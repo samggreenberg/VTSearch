@@ -89,10 +89,10 @@ active context in the URL:
 |------|-------|------|
 | `/dashboard` | — | Dataset & detector management |
 | `/label/:datasetId/:detectorId` | `activeContextGuard` | Labeling / training |
-| `/find/:datasetId/:detectorId` | `activeContextGuard` | Multi-dataset search |
+| `/test/:datasetId/:detectorId` | `activeContextGuard` | Test (`FindViewComponent`) |
 | `/browse/:datasetId` | `browseContextGuard` | VTSBrowse projection canvas |
 
-Bare `/label`, `/find`, `/browse` (and anything unmatched) redirect to
+Bare `/label`, `/test`, `/browse` (and anything unmatched) redirect to
 `/dashboard`: a half-specified pair is not a representable state, so there is
 nothing to render.
 
@@ -162,7 +162,7 @@ the component —
 - `DashboardLoadingTasksService` — per-task loading rows, and the
   poll-until-settled-then-refresh bookkeeping.
 - `DashboardSelectionService` — the highlighted table rows (which drive
-  Train / Find / Combine / Delete), *owned* here rather than mirrored from the
+  Train / Test / Find / Combine / Delete), *owned* here rather than mirrored from the
   component, so the top-bar pulldowns show what is *selected* while the
   Dashboard is on screen (not merely what is loaded) by reading signals
   directly, and the selection survives a round trip to another view. Both
@@ -202,7 +202,7 @@ rule: it reads the kind of the sort started last
 (`SortRunnerService.newestSortKind`), not `sortMode`, and gives way only to a
 learned one, so a text seed still in the air cannot hold it off (#4326).
 
-The three panels are shared with the Find view:
+The three panels are shared with the Test view:
 
 - **Left** — media list (virtual scroller), sort bar, Threshold, stripe
   overview, select mode, and the **Autopilot panel** that drives the automated
@@ -211,7 +211,7 @@ The three panels are shared with the Find view:
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
 
-**The Threshold** (`vt-balance`, the balance, in the Manual tab and Find's
+**The Threshold** (`vt-balance`, the balance, in the Manual tab and Test's
 top row; #4413, replacing the precision floor of #4246) is the one knob on the
 detector's line. The balance is F-beta's beta: which way to lean between false
 positives and false negatives. The line is the set with the best estimated
@@ -221,11 +221,11 @@ it estimated. Two values back the control, and they travel separately:
 `PairScopeService.seedBeta` (`GET /api/balance`); `balance` is the state of
 the line on screen (`utils/line-balance.ts`, `LineBalance`: `unchecked` or
 `checked`, the count kept, the check's two likely ranges and its F-beta
-estimate), and only ever arrives *with* that line (a sort, a Find pass, or the
+estimate), and only ever arrives *with* that line (a sort, a Test pass, or the
 balance POST's own response). Every response that carries a line carries both
 `floor` (the old object, kept one release) and `balance`; the frontend reads
 only `balance`. Each view has one write path, both `switchMap`-ed and
-pair-scoped so a balance the user moved past can never land last. Find's
+pair-scoped so a balance the user moved past can never land last. Test's
 (`betaRequests$`, debounced) installs the returned line straight over the
 frozen scores. Label's (in `SortRunnerService`) re-runs the learned sort, but
 only from the POST's response: the learned sort reads the balance server-side
@@ -238,10 +238,10 @@ Negatives spectrum with three radios under its thirds (`BALANCE_PRESETS` in
 false negatives), and never shows a balance as a word or a number: each
 radio's tooltip says where it sits (#4298, #4317). The radios show the host's
 balance, never the click: a pick puts the DOM back on `value()` before
-emitting, so a pick the host drops (Find, mid-pass) leaves them where they
+emitting, so a pick the host drops (Test, mid-pass) leaves them where they
 were. A stored balance off the list is shown on the nearest radio (nearest in
 log space, a tie to the higher beta) and snapped to it through the control's
-own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Find
+own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Test
 drops a balance change while a pass is running. Under the spectrum the state
 line reads "Checked · likely 55–100% right, about half of them found (checked
 5) · 32 kept" or "Top 32 kept, unchecked" (`balanceSummary`; the recall range
@@ -252,7 +252,7 @@ not; there is no red.
 **The spot check** (`vt-spot-check-modal`, #4273, walking to the balance's
 peak since #4413) measures that line, in Train only. The control's "Check N
 picks" emits `check`; the left panel forwards it as `check`, and the label
-view hosts the modal behind a `showSpotCheck` signal. Find sets the control's
+view hosts the modal behind a `showSpotCheck` signal. Test sets the control's
 `offerCheck` false and hosts no modal: it tests the balance Train set, and
 labelling more to set one is too late there (#4317); its own test of the line
 is the Test autopilot (below), and the control's state line there is the
@@ -284,22 +284,30 @@ follows: a retrain moves the list under the result, which is what reports it
 the same in every state; the state and its likely range live in the balance
 control and on the Stats chart (which draws no horizontal line any more: a
 balance is a preference, not a precision to keep), and a stale range differs
-only in its tooltip. The Find view draws neither the range nor the Stats
+only in its tooltip. The Test view draws neither the range nor the Stats
 chart that used to carry it: its result pane draws the test's own ranges.
 
-### Find view (`components/find-view/`)
+### Test view (`components/find-view/`)
+
+The Dashboard's **Test** button opens it at `/test/:datasetId/:detectorId`.
+It was called Find until #4525 renamed it, and its code keeps that name, as
+the Train view's is `label`: `FindViewComponent`, `panelMode: 'find'`,
+`VoteStateService.findMode`, and on the API side `/api/find-label`,
+`find_mode` and the `find` SSE channel. **Find** is now the Dashboard's third
+button, which opens no view: it starts a background AutoRun per ticked
+dataset (`DashboardComponent.onAutorun`, `AutoRunService`).
 
 Scores the active pair's dataset with its detector (`POST /api/find-label`)
 and opens on two tabs in the left panel (`findTab`, owned by the view since
 the centre and right panes switch with it; #4524): **Autopilot**, the Test
-autopilot, and **Review**, today's Find in full (the ranked work queue under
+autopilot, and **Review**, the ranked result in full (the work queue under
 the line, the boundary walk, the Verified Good / Verified Bad piles, To
 Dataset / Export / Browse, which can hand a subset of result ids to Browse
 through `BrowseSubsetService`). Train's Autopilot / Manual split applied to
 testing: the guided flow is the default, the open one a tab away.
 
 **The Test autopilot** measures the line on the corpus in front of the user
-with uniform picks from rank bands on both sides of it (`docs/plans/test-mode.md`;
+with uniform picks from rank bands on both sides of it (`vtscore/docs/packages/training.md`;
 the statistics are `vtscore/training/thresholds/line_test.py`, the routes
 `/api/line-test`). The server owns the sample and derives the phase on every
 read (`line_phase`), so nothing in the frontend accumulates it: the view's
@@ -426,7 +434,7 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
-| `AutoRunService` | The end of a background AutoRun: opens the results of a run this tab started (a dataset's ⋯ **Run AutoRun**, or the Dashboard's big **AutoRun** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, or one that landed while the dialog was open) with a **View results** action, and holds the run the app-root AutoRun Results dialog shows |
+| `AutoRunService` | The end of a background AutoRun: opens the results of a run this tab started (a dataset's ⋯ **Run AutoRun**, or the Dashboard's big **Find** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, or one that landed while the dialog was open) with a **View results** action, and holds the run the app-root AutoRun Results dialog shows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
@@ -623,7 +631,7 @@ which appends `dataset_id` / `detector_id` query params from the active layer.
 
 ### Routes and guards — the URL is the source of truth
 
-`/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId` carry the
+`/label/:datasetId/:detectorId` and `/test/:datasetId/:detectorId` carry the
 pair so reload, share links, and browser back/forward all work.
 `activeContextGuard` resolves the URL pair before the view renders: it awaits
 the registry fetch (a cold deep-link can arrive first), toasts and redirects to

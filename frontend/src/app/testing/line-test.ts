@@ -82,18 +82,19 @@ export function wireTest(overrides: Partial<LineTestState> = {}): LineTestState 
       alpha: 0.05,
     },
     kept_at: null,
+    class_model: true,
     ...overrides,
   } as LineTestState;
 }
 
-/** A finished test: Done, nothing pending, 45 picks behind the ranges. */
+/** A finished test: Done, nothing pending, 65 picks behind the ranges (the walk below the line ran to its budget). */
 export function wireDone(overrides: Partial<LineTestState> = {}): LineTestState {
-  const base = wireTest({ phase: 'done', picks: [], labelled: 45, round: 9, ...overrides });
+  const base = wireTest({ phase: 'done', picks: [], labelled: 65, round: 13, ...overrides });
   return {
     ...base,
     band: null as unknown as LineTestState['band'],
-    report: { ...base.report, phase: 'done', matches_stop: 'width', misses_stop: 'dry_run', matches_width: 0.18, misses_width: 0.22, picks_above: 25, picks_below: 20 },
-    estimates: { ...base.estimates, labelled: 45 },
+    report: { ...base.report, phase: 'done', matches_stop: 'width', misses_stop: 'budget', matches_width: 0.18, misses_width: 0.22, picks_above: 25, picks_below: 40 },
+    estimates: { ...base.estimates, labelled: 65 },
   };
 }
 

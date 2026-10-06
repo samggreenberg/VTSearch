@@ -19,7 +19,7 @@ export type SelectionState = 'none' | 'some' | 'all';
  *
  * Two selection concepts coexist:
  *  - **active/loaded context** (`ActiveContextService`) — the pair the
- *    backend has loaded, which the pulldown shows on the label/find/browse
+ *    backend has loaded, which the pulldown shows on the label/test/browse
  *    views (there are no tables there to select from).
  *  - **table selection** (this service) — the highlighted rows that drive
  *    Train / Find / Combine / Delete.

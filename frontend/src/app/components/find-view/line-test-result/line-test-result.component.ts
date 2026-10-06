@@ -117,6 +117,12 @@ export class LineTestResultComponent {
   readonly nothing = computed(() => this.phase() === 'nothing');
   readonly moved = computed(() => this.response()?.moved ?? false);
   readonly stale = computed(() => this.response()?.stale ?? false);
+  /**
+   * The detector has a class model to count the matches below the bands the
+   * test reached. A structural or document detector has none, so its recall
+   * is unmeasured below them and is read in words only (#4523, #4542).
+   */
+  readonly classModel = computed(() => this.test()?.class_model ?? true);
   /** A test resumed from the verdict the detector keeps (#4526) says so: the user never voted these picks today. */
   readonly keptNote = computed(() => {
     const t = this.test();
@@ -134,8 +140,14 @@ export class LineTestResultComponent {
   });
   readonly recallText = computed(() => {
     const e = this.estimates();
-    return e ? `${e.found} (${estimatePercent(e.recall)})` : '';
+    if (!e) return '';
+    return this.classModel() ? `${e.found} (${estimatePercent(e.recall)})` : e.found;
   });
+  readonly foundTitle = computed(() =>
+    this.classModel()
+      ? "Of all the matches in the collection, the share the line keeps: random picks below the line, read against the detector's own count of what the unchecked tail holds."
+      : 'Of all the matches in the collection, the share the line keeps, as far as the picks below the line reach: this detector has no count of its own for the rest of the list.',
+  );
   readonly fbetaText = computed(() => {
     const e = this.estimates();
     return e ? fbetaHeadline(e.fbeta) : '';
@@ -148,10 +160,23 @@ export class LineTestResultComponent {
     const t = this.test();
     return widthLight(t?.report?.misses_width, t?.budgets?.misses_width ?? 0.25);
   });
-  /** The deep tail the walk never reached is the model's word, and said to be. */
+  /**
+   * The deep tail the walk never reached is the model's word, and said to be;
+   * with no class model nothing counts it, and the note says recall is
+   * unmeasured there.
+   */
   readonly tailNote = computed(() => {
     const e = this.estimates();
-    if (!e?.tail_from_model) return '';
+    const t = this.test();
+    if (!e || !t) return '';
+    if (!this.classModel()) {
+      const reached = Math.max(t.line_count, ...t.bands.filter((b) => b.side === 'below' && b.labelled > 0).map((b) => b.hi));
+      return (
+        `This detector has no class model, so nothing estimates the matches below the top ${reached.toLocaleString()}: ` +
+        `Found counts only those the picks turned up, and is a reading in words, not a measurement.`
+      );
+    }
+    if (!e.tail_from_model) return '';
     return `The deepest part of the list was not checked: the ${Math.round(e.tail_positives)} matches it likely holds are the detector's own estimate.`;
   });
 
@@ -185,9 +210,10 @@ export class LineTestResultComponent {
     const e = this.estimates();
     const t = this.test();
     if (!e || !t) return '';
+    const found = this.classModel() ? `${e.found} (${estimatePercent(e.recall)} of all the matches)` : e.found;
     return (
       `On this collection the line keeps the top ${t.line_count.toLocaleString()}: likely ${estimatePercent(e.precision)} ` +
-      `of them are right, with ${e.found} (${estimatePercent(e.recall)} of all the matches). ` +
+      `of them are right, with ${found}. ` +
       `That is what AutoRun would ship from a collection like this one.`
     );
   });
@@ -453,9 +479,10 @@ export class LineTestResultComponent {
   }
 
   edgeTitle(e: LineTestEdge): string {
+    const found = this.classModel() ? `${estimatePercent(e.recall)} of all the matches found` : e.found;
     return (
       `If the line kept the top ${e.count.toLocaleString()}: likely ${estimatePercent(e.precision)} right, ` +
-      `${estimatePercent(e.recall)} of all the matches found, F-beta ${fbetaHeadline(e.fbeta)}.`
+      `${found}, F-beta ${fbetaHeadline(e.fbeta)}.`
     );
   }
 

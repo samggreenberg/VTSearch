@@ -1,6 +1,6 @@
 """The test sample: what Test mode measures about a detector's line, and how (#4527).
 
-Test mode (``docs/plans/test-mode.md``) asks one question of a detector on a
+Test mode (``vtscore/docs/packages/training.md``) asks one question of a detector on a
 corpus it never trained on: *if this line went to AutoRun, what share of what
 it ships would be right, and what share of the real matches would it ship?*
 The answer is the line's precision and recall on that corpus, each as a
@@ -25,10 +25,14 @@ came from is recorded, because the estimators weight by band.
 **The estimators** are joint Monte Carlo ranges from per-band posteriors,
 drawn once per state and shared by every number (:meth:`LineTest.estimates`):
 
-* Each band's share right has a Beta posterior under the Jeffreys prior
-  (``Beta(right + 1/2, wrong + 1/2)``), and the band's unlabelled items are
-  drawn binomially at that share, so a censused band is exact and a band
-  with no picks is as uncertain as the prior says.
+* Each band's share right has a Beta posterior, and the band's unlabelled
+  items are drawn binomially at that share, so a censused band is exact and
+  a band with no picks is as uncertain as its prior says.  Above the line a
+  band's prior is the *pooled* share of every pick above the line (Jeffreys
+  on the pool) at :data:`POOLED_WEIGHT` picks' worth, drawn once per column
+  and shared by every band (#4539): independent Jeffreys priors read each
+  empty band of a big sparse line as about 8% right, and summed over a
+  thousand items that put the range above the truth every time (#4523).
 * **Above the line** the draws give the band-weighted precision of any
   top-*b* union, so the same draws re-estimate the line at every band edge
   (:attr:`LineEstimates.at_edges`), which the verdict's *Lean the Threshold*
@@ -60,20 +64,26 @@ is largest); later rounds go to the band whose next round would shrink the
 F-beta range most in expectation - the greedy face of Neyman allocation
 (``docs/plans/coverage-atlas.md`` §6.3), computed on the draws by
 pre-posterior analysis over the round's possible outcomes.  Below the line
-the walk takes the first band under the line first, then goes deeper while
-the band it just audited turned up a match or holds a posterior mass that is
-not negligible against the matches found above the line; a band with no
-match in its picks and little mass is a dry run and ends the walk.
+the walk takes the first band under the line first, then one band deeper a
+round.  With a class model it walks to its pick budget: every band it
+reaches is the model's count corrected by picks, and a walk that stops
+early leaves the tail to the model alone, as a point, whose recall range
+held the truth in 13-38% of #4523's sessions against 75-94% for the walk to
+the budget.  Without one it stops at a dry run - a band with no match in
+its picks - since a deeper band would be read on the Jeffreys prior alone,
+and on bands of thousands that counts hundreds of phantom positives.
 
 **The phase machine and stop rule** (:func:`line_phase`) are a pure function
 of the sample and its budgets (:class:`LineBudgets`), so the app's view and
 the harness derive the phase from state on every poll rather than
 accumulating it.  The phases are the matches (precision), the misses
-(recall) and ``done``; a phase ends when its range is narrower than its
-target, at its pick budget, or when its bands are exhausted (and, below the
-line, on a dry run), and a line that keeps fewer items than one round is
-``nothing``: nothing to test.  The targets and budgets are parameters whose
-defaults are the plan's proposals; #4523 prices them.
+(recall) and ``done``.  The matches phase ends when its range is narrower
+than its target, at its pick budget, or when its bands are exhausted; the
+misses phase at its pick budget or when its bands are exhausted, and,
+without a class model, on its width target or a dry run.  A line that keeps
+fewer items than one round is ``nothing``: nothing to test.  The targets and
+budgets are parameters whose defaults are the values #4523 priced
+(``docs/experiments/2026-10-05-line-test-4523/REPORT.md``).
 
 Test votes never train the detector: they are recorded with
 :data:`TEST_PROVENANCE` so a later merge can tell them from a check's.
@@ -107,8 +117,16 @@ TEST_DRAWS = 4000
 #: state shares one random stream, which steadies the look-ahead's comparisons.
 TEST_DRAW_SEED = 0
 
-#: The Jeffreys prior on a band's share right above the line: ``Beta(1/2, 1/2)``.
+#: The Jeffreys prior on the pooled share right above the line: ``Beta(1/2, 1/2)``.
 JEFFREYS = 0.5
+
+#: What the pooled share above the line is worth to one band, in picks (#4539).
+#: Each band's prior is drawn from the pooled posterior of every pick above the
+#: line at this weight, so one round of a band's own picks weighs as much as the
+#: pool and a rich band still reads richer; but empty bands no longer read as 8%
+#: each (the Jeffreys mean of 0 of 5) summed over a thousand items, which is how
+#: a sparse line's precision range came to sit above its truth (#4523).
+POOLED_WEIGHT = float(CHECK_MIN_PICKS)
 
 #: The floor under the model's prior on a band below the line, in pseudo-picks
 #: either way: enough that a band the model counts empty stays correctable by
@@ -181,7 +199,7 @@ def found_words(recall: LikelyRange | Estimate | float) -> str:
 
 @dataclass(frozen=True)
 class LineBudgets:
-    """What a test may spend and when a phase is narrow enough (``docs/plans/test-mode.md`` §2).
+    """What a test may spend and when a phase is narrow enough (Test mode's stop rule, #4523).
 
     *matches_width* is the precision range's target width and *misses_width*
     the recall range's; a phase ends on width once its range is at or under
@@ -191,8 +209,19 @@ class LineBudgets:
     the positives estimated above the line, below which a band with no match
     in its picks ends the walk below the line, and *model_weight* is what the
     model's share of a band below the line is worth in picks before the
-    band's own picks correct it (one round).  The defaults are the plan's
-    proposals, to be priced by #4523, not values the eval has confirmed.
+    band's own picks correct it (one round).
+
+    *misses_width* and *dry_run_share* govern only a test with no class model
+    (:attr:`LineTest.posteriors` is ``None``: a structural or document
+    detector), whose walk stops at the first band with no match, every
+    band's mass being zero; with a class model the walk below the line runs
+    to *misses_picks*, because its recall range only holds once the walk
+    has corrected the model's tail band by band.  The defaults are the values
+    #4523 priced on 192,660 replayed Tests
+    (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``): 0.20 and 40
+    picks above the line, where the precision range held the truth in 92-96%
+    of sessions at beta <= 1; 40 picks below it, where walking to the budget
+    raised the recall range's coverage from 13-38% to 75-94%.
     """
 
     matches_width: float = 0.20
@@ -431,8 +460,10 @@ class LineTest:
     beta: float
     budgets: LineBudgets = DEFAULT_BUDGETS
     #: Each item's chance of being a positive by the labels line, aligned with
-    #: :attr:`ranking_ids`; ``None`` when the line has no corpus fit, in which
-    #: case the unreached tail counts nothing and every dry band is a dry run.
+    #: :attr:`ranking_ids`; ``None`` when the line has no corpus fit (no class
+    #: model), in which case the unreached tail counts nothing and the walk
+    #: below the line stops at its first dry band, so recall is unmeasured
+    #: below the bands it reached.
     posteriors: np.ndarray | None = field(default=None, repr=False, compare=False)
     labels: dict[int, bool] = field(default_factory=dict)
     #: The band each labelled (or pending) pick was drawn from.
@@ -582,15 +613,43 @@ class LineTest:
         self._cache.clear()
         self._counts.clear()
 
-    def _band_draws(self, b: int, rng: np.random.Generator, n: int, extra: tuple[int, int] | None = None) -> np.ndarray:
+    def _pooled_counts(self, extra: dict[int, tuple[int, int]] | None = None) -> tuple[int, int]:
+        """``(picks, right)`` over every band above the line, *extra*'s hypothetical picks included."""
+        labelled = right = 0
+        for band in self.above:
+            _, n_lab, n_right = self.band_counts(band.index)
+            if extra and band.index in extra:
+                n_lab += extra[band.index][0]
+                n_right += extra[band.index][1]
+            labelled += n_lab
+            right += n_right
+        return labelled, right
+
+    def _pooled_share(
+        self, rng: np.random.Generator, n: int, extra: dict[int, tuple[int, int]] | None = None
+    ) -> np.ndarray:
+        """*n* draws of the pooled share right above the line: Jeffreys' prior on every pick above it."""
+        labelled, right = self._pooled_counts(extra)
+        return rng.beta(JEFFREYS + right, JEFFREYS + (labelled - right), size=n)
+
+    def _band_draws(
+        self,
+        b: int,
+        rng: np.random.Generator,
+        n: int,
+        extra: tuple[int, int] | None = None,
+        pooled: np.ndarray | None = None,
+    ) -> np.ndarray:
         """*n* draws of band *b*'s count of positives: its picks, plus its unlabelled items at a drawn share.
 
-        Above the line the share's prior is Jeffreys'; below it, with a
-        model, it is the model's share of the band at
-        :attr:`LineBudgets.model_weight` picks' worth (floored by
-        :data:`MODEL_FLOOR`), which the picks then correct.  *extra* adds
-        ``(picks, right)`` hypothetical picks to the band, for the
-        allocation rule's pre-posterior look-ahead.
+        Above the line the share's prior is the pooled share of every pick
+        above the line (*pooled*, one draw per column, shared by every band
+        so the draws stay joint) at :data:`POOLED_WEIGHT` picks' worth
+        (#4539); below it, with a model, it is the model's share of the band
+        at :attr:`LineBudgets.model_weight` picks' worth (floored by
+        :data:`MODEL_FLOOR`), which the picks then correct; below it with no
+        model, Jeffreys'.  *extra* adds ``(picks, right)`` hypothetical picks
+        to the band, for the allocation rule's pre-posterior look-ahead.
         """
         band = self._bands[b]
         size, labelled, right = self.band_counts(b)
@@ -600,7 +659,13 @@ class LineTest:
         rest = size - labelled
         if rest <= 0:
             return np.full(n, float(right))
-        if band.side == BELOW and self.posteriors is not None:
+        a: float | np.ndarray
+        c: float | np.ndarray
+        if band.side == ABOVE:
+            if pooled is None:
+                pooled = self._pooled_share(rng, n, None if extra is None else {b: extra})
+            a, c = MODEL_FLOOR + POOLED_WEIGHT * pooled, MODEL_FLOOR + POOLED_WEIGHT * (1.0 - pooled)
+        elif self.posteriors is not None:
             mean = self.band_mass(b) / size
             weight = self.budgets.model_weight
             a, c = MODEL_FLOOR + weight * mean, MODEL_FLOOR + weight * (1.0 - mean)
@@ -614,11 +679,14 @@ class LineTest:
     ) -> np.ndarray:
         """A ``(bands, n)`` matrix of per-band positive counts; unreached bands below the line are the model's point."""
         out = np.zeros((len(self._bands), n))
+        pooled = self._pooled_share(rng, n, extra)
         for band in self._bands:
             if band.side == BELOW and not self.audited(band.index) and not (extra and band.index in extra):
                 out[band.index] = self.band_mass(band.index)
                 continue
-            out[band.index] = self._band_draws(band.index, rng, n, None if extra is None else extra.get(band.index))
+            out[band.index] = self._band_draws(
+                band.index, rng, n, None if extra is None else extra.get(band.index), pooled
+            )
         return out
 
     def _tail(self) -> tuple[float, bool]:
@@ -731,7 +799,11 @@ class LineTest:
             return 0.0
         n, alpha, beta = self.budgets.draws, self.budgets.alpha, self.beta
         current = self._summarise(base, beta, alpha)[2].width
-        a, bb = right + JEFFREYS, labelled - right + JEFFREYS
+        # The round's predictive under the band's prior: the pooled share's mean at POOLED_WEIGHT (#4539).
+        pooled_lab, pooled_right = self._pooled_counts()
+        p_mean = (pooled_right + JEFFREYS) / (pooled_lab + 2.0 * JEFFREYS)
+        a = right + MODEL_FLOOR + POOLED_WEIGHT * p_mean
+        bb = labelled - right + MODEL_FLOOR + POOLED_WEIGHT * (1.0 - p_mean)
         expected = 0.0
         for r in range(m + 1):
             weight = math.comb(m, r) * _beta_fn(a + r, bb + m - r) / _beta_fn(a, bb)
@@ -747,13 +819,15 @@ class LineTest:
     def misses_walk(self) -> tuple[int | None, str | None]:
         """Where the walk below the line stands: ``(next band to audit, why it ended)``; one of the two is ``None``.
 
-        The walk audits the first band under the line, then each next band
-        while the band it just audited turned up a match or holds a posterior
-        mass that is not negligible against the positives found above the
-        line (:attr:`LineBudgets.dry_run_share` of them).  A band with no
-        match in its picks and little mass is a dry run; past the last band
-        the walk is exhausted; with nothing below the line it is exhausted
-        before it starts.
+        The walk audits the first band under the line, then each next band.
+        With a class model it goes on until the phase's pick budget stops it
+        (:func:`line_phase`) or the bands run out (#4523).  Without one a
+        band with no match in its picks and a posterior mass under
+        :attr:`LineBudgets.dry_run_share` of the positives found above the
+        line is a dry run that ends the walk; every band's mass is zero
+        then, so any share above zero stops it at the first band with no
+        match.  Past the last band the walk is exhausted; with nothing below
+        the line it is exhausted before it starts.
         """
         below = self.below
         if not below:
@@ -764,11 +838,12 @@ class LineTest:
                 last_audited = band
         if last_audited is None:
             return below[0].index, None
-        _, _, right = self.band_counts(last_audited.index)
-        found_above = max(self.estimates().positives_above.point, 1.0)
-        dry = right == 0 and self.band_mass(last_audited.index) < self.budgets.dry_run_share * found_above
-        if dry:
-            return None, STOP_DRY_RUN
+        if self.posteriors is None:
+            _, _, right = self.band_counts(last_audited.index)
+            found_above = max(self.estimates().positives_above.point, 1.0)
+            dry = right == 0 and self.band_mass(last_audited.index) < self.budgets.dry_run_share * found_above
+            if dry:
+                return None, STOP_DRY_RUN
         nxt = last_audited.index + 1
         if nxt >= len(self._bands):
             return None, STOP_EXHAUSTED
@@ -888,6 +963,7 @@ class LineTest:
             "estimates": None if self.nothing_to_test else self.estimates().as_dict(),
             "budgets": self.budgets.as_dict(),
             "kept_at": self.kept_at,
+            "class_model": self.posteriors is not None,
         }
 
 
@@ -900,15 +976,19 @@ def line_phase(test: LineTest) -> PhaseReport:
 
     ``nothing`` when the line keeps fewer items than one round.  Otherwise
     the matches phase runs until every band above the line is exhausted, its
-    precision range is at or under its target width after at least one round
-    above the line, or its picks reach the matches budget; then the misses
-    phase, until the walk below the line ends (exhausted, or a dry run), its
-    recall range is under its target after at least one round below the
-    line, or its picks reach the misses budget; then ``done``.  Width is read
-    on the ranges as they stand, so a phase's verdict is a function of the
-    picks and never of the order they were taken in; when more than one
-    reason holds, the one named is the first in that order (a censused line
-    is ``exhausted``, not ``width``, though its range has no width at all).
+    precision range is at or under its target width once every band above the
+    line has had a round (#4539), or its picks reach the matches budget; then the misses
+    phase, until the walk below the line ends (exhausted, or, with no class
+    model, a dry run), its recall range is under its target after at least
+    one round below the line (with no class model only), or its picks reach
+    the misses budget; then ``done``.  With a class model the recall range's
+    width never stops the walk: it is narrow from the start, because the
+    unreached tail is the model's point, and it holds only once the walk has
+    corrected that point band by band (#4523).  Width is read on the ranges
+    as they stand, so a phase's verdict is a function of the picks and never
+    of the order they were taken in; when more than one reason holds, the one
+    named is the first in that order (a censused line is ``exhausted``, not
+    ``width``, though its range has no width at all).
     """
     budgets = test.budgets
     if test.nothing_to_test:
@@ -918,7 +998,12 @@ def line_phase(test: LineTest) -> PhaseReport:
     matches_stop: str | None = None
     if all(test.exhausted(b.index) for b in test.above):
         matches_stop = STOP_EXHAUSTED
-    elif picks_above > 0 and est.precision.width <= budgets.matches_width + _EPS:
+    elif (
+        # Every band audited first: the pooled prior (#4539) can narrow the
+        # range on two bands' picks, but a band no pick has seen is a guess.
+        all(test.audited(b.index) or test.exhausted(b.index) for b in test.above)
+        and est.precision.width <= budgets.matches_width + _EPS
+    ):
         matches_stop = STOP_WIDTH
     elif picks_above >= budgets.matches_picks:
         matches_stop = STOP_BUDGET
@@ -928,7 +1013,7 @@ def line_phase(test: LineTest) -> PhaseReport:
     _, walk_end = test.misses_walk()
     if walk_end is not None:
         misses_stop = walk_end
-    elif picks_below > 0 and est.recall.width <= budgets.misses_width + _EPS:
+    elif test.posteriors is None and picks_below > 0 and est.recall.width <= budgets.misses_width + _EPS:
         misses_stop = STOP_WIDTH
     elif picks_below >= budgets.misses_picks:
         misses_stop = STOP_BUDGET

@@ -65,7 +65,7 @@ interface ActiveSwitch {
  * Two entry points:
  *
  *  - `switchTo(ds, det)`: called by the top-bar pulldowns. When the
- *    user is on `/label/:ds/:det` or `/find/:ds/:det`, it navigates to
+ *    user is on `/label/:ds/:det` or `/test/:ds/:det`, it navigates to
  *    the new URL (the route guard then calls `applyActivePair`). On
  *    other routes (e.g. `/dashboard`) it flips the pair imperatively.
  *  - `applyActivePair(ds, det)`: called by the active-context route
@@ -92,7 +92,7 @@ export class ContextSwitchService {
   }
 
   /**
-   * Pulldown-initiated switch. On `/label` or `/find`, navigates to the
+   * Pulldown-initiated switch. On `/label` or `/test`, navigates to the
    * matching `/<view>/:ds/:det` URL; the route guard then drives the
    * active-pair flip via `applyActivePair`. On other routes, flips the
    * pair imperatively (no navigation).
@@ -103,14 +103,14 @@ export class ContextSwitchService {
   switchTo(datasetId: string, detectorId: string): void {
     const currentUrl = this.router.url.split('?')[0];
     const onLabel = currentUrl.startsWith('/label');
-    const onFind = currentUrl.startsWith('/find');
+    const onTest = currentUrl.startsWith('/test');
     const onBrowse = currentUrl.startsWith('/browse');
     if (onBrowse && datasetId) {
       this.router.navigate(['/', 'browse', datasetId]);
       return;
     }
-    if ((onLabel || onFind) && datasetId && detectorId) {
-      const seg = onFind ? 'find' : 'label';
+    if ((onLabel || onTest) && datasetId && detectorId) {
+      const seg = onTest ? 'test' : 'label';
       this.router.navigate(['/', seg, datasetId, detectorId]);
       return;
     }

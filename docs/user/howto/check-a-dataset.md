@@ -52,8 +52,8 @@ choose **Stats**. The **Stats: Yellow Smileys** window shows:
   <img src="../assets/detector-stats.light.webp" alt="Detector stats: (1) its Good and Bad answers, (2) how many are about pictures in the open dataset, (3) how it was made, and when" width="720" />
 </picture>
 
-Between the counts and **Creation**, **Tested on** lists what a test in Find
-measured the detector to ship, one line per dataset it was tested on: *drawings-new:
+Between the counts and **Creation**, **Tested on** lists what a test measured
+the detector to ship, one line per dataset it was tested on: *drawings-new:
 likely 70–85% right, about half of them found (34 picks, 2026-10-05)*. A line
 marked *out of date* is from before the detector was last retrained; *Untested*
 means no test has finished yet (see

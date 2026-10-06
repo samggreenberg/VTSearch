@@ -1,4 +1,4 @@
-"""Planted-answer tests for Test mode's test sample (#4527; ``docs/plans/test-mode.md`` §5).
+"""Planted-answer tests for Test mode's test sample (#4527; ``vtscore/docs/packages/training.md``).
 
 A synthetic ranking with a known per-band precision and a known count of
 positives below the line, seeded.  Pinned here: the bands on both sides of
@@ -8,9 +8,10 @@ is labelled; the ranges hold the planted truth at the stated level over many
 seeds; the line re-estimated at every edge from the same draws; the
 model-assisted count below the line and its flagged tail), the allocation
 rule (the band holding the line first, then the band with the most
-uncertainty by size; the walk below the line and its dry-run stop), the
-phase machine and its stops (width, budget, exhaustion, dry run, and
-*nothing to test* on an empty line), and the ``test`` vote flow.
+uncertainty by size; the walk below the line, to its budget with a class
+model and to its first dry band without one), the phase machine and its
+stops (width, budget, exhaustion, dry run, and *nothing to test* on an empty
+line), and the ``test`` vote flow.
 """
 
 from __future__ import annotations
@@ -335,13 +336,11 @@ class TestTheAllocationRule:
         assert test.exhausted(0) and test.expected_shrink(0) == 0.0
         assert test.phase().matches_stop == STOP_EXHAUSTED and test.phase().phase == PHASE_MISSES
 
-    def test_below_the_line_the_first_band_under_it_first_then_deeper_while_a_band_turns_up_matches(self):
+    def test_below_the_line_the_first_band_under_it_first_then_one_band_deeper_a_round(self):
         ids, positives, post = _planted(
             below=(8, 8, 1, 0, 0, 0, 0)
         )  # the first two bands under the line are all matches
-        test = LineTest.start(
-            ids, 64, 1.0, posteriors=post, seed=42, budgets=LineBudgets(matches_picks=20, misses_width=0.01)
-        )
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=LineBudgets(matches_picks=20))
         _run(test, positives, rounds=4)
         assert test.phase().phase == PHASE_MISSES and test.misses_walk() == (4, None)
         _run(test, positives, rounds=1)
@@ -350,32 +349,36 @@ class TestTheAllocationRule:
         assert test.misses_walk() == (6, None)
         assert sorted(test.pick_band[cid] for cid in test.labels if test.pick_band[cid] >= 4) == [4] * 5 + [5] * 5
 
-    def test_a_dry_band_with_little_mass_is_a_dry_run_that_ends_the_walk(self):
+    def test_with_a_class_model_a_dry_band_does_not_end_the_walk(self):
+        """#4523: a walk that stops early leaves the tail to the model's point, and its recall range rarely holds."""
         ids, positives, post = _planted(below=(0, 0, 0, 0, 0, 0, 0))
-        test = LineTest.start(
-            ids, 64, 1.0, posteriors=post, seed=42, budgets=LineBudgets(matches_picks=20, misses_width=0.01)
-        )
+        budgets = LineBudgets(matches_picks=20, misses_picks=30)
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budgets)
+        _run(test, positives, rounds=5)
+        assert test.band_counts(4) == (8, 5, 0) and test.band_mass(4) == 0.0
+        assert test.misses_walk() == (5, None) and test.phase().phase == PHASE_MISSES
+        _run(test, positives)
+        assert test.phase().misses_stop == STOP_BUDGET and test.phase().picks_below == 30
+
+    def test_without_a_class_model_a_dry_band_is_a_dry_run_that_ends_the_walk(self):
+        """With no model every band's mass is nothing, so the first band with no match ends the walk."""
+        ids, positives, _ = _planted(below=(0, 0, 0, 0, 0, 0, 0))
+        test = LineTest.start(ids, 64, 1.0, seed=42, budgets=LineBudgets(matches_picks=20, misses_width=0.01))
         _run(test, positives, rounds=5)
         assert test.band_counts(4) == (8, 5, 0) and test.band_mass(4) == 0.0
         assert test.misses_walk() == (None, STOP_DRY_RUN)
         assert test.phase().phase == PHASE_DONE and test.phase().misses_stop == STOP_DRY_RUN
 
-    def test_a_dry_band_whose_mass_is_not_negligible_keeps_the_walk_going(self):
-        ids, positives, post = _planted(below=(0, 0, 0, 0, 0, 0, 0))
-        post = post.copy()
-        post[64:72] = 0.5  # the model expects 4 matches there, against ~48 found above the line
-        test = LineTest.start(
-            ids, 64, 1.0, posteriors=post, seed=42, budgets=LineBudgets(matches_picks=20, misses_width=0.01)
-        )
+    def test_without_a_class_model_a_band_that_turns_up_a_match_keeps_the_walk_going(self):
+        ids, positives, _ = _planted(below=(8, 8, 1, 0, 0, 0, 0))
+        test = LineTest.start(ids, 64, 1.0, seed=42, budgets=LineBudgets(matches_picks=20, misses_width=0.01))
         _run(test, positives, rounds=5)
-        assert test.band_counts(4)[2] == 0
+        assert test.band_counts(4)[2] == 5
         assert test.misses_walk() == (5, None)
 
     def test_the_walk_is_exhausted_past_the_last_band_and_with_nothing_below_the_line(self):
         ids, positives, post = _planted(n=80, line=64, below=(8, 8))
-        test = LineTest.start(
-            ids, 64, 1.0, posteriors=post, seed=42, budgets=LineBudgets(matches_picks=20, misses_width=0.01)
-        )
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=LineBudgets(matches_picks=20))
         _run(test, positives)
         assert test.phase().misses_stop == STOP_EXHAUSTED and test.phase().phase == PHASE_DONE
         whole = LineTest.start(ids[:64], 64, 1.0, seed=42, budgets=LineBudgets(matches_picks=20))
@@ -409,14 +412,19 @@ class TestThePhaseMachine:
         assert seen == [PHASE_MATCHES, PHASE_MISSES, PHASE_DONE]
         assert test.phase().done and test.next_band() is None
 
-    def test_the_matches_phase_ends_on_width_after_at_least_one_round(self):
+    def test_the_matches_phase_ends_on_width_once_every_band_above_the_line_has_a_round(self):
+        """#4539: the pooled prior can meet a loose target on one band's picks; a band no pick has seen still waits."""
         ids, positives, post = _planted(above_rate=1.0)
         budgets = LineBudgets(matches_width=0.7)  # a target the prior alone does not meet, but one round does
         test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budgets)
         before = test.phase()
         assert before.phase == PHASE_MATCHES and before.matches_width is not None and before.matches_width > 0.7
         _run(test, positives, rounds=1)
+        early = test.phase()
+        assert early.phase == PHASE_MATCHES and early.matches_stop is None, "three bands above the line unseen"
+        _run(test, positives, rounds=len(test.above) - 1)
         report = test.phase()
+        assert all(test.audited(b.index) for b in test.above)
         assert report.matches_stop == STOP_WIDTH and report.phase == PHASE_MISSES
         assert report.matches_width is not None and report.matches_width <= 0.7
 
@@ -435,17 +443,35 @@ class TestThePhaseMachine:
         test = _run(LineTest.start(ids, 8, 1.0, posteriors=post, seed=42, budgets=budgets), positives, rounds=2)
         assert test.phase().matches_stop == STOP_EXHAUSTED and test.phase().picks_above == 8
 
-    def test_the_misses_phase_ends_on_width_budget_and_the_walk(self):
+    def test_with_a_class_model_the_misses_phase_ends_on_its_budget_or_the_bands_running_out(self):
+        """#4523: the recall range's width never stops a walk with a model; the walk runs to its budget."""
         ids, positives, post = _planted(below=(8, 8, 8, 8, 0, 0, 0))
-        width = LineBudgets(matches_picks=20, misses_width=0.5)
+        width = LineBudgets(matches_picks=20, misses_width=1.0, misses_picks=30)  # met by any range: not a stop
         test = _run(LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=width), positives)
-        assert test.phase().misses_stop == STOP_WIDTH and test.phase().picks_below == 5
-        budget = LineBudgets(matches_picks=20, misses_width=0.001, misses_picks=10)
+        assert test.phase().misses_stop == STOP_BUDGET and test.phase().picks_below == 30
+        budget = LineBudgets(matches_picks=20, misses_picks=10)
         test = _run(LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budget), positives)
         assert test.phase().misses_stop == STOP_BUDGET and test.phase().picks_below == 10
-        walk = LineBudgets(matches_picks=20, misses_width=0.001, misses_picks=400)
+        walk = LineBudgets(matches_picks=20, misses_picks=400)  # past the dry bands, to the corpus's end
         test = _run(LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=walk), positives)
+        assert test.phase().misses_stop == STOP_EXHAUSTED and test.phase().picks_below == 5 * len(test.below)
+
+    def test_without_a_class_model_the_misses_phase_also_ends_on_width_and_a_dry_run(self):
+        ids, positives, _ = _planted(below=(8, 8, 8, 8, 0, 0, 0))
+        width = LineBudgets(matches_picks=20, misses_width=0.5)
+        test = _run(LineTest.start(ids, 64, 1.0, seed=42, budgets=width), positives)
+        assert test.phase().misses_stop == STOP_WIDTH and test.phase().picks_below == 5
+        budget = LineBudgets(matches_picks=20, misses_width=0.001, misses_picks=10)
+        test = _run(LineTest.start(ids, 64, 1.0, seed=42, budgets=budget), positives)
+        assert test.phase().misses_stop == STOP_BUDGET and test.phase().picks_below == 10
+        walk = LineBudgets(matches_picks=20, misses_width=0.001, misses_picks=400)
+        test = _run(LineTest.start(ids, 64, 1.0, seed=42, budgets=walk), positives)
         assert test.phase().misses_stop == STOP_DRY_RUN and test.phase().picks_below == 25
+
+    def test_the_defaults_are_the_values_4523_priced(self):
+        """``docs/experiments/2026-10-05-line-test-4523/REPORT.md``: 0.20 / 40 above the line, 40 picks below it."""
+        assert (DEFAULT_BUDGETS.matches_width, DEFAULT_BUDGETS.matches_picks) == (0.20, 40)
+        assert DEFAULT_BUDGETS.misses_picks == 40 and DEFAULT_BUDGETS.picks_per_round == CHECK_MIN_PICKS == 5
 
     def test_the_phase_is_a_pure_function_of_the_sample_and_the_budgets(self):
         ids, positives, post = _planted()
@@ -479,6 +505,7 @@ class TestTheWireShape:
         assert len(d["bands"]) == 12 and d["bands"][0]["range"] is None
         assert set(d["estimates"]) >= {"precision", "recall", "fbeta", "found", "at_edges", "tail_from_model"}
         assert d["budgets"] == DEFAULT_BUDGETS.as_dict()
+        assert d["class_model"] is True and LineTest.start(ids, 64, 1.0, seed=42).as_dict()["class_model"] is False
         _run(test, positives)
         d = test.as_dict()
         assert d["phase"] == PHASE_DONE and d["picks"] == [] and d["band"] is None

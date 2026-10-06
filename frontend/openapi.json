@@ -5428,6 +5428,9 @@
           "budgets": {
             "$ref": "#/components/schemas/LineTestBudgets"
           },
+          "class_model": {
+            "type": "boolean"
+          },
           "estimates": {
             "$ref": "#/components/schemas/LineTestEstimates",
             "nullable": true
@@ -5476,6 +5479,7 @@
           "bands",
           "beta",
           "budgets",
+          "class_model",
           "estimates",
           "kept_at",
           "labelled",

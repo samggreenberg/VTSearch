@@ -239,11 +239,11 @@ describe('DashboardComponent', () => {
       expect(component.selectedDetectorIds.has('m2')).toBe(true);
       expect(component.labelEnabled).toBe(false);
       expect(component.labelHint).toBe('AutoRun detectors are frozen — move to Drafts to retrain');
-      // Find (read-only scoring) stays available.
+      // Test (read-only scoring) stays available.
       expect(component.findEnabled).toBe(true);
     });
 
-    describe('Find follows the visible tab only (#4228)', () => {
+    describe('Test follows the visible tab only (#4228)', () => {
       const dataset = [{ id: 'd1', name: 'Data', media_type: 'audio' }];
       const loneAutorun = [
         { id: 'm2', name: 'Frozen B', media_type: 'audio', num_training: 5, autofind: true },
@@ -516,29 +516,29 @@ describe('DashboardComponent', () => {
       expect(component.labelEnabled).toBe(false);
     });
 
-    it('should disable Find with no selections', () => {
+    it('should disable Test with no selections', () => {
       flushInitialRequests();
       selection.clear('dataset');
       selection.clear('detector');
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should enable Find with matching media types', () => {
+    it('should enable Test with matching media types', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      // Find requires the detector to have training labels.
+      // Test requires the detector to have training labels.
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBe(true);
     });
 
-    it('should disable Find on media type mismatch', () => {
+    it('should disable Test on media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should disable Find when multiple datasets have different media types', () => {
+    it('should disable Test when multiple datasets have different media types', () => {
       const datasets = [
         { id: 'd1', name: 'DS1', media_type: 'audio' },
         { id: 'd2', name: 'DS2', media_type: 'image' },
@@ -549,7 +549,7 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should enable Find when all selected items share media type', () => {
+    it('should enable Test when all selected items share media type', () => {
       const datasets = [
         { id: 'd1', name: 'DS1', media_type: 'image' },
         { id: 'd2', name: 'DS2', media_type: 'image' },
@@ -564,14 +564,14 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBe(true);
     });
 
-    it('should disable Find when the selected model has 0 training', () => {
+    it('should disable Test when the selected model has 0 training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should enable Find for a model with training', () => {
+    it('should enable Test for a model with training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
@@ -586,7 +586,7 @@ describe('DashboardComponent', () => {
     // dashboard actions — on a big machine you can saturate the import
     // slots and still start another import, create/delete a detector, or
     // change the selection. Only an in-flight *active-pair switch* gates
-    // them, via `isContextSwitching`. Train/Find additionally wait out a
+    // them, via `isContextSwitching`. Train/Test additionally wait out a
     // browse-prep (whose completion fires a competing /browse navigation),
     // via `isNavBusy`.
 
@@ -605,7 +605,7 @@ describe('DashboardComponent', () => {
       expect(component.isNavBusy).toBe(true);
     });
 
-    it('gates on a Train or Find click intent', () => {
+    it('gates on a Train or Test click intent', () => {
       flushInitialRequests();
       component.trainLoading.set(true);
       expect(component.isContextSwitching).toBe(true);
@@ -614,7 +614,7 @@ describe('DashboardComponent', () => {
       expect(component.isContextSwitching).toBe(true);
     });
 
-    it('gates Train/Find during browse-prep but leaves independent actions live', () => {
+    it('gates Train/Test during browse-prep but leaves independent actions live', () => {
       flushInitialRequests();
       vi.spyOn(component.browsePrep, 'preparing', 'get').mockReturnValue(true);
       expect(component.isContextSwitching).toBe(false);
@@ -675,7 +675,7 @@ describe('DashboardComponent', () => {
     });
   });
 
-  describe('find hints', () => {
+  describe('Test button hints (findHint)', () => {
     it('should hint about missing dataset and model', () => {
       flushInitialRequests();
       selection.clear('dataset');
@@ -706,11 +706,13 @@ describe('DashboardComponent', () => {
       expect(component.findHint).toBe('Media type mismatch');
     });
 
-    it('should return score hint when find is enabled', () => {
+    it('should return the test hint when Test is enabled', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
-      expect(component.findHint).toBe('Score selected datasets with selected detectors');
+      expect(component.findHint).toBe(
+        'Score the selected dataset with the selected detector, then test how well its line does there',
+      );
     });
 
     it('should hint about untrained model', () => {
@@ -721,7 +723,7 @@ describe('DashboardComponent', () => {
     });
   });
 
-  describe('AutoRun button (#4529)', () => {
+  describe('Find button (#4529; AutoRun until #4525)', () => {
     const audioDatasets = [
       { id: 'd1', name: 'DS1', media_type: 'audio', loaded: true },
       { id: 'd2', name: 'DS2', media_type: 'audio', loaded: true },
@@ -736,21 +738,21 @@ describe('DashboardComponent', () => {
       const buttons = Array.from(
         (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.dashboard-actions button'),
       );
-      const button = buttons.find((b) => b.textContent?.trim() === 'AutoRun');
+      const button = buttons.find((b) => b.textContent?.trim() === 'Find');
       expect(button).toBeTruthy();
       return button!;
     }
 
-    it('sits in the action bar beside Train and Find', () => {
+    it('sits in the action bar after Train and Test', () => {
       flushInitialRequests();
       autorunButton();
       const labels = Array.from(
         (fixture.nativeElement as HTMLElement).querySelectorAll('.dashboard-actions button'),
       ).map((b) => b.textContent?.trim());
-      expect(labels).toEqual(['Train', 'Find', 'AutoRun']);
+      expect(labels).toEqual(['Train', 'Test', 'Find']);
     });
 
-    it('is disabled, with the hint Find gives, until a dataset and a detector are ticked', () => {
+    it('is disabled, with the hint Test gives, until a dataset and a detector are ticked', () => {
       flushInitialRequests();
       expect(component.autorunEnabled).toBe(false);
       expect(component.autorunHint).toBe('Select a dataset and detector above.');
@@ -763,6 +765,9 @@ describe('DashboardComponent', () => {
       selection.selectOnly('detector', ['m1', 'm2']);
       expect(component.autorunEnabled).toBe(true);
       expect(autorunButton().disabled).toBe(false);
+      expect(component.autorunHint).toBe(
+        'Run every selected detector on every selected dataset, as AutoRun does, and show the results as each run finishes',
+      );
     });
 
     it('is disabled on a media type mismatch across the ticked rows', () => {

@@ -1044,6 +1044,10 @@ WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
 SAVE_TEST_SCORES = os.environ.get("CALIB_SAVE_TEST_SCORES", "").strip().lower() in ("1", "true", "yes")
+#: The Test arm (#4523, ``CALIB_LINE_TEST=1``): after the last ordinary click, run Test mode's autopilot on the
+#: withheld half with every pick answered from the truth, at the app's default budgets, into
+#: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.
+LINE_TEST = os.environ.get("CALIB_LINE_TEST", "").strip().lower() in ("1", "true", "yes")
 SIM_SIZE = int(os.environ["CALIB_SIM_SIZE"]) if os.environ.get("CALIB_SIM_SIZE", "").strip() else None
 
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
-    from vtscore.training.thresholds import FoldAnchoredCut
+    from vtscore.training.thresholds import FoldAnchoredCut, LineBudgets
 
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
@@ -2095,6 +2095,8 @@ def simulate_voting_iterations(  # noqa: C901
     rank_frame_sink: Optional[list[dict[str, Any]]] = None,
     rank_frame_steps: Optional[Sequence[int]] = None,
     test_score_sink: Optional[list[dict[str, Any]]] = None,
+    line_test_sink: Optional[list[dict[str, Any]]] = None,
+    line_test_budgets: Optional["LineBudgets"] = None,
     sim_size: Optional[int] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
@@ -2296,6 +2298,16 @@ def simulate_voting_iterations(  # noqa: C901
             fills it.  ``None`` (default) = off.
         rank_frame_steps: The ordinary steps (``t``) to record ``step`` rows
             at; ignored without a sink.
+        line_test_sink: List the
+            :data:`~vtscore.eval.voting_columns.LINE_TEST_COLUMNS` row is
+            appended to (#4523): Test mode's autopilot run on the withheld half
+            as it stood at the last ordinary click, every pick answered from
+            the truth (:func:`vtscore.eval.line_test_arm.line_test_row`).
+            Runs after the loop, so it cannot perturb the trajectory, and
+            only under a balance (*beta*): the Test is the balance line's.
+            Only the calibration-metrics path fills it.  ``None`` (default) = off.
+        line_test_budgets: The Test's targets and budgets; ``None`` (default)
+            is the app's :data:`~vtscore.training.thresholds.DEFAULT_BUDGETS`.
         opening_diversity: ``"<tau>/<k>"`` - an experiment knob (issue #4197),
             not app behaviour.  While the opening walks the top of the seed sort
             (``good`` / ``more``), pass over candidates with cosine >= *tau* to at
@@ -3350,11 +3362,13 @@ def simulate_voting_iterations(  # noqa: C901
                     {
                         "t": int(t),
                         "phase": check_phase if picks is not None else (flow.phase if flow is not None else ""),
-                        "scores": np.asarray(calibration[1], dtype=np.float32),
+                        # Full precision (#4523): the Test arm replays this snapshot, and a
+                        # float32 score or a rounded model moves its line and its tail.
+                        "scores": np.asarray(calibration[1], dtype=np.float64),
                         "labels": np.asarray(calibration[2], dtype=np.int8),
                         "train_threshold": float(threshold),
                         "beta": float(details["beta"]) if details.get("beta") is not None else float("nan"),
-                        "model": None if find_line is None else find_line.model.as_dict(),
+                        "model": None if find_line is None else asdict(find_line.model),
                     }
                 )
         else:
@@ -3537,7 +3551,7 @@ def simulate_voting_iterations(  # noqa: C901
             metric_rows, base_scores, base_labels, base_ids = calibration
             # A prompted check's rounds are clicks (#4496); the end-of-run check's are not.
             is_click = picks is None or check_phase == "prompt"
-            if rank_frame_sink is not None and is_click:
+            if (rank_frame_sink is not None or line_test_sink is not None) and is_click:
                 # Kept by reference and turned into the ``last`` frame after the
                 # loop: nothing here is mutated later, and the voted set is a
                 # snapshot, so it is this step's ranking whatever runs after it.
@@ -3560,7 +3574,11 @@ def simulate_voting_iterations(  # noqa: C901
                         else None
                     ),
                 }
-                if rank_frame_steps and any(t_before < s <= t for s in rank_frame_steps):
+                if (
+                    rank_frame_sink is not None
+                    and rank_frame_steps
+                    and any(t_before < s <= t for s in rank_frame_steps)
+                ):
                     rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})
             if (
                 precision_frame_sink is not None
@@ -3741,6 +3759,35 @@ def simulate_voting_iterations(  # noqa: C901
 
     if rank_frame_sink is not None and last_ordinary is not None:
         rank_frame_sink.append({**rank_ident, **_rank_frame("last", **last_ordinary)})
+
+    # --- The Test arm (#4523), once per run. ---
+    #
+    # Test mode's autopilot on the withheld half as the last ordinary click
+    # left it: Find's labels line drawn there at the run's balance, uniform
+    # picks within rank bands answered from the truth, to Done.  Test votes
+    # never train, and the arm runs after the loop, so the trajectory above is
+    # exactly what it is without the arm.  Seeded off the run's seed, so a
+    # replay of the saved snapshot (`line_test_arm.row_from_snapshot`) can
+    # reproduce this row.
+    if line_test_sink is not None and last_ordinary is not None and beta is not None:
+        from vtscore.eval.line_test_arm import line_test_row  # noqa: PLC0415
+        from vtscore.training.thresholds import DEFAULT_BUDGETS  # noqa: PLC0415
+
+        line_test_sink.append(
+            {
+                **rank_ident,
+                **line_test_row(
+                    last_ordinary["t"],
+                    last_ordinary["test_scores"],
+                    last_ordinary["test_labels"],
+                    float(beta),
+                    find_on_test=last_ordinary["find_on_test"],
+                    fallback_threshold=last_ordinary["fallback_threshold"],
+                    budgets=line_test_budgets if line_test_budgets is not None else DEFAULT_BUDGETS,
+                    seed=seed,
+                ),
+            }
+        )
 
     # --- The supervised skyline (issue #3322), once per run. ---
     #

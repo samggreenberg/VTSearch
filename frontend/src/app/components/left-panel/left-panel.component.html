@@ -3,11 +3,11 @@
     <div class="dataset-name" [title]="datasetName()">{{ datasetName() }}</div>
   }
   @if (panelMode() === 'find') {
-    <!-- Find mode (#4524): the Test autopilot on one tab, today's Find in full
-         on the other, the Train view's Autopilot / Manual split applied to
-         Test. The host owns the tab, since the centre and right panes switch
-         with it. -->
-    <div class="left-tabs" role="tablist" aria-label="Find mode">
+    <!-- Test mode (#4524; `find` in code, #4525): the Test autopilot on one
+         tab, Review (the ranked list in full) on the other, the Train view's
+         Autopilot / Manual split applied to Test. The host owns the tab,
+         since the centre and right panes switch with it. -->
+    <div class="left-tabs" role="tablist" aria-label="Test mode">
       <button
         class="left-tab"
         role="tab"
@@ -48,11 +48,11 @@
         <ng-content select="[findAutopilot]" />
       </div>
     } @else {
-    <div class="tab-panel-manual" role="tabpanel" aria-label="Find results">
+    <div class="tab-panel-manual" role="tabpanel" aria-label="Review">
       <!-- The Threshold plus the unverified-positives work-queue actions
            (Browse / To Dataset / Export). All three scope over the unverified
            items above the line — the above-threshold items the human hasn't
-           acted on yet. Find tests the threshold Train set, so it offers no
+           acted on yet. Test tests the threshold Train set, so it offers no
            spot check (#4317). -->
       <div class="find-balance-row">
         <vt-balance

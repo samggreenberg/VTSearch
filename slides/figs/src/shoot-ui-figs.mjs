@@ -783,16 +783,20 @@ async function shootFind(page) {
   await shootNumbered(page, 'ui-steps-find.build1', [
     step(1, datasetRow(TEST_DATASET)),
     step(2, detectorRow(BOOK_DETECTOR)),
-    step(3, dashButton('Find')),
+    step(3, dashButton('Test')),
   ]);
 
-  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  // Test, not Find: since #4525 the Find button runs AutoRun and opens no view.
+  await page.getByRole('button', { name: 'Test', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
-  await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
   // photographing a progress bar.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 })
     .catch(() => {});
+  // Test opens on its Autopilot tab, which hides the ranking (#4524); the
+  // slides show the ranking, on the Review tab.
+  await page.locator('.left-tab[title^="Review"]').first().click();
+  await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   await page.waitForTimeout(3000);
 
   // The Step-By-Step slide's last page: the results a user lands on, best

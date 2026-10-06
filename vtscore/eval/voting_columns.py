@@ -474,6 +474,108 @@ def beta_tag(beta: float) -> str:
     return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
 
 
+#: The Test arm's frame (#4523): one row per session, Test mode's autopilot run
+#: on the withheld half after the last ordinary click, every pick answered from
+#: the truth (:func:`vtscore.eval.line_test_arm.line_test_row`).  Emitted only
+#: with a ``line_test_sink`` and a balance (the Test is the balance line's).
+LINE_TEST_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "calibration_seed",
+    "style",
+    #: The last ordinary click: the ranking the Test ran on.
+    "t",
+    "beta",
+    #: ``labels`` - Find's labels line fitted on the withheld half; ``fallback``
+    #: - the retrain's cut, no class model that step; ``none`` - no line (then
+    #: *Nothing to test*).  ``has_model`` says whether the recall estimator
+    #: had the model's item posteriors below the line.
+    "line_source",
+    "has_model",
+    #: The budgets the Test ran under (:class:`~vtscore.training.thresholds.LineBudgets`).
+    "matches_width",
+    "misses_width",
+    "matches_picks",
+    "misses_picks",
+    "picks_per_round",
+    "dry_run_share",
+    "model_weight",
+    #: The seed the Test's own picks were drawn at.
+    "test_seed",
+    #: ``done`` or ``nothing``; the line's count and the corpus behind it.
+    "phase",
+    "line_count",
+    "n_test",
+    "n_test_pos",
+    #: The cost: rounds, picks per phase, and why each phase ended (one of
+    #: ``STOP_REASONS``; blank for a phase that never ran).
+    "rounds",
+    "picks_above",
+    "picks_below",
+    "picks_total",
+    "matches_stop",
+    "misses_stop",
+    #: The truth at the line, and the best any cut of the ranking reaches.
+    "precision_true",
+    "recall_true",
+    "fbeta_true",
+    "found_true",
+    "fbeta_best_cut_true",
+    "best_cut_true",
+    #: The most another band edge's true F-beta beats the line's by.
+    "edge_gain_true",
+    "n_edges",
+    "bands_below",
+    "bands_below_reached",
+    #: The ranges at Done (point, lo, hi) and whether each held the truth
+    #: (1 / 0; -1 with nothing to test).
+    "precision_point",
+    "precision_lo",
+    "precision_hi",
+    "precision_held",
+    "recall_point",
+    "recall_lo",
+    "recall_hi",
+    "recall_held",
+    "fbeta_point",
+    "fbeta_lo",
+    "fbeta_hi",
+    "fbeta_held",
+    #: The *found* words the verdict shows, against the truth's words.
+    "found",
+    "found_match",
+    #: The counts behind recall: above the line, and the model-assisted count
+    #: below it, each beside the truth; the model's count in the bands the
+    #: walk never reached beside the positives really there.
+    "positives_above_point",
+    "positives_above_lo",
+    "positives_above_hi",
+    "positives_above_true",
+    "positives_below_point",
+    "positives_below_lo",
+    "positives_below_hi",
+    "positives_below_true",
+    "tail_positives_model",
+    "tail_positives_true",
+    "tail_from_model",
+    #: *Lean the Threshold*: the best other edge by the estimate, how much it
+    #: reads above the line, and the truth at that edge.
+    "edge_gain_est",
+    "best_edge_est",
+    "fbeta_at_best_edge_est_true",
+    #: How many of the ``n_edges`` re-estimated ranges held the truth.
+    "edges_precision_held",
+    "edges_recall_held",
+    "edges_fbeta_held",
+    #: The verdict's reading against the oracle's under the same rule
+    #: (:func:`vtscore.eval.line_test_arm.read_verdict`).
+    "verdict",
+    "oracle_verdict",
+    "verdict_match",
+)
+
+
 #: Column order for the calibration study's main per-step frame (issue #2781),
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;
 #: under ``safe_thresholds`` additionally one row per safe-threshold GMM variant
