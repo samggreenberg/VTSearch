@@ -103,7 +103,7 @@ cut.
 
 <!-- item-sep -->
 
-- [ ] #4582 — Re-score the Cost-era studies' cells at beta 1/4, 1 and 4 where they still exist (Sonnet)
+- [ ] #4582 — Re-score the Cost-era studies' cells at beta 1/4, 1 and 4 where they still exist (Sonnet); report: [`REPORT.md`](../experiments/2026-10-06-cost-fbeta-rescore-4582/REPORT.md)
 
 <!-- item-sep -->
 
