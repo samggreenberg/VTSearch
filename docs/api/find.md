@@ -6,6 +6,15 @@ Endpoints for running detectors against data: multi-dataset **Find**, the
 active-dataset **Find Label** / **Auto-Detect** flows, and their evaluation
 stats and cancel companions.
 
+**Naming.** The app's **Test** view (`/test/:datasetId/:detectorId`) is the
+caller of Find Label, the find stats, corrections and queues, and the test of
+the line below. It was called Find until #4525, and these routes, their
+fields (`find_mode`, `find_scores`) and the `find` SSE channel keep that name,
+so "Find mode" and "the Find pass" on this page mean the Test view's session.
+The Dashboard's **Find** button is something else: it starts a background
+AutoRun per ticked dataset
+([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)).
+
 Several endpoints here read or mutate the active dataset / detector context via
 the [`X-Dataset-Id` / `X-Detector-Id` headers](../API.md#context-headers-x-dataset-id--x-detector-id);
 the required ones are marked below.
@@ -226,7 +235,7 @@ in the **background** instead - after a web import (see the `autorun` flag
 under [Loading Datasets](datasets.md#loading-datasets)) and from a dataset's
 ⋯ **Run AutoRun**
 ([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)),
-whose big **AutoRun** button runs the ticked detectors in their place -
+whose big **Find** button runs the ticked detectors in their place -
 and keeps each run's results for the user who started it:
 
 ### AutoRun results
@@ -256,7 +265,7 @@ POST /api/line-test/forget
 **All but `GET` require** `X-Detector-Id`.
 
 Test mode's test of the line the Find pass drew (#4524; the design is
-`docs/plans/test-mode.md`, the statistics
+[*The test sample*](../../vtscore/docs/packages/training.md#the-test-sample-linetest-linebudgets-line_phase-found_words), the statistics
 `vtscore/training/thresholds/line_test.py`). The question is *if this line
 went to AutoRun, what share of what it ships would be right, and what share of
 the real matches would it ship?* The answer comes from **uniform picks within

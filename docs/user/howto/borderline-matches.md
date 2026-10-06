@@ -1,7 +1,7 @@
 # Catch the borderline matches
 
 Every detector draws a line: pictures above it are matches, pictures below
-are not. Some real matches always land just under the line. Find already
+are not. Some real matches always land just under the line. Test already
 shows you pictures from both sides of it, and moving the **Threshold**
 toward **False Positives** moves the line down to let the next band of
 pictures in. This page shows how to review the pictures near the line, move
@@ -9,7 +9,7 @@ the Threshold, and see what that costs you.
 
 It picks up where [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search)
 ends: the `Yellow Smileys` detector, trained on `drawings`, has just been run
-over `drawings-new` with **Find**. The red numbers in each screenshot show
+over `drawings-new` with **Test**. The red numbers in each screenshot show
 where to click, in order.
 
 ## How the Threshold moves the line
@@ -39,7 +39,7 @@ the **Autopilot** tab found on it:
   48 kept** - the Test autopilot has measured it with random picks from
   either side of the line, and the note says how much of what it keeps is
   likely right and how much of what the collection holds it likely found;
-  see [Find: testing and reviewing](../USER_GUIDE.md#find-testing-and-reviewing).
+  see [Testing a detector](../USER_GUIDE.md#testing-a-detector).
   Moving the Threshold after a test reads *tested at another line* until you
   test again. The check Train ran measured the training collection, so it is
   not shown here.
@@ -54,7 +54,7 @@ the pictures. Only the line moves. The user guide explains the line itself in
 ## Step 1: Check the pictures either side of the line
 
 On the **Review** tab, check the pictures near the line first, as in
-[Check and correct a detector's calls](check-and-correct.md). Find serves
+[Check and correct a detector's calls](check-and-correct.md). Review serves
 them from both sides, alternating above and below the line, so the real
 matches just under it come up wherever the Threshold sits. Every one you mark
 **Good** joins **Verified Good**, and counts as a match from then on.
@@ -84,7 +84,7 @@ much of that longer list is right here; testing the new line on the
 ## Step 3: Review the pictures it let in
 
 When the line has moved, carry on checking with **Good** and **Bad** as
-before. Find now starts from the bottom of the band it just let in, the
+before. Review now starts from the bottom of the band it just let in, the
 lowest-scoring picture still above the new line, and works outwards from
 there. Nothing on screen marks which pictures are new: they are the ones just
 above the line, and every one you check moves to the right-hand panel.
@@ -126,7 +126,7 @@ Threshold there.
 ## Where the setting goes
 
 The detector keeps its Threshold while VTSearch runs, and the Threshold
-decides where the line sits the next time you run Find with this detector, on this dataset
+decides where the line sits the next time you run this detector, on this dataset
 or any other. The line decides which unchecked pictures count as matches when
 you **Export** or use **To Dataset**
 ([Send your matches somewhere](export-matches.md)).

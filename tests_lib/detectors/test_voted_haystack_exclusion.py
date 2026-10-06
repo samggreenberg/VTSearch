@@ -196,13 +196,13 @@ class TestSharedExclusionPolicy:
         assert thresholds_mod.drop_voted(scores, ids, {2, 1}).tolist() == [0.9, 0.5]
 
     def test_applies_above_the_floor(self):
-        scores = np.linspace(0.0, 1.0, 100).tolist()
+        scores = list(np.linspace(0.0, 1.0, 100))
         ids = list(range(100))
         kept, applied = thresholds_mod.apply_vote_exclusion(scores, ids, {0, 1, 2}, min_remainder=10)
         assert applied and kept.size == 97
 
     def test_declines_below_the_floor_and_returns_the_whole_haystack(self):
-        scores = np.linspace(0.0, 1.0, 100).tolist()
+        scores = list(np.linspace(0.0, 1.0, 100))
         ids = list(range(100))
         kept, applied = thresholds_mod.apply_vote_exclusion(scores, ids, set(range(50)), min_remainder=60)
         assert not applied and kept.size == 100
@@ -250,7 +250,7 @@ class TestHarnessArmKnob:
         excluded_sizes = captured[-1]
 
         ids = list(range(len(vecs)))
-        scores = np.linspace(0.0, 1.0, len(vecs)).tolist()
+        scores = list(np.linspace(0.0, 1.0, len(vecs)))
         off, off_applied = thresholds_mod.apply_vote_exclusion(scores, ids, voted, min_remainder=math.inf)
         on, on_applied = thresholds_mod.apply_vote_exclusion(scores, ids, voted, min_remainder=None)
 

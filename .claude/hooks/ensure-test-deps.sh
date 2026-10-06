@@ -45,10 +45,12 @@ pip install --upgrade setuptools -q
 #     versions patch CVE-2026-44431/44432.
 #   - httplib2 0.20.4 ships pre-installed (via launchpadlib, debian-managed);
 #     0.32.0 patches PYSEC-2026-3444. Unused by VTSearch.
-#   - pypdf 6.17.0 ships pre-installed in the Python 3.13 image, required by
-#     nothing of ours (PyMuPDF reads our PDFs); 6.19.0 patches
-#     PYSEC-2026-4153..4160.
-pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 httplib2 pypdf -q
+pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 httplib2 -q
+
+# pypdf ships pre-installed in the cloud container (in /usr/local, so a plain
+# upgrade replaces it); VTSearch does not use it. 6.17.0 carries
+# PYSEC-2026-4153..4160, patched in 6.19.0.
+pip install --upgrade "pypdf>=6.19.0" -q
 
 # The container also carries a per-user site (/root/.local/lib/python3.11/
 # site-packages, home of the preinstalled MCP tooling) that sits AHEAD of
@@ -68,18 +70,15 @@ fi
 pip install --ignore-installed blinker -q
 
 # VTSBrowse signpost naming deps (see docs/plans/vtsbrowse-toponymy.md):
-# apricot-select's legacy setup.py needs the stdlib-distutils shim and must
-# precede the main requirements pass (it's declared in pyproject.toml);
+# apricot-select ships a legacy setup.py sdist and must precede the main
+# requirements pass (it's declared in pyproject.toml). Do NOT wrap it in
+# SETUPTOOLS_USE_DISTUTILS=stdlib, as scripts/install.sh explains: setuptools
+# >= 74 refuses to import with that value set, and Python >= 3.12 has no
+# stdlib distutils, so the build dies with "BackendUnavailable: Cannot import
+# 'setuptools.build_meta'" (it did on the Python 3.13 container).
 # toponymy goes in --no-deps because its transformers<5 pin would downgrade
 # the app's transformers and is empirically unnecessary for our usage.
-# Python 3.12 removed stdlib distutils, so there the shim makes setuptools'
-# build backend unimportable and setuptools' own vendored copy is the one
-# that builds it.
-if python -c 'import sys; sys.exit(0 if sys.version_info < (3, 12) else 1)'; then
-  SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select -q
-else
-  pip install apricot-select -q
-fi
+pip install apricot-select -q
 pip install --no-deps "toponymy==0.5.2" -q
 
 # Install all dependencies + editable install via pyproject.toml

@@ -1,6 +1,6 @@
 """A finished test's verdict, kept on the detector (#4526).
 
-Test mode (``docs/plans/test-mode.md``) measures a detector's line on a corpus
+Test mode (``vtscore/docs/packages/training.md``) measures a detector's line on a corpus
 it never trained on: uniform picks from rank bands on both sides of the line,
 and from them the line's precision, recall and F-beta as likely ranges
 (:class:`~vtscore.training.thresholds.LineTest`).  This module keeps the

@@ -89,7 +89,7 @@ def start_precision_check():
     det_ctx = get_active_detector_context()
     ranking = det_ctx.line_ranking
     if ranking is None:
-        abort(409, message="No ranking to check: run a learned sort or a Find pass first.")
+        abort(409, message="No ranking to check: run a learned sort or a Test pass first.")
     knobs = line_knobs()
     beta, floor = knobs["beta"], knobs["min_precision"]
     if beta is None and floor is None:

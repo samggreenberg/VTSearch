@@ -264,8 +264,8 @@ instead, since every commit on `dev` is effectively a new app release.)
   `LineTest` gains `kept_at`, when a resumed test's picks were taken
   (`None` for a fresh test), in `as_dict()` too.
 
-- **The test sample** (issue #4527; the first slice of Test mode,
-  `docs/plans/test-mode.md`). `vtscore.training.thresholds.line_test`: `LineTest`
+- **The test sample** (issue #4527; the first slice of Test mode, #4520,
+  documented in `vtscore/docs/packages/training.md`). `vtscore.training.thresholds.line_test`: `LineTest`
   freezes a ranking and its line, cuts both sides into the spot check's doubling
   bands, deals uniform rounds (`draw` / `record` / `unrecord`) and records each
   pick's band; `estimates()` is the line's precision, recall and F-beta as

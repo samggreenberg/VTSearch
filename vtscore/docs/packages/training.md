@@ -557,12 +557,38 @@ range comes only from those picks, never from a model.
 ### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`
 
 `vtscore/training/thresholds/line_test.py` (#4527; the first slice of Test
-mode, `docs/plans/test-mode.md`). Test mode asks of a detector on a corpus it
+mode, #4520). Test mode asks of a detector on a corpus it
 never trained on what share of what its line ships would be right and what
 share of the real matches it would ship, as likely ranges from uniform picks
 within rank bands; this module is the sample, its estimators, the allocation
 rule and the phase machine, pure statistics over ids, ranks and labels that
 the app's routes and the eval harness both call.
+
+**Why it is shaped this way.** AutoRun ships the set above the line unchecked,
+and nobody downstream can tell a wrong match from a missed one, so a test
+reports both halves, the line's precision and recall on the corpus at the
+user's balance, with F-beta at that balance as the headline, all from one set
+of draws. The corpus stands in for the future datasets AutoRun will see; the
+app's two trust checks (training-domain overlap, evidence coverage) are the
+caveat on that extrapolation. The verdict is a reading of the ranges, never a
+threshold the app enforces (#4267: *do your best, and say how close we got*).
+Two rules make the numbers mean anything:
+
+- **A test vote never trains the detector.** The point of a test set is that
+  the detector never saw it. The app keeps test votes out of the labelset and
+  records them with their own provenance flow; **Add Corrections** is the
+  failed-the-test exit, and the moment it is used the result is stale.
+- **Every number comes from uniform picks within rank bands**, never from the
+  top of the ranking or the boundary walk, which is biased toward the line by
+  design (#4257: model-chosen votes broke 83% of the #4220 estimator's
+  promises). The ranking is frozen for the whole test, which is what makes
+  the band design valid, and the app hides the ranked list while a test runs,
+  since a pick's place in it would show its rank.
+
+The intervals are Beta posteriors drawn jointly, so optional stopping does not
+change what a posterior means; the frequentist coverage of the stop is a
+question for the eval, priced by #4523
+([`REPORT.md`](../../../docs/experiments/2026-10-05-line-test-4523/REPORT.md)).
 
 - `LineTest.start(ranking_ids, line_count, beta, posteriors=None, budgets=,
   seed=None, labels=None)` freezes the ranking and the line (the top

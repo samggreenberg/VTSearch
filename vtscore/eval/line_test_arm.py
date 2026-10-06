@@ -1,6 +1,6 @@
 """The Test arm: Test mode's autopilot run on the withheld half, read against the truth (#4523).
 
-Test mode (``docs/plans/test-mode.md``) measures a detector's line on a corpus
+Test mode (``vtscore/docs/packages/training.md``) measures a detector's line on a corpus
 it never trained on, from uniform picks within rank bands, and stops when its
 ranges are narrow enough or its budgets are spent
 (:mod:`vtscore.training.thresholds.line_test`).  Whether those ranges hold,

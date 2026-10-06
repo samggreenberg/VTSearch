@@ -5,7 +5,7 @@ import type { LineTestVerdict } from '../generated/api-client/models/line-test-v
 import { formatTimestamp } from './format-date';
 
 /**
- * Test mode's test of the line (#4524; the design is `docs/plans/test-mode.md`,
+ * Test mode's test of the line (#4524; the design is in `vtscore/docs/packages/training.md`,
  * the statistics `vtscore/training/thresholds/line_test.py`): the vocabulary
  * the Find view's Autopilot tab reads the server's state in, and the words it
  * puts on it. The phase is derived server-side on every read (`line_phase`);
