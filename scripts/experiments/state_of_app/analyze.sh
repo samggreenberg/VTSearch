@@ -6,7 +6,9 @@
 #   text_baseline.csv            click 0: what typing the query alone scores,
 #                                AP and the line at each floor (#4357)
 #   analysis/viewer.html         the shared calibration viewer, for browsing
-#                                cells; the report reads the tables below
+#                                cells; the report reads the tables below.
+#                                It opens on AP and does not offer cost,
+#                                which the review retired (#4357, #4576)
 #   analysis/cells.csv, lines.csv, curves.csv, influence.csv, images.csv,
 #   image_detector.csv, summary.md
 #   analysis/figures/*.png, analysis/images.md + images/ (thumbnails)
@@ -51,7 +53,8 @@ if _stale_baseline; then
 fi
 python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" \
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
-  --subtitle "coco_better, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)"
+  --subtitle "coco_better, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)" \
+  --default-metric average_precision --hide-metrics cost
 python "$HERE/analyze.py" --exp "$EXP" --baseline "$BASELINE" --out "$OUT" --path "$SOTA_PATH" --seeds "${SOTA_ANALYZE_SEEDS:-0}"
 python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"
 python "$HERE/thumbs.py" --analysis "$OUT" --out "$OUT/images" --n 12

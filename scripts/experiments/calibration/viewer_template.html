@@ -357,11 +357,25 @@
   })();
   const inBand = (c) => state.band === ALL || bandOf(c) === state.band;
 
+  // The metrics on the menu, and the one the page opens on.  `P.view` is the
+  // study's choice (viewer.py's --default-metric / --hide-metrics), carried in
+  // the payload so a reskin keeps it.  A page without one offers every metric
+  // and opens on the first, which is cost on any run that emits it: wrong for
+  // a report that retired cost (#4576).  A hidden metric is off the menu only -
+  // its numbers are still in the payload, and `mi` below still indexes the
+  // full list.
+  const VIEW = P.view || {};
+  const OFFERED = (() => {
+    const hide = new Set(VIEW.hide || []);
+    const keep = P.metrics.filter((m) => !hide.has(m.key));
+    return keep.length ? keep : P.metrics;   // the builder refuses this; never offer nothing
+  })();
+
   const state = {
     dataset: P.datasets.length > 1 ? ALL : P.datasets[0],
     band: ALL,
     category: ALL,
-    metric: P.metrics[0].key,
+    metric: (OFFERED.find((m) => m.key === VIEW.metric) || OFFERED[0]).key,
     embedders: new Set(P.embedders),
     arms: new Set(P.arms),
     seedMode: "avg",
@@ -432,7 +446,7 @@
   fillCats();
 
   const mSel = $("metric");
-  mSel.innerHTML = P.metrics.map((m) => `<option value="${esc(m.key)}">${esc(m.label)}</option>`).join("");
+  mSel.innerHTML = OFFERED.map((m) => `<option value="${esc(m.key)}">${esc(m.label)}</option>`).join("");
   mSel.value = state.metric;
   mSel.onchange = () => { state.metric = mSel.value; render(); };
 

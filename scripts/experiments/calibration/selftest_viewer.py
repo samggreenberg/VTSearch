@@ -16,7 +16,11 @@ screen, so both are checked against values that are known by construction:
   (``lower``) that :mod:`vtscore.eval.calibration_metrics` declares — a viewer
   that decided for itself would eventually attach "lower is better" to recall;
 * the per-seed payload must stay inside its byte budget, and must **say** which
-  click grid it landed on rather than thinning in silence.
+  click grid it landed on rather than thinning in silence;
+* the page's opening ``view`` (the metric it opens on, the ones it hides) must
+  come out the same whether it was built in or put on by a reskin, must survive
+  a later plain reskin, and must refuse a choice the page could only honour by
+  quietly opening somewhere else (#4576).
 
 Run: ``python selftest_viewer.py``
 """
@@ -469,6 +473,87 @@ def main() -> int:  # noqa: C901
             == re.search(r'type="application/json">(.*?)</script>', html, re.S).group(1),
         )
         ok &= _check("...and the reskinned page is still whole", again == html)
+
+        # --- the opening view (#4576) ---------------------------------------
+        # A report that retired a metric must not open its viewer on it.  The
+        # choice lives in the payload, so it has to come out identical whether
+        # the page was built with it or a reskin put it on afterwards (the
+        # committed SotA pages were built before it existed), and a later plain
+        # reskin -- the routine template push -- must not undo it.
+        def blob(path: Path) -> str:
+            return re.search(r'type="application/json">(.*?)</script>', path.read_text(encoding="utf-8"), re.S).group(1)
+
+        retire = {"metric": "average_precision", "hide": ["cost"]}
+        ok &= _check("a page built without a choice carries no `view`, so it reads as before", "view" not in P)
+        viewed = V.build_viewer(
+            main_df,
+            tmp / "viewed.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            skyline=sky,
+            runs_budget_mb=0.25,
+            default_metric="average_precision",
+            hide_metrics=["cost"],
+        )
+        PV = _payload(viewed)
+        ok &= _check("the build writes the view into the payload", PV.get("view") == retire, str(PV.get("view")))
+        ok &= _check(
+            "...and hiding is not dropping: the hidden metric's numbers are still carried",
+            PV["metrics"] == P["metrics"] and PV["agg"]["mean"]["shape"] == P["agg"]["mean"]["shape"],
+            str([m["key"] for m in PV["metrics"]]),
+        )
+        late = tmp / "late.html"
+        shutil.copyfile(out, late)
+        V.reskin(late, default_metric="average_precision", hide_metrics=["cost"])
+        PL = _payload(late)
+        ok &= _check("a reskin puts the same view on a page built without one", PL.get("view") == retire)
+        ok &= _check(
+            "...touching nothing else in the payload",
+            blob(late) == blob(out)[:-1] + ',"view":' + json.dumps(retire, separators=(",", ":")) + "}",
+        )
+        ok &= _check(
+            "...and lands where a build puts it, so the two pages agree key for key",
+            list(PL) == list(PV),
+            f"{list(PL)[-3:]} vs {list(PV)[-3:]}",
+        )
+        kept = blob(late)
+        V.reskin(late)
+        ok &= _check("a later plain reskin keeps the view, byte for byte", blob(late) == kept)
+        V.reskin(late, default_metric="precision")
+        ok &= _check(
+            "a reskin that names one half leaves the other alone",
+            _payload(late).get("view") == {"metric": "precision", "hide": ["cost"]},
+            str(_payload(late).get("view")),
+        )
+        V.reskin(late, default_metric="", hide_metrics=[])
+        ok &= _check(
+            "clearing both halves drops the block and restores the original payload",
+            blob(late) == blob(out),
+        )
+        ok &= _check(
+            "the template reads the block the builder writes",
+            "P.view" in re.sub(r'<script id="payload".*?</script>', "", html, flags=re.S),
+        )
+
+        def refuses(label: str, **kw) -> bool:
+            try:
+                V.build_viewer(main_df, tmp / "refused.html", arms=ARMS, runs_budget_mb=0.25, **kw)
+            except SystemExit as exc:
+                return _check(f"refuses {label}", True, str(exc))
+            return _check(f"refuses {label}", False, "built anyway")
+
+        ok &= refuses("a misspelt metric to hide", hide_metrics=["cots"])
+        ok &= refuses("opening on a metric the run never emitted", default_metric="auroc")
+        ok &= refuses("opening on a metric it also hides", default_metric="cost", hide_metrics=["cost"])
+        ok &= refuses(
+            "hiding every metric the page carries",
+            hide_metrics=["cost", "precision", "recall", "f1", "average_precision"],
+        )
+        ok &= _check(
+            "...but hiding a known metric the run never emitted is allowed",
+            V.opening_view(["cost", "precision"], hide=["auroc"]) == {"hide": ["auroc"]},
+        )
 
         print("\n" + ("SELFTEST PASSED" if ok else "SELFTEST FAILED"))
         return 0 if ok else 1
