@@ -2,7 +2,7 @@
 
 :func:`operating_metrics` is the shared tail of every arm the harness emits:
 given held-out scores, labels and a threshold it produces the cost / FPR / FNR /
-oracle / regret block that each row carries, so the shipped row and a dozen
+F-beta / oracle / regret block that each row carries, so the shipped row and a dozen
 experiment arms are always priced by the same code.  The rest of the module is
 what that computation leans on - the 6-dp rounding every emitted float goes
 through, the fold-count reader for a provenance string, and a small memo in
@@ -104,6 +104,7 @@ def operating_metrics(
     pool_variant: str,
     provenance: str,
     n_pool_rows: float,
+    beta: float | None,
 ) -> dict[str, Any]:
     """Full per-step calibration metrics for one pooling (issue #2781).
 
@@ -115,6 +116,14 @@ def operating_metrics(
     on calibration vs. best cut on test).  ``cal_scores``/``cal_labels`` are the
     pooled calibration fold orderings under the same pooling; ``None`` skips the
     decomposition (leaves those columns NaN).
+
+    *beta* is the balance that drew the step's line (``details["beta"]``), and
+    prices the objective, ``fbeta``, beside the preset columns
+    (:func:`~vtscore.eval.calibration_metrics.fbeta_metrics`, #4584); ``None``
+    where no balance drew one.  Required rather than defaulted, so an arm that
+    forgets it fails here instead of emitting a NaN objective on a balance row.
+    ``cost`` is priced at *inclusion* whatever *beta* is: it is the diagnostic
+    column now, not the decision metric.
 
     **Two reference points, because the naive one is optimistic** (#3116, #3248).
     ``oracle_cost`` is the minimum of the empirical cost over the very test
@@ -157,6 +166,7 @@ def operating_metrics(
 
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
         detection_metrics,
+        fbeta_metrics,
         inclusion_weights,
         is_degenerate,
         operating_cost,
@@ -256,6 +266,7 @@ def operating_metrics(
         "fpr": round6(fpr),
         "fnr": round6(fnr),
         **{k: round6(v) for k, v in detection_metrics(scores, labels, threshold).items()},
+        **{k: round6(v) for k, v in fbeta_metrics(scores, labels, threshold, beta).items()},
         "auroc": round6(float(_auroc(scores, labels))),
         "average_precision": round6(float(_average_precision(scores, labels))),
         "oracle_threshold": round6(float(o_thr)),

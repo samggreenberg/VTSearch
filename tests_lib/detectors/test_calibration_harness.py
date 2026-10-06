@@ -180,6 +180,21 @@ def test_tree_arm_emits_base_plus_remedial_rows():
     assert saw_full, "no step reached a conformal cut with remedial re-pools"
 
 
+def test_every_calibration_row_carries_its_own_objective():
+    """#4584: the base row and every re-pool price F-beta at the step's beta, from their own cut."""
+    from vtscore.eval.calibration_metrics import fbeta_from_rates  # noqa: PLC0415
+
+    rows, _sweep = _run_emit("max_patch_pca_hac")
+    scored = [r for r in rows if np.isfinite(r["recall"])]
+    assert {r["pool_variant"] for r in scored} == {"max", "topk", "pnorm"}
+    for r in scored:
+        assert np.isfinite(r["fbeta_b1"])
+        if np.isfinite(r["beta"]):
+            assert r["fbeta"] == pytest.approx(float(fbeta_from_rates(r["precision"], r["recall"], r["beta"])), abs=2e-5)
+        else:
+            assert np.isnan(r["fbeta"])
+
+
 def test_calibration_columns_and_invariants():
     rows, sweep = _run_emit("max_patch_pca_hac")
     for r in rows:

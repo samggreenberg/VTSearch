@@ -157,6 +157,38 @@ class TestTheArms:
             self._run(min_precision=0.5)
 
 
+class TestTheObjectiveColumns:
+    """#4584: every row carries the objective at its own beta, so no analyzer re-derives it."""
+
+    def _rows(self, **kwargs):
+        return simulate_voting_iterations(_separable(), "alpha", seed=0, max_steps=12, calibrate_count=2, **kwargs)
+
+    @pytest.mark.parametrize(("beta", "preset"), [(None, "fbeta_b1"), (0.25, "fbeta_b025"), (4.0, "fbeta_b4")])
+    def test_fbeta_is_the_rows_own_preset_column(self, beta, preset):
+        rows = self._rows(**({} if beta is None else {"beta": beta}))
+        assert rows
+        scored = [r for r in rows if math.isfinite(r["recall"])]
+        assert scored
+        for r in scored:
+            assert r["beta"] == (DEFAULT_BETA if beta is None else beta)
+            assert math.isfinite(r["fbeta"]) and r["fbeta"] == r[preset]
+
+    def test_it_is_what_the_rows_rates_say(self):
+        """The count form on the row and the rate form an analyzer back-fills with agree."""
+        from vtscore.eval.calibration_metrics import fbeta_from_rates  # noqa: PLC0415
+
+        rows = [r for r in self._rows(beta=0.5) if math.isfinite(r["recall"])]
+        got = np.array([r["fbeta"] for r in rows])
+        want = fbeta_from_rates([r["precision"] for r in rows], [r["recall"] for r in rows], 0.5)
+        np.testing.assert_allclose(got, want, atol=2e-5)
+
+    def test_the_inclusion_arm_has_no_objective_but_keeps_the_presets(self):
+        rows = [r for r in self._rows(beta=NO_BALANCE) if math.isfinite(r["recall"])]
+        assert rows
+        assert all(math.isnan(r["fbeta"]) for r in rows)
+        assert all(math.isfinite(r["fbeta_b1"]) for r in rows)
+
+
 class TestTheBalanceArm:
     """#4413: the line drawn at F-beta's beta, and the end-of-run check as the F-beta walk."""
 

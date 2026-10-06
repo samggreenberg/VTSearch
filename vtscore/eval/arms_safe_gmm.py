@@ -251,6 +251,7 @@ def _safe_gmm_variant_rows(
             pool_variant="max",
             provenance=provenance,
             n_pool_rows=n_pool_rows,
+            beta=details.get("beta"),
         )
         row["gmm_variant"] = name
         row["schedule"] = ""

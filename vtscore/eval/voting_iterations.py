@@ -81,6 +81,7 @@ from vtscore.eval import scale_bands
 from vtscore.eval.labels import evaluable_pool, media_is_positive
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.voting_columns import (
+    FBETA_COLUMNS,
     FIT_QUALITY_STRIDE_DEFAULT,
     STOPPING_MARGIN_COLUMNS,
     VOTING_COLUMNS,
@@ -1089,9 +1090,11 @@ def _evaluate_on_test(
     Find on the withheld half would draw: the same class model, the prevalence
     re-estimated on these scores.
 
-    Returns the operating-point metrics the user cares about — inclusion-weighted
-    ``cost``, ``fpr``, ``fnr``, ``precision``, ``recall`` and ``f1`` (all
-    computed at *threshold*, the last three via
+    Returns the operating-point metrics the user cares about — the objective
+    ``fbeta`` at *beta* with its preset columns
+    (:func:`~vtscore.eval.calibration_metrics.fbeta_metrics`, #4584),
+    inclusion-weighted ``cost``, ``fpr``, ``fnr``, ``precision``, ``recall`` and
+    ``f1`` (all computed at *threshold*, the last three via
     :func:`~vtscore.eval.calibration_metrics.detection_metrics`) — plus the
     threshold-independent ranking metrics ``auroc`` and ``average_precision``,
     which isolate "how good is the ranking" from "how good is the threshold".
@@ -1118,6 +1121,7 @@ def _evaluate_on_test(
             "precision": nan,
             "recall": nan,
             "f1": nan,
+            **dict.fromkeys(FBETA_COLUMNS, nan),
             "n_test_pos": nan,
             "n_test_neg": nan,
             "n_flagged": nan,
@@ -1139,6 +1143,7 @@ def _evaluate_on_test(
             out["find_threshold"] = threshold
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
         detection_metrics,
+        fbeta_metrics,
         inclusion_weights,
         operating_cost,
     )
@@ -1153,6 +1158,7 @@ def _evaluate_on_test(
         "fpr": round(fpr, 6),
         "fnr": round(fnr, 6),
         **{k: round6(v) for k, v in det.items()},
+        **{k: round6(v) for k, v in fbeta_metrics(scores_arr, labels_arr, threshold, beta).items()},
         "auroc": round(_auroc(scores_arr, labels_arr), 6),
         "average_precision": round(_average_precision(scores_arr, labels_arr), 6),
     }
@@ -1189,6 +1195,7 @@ def _standalone_calibration_row(
         pool_variant="max",
         provenance=str(details.get("provenance") or details.get("threshold_rule") or "standalone"),
         n_pool_rows=1.0,
+        beta=details.get("beta"),
     )
     if "xcal_threshold" in details:
         row["xcal_threshold"] = round6(float(details["xcal_threshold"]))
@@ -1267,6 +1274,7 @@ def _calibration_metric_rows(
         pool_variant="max",
         provenance=provenance,
         n_pool_rows=n_pool_rows,
+        beta=details.get("beta"),
     )
     if "xcal_threshold" in details:
         # Under safe_thresholds the base row's threshold is the blended one;
@@ -1329,6 +1337,7 @@ def _calibration_metric_rows(
                     pool_variant=variant,
                     provenance="conformal",
                     n_pool_rows=n_pool_rows,
+                    beta=details.get("beta"),
                 )
             )
 
@@ -1512,6 +1521,8 @@ def _skyline_arm_rows(
             pool_variant="max",
             provenance=SKYLINE_PROVENANCE,
             n_pool_rows=1.0,
+            # A skyline belongs to no step, so no balance drew a line on it.
+            beta=None,
         )
         row["gmm_variant"] = name
         row["schedule"] = ""
