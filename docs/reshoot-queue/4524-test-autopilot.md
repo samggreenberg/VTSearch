@@ -5,7 +5,4 @@
 - `trust-stats` — the two trust chips sit under the verdict in the result pane, not in a modal
 - `borderline-chart` — the chart is the result pane's, with a range bar at every band edge
 - `borderline-floor` — the Threshold's note under the spectrum reads *Untested · top N kept* now
-- `step-find-results` — the ranked list is the Review tab; the shot frames it after the tab click
-- `correct-verify` — Step 1 is on the Review tab
-- `correct-add` — the Review tab's Add Corrections to Detector
 - `slides:find` — the Find frames show the Autopilot tab
