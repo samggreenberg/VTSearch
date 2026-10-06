@@ -8,4 +8,3 @@
 - `step-find-results` — the ranked list is the Review tab; the shot frames it after the tab click
 - `correct-verify` — Step 1 is on the Review tab
 - `correct-add` — the Review tab's Add Corrections to Detector
-- `slides:find` — the Find frames show the Autopilot tab
