@@ -1,6 +1,7 @@
 # State of the App: Region Photo — 2026-10-06
 
 **Issue:** #4534. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
+**Interactive viewer:** [`viewer.html`](viewer.html), the beta-1 run's sessions (`2026-10-06-b1`, the app's default preset).
 **App:** `dev` at e530b4c0d (2026-10-05 evening). The app is the same one the Binary Photo review of 2026-10-05
 read (#4510): the labels line (#4452), the corpus-relative spread floor (#4492), Autopilot's weak-separation
 check (#4496), and presets of beta 1/4, 1 and 4.

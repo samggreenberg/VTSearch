@@ -1,6 +1,7 @@
 # State of the App: Binary Photo — 2026-10-05
 
 **Issue:** #4510. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
+**Interactive viewer:** [`viewer.html`](viewer.html), the beta-1 run's sessions (`2026-10-05-b1`, the app's default preset).
 **App:** `dev` at 19ed74aaa. The line comes from the labels (#4452), and its spread floor follows the corpus
 (#4492). Autopilot runs the spot check itself when the labels separate weakly (#4496, PR #4503). The presets are
 beta 1/4, 1 and 4.
