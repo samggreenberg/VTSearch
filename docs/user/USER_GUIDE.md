@@ -600,9 +600,10 @@ dataset's media type.
 To run detectors of your choosing instead - drafts included, without
 moving them to the AutoRun tab - tick them and the datasets to run them
 on, and click the big **Find** button in the Dashboard's action bar,
-beside **Train** and **Test**. It is enabled on the same rule as
-**Test**: at least one dataset and one detector, all of one media type,
-and every ticked detector trained. Unlike Test it uses every ticked row:
+beside **Train** and **Test**. It is enabled once at least one dataset
+and one detector are ticked, all of one media type, and every ticked
+detector is trained. Unlike Test, which takes exactly one dataset and one
+detector, it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the AutoRun Results dialog; any that finish while the
