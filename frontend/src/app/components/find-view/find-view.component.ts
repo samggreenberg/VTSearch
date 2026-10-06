@@ -506,7 +506,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.advanceToBoundary();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
-          // Score is done: the Test autopilot takes over on its tab.
+          // Score is done: the Test autopilot takes over on its tab. The pass
+          // is no longer busy, but `finalize` only says so after this handler
+          // returns, and the start refuses a busy pass, so say it here first
+          // (#4555).
+          this.sortState.setSortBusy(false);
           this.startTestIfDue();
         },
         error: (err: any) => {

@@ -570,12 +570,16 @@ async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void
   await h.wait(800);
 }
 
-/** Select a dataset + detector on the dashboard, then Test; wait out scoring. */
 /**
  * Score the test dataset with the detector and land on the Test view's
  * Autopilot tab (#4524), the tab Test opens on, with the test's first round
  * dealt. refresh.sh seeds the draw (VTSEARCH_SPOT_CHECK_SEED), so a refresh
  * frames the same picks.
+ *
+ * It waits for the round itself, a pick's dot, or for a test that ended
+ * before one (Done, Nothing to test). Never for the stage's heading alone:
+ * *Drawing picks…* is a heading too, and the view sat on it when the test
+ * never started (#4555), so a wait that took it photographed the hang.
  */
 async function openTest(page: Page, h: Helpers): Promise<void> {
   await resetFind(h);
@@ -589,13 +593,25 @@ async function openTest(page: Page, h: Helpers): Promise<void> {
   // Scoring puts an overlay over the centre panel; wait it out rather than
   // photographing a progress bar. The test starts once the pass lands.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 }).catch(() => {});
-  await page.waitForSelector('.line-test-stage .pick-dot, .line-test-stage .stage-heading', { timeout: 60000 });
+  await page.waitForSelector(
+    '.line-test-stage .pick-dot, .line-test-stage[data-phase="done"], .line-test-stage[data-phase="nothing"]',
+    { timeout: 60000 },
+  );
   await h.wait(2500);
 }
 
-/** Score the test dataset and open the Test view's Review tab: the ranked result in full. */
+/**
+ * Score the test dataset, test the line to Done on Autopilot, then open the
+ * Review tab: the ranked result in full, the test's picks in the piles. That
+ * is the guide's order (Step 4: click until Done, then open Review), and the
+ * only way a reader reaches Review with a Threshold they can move: the test
+ * starts as the pass lands, while the tabs are still disabled, and freezes
+ * the Threshold until Done.
+ */
 async function openFind(page: Page, h: Helpers): Promise<void> {
   await openTest(page, h);
+  await testUntilDone(page, h);
+  await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
   await page.locator('.left-tab[title^="Review"]').first().click();
   await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   await h.wait(1500);
@@ -605,7 +621,10 @@ async function openFind(page: Page, h: Helpers): Promise<void> {
  * Vote the Test autopilot's rounds to Done, with the corpus's truth: each
  * round's pending picks (in draw order, which is the stage's dot order) are
  * read off `/api/line-test`, named through `/api/medias/batch`, and answered
- * with the keys, as a reader would. Up to twenty rounds.
+ * with the keys, as a reader would. Up to twenty rounds; a test's budgets
+ * hold it to twelve. With no test running there is nothing to vote, and the
+ * Done the caller waits for will never come, so that throws rather than
+ * leaving the caller to time out on it.
  */
 async function testUntilDone(page: Page, h: Helpers): Promise<void> {
   const { pictures } = corpus(TEST_DATASET);
@@ -619,7 +638,8 @@ async function testUntilDone(page: Page, h: Helpers): Promise<void> {
   for (let round = 0; round < 20; round++) {
     const state = await getJson('/api/line-test');
     const test = state.test;
-    if (!test || test.phase === 'done' || test.phase === 'nothing') return;
+    if (!test) throw new Error('testUntilDone: no test is running on the Autopilot tab');
+    if (test.phase === 'done' || test.phase === 'nothing') return;
     const picks: number[] = test.picks;
     const metas = await (await page.request.post(origin + '/api/medias/batch', { headers, data: { ids: picks } })).json();
     const nameOf = new Map((metas as { id: number; filename: string }[]).map((m) => [m.id, m.filename]));
@@ -640,6 +660,7 @@ async function testUntilDone(page: Page, h: Helpers): Promise<void> {
       .catch(() => {});
     await h.wait(400);
   }
+  throw new Error('testUntilDone: the test is not Done after twenty rounds');
 }
 
 /**
@@ -1376,11 +1397,13 @@ export const SHOTS: Shot[] = [
       { target: '.find-balance-row .balance-state-text', kind: 'step', step: 2, at: 'right' },
       { target: '.media-threshold-line', kind: 'step', step: 3, at: 'right' },
     ],
-    // Unchecked, as a reader meets it first: the left radio keeps the top 128, so the line
-    // moves down and the note says how many it keeps now.
+    // After the test, as the how-to picks up (the Threshold is frozen until
+    // Done): the left radio (beta 4, #4448) keeps up to the top 128, so the
+    // line moves down and the note says how many it keeps now, tested at
+    // another line.
     async recipe(page, h) {
       await openFind(page, h);
-      await page.locator('.find-balance-row input[type="radio"][value="2"]').click();
+      await page.locator('.find-balance-row input[type="radio"][value="4"]').click();
       await h.wait(1500);
       // The list only draws the pictures near what it shows. Answer the next
       // picture, as Step 1 has the reader do: Find then serves from the line

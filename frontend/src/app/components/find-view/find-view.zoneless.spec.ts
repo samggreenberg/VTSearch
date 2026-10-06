@@ -277,6 +277,21 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortBusy).toBe(false);
   });
 
+  // #4555: Test opens on the Autopilot tab, and the test of the line starts
+  // the moment the scoring pass lands, with no click. It used to wait for one:
+  // the pass's `finalize` (which drops the busy flag) runs only after its
+  // `next` returns, so the start, asked for from `next`, still saw the pass
+  // busy and stood down, and the stage sat at "Drawing picks…".
+  it('starts the test of the line as soon as the scoring pass lands', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+
+    httpMock.expectNone('/api/line-test/start');
+    httpMock.expectOne('/api/find-label').flush({ results: [{ id: 1, score: 0.9 }], threshold: 0.5 });
+
+    httpMock.expectOne('/api/line-test/start');
+  });
+
   // The balance POST is deferred until the picker settles (issue #2973), and
   // that settle window is inside the pair scope too: a pick the user abandons
   // by switching pair must never be written into the pair they switched *to*,

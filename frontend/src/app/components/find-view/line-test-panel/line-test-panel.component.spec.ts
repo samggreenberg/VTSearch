@@ -49,6 +49,16 @@ describe('LineTestPanelComponent (#4524)', () => {
     expect(light(el)!.dataset['color']).toBe('yellow');
   });
 
+  it('Score reads the line as drawn once the pass is over and no test has come back yet (#4555)', async () => {
+    const el = await show(null, false);
+    expect(active(el).dataset['phase']).toBe('score');
+    // Green draws as the check, as Train's lights do.
+    expect(light(el)).toBeNull();
+    expect(active(el).querySelector('.ap-check')).not.toBeNull();
+    expect(active(el).querySelector('.ap-step-detail')!.textContent).toContain('Line drawn');
+    expect(active(el).querySelector('.ap-step-detail')!.textContent).not.toContain('Scoring');
+  });
+
   it('Check the matches is active with a running test, its light the precision range\'s width against its target', async () => {
     const wide = wireTest();
     let el = await show(wireLineTest(wide));
