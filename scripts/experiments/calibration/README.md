@@ -585,7 +585,7 @@ their own without a re-run.
 | embedder | any **non-empty** subset — **one panel each, never averaged** |
 | arms | any **non-empty** subset |
 | seeds | averaged, or every seed its own line |
-| metric | cost, precision, recall, F1, FPR, FNR, average precision, AUROC |
+| metric | cost, precision, recall, F1, the objective (F-beta at the run's balance; the page opens on it when the run drew its line at one, #4584), FPR, FNR, average precision, AUROC |
 | draw › oracle threshold | off (default), or the cheating-threshold line dotted beside the solid performance line |
 | draw › overlay on one chart | off (default), one chart per varying dimension with its ±1 SD shadow; on, all of them on one chart in distinct hues, shadows off |
 
