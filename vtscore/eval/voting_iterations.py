@@ -2503,7 +2503,7 @@ def simulate_voting_iterations(  # noqa: C901
             #4427's pricing; ``"advisory"`` and ``"trim"`` force a shape.
             All apply to the end-of-run balance walk only.
         spot_check: When the simulated user runs the floor's **spot check**
-            (#4272, the band walk of #4388).  ``"end"`` (the default): once the
+            (#4272, the band walk of #4388).  ``"end"``: once the
             voting steps are spent - *max_steps* reached, or the pool exhausted
             - the user checks the line the way the app's check step does: the
             unvoted ranking is fixed off the current one and cut into bands
