@@ -248,6 +248,12 @@ section.outline ol li.here { font-weight: 700; }
    weight whichever one is marked. */
 section.outline ol li { font-weight: 600; }
 section.outline ol li em { color: var(--ink-soft); font-style: normal; }
+/* Every line is a link to the page its section starts on (build.py
+   `link_outline`), and none of them may look like one: the outline is a slide
+   the room reads, and a click target is a fact about the PDF, not about the
+   talk. So a link takes the colour, weight and decoration of the line it is
+   on — which is also what keeps the `atN` marking below in charge of them. */
+section.outline a { color: inherit; text-decoration: none; }
 
 /* The same outline, shown again before each section with that section marked:
    `outline-<deck> +at3` in the manifest. The marked line goes bold and the
@@ -587,3 +593,11 @@ section .pageno-letter {
 }
 section.speaker .pageno,
 section.speaker .pageno-letter { display: none; }
+/* Inside a section, the number is also a link back to the outline that opened
+   it (build.py `section_homes`), on the audience page and the speaker page
+   alike. Like the outline's own links it must not look like one: the folio is
+   an address, and a blue underlined address is a claim about the PDF that the
+   room has no use for. */
+section .pageno a,
+section .pageno-letter a,
+section.speaker .speaker-pageno a { color: inherit; text-decoration: none; }

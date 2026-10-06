@@ -82,6 +82,9 @@ export class LineTestPanelComponent {
     const est = test?.estimates ?? null;
     switch (phase) {
       case 'score': {
+        // The pass can be over with no test yet (its start in flight, or
+        // refused); the light is green then, and the words must agree.
+        if (!this.scoring()) return 'Line drawn';
         const p = this.scoreProgress();
         return p == null ? 'Scoring…' : `${Math.round(p * 100)}% scored`;
       }

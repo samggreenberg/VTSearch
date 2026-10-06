@@ -1037,8 +1037,9 @@ _weak_min_t = _opt_float("CALIB_WEAK_MIN_T")
 WEAK_MIN_T = None if _weak_min_t is None else int(_weak_min_t)
 _weak_repeat = _opt_float("CALIB_WEAK_REPEAT")
 WEAK_REPEAT = None if _weak_repeat is None else int(_weak_repeat)
-#: Where the weak check may prompt (``CALIB_WEAK_PHASE``): ``any`` (unset) or ``learned`` - only once Autopilot has
-#: left its text-sort opening, where the app has no detector to read separation from (#4496).
+#: Where the weak check may prompt (``CALIB_WEAK_PHASE``): unset is the harness's default, the app's ``learned`` (#4503)
+#: - only once Autopilot has left its text-sort opening, where the app has no detector to read separation from;
+#: ``any`` is the arm #4496 priced first, a prompt anywhere in the flow.
 WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
@@ -1060,13 +1061,14 @@ else:
 #: The **Autopilot opening** this arm runs (issue #3267), in the grammar of
 #: :mod:`vtscore.eval.startup_schedule` - e.g. ``"n6@k-6,n6@k-2,n6@k0"``.
 #:
-#: Unset = the app's own opening (three positives off the top of the seed sort,
-#: then four negatives at its cutoff), which is what every study before #3267
-#: ran and what the `prod` control arm must keep running.  Do **not** write the
-#: production spelling in here as a "default": a schedule string frozen in this
-#: file goes stale the moment the app's opening moves, and the control arm would
-#: then quietly stop being the control.  ``PRODUCTION_STARTUP`` exists for a run
-#: that wants to name it explicitly, and is pinned against the app.
+#: Unset = the app's own opening, which is what the `prod` control arm must keep
+#: running.  ``PRODUCTION_STARTUP`` spells it; it is not restated here, because
+#: this comment went on describing the opening from before #4282 after it moved
+#: (#4549).  Do **not** write the production spelling in here as a "default"
+#: either: a schedule string frozen in this file goes stale the moment the app's
+#: opening moves, and the control arm would then quietly stop being the control.
+#: ``PRODUCTION_STARTUP`` exists for a run that wants to name it explicitly, and
+#: is pinned against the app; preflight check 12 compares a set schedule to it.
 STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 
 #: Issue #4197's opening-diversity knob, ``"<tau>/<k>"``: while Autopilot's

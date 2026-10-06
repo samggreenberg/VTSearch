@@ -602,197 +602,22 @@ fi
 # divergence must be **declared** to pass: `--diverges head,anchor_weight`.  That
 # is the whole design - a study is always allowed to pin the axis it sweeps, and
 # is never allowed to pin one silently.
+#
+# That covers the session the simulated user runs as well as the detector: the
+# opening, the preference the line is drawn at, the spot check and its walk, and
+# where acquisition samples.  Until #4549 those passed unread, so a launcher
+# could run an opening or a check nobody ships and preflight said ok.
+KNOB_PROBE="$REPO/scripts/experiments/calibration/preflight_knobs.py"
 if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
   say_fail "pinned knobs NOT compared against production: python cannot import the tree (see above)"
-elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
-  DIVERGENCE=$(CALIB_EXP="$EXP" python - "$REPO" <<'PYDIV' 2>&1
-import os
-import pathlib
-import sys
-
-repo = sys.argv[1]
-sys.path.insert(0, str(pathlib.Path(repo) / "scripts" / "experiments" / "calibration"))
-import common  # noqa: E402
-
-common.setup_env()
-# Imported with the RUN'S OWN ENVIRONMENT, so every knob below reads the value
-# this run will actually use - the env var if it set one, else the harness
-# default.  Re-deriving the defaults here as literals is what let #3400's three
-# stale ones sit unnoticed: the check compared a launcher's pin against the app
-# and never noticed that *not pinning* resolved to a study-era value.  An unset
-# knob is only "the shipped arm" if the harness resolves it there, so that is
-# what gets compared.
-import experiment_config as C  # noqa: E402
-from vtscore.eval.voting_iterations import PRODUCTION_HEAD, PRODUCTION_PATCH_STYLE  # noqa: E402
-from vtscore.training import thresholds as T  # noqa: E402
-
-
-def env(name):
-    v = os.environ.get(name)
-    return v.strip() if v and v.strip() else None
-
-
-rows = []
-
-
-def pinned(knob, var, shipped):
-    """A scalar knob: unset means the harness resolves it to the shipped value."""
-    v = env(var)
-    if v is not None and v != str(shipped):
-        rows.append((knob, v, str(shipped)))
-
-
-def must_contain(knob, var, shipped, effective):
-    """A set-valued knob: the shipped value has to be IN what the run resolves
-    it to, or the run has no arm to compare its challengers against.
-
-    *effective* is the resolved list off ``experiment_config``, so this catches a
-    stale harness default exactly as it catches a stale launcher pin - and says
-    which of the two it is, because the remedy differs (drop the pin vs. fix the
-    default).
-    """
-    got = [str(x).strip() for x in effective]
-    if str(shipped) in got:
-        return
-    source = "pinned in %s" % var if env(var) else "harness default; %s is unset" % var
-    rows.append((knob, "%s (%s)" % (",".join(got), source), "a set containing " + str(shipped)))
-
-
-pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
-# The pipeline, the vote order and the standalone cut (#3959): unset is the app's
-# own on all three, so any value is a run-level arm the study must declare.
-pinned("trainer", "CALIB_TRAINER", "app")
-pinned("strategy", "CALIB_STRATEGY", "autopilot")
-pinned("standalone_cut", "CALIB_STANDALONE_CUT", "raw")
-
-# The heads' own fit knobs are app env vars, not CALIB_* ones (#3197), so a
-# launcher that exports them changes the detector without touching any knob
-# above.  Their shipped values are the literal defaults in `config/runtime.py`,
-# read from its source because `vtscore.config` has already resolved them from
-# THIS run's environment - comparing the env var against the imported constant
-# would compare the pin against itself.
-import inspect  # noqa: E402
-import re  # noqa: E402
-
-from vtscore.config import runtime as _RT  # noqa: E402
-
-_RT_SRC = inspect.getsource(_RT)
-
-
-def pinned_app_env(knob, var):
-    v = env(var)
-    if v is None:
-        return
-    m = re.search(r'os\.environ\.get\(\s*"%s"\s*,\s*"([^"]*)"' % re.escape(var), _RT_SRC)
-    if m is None:
-        rows.append((knob, v, "<shipped default not found in config/runtime.py>"))
-        return
-    try:
-        same = float(v) == float(m.group(1))
-    except ValueError:
-        same = v == m.group(1)
-    if not same:
-        rows.append((knob, v, m.group(1)))
-
-
-pinned_app_env("svm_head_c", "VTSEARCH_SVM_HEAD_C")
-pinned_app_env("train_epochs", "VTSEARCH_TRAIN_EPOCHS")
-pinned_app_env("train_patience", "VTSEARCH_TRAIN_PATIENCE")
-pinned("acq_offset", "CALIB_ACQ_INCLUSION_OFFSET", T.ACQUISITION_INCLUSION_OFFSET)
-pinned("calibrate_count", "CALIB_CALIBRATE_COUNT", 2)
-# The LIVE cut rule (#3557) - unset resolves to FOLD_ANCHOR_CUT_RULE inside the
-# harness.  Distinct from `cut_rule` below, which is the set of RE-CUTS riding
-# the trajectory: this one moves the trajectory itself (acquisition re-cuts the
-# same estimator), so a pinned value is a run-level arm and must be declared.
-pinned("live_cut_rule", "CALIB_LIVE_CUT_RULE", T.FOLD_ANCHOR_CUT_RULE)
-# A RETIRED live threshold rule (#4184) - unset is the shipped fold-anchored
-# cut.  Any value replaces the cut acquisition reads, so it is always a
-# run-level divergence the study must declare.
-v = env("CALIB_LIVE_THRESHOLD")
-if v is not None:
-    rows.append(("live_threshold", v, "<unset> = the shipped fold-anchored cut"))
-# The Train/Calibrate split of each calibration fold (#3287/#3290).  The
-# shipped default is no longer one scalar: unset resolves per embedder through
-# `production_split_for` (PRODUCTION_SPLIT_BY_SPACE), exactly as the app does,
-# so an unset env var IS the production arm.  A pinned scalar can match at
-# most one space on a run that mixes them, so - like CALIB_BLEND_SCHEDULE - an
-# explicit pin is always a divergence the study must declare.
-v = env("CALIB_CALIBRATION_FRACTION")
-if v is not None:
-    per_space = ", ".join("%s=%g" % (k, f) for k, f in sorted(T.PRODUCTION_SPLIT_BY_SPACE.items()))
-    rows.append(("calibration_fraction", v, "<unset> = the app's per-space default (%s)" % per_space))
-
-# The app has no safe-thresholds switch any more (#2799): fusion is always on.
-# Read off the resolved config rather than the env var, because until #3400 the
-# harness default was 0: an unset var passed this check while the run measured
-# the unfused control - the one arm the app can no longer produce.
-if not C.SAFE_THRESHOLDS:
-    rows.append(("safe_thresholds", env("CALIB_SAFE_THRESHOLDS") or "<unset> = 0", "1 (the app has no switch)"))
-
-# The #3796 calibration-split draw.  Production pins the split to
-# CALIBRATION_SPLIT_SEED and #2934 pinned it on purpose, so an unset env var IS
-# the production arm and ANY list is a divergence - including a one-element list
-# holding today's constant, which freezes the arm against a pin that can move.
-# The sweep is legitimate and is the only thing that can measure the pin's cost;
-# what it may not be is silent, because a grid whose cells calibrate off
-# nineteen splits nobody ships looks exactly like a grid that does not.
-v = env("CALIB_CALIBRATION_SEEDS")
-if v is not None:
-    rows.append(("calibration_seed", v, "<unset> = the app's pinned split (%d)" % T.CALIBRATION_SPLIT_SEED))
-
-# An explicit schedule overrides the app's per-mode default (#2841).
-v = env("CALIB_BLEND_SCHEDULE")
-if v is not None:
-    rows.append(("blend_schedule", v, "<unset> = the app's per-mode default"))
-
-# The #3314 adaptive fold count.  The app has no such thing: `calibrate_count`
-# is a constant there, so ANY schedule is a divergence and has to be declared -
-# including one whose early phase happens to equal today's constant, since the
-# knob's whole effect is that the count stops being one.  Checked separately
-# from `calibrate_count` above because the two can be set together and mean
-# different arms (the schedule's tail IS `calibrate_count`).
-v = env("CALIB_FOLD_COUNT_SCHEDULE")
-if v is not None:
-    rows.append(("fold_count_schedule", v, "<unset> = a constant calibrate_count, as the app has"))
-
-# The #3308 voted-media exclusion floor, which #3312 sweeps as an arm axis.
-# Unset resolves through the app's own `resolve_exclusion_floor`, so an unset
-# env var IS the production arm.  Every other value is a divergence - INCLUDING
-# a numeric pin that happens to equal today's shipped floor, because pinning it
-# freezes the arm against a constant that can move underneath the study.
-v = env("CALIB_EXCLUDE_VOTED")
-if v is not None and v.strip().lower() not in ("", "default", "app"):
-    rows.append(
-        (
-            "exclusion_floor",
-            v,
-            "<unset> = the app's own floor (currently %g)" % T.resolve_exclusion_floor(None),
-        )
-    )
-
-# The anchored/fold-anchored grid (#2852) is emitted only under CALIB_ANCHORED=1
-# and is off by default.  Checking its knobs unconditionally makes every study
-# that does not use the family declare a divergence it does not have - and a
-# declared-but-fictional divergence is worse than no check, because the next
-# reader cannot tell the real ones from the noise.  Check them when the family is
-# actually on; say plainly that they were skipped when it is not.
-if os.environ.get("CALIB_ANCHORED") == "1":
-    must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, C.ANCHORED_RULES)
-    must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, C.ANCHORED_FOLD_COMBINES)
-    must_contain(
-        "anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, ["%g" % w for w in C.ANCHORED_WEIGHTS]
-    )
-else:
-    print("SKIPPED\tanchored grid (CALIB_ANCHORED is not 1, so no anchored row is emitted)")
-must_contain("patch_style", "CALIB_PATCH_STYLES", PRODUCTION_PATCH_STYLE, C.PATCH_STYLES)
-
-if not rows:
-    print("MATCHES")
-else:
-    for knob, got, want in rows:
-        print("DIVERGES\t%s\t%s\t%s" % (knob, got, want))
-PYDIV
-)
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" && ! -f "$KNOB_PROBE" ]]; then
+  say_fail "pinned knobs NOT compared against production: $REPO predates calibration/preflight_knobs.py (#4549)"
+elif [[ -n "$REPO" && -f "$KNOB_PROBE" ]]; then
+  # The probe lives beside the experiment_config it imports, in the tree the jobs
+  # will run, so the two can never be from different commits.  It is a file
+  # rather than a heredoc so its rules are unit-tested
+  # (tests_lib/meta/test_preflight_knobs.py).
+  DIVERGENCE=$(CALIB_EXP="$EXP" python "$KNOB_PROBE" "$REPO" 2>&1)
   # Tag-dispatched rather than prefix-matched on the whole blob: the probe emits
   # SKIPPED lines for knob families this run does not enable, and those have to
   # be *reported* (a skipped check is not a passed one) without being mistaken
@@ -816,6 +641,11 @@ PYDIV
           say_fail "UNDECLARED divergence from production: $knob = $got, shipped is $want"
           unacked=$((unacked + 1))
         fi ;;
+      REFUSED)
+        # A value the harness itself rejects: every cell would die on it once the
+        # array is queued, so no declaration excuses it.
+        understood=1
+        say_fail "$knob = $got is a value the harness refuses: $want" ;;
       *)
         say_fail "could not compare this run's knobs against production: $tag $knob $got $want"
         understood=1 ;;
@@ -826,7 +656,7 @@ PYDIV
   fi
   if [[ "$unacked" -gt 0 ]]; then
     echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
-    echo "        -> if it is not, the run would measure a detector nobody ships"
+    echo "        -> if it is not, the run would measure a detector or a session nobody ships"
   fi
 fi
 

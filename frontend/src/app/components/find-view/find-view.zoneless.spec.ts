@@ -11,6 +11,7 @@ import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
+import { KeyboardService } from '../../services/keyboard.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -275,6 +276,21 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortOrder?.map((s) => s.id)).toEqual([1]);
     expect(sortState.threshold).toBe(0.5);
     expect(sortState.sortBusy).toBe(false);
+  });
+
+  // #4555: Test opens on the Autopilot tab, and the test of the line starts
+  // the moment the scoring pass lands, with no click. It used to wait for one:
+  // the pass's `finalize` (which drops the busy flag) runs only after its
+  // `next` returns, so the start, asked for from `next`, still saw the pass
+  // busy and stood down, and the stage sat at "Drawing picks…".
+  it('starts the test of the line as soon as the scoring pass lands', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+
+    httpMock.expectNone('/api/line-test/start');
+    httpMock.expectOne('/api/find-label').flush({ results: [{ id: 1, score: 0.9 }], threshold: 0.5 });
+
+    httpMock.expectOne('/api/line-test/start');
   });
 
   // The balance POST is deferred until the picker settles (issue #2973), and
@@ -828,6 +844,25 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(el.querySelector('vt-line-test-stage')).toBeNull();
       // The Stats modal is retired into the result pane (#4524).
       expect(el.querySelector('button[aria-label="Stats"]')).toBeNull();
+    });
+
+    // #4555: Test opens on Autopilot, which has no centre panel, so the one
+    // Review makes is not the one the view opened with; each must be started
+    // (its settings, the shortcuts), or Review's keys do nothing.
+    it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {
+      const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      start.mockClear();
+
+      fixture.componentInstance.onFindTabChange('review');
+      TestBed.tick();
+      // The panel starts a tick after it is made; its own loads then drain.
+      await new Promise((resolve) => setTimeout(resolve));
+      await flushInit(ranking.map(({ id }) => id));
+      expect(start).toHaveBeenCalledTimes(1);
     });
   });
 });
