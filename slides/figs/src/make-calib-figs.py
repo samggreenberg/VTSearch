@@ -4388,11 +4388,12 @@ FBETA_MAPS_STAGES = 3
 #: and the first map's left edge (room for the row's one "Precision"). A gap
 #: holds the next map's tick numbers clear of the numbers ending the curves to
 #: its left. The row is as wide as the slide allows, short of the page
-#: number's corner; the maps' tops then sit under the title's notch.
+#: number's corner, and as high: its titles just under the title's notch, so
+#: the slack is a margin below the row as well as above it (owner, 2026-10-05).
 FBETA_MAP_SIDE = 5.4
 FBETA_MAP_GAP = 1.2
 FBETA_MAP_X = 1.3
-FBETA_MAP_Y = 1.55
+FBETA_MAP_Y = 2.0
 #: How far above its map a map's "β = ..." sits: well clear of the numbers
 #: that end β = 4's curves along its top, so it reads as the map's title and
 #: not as one more curve's label (owner, 2026-10-05). The slack above the
