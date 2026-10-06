@@ -1,4 +1,4 @@
-"""Planted-answer tests for Test mode's test sample (#4527; ``docs/plans/test-mode.md`` §5).
+"""Planted-answer tests for Test mode's test sample (#4527; ``vtscore/docs/packages/training.md``).
 
 A synthetic ranking with a known per-band precision and a known count of
 positives below the line, seeded.  Pinned here: the bands on both sides of

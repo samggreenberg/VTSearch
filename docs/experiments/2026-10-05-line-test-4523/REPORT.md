@@ -2,7 +2,7 @@
 
 **The precision half of Test mode works at the plan's values, and the recall
 half does not work at any of them.** With a precision-width target of 0.20
-and 40 picks a phase (`docs/plans/test-mode.md` §2), a Test costs **20–38
+and 40 picks a phase (Test mode's proposed stop rule, #4520), a Test costs **20–38
 picks** (median 16–40, 90th percentile 30–45) and its precision range holds
 the truth in **92–96%** of sessions on COCO Better's default pool at beta ≤ 1
 and **96–99%** on a 5% corpus, against the 95% it claims. Tightening the

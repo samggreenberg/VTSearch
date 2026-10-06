@@ -171,7 +171,7 @@ export class KeyboardHelpModalComponent implements OnInit {
   readonly contexts: ShortcutContext[] = [
     {
       id: 'find',
-      label: 'Train / Find',
+      label: 'Train / Test',
       groups: [
         {
           title: 'Voting',

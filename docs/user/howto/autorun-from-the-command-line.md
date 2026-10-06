@@ -36,9 +36,9 @@ The detector moves from the **Drafts** tab of the **Detectors** card to the
 
 An AutoRun detector is *frozen*: it can't be renamed, deleted, trained or
 given more labels, so what runs unattended is exactly what you tested. It can
-still be used with **Find**, and its **⋯** menu keeps **Browse positives**,
-**Export labels** and **Stats**. To change it, choose **Move to Drafts** from
-the same menu, change it, and move it back.
+still be tested with **Test** and run with **Find**, and its **⋯** menu keeps
+**Browse positives**, **Export labels** and **Stats**. To change it, choose
+**Move to Drafts** from the same menu, change it, and move it back.
 
 Each person on a shared server has their own AutoRun list.
 

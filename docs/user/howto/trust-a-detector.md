@@ -2,7 +2,7 @@
 
 A detector is only as good as the examples it learned from. Point it at
 pictures unlike any of them and it still gives an answer for every one; it
-just has nothing to base it on. The result pane in Find answers two
+just has nothing to base it on. The result pane in Test answers two
 questions before you rely on it: how right its line is on *this* collection,
 measured on pictures you answered yourself, and how often it is calling
 pictures it has never seen the like of, so you know which calls to check by
@@ -10,13 +10,13 @@ hand.
 
 This page picks up where [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search)
 ends: the `Yellow Smileys` detector, trained on `drawings`, has just been run
-over `drawings-new` with **Find**. It is at its most useful for a detector
+over `drawings-new` with **Test**. It is at its most useful for a detector
 someone *else* trained, since you don't know what that one has seen. The red
 numbers in each screenshot show where to click, in order.
 
 ## Step 1: Test the line
 
-Find opens on its **Autopilot** tab, which shows you pictures picked at random
+Test opens on its **Autopilot** tab, which shows you pictures picked at random
 from either side of the line, a round of five at a time. Answer each with
 **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-good.dark.webp" /><img src="../assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-bad.dark.webp" /><img src="../assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`) until the
 phases on the left read **Done!**: first **Check the matches** (pictures
@@ -87,7 +87,7 @@ collection as a whole.
 - **A large share atypical, or in an evidence vacuum**: the detector needs
   examples from this kind of picture. **Add Corrections and retrain** hands it
   the picks you disagreed with, and the pictures you check by hand on the
-  **Review** tab; then run Find again
+  **Review** tab; then run Test again
   ([Check and correct a detector's calls](check-and-correct.md)). That
   teaches it more than moving the Threshold would.
 

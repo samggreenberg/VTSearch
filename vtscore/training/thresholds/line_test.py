@@ -1,6 +1,6 @@
 """The test sample: what Test mode measures about a detector's line, and how (#4527).
 
-Test mode (``docs/plans/test-mode.md``) asks one question of a detector on a
+Test mode (``vtscore/docs/packages/training.md``) asks one question of a detector on a
 corpus it never trained on: *if this line went to AutoRun, what share of what
 it ships would be right, and what share of the real matches would it ship?*
 The answer is the line's precision and recall on that corpus, each as a
@@ -181,7 +181,7 @@ def found_words(recall: LikelyRange | Estimate | float) -> str:
 
 @dataclass(frozen=True)
 class LineBudgets:
-    """What a test may spend and when a phase is narrow enough (``docs/plans/test-mode.md`` §2).
+    """What a test may spend and when a phase is narrow enough (Test mode's stop rule, #4523).
 
     *matches_width* is the precision range's target width and *misses_width*
     the recall range's; a phase ends on width once its range is at or under

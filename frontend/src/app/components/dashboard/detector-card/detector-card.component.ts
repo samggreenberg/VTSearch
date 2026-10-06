@@ -119,7 +119,7 @@ export class DetectorCardComponent {
   get verdictHint(): string {
     const verdict = this.verdict;
     if (!verdict) {
-      return 'No test has measured what this detector ships. Score a dataset it never trained on in Find, and the Autopilot tab tests it.';
+      return 'No test has measured what this detector ships. Tick it and a dataset it never trained on, then click Test.';
     }
     return verdictTitle(verdict);
   }

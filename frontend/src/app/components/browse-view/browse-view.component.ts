@@ -556,7 +556,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         // No handoff (e.g. a hard reload): the ephemeral subset is gone.
         this.status.set('error');
         this.errorMessage.set(
-          'This map has expired. Re-run Find and click Browse to rebuild it.',
+          'This map has expired. Re-run Test and click Browse to rebuild it.',
         );
         return;
       }
@@ -1248,7 +1248,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       // Nothing to rebuild (e.g. Retry after the handoff expired).
       this.status.set('error');
       this.errorMessage.set(
-        'This map has expired. Re-run Find and click Browse to rebuild it.',
+        'This map has expired. Re-run Test and click Browse to rebuild it.',
       );
       return;
     }
@@ -1443,7 +1443,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const detectorId = this.activeContext.modelId;
     this.browseSubset.markReturningToFind();
     if (datasetId && detectorId) {
-      this.router.navigate(['/find', datasetId, detectorId]);
+      this.router.navigate(['/test', datasetId, detectorId]);
     } else {
       this.router.navigate(['/dashboard']);
     }

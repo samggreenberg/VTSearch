@@ -3,7 +3,7 @@
 Before you train anything, it helps to see what a dataset holds: which kinds
 of picture there are, how many of each, and what sits between them. **Browse**
 lays the whole dataset out as a map, with similar pictures near each other, so
-you can look it over by eye. Opened from Find, the same map lets you check the
+you can look it over by eye. Opened from Test, the same map lets you check the
 matches a screenful at a time.
 
 This page uses the datasets and the detector from [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search).
@@ -79,23 +79,23 @@ selection.
 
 On a whole dataset the selection is for looking: it collects the pictures you
 want to compare side by side, and is gone when you leave Browse. Opened from
-Find, it does more.
+Test, it does more.
 
-## Browse the matches from Find
+## Browse the matches from Test
 
-In Find, the eye button at the top of the **Verified Good** pile opens Browse
+In Test's **Review** tab, the eye button at the top of the **Verified Good** pile opens Browse
 on just the matches, checked or not. (The eye beside the **Threshold** on
 the left opens only the ones you haven't checked.) Wrong matches tend to sit together
 on the map, which makes them quick to clear out:
 
 1. Select the tiles that are wrong, or right.
 2. Click **Verified Bad** (or **Verified Good**). The pictures are marked that
-   way, as if you had checked each one in Find, and leave the map.
-3. Click **← Back to Find**. Your checks are in the piles on the right.
+   way, as if you had checked each one in Test, and leave the map.
+3. Click **← Back to Test**. Your checks are in the piles on the right.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/browse-find.dark.webp" />
-  <img src="../assets/browse-find.light.webp" alt="Browsing Find's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Find" width="720" />
+  <img src="../assets/browse-find.light.webp" alt="Browsing a tested detector's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Test" width="720" />
 </picture>
 
 ## Where next

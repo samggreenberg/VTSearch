@@ -109,7 +109,7 @@ describe('ContextPulldownComponent', () => {
         provideRouter([
           { path: 'dashboard', component: DummyViewComponent },
           { path: 'browse/:datasetId', component: DummyViewComponent },
-          { path: 'find/:datasetId/:detectorId', component: DummyViewComponent },
+          { path: 'test/:datasetId/:detectorId', component: DummyViewComponent },
           { path: 'label/:datasetId/:detectorId', component: DummyViewComponent },
         ]),
         { provide: RunningJobsService, useClass: RunningJobsStub },
@@ -442,7 +442,7 @@ describe('ContextPulldownComponent', () => {
     });
   });
 
-  describe('locked on browse / find views', () => {
+  describe('locked on browse / Test views', () => {
     it('is unlocked on the dashboard', async () => {
       await createPulldown('dataset');
       await router.navigate(['/dashboard']);
@@ -457,9 +457,9 @@ describe('ContextPulldownComponent', () => {
       expect(component.locked).toBe(true);
     });
 
-    it('locks on the find-results view', async () => {
+    it('locks on the Test view', async () => {
       await createPulldown('detector');
-      await router.navigate(['/find', 'd1', 'm1']);
+      await router.navigate(['/test', 'd1', 'm1']);
       await settleZoneless(fixture);
       expect(component.locked).toBe(true);
     });
@@ -503,7 +503,7 @@ describe('ContextPulldownComponent', () => {
       await createPulldown('detector');
       activeContext.setIntent('d1', 'm1');
       setRegistry([makeDataset('d1', 'DS')], [makeDetector('m1', 'My Detector')]);
-      await router.navigate(['/find', 'd1', 'm1']);
+      await router.navigate(['/test', 'd1', 'm1']);
       await settleZoneless(fixture);
 
       expect(component.locked).toBe(true);
