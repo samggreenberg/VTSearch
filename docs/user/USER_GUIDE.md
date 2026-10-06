@@ -1161,9 +1161,12 @@ end, as Train's do:
    whichever band would narrow the answer most. The light tracks how narrow
    the likely range for the share right has got.
 3. **Check the misses.** Picks from below the line, the band just under it
-   first, then deeper while matches keep turning up; a band that turns up
-   nothing and holds little ends the walk. The light tracks the range for
-   the share of all the matches found.
+   first, then one band deeper a round until the step has spent its picks,
+   so the answer rests on picks from deep in the list and not only on the
+   detector's own count of what is there. A detector with no class model (a
+   document or structural one) stops instead at the first band that turns
+   up nothing. The light tracks the range for the share of all the matches
+   found.
 4. **Done!** The ranges have stopped moving usefully. You click until Done,
    not until the dataset runs out: forty picks a side is the most a phase
    asks for.
@@ -1190,7 +1193,9 @@ The right pane shows the result as it forms, and the verdict at Done:
 - **Found** - of all the matches in the collection, the share the line keeps,
   in words, with the range beside it. The deepest part of the list is never
   checked; the matches it holds are the detector's own estimate, and the pane
-  says so.
+  says so. A detector with no class model has no such estimate, so Found is
+  given in words only and the pane says it is unmeasured below the bands the
+  picks reached.
 - **Precision by Number Returned** - how right the top N likely are, at every
   band edge, from the picks alone, with the line marked: the clearest way to
   see how much you give up in precision for each extra match. Point at the

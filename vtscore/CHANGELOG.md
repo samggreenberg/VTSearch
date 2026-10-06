@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A test's walk below the line runs to its budget when there is a class model** (issue #4542).
+  With `posteriors` given, `LineTest.misses_walk()` no longer stops at a dry band and
+  `line_phase` no longer ends the misses phase on `LineBudgets.misses_width`: the walk goes
+  one band deeper a round until `misses_picks` is spent or the bands run out. #4523 priced it:
+  the recall range held the truth in 13-38% of sessions at the old stops and 75-94% walking
+  to the budget, for about 30 more picks. `dry_run_share` and `misses_width` now govern only
+  a test with no class model (`posteriors=None`), whose walk keeps its dry-run stop.
+  `LineBudgets`' defaults are unchanged and are now the priced values. `LineTest.as_dict()`
+  gains `class_model`.
+
 - **A test's draws are read at any count** (issue #4524). `LineTest.estimate_at(count,
   beta=None)` returns the `EdgeEstimate` the line would ship if it kept the top *count*,
   from the same joint draws as `estimates()`: exact at a band edge, a band's positives

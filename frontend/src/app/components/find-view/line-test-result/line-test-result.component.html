@@ -38,7 +38,7 @@
           <dd>{{ precisionText() }}</dd>
         </div>
         <div class="range-row" [attr.data-light]="recallLight()">
-          <dt title="Of all the matches in the collection, the share the line keeps: random picks below the line, read against the detector's own count of what the unchecked tail holds.">
+          <dt [title]="foundTitle()">
             <span class="ap-light" [attr.data-color]="recallLight()" role="img" [attr.aria-label]="'Recall: ' + recallLight()"></span>Found
           </dt>
           <dd>{{ recallText() }}</dd>

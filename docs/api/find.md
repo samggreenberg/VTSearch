@@ -306,7 +306,7 @@ Every verb returns the same body:
     },
     "budgets": {"matches_width": 0.2, "misses_width": 0.25, "matches_picks": 40, "misses_picks": 40,
                 "picks_per_round": 5, "dry_run_share": 0.05, "model_weight": 5, "alpha": 0.05},
-    "kept_at": null
+    "kept_at": null, "class_model": true
   },
   "stale": false, "moved": false,
   "presets": [{"beta": 0.25, "count": 31, "precision": {"...": "..."}, "recall": {"...": "..."}, "fbeta": {"...": "..."}, "found": "..."}, "..."]
@@ -350,12 +350,17 @@ Every verb returns the same body:
 (`vtscore.training.thresholds.line_phase`): `matches` (precision, picks from
 the bands above the line, the band holding the line first, then the band
 whose round would narrow the F-beta range most), `misses` (recall, a walk
-down the bands below the line with a dry-run stop), `done`, or `nothing`
-(the line keeps fewer items than one round). `report` says why each finished
-phase ended (`width`, `budget`, `exhausted`, `dry_run`) and carries the
-ranges' current widths for the app's phase lights. `estimates` is every
-number from one set of joint draws, and `null` when there is nothing to test;
-`at_edges` re-estimates the line at every band edge from the same draws.
+down the bands below the line, a band a round), `done`, or `nothing` (the
+line keeps fewer items than one round). With a class model the walk runs to
+`budgets.misses_picks`; without one (`test.class_model` is `false`: a
+structural or document detector) it stops at the first band with no match,
+and the recall below the bands it reached is unmeasured, so the app reads it
+in words only (#4523). `report` says why each finished phase ended (`width`,
+`budget`, `exhausted`, `dry_run`; the misses phase ends on `width` or
+`dry_run` only without a class model) and carries the ranges' current widths
+for the app's phase lights. `estimates` is every number from one set of joint
+draws, and `null` when there is nothing to test; `at_edges` re-estimates the
+line at every band edge from the same draws.
 
 `presets` is the line each balance preset (beta 1/4, 1, 4) would draw on this
 corpus and what the picks already taken say it would ship - the verdict's

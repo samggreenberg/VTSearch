@@ -123,6 +123,14 @@ class TestSimulateLineTest:
         assert a == b
         assert a != c  # a different seed deals different picks
 
+    def test_with_a_class_model_the_walk_below_the_line_runs_to_its_budget(self):
+        """#4542: the default arm walks to the misses budget with a model and stops at a dry band without one."""
+        truth, post = _planted()
+        out = simulate_line_test(truth, 64, 1.0, posteriors=post, seed=1)
+        assert out["misses_stop"] == "budget" and out["picks_below"] == DEFAULT_BUDGETS.misses_picks
+        bare = simulate_line_test(truth, 64, 1.0, posteriors=None, seed=1)
+        assert bare["misses_stop"] in ("dry_run", "width") and bare["picks_below"] < DEFAULT_BUDGETS.misses_picks
+
     def test_without_a_model_the_tail_counts_nothing_and_says_so(self):
         truth, _ = _planted()
         out = simulate_line_test(truth, 64, 1.0, posteriors=None, seed=0)

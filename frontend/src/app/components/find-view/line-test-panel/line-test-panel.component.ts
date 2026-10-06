@@ -118,11 +118,20 @@ export class LineTestPanelComponent {
       }
       case 'misses': {
         const target = budgets?.misses_width ?? 0.25;
+        const picks = budgets?.misses_picks ?? 40;
+        // With a class model the walk below the line runs to its budget
+        // whatever the range's width (#4523): the range is narrow early only
+        // because the unchecked tail is the detector's own count.
+        const ends =
+          test?.class_model === false
+            ? `, when the step ends. It also ends at ${picks} picks, or when a band below the line turns up nothing.`
+            : `. The step itself ends at ${picks} picks, or once every band below the line is checked, however narrow ` +
+              `the range: until the picks reach deep into the list, it leans on the detector's own count of what is there.`;
         return light(
           widthLight(report?.misses_width, target),
           `Tracks how narrow the likely range for the share of all the matches found has got: red while wider than ` +
-            `${Math.round(2 * target * 100)} points, yellow within that, green at ${Math.round(target * 100)} points or under. ` +
-            `It also ends at ${budgets?.misses_picks ?? 40} picks, or when a band below the line turns up nothing and holds little.`,
+            `${Math.round(2 * target * 100)} points, yellow within that, green at ${Math.round(target * 100)} points or under` +
+            ends,
         );
       }
       case 'done':
