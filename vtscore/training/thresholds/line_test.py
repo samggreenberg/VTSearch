@@ -805,7 +805,9 @@ class LineTest:
         unlabelled items at a drawn share).  The right picks ranked above *k*
         count as themselves; the unlabelled positives are split by the
         model's posterior mass on the unlabelled items above *k*, or by their
-        number with no model or no mass.
+        number with no model or no mass, and held to what each side can hold:
+        no more above *k* than it has unlabelled items, no fewer than the
+        rest of the band below *k* cannot take.
         """
         right_above = right_all = 0
         for cid, ok in self.labels.items():
@@ -824,7 +826,9 @@ class LineTest:
         else:
             n_free = int(free.sum())
             share = int(upper.sum()) / n_free if n_free else 0.0
-        return right_above + unlabelled * share
+        n_upper, n_lower = int(upper.sum()), int(free.sum()) - int(upper.sum())
+        above = np.clip(unlabelled * share, np.maximum(unlabelled - n_lower, 0.0), np.minimum(unlabelled, n_upper))
+        return right_above + above
 
     def _expected_shrink(self, b: int, base: np.ndarray) -> float:
         size, labelled, right = self.band_counts(b)

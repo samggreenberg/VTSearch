@@ -259,6 +259,18 @@ class TestTheEstimators:
         assert by_model.point > by_size.point + 0.05, (by_model, by_size)
         assert by_model.holds(precision_at_48) or by_model.hi > 0.95
 
+    def test_the_split_never_puts_more_matches_above_the_count_than_it_has_items(self):
+        """A model sure of a band's top cannot read a preset as more than 100% right (the route caught 1.0037)."""
+        ids, positives, post = self._top_heavy()
+        post = post.copy()
+        post[32:34] = 1.0  # all the model's mass on the band's first two items
+        post[34:64] = 1e-6
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42)
+        for count in (33, 34, 36, 40, 48, 60):
+            at = test.estimate_at(count)
+            assert 0.0 <= at.precision.lo <= at.precision.hi <= 1.0, (count, at.precision)
+            assert 0.0 <= at.recall.lo <= at.recall.hi <= 1.0, (count, at.recall)
+
     def test_a_pick_inside_the_band_counts_where_its_rank_falls(self):
         """A labelled right pick ranked above the count is counted as itself, not spread across the band."""
         ids, positives, post = self._top_heavy()
