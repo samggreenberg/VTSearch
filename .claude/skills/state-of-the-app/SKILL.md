@@ -365,9 +365,11 @@ keep a report on its link:
   deliberate side-report (the per-floor control is the one today).
 - **The viewer.** Commit `viewer.html` beside `REPORT.md`. `analyze.sh` already
   writes it to `analysis-<path>/viewer.html`; for the per-preset sessions take
-  the beta-1 run's, the app's default arm. Without one, the `viewer.html` link
-  serves a page saying the newest report has none (it never falls back to an
-  older report's viewer).
+  the beta-1 run's, the app's default arm. It opens on AP and does not offer
+  cost (#4576); a page built before that gets both from
+  `viewer.py --reskin <page> --default-metric average_precision --hide-metrics cost`.
+  Without a committed viewer, the `viewer.html` link serves a page saying the
+  newest report has none (it never falls back to an older report's viewer).
 - **A new kind** (a future modality) needs nothing here: its first report
   creates `sota/<kind>/`.
 

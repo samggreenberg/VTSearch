@@ -455,6 +455,14 @@ by a second, cheaper pass over the same cells and merged in with
 `--skyline-results`; re-running the loop for it would have replaced the
 performance rows the reports' tables were read off.
 
+Which metric a page **opens on** is the study's to choose, and so is which ones
+it offers at all: `--default-metric` and `--hide-metrics` write a `view` block
+into the payload, at build time or on a reskin of a page that is already built,
+and a later plain reskin keeps it. Without one the page opens on its first
+metric, which is cost on any run that emits it, so a study whose report retired
+cost passes both, as the State of the App's `analyze.sh` does (#4576). Hiding only takes a metric off the
+menu; its numbers stay in the payload.
+
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
 the weighted pooling against a hand-computed answer, the click-0 anchor, and the
 budget note.

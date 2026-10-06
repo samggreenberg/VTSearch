@@ -25,7 +25,14 @@ What the page lets a reader pick:
 * **seeds** — averaged, or every seed as its own line;
 * **metric** — cost, precision, recall, F1, FPR, FNR, average precision, AUROC:
   whatever the run emitted, from one shared definition
-  (:data:`vtscore.eval.calibration_metrics.DETECTION_METRICS`);
+  (:data:`vtscore.eval.calibration_metrics.DETECTION_METRICS`).  The page opens
+  on the first of them unless the study says otherwise: ``--default-metric``
+  picks the one it opens on and ``--hide-metrics`` takes some off the menu, for
+  a study whose report has retired one (the State of the App dropped cost,
+  #4576).  Both live in the payload's ``view`` block, so a later ``--reskin``
+  keeps them, and ``--reskin`` takes the same two flags to set them on a page
+  that is already built.  Hiding is not dropping: the numbers stay in the
+  payload, so a hidden metric comes back with a reskin rather than a rebuild;
 * **overlay** — off (the default), every varying dimension is its own chart
   carrying one bold line and the ±1 SD shadow of the population under it; on,
   they all land on one chart in distinct hues and the shadows come off.  The
@@ -136,6 +143,13 @@ says what the arm IS rather than where it sits::
 
     python viewer.py --results "$CALIB_EXP" --arms results=prod \\
         --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
+
+A study whose report has retired a metric opens on another and hides it, and
+the same two flags set that on a page that is already built::
+
+    python viewer.py ... --default-metric average_precision --hide-metrics cost
+    python viewer.py --reskin path/to/viewer.html \\
+        --default-metric average_precision --hide-metrics cost
 """
 
 from __future__ import annotations
@@ -340,6 +354,45 @@ def _metric_list(main: pd.DataFrame, oracle_keys: Sequence[str] = ()) -> list[di
                 }
             )
     return out
+
+
+def opening_view(keys: Sequence[str], *, metric: str | None = None, hide: Sequence[str] = ()) -> dict:
+    """The payload's ``view`` block: the metric the page opens on, and the ones it hides.
+
+    *keys* are the metrics the payload carries.  The block says how the page
+    **opens**, never what it carries, so it can be rewritten on a built page
+    (:func:`reskin`) without touching a number.
+
+    Returns ``{}`` when there is nothing to say, so a page built without either
+    choice has no ``view`` key and reads exactly as it did before there was one.
+    Raises rather than letting the page fall back on its own, because a page
+    that quietly opened on its first metric is the bug this block exists to
+    fix (#4576): a misspelt name, a default the page cannot open on, or a
+    ``hide`` that leaves nothing to offer each fail the build here.  Hiding a
+    known metric the run never emitted is allowed, since the page then has
+    nothing to hide.
+    """
+    from vtscore.eval.calibration_metrics import DETECTION_METRICS
+
+    unknown = [k for k in hide if k not in DETECTION_METRICS]
+    if unknown:
+        raise SystemExit(
+            f"viewer: no such metric to hide: {', '.join(unknown)} (known: {', '.join(DETECTION_METRICS)})"
+        )
+    hidden = [k for k in DETECTION_METRICS if k in set(hide)]
+    offered = [k for k in keys if k not in hidden]
+    if not offered:
+        raise SystemExit(f"viewer: hiding {', '.join(hidden)} leaves the page no metric to offer")
+    if metric and metric not in keys:
+        raise SystemExit(f"viewer: cannot open on {metric!r}: the payload carries only {', '.join(keys)}")
+    if metric and metric in hidden:
+        raise SystemExit(f"viewer: cannot open on {metric!r} and hide it")
+    view: dict = {}
+    if metric:
+        view["metric"] = metric
+    if hidden:
+        view["hide"] = hidden
+    return view
 
 
 def _thin(t_full: np.ndarray, keep: int) -> np.ndarray:
@@ -699,8 +752,14 @@ def build_viewer(  # noqa: C901
     anchor_label: str = curves.BASELINE_LABEL,
     template: Path = TEMPLATE,
     build: dict | None = None,
+    default_metric: str | None = None,
+    hide_metrics: Sequence[str] = (),
 ) -> Path:
-    """Write the self-contained viewer HTML.  Returns *out_path*."""
+    """Write the self-contained viewer HTML.  Returns *out_path*.
+
+    *default_metric* and *hide_metrics* set the page's opening ``view``; see
+    :func:`opening_view`.
+    """
     if main.empty:
         raise SystemExit("viewer: no rows to build from")
     main = main.copy()
@@ -712,6 +771,8 @@ def build_viewer(  # noqa: C901
     shape = _Shape(main, arms, denominator, oracle_keys)
     if not shape.metrics:
         raise SystemExit("viewer: the frame carries none of the known metric columns")
+    # Checked before the expensive part, so a misspelt flag fails in a second.
+    view = opening_view([m["key"] for m in shape.metrics], metric=default_metric, hide=hide_metrics)
 
     den = denominator if denominator is not None and not denominator.empty else main
     den = den.copy()
@@ -828,6 +889,9 @@ def build_viewer(  # noqa: C901
         # study's finding.
         **({"build": build} if build else {}),
         "payload_kb": {k: round(v / 1024) for k, v in sizes.items()},
+        # Last, because that is where `reskin` appends it: a view added to a
+        # built page sits where a build would have put it.
+        **({"view": view} if view else {}),
     }
 
     html = template.read_text(encoding="utf-8")
@@ -843,7 +907,13 @@ def build_viewer(  # noqa: C901
     return out_path
 
 
-def reskin(page: Path, template: Path = TEMPLATE) -> Path:
+def reskin(
+    page: Path,
+    template: Path = TEMPLATE,
+    *,
+    default_metric: str | None = None,
+    hide_metrics: Sequence[str] | None = None,
+) -> Path:
     """Re-substitute *page*'s own payload into the current template, in place.
 
     The template is the whole of the viewer's behaviour — every control, every
@@ -857,6 +927,11 @@ def reskin(page: Path, template: Path = TEMPLATE) -> Path:
     skyline still shows neither, and the page disables those controls rather
     than drawing an empty one.  Re-running the analyzer is the only way to get
     them.
+
+    *default_metric* and *hide_metrics* rewrite the payload's ``view`` block
+    (:func:`opening_view`), each only when given: ``""`` and ``[]`` clear their
+    half.  With neither, the payload is copied byte for byte, ``view``
+    included, so a template push never undoes a study's choice.
     """
     page = Path(page)
     html = page.read_text(encoding="utf-8")
@@ -864,6 +939,17 @@ def reskin(page: Path, template: Path = TEMPLATE) -> Path:
     if not m:
         raise SystemExit(f"{page}: no payload script tag - not a viewer page")
     blob = m.group(1)
+    if default_metric is not None or hide_metrics is not None:
+        payload = json.loads(blob)
+        was = payload.pop("view", None) or {}
+        view = opening_view(
+            [spec["key"] for spec in payload["metrics"]],
+            metric=was.get("metric") if default_metric is None else default_metric,
+            hide=was.get("hide", []) if hide_metrics is None else hide_metrics,
+        )
+        if view:
+            payload["view"] = view
+        blob = json.dumps(payload, separators=(",", ":"), allow_nan=False)
     fresh = template.read_text(encoding="utf-8")
     if fresh.count(TOKEN) != 1:
         raise SystemExit(f"{template}: expected exactly 1 {TOKEN}, found {fresh.count(TOKEN)}")
@@ -888,6 +974,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
     ap.add_argument("--title", default="Quality over clicks")
     ap.add_argument("--subtitle", default="")
+    ap.add_argument(
+        "--default-metric",
+        metavar="KEY",
+        help="the metric the page opens on (default: the first it offers); with --reskin, '' reverts to that",
+    )
+    ap.add_argument(
+        "--hide-metrics",
+        metavar="KEYS",
+        help="comma-separated metrics the page does not offer, though it still carries them; "
+        "with --reskin, '' offers every one again",
+    )
     ap.add_argument("--runs-budget-mb", type=float, default=RUNS_BUDGET_MB)
     ap.add_argument(
         "--no-skyline",
@@ -902,10 +999,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "(default: --results), for a floor measured after the run it describes",
     )
     args = ap.parse_args(list(argv) if argv is not None else None)
+    hide = None if args.hide_metrics is None else [k for k in args.hide_metrics.replace(",", " ").split() if k]
 
     if args.reskin:
         for page in args.reskin:
-            out = reskin(Path(page))
+            out = reskin(Path(page), default_metric=args.default_metric, hide_metrics=hide)
             print(f"reskinned {out}  ({out.stat().st_size / 1e6:.2f} MB)")
         return 0
     if not args.arms or not args.out:
@@ -950,6 +1048,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         title=args.title,
         subtitle=args.subtitle,
         runs_budget_mb=args.runs_budget_mb,
+        default_metric=args.default_metric or None,
+        hide_metrics=hide or (),
     )
     print(f"wrote {out}  ({out.stat().st_size / 1e6:.2f} MB)")
     if not args.baseline:
