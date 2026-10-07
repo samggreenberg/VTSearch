@@ -16,8 +16,10 @@
 
 <!-- **a** — Left: each line is scored at its own β, so this is not a league
      table between radios. Every line starts at the far left, the typed
-     query: the text sort cut at its own blind GMM line, which returns
-     about 4,500 images, F-beta 0.01, 0.02 and 0.15. The **✓** is not more clicks: it is the same
+     query: the text sort at the line the app draws for it (the guarded
+     cut, #4136), which returns about 200 images, F-beta 0.17, 0.24 and
+     0.48. At β 4 that beats the detector at 25 clicks (0.42); the clicks
+     catch it by about click 50. The **✓** is not more clicks: it is the same
      sessions after the spot check's uniform picks. After 150 clicks and the
      spot check: 0.64, 0.53 and 0.60. The check's 21 to 30 uniform picks add
      +0.022 to +0.033 at every radio. Autopilot also runs it mid-session when

@@ -18,8 +18,8 @@
 
 <!-- **a** — Left: each line is scored at its own β, so again not a league
      table between radios. They start at the same typed query as Photo
-     Finish's (the region path opens on the same text sort): 0.01, 0.02 and
-     0.15. After 150 clicks and the spot check: 0.73, 0.63
+     Finish's (the region path opens on the same text sort): 0.18, 0.25 and
+     0.48, which the region path passes by click 25 at every β. After 150 clicks and the spot check: 0.73, 0.63
      and 0.72, about 0.1 above Photo Finish's 0.64, 0.53 and 0.60 at every
      radio, and already 0.57, 0.49 and 0.61 at 25 clicks. The check's 21 to
      30 picks add +0.03 to +0.04 here, more than they add on the binary
