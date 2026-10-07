@@ -48,13 +48,14 @@ def windowed_sort_response(
 ) -> dict[str, Any]:
     """Build a sort-response body, windowing the transmitted ``results``.
 
-    *acq_threshold* is the **acquisition** cut for a detector sort - the rank
-    position Autopilot's Hard / New picks sample around, which since #2876 sits
-    above the reporting ``threshold`` (see
-    :func:`vtscore.state.core.detector_acquisition_threshold`).  Only the learned
-    sort carries one; the text / example / label-file sorts have no detector
-    behind them, so they leave it ``None`` and the client falls back to
-    ``threshold``.  It is deliberately *not* fed to ``_windowed_sort_extras``:
+    *acq_threshold* is the **acquisition** cut - the rank position Autopilot's
+    Hard / New picks sample around.  On a detector sort it sits above the
+    reporting ``threshold`` since #2876 (see
+    :func:`vtscore.state.core.detector_acquisition_threshold`); on a text sort
+    it is the mixture midpoint, with the guarded rule drawing ``threshold``
+    since #4136 (see :func:`vtscore.training.thresholds.text_sort_cuts`).  The
+    example and label-file sorts draw one line and leave it ``None``, and the
+    client falls back to ``threshold``.  It is deliberately *not* fed to ``_windowed_sort_extras``:
     ``above_threshold`` counts what the user is told matched, which is the
     reporting cut's job.  *balance* is what the balance says about
     ``threshold`` (#4413, :func:`vtscore.state.core.detector_balance_state`);

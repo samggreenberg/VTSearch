@@ -28,6 +28,12 @@ Reads one State of the App run (``launch.sh``) and writes, under ``--out``:
   and per image x detector, early and late separately.
 * ``harmful_pairs.csv`` -- the (image, class, label) pairs that hurt past
   -``Z_FLAG``, net of cell, label and phase: the hand-review list (#4179).
+* ``stops.csv`` / ``margins.csv`` -- one row per run: where the app's stopping
+  rules first fired (the click Autopilot says *All quality indicators are
+  green*), the objective and AP there, at the budget and at the run's own
+  best, and how far short each gate was over the clicks it held (#3560,
+  ``calibration/stopping.py``).  A run that never trained is kept as one the
+  rules never stopped.
 * ``summary.md`` -- the tables a reader starts from.
 
 **The metrics (owner, 2026-09-30, #4357).**  #4223 retired FPR + FNR as the
@@ -117,6 +123,8 @@ from _rank_metrics import (  # noqa: E402
     line_metrics,
     parse_ranks,
 )
+import objective  # noqa: E402
+import stopping  # noqa: E402
 
 #: The two production paths, as the harness names them.
 ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max_patch"): "DINOv3 region"}
@@ -191,6 +199,10 @@ CURVE_METRICS = ("f1", "precision", "recall", "oracle_recall")
 
 #: The balance's curves: the returned set's F-beta and its share of the best cut, with precision and recall.
 BALANCE_CURVE_METRICS = ("fbeta", "fb_share", "precision", "recall")
+
+#: What the stopping block reads at the app's stop (#3560): the objective (a run that drew its line at a
+#: balance), and AP beside it.  Never cost (#4357), so not ``stopping.DEFAULT_METRICS``.
+STOP_METRICS = (objective.OBJECTIVE, "average_precision")
 
 
 def curve_col(metric: str, floor: Any) -> str:
@@ -477,6 +489,23 @@ def _run_frames(frames: pd.DataFrame) -> dict[tuple, dict[str, pd.DataFrame]]:
     return out
 
 
+def _shown_from(ordinary: pd.DataFrame) -> dict[tuple, float]:
+    """Per run key, the first click at which the app shows a detector (#4605); ``inf`` when it never does.
+
+    The app stays on the text sort through Autopilot's opening (Good, Bad, More) and sorts by the
+    detector only from the Hard phase on. The harness marks the steps the app shows as
+    ``app_trained == 1`` (:func:`vtscore.eval.autopilot_flow.app_has_detector`): a detector it trains
+    earlier is one no user sees. So every user-facing number before this click is the text sort's.
+    Rows without the flag (recorded before it existed, or a fixture) are shown from the first row.
+    """
+    out: dict[tuple, float] = {}
+    for key, g in ordinary.groupby(RUN_KEY):
+        flag = pd.to_numeric(g["app_trained"], errors="coerce") if "app_trained" in g.columns else None
+        shown = g.loc[flag == 1, "t"] if flag is not None and flag.notna().any() else g["t"]
+        out[tuple(key)] = float(shown.min()) if len(shown) else float("inf")
+    return out
+
+
 def _line_at(frame: dict | None, floor: float) -> dict[str, float]:
     if frame is None:
         return {m: np.nan for m in LINE_METRICS}
@@ -518,6 +547,7 @@ def run_tables(
     clicks_by = {tuple(k): g for k, g in pk_click.groupby(RUN_KEY)}
     check_picks_by = {tuple(k): g for k, g in pk_check.groupby(RUN_KEY)}
     series = {tuple(k): g.groupby("t")["average_precision"].mean() for k, g in ordinary.groupby(RUN_KEY)}
+    shown_from = _shown_from(ordinary)
     # The floor each run's sessions aimed at (the run's CALIB_MIN_PRECISION), off its own rows.
     floor_of: dict[tuple, float] = {}
     beta_of: dict[tuple, float] = {}
@@ -562,15 +592,19 @@ def run_tables(
             "text_ap": text["text_ap"],
         }
         final_t = int(s.index.max()) if trained else (int(clicks["t"].max()) if clicks is not None else 0)
+        # The first click the app shows a detector: the end of Autopilot's opening (#4605).
+        shown = shown_from.get(key, float("inf"))
+        row["shown_from"] = shown
         for c in CHECKPOINTS:
-            at = s[s.index <= c] if trained else None
-            # Before a detector exists, what the user sees IS the text sort, so
-            # the text score stands in -- never a gap, which would let the mean
-            # at a checkpoint silently skip the runs that are still starving.
+            at = s[(s.index <= c) & (s.index >= shown)] if trained else None
+            # Before the app shows a detector, what the user sees IS the text sort
+            # (the opening's own detectors are on no screen, #4605), so the text
+            # score stands in -- never a gap, which would let the mean at a
+            # checkpoint silently skip the runs that are still starving.
             row[f"ap_{c}"] = at.iloc[-1] if at is not None and len(at) else text["text_ap"]
             row[f"goods_{c}"] = _goods_by(clicks, c)
         row["final_t"] = final_t
-        row["final_ap"] = s.iloc[-1] if trained else text["text_ap"]
+        row["final_ap"] = s.iloc[-1] if trained and s.index.max() >= shown else text["text_ap"]
         row["positives_found"] = _goods_by(clicks, final_t)
         row["ceiling_ap"] = skyd.get(key, np.nan)
         row["clicks_bought"] = row["final_ap"] - row["text_ap"]
@@ -585,11 +619,19 @@ def run_tables(
         chk_rows = checks.get(key)
         last_ord = ord_rows.iloc[-1] if ord_rows is not None and len(ord_rows) else None
         last_chk = chk_rows.sort_values("t").iloc[-1] if chk_rows is not None and len(chk_rows) else None
-        unchecked = _threshold_at(last_ord, own_beta)
-        after = _threshold_at(last_chk if last_chk is not None else last_ord, own_beta)
+        # Before the app shows a detector the user has the typed query's own set: the text sort at its line.
+        text_line = _text_app_line(text, own_beta)
+        text_thr = {f"thr_{m}": text_line[k] for m, k in (("precision", "precision"), ("recall", "recall"),
+                                                          ("fbeta", "fbeta"), ("returned", "k"))}  # fmt: skip
+        last_shown = last_ord is not None and int(last_ord["t"]) >= shown
+        unchecked = _threshold_at(last_ord, own_beta) if last_ord is None or last_shown else text_thr
+        after = _threshold_at(last_chk, own_beta) if last_chk is not None else unchecked
         for c in CHECKPOINTS:
-            at = ord_rows[ord_rows["t"] <= c] if ord_rows is not None else None
-            point = _threshold_at(at.iloc[-1] if at is not None and len(at) else None, own_beta)
+            at = ord_rows[(ord_rows["t"] <= c) & (ord_rows["t"] >= shown)] if ord_rows is not None else None
+            if at is not None and len(at):
+                point = _threshold_at(at.iloc[-1], own_beta)
+            else:
+                point = text_thr if ord_rows is not None and len(ord_rows) else _threshold_at(None, own_beta)
             # The returned set's path through the session (#4519): F-beta, and the
             # precision, recall and size behind it, at each checkpoint.
             for m in ("fbeta", "precision", "recall", "returned"):
@@ -607,22 +649,23 @@ def run_tables(
         steps = kinds.get("step")
         step_at = {int(r["t"]): r for r in steps.to_dict("records")} if steps is not None else {}
         sky_frame = kinds.get(CEILING)
-        first_t = int(s.index.min()) if trained else None
+        first_t = int(shown) if trained and np.isfinite(shown) else None
         # (point, t, frame, read the text sort instead).  A point with neither is
         # unknown and stays blank rather than borrowing a neighbour's value.
         points: list[tuple[str, float, dict | None, bool]] = [("text", 0, None, True)]
         for c in CHECKPOINTS:
             if not have_frames:
                 points.append((str(c), c, None, False))
-            elif c in step_at:
+            elif c in step_at and first_t is not None and c >= first_t:
                 points.append((str(c), c, step_at[c], False))
-            elif last_frame is not None and int(last_frame["t"]) <= c:
+            elif last_frame is not None and int(last_frame["t"]) <= c and first_t is not None and c >= first_t:
                 # The pool ran out before click c: the line stays where it ended.
                 points.append((str(c), c, last_frame, False))
             else:
-                # No detector yet at click c: the user still has the text sort.
+                # No detector on screen yet at click c: the user still has the text sort.
                 points.append((str(c), c, None, first_t is None or c < first_t))
-        points.append(("final", final_t, last_frame if have_frames else None, have_frames and not trained))
+        final_text = have_frames and (not trained or first_t is None)
+        points.append(("final", final_t, last_frame if have_frames and not final_text else None, final_text))
         points.append(("ceiling", np.nan, _frame_dict(sky_frame.iloc[-1]) if sky_frame is not None else None, False))
         ident = {k: row[k] for k in ("arm", "dataset", "category", "class", "band", "seed", "never_trained")}
         at_default: dict[str, dict[str, float]] = {}
@@ -662,14 +705,16 @@ def run_tables(
             ranks = parse_ranks(fr["test_pos_ranks"])
             for x in FLOORS:
                 m = line_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), x, frame_k(fr, x))
-                steps_out.append({**ident, "t": int(fr["t"]), "floor": x, **m})
+                steps_out.append({**ident, "t": int(fr["t"]), "shown": int(fr["t"]) >= shown, "floor": x, **m})
             for b in BETAS:
                 for rule, kk in ((RULE_APP, frame_beta_k(fr, b)), (RULE_TOP, balance_cap(b))):
                     mb = balance_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), b, kk)
-                    balance_steps.append({**ident, "t": int(fr["t"]), "beta": b, "rule": rule, **mb})
+                    balance_steps.append(
+                        {**ident, "t": int(fr["t"]), "shown": int(fr["t"]) >= shown, "beta": b, "rule": rule, **mb}
+                    )
             t_fr = int(fr["t"])
             mp = _pool_at(fr, counts.get(t_fr, float("nan")), _goods_by(clicks, t_fr), own_beta)
-            pool_steps.append({**ident, "t": t_fr, "beta": own_beta, **mp})
+            pool_steps.append({**ident, "t": t_fr, "shown": t_fr >= shown, "beta": own_beta, **mp})
         # The withheld set above the threshold at every ordinary click, then unchecked and after the check.
         if ord_rows is not None:
             for r_ in ord_rows.to_dict("records"):
@@ -678,6 +723,7 @@ def run_tables(
                         **ident,
                         "point": "step",
                         "t": int(r_["t"]),
+                        "shown": int(r_["t"]) >= shown,
                         "beta": own_beta,
                         **_threshold_at(pd.Series(r_), own_beta),
                     }
@@ -696,6 +742,118 @@ def run_tables(
     )
 
 
+def _band(category: pd.Series) -> pd.Series:
+    """The size half of a ``class@band`` category; blank where there is none."""
+    return category.astype(str).str.split("@").str[1].fillna("")
+
+
+def stopping_tables(base: pd.DataFrame, cells: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """``(stops, margins)``: per run, where the app's stopping rules fired and how close each gate came (#3560).
+
+    The app announces "All quality indicators are green" the first time Smart,
+    Stable and Span are all green, and a user may stop there; the session keeps
+    clicking to the budget either way.  ``stopping.stopping_points`` reads that
+    stop and the objective there off the ordinary clicks (the end-of-run check's
+    rows are not clicks), and ``stopping.margins`` how far short each gate was
+    over the clicks it held.
+
+    **A run that never trained a detector is kept.**  It has no row to read, but
+    it is a session the rules never stopped, so it enters the fire rate as a run
+    that did not fire, censored at its last click.  Dropping it would raise the
+    fire rate by exactly the runs the review most needs to see.
+    """
+    stops = mg = pd.DataFrame()
+    ordinary = base[~_is_check(base)] if not base.empty and "phase" in base.columns else pd.DataFrame()
+    if not ordinary.empty:
+        arm = [ARMS.get((e, s), f"{e}/{s}") for e, s in zip(ordinary["embedder"], ordinary["style"], strict=True)]
+        ordinary = ordinary.assign(arm=arm)
+        keys = ("arm", *RUN_KEY)
+        stops = stopping.stopping_points(ordinary, keys=keys, metrics=STOP_METRICS)
+        mg = stopping.margins(ordinary, keys=keys)
+    starved = cells[cells["never_trained"].astype(bool)] if not cells.empty else cells
+    if not starved.empty:
+        rows = []
+        for r in starved.to_dict("records"):
+            emb, style = _ARM_OF.get(r["arm"]) or tuple(str(r["arm"]).split("/", 1))
+            rows.append(
+                {
+                    "arm": r["arm"],
+                    "dataset": r["dataset"],
+                    "category": r["category"],
+                    "embedder": emb,
+                    "style": style,
+                    "seed": int(r["seed"]),
+                    "n_steps": 0,
+                    "t_budget": int(r["final_t"]),
+                    "stopped": False,
+                    "t_stop": np.nan,
+                    "t_sustained": np.nan,
+                    "n_done_episodes": 0,
+                    "clicks_after_stop": np.nan,
+                }
+            )
+        stops = pd.concat([stops, pd.DataFrame(rows)], ignore_index=True) if not stops.empty else pd.DataFrame(rows)
+    if not stops.empty:
+        stops["stopped"] = stops["stopped"].astype(bool)
+    for df in (stops, mg):
+        if not df.empty:
+            df["band"] = _band(df["category"])
+    return stops, mg
+
+
+def stopping_md(stops: pd.DataFrame, mg: pd.DataFrame) -> list[str]:
+    """The summary's stopping block: where the app said stop, what the line scored there, and what held it."""
+    if stops.empty:
+        return []
+    # The objective where the sessions drew their line at a balance, else AP; decided on the runs, not on
+    # whether any of them fired, so a review where nothing fired still names the objective.
+    obj_at = f"{objective.OBJECTIVE}_at_stop"
+    metric = objective.OBJECTIVE if obj_at in stops.columns else "average_precision"
+    by_arm = stopping.summarise(stops, by=("arm",), metrics=STOP_METRICS)
+    out = [
+        "## Where the app said stop (#3560)",
+        "",
+        "The app announces *All quality indicators are green* the first time Smart, Stable and Span are all "
+        "green, and a user may stop there; the session keeps clicking to the budget either way. A run's **stop** "
+        "is that first click. `fired` counts the runs the rules stopped at all, and every column after it "
+        "describes only those, so read it first. The KM median carries the runs that never fired as censored "
+        "at their last click, and is blank when fewer than half fired. "
+        f"`{metric} at stop` and `at budget` are the line's {metric} at the stop and at the last click, Δ "
+        "paired within run; `short of run's best` is how far the stop fell below the best the run ever "
+        "reached, and `clicks past best` how many clicks after that best it fired (negative: before it). "
+        "The best is the top of a noisy series, so read those two together.",
+        "",
+        stopping.stopping_table(by_arm, metric=metric),
+        "",
+    ]
+    note = stopping.binding_note(by_arm)
+    if note:
+        out += [note, "", "Per band:", ""]
+    else:
+        out += ["Per band:", ""]
+    out += [stopping.stopping_table(stopping.summarise(stops, by=("arm", "band"), metrics=STOP_METRICS), metric=metric)]
+    out += [
+        "",
+        "### How close each gate came, over the clicks it held",
+        "",
+        "The median margin to green over each run's held clicks (before its stop, or all of them when it never "
+        "stopped): positive is satisfied with that much room, negative is short by that much. In brackets, the "
+        "share of held clicks the gate was green at: a margin just under zero at about half is a rule flapping, "
+        "at 0% a wall. Smart's two gates are an either-or.",
+        "",
+        stopping.margin_table(stopping.summarise_margins(mg, by=("arm",))),
+        "",
+    ]
+    return out
+
+
+def _on_screen(d: pd.DataFrame | None) -> pd.DataFrame | None:
+    """A per-click table's rows at clicks the app shows a detector (``shown``, #4605); all rows without the flag."""
+    if d is None or d.empty or "shown" not in d.columns:
+        return d
+    return d[d["shown"].fillna(True).astype(bool)]
+
+
 def curves(
     cells: pd.DataFrame,
     base: pd.DataFrame,
@@ -708,9 +866,10 @@ def curves(
 ) -> pd.DataFrame:
     """Every run on a common click grid 0..horizon, as the USER would see it.
 
-    Click 0 is the text-only AP; until the first scored click the user still
-    sees the text sort, so it carries forward; after that the last scored value
-    carries forward. A run that never trained stays at its text AP.  Goods found
+    Click 0 is the text-only AP; until the app shows a detector -- the end of
+    Autopilot's opening, not the first scored click (#4605, :func:`_shown_from`)
+    -- the user still sees the text sort, so it carries forward; after that the
+    last scored value carries forward. A run that never trained stays at its text AP.  Goods found
     count the clicks only, never the spot check's picks.
 
     The returned set at each floor (precision, recall, the oracle's recall at
@@ -722,7 +881,15 @@ def curves(
     run recorded without them) is blank past click 0.
     """
     ordinary = base[~_is_check(base)] if not base.empty else pd.DataFrame(columns=[*RUN_KEY, "t"])
-    by_run = {tuple(k): g.groupby("t")["average_precision"].mean() for k, g in ordinary.groupby(RUN_KEY)}
+    # Only what the app shows (#4605): the opening's own detectors are on no screen.
+    shown_from = _shown_from(ordinary)
+    if ordinary.empty:
+        on_screen = ordinary
+    else:
+        first = pd.Series(shown_from).reindex(pd.MultiIndex.from_frame(ordinary[list(RUN_KEY)])).to_numpy()
+        on_screen = ordinary[ordinary["t"].to_numpy(dtype=float) >= first]
+    by_run = {tuple(k): g.groupby("t")["average_precision"].mean() for k, g in on_screen.groupby(RUN_KEY)}
+    steps, balance_steps, thresholds = (_on_screen(d) for d in (steps, balance_steps, thresholds))
     pk = picks[~_is_check(picks)] if not picks.empty else picks
     goods_run = {tuple(k): g.sort_values("t") for k, g in pk.groupby(RUN_KEY)} if not pk.empty else {}
     horizon = max(CHECKPOINTS[-1], int(ordinary["t"].max()) if not ordinary.empty else 0)
@@ -754,11 +921,13 @@ def curves(
                 g["t"].to_numpy(),
                 {m: g[m].to_numpy(dtype=float) for m in BALANCE_CURVE_METRICS},
             )
-    thr_run: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+    # The objective and the precision and recall behind it (the right panel's per-click path, #4605).
+    thr_cols = ("thr_fbeta", "thr_precision", "thr_recall")
+    thr_run: dict[tuple, tuple[np.ndarray, dict[str, np.ndarray]]] = {}
     if thresholds is not None and not thresholds.empty:
         for (arm, cat, seed), g in thresholds[thresholds["point"] == "step"].groupby(["arm", "category", "seed"]):
             g = g.sort_values("t")
-            thr_run[(arm, cat, int(seed))] = (g["t"].to_numpy(), g["thr_fbeta"].to_numpy(dtype=float))
+            thr_run[(arm, cat, int(seed))] = (g["t"].to_numpy(), {m: g[m].to_numpy(dtype=float) for m in thr_cols})
     rows = []
     for r in cells.itertuples():
         key = (r.dataset, r.category, _emb_of(r.arm), _style_of(r.arm), int(r.seed))
@@ -792,13 +961,15 @@ def curves(
                 elif not r.never_trained:
                     v[1:] = np.nan
                 f1_cols[curve_col(metric, floor)] = v
-        # The objective over clicks (#4427): no threshold before the first trained click, then carried forward.
-        thr = np.full(len(grid), np.nan, dtype=float)
+        # The objective over clicks (#4427): no threshold before the app shows a detector (#4605), then carried
+        # forward; with it the precision and recall of the same set.
+        thr = {m: np.full(len(grid), np.nan, dtype=float) for m in thr_cols}
         have_thr = thr_run.get((r.arm, r.category, int(r.seed)))
         if have_thr is not None:
             tt, tv = have_thr
             idx = np.searchsorted(tt, grid, side="right") - 1
-            thr[idx >= 0] = tv[idx[idx >= 0]]
+            for m in thr_cols:
+                thr[m][idx >= 0] = tv[m][idx[idx >= 0]]
         rows.append(
             pd.DataFrame(
                 {
@@ -808,7 +979,7 @@ def curves(
                     "t": grid,
                     "ap": ap,
                     "goods": goods,
-                    "thr_fbeta": thr,
+                    **thr,
                     **f1_cols,
                 }
             )
@@ -1256,6 +1427,8 @@ def summary(
     null: tuple | None = None,
     balances: pd.DataFrame | None = None,
     pools: pd.DataFrame | None = None,
+    stops: pd.DataFrame | None = None,
+    margins: pd.DataFrame | None = None,
 ) -> None:
     lines_md = ["# State of the App -- summary tables", ""]
     if not cells.empty and cells["never_trained"].any():
@@ -1312,6 +1485,8 @@ def summary(
                 _md(chk),
                 "",
             ]
+        if stops is not None:
+            lines_md += stopping_md(stops, margins if margins is not None else pd.DataFrame())
         by_band = ["text_ap", "final_ap", "ceiling_ap", "text_f1", "final_f1", "ceiling_f1", "positives_found"]
         lines_md += ["## Per path and band", "", _md(cells.groupby(["arm", "band"])[by_band].mean().round(3)), ""]
         band_line = lines[(lines["point"] == "final") & (lines["floor"] == 0.5)]
@@ -1433,7 +1608,20 @@ def main() -> int:
     det.to_csv(args.out / "image_detector.csv", index=False)
     if not inf.empty:
         harmful_pairs(inf).to_csv(args.out / "harmful_pairs.csv", index=False)
-    summary(cells, lines, img, args.out, image_null(inf) if not inf.empty else None, balances=balances, pools=pools)
+    stops, margins = stopping_tables(base, cells)
+    stops.to_csv(args.out / "stops.csv", index=False)
+    margins.to_csv(args.out / "margins.csv", index=False)
+    summary(
+        cells,
+        lines,
+        img,
+        args.out,
+        image_null(inf) if not inf.empty else None,
+        balances=balances,
+        pools=pools,
+        stops=stops,
+        margins=margins,
+    )
     n_frames = "no rank frames" if frames.empty else f"{len(frames)} rank frames"
     print(f"{len(cells)} runs, {len(inf)} credited clicks, {len(img)} images, {n_frames} -> {args.out}")
     return 0

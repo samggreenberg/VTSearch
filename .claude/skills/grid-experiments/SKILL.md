@@ -159,21 +159,50 @@ Then check the two things a script cannot:
   horizon can be far cheaper than it looks — and a region/patch cell can be 10×
   a whole-image one, which changes the arm budget entirely.
 
-### Size an A/B before you launch it (#3840)
+### Size an A/B before you launch it (#3840, #4584)
 
 A trajectory A/B's resolution is known in advance, so decide the grid from it
 rather than discovering the floor in the write-up:
 
-> **SE of the paired mean Δcost = σ/√n, σ ≈ 0.04** for any two arms whose
-> thresholds differ. To resolve δ at 2 SE: **n = (2σ/δ)²** paired cells
-> (80% power: (2.8σ/δ)²).
+> **SE of the paired mean Δ = σ/√n**, with σ the per-cell sd of the paired Δ
+> of the **decision metric**, for any two arms whose thresholds differ. To
+> resolve δ at 2 SE: **n = (2σ/δ)²** paired cells (80% power: (2.8σ/δ)²).
 
-| δ | 0.02 | 0.01 | 0.005 | 0.004 | 0.002 |
-|---|---|---|---|---|---|
-| cells at 2 SE | 16 | 64 | 260 | 400 | 1,600 |
+The decision metric follows the balance the run draws its line at. A balance
+run (any `CALIB_BETA`, including unset, which is the app's default beta 1) is
+decided on the **objective**, `fbeta`: F-beta of the withheld half above the
+threshold the app holds, at the run's own beta (#4427). Only `CALIB_BETA=off`,
+the Inclusion arm, is decided on `cost`. σ differs by metric and by beta, and
+δ is in that metric's units: a grid sized for Δcost 0.01 resolves only about
+0.02 to 0.04 of F-beta.
 
-Validated on 399 fresh cells against a pre-registered prediction
-(`docs/experiments/2026-09-22-ab-resolution-3840/REPORT.md`).
+| decision metric | σ per cell | δ = 0.02 | 0.01 | 0.005 | 0.004 | 0.002 |
+|---|---|---|---|---|---|---|
+| Δcost, `CALIB_BETA=off` (measured, #3840) | 0.04 | 16 | 64 | 256 | 400 | 1,600 |
+| Δ-objective at beta 1/4 (measured, #4584) | 0.13 | 169 | 676 | 2,704 | 4,225 | 16,900 |
+| Δ-objective at beta 1 (measured, #4584) | 0.08 | 64 | 256 | 1,024 | 1,600 | 6,400 |
+| Δ-objective at beta 4 (measured, #4584) | 0.10 | 100 | 400 | 1,600 | 2,500 | 10,000 |
+
+The cost row was validated on 399 fresh cells against a pre-registered
+prediction (`docs/experiments/2026-09-22-ab-resolution-3840/REPORT.md`). The
+objective rows are the per-cell sd of the paired Δ in `analyze_ab`'s decision
+window (scope `app_visible`, all steps, each arm's own rows), measured on
+same-commit pairs of today's app on `coco_better` (binary SigLIP, 1% pool,
+150 votes; #4584):
+
+| pair | beta 1/4 | beta 1 | beta 4 |
+|---|---|---|---|
+| #4583's calibration split / fold count (3 contrasts, 685 runs each) | 0.054–0.059 | 0.030–0.035 | 0.038–0.044 |
+| #4428's acquisition depth, `x0.25` vs shipped (414 runs, 300 votes) | | 0.082 | |
+
+**σ depends on how far the two arms' trajectories part:** an arm that changes
+what Autopilot asks (acquisition) parts them more than one that only moves the
+line (calibration), about 2.4× here. The table takes the larger, acquisition-type
+σ at beta 1 and scales beta 1/4 and 4 by the ratios measured within #4583
+(×1.6, ×1.24), so it is conservative for a line-only knob. Point reads are
+noisier than the all-steps window: at vote 150 the per-cell sd is 0.09 / 0.05 /
+0.06 on the #4583 pairs, so a decision taken at one vote needs about twice the
+cells.
 
 **Preflight enforces it (#4111).** Give it the δ the A/B is meant to resolve:
 
@@ -182,15 +211,21 @@ bash scripts/experiments/preflight.sh --exp "$CALIB_EXP" ... --resolve-delta 0.0
 ```
 
 It refuses a grid with fewer than (2σ/δ)² paired cells, and prints the δ the grid
-*can* resolve and the `CALIB_N_SEEDS` that would get there. It counts paired
-cells the way `analyze_ab.py` pairs them, one per style (`run_cells.py
---print-paired-cells`). `--print-cells` gives a different number: it counts array
-tasks, and a `whole_image,max_patch` task is two paired cells (42 tasks vs 57
-paired cells a seed on the #3585 environments). `--sigma` overrides the 0.04
-default. `--paired-cells N` supplies the count for a grid `run_cells.py` does
-not enumerate. `analyze_ab.py` prints the same floor (`resolvable_delta_2se`)
-beside every Δ it writes, including the pooled line, so a report cannot quote a
-Δ without it.
+*can* resolve, the `CALIB_N_SEEDS` that would get there, and which σ it used.
+The default σ is the table's for the launch's `CALIB_BETA`: 0.13 at 1/4, 0.08 at
+1 or unset, 0.10 at 4, 0.04 with `off`. At a beta the table has no σ for
+(anything off the presets) it stops and asks for `--sigma`, which overrides the
+default anywhere. It counts paired cells the way `analyze_ab.py` pairs them, one per
+style (`run_cells.py --print-paired-cells`). `--print-cells` gives a different
+number: it counts array tasks, and a `whole_image,max_patch` task is two paired
+cells (42 tasks vs 57 paired cells a seed on the #3585 environments).
+`--paired-cells N` supplies the count for a grid `run_cells.py` does not
+enumerate. `analyze_ab.py` decides on the same metric (`fbeta` when the runs
+carry a beta, refusing a pair drawn at two different betas; `cost` otherwise)
+and prints the same floor (`resolvable_delta_2se`) beside every Δ it writes,
+including the pooled line, so a report cannot quote a Δ without it. Cells
+written before the `fbeta` columns have them filled from `precision` and
+`recall`.
 
 What goes with it:
 

@@ -198,7 +198,7 @@ section.statement h1 { font-size: 54px; line-height: 1.2; }
    and the list occupies the rectangle a figure would. The outline *is* this
    slide's figure — it is the one thing the room is meant to look at — so it
    gets the slot the deck gives figures, and the audience is not asked to
-   re-find the title on the one slide that comes back six times. */
+   re-find the title on the one slide that comes back before every section. */
 section.outline {
   padding: 42px 60px;
   align-content: start;
@@ -221,19 +221,53 @@ section.outline ol {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  font-size: 34px;
   padding-left: 0;
   list-style: none;
   counter-reset: outline;
+  /* The list sizes itself to its length, so a talk cut down to three sections
+     and the master deck's nine both fill the slot (#4598). Every line gets an
+     equal share of the slot's height, its *pitch*, out of 600 of its 618px,
+     up to 80px; the type is 0.56 of the pitch, between 22px (the floor is 20)
+     and 36px. So two to seven lines are 80px apart at 36px, ten are 60px
+     apart at 33.6px, and sixteen, the most the slot holds, are 37.5px apart
+     at 22px. A line is never two lines tall (`white-space: nowrap` below),
+     which is what lets one number stand for a line: a section's line is a
+     bare name (slides/STYLE.md). */
+  --outline-lines: 1;
+  --outline-pitch: min(80px, calc(600px / var(--outline-lines)));
+  font-size: clamp(22px, calc(var(--outline-pitch) * 0.56), 36px);
 }
+/* How many lines the list has, the closing line included (it is hidden, not
+   removed, so it keeps its share): CSS cannot count, so each rule says "at
+   least k", and the last that matches wins. Sixteen is the ceiling, and
+   build.py's OUTLINE_MAX_LINES fails a longer outline at `--check` rather than
+   letting it run off the slot; keep the two in step. */
+section.outline ol:has(> li:nth-child(2)) { --outline-lines: 2; }
+section.outline ol:has(> li:nth-child(3)) { --outline-lines: 3; }
+section.outline ol:has(> li:nth-child(4)) { --outline-lines: 4; }
+section.outline ol:has(> li:nth-child(5)) { --outline-lines: 5; }
+section.outline ol:has(> li:nth-child(6)) { --outline-lines: 6; }
+section.outline ol:has(> li:nth-child(7)) { --outline-lines: 7; }
+section.outline ol:has(> li:nth-child(8)) { --outline-lines: 8; }
+section.outline ol:has(> li:nth-child(9)) { --outline-lines: 9; }
+section.outline ol:has(> li:nth-child(10)) { --outline-lines: 10; }
+section.outline ol:has(> li:nth-child(11)) { --outline-lines: 11; }
+section.outline ol:has(> li:nth-child(12)) { --outline-lines: 12; }
+section.outline ol:has(> li:nth-child(13)) { --outline-lines: 13; }
+section.outline ol:has(> li:nth-child(14)) { --outline-lines: 14; }
+section.outline ol:has(> li:nth-child(15)) { --outline-lines: 15; }
+section.outline ol:has(> li:nth-child(16)) { --outline-lines: 16; }
 section.outline ol li {
   counter-increment: outline;
-  margin-bottom: 0.5em;
+  margin: 0;
+  line-height: var(--outline-pitch);
+  white-space: nowrap;
   padding-left: 2.75em;
   position: relative;
 }
-/* Right-aligned in a column as wide as the widest numeral, VIII, so the names
-   start on one line whatever their numeral's width. */
+/* Right-aligned in a column wider than any numeral the ceiling allows, so the
+   names start on one line whatever their numeral's width: the widest of I to
+   XVI is XIV, measured at 1.77em in the deck's face, against VIII's 1.59. */
 section.outline ol li::before {
   content: counter(outline, upper-roman);
   position: absolute;
@@ -244,9 +278,6 @@ section.outline ol li::before {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-/* The trailing item's own bottom margin would otherwise push the whole list
-   above the centre of the slot it is centred in. */
-section.outline ol li:last-child { margin-bottom: 0; }
 /* The section we are about to enter, or the one being revisited. */
 section.outline ol li.here { font-weight: 700; }
 /* Weight is set here, not with `**bold**` in the fragment: the whole point of
@@ -277,7 +308,15 @@ section.outline.at4 ol li:nth-of-type(4),
 section.outline.at5 ol li:nth-of-type(5),
 section.outline.at6 ol li:nth-of-type(6),
 section.outline.at7 ol li:nth-of-type(7),
-section.outline.at8 ol li:nth-of-type(8) { color: var(--ink); font-weight: 700; }
+section.outline.at8 ol li:nth-of-type(8),
+section.outline.at9 ol li:nth-of-type(9),
+section.outline.at10 ol li:nth-of-type(10),
+section.outline.at11 ol li:nth-of-type(11),
+section.outline.at12 ol li:nth-of-type(12),
+section.outline.at13 ol li:nth-of-type(13),
+section.outline.at14 ol li:nth-of-type(14),
+section.outline.at15 ol li:nth-of-type(15),
+section.outline.at16 ol li:nth-of-type(16) { color: var(--ink); font-weight: 700; }
 section.outline.at1 ol li:nth-of-type(1)::before,
 section.outline.at2 ol li:nth-of-type(2)::before,
 section.outline.at3 ol li:nth-of-type(3)::before,
@@ -285,7 +324,15 @@ section.outline.at4 ol li:nth-of-type(4)::before,
 section.outline.at5 ol li:nth-of-type(5)::before,
 section.outline.at6 ol li:nth-of-type(6)::before,
 section.outline.at7 ol li:nth-of-type(7)::before,
-section.outline.at8 ol li:nth-of-type(8)::before { color: var(--ink-soft); }
+section.outline.at8 ol li:nth-of-type(8)::before,
+section.outline.at9 ol li:nth-of-type(9)::before,
+section.outline.at10 ol li:nth-of-type(10)::before,
+section.outline.at11 ol li:nth-of-type(11)::before,
+section.outline.at12 ol li:nth-of-type(12)::before,
+section.outline.at13 ol li:nth-of-type(13)::before,
+section.outline.at14 ol li:nth-of-type(14)::before,
+section.outline.at15 ol li:nth-of-type(15)::before,
+section.outline.at16 ol li:nth-of-type(16)::before { color: var(--ink-soft); }
 
 /* The closing line. `Conclusion` is not a section the room is walked through, so
    it is not on the list they are shown on the way: the fragment wraps it in

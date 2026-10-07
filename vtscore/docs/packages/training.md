@@ -26,7 +26,7 @@ this package is the underlying ML core.
 | `vtscore/training/query_sort.py`                                      | External-query sorts of the active dataset (example media, label files): `cosine_sort_active`, `example_sort_from_paths`, `train_and_score_active`, … |
 
 The package `__init__.py` re-exports the head-building names and the eight
-threshold functions below; everything else (`text_sort_threshold`, the SVM,
+threshold functions below; everything else (`text_sort_cuts`, the SVM,
 region and structural helpers) is imported from its submodule.
 
 ```python
@@ -37,7 +37,7 @@ from vtscore.training import (
     calibration_folds, calibration_folds_cached, threshold_from_folds,
     fold_anchored_gmm_threshold,
 )
-from vtscore.training.thresholds import text_sort_threshold
+from vtscore.training.thresholds import text_sort_cuts, text_sort_threshold
 from vtscore.training.svm import SVMClassifier, train_svm
 from vtscore.training.region_similarity import (
     score_against_query, cosine_sort_with_boxes,
@@ -246,7 +246,7 @@ are summarised in
 | Function                                  | When it fires                                                 |
 |-------------------------------------------|---------------------------------------------------------------|
 | `calculate_gmm_threshold`                 | All-media score distribution - used by the safe blend         |
-| `text_sort_threshold`                     | A cosine/text sort's line - the midpoint, or the guarded rule behind `VTSEARCH_TEXT_SORT_CUT` |
+| `text_sort_cuts`                          | A typed-query sort's two lines from one fit: the guarded display line (`text_sort_threshold`) and the midpoint it samples at (`text_sort_acquisition_threshold`) |
 | `conformal_threshold`                     | Conformal inclusion rule on one (scores, labels) set          |
 | `calculate_cross_calibration_threshold`   | k-fold cross-calibration, in one call                         |
 | `calibration_folds` / `calibration_folds_cached` | The inclusion-*independent* half: fit the folds       |
@@ -258,25 +258,39 @@ are summarised in
 | `balance_schedule` / `SpotCheck` / `likely_range` | The balance's spot check (#4272, #4413): the cap, bands and picks a walk costs, the walk itself, and the likely ranges a checked set carries |
 | `LineRanking` / `balance_line` / `balance_state` | The ranking a detector's line keeps a set of, the line the balance draws over it, and the state every response carries |
 
-### `text_sort_threshold(scores, rule=None)`
+### `text_sort_cuts(scores, rule=None)`
 
 `vtscore/training/thresholds/gmm.py` (import from `vtscore.training.thresholds`).
-The line a **typed-query** sort draws - called by
-`vtscore/training/query_sort.py::cosine_sort_active` for `role="text"` and by
-the eval harness's Autopilot opening. Example and label-file sorts keep
-`calculate_gmm_threshold`. The rule comes from `rule=`, else
-`TEXT_SORT_CUT_RULE` (env `VTSEARCH_TEXT_SORT_CUT`):
+The two lines a **typed-query** sort carries (issue #4136), as a frozen
+`TextSortCuts(threshold, acq_threshold, branch)`, drawn from one mixture fit.
+Called by `vtscore/training/query_sort.py::text_sort_active`, which the
+app's text route uses to fill the response's `threshold` / `acq_threshold`.
+Example and label-file sorts keep `calculate_gmm_threshold`.
 
-- `gmm_midpoint` (the default): exactly `calculate_gmm_threshold`.
-- `guarded_tail`: `guarded_text_sort_threshold`. If the shipped fit's two
-  components are separated (Ashman's D >= `TEXT_SORT_SEPARATION_D` = 2), it
-  continues that fit to convergence (`converge_score_gmm`) and cuts at the
-  midpoint. Otherwise it cuts at median + `TEXT_SORT_TAIL_K` (3) x the
-  lower-half-MAD sigma (`bulk_location_scale`).
+- `threshold` is the **display** line: what is painted green, what the
+  above-threshold count and Find read. Its rule comes from `rule=`, else
+  `TEXT_SORT_CUT_RULE` (env `VTSEARCH_TEXT_SORT_CUT`; `TEXT_SORT_CUT_DEFAULT`
+  when unset or unrecognised):
+  - `guarded_tail` (the default since #4136): `guarded_text_sort_threshold`.
+    If the shipped fit's two components are separated (Ashman's D >=
+    `TEXT_SORT_SEPARATION_D` = 2), it continues that fit to convergence
+    (`converge_score_gmm`) and cuts at the midpoint (`branch == "gmm"`).
+    Otherwise it cuts at median + `TEXT_SORT_TAIL_K` (3) x the
+    lower-half-MAD sigma (`bulk_location_scale`; `branch == "tail"`). On a
+    typical one-mode text sort it admits roughly the matches where the
+    midpoint admits a median 43% of the haystack.
+  - `gmm_midpoint`: exactly `calculate_gmm_threshold` (`branch ==
+    "midpoint"`), the pre-#3826 line, kept as the opt-out.
+- `acq_threshold` is the **acquisition** cut Autopilot's Bad phase samples
+  around: the shipped midpoint, `calculate_gmm_threshold`, under *every*
+  rule. The guarded line made that opening worse in an A/B
+  (`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`), so it moves
+  only the display line.
 
-`guarded_tail` admits far fewer non-matches on a typical one-mode text sort,
-but is off by default because it made Autopilot's opening worse in an A/B
-(`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`).
+`text_sort_threshold(scores, rule=None)` returns the display line alone;
+`text_sort_acquisition_threshold(scores)` the acquisition cut alone (the
+eval harness's opening calls it). Both are thin wrappers, and the latter is
+bit-identical to `calculate_gmm_threshold`.
 
 ### `calculate_gmm_threshold(scores)`
 
@@ -607,7 +621,7 @@ Two rules make the numbers mean anything:
   failed-the-test exit, and the moment it is used the result is stale.
 - **Every number comes from uniform picks within rank bands**, never from the
   top of the ranking or the boundary walk, which is biased toward the line by
-  design (#4257: model-chosen votes broke 83% of the #4220 estimator's
+  design (#4256: model-chosen votes broke 83% of the #4220 estimator's
   promises). The ranking is frozen for the whole test, which is what makes
   the band design valid, and the app hides the ranked list while a test runs,
   since a pick's place in it would show its rank.

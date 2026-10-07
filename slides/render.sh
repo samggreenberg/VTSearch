@@ -79,6 +79,12 @@ mkdir -p _out
 # the room cannot resolve.
 PNG_SCALE=${PNG_SCALE:-2}
 PNG_MAX_MB=${PNG_MAX_MB:-25}
+# Seconds Marp may spend on one browser operation. Its own default, 30, is about
+# what printing hold-the-line's ~280 full-bleed pages to one PDF takes, so the
+# audience render failed on a cold container with "Timed out after waiting
+# 30000ms" as soon as the deck grew a page (#4598). The ceiling only matters
+# when something is slow; a render that is not finishes as fast as before.
+MARP_BROWSER_TIMEOUT=${MARP_BROWSER_TIMEOUT:-180}
 
 # Marp warns but exits 0 when a figure path doesn't resolve, producing a deck
 # with holes where the figures should be. Treat that warning as fatal.
@@ -88,7 +94,8 @@ run_marp() {
     # --no-stdin: without it Marp waits for EOF on stdin before converting, so
     # a render started from anything that does not close stdin (a script, a CI
     # step, an agent shell) hangs forever with no output rather than failing.
-    "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files --no-stdin 2>&1 | tee "$log"
+    "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files --no-stdin \
+        --browser-timeout "$MARP_BROWSER_TIMEOUT" 2>&1 | tee "$log"
     # `set -e` does not see a failure on the left of a pipe, and this script has
     # no `pipefail`, so without this the whole render reports success after Marp
     # has died — which is how a run that could not find a browser at all still

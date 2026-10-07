@@ -10,22 +10,23 @@
 # axis the *user* sets — F-beta, the three-radio balance that asks which
 # mistake they mind more (#4413, #4448), and the line the labels draw at its
 # peak (#4452). Then the places the loop never asks about, the data the
-# experiments run on and how the app does on it, the region-voting idea (whose
+# experiments run on and how the app does on it, how a user tests a detector on
+# their own pile and how often that test is right, the region-voting idea (whose
 # measured verdict waits for the runs still reporting), and documents — logos
 # on scanned pages — ending on how the app does on them.
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in the reports the presenter notes cite (see #3246, #3265).
 #
-# The outline fragment appears ten times: once bare, as the opening list, and
-# then once before each section marked with `+at1` … `+at8`. It is one slide
-# shown ten ways rather than ten slides — `build.py` numbers it 1a…1j — and the
-# last showing, `+end`, is the deck's closing slide: it is the only one that
-# shows "Conclusion", as its marked line. Sections are numbered in Roman
-# numerals (I … VIII), slides in Arabic, so the two never read alike.
+# The outline fragment appears eleven times: once bare, as the opening list,
+# and then once before each section marked with `+at1` … `+at9`. It is one
+# slide shown eleven ways rather than eleven slides — `build.py` numbers it
+# 1a…1k — and the last showing, `+end`, is the deck's closing slide: it is the
+# only one that shows "Conclusion", as its marked line. Sections are numbered in
+# Roman numerals (I … IX), slides in Arabic, so the two never read alike.
 #
 # This is the master deck: every fragment a talk might want is named here, and
-# a talk cuts its own manifest from it. Section VIII, Instruction, is the one most
+# a talk cuts its own manifest from it. Section IX, Instruction, is the one most
 # talks cut — it is a how-to for users, not an argument for data scientists — and
 # a talk *for* users moves it up to follow section I instead.
 
@@ -62,7 +63,7 @@ slides:
   quantile-transfer
   split-fraction
 
-  # III — Inclination: why a line needs one, what F₁ and F-beta are (#4517),
+  # III — Inclination: why a line needs one, what F1 and F-beta are (#4517),
   # F-beta's peak and the three-radio balance that sets its beta (#4413,
   # #4448), the line the labels draw at its expected peak (#4452), and why
   # the labels are what it is drawn from: they are all Find has (#4517). Then
@@ -124,9 +125,32 @@ slides:
   # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
   sota-photos
 
-  # VI — Region: the region vote in the app, what a patch is and the model
-  # that makes them (DINOv3, #4517), and the maximum a photo is then scored by.
+  # VI — Examination: the Test button (#4594, #4598), how a user finds out
+  # what section V just measured, on their own pile. It follows Experimentation
+  # because its last slide grades the Test on the COCO Better sessions the room
+  # has just met. The question and its two rules; the background, one idea a
+  # slide — stratified bands, one band's Beta posterior, the joint Monte Carlo
+  # draws, the prior borrowed from neighbouring bands above the line (#4539,
+  # #4560) and the model's count corrected below it (#4523); then the app — the
+  # autopilot's rounds and stop, the result pane, and how often its ranges hold.
+  # The bands and Clopper–Pearson it builds on are Spot Check's and Home on the
+  # Range's, in section III. Every figure but the last runs the shipped
+  # `LineTest` on a planted pile (`make-test-figs.py`); the last is #4560's
+  # shipped summary.
   outline-hold-the-line +at6
+  test-question
+  test-bands
+  test-posterior
+  test-draws
+  test-pool
+  test-model
+  test-rounds
+  test-result
+  test-coverage
+
+  # VII — Region: the region vote in the app, what a patch is and the model
+  # that makes them (DINOv3, #4517), and the maximum a photo is then scored by.
+  outline-hold-the-line +at7
   voting-modes
   patches
   evt-gumbel
@@ -134,7 +158,7 @@ slides:
   # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
   sota-regions
 
-  # VII — Document(ation): logos on scanned pages. The logo slide opens it
+  # VIII — Document(ation): logos on scanned pages. The logo slide opens it
   # because it introduces the idea of logo detection before the room is asked
   # to find logos on documents. It is the
   # `book` slide's claim made a second time, in the one domain where a room
@@ -150,7 +174,7 @@ slides:
   # why a page vector cannot build one, and the votes. Tiles shipped after
   # these slides were drawn (#4378, #4415): the notes say so, and the tiles
   # figure still draws the old single-layer pick until #4455 pins the app's own.
-  outline-hold-the-line +at7
+  outline-hold-the-line +at8
   logo-grid
   logo-keypoints
   logo-match
@@ -176,13 +200,13 @@ slides:
   # radio (`make-sota-figs.py`, from the committed per-step CSVs).
   sota-documents
 
-  # VIII — Instruction: the tool as a how-to (#4202). Section I shows the same
+  # IX — Instruction: the tool as a how-to (#4202). Section I shows the same
   # session as an argument; this shows it as instructions, every click marked
   # with a numbered red disc and the numbers keyed down the side, so the pages
   # still work as a handout with nobody talking over them. One session, shot
   # once (`shoot-ui-figs.mjs`), from an empty app: load a pile of photos, make a
   # detector, train it, load a pile it never saw, and Find.
-  outline-hold-the-line +at8
+  outline-hold-the-line +at9
   steps-load-train
   steps-make-detector
   steps-train

@@ -143,6 +143,7 @@ def _anchored_variant_rows(
             pool_variant="max",
             provenance=provenance,
             n_pool_rows=n_pool_rows,
+            beta=details.get("beta"),
         )
         row["gmm_variant"] = name
         row["xcal_threshold"] = round6(xcal)

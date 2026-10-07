@@ -11,6 +11,9 @@ import numpy as np
 import pytest
 
 from vtscore.eval.calibration_metrics import (
+    detection_metrics,
+    fbeta_from_rates,
+    fbeta_metrics,
     inclusion_weights,
     is_degenerate,
     negative_block_null,
@@ -166,3 +169,69 @@ def test_negative_block_null():
     # only the two negative bags' nodes, sorted
     assert null.tolist() == pytest.approx([0.4, 0.5, 0.7])
     assert negative_block_null(blocks, [1.0, 1.0, 1.0]).size == 0
+
+
+# --- The objective's columns (#4584) -------------------------------------------
+
+
+def _brute_fbeta(scores, labels, threshold, beta):
+    """F-beta by its textbook definition, from precision and recall."""
+    pred = np.asarray(scores) >= threshold
+    y = np.asarray(labels) == 1
+    tp, fp, fn = (pred & y).sum(), (pred & ~y).sum(), (~pred & y).sum()
+    if tp == 0:
+        return 0.0
+    p, r = tp / (tp + fp), tp / (tp + fn)
+    return (1 + beta**2) * p * r / (beta**2 * p + r)
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_fbeta_metrics_is_the_textbook_fbeta_at_the_rows_beta_and_each_preset(seed):
+    rng = np.random.default_rng(seed)
+    labels = (rng.random(300) < 0.1).astype(float)
+    scores = rng.normal(labels, 1.0)
+    thr = float(np.quantile(scores, 0.8))
+    out = fbeta_metrics(scores, labels, thr, 0.5)
+    assert set(out) == {"fbeta", "fbeta_b025", "fbeta_b1", "fbeta_b4"}
+    assert out["fbeta"] == pytest.approx(_brute_fbeta(scores, labels, thr, 0.5))
+    for col, beta in (("fbeta_b025", 0.25), ("fbeta_b1", 1.0), ("fbeta_b4", 4.0)):
+        assert out[col] == pytest.approx(_brute_fbeta(scores, labels, thr, beta))
+    # F1 is the beta-1 column, by the definition the f1 column already uses.
+    assert out["fbeta_b1"] == pytest.approx(detection_metrics(scores, labels, thr)["f1"])
+
+
+def test_fbeta_has_no_value_without_a_balance_or_without_positives():
+    scores = np.array([0.9, 0.5, 0.1])
+    out = fbeta_metrics(scores, np.array([1.0, 0.0, 0.0]), 0.4, None)
+    assert np.isnan(out["fbeta"])  # the Inclusion arm drew no balance line
+    assert out["fbeta_b1"] == pytest.approx(2 / 3)  # the presets are filled anyway
+    none_pos = fbeta_metrics(scores, np.zeros(3), 0.4, 1.0)
+    assert all(np.isnan(v) for v in none_pos.values())  # recall is undefined
+
+
+def test_a_cut_that_returns_nothing_scores_zero_not_nan():
+    """It found none of the positives; a NaN would drop the cell and flatter it (#4452)."""
+    out = fbeta_metrics(np.array([0.2, 0.1]), np.array([1.0, 0.0]), 0.9, 1.0)
+    assert out["fbeta"] == 0.0
+    assert np.isnan(detection_metrics(np.array([0.2, 0.1]), np.array([1.0, 0.0]), 0.9)["precision"])
+
+
+def test_fbeta_from_rates_reads_back_what_the_row_carries():
+    """An older frame back-filled from its rates scores each row as a new row would carry it."""
+    rng = np.random.default_rng(42)
+    rows = []
+    for i in range(40):
+        labels = (rng.random(200) < 0.08).astype(float)
+        scores = rng.normal(labels, 1.0)
+        thr = float(np.quantile(scores, rng.uniform(0.5, 1.0))) + (10.0 if i == 0 else 0.0)
+        beta = (0.25, 1.0, 4.0, 0.5)[i % 4]
+        det = {k: round(v, 6) for k, v in detection_metrics(scores, labels, thr).items()}
+        rows.append((det["precision"], det["recall"], beta, fbeta_metrics(scores, labels, thr, beta)["fbeta"]))
+    p, r, b, want = (np.array(c, dtype=float) for c in zip(*rows, strict=True))
+    assert np.isnan(p[0])  # the empty cut is in the sample
+    np.testing.assert_allclose(fbeta_from_rates(p, r, b), want, atol=2e-5)
+
+
+def test_fbeta_from_rates_is_nan_where_the_row_has_no_value():
+    out = fbeta_from_rates(np.array([0.5, 0.5, np.nan]), np.array([np.nan, 0.5, 0.0]), np.array([1.0, np.nan, 1.0]))
+    assert np.isnan(out[0]) and np.isnan(out[1]) and out[2] == 0.0

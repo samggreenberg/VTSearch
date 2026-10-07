@@ -12,10 +12,10 @@
      talk uses. Left to right, β rises; the same three, top to bottom, are the
      next slide's rows. -->
 
-<!-- **a** — F₁ as a map: recall across, precision up, and its level curves
+<!-- **a** — F1 as a map: recall across, precision up, and its level curves
      drawn like a topographic map's contours. Every point on a curve scores
      the number at its end. They bow evenly about the diagonal: give up some
-     precision for the same recall and F₁ does not care which. The cut
+     precision for the same recall and F1 does not care which. The cut
      F-ing Metrics read, 0.8 and 0.8, sits on the 0.8 curve. -->
 
 <!-- **b** — β = ¼: the same map, and the curves lie down. Height is

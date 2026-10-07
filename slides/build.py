@@ -800,6 +800,28 @@ def check_speaker_fit(
         )
 
 
+#: The most lines an outline holds, the closing line included: the theme sizes
+#: the list to its length (`--outline-lines` in `themes/vtsearch.css`, which
+#: counts this far and no further), and at sixteen its type is at 22px, one step
+#: above the deck's floor. Keep the two in step.
+OUTLINE_MAX_LINES = 16
+
+
+def check_outline_length(name: str, text: str, problems: list[str]) -> None:
+    """Preflight that an outline fits the slot the theme sizes it into.
+
+    Past the ceiling the theme stops shrinking the type and the list runs off
+    the slide: the first and last sections are the ones cut, which is the
+    failure #4598 met at the old fixed spacing.
+    """
+    items = outline_items(text)
+    if len(items) > OUTLINE_MAX_LINES:
+        problems.append(
+            f"fragments/{name}.md: the outline has {len(items)} lines, and the theme fits at most "
+            f"{OUTLINE_MAX_LINES} (the closing line included) — merge sections, or cut the talk's own outline"
+        )
+
+
 def check_fragment(name: str, text: str, problems: list[str]) -> None:
     for lineno, line in enumerate(text.splitlines(), 1):
         if RULE_RE.match(line):
@@ -808,6 +830,7 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
                 f"slides; use `***` for a horizontal rule"
             )
     check_headline(name, text, problems)
+    check_outline_length(name, text, problems)
     check_build_markers(name, text, problems)
     check_frames_directive(name, text, problems)
     check_bookmark_directive(name, text, problems)

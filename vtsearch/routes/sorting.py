@@ -49,11 +49,11 @@ from vtsearch.schemas.sorting import (
 )
 from vtscore.training.query_sort import (
     apply_crop_or_keep,
-    cosine_sort_active,
     embed_external_labels,
     example_sort_from_paths,
     parse_label_file,
     score_embedder_for_active,
+    text_sort_active,
     train_and_score_active,
 )
 from vtsearch.state import (
@@ -239,9 +239,12 @@ def sort_clips(body: dict):
             abort(500, message=f"Could not embed text for media type {media_type}")
 
         update_sort_progress("sorting", "Computing similarities…", 0, 0, step=3, total_steps=_SORT_STEPS)
-        results, threshold = cosine_sort_active(text_vec, role="text", snap=snap)
+        # Two lines (#4136): the display line as ``threshold`` and the midpoint
+        # as ``acq_threshold``, so the Hard select samples where it always has
+        # whatever rule paints the green region.
+        results, cuts = text_sort_active(text_vec, snap=snap)
         sort_idle()
-        return windowed_sort_response(results, threshold)
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold)
     except Exception as exc:
         recorder.finish(ok=False)
         from werkzeug.exceptions import HTTPException

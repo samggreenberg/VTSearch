@@ -56,6 +56,23 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A text sort's green region ends at the guarded line, and Autopilot still
+  samples at the midpoint** (issue #4136; the rule is #3826's). A typed query's
+  cosine sort is usually one broad mode with the matches as a thin shoulder, so
+  the two-Gaussian midpoint every text sort used to draw split the mode and
+  painted a median 43% of the list green, 12–54× the true matches. The line is
+  now the guarded rule: the mixture's midpoint only when its two components are
+  separated, otherwise the bulk's median + 3 robust sigmas, which paints about
+  the matches (F1 0.17 → 0.39 on 1,120 labelled sorts; better at the 1/4 and 1
+  balances and a tie at 4). On a query that matches most of a collection and
+  that the embedder does not separate ("a person" on a photo set), the line
+  admits only the top of the matches; that trade is documented, not fixed. The
+  sort response now carries `acq_threshold`, the midpoint, beside `threshold`,
+  and Autopilot's Bad phase reads it, so the opening's picks are exactly what
+  they were before this change (the guarded line as the *sampling* position
+  made the first detectors worse in an A/B). `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint`
+  restores the plain midpoint for display.
+
 - **Test takes exactly one dataset and one detector** (the Dashboard's action bar).
   With two datasets or two detectors ticked, Test used to stay enabled and quietly open on
   the first ticked pair; it is now greyed out with *Select exactly 1 dataset* (or

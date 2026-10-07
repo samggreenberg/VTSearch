@@ -4299,7 +4299,7 @@ def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
 
 
 #: How many stages F-ing Metrics reveals in: the cut and its three counts;
-#: precision and recall; F₁; F-beta.
+#: precision and recall; F1; Fβ.
 FMETRICS_STAGES = 4
 #: The cut F-ing Metrics reads, as items kept: the Cutting Room's middle one,
 #: one mistake of each kind, where every F-beta agrees (0.80).
@@ -4307,13 +4307,13 @@ FMETRICS_KEPT = 5
 
 
 def fmetrics_fig() -> None:
-    """What F₁ is, and then what F-beta is, on the ten items the room just saw (#4517).
+    """What F1 is, and then what Fβ is, on the ten items the room just saw (#4517).
 
     Beta Max used to print the F-beta formula under its rows and leave the room
     to take it in while the rows were the point. This comes first, with Beta
     Release (the same score as a map, at each beta) between the two: one cut
     through the same ranking, the three counts it has, the two rates
-    those make, F₁ as their harmonic mean, and F-beta as the same mean with
+    those make, F1 as their harmonic mean, and Fβ as the same mean with
     recall weighted β times. The count form on the last line is the one Beta
     Max and What to Expect then evaluate.
     """
@@ -4365,14 +4365,14 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
     rows = (
         (2, f"precision  P = hits / kept = {precision:.2f}"),
         (2, f"recall  R = hits / matches = {recall:.2f}"),
-        (3, _sub(r"F_1") + f" = 2PR / (P + R) = {f1:.2f}"),
-        (4, _sub(r"F_\beta") + " = (1 + β²) PR / (β²P + R)"),
+        (3, f"F1 = 2PR / (P + R) = {f1:.2f}"),
+        (4, "Fβ = (1 + β²) PR / (β²P + R)"),
         (4, "= (1 + β²) · hits / (β² · matches + kept)"),
     )
     row_x = x0 + w * FMETRICS_INDENT
     # The count form continues the line above it, so its "=" sits under that
-    # line's: measured, because the F_β in front of it is set in mathtext.
-    prefix = ax.text(row_x, 0, _sub(r"F_\beta") + " ", fontsize=20, alpha=0)
+    # line's: measured, because a glyph's width is the font's, not a constant.
+    prefix = ax.text(row_x, 0, "Fβ ", fontsize=20, alpha=0)
     renderer = fig.canvas.get_renderer()
     box = prefix.get_window_extent(renderer).transformed(ax.transData.inverted())
     prefix.remove()
@@ -4395,7 +4395,7 @@ FMETRICS_INDENT = 0.16
 
 # ── Beta Release: F-beta as a map, once per beta (#4519) ──────────────────────
 
-#: How many stages Beta Release reveals in: F₁'s map, the one F-ing Metrics
+#: How many stages Beta Release reveals in: F1's map, the one F-ing Metrics
 #: just defined; then β = ¼'s; then β = 4's (`FBETA_REVEAL`'s order).
 FBETA_MAPS_STAGES = 3
 #: The three maps' squares, in canvas units: the side, the gap between maps,
@@ -5735,7 +5735,7 @@ def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) 
     """Stages 4-5: expected F-beta down the ranking, the line at the picked radio's peak, then the other two."""
     lo, hi = LL_LOGIT
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_F_Y, z=3)
-    _ll_row_name(ax, LL_F_Y + 0.75, "Expected " + _sub(r"F_\beta"))
+    _ll_row_name(ax, LL_F_Y + 0.75, "Expected Fβ")
     for (beta, _name), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True):
         picked = beta == LL_PICKED
         if stage < (4 if picked else 5):

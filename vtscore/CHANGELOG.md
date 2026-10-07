@@ -10,6 +10,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
+  `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen
+  `TextSortCuts(threshold, acq_threshold, branch)` from one mixture fit: `threshold` is the
+  display line under `TEXT_SORT_CUT_RULE`, and `acq_threshold` is the shipped midpoint
+  (`calculate_gmm_threshold`) under every rule, which `text_sort_acquisition_threshold(scores)`
+  also returns on its own. `TEXT_SORT_CUT_DEFAULT` is `"guarded_tail"`: `text_sort_threshold`
+  now draws #3826's guarded line unless `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint`; it was
+  `"gmm_midpoint"` while the line was also Autopilot's sampling position. The eval harness's
+  Bad phase (`al_strategies._sort_threshold`) and the `@mid` schedule cut read the acquisition
+  cut, so an opening's picks no longer move with the display rule.
+  `vtscore.training.query_sort.text_sort_active(query_vec, snap=None)` returns `(results, cuts)`
+  for the text route; `cosine_sort_active` is unchanged in signature and returns the display
+  line for `role="text"`.
+
 - **A test's walk below the line runs to its budget when there is a class model** (issue #4542).
   With `posteriors` given, `LineTest.misses_walk()` no longer stops at a dry band and
   `line_phase` no longer ends the misses phase on `LineBudgets.misses_width`: the walk goes
@@ -244,6 +258,19 @@ instead, since every commit on `dev` is effectively a new app release.)
     `_safe_threshold_for_step` takes `check=`.
 
 ### Added
+
+- **Every eval row carries the objective** (issue #4584). The voting-iterations
+  and calibration frames (`VOTING_COLUMNS`, `CALIBRATION_COLUMNS`) gain
+  `FBETA_COLUMNS`: `fbeta`, F-beta of the withheld half above the row's
+  threshold at the row's own `beta` (NaN where no balance drew the line), and
+  `fbeta_b025` / `fbeta_b1` / `fbeta_b4` at each preset. One definition,
+  `vtscore.eval.calibration_metrics.fbeta_metrics`, computed from the counts
+  through the app's `fbeta_score`; `fbeta_from_rates` is the same number read
+  back off a frame's `precision` and `recall`, for frames written before the
+  columns. `DETECTION_METRICS` gains `fbeta`. `row_metrics.operating_metrics`
+  takes an optional `beta` (default `None`, so existing callers keep working
+  and emit a NaN `fbeta`); `cost` stays on every row as a diagnostic.
+  `RANK_FRAME_BETAS` and `beta_tag` moved up `voting_columns.py`, unchanged.
 
 - **A finished test's verdict is kept on the detector** (issue #4526).
   `vtscore.detectors.line_verdicts`: `LineTestVerdict.from_test` is what a

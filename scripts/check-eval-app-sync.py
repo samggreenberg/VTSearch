@@ -338,6 +338,33 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="thresholds.text_sort_acquisition",
+        app="py:vtscore.training.thresholds.gmm.text_sort_cuts",
+        harness="vtscore/eval/al_strategies.py::_sort_threshold",
+        kind="default",
+        note=(
+            "Which of a typed-query sort's two lines the opening samples against (#4136). The app's "
+            "text route returns text_sort_cuts: the display line as `threshold` (the guarded rule "
+            "by default, #3826) and the mixture midpoint as `acq_threshold`, and the Hard select "
+            "reads `acq_threshold ?? threshold`. The harness's _sort_threshold reads "
+            "text_sort_acquisition_threshold for a typed query, and startup_schedule's `@mid` cut "
+            "does the same, so the Bad phase and the `b4@mid` round sample at the midpoint whatever "
+            "VTSEARCH_TEXT_SORT_CUT paints green. That split is the whole point: with the guarded "
+            "line as the sampling position the #3826 A/B put the Bad phase at the 2.5th percentile "
+            "of the ranking and the first detectors were worse at every beta. If text_sort_cuts "
+            "starts putting anything but the midpoint in acq_threshold, or _sort_threshold starts "
+            "reading the display line, the other side has to move with it. "
+            "tests_lib/sorting/test_text_sort_threshold.py pins the identity bit for bit and runs "
+            "the harness's opening under both rules to show the picks do not move."
+        ),
+        divergence=(
+            "The app side is the library function the route calls, not the route: "
+            "vtsearch/routes/sorting.py only forwards the pair into windowed_sort_response, and "
+            "the frontend's `acq_threshold ?? threshold` fallback is pinned by the "
+            "autopilot.auto_select_next mirror's TypeScript side."
+        ),
+    ),
+    Mirror(
         id="progress.smart_status",
         app="py:vtscore.detectors.labeling_progress._compute_smart_status",
         harness="vtscore/eval/autopilot_flow.py::smart_status,smart_detail",
