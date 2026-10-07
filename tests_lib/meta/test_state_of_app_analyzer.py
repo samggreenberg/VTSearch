@@ -894,6 +894,32 @@ def test_a_run_that_never_trained_scores_its_typed_query_in_every_average(run, t
     assert obj["F after the check"] == pytest.approx(cells["thr_fbeta_final"].mean())
     dip = perp._dip_rows({1.0: a})
     assert {"session: F at 25 / 50 / 100", "session F >= text sort's again by click"} <= set(dip.columns)
+    back = pd.Series({0: 0.5, 1: 0.5, 2: 0.3, 3: 0.4, 4: 0.5, 5: 0.6})
+    assert perp._back_by(back, 0.5) == 4, "back at the level after its own lowest point"
+    assert perp._back_by(pd.Series({0: 0.5, 1: 0.5, 2: 0.6}), 0.5) == perp.NEVER_BELOW
+    assert perp._back_by(pd.Series({0: 0.5, 1: 0.2, 2: 0.3}), 0.5) == "not by the end"
+
+
+def test_a_checkpoint_inside_a_spot_check_carries_the_last_detector_on_screen(run, tmp_path) -> None:
+    """#4631: a spot check scores a run once per round of picks, so a run inside one can have no rank frame at a
+    checkpoint. The user has its last detector all the while (#4624); a blank there dropped exactly the weak
+    sessions the check prompts in from the checkpoint's mean (157 of 1,440 at click 50 on the 2026-10-05 review)."""
+    exp = tmp_path / "mid-check"
+    shutil.copytree(run["exp"] / "results", exp / "results")
+    f = exp / "results" / "cells" / "task_0001__rankframes.csv"  # cat1@large
+    frames = pd.read_csv(f, dtype={"test_pos_ranks": str, "pool_pos_ranks": str})
+    at10 = frames["kind"].eq("step") & frames["t"].eq(10)
+    assert bool(at10.any())
+    earlier = frames[at10].assign(t=8)  # the same detector, last on screen at click 8; no frame at 10
+    pd.concat([frames[~at10], earlier]).to_csv(f, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    bal = pd.read_csv(out / "balances.csv", dtype={"point": str})
+    lines = pd.read_csv(out / "lines.csv", dtype={"point": str})
+    for table, before in ((bal, run["balances"]), (lines, run["lines"])):
+        new = table[(table["category"] == "cat1@large") & (table["point"] == "10")]
+        old = before[(before["category"] == "cat1@large") & (before["point"].astype(str) == "10")]
+        assert bool(new["precision"].notna().all()), "carried, not blank"
+        assert np.allclose(new["precision"].to_numpy(), old["precision"].to_numpy(), equal_nan=True)
 
 
 def test_a_never_trained_run_takes_the_studys_beta(run, rm, tmp_path) -> None:

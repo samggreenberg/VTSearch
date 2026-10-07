@@ -691,9 +691,10 @@ def run_tables(
         sky_frame = kinds.get(CEILING)
         first_t = int(shown) if trained and np.isfinite(shown) else None
         # (point, t, frame, read the text sort instead).  A point with neither is
-        # unknown and stays blank rather than borrowing a neighbour's value.
+        # unknown and stays blank rather than borrowing a later value.
         points: list[tuple[str, float, dict | None, bool]] = [("text", 0, None, True)]
         for c in CHECKPOINTS:
+            on_screen_by_c = [t for t in step_at if first_t is not None and first_t <= t <= c]
             if not have_frames:
                 points.append((str(c), c, None, False))
             elif c in step_at and first_t is not None and c >= first_t:
@@ -701,6 +702,11 @@ def run_tables(
             elif last_frame is not None and int(last_frame["t"]) <= c and first_t is not None and c >= first_t:
                 # The pool ran out before click c: the line stays where it ended.
                 points.append((str(c), c, last_frame, False))
+            elif on_screen_by_c:
+                # No frame at click c itself: the run is inside a spot check, which scores it once per round of
+                # picks, and the user has its last detector all the while (#4624).  Blank, the point dropped
+                # exactly the weak sessions the check prompts in from the mean (#4631: 157 of 1,440 at click 50).
+                points.append((str(c), c, step_at[max(on_screen_by_c)], False))
             else:
                 # No detector on screen yet at click c: the user still has the text sort.
                 points.append((str(c), c, None, first_t is None or c < first_t))

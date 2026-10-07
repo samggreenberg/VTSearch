@@ -334,6 +334,19 @@ def figure_path(runs: dict[float, Path], out: Path) -> None:
 
 #: The clicks the early-dip table reads the session at: past the earliest hand-over (click 23, #4605).
 DIP_CLICKS = (25, 50, 100)
+#: The early-dip table's word for a series that never falls below the text sort's level.
+NEVER_BELOW = "never below"
+
+
+def _back_by(series: pd.Series, level: float) -> int | str:
+    """The click by which *series* is back at *level* after its lowest point past click 0 (:data:`NEVER_BELOW`
+    when it never falls below it)."""
+    past = series.loc[1:]
+    if past.empty or past.min() >= level - 1e-9:
+        return NEVER_BELOW
+    low = past.idxmin()
+    back = series.loc[low:][series.loc[low:] >= level - 1e-9]
+    return int(back.index[0]) if len(back) else "not by the end"
 
 
 def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
@@ -354,17 +367,15 @@ def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
             text_f = float(t_rows["fbeta"].mean()) if len(t_rows) else float("nan")
             text_k = float(t_rows["k"].median()) if len(t_rows) else float("nan")
             low_t = int(m.loc[1:].idxmin()) if len(m) > 1 else 0
-            back = m.loc[low_t:][m.loc[low_t:] >= m.loc[0]]
-            back_f = f.loc[low_t:][f.loc[low_t:] >= text_f]
             at = " / ".join(str(t) for t in DIP_CLICKS)
             rows.append({
                 "beta": f"{beta:g}", "rule": rule,
                 "text sort: F": text_f, "text sort: returned": text_k, "text sort: share of best": m.loc[0],
                 f"session: F at {at}": " / ".join(f"{f.get(t, float('nan')):.2f}" for t in DIP_CLICKS),
                 f"session: returned at {at}": " / ".join(f"{k.get(t, float('nan')):.0f}" for t in DIP_CLICKS),
-                "session F >= text sort's again by click": int(back_f.index[0]) if len(back_f) else "not by the end",
+                "session F >= text sort's again by click": _back_by(f, text_f),
                 "lowest share": m.loc[low_t], "at click": low_t,
-                "share >= text sort's by click": int(back.index[0]) if len(back) else "not by the end",
+                "share >= text sort's again by click": _back_by(m, float(m.loc[0])),
             })  # fmt: skip
     return pd.DataFrame(rows)
 
