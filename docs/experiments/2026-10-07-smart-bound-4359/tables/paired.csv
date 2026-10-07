@@ -1,0 +1,40 @@
+beta,rule,read,n,delta,se,sd,resolved
+0.25,never,"objective, votes 1-30",432,0.0012094,0.00042981,0.007407,True
+0.25,never,"objective, votes 31-100",432,0.012497,0.0019165,0.03308,True
+0.25,never,"objective, votes 101-150",432,0.0099177,0.0026638,0.047001,True
+0.25,never,"objective, votes 1-150",432,0.0093796,0.0014529,0.023604,True
+0.25,never,"objective, vote 150",432,0.0030394,0.0039592,0.078936,False
+0.25,never,"objective, after the check",432,0.0068907,0.0034971,0.07154,False
+0.25,never,"AP, vote 150",411,0.0041656,0.00091754,0.021764,True
+0.25,never,"returned set size, after the check",430,2.2023,0.8429,19.421,True
+0.25,never,"precision, after the check",430,-0.0063653,0.0052752,0.10582,False
+0.25,never,goods,430,1.2163,0.16431,3.5244,True
+0.25,never,hard_good_share,371,-0.18871,0.015475,0.22316,True
+0.25,never,hard_picks,371,58.442,1.9899,23.935,True
+0.25,never,hard_end,371,52.854,2.5015,35.685,True
+1,never,"objective, votes 1-30",432,0.00074266,0.00031282,0.0051954,True
+1,never,"objective, votes 31-100",432,0.010649,0.001564,0.028435,True
+1,never,"objective, votes 101-150",432,0.0056078,0.0011959,0.025467,True
+1,never,"objective, votes 1-150",432,0.0069872,0.00095046,0.017008,True
+1,never,"objective, vote 150",432,0.0020547,0.0015501,0.040342,False
+1,never,"objective, after the check",432,0.0010533,0.0019302,0.041459,False
+1,never,"AP, vote 150",411,0.0032918,0.00098059,0.020671,True
+1,never,"returned set size, after the check",430,5.0395,2.8031,68.513,False
+1,never,"precision, after the check",430,-0.010386,0.0036191,0.076588,True
+1,never,goods,430,1.1698,0.15548,3.467,True
+1,never,hard_good_share,393,-0.18417,0.014405,0.21467,True
+1,never,hard_picks,393,55.44,2.0683,25.442,True
+1,never,hard_end,393,50.644,2.4702,35.732,True
+4,never,"objective, votes 1-30",432,-0.00016007,0.0001799,0.0036529,False
+4,never,"objective, votes 31-100",432,0.0031359,0.00083653,0.017132,True
+4,never,"objective, votes 101-150",432,0.0040116,0.0010227,0.019208,True
+4,never,"objective, votes 1-150",432,0.0027686,0.00056384,0.011092,True
+4,never,"objective, vote 150",432,0.0044506,0.0016736,0.034761,True
+4,never,"objective, after the check",432,0.001211,0.0020762,0.041798,False
+4,never,"AP, vote 150",411,0.002811,0.00095867,0.019902,True
+4,never,"returned set size, after the check",430,14.842,11.822,254.76,False
+4,never,"precision, after the check",430,0.00089236,0.003007,0.064429,False
+4,never,goods,430,1.1395,0.15977,3.4881,True
+4,never,hard_good_share,405,-0.1723,0.013081,0.18927,True
+4,never,hard_picks,405,47.333,2.101,26.496,True
+4,never,hard_end,406,43.813,2.3871,34.599,True

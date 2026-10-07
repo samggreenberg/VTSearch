@@ -306,6 +306,8 @@ def probe(C: Any) -> list[str]:
     if C.ACQ_RANK_PERCENTILE is not None:
         rows.append(("acq_rank_percentile", env("CALIB_ACQ_RANK_PERCENTILE") or "", "<unset> = the app's offset cut"))
     # #3546's arms: neither has an app counterpart yet.
+    if C.SMART_GATE != "app":
+        rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
     if C.ACQ_ORIGIN != "line":
         rows.append(("acq_origin", C.ACQ_ORIGIN, "line (the app counts the offset from the line)"))
     from vtscore.eval.voting_iterations import resolve_acquisition_target  # noqa: PLC0415

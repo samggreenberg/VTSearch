@@ -2197,6 +2197,7 @@ def simulate_voting_iterations(  # noqa: C901
     acq_p_crossing: "float | str | None" = None,
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
+    smart_gate: str = "app",
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
@@ -2450,6 +2451,9 @@ def simulate_voting_iterations(  # noqa: C901
             ``None`` (the default) is the app's rule: under a balance the
             shipped ``ACQUISITION_TARGET_PRECISION``, on the Inclusion arm the
             offset cut.  ``"off"`` forces the offset cut under a balance.
+        smart_gate: #4359's bound on the Smart light: ``"app"`` (the default)
+            reads it; ``"never"`` holds it yellow for the phase decision, so
+            Autopilot stays in ``hard`` to the end of the run.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -3009,7 +3013,7 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
-        flow = AutopilotFlow(startup=startup_state)
+        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate)
     # Each schedule round's cut on the seed sort, resolved once: the app fits a
     # cosine sort's GMM over the whole sort and never refits it as votes come
     # in, so these are constants of the run rather than per-step state.

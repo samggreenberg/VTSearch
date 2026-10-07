@@ -14,6 +14,9 @@ subset and said nothing".  Every check here is one of those:
   check round keeps its last scored level rather than dropping out (#4624);
 * ``t=0`` must be the **zero-click text sort**, not the first trainable click,
   so the far left of the figure is what typing got for free;
+* a click in **Autopilot's opening** (``app_trained == 0``) must be the
+  harness's detector, what an export of the labels gives there, so a frame
+  carrying the flag draws the curve one without it does (#4640);
 * an arm that never beats that anchor must report **no crossover**, not the last
   click it happened to be measured at;
 * the coverage strip must be drawn only when coverage says something the
@@ -229,6 +232,18 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "...and score_empty_sets applies it to the rows a run wrote",
             C.score_empty_sets(nil.assign(arm="a", t=1, seed=0), None)["precision"].tolist()[0] == 0.0,
+        )
+
+        # --- Autopilot's opening (#4640) ------------------------------------
+        # The session shows the text sort until the Hard phase (`app_trained`),
+        # but the user can export the labels or run Test at any click, so a
+        # row is what they can take away there (owner, 2026-10-07): the flag
+        # is not read, and the curve is the one a frame without it draws.
+        flagged = main_df.assign(app_trained=(main_df["t"] >= FIRST_T + 10).astype(int))
+        C.quality_vs_clicks(flagged, tmp / "flagged", arms=arms, denominator=cells, baseline=base)
+        ok &= _check(
+            "a frame that flags the opening (app_trained 0) draws the same curve as one without the flag",
+            pd.read_csv(tmp / "flagged" / "cost_vs_clicks.csv").equals(curve),
         )
 
         # --- crossover: how many clicks before beating the typed query ------

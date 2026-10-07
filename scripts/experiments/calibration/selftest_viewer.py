@@ -29,7 +29,10 @@ screen, so both are checked against values that are known by construction:
   any click of a run that never got both) must be in the mean as the empty
   returned set the app gives there, a loss and not a gap, with the runs read
   off the text-sort baseline when there is no cell list, never a group or a
-  seed the run never ran.
+  seed the run never ran;
+* a click in **Autopilot's opening** (``app_trained == 0``) must be drawn at the
+  harness's detector, what an export of the labels gives there, not at the
+  text sort the session shows: the page does not read the flag (#4640).
 
 Run: ``python selftest_viewer.py``
 """
@@ -91,6 +94,9 @@ GAP_PRECISION = 0.55
 #: row or after its last.
 SHORT_RUN = ("alt", "dsB", "embB", "rich", 7)
 SHORT_LO, SHORT_HI = 10, 30
+#: The first click the app would show a detector at, in the frame that flags
+#: Autopilot's opening (``app_trained``, #4605): the page must not read it (#4640).
+OPENING_END = 15
 
 
 def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -443,6 +449,42 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "...which a build that opts out leaves undefined",
             abs(_decode(PNo["agg"]["n"])[g_nil, a_nil, m_p, ti] - (CATS["rich"] - 1)) < 0.5,
+        )
+
+        # --- Autopilot's opening (#4640) -------------------------------------
+        # The session stays on the text sort until the Hard phase, which the
+        # harness flags as `app_trained`, but the user can export the labels
+        # and run Test at any click, and either retrains from them.  So the
+        # page draws the opening's detector, what an export there gives
+        # (owner, 2026-10-07): the flag is not read, and a frame carrying it
+        # builds the same page as one without it.
+        flagged = main_df.assign(app_trained=(main_df["t"] >= OPENING_END).astype(int))
+        PF = _payload(
+            V.build_viewer(
+                flagged, tmp / "flagged.html", arms=ARMS, denominator=cells, baseline=base, skyline=sky,
+                runs_budget_mb=0.25,
+            )
+        )  # fmt: skip
+        ok &= _check(
+            "a frame that flags the opening (app_trained 0) builds the same page as one without the flag",
+            all(
+                np.array_equal(_decode(PF["agg"][k]), _decode(P["agg"][k]), equal_nan=True)
+                for k in ("mean", "sd", "n", "omean", "on")
+            )
+            and PF["runs"] is not None
+            and PF["runs"]["t"] == P["runs"]["t"]
+            and np.array_equal(_decode(PF["runs"]["values"]), _decode(P["runs"]["values"]), equal_nan=True),
+        )
+        p_open = _decode(PF["agg"]["mean"])[g_rich, ai["ctl"], keys.index("precision"), P["t"].index(OPENING_END - 5)]
+        ok &= _check(
+            "...so a click in the opening is the detector's precision, not the text sort's",
+            abs(p_open - 0.7) <= step,
+            f"{p_open} vs 0.7 (text sort 0.4)",
+        )
+        ok &= _check(
+            "...and the page's reading note says the opening is drawn as the detector",
+            "through Autopilot's opening"
+            in re.sub(r'<script id="payload".*?</script>', "", out.read_text(), flags=re.S),
         )
 
         # --- a spot check's rounds (#4624) -----------------------------------

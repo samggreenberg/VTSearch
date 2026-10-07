@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""#3546: Autopilot's acquisition cut, eight rules at three presets, against today's cut.
+"""#3546: Autopilot's acquisition cut, eight rules at three presets, against today's cut (#4359 reuses it).
 
 Reads the 24 arms ``launch_acqcut_3546.sh`` writes (``<rule>_<beta>``) and scores
 each rule against the control (``ctl``: line - 4 Inclusion steps) at the same
@@ -15,6 +15,8 @@ acquisition rule is *for*:
 
     python analyze_acqcut_3546.py --base /expscratch/$USER/acqcut-3546 \\
         --baseline /expscratch/$USER/progression-4184-h0.01/text_baseline.csv --out OUT
+
+#4359's Smart bound reads the same measures: ``--base .../smartgate-4359 --rules app,never --control app``.
 """
 
 from __future__ import annotations
@@ -77,7 +79,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     ap.add_argument("--baseline", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--seeds", type=int, default=3, help="the grid's seeds: the anchor is cut to them")
+    ap.add_argument("--rules", default=",".join(RULES), help="arm stems, comma-separated (#4359 reads app,never)")
+    ap.add_argument("--control", default=CONTROL, help="the stem every rule is paired against")
     args = ap.parse_args(list(argv) if argv is not None else None)
+    rules = [r for r in args.rules.split(",") if r]
+    control = args.control
     args.out.mkdir(parents=True, exist_ok=True)
 
     base = _cells_io.legacy_datasets(pd.read_csv(args.baseline))
@@ -86,7 +92,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     harv: dict[str, pd.DataFrame] = {}
     prov: dict[str, dict] = {}
     problems: list[str] = []
-    for rule in RULES:
+    for rule in rules:
         for btag in BETAS:
             arm = f"{rule}_{btag}"
             d = args.base / arm / "results"
@@ -108,12 +114,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
 
     rows = []
     for btag, beta in BETAS.items():
-        ctl = f"{CONTROL}_{btag}"
+        ctl = f"{control}_{btag}"
         if ctl not in tables:
             continue
-        for rule in RULES:
+        for rule in rules:
             arm = f"{rule}_{btag}"
-            if rule == CONTROL or arm not in tables:
+            if rule == control or arm not in tables:
                 continue
             a, c = tables[arm], tables[ctl]
             reads: dict[str, pd.Series] = {}
@@ -161,7 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     (args.out / "provenance.json").write_text(json.dumps({"arms": prov, "problems": problems}, indent=2))
 
     pd.set_option("display.width", 250)
-    lines = ["# #3546 - machine summary", ""]
+    lines = [f"# {args.base.name} - machine summary", ""]
     if problems:
         lines += ["## Problems", "", *[f"- {x}" for x in problems], ""]
     lines += ["## Levels", "", levels.round(3).to_string(index=False), ""]
