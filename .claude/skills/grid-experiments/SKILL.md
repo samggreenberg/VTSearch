@@ -533,6 +533,14 @@ reading note (`empty_sets_scored`). This needs each run's prevalence, which a
 built page does not carry, so a committed page built before it is **rebuilt**
 from its results, not reskinned.
 
+**From the first Good and Bad on, both draw the harness's detector, Autopilot's
+opening included** (owner, 2026-10-07, #4640). The session stays on the text
+sort until the Hard phase (`app_trained`, #4605), but the user can export the
+labels and run Test at any click, and either retrains from the labelset. So
+the page shows what that gives, and neither module reads `app_trained`. A
+report that scores the *session* filters on it itself, as the State of the App
+analyzer does.
+
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
 the weighted pooling against a hand-computed answer, the click-0 anchor, the
 budget note, the carry through a spot check round, and the empty-set score of a
