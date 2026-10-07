@@ -135,12 +135,12 @@ if [[ -n "$RESOLVE_DELTA" && -z "$RESOLVE_SIGMA" ]]; then
     RESOLVE_SIGMA=0.04
     SIGMA_WHY="the Δcost σ of #3840, for a run with no balance (CALIB_BETA=off)"
   elif [[ "$SIGMA_BETA" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]]; then
-    RESOLVE_SIGMA=$(awk -v b="$SIGMA_BETA" 'BEGIN { if (b == 0.25) print 0.16; else if (b == 1) print 0.08 }')
+    RESOLVE_SIGMA=$(awk -v b="$SIGMA_BETA" 'BEGIN { if (b == 0.25) print "0.13"; else if (b == 1) print "0.08"; else if (b == 4) print "0.10" }')
     if [[ -z "$RESOLVE_SIGMA" ]]; then
       echo "--resolve-delta: no σ is measured yet for the objective at beta $SIGMA_BETA (#4584); pass --sigma" >&2
       exit 2
     fi
-    SIGMA_WHY="the objective's σ at beta $SIGMA_BETA, provisional until #4584 measures it"
+    SIGMA_WHY="the objective's σ at beta $SIGMA_BETA, measured per cell on same-commit pairs (#4584)"
   else
     echo "CALIB_BETA=${CALIB_BETA:-} is not 'off', a beta, or unset (= the app's default)" >&2
     exit 2
@@ -1200,9 +1200,9 @@ fi
 # supplies the count for a grid `run_cells.py` does not enumerate.
 #
 # The default σ is the decision metric's (see the argument parsing above): the
-# objective's at the run's beta on a balance run (#4584: about 0.16 at beta 1/4
-# and 0.08 at beta 1, read off the paired SEs of #4428, #4496 and #4548 and
-# provisional until measured per cell), #3840's 0.04 on cost with CALIB_BETA=off
+# objective's at the run's beta on a balance run (#4584: 0.13 at beta 1/4, 0.08
+# at beta 1, 0.10 at beta 4, the per-cell sd of the paired Δ in analyze_ab's
+# all-steps window; see the grid-experiments skill), #3840's 0.04 on cost with CALIB_BETA=off
 # (the #3585 environments at 100 votes).  Neither is universal (#3796 saw 0.056
 # on `vg_scale_any` at 150 votes), so a study on another environment set reads
 # σ off its first seeds and passes `--sigma`.  Do not shrink it for a "small"
