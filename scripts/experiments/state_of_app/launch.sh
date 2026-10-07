@@ -103,7 +103,7 @@ export CALIB_TIME="${CALIB_TIME:-4:00:00}"
 # A review's run directory defaults to TODAY. Adding cells to an existing review
 # after midnight therefore needs SOTA_DATE pinned, or every task lands in a new,
 # unprepared directory and dies in 0 s (576 of them did, 2026-09-24). Refuse it.
-case "${1:-}" in subset|redo|cells|size)
+case "${1:-}" in subset|redo|cells|size|pack)
   if [[ ! -s "$CALIB_EXP/results/prepare_info.json" ]]; then
     echo "no prepared grid at $CALIB_EXP (set SOTA_DATE=<the review's date>, or run prepare first)" >&2
     exit 3

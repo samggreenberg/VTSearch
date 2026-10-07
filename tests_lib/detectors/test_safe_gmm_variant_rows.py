@@ -349,6 +349,11 @@ class TestTheWiderWorldKnobs:
         assert last["labels"].sum() > 0 and np.isfinite(last["train_threshold"])
         drawn = [s for s in sink if s["model"] is not None]
         assert drawn and {"mu_pos", "mu_neg", "sigma"} <= set(drawn[-1]["model"])
+        # #4490: each snapshot carries the step's calibration folds, so a line rule can be replayed on it.
+        snap = drawn[-1]
+        assert snap["fold_scores"].dtype == np.float64
+        assert snap["fold_scores"].shape == snap["fold_labels"].shape == snap["fold_index"].shape
+        assert snap["fold_scores"].size > 0 and snap["fold_labels"].sum() > 0
 
     def test_a_smaller_train_pool_keeps_the_withheld_half_whole(self):
         full = _run_safe_uncached("max_patch", beta=None, max_steps=6)
