@@ -647,7 +647,7 @@ class TestLearnedSort:
 
         seen: list[list[float]] = []
 
-        def fake_cuts(scores):
+        def fake_cuts(scores, beta=None):
             seen.append(list(scores))
             return TextSortCuts(0.9, 0.3, "tail")
 
