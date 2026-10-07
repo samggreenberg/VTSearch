@@ -203,7 +203,13 @@ def test_calibration_columns_and_invariants():
         # every declared column present
         assert set(CALIBRATION_COLUMNS).issubset(r.keys())
         # ``centroid``: under the label quota the row is the Goods' centroid's (#4643).
-        assert r["threshold_provenance"] in {"conformal", "no_good_sentinel", "too_few_default", "gmm_blend", "centroid"}
+        assert r["threshold_provenance"] in {
+            "conformal",
+            "no_good_sentinel",
+            "too_few_default",
+            "gmm_blend",
+            "centroid",
+        }
         assert r["degenerate"] in (0, 1)
         # the oracle can never cost more than the trained cut -> regret >= 0
         if np.isfinite(r["regret"]):
