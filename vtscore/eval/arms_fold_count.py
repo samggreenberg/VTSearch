@@ -388,6 +388,7 @@ def _fold_count_variant_rows(
                 pool_variant="max",
                 provenance=provenance,
                 n_pool_rows=n_pool_rows,
+                beta=details.get("beta"),
             )
             row["gmm_variant"] = f"folds_k{k}_{arm}"
             row["schedule"] = schedule or ""

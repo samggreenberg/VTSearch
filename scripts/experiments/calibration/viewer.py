@@ -23,10 +23,12 @@ What the page lets a reader pick:
   of everything for a chart of nothing.  The page locks the last remaining chip
   rather than snapping it silently back on;
 * **seeds** — averaged, or every seed as its own line;
-* **metric** — cost, precision, recall, F1, FPR, FNR, average precision, AUROC:
-  whatever the run emitted, from one shared definition
+* **metric** — cost, precision, recall, F1, the objective (F-beta at the run's
+  balance), FPR, FNR, average precision, AUROC: whatever the run emitted, from
+  one shared definition
   (:data:`vtscore.eval.calibration_metrics.DETECTION_METRICS`).  The page opens
-  on the first of them unless the study says otherwise: ``--default-metric``
+  on the objective when the run drew its line at a balance (#4584), else on the
+  first of them, unless the study says otherwise: ``--default-metric``
   picks the one it opens on and ``--hide-metrics`` takes some off the menu, for
   a study whose report has retired one (the State of the App dropped cost,
   #4576).  Both live in the payload's ``view`` block, so a later ``--reskin``
@@ -169,6 +171,7 @@ import common
 common.setup_env()
 
 import numpy as np  # noqa: E402
+import objective  # noqa: E402
 import pandas as pd  # noqa: E402
 
 import curves  # noqa: E402
@@ -704,18 +707,22 @@ def _skyline_arrays(skyline: pd.DataFrame | None, shape: _Shape) -> tuple[np.nda
     return mean, n, pick
 
 
-def _baselines(baseline: pd.DataFrame | None, shape: _Shape) -> dict[str, dict[tuple, float]]:
+def _baselines(
+    baseline: pd.DataFrame | None, shape: _Shape, objective_col: str | None = None
+) -> dict[str, dict[tuple, float]]:
     """``metric -> {(dataset, embedder, category, seed): value}``.
 
     Uses :func:`curves.baseline_map` for the column lookup, so the page's click-0
     anchor and the PNG's click-0 anchor read the same column of the same file.
+    *objective_col* is the objective's (:func:`curves.objective_anchor_column`).
     """
     if baseline is None or baseline.empty:
         return {}
     keys = [k for k in ("dataset", "embedder", "category", "seed") if k in baseline.columns]
     out: dict[str, dict[tuple, float]] = {}
     for spec in shape.metrics:
-        m = curves.baseline_map(baseline, spec["key"], keys)
+        col = objective_col if spec["key"] == objective.OBJECTIVE else None
+        m = curves.baseline_map(baseline, spec["key"], keys, col)
         if not m:
             continue
         fixed: dict[tuple, float] = {}
@@ -758,11 +765,13 @@ def build_viewer(  # noqa: C901
     """Write the self-contained viewer HTML.  Returns *out_path*.
 
     *default_metric* and *hide_metrics* set the page's opening ``view``; see
-    :func:`opening_view`.
+    :func:`opening_view`.  Without a *default_metric*, a frame that carries a
+    beta opens on the objective (#4584), its columns filled from the rates
+    where the cells predate them; any other frame opens on the first metric.
     """
     if main.empty:
         raise SystemExit("viewer: no rows to build from")
-    main = main.copy()
+    main = objective.with_objective(main).copy()
     if "embedder" not in main.columns:
         main["embedder"] = ""
     main["__group"] = _group_key(main)
@@ -771,8 +780,12 @@ def build_viewer(  # noqa: C901
     shape = _Shape(main, arms, denominator, oracle_keys)
     if not shape.metrics:
         raise SystemExit("viewer: the frame carries none of the known metric columns")
+    offered = [m["key"] for m in shape.metrics]
+    if default_metric is None and objective.carries_beta(main) and objective.OBJECTIVE in offered:
+        if objective.OBJECTIVE not in set(hide_metrics):
+            default_metric = objective.OBJECTIVE
     # Checked before the expensive part, so a misspelt flag fails in a second.
-    view = opening_view([m["key"] for m in shape.metrics], metric=default_metric, hide=hide_metrics)
+    view = opening_view(offered, metric=default_metric, hide=hide_metrics)
 
     den = denominator if denominator is not None and not denominator.empty else main
     den = den.copy()
@@ -784,7 +797,7 @@ def build_viewer(  # noqa: C901
         for (arm, gk), d in den.groupby(["arm", "__group"])
     }
 
-    base = _baselines(baseline, shape)
+    base = _baselines(baseline, shape, curves.objective_anchor_column(main))
     has_anchor = bool(base)
     t_full = np.arange(0 if has_anchor else 1, int(main["t"].max()) + 1)
 
@@ -977,7 +990,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument(
         "--default-metric",
         metavar="KEY",
-        help="the metric the page opens on (default: the first it offers); with --reskin, '' reverts to that",
+        help="the metric the page opens on (default: the objective, fbeta, on a run with a balance, else the "
+        "first it offers); with --reskin, '' reverts to the first it offers",
     )
     ap.add_argument(
         "--hide-metrics",

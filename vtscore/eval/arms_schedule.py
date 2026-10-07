@@ -107,6 +107,7 @@ def _schedule_variant_rows(
             pool_variant="max",
             provenance="gmm_blend" if weight < 1.0 else pre_blend_provenance,
             n_pool_rows=n_pool_rows,
+            beta=details.get("beta"),
         )
         row["gmm_variant"] = ""
         row["schedule"] = name

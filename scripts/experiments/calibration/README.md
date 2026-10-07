@@ -49,6 +49,7 @@ a report's committed-figure requirement points at.
 | `prepare_data.py`, `run_cells.py`, `analyze.py`, `launch_all.sh`, `launch_cells.sh` | The three-stage pipeline (#2781). Every study launcher is a wrapper that flips pre-registered knobs over these and re-points `CALIB_EXP`. |
 | `noop.py` | The analyze step for a launcher whose analysis runs separately. |
 | `study_paths.py` | `require_study_dir` — the check an **analyzer** owes its `--exp` (#4001). The finished study output dirs were deleted on 2026-09-18, so a stale default now dies on whatever file it opens first; this names the directory and the record instead. Readers only: a launcher `mkdir -p`s its study dir, and requiring one would break the re-run that made the delete acceptable. |
+| `objective.py` | **Which metric a decision reads** (#4584): the objective, `fbeta` (F-beta of the withheld half above the threshold the app holds, at the row's own beta), on any frame that carries a beta, and `cost` only on one that does not (`CALIB_BETA=off`, a Cost-era run). `with_objective` fills the `fbeta` columns on cells written before the runner emitted them, from their `precision` and `recall`. The A/B analyzer, the curves, the stopping point, the overview and the viewer all default through it. |
 | `curves.py`, `selftest_curves.py` | The standard quality-over-clicks figure pair every simulated-user study owes. One implementation; do not write it again. |
 | `stopping.py`, `selftest_stopping.py` | **Stopping point and stopping cost** (#3560): where the app's own stopping rules fired on each trajectory, and what the detector cost there — the number a user actually leaves with, as against the "final cost" at a click budget nobody chose. Reads the `phase` column every run since 2026-07-31 already emits, so it enriches finished studies without a re-run. Handles the three things that make a naive average wrong: the rules **flap**, they **often never fire**, and the runs excluded by "average over the ones that stopped" are exactly the slow ones. |
 | `preflight_knobs.py` | **Check 12 of the launch preflight** (`../preflight.sh`): every knob this run pins - the detector's and the session's (the opening, the preference, the spot check and its walk, acquisition) - against what the app ships, so a divergence passes only when declared with `--diverges <knob>`, and a value the harness would refuse fails outright (#4549). Imported under the run's own environment, from the worktree the jobs import. |
@@ -584,7 +585,7 @@ their own without a re-run.
 | embedder | any **non-empty** subset — **one panel each, never averaged** |
 | arms | any **non-empty** subset |
 | seeds | averaged, or every seed its own line |
-| metric | cost, precision, recall, F1, FPR, FNR, average precision, AUROC |
+| metric | cost, precision, recall, F1, the objective (F-beta at the run's balance; the page opens on it when the run drew its line at one, #4584), FPR, FNR, average precision, AUROC |
 | draw › oracle threshold | off (default), or the cheating-threshold line dotted beside the solid performance line |
 | draw › overlay on one chart | off (default), one chart per varying dimension with its ±1 SD shadow; on, all of them on one chart in distinct hues, shadows off |
 

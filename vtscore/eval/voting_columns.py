@@ -294,6 +294,29 @@ BAND_COLUMNS: tuple[str, ...] = (
 )
 
 
+#: The balances the rank frame records the shipped line's count at: the app's
+#: presets, ``vtscore.training.thresholds.BALANCE_PRESETS`` (#4448, #4471; a
+#: test pins the two together, so the analysis follows the app).
+RANK_FRAME_BETAS: tuple[float, ...] = (0.25, 1.0, 4.0)
+
+
+def beta_tag(beta: float) -> str:
+    """``b025`` / ``b1`` / ``b4``: the column suffix a balance's metrics carry."""
+    return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
+
+
+#: The objective (#4427, #4584): F-beta of the withheld half above the row's
+#: threshold.  ``fbeta`` is at the row's own ``beta``, the balance that drew the
+#: line, and is NaN where none did (``beta="off"``, a skyline row); the preset
+#: columns score the same returned set at each of :data:`RANK_FRAME_BETAS`, so a
+#: frame from one preset can be read at the others without going back to the
+#: cells.  One definition, :func:`vtscore.eval.calibration_metrics.fbeta_metrics`,
+#: so no analyzer re-derives it from ``precision`` and ``recall``.  ``cost``
+#: stays beside them as a diagnostic: it is priced at the run's Inclusion
+#: whatever beta drew the line.
+FBETA_COLUMNS: tuple[str, ...] = ("fbeta", *(f"fbeta_{beta_tag(b)}" for b in RANK_FRAME_BETAS))
+
+
 VOTING_COLUMNS: tuple[str, ...] = (
     *IDENT_COLUMNS,
     "cost",
@@ -306,6 +329,7 @@ VOTING_COLUMNS: tuple[str, ...] = (
     "precision",
     "recall",
     "f1",
+    *FBETA_COLUMNS,
     #: The counts behind them, so a rate can be re-derived, weighted or pooled
     #: without going back to the cells.
     "n_test_pos",
@@ -450,17 +474,6 @@ RANK_FRAME_COLUMNS: tuple[str, ...] = (
     "test_line_k_b1",
     "test_line_k_b4",
 )
-
-#: The balances the rank frame records the shipped line's count at: the app's
-#: presets, ``vtscore.training.thresholds.BALANCE_PRESETS`` (#4448, #4471; a
-#: test pins the two together, so the analysis follows the app).
-RANK_FRAME_BETAS: tuple[float, ...] = (0.25, 1.0, 4.0)
-
-
-def beta_tag(beta: float) -> str:
-    """``b025`` / ``b1`` / ``b4``: the column suffix a balance's metrics carry."""
-    return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
-
 
 #: The Test arm's frame (#4523): one row per session, Test mode's autopilot run
 #: on the withheld half after the last ordinary click, every pick answered from
@@ -618,6 +631,7 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "precision",
     "recall",
     "f1",
+    *FBETA_COLUMNS,
     "n_test_pos",
     "n_test_neg",
     "n_flagged",
