@@ -1,15 +1,22 @@
-"""The typed-query sort's line: the guarded rule of issue #3826, and its flag.
+"""The typed-query sort's two lines: the guarded display rule of #3826, the midpoint it samples at (#4136).
 
 A cosine sort of a typed query is usually one broad mode with the matches as a
 thin right shoulder, so a two-Gaussian midpoint splits the mode and lands in
 its densest region.  :func:`guarded_text_sort_threshold` keeps the mixture only
 where its components are separated (converged, then the midpoint) and cuts the
-bulk's upper tail everywhere else.  :func:`text_sort_threshold` is the one entry
-point the app's text route and the eval harness's opening both call, and with
-the default rule it must *be* :func:`calculate_gmm_threshold`.
+bulk's upper tail everywhere else.  That is the **display** line, and since
+#4136 the default one.  The sort's **acquisition** cut - where Autopilot's Bad
+phase samples - stays the midpoint under every rule, because the #3826 A/B
+found the guarded line puts that phase inside the matches.
+:func:`text_sort_cuts` draws both from one fit; the app's text route sends
+them as ``threshold`` / ``acq_threshold``, and the eval harness's opening reads
+the acquisition half through :func:`text_sort_acquisition_threshold`.
 
-These are identities and mechanisms, not golden numbers: the measured effect
-lives in ``docs/experiments/2026-09-22-text-cut-3826/REPORT.md``.
+These are identities and mechanisms, not golden numbers: the measured effects
+live in ``docs/experiments/2026-09-22-text-cut-3826/REPORT.md`` (the display
+line), ``docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`` (the opening)
+and ``docs/experiments/2026-10-06-cost-fbeta-rescore-4582/REPORT.md`` (both,
+at the three F-beta presets).
 """
 
 from __future__ import annotations
@@ -21,14 +28,19 @@ import pytest
 
 from vtscore.training.thresholds import gmm as G
 from vtscore.training.thresholds import (
+    TEXT_SORT_CUT_DEFAULT,
+    TEXT_SORT_CUT_RULES,
     TEXT_SORT_SEPARATION_D,
     TEXT_SORT_TAIL_K,
+    TextSortCuts,
     ashman_d,
     bulk_location_scale,
     calculate_gmm_threshold,
     converge_score_gmm,
     fit_score_gmm,
     guarded_text_sort_threshold,
+    text_sort_acquisition_threshold,
+    text_sort_cuts,
     text_sort_threshold,
 )
 
@@ -51,28 +63,47 @@ def _separated(n_lo: int = 800, n_hi: int = 40, seed: int = 1) -> tuple[np.ndarr
     return np.concatenate([lo, hi]), np.concatenate([np.zeros(n_lo, bool), np.ones(n_hi, bool)])
 
 
-class TestDefaultRuleIsTheShippedLine:
-    """Off by default: the flag's absence changes nothing, bit for bit."""
+class TestTheDefaultRule:
+    """The guarded line is what a text sort paints by default (#4136); the midpoint is where it samples."""
 
-    def test_default_rule_is_the_gmm_midpoint(self):
-        assert G.TEXT_SORT_CUT_RULE == "gmm_midpoint"
+    def test_the_default_rule_is_the_guarded_line(self):
+        assert TEXT_SORT_CUT_DEFAULT == "guarded_tail"
+        assert G.TEXT_SORT_CUT_RULE == "guarded_tail"
 
     @pytest.mark.parametrize("seed", range(5))
-    def test_default_equals_calculate_gmm_threshold_exactly(self, seed):
+    def test_the_default_display_line_is_the_guarded_one(self, seed):
         scores, _ = _shoulder(seed=seed)
         values = scores.tolist()
-        assert text_sort_threshold(values) == calculate_gmm_threshold(values)
+        assert text_sort_threshold(values) == guarded_text_sort_threshold(values)[0]
 
-    def test_explicit_rule_overrides_the_module_default(self, monkeypatch):
+    @pytest.mark.parametrize("seed", range(5))
+    def test_the_acquisition_cut_is_calculate_gmm_threshold_exactly(self, seed):
+        """Bit for bit, under the default rule: the opening's picks are the midpoint arm's by construction."""
+        scores, _ = _shoulder(seed=seed)
+        values = scores.tolist()
+        assert text_sort_cuts(values).acq_threshold == calculate_gmm_threshold(values)
+        assert text_sort_acquisition_threshold(values) == calculate_gmm_threshold(values)
+
+    def test_the_opt_out_rule_draws_one_line(self):
+        """``gmm_midpoint`` is the pre-#3826 sort: display and acquisition are one number."""
         scores, _ = _shoulder()
         values = scores.tolist()
-        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", "guarded_tail")
-        assert text_sort_threshold(values) == guarded_text_sort_threshold(values)[0]
+        cuts = text_sort_cuts(values, rule="gmm_midpoint")
+        assert cuts == TextSortCuts(calculate_gmm_threshold(values), calculate_gmm_threshold(values), "midpoint")
         assert text_sort_threshold(values, rule="gmm_midpoint") == calculate_gmm_threshold(values)
+
+    def test_an_explicit_rule_overrides_the_module_default(self, monkeypatch):
+        scores, _ = _shoulder()
+        values = scores.tolist()
+        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", "gmm_midpoint")
+        assert text_sort_threshold(values) == calculate_gmm_threshold(values)
+        assert text_sort_threshold(values, rule="guarded_tail") == guarded_text_sort_threshold(values)[0]
 
     def test_unknown_rule_raises(self):
         with pytest.raises(ValueError, match="unknown text-sort cut rule"):
             text_sort_threshold([0.1, 0.2, 0.3], rule="midpoint_of_vibes")
+        with pytest.raises(ValueError, match="unknown text-sort cut rule"):
+            text_sort_cuts([0.1, 0.2, 0.3], rule="midpoint_of_vibes")
 
 
 class TestTheFlagIsReadFromTheEnvironment:
@@ -89,7 +120,7 @@ class TestTheFlagIsReadFromTheEnvironment:
 
     @pytest.mark.parametrize("value", [None, "", "guarded-tail", "tail"])
     def test_unknown_or_unset_falls_back_to_the_default(self, value):
-        assert G.resolve_text_sort_cut_rule(value) == "gmm_midpoint"
+        assert G.resolve_text_sort_cut_rule(value) == TEXT_SORT_CUT_DEFAULT == "guarded_tail"
 
 
 class TestTheTailBranch:
@@ -220,35 +251,147 @@ class TestFallbacks:
         assert math.isinf(ashman_d(G.GmmFit1D(0.5, 0.1, 0.0, 0.5, 0.3, 0.0)))
 
 
-class TestCallersFollowTheRule:
-    """The app's text route and the harness's opening read the same line."""
+class TestTheTwoCuts:
+    """:func:`text_sort_cuts` draws both lines from one fit, and the acquisition half never moves."""
 
-    def test_harness_bad_phase_line_on_a_text_sort(self, monkeypatch):
+    @pytest.mark.parametrize("rule", TEXT_SORT_CUT_RULES)
+    @pytest.mark.parametrize("make", [_shoulder, _separated])
+    def test_the_acquisition_cut_is_the_midpoint_under_every_rule(self, make, rule):
+        scores, _ = make()
+        values = scores.tolist()
+        cuts = text_sort_cuts(values, rule=rule)
+        assert cuts.acq_threshold == calculate_gmm_threshold(values)
+        assert cuts.acq_threshold == text_sort_acquisition_threshold(values)
+
+    @pytest.mark.parametrize("make", [_shoulder, _separated])
+    def test_the_display_line_and_its_branch_are_the_guarded_rules(self, make):
+        scores, _ = make()
+        values = scores.tolist()
+        cuts = text_sort_cuts(values, rule="guarded_tail")
+        assert (cuts.threshold, cuts.branch) == guarded_text_sort_threshold(values)
+
+    def test_on_a_shoulder_the_two_lines_differ(self):
+        """The point of #4136: one number cannot do both jobs on a one-mode sort."""
+        scores, labels = _shoulder()
+        cuts = text_sort_cuts(scores.tolist(), rule="guarded_tail")
+        assert cuts.branch == "tail"
+        assert cuts.threshold > cuts.acq_threshold
+        # The display line paints about the matches; the acquisition cut sits in the mode.
+        assert (scores >= cuts.threshold).sum() <= 2 * labels.sum()
+        assert (scores >= cuts.acq_threshold).sum() > 10 * labels.sum()
+
+    @pytest.mark.parametrize("rule", TEXT_SORT_CUT_RULES)
+    @pytest.mark.parametrize("scores", [[], [0.3]])
+    def test_fewer_than_two_scores(self, scores, rule):
+        cuts = text_sort_cuts(scores, rule=rule)
+        assert (cuts.threshold, cuts.acq_threshold) == (0.5, 0.5)
+        assert cuts.branch == ("fallback" if rule == "guarded_tail" else "midpoint")
+
+    def test_a_constant_sample_cuts_both_lines_at_the_value(self):
+        cuts = text_sort_cuts([0.3] * 10, rule="guarded_tail")
+        assert cuts.threshold == pytest.approx(0.3)
+        assert cuts.acq_threshold == pytest.approx(0.3)
+        assert cuts.branch == "gmm"
+
+    def test_the_cuts_are_immutable(self):
+        cuts = text_sort_cuts([0.1, 0.2, 0.3, 0.9])
+        with pytest.raises(Exception, match="frozen|assign"):
+            cuts.threshold = 0.0  # type: ignore[misc]
+
+
+class TestTheOpeningReadsTheAcquisitionCut:
+    """The harness's Bad phase and ``@mid`` sample where the app's Hard select does: the midpoint."""
+
+    @pytest.mark.parametrize("rule", TEXT_SORT_CUT_RULES)
+    def test_harness_bad_phase_line_on_a_text_sort(self, monkeypatch, rule):
+        from vtscore.eval.al_strategies import _sort_threshold
+
+        scores, _ = _shoulder()
+        ranking = dict(enumerate(scores.tolist()))
+        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", rule)
+        assert _sort_threshold(ranking, typed_query=True) == calculate_gmm_threshold(list(ranking.values()))
+        # A known-good centroid sort is not a typed query and keeps the midpoint.
+        assert _sort_threshold(ranking) == calculate_gmm_threshold(list(ranking.values()))
+
+    def test_the_bad_phase_does_not_read_the_display_line(self, monkeypatch):
         from vtscore.eval.al_strategies import _sort_threshold
 
         scores, _ = _shoulder()
         ranking = dict(enumerate(scores.tolist()))
         monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", "guarded_tail")
-        assert _sort_threshold(ranking, typed_query=True) == guarded_text_sort_threshold(list(ranking.values()))[0]
-        # A known-good centroid sort is not a typed query and keeps the midpoint.
-        assert _sort_threshold(ranking) == calculate_gmm_threshold(list(ranking.values()))
+        assert _sort_threshold(ranking, typed_query=True) != text_sort_threshold(list(ranking.values()))
 
-    def test_startup_schedule_mid_is_the_text_line(self, monkeypatch):
+    @pytest.mark.parametrize("rule", TEXT_SORT_CUT_RULES)
+    def test_startup_schedule_mid_is_the_acquisition_cut(self, monkeypatch, rule):
         from vtscore.eval.startup_schedule import parse_startup_schedule, round_cut
 
         scores, _ = _shoulder()
         (rnd,) = parse_startup_schedule("n1@mid")
-        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", "guarded_tail")
-        assert round_cut(scores.tolist(), rnd) == guarded_text_sort_threshold(scores.tolist())[0]
+        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", rule)
+        assert round_cut(scores.tolist(), rnd) == text_sort_acquisition_threshold(scores.tolist())
 
     def test_cosine_sort_active_uses_the_text_rule_only_for_text(self, monkeypatch):
         import vtscore.training.thresholds as T
-        from vtscore.training.query_sort import cosine_sort_active
+        from vtscore.training.query_sort import cosine_sort_active, text_sort_active
 
         from tests_lib.sorting.test_query_sort import _fill_active_medias
 
         query = _fill_active_medias()
-        monkeypatch.setattr(T, "text_sort_threshold", lambda s: 0.123)
+        monkeypatch.setattr(T, "text_sort_cuts", lambda s: TextSortCuts(0.123, 0.0456, "tail"))
         monkeypatch.setattr(T, "calculate_gmm_threshold", lambda s: 0.456)
         assert cosine_sort_active(query, role="text")[1] == 0.123
         assert cosine_sort_active(query, role="score")[1] == 0.456
+        _results, cuts = text_sort_active(query)
+        assert cuts == TextSortCuts(0.123, 0.0456, "tail")
+
+    def test_text_sort_active_rounds_both_lines_to_four_decimals(self, monkeypatch):
+        import vtscore.training.thresholds as T
+        from vtscore.training.query_sort import text_sort_active
+
+        from tests_lib.sorting.test_query_sort import _fill_active_medias
+
+        query = _fill_active_medias()
+        monkeypatch.setattr(T, "text_sort_cuts", lambda s: TextSortCuts(0.123456, 0.0456789, "gmm"))
+        _results, cuts = text_sort_active(query)
+        assert cuts == TextSortCuts(0.1235, 0.0457, "gmm")
+
+
+class TestTheOpeningIsBlindToTheDisplayRule:
+    """The assertion #4136 asked of the A/B harness, run on the harness itself.
+
+    Two openings that differ only in ``VTSEARCH_TEXT_SORT_CUT`` vote the same
+    items in the same order, because every pre-detector pick reads the
+    acquisition cut and that cut is the midpoint under both rules.  A GRID
+    re-run of ``launch_ab_3826.sh`` could only confirm this with sampling
+    noise on top; the identity is exact, so it is pinned here instead.
+    """
+
+    STEPS = 40
+
+    def _seed_sort(self):
+        from tests_lib.detectors.test_startup_schedule import _seeded_dataset
+
+        _medias, seed_scores = _seeded_dataset()
+        return list(seed_scores.values())
+
+    def test_the_rules_disagree_on_this_sort(self):
+        """Teeth: the identity below would be vacuous on a sort where the two lines coincide."""
+        values = self._seed_sort()
+        assert text_sort_threshold(values, rule="guarded_tail") != text_sort_threshold(values, rule="gmm_midpoint")
+
+    @pytest.mark.parametrize("schedule", [None, "PRODUCTION_STARTUP"])
+    def test_the_same_items_are_voted_under_both_rules(self, monkeypatch, schedule):
+        from vtscore.eval.startup_schedule import PRODUCTION_STARTUP
+
+        from tests_lib.detectors.test_startup_schedule import _run
+
+        spec = PRODUCTION_STARTUP if schedule else None
+        picks: dict[str, list[tuple[str, int, int]]] = {}
+        for rule in TEXT_SORT_CUT_RULES:
+            monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", rule)
+            _rows, log = _run(spec, max_steps=self.STEPS)
+            picks[rule] = [(p["phase"], p["picked_id"], p["picked_label"]) for p in log]
+        assert picks["guarded_tail"] == picks["gmm_midpoint"]
+        phases = [ph for ph, _, _ in picks["gmm_midpoint"]]
+        assert "hard" in phases, "the run never left the opening, so the comparison covers no learned pick"
+        assert ("bad" in phases) or ("s1" in phases), "no Bad-phase pick was made"

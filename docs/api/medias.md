@@ -332,7 +332,7 @@ and [label-file sort](#label-file-sort) — do **not** return a bare
 |-------|---------|
 | `results` | The transmitted ranking rows, **descending by score**. May be a *head window* of the full ranking (see below), not the whole thing. |
 | `threshold` | The decision line (see [learned sort](#learned-sort) for `threshold` vs `acq_threshold`). |
-| `acq_threshold` | The acquisition cut; `null` on sorts with no detector behind them. |
+| `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Carried by the learned sort and, since #4136, the text sort; `null` on the example and label-file sorts, where a client falls back to `threshold`. |
 | `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page). Also the sort-generation token: a re-sort mints a new one. |
 | `total` | Length of the **full** ranking — `>= results.length`. |
 | `above_threshold` | Rows at or above `threshold` across the full ranking (not just the window). |
@@ -393,11 +393,19 @@ POST /api/sort
 **Body:** `{"text": "dog barking"}`
 
 Embeds the text query using the media type's embedding model, then sorts all
-medias by cosine similarity. Includes a GMM-based threshold.
+medias by cosine similarity, and draws two lines over the ranking (issue
+#4136): `threshold`, the **display** line the green region ends at, is the
+guarded rule of #3826 (the mixture midpoint only when the two fitted
+components are separated, else the bulk's median + 3 robust sigmas; the
+`VTSEARCH_TEXT_SORT_CUT=gmm_midpoint` environment variable restores the plain
+midpoint), and `acq_threshold`, the **acquisition** cut Autopilot's Bad phase
+samples around, is always the mixture midpoint. The split exists because the
+guarded line is the better thing to paint and the worse place to sample
+negatives (see [`docs/ML.md`](../ML.md#threshold-calibration)).
 
 → A [windowed sort response](#sort-response-shape-windowing) whose rows are
-`{"id": 0, "similarity": 0.8234}`. `acq_threshold` is `null` (no detector
-behind this sort).
+`{"id": 0, "similarity": 0.8234}`, with both `threshold` and `acq_threshold`
+set.
 
 When the dataset's embedder is patch-region-aware (e.g.
 `dinov3_patch`), each result additionally carries
@@ -450,7 +458,7 @@ The `done` payload — whether returned inline (`wait=true`) or via the result
 poll — is that same windowed envelope: `results`, `threshold`,
 `acq_threshold`, `balance`, `sort_token`, `total`, `above_threshold`,
 `has_more_below`. This is the only sort with a detector behind it, so the only
-one whose `acq_threshold` and `balance` are non-`null`; `balance` is the
+one whose `balance` is non-`null`; `balance` is the
 [line state](labeling.md#the-line-state) of `threshold`: the set the line
 keeps, and what the spot check found on it.
 
@@ -459,9 +467,11 @@ keeps, and what the spot check found on it.
 is the **acquisition cut**, and it is a different number — Autopilot's Hard and
 New picks read a threshold as a *rank position* rather than a boundary, so they
 sample around a cut taken four inclusion steps below the reporting one
-(`ACQUISITION_INCLUSION_OFFSET`), which places it higher in the ranking. Nothing shown to the user reads it. It is
-`null` on sorts with no detector behind them (`/api/sort`, `/api/example-sort`,
-`/api/label-file-sort`), where a client should fall back to `threshold`. See
+(`ACQUISITION_INCLUSION_OFFSET`), which places it higher in the ranking. Nothing shown to the user reads it.
+The [text sort](#text-sort) carries the same pair since #4136 (its
+`acq_threshold` is the mixture midpoint); it is `null` on the two sorts that
+draw one line (`/api/example-sort`, `/api/label-file-sort`), where a client
+should fall back to `threshold`. See
 [`docs/ML.md`](../ML.md#threshold-calibration) for the mechanism and the
 measurement behind the offset.
 

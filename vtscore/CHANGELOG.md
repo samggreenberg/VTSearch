@@ -10,6 +10,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
+  `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen
+  `TextSortCuts(threshold, acq_threshold, branch)` from one mixture fit: `threshold` is the
+  display line under `TEXT_SORT_CUT_RULE`, and `acq_threshold` is the shipped midpoint
+  (`calculate_gmm_threshold`) under every rule, which `text_sort_acquisition_threshold(scores)`
+  also returns on its own. `TEXT_SORT_CUT_DEFAULT` is `"guarded_tail"`: `text_sort_threshold`
+  now draws #3826's guarded line unless `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint`; it was
+  `"gmm_midpoint"` while the line was also Autopilot's sampling position. The eval harness's
+  Bad phase (`al_strategies._sort_threshold`) and the `@mid` schedule cut read the acquisition
+  cut, so an opening's picks no longer move with the display rule.
+  `vtscore.training.query_sort.text_sort_active(query_vec, snap=None)` returns `(results, cuts)`
+  for the text route; `cosine_sort_active` is unchanged in signature and returns the display
+  line for `role="text"`.
+
 - **A test's walk below the line runs to its budget when there is a class model** (issue #4542).
   With `posteriors` given, `LineTest.misses_walk()` no longer stops at a dry band and
   `line_phase` no longer ends the misses phase on `LineBudgets.misses_width`: the walk goes

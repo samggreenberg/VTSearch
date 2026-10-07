@@ -263,23 +263,26 @@ def _hard_pick_by_index(ctx: ALContext, ranking: dict[int, float], threshold: fl
 
 
 def _sort_threshold(scores: dict[int, float], *, typed_query: bool = False) -> float:
-    """The cutoff a text / example sort would show for *scores*.
+    """The cut the ``hard`` select on a text / example sort samples against.
 
     Every cosine sort in the app draws a line over its full score distribution,
     and the ``hard`` select measures against that line.  For an example (or
     known-good centroid) sort the line is
     :func:`~vtscore.training.thresholds.calculate_gmm_threshold`.  For a
-    **typed-query** sort (*typed_query*) it is
-    :func:`~vtscore.training.thresholds.text_sort_threshold`, the same call the
-    app's text route makes, so a flag that moves the app's text line (#3826)
-    moves the opening simulated here too.  With the default rule the two are
-    identical, and the Bad phase's pick lands in the *middle* of the text
+    **typed-query** sort (*typed_query*) it is the sort's *acquisition* cut,
+    :func:`~vtscore.training.thresholds.text_sort_acquisition_threshold`: the
+    app's text route sends it as ``acq_threshold`` beside the display line, and
+    the Hard select reads ``acq_threshold ?? threshold`` (#4136).  That cut is
+    the midpoint whatever ``VTSEARCH_TEXT_SORT_CUT`` paints green, so a display
+    rule cannot move the opening simulated here - the #3826 A/B measured what
+    happened when one did (Δcost +0.016 ± 0.005; the Bad phase voted the top of
+    the ranking).  The Bad phase's pick lands in the *middle* of the text
     ranking, not at its bottom.
     """
-    from vtscore.training.thresholds import calculate_gmm_threshold, text_sort_threshold  # noqa: PLC0415
+    from vtscore.training.thresholds import calculate_gmm_threshold, text_sort_acquisition_threshold  # noqa: PLC0415
 
     values = list(scores.values())
-    return text_sort_threshold(values) if typed_query else calculate_gmm_threshold(values)
+    return text_sort_acquisition_threshold(values) if typed_query else calculate_gmm_threshold(values)
 
 
 def _atlas_next(ctx: ALContext) -> Optional[int]:
@@ -355,7 +358,8 @@ def _pick_on_seed_sort(ctx: ALContext, cut: Optional[float]) -> int:
 
     The one operation both pre-detector phases are made of: rank the seed sort,
     find *cut*'s rank position, take the nearest unlabelled item.  ``None``
-    means the sort's own GMM line - the app's cutoff for every cosine sort.
+    means the sort's own acquisition cut - the GMM midpoint, which is what the
+    app's Hard select reads on every cosine sort (:func:`_sort_threshold`).
     """
     ranking = ctx.seed_scores
     typed_query = ranking is not None
@@ -374,8 +378,9 @@ def _pick_bad_phase(ctx: ALContext) -> int:
 
     Sort ``text``/``load`` + Select ``hard``.  The app has not run a learned
     sort yet at this point, so the ranking here is the *query* similarity and
-    the cutoff is that sort's GMM line: the pick lands in the middle of the
-    text ranking, where the ambiguous items are, rather than at the bottom.
+    the cutoff is that sort's acquisition cut, the GMM midpoint (not the
+    guarded display line, #4136): the pick lands in the middle of the text
+    ranking, where the ambiguous items are, rather than at the bottom.
     Finding negatives is easy; the ones worth spending a vote on are the ones
     the query ranking cannot separate.
     """

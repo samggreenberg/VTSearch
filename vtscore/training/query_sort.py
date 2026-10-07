@@ -28,16 +28,14 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from vtscore.media.embedder import MediaEmbedder
+    from vtscore.training.thresholds import TextSortCuts
 
 
-def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[list[dict], float]:
-    """Sort every media in the active dataset by cosine similarity to *query_vec*.
+def _cosine_sort_scored(query_vec, *, role: str, snap) -> tuple[list[dict], list[float]]:
+    """Score every media in the active dataset against *query_vec*: ``(results, sims)``.
 
-    Returns ``(results, threshold)`` where *results* is a list of
-    ``{"id": …, "similarity": …}`` dicts sorted descending, and
-    *threshold* is the sort's line (rounded to 4 decimals): for a ``"text"``
-    query, :func:`~vtscore.training.thresholds.text_sort_threshold`; for any
-    other, the GMM midpoint.
+    The ranking half of :func:`cosine_sort_active` and :func:`text_sort_active`,
+    which differ only in the line(s) they draw over *sims*.
 
     *role* selects which bound embedder the haystack is scored against (the
     v3 routing table, see :meth:`DatasetContext.routed_embedder`): ``"text"``
@@ -59,7 +57,6 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
     from vtscore.state import snapshot_medias
     from vtscore.state.core import get_active_context
     from vtscore.training.region_similarity import cosine_sort_with_boxes
-    from vtscore.training.thresholds import calculate_gmm_threshold, text_sort_threshold
 
     ctx = get_active_context()
     embedder_name = ctx.routed_embedder(role)
@@ -69,13 +66,70 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
 
     if snap is None:
         snap = snapshot_medias()
-    results, sims_list = cosine_sort_with_boxes(snap, query_vec, embedder_name, region_aware=region_aware)
-    # A typed query draws its line with the text-sort rule (#3826; the GMM
-    # midpoint unless ``VTSEARCH_TEXT_SORT_CUT`` says otherwise).  Example and
-    # label-file sorts keep the midpoint: the guarded rule was measured on
-    # typed queries only.
-    threshold = text_sort_threshold(sims_list) if role == "text" else calculate_gmm_threshold(sims_list)
-    return results, round(threshold, 4)
+    return cosine_sort_with_boxes(snap, query_vec, embedder_name, region_aware=region_aware)
+
+
+def text_sort_active(query_vec, *, snap=None) -> tuple[list[dict], TextSortCuts]:
+    """Sort every media in the active dataset by cosine similarity to a typed query's vector.
+
+    Returns ``(results, cuts)``: *results* as :func:`cosine_sort_active` gives
+    them, and *cuts* the sort's two lines (issue #4136), each rounded to 4
+    decimals - ``threshold``, the display line drawn by
+    :func:`~vtscore.training.thresholds.text_sort_threshold`'s rule, and
+    ``acq_threshold``, the midpoint Autopilot's opening samples at.  The text
+    route sends the pair as the response's ``threshold`` / ``acq_threshold``,
+    the same two fields a learned sort carries, so the Hard select reads the
+    acquisition cut and everything the user sees reads the display line.
+
+    *query_vec* must have been embedded by the dataset's text embedder
+    (``role="text"``).  *snap* as in :func:`cosine_sort_active`.
+    """
+    from dataclasses import replace
+
+    from vtscore.training.thresholds import text_sort_cuts
+
+    results, sims_list = _cosine_sort_scored(query_vec, role="text", snap=snap)
+    cuts = text_sort_cuts(sims_list)
+    return results, replace(cuts, threshold=round(cuts.threshold, 4), acq_threshold=round(cuts.acq_threshold, 4))
+
+
+def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[list[dict], float]:
+    """Sort every media in the active dataset by cosine similarity to *query_vec*.
+
+    Returns ``(results, threshold)`` where *results* is a list of
+    ``{"id": …, "similarity": …}`` dicts sorted descending, and
+    *threshold* is the sort's display line (rounded to 4 decimals): for a
+    ``"text"`` query, :func:`text_sort_active`'s ``threshold``; for any
+    other, the GMM midpoint.  A caller that also needs a text sort's
+    acquisition cut calls :func:`text_sort_active` instead.
+
+    *role* selects which bound embedder the haystack is scored against (the
+    v3 routing table, see :meth:`DatasetContext.routed_embedder`): ``"text"``
+    for a text query, ``"score"`` (patch-else-text) for an example/cosine
+    query.  *query_vec* must have been embedded by that same embedder.
+
+    For datasets embedded with a patch-aware embedder (DINOv2, DINOv3,
+    EUPE), each result also carries a ``best_region`` field containing the
+    bounding box of the region that scored highest, in normalised
+    image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
+    take a fast vectorised numpy path with no per-result box.
+
+    Both paths live in :mod:`vtscore.training.region_similarity`.
+
+    *snap* lets the caller thread in a medias snapshot it already took, so a
+    single handler doesn't copy the full medias dict under ``_state_lock`` more
+    than once per request; when ``None`` a fresh snapshot is taken.
+    """
+    # A typed query draws its lines with the text-sort rules (#3826, #4136).
+    # Example and label-file sorts keep the midpoint: the guarded rule was
+    # measured on typed queries only.
+    if role == "text":
+        results, cuts = text_sort_active(query_vec, snap=snap)
+        return results, cuts.threshold
+    from vtscore.training.thresholds import calculate_gmm_threshold
+
+    results, sims_list = _cosine_sort_scored(query_vec, role=role, snap=snap)
+    return results, round(calculate_gmm_threshold(sims_list), 4)
 
 
 def score_embedder_for_active(snap=None) -> tuple[MediaEmbedder | None, str | None]:

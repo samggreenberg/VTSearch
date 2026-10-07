@@ -71,6 +71,10 @@
     "app": "b167612751767183a0416f22e643d9d4a79c67e7d041d9b9a1ae4d20725db084",
     "harness": "a3d9f1d799352d5409e925b7ac805905de7add2fe27c464d2e4f01dabf2015fb"
   },
+  "thresholds.text_sort_acquisition": {
+    "app": "ffe8742b8bb778506d48d1617d8b7cb83232bd74918728f2832c66d9160945c2",
+    "harness": "d956705dabc14748b6060eeed83c574d672b6ee2f0ec58c4304512ee5da1b3c7"
+  },
   "thresholds.vote_exclusion_floor": {
     "app": "4832453572322283bf6cc9b70d9a1d2b8b3aa5da1f354e36bb5d771d43b82a5c"
   },

@@ -285,7 +285,7 @@ The simulated user follows the app's **own** phase machine, ported in [`vtscore/
 | | app (and the harness now) | old approximation |
 |---|---|---|
 | First trained detector | at quorum — 3 good **and** 4 bad | at the first `(≥1 good, ≥1 bad)` pair |
-| Bad-phase pick | the **text sort's cutoff** (Select `hard` on a text sort) | the bottom of the sort |
+| Bad-phase pick | the **text sort's acquisition cut** (Select `hard` on a text sort: the mixture midpoint the route sends as `acq_threshold`, not the guarded line it paints green, #4136) | the bottom of the sort |
 | Hard-phase pick | nearest the cutoff **by rank** | nearest **by score** |
 | Hard → New | when the *smart* and *stable* indicators go green | alternating on step parity |
 

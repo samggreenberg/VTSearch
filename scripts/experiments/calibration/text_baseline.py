@@ -151,8 +151,10 @@ def main() -> int:
                 labels = np.asarray([1 if media_is_positive(medias_cat[i], cat) else 0 for i in ids])
 
                 # The app cuts the haystack it can see: every media, not a split,
-                # with the text route's own rule (the GMM midpoint unless
-                # VTSEARCH_TEXT_SORT_CUT says otherwise, #3826).
+                # with the text route's own *display* rule (the guarded line
+                # unless VTSEARCH_TEXT_SORT_CUT says otherwise; #3826, #4136).
+                # Click 0 scores what the user sees.  The midpoint the opening
+                # samples at is the cells' business, not this anchor's.
                 gmm_cut = float(text_sort_threshold([float(s) for s in scores]))
 
                 for seed in cfg.SEEDS:
