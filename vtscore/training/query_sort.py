@@ -69,7 +69,7 @@ def _cosine_sort_scored(query_vec, *, role: str, snap) -> tuple[list[dict], list
     return cosine_sort_with_boxes(snap, query_vec, embedder_name, region_aware=region_aware)
 
 
-def text_sort_active(query_vec, *, snap=None) -> tuple[list[dict], TextSortCuts]:
+def text_sort_active(query_vec, *, snap=None, beta: float | None = None) -> tuple[list[dict], TextSortCuts]:
     """Sort every media in the active dataset by cosine similarity to a typed query's vector.
 
     Returns ``(results, cuts)``: *results* as :func:`cosine_sort_active` gives
@@ -82,14 +82,21 @@ def text_sort_active(query_vec, *, snap=None) -> tuple[list[dict], TextSortCuts]
     acquisition cut and everything the user sees reads the display line.
 
     *query_vec* must have been embedded by the dataset's text embedder
-    (``role="text"``).  *snap* as in :func:`cosine_sort_active`.
+    (``role="text"``).  *snap* as in :func:`cosine_sort_active`.  *beta* is the
+    balance the display line is drawn at (#4603); ``None`` reads the active one
+    (:func:`vtscore.state.get_beta`), which is the user's setting before any
+    detector exists.
     """
     from dataclasses import replace
 
     from vtscore.training.thresholds import text_sort_cuts
 
+    if beta is None:
+        from vtscore.state import get_beta
+
+        beta = get_beta()
     results, sims_list = _cosine_sort_scored(query_vec, role="text", snap=snap)
-    cuts = text_sort_cuts(sims_list)
+    cuts = text_sort_cuts(sims_list, beta=beta)
     return results, replace(cuts, threshold=round(cuts.threshold, 4), acq_threshold=round(cuts.acq_threshold, 4))
 
 

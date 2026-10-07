@@ -1477,8 +1477,9 @@ class TextSortCuts:
             midpoint, :func:`calculate_gmm_threshold`, under every rule.
         branch: Which branch drew ``threshold``: ``"gmm"``, ``"tail"`` or
             ``"fallback"`` under ``guarded_tail`` (see
-            :func:`guarded_text_sort_threshold`), ``"midpoint"`` under
-            ``gmm_midpoint``.
+            :func:`guarded_text_sort_threshold`), ``"count"`` when a balance
+            at or below :data:`TEXT_SORT_COUNT_MAX_BETA` drew it
+            (:func:`_count_line`), ``"midpoint"`` under ``gmm_midpoint``.
     """
 
     threshold: float
@@ -1486,7 +1487,52 @@ class TextSortCuts:
     branch: str
 
 
-def text_sort_cuts(scores: list[float], rule: str | None = None) -> TextSortCuts:
+#: The count line (issue #4603): at a balance of beta 1 or below, a typed-query
+#: sort's display line keeps the top ``round(c(beta) * n_hat)`` of the sort, where
+#: ``n_hat`` estimates how many of the scored media match.  Above beta 1 the
+#: guarded line stays, which the pricing found as good as the count line at beta 4.
+TEXT_SORT_COUNT_MAX_BETA = 1.0
+#: ``n_hat`` counts the media above ``median + z * sigma`` beyond what a Gaussian
+#: bulk puts there, with ``sigma = 1.4826 * MAD`` (the matches are a few percent of
+#: a sort at most, so the median and MAD are the non-matches').  At z = 4 it lands
+#: on the true count at COCO Better's 0.44% prevalence and errs high below that and
+#: low above it, the directions that cost least at beta 1/4 and 1 (#4603).
+TEXT_SORT_COUNT_Z = 4.0
+#: c(beta) = beta ** TEXT_SORT_COUNT_EXPONENT: the multiple of the true count that
+#: scored best at each preset, 3/8 at beta 1/4 and 1 at beta 1, at 0.1%, 0.44% and
+#: 2% prevalence alike (#4603), joined by the power curve through the two.
+TEXT_SORT_COUNT_EXPONENT = math.log(3 / 8) / math.log(1 / 4)
+#: Below this many scores the bulk's spread is not worth estimating; the guarded
+#: line stays.
+TEXT_SORT_COUNT_MIN_SCORES = 50
+
+
+def _count_line(scores: np.ndarray, beta: float) -> float | None:
+    """The count line at *beta* (#4603), or ``None`` when the bulk has no spread to measure.
+
+    ``n_hat`` is the excess over a Gaussian bulk above ``median + z * sigma``
+    (:data:`TEXT_SORT_COUNT_Z`), clamped to ``[1, n]``; the line is the score of the
+    ``round(c(beta) * n_hat)``-th highest, so it keeps that many (ties keep more).
+    Priced against today's guarded line on COCO Better (SigLIP, 144 classes, 10
+    seeds): +0.13 to +0.30 F-beta at beta 1/4 and +0.01 to +0.13 at beta 1, at 0.1%,
+    0.44% and 2% prevalence.
+    """
+    n = scores.size
+    if n < TEXT_SORT_COUNT_MIN_SCORES:
+        return None
+    med = float(np.median(scores))
+    sigma = 1.4826 * float(np.median(np.abs(scores - med)))
+    if not sigma > 0.0:
+        return None
+    z = TEXT_SORT_COUNT_Z
+    above = float(np.count_nonzero(scores > med + z * sigma))
+    bulk_above = n * 0.5 * math.erfc(z / math.sqrt(2.0))
+    n_hat = min(max(above - bulk_above, 1.0), float(n))
+    keep = min(max(1, round(beta**TEXT_SORT_COUNT_EXPONENT * n_hat)), n)
+    return float(np.partition(scores, n - keep)[n - keep])
+
+
+def text_sort_cuts(scores: list[float], rule: str | None = None, beta: float | None = None) -> TextSortCuts:
     """Both lines of a typed-query sort, from one mixture fit (issue #4136).
 
     The single entry point for "where does a typed-query sort's green region
@@ -1499,6 +1545,14 @@ def text_sort_cuts(scores: list[float], rule: str | None = None) -> TextSortCuts
     *rule* overrides :data:`TEXT_SORT_CUT_RULE` for the display line.  The
     acquisition cut is the midpoint whatever the rule - with ``gmm_midpoint``
     the two lines are one and the same number.
+
+    *beta* is the balance the user set (F-beta's beta, #4413).  Under the guarded
+    rule, a balance at or below :data:`TEXT_SORT_COUNT_MAX_BETA` draws the
+    display line by count instead (:func:`_count_line`, #4603): the guarded line
+    keeps about the same set at every balance, about four times the matches at
+    0.44% prevalence, which a precision preset pays for.  ``None`` (a library
+    caller with no balance) keeps the guarded line.  The acquisition cut never
+    moves with *beta*, so a session's clicks are the same at any balance's line.
     """
     chosen = TEXT_SORT_CUT_RULE if rule is None else rule
     if chosen not in TEXT_SORT_CUT_RULES:
@@ -1507,18 +1561,22 @@ def text_sort_cuts(scores: list[float], rule: str | None = None) -> TextSortCuts
     if chosen == "gmm_midpoint":
         return TextSortCuts(midpoint, midpoint, "midpoint")
     display, branch = _guarded_line_from_fit(scores, midpoint, arr, fit)
+    if beta is not None and beta <= TEXT_SORT_COUNT_MAX_BETA:
+        counted = _count_line(np.asarray(scores, dtype=np.float64), float(beta))
+        if counted is not None:
+            display, branch = counted, "count"
     return TextSortCuts(display, midpoint, branch)
 
 
-def text_sort_threshold(scores: list[float], rule: str | None = None) -> float:
-    """The **display** line a typed-query sort draws, under *rule* (default :data:`TEXT_SORT_CUT_RULE`).
+def text_sort_threshold(scores: list[float], rule: str | None = None, beta: float | None = None) -> float:
+    """The **display** line a typed-query sort draws, under *rule* (default :data:`TEXT_SORT_CUT_RULE`), at *beta*.
 
     :func:`text_sort_cuts`'s ``threshold`` alone: what the user sees.  Under
     ``gmm_midpoint`` it *is* :func:`calculate_gmm_threshold`.  It is not where
     Autopilot's opening samples - that is :func:`text_sort_acquisition_threshold`,
     and the two differ under the default rule (#4136).
     """
-    return text_sort_cuts(scores, rule).threshold
+    return text_sort_cuts(scores, rule, beta).threshold
 
 
 def text_sort_acquisition_threshold(scores: list[float]) -> float:

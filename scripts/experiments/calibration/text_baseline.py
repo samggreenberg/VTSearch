@@ -156,6 +156,8 @@ def main() -> int:
                 # Click 0 scores what the user sees.  The midpoint the opening
                 # samples at is the cells' business, not this anchor's.
                 gmm_cut = float(text_sort_threshold([float(s) for s in scores]))
+                # The line at each preset (#4603): at beta 1 or below the app draws it by count.
+                line_cut = {b: float(text_sort_threshold([float(s) for s in scores], beta=b)) for b in BETAS}
 
                 for seed in cfg.SEEDS:
                     sim_ids, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
@@ -167,7 +169,9 @@ def main() -> int:
                         p = cfg.HAYSTACK_PREVALENCE
                         seen = set(thin_haystack(medias_cat, sim_ids, cat, p, seed))
                         seen |= set(thin_haystack(medias_cat, test_ids, cat, p, seed))
-                        gmm_cut = float(text_sort_threshold([float(s) for i, s in zip(ids, scores) if i in seen]))
+                        seen_scores = [float(s) for i, s in zip(ids, scores) if i in seen]
+                        gmm_cut = float(text_sort_threshold(seen_scores))
+                        line_cut = {b: float(text_sort_threshold(seen_scores, beta=b)) for b in BETAS}
                     tset = set(test_ids)
                     mask = np.asarray([i in tset for i in ids])
                     y, s = labels[mask], scores[mask]
@@ -217,6 +221,17 @@ def main() -> int:
                         for b in BETAS
                         for name, v in balance_metrics(ranks, int(mask.sum()), npos, b, None).items()
                     }
+                    # The app's own line at each preset (#4603), as text_precision etc. score the beta-blind one.
+                    line_cols = {}
+                    for b in BETAS:
+                        at = s >= line_cut[b]
+                        tag = beta_tag(b)
+                        line_cols[f"text_line_cut_{tag}"] = round(line_cut[b], 6)
+                        line_cols[f"text_line_precision_{tag}"] = round(
+                            detection_metrics(s, y, line_cut[b])["precision"], 6
+                        )
+                        line_cols[f"text_line_recall_{tag}"] = round(float((at & (y == 1)).sum() / npos), 6)
+                        line_cols[f"text_line_fpr_{tag}"] = round(float((at & (y == 0)).sum() / nneg), 6)
                     rows.append(
                         {
                             "dataset": ds,
@@ -240,6 +255,7 @@ def main() -> int:
                             "text_auroc": round(float(roc_auc_score(y, s)), 6),
                             **floor_cols,
                             **balance_cols,
+                            **line_cols,
                         }
                     )
                 common.log(

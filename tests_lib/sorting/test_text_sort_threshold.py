@@ -337,7 +337,7 @@ class TestTheOpeningReadsTheAcquisitionCut:
         from tests_lib.sorting.test_query_sort import _fill_active_medias
 
         query = _fill_active_medias()
-        monkeypatch.setattr(T, "text_sort_cuts", lambda s: TextSortCuts(0.123, 0.0456, "tail"))
+        monkeypatch.setattr(T, "text_sort_cuts", lambda s, beta=None: TextSortCuts(0.123, 0.0456, "tail"))
         monkeypatch.setattr(T, "calculate_gmm_threshold", lambda s: 0.456)
         assert cosine_sort_active(query, role="text")[1] == 0.123
         assert cosine_sort_active(query, role="score")[1] == 0.456
@@ -351,7 +351,7 @@ class TestTheOpeningReadsTheAcquisitionCut:
         from tests_lib.sorting.test_query_sort import _fill_active_medias
 
         query = _fill_active_medias()
-        monkeypatch.setattr(T, "text_sort_cuts", lambda s: TextSortCuts(0.123456, 0.0456789, "gmm"))
+        monkeypatch.setattr(T, "text_sort_cuts", lambda s, beta=None: TextSortCuts(0.123456, 0.0456789, "gmm"))
         _results, cuts = text_sort_active(query)
         assert cuts == TextSortCuts(0.1235, 0.0457, "gmm")
 
@@ -423,3 +423,74 @@ class TestTheOpeningIsBlindToTheDisplayRule:
         phases = [ph for ph, _, _ in picks["gmm_midpoint"]]
         assert "hard" in phases, "the run never left the opening, so the comparison covers no learned pick"
         assert ("bad" in phases) or ("s1" in phases), "no Bad-phase pick was made"
+
+
+class TestTheCountLine:
+    """#4603: at a balance of beta 1 or below the display line keeps round(c(beta) * n_hat) of the sort.
+
+    ``n_hat`` is the excess over a Gaussian bulk above median + 4 sigma (sigma from the MAD); c is 3/8 at
+    beta 1/4 and 1 at beta 1.  Above beta 1 the guarded line stays, and the acquisition cut never moves.
+    """
+
+    @staticmethod
+    def _sort(n_bulk: int = 20000, n_match: int = 100, seed: int = 0) -> list[float]:
+        rng = np.random.default_rng(seed)
+        bulk = rng.normal(0.0, 0.02, n_bulk)
+        matches = rng.normal(0.14, 0.01, n_match)  # far above median + 4 sigma
+        return [float(v) for v in np.concatenate([bulk, matches])]
+
+    @staticmethod
+    def _kept(values: list[float], threshold: float) -> int:
+        return int((np.asarray(values) >= threshold).sum())
+
+    def test_beta_1_keeps_about_the_matches(self):
+        values = self._sort()
+        cuts = text_sort_cuts(values, beta=1.0)
+        assert cuts.branch == "count"
+        assert 95 <= self._kept(values, cuts.threshold) <= 105
+
+    def test_beta_quarter_keeps_three_eighths_of_them(self):
+        values = self._sort()
+        kept_quarter = self._kept(values, text_sort_cuts(values, beta=0.25).threshold)
+        kept_one = self._kept(values, text_sort_cuts(values, beta=1.0).threshold)
+        assert kept_quarter == pytest.approx(0.375 * kept_one, abs=2)
+        assert G.TEXT_SORT_COUNT_EXPONENT == pytest.approx(math.log(3 / 8) / math.log(1 / 4))
+
+    @pytest.mark.parametrize("beta", [None, 4.0, 1.5])
+    def test_above_beta_1_or_without_a_balance_the_guarded_line_stays(self, beta):
+        values = self._sort()
+        assert text_sort_cuts(values, beta=beta) == text_sort_cuts(values)
+        assert text_sort_cuts(values, beta=beta).branch != "count"
+
+    def test_the_acquisition_cut_never_moves_with_the_balance(self):
+        values = self._sort()
+        acq = {text_sort_cuts(values, beta=b).acq_threshold for b in (None, 0.25, 1.0, 4.0)}
+        assert acq == {calculate_gmm_threshold(values)}
+
+    @pytest.mark.parametrize("values", [[0.3] * 500, [0.1 * i for i in range(30)]])
+    def test_no_spread_or_too_few_scores_keep_the_guarded_line(self, values):
+        assert text_sort_cuts(values, beta=0.25) == text_sort_cuts(values)
+
+    def test_text_sort_threshold_passes_the_balance(self):
+        values = self._sort()
+        assert text_sort_threshold(values, beta=1.0) == text_sort_cuts(values, beta=1.0).threshold
+
+    def test_text_sort_active_draws_at_the_active_balance(self, monkeypatch):
+        import vtscore.state as S
+        import vtscore.training.thresholds as T
+        from vtscore.training.query_sort import text_sort_active
+
+        from tests_lib.sorting.test_query_sort import _fill_active_medias
+
+        query = _fill_active_medias()
+        seen: list[float | None] = []
+
+        def fake_cuts(scores, beta=None):
+            seen.append(beta)
+            return TextSortCuts(0.5, 0.25, "count")
+
+        monkeypatch.setattr(T, "text_sort_cuts", fake_cuts)
+        monkeypatch.setattr(S, "get_beta", lambda: 0.25)
+        text_sort_active(query)
+        text_sort_active(query, beta=4.0)
+        assert seen == [0.25, 4.0]

@@ -86,6 +86,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A text sort's green region follows the balance** (issue #4603). At a
+  balance of beta 1 or below, a typed query's line now keeps about as many
+  images as the sort has matches, times 3/8 at the 1/4 preset and 1 at the
+  balanced one. The count is estimated from the scores alone: what stands
+  above the bulk's median + 4 robust sigmas beyond a Gaussian bulk's share.
+  The guarded line kept about the same set at every balance, about four times
+  the matches at COCO Better's prevalence. Priced on 144 classes at 0.1%,
+  0.44% and 2% prevalence, the typed query's set gains +0.13 to +0.30 F-beta
+  at beta 1/4 and +0.01 to +0.13 at beta 1. At beta 4 and above 1 the guarded
+  line stays. That set is what a user sees through Autopilot's whole opening,
+  a median ~40 clicks (#4605). Autopilot's sampling cut (`acq_threshold`) does
+  not move, so a session's picks are the same at any balance.
+
 - **A text sort's green region ends at the guarded line, and Autopilot still
   samples at the midpoint** (issue #4136; the rule is #3826's). A typed query's
   cosine sort is usually one broad mode with the matches as a thin shoulder, so
