@@ -317,8 +317,10 @@ LEFT_AXES = (0.085, PANEL_BOTTOM, 0.37, PANEL_HEIGHT)
 #: A marked click, the same on both panels: a small hollow circle, white inside so it
 #: reads against the line it sits on (owner, 2026-10-07: solid dots were "melting into
 #: the black line"; then "make the dots smaller ... they have white AND black"). Drawn
-#: over the line, so even the heaviest radio's shows the white centre.
-MARK_PT, MARK_EDGE = 7, 1.5
+#: over the line, so even the heaviest radio's shows the white centre. The edge is the
+#: middle radio's line weight (owner: "match the middle line, not the thinnest").
+MARK_PT = 7
+MARK_EDGE = next(w for b, _, w in RADIOS if b == 1.0)
 #: The precision-recall grid: a faint line every step, so a set near the
 #: top-right corner can still be read against something (#4533). Half a tick
 #: on the documents' half-unit span; a whole one on the photos' wider span,
