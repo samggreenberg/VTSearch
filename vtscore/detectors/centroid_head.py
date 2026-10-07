@@ -86,7 +86,7 @@ def is_centroid_head(model: object) -> bool:
     return bool(getattr(model, _MARK, False))
 
 
-def centroid_cut(cosines: Sequence[float]) -> float:
+def centroid_cut(cosines: "Sequence[float] | np.ndarray") -> float:
     """The line through the centroid's cosines: the two-Gaussian midpoint every cosine sort draws."""
     from vtscore.training.thresholds import calculate_gmm_threshold  # noqa: PLC0415
 

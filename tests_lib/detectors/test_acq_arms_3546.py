@@ -132,12 +132,15 @@ class TestTheArmsRun:
             beta=1.0,
             **kwargs,
         )
+        # Acquisition is the Train side: a row with no Bad yet (the Goods'
+        # centroid's, #4643) has no head and so no acquisition cut.
         base = [
             r
             for r in rows
             if not str(r.get("gmm_variant") or "").strip()
             and str(r.get("pool_variant") or "") in ("", "max")
             and not str(r.get("schedule") or "").strip()
+            and r["n_bad"] > 0
         ]
         assert base and all("acq_threshold" in r for r in base)
         return [(int(r["t"]), float(r["acq_threshold"])) for r in base]
