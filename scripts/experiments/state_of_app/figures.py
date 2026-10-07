@@ -338,14 +338,20 @@ def returned_at_beta(
     was recorded. Solid: each sort's own line in the app (the text sort's blind
     GMM cut at click 0, the detector's labels line after); dashed: set-constant
     top-K on both (owner, 2026-10-04: one rule per comparison). A balance the
-    run's sessions did not aim at is titled so.
+    run's sessions did not aim at is titled so. Every run at every recorded
+    click, as its session shows it (``analyze.session_balance_steps``, #4631):
+    the typed query's set until the app shows its detector, and throughout a
+    run that never trained.
     """
+    from analyze import session_balance_steps  # noqa: PLC0415
+
     del curves  # the share is read off the balance tables, which carry the rule
     if balance_steps is None or balance_steps.empty or balances is None or balances.empty:
         return False
     if "rule" not in balance_steps:  # an analysis from before the rule column: the app's line only
         balance_steps = balance_steps.assign(rule="app line")
         balances = balances.assign(rule="app line")
+    balance_steps = session_balance_steps(balance_steps, balances)
     own = set(cells["session_beta"].dropna().round(4)) if "session_beta" in cells else set()
     betas = sorted(balance_steps["beta"].unique())
     fig, axes = plt.subplots(
@@ -395,7 +401,7 @@ def objective_over_clicks(curves: pd.DataFrame, cells: pd.DataFrame, out: Path) 
         if arm not in mean:
             continue
         ax.plot(mean.index, mean[arm], color=color, linewidth=2, label=f"{arm}: unchecked line")
-        c = cells[(cells["arm"] == arm) & ~cells["never_trained"].astype(bool)]
+        c = cells[cells["arm"] == arm]  # every run, the never-trained at the typed query (#4631)
         if "thr_fbeta_final" in c and c["thr_fbeta_final"].notna().any():
             end = float(c["thr_fbeta_final"].mean())
             ax.plot([mean.index.max()], [end], marker="D", markersize=7, color=color, zorder=5)

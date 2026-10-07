@@ -72,6 +72,17 @@ the candidate the check drew its picks from.  Under the advisory check that is
 the set it audited (``check_audited``, #4427), not the set the line keeps.  What the check *should* certify
 is #4358's ruling; until then this reports what it does certify.
 
+**Every attempted run is in every average (owner, 2026-10-07, #4631).**  A run
+that never trains a detector (150 clicks and no Good) writes no metric row, and
+a mean over the runs with a value drops exactly the sessions the app failed.  So
+every run is scored at every click as the user meets it: the typed query's own
+set (the text sort at its line in the app) until the app shows the run's
+detector, which for such a run is never (the owner's pick over the viewer's
+empty set, whose 4th-decimal difference on these runs is the typed query's
+F-beta of 0.006 to 0.03).  An **empty returned set** (a line that keeps nothing,
+a detector that flags nothing) scores precision 0 beside its recall and F-beta
+of 0, never an undefined precision that leaves the mean (``curves.EMPTY_SET``).
+
 **How a click is credited (owner, 2026-09-23).** The harness scores the test
 split after every click once a Good and a Bad exist; before that there is no
 detector to score. So a scored step's change is split EQUALLY among every click
@@ -131,6 +142,10 @@ ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max
 #: The State of the App reports are one per production path (owner, 2026-09-24):
 #: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo").
 PATHS = {"binary": ("siglip", "whole_image"), "region": ("siglip+dinov3_patch", "max_patch")}
+#: A spot check's round of picks (``vtscore.training.thresholds.spot_check.CHECK_MIN_PICKS``, which a test pins):
+#: how far past a checkpoint a run's next rank frame may be read when the run handed over inside a check round
+#: and has no frame on screen by the checkpoint (#4631).
+CHECK_ROUND = 5
 #: Clicks at which a curve is sampled into ``cells.csv`` and ``lines.csv``.
 #: ``launch.sh`` records rank frames at the same clicks.
 CHECKPOINTS = (10, 25, 50, 100, 150)
@@ -314,7 +329,8 @@ def _pr_balance(
     f = _fbeta_pr(precision, recall, beta)
     return {
         "k": k,
-        "precision": precision if k > 0 else nan,
+        # A set that keeps nothing scores precision 0, not undefined (#4631, as `balance_metrics`).
+        "precision": precision if k > 0 else (0.0 if n_pos > 0 else nan),
         "recall": recall,
         "fbeta": f,
         "oracle_fbeta": oracle,
@@ -434,12 +450,19 @@ def _fbeta_pr(precision: float, recall: float, beta: float) -> float:
 
 
 def _threshold_at(row: pd.Series | None, beta: float) -> dict[str, float]:
-    """The withheld set above *row*'s threshold (#4427): its precision, recall, F-beta and size."""
+    """The withheld set above *row*'s threshold (#4427): its precision, recall, F-beta and size.
+
+    A detector that flags nothing has its precision left undefined by the harness; it is an empty
+    returned set, so it scores precision 0 (#4631), by ``curves.zero_empty_precision``'s rule: an
+    undefined precision with recall 0 and, where recorded, FPR 0.
+    """
     nan = float("nan")
     if row is None:
         return {m: nan for m in THRESHOLD_METRICS}
     p, r = _f(row.get("precision")), _f(row.get("recall"))
     n_pos, n_neg, fpr = _f(row.get("n_test_pos")), _f(row.get("n_test_neg")), _f(row.get("fpr"))
+    if not np.isfinite(p) and r == 0 and (fpr == 0 or not np.isfinite(fpr)):
+        p = 0.0
     returned = r * n_pos + fpr * n_neg if np.isfinite(r * n_pos + fpr * n_neg) else nan
     return {"thr_precision": p, "thr_recall": r, "thr_fbeta": _fbeta_pr(p, r, beta), "thr_returned": returned}
 
@@ -574,6 +597,12 @@ def run_tables(
             b = pd.to_numeric(g["beta"], errors="coerce").dropna()
             if len(b):
                 beta_of[tuple(k)] = float(b.iloc[0])
+    # A run that never trained writes no row to read its beta off, and a review runs one set of sessions
+    # per beta (`SOTA_BETA`), so it takes the beta every other run carries; F1 (beta 1) when they disagree
+    # or carry none, as for a floor-era run.  Read at beta 1, a beta-4 review's starved runs would score
+    # the typed query at the wrong preset (#4631).
+    study_betas = set(beta_of.values())
+    study_beta = study_betas.pop() if len(study_betas) == 1 else float("nan")
     skyd: dict[tuple, float] = {}
     skym: dict[tuple, dict] = {}
     for r in sky.to_dict("records") if not sky.empty else []:
@@ -601,7 +630,7 @@ def run_tables(
             "seed": int(seed),
             "never_trained": not trained,
             "session_floor": floor_of.get(key, float("nan")),
-            "session_beta": beta_of.get(key, float("nan")),
+            "session_beta": beta_of.get(key, study_beta),
             "text_ap": text["text_ap"],
         }
         final_t = int(s.index.max()) if trained else (int(clicks["t"].max()) if clicks is not None else 0)
@@ -624,7 +653,7 @@ def run_tables(
         row["headroom"] = row["ceiling_ap"] - row["final_ap"]
         row.update(_check_columns(checks.get(key), last_frame, check_picks_by.get(key)))
         # The session's own preference, for the pool-side line (#4427): its beta, or F1 under a floor.
-        own_beta = beta_of.get(key, 1.0)
+        own_beta = beta_of.get(key, study_beta if np.isfinite(study_beta) else 1.0)
         counts, end_count = _counts_by_t(ordinary_by.get(key), checks.get(key))
         # The objective (#4427): the withheld set above the app's threshold, from the session's own rows.
         ord_rows = ordinary_by.get(key)
@@ -636,15 +665,17 @@ def run_tables(
         text_line = _text_app_line(text, own_beta)
         text_thr = {f"thr_{m}": text_line[k] for m, k in (("precision", "precision"), ("recall", "recall"),
                                                           ("fbeta", "fbeta"), ("returned", "k"))}  # fmt: skip
+        # The objective at click 0, and wherever the app shows no detector: the curves start from it.
+        for m in THRESHOLD_METRICS:
+            row[f"text_{m}"] = text_thr[m]
+        # A run with no detector on screen at its last click has the typed query's set there: one still in the
+        # opening, or one that never trained (#4631: in every average, at what its session shows).
         last_shown = last_ord is not None and int(last_ord["t"]) >= shown
-        unchecked = _threshold_at(last_ord, own_beta) if last_ord is None or last_shown else text_thr
+        unchecked = _threshold_at(last_ord, own_beta) if last_shown else text_thr
         after = _threshold_at(last_chk, own_beta) if last_chk is not None else unchecked
         for c in CHECKPOINTS:
             at = ord_rows[(ord_rows["t"] <= c) & (ord_rows["t"] >= shown)] if ord_rows is not None else None
-            if at is not None and len(at):
-                point = _threshold_at(at.iloc[-1], own_beta)
-            else:
-                point = text_thr if ord_rows is not None and len(ord_rows) else _threshold_at(None, own_beta)
+            point = _threshold_at(at.iloc[-1], own_beta) if at is not None and len(at) else text_thr
             # The returned set's path through the session (#4519): F-beta, and the
             # precision, recall and size behind it, at each checkpoint.
             for m in ("fbeta", "precision", "recall", "returned"):
@@ -664,9 +695,11 @@ def run_tables(
         sky_frame = kinds.get(CEILING)
         first_t = int(shown) if trained and np.isfinite(shown) else None
         # (point, t, frame, read the text sort instead).  A point with neither is
-        # unknown and stays blank rather than borrowing a neighbour's value.
+        # unknown and stays blank rather than borrowing a later value.
         points: list[tuple[str, float, dict | None, bool]] = [("text", 0, None, True)]
         for c in CHECKPOINTS:
+            on_screen_by_c = [t for t in step_at if first_t is not None and first_t <= t <= c]
+            ahead = [t for t in step_at if first_t is not None and first_t <= t and c < t <= c + CHECK_ROUND]
             if not have_frames:
                 points.append((str(c), c, None, False))
             elif c in step_at and first_t is not None and c >= first_t:
@@ -674,6 +707,17 @@ def run_tables(
             elif last_frame is not None and int(last_frame["t"]) <= c and first_t is not None and c >= first_t:
                 # The pool ran out before click c: the line stays where it ended.
                 points.append((str(c), c, last_frame, False))
+            elif on_screen_by_c:
+                # No frame at click c itself: the run is inside a spot check, which scores it once per round of
+                # picks, and the user has its last detector all the while (#4624).  Blank, the point dropped
+                # exactly the weak sessions the check prompts in from the mean (#4631: 157 of 1,440 at click 50).
+                points.append((str(c), c, step_at[max(on_screen_by_c)], False))
+            elif first_t is not None and c >= first_t and ahead:
+                # Handed over a click or two before c and straight into a check round, so no frame is on screen
+                # yet (frames are sparse: every 5 clicks, and only at the checkpoints on the region path).  Its next
+                # frame, at most a round ahead, is the nearest reading of the detector the user has; the last one
+                # before the hand-over can be 50 clicks stale and was on no screen (#4605).
+                points.append((str(c), c, step_at[min(ahead)], False))
             else:
                 # No detector on screen yet at click c: the user still has the text sort.
                 points.append((str(c), c, None, first_t is None or c < first_t))
@@ -742,6 +786,9 @@ def run_tables(
                     }
                 )
             thresholds.append({**ident, "point": "unchecked", "t": int(last_ord["t"]), "beta": own_beta, **unchecked})
+            thresholds.append({**ident, "point": "final", "t": final_t, "beta": own_beta, **after})
+        else:  # never trained: its ends are the typed query's set (#4631)
+            thresholds.append({**ident, "point": "unchecked", "t": final_t, "beta": own_beta, **unchecked})
             thresholds.append({**ident, "point": "final", "t": final_t, "beta": own_beta, **after})
     return (
         pd.DataFrame(cells),
@@ -888,12 +935,26 @@ def curves(
     The returned set at each floor (precision, recall, the oracle's recall at
     that floor and F1; :func:`curve_col` names the columns) follows the
     same rule off the ``step`` rank frames: the text sort's until the first
-    frame, then the last frame's.  Between two recorded frames that is a carried
-    value, not a measurement, so a figure should read the curve only at the
-    clicks ``line_steps.csv`` holds.  A trained run with no frames at all (a
-    run recorded without them) is blank past click 0.
+    frame on screen, then the last frame's.  Between two recorded frames that is
+    a carried value, not a measurement, so a figure should read the curve only at
+    the clicks ``line_steps.csv`` holds.  A trained run with no frames at all (a
+    run recorded without them) is blank past click 0; one whose frames all fall
+    in the opening (it never handed over) reads the text sort throughout.
+
+    The objective (``thr_*``) starts at the run's typed query (``text_thr_*``,
+    the text sort's own set at the session's beta) and holds it until the app
+    shows the run's detector, then carries its line (#4631).  So every run is
+    in the mean at every click, the ones that never trained included.
     """
     ordinary = base[~_is_check(base)] if not base.empty else pd.DataFrame(columns=[*RUN_KEY, "t"])
+    # The runs that recorded rank frames at all, shown or not: a run with frames only in the opening is on the
+    # text sort, not unknown.
+    framed = {
+        (a, c, int(s))
+        for d in (steps, balance_steps)
+        if d is not None and not d.empty
+        for a, c, s in d[["arm", "category", "seed"]].drop_duplicates().itertuples(index=False, name=None)
+    }
     # Only what the app shows (#4605): the opening's own detectors are on no screen.
     shown_from = _shown_from(ordinary)
     if ordinary.empty:
@@ -971,12 +1032,12 @@ def curves(
                     idx = np.searchsorted(ft, grid, side="right") - 1
                     v[idx >= 0] = fvals[metric][idx[idx >= 0]]
                     v[0] = start
-                elif not r.never_trained:
+                elif not r.never_trained and (r.arm, r.category, int(r.seed)) not in framed:
                     v[1:] = np.nan
                 f1_cols[curve_col(metric, floor)] = v
-        # The objective over clicks (#4427): no threshold before the app shows a detector (#4605), then carried
-        # forward; with it the precision and recall of the same set.
-        thr = {m: np.full(len(grid), np.nan, dtype=float) for m in thr_cols}
+        # The objective over clicks (#4427): the typed query's set until the app shows a detector (#4605), then
+        # the line carried forward; with it the precision and recall of the same set.
+        thr = {m: np.full(len(grid), getattr(r, f"text_{m}", np.nan), dtype=float) for m in thr_cols}
         have_thr = thr_run.get((r.arm, r.category, int(r.seed)))
         if have_thr is not None:
             tt, tv = have_thr
@@ -1246,10 +1307,12 @@ def check_table(cells: pd.DataFrame, by: list[str]) -> pd.DataFrame:
 
 
 def objective_table(cells: pd.DataFrame, by: list[str]) -> pd.DataFrame:
-    """The objective per *by* (#4427): F-beta of the withheld set above the app's threshold, unchecked and checked."""
-    c = cells[~cells["never_trained"].astype(bool)].copy()
+    """The objective per *by* (#4427): F-beta of the withheld set above the app's threshold, unchecked and checked.
+
+    Over every run, a run that never trained at its typed query's set (#4631); its check's effect is 0.
+    """
     out = (
-        c.groupby(by)
+        cells.groupby(by)
         .agg(
             runs=("thr_fbeta_final", "count"),
             fbeta_25=("thr_fbeta_25", "mean"),
@@ -1281,7 +1344,7 @@ def objective_md(cells: pd.DataFrame) -> list[str]:
             "*No session rows with a threshold.*",
             "",
         ]
-    c = cells[~cells["never_trained"].astype(bool)]
+    c = cells
     by_band = (
         c.groupby(["arm", "band"])[["thr_fbeta_unchecked", "thr_fbeta_final", "thr_walk_effect"]].mean().round(3)
         if "band" in c and c["band"].astype(bool).any()
@@ -1297,7 +1360,9 @@ def objective_md(cells: pd.DataFrame) -> list[str]:
         "the check's votes. Fixed-click columns read the unchecked line at that click. This, not the "
         "rank-count line below (the balance's rule re-drawn on the fresh ranking), is what a user's next "
         "corpus gets, and it is where a harvesting acquisition shows: a thinned unvoted top pushes the kept "
-        "set's edge score up and few fresh images clear it (#4427).",
+        "set's edge score up and few fresh images clear it (#4427). Every run counts: until the app shows a "
+        "run's detector, and throughout a run that never trained, it scores the typed query's own set (#4605, "
+        "#4631).",
         "",
         _md(objective_table(cells, ["arm"])),
         "",
@@ -1387,12 +1452,42 @@ def returned_at_beta(balances: pd.DataFrame, by: list[str]) -> pd.DataFrame:
             fbeta=("fbeta", "mean"),
             oracle_fbeta=("oracle_fbeta", "mean"),
             fb_share=("fb_share", "mean"),
-            # The labels line (#4452) can keep nothing; its precision is then undefined and left out of the mean.
+            # The labels line (#4452) can keep nothing: an empty set, scored precision 0 and F-beta 0 (#4631).
             empty=("k", lambda k: float((k == 0).mean())),
             runs=("fbeta", "count"),
         )
         .round(3)
     )
+
+
+def session_balance_steps(balance_steps: pd.DataFrame, balances: pd.DataFrame) -> pd.DataFrame:
+    """Every run's returned set at every recorded click, per beta and rule, as its session shows it (#4631).
+
+    ``balance_steps.csv`` has a row only where a run recorded a rank frame, so a mean over its rows at a
+    click is over the runs with a frame there: never a run that never trained, and every one of the
+    opening's detectors, which the app does not show (#4605).  This reads every run ``balances`` lists at
+    every click any run recorded: its last frame on screen at or before the click, else the typed query's
+    row of the same rule (the ``text`` point).  ``framed`` says which.
+    """
+    keys = ["arm", "category", "seed", "beta", "rule"]
+    metrics = list(BALANCE_METRICS)
+    if balance_steps is None or balance_steps.empty or balances is None or balances.empty:
+        return pd.DataFrame(columns=[*keys, "t", "framed", *metrics])
+    steps = balance_steps if "rule" in balance_steps else balance_steps.assign(rule=RULE_APP)
+    bal = balances if "rule" in balances else balances.assign(rule=RULE_APP)
+    text = bal.loc[bal["point"].astype(str) == "text", [*keys, *metrics]].drop_duplicates(keys)
+    on = _on_screen(steps)
+    on = on.loc[:, [*keys, "t", *metrics]].assign(t=lambda d: d["t"].astype(int))
+    on = on.drop_duplicates([*keys, "t"], keep="last").assign(t_frame=lambda d: d["t"]).sort_values("t")
+    clicks = pd.DataFrame({"t": np.sort(steps["t"].astype(int).unique())})
+    grid = text.loc[:, keys].merge(clicks, how="cross").sort_values("t")
+    out = pd.merge_asof(grid, on, on="t", by=keys, direction="backward")
+    out = out.merge(text, on=keys, suffixes=("", "_text"))
+    framed = out["t_frame"].notna()
+    for m in metrics:
+        out[m] = out[m].where(framed, out[f"{m}_text"])
+    out["framed"] = framed
+    return out.loc[:, [*keys, "t", "framed", *metrics]].sort_values([*keys, "t"]).reset_index(drop=True)
 
 
 def session_betas(cells: pd.DataFrame) -> list[float]:
@@ -1425,7 +1520,7 @@ def returned_at_beta_md(cells: pd.DataFrame, balances: pd.DataFrame) -> list[str
         "(32 at beta <= 1, 128 above) on every sort. Compare text and detector within a rule, never across. "
         "`fbeta` against `oracle_fbeta`, the best any cut of the same ranking reaches (`fb_share` = fbeta / "
         "oracle); `k`, `precision` and `recall` beside it, and `empty`, the share of runs whose line keeps "
-        "nothing (scored F-beta 0, precision left out). " + who,
+        "nothing (an empty set: F-beta and precision 0, #4631). " + who,
         "",
         _md(returned_at_beta(balances, ["arm"])),
         "",

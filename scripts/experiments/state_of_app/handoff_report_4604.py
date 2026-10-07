@@ -116,13 +116,13 @@ def ap_table(ap: dict[str, tuple[Path, Path]]) -> pd.DataFrame:
     """The opening's detector as a ranking: AP on the withheld half against the typed query's, by click.
 
     Read off a pre-#4605 analysis (its ``curves.csv`` carries the detector's AP from the first detector, and the
-    typed query's before it), over the trained runs of the #4605 analysis.
+    typed query's before it), over every run of the #4605 analysis: one that never trained stays at the typed
+    query's AP (#4631).
     """
     rows = []
     for p, (old, new) in ap.items():
         c = pd.read_csv(old / "curves.csv", usecols=["category", "seed", "t", "ap"])
-        cells = pd.read_csv(new / "cells.csv")
-        cells = cells.loc[~cells["never_trained"].astype(bool), ["category", "seed", "text_ap"]]
+        cells = pd.read_csv(new / "cells.csv").loc[:, ["category", "seed", "text_ap"]]
         c = c.merge(cells, on=["category", "seed"])
         row: dict[str, object] = {"path": p, "runs": len(cells), "typed query AP": cells["text_ap"].mean()}
         for t in (4, 7, 10, 25, 40, 60):

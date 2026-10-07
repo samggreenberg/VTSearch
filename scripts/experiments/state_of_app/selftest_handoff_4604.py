@@ -21,7 +21,7 @@ price = importlib.import_module("handoff_price_4604")
 def _fixture(d: Path) -> argparse.Namespace:
     """Two runs, 12 clicks each. Run A: the typed query's set scores 0.3; a detector from click 4 scores 0.1 at
     click 4 (3 Goods + 1 Bad) and 0.6 from click 5; the Bad phase ends at click 7; Hard at click 12. Run B never
-    trains (no rows): it must be left out."""
+    trains (no rows, 12 Bad clicks): it stays in, at its typed query's 0.2 under every rule (#4631)."""
     steps, picks = [], []
     phases = {4: "bad", 5: "bad", 6: "bad", 7: "more", 8: "more", 9: "more"}
     for t in range(4, 13):
@@ -38,6 +38,8 @@ def _fixture(d: Path) -> argparse.Namespace:
         dscore = {8: 0.565, 9: 0.585}.get(s, np.nan if s < 5 else 0.0)
         picks.append({"category": "a@large", "seed": 0, "t": s, "phase": "x", "picked_label": lab,
                       "picked_seed_score": 1.0 if (lab or s == 11) else -1.0, "picked_detector_score": dscore})  # fmt: skip
+        picks.append({"category": "b@large", "seed": 0, "t": s, "phase": "x", "picked_label": 0,
+                      "picked_seed_score": -1.0, "picked_detector_score": np.nan})  # fmt: skip
     pd.DataFrame(steps).to_csv(d / "steps.csv", index=False)
     pd.DataFrame(picks).to_csv(d / "picks.csv", index=False)
     pd.DataFrame(
@@ -45,7 +47,8 @@ def _fixture(d: Path) -> argparse.Namespace:
          {"category": "b@large", "class": "b", "band": "large", "seed": 0, "never_trained": True, "shown_from": np.inf}]
     ).to_csv(d / "cells.csv", index=False)  # fmt: skip
     pd.DataFrame(
-        [{"embedder": "siglip", "category": "a@large", "seed": 0, "text_precision": 0.3, "text_recall": 0.3, "text_gmm_cut": 0.0}]
+        [{"embedder": "siglip", "category": "a@large", "seed": 0, "text_precision": 0.3, "text_recall": 0.3, "text_gmm_cut": 0.0},
+         {"embedder": "siglip", "category": "b@large", "seed": 0, "text_precision": 0.2, "text_recall": 0.2, "text_gmm_cut": 0.0}]
     ).to_csv(d / "base.csv", index=False)  # fmt: skip
     return argparse.Namespace(steps=d / "steps.csv", picks=d / "picks.csv", cells=d / "cells.csv",
                               baseline=d / "base.csv", text_embedder="siglip", beta=1.0)  # fmt: skip
@@ -58,15 +61,17 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         a = _fixture(Path(tmp))
         runs, tq, det, shown, kept, lab, tside, dside = price.load(a)
-        assert list(runs["category"]) == ["a@large"], "the never-trained run is left out"
+        assert list(runs["category"]) == ["a@large", "b@large"], "the never-trained run stays in (#4631)"
         assert np.isclose(tq[0], 0.3) and shown[0] == 12 and runs["more_from"][0] == 7
+        assert np.isclose(tq[1], 0.2) and np.isinf(shown[1]) and np.isnan(det[1]).all(), "no detector, ever"
         assert np.isnan(det[0, 3]) and np.isclose(det[0, 4], 0.1) and np.isclose(det[0, 150], 0.6), "carried forward"
         assert dside[0, 8] == 0 and dside[0, 9] == 1, "a pick is judged against the PREVIOUS step's line"
         assert np.isnan(dside[0, 4]), "no detector before click 5's pick"
-        # Without a cells.csv (#4583's arms) the trained runs, class, band and Hard come off the steps.
+        # Without a cells.csv (#4583's arms) the runs come off the steps and picks, class, band and Hard off the steps.
         derived = price.load(argparse.Namespace(**{**vars(a), "cells": None}))[0]
-        assert list(derived["category"]) == ["a@large"] and derived["class"][0] == "a" and derived["band"][0] == "large"
-        assert derived["shown_from"][0] == 12
+        assert list(derived["category"]) == ["a@large", "b@large"], "the picks list the never-trained run"
+        assert derived["class"][0] == "a" and derived["band"][0] == "large"
+        assert derived["shown_from"][0] == 12 and np.isinf(derived["shown_from"][1])
         rs = price.rules(runs, tq, det, shown, kept, lab, tside, dside, 1.0)
         f = {k: v[2][0] for k, v in rs.items()}
         assert np.allclose(f["today"][:12], 0.3) and np.allclose(f["today"][12:], 0.6), "today hands off at Hard"
@@ -82,6 +87,9 @@ def main() -> int:
         assert np.allclose(f["after_bad_votes_m+0.0_p1"][:12], 0.3) and np.isclose(
             f["after_bad_votes_m+0.0_p1"][12], 0.6
         )
+        assert all(np.allclose(v[2][1], 0.2) for v in rs.values()), "the never-trained run: its typed query, always"
+        row = price.summarize("today", "today", np.nan, rs["today"][2], rs["today"][2], runs)
+        assert row["runs"] == 2 and np.isclose(row["at_150"], (0.6 + 0.2) / 2), "both runs in the mean"
     print("selftest_handoff_4604: all planted answers recovered")
     return 0
 
