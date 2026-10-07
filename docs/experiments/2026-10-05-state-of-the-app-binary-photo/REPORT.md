@@ -22,6 +22,11 @@ full-label ceiling pass shared by the three.
   session's hand-off is now the typed query's own set at #4136's guarded line. The votes and every number after
   the check are unchanged. The objective at 25 clicks moved from 0.43/0.34/0.42 to 0.32/0.32/0.47. The AP at 150 moved too, for the sessions still in the opening at click 150: by 0.01 at small, and in a few
   classes (#4552 caught these).
+- **Re-scored 2026-10-07 (#4603): the typed query's line follows the preset.** At beta 1/4 and 1 the app now
+  draws the typed query's line by count, a multiple of the matches it estimates from the scores; at 4 the
+  guarded line stays. The typed query moves from 0.17/0.24/0.48 to 0.48/0.37/0.48 (19/51/203 images), and the
+  objective at 25 clicks from 0.32/0.32/0.47 to 0.46/0.37/0.47. Sessions are unchanged: only what a user sees
+  before the hand-over moves.
 
 A **review**, not an experiment: the app as it ships, the way a user meets it.
 - **The session.** The user types a query and sees the text sort, then votes for 150 clicks while Autopilot picks
@@ -39,8 +44,8 @@ A **review**, not an experiment: the app as it ships, the way a user meets it.
 
 | preset | 25 clicks | 50 clicks | 150 clicks, unchecked | **after the check** | returned, median (unchecked / after) | returned > 200 (unchecked / after) |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1/4 | 0.32 | 0.48 | 0.61 | **0.64** | 30 / 21 | 5% / 0% |
-| 1 | 0.32 | 0.42 | 0.50 | **0.53** | 46 / 44 | 11% / 5% |
+| 1/4 | 0.46 | 0.51 | 0.61 | **0.64** | 25 / 21 | 1% / 0% |
+| 1 | 0.37 | 0.42 | 0.50 | **0.53** | 43 / 44 | 7% / 5% |
 | 4 | 0.47 | 0.50 | 0.57 | **0.60** | 83 / 80 | 29% / 28% |
 
 ![The objective over clicks, per preset](figures/objective_at_own_beta.png)
@@ -50,14 +55,14 @@ A **review**, not an experiment: the app as it ships, the way a user meets it.
    - the balanced preset returns 44 at 0.60 and 0.52;
    - the recall preset returns 80 at 0.43 and 0.68.
 2. **The early session is the typed query's set (#4605).** The app stays on the text sort through Autopilot's
-   opening, so until the Hard phase the user has the typed query's own set: about 200 images at F-beta
-   0.17/0.24/0.48. No session hands over before click 23; 30% have by click 25, half by 40, 61% by 50 and 91% by
-   150. As they do, the objective climbs steeply at 1/4 and 1 (0.39 and 0.36 by click 30). At 4 a young
-   detector is no better than the typed query: the line holds near 0.48 (0.47 at click 26) and passes it only at
-   click 38.
-3. **The check still pays, at the end and mid-session.** The end-of-run check adds +0.024 ± 0.003,
-   +0.021 ± 0.002 and +0.032 ± 0.002, for about 21 votes (30 at beta 4). It cuts the share of runs returning more
-   than 200 images from 5%, 11% and 29% to 0%, 5% and 28%. Mid-session, Autopilot ran it in 43 to 45% of sessions
+   opening, so until the Hard phase the user has the typed query's own set, at the line the preset draws
+   (#4603): 19, 51 and 203 images at F-beta 0.48/0.37/0.48. No session hands over before click 23; 30% have by
+   click 25, half by 40, 61% by 50 and 91% by 150. A young detector is about as good as the typed query: the
+   line dips at most 0.02 at the hand-over (0.46, 0.36 and 0.47 around click 26), is back above the typed query
+   by clicks 33, 29 and 36, and climbs from there.
+3. **The check still pays, at the end and mid-session.** The end-of-run check adds +0.025 ± 0.003,
+   +0.022 ± 0.002 and +0.032 ± 0.002, for about 21 votes (30 at beta 4). It cuts the share of runs returning more
+   than 200 images from 1%, 7% and 29% to 0%, 5% and 28%. Mid-session, Autopilot ran it in 43 to 45% of sessions
    ([below](#the-spot-check)).
 4. **The ceiling's own line still goes too deep (#4490).** With every label known, Find's line scores
    0.47/0.44/0.61 at the three presets, against the 150-click session's 0.60/0.49/0.56. At beta 1 it returns a
@@ -73,27 +78,30 @@ typed query's set, #4605; the returned size a median):
 
 | preset | point | precision | recall | F-beta | returned, median |
 |---:|---|---:|---:|---:|---:|
-| all | typed query | 0.17 | 0.60 | 0.17 / 0.24 / 0.48 | 203 |
-| 1/4 | 25 | 0.33 | 0.50 | 0.32 | 152 |
-| 1/4 | 50 | 0.53 | 0.41 | 0.48 | 45 |
-| 1/4 | 100 | 0.66 | 0.38 | 0.57 | 31 |
-| 1/4 | 150 | 0.69 | 0.40 | 0.61 | 30 |
+| 1/4 | typed query | 0.54 | 0.26 | 0.48 | 19 |
+| 1/4 | 25 | 0.52 | 0.29 | 0.46 | 19 |
+| 1/4 | 50 | 0.59 | 0.32 | 0.51 | 20 |
+| 1/4 | 100 | 0.67 | 0.35 | 0.57 | 21 |
+| 1/4 | 150 | 0.69 | 0.39 | 0.61 | 25 |
 | 1/4 | after the check | 0.73 | 0.38 | 0.64 | 21 |
-| 1 | 25 | 0.29 | 0.54 | 0.32 | 159 |
-| 1 | 50 | 0.47 | 0.49 | 0.42 | 57 |
-| 1 | 100 | 0.56 | 0.49 | 0.48 | 45 |
-| 1 | 150 | 0.56 | 0.52 | 0.50 | 46 |
+| 1 | typed query | 0.37 | 0.45 | 0.37 | 51 |
+| 1 | 25 | 0.40 | 0.41 | 0.37 | 44 |
+| 1 | 50 | 0.50 | 0.43 | 0.42 | 40 |
+| 1 | 100 | 0.56 | 0.47 | 0.47 | 40 |
+| 1 | 150 | 0.56 | 0.51 | 0.50 | 43 |
 | 1 | after the check | 0.60 | 0.52 | 0.53 | 44 |
+| 4 | typed query | 0.17 | 0.60 | 0.48 | 203 |
 | 4 | 25 | 0.24 | 0.56 | 0.47 | 181 |
 | 4 | 50 | 0.36 | 0.56 | 0.50 | 101 |
 | 4 | 100 | 0.42 | 0.62 | 0.54 | 81 |
 | 4 | 150 | 0.42 | 0.65 | 0.57 | 83 |
 | 4 | after the check | 0.43 | 0.68 | 0.60 | 80 |
 
-**The clicks buy precision, not recall.** At click 25 most sessions still show the typed query, so the 25s sit
-near it. From click 50 to click 100, precision rises 0.06 to 0.13 at every preset (0.53 → 0.66, 0.47 → 0.56,
-0.36 → 0.42) while recall moves about 0.05 or less: the line sits where the preset puts it and the set sharpens
-around it. After click 100 the points barely move. The check then adds precision at 1/4 and 1 (+0.04 and +0.03) and almost nothing at 4. The machine-readable
+**The clicks mostly buy precision.** At click 25 most sessions still show the typed query, so the 25s sit near
+it. From the typed query to click 100, precision rises 0.13, 0.19 and 0.25 at the three presets (0.54 → 0.67,
+0.37 → 0.56, 0.17 → 0.42) while recall rises 0.09, 0.02 and 0.02: the line sits where the preset puts it and the
+set sharpens around it. After click 100 the points barely move. The check then adds precision at 1/4 and 1
+(+0.04 each) and almost nothing at 4. The machine-readable
 path is `precision_recall_path.csv`.
 
 ### The returned set, one rule per row
@@ -107,18 +115,17 @@ F-beta at the preset; detector columns are the last click before the check.
 
 | preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks | full labels |
 |---:|---|---:|---:|---:|---:|---:|
-| 1/4 | app line | 0.17 | 0.31 | 0.46 | **0.60** | 0.47 |
+| 1/4 | app line | 0.47 | 0.45 | 0.49 | **0.60** | 0.47 |
 | 1/4 | top 32 | 0.47 | 0.46 | 0.49 | **0.58** | 0.61 |
-| 1 | app line | 0.24 | 0.31 | 0.41 | **0.49** | 0.44 |
+| 1 | app line | 0.36 | 0.36 | 0.41 | **0.49** | 0.44 |
 | 1 | top 32 | 0.38 | 0.37 | 0.40 | **0.47** | 0.49 |
 | 4 | app line | 0.47 | 0.46 | 0.48 | **0.56** | 0.61 |
 | 4 | top 128 | 0.49 | 0.47 | 0.48 | **0.56** | 0.62 |
 
-The text sort's app line is #4136's guarded line (about 200 images), the one the app draws today; a session
-still in its opening reads it at 25 and 50 clicks (#4605). Under top-K, where only the rankings are compared,
-150 clicks of detector beat the text sort by 0.08 to 0.11 at every preset. Under the app's own lines the gap is
-0.43 and 0.26 at 1/4 and 1, because the guarded line returns about four times as many images as there are
-positives, far more than those presets want (#4603), and 0.09 at 4.
+The text sort's app line is the one the app draws today: the count line at 1/4 and 1 (#4603; a mean of 24 and
+63 images) and #4136's guarded line at 4 (288). A session still in its opening reads it at 25 and 50 clicks
+(#4605). Under top-K, where only the rankings are compared, 150 clicks of detector beat the text sort by 0.08 to
+0.11 at every preset. Under the app's own lines the gap is 0.13 at 1/4 and 1 and 0.09 at 4.
 
 ### The ranking
 
@@ -292,15 +299,16 @@ share a cue with the class.
 - `perbeta_summary.md`: every per-preset table above, from `perp.py --kind balance`.
 - `precision_recall_path.csv`: each preset's returned set at 25, 50, 100 and 150 clicks and after the check
   (#4519).
-- `objective_by_click.csv`: each preset's objective at every click (`by_click.py`, #4599): the typed query, at
-  the guarded line the app draws for it since #4136, until the app shows the session's detector (the end of the
-  opening, #4605), then its line.
+- `objective_by_click.csv`: each preset's objective at every click (`by_click.py`, #4599), with the precision and
+  recall behind it: the typed query, at the line the app draws for it at that preset (#4136, #4603), until the
+  app shows the session's detector (the end of the opening, #4605), then its line.
 - `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell.
 - `images.md`, `images/`: the helpful and harmful images, with thumbnails.
 - `why/`: the confuser sheets and `why.csv`.
-- Runs and full analyses: `/expscratch/sgreenberg/state-of-the-app/2026-10-05-b025|b1|b4/analysis-binary-4605/`,
-  the opening scored as the text sort (#4605) on the guarded baseline
-  (`/expscratch/sgreenberg/notch-4599/text_baseline-guarded-binary10.csv`); `perp.py` and `by_click.py` over them
-  are in `2026-10-07-perp-4605-binary/`, and `/expscratch/sgreenberg/notch-4599/opening/analyze_4605.sh` reruns one.
-  The first version's are beside them as `analysis-binary/`, and the 4-seed ones as `analysis-binary-4seeds/`. The prompt counts come from
+- Runs and full analyses: `/expscratch/sgreenberg/state-of-the-app/2026-10-05-b025|b1|b4/analysis-binary-4603/`,
+  the opening scored as the text sort (#4605) on a baseline with each preset's own line (#4603,
+  `/expscratch/sgreenberg/notch-4599/text_baseline-count-binary10.csv`); `perp.py` and `by_click.py` over them are
+  in `2026-10-07-perp-4603-binary/`, and `/expscratch/sgreenberg/notch-4599/opening/analyze_dev.sh` reruns one
+  (`TAG=4603`). Before #4603 they were `analysis-binary-4605/` on the guarded baseline. The first version's are
+  beside them as `analysis-binary/`, and the 4-seed ones as `analysis-binary-4seeds/`. The prompt counts come from
   `/expscratch/sgreenberg/sota-1005/prompts.py`.
