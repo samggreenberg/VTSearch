@@ -413,6 +413,10 @@ def _line_columns(details: dict[str, Any]) -> dict[str, Any]:
 #: waits for the flow to leave them.
 _OPENING_PHASES = frozenset({"good", "bad", "more"})
 
+#: Where Autopilot's ``more`` walk can draw (#4637): ``"seed"`` is the app, the
+#: top of the text sort; ``"detector"`` the top of the step's detector ranking.
+MORE_WALKS = ("seed", "detector")
+
 
 def _preference_line_for_step(
     ranking: LineRanking,
@@ -2199,6 +2203,7 @@ def simulate_voting_iterations(  # noqa: C901
     acq_target_p: "float | str | None" = None,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
+    more_walk: str = "seed",
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_steps: Optional[Sequence[int]] = None,
@@ -2423,6 +2428,13 @@ def simulate_voting_iterations(  # noqa: C901
             least *k* Bads voted so far (the text query's sibling cluster).
             ``None`` - the default - is the app.  See
             :func:`vtscore.eval.al_strategies._diverse_top`.
+        more_walk: Where Autopilot's ``more`` walk draws (issue #4637), an
+            experiment knob.  ``"seed"`` - the default - is the app: the top of
+            the text sort.  ``"detector"`` takes the top of the step's detector
+            ranking instead, and records the walk's steps as shown
+            (``app_trained``): the app showing the opening's detector from the
+            end of the Bad phase (#4604).  Needs the app's own opening (no
+            *startup_schedule*, no *opening_diversity*) and the phase machine.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -2706,6 +2718,12 @@ def simulate_voting_iterations(  # noqa: C901
     start_time = time.monotonic()
 
     diversity = _parse_opening_diversity(opening_diversity)
+    if more_walk not in MORE_WALKS:
+        raise ValueError(f"more_walk must be one of {MORE_WALKS}; got {more_walk!r}")
+    if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
+        raise ValueError(
+            "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
+        )
     knobs = _resolve_run_knobs(
         fold_count_schedule=fold_count_schedule,
         calibrate_count=calibrate_count,
@@ -3010,6 +3028,10 @@ def simulate_voting_iterations(  # noqa: C901
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
         flow = AutopilotFlow(startup=startup_state)
+    elif more_walk != "seed":
+        raise ValueError(
+            "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
+        )
     # Each schedule round's cut on the seed sort, resolved once: the app fits a
     # cosine sort's GMM over the whole sort and never refits it as votes come
     # in, so these are constants of the run rather than per-step state.
@@ -3239,6 +3261,7 @@ def simulate_voting_iterations(  # noqa: C901
                 startup_cut=startup_cut,
                 uncertainty=pool_uncertainty,
                 opening_diversity=diversity,
+                more_walk=more_walk,
             )
             cid = select_next(strategy, ctx)
             is_positive = _cast(cid, phase)
@@ -3625,7 +3648,9 @@ def simulate_voting_iterations(  # noqa: C901
             # margin cannot disagree with the light above it; NaN where no phase
             # machine ran, or where the rule itself declined to fit one.
             **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
-            "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
+            "app_trained": 1
+            if (flow is None or app_has_detector(flow.phase, more_shown=more_walk == "detector"))
+            else 0,
             "startup_schedule": startup_schedule or "",
             "calibration_seed": calibration_seed,
             "acq_threshold": round(float(acq_threshold), 6),
