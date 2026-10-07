@@ -204,3 +204,21 @@ slides:
   inclusion-knob
   inclusion-walk
   inclusion-tilt
+
+  # Test, after the end until the talk finds it a place (#4594): what the Test
+  # button measures and how. The question and its two rules; the background,
+  # one idea a slide — stratified bands, one band's Beta posterior, the joint
+  # Monte Carlo draws, the prior borrowed from neighbouring bands above the
+  # line (#4539, #4560) and the model's count corrected below it (#4523); then
+  # the app — the autopilot's rounds and stop, the result pane, and how often
+  # its ranges hold. Every figure but the last runs the shipped `LineTest` on a
+  # planted pile (`make-test-figs.py`); the last is #4560's shipped summary.
+  test-question
+  test-bands
+  test-posterior
+  test-draws
+  test-pool
+  test-model
+  test-rounds
+  test-result
+  test-coverage
