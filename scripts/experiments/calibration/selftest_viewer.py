@@ -24,7 +24,12 @@ screen, so both are checked against values that are known by construction:
 * a run inside a spot check round must **stay in the mean** between rounds, at
   its last scored value, with nothing carried before its first row or after
   its last, and a reskin must get the same carry from the per-seed lines
-  (#4624).
+  (#4624);
+* a click with **no trained detector** (before a run's first Good and Bad, or
+  any click of a run that never got both) must be in the mean as the empty
+  returned set the app gives there, a loss and not a gap, with the runs read
+  off the text-sort baseline when there is no cell list, never a group or a
+  seed the run never ran.
 
 Run: ``python selftest_viewer.py``
 """
@@ -299,6 +304,103 @@ def main() -> int:  # noqa: C901
             "...so a starving category reports coverage well below 1", abs(cov - 1.0 / N_SEED) < 1e-6, f"{cov:.3f}"
         )
 
+        # --- the denominator with no cell list ------------------------------
+        # The CLI has no cell list, only the text-sort baseline, which scores
+        # every cell of the grid; read off the rows, the denominator counts the
+        # survivors.  A baseline wider than the run must not read as
+        # starvation, so a group the arm trained nothing in and a seed that
+        # trained nowhere are both left out.
+        wide = pd.concat(
+            [base, base.assign(category="ghost"), base[base["category"] == "rich"].assign(seed=N_SEED + 5)],
+            ignore_index=True,
+        )
+        own = V.build_viewer(main_df, tmp / "own.html", arms=ARMS, baseline=wide, runs_budget_mb=0.25)
+        PO = _payload(own)
+        ok &= _check(
+            "with no cell list, the baseline counts the runs that never trained",
+            PO["groups"] == P["groups"] and bool(np.array_equal(_decode(PO["agg"]["cells"]), cellsA)),
+            f"lean {_decode(PO['agg']['cells'])[g_lean, ai['ctl'], 0]}",
+        )
+        ok &= _check(
+            "...but not a group the run never trained in, nor a seed it never ran",
+            "ghost" not in PO["categories"] and PO["n_cells"] == len(cells) == P["n_cells"],
+            f"{PO['categories']} {PO['n_cells']}",
+        )
+
+        # --- a click with no trained detector -------------------------------
+        # Before a run's first Good and Bad, and at every click of a run that
+        # never got both, the harness writes no row; a user there has a
+        # labelset the app cannot train, and Find returns nothing.  So the
+        # click is the empty returned set, a loss in the mean, not a gap that
+        # leaves the failing sessions out of it (owner, 2026-10-07).
+        step = 2.0 / P["agg"]["mean"]["scale"]
+        mi_ap = keys.index("average_precision")
+        prev = N_TEST_POS / (N_TEST_POS + N_TEST_NEG)
+        lean_p = (CATS["lean"] * 0.7 + (N_SEED - CATS["lean"]) * 0.0) / N_SEED
+        lean_ap = (CATS["lean"] * 0.8 + (N_SEED - CATS["lean"]) * prev) / N_SEED
+        a_c = ai["ctl"]
+        ok &= _check(
+            "a run that never trained is in the mean at every click",
+            all(abs(n[g_lean, a_c, keys.index(k), ti] - N_SEED) < 0.5 for k in ("precision", "recall", "f1")),
+            str([n[g_lean, a_c, keys.index(k), ti] for k in ("precision", "recall", "f1")]),
+        )
+        ok &= _check(
+            "...as the empty set: precision, recall and F1 0",
+            abs(mean[g_lean, a_c, keys.index("precision"), ti] - lean_p) <= step
+            and abs(mean[g_lean, a_c, keys.index("recall"), ti] - CATS["lean"] * 0.6 / N_SEED) <= step
+            and abs(mean[g_lean, a_c, keys.index("f1"), ti] - CATS["lean"] * 0.65 / N_SEED) <= step,
+            f"{mean[g_lean, a_c, keys.index('precision'), ti]} vs {lean_p}",
+        )
+        ok &= _check(
+            "...and AP at the test split's prevalence, the chance level of no ranking",
+            abs(mean[g_lean, a_c, mi_ap, ti] - lean_ap) <= step,
+            f"{mean[g_lean, a_c, mi_ap, ti]} vs {lean_ap}",
+        )
+        ok &= _check(
+            "...but no cost is invented when the rows cannot pin the miss weight",
+            abs(n_lean - CATS["lean"]) < 0.5,
+            str(n_lean),
+        )
+        ok &= _check(
+            "...the oracle is the same empty set: with no model there is no cut to move",
+            P["agg"]["omean"] is not None
+            and abs(
+                _decode(P["agg"]["omean"])[g_lean, a_c, keys.index("recall"), ti]
+                - CATS["lean"] * (1 - ORACLE_FNR) / N_SEED
+            )
+            <= step,
+            str(_decode(P["agg"]["omean"])[g_lean, a_c, keys.index("recall"), ti]),
+        )
+        ok &= _check(
+            "...click 0 stays the text sort",
+            abs(mean[g_lean, a_c, mi, P["t"].index(0)] - TEXT_COST) <= step,
+        )
+        ok &= _check(
+            "...and the page is told the clicks without a detector were scored",
+            bool(P.get("no_detector_scored"))
+            and "P.no_detector_scored" in re.sub(r'<script id="payload".*?</script>', "", out.read_text(), flags=re.S),
+        )
+        own_n = _decode(PO["agg"]["n"])
+        ok &= _check(
+            "with no cell list, the baseline's runs are the ones scored",
+            abs(own_n[g_lean, a_c, keys.index("precision"), ti] - N_SEED) < 0.5,
+            str(own_n[g_lean, a_c, keys.index("precision"), ti]),
+        )
+        bare = V.build_viewer(
+            main_df,
+            tmp / "bare.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            runs_budget_mb=0.25,
+            score_no_detector=False,
+        )
+        ok &= _check(
+            "a build that opts out leaves them out, and says nothing",
+            abs(_decode(_payload(bare)["agg"]["n"])[g_lean, a_c, keys.index("precision"), ti] - CATS["lean"]) < 0.5
+            and "no_detector_scored" not in _payload(bare),
+        )
+
         # --- a spot check's rounds (#4624) -----------------------------------
         # A run inside a prompted check is scored once per round, so between
         # rounds it has no row.  The viewer's mean used to skip it there, and a
@@ -333,12 +435,16 @@ def main() -> int:  # noqa: C901
         )
         g_short, a_short = gi[("dsB", "embB", "rich")], ai[SHORT_RUN[0]]
         n_short = [n[g_short, a_short, mi_p, P["t"].index(t)] for t in (SHORT_LO - 5, SHORT_LO + 10, SHORT_HI + 5)]
+        p_early = mean[g_short, a_short, mi_p, P["t"].index(SHORT_LO - 5)]
         ok &= _check(
             "nothing is carried before a run's first row or after its last",
-            abs(n_short[0] - (CATS["rich"] - 1)) < 0.5
-            and abs(n_short[1] - CATS["rich"]) < 0.5
-            and abs(n_short[2] - (CATS["rich"] - 1)) < 0.5,
+            abs(n_short[1] - CATS["rich"]) < 0.5 and abs(n_short[2] - (CATS["rich"] - 1)) < 0.5,
             str(n_short),
+        )
+        ok &= _check(
+            "...before its first row it has no detector, so it is the empty set, not its first value",
+            abs(n_short[0] - CATS["rich"]) < 0.5 and abs(p_early - (CATS["rich"] - 1) * 0.7 / CATS["rich"]) <= step,
+            f"n {n_short[0]} precision {p_early}",
         )
         per_seed = _decode(P["runs"]["values"]) if P["runs"] else None
         r_gap = P["runs"]["index"].index([g_gap, a_gap, P["seeds"].index(GAP_RUN[4])]) if P["runs"] else -1

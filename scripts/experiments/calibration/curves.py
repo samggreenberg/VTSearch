@@ -43,14 +43,17 @@ into a good-looking curve:
 
 1. **Average over a shrinking denominator.**  The main metric frame starts at
    the first *trainable* step — before one Good and one Bad vote coexist there
-   is no model, no threshold and no row.  So a starved cell simply is not in
-   the average, and an arm that starves on a third of its cells gets its mean
-   computed over the two thirds that worked.  Every mean is therefore dashed
-   wherever coverage — the fraction of that arm's cells measured at that click
-   — is below :data:`SOLID_COVERAGE`.  A dashed line means "this level
-   describes a subset".  The stretch between ``t=0`` and the first trainable
-   click is dashed by the same rule and for the same reason: nothing was
-   measured in there.  A click a run has no row for *inside* its span is a
+   is no model, no threshold and no row.  Left that way, a starved cell is
+   not in the average, and an arm that starves on a third of its cells gets
+   its mean computed over the two thirds that worked.  But a user at that
+   click has a labelset the app cannot train, and Find on it returns nothing,
+   so such a click is scored as the empty returned set
+   (:func:`score_no_detector`, :data:`EMPTY_SET`): every attempted run is in
+   the mean at every click, the failing ones at a loss.  Any mean still
+   computed over fewer cells is dashed wherever coverage — the fraction of
+   that arm's cells measured at that click — is below
+   :data:`SOLID_COVERAGE`; a dashed line means "this level describes a
+   subset".  A click a run has no row for *inside* its span is a
    different thing: a spot check answers several picks at once and is scored
    once per round, and the user has the run's last trained detector all the
    while, so that row stands in for the clicks between (:func:`fill_gaps`,
@@ -67,7 +70,10 @@ into a good-looking curve:
    row per ``(arm, *keys)`` cell the run *attempted* — and coverage is measured
    against the cells that exist rather than against the cells that produced
    rows.  Without it the two are the same number by construction and the
-   coverage strip reads 100% for an arm that starved everywhere.
+   coverage strip reads 100% for an arm that starved everywhere, and the
+   cells that never trained are not scored at all.  A caller with no cell
+   list but a text-sort baseline gets one from :func:`attempted_cells`,
+   which is what the standalone CLI and ``viewer.py`` do.
 3. **Silently subsample the per-run panel.**  ``max_runs`` defaults to 0 (draw
    them all).  A caller that sets it gets the cap written into the panel title,
    because a hairball with a third of its lines removed looks like a tighter
@@ -417,6 +423,234 @@ def _fully_measured_from(covs: Sequence[np.ndarray], t_index: np.ndarray) -> int
     return max(firsts) if firsts else None
 
 
+def attempted_cells(main: pd.DataFrame, baseline: pd.DataFrame | None, keys: Sequence[str] = KEYS) -> pd.DataFrame:
+    """One row per ``(arm, *keys)`` cell the run attempted: a ``denominator`` for a caller with no cell list.
+
+    *main* holds rows only for the cells that trained, so a seed that never
+    found a positive is in no row of it, and a denominator read off it counts
+    the survivors (the 2026-10-05 Binary Photo review's viewer counted 1,403
+    of its 1,430 runs, and called knife@small fully measured on 3 of its 10).
+    The text-sort *baseline* scores every cell of the prepared grid, trained
+    or not, so it is the cell list a standalone build has.  Its seeds are
+    added to the cells *main* already holds, under two guards that keep a
+    run the baseline outlived (a subset or smoke run over a full grid's
+    baseline) from reading as starvation: a seed counts only where that arm
+    trained at least one run of the same group (*keys* minus ``seed``), and
+    only if it trained somewhere in the study.  The cost of the guards is
+    that a group where no seed ever trained stays invisible, as it was.
+
+    Joined on the group keys the two frames share, as :func:`baseline_map`
+    reads the anchor.  Without a *baseline*, or one with no ``seed`` column,
+    this is the cells of *main* alone.
+    """
+    kk = [k for k in keys if k in main.columns]
+    if "arm" not in main.columns or "seed" not in kk:
+        return pd.DataFrame(columns=["arm", *kk])
+    trained = main.loc[:, ["arm", *kk]].drop_duplicates()
+    shared = [k for k in kk if k != "seed" and baseline is not None and k in baseline.columns]
+    if baseline is None or baseline.empty or "seed" not in baseline.columns or not shared:
+        return trained.reset_index(drop=True)
+    ran = set(pd.to_numeric(trained["seed"], errors="coerce").dropna().astype(int))
+    b = baseline.loc[:, [*shared, "seed"]].copy()
+    b["seed"] = pd.to_numeric(b["seed"], errors="coerce")
+    b = b.dropna(subset=["seed"])
+    b = b[b["seed"].astype(int).isin(ran)].drop_duplicates()
+    # Matched as text, then written back in *main*'s own dtypes, so the cells
+    # line up with the columns `_wide` pivots *main* into.
+    tmp = [f"__k{i}" for i in range(len(shared))]
+    groups = trained.drop(columns="seed").drop_duplicates()
+    left = groups.assign(**{t: groups[c].astype(str) for t, c in zip(tmp, shared, strict=True)})
+    right = b.assign(**{t: b[c].astype(str) for t, c in zip(tmp, shared, strict=True)}).loc[:, [*tmp, "seed"]]
+    right["seed"] = right["seed"].astype(int).astype(trained["seed"].dtype)
+    extra = left.merge(right, on=tmp).loc[:, ["arm", *kk]]
+    return pd.concat([trained, extra], ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+
+#: Marks the rows :func:`score_no_detector` adds: 1 at a click the run had no
+#: trained detector at, 0 on every row the run itself wrote.
+NO_DETECTOR = "__no_detector"
+
+#: What a click with **no trained detector** scores: the empty returned set.
+#: The harness writes no row until a run has a Good and a Bad vote, and the app
+#: gives a user at that point nothing either: a labelset of one class loads as a
+#: detector with no model, and Find on it is refused (a 400 and a toast,
+#: ``vtsearch/routes/detectors/scoring.py``).  So the click counts as a loss
+#: rather than leaving the average (owner, 2026-10-07).  Precision is counted
+#: as 0, not left undefined as :func:`~vtscore.eval.calibration_metrics.detection_metrics`
+#: leaves it for a detector that flags nothing, because here the undefined
+#: value would drop exactly the failing sessions from the mean.  The ranking
+#: metrics get chance, since there is no ranking: AUROC 0.5 here, and AP the
+#: test split's prevalence, which is per run (:func:`_run_prevalence`).  The
+#: objective (``fbeta`` and its presets) is 0, and cost is the miss weight
+#: alone (:func:`_miss_weights`).
+EMPTY_SET: dict[str, float] = {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.0,
+    "fnr": 1.0,
+    "auroc": 0.5,
+}
+
+
+def _as_text(df: pd.DataFrame) -> pd.DataFrame:
+    """*df*'s key columns as text, ``seed`` as a whole number, for matching frames written with other dtypes."""
+    out = df.astype(str)
+    if "seed" in df.columns:
+        out["seed"] = pd.to_numeric(df["seed"], errors="coerce").astype("Int64").astype(str)
+    return out
+
+
+def _miss_weights(frame: pd.DataFrame) -> dict[str, float]:
+    """``arm -> fnr_weight``: what an empty set costs, read off the arm's own rows.
+
+    A row's cost is ``fpr_weight * FPR + fnr_weight * FNR`` at the run's
+    inclusion, and the rows do not carry the inclusion, so the two weights are
+    solved for from the rows themselves.  An arm whose rows do not fit one pair
+    (a sweep over inclusion inside one arm) or cannot pin both gets none, and
+    its empty-set cost stays undefined rather than guessed.
+    """
+    out: dict[str, float] = {}
+    if not {"arm", "cost", "fpr", "fnr"} <= set(frame.columns):
+        return out
+    for arm, g in frame.groupby("arm"):
+        c, f, n = (pd.to_numeric(g[k], errors="coerce").to_numpy(dtype=float) for k in ("cost", "fpr", "fnr"))
+        ok = np.isfinite(c) & np.isfinite(f) & np.isfinite(n)
+        a = np.column_stack([f[ok], n[ok]])
+        if ok.sum() < 2 or np.linalg.matrix_rank(a) < 2:
+            continue
+        w, *_ = np.linalg.lstsq(a, c[ok], rcond=None)
+        if float(np.max(np.abs(a @ w - c[ok]))) <= 1e-3:
+            out[str(arm)] = float(w[1])
+    return out
+
+
+def _run_prevalence(
+    frame: pd.DataFrame, cells: pd.DataFrame, baseline: pd.DataFrame | None, kk: list[str]
+) -> np.ndarray:
+    """The test split's prevalence for each row of *cells*: chance level for AP.
+
+    From the text-sort baseline when it has one (it scores every run, the
+    starved ones included), else the run's own rows' ``n_test_pos`` /
+    ``n_test_neg``, else the mean over its group's runs, else NaN.
+    """
+    n = len(cells)
+    out = np.full(n, np.nan)
+    group = [k for k in kk if k != "seed"]
+
+    def _fill(src: pd.DataFrame, on: list[str], vals: pd.Series) -> None:
+        if not on:
+            return
+        lookup = pd.Series(vals.to_numpy(dtype=float), index=pd.MultiIndex.from_frame(_as_text(src[on])))
+        lookup = lookup[np.isfinite(lookup.to_numpy())].groupby(level=list(range(len(on)))).mean()
+        at = lookup.reindex(pd.MultiIndex.from_frame(_as_text(cells[on]))).to_numpy(dtype=float)
+        hole = ~np.isfinite(out)
+        out[hole] = at[hole]
+
+    if baseline is not None and not baseline.empty and "seed" in baseline.columns:
+        on = [k for k in kk if k in baseline.columns]
+        if "prevalence" in baseline.columns:
+            _fill(baseline, on, pd.to_numeric(baseline["prevalence"], errors="coerce"))
+        elif {"n_test_pos", "n_test"} <= set(baseline.columns):
+            pos = pd.to_numeric(baseline["n_test_pos"], errors="coerce")
+            _fill(baseline, on, pos / pd.to_numeric(baseline["n_test"], errors="coerce"))
+    if {"n_test_pos", "n_test_neg"} <= set(frame.columns):
+        pos = pd.to_numeric(frame["n_test_pos"], errors="coerce")
+        tot = pos + pd.to_numeric(frame["n_test_neg"], errors="coerce")
+        prev = pos / tot.where(tot > 0)
+        _fill(frame, ["arm", *kk], prev)
+        _fill(frame, ["arm", *group], prev)
+    return out
+
+
+def score_no_detector(
+    frame: pd.DataFrame,
+    cells: pd.DataFrame | None,
+    baseline: pd.DataFrame | None = None,
+    keys: Sequence[str] = KEYS,
+) -> pd.DataFrame:
+    """Score every attempted run at every click it had no trained detector at: the empty returned set.
+
+    The rows a run writes start at its first click with a Good and a Bad vote,
+    so before that, and at every click of a run that never got one, the mean
+    had no value and simply left the run out: the sessions failing hardest
+    were the ones missing from the average.  This adds a row for each of those
+    clicks, from click 1 to the run's first row (to the last click of the
+    study, for a run that never trained), scored as :data:`EMPTY_SET` says,
+    and marked :data:`NO_DETECTOR` 1; every row the run wrote gets 0.
+
+    *cells* is one row per attempted ``(arm, *keys)`` cell (a ``denominator``,
+    or :func:`attempted_cells`); without one, only the runs in *frame* are
+    scored, which covers the clicks before each first detector and misses the
+    runs that never had one.  A key column *cells* lacks is filled with
+    *frame*'s value when that is the same on every row (an embedder written as
+    ``""``), and otherwise the cells of *frame* are used.  Click 0, the
+    text-sort anchor, is never added: every run has a text sort.  Nothing is
+    added after a run's last row, since the run is over there.
+    """
+    if frame.empty or not {"t", "arm"} <= set(frame.columns):
+        return frame
+    kk = [k for k in keys if k in frame.columns]
+    if "seed" not in kk:
+        return frame
+    ids = ["arm", *kk]
+    if cells is None or cells.empty or "arm" not in cells.columns or "seed" not in cells.columns:
+        cells = frame.loc[:, ids]
+    cells = cells.copy()
+    for k in kk:
+        if k not in cells.columns:
+            vals = frame[k].dropna().unique()
+            if len(vals) != 1:
+                cells = frame.loc[:, ids].copy()
+                break
+            cells[k] = vals[0]
+    cells = cells.loc[:, ids].drop_duplicates().reset_index(drop=True)
+
+    t = pd.to_numeric(frame["t"], errors="coerce")
+    horizon = int(t.max())
+    # Matched as text, as `attempted_cells` matches, so a cell list written
+    # with other dtypes than the frame still finds its runs.
+    scored = _as_text(frame.loc[t >= 1, ids]).assign(t=t[t >= 1])
+    first = scored.groupby(ids, dropna=False)["t"].min()
+    first_at = first.reindex(pd.MultiIndex.from_frame(_as_text(cells))).to_numpy(dtype=float)
+    first_at = np.where(np.isfinite(first_at), first_at, horizon + 1).astype(int)
+    n_add = np.clip(first_at - 1, 0, None)
+    out = frame.copy()
+    out[NO_DETECTOR] = 0
+    if not n_add.any():
+        return out
+
+    rep = np.repeat(np.arange(len(cells)), n_add)
+    extra = cells.iloc[rep].reset_index(drop=True)
+    extra["t"] = np.concatenate([np.arange(1, k + 1) for k in n_add if k > 0])
+    # Only a metric the study measured: filling one it never emitted (an
+    # objective with no balance, an AUROC nobody computed) would put it on
+    # the menu as a column of nothing but losses.
+    measured = {c for c in frame.columns if pd.to_numeric(frame[c], errors="coerce").notna().any()}
+    for col, value in EMPTY_SET.items():
+        if col in measured:
+            extra[col] = value
+    for col in measured:
+        if col == objective.OBJECTIVE or col.startswith(objective.OBJECTIVE + "_"):
+            extra[col] = 0.0
+    if "average_precision" in measured:
+        extra["average_precision"] = _run_prevalence(frame, cells, baseline, kk)[rep]
+    if "cost" in measured:
+        weights = _miss_weights(frame)
+        extra["cost"] = extra["arm"].astype(str).map(weights).astype(float)
+    extra[NO_DETECTOR] = 1
+    return pd.concat([out, extra], ignore_index=True)
+
+
+def _attempted(
+    main: pd.DataFrame, kk: list[str], denominator: pd.DataFrame | None, baseline: pd.DataFrame | None
+) -> pd.DataFrame:
+    """The caller's cell list when it gave one, else :func:`attempted_cells`."""
+    if denominator is not None and not denominator.empty:
+        return denominator
+    return attempted_cells(main, baseline, kk)
+
+
 def _cell_index(
     main: pd.DataFrame,
     keys: list[str],
@@ -536,8 +770,10 @@ def mean_figure(  # noqa: C901
     kk = _keys(main, keys)
     if main.empty or metric not in main.columns or "dataset" not in main.columns:
         return None, pd.DataFrame()
-    # A run inside a spot check keeps its last scored level between rounds (#4624).
+    # A run inside a spot check keeps its last scored level between rounds (#4624),
+    # and a click with no trained detector is the empty returned set, not a gap.
     main = fill_gaps(main, ("arm", *kk))
+    main = score_no_detector(main, _attempted(main, kk, denominator, baseline), baseline, kk)
     datasets = sorted(str(d) for d in main["dataset"].dropna().unique())
     arms_present = [a for a in arms if (main["arm"] == a).any()]
     if not datasets or not arms_present:
@@ -724,8 +960,10 @@ def per_run_figures(  # noqa: C901
     arms_present = [a for a in arms if (main["arm"] == a).any()]
     if not arms_present:
         return []
-    # A run inside a spot check keeps its last scored level between rounds (#4624).
+    # A run inside a spot check keeps its last scored level between rounds (#4624),
+    # and a click with no trained detector is the empty returned set, not a gap.
     main = fill_gaps(main, ("arm", *kk))
+    main = score_no_detector(main, _attempted(main, kk, denominator, baseline), baseline, kk)
 
     norm = _prevalence_norm(prevalence)
     cmap = plt.get_cmap("viridis_r")
@@ -1017,11 +1255,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not args.baseline:
         print("\nNOTE: no --baseline, so the curves start at the first trainable click and there is")
         print("      nothing to compare the far right against. Run text_baseline.py and pass its CSV.")
-    print(
-        "\nNOTE: run standalone, coverage is measured against the cells that PRODUCED rows, "
-        "so a starved cell is invisible.\n      analyze_startup.py passes its own cell list as the "
-        "denominator and is the reading that counts starvation."
-    )
+        print(
+            "\nNOTE: and without one, a run that never trained is in no row and so in no mean: "
+            "only the clicks before\n      each trained run's first detector are scored as an empty set. "
+            "With --baseline every run it lists is."
+        )
     return 0
 
 

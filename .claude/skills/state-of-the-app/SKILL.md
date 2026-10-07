@@ -394,7 +394,12 @@ things keep a report on its link:
   every session as the checks ran out of budget. A page built before that gets
   the carry from its own per-seed lines with `viewer.py --reskin <page>
   --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
-  it). `analyze.py`'s curves and `by_click.py` already carried.
+  it). `analyze.py`'s curves and `by_click.py` already carried. A click where
+  a run has no trained detector (its opening clicks, or every click of a run
+  that never got a Good and a Bad) is scored as the empty returned set, the
+  nothing Find gives that labelset, so the runs that never trained are in its
+  mean as losses (`curves.score_no_detector`); a page built before that is
+  rebuilt with `analyze.sh`, since a reskin has no prevalence to put AP at.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).
 - **A new kind** (a future modality) needs nothing here: its first report

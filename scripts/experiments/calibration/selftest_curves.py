@@ -149,6 +149,66 @@ def main() -> int:  # noqa: C901
             bool(np.allclose(curve["baseline"].dropna(), TEXT_COST)),
         )
 
+        # --- the denominator with no cell list -------------------------------
+        # The standalone CLI has the baseline but no cell list; the baseline
+        # scores every cell, so it is what counts the starver's lost two thirds.
+        cols = ["arm", "dataset", "category", "seed"]
+
+        def _set(df: pd.DataFrame) -> set[tuple]:
+            return {tuple(r) for r in df.loc[:, cols].itertuples(index=False, name=None)}
+
+        ok &= _check(
+            "with no cell list, the baseline supplies the cells that never trained",
+            _set(C.attempted_cells(main_df, base)) == _set(cells),
+            f"{len(_set(C.attempted_cells(main_df, base)))} vs {len(_set(cells))}",
+        )
+        ok &= _check(
+            "...and without one it is the cells that trained, as before",
+            _set(C.attempted_cells(main_df, None)) == _set(main_df),
+        )
+
+        # --- a click with no trained detector -------------------------------
+        # The app returns nothing there, so the click is the empty set: a loss
+        # in the mean, not a gap that leaves the failing runs out of it.  Cost
+        # is the miss weight alone, solved for from the arm's own rows.
+        wf, wn = 0.5, 2.0
+        tiny_rows = []
+        for seed, first in ((0, 3), (1, 1)):
+            for t in range(first, 6):
+                fpr, fnr = 0.01 * t, 0.5 / t
+                tiny_rows.append(
+                    {"arm": "a", "dataset": "d", "category": "c", "seed": seed, "t": t, "fpr": fpr, "fnr": fnr,
+                     "cost": wf * fpr + wn * fnr, "f1": 0.5, "n_test_pos": 10.0, "n_test_neg": 90.0,
+                     "auroc": np.nan}
+                )  # fmt: skip
+        tiny = pd.DataFrame(tiny_rows)
+        tiny_cells = pd.DataFrame([{"arm": "a", "dataset": "d", "category": "c", "seed": s} for s in (0, 1, 2)])
+        tiny_base = pd.DataFrame([{"dataset": "d", "category": "c", "seed": s, "prevalence": 0.1} for s in (0, 1, 2)])
+        ok &= _check("the miss weight is read off the rows", abs(C._miss_weights(tiny)["a"] - wn) < 1e-9)
+        scored = C.score_no_detector(tiny, tiny_cells, tiny_base)
+        added = scored[scored[C.NO_DETECTOR] == 1]
+        never = added[added["seed"] == 2]
+        ok &= _check(
+            "a run is scored from click 1 to its first row, a run that never trained at every click",
+            sorted(added.loc[added["seed"] == 0, "t"]) == [1, 2]
+            and sorted(never["t"]) == [1, 2, 3, 4, 5]
+            and not (added["seed"] == 1).any(),
+            str(sorted(zip(added["seed"], added["t"], strict=True))),
+        )
+        ok &= _check(
+            "...as the empty set: FPR 0, FNR 1, F1 0, cost the miss weight",
+            bool((added["fpr"] == 0).all() and (added["fnr"] == 1).all() and (added["f1"] == 0).all())
+            and bool(np.allclose(added["cost"], wn)),
+        )
+        ok &= _check(
+            "...a metric the study never measured is left unmeasured",
+            "precision" not in added.columns and bool(added["auroc"].isna().all()),
+        )
+        ok &= _check(
+            "...and every row the runs wrote is marked as theirs",
+            int((scored[C.NO_DETECTOR] == 0).sum()) == len(tiny) and len(scored) == len(tiny) + len(added),
+        )
+
         # --- crossover: how many clicks before beating the typed query ------
         x = C.crossover(curve).set_index(["arm", "dataset"])
         ok &= _check(
