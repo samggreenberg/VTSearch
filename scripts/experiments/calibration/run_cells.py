@@ -525,8 +525,20 @@ def main(argv: list[str] | None = None) -> int:
         all_linetests.extend(linetest_local or [])
         if testscores_local:
             # The last ordinary step and the last row (after the check): what Train left and what Find applies.
-            ordinary = [f for f in testscores_local if f["phase"] != "check"]
-            keep = {"last": ordinary[-1] if ordinary else testscores_local[-1], "final": testscores_local[-1]}
+            # The full-label ceiling's snapshot (#4490) is kept apart, never read as a session's step; and
+            # CALIB_SAVE_TEST_SCORES_AT keeps the first ordinary step at or past each listed click (``t<N>``).
+            ceiling = [f for f in testscores_local if f["phase"] == "ceiling"]
+            session = [f for f in testscores_local if f["phase"] != "ceiling"]
+            ordinary = [f for f in session if f["phase"] != "check"]
+            keep = {}
+            if session:
+                keep = {"last": ordinary[-1] if ordinary else session[-1], "final": session[-1]}
+            for at in cfg.SAVE_TEST_SCORES_AT:
+                hit = next((f for f in ordinary if int(f["t"]) >= at), None)
+                if hit is not None:
+                    keep[f"t{at}"] = hit
+            if ceiling:
+                keep["ceiling"] = ceiling[-1]
             all_testscores.update({f"{emb}/{style}/{k}": v for k, v in keep.items()})
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
@@ -604,9 +616,10 @@ def main(argv: list[str] | None = None) -> int:
         ts_out = outdir / f"task_{idx:04d}__testscores.npz"
         packed_ts: dict[str, object] = {}
         for key, snap in all_testscores.items():
-            packed_ts[f"{key}/scores"] = snap["scores"]
-            packed_ts[f"{key}/labels"] = snap["labels"]
-            meta = {k: v for k, v in snap.items() if k not in ("scores", "labels")}
+            arrays = {k: v for k, v in snap.items() if isinstance(v, np.ndarray)}
+            for name, arr in arrays.items():
+                packed_ts[f"{key}/{name}"] = arr
+            meta = {k: v for k, v in snap.items() if k not in arrays}
             packed_ts[f"{key}/meta"] = np.array(json.dumps(meta))
         np.savez_compressed(ts_out, **packed_ts)
         common.log(f"wrote {len(all_testscores)} test-score snapshots to {ts_out}")

@@ -437,3 +437,57 @@ def test_the_ceilings_frame_records_finds_labels_line_from_its_full_labels():
     labels = np.array([1.0 if medias[c]["category"] == "cat0" else 0.0 for c in ordered])
     o_thr, *_ = oracle_cut(scores, labels, wf, wn)
     assert rows[0]["threshold"] == pytest.approx(o_thr)
+
+
+def test_the_ceilings_snapshot_rebuilds_its_find_line_from_the_saved_folds():
+    """#4490: the ceiling leaves a snapshot a replay can redraw its Find line from, exactly.
+
+    The saved fold arrays rebuild the class model the frame's line used, and with the withheld half's
+    scores the same line, so a line rule can be priced on the full-label model without re-training it.
+    """
+    from dataclasses import asdict
+
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag
+    from vtscore.training.thresholds import fit_labels_line
+    from vtscore.training.thresholds.labels_line import class_score_model
+
+    medias = _blob_dataset(n_per_cat=30, separation=1.5)
+    ids = sorted(medias)
+    sim_ids, test_ids = ids[0::2], ids[1::2]
+    frames: list = []
+    snaps: list = []
+    kwargs: dict[str, Any] = dict(trainer="app", head="linear_svm", style_obj=WholeImageStyle(), region_voting=False, input_dim=DIM,
+                  calibrate_count=2, calibration_fraction=0.5)  # fmt: skip
+    _skyline_arm_rows(
+        [SKYLINE_TRAIN_FULL], medias, "cat0", sim_ids, test_ids, 0, seed=0,
+        rank_frame_sink=frames, test_score_sink=snaps, **kwargs,
+    )  # fmt: skip
+    assert len(snaps) == 1
+    snap = snaps[0]
+    assert snap["phase"] == "ceiling"
+    ordered = sorted(test_ids)
+    assert snap["scores"].dtype == np.float64 and snap["scores"].shape == (len(ordered),)
+    assert snap["labels"].tolist() == [int(medias[c]["category"] == "cat0") for c in ordered]
+    assert snap["ids"].tolist() == ordered
+    assert snap["fold_scores"].shape == snap["fold_labels"].shape == snap["fold_index"].shape
+    assert snap["fold_labels"].sum() > 0 and (snap["fold_labels"] == 0).any()
+
+    folds = [
+        (snap["fold_scores"][snap["fold_index"] == i], snap["fold_labels"][snap["fold_index"] == i])
+        for i in np.unique(snap["fold_index"])
+    ]
+    model = class_score_model(folds)
+    assert model is not None and asdict(model) == snap["model"]
+    line = fit_labels_line(folds, snap["scores"], ordered, {})
+    assert line is not None
+    for b in RANK_FRAME_BETAS:
+        assert frames[0][f"test_line_k_{beta_tag(b)}"] == int(np.count_nonzero(snap["scores"] >= line.threshold(b)))
+
+
+def test_no_snapshot_without_a_sink():
+    medias = _blob_dataset(n_per_cat=20, separation=1.5)
+    ids = sorted(medias)
+    kwargs: dict[str, Any] = dict(trainer="app", head="linear_svm", style_obj=WholeImageStyle(), region_voting=False, input_dim=DIM,
+                  calibrate_count=2, calibration_fraction=0.5)  # fmt: skip
+    rows = _skyline_arm_rows([SKYLINE_TRAIN_FULL], medias, "cat0", ids[0::2], ids[1::2], 0, seed=0, **kwargs)
+    assert len(rows) == 1

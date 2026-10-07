@@ -95,6 +95,14 @@ instead, since every commit on `dev` is effectively a new app release.)
   robust logit spread (`corpus_sigma_floor`) rather than an absolute 0.25.
   `fit_corpus` and `corpus_posteriors` take the floor as `floor=`. The
   parametric fallback, with no corpus, keeps `MIN_LOGIT_SIGMA`.
+- **Withheld-half snapshots carry the calibration folds and the images' ids, and the
+  ceiling leaves one** (issue #4490). Every `test_score_sink` entry gains `fold_scores`,
+  `fold_labels` and `fold_index` (the step's held-out scores of its votes, from which
+  `class_score_model` is rebuilt exactly) and `ids` (the withheld images, in score order).
+  `_skyline_arm_rows(test_score_sink=...)` appends a `phase="ceiling"` entry for the
+  full-label model: the withheld half's scores and labels, its Find line's class model and
+  its folds. A line rule that changes the class model can be priced post hoc on a session
+  or on the ceiling without re-training either.
 - **The full-label ceiling's rank frame records Find's labels line** (issue
   #4486). `_skyline_arm_rows` draws the labels line from the skyline's own
   calibration folds (`_skyline_fit_and_score(details_sink=...)`), fits its
