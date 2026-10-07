@@ -14,9 +14,10 @@ address printed on the slide, not `95`). `build.py` works both out from the
 manifest, since they are facts about fragments that no rendered page carries,
 and leaves them in `_build/<deck>[...].nav.json` for this script to write in.
 It also sets the PDF to open with the bookmarks showing, and makes the middle
-of every audience page but the outline's a link to the next page, so a viewer
-with no slideshow mode is one anyway: click the slide, get the next
-(`link_advance`).
+of every audience page a link to the next page, so a viewer with no slideshow
+mode is one anyway: click the slide, get the next (`link_advance`). Where a page
+has links of its own there — the outline's section numerals — the area is
+carved around them, so each click lands on exactly one link.
 
 The speaker deck needs one thing more. Its outline is a *picture* — a PNG of
 the audience slide beside the notes — so the links the audience deck gets for
@@ -121,26 +122,49 @@ def link_miniatures(doc: pymupdf.Document, probe: pymupdf.Document, pages: list[
 ADVANCE_INSET = 0.10
 
 
+def carve(area: pymupdf.Rect, holes: list[pymupdf.Rect]) -> list[pymupdf.Rect]:
+    """*area* less every rectangle in *holes*, as rectangles that do not overlap.
+
+    Each hole splits every piece it cuts into the bands above and below it, at
+    the piece's full width, and the two sides level with it. Pieces only ever
+    shrink, so none of them can reach into a hole cut before.
+    """
+    pieces = [area]
+    for hole in holes:
+        carved: list[pymupdf.Rect] = []
+        for piece in pieces:
+            if not piece.intersects(hole):
+                carved.append(piece)
+                continue
+            cut = pymupdf.Rect(piece) & hole
+            if cut.y0 > piece.y0:
+                carved.append(pymupdf.Rect(piece.x0, piece.y0, piece.x1, cut.y0))
+            if cut.y1 < piece.y1:
+                carved.append(pymupdf.Rect(piece.x0, cut.y1, piece.x1, piece.y1))
+            if cut.x0 > piece.x0:
+                carved.append(pymupdf.Rect(piece.x0, cut.y0, cut.x0, cut.y1))
+            if cut.x1 < piece.x1:
+                carved.append(pymupdf.Rect(cut.x1, cut.y0, piece.x1, cut.y1))
+        pieces = carved
+    return pieces
+
+
 def link_advance(doc: pymupdf.Document, pages: list[int]) -> int:
     """Make the middle of each of *pages* (1-based) a link to the page after it.
 
-    Refuses a page that already carries a link inside that area: the two would
-    overlap, and which one a click lands on is up to the viewer. No slide does
-    today — the outline, whose lines are links, is left out by build.py — so a
-    slide that grows a link of its own fails here rather than half-working.
+    A link the page already carries inside that area keeps its ground: the area
+    is carved around it (`carve`), because overlapping links leave which one a
+    click lands on up to the viewer. That is the outline, whose numerals jump to
+    their sections while the rest of it advances (#4618).
     """
     for number in pages:
         page = doc[number - 1]
         bounds = page.rect
         dx, dy = bounds.width * ADVANCE_INSET, bounds.height * ADVANCE_INSET
         area = pymupdf.Rect(bounds.x0 + dx, bounds.y0 + dy, bounds.x1 - dx, bounds.y1 - dy)
-        clash = [link for link in page.get_links() if link["from"].intersects(area)]
-        if clash:
-            raise SystemExit(
-                f"pdf_nav.py: page {number} has a link of its own inside its click-to-advance area "
-                f"({clash[0]['from']}); move it out, or leave the page out of build.py's `advance_pages`"
-            )
-        page.insert_link({"kind": pymupdf.LINK_GOTO, "from": area, "page": number, "to": pymupdf.Point(0, 0)})
+        holes = [link["from"] for link in page.get_links() if link["from"].intersects(area)]
+        for piece in carve(area, holes):
+            page.insert_link({"kind": pymupdf.LINK_GOTO, "from": piece, "page": number, "to": pymupdf.Point(0, 0)})
     return len(pages)
 
 

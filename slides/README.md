@@ -221,7 +221,7 @@ the reveals go:
 
 ![bg fit](figs/calib-xcal-flow.png)
 
-## Grading Your<br>Own Homework
+## Grade My Own<br>Homework
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 
@@ -302,7 +302,7 @@ rules about *fragments*, which Marpit cannot see:
   2. Marpit's own counter would number it and hide the number.
 - **A fragment used more than once is one slide, shown several ways.** All its
   pages share a number and take consecutive letters — the outline reads
-  `1a … 1k` however far apart its eleven pages fall — which is the same rule a
+  `1a … 1l` however far apart its twelve pages fall — which is the same rule a
   build already follows, applied to the other way a slide can have pages.
   Marpit can hold the previous page's number, which is no help when the pages
   are eighty slides apart.
@@ -310,8 +310,8 @@ rules about *fragments*, which Marpit cannot see:
 A numbering group's presenter notes are written per letter, as for a build,
 and the speaker build then gives each showing only the notes naming *its*
 letters (plus, on the first showing, any note naming none). That is what
-keeps a slide the room sees eleven times from printing the same four paragraphs
-into the speaker's hand eleven times.
+keeps a slide the room sees twelve times from printing the same four paragraphs
+into the speaker's hand twelve times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with the final stage large beside the notes and every page of the group under
@@ -325,7 +325,7 @@ against `NOTES_LINES` conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
 one `**c** —` per reveal, though one note may cover several. That counts the
-group across the whole deck, so a fragment shown eleven times owes eleven lettered
+group across the whole deck, so a fragment shown twelve times owes twelve lettered
 notes even though it carries no build markers. A frame nobody wrote a line for
 is invisible until you are standing in front of a room.
 
@@ -367,17 +367,21 @@ them changes a pixel of any slide:
 
 - **Click the slide for the next one.** The middle of every page — inset a
   tenth of the page from each edge, so 80% by 80% of it — is a link to the next
-  page, so a PDF viewer with no slideshow mode is one anyway (#4563). The
-  outline's pages are left out, because their lines are links of their own,
-  and so is the last page, which has nowhere to go. The area stops short of the
-  corner, so the page number's own link still works.
+  page, so a PDF viewer with no slideshow mode is one anyway (#4563). On the
+  outline it is carved around the section numerals, which are links of their
+  own, so clicking anywhere else on an outline moves on like any other slide
+  (#4618). The last page is left out, having nowhere to go. The area stops
+  short of the corner, so the page number's own link still works.
 
-- **The outline is clickable.** Every line of it links to the page its section
-  starts on — the showing of the outline marked `+atN` for that line, or `+end`
-  for the closing one. The links are invisible (`section.outline a` takes the
-  colour and weight of its line), so the room sees the slide it always saw and
-  only a click finds them. That makes the outline the deck's contents page when
-  a question sends you back to section III.
+- **The outline's numerals are clickable.** Every line's Roman numeral links
+  to the page its section starts on — the showing of the outline marked `+atN`
+  for that line, or `+end` for the closing one. Only the numeral: the rest of
+  the slide advances, so a presenter clicking through the deck is never thrown
+  into a section by an outline in the way (#4618). The links are invisible (an
+  empty anchor laid over the numeral, `section.outline ol li > a:empty`), so the
+  room sees the slide it always saw and only a click finds them. That makes the
+  outline the deck's contents page when a question sends you back to section
+  III.
 - **The page number is the way back.** On every slide inside a section, the
   number in the corner (and its letter) links to the outline showing that
   opened the section — the "you are here" list, from which any other section
@@ -389,7 +393,7 @@ them changes a pixel of any slide:
   one level under it. One entry per slide, never per reveal: a build's entry
   lands on its first page. Each entry leads with the address the deck uses for
   it — a section its Roman numeral, `III. Inclination`, and a slide its page
-  number, `18. The Cutting Room` — followed by the section's line or the
+  number, `17. The Cutting Room` — followed by the section's line or the
   slide's headline, with the line break taken out.
 - **Page labels.** The viewer's page box reads the address the page prints —
   `17c`, not `95` — so a reader told to look at 17c can type exactly that. The
@@ -400,24 +404,25 @@ them changes a pixel of any slide:
 The speaker deck gets the last four, aimed at *its* pages: a bookmark lands on the
 slide's one speaker page, a label is the number the page prints in its corner,
 that number links back to the speaker page of the section's outline, and the
-outline's lines are clickable on the miniature, jumping to the speaker page
+outline's numerals are clickable on the miniature, jumping to the speaker page
 where that section starts.
 
-**How.** The links are ordinary markdown links that `build.py` writes around
-the outline's lines,
+**How.** The links are markdown links that `build.py` writes at the start of
+the outline's lines, with no text because the numeral is the theme's counter,
 
 ```markdown
-1. [VTSearch](#3)
+1. [](#3)Mission
 ```
 
-because Marpit gives every slide its page number as its `id`, and Chromium
-prints a link to an `id` as a link to that page; the page numbers' links are the
-same thing in HTML. They work in the HTML export too. Bookmarks, labels and
+and they work because Marpit gives every slide its page number as its `id`,
+and Chromium prints a link to an `id` as a link to that page; the page numbers'
+links are the same thing in HTML. They work in the HTML export too. Bookmarks, labels and
 the click-to-advance areas Chromium cannot write, so `build.py` leaves them in
 `_build/<deck>.nav.json` (the last as the list of pages that get one,
 `advance_pages`) and `pdf_nav.py`, which `render.sh` runs after every PDF
-render, writes them in. `pdf_nav.py` refuses a page whose own links reach into
-its click-to-advance area, rather than let the two overlap. On a speaker page
+render, writes them in. `pdf_nav.py` carves a page's click-to-advance area
+around any link of its own that reaches into it, rather than let the two
+overlap and leave the viewer to pick which one a click means. On a speaker page
 the outline is a picture, so its links have to be measured: `render.sh` renders
 the outline's showings alone (`_build/<deck>.probe.md`, a few seconds), and
 `pdf_nav.py` scales each link Chromium drew there onto the miniature.
@@ -505,7 +510,7 @@ caption. Nothing is staged through the API that a slide says was done by hand:
 the button `train-loop` clicks is chosen from the served item's own file name,
 so the piles are a real session's.
 
-The **Instruction** figures (`figs/ui-steps-*.webp`, section IX) are that same
+The **Instruction** figures (`figs/ui-steps-*.webp`, section X) are that same
 session photographed a second time at the moments a user has to click, with a
 red numbered disc on each control (`scripts/screenshots/callouts.mjs`, shared
 with the user guide's screenshots). Where a moment is also an intro frame, the

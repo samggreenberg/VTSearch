@@ -129,6 +129,7 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_SSE_MAX_CONNECTIONS` | `VTSEARCH_THREADS - 2` (i.e. `6`) | Hard cap on concurrent `/api/events` streams. Each stream holds a gunicorn worker thread for its lifetime, so the default reserves headroom for ordinary REST requests. The Flask dev server spawns a thread per connection and therefore uncaps this automatically unless you set it explicitly. |
 | `VTSEARCH_RUNDIR` | system temp dir | Directory for the single-instance port lockfiles. Set it when several users run VTSearch on one host and a shared `/tmp` lockfile would collide. |
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
+| `VTSEARCH_ON_DATASET_IMPORTED` | unset | Comma-separated `module:function` specs to call when a user's dataset import from the web app succeeds or fails, e.g. to email them (see [EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)). Each module must be importable on the server. A spec that fails to load is reported on stdout and none of the variable's hooks are installed. Env-var equivalent of `--on-dataset-imported`, for the gunicorn images; an explicit flag wins. Deliberately not a setting: nothing in the settings file can name code to run. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock the deployment to **Semantic** embedders, hiding the prototype Patch Semantic and Structural types from every picker and rejecting them at the dataset-load / detector-create routes. Env-var equivalent of `--semantic-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `semantic_only` server setting. |
 | `VTSEARCH_HIDE_INGEST_ETA` | unset | Set to `1`/`true`/`yes`/`on` to hide the remaining-time estimate on **ingest** progress bars (dataset imports, staging imports, and a labelset's missing-media fetch), for a deployment where those jobs are too erratic for any timing profile to predict. The bars still fill and show their counts; opening a dataset, sorts, Find and training keep their ETA. Env-var equivalent of `--hide-ingest-eta`, for the gunicorn images; an explicit flag wins, and either beats the persisted `hide_ingest_eta` server setting. See [When ingest ETAs can't be trusted](#when-ingest-etas-cant-be-trusted). |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Stamps every newly created dataset with an expiry this many days out. Positive integers only; anything else is ignored with a warning on stdout. Env-var equivalent of `--dataset-max-age-days`, for the gunicorn images; an explicit flag wins. |
@@ -566,7 +567,7 @@ single-user default keeps `user_settings.json` directly in the data dir. See
 | `data/models/` | **Yes** | Re-downloading is slow (~4.1 GB) |
 | `data/embeddings/` | Optional | Embedded demo-dataset cache; losing it means re-embedding a demo on its next load |
 | `data/settings.json` | **Yes** | Server settings: directories, concurrency limits, deployment locks |
-| `data/user_settings.json`, `data/<username>/user_settings.json` | **Yes** | Every user preference, including each user's Auto-Find detector list |
+| `data/user_settings.json`, `data/<username>/user_settings.json` | **Yes** | Every user preference, including each user's AutoFind detector list |
 | `data/detectors/`, `data/detector_registry.json` | **Yes** | Persistent detector definitions with labelsets |
 | `data/saved_datasets/`, `data/dataset_registry.json` | **Yes** | Every registered dataset (pickle + registry entry); losing them means re-importing |
 | `data/api_keys.json` | **Yes** (if used) | API keys for `--login api_key` |
@@ -583,7 +584,7 @@ is the most common settings mistake on a fresh deployment, so start here:
 | Tier | File | Holds | Model |
 |------|------|-------|-------|
 | **Server** | `data/settings.json` | Deployment-wide infrastructure and operator locks. Loaded once at startup, before any user logs in. | `ServerSettings` (`vtsearch/settings_models.py`) |
-| **Per-user** | `<user data dir>/user_settings.json` | Every user preference — theme, volume, autopilot, Auto-Find, panel layout, browse prefs. Resolved per request from the logged-in user. | `UserSettings` (same module) |
+| **Per-user** | `<user data dir>/user_settings.json` | Every user preference — theme, volume, autopilot, AutoFind, panel layout, browse prefs. Resolved per request from the logged-in user. | `UserSettings` (same module) |
 
 The per-user file lives at `data/user_settings.json` in a single-user
 deployment and at `data/<username>/user_settings.json` under a multi-user login
@@ -600,7 +601,7 @@ the next start. VTSearch does not migrate old settings shapes forward.
 **If you are changing a user preference, edit `user_settings.json`, not
 `settings.json`.** A `theme` or `autopilot_enabled` key placed in
 `data/settings.json` is simply ignored. The one deliberate exception is the
-Auto-Find trio (`autofind_detectors`, `autofind_exporter`,
+AutoFind trio (`autofind_detectors`, `autofind_exporter`,
 `autofind_exporter_field_values`): for the built-in `default` user only, a read
 that misses in `user_settings.json` falls through to `data/settings.json`, which
 is what lets the CLI's `--settings` flat file and single-user deployments keep
@@ -742,7 +743,7 @@ An abridged example; the full field list is `UserSettings` in
   "autofind_detectors": [],
   "autofind_exporter": "",
   "autofind_exporter_field_values": {},
-  "autorun_on_import": true,
+  "autofind_on_import": true,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -761,16 +762,16 @@ An abridged example; the full field list is `UserSettings` in
 - `theme`: `"system"` (the default — follows the OS `prefers-color-scheme`),
   `"dark"`, `"light"`, or `"highviz"`.
 - `autofind_detectors`: detector names to run on each web import, from a
-  dataset's **Run AutoRun**, during `/api/auto-detect`, and in the CLI
+  dataset's **Run AutoFind**, during `/api/auto-detect`, and in the CLI
   `--autodetect` flow, each mapping to a JSON file under `data/detectors/`.
-  Every user curates their own list on the Dashboard's AutoRun detector tab
+  Every user curates their own list on the Dashboard's AutoFind detector tab
   (`PUT /api/detectors/registry/<id>/autofind`). `autofind_exporter` names the
   results exporter run afterwards (`""` = no auto-export; the CLI then falls
   back to the `gui` exporter), and `autofind_exporter_field_values` keeps each
   exporter's configuration around when the picker switches between them. This is
   the trio that reads through to `data/settings.json` for the `default` user.
-  `autorun_on_import` (default `true`) is whether a web import runs them: the
-  Add Dataset dialog's **Run AutoRun** checkbox starts from it and each import
+  `autofind_on_import` (default `true`) is whether a web import runs them: the
+  Add Dataset dialog's **Run AutoFind** checkbox starts from it and each import
   writes it back.
 - `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`, and the `browse_*` maps:
   per-media-type UI preferences, keyed by media-type id, so a user can tune

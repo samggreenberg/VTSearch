@@ -40,7 +40,7 @@ import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
 import { BuildSkewService } from './services/build-skew.service';
-import { AutoRunService } from './services/autorun.service';
+import { AutoFindService } from './services/autofind.service';
 import {
   NewThingFlowsService,
   ImporterFlowState,
@@ -87,9 +87,9 @@ export class AppComponent {
   private newThingFlows = inject(NewThingFlowsService);
   private hfAuth = inject(HuggingFaceAuthService);
   private toast = inject(ToastService);
-  // Constructed here so it watches for finished AutoRun runs from app start,
+  // Constructed here so it watches for finished AutoFind runs from app start,
   // whichever view the user is on; the template mounts its results dialog.
-  autorun = inject(AutoRunService);
+  autofind = inject(AutoFindService);
 
   title = 'VTSearch';
   menuOpen = false;

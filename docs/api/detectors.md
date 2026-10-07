@@ -273,7 +273,7 @@ GET /api/detectors/registry
 
 Entries also carry `examples`, `media_example`, `embedder`, `embedder_type`,
 `created_at`, `created_by`, `readers`, and `is_owner`; see the
-`DetectorRegistryListResponse` schema in the spec. An AutoRun detector
+`DetectorRegistryListResponse` schema in the spec. An AutoFind detector
 (`autofind: true`) also carries `test_verdict`: the newest test verdict it
 keeps, in the shape of the [stats](#detector-statistics)' `test_verdicts`
 entries, or `null` when it was never tested. Drafts leave it out.
@@ -388,7 +388,7 @@ haven't landed yet. The task's terminal frame carries
 `"ingest_result": {"ingested": 12}`; cancel it with
 `POST /api/detectors/cancel/{task_id}`.
 
-### Toggle Auto-Find flag
+### Toggle AutoFind flag
 
 ```
 PUT /api/detectors/registry/{detector_id}/autofind
@@ -399,8 +399,8 @@ PUT /api/detectors/registry/{detector_id}/autofind
 → `{"ok": true, "autofind": true}` (writes the detector's name into
 `autofind_detectors` so `/api/auto-detect` and the CLI
 `--autodetect` flow pick it up). In the GUI this is the Dashboard's
-Drafts ↔ AutoRun detector-tab move: `autofind: true` detectors sit on
-the frozen AutoRun tab, everything else on Drafts.
+Drafts ↔ AutoFind detector-tab move: `autofind: true` detectors sit on
+the frozen AutoFind tab, everything else on Drafts.
 
 ### Load / unload detector
 
@@ -460,7 +460,7 @@ labelset-media ingest, or a positives-browse build.
 DELETE /api/detectors/registry/{detector_id}
 ```
 
-Also cleans up the on-disk labelset file and clears the Auto-Find flag.
+Also cleans up the on-disk labelset file and clears the AutoFind flag.
 
 → `{"ok": true}`
 

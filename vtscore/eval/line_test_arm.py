@@ -429,6 +429,31 @@ def line_test_row(
     }
 
 
+def _snapshot_model(snapshot: Mapping[str, Any], model: Mapping[str, Any]) -> Any:
+    """The snapshot's class model, with its Bads' held-out scores when the snapshot carries its folds (#4490).
+
+    The JSON keeps the model's scalars; the Bads' scores, which decide whether the
+    negatives take the Bads' own shape, travel in the fold arrays.  They are put
+    back only when the folds rebuild the same model (a one-Good session's in-sample
+    fallback does not, and carries none).
+    """
+    from dataclasses import fields, replace  # noqa: PLC0415
+
+    from vtscore.training.thresholds.labels_line import ClassScoreModel, class_score_model  # noqa: PLC0415
+
+    names = {f.name for f in fields(ClassScoreModel)}
+    cm = ClassScoreModel(**{k: v for k, v in model.items() if k in names})
+    idx = snapshot.get("fold_index")
+    if idx is None or np.asarray(idx).size == 0:
+        return cm
+    idx = np.asarray(idx)
+    fs, fl = np.asarray(snapshot["fold_scores"]), np.asarray(snapshot["fold_labels"])
+    rebuilt = class_score_model([(fs[idx == i], fl[idx == i]) for i in np.unique(idx)])
+    if rebuilt is None or abs(rebuilt.mu_pos - cm.mu_pos) > 1e-9 or abs(rebuilt.mu_neg - cm.mu_neg) > 1e-9:
+        return cm
+    return replace(cm, neg_logits=rebuilt.neg_logits)
+
+
 def row_from_snapshot(
     snapshot: Mapping[str, Any],
     *,
@@ -445,7 +470,7 @@ def row_from_snapshot(
     mask of its items (the study's thinner scenarios); the fit, the line and
     the Test then all see only the kept items.
     """
-    from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import LabelsLine  # noqa: PLC0415
 
     scores = np.asarray(snapshot["scores"], dtype=np.float64)
     labels = np.asarray(snapshot["labels"], dtype=np.float64)
@@ -458,7 +483,7 @@ def row_from_snapshot(
     find_on_test = None
     if model is not None:
         # ``on_corpus`` reads only the class model; the prevalence here is a placeholder.
-        find_on_test = LabelsLine(ClassScoreModel(**model), 0.5).on_corpus(scores)
+        find_on_test = LabelsLine(_snapshot_model(snapshot, model), 0.5).on_corpus(scores)
     fallback = snapshot.get("train_threshold")
     return line_test_row(
         int(snapshot["t"]),

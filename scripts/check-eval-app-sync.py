@@ -355,7 +355,10 @@ MIRRORS: list[Mirror] = [
             "starts putting anything but the midpoint in acq_threshold, or _sort_threshold starts "
             "reading the display line, the other side has to move with it. "
             "tests_lib/sorting/test_text_sort_threshold.py pins the identity bit for bit and runs "
-            "the harness's opening under both rules to show the picks do not move."
+            "the harness's opening under both rules to show the picks do not move. Since #4603 the "
+            "display line also takes the balance (by count at beta <= 1); the acquisition cut does "
+            "not, so the harness's opening is unaffected, and text_baseline.py scores each preset's "
+            "display line for the review's click 0."
         ),
         divergence=(
             "The app side is the library function the route calls, not the route: "

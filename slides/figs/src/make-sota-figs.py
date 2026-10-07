@@ -80,8 +80,6 @@ TYPED_QUERY = "typed query"
 #: region path (DINOv3 patches, `max_patch`, opened on SigLIP's text sort).
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
 REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
-#: The region review's precision-recall panel: its recall span.
-REGION_PR_LIM = (0.4, 0.9)
 
 #: The three radios, left panel's line weight and label, in the order
 #: `calib-fbeta` stacks them: the precision end, the middle, the recall end.
@@ -131,16 +129,16 @@ EXPECT = {
     ("documents", 1.0, "kept"): 14,
     ("documents", 4.0, "kept"): 25,
     ("documents", 1.0, "f50"): 0.87,
-    ("photos", 0.25, "text"): 0.17,
-    ("photos", 1.0, "text"): 0.24,
+    ("photos", 0.25, "text"): 0.48,
+    ("photos", 1.0, "text"): 0.37,
     ("photos", 4.0, "text"): 0.48,
-    ("photos", 0.25, "at50"): 0.48,
+    ("photos", 0.25, "at50"): 0.51,
     ("photos", 1.0, "at50"): 0.42,
     ("photos", 4.0, "at50"): 0.50,
-    ("regions", 0.25, "at50"): 0.51,
-    ("regions", 1.0, "at50"): 0.46,
+    ("regions", 0.25, "at50"): 0.54,
+    ("regions", 1.0, "at50"): 0.47,
     ("regions", 4.0, "at50"): 0.57,
-    ("regions", 0.25, "text"): 0.18,
+    ("regions", 0.25, "text"): 0.48,
     ("regions", 4.0, "text"): 0.48,
     ("regions", 0.25, "after"): 0.73,
     ("regions", 1.0, "after"): 0.63,
@@ -388,8 +386,19 @@ END_LABEL_PT = MARK_PT / 2 + 6
 #: The paths' recall axis: zoomed to where the document sets live. Precision's
 #: span is the slide's own, shared with the F panel beside it (`_floor`).
 PR_PATH_LIM = (0.5, 1.0)
-#: The photo paths' recall axis: every photo set's recall lies between 0.38 and 0.68.
-PHOTO_PR_LIM = (0.3, 0.8)
+
+
+def _recall_span(data: dict[float, dict]) -> tuple[float, float]:
+    """The photo paths' recall axis: the 0.1 steps around every recall the panel draws, per-click paths included.
+
+    Read off the data, as the y span is (`_floor`, `_top`): since #4603 the typed query at beta 1/4 keeps about 19
+    images at recall ~0.26, well left of where the sessions go, and a fixed span drew it off the panel.
+    """
+    recalls = [point["recall"] for d in data.values() for point in d["path"]]
+    recalls += [r for d in data.values() for r, _p in d.get("curve_pr") or []]
+    lo = math.floor(round(min(recalls) / 0.1, 6)) * 0.1
+    hi = math.ceil(round(max(recalls) / 0.1, 6)) * 0.1
+    return round(max(0.0, lo), 6), round(min(1.0, hi), 6)
 
 
 def _pr_paths_panel(
@@ -536,7 +545,7 @@ PHOTO_CHECK_X = 168
 def photo_figure(
     data: dict[float, dict],
     stage: int,
-    recall_lim: tuple[float, float] = PHOTO_PR_LIM,
+    recall_lim: tuple[float, float] | None = None,
 ) -> Figure:
     """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
     fig = plt.figure(figsize=FIG_SIZE)
@@ -566,7 +575,8 @@ def photo_figure(
     )
     ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", END_LABEL])
     if stage >= 2:
-        _pr_paths_panel(fig, data, recall_lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, (floor, top))
+        lim = recall_lim or _recall_span(data)
+        _pr_paths_panel(fig, data, lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, (floor, top))
     return fig
 
 
@@ -590,7 +600,7 @@ def doc_figure(data: dict[float, dict], stage: int) -> Figure:
 
 
 def region_figure(data: dict[float, dict], stage: int) -> Figure:
-    return photo_figure(data, stage, REGION_PR_LIM)
+    return photo_figure(data, stage)
 
 
 def main() -> int:

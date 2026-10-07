@@ -25,6 +25,36 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **AutoRun is now AutoFind; its ⋯ run opens no dialog, and Find Results
+  gains Browse** (issue #4615). The Dashboard's **AutoRun** tab, the detector
+  ⋯ menu's **Move to AutoRun**, the dataset ⋯ menu's **Run AutoRun** and the
+  Add Dataset dialog's checkbox all say **AutoFind**, as the Settings tab
+  (formerly *Auto-Find*) and its exporter do. AutoFind is the unattended path,
+  the app's twin of the command line's run: a dataset's ⋯ **Run AutoFind** now
+  ends with the same notice an import's run gives (*AutoFind finished on
+  "Birds": 12 hits*, with **View results**) instead of opening the results
+  dialog. The big **Find** button still opens its results as they land, and
+  its runs are called Find on the dataset row and in their notices. The
+  dialog, now **Find Results**, gains a **Browse** button that lays the listed
+  items (Good, Bad or Both) out in Browse as a map of their own; **← Back to
+  Find Results** returns to the Dashboard with them open again. The API
+  follows the name: `POST /api/datasets/registry/<id>/autofind`,
+  `GET /api/autofind/runs/<run_id>`, the import form's `autofind` flag, the
+  `autofind` block on a run's `loading-tasks` row (whose `trigger` is now
+  also `find` for the Find button's runs) and the `autofind_on_import`
+  setting, which starts back at its default (on) for anyone who had turned
+  `autorun_on_import` off. The autorun *processors* (`/api/autorun-extractors`,
+  `/api/autorun-localizers`) are a different thing and keep their names.
+
+- **Run your own function when an import finishes** (issue #4616). A server
+  admin can name functions with `--on-dataset-imported module:function` (or
+  `VTSEARCH_ON_DATASET_IMPORTED`, comma-separated), and each is called with a
+  `DatasetImported` event whenever a user's import from the web app succeeds or
+  fails, for example to email them. The code lives outside this repository; the
+  module only has to be importable on the server. A bad spec stops the server at
+  startup (the env form warns instead), and there is no settings-file key for it.
+  See [EXTENDING.md § Dataset-Import Hooks](docs/EXTENDING.md#dataset-import-hooks).
+
 - **A finished test's verdict is kept on the detector** (issue #4526). Reaching
   Done in Find's Test autopilot saves the verdict with the detector, one per
   collection it was tested on: the share right and the share found as ranges,
@@ -63,6 +93,19 @@ not list every commit. Use `git log` for the full history.
   counted only what the boundary walk happened to serve.
 
 ### Changed
+
+- **A text sort's green region follows the balance** (issue #4603). At a
+  balance of beta 1 or below, a typed query's line now keeps about as many
+  images as the sort has matches, times 3/8 at the 1/4 preset and 1 at the
+  balanced one. The count is estimated from the scores alone: what stands
+  above the bulk's median + 4 robust sigmas beyond a Gaussian bulk's share.
+  The guarded line kept about the same set at every balance, about four times
+  the matches at COCO Better's prevalence. Priced on 144 classes at 0.1%,
+  0.44% and 2% prevalence, the typed query's set gains +0.13 to +0.30 F-beta
+  at beta 1/4 and +0.01 to +0.13 at beta 1. At beta 4 and above 1 the guarded
+  line stays. That set is what a user sees through Autopilot's whole opening,
+  a median ~40 clicks (#4605). Autopilot's sampling cut (`acq_threshold`) does
+  not move, so a session's picks are the same at any balance.
 
 - **A text sort's green region ends at the guarded line, and Autopilot still
   samples at the midpoint** (issue #4136; the rule is #3826's). A typed query's

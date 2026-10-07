@@ -69,7 +69,7 @@ def _settings_file_with_detector_and_exporter(
     exporter_name: str,
     exporter_field_values: dict,
 ) -> Path:
-    """Like ``_settings_file_with_detector`` but also configures the Auto-Find exporter.
+    """Like ``_settings_file_with_detector`` but also configures the AutoFind exporter.
 
     Used to exercise the settings-based exporter fallback: a streaming run that
     passes no ``--exporter`` must pick up this exporter (and its field values)

@@ -121,7 +121,7 @@ annotations as an absolutely-positioned DOM overlay computed from each `target`'
 bounding rect, and capture (`clip` element if given, else viewport) → WebP.
 A recipe should *pose* the app (a form filled in, a menu open) rather than
 change it; one that has to change it to reach its frame (pictures verified in
-Find, a detector moved to AutoRun) puts it back in `after`, which runs once the
+Find, a detector moved to AutoFind) puts it back in `after`, which runs once the
 shot is taken, pass or fail, so no later shot inherits the change.
 
 **One recipe run, both themes** (#4341). The theme is only the colour scheme the

@@ -15,7 +15,7 @@ DELETE /api/detectors/registry/<id>                   Remove a detector from the
 PUT    /api/detectors/registry/<id>/rename            Rename a registered detector.
 POST   /api/detectors/registry/<id>/labelset-source/move-file
                                                       Move an orphaned labelset file after a rename.
-PUT    /api/detectors/registry/<id>/autofind           Toggle the detector's Auto-Find flag.
+PUT    /api/detectors/registry/<id>/autofind           Toggle the detector's AutoFind flag.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
 Migrated to ``flask_smorest`` so the routes are described in
@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 detectors_registry_bp = Blueprint(
     "detectors_registry",
     __name__,
-    description="Register, load, unload, rename, and toggle Auto-Find on detectors.",
+    description="Register, load, unload, rename, and toggle AutoFind on detectors.",
 )
 
 
@@ -119,14 +119,14 @@ def _abort_if_name_taken(name: str, *, own_path: Path | None = None, exclude_id:
 @detectors_registry_bp.route("/api/detectors/registry")
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
-    """Return detectors visible to the current user, with loaded/Auto-Find flags.
+    """Return detectors visible to the current user, with loaded/AutoFind flags.
 
     Detectors are user-shared like datasets: each entry is the creator's plus
     anyone the creator added to ``readers`` (or everyone via ``"*"``). The
     response also carries ``created_by``, ``readers``, and ``is_owner`` so the
     dashboard can render the access column and gate the security button.
-    An AutoRun detector also carries ``test_verdict``, the newest test
-    verdict it keeps (#4526), for the AutoRun tab to show beside it; drafts
+    An AutoFind detector also carries ``test_verdict``, the newest test
+    verdict it keeps (#4526), for the AutoFind tab to show beside it; drafts
     leave it out, so the listing reads no detector file it does not need.
     """
     from vtscore.detectors.line_verdicts import verdict_summaries
@@ -907,13 +907,13 @@ def delete_registered_detector(detector_id: str):
     except Exception:
         logger.exception("Failed to unregister detector context for %s", detector_id)
 
-    # Drop Auto-Find flag if set.
+    # Drop AutoFind flag if set.
     try:
         from vtsearch.settings import remove_autofind_detector
 
         remove_autofind_detector(entry.get("name", ""))
     except Exception:
-        logger.exception("Failed to drop Auto-Find flag for %s", detector_id)
+        logger.exception("Failed to drop AutoFind flag for %s", detector_id)
 
     unregister_detector(detector_id)
     return {"ok": True}
@@ -982,7 +982,7 @@ def rename_registered_detector(body: dict, detector_id: str):
             if new_path != old_path:
                 old_path.unlink(missing_ok=True)
 
-        # Rename Auto-Find entry if present.
+        # Rename AutoFind entry if present.
         try:
             from vtsearch.settings import get_autofind_detectors, set_autofind_detectors
 
@@ -991,7 +991,7 @@ def rename_registered_detector(body: dict, detector_id: str):
                 current = [new_name if n == old_name else n for n in current]
                 set_autofind_detectors(current)
         except Exception:
-            logger.exception("Failed to rename Auto-Find entry for %s", detector_id)
+            logger.exception("Failed to rename AutoFind entry for %s", detector_id)
 
         # Update the loaded in-memory context so future syncs use the new
         # name in {detector_name} template substitution, and detect any
@@ -1066,11 +1066,11 @@ def move_labelset_source_file(body: dict, detector_id: str):
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 @detectors_registry_bp.alt_response(500, description="Detector has no associated name.")
 def set_detector_autofind(body: dict, detector_id: str):
-    """Toggle the calling user's Auto-Find flag for a registered detector.
+    """Toggle the calling user's AutoFind flag for a registered detector.
 
     The flag is stored per-user under ``autofind_detectors`` (see
     :func:`vtsearch.settings.add_autofind_detector`), so each user curates their
-    own Auto-Find list. The CLI's ``--autodetect`` flow reads the running
+    own AutoFind list. The CLI's ``--autodetect`` flow reads the running
     user's list (the built-in ``default`` user falls back to the server
     settings file). The user must be able to access the detector to flag it.
     """

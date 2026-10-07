@@ -498,9 +498,26 @@ metric, which is cost on any run that emits it, so a study whose report retired
 cost passes both, as the State of the App's `analyze.sh` does (#4576). Hiding only takes a metric off the
 menu; its numbers stay in the payload.
 
+**A run inside a spot check stays in the mean.** A prompted check (#4496)
+answers its picks in rounds of about five, so a run inside one is scored once
+per round and has no row at the clicks between. Both the viewer's averaged
+line and `curves.py`'s PNG mean used to be taken over "the runs with a row at
+this click", which skipped exactly those runs, and a check prompts where the
+labels separate weakly, so what it skipped was the weak sessions: a survivor's
+mean that fell at the end of every review as the checks ran out of budget and
+the weak runs came back (#4624). Both now carry each run's last scored row
+through the clicks it has none for (`curves.fill_gaps`): inside the run's span
+only, never before its first row or after its last, and a metric undefined on
+a scored row stays undefined. The page says so in its reading note
+(`gaps_filled`). A committed page built before the carry gets it from its own
+per-seed lines with `python viewer.py --reskin <page> --fill-gaps`, which
+refuses a page whose per-seed lines were thinned to fit the budget (rebuild
+that one from its cells).
+
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
-the weighted pooling against a hand-computed answer, the click-0 anchor, and the
-budget note.
+the weighted pooling against a hand-computed answer, the click-0 anchor, the
+budget note, and the carry through a spot check round; `selftest_curves.py` is
+the PNGs'. Both run in the suite (`tests_lib/meta/test_calibration_viewer.py`).
 
 **The metrics come from the harness, not from the viewer.** `cost`, `precision`,
 `recall`, `f1`, `fpr`, `fnr`, `average_precision` and `auroc` are emitted by

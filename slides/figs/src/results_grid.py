@@ -13,7 +13,7 @@ than move the frame (`slides/STYLE.md`).
 
 The slide it serves used to be the verification screen with the results shoved
 into a left-hand panel, which is a picture of a person checking their answers.
-Not looking at your results in the tool is a *feature* — an autorun detector
+Not looking at your results in the tool is a *feature* — an AutoFind detector
 mails you a list of references — so what the room should see is the pictures,
 with no chrome anywhere near them (#3779).
 

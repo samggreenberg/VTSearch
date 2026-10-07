@@ -18,7 +18,7 @@ votes, filled before a detector shows, for two lines:
 - cross-calibration (grey): the same sessions whatever the user wants, scored at the row's beta;
 - today's app at that preset (the deck's blue), its own sessions.
 
-Only beta 1/4 separates the two, so the slide sits in the appendix after Conclusion rather than in section V
+Only beta 1/4 separates the two, so the slide sits in the appendix after Conclusion rather than in Experimentation
 (#4563): an answer to a question, not a slide to walk a room through.
 
 Both start at the typed query, the notch at click 0. Page a draws cross-calibration alone ("one line, whatever

@@ -20,6 +20,23 @@ instead, since every commit on `dev` is effectively a new app release.)
   `"off"` = the offset cut, a number pins it) and `acq_origin` (`"line"`, or `"inclusion"`: the old
   Inclusion-knob origin for the offset). Priced in `docs/experiments/2026-10-07-acquisition-cut-3546/`.
 
+- **A typed-query sort's display line takes the balance** (issue #4603).
+  `text_sort_cuts(scores, rule=None, beta=None)` and `text_sort_threshold(..., beta=None)`:
+  at `beta <= TEXT_SORT_COUNT_MAX_BETA` (1) the guarded rule draws the line by count
+  (branch `"count"`). It keeps the top `round(beta ** TEXT_SORT_COUNT_EXPONENT * n_hat)`, where
+  `n_hat` is the excess over a Gaussian bulk (median, 1.4826 x MAD) above
+  `median + TEXT_SORT_COUNT_Z * sigma` (z = 4) and the exponent puts c at 3/8 for beta 1/4.
+  `beta=None`, beta above 1, a sort under `TEXT_SORT_COUNT_MIN_SCORES` (50), or one with no
+  spread keeps the guarded line. `acq_threshold` never moves with beta.
+  `query_sort.text_sort_active(query_vec, snap=None, beta=None)` reads the active balance
+  (`vtscore.state.get_beta`) when `beta` is `None`.
+
+- **The CLI calls the settings' detector list AutoFind** (issue #4615). The
+  app renamed its AutoRun (and the Settings' *Auto-Find*) to AutoFind, so
+  `vtscore.cli`'s plan heading reads `AutoFind detectors (N):` and its two
+  no-detector messages say *AutoFind*. Only printed text changed: the
+  `autofind_detectors` settings key and every function name are as before.
+
 - **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
   `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen
   `TextSortCuts(threshold, acq_threshold, branch)` from one mixture fit: `threshold` is the
@@ -88,6 +105,27 @@ instead, since every commit on `dev` is effectively a new app release.)
   robust logit spread (`corpus_sigma_floor`) rather than an absolute 0.25.
   `fit_corpus` and `corpus_posteriors` take the floor as `floor=`. The
   parametric fallback, with no corpus, keeps `MIN_LOGIT_SIGMA`.
+- **When the labels' Bads are a random sample, the labels line models the negatives with
+  their own scores** (issue #4490). `class_score_model` keeps the Bads' sorted held-out
+  logit scores on the model (`ClassScoreModel.neg_logits`, compared and summarised by
+  neither `==` nor `as_dict`) when there are at least `RANDOM_BADS_MIN` (100), never from
+  the in-sample fallback. `_line_on` reads them: when they are at most
+  `RANDOM_BADS_MAX_ENRICHMENT` (2) times over-represented in the corpus's top
+  `RANDOM_BADS_TOP_SHARE` (5%), each item's chance comes from the labels' Good normal
+  against a kernel density of the Bads, the positives' share fitted by EM, and the line
+  is the same `corpus_cut` over them; `LabelsLine.bads_shape` says which. Otherwise the
+  line is unchanged. A labelset from an exhaustively labelled dataset gains +0.155 /
+  +0.085 / +0.039 F-beta at 1/4, 1, 4 on the review's full-label ceiling; no session
+  within 150 clicks changes. `line_test_arm.row_from_snapshot` restores the Bads' scores
+  from a snapshot's folds, so its replay still matches the run.
+- **Withheld-half snapshots carry the calibration folds and the images' ids, and the
+  ceiling leaves one** (issue #4490). Every `test_score_sink` entry gains `fold_scores`,
+  `fold_labels` and `fold_index` (the step's held-out scores of its votes, from which
+  `class_score_model` is rebuilt exactly) and `ids` (the withheld images, in score order).
+  `_skyline_arm_rows(test_score_sink=...)` appends a `phase="ceiling"` entry for the
+  full-label model: the withheld half's scores and labels, its Find line's class model and
+  its folds. A line rule that changes the class model can be priced post hoc on a session
+  or on the ceiling without re-training either.
 - **The full-label ceiling's rank frame records Find's labels line** (issue
   #4486). `_skyline_arm_rows` draws the labels line from the skyline's own
   calibration folds (`_skyline_fit_and_score(details_sink=...)`), fits its
@@ -268,6 +306,14 @@ instead, since every commit on `dev` is effectively a new app release.)
     `_safe_threshold_for_step` takes `check=`.
 
 ### Added
+
+- **`DatasetImported`, how a dataset import ended** (issue #4616).
+  `vtscore.datasets.import_event` adds a frozen `DatasetImported(outcome,
+  dataset_id, name, user, media_type, n_media, origin, error)` with the
+  `SUCCEEDED` / `FAILED` outcome constants and their `ImportOutcome` type. The load pipeline hands one to its
+  new `on_finished` callback after a load that succeeded or failed (never after
+  a cancel); the app passes it to the admin's `--on-dataset-imported` hooks.
+  Additive: no existing signature changed meaning.
 
 - **Every eval row carries the objective** (issue #4584). The voting-iterations
   and calibration frames (`VOTING_COLUMNS`, `CALIBRATION_COLUMNS`) gain

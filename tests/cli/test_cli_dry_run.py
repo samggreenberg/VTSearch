@@ -100,7 +100,7 @@ class TestDryRunPickle:
         assert "DRY RUN" in out
         assert "Dataset pickle:" in out
         assert str(dataset_path) in out
-        assert "Auto-Find detectors (1)" in out
+        assert "AutoFind detectors (1)" in out
         assert "dry-tm" in out
         assert "media_type=audio" in out
         assert "labels=2" in out
@@ -199,17 +199,17 @@ class TestDryRunPickle:
         autodetect_main(str(dataset_path), settings_path=str(settings_path), dry_run=True)
 
         out = capsys.readouterr().out
-        assert "Auto-Find detectors: (none" in out
+        assert "AutoFind detectors: (none" in out
 
 
 class TestDryRunOverrideDetectors:
     """Issue #4235: an override (what ``--import-labels-into`` passes) replaces
-    the settings' Auto-Find list in the plan, and the plan says so."""
+    the settings' AutoFind list in the plan, and the plan says so."""
 
     def test_text_plan_lists_override_not_autofind(self, client, tmp_path, capsys):
         _write_trainable_model("imported-tm", _make_labelset_with_two_audio_labels())
         dataset_path = _make_dataset_file(tmp_path, medias)
-        settings_path = _settings_file_with_detectors(tmp_path, ["autorun-tm"])
+        settings_path = _settings_file_with_detectors(tmp_path, ["autofind-tm"])
 
         from vtscore.cli import autodetect_main
 
@@ -221,16 +221,16 @@ class TestDryRunOverrideDetectors:
         )
 
         out = capsys.readouterr().out
-        assert "Detectors (1; overrides the settings' Auto-Find list):" in out
+        assert "Detectors (1; overrides the settings' AutoFind list):" in out
         assert "imported-tm" in out
         assert "labels=2" in out
-        assert "autorun-tm" not in out
-        assert "Auto-Find detectors (" not in out
+        assert "autofind-tm" not in out
+        assert "AutoFind detectors (" not in out
 
     def test_json_plan_marks_override(self, client, tmp_path, capsys):
         _write_trainable_model("imported-tm", _make_labelset_with_two_audio_labels())
         dataset_path = _make_dataset_file(tmp_path, medias)
-        settings_path = _settings_file_with_detectors(tmp_path, ["autorun-tm"])
+        settings_path = _settings_file_with_detectors(tmp_path, ["autofind-tm"])
 
         from vtscore import cli_progress
         from vtscore.cli import autodetect_main
@@ -249,9 +249,9 @@ class TestDryRunOverrideDetectors:
         assert [d["name"] for d in plan["autofind_detectors"]] == ["imported-tm"]
 
     def test_json_plan_without_override_reads_autofind(self, client, tmp_path, capsys):
-        _write_trainable_model("autorun-tm", _make_labelset_with_two_audio_labels())
+        _write_trainable_model("autofind-tm", _make_labelset_with_two_audio_labels())
         dataset_path = _make_dataset_file(tmp_path, medias)
-        settings_path = _settings_file_with_detectors(tmp_path, ["autorun-tm"])
+        settings_path = _settings_file_with_detectors(tmp_path, ["autofind-tm"])
 
         from vtscore import cli_progress
         from vtscore.cli import autodetect_main
@@ -262,7 +262,7 @@ class TestDryRunOverrideDetectors:
         events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
         plan = next(e for e in events if e["event"] == "dry_run_plan")
         assert plan["detectors_source"] == "autofind"
-        assert [d["name"] for d in plan["autofind_detectors"]] == ["autorun-tm"]
+        assert [d["name"] for d in plan["autofind_detectors"]] == ["autofind-tm"]
 
 
 class TestDryRunImporter:

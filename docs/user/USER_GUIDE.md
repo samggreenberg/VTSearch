@@ -83,7 +83,7 @@ it, best match first. It also draws a **line** through that ranking (the
 *threshold*): items at or above the line are its **matches**, and items
 below it are not. Everything that acts on "the matches" acts on exactly the
 items above the line: the *Unverified Good* count in Test, **To Dataset**,
-**Export**, **Browse**, and the exports an AutoRun detector sends.
+**Export**, **Browse**, and the exports an AutoFind detector sends.
 
 Two numbers describe how good a set of matches is:
 
@@ -221,7 +221,7 @@ finished stay as votes.
 
 Everything that uses the matches works on the line in every state: the
 *Unverified Good* count, Test's review walk, **To Dataset**, **Export**
-and **Browse** all act on the items above it. An AutoRun or command-line run
+and **Browse** all act on the items above it. An AutoFind or command-line run
 has nobody to vote, so it can't be checked: it exports the line your labels
 draw for that collection and records it as unchecked, with a line in the run's log and a
 `balance` entry beside the threshold in exports that carry the full results
@@ -374,8 +374,8 @@ results in full:
 That is the whole loop. Once you trust the detector, the **Find** button
 beside **Test** runs it on new datasets without a test: tick the detectors
 and the datasets, and click **Find**. Or move the detector to the
-**AutoRun** tab, and it runs on every dataset you import (see
-[Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset)).
+**AutoFind** tab, and it runs on every dataset you import (see
+[Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
 The [how-to guides](#how-to-guides-one-task-at-a-time) below take each next
 step the same way, one task at a time; the rest of this guide covers each
@@ -419,8 +419,8 @@ picks up where it leaves off.
   answers and rebuild it elsewhere.
 - [Add labels you already have](howto/import-labels.md): import answers from a
   CSV file.
-- [Run your detectors on new pictures from the command line](howto/autorun-from-the-command-line.md):
-  **AutoRun** and `--autodetect`.
+- [Run your detectors on new pictures from the command line](howto/autofind-from-the-command-line.md):
+  **AutoFind** and `--autodetect`.
 - [Combine datasets or detectors](howto/combine.md): merge several into one.
 
 **Explore and manage your data**
@@ -569,11 +569,11 @@ If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.
 
-### Running AutoRun on a new dataset
+### Running AutoFind on a new dataset
 
-Once you have a detector on the Dashboard's **AutoRun** tab, every
-importer shows a **Run AutoRun detectors on this dataset** checkbox
-(outside **Advanced**). Ticked, VTSearch runs your AutoRun detectors on
+Once you have a detector on the Dashboard's **AutoFind** tab, every
+importer shows a **Run AutoFind detectors on this dataset** checkbox
+(outside **Advanced**). Ticked, VTSearch runs your AutoFind detectors on
 the dataset as soon as it is saved - the ones for the dataset's media
 type, provided the dataset has the kind of embedder each one scores
 with. The dialog remembers the box the way you left it at your last
@@ -581,24 +581,28 @@ import.
 
 The run shows on the new dataset's Dashboard row while it works, and its
 **Cancel** stops it. When it finishes, a notice tells you how many hits
-it found; its **View results** button opens the **AutoRun Results**
+it found; its **View results** button opens the **Find Results**
 dialog, which lists every item each detector called Good (switch to
 **Bad** or **Both** to see the rest), copies the list to the clipboard,
 and **Export**s the listed rows to any exporter. If you picked a results
-exporter on the Settings **Auto-Find** tab, the run has already sent the
-results there too. If none of your AutoRun detectors can run on the new
+exporter on the Settings **AutoFind** tab, the run has already sent the
+results there too. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
 of embedder the dataset doesn't have - a notice says so instead.
 
-To run AutoRun on a dataset you already have - to try a detector you
-just moved to AutoRun, say - pick **Run AutoRun** from the dataset's
+To run AutoFind on a dataset you already have - to try a detector you
+just moved to AutoFind, say - pick **Run AutoFind** from the dataset's
 **⋯** menu. It loads the dataset if it isn't loaded, runs the same
-detectors, and opens the AutoRun Results dialog when it is done. The
-item is greyed out when none of your AutoRun detectors are for that
-dataset's media type.
+detectors, and says when it is done with the same notice an import's run
+gives, its **View results** button a click away. AutoFind is the
+unattended path, the app's twin of the
+[command line's](howto/autofind-from-the-command-line.md) run, so it opens
+nothing on its own; to look through the hits as soon as they land, use
+**Find** below. The item is greyed out when none of your AutoFind
+detectors are for that dataset's media type.
 
 To run detectors of your choosing instead - drafts included, without
-moving them to the AutoRun tab - tick them and the datasets to run them
+moving them to the AutoFind tab - tick them and the datasets to run them
 on, and click the big **Find** button in the Dashboard's action bar,
 beside **Train** and **Test**. It is enabled once at least one dataset
 and one detector are ticked, all of one media type, and every ticked
@@ -606,10 +610,14 @@ detector is trained. Unlike Test, which takes exactly one dataset and one
 detector, it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
-finish opens the AutoRun Results dialog; any that finish while the
+finish opens the Find Results dialog; any that finish while the
 dialog is open announce themselves with a **View results** notice
-instead, so none of them is lost. Like every AutoRun, the runs also go
-to your Settings **Auto-Find** exporter when you have picked one.
+instead, so none of them is lost. The dialog's **Browse** button opens
+the listed items - the Good ones, or whichever side you switched to - in
+[Browse](#browse-exploring-a-dataset-spatially), laid out as a map of their own;
+**&larr; Back** there brings you back to the Dashboard with the results
+open again. Like every AutoFind, the runs also go to your Settings
+**AutoFind** exporter when you have picked one.
 
 ### Pre-computed embeddings (.npz)
 
@@ -1134,7 +1142,7 @@ Manual split applied to testing:
 Test is where you decide whether to trust a detector. To run detectors you
 already trust and collect what they match, with no view to work through, use
 the Dashboard's **Find** button instead (see
-[Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset)).
+[Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
@@ -1143,7 +1151,7 @@ the Dashboard's **Find** button instead (see
 
 ### The Test autopilot
 
-The question the Test autopilot answers is the one AutoRun needs answered: *if
+The question the Test autopilot answers is the one AutoFind needs answered: *if
 this detector shipped the matches it finds in a future dataset like this one,
 unchecked, what share would be right, and what share of the real matches
 would it ship?* The answer comes from **random picks** rather than from the
@@ -1209,8 +1217,8 @@ The right pane shows the result as it forms, and the verdict at Done:
 At **Done!** the verdict reads the ranges in a sentence, and offers three
 ways out, as the **Detector Trained** dialog does in Train:
 
-- **Move to AutoRun** - the reason the test exists. The detector joins your
-  AutoRun list, and you land on the Dashboard. It is offered whatever the
+- **Move to AutoFind** - the reason the test exists. The detector joins your
+  AutoFind list, and you land on the Dashboard. It is offered whatever the
   ranges say; the verdict sits beside the button.
 - **Lean the Threshold** - the same picks read at the line each balance would
   draw on this collection: how many each keeps, the likely share right, and
@@ -1227,7 +1235,7 @@ ways out, as the **Detector Trained** dialog does in Train:
 detector, one verdict per collection it was tested on (testing the same
 collection again replaces it): the ranges, the balance, the date, and the
 picks with what you said about each, never a score. The detector's **Stats**
-lists it under *Tested on*, and an AutoRun detector shows its latest under its
+lists it under *Tested on*, and an AutoFind detector shows its latest under its
 name on the Dashboard. Once the detector is retrained (more votes in Train,
 **Add Corrections**, imported labels), the ranking those picks were drawn
 from no longer exists, so the verdict is marked *out of date*; it stays, so
@@ -1371,9 +1379,9 @@ eight tabs:
   largest; **View** and **Hide** show them always or never), the metadata
   panel, the **Enable achievements** toggle, and per-media-type Scroll
   Style (focus mode and thumbnail size).
-- **Auto-Find** - what exporter to send AutoRun results to. (Which
-  detectors run is chosen on the Dashboard's **AutoRun** tab; see
-  [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset).)
+- **AutoFind** - what exporter to send AutoFind results to. (Which
+  detectors run is chosen on the Dashboard's **AutoFind** tab; see
+  [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
 - **Browser** - per-media-type look of the spatial Browse view
@@ -1413,7 +1421,7 @@ with bulk-action and per-card controls.
   **Readers**. A row that isn't in memory shows an inline **Load**
   button, which disappears once the dataset is loaded. The name has a
   pencil for **Rename**, **Delete** is an inline button, and the
-  remaining actions (**Browse dataset**, **Run AutoRun**, **Stats**, and -
+  remaining actions (**Browse dataset**, **Run AutoFind**, **Stats**, and -
   on multi-user deployments - access controls) live behind a **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-overflow.dark.webp" /><img src="assets/icon-overflow.light.webp" alt="The ⋯ row menu" height="24" /></picture> overflow
   menu.
 - **Detectors** - every saved detector, split across two tabs:
@@ -1422,10 +1430,10 @@ with bulk-action and per-card controls.
     is inline; the **⋯** overflow menu holds the rest, including
     **Import Labels** (import labels into this detector), **Export
     labels** (see [Exporting your work](#exporting-your-work)), and
-    **Move to AutoRun**.
-  - **AutoRun** holds finalized detectors. They run automatically
+    **Move to AutoFind**.
+  - **AutoFind** holds finalized detectors. They run automatically
     against every dataset you import (see
-    [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset))
+    [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset))
     and during CLI autodetect, and they are *frozen*: no rename, delete,
     retrain, or label import until you pick **Move to Drafts** from the
     **⋯** menu to unfreeze them. Read-only actions (**Load**, **Browse
@@ -1434,12 +1442,12 @@ with bulk-action and per-card controls.
     [test verdict](#the-result) the detector keeps (*Tested on
     drawings-new: likely 70-85% right, about half of them found (34
     picks, 2026-10-05)*), marked *Out of date* if it was retrained
-    since, or *Untested*: an AutoRun detector ships its matches
+    since, or *Untested*: an AutoFind detector ships its matches
     unchecked, and this is what it was measured to ship.
 
   A detector lives on exactly one tab at a time, and every user
-  curates their own AutoRun list. The typical loop: build and test a
-  detector in **Drafts**, move it to **AutoRun** once you trust it,
+  curates their own AutoFind list. The typical loop: build and test a
+  detector in **Drafts**, move it to **AutoFind** once you trust it,
   and move it back to Drafts later if it needs more tuning. Until you
   have a detector at all, both tabs are dimmed and the grid stays on
   Drafts, where a new detector lands.
@@ -1470,12 +1478,12 @@ against your selection.
 **Test** in the action bar to open the test view (see
 [Testing a detector](#testing-a-detector)).
 
-**Running detectors unattended:** select any number of datasets and
-detectors of one media type, then click **Find** in the action bar.
+**Finding with detectors of your choice:** select any number of datasets
+and detectors of one media type, then click **Find** in the action bar.
 It opens no view: each selected dataset gets a background run of every
 selected detector, shown on its row, and the results open in the
-**AutoRun Results** dialog as the runs finish (see
-[Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset)).
+**Find Results** dialog as the runs finish (see
+[Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
 You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Test / Find buttons

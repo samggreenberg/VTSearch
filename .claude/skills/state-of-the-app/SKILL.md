@@ -37,7 +37,9 @@ same edit.
   blind GMM cut, the detector's labels line, and for the full-label ceiling
   Find's labels line drawn from its full labels, #4486; the skyline's own row
   is still cut at the retired oracle on the test labels, which no Find could
-  draw, so a ceiling frame from before #4486 reads blank), the primary
+  draw, so a ceiling frame from before #4486 reads blank; from #4490's build
+  that line models the negatives with the full labels' own Bads, so a ceiling
+  line from an earlier review ran deep and is not comparable), the primary
   reading; and `top-K` (set-constant at the old cap,
   32 at beta <= 1 and 128 above, on every sort), a secondary view shown for
   both sorts or neither. The owner is skeptical a set-constant line will ever
@@ -385,6 +387,14 @@ things keep a report on its link:
   the beta-1 run's, the app's default arm. It opens on AP and does not offer
   cost (#4576); a page built before that gets both from
   `viewer.py --reskin <page> --default-metric average_precision --hide-metrics cost`.
+  Its averaged line carries a run's last scored value through a spot check's
+  rounds (#4624): a run inside a prompted check is scored once per round of
+  picks, and a mean over "the runs with a row at this click" skipped it between
+  rounds, which skipped exactly the weak sessions and drew a dip at the end of
+  every session as the checks ran out of budget. A page built before that gets
+  the carry from its own per-seed lines with `viewer.py --reskin <page>
+  --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
+  it). `analyze.py`'s curves and `by_click.py` already carried.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).
 - **A new kind** (a future modality) needs nothing here: its first report

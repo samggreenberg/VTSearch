@@ -78,7 +78,7 @@ collection as a whole.
 ## Step 4: Act on it
 
 - **Both shares small, the ranges high**: trust the unchecked calls. **Move
-  to AutoRun** puts the detector on your AutoRun list, to ship its matches
+  to AutoFind** puts the detector on your AutoFind list, to ship its matches
   from every dataset like this one; or send these matches on
   ([Send your matches somewhere](export-matches.md)).
 - **A range too low for what you will do with the matches**: **Lean the
@@ -92,7 +92,7 @@ collection as a whole.
   teaches it more than moving the Threshold would.
 
 Whichever you pick, the verdict stays with the detector: its **Stats** list it
-under *Tested on*, and the Dashboard's AutoRun tab shows the latest under its
+under *Tested on*, and the Dashboard's AutoFind tab shows the latest under its
 name, marked *out of date* once it is retrained. Test the same collection again
 later, with nothing retrained, and the test resumes from the picks you already
 took.

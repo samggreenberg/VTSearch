@@ -149,6 +149,8 @@ ENVX="$ENVX CALIB_ACQ_INCLUSION_OFFSET=${CALIB_ACQ_INCLUSION_OFFSET:-} CALIB_ACQ
 ENVX="$ENVX CALIB_WALK_PICKS=${CALIB_WALK_PICKS:-} CALIB_WALK_TOL=${CALIB_WALK_TOL:-} CALIB_WALK_FINE=${CALIB_WALK_FINE:-}"
 ENVX="$ENVX CALIB_WALK_GUARD=${CALIB_WALK_GUARD:-} CALIB_WALK_SHAPE=${CALIB_WALK_SHAPE:-}"
 ENVX="$ENVX CALIB_SAVE_TEST_SCORES=${CALIB_SAVE_TEST_SCORES:-} CALIB_SIM_SIZE=${CALIB_SIM_SIZE:-}"
+# #4490: extra snapshot clicks (comma list) beside the last and final ones.
+ENVX="$ENVX CALIB_SAVE_TEST_SCORES_AT=${CALIB_SAVE_TEST_SCORES_AT:-}"
 # The Test arm (#4523): Test mode's autopilot on the withheld half after the last click; off unless a study asks.
 ENVX="$ENVX CALIB_LINE_TEST=${CALIB_LINE_TEST:-}"
 # When the simulated user checks (#4496): empty is the end-of-run check; `weak` adds the prompt on weak separation.
@@ -304,6 +306,34 @@ redo)
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   ;;
 
+pack)
+  # Cells packed into a few multi-CPU jobs rather than an array, for when the cpu partition's per-user cap is
+  # full and another partition has idle nodes (#4490 ran on V100 nodes: CALIB_PARTITION=gpu
+  # CALIB_PACK_GRES=gpu:v100:1). CALIB_PACK_JOBS jobs, each running CALIB_PACK_PAR cells at a time. The GPU is
+  # hidden and each cell held to $CPUS threads, so a cell computes what an array task on the cpu partition would.
+  IDXS="${2:?usage: launch_bands.sh pack <comma-separated indices>}"
+  PJOBS="${CALIB_PACK_JOBS:-1}"
+  PAR="${CALIB_PACK_PAR:-16}"
+  GRES_ARG=()
+  [[ -n "${CALIB_PACK_GRES:-}" ]] && GRES_ARG=(--gres="$CALIB_PACK_GRES")
+  MEM_GB="${MEM%G}"
+  [[ "$MEM_GB" =~ ^[0-9]+$ ]] || { echo "pack needs CALIB_MEM in whole G (got $MEM)" >&2; exit 2; }
+  read -r -a ALL_IDX <<<"${IDXS//,/ }"
+  THREADS="OMP_NUM_THREADS=$CPUS MKL_NUM_THREADS=$CPUS OPENBLAS_NUM_THREADS=$CPUS"
+  for ((j = 0; j < PJOBS; j++)); do
+    SHARD=()
+    for ((i = j; i < ${#ALL_IDX[@]}; i += PJOBS)); do SHARD+=("${ALL_IDX[$i]}"); done
+    [[ ${#SHARD[@]} -eq 0 ]] && continue
+    echo "pack $j: ${#SHARD[@]} cells, $PAR at a time"
+    submit "pack$j" --job-name="$JOB_NAME-pack$j" \
+      --mem="$((PAR * MEM_GB))G" --cpus-per-task="$((PAR * CPUS))" --time="$TIME" \
+      --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
+      --output="$LOGS/pack$j-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $HERE && \
+printf '%s\n' ${SHARD[*]} | xargs -P $PAR -I{} sh -c 'python run_cells.py --index {} > $LOGS/cell-{}.out 2>&1 || echo FAILED {}'; echo pack done"
+  done
+  ;;
+
 status)
   echo "=== queue ==="
   squeue -u "$USER" -o "%.10i %.16j %.9T %.11M %.6D %R" | grep -E "bands|JOBID" || true
@@ -311,5 +341,5 @@ status)
   ls "$CALIB_RESULTS/cells" 2>/dev/null | wc -l
   ;;
 *)
-  echo "usage: launch_bands.sh {prepare|size <idx>|cells|redo <idx-list>|status}" >&2; exit 1 ;;
+  echo "usage: launch_bands.sh {prepare|size <idx>|cells|redo <idx-list>|pack <idx-list>|status}" >&2; exit 1 ;;
 esac

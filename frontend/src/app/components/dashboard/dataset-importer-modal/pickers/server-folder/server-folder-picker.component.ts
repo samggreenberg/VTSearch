@@ -79,10 +79,10 @@ export class ServerFolderPickerComponent {
   readonly buildProjectionChange = output<boolean>();
   readonly mergeNearDuplicates = input(false);
   readonly mergeNearDuplicatesChange = output<boolean>();
-  /** The Add Dataset dialog's "Run AutoRun" choice for this import, sent as
-   *  ``autorun``; ``null`` (the box is hidden) sends nothing, so the user's
-   *  remembered ``autorun_on_import`` setting decides server-side. */
-  readonly autorun = input<boolean | null>(null);
+  /** The Add Dataset dialog's "Run AutoFind" choice for this import, sent as
+   *  ``autofind``; ``null`` (the box is hidden) sends nothing, so the user's
+   *  remembered ``autofind_on_import`` setting decides server-side. */
+  readonly autofind = input<boolean | null>(null);
 
   readonly importStarted = output<void>();
 
@@ -475,8 +475,8 @@ export class ServerFolderPickerComponent {
     }
     params['build_projection'] = this.buildProjection() ? 'true' : 'false';
     params['merge_near_duplicates'] = this.mergeNearDuplicates() ? 'true' : 'false';
-    const autorun = this.autorun();
-    if (autorun !== null) params['autorun'] = autorun ? 'true' : 'false';
+    const autofind = this.autofind();
+    if (autofind !== null) params['autofind'] = autofind ? 'true' : 'false';
 
     this.datasetsCrudApi.runImporter('server_folder', params).subscribe({
       next: () => {

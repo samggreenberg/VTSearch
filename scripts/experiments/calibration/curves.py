@@ -50,7 +50,11 @@ into a good-looking curve:
    — is below :data:`SOLID_COVERAGE`.  A dashed line means "this level
    describes a subset".  The stretch between ``t=0`` and the first trainable
    click is dashed by the same rule and for the same reason: nothing was
-   measured in there.
+   measured in there.  A click a run has no row for *inside* its span is a
+   different thing: a spot check answers several picks at once and is scored
+   once per round, and the user has the run's last trained detector all the
+   while, so that row stands in for the clicks between (:func:`fill_gaps`,
+   #4624) and a check never drops a run from the mean.
 
    A **coverage strip** under the panel draws that fraction outright, but only
    when it is not already told by the dashing (:func:`_strip_worth_drawing`):
@@ -240,6 +244,61 @@ def _cell_columns(cells: Sequence[tuple], keys: list[str]) -> pd.Index:
     if len(keys) > 1:
         return pd.MultiIndex.from_tuples(list(cells), names=keys)
     return pd.Index([c[0] for c in cells], name=keys[0])
+
+
+#: Marks the rows :func:`fill_gaps` adds: 1 on a carried row, 0 on a scored one.
+CARRIED = "__carried"
+
+
+def fill_gaps(frame: pd.DataFrame, keys: Sequence[str]) -> pd.DataFrame:
+    """Carry each run's last scored row through the clicks it has none for (#4624).
+
+    A spot check answers its picks in rounds (#4496), so a run inside a
+    prompted check is scored once per round of about five votes and has no
+    row at the clicks between.  A mean over "the runs with a row at this
+    click" then skips exactly those runs, and Autopilot prompts the check
+    where the labels separate weakly, so what it skips is the weak sessions:
+    on the 2026-10-05 Binary Photo review the viewer's AP line read 0.58 at
+    click 133 over 1,195 runs and 0.53 at click 150 over all 1,403, a dip
+    the runs present at both clicks did not have.  Between two of its scored
+    rows the user has the run's last trained detector, so that row stands in
+    for every click up to the next one.
+
+    Rows are added only **inside** a run's span: never before its first
+    scored click (there is no detector there, and the gap from the text-sort
+    anchor to the first trained click is the honest drawing) and never after
+    its last (the run is over).  A metric that is NaN on a scored row (an
+    undefined precision) stays NaN and is what gets carried: only clicks
+    with no row at all are filled.  An added row copies the scored row it
+    stands in for, with ``t`` set to the click it fills and :data:`CARRIED`
+    set to 1; every original row gets :data:`CARRIED` 0.  *keys* identify a
+    run (the cell keys plus ``arm``); those absent from *frame* are ignored.
+    """
+    if frame.empty or "t" not in frame.columns:
+        return frame
+    kk = [k for k in keys if k in frame.columns]
+    scored = frame.assign(t=pd.to_numeric(frame["t"], errors="coerce")).dropna(subset=["t"])
+    carried: list[pd.DataFrame] = []
+    groups = scored.groupby(kk, dropna=False, sort=False) if kk else [((), scored)]
+    for _, g in groups:
+        have = np.unique(g["t"].to_numpy(dtype=float)).astype(int)
+        if len(have) < 2:
+            continue
+        missing = np.setdiff1d(np.arange(have[0], have[-1] + 1), have)
+        if not missing.size:
+            continue
+        last = g.sort_values("t", kind="stable").drop_duplicates("t", keep="last")
+        last = last.set_index(last["t"].astype(int)).drop(columns="t")
+        src = last.reindex(missing, method="ffill")
+        src.index.name = "t"
+        carried.append(src.reset_index())
+    out = frame.copy()
+    out[CARRIED] = 0
+    if not carried:
+        return out
+    extra = pd.concat(carried, ignore_index=True)
+    extra[CARRIED] = 1
+    return pd.concat([out, extra], ignore_index=True)
 
 
 def _wide(
@@ -477,6 +536,8 @@ def mean_figure(  # noqa: C901
     kk = _keys(main, keys)
     if main.empty or metric not in main.columns or "dataset" not in main.columns:
         return None, pd.DataFrame()
+    # A run inside a spot check keeps its last scored level between rounds (#4624).
+    main = fill_gaps(main, ("arm", *kk))
     datasets = sorted(str(d) for d in main["dataset"].dropna().unique())
     arms_present = [a for a in arms if (main["arm"] == a).any()]
     if not datasets or not arms_present:
@@ -663,6 +724,8 @@ def per_run_figures(  # noqa: C901
     arms_present = [a for a in arms if (main["arm"] == a).any()]
     if not arms_present:
         return []
+    # A run inside a spot check keeps its last scored level between rounds (#4624).
+    main = fill_gaps(main, ("arm", *kk))
 
     norm = _prevalence_norm(prevalence)
     cmap = plt.get_cmap("viridis_r")

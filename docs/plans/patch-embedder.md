@@ -246,7 +246,7 @@ independent of the active detector.
   heads-up.
 - **Compatibility gate (the substantive change).** A detector is compatible with a
   dataset iff same `media_type` **and** the dataset binds an embedder of the
-  detector's type. Find-label refuses an incompatible pair (409); Auto-Find silently
+  detector's type. Find-label refuses an incompatible pair (409); AutoFind silently
   skips incompatible detectors. All detector-scoped training/scoring funnels through
   one resolver, `keying_embedder_for_snap(det_ctx, snap)` (the dataset's concrete
   embedder of the detector's type, else the score precedence), so switching between

@@ -413,17 +413,17 @@ the returned `task_id` names it on the `loading-tasks` channel of
 [`/api/events`](events.md) (SSE). `task_id` can be `""` in the rare case no task
 was registered. Cancel with `POST /api/dataset/cancel/{task_id}`.
 
-**AutoRun after import.** `load-file`, `load-demo`, `import/{importer_name}`,
-`import-local-folder` and `import-local-files` accept an optional `autorun`
-flag (`"true"` / `"false"`): whether to run the caller's AutoRun detectors on
+**AutoFind after import.** `load-file`, `load-demo`, `import/{importer_name}`,
+`import-local-folder` and `import-local-files` accept an optional `autofind`
+flag (`"true"` / `"false"`): whether to run the caller's AutoFind detectors on
 the dataset once it is saved. A sent flag is also remembered as the caller's
-`autorun_on_import` [setting](settings.md), which decides an import that
+`autofind_on_import` [setting](settings.md), which decides an import that
 sends none (default `true`). The run starts only after the import finished
 successfully, as its own task on the `loading-tasks` channel keyed to the new
-dataset (see [Run AutoRun](#run-autorun-on-a-registered-dataset)). When none
-of the caller's AutoRun detectors applies (another media type, or an embedder
-type the dataset lacks) nothing runs; if they have any AutoRun detectors at
-all, a row that is already idle reports it, its `autorun.skipped` holding the
+dataset (see [Run AutoFind](#run-autofind-on-a-registered-dataset)). When none
+of the caller's AutoFind detectors applies (another media type, or an embedder
+type the dataset lacks) nothing runs; if they have any AutoFind detectors at
+all, a row that is already idle reports it, its `autofind.skipped` holding the
 reason.
 
 ### Demo datasets
@@ -650,31 +650,32 @@ POST /api/datasets/registry/{dataset_id}/load
 
 403 if access is denied; 404 if the dataset or its saved pickle is missing.
 
-### Run AutoRun on a registered dataset
+### Run AutoFind on a registered dataset
 
 ```
-POST /api/datasets/registry/{dataset_id}/autorun
+POST /api/datasets/registry/{dataset_id}/autofind
 Content-Type: application/json
 
 {"detector_ids": ["<detector id>", "..."]}
 ```
 
-→ `{"ok": true, "message": "AutoRun started", "task_id": "_autorun_…"}`
+→ `{"ok": true, "message": "AutoFind started", "task_id": "_autofind_…"}`
 
 Runs detectors that apply to the (loaded) dataset in the background. The body
 is optional. Without it (or with `detector_ids` omitted or `null`), the run
-uses the caller's AutoRun detectors - the Dashboard's ⋯ **Run AutoRun**. With
+uses the caller's AutoFind detectors - the Dashboard's ⋯ **Run AutoFind**. With
 `detector_ids`, it uses exactly the detectors those registry ids name, drafts
-included, and leaves the caller's AutoRun list alone - the Dashboard's big
+included, and leaves the caller's AutoFind list alone - the Dashboard's big
 **Find** button, which sends the ticked detectors once per ticked dataset.
 Detectors of another media type, or of an embedder type the dataset lacks, are
-skipped as for the AutoRun list. The task reports on the
+skipped as for the AutoFind list. The task reports on the
 `loading-tasks` channel with the dataset's `dataset_id`, so it renders on the
-dataset's row, and carries an `autorun` block: `{run_id, owner, trigger,
-dataset_id, dataset_name}`, plus `detectors_run`, `total_hits`,
+dataset's row, and carries an `autofind` block: `{run_id, owner, trigger,
+dataset_id, dataset_name}` (`trigger` is `"manual"` without `detector_ids` and
+`"find"` with them), plus `detectors_run`, `total_hits`,
 `missing_detectors` and `auto_export` once it finishes. The results go to the
-caller's Auto-Find exporter when one is set, and are served by
-[`GET /api/autorun/runs/{run_id}`](find.md#autorun-results). Cancel with
+caller's AutoFind exporter when one is set, and are served by
+[`GET /api/autofind/runs/{run_id}`](find.md#autofind-results). Cancel with
 `POST /api/dataset/cancel/{task_id}`.
 
 400 when none of the detectors to run applies (wrong media type, or an

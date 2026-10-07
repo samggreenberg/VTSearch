@@ -167,7 +167,7 @@ class TestSavingRun:
         autodetect_main(str(source), settings_path=str(_settings_file(tmp_path, [])), save_dataset=True)
 
         assert len(list_datasets()) == 1
-        assert "Detection skipped: no Auto-Find detectors are configured" in capsys.readouterr().out
+        assert "Detection skipped: no AutoFind detectors are configured" in capsys.readouterr().out
 
     def test_detector_for_another_media_type_saves_and_skips(self, client, tmp_path, capsys):
         _write_detector("videos-only", media_type="video")
@@ -177,7 +177,7 @@ class TestSavingRun:
         autodetect_main(str(source), settings_path=str(_settings_file(tmp_path, ["videos-only"])), save_dataset=True)
 
         assert len(list_datasets()) == 1
-        assert "Detection skipped: No Auto-Find detectors found for media type: audio" in capsys.readouterr().out
+        assert "Detection skipped: No AutoFind detectors found for media type: audio" in capsys.readouterr().out
 
     def test_already_saved_pickle_is_not_imported_twice(self, client, tmp_path, capsys):
         from vtscore.cli import autodetect_main

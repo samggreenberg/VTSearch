@@ -516,7 +516,7 @@ class TestRunPipelineFile:
         assert "yaml-detector" in body.get("results", {})
 
     def test_detectors_override_ignores_settings_autofind_list(self, client, tmp_path, monkeypatch):
-        """`detectors:` in the YAML overrides the settings file's Auto-Find
+        """`detectors:` in the YAML overrides the settings file's AutoFind
         list for that run only; the file on disk must NOT be touched."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)

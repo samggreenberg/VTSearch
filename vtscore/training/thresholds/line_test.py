@@ -1,7 +1,7 @@
 """The test sample: what Test mode measures about a detector's line, and how (#4527).
 
 Test mode (``vtscore/docs/packages/training.md``) asks one question of a detector on a
-corpus it never trained on: *if this line went to AutoRun, what share of what
+corpus it never trained on: *if this line went to AutoFind, what share of what
 it ships would be right, and what share of the real matches would it ship?*
 The answer is the line's precision and recall on that corpus, each as a
 likely range, and F-beta at the user's balance as the headline, all from

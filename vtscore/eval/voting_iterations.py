@@ -1418,6 +1418,32 @@ def _skyline_fit_and_score(
     return ({cid: float(v) for cid, v in zip(ids, pooled, strict=True)}, step, timings, score_seconds)
 
 
+def _model_meta(model: Any) -> dict[str, Any]:
+    """The class model's scalars at full precision, for a snapshot's JSON; its Bads' scores travel in the folds."""
+    return {k: v for k, v in asdict(model).items() if k != "neg_logits"}
+
+
+def _fold_arrays(orderings: Any) -> dict[str, Any]:
+    """The calibration folds' held-out scores and labels as flat arrays, for a test-score snapshot (#4490).
+
+    ``fold_index`` says which fold each score was held out in, so a replay can rebuild
+    :func:`~vtscore.training.thresholds.labels_line.class_score_model`'s input exactly.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    parts = [
+        (np.asarray(s, dtype=np.float64).ravel(), np.asarray(y, dtype=np.float64).ravel()) for s, y in orderings or []
+    ]
+    parts = [(s[: min(s.size, y.size)], y[: min(s.size, y.size)]) for s, y in parts]
+    return {
+        "fold_scores": np.concatenate([s for s, _ in parts]) if parts else np.empty(0, dtype=np.float64),
+        "fold_labels": (np.concatenate([y for _, y in parts]) if parts else np.empty(0)).astype(np.int8),
+        "fold_index": np.concatenate([np.full(s.size, i, dtype=np.int16) for i, (s, _) in enumerate(parts)])
+        if parts
+        else np.empty(0, dtype=np.int16),
+    }
+
+
 def _ceiling_find_line(details: dict[str, Any], score_map: dict[int, float], ordered_test: list[int]) -> Any:
     """The ceiling's Find line (#4486): what a Find on the withheld half returns with every training label known.
 
@@ -1430,6 +1456,37 @@ def _ceiling_find_line(details: dict[str, Any], score_map: dict[int, float], ord
 
     test_scores = np.array([score_map[cid] for cid in ordered_test], dtype=np.float64)
     return fit_labels_line(details.get("fold_orderings") or None, test_scores, ordered_test, {})
+
+
+def _ceiling_line(
+    details: dict[str, Any],
+    score_map: dict[int, float],
+    ordered_test: list[int],
+    test_labels: Any,
+    want_frame: bool,
+    test_score_sink: Optional[list[dict[str, Any]]],
+) -> Any:
+    """The ceiling's Find line when a frame or a snapshot wants it; leaves the snapshot in *test_score_sink* (#4490)."""
+    import numpy as np  # noqa: PLC0415
+
+    if not want_frame and test_score_sink is None:
+        return None
+    find_line = _ceiling_find_line(details, score_map, ordered_test)
+    if test_score_sink is not None:
+        test_score_sink.append(
+            {
+                "t": 0,
+                "phase": "ceiling",
+                "scores": np.array([score_map[cid] for cid in ordered_test], dtype=np.float64),
+                "labels": np.asarray(test_labels).astype(np.int8),
+                "ids": np.asarray(ordered_test, dtype=np.int64),
+                "train_threshold": float("nan"),
+                "beta": float("nan"),
+                "model": None if find_line is None else _model_meta(find_line.model),
+                **_fold_arrays(details.get("fold_orderings")),
+            }
+        )
+    return find_line
 
 
 def _skyline_arm_rows(
@@ -1450,6 +1507,7 @@ def _skyline_arm_rows(
     seed: int,
     rank_frame_sink: Optional[list[dict[str, Any]]] = None,
     rank_ident: Optional[dict[str, Any]] = None,
+    test_score_sink: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """One metric row per requested skyline arm (issue #3322), or ``[]``.
 
@@ -1479,7 +1537,10 @@ def _skyline_arm_rows(
     Returns each row already carrying its ``gmm_variant`` tag and its own timing
     / backend columns; the caller supplies the identifying columns.  With a
     *rank_frame_sink*, each arm also appends its test ranking there as a rank
-    frame of that arm's kind (#4357), under *rank_ident*.
+    frame of that arm's kind (#4357), under *rank_ident*.  With a
+    *test_score_sink*, the full-label arm also leaves a ``phase="ceiling"``
+    snapshot there (#4490): the withheld half's scores and labels, the class
+    model its Find line used, and the calibration folds it was drawn from.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1566,8 +1627,8 @@ def _skyline_arm_rows(
                 calibration_fraction=calibration_fraction,
                 details_sink=sky_details,
             )
-            find_line = (
-                _ceiling_find_line(sky_details, score_map, ordered_test) if rank_frame_sink is not None else None
+            find_line = _ceiling_line(
+                sky_details, score_map, ordered_test, test_labels, rank_frame_sink is not None, test_score_sink
             )
             row = _row(SKYLINE_TRAIN_FULL, score_map, step, timings, secs, find_on_test=find_line)
             if row is not None:
@@ -3411,9 +3472,12 @@ def simulate_voting_iterations(  # noqa: C901
                         # float32 score or a rounded model moves its line and its tail.
                         "scores": np.asarray(calibration[1], dtype=np.float64),
                         "labels": np.asarray(calibration[2], dtype=np.int8),
+                        # Which image each score is (#4490): a report can name the wrong images a line keeps.
+                        "ids": np.asarray(calibration[3], dtype=np.int64),
                         "train_threshold": float(threshold),
                         "beta": float(details["beta"]) if details.get("beta") is not None else float("nan"),
-                        "model": None if find_line is None else asdict(find_line.model),
+                        "model": None if find_line is None else _model_meta(find_line.model),
+                        **_fold_arrays(details.get("fold_orderings")),
                     }
                 )
         else:
@@ -3859,6 +3923,7 @@ def simulate_voting_iterations(  # noqa: C901
             seed=seed,
             rank_frame_sink=rank_frame_sink,
             rank_ident=rank_ident,
+            test_score_sink=test_score_sink,
         )
         _apply_skyline_decomposition(rows, skyline_rows)
         # `t=0` and `app_trained=0`: the skyline belongs to no step, so it is

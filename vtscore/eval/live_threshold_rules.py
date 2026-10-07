@@ -17,7 +17,7 @@ no extra training and cannot move the fold models, the splits or the head.
 
 The rules, in the deck's order:
 
-* ``xcal_mincost`` - **iteration 1, as the "Grading Your Own Homework" slide
+* ``xcal_mincost`` - **iteration 1, as the "Grade My Own Homework" slide
   draws it.**  Each fold model's cost-minimising cut on its own held-out votes,
   averaged in score space and handed to the final model.  This is the rule of
   commit ``b5033a152`` (2026-02-16) - ``>=`` at an observed score, ties broken
@@ -33,8 +33,8 @@ The rules, in the deck's order:
   which on binary voting is ``corridor20`` (the band clamp the "Weight and See"
   slide draws).  The x-cal side is *this ladder's* rung-1 cut, not the pooled
   conformal quantile, so rung 3 is literally rungs 1 and 2 combined.
-* ``anchored_rawmean`` - **iteration 4's strawman**, the ``b`` build of "The
-  Rank & File": each fold's anchored mixture cut at its own midpoint, and the
+* ``anchored_rawmean`` - **iteration 4's strawman**, the ``b`` build of "No
+  Mean Feat": each fold's anchored mixture cut at its own midpoint, and the
   per-fold cuts averaged *as raw scores* on the final model.  The slide's point
   is that this is wrong - three models, three scales - and the shipped
   quantile transfer is the fix.

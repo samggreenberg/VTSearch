@@ -22,7 +22,7 @@ import { DashboardModalsService } from '../../services/dashboard-modals.service'
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { AutoRunService } from '../../services/autorun.service';
+import { AutoFindService } from '../../services/autofind.service';
 import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -99,7 +99,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   browsePrep = inject(BrowsePrepService);
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
-  private autorun = inject(AutoRunService);
+  private autofind = inject(AutoFindService);
 
   /** The highlighted rows, owned by `DashboardSelectionService` (a root
    *  singleton, so the top bar reads them without this component and they
@@ -418,24 +418,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.datasetState.detectors;
   }
 
-  /** Draft (editable) detectors: everything not on the user's AutoRun list. */
+  /** Draft (editable) detectors: everything not on the user's AutoFind list. */
   get draftDetectors(): DetectorRegistryEntry[] {
     return this.detectors.filter((d) => !d.autofind);
   }
 
-  /** AutoRun (frozen) detectors: auto-run on every dataset as it's imported. */
-  get autorunDetectors(): DetectorRegistryEntry[] {
+  /** AutoFind (frozen) detectors: auto-run on every dataset as it's imported. */
+  get autofindDetectors(): DetectorRegistryEntry[] {
     return this.detectors.filter((d) => !!d.autofind);
   }
 
   /** The detectors shown by the active grid tab. Selection, the header
    *  master-checkbox, and the section actions all operate on this subset. */
   get visibleDetectors(): DetectorRegistryEntry[] {
-    return this.detectorTab() === 'autorun' ? this.autorunDetectors : this.draftDetectors;
+    return this.detectorTab() === 'autofind' ? this.autofindDetectors : this.draftDetectors;
   }
 
   /** True once the registry has loaded and holds no detectors in either tab.
-   *  Disables (and dims) the Drafts / AutoRun tabs: with nothing to switch
+   *  Disables (and dims) the Drafts / AutoFind tabs: with nothing to switch
    *  between, the strip would only distract a first-time user. */
   get noDetectors(): boolean {
     return this.registryLoaded && this.detectors.length === 0;
@@ -491,7 +491,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     } else if (currentIds.size === 1 && this.dashSelection.count(kind) === 0) {
       // Exactly one item and nothing selected; auto-select it. A lone
       // detector on the hidden tab is refused by the selection service, so
-      // Drafts with only an AutoRun detector stays empty (#4228).
+      // Drafts with only an AutoFind detector stays empty (#4228).
       this.dashSelection.selectOnly(kind, currentIds);
     }
     if (kind === 'dataset') this.knownDatasetIds = currentIds;
@@ -830,11 +830,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Move a detector between the Drafts and AutoRun tabs by toggling its
-   *  per-user Auto-Find membership. The row disappears from the current tab
+  /** Move a detector between the Drafts and AutoFind tabs by toggling its
+   *  per-user AutoFind membership. The row disappears from the current tab
    *  (and from the selection) and reappears on the other one. */
-  setDetectorAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
-    this.detectorsRegistryApi.setAutofind(model.id, autorun).subscribe({
+  setDetectorAutofind(model: DetectorRegistryEntry, autofind: boolean): void {
+    this.detectorsRegistryApi.setAutofind(model.id, autofind).subscribe({
       next: () => {
         this.dashSelection.deselect('detector', model.id);
         this.datasetState.refresh();
@@ -847,7 +847,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId.set(model.id);
-    // No AutoRun caveat needed here: AutoRun rows are frozen (no Delete
+    // No AutoFind caveat needed here: AutoFind rows are frozen (no Delete
     // affordance), so only draft detectors can reach this dialog.
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
@@ -883,35 +883,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** How many of the user's AutoRun detectors are for *dataset*'s media type:
-   *  the ones its ⋯ "Run AutoRun" would run. */
-  autorunDetectorCountFor(dataset: DatasetRegistryEntry): number {
-    return this.autorunDetectors.filter((d) => d.media_type === dataset.media_type).length;
+  /** How many of the user's AutoFind detectors are for *dataset*'s media type:
+   *  the ones its ⋯ "Run AutoFind" would run. */
+  autofindDetectorCountFor(dataset: DatasetRegistryEntry): number {
+    return this.autofindDetectors.filter((d) => d.media_type === dataset.media_type).length;
   }
 
-  /** The dataset ⋯ "Run AutoRun": run the user's AutoRun detectors on it now,
-   *  or exactly *detectorIds* when given (the big Find button, via
-   *  {@link onAutorun}). The run is a background task shown inline on the row,
-   *  and its results dialog opens when it finishes (`AutoRunService`). AutoRun
-   *  scores a dataset in memory, so an unloaded one is loaded first. */
-  runAutorun(dataset: DatasetRegistryEntry, detectorIds?: string[]): void {
+  /** The dataset ⋯ "Run AutoFind": run the user's AutoFind detectors on it
+   *  now. The run is a background task shown inline on the row, and a toast
+   *  says when it is done (`AutoFindService`); it opens no dialog, since
+   *  AutoFind is the unattended path (#4615). */
+  runAutofind(dataset: DatasetRegistryEntry): void {
+    this.whenLoaded(dataset, () => this.autofind.run(dataset.id));
+  }
+
+  /** Run *start* once *dataset* is loaded: AutoFind and Find score a dataset
+   *  in memory, so an unloaded one is loaded first. */
+  private whenLoaded(dataset: DatasetRegistryEntry, start: () => void): void {
     if (dataset.loaded) {
-      this.autorun.run(dataset.id, detectorIds);
+      start();
       return;
     }
     this.datasetsRegistryApi.loadRegistered(dataset.id).subscribe({
       next: (response) => {
         if (!response.task_id) {
-          this.autorun.run(dataset.id, detectorIds);
+          start();
           return;
         }
         // Fires once the load settles, and not at all if it fails.
-        this.loadingTasksSvc.startProgressPolling(response.task_id, () =>
-          this.autorun.run(dataset.id, detectorIds),
-        );
+        this.loadingTasksSvc.startProgressPolling(response.task_id, start);
       },
     });
   }
+
 
   /** Launch the VTSBrowse view for a dataset. Loads the dataset (if needed)
    *  AND builds its projection first — with progress shown inline on the
@@ -1094,7 +1098,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       dataset_name?: string;
       build_projection?: boolean;
       merge_near_duplicates?: boolean;
-      autorun?: boolean;
+      autofind?: boolean;
     };
     const params: Record<string, string | string[] | Record<string, number | string> | CleanerSelection[]> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
@@ -1113,7 +1117,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (userName) params['dataset_name'] = userName;
     if (extras.build_projection) params['build_projection'] = 'true';
     if (extras.merge_near_duplicates) params['merge_near_duplicates'] = 'true';
-    if (extras.autorun !== undefined) params['autorun'] = extras.autorun ? 'true' : 'false';
+    if (extras.autofind !== undefined) params['autofind'] = extras.autofind ? 'true' : 'false';
     this.datasetsCrudApi.loadDemo(demo.name, params).subscribe({
       next: (response) => {
         this.loadingTasksSvc.startProgressPolling(response.task_id);
@@ -1285,7 +1289,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (selectedModels.length !== 1) return false;
     const model = selectedModels[0];
     if (model.media_type !== selectedDatasets[0].media_type) return false;
-    // AutoRun detectors are frozen: move back to Drafts before retraining.
+    // AutoFind detectors are frozen: move back to Drafts before retraining.
     if (model.autofind) return false;
     return true;
   }
@@ -1314,7 +1318,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  dataset and one detector, one media type across every ticked row, and
    *  every ticked detector trained. Test and Find share this rule, except that
    *  Test (*onePair*) opens one view on one pair and so takes exactly one of
-   *  each, as Train does; Find runs AutoRun on every ticked dataset with every
+   *  each, as Train does; Find runs AutoFind on every ticked dataset with every
    *  ticked detector.
    *
    *  Each reason is shown under its button as well as in the tooltip, so it
@@ -1350,14 +1354,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** The big Find button (#4529; labelled AutoRun until #4525): enabled on
    *  Test's rule, for any number of ticked rows. */
-  get autorunEnabled(): boolean {
+  get autofindEnabled(): boolean {
     return this.scoreSelectionBlocker(false) === '';
   }
 
-  get autorunHint(): string {
+  get autofindHint(): string {
     return (
       this.scoreSelectionBlocker(false) ||
-      'Run every selected detector on every selected dataset, as AutoRun does, and show the results as each run finishes'
+      'Run every selected detector on every selected dataset, as AutoFind does, and show the results as each run finishes'
     );
   }
 
@@ -1376,7 +1380,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return 'Media type mismatch';
     }
     if (model?.autofind) {
-      // AutoRun detectors are frozen against edits.
+      // AutoFind detectors are frozen against edits.
       return 'Frozen: move to Drafts to retrain';
     }
     return 'Open the Train view with the selected dataset and detector';
@@ -1422,15 +1426,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.router.navigate(['/test', dataset.id, model.id]);
   }
 
-  /** The big Find button: one background AutoRun per ticked dataset, each
-   *  restricted to the ticked detectors (drafts run as they are, without
-   *  moving to the AutoRun tab). Not a view: the runs show inline on their
-   *  dataset rows, and `AutoRunService` opens the results as they land. */
-  onAutorun(): void {
-    if (!this.autorunEnabled) return;
+  /** The big Find button: one background AutoFind run per ticked dataset,
+   *  each restricted to the ticked detectors (drafts run as they are, without
+   *  moving to the AutoFind tab). Not a view: the runs show inline on their
+   *  dataset rows, and `AutoFindService` opens the Find Results dialog as they
+   *  land. */
+  onAutofind(): void {
+    if (!this.autofindEnabled) return;
     const detectorIds = this.resolvedSelectedModels.map((m) => m.id);
     for (const dataset of this.resolvedSelectedDatasets) {
-      this.runAutorun(dataset, detectorIds);
+      this.whenLoaded(dataset, () => this.autofind.find(dataset.id, detectorIds));
     }
   }
 }

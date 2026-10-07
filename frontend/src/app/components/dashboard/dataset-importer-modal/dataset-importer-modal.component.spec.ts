@@ -157,8 +157,8 @@ describe('DatasetImporterModalComponent', () => {
     httpMock
       .match((req) => req.url.endsWith('/suggested-name'))
       .forEach((req) => req.flush({ dataset_name: 'suggested' }));
-    // ngOnInit fetches the detector registry (for the Run AutoRun box) when
-    // nothing has yet; only the AutoRun tests below care what it holds.
+    // ngOnInit fetches the detector registry (for the Run AutoFind box) when
+    // nothing has yet; only the AutoFind tests below care what it holds.
     flushRegistry([]);
     httpMock.verify();
   });
@@ -611,8 +611,8 @@ describe('DatasetImporterModalComponent', () => {
     });
   });
 
-  describe('Run AutoRun checkbox', () => {
-    const autorunDetector = { id: 'd1', name: 'Barks', media_type: 'audio', autofind: true };
+  describe('Run AutoFind checkbox', () => {
+    const autofindDetector = { id: 'd1', name: 'Barks', media_type: 'audio', autofind: true };
 
     function openGenericForm(): void {
       component.selectImporter(genericForm());
@@ -622,46 +622,46 @@ describe('DatasetImporterModalComponent', () => {
     }
 
     function checkbox(): HTMLInputElement | null {
-      return fixture.nativeElement.querySelector('#import-run-autorun');
+      return fixture.nativeElement.querySelector('#import-run-autofind');
     }
 
-    it('is hidden, and sends nothing, when the user has no AutoRun detectors', async () => {
+    it('is hidden, and sends nothing, when the user has no AutoFind detectors', async () => {
       flushImporters();
-      flushRegistry([{ ...autorunDetector, autofind: false }]);
+      flushRegistry([{ ...autofindDetector, autofind: false }]);
       openGenericForm();
       await settleZoneless(fixture);
 
       expect(checkbox()).toBeNull();
       component.genericFormPicker().submit();
       const req = httpMock.expectOne('/api/dataset/import/generic_form');
-      expect('autorun' in req.request.body).toBe(false);
+      expect('autofind' in req.request.body).toBe(false);
       req.flush({});
     });
 
     it('starts from the remembered setting and sends the choice', async () => {
-      flushImporters({ autorun_on_import: false });
-      flushRegistry([autorunDetector]);
+      flushImporters({ autofind_on_import: false });
+      flushRegistry([autofindDetector]);
       openGenericForm();
       await settleZoneless(fixture);
 
       expect(checkbox()?.checked).toBe(false);
       component.genericFormPicker().submit();
       const req = httpMock.expectOne('/api/dataset/import/generic_form');
-      expect(req.request.body['autorun']).toBe('false');
+      expect(req.request.body['autofind']).toBe('false');
       req.flush({});
     });
 
-    it('sends a ticked box as autorun=true', async () => {
-      flushImporters({ autorun_on_import: false });
-      flushRegistry([autorunDetector]);
+    it('sends a ticked box as autofind=true', async () => {
+      flushImporters({ autofind_on_import: false });
+      flushRegistry([autofindDetector]);
       openGenericForm();
-      component.onRunAutorunChange(true);
+      component.onRunAutofindChange(true);
       await settleZoneless(fixture);
 
       expect(checkbox()?.checked).toBe(true);
       component.genericFormPicker().submit();
       const req = httpMock.expectOne('/api/dataset/import/generic_form');
-      expect(req.request.body['autorun']).toBe('true');
+      expect(req.request.body['autofind']).toBe('true');
       req.flush({});
     });
   });

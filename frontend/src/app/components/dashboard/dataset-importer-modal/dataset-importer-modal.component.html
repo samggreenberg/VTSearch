@@ -45,7 +45,7 @@
         (buildProjectionChange)="buildProjection = $event"
         [mergeNearDuplicates]="mergeNearDuplicates"
         (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-        [autorun]="autorunFlag"
+        [autofind]="autofindFlag"
         (demoDatasetSelected)="onDemoDatasetSelected($event)"
       ></vt-demo-picker>
     </ng-container>
@@ -74,7 +74,7 @@
         (buildProjectionChange)="buildProjection = $event"
         [mergeNearDuplicates]="mergeNearDuplicates"
         (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-        [autorun]="autorunFlag"
+        [autofind]="autofindFlag"
         (importStarted)="importStarted.emit()"
       ></vt-server-folder-picker>
     </ng-container>
@@ -113,7 +113,7 @@
         (buildProjectionChange)="buildProjection = $event"
         [mergeNearDuplicates]="mergeNearDuplicates"
         (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-        [autorun]="autorunFlag"
+        [autofind]="autofindFlag"
         (importStarted)="importStarted.emit()"
       ></vt-local-folder-picker>
     </ng-container>
@@ -129,26 +129,26 @@
     (buildProjectionChange)="buildProjection = $event"
     [mergeNearDuplicates]="mergeNearDuplicates"
     (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-    [autorun]="autorunFlag"
+    [autofind]="autofindFlag"
     (importStarted)="importStarted.emit()"
   ></vt-generic-form-picker>
 
-  <!-- Outside Advanced on purpose: whether the user's AutoRun detectors run on
+  <!-- Outside Advanced on purpose: whether the user's AutoFind detectors run on
        this import is a routine per-import choice, not a tuning knob. -->
-  @if (selectedImporter() && autorunDetectorCount > 0) {
-    <div class="form-group autorun-toggle">
+  @if (selectedImporter() && autofindDetectorCount > 0) {
+    <div class="form-group autofind-toggle">
       <label
         class="form-label"
-        for="import-run-autorun"
-        [title]="'Once the dataset is saved, run the detectors on your AutoRun tab (' + autorunDetectorCount + ') that match its media type. Their results open from a notice when they finish, and go to your Auto-Find exporter if you set one. Your choice is remembered for your next import.'"
+        for="import-run-autofind"
+        [title]="'Once the dataset is saved, run the detectors on your AutoFind tab (' + autofindDetectorCount + ') that match its media type. Their results open from a notice when they finish, and go to your AutoFind exporter if you set one. Your choice is remembered for your next import.'"
       >
         <input
-          id="import-run-autorun"
+          id="import-run-autofind"
           type="checkbox"
-          [ngModel]="runAutorun()"
-          (ngModelChange)="onRunAutorunChange($event)"
+          [ngModel]="runAutofind()"
+          (ngModelChange)="onRunAutofindChange($event)"
         />
-        Run AutoRun detectors on this dataset
+        Run AutoFind detectors on this dataset
       </label>
     </div>
   }

@@ -96,7 +96,7 @@ export function testLineState(response: LineTestResponse | null, lineCount: numb
 
 /**
  * A verdict the detector keeps (#4526) in one line, as the Stats dialog's
- * *Tested on* section and the Dashboard's AutoRun tab read it:
+ * *Tested on* section and the Dashboard's AutoFind tab read it:
  * "drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)".
  */
 export function verdictLine(verdict: LineTestVerdict): string {

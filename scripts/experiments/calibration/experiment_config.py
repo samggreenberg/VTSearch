@@ -1048,6 +1048,11 @@ WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
 SAVE_TEST_SCORES = os.environ.get("CALIB_SAVE_TEST_SCORES", "").strip().lower() in ("1", "true", "yes")
+#: Clicks at which to keep a snapshot too (``CALIB_SAVE_TEST_SCORES_AT=10,25,50``; #4490 prices a line rule over clicks):
+#: the first ordinary step at or past each, saved as ``t<N>``.  Each snapshot also carries the step's calibration folds.
+SAVE_TEST_SCORES_AT = tuple(
+    int(x) for x in os.environ.get("CALIB_SAVE_TEST_SCORES_AT", "").replace(" ", "").split(",") if x
+)
 #: The Test arm (#4523, ``CALIB_LINE_TEST=1``): after the last ordinary click, run Test mode's autopilot on the
 #: withheld half with every pick answered from the truth, at the app's default budgets, into
 #: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.

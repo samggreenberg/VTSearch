@@ -511,7 +511,7 @@ class TestDashboardModelRegistryColumns:
         assert m["created_at"] > 0
 
     def test_model_registry_includes_autofind_false_by_default(self, client):
-        """Detectors that are not flagged for Auto-Find show autofind=False."""
+        """Detectors that are not flagged for AutoFind show autofind=False."""
         register_detector(name="no-autofind", media_type="image")
         resp = client.get("/api/detectors/registry")
         data = resp.get_json()
@@ -519,7 +519,7 @@ class TestDashboardModelRegistryColumns:
         assert m["autofind"] is False
 
     def test_autofind_toggle_via_api(self, client):
-        """Toggling Auto-Find via PUT updates the model registry response."""
+        """Toggling AutoFind via PUT updates the model registry response."""
         from vtsearch.settings import get_autofind_detectors
 
         entry = register_detector(name="toggle-det", media_type="audio")
@@ -588,10 +588,10 @@ class TestDashboardModelRegistryColumns:
 
 
 class TestAutofindCheckboxPersistence:
-    """Tests that toggling Auto-Find via the API persists the setting."""
+    """Tests that toggling AutoFind via the API persists the setting."""
 
     def test_autofind_toggle_persists_to_settings(self, client):
-        """Toggling Auto-Find on saves the model name to settings."""
+        """Toggling AutoFind on saves the model name to settings."""
         from vtsearch.settings import get_autofind_detectors
 
         entry = register_detector(name="persist-det", media_type="audio")
@@ -604,7 +604,7 @@ class TestAutofindCheckboxPersistence:
         assert "persist-det" in get_autofind_detectors()
 
     def test_autofind_toggle_off_removes_from_settings(self, client):
-        """Toggling Auto-Find off removes the model name from settings."""
+        """Toggling AutoFind off removes the model name from settings."""
         from vtsearch.settings import add_autofind_detector, get_autofind_detectors
 
         entry = register_detector(name="remove-det", media_type="audio")

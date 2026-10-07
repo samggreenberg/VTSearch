@@ -6,7 +6,7 @@ import { checkboxValue, isChecked } from '../../utils/plugin-checkbox';
  * The `<input type="checkbox">` for a ``"checkbox"`` ``PluginField``.
  *
  * Every surface that renders plugin fields (the exporter and importer modals,
- * the label importer, the New Model form, Auto-Find, the dataset importer
+ * the label importer, the New Model form, AutoFind, the dataset importer
  * pickers, …) is a near-duplicate of the others, and each one open-codes a
  * chain of ``@if (field.field_type === …)`` branches. When ``checkbox`` was
  * added, only two of the ten chains grew a branch for it; on the other eight a

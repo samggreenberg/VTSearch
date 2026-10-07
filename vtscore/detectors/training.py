@@ -192,7 +192,7 @@ def _labels_line(
     The class model the calibration folds' held-out scores of the votes imply,
     cut where the expected F-beta peaks at the prevalence that model estimates
     on the corpus this retrain scored - the Train dataset in Train, the
-    searched one in Find, AutoRun and the CLI.  The same labels and embedder
+    searched one in Find, AutoFind and the CLI.  The same labels and embedder
     give the same model everywhere; no count is drawn on any corpus.  ``None``
     (too few votes, one class) leaves the caller's fallbacks, which admit
     nothing when the folds never split.

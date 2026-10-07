@@ -475,7 +475,7 @@ def ensure_detector_model_matches_active_embedder() -> None:
     The scoring fast-paths
     (:func:`vtscore.detectors.model_loading.resolve_or_train_detector`
     and the find dispatcher) defensively repeat the check per-detector,
-    since Auto-Find / multi-dataset Find iterate detectors that aren't the
+    since AutoFind / multi-dataset Find iterate detectors that aren't the
     active one.
     """
     from vtscore.state.core import get_active_detector_context

@@ -45,7 +45,7 @@ choose **Stats**. The **Stats: Yellow Smileys** window shows:
    the dataset currently open, out of all of them.
 3. **Creation** and **Provenance**: its kind of media, embedder and
    description, when it was made and last trained, by whom, and whether it is
-   on the **AutoRun** tab.
+   on the **AutoFind** tab.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/detector-stats.dark.webp" />

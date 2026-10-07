@@ -820,11 +820,11 @@ export class FindViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * The verdict's reason to exist: put the detector on the AutoRun list, so
+   * The verdict's reason to exist: put the detector on the AutoFind list, so
    * every dataset it runs over ships its matches unchecked at this balance,
-   * and head to the Dashboard, where the AutoRun tab reads the result.
+   * and head to the Dashboard, where the AutoFind tab reads the result.
    */
-  onMoveToAutoRun(): void {
+  onMoveToAutoFind(): void {
     const modelId = this.activeContext.modelId;
     if (!modelId) return;
     const name = this.activeDetector.detectorName() || 'The detector';
@@ -834,14 +834,14 @@ export class FindViewComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.toast.success({
-            message: `${name} is on AutoRun`,
+            message: `${name} is on AutoFind`,
             detail: 'It runs over every dataset you import or run it on, and ships its matches at this balance.',
-            dedupKey: 'find-move-to-autorun',
+            dedupKey: 'find-move-to-autofind',
           });
           void this.router.navigate(['/dashboard']);
         },
         error: (err: { error?: { message?: string } }) => {
-          this.toast.error({ message: err?.error?.message || 'Could not move the detector to AutoRun', dedupKey: 'find-move-to-autorun-error' });
+          this.toast.error({ message: err?.error?.message || 'Could not move the detector to AutoFind', dedupKey: 'find-move-to-autofind-error' });
         },
       });
   }

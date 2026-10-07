@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 _TEXT_LIKE_TYPES = frozenset({"text", "url", "email", "password", "folder", "server_path", "select"})
 
 #: strftime format per date/time template var. ``YYYYMMDD-HHMMSS`` is unique
-#: per run; the date-only forms let a scheduled (e.g. daily) Auto-Find write
+#: per run; the date-only forms let a scheduled (e.g. daily) AutoFind write
 #: to a path named after today's date - ``results_{YYYY}.{MM}.{DD}.csv``.
 _DATETIME_TEMPLATE_VARS = {
     "YYYYMMDD-HHMMSS": "%Y%m%d-%H%M%S",
@@ -193,7 +193,7 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
         # because it is the only place the web path applies a default at
         # all: marshmallow's ``load_default`` fires on a *missing* key,
         # and a GUI form posts an untouched input as ``""``.  Saved-settings
-        # callers (the Auto-Find results exporter) reach a plugin through
+        # callers (the AutoFind results exporter) reach a plugin through
         # here without passing a schema at all.
         if f.default and _is_blank(field_values.get(f.key)):
             field_values[f.key] = f.default

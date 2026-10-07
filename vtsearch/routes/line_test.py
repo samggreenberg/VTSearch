@@ -33,7 +33,7 @@ Find pass, vote clear or dataset switch.
 The verdict outlives the session (#4526): the vote that finishes a test keeps
 its verdict on the detector's JSON, one per tested dataset
 (:mod:`vtscore.detectors.line_verdicts`), where the detector's Stats and the
-Dashboard's AutoRun tab read it; and a test started over a ranking and line a
+Dashboard's AutoFind tab read it; and a test started over a ranking and line a
 kept verdict was drawn from resumes from its picks rather than dealing new
 ones.
 """
