@@ -377,8 +377,8 @@ def main() -> int:  # noqa: C901
         )
         ok &= _check(
             "...and the page is told the clicks without a detector were scored",
-            bool(P.get("no_detector_scored"))
-            and "P.no_detector_scored" in re.sub(r'<script id="payload".*?</script>', "", out.read_text(), flags=re.S),
+            bool(P.get("empty_sets_scored"))
+            and "P.empty_sets_scored" in re.sub(r'<script id="payload".*?</script>', "", out.read_text(), flags=re.S),
         )
         own_n = _decode(PO["agg"]["n"])
         ok &= _check(
@@ -393,12 +393,56 @@ def main() -> int:  # noqa: C901
             denominator=cells,
             baseline=base,
             runs_budget_mb=0.25,
-            score_no_detector=False,
+            score_empty_sets=False,
         )
         ok &= _check(
             "a build that opts out leaves them out, and says nothing",
             abs(_decode(_payload(bare)["agg"]["n"])[g_lean, a_c, keys.index("precision"), ti] - CATS["lean"]) < 0.5
-            and "no_detector_scored" not in _payload(bare),
+            and "empty_sets_scored" not in _payload(bare),
+        )
+
+        # A detector that trained and flags nothing returns the same empty
+        # set: the harness leaves its precision undefined, which would drop the
+        # run from the precision mean, so it counts as 0 (owner, 2026-10-07).
+        # Its oracle cut flagging nothing (FPR 0, FNR 1) is the same case.
+        nil_run = ("alt", "dsB", "embA", "rich", 3)
+        nil = main_df.copy()
+        at = (
+            (nil["arm"] == nil_run[0])
+            & (nil["dataset"] == nil_run[1])
+            & (nil["embedder"] == nil_run[2])
+            & (nil["category"] == nil_run[3])
+            & (nil["seed"] == nil_run[4])
+            & (nil["t"] == T_MAX)
+        )
+        nil.loc[at, ["precision", "recall", "f1", "oracle_fpr", "oracle_fnr"]] = [np.nan, 0.0, 0.0, 0.0, 1.0]
+        PN = _payload(
+            V.build_viewer(nil, tmp / "nil.html", arms=ARMS, denominator=cells, baseline=base, runs_budget_mb=0.25)
+        )
+        g_nil, a_nil, m_p = gi[nil_run[1:4]], ai[nil_run[0]], keys.index("precision")
+        n_nil, mean_nil = _decode(PN["agg"]["n"]), _decode(PN["agg"]["mean"])
+        ok &= _check(
+            "a detector that flags nothing stays in the precision mean, at 0",
+            abs(n_nil[g_nil, a_nil, m_p, ti] - CATS["rich"]) < 0.5
+            and abs(mean_nil[g_nil, a_nil, m_p, ti] - (CATS["rich"] - 1) * 0.7 / CATS["rich"]) <= step,
+            f"n {n_nil[g_nil, a_nil, m_p, ti]} mean {mean_nil[g_nil, a_nil, m_p, ti]}",
+        )
+        o_nil = _decode(PN["agg"]["omean"])[g_nil, a_nil, m_p, ti]
+        ok &= _check(
+            "...and so does an oracle cut that flags nothing",
+            abs(_decode(PN["agg"]["on"])[g_nil, a_nil, m_p, ti] - CATS["rich"]) < 0.5
+            and abs(o_nil - (CATS["rich"] - 1) * ORACLE_PRECISION / CATS["rich"]) <= step,
+            str(o_nil),
+        )
+        PNo = _payload(
+            V.build_viewer(
+                nil, tmp / "nil-off.html", arms=ARMS, denominator=cells, baseline=base, runs_budget_mb=0.25,
+                score_empty_sets=False,
+            )
+        )  # fmt: skip
+        ok &= _check(
+            "...which a build that opts out leaves undefined",
+            abs(_decode(PNo["agg"]["n"])[g_nil, a_nil, m_p, ti] - (CATS["rich"] - 1)) < 0.5,
         )
 
         # --- a spot check's rounds (#4624) -----------------------------------

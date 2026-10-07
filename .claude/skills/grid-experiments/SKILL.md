@@ -519,13 +519,15 @@ first Good and Bad vote, and at every click of a run that never got both, the
 harness writes no row, and a user there has nothing: the labelset loads as a
 detector with no model and Find on it is refused. Both the viewer and
 `curves.py` now score those clicks as the empty returned set
-(`curves.score_no_detector`, `curves.EMPTY_SET`: recall, F1 and the objective
+(`curves.score_empty_sets`, `curves.EMPTY_SET`: recall, F1 and the objective
 0, precision 0, FPR 0, FNR 1, AP the test split's prevalence, AUROC 0.5, cost
 the miss weight), so a failing run is averaged in rather than averaged out
-(owner, 2026-10-07). The runs scored are the caller's cell list or, without
+(owner, 2026-10-07). A trained detector that flags nothing returns the same
+set, so its precision, which the harness leaves undefined, counts as 0 too
+(`curves.zero_empty_precision`; the viewer's oracle line as well). The runs scored are the caller's cell list or, without
 one, every run the text-sort baseline lists in a group the arm trained in
 (`curves.attempted_cells`), so pass `--baseline`. The page says so in its
-reading note (`no_detector_scored`). This needs each run's prevalence, which a
+reading note (`empty_sets_scored`). This needs each run's prevalence, which a
 built page does not carry, so a committed page built before it is **rebuilt**
 from its results, not reskinned.
 

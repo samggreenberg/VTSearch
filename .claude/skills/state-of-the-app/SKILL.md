@@ -398,7 +398,8 @@ things keep a report on its link:
   a run has no trained detector (its opening clicks, or every click of a run
   that never got a Good and a Bad) is scored as the empty returned set, the
   nothing Find gives that labelset, so the runs that never trained are in its
-  mean as losses (`curves.score_no_detector`); a page built before that is
+  mean as losses (`curves.score_empty_sets`), and a detector that flags
+  nothing counts its precision as 0 rather than undefined; a page built before that is
   rebuilt with `analyze.sh`, since a reskin has no prevalence to put AP at.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).

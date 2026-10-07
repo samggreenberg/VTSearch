@@ -185,7 +185,7 @@ def main() -> int:  # noqa: C901
         tiny_cells = pd.DataFrame([{"arm": "a", "dataset": "d", "category": "c", "seed": s} for s in (0, 1, 2)])
         tiny_base = pd.DataFrame([{"dataset": "d", "category": "c", "seed": s, "prevalence": 0.1} for s in (0, 1, 2)])
         ok &= _check("the miss weight is read off the rows", abs(C._miss_weights(tiny)["a"] - wn) < 1e-9)
-        scored = C.score_no_detector(tiny, tiny_cells, tiny_base)
+        scored = C.score_empty_sets(tiny, tiny_cells, tiny_base)
         added = scored[scored[C.NO_DETECTOR] == 1]
         never = added[added["seed"] == 2]
         ok &= _check(
@@ -207,6 +207,28 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "...and every row the runs wrote is marked as theirs",
             int((scored[C.NO_DETECTOR] == 0).sum()) == len(tiny) and len(scored) == len(tiny) + len(added),
+        )
+
+        # A trained detector that flags nothing: the harness leaves precision
+        # undefined, and the returned set is just as empty, so it counts as 0.
+        # Only that signature (recall 0, FPR 0) qualifies: a precision
+        # undefined because the split had no positives stays undefined.
+        nil = pd.DataFrame(
+            {
+                "precision": [np.nan, np.nan, np.nan, 0.4],
+                "recall": [0.0, np.nan, 0.0, 0.5],
+                "fpr": [0.0, 0.0, 0.2, 0.1],
+            }
+        )
+        zeroed = C.zero_empty_precision(nil)["precision"].tolist()
+        ok &= _check(
+            "an empty returned set's precision counts as 0, and nothing else's moves",
+            zeroed[0] == 0.0 and np.isnan(zeroed[1]) and np.isnan(zeroed[2]) and zeroed[3] == 0.4,
+            str(zeroed),
+        )
+        ok &= _check(
+            "...and score_empty_sets applies it to the rows a run wrote",
+            C.score_empty_sets(nil.assign(arm="a", t=1, seed=0), None)["precision"].tolist()[0] == 0.0,
         )
 
         # --- crossover: how many clicks before beating the typed query ------

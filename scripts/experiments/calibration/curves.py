@@ -48,8 +48,9 @@ into a good-looking curve:
    its mean computed over the two thirds that worked.  But a user at that
    click has a labelset the app cannot train, and Find on it returns nothing,
    so such a click is scored as the empty returned set
-   (:func:`score_no_detector`, :data:`EMPTY_SET`): every attempted run is in
-   the mean at every click, the failing ones at a loss.  Any mean still
+   (:func:`score_empty_sets`, :data:`EMPTY_SET`), as is a trained detector
+   that flags nothing, whose undefined precision counts as 0: every attempted
+   run is in the mean at every click, the failing ones at a loss.  Any mean still
    computed over fewer cells is dashed wherever coverage — the fraction of
    that arm's cells measured at that click — is below
    :data:`SOLID_COVERAGE`; a dashed line means "this level describes a
@@ -466,11 +467,13 @@ def attempted_cells(main: pd.DataFrame, baseline: pd.DataFrame | None, keys: Seq
     return pd.concat([trained, extra], ignore_index=True).drop_duplicates().reset_index(drop=True)
 
 
-#: Marks the rows :func:`score_no_detector` adds: 1 at a click the run had no
+#: Marks the rows :func:`score_empty_sets` adds: 1 at a click the run had no
 #: trained detector at, 0 on every row the run itself wrote.
 NO_DETECTOR = "__no_detector"
 
 #: What a click with **no trained detector** scores: the empty returned set.
+#: (A detector that trained and flags nothing returns the same set, and its own
+#: row's undefined precision is counted as this 0 too: :func:`zero_empty_precision`.)
 #: The harness writes no row until a run has a Good and a Bad vote, and the app
 #: gives a user at that point nothing either: a labelset of one class loads as a
 #: detector with no model, and Find on it is refused (a 400 and a toast,
@@ -563,13 +566,48 @@ def _run_prevalence(
     return out
 
 
-def score_no_detector(
+def zero_empty_precision(
+    frame: pd.DataFrame, precision: str = "precision", recall: str = "recall", fpr: str = "fpr"
+) -> pd.DataFrame:
+    """*frame* with the precision of every **empty returned set** counted as 0, not left undefined.
+
+    :func:`~vtscore.eval.calibration_metrics.detection_metrics` leaves the
+    precision of a detector that flags nothing undefined, which drops that run
+    out of a precision mean: the sessions whose detector returned nothing are
+    exactly the ones the mean then never sees.  A user who ran Find and got
+    nothing back got a loss, so it counts as 0, the value an empty set scores
+    under :data:`EMPTY_SET` (owner, 2026-10-07).  A row is an empty set when its
+    precision is undefined, its recall is 0 and its FPR (when the frame has
+    one) is 0; a precision undefined for any other reason (a row with no
+    positives to recall, a column the study never emitted) is left alone.
+    The column names are parameters so the viewer's oracle companion goes
+    through the same rule.
+    """
+    if precision not in frame.columns or recall not in frame.columns:
+        return frame
+    p = pd.to_numeric(frame[precision], errors="coerce")
+    empty = p.isna() & (pd.to_numeric(frame[recall], errors="coerce") == 0)
+    if fpr in frame.columns:
+        empty &= pd.to_numeric(frame[fpr], errors="coerce") == 0
+    if not empty.any():
+        return frame
+    out = frame.copy()
+    out.loc[empty, precision] = 0.0
+    return out
+
+
+def score_empty_sets(
     frame: pd.DataFrame,
     cells: pd.DataFrame | None,
     baseline: pd.DataFrame | None = None,
     keys: Sequence[str] = KEYS,
 ) -> pd.DataFrame:
-    """Score every attempted run at every click it had no trained detector at: the empty returned set.
+    """Score every empty returned set as one, so no failing run leaves the mean.
+
+    Two kinds, both what a user who ran Find got back: nothing.  A row whose
+    detector flags nothing has its undefined precision counted as 0
+    (:func:`zero_empty_precision`), and a click with no trained detector at
+    all, which has no row, gets one.
 
     The rows a run writes start at its first click with a Good and a Bad vote,
     so before that, and at every click of a run that never got one, the mean
@@ -588,7 +626,10 @@ def score_no_detector(
     text-sort anchor, is never added: every run has a text sort.  Nothing is
     added after a run's last row, since the run is over there.
     """
-    if frame.empty or not {"t", "arm"} <= set(frame.columns):
+    if frame.empty:
+        return frame
+    frame = zero_empty_precision(frame)
+    if not {"t", "arm"} <= set(frame.columns):
         return frame
     kk = [k for k in keys if k in frame.columns]
     if "seed" not in kk:
@@ -771,9 +812,9 @@ def mean_figure(  # noqa: C901
     if main.empty or metric not in main.columns or "dataset" not in main.columns:
         return None, pd.DataFrame()
     # A run inside a spot check keeps its last scored level between rounds (#4624),
-    # and a click with no trained detector is the empty returned set, not a gap.
+    # and an empty returned set (no detector yet, or one that flags nothing) is a loss.
     main = fill_gaps(main, ("arm", *kk))
-    main = score_no_detector(main, _attempted(main, kk, denominator, baseline), baseline, kk)
+    main = score_empty_sets(main, _attempted(main, kk, denominator, baseline), baseline, kk)
     datasets = sorted(str(d) for d in main["dataset"].dropna().unique())
     arms_present = [a for a in arms if (main["arm"] == a).any()]
     if not datasets or not arms_present:
@@ -961,9 +1002,9 @@ def per_run_figures(  # noqa: C901
     if not arms_present:
         return []
     # A run inside a spot check keeps its last scored level between rounds (#4624),
-    # and a click with no trained detector is the empty returned set, not a gap.
+    # and an empty returned set (no detector yet, or one that flags nothing) is a loss.
     main = fill_gaps(main, ("arm", *kk))
-    main = score_no_detector(main, _attempted(main, kk, denominator, baseline), baseline, kk)
+    main = score_empty_sets(main, _attempted(main, kk, denominator, baseline), baseline, kk)
 
     norm = _prevalence_norm(prevalence)
     cmap = plt.get_cmap("viridis_r")
