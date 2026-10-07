@@ -33,6 +33,16 @@ from vtscore.training.thresholds import (
 )
 
 
+def _trained(rows: list[dict]) -> list[dict]:
+    """The rows with a Train-side line: a Good and a Bad voted, so a head was fitted.
+
+    Under the label quota (#4643) the rows start at the first Good, where Test
+    gives the Goods' centroid; a row with no Bad yet has no head and so no
+    balance line on the Train side, which is what these tests pin.
+    """
+    return [r for r in rows if r["n_good"] > 0 and r["n_bad"] > 0]
+
+
 def _separable(n_per_cat: int = 20, dim: int = 16) -> dict[int, dict]:
     rng = np.random.RandomState(0)
     medias: dict[int, dict] = {}
@@ -77,7 +87,7 @@ class TestTheArms:
         rows, _picks = self._run()
         assert rows
         assert all(r["beta"] == DEFAULT_BETA and "min_precision" not in r for r in rows)
-        assert {r["floor_status"] for r in rows} <= set(BALANCE_STATES)
+        assert {r["floor_status"] for r in _trained(rows)} <= set(BALANCE_STATES)
 
     def test_before_the_check_the_line_keeps_the_unchecked_cap(self, schedule_only):
         """The count line before a check: the top K unvoted, K the balance's cap, capped by the corpus.
@@ -85,7 +95,7 @@ class TestTheArms:
         Since #4452 the default arm draws the labels' line; the count line is the forced-shape arm's.
         """
         rows, _picks = self._run(walk_shape="advisory")
-        steps = [r for r in rows if r["phase"] != "check"]
+        steps = [r for r in _trained(rows) if r["phase"] != "check"]
         assert steps and all(r["floor_status"] == BALANCE_UNCHECKED for r in steps)
         k = balance_schedule(DEFAULT_BETA).candidate
         # `n_remainder` is the unvoted sim set after this step's vote: the candidate.
@@ -99,7 +109,7 @@ class TestTheArms:
         anchored on before #4452; the count line is now the forced-shape arm's.
         """
         rows, _picks = self._run(walk_shape="advisory")
-        steps = [r for r in rows if r["phase"] != "check"]
+        steps = [r for r in _trained(rows) if r["phase"] != "check"]
         k = balance_schedule(DEFAULT_BETA).candidate
         assert steps and all(1 <= r["floor_count"] <= min(k, r["n_remainder"]) for r in steps)
 
@@ -127,7 +137,7 @@ class TestTheArms:
     def test_switching_the_check_off_leaves_the_run_unchecked(self):
         rows, picks = self._run(spot_check="off")
         assert all(r["phase"] != "check" for r in rows)
-        assert all(r["floor_status"] == BALANCE_UNCHECKED for r in rows)
+        assert all(r["floor_status"] == BALANCE_UNCHECKED for r in _trained(rows))
         assert all(p["phase"] != "check" for p in picks)
 
     def test_the_voting_steps_are_byte_identical_with_or_without_the_check(self):
@@ -136,9 +146,10 @@ class TestTheArms:
         without, _ = self._run(spot_check="off")
         steps = [r for r in with_check if r["phase"] != "check"]
         assert [r["t"] for r in steps] == [r["t"] for r in without]
-        # The plain frame carries no raw threshold; these all read it.
+        # The plain frame carries no raw threshold; these all read it.  A row
+        # with no Bad yet (#4643) has no Train line, so NaN, which never equals.
         for col in ("report_pool_percentile", "cost", "n_flagged", "acq_threshold", "floor_count"):
-            assert [r[col] for r in steps] == [r[col] for r in without], col
+            assert [r[col] for r in _trained(steps)] == [r[col] for r in _trained(without)], col
 
     def test_an_unknown_check_knob_is_refused(self):
         with pytest.raises(ValueError, match="spot_check"):
@@ -235,7 +246,7 @@ class TestTheBalanceArm:
 
     def test_the_line_is_the_balances_under_its_cap(self):
         rows, _ = self._run(beta=1.0)
-        steps = [r for r in rows if r["phase"] not in ("check", "")]
+        steps = [r for r in _trained(rows) if r["phase"] not in ("check", "")]
         assert steps and all(r["beta"] == 1.0 for r in steps)
         assert all(r["floor_status"] == BALANCE_UNCHECKED for r in steps)
         # No cap since #4452: the labels' line keeps what clears it, possibly none.
@@ -418,9 +429,10 @@ class TestTheBalanceAwareAcquisitionArm:
         assert resolve_acquisition_factor(0.25, 2.0) == 0.25
         shipped, _ = self._run(1.0)
         offset, _ = self._run(1.0, acq_p_crossing="off")
-        assert [r["acq_threshold"] for r in shipped] == [r["acq_threshold"] for r in offset]
+        # A row with no Bad yet (#4643) has no acquisition cut: NaN, which never equals.
+        assert [r["acq_threshold"] for r in _trained(shipped)] == [r["acq_threshold"] for r in _trained(offset)]
         argmax, _ = self._run(1.0, acq_inclusion_offset=0, acq_p_crossing=0.5)
-        assert [r["acq_threshold"] for r in argmax] != [r["acq_threshold"] for r in offset]
+        assert [r["acq_threshold"] for r in _trained(argmax)] != [r["acq_threshold"] for r in _trained(offset)]
         with pytest.raises(ValueError, match="must be > 0"):
             self._run(1.0, acq_inclusion_offset=0, acq_p_crossing="x")
 

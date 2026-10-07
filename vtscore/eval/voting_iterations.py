@@ -3426,6 +3426,9 @@ def simulate_voting_iterations(  # noqa: C901
                 # No head without a Bad, but Test gives the Goods' centroid
                 # from the first Good (#4643), so this click has a row.  The
                 # Train side has nothing to record: no line, no pool scores.
+                # The row's balance is the one a trained step records, which
+                # only the safe-threshold path draws a line at.
+                row_beta = beta if safe_thresholds else None
                 t_test = time.monotonic()
                 c_step, c_rows, _c_cal = _centroid_test(
                     good_votes,
@@ -3436,7 +3439,7 @@ def simulate_voting_iterations(  # noqa: C901
                     region_voting=region_voting,
                     region_aware=region_aware,
                     style_obj=style_obj,
-                    beta=beta,
+                    beta=row_beta,
                     calibration_rows=emit_calibration_metrics and style_obj is not None,
                 )
                 c_seconds = time.monotonic() - t_test
@@ -3456,7 +3459,7 @@ def simulate_voting_iterations(  # noqa: C901
                     float("nan"),
                     float("nan"),
                     {},
-                    {"beta": beta},
+                    {"beta": row_beta},
                     "centroid",
                 )
                 c_timing = {
@@ -3671,7 +3674,7 @@ def simulate_voting_iterations(  # noqa: C901
                 region_voting=region_voting,
                 region_aware=region_aware,
                 style_obj=style_obj,
-                beta=beta,
+                beta=details.get("beta"),
                 calibration_rows=emit_calibration_metrics and style_obj is not None,
             )
             if calibration is None:

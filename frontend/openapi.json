@@ -3998,6 +3998,9 @@
           "good_count": {
             "type": "integer"
           },
+          "label_quota": {
+            "$ref": "#/components/schemas/LabelQuota"
+          },
           "ok": {
             "type": "boolean"
           },
@@ -4016,6 +4019,7 @@
           "balance",
           "detector_name",
           "good_count",
+          "label_quota",
           "ok",
           "results",
           "threshold"
@@ -4679,6 +4683,48 @@
           "icon",
           "name",
           "ui_mode"
+        ],
+        "type": "object"
+      },
+      "LabelQuota": {
+        "additionalProperties": false,
+        "properties": {
+          "bad_quota": {
+            "type": "integer"
+          },
+          "bads_owed": {
+            "type": "integer"
+          },
+          "good_quota": {
+            "type": "integer"
+          },
+          "goods_owed": {
+            "type": "integer"
+          },
+          "n_bad": {
+            "type": "integer"
+          },
+          "n_good": {
+            "type": "integer"
+          },
+          "tier": {
+            "description": "``centroid``: the Goods' centroid cut with a GMM, given under the quota; ``trained``: the trained head; ``none``: no Good to sort toward.",
+            "enum": [
+              "none",
+              "centroid",
+              "trained"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "bad_quota",
+          "bads_owed",
+          "good_quota",
+          "goods_owed",
+          "n_bad",
+          "n_good",
+          "tier"
         ],
         "type": "object"
       },
@@ -7422,6 +7468,10 @@
               "$ref": "#/components/schemas/_Hit"
             },
             "type": "array"
+          },
+          "label_quota": {
+            "$ref": "#/components/schemas/LabelQuota",
+            "nullable": true
           },
           "negative_hits": {
             "items": {
