@@ -1472,6 +1472,7 @@ def _ceiling_line(
                 "phase": "ceiling",
                 "scores": np.array([score_map[cid] for cid in ordered_test], dtype=np.float64),
                 "labels": np.asarray(test_labels).astype(np.int8),
+                "ids": np.asarray(ordered_test, dtype=np.int64),
                 "train_threshold": float("nan"),
                 "beta": float("nan"),
                 "model": None if find_line is None else asdict(find_line.model),
@@ -3379,6 +3380,8 @@ def simulate_voting_iterations(  # noqa: C901
                         # float32 score or a rounded model moves its line and its tail.
                         "scores": np.asarray(calibration[1], dtype=np.float64),
                         "labels": np.asarray(calibration[2], dtype=np.int8),
+                        # Which image each score is (#4490): a report can name the wrong images a line keeps.
+                        "ids": np.asarray(calibration[3], dtype=np.int64),
                         "train_threshold": float(threshold),
                         "beta": float(details["beta"]) if details.get("beta") is not None else float("nan"),
                         "model": None if find_line is None else asdict(find_line.model),

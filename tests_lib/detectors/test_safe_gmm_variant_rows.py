@@ -354,6 +354,7 @@ class TestTheWiderWorldKnobs:
         assert snap["fold_scores"].dtype == np.float64
         assert snap["fold_scores"].shape == snap["fold_labels"].shape == snap["fold_index"].shape
         assert snap["fold_scores"].size > 0 and snap["fold_labels"].sum() > 0
+        assert snap["ids"].shape == snap["scores"].shape and len(set(snap["ids"].tolist())) == snap["ids"].size
 
     def test_a_smaller_train_pool_keeps_the_withheld_half_whole(self):
         full = _run_safe_uncached("max_patch", beta=None, max_steps=6)

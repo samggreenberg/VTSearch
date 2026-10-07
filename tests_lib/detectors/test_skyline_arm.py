@@ -468,6 +468,7 @@ def test_the_ceilings_snapshot_rebuilds_its_find_line_from_the_saved_folds():
     ordered = sorted(test_ids)
     assert snap["scores"].dtype == np.float64 and snap["scores"].shape == (len(ordered),)
     assert snap["labels"].tolist() == [int(medias[c]["category"] == "cat0") for c in ordered]
+    assert snap["ids"].tolist() == ordered
     assert snap["fold_scores"].shape == snap["fold_labels"].shape == snap["fold_index"].shape
     assert snap["fold_labels"].sum() > 0 and (snap["fold_labels"] == 0).any()
 
