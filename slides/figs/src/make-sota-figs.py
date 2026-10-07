@@ -155,8 +155,9 @@ EXPECT = {
 plt.rcParams.update(
     {
         "font.family": ["DejaVu Sans"],
-        # F-beta's subscript is set as mathtext, in the figure's own face, as on
-        # F-ing Metrics (`make-calib-figs._sub`).
+        # Any mathtext is set in the figure's own face, as on F-ing Metrics
+        # (`make-calib-figs._sub`). Fβ itself has no subscript (owner, 2026-10-07: "we
+        # don't write F_1; we write F1").
         "mathtext.fontset": "dejavusans",
         "font.size": 17,
         "text.color": INK,
@@ -472,7 +473,7 @@ def _f_panel(
     ax.yaxis.grid(True, which="both", color=PR_GRID_COLOUR, lw=PR_GRID_LW)
     ax.set_axisbelow(True)
     ax.set_xlabel(xlabel)
-    ax.set_ylabel(r"$\mathregular{F_\beta}$ at that β")
+    ax.set_ylabel("Fβ at that β")
     ends = {}
     for beta, label, weight in RADIOS:
         xs, ys = lines[beta]

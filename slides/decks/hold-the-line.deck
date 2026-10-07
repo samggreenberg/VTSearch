@@ -63,7 +63,7 @@ slides:
   quantile-transfer
   split-fraction
 
-  # III — Inclination: why a line needs one, what F₁ and F-beta are (#4517),
+  # III — Inclination: why a line needs one, what F1 and F-beta are (#4517),
   # F-beta's peak and the three-radio balance that sets its beta (#4413,
   # #4448), the line the labels draw at its expected peak (#4452), and why
   # the labels are what it is drawn from: they are all Find has (#4517). Then
@@ -228,4 +228,3 @@ slides:
   inclusion-knob
   inclusion-walk
   inclusion-tilt
-

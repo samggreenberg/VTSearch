@@ -677,7 +677,7 @@ DRAW_COLS = (
     (4.85, ("below", "the line")),
     (6.15, ("", "Right")),
     (7.1, ("", "Found")),
-    (8.0, ("", r"$\mathregular{F_1}$")),
+    (8.0, ("", "F1")),
 )
 #: Where the table's two halves end: the band counts, then the line's three numbers.
 DRAW_RULE_X = (0.5, 5.55, 8.45)
@@ -744,7 +744,7 @@ def _draws_stage(stage: int) -> Figure:
             (
                 (right, estimates.precision, "Right", "pct"),
                 (found, estimates.recall, "Found", "pct"),
-                (f1, estimates.fbeta, r"$\mathregular{F_1}$", "f"),
+                (f1, estimates.fbeta, "F1", "f"),
             )
         ):
             hist = fig.add_axes((DRAW_HIST_X0, 0.535 - i * 0.19, DRAW_HIST_W, 0.085))
@@ -1047,7 +1047,7 @@ def _rounds_stage(stage: int) -> Figure:
         x, w = _band_cell(test, chosen)
         ax.text(x - 0.12, ROUNDS_Y0 + ROUNDS_H + 1.58, "where a round narrows", ha="right", va="center",
                 fontsize=15)  # fmt: skip
-        ax.text(x - 0.12, ROUNDS_Y0 + ROUNDS_H + 1.22, r"the $\mathregular{F_1}$ range most", ha="right",
+        ax.text(x - 0.12, ROUNDS_Y0 + ROUNDS_H + 1.22, "the F1 range most", ha="right",
                 va="center", fontsize=15)  # fmt: skip
     # ── stage 4: the walk below the line ─────────────────────────────────────
     if stage >= 4:
@@ -1131,7 +1131,7 @@ def _result_stage(stage: int) -> Figure:
     _side_block(
         fig,
         [
-            ("Balance (F-beta)", "head", 0.0),
+            ("Balance (Fβ)", "head", 0.0),
             (f"{est.fbeta.point:.2f}, likely {est.fbeta.lo:.2f}–{est.fbeta.hi:.2f}", "body", 0.045),
             ("Right", "head", 0.07),
             (f"likely {_span(est.precision.lo, est.precision.hi)}", "body", 0.045),
