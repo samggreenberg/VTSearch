@@ -19,6 +19,9 @@ re-run cannot show by looking at it:
   (``_rank_metrics``), which agrees with brute force and with sklearn's AP.
 * **Missing data stays missing:** a run recorded without rank frames reports
   its line at click 0 only, never a neighbour's value.
+* **Where the app said stop** (#3560) is read off the ordinary clicks, scores
+  the same objective as the analyzer's own, and keeps the run that never
+  trained as one the rules never stopped.
 
 The cells are written by the real harness on synthetic clusters, so they carry
 a session's shape (check rows, check picks, rank frames) without the GRID.
@@ -258,6 +261,8 @@ def run(tmp_path_factory, rm):
         "pools": read("pools.csv"),
         "pool_steps": read("pool_steps.csv"),
         "thresholds": read("thresholds.csv"),
+        "stops": read("stops.csv"),
+        "margins": read("margins.csv"),
         "summary": (out / "summary.md").read_text(),
     }
 
@@ -715,3 +720,33 @@ def test_without_rank_frames_the_line_is_known_at_click_0_only(run, tmp_path) ->
     cells = pd.read_csv(out / "cells.csv")
     assert bool(cells["final_ap"].notna().all()), "AP, harvest and the check need no rank frame"
     assert "no rank frames" in (out / "summary.md").read_text()
+
+
+def test_the_stop_is_read_off_every_run_including_the_one_that_never_trained(run) -> None:
+    """#3560: a starved run has no row to read, and it is the run a fire rate must not drop."""
+    stops = run["stops"].set_index("category")
+    assert set(stops.index) == {*CATS, "cat9@small"}
+    starved = stops.loc["cat9@small"]
+    assert not bool(starved["stopped"]) and np.isnan(starved["t_stop"])
+    assert starved["t_budget"] == run["cells"].loc["cat9@small", "final_t"], "censored at its own last click"
+    assert list(stops["band"]) == [c.split("@")[1] for c in stops.index]
+
+
+def test_the_stop_is_read_off_the_ordinary_clicks_and_scores_the_analyzers_objective(run) -> None:
+    """The check's rows sit past the budget and are not clicks; the objective at the budget is the unchecked line's."""
+    stops = run["stops"].set_index("category")
+    for cat in CATS:
+        row, cell = stops.loc[cat], run["cells"].loc[cat]
+        assert row["t_budget"] == cell["final_t"] == MAX_STEPS
+        assert row["fbeta_final"] == pytest.approx(cell["thr_fbeta_unchecked"])
+        assert row["average_precision_final"] == pytest.approx(cell["final_ap"])
+        assert row["fbeta_best"] >= row["fbeta_final"], "the run's best is its highest F-beta"
+
+
+def test_the_summary_carries_the_stopping_block(run) -> None:
+    summary = run["summary"]
+    block = summary[summary.index("## Where the app said stop") :]
+    assert "| arm | runs | fired |" in block and "| arm | band | runs | fired |" in block
+    assert "fbeta at stop" in block and "short of run's best" in block, "the objective, never AP or cost, leads"
+    assert "### How close each gate came" in block
+    assert set(run["margins"]["category"]) == set(CATS), "margins need rows, so the starved run has none"

@@ -69,6 +69,12 @@ distribution only behind it, and computes the median through Kaplan–Meier with
 non-firing runs censored at their own budget — which returns `NaN`, honestly,
 when fewer than half the runs ever fired.
 
+All of that is descriptive: it says where the rules fire, not whether firing
+there was right.  So each stopping point is also held against **the run's own
+best** (``{metric}_from_best``, ``{metric}_clicks_past_best``): a rule that
+fires long after the run's best costs users clicks, one that fires long before
+it costs them quality, and both read off the same rows.
+
 Usage::
 
     import stopping
@@ -109,6 +115,11 @@ from vtscore.eval.autopilot_flow import (
 #: rest.
 RUN_KEYS: tuple[str, ...] = ("arm", "dataset", "embedder", "category", "seed")
 
+#: The columns a table names its groups by, in the order they are printed: the
+#: run keys a study groups on, and ``band``, which the State of the App review
+#: reads every stratum by (it is the size half of a ``class@band`` category).
+IDENT_COLUMNS: tuple[str, ...] = ("arm", "dataset", "embedder", "category", "band")
+
 #: Metrics carried through to the stopping point by default: the two a ship
 #: decision reads - the objective on a balance run, cost without one (#4584;
 #: each is dropped where the frame cannot carry it) - and the ranking metric
@@ -118,6 +129,16 @@ DEFAULT_METRICS: tuple[str, ...] = (objective.OBJECTIVE, objective.COST, "averag
 #: The indicator columns a post-#3560 run emits.  Absent from every earlier
 #: frame, which is why every read of them is guarded.
 LIGHT_COLUMNS: tuple[str, ...] = ("smart", "stable", "span")
+
+#: Phases a row can carry that are **not** a reading of the phase machine.  A
+#: spot check Autopilot prompts mid-session (``spot_check="weak"``, #4496, the
+#: default since 2026-10-05) owns the ``phase`` column for its rounds, which
+#: are clicks and stay in the frame.  The phase machine's answer on those
+#: steps is not recorded, so they can neither fire the rules nor end a
+#: ``done`` stretch: the state is carried across them from the last step that
+#: was read.  Without that, a check prompted inside a ``done`` stretch splits
+#: it into two episodes and moves ``t_sustained`` past the check.
+UNREAD_PHASES: frozenset[str] = frozenset({"prompt"})
 
 #: The five gates green is a conjunction over, each as a **margin to green**:
 #: ``(name, column, threshold, sense)``, where the margin is
@@ -182,6 +203,23 @@ def _present(df: pd.DataFrame, keys: Sequence[str]) -> list[str]:
     return [k for k in keys if k in df.columns]
 
 
+def _done_states(phase: pd.Series) -> tuple[np.ndarray, np.ndarray]:
+    """``(fired, held)`` per step of one sorted trajectory.
+
+    ``fired`` is true where the phase machine read ``done``, which is where the
+    app could announce: the first one is the stopping point.  ``held`` is the
+    state the run was in, read steps as read and :data:`UNREAD_PHASES` steps
+    carrying the last read state forward (not ``done`` before any read).  It is
+    what episodes and the sustained stop are counted on.
+    """
+    p = phase.fillna("").astype(str).str.strip()
+    fired = (p == STOPPING_PHASE).to_numpy()
+    read = ~p.isin(UNREAD_PHASES).to_numpy()
+    state = pd.Series(np.where(read, fired.astype(float), np.nan))
+    held = state.ffill().fillna(0.0).to_numpy(dtype=float) > 0.5
+    return fired, held
+
+
 def _episodes(is_done: np.ndarray) -> int:
     """Number of maximal runs of consecutive ``done`` steps.
 
@@ -226,6 +264,17 @@ def stopping_points(
         studies report today, and ``final - at_stop``.  For ``cost`` a positive
         delta means the extra clicks made the detector *worse*; for the
         objective, ``fbeta``, a negative one does.
+    ``{metric}_best`` / ``{metric}_t_best``
+        The best the run ever reached, in the metric's own direction, and the
+        first click it reached it at.  Defined for every run, fired or not.
+    ``{metric}_from_best`` / ``{metric}_clicks_past_best``
+        How far short of that best the stopping point was (never negative), and
+        ``t_stop - t_best``: positive is a rule that fired after the run's best
+        and cost the user clicks, negative one that fired before it and cost
+        them quality.  ``NaN`` where the rules never fired.  The best is the
+        extreme of a noisy series, so it is optimistic: ``from_best`` overstates
+        what stopping gave away by about the step-to-step noise, and on a flat
+        stretch ``clicks_past_best`` is a coin toss.  Read the two together.
     ``n_good_at_stop`` / ``n_bad_at_stop``
         The labelset the user would have left with.
     ``blocked_smart`` / ``blocked_stable`` / ``blocked_span``
@@ -244,13 +293,14 @@ def stopping_points(
         # No balance drew the line: there is no objective to carry, only NaN.
         metrics = [m for m in metrics if m != objective.OBJECTIVE]
     metrics = [m for m in metrics if m in main.columns]
+    lower = {m: objective.lower_is_better(m) for m in metrics}
     out: list[dict[str, Any]] = []
     for run_key, g in main.groupby(kk, dropna=False, sort=True):
         g = g.sort_values("t")
         t = g["t"].to_numpy()
-        is_done = (g["phase"].astype(str) == STOPPING_PHASE).to_numpy()
+        fired, is_done = _done_states(g["phase"])
 
-        first_i = int(np.argmax(is_done)) if is_done.any() else None
+        first_i = int(np.argmax(fired)) if fired.any() else None
         # Sustained: the first index from which every LATER measured step is
         # also done.  A suffix scan, so it is the last falsification that
         # decides - not the first success.
@@ -277,6 +327,17 @@ def stopping_points(
             row[f"{m}_at_stop"] = at_stop
             row[f"{m}_final"] = final
             row[f"{m}_delta"] = final - at_stop
+            # The run's own best (#3560's "is the stopping cost near the run's
+            # best?"): the first click at the extreme, in the metric's direction.
+            if np.isnan(vals).all():
+                best, t_best = float("nan"), float("nan")
+            else:
+                i_best = int(np.nanargmin(vals) if lower[m] else np.nanargmax(vals))
+                best, t_best = float(vals[i_best]), float(t[i_best])
+            row[f"{m}_best"] = best
+            row[f"{m}_t_best"] = t_best
+            row[f"{m}_from_best"] = (at_stop - best) if lower[m] else (best - at_stop)
+            row[f"{m}_clicks_past_best"] = row["t_stop"] - t_best
         for col, name in (("n_good", "n_good_at_stop"), ("n_bad", "n_bad_at_stop")):
             if col in g.columns and first_i is not None:
                 row[name] = float(pd.to_numeric(g[col], errors="coerce").to_numpy(dtype=float)[first_i])
@@ -386,6 +447,11 @@ def summarise(
             # within-run difference and not a difference of two medians over
             # different denominators.
             row[f"median_{m}_delta"] = _q(fired[f"{m}_delta"], 0.5)
+            # Against each run's own best, over the same fired runs.  Absent
+            # from a frame stopping_points did not write (a hand-built one).
+            for col in ("from_best", "clicks_past_best"):
+                if f"{m}_{col}" in fired.columns:
+                    row[f"median_{m}_{col}"] = _q(fired[f"{m}_{col}"], 0.5)
         for light in LIGHT_COLUMNS:
             row[f"blocked_{light}"] = (
                 _q(g[f"blocked_{light}"], 0.5) if f"blocked_{light}" in g.columns else float("nan")
@@ -418,8 +484,10 @@ def stopping_table(summary: pd.DataFrame, *, metric: str | None = None) -> str:
     One row per group.  The columns are the issue's two questions — *where* the
     rules fired and *what it cost there* — plus the two qualifications without
     which neither number can be read: how many runs ever fired, and how much
-    the budget's extra clicks moved the metric afterwards.  *metric* defaults
-    to the objective where the runs carried one, else cost (#4584).
+    the budget's extra clicks moved the metric afterwards.  The last two hold
+    the stop against each run's own best: how far short of it, and how many
+    clicks after it (negative: before).  *metric* defaults to the objective
+    where the runs carried one, else cost (#4584).
     """
     if summary.empty:
         return "_No stopping data: no run carried a `phase` column._"
@@ -427,9 +495,10 @@ def stopping_table(summary: pd.DataFrame, *, metric: str | None = None) -> str:
         col = f"median_{objective.OBJECTIVE}_at_stop"
         has_objective = col in summary.columns and bool(summary[col].notna().any())
         metric = objective.OBJECTIVE if has_objective else objective.COST
-    ident = [c for c in summary.columns if c in ("arm", "dataset", "embedder", "category")]
+    ident = [c for c in summary.columns if c in IDENT_COLUMNS]
     head = [*ident, "runs", "fired", "stop click (KM)", "stop click (median of fired)"]
     head += [f"{metric} at stop", f"{metric} at budget", f"Δ{metric} (paired)", "clicks after stop"]
+    head += ["short of run's best", "clicks past best"]
     lines = ["| " + " | ".join(head) + " |", "|" + "|".join(["---"] * len(head)) + "|"]
     for _, r in summary.iterrows():
         cells = [str(r[c]) for c in ident]
@@ -442,6 +511,8 @@ def stopping_table(summary: pd.DataFrame, *, metric: str | None = None) -> str:
         cells.append(_fmt(r.get(f"median_{metric}_final")))
         cells.append(_fmt(r.get(f"median_{metric}_delta")))
         cells.append(_fmt(r.get("median_clicks_after_stop"), 0))
+        cells.append(_fmt(r.get(f"median_{metric}_from_best")))
+        cells.append(_fmt(r.get(f"median_{metric}_clicks_past_best"), 0))
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
@@ -513,8 +584,8 @@ def margins(
     out: list[dict[str, Any]] = []
     for run_key, g in main.groupby(kk, dropna=False, sort=True):
         g = g.sort_values("t")
-        is_done = (g["phase"].astype(str) == STOPPING_PHASE).to_numpy()
-        first_i = int(np.argmax(is_done)) if is_done.any() else None
+        fired, _ = _done_states(g["phase"])
+        first_i = int(np.argmax(fired)) if fired.any() else None
         held = slice(0, first_i if first_i is not None else len(g))
         gh = g.iloc[held]
 
@@ -608,7 +679,7 @@ def margin_table(summary: pd.DataFrame) -> str:
     """
     if summary.empty:
         return "_No margin data: these cells predate the per-step indicator margins (issue #3560)._"
-    ident = [c for c in summary.columns if c in ("arm", "dataset", "embedder", "category")]
+    ident = [c for c in summary.columns if c in IDENT_COLUMNS]
     labels = {
         "smart_slope": "Smart slope",
         "smart_t": "Smart t",
@@ -654,6 +725,12 @@ def binding_note(summary: pd.DataFrame) -> str:
             "Stable inside `hard`. Re-run to answer it."
         )
     means = {c: float(summary[f"blocked_{c}"].mean(skipna=True)) for c in LIGHT_COLUMNS}
-    worst = max(means, key=lambda c: means[c] if math.isfinite(means[c]) else -1.0)
+    top = max((v for v in means.values() if math.isfinite(v)), default=float("nan"))
     parts = ", ".join(f"{c} {means[c]:.0%}" if math.isfinite(means[c]) else f"{c} —" for c in LIGHT_COLUMNS)
-    return f"Share of held steps each indicator was not green: {parts}. **{worst}** is the binding rule."
+    head = f"Share of held steps each indicator was not green: {parts}."
+    # A tie is reported as one: naming the first of several equal lights would
+    # pin the block on whichever this module happens to list first.
+    worst = [c for c in LIGHT_COLUMNS if means[c] == top]
+    if len(worst) > 1:
+        return f"{head} {', '.join(f'**{c}**' for c in worst)} tie as the binding rule."
+    return f"{head} **{worst[0]}** is the binding rule." if worst else head

@@ -141,6 +141,12 @@ same edit.
     the check *should* certify is #4358; report whatever that ruling becomes.
   - **Ceiling:** the full-label model's AP, and its line, F1 and oracle recall at P.
   - **Click 0:** the text sort's AP and its top K at P.
+  - **Where the app said stop (#3560):** `summary.md`'s stopping block, with
+    `stops.csv` / `margins.csv`: the share of sessions the stopping rules ever
+    fired in, the click they fired at, the objective there against the budget
+    and the run's own best, which light held the rest, and how close each gate
+    came. Not yet a report section: the first review to read it decides
+    whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
