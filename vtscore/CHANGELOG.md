@@ -10,6 +10,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The eval harness can hold Autopilot's Smart light yellow** (issue #4359). `simulate_voting_iterations`
+  and `vtscore.eval.autopilot_flow.AutopilotFlow` take `smart_gate` (`"app"`, the default and the app,
+  or `"never"`: the phase decision reads Smart as yellow, so a session stays in `hard`). A bound
+  for re-keying Smart; the app is unchanged.
+
 - **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
   now returns the score where the labels line's corpus posterior falls below the new
   `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new
