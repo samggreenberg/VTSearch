@@ -255,6 +255,18 @@ def _encode(arr: np.ndarray, scale: int = SCALE) -> dict:
     }
 
 
+def _decode(enc: dict) -> np.ndarray:
+    """The inverse of :func:`_encode`, as the page decodes it: NaN where the mask says so."""
+    shape = enc["shape"]
+    n_t = int(shape[-1])
+    rows = int(np.prod(shape[:-1])) if len(shape) > 1 else 1
+    deltas = np.frombuffer(gzip.decompress(base64.b64decode(enc["v"])), dtype=np.int16).reshape(rows, n_t)
+    vals = np.cumsum(deltas.astype(np.int64), axis=1) / float(enc["scale"])
+    mask = np.unpackbits(np.frombuffer(gzip.decompress(base64.b64decode(enc["m"])), dtype=np.uint8))
+    valid = mask[: rows * n_t].reshape(rows, n_t).astype(bool)
+    return np.where(valid, vals, np.nan).reshape(shape)
+
+
 def _payload_bytes(enc: dict) -> int:
     return len(enc["v"]) + len(enc["m"])
 
@@ -761,6 +773,7 @@ def build_viewer(  # noqa: C901
     build: dict | None = None,
     default_metric: str | None = None,
     hide_metrics: Sequence[str] = (),
+    fill_gaps: bool = True,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*.
 
@@ -768,6 +781,14 @@ def build_viewer(  # noqa: C901
     :func:`opening_view`.  Without a *default_metric*, a frame that carries a
     beta opens on the objective (#4584), its columns filled from the rates
     where the cells predate them; any other frame opens on the first metric.
+
+    *fill_gaps* carries each run's last scored row through the clicks it has
+    no row for (:func:`curves.fill_gaps`, #4624): a run inside a prompted
+    spot check is scored once per round of picks, and without the carry the
+    averaged line skips it between rounds, which on a review is a survivor's
+    mean over the sessions the check did not prompt.  Off only for a study of
+    the rows themselves; the page says in its reading note when it is on
+    (``gaps_filled``).
     """
     if main.empty:
         raise SystemExit("viewer: no rows to build from")
@@ -776,6 +797,8 @@ def build_viewer(  # noqa: C901
         main["embedder"] = ""
     main["__group"] = _group_key(main)
     oracle_keys = add_oracle_columns(main)
+    if fill_gaps:
+        main = curves.fill_gaps(main, ("__group", "arm", "seed"))
 
     shape = _Shape(main, arms, denominator, oracle_keys)
     if not shape.metrics:
@@ -901,6 +924,9 @@ def build_viewer(  # noqa: C901
         # committed numbers.  A swap is invisible on screen and inverts the
         # study's finding.
         **({"build": build} if build else {}),
+        # When the per-run gaps were carried (#4624); absent on a page that
+        # was built without the carry and never reskinned with it.
+        **({"gaps_filled": _now()} if fill_gaps else {}),
         "payload_kb": {k: round(v / 1024) for k, v in sizes.items()},
         # Last, because that is where `reskin` appends it: a view added to a
         # built page sits where a build would have put it.
@@ -920,12 +946,94 @@ def build_viewer(  # noqa: C901
     return out_path
 
 
+def _now() -> str:
+    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def fill_payload_gaps(payload: dict) -> dict:
+    """Carry the per-seed lines through their gaps and re-average them (#4624), in place.
+
+    The reskin counterpart of :func:`curves.fill_gaps`, for a committed page
+    whose results directory is on the GRID or gone: the ``runs`` payload holds
+    every run at every click, so the carry can be done on it and the averaged
+    ``agg`` (``mean`` / ``sd`` / ``n``) recomputed from the result.  Click 0 is
+    the text-sort anchor, not a detector, so it is neither a span's start nor
+    recomputed; the oracle companion (``omean`` / ``on``) is not in the per-seed
+    payload and is left as built.  The per-seed values are quantised to
+    ``1/RUNS_SCALE``, so a re-averaged mean can differ from a rebuilt one by up
+    to that much; on a [0, 1] metric that is a thousandth.
+
+    Refuses a page whose per-seed lines were thinned to fit the byte budget:
+    the carry needs every click, so such a page is rebuilt from its results.
+    """
+    runs = payload.get("runs")
+    if not runs:
+        raise SystemExit("no per-seed payload on this page: rebuild it from its results to fill the gaps")
+    t = [int(x) for x in payload["t"]]
+    if [int(x) for x in runs["t"]] != t:
+        raise SystemExit(
+            f"the per-seed lines are on a thinned grid ({len(runs['t'])} of {len(t)} clicks); "
+            "rebuild the page from its results to fill the gaps"
+        )
+    vals = _decode(runs["values"])
+    present = np.isfinite(vals).any(axis=1)
+    anchor = t.index(0) if 0 in t else -1
+    if anchor >= 0:
+        present[:, anchor] = False
+    filled = vals.copy()
+    for r in range(vals.shape[0]):
+        idx = np.flatnonzero(present[r])
+        if len(idx) < 2:
+            continue
+        inside = np.arange(idx[0], idx[-1] + 1)
+        gap = ~present[r, inside]
+        if not gap.any():
+            continue
+        src = idx[np.searchsorted(idx, inside, side="right") - 1]
+        filled[r][:, inside[gap]] = vals[r][:, src[gap]]
+
+    agg = payload["agg"]
+    mean, sd, n = _decode(agg["mean"]), _decode(agg["sd"]), _decode(agg["n"])
+    new_mean, new_sd, new_n = np.full_like(mean, np.nan), np.full_like(sd, np.nan), np.zeros_like(n)
+    index = np.asarray(runs["index"], dtype=int)
+    for gi, ai in {(int(g), int(a)) for g, a, _s in index}:
+        v = filled[(index[:, 0] == gi) & (index[:, 1] == ai)]
+        good = np.isfinite(v)
+        cnt = good.sum(axis=0).astype(float)
+        z = np.where(good, v, 0.0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mu = np.where(cnt > 0, z.sum(axis=0) / np.maximum(cnt, 1), np.nan)
+            var = np.where(cnt > 0, (z**2).sum(axis=0) / np.maximum(cnt, 1) - mu**2, np.nan)
+        new_mean[gi, ai], new_sd[gi, ai], new_n[gi, ai] = mu, np.sqrt(np.clip(var, 0.0, None)), cnt
+    if anchor >= 0:
+        new_mean[..., anchor], new_sd[..., anchor], new_n[..., anchor] = (
+            mean[..., anchor],
+            sd[..., anchor],
+            n[..., anchor],
+        )
+    agg["mean"], agg["sd"], agg["n"] = _encode(new_mean), _encode(new_sd), _encode(new_n, scale=1)
+    runs["values"] = _encode(filled, scale=RUNS_SCALE)
+    sizes = payload.get("payload_kb") or {}
+    for k in ("mean", "sd", "n"):
+        sizes[k] = round(_payload_bytes(agg[k]) / 1024)
+    sizes["runs"] = round(_payload_bytes(runs["values"]) / 1024)
+    payload["payload_kb"] = sizes
+    # Lands where a build puts it: just before `payload_kb`.
+    items = [(k, v) for k, v in payload.items() if k != "gaps_filled"]
+    at = next(i for i, (k, _v) in enumerate(items) if k == "payload_kb")
+    items.insert(at, ("gaps_filled", _now()))
+    payload.clear()
+    payload.update(items)
+    return payload
+
+
 def reskin(
     page: Path,
     template: Path = TEMPLATE,
     *,
     default_metric: str | None = None,
     hide_metrics: Sequence[str] | None = None,
+    fill_gaps: bool = False,
 ) -> Path:
     """Re-substitute *page*'s own payload into the current template, in place.
 
@@ -943,8 +1051,10 @@ def reskin(
 
     *default_metric* and *hide_metrics* rewrite the payload's ``view`` block
     (:func:`opening_view`), each only when given: ``""`` and ``[]`` clear their
-    half.  With neither, the payload is copied byte for byte, ``view``
-    included, so a template push never undoes a study's choice.
+    half.  *fill_gaps* carries the per-seed lines through their gaps and
+    re-averages them (:func:`fill_payload_gaps`, #4624).  With none of the
+    three, the payload is copied byte for byte, ``view`` included, so a
+    template push never undoes a study's choice.
     """
     page = Path(page)
     html = page.read_text(encoding="utf-8")
@@ -952,16 +1062,19 @@ def reskin(
     if not m:
         raise SystemExit(f"{page}: no payload script tag - not a viewer page")
     blob = m.group(1)
-    if default_metric is not None or hide_metrics is not None:
+    if default_metric is not None or hide_metrics is not None or fill_gaps:
         payload = json.loads(blob)
-        was = payload.pop("view", None) or {}
-        view = opening_view(
-            [spec["key"] for spec in payload["metrics"]],
-            metric=was.get("metric") if default_metric is None else default_metric,
-            hide=was.get("hide", []) if hide_metrics is None else hide_metrics,
-        )
-        if view:
-            payload["view"] = view
+        if fill_gaps:
+            fill_payload_gaps(payload)
+        if default_metric is not None or hide_metrics is not None:
+            was = payload.pop("view", None) or {}
+            view = opening_view(
+                [spec["key"] for spec in payload["metrics"]],
+                metric=was.get("metric") if default_metric is None else default_metric,
+                hide=was.get("hide", []) if hide_metrics is None else hide_metrics,
+            )
+            if view:
+                payload["view"] = view
         blob = json.dumps(payload, separators=(",", ":"), allow_nan=False)
     fresh = template.read_text(encoding="utf-8")
     if fresh.count(TOKEN) != 1:
@@ -999,6 +1112,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="comma-separated metrics the page does not offer, though it still carries them; "
         "with --reskin, '' offers every one again",
     )
+    ap.add_argument(
+        "--fill-gaps",
+        action="store_true",
+        help="with --reskin, carry each run's last value through the clicks it has no row for (a spot check's "
+        "rounds, #4624) and re-average the page from its per-seed lines; refused on a page whose per-seed "
+        "lines were thinned. A build does this by itself.",
+    )
     ap.add_argument("--runs-budget-mb", type=float, default=RUNS_BUDGET_MB)
     ap.add_argument(
         "--no-skyline",
@@ -1017,9 +1137,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.reskin:
         for page in args.reskin:
-            out = reskin(Path(page), default_metric=args.default_metric, hide_metrics=hide)
+            out = reskin(Path(page), default_metric=args.default_metric, hide_metrics=hide, fill_gaps=args.fill_gaps)
             print(f"reskinned {out}  ({out.stat().st_size / 1e6:.2f} MB)")
         return 0
+    if args.fill_gaps:
+        ap.error("--fill-gaps goes with --reskin; a build carries the gaps by itself")
     if not args.arms or not args.out:
         ap.error("--arms and --out are required unless --reskin is given")
 
@@ -1057,7 +1179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "arms": args.arms,
             "baseline": str(Path(args.baseline).resolve()) if args.baseline else None,
             "skyline_results": str(sky_root.resolve()) if args.skyline_results else None,
-            "built": _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "built": _now(),
         },
         title=args.title,
         subtitle=args.subtitle,

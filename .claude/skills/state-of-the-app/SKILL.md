@@ -385,6 +385,14 @@ things keep a report on its link:
   the beta-1 run's, the app's default arm. It opens on AP and does not offer
   cost (#4576); a page built before that gets both from
   `viewer.py --reskin <page> --default-metric average_precision --hide-metrics cost`.
+  Its averaged line carries a run's last scored value through a spot check's
+  rounds (#4624): a run inside a prompted check is scored once per round of
+  picks, and a mean over "the runs with a row at this click" skipped it between
+  rounds, which skipped exactly the weak sessions and drew a dip at the end of
+  every session as the checks ran out of budget. A page built before that gets
+  the carry from its own per-seed lines with `viewer.py --reskin <page>
+  --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
+  it). `analyze.py`'s curves and `by_click.py` already carried.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).
 - **A new kind** (a future modality) needs nothing here: its first report

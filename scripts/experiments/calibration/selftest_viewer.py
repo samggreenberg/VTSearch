@@ -20,7 +20,11 @@ screen, so both are checked against values that are known by construction:
 * the page's opening ``view`` (the metric it opens on, the ones it hides) must
   come out the same whether it was built in or put on by a reskin, must survive
   a later plain reskin, and must refuse a choice the page could only honour by
-  quietly opening somewhere else (#4576).
+  quietly opening somewhere else (#4576);
+* a run inside a spot check round must **stay in the mean** between rounds, at
+  its last scored value, with nothing carried before its first row or after
+  its last, and a reskin must get the same carry from the per-seed lines
+  (#4624).
 
 Run: ``python selftest_viewer.py``
 """
@@ -72,6 +76,17 @@ ORACLE_F1 = 2.0 * _TP / (2.0 * _TP + _FP + _FN)
 #: the two categories so a wrong pool shows up as a level rather than as noise.
 SKY_COST = {"rich": 0.06, "lean": 0.16}
 
+#: A spot check round (#4624): this run has no row at clicks 21..24, and its
+#: click-20 row carries a precision of its own and an undefined f1, so the
+#: carry can be told from a neighbour's value and from a fill.
+GAP_RUN = ("ctl", "dsA", "embA", "rich", 0)
+GAP_LO, GAP_HI = 21, 24
+GAP_PRECISION = 0.55
+#: A run that starts late and ends early: nothing is carried before its first
+#: row or after its last.
+SHORT_RUN = ("alt", "dsB", "embB", "rich", 7)
+SHORT_LO, SHORT_HI = 10, 30
+
 
 def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     rows, cells, base, sky = [], [], [], []
@@ -101,7 +116,13 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                         )
                         if seed >= trained:
                             continue  # never trained: no metric row at all
+                        run = (arm, ds, emb, cat, seed)
                         for t in range(1, T_MAX + 1):
+                            if run == GAP_RUN and GAP_LO <= t <= GAP_HI:
+                                continue  # inside a spot check round: no row (#4624)
+                            if run == SHORT_RUN and not (SHORT_LO <= t <= SHORT_HI):
+                                continue  # not started yet, or already over
+                            on_gap_edge = run == GAP_RUN and t == GAP_LO - 1
                             rows.append(
                                 {
                                     "arm": arm,
@@ -113,9 +134,9 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                                     # Flat in t and in seed, so any pooling error
                                     # shows up as a level rather than as noise.
                                     "cost": LEVEL[arm] + (0.10 if cat == "lean" else 0.0),
-                                    "precision": 0.7,
+                                    "precision": GAP_PRECISION if on_gap_edge else 0.7,
                                     "recall": 0.6,
-                                    "f1": 0.65,
+                                    "f1": np.nan if on_gap_edge else 0.65,
                                     "average_precision": 0.8,
                                     # The oracle cut, as the harness emits it:
                                     # the cost and the two rates, never the
@@ -277,6 +298,110 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "...so a starving category reports coverage well below 1", abs(cov - 1.0 / N_SEED) < 1e-6, f"{cov:.3f}"
         )
+
+        # --- a spot check's rounds (#4624) -----------------------------------
+        # A run inside a prompted check is scored once per round, so between
+        # rounds it has no row.  The viewer's mean used to skip it there, and a
+        # check prompts where the labels separate weakly, so what it skipped was
+        # the weak sessions: a survivor's mean that dipped at the end of every
+        # review when the checks ran out of budget and the weak runs came back.
+        step = 2.0 / P["agg"]["mean"]["scale"]
+        g_gap, a_gap = gi[("dsA", "embA", "rich")], ai[GAP_RUN[0]]
+        mi_p, mi_f = keys.index("precision"), keys.index("f1")
+        t_in, t_next = P["t"].index(GAP_LO + 1), P["t"].index(GAP_HI + 1)
+        ok &= _check(
+            "a run inside a spot check round stays in the count between rounds",
+            abs(n[g_gap, a_gap, mi_p, t_in] - CATS["rich"]) < 0.5,
+            str(n[g_gap, a_gap, mi_p, t_in]),
+        )
+        want_p = ((CATS["rich"] - 1) * 0.7 + GAP_PRECISION) / CATS["rich"]
+        ok &= _check(
+            "...at its last scored value, not a neighbour's",
+            abs(mean[g_gap, a_gap, mi_p, t_in] - want_p) <= step,
+            f"{mean[g_gap, a_gap, mi_p, t_in]} vs {want_p}",
+        )
+        ok &= _check(
+            "...and a metric undefined on that row stays undefined through the gap",
+            abs(n[g_gap, a_gap, mi_f, t_in] - (CATS["rich"] - 1)) < 0.5
+            and abs(mean[g_gap, a_gap, mi_f, t_in] - 0.65) <= step,
+            f"n {n[g_gap, a_gap, mi_f, t_in]} mean {mean[g_gap, a_gap, mi_f, t_in]}",
+        )
+        ok &= _check(
+            "the carry ends where the next round is scored",
+            abs(mean[g_gap, a_gap, mi_p, t_next] - 0.7) <= step,
+            str(mean[g_gap, a_gap, mi_p, t_next]),
+        )
+        g_short, a_short = gi[("dsB", "embB", "rich")], ai[SHORT_RUN[0]]
+        n_short = [n[g_short, a_short, mi_p, P["t"].index(t)] for t in (SHORT_LO - 5, SHORT_LO + 10, SHORT_HI + 5)]
+        ok &= _check(
+            "nothing is carried before a run's first row or after its last",
+            abs(n_short[0] - (CATS["rich"] - 1)) < 0.5
+            and abs(n_short[1] - CATS["rich"]) < 0.5
+            and abs(n_short[2] - (CATS["rich"] - 1)) < 0.5,
+            str(n_short),
+        )
+        per_seed = _decode(P["runs"]["values"]) if P["runs"] else None
+        r_gap = P["runs"]["index"].index([g_gap, a_gap, P["seeds"].index(GAP_RUN[4])]) if P["runs"] else -1
+        ok &= _check(
+            "the per-seed line is carried the same way",
+            per_seed is not None
+            and abs(per_seed[r_gap, mi_p, P["runs"]["t"].index(GAP_LO + 1)] - GAP_PRECISION) <= 1.0 / V.RUNS_SCALE
+            and not np.isfinite(per_seed[r_gap, mi_f, P["runs"]["t"].index(GAP_LO + 1)]),
+        )
+        ok &= _check("the page is told the gaps were carried", bool(P.get("gaps_filled")))
+
+        # A committed page whose results are gone gets the same carry from its
+        # per-seed lines, which hold every run at every click.
+        raw = V.build_viewer(
+            main_df,
+            tmp / "raw.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            skyline=sky,
+            runs_budget_mb=0.25,
+            fill_gaps=False,
+        )
+        PR = _payload(raw)
+        ok &= _check(
+            "a build without the carry skips the run between rounds, and says nothing",
+            abs(_decode(PR["agg"]["n"])[g_gap, a_gap, mi_p, t_in] - (CATS["rich"] - 1)) < 0.5
+            and "gaps_filled" not in PR,
+        )
+        V.reskin(raw, fill_gaps=True)
+        PF = _payload(raw)
+        n_f, mean_f = _decode(PF["agg"]["n"]), _decode(PF["agg"]["mean"])
+        ok &= _check(
+            "--fill-gaps on a reskin carries them from the per-seed payload",
+            abs(n_f[g_gap, a_gap, mi_p, t_in] - CATS["rich"]) < 0.5 and bool(PF.get("gaps_filled")),
+            str(n_f[g_gap, a_gap, mi_p, t_in]),
+        )
+        ok &= _check(
+            "...re-averaging to within the per-seed quantisation of a build that carried",
+            bool(np.array_equal(np.isfinite(mean_f), np.isfinite(mean)))
+            and float(np.nanmax(np.abs(mean_f - mean))) <= 1.0 / V.RUNS_SCALE + step,
+            f"max |diff| {np.nanmax(np.abs(mean_f - mean))}",
+        )
+        ok &= _check(
+            "...leaving click 0 and the oracle companion as built",
+            bool(np.allclose(mean_f[..., P["t"].index(0)], mean[..., P["t"].index(0)], equal_nan=True))
+            and PF["agg"]["omean"] == PR["agg"]["omean"],
+        )
+        ok &= _check("...with the marker where a build puts it", list(PF) == list(P), f"{list(PF)} vs {list(P)}")
+        thin = V.build_viewer(
+            main_df,
+            tmp / "thin.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            runs_budget_mb=0.0001,
+            fill_gaps=False,
+        )
+        try:
+            V.reskin(thin, fill_gaps=True)
+            ok &= _check("a page whose per-seed lines were thinned is refused", False, "filled anyway")
+        except SystemExit as exc:
+            ok &= _check("a page whose per-seed lines were thinned is refused", "thinned" in str(exc), str(exc))
 
         # --- the oracle companion -------------------------------------------
         # Reconstructed, not emitted: the harness ships an (FPR, FNR) pair and
@@ -534,6 +659,10 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "the template reads the block the builder writes",
             "P.view" in re.sub(r'<script id="payload".*?</script>', "", html, flags=re.S),
+        )
+        ok &= _check(
+            "...and says when the gaps were carried",
+            "P.gaps_filled" in re.sub(r'<script id="payload".*?</script>', "", html, flags=re.S),
         )
 
         def refuses(label: str, **kw) -> bool:
