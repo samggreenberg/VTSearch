@@ -42,7 +42,7 @@ slides:
   title-hold-the-line
   outline-hold-the-line
 
-  # I — VTSearch
+  # I — Mission: the tool, from nothing, and what it is for.
   outline-hold-the-line +at1
   problem
   make-detector
@@ -58,7 +58,6 @@ slides:
   gmm-idea
   gmm-em
   blend
-  blend-schedule
   anchored-gmm
   anchored-em
   quantile-transfer
@@ -245,3 +244,8 @@ slides:
   inclusion-knob
   inclusion-walk
   inclusion-tilt
+  # Last, Weight and See: how the blend's weight moves with votes, moved out
+  # of Calibration (#4618). Above Average's fused cut replaced the blend, and
+  # what remains of the schedule is the fallback for sessions too young for
+  # its folds; it is parked here pending deletion.
+  blend-schedule

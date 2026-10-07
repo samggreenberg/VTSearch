@@ -2,7 +2,7 @@
 
 ## Outline & OutLyin'
 
-1. VTSearch
+1. Mission
 2. Calibration
 3. Inclination
 4. Exploration
@@ -20,9 +20,10 @@
      when it stops, what it was measured on, how a user can test it, regions,
      and documents — then how to do it yourself. -->
 
-<!-- **b** — Section I is the tool, from nothing — nobody needs to have seen it
-     before. The last of its slides is where the whole talk's object turns up:
-     one line through a ranking, doing two jobs. -->
+<!-- **b** — Section I is the tool's mission: what it is for, and the tool
+     itself, from nothing — nobody needs to have seen it before. The last of
+     its slides is where the whole talk's object turns up: one line through a
+     ranking, doing two jobs. -->
 
 <!-- **c** — Section II puts the line where the *data* says. Four ideas in
      order, each one repairing what the last one starved on. It ends on the
