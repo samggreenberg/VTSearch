@@ -19,6 +19,8 @@ re-run cannot show by looking at it:
   (``_rank_metrics``), which agrees with brute force and with sklearn's AP.
 * **Missing data stays missing:** a run recorded without rank frames reports
   its line at click 0 only, never a neighbour's value.
+* **The opening is the text sort** (#4605): until the app shows a detector
+  (``app_trained``), every user-facing number is the text sort's.
 * **Where the app said stop** (#3560) is read off the ordinary clicks, scores
   the same objective as the analyzer's own, and keeps the run that never
   trained as one the rules never stopped.
@@ -177,6 +179,11 @@ def _write_cells(exp: Path) -> None:
         for table in (rows, picks, frames):
             for r in table:
                 r["embedder"] = "siglip"
+        # Twenty clicks never leave Autopilot's opening, where the app shows the text sort
+        # (``app_trained == 0``, #4605). Mark them shown, so the detector's line is what these
+        # tests read; the opening has a test of its own, which turns the flag back off.
+        for r in rows:
+            r["app_trained"] = 1
         pd.DataFrame(rows, columns=pd.Index([*CALIBRATION_COLUMNS, "embedder"])).to_csv(
             cells / f"task_{idx:04d}.csv", index=False
         )
@@ -772,3 +779,47 @@ def test_by_click_fills_the_typed_query_until_a_detector_and_carries_gaps() -> N
     assert got.loc[2, "fbeta"] == pytest.approx((0.4 + 0.3) / 2), "b still has only its typed query"
     assert got.loc[4, "fbeta"] == pytest.approx((0.7 + 0.8) / 2), "b's gap carries its last value"
     assert got["with_detector"].tolist() == [0, 0, 1, 2, 2]
+
+
+def test_the_opening_is_scored_as_the_text_sort_the_app_shows(run, tmp_path) -> None:
+    """#4605: the app stays on the text sort through Autopilot's opening, so a detector the harness
+    trains there (``app_trained == 0``) is on no screen. Until a run's first shown click, every
+    user-facing number is the text sort's; from it on, nothing changes; other runs are untouched."""
+    exp = tmp_path / "opening"
+    shutil.copytree(run["exp"] / "results", exp / "results")
+    main = exp / "results" / "cells" / "task_0000.csv"  # cat0@small
+    df = pd.read_csv(main)
+    df.loc[df["t"] < 15, "app_trained"] = 0
+    df.to_csv(main, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    cells = pd.read_csv(out / "cells.csv").set_index("category")
+    curves = pd.read_csv(out / "curves.csv")
+    lines = pd.read_csv(out / "lines.csv", dtype={"point": str})
+    balances = pd.read_csv(out / "balances.csv")
+
+    row, before, text = cells.loc["cat0@small"], run["cells"].loc["cat0@small"], run["text"]["cat0@small"]
+    shown = df.loc[(df["t"] >= 15) & (df["app_trained"] == 1), "t"].min()
+    assert row["shown_from"] == shown
+    assert row["ap_10"] == pytest.approx(text["text_AP"]), "AP at click 10 is the text sort's"
+    beta = row["session_beta"] if np.isfinite(row["session_beta"]) else 1.0
+    p, r = text["text_precision"], text["text_recall"]
+    assert row["thr_fbeta_10"] == pytest.approx((1 + beta**2) * p * r / (beta**2 * p + r)), "the typed query's set"
+    for col in ("ap_25", "thr_fbeta_25", "thr_fbeta_final", "final_ap"):
+        assert row[col] == pytest.approx(before[col]), f"{col}: past the opening nothing moves"
+
+    curve = curves[curves["category"] == "cat0@small"].set_index("t")
+    assert curve.loc[1 : shown - 1, "thr_fbeta"].isna().all(), "no detector's objective before the switch"
+    assert np.allclose(curve.loc[1 : shown - 1, "ap"], text["text_AP"]), "the text sort's AP until the switch"
+    old = run["curves"][run["curves"]["category"] == "cat0@small"].set_index("t")
+    assert curve.loc[shown:, "thr_fbeta"].to_numpy() == pytest.approx(old.loc[shown:, "thr_fbeta"].to_numpy())
+
+    at = lines[(lines["category"] == "cat0@small")].set_index(["point", "floor"])
+    for x in sorted(lines["floor"].unique()):
+        assert at.loc[("10", x), "precision"] == pytest.approx(at.loc[("text", x), "precision"], nan_ok=True)
+    b = balances[balances["category"] == "cat0@small"].set_index(["point", "beta", "rule"])
+    for key in b.loc["text"].index:
+        assert b.loc[("10", *key), "fbeta"] == pytest.approx(b.loc[("text", *key), "fbeta"], nan_ok=True)
+
+    other, other_before = cells.loc["cat1@large"], run["cells"].loc["cat1@large"]
+    for col in ("ap_10", "thr_fbeta_10", "thr_fbeta_final"):
+        assert other[col] == pytest.approx(other_before[col], nan_ok=True), f"{col}: another run is untouched"

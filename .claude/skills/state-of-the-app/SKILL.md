@@ -147,6 +147,16 @@ same edit.
     and the run's own best, which light held the rest, and how close each gate
     came. Not yet a report section: the first review to read it decides
     whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
+- **The opening is the text sort (#4605).** The app stays on the text sort
+  through Autopilot's opening (Good, Bad, More) and shows a detector only from
+  the Hard phase on, a median ~40 clicks in. The harness trains detectors
+  during the opening anyway and flags the steps the app would show as
+  `app_trained == 1`. Every user-facing number before a run's first such step
+  (AP, the line at P, the balance, the objective, `curves.csv`) is the text
+  sort's, at its own line. Never read the opening's detectors as what the
+  user has. (A document dataset's dry-run walk is on the learned sort in the
+  app, but the harness flags it 0; the document reviews use their own
+  analyzer.)
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
@@ -231,7 +241,7 @@ bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
 # per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
 python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
-python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until a run's first detector (#4599): the slides' left panel reads it
+python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until the app shows a run's detector (the opening's end, #4605): the slides' left panel reads it
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 
