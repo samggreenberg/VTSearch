@@ -78,8 +78,12 @@ def lower_is_better(metric: str) -> bool:
 def with_objective(df: pd.DataFrame) -> pd.DataFrame:
     """*df* with the objective's columns, filled from its rates where the frame predates them.
 
-    A column already present is left as written: the runner computed it from
-    the counts, which the 6-dp rates can only approximate.  Without
+    A value already written is left as written: the runner computed it from
+    the counts, which the 6-dp rates can only approximate.  A NaN in a column
+    that exists is filled like a missing column, because a frame concatenated
+    from cells written before and after the columns existed (a resumed study,
+    an A/B whose control ran earlier) carries the column with the older rows
+    empty, and an empty objective reads as a loss, not a refusal.  Without
     ``precision`` and ``recall`` there is nothing to fill from, and *df* comes
     back unchanged.  A row with no balance gets a NaN ``fbeta`` and its preset
     columns, as a new row would.
@@ -90,7 +94,7 @@ def with_objective(df: pd.DataFrame) -> pd.DataFrame:
     from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
 
     want = {OBJECTIVE: None, **{f"{OBJECTIVE}_{beta_tag(b)}": b for b in RANK_FRAME_BETAS}}
-    missing = [c for c in want if c not in df.columns]
+    missing = [c for c in want if c not in df.columns or df[c].isna().any()]
     if not missing:
         return df
     out = df.copy()
@@ -103,7 +107,12 @@ def with_objective(df: pd.DataFrame) -> pd.DataFrame:
     )
     for col in missing:
         beta = want[col]
-        out[col] = fbeta_from_rates(p, r, row_beta if beta is None else beta)
+        filled = fbeta_from_rates(p, r, row_beta if beta is None else beta)
+        if col in out.columns:
+            written = pd.to_numeric(out[col], errors="coerce")
+            out[col] = written.where(written.notna(), filled)
+        else:
+            out[col] = filled
     return out
 
 

@@ -123,6 +123,19 @@ class TestTheRule:
         df = _frame(1.0).assign(fbeta=0.123, fbeta_b025=0.1, fbeta_b1=0.2, fbeta_b4=0.3)
         assert objective.with_objective(df) is df
 
+    def test_rows_written_before_the_columns_are_filled_in_a_mixed_frame(self, objective):
+        # One cell written after the columns existed, one before: concatenated,
+        # the older rows carry the column empty.  They are filled from their
+        # rates; the newer rows keep what the runner wrote.
+        new = _frame(1.0, n_seeds=1).assign(fbeta=0.123, fbeta_b025=0.1, fbeta_b1=0.2, fbeta_b4=0.3)
+        old = _frame(1.0, n_seeds=1).assign(seed=9)
+        out = objective.with_objective(pd.concat([new, old], ignore_index=True))
+        is_old = out["seed"] == 9
+        assert (out.loc[~is_old, "fbeta"] == 0.123).all() and (out.loc[~is_old, "fbeta_b4"] == 0.3).all()
+        p, r = out.loc[is_old, "precision"].to_numpy(), out.loc[is_old, "recall"].to_numpy()
+        np.testing.assert_allclose(out.loc[is_old, "fbeta"], 2 * p * r / (p + r))
+        np.testing.assert_allclose(out.loc[is_old, "fbeta_b1"], 2 * p * r / (p + r))
+
     def test_no_balance_is_no_objective_but_the_presets_are_still_read(self, objective):
         out = objective.with_objective(_frame(None))
         assert out["fbeta"].isna().all() and out["fbeta_b1"].notna().all()
