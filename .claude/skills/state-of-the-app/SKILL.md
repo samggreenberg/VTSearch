@@ -181,7 +181,11 @@ same edit.
   harness's detector, whose line is Find's on the withheld half. That is the
   click-4 dip the report's own curves do not have, and it is not a bug: the
   report is the session, the viewer is the export. The page says so in its
-  reading note, and `selftest_viewer.py` / `selftest_curves.py` pin it.
+  reading note, and `selftest_viewer.py` / `selftest_curves.py` pin it. The
+  owner wants the app to stop handing out an unreal detector (#4643: until the
+  labels meet the opening's quota, Test gives the typed query's set). When it
+  does, the harness's rows carry that set and the page follows, so the dip
+  goes with the app, not with a viewer rule.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
