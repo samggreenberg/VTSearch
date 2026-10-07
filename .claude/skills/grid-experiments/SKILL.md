@@ -493,10 +493,12 @@ performance rows the reports' tables were read off.
 Which metric a page **opens on** is the study's to choose, and so is which ones
 it offers at all: `--default-metric` and `--hide-metrics` write a `view` block
 into the payload, at build time or on a reskin of a page that is already built,
-and a later plain reskin keeps it. Without one the page opens on its first
-metric, which is cost on any run that emits it, so a study whose report retired
-cost passes both, as the State of the App's `analyze.sh` does (#4576). Hiding only takes a metric off the
-menu; its numbers stay in the payload.
+and a later plain reskin keeps it. Without one the page opens on F1 (#4635),
+or on the first metric it offers when the run emitted no F1. The template makes
+that choice, so a plain reskin moves every committed page without a `view` onto
+it. A study whose report retired cost hides it, as the State of the App's
+`analyze.sh` does (#4576). Hiding only takes a metric off the menu; its numbers
+stay in the payload.
 
 **A run inside a spot check stays in the mean.** A prompted check (#4496)
 answers its picks in rounds of about five, so a run inside one is scored once
@@ -514,9 +516,35 @@ per-seed lines with `python viewer.py --reskin <page> --fill-gaps`, which
 refuses a page whose per-seed lines were thinned to fit the budget (rebuild
 that one from its cells).
 
+**A run with no detector stays in the mean too, as a loss.** Before a run's
+first Good and Bad vote, and at every click of a run that never got both, the
+harness writes no row, and a user there has nothing: the labelset loads as a
+detector with no model and Find on it is refused. Both the viewer and
+`curves.py` now score those clicks as the empty returned set
+(`curves.score_empty_sets`, `curves.EMPTY_SET`: recall, F1 and the objective
+0, precision 0, FPR 0, FNR 1, AP the test split's prevalence, AUROC 0.5, cost
+the miss weight), so a failing run is averaged in rather than averaged out
+(owner, 2026-10-07). A trained detector that flags nothing returns the same
+set, so its precision, which the harness leaves undefined, counts as 0 too
+(`curves.zero_empty_precision`; the viewer's oracle line as well). The runs scored are the caller's cell list or, without
+one, every run the text-sort baseline lists in a group the arm trained in
+(`curves.attempted_cells`), so pass `--baseline`. The page says so in its
+reading note (`empty_sets_scored`). This needs each run's prevalence, which a
+built page does not carry, so a committed page built before it is **rebuilt**
+from its results, not reskinned.
+
+**From the first Good and Bad on, both draw the harness's detector, Autopilot's
+opening included** (owner, 2026-10-07, #4640). The session stays on the text
+sort until the Hard phase (`app_trained`, #4605), but the user can export the
+labels and run Test at any click, and either retrains from the labelset. So
+the page shows what that gives, and neither module reads `app_trained`. A
+report that scores the *session* filters on it itself, as the State of the App
+analyzer does.
+
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
 the weighted pooling against a hand-computed answer, the click-0 anchor, the
-budget note, and the carry through a spot check round; `selftest_curves.py` is
+budget note, the carry through a spot check round, and the empty-set score of a
+click with no detector; `selftest_curves.py` is
 the PNGs'. Both run in the suite (`tests_lib/meta/test_calibration_viewer.py`).
 
 **The metrics come from the harness, not from the viewer.** `cost`, `precision`,

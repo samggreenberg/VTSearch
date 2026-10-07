@@ -793,6 +793,16 @@ run it over another dataset. Nothing happens on its own, and the
 dialog only appears for the run that trained the detector - coming
 back later to refine it further will not raise it again.
 
+Once **Done!** is reached it stays checked, and a seventh step, **Keep
+Improving.**, takes over for as long as you keep labeling. It is
+optional. Its light shows whichever of the smart, stable and span
+indicators is furthest behind, and its line says what Autopilot is
+offering now. A new vote can knock an indicator off green for a while
+as the detector takes it in; Autopilot then goes back to borderline
+items (**Showing boundary items**) or a broad mix (**Showing diverse
+items**) until it recovers, but the panel does not drop back to Refine
+Boundary.
+
 ### Document collections stop on a dry run
 
 On a collection of document pages, where a detector finds logos and
@@ -817,7 +827,7 @@ dry run there means the detector has found what it can.
 ### The collapsed bar
 
 You can collapse Autopilot to a thin strip that just shows the
-five phase indicators, with the current phase's light above its name.
+phase indicators, with the current phase's light above its name.
 Click any active phase to re-pick the
 current recommendation (useful if you voted the wrong way and
 want a fresh suggestion). Collapsed mode is handy once you're

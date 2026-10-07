@@ -432,6 +432,66 @@ describe('AutopilotStateService', () => {
     expect(service.state.phase).toBe('new');
   });
 
+  describe('doneReached (#4621)', () => {
+    const green = makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' });
+
+    /** Run to Done: the quorum, the walk's target, and every indicator green. */
+    function reachDone(): void {
+      service.activate();
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(20, 4);
+      expect(service.state.phase).toBe('done');
+    }
+
+    it('starts false', () => {
+      service.activate();
+      service.checkPhaseTransition(20, 4);
+      expect(service.state.phase).toBe('hard');
+      expect(service.state.doneReached).toBe(false);
+    });
+
+    it('is set on reaching Done', () => {
+      reachDone();
+      expect(service.state.doneReached).toBe(true);
+    });
+
+    it('holds while the phase follows the indicators back to hard and new', () => {
+      reachDone();
+      service.updateFromLabelingStatus(
+        makeStatus({ status: 'green' }, { status: 'yellow' }, { status: 'green' }),
+      );
+      service.checkPhaseTransition(21, 4);
+      // The phase itself is unchanged by the latch: it still drives the picks.
+      expect(service.state.phase).toBe('hard');
+      expect(service.state.doneReached).toBe(true);
+
+      service.updateFromLabelingStatus(
+        makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+      );
+      service.checkPhaseTransition(21, 5);
+      expect(service.state.phase).toBe('new');
+      expect(service.state.doneReached).toBe(true);
+    });
+
+    it('clears when votes fall back into the opening', () => {
+      reachDone();
+      service.checkPhaseTransition(1, 4);
+      expect(service.state.phase).toBe('good');
+      expect(service.state.doneReached).toBe(false);
+    });
+
+    it('resets on a new run and on clear', () => {
+      reachDone();
+      service.deactivate();
+      service.activate();
+      expect(service.state.doneReached).toBe(false);
+
+      reachDone();
+      service.clear();
+      expect(service.state.doneReached).toBe(false);
+    });
+  });
+
   it('should cascade good→bad→more in a single checkPhaseTransition call', () => {
     service.activate();
     // Both thresholds met at once (user labeled in Manual before switching to Autopilot)

@@ -148,11 +148,42 @@ class TestTheRule:
         assert objective.rows_carry_beta([row]) and not objective.rows_carry_beta([{**row, "beta": "nan"}])
 
 
+def _fb(p: float, r: float, beta: float) -> float:
+    b2 = beta * beta
+    return (1 + b2) * p * r / (b2 * p + r)
+
+
+def _baseline(*, lines: bool = True) -> pd.DataFrame:
+    """A text baseline: the beta-blind cut, the app's own line at beta 1 and 4 (#4603), and the top-K reading."""
+    row = {
+        "dataset": "coco_better",
+        "embedder": "siglip",
+        "category": "cat",
+        "seed": 0,
+        "text_precision": 0.4,
+        "text_recall": 0.3,
+        "text_fpr": 0.05,
+        # The top 32 / 128 (`balance_metrics` at the retired cap): never an anchor (#4474).
+        "text_fbeta_b1": 0.99,
+        "text_fbeta_b4": 0.99,
+    }
+    if lines:
+        row |= {"text_line_precision_b1": 0.5, "text_line_recall_b1": 0.4, "text_line_fpr_b1": 0.02}
+        row |= {"text_line_precision_b4": 0.2, "text_line_recall_b4": 0.9, "text_line_fpr_b4": 0.3}
+    return pd.DataFrame([row])
+
+
+_KEYS = ["dataset", "embedder", "category", "seed"]
+_CELL = ("coco_better", "siglip", "cat", 0)
+
+
 class TestCurves:
-    def test_no_metric_named_draws_the_objective_and_anchors_it_at_the_runs_preset(self, curves):
+    def test_no_metric_named_draws_the_objective_and_anchors_it_at_the_runs_line(self, curves, objective):
         main, metric, lower, col = curves.resolve_metric(_frame(1.0), None, None, None)
-        assert (metric, lower, col) == ("fbeta", False, "text_fbeta_b1")
+        assert (metric, lower, col) == ("fbeta", False, None)
         assert main["fbeta"].notna().all()
+        anchor = curves.baseline_map(_baseline(), metric, _KEYS, col, objective.frame_beta(main))
+        assert anchor[_CELL] == pytest.approx(_fb(0.5, 0.4, 1.0))
 
     def test_a_frame_without_a_balance_still_draws_cost(self, curves):
         _main, metric, lower, col = curves.resolve_metric(_frame(None), None, None, None)
@@ -162,9 +193,35 @@ class TestCurves:
         _main, metric, lower, _col = curves.resolve_metric(_frame(1.0), "cost", None, None)
         assert (metric, lower) == ("cost", True)
 
-    def test_a_beta_off_the_presets_has_no_text_sort_anchor(self, curves):
-        assert curves.objective_anchor_column(_frame(0.5)) is None
-        assert curves.objective_anchor_column(_frame(4.0)) == "text_fbeta_b4"
+    def test_every_cut_metric_reads_the_one_set_the_line_at_the_frames_beta_returns(self, curves):
+        # At beta 4 the app's text line keeps a long list (#4603); F1 and F1/4
+        # score that same set, never the top-K reading the baseline also carries.
+        at = {m: curves.baseline_map(_baseline(), m, _KEYS, beta=4.0)[_CELL] for m in curves.LINE_METRICS}
+        assert (at["precision"], at["recall"], at["fpr"]) == pytest.approx((0.2, 0.9, 0.3))
+        assert at["fnr"] == pytest.approx(0.1)
+        assert at["fbeta"] == pytest.approx(_fb(0.2, 0.9, 4.0)) == pytest.approx(at["fbeta_b4"])
+        assert at["f1"] == pytest.approx(_fb(0.2, 0.9, 1.0)) == pytest.approx(at["fbeta_b1"])
+        assert at["fbeta_b025"] == pytest.approx(_fb(0.2, 0.9, 0.25))
+
+    def test_a_beta_the_baseline_has_no_line_for_reads_the_blind_cut(self, curves):
+        # Beta 0.5 (a preset before #4471), a baseline from before #4603, and
+        # a frame with no balance all read the line the app drew then.
+        for baseline, beta in ((_baseline(), 0.5), (_baseline(lines=False), 1.0), (_baseline(), None)):
+            assert curves.baseline_map(baseline, "precision", _KEYS, beta=beta)[_CELL] == pytest.approx(0.4)
+            assert curves.baseline_map(baseline, "fbeta_b4", _KEYS, beta=beta)[_CELL] == pytest.approx(
+                _fb(0.4, 0.3, 4.0)
+            )
+        assert curves.baseline_map(_baseline(), "fbeta", _KEYS, beta=0.5)[_CELL] == pytest.approx(_fb(0.4, 0.3, 0.5))
+        assert curves.baseline_map(_baseline(), "fbeta", _KEYS, beta=None) == {}
+
+    def test_a_line_that_keeps_nothing_anchors_precision_at_zero(self, curves):
+        empty = _baseline().assign(text_line_precision_b4=np.nan, text_line_recall_b4=0.0, text_line_fpr_b4=0.0)
+        assert curves.baseline_map(empty, "precision", _KEYS, beta=4.0)[_CELL] == 0.0
+        assert curves.baseline_map(empty, "fbeta", _KEYS, beta=4.0)[_CELL] == 0.0
+
+    def test_the_ranking_metrics_keep_their_own_columns(self, curves):
+        base = _baseline().assign(text_AP=0.6)
+        assert curves.baseline_map(base, "average_precision", _KEYS, beta=4.0)[_CELL] == pytest.approx(0.6)
 
 
 class TestStopping:
@@ -187,14 +244,23 @@ def _payload(path: Path) -> dict:
     return json.loads(m.group(1))
 
 
-@pytest.mark.parametrize(("beta", "opens_on"), [(1.0, "fbeta"), (None, None)], ids=("balance", "no-balance"))
-def test_the_viewer_opens_on_the_objective_on_a_balance_run(tmp_path, beta, opens_on):
+@pytest.mark.parametrize("beta", [1.0, None], ids=("balance", "no-balance"))
+def test_the_viewer_leaves_a_run_with_f1_to_the_page_default(tmp_path, beta):
+    """The page itself opens on F1 (#4635), so the payload names no metric."""
     viewer = _load("viewer")
     out = viewer.build_viewer(_frame(beta), tmp_path / "viewer.html", arms=["prod"])
     payload = _payload(out)
-    assert payload.get("view", {}).get("metric") == opens_on
+    assert "metric" not in payload.get("view", {})
     keys = [m["key"] for m in payload["metrics"]]
+    assert viewer.DEFAULT_METRIC in keys
     assert ("fbeta" in keys) is (beta is not None)
+
+
+@pytest.mark.parametrize(("beta", "opens_on"), [(1.0, "fbeta"), (None, None)], ids=("balance", "no-balance"))
+def test_the_viewer_opens_on_the_objective_on_a_balance_run_without_f1(tmp_path, beta, opens_on):
+    viewer = _load("viewer")
+    out = viewer.build_viewer(_frame(beta), tmp_path / "viewer.html", arms=["prod"], hide_metrics=["f1"])
+    assert _payload(out).get("view", {}).get("metric") == opens_on
 
 
 def test_the_viewer_still_opens_where_the_study_says(tmp_path):

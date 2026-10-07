@@ -92,6 +92,16 @@ same edit.
   `main`, then switched the same day). A report commits its viewer so the link
   has one. See
   [Where the owner reads it](#where-the-owner-reads-it-the-stable-links).
+- **The viewer carries every balance (owner, 2026-10-07, #4636):** the
+  committed viewer holds all three session sets, a chip per beta the sessions
+  ran at, and offers F1/4 and F4 beside F1 on the metric menu. The two are
+  different questions: the chip is how the app at that beta trained, checked
+  and drew its line; the metric is the beta its returned set is scored at.
+  The objective (`fbeta`) is the diagonal, each set at its own beta. With the
+  Target size filter, a reader can ask "how do we do on large targets at
+  beta 4" without a re-run. `viewer_betas.sh` builds it (below); each set's
+  click 0 is the text sort's own line at that set's beta (#4603), so the
+  notch and the curve are one rule (#4474).
 - **Seeds per path, sized by cost:** Binary Photo is cheap (~7 min and ~1 GB a
   run, ~10-15 min per seed for all 144 cells), so it takes **as many seeds as
   a night allows** (owner, 2026-09-24: per-image claims need repeat clicks, and
@@ -153,12 +163,29 @@ same edit.
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
   the Hard phase on, a median ~40 clicks in. The harness trains detectors
   during the opening anyway and flags the steps the app would show as
-  `app_trained == 1`. Every user-facing number before a run's first such step
-  (AP, the line at P, the balance, the objective, `curves.csv`) is the text
-  sort's, at its own line. Never read the opening's detectors as what the
-  user has. (A document dataset's dry-run walk is on the learned sort in the
-  app, but the harness flags it 0; the document reviews use their own
-  analyzer.)
+  `app_trained == 1`. Every number the report reads off the session before a
+  run's first such step (AP, the line at P, the balance, the objective,
+  `curves.csv`, `by_click.py`) is the text sort's, at its own line. Never read
+  the opening's detectors as what the session shows. (A document dataset's
+  dry-run walk is on the learned sort in the app, but the harness flags it 0;
+  the document reviews use their own analyzer.)
+- **The viewer draws what the saved labels give, opening included (owner,
+  2026-10-07, #4640).** What decides it is what the Train interface lets a
+  user take away. Had the app refused to save a detector until it was real,
+  the opening's detectors could be left out; since it lets the user export,
+  the page shows what an import gives. And it never refuses: every vote is
+  written to the detector as it is cast, Export labels and Test have no phase
+  gate, and Test or an import retrains from the labelset. So `viewer.py` and
+  `curves.py` do not read `app_trained`. Before a run's first Good and Bad
+  they draw the empty set (Test is refused, #4629), and from there on the
+  harness's detector, whose line is Find's on the withheld half. That is the
+  click-4 dip the report's own curves do not have, and it is not a bug: the
+  report is the session, the viewer is the export. The page says so in its
+  reading note, and `selftest_viewer.py` / `selftest_curves.py` pin it. The
+  owner wants the app to stop handing out an unreal detector (#4643: with too
+  few Goods, Test gives the typed query's set; with too few Bads, the Goods'
+  centroid). When it does, the harness's rows carry those sets and the page
+  follows, so the dip goes with the app, not with a viewer rule.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
@@ -244,6 +271,7 @@ SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per p
 # per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
 python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
 python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until the app shows a run's detector (the opening's end, #4605): the slides' left panel reads it
+srun -p cpu --mem=16G -c 2 -t 60 bash viewer_betas.sh <date>   # the committed viewer: every session set on one page, a chip per beta (#4636) -> <date>-betas/viewer.html
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 
@@ -382,11 +410,14 @@ things keep a report on its link:
   directory named `*-state-of-the-app-*` whose title names no kind fails
   `tests_lib/meta/test_publish_sota_site.py` unless that test lists it as a
   deliberate side-report (the per-floor control is the one today).
-- **The viewer.** Commit `viewer.html` beside `REPORT.md`. `analyze.sh` already
-  writes it to `analysis-<path>/viewer.html`; for the per-preset sessions take
-  the beta-1 run's, the app's default arm. It opens on AP and does not offer
-  cost (#4576); a page built before that gets both from
-  `viewer.py --reskin <page> --default-metric average_precision --hide-metrics cost`.
+- **The viewer.** Commit `viewer.html` beside `REPORT.md`. For the per-preset
+  sessions it is `viewer_betas.sh <date>`'s page (#4636): one chip per session
+  set, beside F1/4 and F4 on the metric menu. It thins the per-seed lines to
+  fit the repo's 4,000 KB cap (`SOTA_RUNS_BUDGET_MB`, default 1) and says when
+  a page is still over it. A review with one session set commits
+  `analyze.sh`'s `analysis-<path>/viewer.html`. It opens on F1 (#4635) and does not
+  offer cost (#4576); a page built before that gets both from
+  `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's
   rounds (#4624): a run inside a prompted check is scored once per round of
   picks, and a mean over "the runs with a row at this click" skipped it between
@@ -394,7 +425,15 @@ things keep a report on its link:
   every session as the checks ran out of budget. A page built before that gets
   the carry from its own per-seed lines with `viewer.py --reskin <page>
   --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
-  it). `analyze.py`'s curves and `by_click.py` already carried.
+  it). `analyze.py`'s curves and `by_click.py` already carried. A click where
+  a run has no trained detector (before its first Good and Bad, or every click
+  of a run that never got both) is scored as the empty returned set, the
+  nothing Test gives that labelset, so the runs that never trained are in its
+  mean as losses (`curves.score_empty_sets`); from the first Good and Bad on,
+  Autopilot's opening included, it draws the harness's detector (#4640,
+  above). A detector that flags nothing counts its precision as 0 rather than
+  undefined; a page built before that is rebuilt with `analyze.sh`, since a
+  reskin has no prevalence to put AP at.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).
 - **A new kind** (a future modality) needs nothing here: its first report

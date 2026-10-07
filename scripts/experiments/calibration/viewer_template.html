@@ -227,7 +227,7 @@
       </div>
     </div>
     <div class="ctl" style="flex:1 1 100%">
-      <label class="h">Arms <span style="text-transform:none;letter-spacing:0">— one or more</span></label>
+      <label class="h"><span id="armsTitle">Arms</span> <span id="armsHint" style="text-transform:none;letter-spacing:0">— one or more</span></label>
       <div class="chips" id="arms"></div>
     </div>
   </div>
@@ -345,6 +345,11 @@
   // appears only when EVERY category carries a suffix and there is more than one
   // band to choose between, for the same reason the embedder chips hide
   // themselves at one embedder - a control with one option is furniture.
+  //
+  // Like the category control it offers all sizes pooled, each size as its own
+  // line (#4635), or one size.  "Each size" splits only the POOLED line: every
+  // category already names its size, so with categories split or one picked a
+  // size split would add no line, only empty combinations.
   const BAND_ORDER = ["small", "medium", "large"];
   const bandOf = (c) => { const i = String(c).lastIndexOf("@"); return i < 0 ? null : String(c).slice(i + 1); };
   const BANDS = (() => {
@@ -355,15 +360,18 @@
     const rank = (b) => { const i = BAND_ORDER.indexOf(b); return i < 0 ? BAND_ORDER.length : i; };
     return u.sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
   })();
-  const inBand = (c) => state.band === ALL || bandOf(c) === state.band;
+  const inBand = (c) => state.band === ALL || state.band === EACH || bandOf(c) === state.band;
 
   // The metrics on the menu, and the one the page opens on.  `P.view` is the
   // study's choice (viewer.py's --default-metric / --hide-metrics), carried in
   // the payload so a reskin keeps it.  A page without one offers every metric
-  // and opens on the first, which is cost on any run that emits it: wrong for
-  // a report that retired cost (#4576).  A hidden metric is off the menu only -
-  // its numbers are still in the payload, and `mi` below still indexes the
-  // full list.
+  // and opens on F1 where the run emitted it (#4635), else on the first.  A
+  // hidden metric is off the menu only - its numbers are still in the payload,
+  // and `mi` below still indexes the full list.
+  //
+  // viewer.py's DEFAULT_METRIC names the same key, so the builder knows when a
+  // study's choice would only repeat it.
+  const OPEN_ON = "f1";
   const VIEW = P.view || {};
   const OFFERED = (() => {
     const hide = new Set(VIEW.hide || []);
@@ -375,7 +383,7 @@
     dataset: P.datasets.length > 1 ? ALL : P.datasets[0],
     band: ALL,
     category: ALL,
-    metric: (OFFERED.find((m) => m.key === VIEW.metric) || OFFERED[0]).key,
+    metric: (OFFERED.find((m) => m.key === VIEW.metric) || OFFERED.find((m) => m.key === OPEN_ON) || OFFERED[0]).key,
     embedders: new Set(P.embedders),
     arms: new Set(P.arms),
     seedMode: "avg",
@@ -435,13 +443,21 @@
     $("bandWrap").style.display = "none";
   } else {
     bandSel.innerHTML =
-      `<option value="${ALL}">All sizes</option>` +
+      `<option value="${ALL}">All sizes — averaged together</option>` +
+      `<option value="${EACH}">Each size — one line each</option>` +
       BANDS.map((b) => `<option value="${esc(b)}">${esc(b)}</option>`).join("");
     bandSel.value = state.band;
     // Narrowing the band can strip the category currently selected, so refill
     // rather than leaving a selection that names no group: `fillCats` falls back
-    // to "all categories" when the current one is no longer on offer.
-    bandSel.onchange = () => { state.band = bandSel.value; fillCats(); render(); };
+    // to "all categories" when the current one is no longer on offer.  Asking
+    // for each size drops a single picked category for the same reason: it has
+    // one size, so the request would draw one line.
+    bandSel.onchange = () => {
+      state.band = bandSel.value;
+      if (state.band === EACH && state.category !== EACH) state.category = ALL;
+      fillCats();
+      render();
+    };
   }
   fillCats();
 
@@ -454,6 +470,13 @@
   // study ran a single embedder - a control with one option is furniture.
   if (P.embedders.length < 2) $("embWrap").style.display = "none";
   chips($("emb"), P.embedders.map((e) => ({ id: e, label: e || "(unnamed)" })), state.embedders, render);
+  // A review's session sets are one arm per balance (#4636), and the page says
+  // so: the chips choose the beta the sessions RAN at, which the metric menu's
+  // F1/4, F1 and F4 then score the returned set at.
+  if (P.arms_control) {
+    $("armsTitle").textContent = P.arms_control.title;
+    $("armsHint").textContent = `— ${P.arms_control.hint}`;
+  }
   chips($("arms"), P.arms.map((a) => ({ id: a, label: a })), state.arms, render);
 
   $("seedMode").querySelectorAll("input").forEach((inp) => {
@@ -562,13 +585,21 @@
   // Overlaying two embedders is not averaging them - the ban that keeps
   // embedders in separate panels is a ban on pooling two representations of the
   // haystack into one number, and drawing two lines pools nothing.
-  const DIMS = ["embedder", "arm", "category", "dataset"];
+  const DIMS = ["embedder", "arm", "band", "category", "dataset"];
+  //: What a dimension is called on screen, where its key would not say it.
+  //: The arms are whatever the arms control says they are: a review's session
+  //: sets are a beta (#4636).
+  const DIM_LABEL = { band: "target size", ...(P.arms_control ? { arm: P.arms_control.title.toLowerCase() } : {}) };
+  const dimLabel = (d) => DIM_LABEL[d] || d;
 
   function plan() {
     const values = {
       embedder: P.embedders.filter((e) => state.embedders.has(e)),
       arm: P.arms.filter((a) => state.arms.has(a)),
       // `null` means "pooled over everything in play" rather than a single value.
+      // One size is a filter on the categories in play, not a split, so it is
+      // `null` here too; only "each size" over the pooled line splits.
+      band: state.band === EACH && state.category === ALL ? BANDS : [null],
       category: state.category === EACH ? categoriesInPlay() : [state.category === ALL ? null : state.category],
       dataset: state.dataset === EACH ? datasetsInPlay() : [state.dataset === ALL ? null : state.dataset],
     };
@@ -584,12 +615,14 @@
   const ORDER = {
     embedder: (v) => P.embedders.indexOf(v),
     arm: (v) => P.arms.indexOf(v),
+    band: (v) => BANDS.indexOf(v),
     category: (v) => P.categories.indexOf(v),
     dataset: (v) => P.datasets.indexOf(v),
   };
   const SIZE = {
     embedder: () => Math.max(1, P.embedders.length),
     arm: () => Math.max(1, P.arms.length),
+    band: () => Math.max(1, BANDS.length),
     category: () => Math.max(1, P.categories.length),
     dataset: () => Math.max(1, P.datasets.length),
   };
@@ -600,7 +633,8 @@
   }
 
   function groupsFor(sel) {
-    const cats = new Set(sel.category === null ? categoriesInPlay() : [sel.category]);
+    const inPlay = categoriesInPlay().filter((c) => sel.band === null || bandOf(c) === sel.band);
+    const cats = new Set(sel.category === null ? inPlay : [sel.category]);
     const dss = new Set(sel.dataset === null ? datasetsInPlay() : [sel.dataset]);
     const out = [];
     P.groups.forEach((_, i) => {
@@ -685,8 +719,9 @@
   const MAX_PANELS = 16;
   const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "—");
   const shortLabel = (dim, v) =>
-    v === null ? (dim === "category" ? "all categories" : "all datasets")
+    v === null ? ({ band: "all sizes", category: "all categories" }[dim] || "all datasets")
     : dim === "embedder" ? (String(v) || "(unnamed embedder)")
+    : dim === "band" ? `${v} targets`
     : String(v);
   // In overlay the name has to name the COMBINATION, because that is what the
   // hue stands for; in split the panel title already carries every varying
@@ -709,7 +744,7 @@
     // with arm among the varying dimensions.  A swatch beside a chip in split
     // mode would promise a colour the chart never uses.
     $("arms")._colorOf = pl.hueDims.includes("arm")
-      ? (v) => paletteColor(hueIndex(pl.hueDims, { embedder: pl.values.embedder[0], arm: v, category: pl.values.category[0], dataset: pl.values.dataset[0] }))
+      ? (v) => paletteColor(hueIndex(pl.hueDims, { embedder: pl.values.embedder[0], arm: v, band: pl.values.band[0], category: pl.values.category[0], dataset: pl.values.dataset[0] }))
       : null;
     $("arms")._sync();
     $("emb")._sync();
@@ -839,18 +874,21 @@
     return (P.embedders.length === 1 ? P.embedders[0] : "") || P.title;
   }
 
-  function panelSub(pl) {
+  function panelSub(pl, fk) {
     const bits = [];
     const splits = (d) => pl.hueDims.includes(d) || pl.facetDims.includes(d);
     bits.push(splits("dataset")
       ? null
       : (state.dataset === ALL ? `all ${P.datasets.length} datasets pooled` : state.dataset));
-    const nCats = categoriesInPlay().length;
-    const pooled = state.band === ALL
-      ? `all ${nCats} categories pooled`
-      : `all ${nCats} ${state.band}-band categories pooled`;
+    // The size this panel pools: its own when the sizes are split one chart
+    // each, the one picked, or none.
+    const band = fk.band != null ? fk.band : (state.band === ALL || state.band === EACH ? null : state.band);
+    const nCats = categoriesInPlay().filter((c) => band === null || bandOf(c) === band).length;
+    const pooled = band === null
+      ? (splits("band") ? "each size's categories pooled" : `all ${nCats} categories pooled`)
+      : `all ${nCats} ${band}-band categories pooled`;
     bits.push(splits("category")
-      ? (state.band === ALL ? null : `${state.band} band`)
+      ? (band === null ? null : `${band} band`)
       : (state.category === ALL ? pooled : state.category));
     bits.push(state.seedMode === "each" ? "every seed" : "seeds averaged");
     return bits.filter(Boolean).join(" · ");
@@ -870,15 +908,17 @@
     const head = useOverlay ? "" : panelTitle(pnl.fk, pl);
     el.innerHTML =
       (head ? `<h2>${esc(head)}</h2>` : "") +
-      `<p class="pn">${esc(panelSub(pl))} · ${nCells} cell${nCells === 1 ? "" : "s"}</p>`;
+      `<p class="pn">${esc(panelSub(pl, pnl.fk))} · ${nCells} cell${nCells === 1 ? "" : "s"}</p>`;
 
     const parts = [];
     const yticks = ticks(lo, hi, 5);
-    const xticks = [...new Set([0, ...ticks(0, tmax, 5), tmax])].filter((t) => t >= 0 && t <= tmax);
+    const xt = clickTicks(tmax, W - M.l - M.r);
     for (const v of yticks) parts.push(
       `<line x1="${M.l}" x2="${W - M.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`,
       `<text x="${M.l - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--muted)">${trim(v)}</text>`);
-    for (const t of xticks) parts.push(
+    for (const t of xt.marks) parts.push(
+      `<line x1="${x(t).toFixed(1)}" x2="${x(t).toFixed(1)}" y1="${H - M.b}" y2="${H - M.b + 4}" stroke="var(--axis)"/>`);
+    for (const t of xt.labels) parts.push(
       `<text x="${x(t).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${Math.round(t)}</text>`);
     parts.push(`<line x1="${M.l}" x2="${W - M.r}" y1="${H - M.b}" y2="${H - M.b}" stroke="var(--axis)"/>`);
 
@@ -966,10 +1006,10 @@
     const host = $("legend");
     const heading = opt.useOverlay
       ? (pl.hueDims.length
-        ? `Colour = <b>${pl.hueDims.map(esc).join(" × ")}</b>, all on one chart`
+        ? `Colour = <b>${pl.hueDims.map((d) => esc(dimLabel(d))).join(" × ")}</b>, all on one chart`
         : `One series`)
       : (panels.length > 1
-        ? `<b>One chart per ${pl.facetDims.map(esc).join(" × ")}</b> — one line each, so the shaded spread underneath it is readable. Colour carries no meaning here; tick <b>overlay on one chart</b> to compare them directly.`
+        ? `<b>One chart per ${pl.facetDims.map((d) => esc(dimLabel(d))).join(" × ")}</b> — one line each, so the shaded spread underneath it is readable. Colour carries no meaning here; tick <b>overlay on one chart</b> to compare them directly.`
         : `One series`);
     let rows = "", warn = "";
     if (opt.useOverlay) {
@@ -1059,6 +1099,22 @@
     for (let v = Math.ceil(a / step) * step; v <= b + step * 1e-9; v += step) out.push(Math.round(v / step) * step);
     return out;
   }
+  // The click axis carries a tick mark every 25 clicks, each labelled (#4635),
+  // rather than ticks()' 50 / 100 on a 150-click run.  Where 25 clicks are too
+  // narrow to label, the labels thin to every 50, 100, ... and the marks stay
+  // at every 25.  The horizon gets a label of its own when it is off the step
+  // and clear of the last one, since it is where every line ends.
+  const XSTEP = 25, XLABEL_PX = 34;
+  function clickTicks(tmax, width) {
+    const marks = [];
+    for (let t = 0; t <= tmax; t += XSTEP) marks.push(t);
+    const px = (dt) => (dt / Math.max(1, tmax)) * width;
+    const every = [1, 2, 4, 10, 20, 40, 100, 200, 400].find((k) => px(k * XSTEP) >= XLABEL_PX) || 1000;
+    const labels = marks.filter((t) => t % (every * XSTEP) === 0);
+    const last = labels[labels.length - 1];
+    if (tmax !== last && px(tmax - last) >= XLABEL_PX * 0.75) labels.push(tmax);
+    return { marks, labels };
+  }
   const trim = (v) => {
     const a = Math.abs(v);
     if (a >= 100 || v === 0) return v.toFixed(0);
@@ -1124,6 +1180,16 @@
       (P.gaps_filled
         ? ` A run inside a spot check is scored once per round of picks, and between rounds its last scored ` +
           `value stands in, so a check never drops a run from the mean (#4624).`
+        : "") +
+      (P.empty_sets_scored
+        ? ` A click where a run has <b>no trained detector</b> yet (before its first Good and Bad, or at every ` +
+          `click of a run that never got both) counts as what the app returns there, nothing: recall, F1 and the ` +
+          `objective 0, precision 0, AP at the class's prevalence, AUROC 0.5. A detector that flags nothing ` +
+          `returns the same empty set, so its precision counts as 0 too. So every run is in the mean at every ` +
+          `click, the failing ones included. From its first Good and Bad on, a run is drawn at the detector ` +
+          `those labels train, which is what Test or an import of the exported labels gives at that click, ` +
+          `<b>through Autopilot's opening too</b>, where the session itself still shows the text sort (#4640). ` +
+          `An early dip below the notch is what exporting there would get, not what the session shows.`
         : "") +
       (opt.showCov
         ? ` The strip underneath is that fraction, and it drops below full somewhere in this slice.`

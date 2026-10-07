@@ -312,6 +312,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`DETECTION_METRICS` names the two outer presets** (issue #4636).
+  `vtscore.eval.calibration_metrics.DETECTION_METRICS` gains `fbeta_b025`
+  ("F1/4") and `fbeta_b4` ("F4"), the returned set scored at the precision- and
+  recall-leaning presets, which every row already carried (`FBETA_COLUMNS`), so
+  a metric picker built on the table offers them beside F1. Ordered by beta
+  around `f1`; `fbeta_b1` stays off the table, since it is `f1` exactly.
+  Additive: no existing entry changed.
+
 - **`DatasetImported`, how a dataset import ended** (issue #4616).
   `vtscore.datasets.import_event` adds a frozen `DatasetImported(outcome,
   dataset_id, name, user, media_type, n_media, origin, error)` with the

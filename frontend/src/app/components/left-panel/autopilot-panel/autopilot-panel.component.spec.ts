@@ -314,12 +314,15 @@ describe('AutopilotPanelComponent', () => {
       expect(activeLight()).toBe('red');
     });
 
-    it('the done step is green, drawn as the check a finished step keeps', async () => {
+    it('at Done the active step is green, drawn as the check a finished step keeps', async () => {
       fixture.componentRef.setInput('goodVotes', goods(20));
       fixture.componentRef.setInput('badVotes', bads(5));
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fixture);
       expect(component.state.phase).toBe('done');
+      // Past Done the active step is Keep Improving (#4621), green while every
+      // indicator is.
+      expect(component.steps.find((st) => st.state === 'active')?.phase).toBe('improve');
       expect(activeLight()).toBe('green');
 
       // Red circle, yellow circle, green check: no green circle is ever drawn.
@@ -328,13 +331,114 @@ describe('AutopilotPanelComponent', () => {
       const activeCheck = el.querySelector('.ap-step.active .ap-check')!;
       expect(activeCheck).toBeTruthy();
       expect(activeCheck.getAttribute('aria-label')).toBe('Step progress: green');
-      // ...and every finished step before it carries the same check.
-      expect(el.querySelectorAll('.ap-step.done .ap-check').length).toBe(5);
+      // ...and every finished step before it, Done included, carries the same check.
+      expect(el.querySelectorAll('.ap-step.done .ap-check').length).toBe(6);
 
       fixture.componentRef.setInput('collapsed', true);
       await settleZoneless(fixture);
       expect(el.querySelectorAll('.collapsed-step.active .ap-check').length).toBe(1);
       expect(el.querySelectorAll('.ap-light').length).toBe(0);
+    });
+  });
+
+  describe('past Done (#4621)', () => {
+    /** A labeling-status payload carrying the given indicator readings. */
+    function status(smart: string, stable: string, span: string) {
+      return { good_count: 0, bad_count: 0, total_count: 0, smart: { status: smart }, stable: { status: stable }, span: { status: span } };
+    }
+
+    function active() {
+      return component.steps.find((st) => st.state === 'active')!;
+    }
+
+    it('keeps Done checked and makes Keep Improving the active step', async () => {
+      reachDone();
+      await settleZoneless(fixture);
+
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'hard', 'new', 'done', 'improve']);
+      expect(component.steps.slice(0, 6).every((st) => st.state === 'done')).toBe(true);
+      const step = active();
+      expect(step.phase).toBe('improve');
+      expect(step.label).toBe('Keep Improving.');
+      expect(step.stepNumber).toBe(7);
+      expect(step.detail).toBe('All indicators green');
+      expect(step.intent).toContain('Optional');
+
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelectorAll('.ap-step').length).toBe(7);
+      expect(el.querySelector('.ap-step.active .ap-step-label')!.textContent!.trim()).toBe('Keep Improving.');
+    });
+
+    it('does not fall back to Refine Boundary when a vote knocks an indicator off green', async () => {
+      reachDone();
+      await settleZoneless(fixture);
+
+      fixture.componentRef.setInput('goodVotes', goods(21));
+      fixture.componentRef.setInput('labelingStatus', status('green', 'yellow', 'green'));
+      await settleZoneless(fixture);
+      // The phase underneath still follows the indicators: it decides the picks.
+      expect(component.state.phase).toBe('hard');
+      // ...but the panel stays put, Done still checked.
+      expect(component.steps.find((st) => st.phase === 'done')!.state).toBe('done');
+      expect(component.steps.find((st) => st.phase === 'hard')!.state).toBe('done');
+      const step = active();
+      expect(step.phase).toBe('improve');
+      expect(step.detail).toBe('Showing boundary items');
+      expect(step.light!.color).toBe('yellow');
+      expect(step.light!.title).toContain('Stable (yellow)');
+      expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(7);
+
+      // Back to green: the same step, its light green again.
+      fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('done');
+      expect(active().phase).toBe('improve');
+      expect(active().light!.color).toBe('green');
+    });
+
+    it('says when it is offering diverse items while only Span lags', async () => {
+      reachDone();
+      await settleZoneless(fixture);
+
+      fixture.componentRef.setInput('labelingStatus', status('green', 'green', 'red'));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('new');
+      expect(active().phase).toBe('improve');
+      expect(active().detail).toBe('Showing diverse items');
+      expect(active().light!.color).toBe('red');
+    });
+
+    it('shows Improve in the collapsed rail', async () => {
+      reachDone();
+      fixture.componentRef.setInput('collapsed', true);
+      await settleZoneless(fixture);
+      const label = fixture.nativeElement.querySelector('.collapsed-step.active .collapsed-step-label');
+      expect(label.textContent.trim()).toBe('Improve');
+      expect(fixture.nativeElement.querySelectorAll('.collapsed-step').length).toBe(7);
+    });
+
+    it('gives the full step list back when votes fall back into the opening', async () => {
+      reachDone();
+      await settleZoneless(fixture);
+
+      fixture.componentRef.setInput('goodVotes', goods(1));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('good');
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'hard', 'new', 'done']);
+      expect(active().phase).toBe('good');
+    });
+
+    it('starts each new run without it', async () => {
+      reachDone();
+      await settleZoneless(fixture);
+
+      component.deactivate();
+      component.activate();
+      fixture.componentRef.setInput('labelingStatus', status('yellow', 'yellow', 'yellow'));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('hard');
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'hard', 'new', 'done']);
+      expect(active().phase).toBe('hard');
     });
   });
 
@@ -687,6 +791,9 @@ describe('AutopilotPanelComponent', () => {
       expect(component.state.phase).toBe('done');
       expect(component.completionPrompt()?.heading).toBe('Detector Trained');
       expect(component.completionPrompt()?.detail).toContain('16 of the detector\'s best matches in a row were not good');
+      // Nothing undoes a dry run, so there is no Keep Improving step (#4621).
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'done']);
+      expect(component.steps.find((st) => st.state === 'active')?.phase).toBe('done');
     });
   });
 
