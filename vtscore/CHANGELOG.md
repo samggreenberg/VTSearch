@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A typed-query sort's display line takes the balance** (issue #4603).
+  `text_sort_cuts(scores, rule=None, beta=None)` and `text_sort_threshold(..., beta=None)`:
+  at `beta <= TEXT_SORT_COUNT_MAX_BETA` (1) the guarded rule draws the line by count
+  (branch `"count"`). It keeps the top `round(beta ** TEXT_SORT_COUNT_EXPONENT * n_hat)`, where
+  `n_hat` is the excess over a Gaussian bulk (median, 1.4826 x MAD) above
+  `median + TEXT_SORT_COUNT_Z * sigma` (z = 4) and the exponent puts c at 3/8 for beta 1/4.
+  `beta=None`, beta above 1, a sort under `TEXT_SORT_COUNT_MIN_SCORES` (50), or one with no
+  spread keeps the guarded line. `acq_threshold` never moves with beta.
+  `query_sort.text_sort_active(query_vec, snap=None, beta=None)` reads the active balance
+  (`vtscore.state.get_beta`) when `beta` is `None`.
+
 - **The CLI calls the settings' detector list AutoFind** (issue #4615). The
   app renamed its AutoRun (and the Settings' *Auto-Find*) to AutoFind, so
   `vtscore.cli`'s plan heading reads `AutoFind detectors (N):` and its two

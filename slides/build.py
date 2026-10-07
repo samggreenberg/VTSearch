@@ -22,7 +22,7 @@ keeps one page per fragment — the final stage. See slides/README.md.
 Beside every assembled deck goes `_build/<deck>[...].nav.json`: the PDF's
 bookmarks and page labels, which Chromium cannot write and pdf_nav.py writes in
 after the render (see "Navigation" below, and slides/README.md). The outline's
-lines become links here too, as plain markdown.
+section numerals become links here too, as an anchor laid over each one.
 
 The --speaker variant renders presenter notes *visibly*, PowerPoint
 notes-page style: each speaker page shows a miniature of the real rendered
@@ -89,11 +89,16 @@ HEADLINE_RE = re.compile(r"^#{1,2}\s+(.+?)\s*$", re.M)
 # `3. Preference`. The *position* of the item is what `+at3` names (the theme
 # marks `li:nth-of-type(3)`), so the number written is not read.
 OUTLINE_ITEM_RE = re.compile(r"^(\d+\.\s+)(\S.*?)\s*$")
-# An outline item that is one inline element end to end — the closing line,
-# `<span class="closing">The End</span>`. Its link goes *inside* the element:
-# the theme finds that line by `li:has(> .closing)`, and an `<a>` wrapped
-# around the span would stop it being the item's child.
-WRAPPED_ITEM_RE = re.compile(r"^(<(\w+)[^>]*>)(.*)(</\2>)$")
+# The link `link_outline` puts on an outline line: an empty anchor the theme
+# lays over the line's Roman numeral (`section.outline ol li > a:empty`), so
+# the numeral jumps to its section and the rest of the slide is left to the
+# click-to-advance area (#4618). Empty, because the numeral is drawn by the
+# theme's counter, not by the markdown; *before* the line's text, so the
+# closing line's `<span class="closing">` stays the item's child, which is how
+# the theme finds it (`li:has(> .closing)`); and a markdown link rather than
+# an `<a>` tag, because Marp sanitises raw HTML and drops an `href` in a scheme
+# it does not know, which is every link in the probe (`PROBE_SCHEME`).
+SECTION_LINK = "[]({})"
 # What the outline-link probe links to instead of `#<page>`: a page number
 # Chromium cannot resolve inside a deck holding only the outline. See
 # `probe_bodies` and pdf_nav.py.
@@ -894,16 +899,16 @@ def slide_numbers(showings: list[Showing], texts: dict[str, str]) -> dict[str, i
 
 # Navigation: what a PDF reader can do with a deck besides turn its pages.
 #
-# - The outline's lines are links, each to the page its section starts on
+# - The outline's numerals are links, each to the page its section starts on
 #   (`link_outline`), and every slide's page number links back to that page
 #   (`section_homes`). Chromium turns a `#<page>` link into an internal PDF
 #   link unaided, so these are plain markup, and the HTML export follows them.
 # - Bookmarks: the sections, and the slides in each (`bookmarks`).
 # - Page labels: the viewer's page box reads `5c`, the address printed on the
 #   page, rather than the page's position in the file (`audience_labels`).
-# - Click to advance: the middle of every page but the outline's is a link to
-#   the next page, so a viewer with no slideshow mode is one anyway
-#   (`advance_pages`).
+# - Click to advance: the middle of every page is a link to the next page, so
+#   a viewer with no slideshow mode is one anyway (`advance_pages`); on the
+#   outline it is carved around the numerals' links.
 #
 # Chromium writes none of the last three, so `assemble` puts them in
 # `_build/<deck>[...].nav.json` beside the markdown and pdf_nav.py writes them
@@ -992,14 +997,20 @@ def section_homes(showings: list[Showing], texts: dict[str, str], firsts: list[i
 
 
 def link_outline(text: str, targets: dict[int, int], href: str) -> str:
-    """Make each outline line in *text* a link to the page its section starts on.
+    """Make each outline line's numeral in *text* a link to the page its section starts on.
+
+    Only the numeral, not the line (#4618): the rest of the slide is the
+    click-to-advance area every other slide has, so a presenter clicking
+    through the deck moves on from an outline like from anything else, and
+    jumps only by aiming at a section's number. The link is `SECTION_LINK`,
+    an empty anchor the theme lays over the numeral, so a reader who never
+    clicks sees the same slide.
 
     *href* formats the page: `#{}` in a deck, which Chromium resolves to the
     page itself because Marpit gives every slide its page number as its `id`,
-    and `vtsnav:{}` in the probe (`probe_bodies`). The theme draws
-    `section.outline a` exactly like the text around it, so a reader who never
-    clicks sees the same slide; a line the theme hides — the closing line, on
-    every showing but the last — is not drawn, so Chromium writes no link for it.
+    and `vtsnav:{}` in the probe (`probe_bodies`). A line the theme hides — the
+    closing line, on every showing but the last — is not drawn, so Chromium
+    writes no link for it.
     """
     item = -1
 
@@ -1011,11 +1022,7 @@ def link_outline(text: str, targets: dict[int, int], href: str) -> str:
         item += 1
         if item not in targets:
             return line
-        target = href.format(targets[item])
-        wrapped = WRAPPED_ITEM_RE.match(match.group(2))
-        if wrapped:
-            return f"{match.group(1)}{wrapped.group(1)}[{wrapped.group(3)}]({target}){wrapped.group(4)}"
-        return f"{match.group(1)}[{match.group(2)}]({target})"
+        return f"{match.group(1)}{SECTION_LINK.format(href.format(targets[item]))}{match.group(2)}"
 
     pieces = re.split(r"(<!--.*?-->)", text, flags=re.DOTALL)
     return "".join(piece if piece.startswith("<!--") else "\n".join(map(link, piece.split("\n"))) for piece in pieces)
@@ -1064,19 +1071,19 @@ def bookmarks(showings: list[Showing], texts: dict[str, str], firsts: list[int])
     return toc
 
 
-def advance_pages(showings: list[Showing], texts: dict[str, str]) -> list[int]:
+def advance_pages(showings: list[Showing]) -> list[int]:
     """The audience pages whose middle is a link to the next page (#4563).
 
-    Every page but the outline's, and but the last, which has nowhere to go.
-    It is what makes a PDF viewer with no slideshow mode into one: click the
-    slide, get the next. The outline is left out because its lines are links
-    already, each to its own section, and an area over them would shadow them.
-    The rectangle itself is pdf_nav.py's (`ADVANCE_INSET`), since it is a fact
-    about the page's size rather than about fragments.
+    Every page but the last, which has nowhere to go. It is what makes a PDF
+    viewer with no slideshow mode into one: click the slide, get the next.
+    The outline is no exception (#4618): its numerals are links of their own,
+    each to its section, and pdf_nav.py carves the area around them, so the
+    rest of the page advances like any other. The rectangle itself is
+    pdf_nav.py's (`ADVANCE_INSET`), since it is a fact about the page's size
+    rather than about fragments.
     """
-    pages = [page for name, _extras, _stages, pages in showings if not outline_items(texts[name]) for page in pages]
     last = sum(len(pages) for *_, pages in showings)
-    return [page for page in pages if page != last]
+    return list(range(1, last))
 
 
 def page_address(number: int | None, page: int, group: list[int]) -> tuple[str, str]:
@@ -1187,7 +1194,7 @@ def audience_bodies(
     and the numbering is still computed, so a page's *address* is the same
     whether or not it is printed on it.
 
-    `links=False` leaves the outline's lines and the page numbers plain text,
+    `links=False` leaves the outline's numerals and the page numbers unlinked,
     for the editable PowerPoint cut, where a link to "page 31" of a PDF that no
     longer exists would mean nothing. The handover cut has no numbers, so it
     has no way back to the outline either; its outline links still work.
@@ -1279,7 +1286,7 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
         "toc": bookmarks(showings, texts, firsts),
         "labels": labels,
         "probe": probe_pages,
-        "advance": [] if speaker else advance_pages(showings, texts),
+        "advance": [] if speaker else advance_pages(showings),
     }
 
     if problems or not write:

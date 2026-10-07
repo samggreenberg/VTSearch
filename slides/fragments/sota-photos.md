@@ -16,23 +16,23 @@
 
 <!-- **a** — Left: each line is scored at its own β, so this is not a league
      table between radios. Every line starts at the far left, the typed
-     query: the text sort at the line the app draws for it (the guarded
-     cut, #4136), about 200 images: F-beta 0.17, 0.24 and 0.48. Each line holds there through Autopilot's opening, because the
-     app stays on the text sort until the Hard phase (#4605): 30% of
-     sessions have left it by click 25, half by 40, 91% by 150. From click 23 the lines rise as sessions hand over, steeply at
-     β ¼ and 1 (0.39 and 0.36 by click 30). At β 4 a young detector is no
-     better than the typed query, so that line holds near 0.48 and passes
-     it only at click 38. After 150 clicks and the spot check (**∞**): 0.64,
+     query: the text sort at the line the app draws for it at that β (by
+     count at ¼ and 1, #4603; the guarded cut at 4): 19, 51 and 203 images,
+     F-beta 0.48, 0.37 and 0.48. Each line holds there through Autopilot's
+     opening, because the app stays on the text sort until the Hard phase
+     (#4605): 30% of sessions have left it by click 25, half by 40, 91% by
+     150. A young detector is about as good as the typed query, so the lines
+     dip slightly at the hand-over, pass it again by clicks 29 to 36, and
+     climb. After 150 clicks and the spot check (**∞**): 0.64,
      0.53 and 0.60; the check's uniform picks add +0.02 to +0.03. -->
 
 <!-- **b** — Right: the same three sets as precision against recall, each a
      path through the session at every click, from the typed query's own set
-     (precision 0.17, recall 0.60). The hollow marks are the same clicks as
+     (precision 0.54, 0.37 and 0.17). The hollow marks are the same clicks as
      on the left: the typed query, 25, 50, 100, 150, and ∞ after the spot
      check. At 25 most sessions still show the typed query, so the 25s sit
-     near the start. The
-     clicks buy precision, not recall: from click 50 to 100, precision rises
-     0.06 to 0.13 at every radio while recall moves about 0.05 or less.
+     near the start. The clicks mostly buy precision: from the typed query to
+     click 100 it rises 0.13 to 0.25 at every radio, recall at most 0.09.
      Where they end: 21 kept at precision 0.73 and recall 0.38; 44 at 0.60 and
      0.52; 80 at 0.43 and 0.68. -->
 

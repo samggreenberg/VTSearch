@@ -29,6 +29,7 @@
      them. That shipped as "safe thresholds", and it is the single biggest win
      in the line. -->
 
-<!-- Say what the figure does not: the average is **weighted**, and how the
-     weight moves as votes accumulate is the next slide. The first version was
-     one hard-coded line with three unmeasured choices baked into it. -->
+<!-- Say what the figure does not: the average is **weighted**. How the
+     weight moves as votes accumulate is in the appendix, Weight and See, for
+     whoever asks. The first version was one hard-coded line with three
+     unmeasured choices baked into it. -->

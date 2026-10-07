@@ -3786,14 +3786,17 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
 
 def blend_schedule_fig() -> None:
-    """Slide 13: how far the blend lets the cross-calibrated cut move, per voting mode.
+    """Weight and See: how far the blend lets the cross-calibrated cut move, per voting mode.
 
     Two panels, because the two modes no longer share a *kind* of schedule and
     one set of axes would force them to. Region voting still averages, so its
-    panel is a weight over votes: ``slow_cap50`` against the historical ramp it
-    replaced. Binary voting ships ``corridor20`` (#3551), which is a clamp, not
-    a weight — a weight axis cannot draw it — so its panel is the score axis
-    itself, with the band the x-cal cut is kept inside.
+    panel is a weight over votes: ``slow_cap50``, and only that — the ramp it
+    replaced is history, and the slide is about how the app weights now (owner,
+    #4618). Every other vote ships ``corridor20`` (#3551), which is a clamp,
+    not a weight — a weight axis cannot draw it — so its panel is the score
+    axis itself, with the band the x-cal cut is kept inside. That panel is not
+    named "binary voting": it is the voting the room has seen all talk, and the
+    word is one more thing to decode (owner, #4618).
 
     Everything here is computed from the shipped registry
     (`production_schedule_for`), so the slide moves when the schedule does.
@@ -3806,7 +3809,7 @@ def blend_schedule_fig() -> None:
     binary = production_schedule_for(region_voting=False)
 
     fig = plt.figure(figsize=(12.8, 7.2))
-    # ── left: region voting, a weight over votes ─────────────────────────────
+    # ── top: region voting, a weight over votes ──────────────────────────────
     ax = fig.add_axes([0.40, 0.56, 0.57, 0.33])
     n = np.arange(0, 121)
 
@@ -3816,9 +3819,7 @@ def blend_schedule_fig() -> None:
             for k in n
         ]
 
-    ax.plot(n, curve("prod"), color=SOFT, linestyle=(0, (4, 3)), linewidth=2.2)
     ax.plot(n, curve(region), color=BLUE, linewidth=2.8)
-    ax.annotate("the old ramp: all x-cal by 20 votes", xy=(60, 0.90), ha="left", va="top", fontsize=15, color=SOFT)
     ax.annotate(
         f"{region}: never past half", xy=(50, 0.5), xytext=(50, 0.60), ha="left", va="bottom", fontsize=15, color=BLUE
     )
@@ -3832,7 +3833,7 @@ def blend_schedule_fig() -> None:
         0.40, 0.955, "region voting: a weight that stops at half", fontsize=17, fontweight="bold", color=INK, va="top"
     )
 
-    # ── right: binary voting, a clamp on the score axis ──────────────────────
+    # ── bottom: every other vote, a clamp on the score axis ──────────────────
     ax = fig.add_axes([0.06, 0.07, 0.91, 0.30])
     mu_lo, mu_hi, sd = 0.22, 0.78, 0.09
     xs = np.linspace(0, 1, 400)
@@ -3865,7 +3866,7 @@ def blend_schedule_fig() -> None:
     fig.text(
         0.06,
         0.47,
-        f"binary voting: a band {width:.0%} of the way to each mean",
+        f"otherwise: a band {width:.0%} of the way to each mean",
         fontsize=17,
         fontweight="bold",
         color=INK,
@@ -4235,8 +4236,15 @@ def fbeta_fig() -> None:
     final = _fbeta_stage(FBETA_STAGES)
     box = tight_box(final)
     for stage in range(1, FBETA_STAGES):
-        save(_fbeta_stage(stage), OUT, f"calib-fbeta.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-fbeta.png", column=FULL_BLEED, box=box)
+        save(
+            _fbeta_stage(stage),
+            OUT,
+            f"calib-fbeta.build{stage}.png",
+            column=FULL_BLEED,
+            box=box,
+            notch=BETA_MAX_NOTCH_PX,
+        )
+    save(final, OUT, "calib-fbeta.png", column=FULL_BLEED, box=box, notch=BETA_MAX_NOTCH_PX)
 
 
 #: The F-beta figure's own canvas: the slide's 16:9 at nearly the teaching
@@ -4247,8 +4255,18 @@ def fbeta_fig() -> None:
 #: costs a little height and buys the width the panel is read across.
 FBETA_CANVAS = (20.6, 11.6)
 #: Canvas units kept clear at the top for the headline: the notch's 172px at
-#: this canvas's 62px a unit, plus the object gap under it.
+#: this canvas's 62px a unit, plus the object gap under it. F-ing Metrics keeps
+#: it, so its ranking lands where the Cutting Room's did.
 FBETA_TOP_RESERVE = 3.1
+#: Beta Max's own reserve, much less: its headline is one line, so its notch is
+#: `BETA_MAX_NOTCH_PX`, and the height it frees goes to the bottom of the
+#: slide, where the Threshold control was cramped into a corner (owner, #4618).
+#: What binds it is the ranking's left foot, which sits under the notch.
+BETA_MAX_TOP_RESERVE = 1.7
+#: Beta Max's title notch: "Beta Max" is one line, whose box measures 56.8px
+#: (`slide_figure.TITLE_NOTCH_PX`), plus one `OBJECT_GAP_PT` at this figure's
+#: scale (16pt at 1.56px a point, 25px). Re-measure if the headline changes.
+BETA_MAX_NOTCH_PX = (60.0, 42.0, 300.0, 82.0)
 #: Each balance's row: its height, the gap between rows, and the share of the
 #: row an F-beta of 1 reaches (the rest is air above the tallest peak).
 FBETA_ROW_H = 1.4
@@ -4256,12 +4274,13 @@ FBETA_ROW_GAP = 0.15
 FBETA_ROW_FILL = 0.9
 
 
-def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
+def _fbeta_ranking(ax: plt.Axes, top_reserve: float = FBETA_TOP_RESERVE) -> tuple[float, float, float]:
     """The ten-item ranking both F-beta figures open on; returns ``(x0, w, rank_y)``.
 
     One row of marks, under the line, in the order the Cutting Room's
-    photographs are in. Shared by F-ing Metrics and Beta Max so that, flicking
-    from one to the next, the ranking does not move.
+    photographs are in. Shared by F-ing Metrics and Beta Max, so the two draw
+    one ranking; *top_reserve* is how far below the canvas's top it hangs,
+    which is all that differs between them (`BETA_MAX_TOP_RESERVE`).
 
     Indented from the left: the top row spans the drawing, which is the one
     shape the title notch cannot be panned out of (`slides/STYLE.md`). 1.5 of
@@ -4269,7 +4288,7 @@ def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
     bottom-right corner, and a label run out to the canvas edge lands on it.
     """
     x0, w = 4.0, FBETA_CANVAS[0] - 4.0 - 1.5
-    rank_y = FBETA_CANVAS[1] - FBETA_TOP_RESERVE - 0.97
+    rank_y = FBETA_CANVAS[1] - top_reserve - 0.97
     _range_line(ax, x0, x0 + w, rank_y, z=3)
     for index, keep in enumerate(RANK_MARKS):
         ax.text(
@@ -4298,12 +4317,15 @@ def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
     return x0, w, rank_y
 
 
-#: How many stages F-ing Metrics reveals in: the cut and its three counts;
-#: precision and recall; F1; Fβ.
+#: How many stages F-ing Metrics reveals in: the cut; Precision and Recall;
+#: F1; Fβ.
 FMETRICS_STAGES = 4
-#: The cut F-ing Metrics reads, as items kept: the Cutting Room's middle one,
-#: one mistake of each kind, where every F-beta agrees (0.80).
-FMETRICS_KEPT = 5
+#: The cut F-ing Metrics reads, as items kept: one left of the Cutting Room's
+#: middle one, so it is plainly not the best cut, and its two rates differ —
+#: 4/6 and 4/5 — where the middle cut's were both 4/5, which left a room unable
+#: to tell from the numbers which fraction was which (owner, #4618). One step
+#: right buys precision and costs no recall, which the presenter can say.
+FMETRICS_KEPT = 6
 
 
 def fmetrics_fig() -> None:
@@ -4312,16 +4334,23 @@ def fmetrics_fig() -> None:
     Beta Max used to print the F-beta formula under its rows and leave the room
     to take it in while the rows were the point. This comes first, with Beta
     Release (the same score as a map, at each beta) between the two: one cut
-    through the same ranking, the three counts it has, the two rates
-    those make, F1 as their harmonic mean, and Fβ as the same mean with
-    recall weighted β times. The count form on the last line is the one Beta
-    Max and What to Expect then evaluate.
+    through the same ranking, the two rates it has, F1 as their harmonic mean,
+    and Fβ as the same mean with recall weighted β times.
+
+    The rates are defined in words the room already has — Goods, and what comes
+    back — rather than through three named counts (kept, hits, matches), which
+    were three new terms to hold for one slide (owner, #4618).
     """
     final = _fmetrics_stage(FMETRICS_STAGES)
     box = tight_box(final)
     for stage in range(1, FMETRICS_STAGES):
         save(_fmetrics_stage(stage), OUT, f"calib-fmetrics.build{stage}.png", column=FULL_BLEED, box=box)
     save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box)
+
+
+def _math(expr: str) -> str:
+    """*expr* as mathtext in the figure's own upright face (see `_sub`), so a fraction is a fraction."""
+    return rf"$\mathregular{{{expr}}}$"
 
 
 def _fmetrics_stage(stage: int) -> plt.Figure:
@@ -4337,60 +4366,59 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
     cut = _cut_score(FMETRICS_KEPT)
     hits = int((good >= cut).sum())
     kept = hits + int((bad >= cut).sum())
-    matches = int(good.size)
-    precision, recall = hits / kept, hits / matches
+    goods = int(good.size)
+    precision, recall = hits / kept, hits / goods
     f1 = 2 * precision * recall / (precision + recall)
 
-    # ── stage 1: one cut, and the three counts it has ─────────────────────────
+    # ── stage 1: one cut, and what comes back ─────────────────────────────────
     cut_x = x0 + cut * w
     ax.plot([cut_x] * 2, [rank_y - 1.05, rank_y + 0.25], color=INK, linewidth=2.0, linestyle=(0, (4, 3)), zorder=4)
     bracket_y = rank_y - 1.2
     ax.plot([cut_x, x0 + w], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=4)
     for x in (cut_x, x0 + w):
         ax.plot([x] * 2, [bracket_y, bracket_y + 0.18], color=INK, linewidth=1.6, zorder=4)
-    centre = x0 + w / 2
-    counts_y = rank_y - 2.0
-    for dx, name, value, gloss in (
-        (-w / 3, "kept", kept, "came back"),
-        (0.0, "hits", hits, "came back and are books"),
-        (w / 3, "matches", matches, "books in all"),
-    ):
-        ax.text(centre + dx, counts_y, f"{name} = {value}", ha="center", va="center", fontsize=20, color=INK)
-        ax.text(centre + dx, counts_y - 0.55, gloss, ha="center", va="center", fontsize=16, color=SOFT)
 
-    # ── stages 2-4: the formulas, one per row ─────────────────────────────────
-    # Left-aligned on one edge so the eye runs down them as a derivation. What
-    # each one *says* is the presenter's to read out, so it is in the notes and
-    # not on the slide: set beside the formulas, the glosses crowded them.
-    rows = (
-        (2, f"precision  P = hits / kept = {precision:.2f}"),
-        (2, f"recall  R = hits / matches = {recall:.2f}"),
-        (3, f"F1 = 2PR / (P + R) = {f1:.2f}"),
-        (4, "Fβ = (1 + β²) PR / (β²P + R)"),
-        (4, "= (1 + β²) · hits / (β² · matches + kept)"),
+    # ── stages 2-4: the formulas, in two columns ──────────────────────────────
+    # The rates on the left, the scores made of them on the right, each pair
+    # read top to bottom (owner, #4618). A fraction is set as one, over a bar:
+    # "A / B" in a row of other slashes read as ASCII, not as maths. What each
+    # one *says* is the presenter's to read out, so it is in the notes.
+    returned = r"\dfrac{\#\ Goods\ returned}"
+    p_rate = rf"P = {returned}{{\#\ returned}} = \dfrac{{{hits}}}{{{kept}}} = {precision:.2f}"
+    r_rate = rf"R = {returned}{{\#\ possible\ Goods}} = \dfrac{{{hits}}}{{{goods}}} = {recall:.2f}"
+    columns = (
+        ((2, "Precision  " + _math(p_rate)), (2, "Recall  " + _math(r_rate))),
+        (
+            (3, _math(rf"F1 = \dfrac{{2PR}}{{P + R}} = {f1:.2f}")),
+            (4, _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")),
+        ),
     )
-    row_x = x0 + w * FMETRICS_INDENT
-    # The count form continues the line above it, so its "=" sits under that
-    # line's: measured, because a glyph's width is the font's, not a constant.
-    prefix = ax.text(row_x, 0, "Fβ ", fontsize=20, alpha=0)
+    # Laid out from every formula whether or not this stage shows it, so a
+    # reveal adds ink and moves nothing. The block is centred on the slide, not
+    # on the ranking: it is wider than the ranking's indent leaves room for.
     renderer = fig.canvas.get_renderer()
-    box = prefix.get_window_extent(renderer).transformed(ax.transData.inverted())
-    prefix.remove()
-    row_y = counts_y - 1.6
-    for index, (first, formula) in enumerate(rows):
-        if index and rows[index - 1][0] != first:
-            row_y -= 0.3
-        if stage >= first:
-            x = row_x + box.width if formula.startswith("=") else row_x
-            ax.text(x, row_y, formula, ha="left", va="baseline", fontsize=20, color=INK)
-        row_y -= 0.72
+    widths = []
+    for column in columns:
+        width = 0.0
+        for _first, formula in column:
+            probe = ax.text(0, 0, formula, fontsize=FMETRICS_PT, alpha=0)
+            width = max(width, probe.get_window_extent(renderer).transformed(ax.transData.inverted()).width)
+            probe.remove()
+        widths.append(width)
+    left = FBETA_CANVAS[0] / 2 - (sum(widths) + FMETRICS_COLUMN_GAP) / 2
+    for column, x in zip(columns, (left, left + widths[0] + FMETRICS_COLUMN_GAP), strict=True):
+        for (first, formula), y in zip(column, FMETRICS_ROWS_Y, strict=True):
+            if stage >= first:
+                ax.text(x, y, formula, ha="left", va="center", fontsize=FMETRICS_PT, color=INK)
     return fig
 
 
-#: Where the formulas' shared left edge sits, as a share of the ranking's width:
-#: in from the line's own start, so the block sits under the middle of the
-#: ranking rather than hanging off its left end.
-FMETRICS_INDENT = 0.16
+#: The formulas' type, the gap between their two columns, and the two rows'
+#: centres, in canvas units: under the cut's bracket, with the space the three
+#: named counts used to take given to fractions, which stand two lines tall.
+FMETRICS_PT = 20
+FMETRICS_COLUMN_GAP = 1.6
+FMETRICS_ROWS_Y = (4.45, 2.35)
 
 
 # ── Beta Release: F-beta as a map, once per beta (#4519) ──────────────────────
@@ -4454,16 +4482,18 @@ def _fbeta_maps_stage(stage: int) -> plt.Figure:
     # In `FBETA_ARMS` order, left to right, so beta rises across the slide; the
     # same three, top to bottom, are Beta Max's rows.
     first = min(FBETA_REVEAL) - 1
-    for arm, ((beta, name), reveal) in enumerate(zip(FBETA_ARMS, FBETA_REVEAL, strict=True)):
-        if stage < reveal - first:
+    shown = [arm for arm, reveal in enumerate(FBETA_REVEAL) if stage >= reveal - first]
+    for arm, (beta, name) in enumerate(FBETA_ARMS):
+        if arm not in shown:
             continue
         x = FBETA_MAP_X + arm * (FBETA_MAP_SIDE + FBETA_MAP_GAP)
         pr = fig.add_axes(_canvas_box((x, FBETA_MAP_Y, FBETA_MAP_SIDE)))
         # Every map has its own numbers, and the row one "Precision", on the
-        # leftmost (owner, 2026-10-05): one axis, not the same label three
-        # times. β = 1's map, shown first and alone, goes without the word
-        # until β = ¼'s arrives beside it.
-        _pr_plane(pr, precision_label=arm == 0)
+        # leftmost map showing (owner, 2026-10-05): one axis, not the same
+        # label three times. β = 1's map, shown first and alone, carries it
+        # until β = ¼'s arrives to its left and takes it over — a map on its
+        # own with an unnamed axis is a chart nobody can read (owner, #4618).
+        _pr_plane(pr, precision_label=arm == min(shown))
         _fbeta_contours(pr, beta)
         ax.text(
             x + FBETA_MAP_SIDE / 2,
@@ -4565,7 +4595,7 @@ def _fbeta_stage(stage: int) -> plt.Figure:
     # are equal wherever precision equals recall, and on this ranking that is
     # the whole Include-5 plateau, so overlaid they ran on top of one another
     # for a fifth of the axis. Separate rows also give each peak its own zero.
-    x0, w, rank_y = _fbeta_ranking(ax)
+    x0, w, rank_y = _fbeta_ranking(ax, BETA_MAX_TOP_RESERVE)
     rows_top = rank_y - 1.05
     sy = FBETA_ROW_H * FBETA_ROW_FILL
     row_base = [rows_top - (i + 1) * FBETA_ROW_H - i * FBETA_ROW_GAP for i in range(len(FBETA_ARMS))]
@@ -4619,23 +4649,23 @@ def _fbeta_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 5: the control that asks for beta ───────────────────────────────
-    # Down in the corner with the balances, not under the ranking. It chooses
-    # among what those three labels name, so that is where it belongs; drawn
-    # across the full width under the panel, a control read as a second copy of
-    # the score axis, as though it picked an item.
+    # Centred under the rows, and wide enough for each end's two words to sit
+    # on one line, as they do in the app (owner, #4618). Half the panel's
+    # width, not all of it: run across the full width, a control reads as a
+    # second copy of the score axis, as though it picked an item.
     if stage >= FBETA_STAGES:
-        _balance_control(ax, FBETA_CONTROL_X0, panel_base - FBETA_CONTROL_DROP, FBETA_CONTROL_W)
+        _balance_control(ax, x0 + (w - FBETA_CONTROL_W) / 2, panel_base - FBETA_CONTROL_DROP, FBETA_CONTROL_W)
     return fig
 
 
-#: Where the control sits: the bottom-left corner, under the column of three
-#: balances it chooses among, stopping short of the panel.
-FBETA_CONTROL_X0 = 0.45
-FBETA_CONTROL_W = 3.35
-#: How far under the panel's floor the control's track runs.
-FBETA_CONTROL_DROP = 1.23
+#: The control's width: its two end labels on one line each, with a gap
+#: between them, as the app's own panel sets them.
+FBETA_CONTROL_W = 8.0
+#: How far under the panel's floor the control's track runs: its heading
+#: clears the lowest row by an object gap and more.
+FBETA_CONTROL_DROP = 2.0
 #: The radios' radius, in canvas units.
-BALANCE_RADIO_R = 0.13
+BALANCE_RADIO_R = 0.15
 
 #: The axis label, placed so it lands where `book-rank`'s does on its slide:
 #: centred on the slide rather than on this figure's (indented) axis, and at
@@ -4656,28 +4686,27 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
     (#4448) — which are the loose, middle and strict cuts the three balances
     above it choose.
     """
-    ax.text(x0, y + 1.02, "Threshold:", ha="left", va="baseline", fontsize=16, color=INK)
+    ax.text(x0, y + 0.95, "Threshold:", ha="left", va="baseline", fontsize=18, color=INK)
     # On one shared baseline: "Negatives" has a descender and "Positives" does
     # not, so bottom-aligned boxes would set the two words at different heights.
-    for x, ha, word in ((x0, "left", "Positives"), (x0 + w, "right", "Negatives")):
-        ax.text(x, y + 0.62, "False", ha=ha, va="baseline", fontsize=13, color=INK)
-        ax.text(x, y + 0.24, word, ha=ha, va="baseline", fontsize=13, color=INK)
-    ax.plot([x0, x0 + w], [y, y], color=SOFT, linewidth=4.0, solid_capstyle="round", zorder=3)
+    for x, ha, ends in ((x0, "left", "False Positives"), (x0 + w, "right", "False Negatives")):
+        ax.text(x, y + 0.3, ends, ha=ha, va="baseline", fontsize=15, color=INK)
+    ax.plot([x0, x0 + w], [y, y], color=SOFT, linewidth=5.0, solid_capstyle="round", zorder=3)
     for i in range(3):
         cx = x0 + w * (2 * i + 1) / 6
         picked = i == 1
         ax.add_patch(
             Circle(
-                (cx, y - 0.38),
+                (cx, y - 0.45),
                 BALANCE_RADIO_R,
                 facecolor="white",
                 edgecolor=BLUE if picked else SOFT,
-                linewidth=1.6,
+                linewidth=1.8,
                 zorder=4,
             )
         )
         if picked:
-            ax.add_patch(Circle((cx, y - 0.38), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
+            ax.add_patch(Circle((cx, y - 0.45), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
 
 
 # ── DINOv3, and the patches it makes (#4517, #4533) ─────────────────────────

@@ -16,7 +16,8 @@
      drawn like a topographic map's contours. Every point on a curve scores
      the number at its end. They bow evenly about the diagonal: give up some
      precision for the same recall and F1 does not care which. The cut
-     F-ing Metrics read, 0.8 and 0.8, sits on the 0.8 curve. -->
+     F-ing Metrics read, recall 0.8 and precision 0.67, sits between the 0.6
+     and 0.8 curves, at its 0.73. -->
 
 <!-- **b** — β = ¼: the same map, and the curves lie down. Height is
      precision: past a little recall, moving right barely changes the score,
