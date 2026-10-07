@@ -227,7 +227,7 @@
       </div>
     </div>
     <div class="ctl" style="flex:1 1 100%">
-      <label class="h">Arms <span style="text-transform:none;letter-spacing:0">— one or more</span></label>
+      <label class="h"><span id="armsTitle">Arms</span> <span id="armsHint" style="text-transform:none;letter-spacing:0">— one or more</span></label>
       <div class="chips" id="arms"></div>
     </div>
   </div>
@@ -470,6 +470,13 @@
   // study ran a single embedder - a control with one option is furniture.
   if (P.embedders.length < 2) $("embWrap").style.display = "none";
   chips($("emb"), P.embedders.map((e) => ({ id: e, label: e || "(unnamed)" })), state.embedders, render);
+  // A review's session sets are one arm per balance (#4636), and the page says
+  // so: the chips choose the beta the sessions RAN at, which the metric menu's
+  // F1/4, F1 and F4 then score the returned set at.
+  if (P.arms_control) {
+    $("armsTitle").textContent = P.arms_control.title;
+    $("armsHint").textContent = `— ${P.arms_control.hint}`;
+  }
   chips($("arms"), P.arms.map((a) => ({ id: a, label: a })), state.arms, render);
 
   $("seedMode").querySelectorAll("input").forEach((inp) => {
@@ -580,7 +587,9 @@
   // haystack into one number, and drawing two lines pools nothing.
   const DIMS = ["embedder", "arm", "band", "category", "dataset"];
   //: What a dimension is called on screen, where its key would not say it.
-  const DIM_LABEL = { band: "target size" };
+  //: The arms are whatever the arms control says they are: a review's session
+  //: sets are a beta (#4636).
+  const DIM_LABEL = { band: "target size", ...(P.arms_control ? { arm: P.arms_control.title.toLowerCase() } : {}) };
   const dimLabel = (d) => DIM_LABEL[d] || d;
 
   function plan() {

@@ -51,6 +51,12 @@ def frame_betas(df: pd.DataFrame) -> list[float]:
     return sorted(float(x) for x in b[np.isfinite(b)].unique())
 
 
+def frame_beta(df: pd.DataFrame) -> float | None:
+    """The one balance every balance row of *df* was drawn at; ``None`` with none, or with several."""
+    betas = frame_betas(df)
+    return betas[0] if len(betas) == 1 else None
+
+
 def carries_beta(df: pd.DataFrame) -> bool:
     """Whether any row of *df* had its line drawn at a balance."""
     return bool(frame_betas(df))
