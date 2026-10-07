@@ -107,8 +107,6 @@ cut.
 
 <!-- item-sep -->
 
-- [ ] #4584 — The A/B tooling decides and sizes on cost: give it the objective, measure its σ (Sonnet)
-
 <!-- item-sep -->
 
 <!-- item-sep -->
