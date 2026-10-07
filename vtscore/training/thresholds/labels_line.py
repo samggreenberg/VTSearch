@@ -39,6 +39,16 @@ high-scoring negatives.
 near the line and from the top, so the Bads' held-out scores sit higher than
 the true negatives' and the negative tail is extrapolated by the normal.  The
 pricing in ``docs/experiments`` measures what that costs on the objective.
+
+**When the Bads are a random sample** (#4490: a labelset imported from an
+exhaustively labelled dataset; every label of the review's ceiling), one normal
+fitted to them describes the negatives' bulk, and their heavy upper tail - where
+the cut is decided - runs several times the normal's.  The line then read those
+negatives as positives and cut deep.  So when there are enough Bads and they are
+not over-represented at the top of the corpus (:func:`_bads_are_a_random_sample`),
+the negatives are modelled by the Bads' own held-out scores instead
+(:func:`_bads_shape_posteriors`).  A session's Bads, picked from the top, never
+pass that test, and their line is unchanged.
 """
 
 from __future__ import annotations
@@ -78,6 +88,23 @@ WEAK_CHECK_MIN_VOTES = 10
 #: Priced against prompting once: +0.013 to +0.027 at click 150 against +0.007
 #: to +0.010, for 28-35% of a prompted session's clicks spent checking.
 WEAK_CHECK_COOLDOWN = 25
+#: The fewest Bads whose own scores model the negatives (#4490): a kernel density of a
+#: random 30 cannot see the upper tail (it lost 0.09 F at beta 1/4 on the review's
+#: ceiling), of 100 it gains.  A model keeps its Bads' scores only from this many.
+RANDOM_BADS_MIN = 100
+#: The top of the corpus the random-sample test reads, as a share of it, and how
+#: over-represented the Bads may be there: a random sample puts this share of its
+#: Bads there (enrichment 1; the review's ceilings sat at 0.65-1.48), while active
+#: learning picks from the top (a session's median was 14x at click 150, and every
+#: session that reached 100 Bads sat at 3.4x or more).  The test reads the top on
+#: purpose: a median test let a spot check's mix of near-line and uniform Bads
+#: through and collapsed those lines to one image.
+RANDOM_BADS_TOP_SHARE = 0.05
+RANDOM_BADS_MAX_ENRICHMENT = 2.0
+#: The narrowest kernel the Bads' density takes, in logit units (identical Bads
+#: would otherwise make a zero-width spike), and the points of its binned grid.
+_KDE_MIN_BANDWIDTH = 0.01
+_KDE_GRID_POINTS = 8001
 #: How far past the class means, in spreads, the threshold search reaches.
 _SEARCH_SPREADS = 8.0
 #: Points on the threshold search's logit grid.
@@ -113,6 +140,11 @@ class ClassScoreModel:
     #: The pooled spread before any floor; ``None`` on a model built by hand, whose
     #: *sigma* is then taken as given.  A corpus floors it afresh (:meth:`floored`).
     sigma_raw: float | None = None
+    #: The Bads' held-out logit scores, sorted, when there are at least
+    #: :data:`RANDOM_BADS_MIN` of them (#4490): what a corpus reads to tell a random
+    #: sample of Bads from a selected one, and the shape it then gives the negatives.
+    #: ``None`` with fewer, and on a model built by hand.  Not in :meth:`as_dict`.
+    neg_logits: np.ndarray | None = field(default=None, compare=False, repr=False)
 
     def floored(self, floor: float) -> "ClassScoreModel":
         """This model with its spread held to *floor* (a corpus's own, #4492) rather than the absolute one."""
@@ -183,7 +215,8 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
     dof = max(1, xp.size + xn.size - 2)
     var = (float(((xp - mu_pos) ** 2).sum()) + float(((xn - mu_neg) ** 2).sum())) / dof
     raw = math.sqrt(var)
-    return ClassScoreModel(mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw)
+    neg = np.sort(xn) if xn.size >= RANDOM_BADS_MIN else None
+    return ClassScoreModel(mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg)
 
 
 def corpus_sigma_floor(scores: Any) -> float:
@@ -385,6 +418,9 @@ class LabelsLine:
     unvoted_posteriors: np.ndarray | None = field(default=None, compare=False, repr=False)
     #: The class model's spread as this corpus floors it (#4492); ``None`` on a line built by hand.
     spread: float | None = None
+    #: Whether the negatives were modelled by the Bads' own scores, the labels' Bads
+    #: being a random sample of this corpus (#4490), rather than by the corpus fit.
+    bads_shape: bool = False
 
     @property
     def separation(self) -> float:
@@ -478,6 +514,74 @@ def _counted_share_bound(model: ClassScoreModel, unvoted: np.ndarray) -> float:
     return float(np.min(r[ok] / s1[ok]) / n)
 
 
+def _bads_are_a_random_sample(model: ClassScoreModel, unvoted_logits: np.ndarray) -> bool:
+    """Whether the labels' Bads look like a random sample of this corpus (#4490).
+
+    At least :data:`RANDOM_BADS_MIN` of them, and at most
+    :data:`RANDOM_BADS_MAX_ENRICHMENT` times their share in the corpus's top
+    :data:`RANDOM_BADS_TOP_SHARE`.  Active learning picks Bads from the top, so a
+    session's are many times over-represented there; a random sample is not.
+    """
+    neg = model.neg_logits
+    if neg is None or neg.size < RANDOM_BADS_MIN or unvoted_logits.size == 0:
+        return False
+    cut = float(np.quantile(unvoted_logits, 1.0 - RANDOM_BADS_TOP_SHARE))
+    enrichment = float((neg >= cut).mean()) / RANDOM_BADS_TOP_SHARE
+    return enrichment <= RANDOM_BADS_MAX_ENRICHMENT
+
+
+def _bads_density(neg_logits: np.ndarray):
+    """A Gaussian kernel density of the Bads' logit scores (Silverman's bandwidth), binned on a fine grid."""
+    from scipy.stats import norm  # noqa: PLC0415
+
+    n = neg_logits.size
+    sd = float(np.std(neg_logits, ddof=1)) if n > 1 else MIN_LOGIT_SIGMA
+    iqr = float(np.subtract(*np.percentile(neg_logits, [75, 25]))) / 1.349 if n > 3 else sd
+    h = max(0.9 * (min(sd, iqr) if iqr > 0 else sd) * n ** (-0.2), _KDE_MIN_BANDWIDTH)
+    lo, hi = float(neg_logits[0]) - 12 * h, float(neg_logits[-1]) + 12 * h
+    grid = np.linspace(lo, hi, _KDE_GRID_POINTS)
+    step = grid[1] - grid[0]
+    counts = np.bincount(np.clip(np.rint((neg_logits - lo) / step).astype(int), 0, grid.size - 1), minlength=grid.size)
+    # Never wider than the grid: np.convolve's "same" output takes the longer input's length.
+    half = min(int(np.ceil(12 * h / step)), (grid.size - 1) // 2)
+    dens = np.convolve(counts.astype(np.float64), norm.pdf(np.arange(-half, half + 1) * step / h), mode="same")
+    dens /= n * h
+
+    def pdf(x: np.ndarray) -> np.ndarray:
+        out = np.interp(x, grid, dens, left=0.0, right=0.0)
+        far = (x < lo) | (x > hi)
+        if far.any():
+            edge = np.where(x[far] < lo, neg_logits[0], neg_logits[-1])
+            out[far] = norm.pdf((x[far] - edge) / h) / (n * h)
+        return out
+
+    return pdf
+
+
+def _bads_shape_posteriors(model: ClassScoreModel, unvoted_logits: np.ndarray, *, iterations: int = 500) -> np.ndarray:
+    """Each unvoted item's chance of being a positive when the negatives are distributed as the Bads (#4490).
+
+    Positives as the labels' Good component (*model*, floored on this corpus),
+    negatives as the Bads' own kernel density; the positives' share fitted by EM
+    on the corpus.  In the order of *unvoted_logits*.
+    """
+    from scipy.stats import norm  # noqa: PLC0415
+
+    assert model.neg_logits is not None
+    f1 = norm.pdf(unvoted_logits, model.mu_pos, model.sigma)
+    f0 = _bads_density(model.neg_logits)(unvoted_logits)
+    pi, r = 0.01, np.zeros_like(unvoted_logits)
+    for _ in range(iterations):
+        with np.errstate(invalid="ignore", divide="ignore"):
+            r = np.nan_to_num(pi * f1 / (pi * f1 + (1.0 - pi) * f0), nan=0.0)
+        new = min(max(float(r.mean()), PREVALENCE_MIN), PREVALENCE_MAX)
+        done = abs(new - pi) < 1e-10
+        pi = new
+        if done:
+            break
+    return r
+
+
 def _line_on(
     model: ClassScoreModel, scores: Any, ids: Iterable[int] | None, labels: Mapping[int, bool] | None
 ) -> "LabelsLine | None":
@@ -494,15 +598,29 @@ def _line_on(
     floor = corpus_sigma_floor(unvoted)
     fitted = model.floored(floor)
     positives, negatives = fit_corpus(fitted, unvoted, n_good, floor=floor)
-    share = (positives - n_good) / unvoted.size if unvoted.size else 0.0
-    share = min(share, _BOUND_MARGIN * _counted_share_bound(fitted, unvoted))
+    order = np.argsort(-unvoted, kind="stable")
+    bads_shape = _bads_are_a_random_sample(model, _logit(unvoted))
+    if bads_shape:
+        # #4490: the Bads are a random sample, so their own scores are the negatives'
+        # shape - heavy upper tail and all - and the chances sum to the positives.
+        post = _bads_shape_posteriors(fitted, _logit(unvoted))
+        share = float(post.mean()) if unvoted.size else 0.0
+    else:
+        share = (positives - n_good) / unvoted.size if unvoted.size else 0.0
+        share = min(share, _BOUND_MARGIN * _counted_share_bound(fitted, unvoted))
+        post = corpus_posteriors(fitted, unvoted, floor=floor)
     positives = n_good + share * unvoted.size
     prevalence = min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX)
-    order = np.argsort(-unvoted, kind="stable")
-    post = corpus_posteriors(fitted, unvoted, floor=floor)
     # The labels' model is kept unfloored, so a Find on another corpus floors it afresh.
     return LabelsLine(
-        model, prevalence, negatives, float(share), unvoted[order].copy(), post[order].copy(), fitted.sigma
+        model,
+        prevalence,
+        negatives,
+        float(share),
+        unvoted[order].copy(),
+        post[order].copy(),
+        fitted.sigma,
+        bads_shape,
     )
 
 
@@ -573,6 +691,10 @@ def fit_labels_line(
     model = class_score_model(orderings)
     if model is None and labels:
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
+        if model is not None:
+            # In-sample scores are not held out: the head saw these Bads, so they
+            # cannot stand for the negatives' shape (#4490).
+            model = replace(model, neg_logits=None)
     if model is None:
         return None
     return _line_on(model, corpus_scores, corpus_ids, labels)
@@ -581,6 +703,9 @@ def fit_labels_line(
 __all__ = [
     "MIN_LOGIT_SIGMA",
     "RELATIVE_SIGMA_FLOOR",
+    "RANDOM_BADS_MAX_ENRICHMENT",
+    "RANDOM_BADS_MIN",
+    "RANDOM_BADS_TOP_SHARE",
     "WEAK_CHECK_COOLDOWN",
     "WEAK_CHECK_MIN_VOTES",
     "WEAK_SEPARATION_D",

@@ -445,6 +445,7 @@ def test_the_ceilings_snapshot_rebuilds_its_find_line_from_the_saved_folds():
     The saved fold arrays rebuild the class model the frame's line used, and with the withheld half's
     scores the same line, so a line rule can be priced on the full-label model without re-training it.
     """
+    import json
     from dataclasses import asdict
 
     from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag
@@ -477,7 +478,9 @@ def test_the_ceilings_snapshot_rebuilds_its_find_line_from_the_saved_folds():
         for i in np.unique(snap["fold_index"])
     ]
     model = class_score_model(folds)
-    assert model is not None and asdict(model) == snap["model"]
+    assert model is not None
+    assert {k: v for k, v in asdict(model).items() if k != "neg_logits"} == snap["model"]
+    json.dumps(snap["model"])  # the snapshot's meta stays JSON: the Bads' scores travel in the folds
     line = fit_labels_line(folds, snap["scores"], ordered, {})
     assert line is not None
     for b in RANK_FRAME_BETAS:

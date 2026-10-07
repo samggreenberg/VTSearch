@@ -37,7 +37,9 @@ same edit.
   blind GMM cut, the detector's labels line, and for the full-label ceiling
   Find's labels line drawn from its full labels, #4486; the skyline's own row
   is still cut at the retired oracle on the test labels, which no Find could
-  draw, so a ceiling frame from before #4486 reads blank), the primary
+  draw, so a ceiling frame from before #4486 reads blank; from #4490's build
+  that line models the negatives with the full labels' own Bads, so a ceiling
+  line from an earlier review ran deep and is not comparable), the primary
   reading; and `top-K` (set-constant at the old cap,
   32 at beta <= 1 and 128 above, on every sort), a secondary view shown for
   both sorts or neither. The owner is skeptical a set-constant line will ever
