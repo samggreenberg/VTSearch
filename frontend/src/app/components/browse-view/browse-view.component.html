@@ -82,8 +82,10 @@
                 type="button"
                 class="btn btn--secondary btn--sm browse-back"
                 (click)="back()"
-                title="Return to the Test view (keeps any items you removed from Good)">
-                &larr; Back to Test
+                [title]="resultsRunId
+                  ? 'Return to the Dashboard with these Find results open again'
+                  : 'Return to the Test view (keeps any items you removed from Good)'">
+                &larr; Back to {{ backTarget }}
               </button>
             }
             <button
@@ -286,7 +288,7 @@
           <vt-browse-selection-panel
             class="browse-side-selection"
             [mediaType]="mediaType()"
-            [canVerify]="subset"
+            [canVerify]="canVerify"
             [volume]="volume()"
             (verifyGood)="onVerify('good')"
             (verifyBad)="onVerify('bad')"

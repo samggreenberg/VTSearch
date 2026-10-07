@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The CLI calls the settings' detector list AutoFind** (issue #4615). The
+  app renamed its AutoRun (and the Settings' *Auto-Find*) to AutoFind, so
+  `vtscore.cli`'s plan heading reads `AutoFind detectors (N):` and its two
+  no-detector messages say *AutoFind*. Only printed text changed: the
+  `autofind_detectors` settings key and every function name are as before.
+
 - **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
   `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen
   `TextSortCuts(threshold, acq_threshold, branch)` from one mixture fit: `threshold` is the

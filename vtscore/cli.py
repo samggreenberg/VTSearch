@@ -1,7 +1,7 @@
 """Command-line interface utilities for VTSearch.
 
 The only CLI workflow is autodetect: load a dataset (from pickle or via an
-importer), score it against the detectors flagged for Auto-Find in the settings
+importer), score it against the detectors flagged for AutoFind in the settings
 file, and export the results.  With ``save_dataset`` the source is first
 imported through the GUI's own load pipeline and registered, so it shows up on
 the dashboard, and the run then scores that saved dataset.
@@ -106,7 +106,7 @@ def _print_dry_run_plan(
 
     With *override_detectors* the plan lists those instead of the settings
     file's *autofind_detectors*, and says so - the run will not read the
-    Auto-Find list at all.
+    AutoFind list at all.
     """
     print("DRY RUN - no media will be loaded, embedded, scored, or exported.", flush=True)
     print("", flush=True)
@@ -115,10 +115,10 @@ def _print_dry_run_plan(
     print("", flush=True)
 
     print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
-    detector_names, heading, count_note = autofind_detectors, "Auto-Find detectors", ""
+    detector_names, heading, count_note = autofind_detectors, "AutoFind detectors", ""
     if override_detectors is not None:
         detector_names = override_detectors
-        heading, count_note = "Detectors", "; overrides the settings' Auto-Find list"
+        heading, count_note = "Detectors", "; overrides the settings' AutoFind list"
     if not detector_names:
         if source_description.get("save_dataset"):
             print(f"{heading}: (none - the dataset would be saved and detection skipped)", flush=True)
@@ -1365,7 +1365,7 @@ def _run_dry_run(
 
 
 class _NoApplicableDetectorsError(ValueError):
-    """No Auto-Find (or override) detector applies to the loaded media.
+    """No AutoFind (or override) detector applies to the loaded media.
 
     A ``ValueError`` so every caller that already reports the message keeps
     doing so; the subclass only exists so a saving run (``save_dataset``) can
@@ -1380,7 +1380,7 @@ def _train_detectors_for_first_chunk(
     override_detectors: list[str] | None,
     autofind_detectors: list[str],
 ) -> tuple[dict[str, dict[str, Any]], _RoutedSnapshots]:
-    """Train each Auto-Find (or override) detector once against the first chunk.
+    """Train each AutoFind (or override) detector once against the first chunk.
 
     Returns the trained detectors alongside the routed snapshots their
     thresholds were calibrated on, so the caller can score this same chunk
@@ -1403,7 +1403,7 @@ def _train_detectors_for_first_chunk(
                 f"None of the requested detectors ({requested}) applies to media type: {media_type}."
             )
         raise _NoApplicableDetectorsError(
-            f"No Auto-Find detectors found for media type: {media_type}. "
+            f"No AutoFind detectors found for media type: {media_type}. "
             "Add detectors to the settings file's autofind_detectors list."
         )
     return detector_mlps, routed
@@ -1645,7 +1645,7 @@ def _run_pipeline(
     autofind_detectors = list(config.autofind_detectors)
     detector_names = list(override_detectors) if override_detectors is not None else autofind_detectors
 
-    # When no explicit ``--exporter`` was given, fall back to the Auto-Find
+    # When no explicit ``--exporter`` was given, fall back to the AutoFind
     # results exporter configured in settings (its per-exporter field values
     # come along too). An explicit ``--exporter`` always wins; if neither is
     # set the downstream default (``gui``) applies.
@@ -1668,7 +1668,7 @@ def _run_pipeline(
     if skip_without_detectors and not detector_names:
         # Checked before the source is opened: with nothing to score, reading
         # the whole dataset back in would be wasted work.
-        _emit_detection_skipped("no Auto-Find detectors are configured")
+        _emit_detection_skipped("no AutoFind detectors are configured")
         return
 
     try:
@@ -1986,7 +1986,7 @@ def autodetect_main(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
 ) -> None:
-    """CLI entry point: run autodetect with all Auto-Find detectors.
+    """CLI entry point: run autodetect with all AutoFind detectors.
 
     With *save_dataset* the source is first saved to the dashboard and the run
     scores that saved copy; having no applicable detector then ends the run

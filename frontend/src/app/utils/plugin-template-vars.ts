@@ -31,10 +31,10 @@
  *    preview can't promise a path the server would spell differently.
  *
  * Only ever use this for **run-now** forms (the Export modal, the Auto-Detect
- * results export). A *persisted* plugin config — Auto-Find's saved exporter
+ * results export). A *persisted* plugin config — AutoFind's saved exporter
  * fields, a detector's labelset-sync source — must keep the placeholder
  * verbatim: those templates are re-resolved on every later run, which is the
- * whole point of `results_{YYYY}.{MM}.{DD}.csv` on a daily Auto-Find and of
+ * whole point of `results_{YYYY}.{MM}.{DD}.csv` on a daily AutoFind and of
  * `labels/{detector_name}.json` on a sync source. Freezing them at edit time
  * would quietly pin every future run to the day the box was filled in.
  */

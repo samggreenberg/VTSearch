@@ -9,7 +9,7 @@
  *
  * Lives here rather than on one component because two surfaces act on the key:
  * the Export modal (a labelset export the user ran) and the Auto-Detect Results
- * modal (an Auto-Find auto-export that ran for them).
+ * modal (an AutoFind auto-export that ran for them).
  *
  * ## Why the opener is severed by hand, not by `noopener`
  *

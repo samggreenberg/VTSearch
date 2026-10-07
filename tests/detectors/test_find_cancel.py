@@ -54,7 +54,7 @@ class TestCancelPrimitives:
         import numpy as np
 
         from vtscore.detectors.training import ScoringRows
-        from vtsearch.autorun_detectors import score_detector
+        from vtsearch.autofind import score_detector
 
         empty = ScoringRows(
             [],

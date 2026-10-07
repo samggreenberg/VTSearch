@@ -1279,7 +1279,7 @@ def objective_md(cells: pd.DataFrame) -> list[str]:
         "",
         "The images of the withheld half that score above the threshold the app holds, as F-beta at the "
         f"session's own preference ({aim}): `fbeta_unchecked` at the last click before the spot check (the "
-        "line as AutoRun or an unchecked session leaves it), `fbeta_checked` after the check and its votes, "
+        "line as AutoFind or an unchecked session leaves it), `fbeta_checked` after the check and its votes, "
         "`walk_effect` their paired difference, with the set's precision, recall and size (`returned_*`) and "
         "the check's votes. Fixed-click columns read the unchecked line at that click. This, not the "
         "rank-count line below (the balance's rule re-drawn on the fresh ranking), is what a user's next "

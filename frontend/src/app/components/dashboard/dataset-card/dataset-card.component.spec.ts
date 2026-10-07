@@ -140,27 +140,27 @@ describe('DatasetCardComponent', () => {
     // Loaded, single-user dataset. Only Delete is inline (plus Load when
     // unloaded), so the ⋯ overflow still carries Browse alongside the tail;
     // Delete is dropped, Load is hidden (loaded), Edit-access is single-user-hidden.
-    expect(labels).toEqual(['Browse dataset', 'Run AutoRun', 'Rename', 'Stats']);
+    expect(labels).toEqual(['Browse dataset', 'Run AutoFind', 'Rename', 'Stats']);
   });
 
-  it('should offer Run AutoRun in the overflow menu only when an AutoRun detector applies', async () => {
-    vi.spyOn(component.autorun, 'emit');
+  it('should offer Run AutoFind in the overflow menu only when an AutoFind detector applies', async () => {
+    vi.spyOn(component.autofind, 'emit');
     const el = fixture.nativeElement as HTMLElement;
-    const autorunItem = () =>
-      Array.from(el.querySelectorAll<HTMLButtonElement>('.menu-item')).find((b) => b.textContent?.trim() === 'Run AutoRun');
+    const autofindItem = () =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('.menu-item')).find((b) => b.textContent?.trim() === 'Run AutoFind');
 
     (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
-    expect(autorunItem()?.disabled).toBe(true);
+    expect(autofindItem()?.disabled).toBe(true);
     component.dismissContextMenu();
 
-    fixture.componentRef.setInput('autorunDetectorCount', 2);
+    fixture.componentRef.setInput('autofindDetectorCount', 2);
     await settleZoneless(fixture);
     (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
-    expect(autorunItem()?.disabled).toBe(false);
-    autorunItem()!.click();
-    expect(component.autorun.emit).toHaveBeenCalled();
+    expect(autofindItem()?.disabled).toBe(false);
+    autofindItem()!.click();
+    expect(component.autofind.emit).toHaveBeenCalled();
   });
 
   it('should still list the inline Delete verb in the right-click context menu', async () => {
@@ -169,7 +169,7 @@ describe('DatasetCardComponent', () => {
     await settleZoneless(fixture);
     const labels = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
     // Right-click stays complete: Delete returns alongside the rest.
-    expect(labels).toEqual(['Browse dataset', 'Run AutoRun', 'Rename', 'Stats', 'Delete']);
+    expect(labels).toEqual(['Browse dataset', 'Run AutoFind', 'Rename', 'Stats', 'Delete']);
   });
 
   it('should emit browse from the overflow menu', async () => {

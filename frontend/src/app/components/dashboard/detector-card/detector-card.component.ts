@@ -92,18 +92,18 @@ export class DetectorCardComponent {
   readonly dismissTask = output<string>();
   readonly checkboxToggle = output<void>();
   readonly security = output<void>();
-  /** Emits the new AutoRun membership: true for "Move to AutoRun", false for
+  /** Emits the new AutoFind membership: true for "Move to AutoFind", false for
    *  "Move to Drafts". */
-  readonly setAutorun = output<boolean>();
+  readonly setAutofind = output<boolean>();
 
-  /** True for an AutoRun detector (``autofind``): the row is frozen, so the
+  /** True for an AutoFind detector (``autofind``): the row is frozen, so the
    *  editing affordances (rename pencil, inline Delete) are hidden and the
    *  menu omits the editing verbs — Move to Drafts first to edit. */
   get frozen(): boolean {
     return !!this.detector()?.autofind;
   }
 
-  /** The newest test verdict an AutoRun detector keeps (#4526), which its row
+  /** The newest test verdict an AutoFind detector keeps (#4526), which its row
    *  shows under the name; null for one never tested (and for a draft, whose
    *  listing leaves it out). */
   get verdict(): LineTestVerdict | null {
@@ -209,11 +209,11 @@ export class DetectorCardComponent {
       case 'stats':
         this.stats.emit();
         break;
-      case 'move-to-autorun':
-        this.setAutorun.emit(true);
+      case 'move-to-autofind':
+        this.setAutofind.emit(true);
         break;
       case 'move-to-drafts':
-        this.setAutorun.emit(false);
+        this.setAutofind.emit(false);
         break;
       case 'delete':
         this.delete.emit();

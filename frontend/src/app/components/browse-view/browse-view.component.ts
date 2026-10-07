@@ -26,6 +26,7 @@ import { DetectorsRegistryApiService } from '../../services/detectors-registry-a
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
+import { AutoFindService } from '../../services/autofind.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { VtDialogService } from '../../services/dialog.service';
@@ -81,6 +82,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private browseSubset = inject(BrowseSubsetService);
+  private autofind = inject(AutoFindService);
   private selection = inject(BrowseSelectionService);
   private mediasApi = inject(MediasApiService);
   private dialog = inject(VtDialogService);
@@ -309,13 +311,39 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Subset mode: browse an ephemeral UMAP fit over just a handful of media
-   * (the positives of a Find run) instead of the full dataset. Set from the
-   * `?subset=1` query param plus a handoff from {@link BrowseSubsetService}.
-   * `subsetIds` is kept on the component so re-resolving the projection (e.g.
-   * a bin-shape switch) re-sends the same ids without a fresh handoff.
+   * (the positives of a Test session, or a Find run's listed results) instead
+   * of the full dataset. Set from the `?subset=1` query param plus a handoff
+   * from {@link BrowseSubsetService}. `subsetIds` is kept on the component so
+   * re-resolving the projection (e.g. a bin-shape switch) re-sends the same
+   * ids without a fresh handoff.
    */
   subset = false;
   subsetIds: number[] = [];
+  /**
+   * The Find run whose results this subset came from (`?from=results&run=…`,
+   * #4615), or `''` for a Test-view subset. Back reopens those results instead
+   * of returning to Test, and the verify actions are off: they mark votes on
+   * the Test session's detector, and a run's results may span several.
+   */
+  resultsRunId = '';
+
+  /** Whether the selection panel offers Verified Good / Verified Bad: only on
+   *  a Test-view subset, whose detector the verdicts are votes for. */
+  get canVerify(): boolean {
+    return this.subset && !this.resultsRunId;
+  }
+
+  /** Where the subset Back button goes, for its label and tooltip. */
+  get backTarget(): string {
+    return this.resultsRunId ? 'Find Results' : 'Test';
+  }
+
+  /** What to tell a user whose subset handoff is gone (e.g. after a reload). */
+  private get expiredMessage(): string {
+    return this.resultsRunId
+      ? 'This map has expired. Open the Find results again and click Browse to rebuild it.'
+      : 'This map has expired. Re-run Test and click Browse to rebuild it.';
+  }
 
   /**
    * Width (CSS px) of the docked side panel (selection list + legend +
@@ -547,7 +575,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
     // Subset mode: the Find view handed off a set of positive ids to project
     // on their own. Detect it from the query param + the in-memory handoff.
-    this.subset = this.route.snapshot.queryParamMap.get('subset') === '1';
+    const query = this.route.snapshot.queryParamMap;
+    this.subset = query.get('subset') === '1';
+    this.resultsRunId = (this.subset && query.get('from') === 'results' && query.get('run')) || '';
     if (this.subset) {
       const handoff = this.browseSubset.take();
       if (handoff && handoff.ids.length > 0) {
@@ -555,9 +585,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       } else {
         // No handoff (e.g. a hard reload): the ephemeral subset is gone.
         this.status.set('error');
-        this.errorMessage.set(
-          'This map has expired. Re-run Test and click Browse to rebuild it.',
-        );
+        this.errorMessage.set(this.expiredMessage);
         return;
       }
     }
@@ -680,9 +708,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.densityMax = max;
   }
 
-  /** Noun for the item-count chip — "positives" for a Find-subset browse. */
+  /** Noun for the item-count chip — "positives" for a Test-subset browse. A
+   *  Find run's subset may be its Good or its Bad rows, so it stays "items". */
   get countNoun(): string {
-    return this.subset ? 'positives' : 'items';
+    return this.subset && !this.resultsRunId ? 'positives' : 'items';
   }
 
   get atMinHexSize(): boolean {
@@ -1247,9 +1276,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.subset && this.subsetIds.length === 0) {
       // Nothing to rebuild (e.g. Retry after the handoff expired).
       this.status.set('error');
-      this.errorMessage.set(
-        'This map has expired. Re-run Test and click Browse to rebuild it.',
-      );
+      this.errorMessage.set(this.expiredMessage);
       return;
     }
     this.enterBuilding();
@@ -1420,11 +1447,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Return to wherever this browse was launched from: the Find view for a
-   * subset (Find-positives) browse, or the dashboard for a full-dataset
-   * browse.
+   * Return to wherever this browse was launched from: the Test view for a
+   * Test-positives subset, the Dashboard with the Find results reopened for a
+   * Find run's subset, or the Dashboard for a full-dataset browse.
    */
   back(): void {
+    if (this.resultsRunId) {
+      const runId = this.resultsRunId;
+      this.router.navigate(['/dashboard']).then(() => this.autofind.openResults(runId));
+      return;
+    }
     if (this.subset) {
       this.backToFind();
       return;

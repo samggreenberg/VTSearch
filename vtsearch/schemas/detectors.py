@@ -314,8 +314,8 @@ class DetectorRegistryEntrySchema(Schema):
     # type-based detector/dataset compatibility gate.  See patch-embedder.md →
     # "Per-detector embedder type".
     embedder_type = fields.String()
-    # The newest test verdict the detector keeps (#4526), which the AutoRun
-    # tab shows beside it: present on AutoRun detectors only, ``null`` for
+    # The newest test verdict the detector keeps (#4526), which the AutoFind
+    # tab shows beside it: present on AutoFind detectors only, ``null`` for
     # one never tested.
     test_verdict = fields.Nested(LineTestVerdictSchema, allow_none=True)
 
@@ -688,9 +688,9 @@ class _AutoDetectResultSchema(Schema):
 
 
 class _AutoFindExportStatusSchema(PluginExtrasSchema):
-    """Outcome of auto-exporting an Auto-Find run's results.
+    """Outcome of auto-exporting an AutoFind run's results.
 
-    Built by ``vtsearch.autorun_detectors.run_autofind_export``: a fixed ``{exporter, success}`` base
+    Built by ``vtsearch.autofind.run_autofind_export``: a fixed ``{exporter, success}`` base
     plus ``message`` on success / ``error`` on failure, and then whatever extra
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
@@ -716,10 +716,10 @@ class _AutoFindExportStatusSchema(PluginExtrasSchema):
 class AutoDetectRequestSchema(Schema):
     """Body for ``POST /api/auto-detect``.
 
-    The body is optional; omitting ``detector_name`` runs every Auto-Find
+    The body is optional; omitting ``detector_name`` runs every AutoFind
     detector for the active dataset's media type. Passing a name restricts
     the run to that one detector (which must already be flagged for
-    Auto-Find; otherwise the handler returns 404).
+    AutoFind; otherwise the handler returns 404).
     """
 
     detector_name = fields.String(load_default="")
@@ -744,13 +744,13 @@ class AutoDetectResponseSchema(Schema):
     # reference from another user's deletion). Reported so a scheduled run
     # never silently drops a detector the user thinks is still active.
     missing_detectors = fields.List(fields.String(), required=True)
-    # Present only when an Auto-Find results exporter is configured: the
+    # Present only when an AutoFind results exporter is configured: the
     # outcome of auto-exporting these results.
     auto_export = fields.Nested(_AutoFindExportStatusSchema)
 
 
-class AutoRunRunResponseSchema(AutoDetectResponseSchema):
-    """Response for ``GET /api/autorun/runs/<run_id>``: one background AutoRun's results.
+class AutoFindRunResponseSchema(AutoDetectResponseSchema):
+    """Response for ``GET /api/autofind/runs/<run_id>``: one background AutoFind's results.
 
     The ``POST /api/auto-detect`` body for the run, plus which dataset it
     scored and what started it.  Served only to the user who started the run,
@@ -762,11 +762,12 @@ class AutoRunRunResponseSchema(AutoDetectResponseSchema):
     dataset_name = fields.String(required=True)
     trigger = fields.String(
         required=True,
-        validate=validate.OneOf(["import", "manual"]),
+        validate=validate.OneOf(["import", "manual", "find"]),
         metadata={
             "description": (
                 "``import`` when a finished web import started the run, ``manual`` when "
-                "the dataset's Run AutoRun action did."
+                "the dataset's Run AutoFind action did, ``find`` when the Dashboard's "
+                "Find button did, with its picked detectors."
             )
         },
     )
@@ -1070,7 +1071,7 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
-    "AutoRunRunResponseSchema",
+    "AutoFindRunResponseSchema",
     "DetectorBrowsePositivesReleaseResponseSchema",
     "DetectorBrowsePositivesResponseSchema",
     "DetectorCancelResponseSchema",

@@ -161,20 +161,20 @@ describe('DetectorCardComponent', () => {
     expect(items.some((b) => /onnx|export model/i.test(b.textContent ?? ''))).toBe(false);
   });
 
-  it('should offer "Move to AutoRun" on a draft detector and emit setAutorun(true)', async () => {
-    vi.spyOn(component.setAutorun, 'emit');
+  it('should offer "Move to AutoFind" on a draft detector and emit setAutofind(true)', async () => {
+    vi.spyOn(component.setAutofind, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
     const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
-    const move = items.find((b) => b.textContent?.includes('Move to AutoRun'));
+    const move = items.find((b) => b.textContent?.includes('Move to AutoFind'));
     expect(move).toBeTruthy();
     expect(items.some((b) => b.textContent?.includes('Move to Drafts'))).toBe(false);
     move!.click();
-    expect(component.setAutorun.emit).toHaveBeenCalledWith(true);
+    expect(component.setAutofind.emit).toHaveBeenCalledWith(true);
   });
 
-  describe('frozen (AutoRun) detector', () => {
+  describe('frozen (AutoFind) detector', () => {
     beforeEach(async () => {
       fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true });
       await settleZoneless(fixture);
@@ -200,17 +200,17 @@ describe('DetectorCardComponent', () => {
       expect(full).toContain('Export labels');
     });
 
-    it('offers "Move to Drafts" and emits setAutorun(false)', async () => {
-      vi.spyOn(component.setAutorun, 'emit');
+    it('offers "Move to Drafts" and emits setAutofind(false)', async () => {
+      vi.spyOn(component.setAutofind, 'emit');
       const el = fixture.nativeElement as HTMLElement;
       (el.querySelector('.overflow-btn') as HTMLElement).click();
       await settleZoneless(fixture);
       const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
       const move = items.find((b) => b.textContent?.includes('Move to Drafts'));
       expect(move).toBeTruthy();
-      expect(items.some((b) => b.textContent?.includes('Move to AutoRun'))).toBe(false);
+      expect(items.some((b) => b.textContent?.includes('Move to AutoFind'))).toBe(false);
       move!.click();
-      expect(component.setAutorun.emit).toHaveBeenCalledWith(false);
+      expect(component.setAutofind.emit).toHaveBeenCalledWith(false);
     });
 
     it('reads Untested under the name when it keeps no verdict', () => {

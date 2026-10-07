@@ -159,7 +159,7 @@ export class LineTestPanelComponent {
           'while matches keep turning up: how many of the real matches the line found.'
         );
       case 'done':
-        return 'Done. The verdict is on the right: move the detector to AutoRun, lean the Threshold, or add corrections and retrain.';
+        return 'Done. The verdict is on the right: move the detector to AutoFind, lean the Threshold, or add corrections and retrain.';
       default:
         return '';
     }

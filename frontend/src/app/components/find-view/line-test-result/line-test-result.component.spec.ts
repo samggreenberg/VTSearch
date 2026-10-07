@@ -155,7 +155,7 @@ describe('LineTestResultComponent (#4524)', () => {
 
     expect(el.querySelector('.verdict')!.textContent).toContain('likely 55–95% of them are right, with about half of them found');
     const exits = Array.from(el.querySelectorAll('.exit-btn')).map((b) => b.textContent!.trim());
-    expect(exits).toEqual(['Move to AutoRun', 'Add Corrections and retrain']);
+    expect(exits).toEqual(['Move to AutoFind', 'Add Corrections and retrain']);
 
     const rows = Array.from(el.querySelectorAll('.presets tbody tr')) as HTMLElement[];
     expect(rows.length).toBe(3);
@@ -171,7 +171,7 @@ describe('LineTestResultComponent (#4524)', () => {
     expect(leaned).toEqual([4]);
 
     const moved: number[] = [];
-    fixture.componentInstance.moveToAutoRun.subscribe(() => moved.push(1));
+    fixture.componentInstance.moveToAutoFind.subscribe(() => moved.push(1));
     (el.querySelector('.exit-btn.btn--primary') as HTMLButtonElement).click();
     expect(moved.length).toBe(1);
 

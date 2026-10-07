@@ -1,11 +1,11 @@
 """``POST /api/auto-detect`` on a dataset whose score precedence nobody keys to.
 
 Regression for the ``KeyError`` at the top of ``auto_detect``: the route built
-one embedding matrix per *distinct keying embedder* of the Auto-Find detectors,
+one embedding matrix per *distinct keying embedder* of the AutoFind detectors,
 then unconditionally read ``matrices[default_score]`` to size the worker cap and
 the achievement count.  On a multi-embedder dataset the score precedence
 (structural ▸ patch ▸ text) can name an embedder no detector keys to - the
-normal case when every Auto-Find detector is type-locked to ``semantic`` while
+normal case when every AutoFind detector is type-locked to ``semantic`` while
 the dataset also binds a patch embedder - so that key was never built and the
 whole request 500'd even though every per-detector scoring path would have
 succeeded.

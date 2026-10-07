@@ -171,11 +171,11 @@ def reset_state():
     :func:`tests_shared.state_reset.reset_shared_state`, which the library
     suite calls too.  Only the app-tier extras are spelled out here.
     """
-    from vtsearch.autorun_detectors import clear_autorun_runs
+    from vtsearch.autofind import clear_autofind_runs
     from vtsearch.autorun_processors import clear_all_autorun
 
     clear_all_autorun()
-    clear_autorun_runs()
+    clear_autofind_runs()
 
     reset_shared_state(_test_medias_snapshot)
 

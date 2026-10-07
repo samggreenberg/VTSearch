@@ -16,7 +16,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Authentication & UI](api/auth.md) | Auth status, login/logout, HuggingFace OAuth, SPA routes, static assets, health probes, version |
 | [Medias & Sorting](api/medias.md) | Media listing/streaming, text/learned/example sort, votes & labels, pile upload, example-media files, seed and datasource importers |
 | [Labeling & Diversity](api/labeling.md) | The balance and its spot check, labeling status/progress, indicator history, train-and-score, coverage atlas |
-| [Detectors](api/detectors.md) | Detector CRUD, saved-label review, detector registry, Auto-Find toggle, loading, labelset-file moves |
+| [Detectors](api/detectors.md) | Detector CRUD, saved-label review, detector registry, AutoFind toggle, loading, labelset-file moves |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, cleaners, converters, media-file browsing, VTSBrowse projection |
 | [Import & Export](api/io.md) | Result exporters, label importers, pregen processors, autorun extractors/localizers and running them, settings importers/exporters |
 | [Settings](api/settings.md) | App settings, settings sources, labelset sources |

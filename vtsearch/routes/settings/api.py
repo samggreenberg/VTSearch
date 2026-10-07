@@ -218,7 +218,7 @@ _READ_ONLY_KEYS = frozenset(
 
 
 def _validate_autofind_exporter(value) -> str:
-    """Validate the Auto-Find results exporter name and return it.
+    """Validate the AutoFind results exporter name and return it.
 
     ``""``/``None`` (which clears auto-export) normalises to ``""``. Any
     other value must name a registered (pickable) exporter; an unknown

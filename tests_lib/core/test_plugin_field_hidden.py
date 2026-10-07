@@ -11,7 +11,7 @@ So a hidden field still:
 * appears in ``to_dict()`` (the frontend needs to know it exists in order
   to skip it, and the value ships to the browser either way - which is why
   the docstring warns it is not a place for a secret);
-* keeps its CLI flag, so a scripted or Auto-Find run can override the value
+* keeps its CLI flag, so a scripted or AutoFind run can override the value
   a deployment fixed;
 * is normalised, defaulted and template-substituted exactly like a visible
   field, so the plugin body cannot tell the difference.

@@ -22,7 +22,7 @@ from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
-    AutoRunRunResponseSchema,
+    AutoFindRunResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
     FindEvidenceCoverageResponseSchema,
     FindLabelRequestSchema,
@@ -37,13 +37,13 @@ detector_scoring_bp = Blueprint(
     "detector_scoring",
     __name__,
     description="Run a detector against the active dataset (find-label) "
-    "or run every AutoRun detector at once (auto-detect).",
+    "or run every AutoFind detector at once (auto-detect).",
 )
 
 
 def _detector_type(det_data: dict | None) -> str:
     """The locked embedder type of a detector JSON (legacy-migrated)."""
-    from vtsearch.autorun_detectors import detector_type  # noqa: PLC0415
+    from vtsearch.autofind import detector_type  # noqa: PLC0415
 
     return detector_type(det_data)
 
@@ -51,9 +51,9 @@ def _detector_type(det_data: dict | None) -> str:
 def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
     """Whether the active snap binds an embedder of the detector's locked type.
 
-    See :func:`vtsearch.autorun_detectors.dataset_supplies_detector_type`.
+    See :func:`vtsearch.autofind.dataset_supplies_detector_type`.
     """
-    from vtsearch.autorun_detectors import dataset_supplies_detector_type  # noqa: PLC0415
+    from vtsearch.autofind import dataset_supplies_detector_type  # noqa: PLC0415
 
     return dataset_supplies_detector_type(det_data, snap)
 
@@ -761,27 +761,27 @@ def find_corrections_to_detector():
 @detector_scoring_bp.response(200, AutoDetectResponseSchema)
 @detector_scoring_bp.alt_response(
     400,
-    description="No medias loaded, or no AutoRun detectors match the active media type.",
+    description="No medias loaded, or no AutoFind detectors match the active media type.",
 )
-@detector_scoring_bp.alt_response(404, description="Named detector is not on the caller's AutoRun list.")
+@detector_scoring_bp.alt_response(404, description="Named detector is not on the caller's AutoFind list.")
 @detector_scoring_bp.alt_response(409, description="Find was cancelled via /api/find/cancel.")
 def auto_detect(body: dict):
-    """Score the active dataset with every detector on the caller's AutoRun list.
+    """Score the active dataset with every detector on the caller's AutoFind list.
 
     Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each
     one's MLP on demand from its on-disk labelset.  Returns one result column
-    per detector. Pass ``detector_name`` to run a single AutoRun detector.
+    per detector. Pass ``detector_name`` to run a single AutoFind detector.
 
-    The synchronous, scripted sibling of the Dashboard's background AutoRun
-    (``POST /api/datasets/registry/<dataset_id>/autorun``); both run through
-    :mod:`vtsearch.autorun_detectors`.  This one reports on the shared Find
+    The synchronous, scripted sibling of the Dashboard's background AutoFind
+    (``POST /api/datasets/registry/<dataset_id>/autofind``); both run through
+    :mod:`vtsearch.autofind`.  This one reports on the shared Find
     tracker and is cancelled by ``/api/find/cancel``.
     """
-    from vtsearch.autorun_detectors import (  # noqa: PLC0415
-        AutoRunUnavailable,
-        plan_autorun,
+    from vtsearch.autofind import (  # noqa: PLC0415
+        AutoFindUnavailable,
+        plan_autofind,
         run_autofind_export,
-        score_autorun,
+        score_autofind,
     )
 
     snap = snapshot_medias()
@@ -790,8 +790,8 @@ def auto_detect(body: dict):
     find_progress.reset_cancel()
 
     try:
-        plan = plan_autorun(snap, detector_name=body.get("detector_name") or "")
-    except AutoRunUnavailable as exc:
+        plan = plan_autofind(snap, detector_name=body.get("detector_name") or "")
+    except AutoFindUnavailable as exc:
         abort(exc.status, message=exc.message)
 
     # A cold detector's train writes "running" to the shared tracker from inside
@@ -800,7 +800,7 @@ def auto_detect(body: dict):
     # exits below.
     with find_idle_on_crash():
         try:
-            response = score_autorun(plan, snap)
+            response = score_autofind(plan, snap)
         except CancelledError:
             find_idle()
             abort(409, message="Find cancelled")
@@ -812,24 +812,24 @@ def auto_detect(body: dict):
     return response
 
 
-@detector_scoring_bp.route("/api/autorun/runs/<run_id>", methods=["GET"])
-@detector_scoring_bp.response(200, AutoRunRunResponseSchema)
+@detector_scoring_bp.route("/api/autofind/runs/<run_id>", methods=["GET"])
+@detector_scoring_bp.response(200, AutoFindRunResponseSchema)
 @detector_scoring_bp.alt_response(
     404,
     description="No such run for the caller: unknown, another user's, or aged out of the kept window.",
 )
-def get_autorun_run(run_id: str):
-    """Results of a finished background AutoRun, for the user who started it.
+def get_autofind_run(run_id: str):
+    """Results of a finished background AutoFind, for the user who started it.
 
-    ``run_id`` is the ``task_id`` of the AutoRun task (``autorun.run_id`` on
+    ``run_id`` is the ``task_id`` of the AutoFind task (``autofind.run_id`` on
     its ``loading-tasks`` row).  Runs are kept in memory only, and only the
     most recent few, so an old or pre-restart run answers 404 like one that
     never existed.
     """
     from vtsearch.auth import get_current_user  # noqa: PLC0415
-    from vtsearch.autorun_detectors import get_autorun_run as _get_run  # noqa: PLC0415
+    from vtsearch.autofind import get_autofind_run as _get_run  # noqa: PLC0415
 
     record = _get_run(run_id, get_current_user())
     if record is None:
-        abort(404, message="AutoRun results not found")
+        abort(404, message="AutoFind results not found")
     return record

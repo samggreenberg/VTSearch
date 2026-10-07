@@ -30,7 +30,7 @@
 
 <!-- **c** — Say what is *not* on this slide, because it is the point: the
      tool. Nobody opened anything. New media flows in on its own — whatever
-     lands in the team's channel — and a detector left on autorun sends what
+     lands in the team's channel — and a detector left on AutoFind sends what
      it finds wherever the person who asked already looks: an email, a
      Dropbox folder, anything an exporter can reach. The person who asked for
      the books gets the books — so the picture of the payoff is the pictures,

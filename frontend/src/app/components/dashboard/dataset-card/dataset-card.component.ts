@@ -40,9 +40,9 @@ export class DatasetCardComponent {
   readonly selected = input(false);
   readonly dimmed = input(false);
   readonly loadingTask = input<LoadingTask | undefined>(undefined);
-  /** How many of the user's AutoRun detectors are for this dataset's media
-   *  type; enables the menu's "Run AutoRun" when non-zero. */
-  readonly autorunDetectorCount = input(0);
+  /** How many of the user's AutoFind detectors are for this dataset's media
+   *  type; enables the menu's "Run AutoFind" when non-zero. */
+  readonly autofindDetectorCount = input(0);
 
   /** True while this row's delete-confirm dialog is open (driven by the
    *  dashboard's `deletingDatasetId`). Spins the trash icon to 90° while open;
@@ -90,7 +90,7 @@ export class DatasetCardComponent {
   readonly delete = output<void>();
   readonly load = output<void>();
   readonly browse = output<void>();
-  readonly autorun = output<void>();
+  readonly autofind = output<void>();
   readonly security = output<void>();
   readonly cancelTask = output<string>();
   readonly dismissTask = output<string>();
@@ -133,7 +133,7 @@ export class DatasetCardComponent {
     const items = buildDatasetCardMenuItems(
       this.dataset(),
       { isDefaultLogin: this.isDefaultLogin(), isOwner: this.isOwner },
-      this.autorunDetectorCount(),
+      this.autofindDetectorCount(),
     );
     this.contextMenuItems = overflow ? overflowMenuItems(items) : items;
     this.contextMenuX = x;
@@ -158,8 +158,8 @@ export class DatasetCardComponent {
       case 'browse':
         this.browse.emit();
         break;
-      case 'autorun':
-        this.autorun.emit();
+      case 'autofind':
+        this.autofind.emit();
         break;
       case 'security':
         this.security.emit();
@@ -236,10 +236,12 @@ export class DatasetCardComponent {
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
-  /** The vocabulary the inline row speaks: a background AutoRun on this
-   *  dataset is not a load, whatever `taskKind` says. */
+  /** The vocabulary the inline row speaks: a background AutoFind or Find on
+   *  this dataset is not a load, whatever `taskKind` says. */
   get effectiveTaskKind(): ProgressKind {
-    return this.loadingTask()?.autorun ? 'autorun' : this.taskKind();
+    const run = this.loadingTask()?.autofind;
+    if (!run) return this.taskKind();
+    return run.trigger === 'find' ? 'find' : 'autofind';
   }
 
   get taskProgressInfo(): ProgressHeader {

@@ -22,7 +22,7 @@
      the 32 are one and a half percent of the pile. -->
 
 <!-- **b** — The first half of the question: **Right**. Of the 32 the line
-     would ship, how many are matches? That is the precision AutoRun would
+     would ship, how many are matches? That is the precision AutoFind would
      deliver, unchecked, on every pile like this one. -->
 
 <!-- **c** — The second half: **Found**. Of all the matches in the pile, how

@@ -3,7 +3,7 @@
 The Angular SPA has ten near-duplicate blocks that branch on
 ``field.field_type`` to pick a widget — one per modal/picker that shows plugin
 configuration (results exporters, settings importers and exporters, label
-importers, the New Model form, Auto-Find, the autodetect results modal, the
+importers, the New Model form, AutoFind, the autodetect results modal, the
 dataset-importer pickers).  When ``"checkbox"`` was added to
 :data:`vtscore.plugins.FieldType`, only two of those ten chains grew a branch
 for it.  On the other eight, a checkbox field fell through the chain to the

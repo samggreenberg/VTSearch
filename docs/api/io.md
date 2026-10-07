@@ -69,7 +69,7 @@ fails, so no plugin can push a `javascript:` URL to the browser. An exporter tha
 *always* returns one sets `opens_url: true` in its `GET /api/exporters` entry, so
 the UI can label the button before the export runs.
 
-The same key reaches the client from the Auto-Find auto-export block
+The same key reaches the client from the AutoFind auto-export block
 (`auto_export.open_url` on `POST /api/auto-detect`), where the Auto-Detect
 Results modal offers it as an **Open** button instead of opening a tab on
 arrival. That path runs the same `validate_browser_url` check, but drops an
@@ -88,7 +88,7 @@ the form's current field values)
 Returns the dropdown options for a `dynamic_options` field on a results
 exporter, for an exporter whose destinations are only knowable at runtime.
 Both surfaces that render exporter fields use it: the Export modal and the
-Settings › Auto-Find results exporter.
+Settings › AutoFind results exporter.
 
 → `{"options": [{"value": "...", "label": "..."}, ...]}` (same shape as the
 label-importer route below).

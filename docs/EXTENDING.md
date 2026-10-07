@@ -375,7 +375,7 @@ detectors in a different sense, covered below.
 
 For ML classifiers, create a detector instead: register it via
 `POST /api/detectors/registry`, label items in the right pane, and toggle
-its Auto-Find flag with `PUT /api/detectors/registry/<id>/autofind`.
+its AutoFind flag with `PUT /api/detectors/registry/<id>/autofind`.
 
 ### New Login Provider Checklist
 

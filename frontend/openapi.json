@@ -176,6 +176,9 @@
             },
             "type": "object"
           },
+          "autofind_on_import": {
+            "type": "boolean"
+          },
           "autopilot_enabled": {
             "type": "boolean"
           },
@@ -190,9 +193,6 @@
           },
           "autopilot_top_greens": {
             "type": "integer"
-          },
-          "autorun_on_import": {
-            "type": "boolean"
           },
           "beta": {
             "type": "number"
@@ -543,30 +543,7 @@
         ],
         "type": "object"
       },
-      "AutoLocalizeResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "localizers_run": {
-            "type": "integer"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "results": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/_AutoLocalizePerProcessor"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "localizers_run",
-          "media_type",
-          "results"
-        ],
-        "type": "object"
-      },
-      "AutoRunRunResponse": {
+      "AutoFindRunResponse": {
         "additionalProperties": false,
         "properties": {
           "auto_export": {
@@ -604,10 +581,11 @@
             "type": "string"
           },
           "trigger": {
-            "description": "``import`` when a finished web import started the run, ``manual`` when the dataset's Run AutoRun action did.",
+            "description": "``import`` when a finished web import started the run, ``manual`` when the dataset's Run AutoFind action did, ``find`` when the Dashboard's Find button did, with its picked detectors.",
             "enum": [
               "import",
-              "manual"
+              "manual",
+              "find"
             ],
             "type": "string"
           }
@@ -622,6 +600,29 @@
           "results",
           "run_id",
           "trigger"
+        ],
+        "type": "object"
+      },
+      "AutoLocalizeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "localizers_run": {
+            "type": "integer"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "results": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/_AutoLocalizePerProcessor"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "localizers_run",
+          "media_type",
+          "results"
         ],
         "type": "object"
       },
@@ -1551,12 +1552,12 @@
         ],
         "type": "object"
       },
-      "DatasetAutorunRequest": {
+      "DatasetAutofindRequest": {
         "additionalProperties": false,
         "properties": {
           "detector_ids": {
             "default": null,
-            "description": "Registry ids of the detectors to run, in place of the caller's AutoRun list. Omit to run the AutoRun list.",
+            "description": "Registry ids of the detectors to run, in place of the caller's AutoFind list. Omit to run the AutoFind list.",
             "items": {
               "type": "string"
             },
@@ -1699,9 +1700,9 @@
       "DatasetLoadDemoRequest": {
         "additionalProperties": false,
         "properties": {
-          "autorun": {
+          "autofind": {
             "default": null,
-            "description": "'true' / 'false': whether to run the caller's AutoRun detectors on the dataset once it is saved, remembered as their `autorun_on_import` setting. Omitted, that setting decides.",
+            "description": "'true' / 'false': whether to run the caller's AutoFind detectors on the dataset once it is saved, remembered as their `autofind_on_import` setting. Omitted, that setting decides.",
             "nullable": true,
             "type": "string"
           },
@@ -6796,6 +6797,9 @@
             "type": "string"
           },
           "autofind_exporter_field_values": {},
+          "autofind_on_import": {
+            "type": "boolean"
+          },
           "autopilot_enabled": {
             "type": "boolean"
           },
@@ -6810,9 +6814,6 @@
           },
           "autopilot_top_greens": {
             "type": "integer"
-          },
-          "autorun_on_import": {
-            "type": "boolean"
           },
           "beta": {
             "type": "number"
@@ -8450,7 +8451,7 @@
     },
     "/api/auto-detect": {
       "post": {
-        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoRun detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoRun\n(``POST /api/datasets/registry/<dataset_id>/autorun``); both run through\n:mod:`vtsearch.autorun_detectors`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
+        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoFind detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoFind\n(``POST /api/datasets/registry/<dataset_id>/autofind``); both run through\n:mod:`vtsearch.autofind`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
         "operationId": "auto_detect",
         "requestBody": {
           "content": {
@@ -8474,10 +8475,10 @@
             "description": "OK"
           },
           "400": {
-            "description": "No medias loaded, or no AutoRun detectors match the active media type."
+            "description": "No medias loaded, or no AutoFind detectors match the active media type."
           },
           "404": {
-            "description": "Named detector is not on the caller's AutoRun list."
+            "description": "Named detector is not on the caller's AutoFind list."
           },
           "409": {
             "description": "Find was cancelled via /api/find/cancel."
@@ -8489,7 +8490,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Score the active dataset with every detector on the caller's AutoRun list.",
+        "summary": "Score the active dataset with every detector on the caller's AutoFind list.",
         "tags": [
           "detector_scoring"
         ]
@@ -8548,6 +8549,45 @@
           "processors_scoring"
         ]
       }
+    },
+    "/api/autofind/runs/{run_id}": {
+      "get": {
+        "description": "``run_id`` is the ``task_id`` of the AutoFind task (``autofind.run_id`` on\nits ``loading-tasks`` row).  Runs are kept in memory only, and only the\nmost recent few, so an old or pre-restart run answers 404 like one that\nnever existed.",
+        "operationId": "get_autofind_run",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoFindRunResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Results of a finished background AutoFind, for the user who started it.",
+        "tags": [
+          "detector_scoring"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/autorun-extractors": {
       "get": {
@@ -8850,45 +8890,6 @@
           "processors_crud"
         ]
       }
-    },
-    "/api/autorun/runs/{run_id}": {
-      "get": {
-        "description": "``run_id`` is the ``task_id`` of the AutoRun task (``autorun.run_id`` on\nits ``loading-tasks`` row).  Runs are kept in memory only, and only the\nmost recent few, so an old or pre-restart run answers 404 like one that\nnever existed.",
-        "operationId": "get_autorun_run",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoRunRunResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Results of a finished background AutoRun, for the user who started it.",
-        "tags": [
-          "detector_scoring"
-        ]
-      },
-      "parameters": [
-        {
-          "in": "path",
-          "name": "run_id",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ]
     },
     "/api/balance": {
       "get": {
@@ -10339,7 +10340,7 @@
         }
       ]
     },
-    "/api/datasets/registry/{dataset_id}/autorun": {
+    "/api/datasets/registry/{dataset_id}/autofind": {
       "parameters": [
         {
           "in": "path",
@@ -10352,13 +10353,13 @@
         }
       ],
       "post": {
-        "description": "The Dashboard's dataset \u22ef **Run AutoRun** sends no body, and the run scores\nthe dataset with every detector on the caller's AutoRun list that applies\nto it.  The Dashboard's big **AutoRun** button sends ``detector_ids``, the\nticked detectors, and the run scores with those instead: drafts run as they\nare, without being moved to the AutoRun list.\n\nEither way the run sends the results to the caller's Auto-Find exporter\nwhen one is set, and keeps them for the AutoRun Results dialog\n(``GET /api/autorun/runs/<task_id>``).  Progress is reported on the\n``loading-tasks`` channel of ``GET /api/events`` under the returned\n``task_id``, on a task keyed to this dataset; its ``autorun`` block carries\nthe summary once it finishes.  Cancellable like any loading task.",
-        "operationId": "run_dataset_autorun",
+        "description": "The Dashboard's dataset \u22ef **Run AutoFind** sends no body, and the run scores\nthe dataset with every detector on the caller's AutoFind list that applies\nto it.  The Dashboard's big **Find** button sends ``detector_ids``, the\nticked detectors, and the run scores with those instead: drafts run as they\nare, without being moved to the AutoFind list.\n\nEither way the run sends the results to the caller's AutoFind exporter\nwhen one is set, and keeps them for the Find Results dialog\n(``GET /api/autofind/runs/<task_id>``).  Progress is reported on the\n``loading-tasks`` channel of ``GET /api/events`` under the returned\n``task_id``, on a task keyed to this dataset; its ``autofind`` block carries\nthe summary once it finishes.  Cancellable like any loading task.",
+        "operationId": "run_dataset_autofind",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DatasetAutorunRequest"
+                "$ref": "#/components/schemas/DatasetAutofindRequest"
               }
             }
           },
@@ -10394,7 +10395,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Run AutoRun on a loaded dataset, in the background.",
+        "summary": "Run AutoFind on a loaded dataset, in the background.",
         "tags": [
           "datasets_registry"
         ]
@@ -11076,7 +11077,7 @@
     },
     "/api/detectors/registry": {
       "get": {
-        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.\nAn AutoRun detector also carries ``test_verdict``, the newest test\nverdict it keeps (#4526), for the AutoRun tab to show beside it; drafts\nleave it out, so the listing reads no detector file it does not need.",
+        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.\nAn AutoFind detector also carries ``test_verdict``, the newest test\nverdict it keeps (#4526), for the AutoFind tab to show beside it; drafts\nleave it out, so the listing reads no detector file it does not need.",
         "operationId": "list_registered_detectors",
         "responses": {
           "200": {
@@ -11093,7 +11094,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return detectors visible to the current user, with loaded/Auto-Find flags.",
+        "summary": "Return detectors visible to the current user, with loaded/AutoFind flags.",
         "tags": [
           "detectors_registry"
         ]
@@ -11264,7 +11265,7 @@
         }
       ],
       "put": {
-        "description": "The flag is stored per-user under ``autofind_detectors`` (see\n:func:`vtsearch.settings.add_autofind_detector`), so each user curates their\nown Auto-Find list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
+        "description": "The flag is stored per-user under ``autofind_detectors`` (see\n:func:`vtsearch.settings.add_autofind_detector`), so each user curates their\nown AutoFind list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
         "operationId": "set_detector_autofind",
         "requestBody": {
           "content": {
@@ -11303,7 +11304,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Toggle the calling user's Auto-Find flag for a registered detector.",
+        "summary": "Toggle the calling user's AutoFind flag for a registered detector.",
         "tags": [
           "detectors_registry"
         ]
@@ -16234,11 +16235,11 @@
       "name": "detectors_labels"
     },
     {
-      "description": "Register, load, unload, rename, and toggle Auto-Find on detectors.",
+      "description": "Register, load, unload, rename, and toggle AutoFind on detectors.",
       "name": "detectors_registry"
     },
     {
-      "description": "Run a detector against the active dataset (find-label) or run every AutoRun detector at once (auto-detect).",
+      "description": "Run a detector against the active dataset (find-label) or run every AutoFind detector at once (auto-detect).",
       "name": "detector_scoring"
     },
     {

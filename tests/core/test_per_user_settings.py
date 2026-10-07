@@ -131,7 +131,7 @@ class TestUnmigratedFiles:
             settings_mod.reset()
 
     def test_autofind_keys_in_server_file_still_read_through(self, tmp_path, monkeypatch):
-        """The one deliberate tier exception survives: the Auto-Find trio.
+        """The one deliberate tier exception survives: the AutoFind trio.
 
         The CLI's documented ``--settings`` flat-file workflow puts
         ``autofind_detectors`` in the server file and expects the ``default``

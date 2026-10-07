@@ -1,28 +1,30 @@
-"""AutoRun: score a dataset with the current user's AutoRun detectors.
+"""AutoFind: score a dataset with the current user's AutoFind detectors.
 
-A user's **AutoRun** detectors - the Dashboard's AutoRun tab, stored as the
+A user's **AutoFind** detectors - the Dashboard's AutoFind tab, stored as the
 per-user ``autofind_detectors`` setting - are the ones they have finalized to
 run unattended.  This module is where the app runs them against a dataset, for
 two kinds of caller:
 
 - ``POST /api/auto-detect`` scores the request's active dataset synchronously,
   reporting on the shared Find tracker (the API / scripted path).
-- :func:`start_autorun_task` scores any loaded dataset in the background, as a
+- :func:`start_autofind_task` scores any loaded dataset in the background, as a
   task on the ``loading-tasks`` channel keyed to that dataset, so it renders
   inline on the dataset's Dashboard row and its Cancel button works.  The
-  dataset ⋯ menu's **Run AutoRun** starts one directly; a web import starts one
-  once the dataset is saved, unless the user unticked **Run AutoRun** in the
+  dataset ⋯ menu's **Run AutoFind** starts one directly; a web import starts one
+  once the dataset is saved, unless the user unticked **Run AutoFind** in the
   Add Dataset dialog (:func:`import_post_load`).  The Dashboard's big
-  **AutoRun** button starts one per ticked dataset, restricted to the ticked
-  detectors (``detector_ids``), which may be drafts as well as AutoRun ones.
+  **Find** button starts one per ticked dataset, restricted to the ticked
+  detectors (``detector_ids``), which may be drafts as well as AutoFind ones;
+  such a run is a *Find* (trigger ``find``), whose results the browser opens
+  when it lands, where an AutoFind only says it is done (#4615).
 
 The CLI's ``--autodetect`` has its own streaming pipeline in :mod:`vtscore.cli`
 and does not come through here.
 
-Either way a run ends the same: the results go to the user's Auto-Find exporter
+Either way a run ends the same: the results go to the user's AutoFind exporter
 when one is configured (:func:`run_autofind_export`).  A background run's
 results are also held in memory for the user who started it
-(:func:`get_autorun_run`), so the browser can show them in the AutoRun Results
+(:func:`get_autofind_run`), so the browser can show them in the Find Results
 dialog.  They are hit lists, never vectors, and only the most recent runs are
 kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
 """
@@ -49,8 +51,8 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle / heavy-import avoidance
 
 logger = logging.getLogger(__name__)
 
-#: Task-id prefix of a background AutoRun on the ``loading-tasks`` channel.
-TASK_PREFIX = "_autorun_"
+#: Task-id prefix of a background AutoFind on the ``loading-tasks`` channel.
+TASK_PREFIX = "_autofind_"
 
 #: How many finished background runs keep their results for the results
 #: dialog.  A run's hit lists cover every media in the dataset, so this is a
@@ -62,18 +64,25 @@ MAX_KEPT_RUNS = 16
 #: ones.  The oldest runs go first; the newest is always kept, whatever its size.
 MAX_KEPT_HITS = 1_000_000
 
-#: What started a background run: a finished web import, or the dataset ⋯
-#: menu's Run AutoRun.  Carried on the task so the browser can tell a run it
-#: asked for (open the results) from one that happened to it (offer them).
-TRIGGERS = ("import", "manual")
+#: What started a background run: a finished web import, the dataset ⋯ menu's
+#: Run AutoFind (``manual``), or the Dashboard's big Find button with its
+#: picked detectors (``find``).  Carried on the task so the browser can name
+#: the run in its notice (#4615).
+TRIGGERS = ("import", "manual", "find")
 
 
-class AutoRunUnavailable(Exception):
+def run_label(trigger: str) -> str:
+    """What a run of *trigger* is called on its task row: ``Find`` for the
+    Find button's, ``AutoFind`` for the rest."""
+    return "Find" if trigger == "find" else "AutoFind"
+
+
+class AutoFindUnavailable(Exception):
     """There is nothing to run.
 
     *message* is user-facing; *status* is the HTTP code the API answers with
     (400 for "nothing applies to this dataset", 404 for a named detector that
-    is not on the user's AutoRun list).
+    is not on the user's AutoFind list).
     """
 
     def __init__(self, message: str, status: int = 400) -> None:
@@ -83,11 +92,11 @@ class AutoRunUnavailable(Exception):
 
 
 @dataclass(frozen=True)
-class AutoRunPlan:
-    """The AutoRun detectors that apply to one dataset snapshot.
+class AutoFindPlan:
+    """The AutoFind detectors that apply to one dataset snapshot.
 
     ``detectors`` holds ``(name, detector JSON, registry entry)`` triples;
-    ``missing`` names AutoRun entries whose detector file no longer exists.
+    ``missing`` names AutoFind entries whose detector file no longer exists.
     """
 
     media_type: str
@@ -124,23 +133,23 @@ def dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
 
 
 def _resolve_names(detector_name: str, media_type: str) -> list[str]:
-    """The AutoRun detector names to consider: all of them, or the one named."""
+    """The AutoFind detector names to consider: all of them, or the one named."""
     from vtsearch.settings import get_autofind_detectors  # noqa: PLC0415
 
     names = get_autofind_detectors()
     if detector_name:
         if detector_name not in names:
-            raise AutoRunUnavailable(f"Detector '{detector_name}' is not on your AutoRun list", status=404)
+            raise AutoFindUnavailable(f"Detector '{detector_name}' is not on your AutoFind list", status=404)
         return [detector_name]
     if not names:
-        raise AutoRunUnavailable("You have no AutoRun detectors. Move a detector to the AutoRun tab first.")
+        raise AutoFindUnavailable("You have no AutoFind detectors. Move a detector to the AutoFind tab first.")
     return names
 
 
 def _resolve_ids(detector_ids: list[str]) -> list[dict]:
     """The registry entries of *detector_ids*, the detectors the caller picked.
 
-    Any detector the caller can see qualifies, draft or AutoRun.  An id that
+    Any detector the caller can see qualifies, draft or AutoFind.  An id that
     names no detector, or one the caller may not access, is a 404 alike, so a
     caller cannot probe for other users' detectors.
     """
@@ -148,13 +157,13 @@ def _resolve_ids(detector_ids: list[str]) -> list[dict]:
     from vtscore.state.current_user import get_current_user  # noqa: PLC0415
 
     if not detector_ids:
-        raise AutoRunUnavailable("Select at least one detector to run.")
+        raise AutoFindUnavailable("Select at least one detector to run.")
     user = get_current_user()
     entries: list[dict] = []
     for detector_id in dict.fromkeys(detector_ids):
         entry = get_detector(detector_id)
         if entry is None or not can_user_access_detector(detector_id, user):
-            raise AutoRunUnavailable(f"Detector '{detector_id}' not found", status=404)
+            raise AutoFindUnavailable(f"Detector '{detector_id}' not found", status=404)
         entries.append(entry)
     return entries
 
@@ -168,7 +177,7 @@ def _collect_for_media_type(
     """Load detector data + registry entry for each name whose media type is *media_type*.
 
     Returns ``(detectors, missing)``: *missing* holds names whose detector file
-    no longer exists on disk (a stale AutoRun reference).  Names whose media
+    no longer exists on disk (a stale AutoFind reference).  Names whose media
     type simply doesn't match are skipped without being reported - those are
     legitimately inapplicable, not broken.  *entries* maps a name to the
     registry entry the caller already resolved it from; other names are looked
@@ -197,20 +206,20 @@ def _collect_for_media_type(
     return detectors, missing
 
 
-def plan_autorun(snap: dict, *, detector_name: str = "", detector_ids: list[str] | None = None) -> AutoRunPlan:
+def plan_autofind(snap: dict, *, detector_name: str = "", detector_ids: list[str] | None = None) -> AutoFindPlan:
     """Decide which detectors score *snap*.
 
-    By default those are the current user's AutoRun detectors (or the one of
+    By default those are the current user's AutoFind detectors (or the one of
     them *detector_name* names).  *detector_ids* replaces that list with the
     registry ids the caller picked, drafts included, without touching the
-    user's AutoRun list.  Either way, keeps the detectors of *snap*'s media
+    user's AutoFind list.  Either way, keeps the detectors of *snap*'s media
     type whose locked embedder type the dataset can supply, and raises
-    :class:`AutoRunUnavailable` when that leaves nothing to run.
+    :class:`AutoFindUnavailable` when that leaves nothing to run.
     """
     if detector_name and detector_ids is not None:
         raise ValueError("Pass detector_name or detector_ids, not both")
     if not snap:
-        raise AutoRunUnavailable("No medias loaded")
+        raise AutoFindUnavailable("No medias loaded")
     media_type = next(iter(snap.values())).get("media_type", "audio")
     if detector_ids is not None:
         picked = {entry["name"]: entry for entry in _resolve_ids(detector_ids)}
@@ -219,18 +228,18 @@ def plan_autorun(snap: dict, *, detector_name: str = "", detector_ids: list[str]
     else:
         names = _resolve_names(detector_name, media_type)
         detectors, missing = _collect_for_media_type(names, media_type)
-        whose = "your AutoRun detectors"
+        whose = "your AutoFind detectors"
     if not detectors:
         message = f"None of {whose} are for {media_type} datasets."
         if missing:
             message += f" Missing detector file(s) for: {', '.join(missing)}"
-        raise AutoRunUnavailable(message)
+        raise AutoFindUnavailable(message)
     compatible = [trip for trip in detectors if dataset_supplies_detector_type(trip[1], snap)]
     if not compatible:
-        raise AutoRunUnavailable(
+        raise AutoFindUnavailable(
             f"None of {whose} can score this dataset: it has no embedder of the kind they were built with."
         )
-    return AutoRunPlan(media_type=media_type, detectors=compatible, missing=missing)
+    return AutoFindPlan(media_type=media_type, detectors=compatible, missing=missing)
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +328,7 @@ def score_detector(
 
 
 def _line_state(name: str, det_ctx: Any) -> dict | None:
-    """What the balance says about *name*'s cut in an AutoRun: unchecked, because nobody can vote.
+    """What the balance says about *name*'s cut in an AutoFind: unchecked, because nobody can vote.
 
     Rides with the cut (``balance``), read at the beta of the thread that
     trained it (#4413).  A headless run cannot spot-check its line (#4272), so
@@ -345,8 +354,8 @@ def _line_state(name: str, det_ctx: Any) -> dict | None:
     return balance
 
 
-def score_autorun(
-    plan: AutoRunPlan,
+def score_autofind(
+    plan: AutoFindPlan,
     snap: dict,
     *,
     check_cancelled: Callable[[], None] = find_progress.check_cancelled,
@@ -400,7 +409,7 @@ def score_autorun(
     # Size the worker cap off the biggest stack actually built.  The cap counts
     # *rows*, not media: a patch stack is H*W+1 rows per media and that is what
     # each worker's forward pass allocates.  ``row_stacks`` is never empty:
-    # ``plan_autorun`` refuses a plan with no detectors.
+    # ``plan_autofind`` refuses a plan with no detectors.
     cap_rows = max(int(r.matrix.shape[0]) for r in row_stacks.values())
     cap_dim = max(int(r.matrix.shape[1]) if r.matrix.ndim > 1 else 0 for r in row_stacks.values())
     worker_cap = cap_workers_by_memory(
@@ -464,7 +473,7 @@ def score_autorun(
 
 
 def run_autofind_export(response: dict) -> dict | None:
-    """Run the configured Auto-Find results exporter on *response*.
+    """Run the configured AutoFind results exporter on *response*.
 
     Returns ``None`` when no exporter is configured (the common case), or a
     status dict ``{exporter, success, message?, error?}`` otherwise. Export
@@ -488,7 +497,7 @@ def run_autofind_export(response: dict) -> dict | None:
         return {"exporter": exporter_name, "success": False, "error": f"Unknown exporter '{exporter_name}'"}
 
     if "find_results" not in exporter.supported_payloads:
-        # A saved Auto-Find choice can outlive the exporter's capabilities (a
+        # A saved AutoFind choice can outlive the exporter's capabilities (a
         # plugin narrowed, or a labelset-only exporter picked before the
         # pickers filtered). Report it rather than handing it a shape it can't
         # read and mailing an empty summary.
@@ -506,7 +515,7 @@ def run_autofind_export(response: dict) -> dict | None:
         normalize_field_values(exporter, field_values)
         outcome = exporter.export_find_results(response, field_values) or {}
     except Exception as exc:  # noqa: BLE001 - surfaced to the caller, never raised
-        logger.exception("Auto-Find export via %s failed", exporter_name)
+        logger.exception("AutoFind export via %s failed", exporter_name)
         return {"exporter": exporter_name, "success": False, "error": str(exc)}
 
     status = {"exporter": exporter_name, "success": True, "message": outcome.get("message", "Export complete.")}
@@ -525,7 +534,7 @@ def run_autofind_export(response: dict) -> dict | None:
         try:
             status["open_url"] = validate_browser_url(str(status["open_url"]))
         except ValueError as exc:
-            logger.error("Auto-Find exporter %r returned an unusable open_url: %s", exporter_name, exc)
+            logger.error("AutoFind exporter %r returned an unusable open_url: %s", exporter_name, exc)
             del status["open_url"]
             status["message"] = f"{status['message']} (the exporter returned an unusable URL, so nothing will open)"
     return status
@@ -554,7 +563,7 @@ def _keep_run(run_id: str, record: dict[str, Any]) -> None:
             total -= _hit_count(evicted)
 
 
-def get_autorun_run(run_id: str, user: str) -> dict[str, Any] | None:
+def get_autofind_run(run_id: str, user: str) -> dict[str, Any] | None:
     """The kept results of background run *run_id*, if *user* started it.
 
     ``None`` for an unknown run, one that has aged out of the
@@ -568,7 +577,7 @@ def get_autorun_run(run_id: str, user: str) -> dict[str, Any] | None:
     return record
 
 
-def clear_autorun_runs() -> None:
+def clear_autofind_runs() -> None:
     """Forget every kept run.  For test isolation."""
     with _runs_lock:
         _runs.clear()
@@ -578,7 +587,7 @@ def _open_run_task(ctx: DatasetContext, trigger: str, media_type: str) -> tuple[
     """Register a background run's ``loading-tasks`` row; return ``(run_id, block, tracker)``.
 
     The row is keyed to the dataset (``dataset_id``) so it renders on the
-    dataset's Dashboard row, and carries the ``autorun`` *block* naming the run,
+    dataset's Dashboard row, and carries the ``autofind`` *block* naming the run,
     its owner and *trigger*.
     """
     from vtscore.state.current_user import get_current_user  # noqa: PLC0415
@@ -594,24 +603,24 @@ def _open_run_task(ctx: DatasetContext, trigger: str, media_type: str) -> tuple[
     }
     tracker = loading_tasks.create_task(
         run_id,
-        f"AutoRun: {dataset_name}",
+        f"{run_label(trigger)}: {dataset_name}",
         dataset_id=ctx.dataset_id,
         media_type=media_type,
-        extra_fields={"autorun": block},
+        extra_fields={"autofind": block},
     )
     return run_id, block, tracker
 
 
 def _report_skipped_run(ctx: DatasetContext, trigger: str, reason: str) -> str:
-    """Record that an AutoRun had nothing to run, as a row that finishes at once.
+    """Record that an AutoFind had nothing to run, as a row that finishes at once.
 
-    Its ``autorun`` block carries ``skipped`` (the reason), which the owner's
+    Its ``autofind`` block carries ``skipped`` (the reason), which the owner's
     browser shows as a notice.  Riding the task row rather than a notification
     keeps it to the user whose import it was: notifications reach every client.
     """
     media_type = ctx.medias[next(iter(ctx.medias))].get("media_type", "") if ctx.medias else ""
     run_id, block, tracker = _open_run_task(ctx, trigger, media_type)
-    tracker.update("idle", f"AutoRun skipped: {reason}", 0, 0, autorun={**block, "skipped": reason})
+    tracker.update("idle", f"AutoFind skipped: {reason}", 0, 0, autofind={**block, "skipped": reason})
     loading_tasks.mark_finished(run_id)
     return run_id
 
@@ -629,36 +638,36 @@ def _dataset_snapshot(ctx: DatasetContext) -> dict:
         return dict(ctx.medias)
 
 
-def start_autorun_task(ctx: DatasetContext, *, trigger: str, detector_ids: list[str] | None = None) -> str:
-    """Start a background AutoRun of the current user's detectors on *ctx*.
+def start_autofind_task(ctx: DatasetContext, *, trigger: str, detector_ids: list[str] | None = None) -> str:
+    """Start a background AutoFind of the current user's detectors on *ctx*.
 
     The run is a task on the ``loading-tasks`` channel keyed to the dataset
-    (``dataset_id``), carrying an ``autorun`` block that names the run, its
+    (``dataset_id``), carrying an ``autofind`` block that names the run, its
     owner and *trigger* (one of :data:`TRIGGERS`) and, once finished, the
     summary counts.  The worker pins *ctx* as its dataset context and never
     touches a loaded detector's live context (the run is not the dataset the
     user is working in); cancelling the task stops it at the next detector.
 
-    The detectors are the user's AutoRun list, or the registry ids in
-    *detector_ids* when given (see :func:`plan_autorun`).  Raises
-    :class:`AutoRunUnavailable` when none of them applies to the dataset.
-    Returns the task id, which is also the run id :func:`get_autorun_run`
+    The detectors are the user's AutoFind list, or the registry ids in
+    *detector_ids* when given (see :func:`plan_autofind`).  Raises
+    :class:`AutoFindUnavailable` when none of them applies to the dataset.
+    Returns the task id, which is also the run id :func:`get_autofind_run`
     answers to.
     """
     from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
     from vtsearch.threading import spawn  # noqa: PLC0415
 
     if trigger not in TRIGGERS:
-        raise ValueError(f"Unknown AutoRun trigger {trigger!r}; expected one of {TRIGGERS}")
+        raise ValueError(f"Unknown AutoFind trigger {trigger!r}; expected one of {TRIGGERS}")
 
     snap = _dataset_snapshot(ctx)
-    plan = plan_autorun(snap, detector_ids=detector_ids)
+    plan = plan_autofind(snap, detector_ids=detector_ids)
 
     run_id, block, tracker = _open_run_task(ctx, trigger, plan.media_type)
     dataset_id = block["dataset_id"]
     n_detectors = len(plan.detectors)
-    # Picked detectors may be drafts, so they are not called AutoRun ones.
-    noun = "AutoRun detector" if detector_ids is None else "detector"
+    # Picked detectors may be drafts, so they are not called AutoFind ones.
+    noun = "AutoFind detector" if detector_ids is None else "detector"
     running_message = f"Running {n_detectors} {noun}{'s' if n_detectors != 1 else ''}…"
     tracker.update("loading", running_message, 0, n_detectors)
 
@@ -674,7 +683,7 @@ def start_autorun_task(ctx: DatasetContext, *, trigger: str, detector_ids: list[
     def run() -> None:
         try:
             with thread_dataset_context(ctx):
-                response = score_autorun(
+                response = score_autofind(
                     plan,
                     snap,
                     check_cancelled=tracker.check_cancelled,
@@ -703,21 +712,21 @@ def start_autorun_task(ctx: DatasetContext, *, trigger: str, detector_ids: list[
             }
             tracker.update(
                 "idle",
-                f"AutoRun found {total_hits} hit{'s' if total_hits != 1 else ''}",
+                f"{run_label(trigger)} found {total_hits} hit{'s' if total_hits != 1 else ''}",
                 n_detectors,
                 n_detectors,
-                autorun=summary,
+                autofind=summary,
             )
         except CancelledError:
             tracker.update("idle", "", 0, 0, error="Cancelled")
         except Exception as exc:  # noqa: BLE001 - reported on the task, never raised off a daemon thread
-            logger.exception("AutoRun on dataset %s failed", dataset_id)
-            tracker.update("idle", "", 0, 0, error=str(exc) or repr(exc) or "AutoRun failed")
+            logger.exception("AutoFind on dataset %s failed", dataset_id)
+            tracker.update("idle", "", 0, 0, error=str(exc) or repr(exc) or "AutoFind failed")
         finally:
             loading_tasks.mark_finished(run_id)
 
     # Registered before the thread starts; see ``LoadingTasksTracker.set_worker``.
-    worker = spawn(run, name=f"autorun-{run_id[len(TASK_PREFIX) :]}", start=False)
+    worker = spawn(run, name=f"autofind-{run_id[len(TASK_PREFIX) :]}", start=False)
     loading_tasks.set_worker(run_id, worker)
     worker.start()
     return run_id
@@ -740,10 +749,10 @@ def _parse_flag(raw: Any) -> bool | None:
     return text in ("1", "true", "yes", "on")
 
 
-def _autorun_after_import(ctx: DatasetContext) -> None:
-    """The load pipeline's ``post_load`` hook: start AutoRun on the new dataset.
+def _autofind_after_import(ctx: DatasetContext) -> None:
+    """The load pipeline's ``post_load`` hook: start AutoFind on the new dataset.
 
-    A user with no AutoRun detectors at all has nothing to be told, so that
+    A user with no AutoFind detectors at all has nothing to be told, so that
     starts nothing and says nothing.  One whose detectors merely don't apply to
     this dataset (another media type, or an embedder type it lacks) asked for a
     run and gets none, so the skip is reported to them with its reason
@@ -752,26 +761,26 @@ def _autorun_after_import(ctx: DatasetContext) -> None:
     from vtsearch.settings import get_autofind_detectors  # noqa: PLC0415
 
     try:
-        start_autorun_task(ctx, trigger="import")
-    except AutoRunUnavailable as exc:
+        start_autofind_task(ctx, trigger="import")
+    except AutoFindUnavailable as exc:
         if get_autofind_detectors():
             _report_skipped_run(ctx, "import", exc.message)
 
 
 def import_post_load(raw_flag: Any) -> Callable[[DatasetContext], None] | None:
-    """Resolve an import request's AutoRun choice into a load ``post_load`` hook.
+    """Resolve an import request's AutoFind choice into a load ``post_load`` hook.
 
-    *raw_flag* is the request's ``autorun`` value.  When it was sent, it is
-    remembered as the user's ``autorun_on_import`` setting - that is what the
+    *raw_flag* is the request's ``autofind`` value.  When it was sent, it is
+    remembered as the user's ``autofind_on_import`` setting - that is what the
     Add Dataset dialog's checkbox starts from next time - and decides this
     import.  When it was not (an API client that doesn't know the flag), the
-    remembered setting decides.  Returns ``None`` when AutoRun should not run.
+    remembered setting decides.  Returns ``None`` when AutoFind should not run.
     """
     from vtsearch import settings  # noqa: PLC0415
 
     choice = _parse_flag(raw_flag)
     if choice is None:
-        choice = settings.get_autorun_on_import()
-    elif choice != settings.get_autorun_on_import():
-        settings.set_autorun_on_import(choice)
-    return _autorun_after_import if choice else None
+        choice = settings.get_autofind_on_import()
+    elif choice != settings.get_autofind_on_import():
+        settings.set_autofind_on_import(choice)
+    return _autofind_after_import if choice else None

@@ -628,7 +628,7 @@ def _run_origin_load_in_background(
     recorders have finished - so the dataset row is already live, and nothing
     the hook does is billed to the load's cost model.  An exception it raises
     is logged and swallowed: the dataset is saved either way.  The app uses it
-    to start the importing user's AutoRun detectors on the new dataset.
+    to start the importing user's AutoFind detectors on the new dataset.
 
     Returns the task_id that can be used to poll progress or cancel.
     """

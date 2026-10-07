@@ -10,6 +10,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { AutoFindService } from '../../services/autofind.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediasApiService } from '../../services/medias-api.service';
@@ -33,9 +34,17 @@ import { settleZoneless } from '../../testing/settle-resource';
 describe('BrowseViewComponent (zoneless canary)', () => {
   let fixture: ComponentFixture<BrowseViewComponent>;
   let metaSubject: Subject<ProjectionMeta>;
+  let query: Record<string, string>;
+  let subsetHandoff: { datasetId: string; ids: number[] } | null;
+  let navigate: ReturnType<typeof vi.fn>;
+  let openResults: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     metaSubject = new Subject<ProjectionMeta>();
+    query = {};
+    subsetHandoff = null;
+    navigate = vi.fn(() => Promise.resolve(true));
+    openResults = vi.fn();
 
     const noop = () => {};
     const projectionStub: Partial<ProjectionApiService> = {
@@ -80,7 +89,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     });
     settingsValue.set({});
     const subsetStub: Partial<BrowseSubsetService> = {
-      take: () => null,
+      take: () => subsetHandoff,
       markReturningToFind: noop,
     };
     const mediasStub: Partial<MediasApiService> = {
@@ -89,11 +98,11 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     };
     const routeStub = {
       snapshot: {
-        queryParamMap: { get: () => null },
+        queryParamMap: { get: (key: string) => query[key] ?? null },
         paramMap: { get: () => '' },
       },
     } as unknown as ActivatedRoute;
-    const routerStub = { navigate: () => Promise.resolve(true) } as unknown as Router;
+    const routerStub = { navigate } as unknown as Router;
 
     await configureZoneless({
       imports: [BrowseViewComponent],
@@ -105,6 +114,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: DetectorsRegistryApiService, useValue: detectorsStub },
         { provide: SettingsStateService, useValue: settingsStub },
         { provide: BrowseSubsetService, useValue: subsetStub },
+        { provide: AutoFindService, useValue: { openResults } },
         { provide: MediasApiService, useValue: mediasStub },
         // ngOnInit calls MediaTypeCapabilityService.ensureLoaded(), which lazily
         // resolves this service to fetch the thumbnail-type registry. The canary
@@ -522,5 +532,48 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     // A committed (released) value clamps into [0, 1].
     component.onVolumeCommit({ target: { value: '5' } } as unknown as Event);
     expect(component.volume()).toBe(1);
+  });
+
+  describe("a Find run's results (#4615)", () => {
+    beforeEach(() => {
+      query = { subset: '1', from: 'results', run: '_autofind_7' };
+      subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
+    });
+
+    it('goes Back to the Dashboard and reopens those results, not to Test', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      expect(component.subset).toBe(true);
+      expect(component.resultsRunId).toBe('_autofind_7');
+      expect(component.backTarget).toBe('Find Results');
+
+      component.back();
+      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
+      await Promise.resolve();
+      expect(openResults).toHaveBeenCalledWith('_autofind_7');
+    });
+
+    it('offers no verify actions and counts items, not positives', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      expect(component.countNoun).toBe('items');
+      expect(component.canVerify).toBe(false);
+    });
+
+    it('says how to rebuild an expired map from the results', async () => {
+      subsetHandoff = null;
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.errorMessage()).toContain('Open the Find results again');
+    });
+
+    it('keeps Back to Test for a Test-view subset', async () => {
+      query = { subset: '1' };
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      expect(component.resultsRunId).toBe('');
+      expect(component.backTarget).toBe('Test');
+      expect(component.countNoun).toBe('positives');
+      expect(component.canVerify).toBe(true);
+    });
   });
 });

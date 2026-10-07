@@ -2,59 +2,59 @@
 
 Once you trust a detector, you may want it run over every new batch of
 pictures without opening VTSearch at all: a nightly job over the day's
-uploads, say. Put the detector on the **AutoRun** tab, and one command scores
-a folder with every AutoRun detector and saves the matches to a file.
+uploads, say. Put the detector on the **AutoFind** tab, and one command scores
+a folder with every AutoFind detector and saves the matches to a file.
 
 This page uses the `Yellow Smileys` detector and the `drawings-new` folder
 from [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search).
 The command runs on the server VTSearch is installed on. The red numbers in
 each screenshot show where to click, in order.
 
-## Step 1: Move the detector to AutoRun
+## Step 1: Move the detector to AutoFind
 
 On the dashboard:
 
 1. Click the **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-overflow.dark.webp" /><img src="../assets/icon-overflow.light.webp" alt="The ⋯ row menu" height="24" /></picture> at the end of the detector's row (`Yellow Smileys`).
-2. Click **Move to AutoRun**.
+2. Click **Move to AutoFind**.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../assets/autorun-menu.dark.webp" />
-  <img src="../assets/autorun-menu.light.webp" alt="Step 1: (1) the detector's ⋯ menu, then (2) Move to AutoRun" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/autofind-menu.dark.webp" />
+  <img src="../assets/autofind-menu.light.webp" alt="Step 1: (1) the detector's ⋯ menu, then (2) Move to AutoFind" width="720" />
 </picture>
 
 The detector moves from the **Drafts** tab of the **Detectors** card to the
-**AutoRun** tab:
+**AutoFind** tab:
 
-1. Click **AutoRun** to see it. The number beside the tab counts the
+1. Click **AutoFind** to see it. The number beside the tab counts the
    detectors on it.
 2. The detector's row is there, without the rename pencil and **Delete**.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../assets/autorun-tab.dark.webp" />
-  <img src="../assets/autorun-tab.light.webp" alt="Step 1: (1) the AutoRun tab, (2) the detector now on it" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/autofind-tab.dark.webp" />
+  <img src="../assets/autofind-tab.light.webp" alt="Step 1: (1) the AutoFind tab, (2) the detector now on it" width="720" />
 </picture>
 
-An AutoRun detector is *frozen*: it can't be renamed, deleted, trained or
+An AutoFind detector is *frozen*: it can't be renamed, deleted, trained or
 given more labels, so what runs unattended is exactly what you tested. It can
 still be tested with **Test** and run with **Find**, and its **⋯** menu keeps
 **Browse positives**, **Export labels** and **Stats**. To change it, choose
 **Move to Drafts** from the same menu, change it, and move it back.
 
-Each person on a shared server has their own AutoRun list.
+Each person on a shared server has their own AutoFind list.
 
 ## Step 2: Choose where results go (optional)
 
 The command can name a destination for its results itself (Step 3). To set
 one it uses when it doesn't, click Settings <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-settings.dark.webp" /><img src="../assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture>, then:
 
-1. Click **Auto-Find**.
+1. Click **AutoFind**.
 2. Under **Results Exporter**, pick a destination: here **Server CSV File**.
 3. Fill in its form: here, the path of the file on the server.
 4. Click **Done**. Settings save as you change them.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../assets/autorun-settings.dark.webp" />
-  <img src="../assets/autorun-settings.light.webp" alt="Step 2: in Settings, (1) Auto-Find, (2) a Results Exporter, (3) its settings, then (4) Done" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/autofind-settings.dark.webp" />
+  <img src="../assets/autofind-settings.light.webp" alt="Step 2: in Settings, (1) AutoFind, (2) a Results Exporter, (3) its settings, then (4) Done" width="720" />
 </picture>
 
 ## Step 3: Run the command
@@ -72,7 +72,7 @@ python app.py --autodetect --importer server_folder --path /data/drawings-new \
 - `--exporter server_csv_file --filepath hits.csv` is where the matches go.
   Leave both out to use the destination from Step 2; with neither, the
   matches are printed.
-- Every detector on the **AutoRun** tab that works on images is run. On a
+- Every detector on the **AutoFind** tab that works on images is run. On a
   server where people log in, add `--user` and `--api-key` to run a
   particular person's list; without them, the command runs the list of the
   built-in default user, which is the one you edit on a server without
@@ -99,8 +99,8 @@ it. The rest of the command's options are in `docs/CLI.md`.
 
 ## Where next
 
-- [Running AutoRun on a new dataset](../USER_GUIDE.md#running-autorun-on-a-new-dataset),
+- [Running AutoFind on a new dataset](../USER_GUIDE.md#running-autofind-on-a-new-dataset),
   in the user guide, for the same detectors inside VTSearch: they run on each
-  dataset you import, and a dataset's **⋯** menu has **Run AutoRun**.
+  dataset you import, and a dataset's **⋯** menu has **Run AutoFind**.
 - [Dashboard: managing datasets and detectors](../USER_GUIDE.md#dashboard-managing-datasets-and-detectors),
-  in the user guide, on the **Drafts** and **AutoRun** tabs.
+  in the user guide, on the **Drafts** and **AutoFind** tabs.

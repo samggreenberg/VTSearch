@@ -4,7 +4,7 @@ Settings are split across two tiers:
 
 * **Server tier** - shared, single-file settings used to bring the
   process up: dataset/detector directories, concurrency limits, the
-  autoload-embedder / Auto-Find detector lists. Stored in
+  autoload-embedder / AutoFind detector lists. Stored in
   ``data/settings.json`` (path = :data:`SETTINGS_PATH`). Loaded once at
   startup, before any user has logged in.
 * **Per-user tier** - every other key (preferences, autopilot config,
@@ -132,7 +132,7 @@ if TYPE_CHECKING:
     def get_default_settings_source() -> dict[str, Any] | None: ...
     def set_default_settings_source(value: dict[str, Any] | None) -> None: ...
 
-    # Auto-Find run configuration. ``autofind_detectors`` is absent here on
+    # AutoFind run configuration. ``autofind_detectors`` is absent here on
     # purpose: it is one of the three ``_SKIP_AUTOGEN`` keys with a
     # hand-written ``def`` further down, so it resolves without a stub (as do
     # ``saved_datasets_dir`` / ``detectors_dir``).
@@ -140,8 +140,8 @@ if TYPE_CHECKING:
     def set_autofind_exporter(value: str) -> None: ...
     def get_autofind_exporter_field_values() -> dict[str, dict[str, str]]: ...
     def set_autofind_exporter_field_values(value: dict[str, dict[str, str]]) -> None: ...
-    def get_autorun_on_import() -> bool: ...
-    def set_autorun_on_import(value: bool) -> None: ...
+    def get_autofind_on_import() -> bool: ...
+    def set_autofind_on_import(value: bool) -> None: ...
 
     # Client-only view prefs: the backend stores and echoes these, but no
     # Python code reads them - the VTSBrowse bin-details panel and bin popup
@@ -271,7 +271,7 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 
 #: Per-user keys for which the built-in "default" user reads through to the
 #: *server* settings file when the key is absent from its own per-user file.
-#: These are the Auto-Find knobs: per-user in multi-user deployments, but the
+#: These are the AutoFind knobs: per-user in multi-user deployments, but the
 #: single-user GUI (everyone is "default") and the CLI ``--settings`` flat file
 #: still expect a value placed in ``settings.json`` to take effect. The
 #: read-through (see :func:`_read_value`) is what makes that documented
@@ -478,7 +478,7 @@ def _read_value(key: str) -> Any:
     username = get_current_user()
     _ensure_user_loaded(username)
     # Default-user read-through: the single-user GUI and the CLI ``--settings``
-    # flat file carry these Auto-Find keys in the server settings file. Honor
+    # flat file carry these AutoFind keys in the server settings file. Honor
     # them for the built-in "default" user when not set in its own file, so
     # those workflows keep working without making the setting truly server-wide.
     # ``_ensure_user_loaded`` already loaded the server tier, so this is a
@@ -615,10 +615,10 @@ def get_all() -> dict[str, Any]:
     result["focus_mode_right"] = get_focus_mode_right()
     result["panel_pct_left"] = get_panel_pct_left()
     result["panel_pct_right"] = get_panel_pct_right()
-    # Auto-Find keys go through their accessors so the default-user read-through
+    # AutoFind keys go through their accessors so the default-user read-through
     # (and per-user isolation for named users) is applied consistently: the
     # plain ``result.update(server_copy)`` above would otherwise leak the
-    # server file's Auto-Find list to every named user, not just "default".
+    # server file's AutoFind list to every named user, not just "default".
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()
@@ -719,7 +719,7 @@ def _sanitize_tier(data: dict[str, Any], tier: str) -> dict[str, Any]:
       operator's real value.
 
     The reverse direction is deliberately *not* dropped: per-user keys in the
-    server file are the documented Auto-Find read-through (see
+    server file are the documented AutoFind read-through (see
     :data:`_DEFAULT_USER_FALLBACK_KEYS`), so those keys are kept - but checked
     against ``UserSettings``, the model that will actually read them, so the
     tier exception is not a hole in the value check. Unknown keys are
@@ -736,7 +736,7 @@ def _sanitize_tier(data: dict[str, Any], tier: str) -> dict[str, Any]:
     for key, value in data.items():
         if key in drop_wrong_tier:
             continue
-        # The Auto-Find trio is read out of the server file by the "default"
+        # The AutoFind trio is read out of the server file by the "default"
         # user, so validate it there against the model that owns it.
         against = UserSettings if server_tier and key in _DEFAULT_USER_FALLBACK_KEYS else model
         if key in against.model_fields:
@@ -1311,7 +1311,7 @@ def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> Non
 
 
 def get_autofind_detectors() -> list[str]:
-    """Return the current user's list of detector names flagged for Auto-Find.
+    """Return the current user's list of detector names flagged for AutoFind.
 
     Each name maps to a JSON file under ``data/detectors/``; scoring resolves
     the labelset's origins, re-embeds, trains an MLP, and applies it to the
@@ -1323,17 +1323,17 @@ def get_autofind_detectors() -> list[str]:
 
 
 def validate_autofind_detectors(value: list[str]) -> list[str]:
-    """Return the deduped Auto-Find detector list, without persisting it."""
+    """Return the deduped AutoFind detector list, without persisting it."""
     return list(dict.fromkeys(value))  # dedupe, preserve order
 
 
 def set_autofind_detectors(value: list[str]) -> None:
-    """Set and persist the current user's full Auto-Find detector list."""
+    """Set and persist the current user's full AutoFind detector list."""
     _write_value("autofind_detectors", validate_autofind_detectors(value))
 
 
 def add_autofind_detector(name: str) -> None:
-    """Add a detector name to the current user's Auto-Find list (idempotent).
+    """Add a detector name to the current user's AutoFind list (idempotent).
 
     Atomic per-user read-modify-write: ``mutate_user`` re-reads the on-disk
     file under the cross-process lock, so a concurrent writer's entry is
@@ -1351,7 +1351,7 @@ def add_autofind_detector(name: str) -> None:
 
 
 def remove_autofind_detector(name: str) -> bool:
-    """Remove a detector name from the current user's Auto-Find list.
+    """Remove a detector name from the current user's AutoFind list.
 
     Returns ``True`` if the name was present (pre-read). Atomic per-user RMW,
     same merge semantics as :func:`add_autofind_detector`.
@@ -1368,7 +1368,7 @@ def remove_autofind_detector(name: str) -> bool:
 
 
 def is_autofind_detector(name: str) -> bool:
-    """Check whether a detector name is in the Auto-Find list."""
+    """Check whether a detector name is in the AutoFind list."""
     return name in get_autofind_detectors()
 
 

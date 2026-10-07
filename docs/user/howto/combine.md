@@ -67,7 +67,7 @@ Where the detectors disagree about a picture (one said **Good**, the other
 **Bad**), that picture is left out of the new detector, as the window says.
 The new detector lands on the **Drafts** tab, ready to train or run.
 
-Detectors on the **AutoRun** tab can't be combined; move them to **Drafts**
+Detectors on the **AutoFind** tab can't be combined; move them to **Drafts**
 first (their **⋯** menu, **Move to Drafts**).
 
 ## Where next

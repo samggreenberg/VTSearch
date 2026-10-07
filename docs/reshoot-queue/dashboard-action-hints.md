@@ -6,7 +6,7 @@
 - `step-new-detector` — and behind the New Detector step
 - `step-train` — the Dashboard behind the Train step
 - `step-find` — and behind the Test step
-- `autorun-menu` — the Dashboard behind the detector's ⋯ menu
-- `autorun-tab` — a ticked AutoRun detector greys Train with *Frozen: move to Drafts to retrain*
+- `autofind-menu` — the Dashboard behind the detector's ⋯ menu
+- `autofind-tab` — a ticked AutoRun detector greys Train with *Frozen: move to Drafts to retrain*
 - `combine-datasets-tick` — with two datasets ticked, Test is now greyed out with *Select exactly 1 dataset*
 - `import-progress` — the Dashboard under an import's progress row

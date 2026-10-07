@@ -153,7 +153,7 @@ export interface Shot {
   recipe: (page: Page, h: Helpers) => Promise<void>;
   /**
    * Undo whatever the recipe changed in the app to reach its frame (items
-   * verified in Find, a moved balance, a detector moved to AutoRun). Runs
+   * verified in Find, a moved balance, a detector moved to AutoFind). Runs
    * after the capture, pass or fail, so no later shot inherits the change.
    * A recipe that only *poses* the app — a form filled in but not submitted,
    * a menu opened — needs none.
@@ -461,8 +461,8 @@ async function tickOnly(page: Page, h: Helpers, tag: string, names: string[]): P
   await h.wait(400);
 }
 
-/** Put the example's detector on (or back off) the AutoRun tab, through the API. */
-async function setAutoRun(h: Helpers, on: boolean): Promise<void> {
+/** Put the example's detector on (or back off) the AutoFind tab, through the API. */
+async function setAutoFind(h: Helpers, on: boolean): Promise<void> {
   const det = h.app.named(await h.app.detectors(), DETECTOR);
   await h.app.api(`/api/detectors/registry/${det.id}/autofind`, { method: 'PUT', body: { autofind: on } });
 }
@@ -587,7 +587,7 @@ async function openTest(page: Page, h: Helpers): Promise<void> {
   await h.selectDatasetRow(TEST_DATASET);
   await h.selectDetectorRow(DETECTOR);
   // Test scores every item, then opens the three-pane view on Autopilot.
-  // (Not Find: since #4525 that button runs AutoRun and opens no view.)
+  // (Not Find: since #4525 that button runs AutoFind and opens no view.)
   await page.getByRole('button', { name: 'Test', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
@@ -1887,15 +1887,15 @@ export const SHOTS: Shot[] = [
     },
   },
 
-  // autorun-from-the-command-line.md
+  // autofind-from-the-command-line.md
   {
-    id: 'autorun-menu',
-    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-1-move-the-detector-to-autorun`,
-    caption: "Step 1: (1) the detector's ⋯ menu, then (2) Move to AutoRun",
+    id: 'autofind-menu',
+    embeddedIn: `${HOWTO}/autofind-from-the-command-line.md#step-1-move-the-detector-to-autofind`,
+    caption: "Step 1: (1) the detector's ⋯ menu, then (2) Move to AutoFind",
     themes: BOTH,
     annotations: [
       { target: detectorRow(DETECTOR), kind: 'step', step: 1 },
-      { target: { selector: '.context-menu .menu-item', hasText: 'Move to AutoRun' }, kind: 'step', step: 2, at: 'right' },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Move to AutoFind' }, kind: 'step', step: 2, at: 'right' },
     ],
     async recipe(page, h) {
       await cleanDashboard(page, h);
@@ -1903,31 +1903,31 @@ export const SHOTS: Shot[] = [
     },
   },
   {
-    id: 'autorun-tab',
-    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-1-move-the-detector-to-autorun`,
-    caption: 'Step 1: (1) the AutoRun tab, (2) the detector now on it',
+    id: 'autofind-tab',
+    embeddedIn: `${HOWTO}/autofind-from-the-command-line.md#step-1-move-the-detector-to-autofind`,
+    caption: 'Step 1: (1) the AutoFind tab, (2) the detector now on it',
     themes: BOTH,
     annotations: [
-      { target: { selector: '.detector-tab-bar .tab', hasText: 'AutoRun' }, kind: 'step', step: 1, at: 'top' },
+      { target: { selector: '.detector-tab-bar .tab', hasText: 'AutoFind' }, kind: 'step', step: 1, at: 'top' },
       { target: detectorRow(DETECTOR), kind: 'step', step: 2 },
     ],
     async recipe(page, h) {
-      await setAutoRun(h, true);
+      await setAutoFind(h, true);
       await cleanDashboard(page, h);
-      await page.locator('.detector-tab-bar .tab', { hasText: 'AutoRun' }).first().click();
+      await page.locator('.detector-tab-bar .tab', { hasText: 'AutoFind' }).first().click();
       await page.locator('tr[vt-detector-card]').first().waitFor({ timeout: 10000 });
       await page.mouse.move(700, 60);
       await h.wait(700);
     },
-    after: async (_page, h) => setAutoRun(h, false),
+    after: async (_page, h) => setAutoFind(h, false),
   },
   {
-    id: 'autorun-settings',
-    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-2-choose-where-results-go-optional`,
-    caption: 'Step 2: in Settings, (1) Auto-Find, (2) a Results Exporter, (3) its settings, then (4) Done',
+    id: 'autofind-settings',
+    embeddedIn: `${HOWTO}/autofind-from-the-command-line.md#step-2-choose-where-results-go-optional`,
+    caption: 'Step 2: in Settings, (1) AutoFind, (2) a Results Exporter, (3) its settings, then (4) Done',
     themes: BOTH,
     annotations: [
-      { target: { selector: '.side-tab', hasText: 'Auto-Find' }, kind: 'step', step: 1 },
+      { target: { selector: '.side-tab', hasText: 'AutoFind' }, kind: 'step', step: 1 },
       // Below the tab, not above: above it the marker lands on the pane's hint text.
       { target: { selector: '.view-tab', hasText: 'Server CSV File' }, kind: 'step', step: 2, at: 'bottom' },
       { target: '#autofind-filepath', kind: 'step', step: 3 },
@@ -1936,7 +1936,7 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await h.dashboard();
       await h.openSettings();
-      await page.locator('.side-tab', { hasText: 'Auto-Find' }).first().click();
+      await page.locator('.side-tab', { hasText: 'AutoFind' }).first().click();
       await page.locator('.view-tab', { hasText: 'Server CSV File' }).first().click();
       await page.waitForSelector('#autofind-filepath', { timeout: 10000 });
       await h.wait(700);

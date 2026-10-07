@@ -2,7 +2,7 @@
 
 The Flask-free command-line entry points for VTSearch's autodetect
 workflow: load a dataset (from pickle or via an importer), train each
-Auto-Find detector against it, score every media, and hand the results
+AutoFind detector against it, score every media, and hand the results
 to an exporter. Three modules cooperate - `vtscore.cli` is the
 imperative pipeline (four entry-point functions plus helpers),
 `vtscore.cli_pipeline` parses YAML pipeline files into the same call
@@ -143,7 +143,7 @@ def autodetect_importer_main_chunked(
   never modified). The app's `--import-labels-into NAME` passes `[NAME]`,
   and the pipeline YAML passes its `detectors:` list (or, without one,
   `[import_labels.detector]`). The dry-run plan lists these instead of the
-  Auto-Find list.
+  AutoFind list.
 - **Default exporter**: when `exporter_name` is `None`, the settings
   file's `autofind_exporter` (with its saved field values) is used;
   if that is unset too, `"gui"` (prints to stdout).
@@ -201,7 +201,7 @@ Source:
   Chunk size: whole dataset
 
 Settings: data/settings.json
-Auto-Find detectors (1):
+AutoFind detectors (1):
   - my-detector  [media_type=audio, labels=42, file=data/detectors/my-detector.json]
 
 Exporter: server_json_file
@@ -267,7 +267,7 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
    exporter a header plus a lazy `(detector_name, hit)` iterator via
    `export_cli_streaming`.
 4. Otherwise iterate the source chunk by chunk. On the first non-empty
-   chunk, train each Auto-Find (or `override_detectors`) detector via
+   chunk, train each AutoFind (or `override_detectors`) detector via
    `_load_and_train_detectors`. A detector whose `media_type` has no
    direct or one-hop converter route from the dataset's types is
    *skipped* with a `detector_skipped` event; one whose

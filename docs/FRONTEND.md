@@ -293,8 +293,13 @@ It was called Find until #4525 renamed it, and its code keeps that name, as
 the Train view's is `label`: `FindViewComponent`, `panelMode: 'find'`,
 `VoteStateService.findMode`, and on the API side `/api/find-label`,
 `find_mode` and the `find` SSE channel. **Find** is now the Dashboard's third
-button, which opens no view: it starts a background AutoRun per ticked
-dataset (`DashboardComponent.onAutorun`, `AutoRunService`).
+button, which opens no view: it starts a background AutoFind run per ticked
+dataset with the ticked detectors (`DashboardComponent.onAutofind`,
+`AutoFindService.find`), and the Find Results dialog opens as they land. The
+dialog's **Browse** lays the listed items out in Browse through the same
+`BrowseSubsetPrepService` the Test view's Browse uses, with an origin
+(`?from=results&run=…`) that sends Browse's Back to those results instead of
+to Test.
 
 Scores the active pair's dataset with its detector (`POST /api/find-label`)
 and opens on two tabs in the left panel (`findTab`, owned by the view since
@@ -335,7 +340,7 @@ Browser, and clears it with the pair state.
   piles: the F-beta headline, the Right and Found ranges with their lights,
   the band-resolution precision curve (which replaces the retired Stats
   modal's *Checked by you* curve), the picks by band, and at Done the
-  verdict with its three exits (**Move to AutoRun**, which sets the
+  verdict with its three exits (**Move to AutoFind**, which sets the
   detector's autofind flag and heads to the Dashboard; **Lean the
   Threshold**, the per-preset table the server prices from the same picks,
   whose click is the control's own balance pick; **Add Corrections and
@@ -354,7 +359,7 @@ Browser, and clears it with the pair state.
   forget button: a retrain marks the verdict stale and a changed ranking
   deals a fresh test, so nothing is owed to the user there
   (`/api/line-test/forget` is the screenshot harness's reset). The two readers of the kept verdicts are the
-  detector Stats modal's *Tested on* section and the AutoRun tab's
+  detector Stats modal's *Tested on* section and the AutoFind tab's
   `vt-detector-card`, which shows its row's `test_verdict` under the name;
   both word it through `verdictLine` / `verdictTitle` in `utils/line-test.ts`.
 
@@ -433,7 +438,7 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
-| `AutoRunService` | The end of a background AutoRun: opens the results of a run this tab started (a dataset's ⋯ **Run AutoRun**, or the Dashboard's big **Find** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, or one that landed while the dialog was open) with a **View results** action, and holds the run the app-root AutoRun Results dialog shows |
+| `AutoFindService` | The end of a background AutoFind: opens the results of a Find this tab started (the Dashboard's big **Find** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, a dataset's ⋯ **Run AutoFind**, or a Find that landed while the dialog was open) with a **View results** action, and holds the run the app-root Find Results dialog shows. AutoFind is the unattended path and never opens the dialog on its own (#4615) |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
@@ -866,13 +871,13 @@ without the stack one keypress closed them all and lost the outer form.
   including the canonical markup and the persistent-tab exception, is in
   [`CLAUDE.md`](../CLAUDE.md) under "Nested-modal back buttons".
 - **Plugin-field forms preview their template variables.** A modal that builds
-  a form from a plugin's `fields` (Export, AutoRun Results) seeds each
+  a form from a plugin's `fields` (Export, Find Results) seeds each
   value through `PluginTemplateVarsService`, which resolves the *declared*
   `template_vars` — `{detector_name}`, `{username}`, the date parts — so the
   user sees and can edit the value the server would substitute rather than a
   raw placeholder (issue #3199). Only declared names are touched, and anything
   unresolvable stays templated for the server. Never do this in a form whose
-  values are **persisted** (Auto-Find's saved exporter fields, a labelset-sync
+  values are **persisted** (AutoFind's saved exporter fields, a labelset-sync
   source): those templates are meant to re-resolve on every later run. See
   `utils/plugin-template-vars.ts`.
 

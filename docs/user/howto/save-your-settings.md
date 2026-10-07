@@ -1,6 +1,6 @@
 # Save and restore your settings
 
-Your settings (theme, Autopilot's numbers, import defaults, your **AutoRun**
+Your settings (theme, Autopilot's numbers, import defaults, your **AutoFind**
 list and more) can be saved to a file and loaded again: to keep a copy before
 you experiment, to set up a second server the way you like it, or to hand a
 colleague your setup.
@@ -45,13 +45,13 @@ Then click **Import**. A line says how many settings were loaded, then the
 window closes and your settings reload.
 
 Only settings VTSearch recognises are loaded; anything else in the file is
-ignored. Importing replaces your **AutoRun** list if the file has one.
+ignored. Importing replaces your **AutoFind** list if the file has one.
 
 ## What is in the file
 
 Your own settings: everything under **Appearance**, **Autopilot**,
-**Browser**, **Import Defaults**, **Sorting** and **Auto-Find**, your
-**AutoRun** list, and remembered layout such as panel widths.
+**Browser**, **Import Defaults**, **Sorting** and **AutoFind**, your
+**AutoFind** list, and remembered layout such as panel widths.
 
 Not in it: the **Server** tab's settings, which belong to the server and
 everyone on it, and your HuggingFace sign-in.

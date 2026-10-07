@@ -122,7 +122,7 @@ def resolve_or_train_detector(
     :func:`~vtscore.concurrency.progress.update_find_progress` signature:
     ``status, message, current=, total=, step=, total_steps=``); ``None`` keeps
     the historical sink, the shared Find tracker.  A caller scoring off to the
-    side of Find - the app's background AutoRun - passes its own task's sink so
+    side of Find - the app's background AutoFind - passes its own task's sink so
     a cold train does not paint the Find bar, or leave it "running", behind a
     user who never asked for a Find.
 
@@ -147,7 +147,7 @@ def resolve_or_train_detector(
 
     det_ctx = get_detector_context(detector_id) if use_loaded_context else None
     if det_ctx is not None:
-        # Defense against H5: scoring Auto-Find detectors iterates contexts
+        # Defense against H5: scoring AutoFind detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
         # have invalidated their stale MLPs.  Drop them here so the next
         # branch trains fresh against the detector's primary.  The keying
@@ -178,7 +178,7 @@ def resolve_or_train_detector(
         total_steps=progress_total_steps,
     )
 
-    # A never-loaded detector (the Auto-Find and portable-export cases) has no
+    # A never-loaded detector (the AutoFind and portable-export cases) has no
     # context to train against, so it gets a throwaway one.  ``detector_id`` is
     # deliberately left empty on it: ``populate_label_embeddings`` ends by
     # calling ``record_detector_embedder`` to persist the space it embedded in,

@@ -257,7 +257,7 @@ class TestAutodetectWiring:
         assert args[1] == "s.json"
 
     def test_no_label_import_keeps_autofind_list(self, monkeypatch):
-        """Without --import-labels-into the settings' Auto-Find list decides."""
+        """Without --import-labels-into the settings' AutoFind list decides."""
         rec = _AutodetectRecorder(monkeypatch)
         _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl"])
         _, kwargs = rec.calls["autodetect_main"]
@@ -456,7 +456,7 @@ class TestImportLabels:
 
     def test_import_labels_into_overrides_autofind_detectors(self, monkeypatch):
         """Issue #4235: the detector labels are imported into is the one the
-        run scores with, in place of the settings' Auto-Find list."""
+        run scores with, in place of the settings' AutoFind list."""
         rec = _AutodetectRecorder(monkeypatch)
         import vtscore.cli as vtcli
 
