@@ -221,7 +221,7 @@ the reveals go:
 
 ![bg fit](figs/calib-xcal-flow.png)
 
-## Grading Your<br>Own Homework
+## Grade My Own<br>Homework
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 

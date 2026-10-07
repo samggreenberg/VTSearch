@@ -17,7 +17,7 @@ no extra training and cannot move the fold models, the splits or the head.
 
 The rules, in the deck's order:
 
-* ``xcal_mincost`` - **iteration 1, as the "Grading Your Own Homework" slide
+* ``xcal_mincost`` - **iteration 1, as the "Grade My Own Homework" slide
   draws it.**  Each fold model's cost-minimising cut on its own held-out votes,
   averaged in score space and handed to the final model.  This is the rule of
   commit ``b5033a152`` (2026-02-16) - ``>=`` at an observed score, ties broken
