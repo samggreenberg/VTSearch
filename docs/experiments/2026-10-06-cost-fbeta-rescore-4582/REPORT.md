@@ -4,7 +4,7 @@
 carries the withheld half's precision and recall at that step's threshold, so the F-beta of the returned set
 at the app's three presets can be computed from the same rows. This report re-reads what survives of each
 study, checks that it reproduces the report's own Δcost, and then replaces cost with F-beta.
-Part of #4581; the plan (`cost-to-fbeta`, under the plans directory) arrives with PR #4587.
+Part of #4581; the plan is the cost-to-fbeta plan that PR #4587 adds.
 
 **What the threshold is.** A Cost-era row's precision and recall were measured above the line *that arm drew
 in that era* (the mixture midpoint, the blend, the fused cut), not today's labels line (#4452). So every
