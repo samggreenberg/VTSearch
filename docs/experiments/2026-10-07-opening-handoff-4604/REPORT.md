@@ -1,6 +1,12 @@
 # Showing a detector during Autopilot's opening (issue #4604)
 
-**Status (2026-10-07): priced offline, nothing shipped.** The app shows the typed query's returned set until
+**Status (2026-10-07): priced offline, nothing shipped.**
+
+**Ruling (owner, 2026-10-07): per path and preset**, after the 1% check below agreed.
+- Once the app has a detector during the opening (#4508's background retrain), it shows it from the end of the Bad phase on Region Photo at every preset and on Binary Photo at beta 1/4.
+- Binary Photo at beta 1 and 4 keeps today's hand-off at Hard.
+
+The app shows the typed query's returned set until
 Autopilot reaches its Hard phase, at click 39 in the median Binary Photo run and 36 in the median Region Photo run (#4605). The harness
 trains a detector at every click of the opening anyway, and scores its line on the withheld half. Suppose the app
 showed that detector from the end of the opening's Bad phase: 3 Goods and 4 Bads, which is click 7 in the median run.
