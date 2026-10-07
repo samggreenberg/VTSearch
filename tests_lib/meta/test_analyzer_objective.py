@@ -187,14 +187,23 @@ def _payload(path: Path) -> dict:
     return json.loads(m.group(1))
 
 
-@pytest.mark.parametrize(("beta", "opens_on"), [(1.0, "fbeta"), (None, None)], ids=("balance", "no-balance"))
-def test_the_viewer_opens_on_the_objective_on_a_balance_run(tmp_path, beta, opens_on):
+@pytest.mark.parametrize("beta", [1.0, None], ids=("balance", "no-balance"))
+def test_the_viewer_leaves_a_run_with_f1_to_the_page_default(tmp_path, beta):
+    """The page itself opens on F1 (#4635), so the payload names no metric."""
     viewer = _load("viewer")
     out = viewer.build_viewer(_frame(beta), tmp_path / "viewer.html", arms=["prod"])
     payload = _payload(out)
-    assert payload.get("view", {}).get("metric") == opens_on
+    assert "metric" not in payload.get("view", {})
     keys = [m["key"] for m in payload["metrics"]]
+    assert viewer.DEFAULT_METRIC in keys
     assert ("fbeta" in keys) is (beta is not None)
+
+
+@pytest.mark.parametrize(("beta", "opens_on"), [(1.0, "fbeta"), (None, None)], ids=("balance", "no-balance"))
+def test_the_viewer_opens_on_the_objective_on_a_balance_run_without_f1(tmp_path, beta, opens_on):
+    viewer = _load("viewer")
+    out = viewer.build_viewer(_frame(beta), tmp_path / "viewer.html", arms=["prod"], hide_metrics=["f1"])
+    assert _payload(out).get("view", {}).get("metric") == opens_on
 
 
 def test_the_viewer_still_opens_where_the_study_says(tmp_path):
