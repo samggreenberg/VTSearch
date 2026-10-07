@@ -814,6 +814,14 @@ def main() -> int:  # noqa: C901
             "...and says when the gaps were carried",
             "P.gaps_filled" in re.sub(r'<script id="payload".*?</script>', "", html, flags=re.S),
         )
+        # The page's own default (#4635) lives in the template, where a plain
+        # reskin carries it to every committed page; the builder leans on it to
+        # leave the view empty, so the two must name the same metric.
+        shell = re.sub(r'<script id="payload".*?</script>', "", html, flags=re.S)
+        ok &= _check(
+            "the template opens on the builder's DEFAULT_METRIC when the view names none",
+            f'const OPEN_ON = "{V.DEFAULT_METRIC}";' in shell and "metric" not in P.get("view", {}),
+        )
 
         def refuses(label: str, **kw) -> bool:
             try:

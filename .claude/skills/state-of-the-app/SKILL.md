@@ -384,9 +384,9 @@ things keep a report on its link:
   deliberate side-report (the per-floor control is the one today).
 - **The viewer.** Commit `viewer.html` beside `REPORT.md`. `analyze.sh` already
   writes it to `analysis-<path>/viewer.html`; for the per-preset sessions take
-  the beta-1 run's, the app's default arm. It opens on AP and does not offer
-  cost (#4576); a page built before that gets both from
-  `viewer.py --reskin <page> --default-metric average_precision --hide-metrics cost`.
+  the beta-1 run's, the app's default arm. It opens on F1 (#4635) and does not
+  offer cost (#4576); a page built before that gets both from
+  `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's
   rounds (#4624): a run inside a prompted check is scored once per round of
   picks, and a mean over "the runs with a row at this click" skipped it between
