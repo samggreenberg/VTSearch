@@ -20,7 +20,8 @@ full-label ceiling pass shared by the three.
   Autopilot's opening and shows a detector only from the Hard phase on (`app_trained`). The first version
   scored the detectors the harness trains during the opening, which no user sees. Every number before a
   session's hand-off is now the typed query's own set at #4136's guarded line. The votes and every number after
-  the check are unchanged. The objective at 25 clicks moved from 0.43/0.34/0.42 to 0.32/0.32/0.47.
+  the check are unchanged. The objective at 25 clicks moved from 0.43/0.34/0.42 to 0.32/0.32/0.47. The AP at 150 moved too, for the sessions still in the opening at click 150: by 0.01 at small, and in a few
+  classes (#4552 caught these).
 
 A **review**, not an experiment: the app as it ships, the way a user meets it.
 - **The session.** The user types a query and sees the text sort, then votes for 150 clicks while Autopilot picks
@@ -168,7 +169,7 @@ in `new` or `done`. Priced against the same sessions without it (#4496, round 2)
 |---|---:|---:|---:|---:|---:|---:|
 | large (49) | 0.77 | 45 | 0.70 | 0.80 | 0.82 | 30 |
 | medium (49) | 0.49 | 41 | 0.38 | 0.50 | 0.51 | 22 |
-| small (46) | 0.29 | 39 | 0.16 | 0.25 | 0.30 | 11 |
+| small (46) | 0.29 | 39 | 0.16 | 0.24 | 0.30 | 11 |
 
 ![Every class x band](figures/per_cell.png)
 
@@ -194,7 +195,7 @@ in `new` or `done`. Priced against the same sessions without it (#4496, round 2)
 | knife | 0.20 | 32 | 0.08 | 0.20 | 0.30 | loop |
 | enclosed road vehicle | 0.22 | 75 | 0.15 | 0.22 | 0.24 | embedding |
 | bench | 0.26 | 36 | 0.24 | 0.25 | 0.26 | embedding |
-| bottle | 0.27 | 45 | 0.16 | 0.27 | 0.30 | mixed |
+| bottle | 0.27 | 45 | 0.16 | 0.26 | 0.30 | mixed |
 | book | 0.28 | 38 | 0.25 | 0.29 | 0.33 | embedding |
 | fork | 0.30 | 55 | 0.15 | 0.26 | 0.33 | mixed |
 
@@ -225,15 +226,15 @@ the last two reviews: the data has not changed, and neither has the embedding.
 
 ## Headroom (full labels minus 150 clicks)
 
-The mean is 0.03 (0.55 − 0.52). It concentrates in a few classes: person (0.13), knife (0.11), bowl (0.10),
-spoon (0.09), chair (0.09), keyboard (0.09) and laptop (0.08). Skis, airplane and baseball bat sit at or above
+The mean is 0.03 (0.55 − 0.52). It concentrates in a few classes: person (0.15), knife (0.11), keyboard and bowl
+(0.10), spoon and chair (0.09) and microwave (0.08). Skis, airplane and baseball bat sit at or above
 their ceiling: a head trained on 150 chosen labels can match one trained on every label when the extra labels
 are noisy.
 
 ## What the clicks bought (150 clicks minus text only)
 
-The mean is +0.10 AP (0.42 → 0.52). Person gains the most, +0.36 (0.10 → 0.47): the typed query ranks it badly and
-clicks rescue it. Skis gains +0.30, and dog and sink +0.24 each. Chair loses 0.01. Bag or luggage, bench and
+The mean is +0.10 AP (0.42 → 0.52). Person gains the most, +0.34 (0.10 → 0.45): the typed query ranks it badly and
+clicks rescue it. Skis gains +0.30, dog +0.24 and sink +0.23. Chair loses 0.01. Bag or luggage, bench and
 parking meter gain at most 0.02: for these, typing the query is as good as clicking.
 
 ![Mean Goods found over clicks](figures/goods_over_clicks.png)

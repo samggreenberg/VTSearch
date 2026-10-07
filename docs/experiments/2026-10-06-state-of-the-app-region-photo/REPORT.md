@@ -9,8 +9,9 @@ check (#4496), and presets of beta 1/4, 1 and 4.
 **Path:** the region path. DINOv3 patch embeddings, with box votes trained as patches and a photo scored by
 its best patch (`max_patch`). It opens on SigLIP's text sort.
 **Bench:** `coco_better`, 144 cells (49 classes at every size they have).
-**Seeds:** 2. **Sessions:** one set per preset (`SOTA_BETA=0.25|1|4`), 288 runs each and 864 in all, trajectory
-pass only (the full-label ceiling is still running; see [Not covered](#not-covered)).
+**Seeds:** 2. **Sessions:** one set per preset (`SOTA_BETA=0.25|1|4`), 288 runs each and 864 in all. The
+full-label ceiling ran for seed 0 only (array 891581, 2026-10-07, 144 runs, shared by the three presets), so
+every ceiling number here is seed 0's (#4552).
 **Runs:** `/expscratch/sgreenberg/state-of-the-app/2026-10-06-b025`, `-b1` and `-b4`.
 - A run takes a median of 42 minutes on one core (p90 61, the slowest 144) and peaks at 18 to 22 GB.
 - So the per-user memory cap, not CPUs, sets how many run at once: at most about 43.
@@ -39,7 +40,8 @@ pass only (the full-label ceiling is still running; see [Not covered](#not-cover
   the detectors the harness trains during the opening, which no user sees. Every number before a session's
   hand-off is now the typed query's own set at the guarded line, and the analysis reads that line throughout.
   The votes and every number after the check are unchanged. The objective at 25 clicks moved from
-  0.57/0.49/0.61 to 0.30/0.33/0.50.
+  0.57/0.49/0.61 to 0.30/0.33/0.50. The AP at 150 moved too, for the 9% of sessions still in the opening at click 150:
+  0.37 to 0.35 at small, and book and knife (#4552 caught these).
 
 A **review**, not an experiment: the app as it ships on the region path, the way a user meets it.
 - **The session.** The user types a query and sees the text sort, then votes for 150 clicks while Autopilot picks
@@ -81,6 +83,10 @@ see [below](#where-it-does-well-and-where-it-does-poorly)):
    the 9% of sessions that never leave the opening in 150 clicks: the check is where they first see a detector.
    It cuts the share of runs returning more than 200 images from 4% and 7% to 1% and 3% at 1/4 and 1. At 4 it barely moves
    (27% to 25%).
+4. **The ceiling's own line goes too deep here too (#4490).** With every label known (seed 0), Find's line
+   scores 0.44/0.47/0.70 at the three presets, against the 150-click session's 0.67/0.58/0.66. It returns a mean
+   of 181, 319 and 605 images at precision 0.43, 0.37 and 0.31. As on the binary path, only beta 4, which rewards
+   depth, comes out ahead.
 
 ### The returned set through the session
 
@@ -125,29 +131,30 @@ typed query's set (#4605); the returned size is a median.
 The detector's own line (the labels line) against a set-constant top-K, at the preset's beta. Compare within a
 rule, never across.
 
-| preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks |
-|---:|---|---:|---:|---:|---:|
-| 1/4 | app line | 0.17 | 0.29 | 0.50 | **0.67** |
-| 1/4 | top 32 | 0.47 | 0.47 | 0.55 | **0.68** |
-| 1 | app line | 0.24 | 0.32 | 0.45 | **0.58** |
-| 1 | top 32 | 0.38 | 0.38 | 0.44 | **0.55** |
-| 4 | app line | 0.47 | 0.49 | 0.55 | **0.66** |
-| 4 | top 128 | 0.49 | 0.48 | 0.54 | **0.66** |
+| preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks | full labels (seed 0) |
+|---:|---|---:|---:|---:|---:|---:|
+| 1/4 | app line | 0.17 | 0.29 | 0.50 | **0.67** | 0.44 |
+| 1/4 | top 32 | 0.47 | 0.47 | 0.55 | **0.68** | 0.74 |
+| 1 | app line | 0.24 | 0.32 | 0.45 | **0.58** | 0.47 |
+| 1 | top 32 | 0.38 | 0.38 | 0.44 | **0.55** | 0.59 |
+| 4 | app line | 0.47 | 0.49 | 0.55 | **0.66** | 0.70 |
+| 4 | top 128 | 0.49 | 0.48 | 0.54 | **0.66** | 0.74 |
 
 ![The returned set's share of the best cut, per preset](figures/returned_at_own_beta.png)
 
 **The labels line matches a fixed top-K on the same ranking.** The text sort's app line is #4136's guarded line,
 the one the app draws today. Under top-K the detector beats the text sort by 50 clicks (0.55/0.44/0.54 against
-0.47/0.38/0.49); at 25 most sessions still show the text sort (#4605).
+0.47/0.38/0.49); at 25 most sessions still show the text sort (#4605). Full labels add 0.04 to 0.08 under
+top-K, but the ceiling's own app line falls below the session's at 1/4 and 1: it goes too deep (#4490).
 
 ### The ranking
 
 The ranking barely depends on the preset (shown: the beta 1 sessions):
 
-| | text only | 25 clicks | 50 clicks | 150 clicks |
-|---|---:|---:|---:|---:|
-| **AP** | 0.42 | 0.42 | 0.50 | **0.64** |
-| **Goods found** | — | 11 | 15 | **25** |
+| | text only | 25 clicks | 50 clicks | 150 clicks | full labels (seed 0) |
+|---|---:|---:|---:|---:|---:|
+| **AP** | 0.42 | 0.42 | 0.50 | **0.64** | 0.68 |
+| **Goods found** | — | 11 | 15 | **25** | — |
 
 ![Mean AP over clicks](figures/ap_over_clicks.png)
 
@@ -180,11 +187,11 @@ the next retrain learns from.
 
 **By size band** (beta 1; trained runs; the objective after the check, and the ranking's AP):
 
-| band (runs) | objective | returned, median | text AP | AP at 150 | Goods found |
-|---|---:|---:|---:|---:|---:|
-| large (98) | 0.81 | 50 | 0.70 | 0.88 | 36 |
-| medium (98) | 0.66 | 47 | 0.38 | 0.70 | 26 |
-| small (92; 83 trained) | 0.39 | 46 | 0.18 | 0.37 | 14 |
+| band (runs) | objective | returned, median | text AP | AP at 150 | full-label AP (seed 0) | Goods found |
+|---|---:|---:|---:|---:|---:|---:|
+| large (98) | 0.81 | 50 | 0.70 | 0.88 | 0.89 | 36 |
+| medium (98) | 0.66 | 47 | 0.38 | 0.70 | 0.71 | 26 |
+| small (92; 83 trained) | 0.39 | 46 | 0.18 | 0.35 | 0.44 | 14 |
 
 Against the binary path (0.77/0.49/0.29 by band), the gain is in **medium and small**: +0.17 and +0.10, against
 +0.04 for large.
@@ -195,9 +202,9 @@ Against the binary path (0.77/0.49/0.29 by band), the gain is in **medium and sm
 |---|---:|---:|---:|
 | chair | 0.07 | 0.37 | 0.35 |
 | enclosed road vehicle | 0.22 | 0.63 | 0.67 |
-| book | 0.28 | 0.54 | 0.55 |
+| book | 0.28 | 0.54 | 0.50 |
 | bottle | 0.27 | 0.50 | 0.54 |
-| knife | 0.20 | 0.41 | 0.41 |
+| knife | 0.20 | 0.41 | 0.39 |
 
 **Poorly, still:** tableware and the dining table.
 - Bowl 0.20 (bowl@small never trains, in either seed), spoon 0.29, dining table 0.32.
@@ -214,15 +221,26 @@ On the binary path, chair@small never trains in any of 10 seeds.
 
 ![Every class x band](figures/per_cell.png)
 
+## Headroom (full labels minus 150 clicks)
+
+Seed 0's 139 trained runs (beta 1), where the ceiling ran.
+- **The mean is 0.04 AP** (0.65 at 150 clicks against 0.70 with every label). The clicks had already bought
+  +0.22 over the typed query (0.44 → 0.65), so 150 clicks close about five sixths of the gap to full labels,
+  against about three quarters on the binary path.
+- **It is nearly all small objects:** +0.11 at small (0.34 → 0.44), against +0.02 at large and +0.01 at medium.
+- **By class,** the most is in chair (+0.20; 0.36 → 0.56), bowl (+0.19; 0.17 → 0.35), sink and knife (+0.17),
+  keyboard (+0.15), laptop and motorcycle (+0.13) and tv (+0.11). Bowl's ceiling is low as well: the embedding
+  is part of its problem, as on the binary path. Chair's ceiling is 0.56: the clicks leave the most on the
+  table there.
+- **Nine classes end at or above their ceiling:** cell phone (−0.04), book (−0.04), umbrella and tie (−0.03),
+  clock, airplane, bird, apple and baseball bat. As on the binary path, a head trained on 150 chosen labels can
+  match one trained on every label when the extra labels are noisy.
+
 <a id="not-covered"></a>
 ## Not covered
 
-- **The full-label ceiling.**
-  - A ceiling run takes about 80 GB, against 24 GB for the clicks.
-  - Seed 0's ceiling (array 891581, `-b1/ceiling`) started 2026-10-07 and had 5 of 144 cells at the time of this
-    analysis, so there is still no headroom section.
-  - `perbeta_summary.md`'s ceiling rows for beta 1 come from those 5 cells and are not read here.
-  - #4552 tracks it.
+- **The ceiling for seed 1.** It ran for seed 0 only, about 80 GB a run against 24 GB for the clicks. Every
+  ceiling number above is seed 0's.
 - **Seeds 2 and up** are not run. The binary review's per-image influence lists need repeat clicks, so they are
   not reported on two seeds.
 
@@ -237,9 +255,12 @@ On the binary path, chair@small never trains in any of 10 seeds.
 - `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell.
 - `viewer.html`: the beta-1 sessions, both seeds.
 - **Runs and analyses** are in `/expscratch/sgreenberg/state-of-the-app/2026-10-06-b025|b1|b4/`:
-  - `analysis-region-4605/`: **this version's**, both seeds, the opening scored as the text sort (#4605), on the
-    post-#4136 baseline; `perp.py` and `by_click.py` over them are in `2026-10-07-perp-4605-region/`, and
-    `/expscratch/sgreenberg/notch-4599/opening/analyze_4605.sh` reruns one;
+  - `analysis-region-4552/`: **this version's**, both seeds, the opening scored as the text sort (#4605), on the
+    post-#4136 baseline, with seed 0's ceiling (`-b1/ceiling`, symlinked into `-b025` and `-b4`); `perp.py` and
+    `by_click.py` over them are in `2026-10-07-perp-4552-region/`, and
+    `/expscratch/sgreenberg/notch-4599/opening/analyze_dev.sh` reruns one. Off them,
+    `/expscratch/sgreenberg/notch-4599/opening/headroom_4552.py` reads the headroom;
+  - `analysis-region-4605/`: the same without the ceiling;
   - `analysis-region/`: both seeds, on the as-measured text baseline (before #4605);
   - `analysis-region-1seed/`: the first version's;
   - `analysis-region-2seeds-post4136baseline/`: the same sessions, with click 0 scored at #4136's line (#4599);
