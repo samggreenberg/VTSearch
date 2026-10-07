@@ -33,8 +33,8 @@ full-label ceiling pass shared by the three.
   columns but not in the objective's. They now score what their session shows, the typed query's own set, at
   every click and at the end (the owner's ruling). Three more holes are closed:
   - an empty returned set scores precision 0, not an undefined value that leaves the mean;
-  - a run inside a spot check at 25, 50 or 100 clicks carries the detector on screen (157 runs were blank at
-    50);
+  - a run inside a spot check at 25, 50 or 100 clicks carries the detector on screen (157 to 189 runs per preset
+    were blank at 50);
   - a run that never leaves the opening reads the text sort's line, not a blank.
 
   The objective after the check moves from 0.64/0.53/0.60 to 0.62/0.51/0.59, and the typed query from
@@ -129,7 +129,7 @@ for the full-label ceiling Find's labels line from every training label (#4486).
 old cap on every sort: 32 at beta ≤ 1 and 128 at beta 4. Compare within a rule, never across. The values are
 F-beta at the preset; detector columns are the last click before the check. Every run is in every column
 (#4631): one inside a spot check at 25 or 50 clicks carries the detector on screen, where it used to drop out
-(157 runs at 50), and one that never trains reads the typed query's.
+(157 to 189 runs per preset at 50), and one that never trains reads the typed query's.
 
 | preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks | full labels |
 |---:|---|---:|---:|---:|---:|---:|
