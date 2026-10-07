@@ -78,9 +78,11 @@ def main() -> int:
     scores = sigmoid(corpus)
     goods = sigmoid(1.0 + 0.4 * rng.standard_normal(30))
     census_bads = sigmoid(negatives(rng, 6000))
-    # A session's Bads: drawn from the top of a corpus of negatives, as active learning picks them.
+    # A session's Bads: drawn from the top of a corpus of negatives, as active learning picks them.  And a mix like
+    # the sessions the first gate misfired on: a selected minority among mostly uniform Bads (20 + 100).
     pool = np.sort(negatives(rng, n_neg))[::-1]
     session_bads = sigmoid(pool[rng.choice(300, 120, replace=False)])
+    mixed_bads = sigmoid(np.concatenate([pool[rng.choice(300, 20, replace=False)], negatives(rng, 100)]))
 
     with tempfile.TemporaryDirectory() as tmp:
         cells = Path(tmp)
@@ -88,6 +90,8 @@ def main() -> int:
                        np.concatenate([goods, census_bads]), np.concatenate([np.ones(30), np.zeros(6000)]))  # fmt: skip
         write(cells / "task_0001__testscores.npz", "last", scores, labels,
               np.concatenate([goods, session_bads]), np.concatenate([np.ones(30), np.zeros(120)]), beta=1.0)  # fmt: skip
+        write(cells / "task_0002__testscores.npz", "final", scores, labels,
+              np.concatenate([goods, mixed_bads]), np.concatenate([np.ones(30), np.zeros(120)]), beta=1.0)  # fmt: skip
 
         snap = C.load(cells / "task_0000__testscores.npz")["siglip/whole_image/ceiling"]
         line = fit_labels_line(census["folds"], scores, list(range(scores.size)), {})
@@ -99,6 +103,13 @@ def main() -> int:
         share_s = C.bads_share_above_median(sess, scores)
         check("a census of Bads reads as representative", C.representative(snap, scores), f"share {share_c:.2f}")
         check("a session's selected Bads do not", not C.representative(sess, scores), f"share {share_s:.2f}")
+        mixed = C.load(cells / "task_0002__testscores.npz")["siglip/whole_image/final"]
+        check("a selected minority among uniform Bads is not representative either", not C.representative(mixed, scores),
+              f"top-5% enrichment {C.top_enrichment(mixed, scores):.1f}")  # fmt: skip
+        check("the median test passes that mix, which is why the gate reads the top",
+              C.representative_by_median(mixed, scores), f"share {C.bads_share_above_median(mixed, scores):.2f}")  # fmt: skip
+        check("the census sits near enrichment 1", abs(C.top_enrichment(snap, scores) - 1.0) < 0.5,
+              f"{C.top_enrichment(snap, scores):.2f}")  # fmt: skip
         check("so the candidate keeps the session's shipped line",
               C.rep_kde(sess, scores)(1.0) == C.shipped(sess, scores)(1.0))  # fmt: skip
 

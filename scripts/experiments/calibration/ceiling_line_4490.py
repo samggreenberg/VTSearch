@@ -17,10 +17,13 @@ The rules (``RULES``):
 
 * ``shipped`` - the labels line as it ships (#4452, #4492).
 * ``rep_kde`` - the candidate: when the Bads look like a random sample of the corpus (at least ``REP_MIN_BADS``
-  of them, and at least ``REP_SHARE`` of the corpus scoring above their median held-out score), the negatives are
+  of them, and no more than ``REP_MAX_ENRICH`` times over-represented in its top 5%), the negatives are
   modelled by the Bads' own held-out scores (a Gaussian KDE on the logit scale) instead of a normal, the
   positives' share is fitted on the corpus by EM, and the cut is the counted F-beta cut over those chances.
   Otherwise the shipped line.
+* ``rep_kde_n30`` - the candidate with the gate lowered to 30 Bads.
+* ``rep_kde_median`` - the candidate under the first gate tried (the share of the corpus above the Bads' median);
+  it fires on sessions after a spot check and collapses their line.
 * ``kde`` - the same fit with no gate (an ablation: it is wrong for a session's selected Bads).
 * ``near_q0.02`` - the issue's first suggestion: the class model from every Good and the Bads whose held-out
   score would rank in the corpus's top 2%.
@@ -50,10 +53,16 @@ from vtscore.training.thresholds import labels_line as LL  # noqa: E402
 
 BETAS = (0.25, 1.0, 4.0)
 TAG = {0.25: "1/4", 1.0: "1", 4.0: "4"}
-#: The gate's two constants: the fewest Bads whose KDE sees the negatives' tail (a random 30 of a ceiling's Bads
-#: lost 0.09 F at beta 1/4; 100 gained), and the share of the corpus above the Bads' median below which the Bads
-#: are a selected sample (a ceiling's sit at 0.27-0.52, a 150-click session's at a median of 0.03).
+#: The gate's constants.  The fewest Bads whose KDE sees the negatives' tail (a random 30 of a ceiling's Bads lost
+#: 0.09 F at beta 1/4; 100 gained).  The top of the corpus the gate reads (its top 5%), and how over-represented the
+#: Bads may be there: a random sample puts 5% of its Bads in the corpus's top 5% (enrichment 1; a ceiling's sit at
+#: 0.65-1.48), active learning picks from the top (a session's sit at 2.9-18 from click 100 on).
 REP_MIN_BADS = 100
+REP_TOP_Q = 0.05
+REP_MAX_ENRICH = 2.0
+#: The first gate tried, on the share of the corpus above the Bads' median (>= 0.2); kept as ``rep_kde_median`` to
+#: show why the gate reads the top: after a spot check a session's ~100 Bads mix near-line picks with uniform ones,
+#: pass it, and the fit collapses to one image.
 REP_SHARE = 0.2
 
 
@@ -211,13 +220,45 @@ def bads_share_above_median(snap: dict, scores: np.ndarray) -> float:
     return 1.0 - np.searchsorted(x, np.median(xn)) / x.size
 
 
-def representative(snap: dict, scores: np.ndarray, *, share: float = REP_SHARE, min_bads: int = REP_MIN_BADS) -> bool:
+def top_enrichment(snap: dict, scores: np.ndarray, q: float = REP_TOP_Q) -> float:
+    """How over-represented the Bads are at the top of the corpus: their share at or above its top-*q* score, over *q*.
+
+    1 for a random sample of the corpus; active learning, which picks Bads from the top, drives it well above.
+    """
     _, xn = folds_xy(snap)
-    return xn.size >= min_bads and bads_share_above_median(snap, scores) >= share
+    if xn.size == 0:
+        return float("nan")
+    cut = float(np.quantile(LL._logit(LL._finite_unit(scores)), 1.0 - q))
+    return float((xn >= cut).mean()) / q
+
+
+def representative(snap: dict, scores: np.ndarray, *, min_bads: int = REP_MIN_BADS) -> bool:
+    """Enough Bads, and not over-represented at the top of the corpus: a random sample, not a selected one."""
+    _, xn = folds_xy(snap)
+    return xn.size >= min_bads and top_enrichment(snap, scores) <= REP_MAX_ENRICH
+
+
+def representative_by_median(snap: dict, scores: np.ndarray, *, min_bads: int = REP_MIN_BADS) -> bool:
+    _, xn = folds_xy(snap)
+    return xn.size >= min_bads and bads_share_above_median(snap, scores) >= REP_SHARE
 
 
 def rep_kde(snap: dict, scores: np.ndarray):
     if fold_model_matches(snap) and representative(snap, scores):
+        return shape_line(snap, scores, bads_kde(folds_xy(snap)[1]))
+    return shipped(snap, scores)
+
+
+def rep_kde_median(snap: dict, scores: np.ndarray):
+    """The candidate under the first gate tried (the share above the Bads' median), for the record."""
+    if fold_model_matches(snap) and representative_by_median(snap, scores):
+        return shape_line(snap, scores, bads_kde(folds_xy(snap)[1]))
+    return shipped(snap, scores)
+
+
+def rep_kde_n30(snap: dict, scores: np.ndarray):
+    """The candidate with its gate lowered to 30 Bads: it then fires on some sessions, which prices the fit there."""
+    if fold_model_matches(snap) and representative(snap, scores, min_bads=30):
         return shape_line(snap, scores, bads_kde(folds_xy(snap)[1]))
     return shipped(snap, scores)
 
@@ -250,7 +291,15 @@ def near_bads(q: float):
     return rule
 
 
-RULES = {"shipped": shipped, "rep_kde": rep_kde, "kde": kde, "near_q0.02": near_bads(0.02), "mix": mix}
+RULES = {
+    "shipped": shipped,
+    "rep_kde": rep_kde,
+    "rep_kde_n30": rep_kde_n30,
+    "rep_kde_median": rep_kde_median,
+    "kde": kde,
+    "near_q0.02": near_bads(0.02),
+    "mix": mix,
+}
 
 
 # ----------------------------------------------------------------------------- price
@@ -322,7 +371,8 @@ def _mech_cell(path: str) -> dict:
     n_neg = float((1 - y).sum())
     sd_neg = float(xn.std(ddof=1))
     r = {"cell": Path(path).name[:9], "n_good": int(m.n_pos), "n_bad": int(m.n_neg), "n_pos": int(y.sum()),
-         "est_total": line.unvoted_share * s.size, "share_above_bad_median": bads_share_above_median(snap, s)}  # fmt: skip
+         "est_total": line.unvoted_share * s.size, "share_above_bad_median": bads_share_above_median(snap, s),
+         "top_enrichment": top_enrichment(snap, s)}  # fmt: skip
     for z in (2, 3, 4):
         r[f"tail{z}"] = float((xn > m.mu_neg + z * sd_neg).mean()) / float(norm.sf(z))
     for b in BETAS:
@@ -475,36 +525,26 @@ def figures(mech: pd.DataFrame, ceiling: pd.DataFrame, sessions: dict[str, pd.Da
     # 3. The session's line over clicks against the ceiling's, shipped and fixed, per preset.
     keys = ["t5", "t10", "t25", "t50", "t100", "last"]
     clicks = [5, 10, 25, 50, 100, 150]
-    fig, axes = plt.subplots(1, len(sessions), figsize=(3.3 * len(sessions), 3.2), sharey=True, facecolor=SURFACE)
+    pos = np.arange(len(clicks))
+    fig, axes = plt.subplots(1, len(sessions), figsize=(3.4 * len(sessions), 3.4), sharey=True, facecolor=SURFACE)
     for ax, (tag, d) in zip(np.atleast_1d(axes), sessions.items()):
         _style(ax)
         b = float(d.beta.iloc[0])
         sh = d[d.rule == "shipped"]
-        ax.plot(
-            clicks,
-            [sh[sh.key == k].f.mean() for k in keys],
-            color=BLUE,
-            lw=2,
-            marker="o",
-            ms=4,
-            label="session (shipped line)",
-        )
-        c = ceiling[ceiling.beta == b]
-        cells = set(sh.cell)
-        c = c[c.cell.isin(cells)]
-        for rule, ls, color, lab in (
-            ("shipped", "--", ORANGE, "every label, shipped line"),
-            ("rep_kde", "-", ORANGE, "every label, fixed line"),
-        ):
-            ax.axhline(c[c.rule == rule].f.mean(), color=color, ls=ls, lw=1.6, label=lab)
+        ax.plot(pos, [sh[sh.key == k].f.mean() for k in keys], color=BLUE, lw=2, marker="o", ms=4,
+                label="a session, at its click (shipped line)")  # fmt: skip
+        c = ceiling[(ceiling.beta == b) & ceiling.cell.isin(set(sh.cell))]
+        ax.axhline(c[c.rule == "shipped"].f.mean(), color=ORANGE, ls="--", lw=1.6, label="every label, shipped line")
+        ax.axhline(c[c.rule == "rep_kde"].f.mean(), color=ORANGE, ls="-", lw=1.8, label="every label, fixed line")
         ax.axhline(c[c.rule == "shipped"].f_best.mean(), color=GRAY, ls=":", lw=1.4, label="every label, best cut")
-        ax.set_xscale("log")
-        ax.set_xticks(clicks, [str(x) for x in clicks])
+        ax.set_xticks(pos, [str(x) for x in clicks])
         ax.set_title(f"beta {TAG[b]}", fontsize=10)
         ax.set_xlabel("click")
-    np.atleast_1d(axes)[0].set_ylabel("F-beta of the withheld half\nabove Find's line")
-    np.atleast_1d(axes)[-1].legend(frameon=False, fontsize=7.5, loc="lower right")
-    fig.tight_layout()
+    first = np.atleast_1d(axes)[0]
+    first.set_ylabel("F-beta of the withheld half\nabove Find's line")
+    handles, labels = first.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False, fontsize=8)
+    fig.tight_layout(rect=(0, 0.14, 1, 1))
     fig.savefig(out / "ceiling_vs_session.png", dpi=150)
     plt.close(fig)
 
