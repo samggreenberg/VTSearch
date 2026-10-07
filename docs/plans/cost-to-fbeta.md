@@ -103,8 +103,6 @@ cut.
 
 <!-- item-sep -->
 
-- [ ] #4582 — Re-score the Cost-era studies' cells at beta 1/4, 1 and 4 where they still exist (Sonnet); report: [`REPORT.md`](../experiments/2026-10-06-cost-fbeta-rescore-4582/REPORT.md)
-
 <!-- item-sep -->
 
 - [ ] #4583 — Calibration fraction and fold count under the labels line, at the three presets (Sonnet; Opus if the spaces disagree)
@@ -122,8 +120,6 @@ cut.
 - [ ] #4359 — Smart and Stable re-keyed to the balance's line (Opus)
 
 <!-- item-sep -->
-
-- [ ] #4136 — The text sort's display line, priced on the objective at the three presets (Opus)
 
 <!-- item-sep -->
 
