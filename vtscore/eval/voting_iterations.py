@@ -1416,6 +1416,11 @@ def _skyline_fit_and_score(
     return ({cid: float(v) for cid, v in zip(ids, pooled, strict=True)}, step, timings, score_seconds)
 
 
+def _model_meta(model: Any) -> dict[str, Any]:
+    """The class model's scalars at full precision, for a snapshot's JSON; its Bads' scores travel in the folds."""
+    return {k: v for k, v in asdict(model).items() if k != "neg_logits"}
+
+
 def _fold_arrays(orderings: Any) -> dict[str, Any]:
     """The calibration folds' held-out scores and labels as flat arrays, for a test-score snapshot (#4490).
 
@@ -1475,7 +1480,7 @@ def _ceiling_line(
                 "ids": np.asarray(ordered_test, dtype=np.int64),
                 "train_threshold": float("nan"),
                 "beta": float("nan"),
-                "model": None if find_line is None else asdict(find_line.model),
+                "model": None if find_line is None else _model_meta(find_line.model),
                 **_fold_arrays(details.get("fold_orderings")),
             }
         )
@@ -3384,7 +3389,7 @@ def simulate_voting_iterations(  # noqa: C901
                         "ids": np.asarray(calibration[3], dtype=np.int64),
                         "train_threshold": float(threshold),
                         "beta": float(details["beta"]) if details.get("beta") is not None else float("nan"),
-                        "model": None if find_line is None else asdict(find_line.model),
+                        "model": None if find_line is None else _model_meta(find_line.model),
                         **_fold_arrays(details.get("fold_orderings")),
                     }
                 )

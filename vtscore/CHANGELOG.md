@@ -95,6 +95,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   robust logit spread (`corpus_sigma_floor`) rather than an absolute 0.25.
   `fit_corpus` and `corpus_posteriors` take the floor as `floor=`. The
   parametric fallback, with no corpus, keeps `MIN_LOGIT_SIGMA`.
+- **When the labels' Bads are a random sample, the labels line models the negatives with
+  their own scores** (issue #4490). `class_score_model` keeps the Bads' sorted held-out
+  logit scores on the model (`ClassScoreModel.neg_logits`, compared and summarised by
+  neither `==` nor `as_dict`) when there are at least `RANDOM_BADS_MIN` (100), never from
+  the in-sample fallback. `_line_on` reads them: when they are at most
+  `RANDOM_BADS_MAX_ENRICHMENT` (2) times over-represented in the corpus's top
+  `RANDOM_BADS_TOP_SHARE` (5%), each item's chance comes from the labels' Good normal
+  against a kernel density of the Bads, the positives' share fitted by EM, and the line
+  is the same `corpus_cut` over them; `LabelsLine.bads_shape` says which. Otherwise the
+  line is unchanged. A labelset from an exhaustively labelled dataset gains +0.155 /
+  +0.085 / +0.039 F-beta at 1/4, 1, 4 on the review's full-label ceiling; no session
+  within 150 clicks changes. `line_test_arm.row_from_snapshot` restores the Bads' scores
+  from a snapshot's folds, so its replay still matches the run.
 - **Withheld-half snapshots carry the calibration folds and the images' ids, and the
   ceiling leaves one** (issue #4490). Every `test_score_sink` entry gains `fold_scores`,
   `fold_labels` and `fold_index` (the step's held-out scores of its votes, from which

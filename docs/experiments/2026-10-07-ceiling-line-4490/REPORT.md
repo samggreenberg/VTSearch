@@ -1,7 +1,7 @@
 # With every label known, the labels line goes too deep (#4490)
 
-**Confirmed, and there is a fix that leaves today's sessions untouched.** The decision for the owner is whether to
-build it into the app's labels line ([Decision](#decision)).
+**Confirmed, and fixed.** The owner chose to build the fix (2026-10-07); it is in the labels line
+(`LabelsLine.bads_shape`, [Decision](#decision)).
 
 With every training label known, the full-label model ranks better than a 150-click session, but Find's labels line
 cut its ranking so deep that it scored worse at beta 1/4 and 1 (#4490, from the #4474 review). The cause is the class
@@ -186,10 +186,13 @@ At beta 1, seed 0. Every image kept by either line is in
 
 ## Decision
 
-**Build the fix into the labels line?** Today it changes Find's line only for a labelset whose Bads are a random
-sample of at least 100: a labelset imported from an exhaustively labelled dataset, and the review's ceiling. No
-150-click session is touched. The build would carry the Bads' held-out scores on the class model (`ClassScoreModel`)
-so that `on_corpus` can apply the gate and the KDE on any corpus.
+**Built (owner, 2026-10-07).** `class_score_model` keeps the Bads' sorted held-out logit scores on the model
+(`ClassScoreModel.neg_logits`) from 100 Bads, never from the in-sample fallback; `_line_on` applies the gate and the
+KDE on whatever corpus it is fitted on, so a Find over another dataset (`on_corpus`) reads it too. Replayed on every
+saved snapshot, the built line keeps exactly what the priced rule kept on all 2,160 ceiling cuts and exactly what
+the shipped line kept on all 5,859 session cuts (`ceiling_line_4490.py verify`). Today it
+changes only labelsets whose Bads are a random sample of at least 100 (an exhaustively labelled import, the review's
+ceiling); no 150-click session.
 
 ## Files
 

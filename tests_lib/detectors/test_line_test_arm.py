@@ -374,3 +374,28 @@ class TestTheHarnessArm:
         replay = row_from_snapshot(ordinary[-1], seed=0)
         harness = {k: v for k, v in sink[0].items() if k not in IDENT}
         assert replay == harness
+
+
+def test_the_replay_restores_the_bads_scores_from_the_snapshots_folds():
+    """#4490: the snapshot's JSON keeps the class model's scalars; the Bads' scores, which decide whether the
+    negatives take the Bads' shape, come back from its folds, and only when the folds rebuild that model."""
+    from dataclasses import asdict
+
+    from vtscore.eval.line_test_arm import _snapshot_model
+    from vtscore.training.thresholds.labels_line import RANDOM_BADS_MIN, class_score_model
+
+    rng = np.random.default_rng(4490)
+    n_bad = RANDOM_BADS_MIN + 20
+    sig = lambda x: 1.0 / (1.0 + np.exp(-x))  # noqa: E731
+    fs = np.r_[sig(rng.normal(1.0, 0.4, 20)), sig(rng.normal(-2.0, 0.4, n_bad))]
+    fl = np.r_[np.ones(20), np.zeros(n_bad)].astype(np.int8)
+    fi = (np.arange(fs.size) % 2).astype(np.int16)
+    built = class_score_model([(fs[fi == i], fl[fi == i]) for i in (0, 1)])
+    assert built is not None and built.neg_logits is not None
+    meta = {k: v for k, v in asdict(built).items() if k != "neg_logits"}
+    snap = {"fold_scores": fs, "fold_labels": fl, "fold_index": fi}
+    restored = _snapshot_model(snap, meta)
+    assert restored.neg_logits is not None and np.array_equal(restored.neg_logits, built.neg_logits)
+    assert _snapshot_model({}, meta).neg_logits is None, "no folds, no Bads' scores"
+    other = {**meta, "mu_pos": meta["mu_pos"] + 0.5}  # an in-sample fallback's model: the folds do not rebuild it
+    assert _snapshot_model(snap, other).neg_logits is None

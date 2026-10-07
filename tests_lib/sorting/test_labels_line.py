@@ -9,6 +9,8 @@ model estimates on the corpus being decided.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -318,3 +320,105 @@ class TestWeakCheckDue:
     def test_no_cooldown_makes_it_due_once(self):
         assert weak_check_due(1.0, 20, None, cooldown=None)
         assert not weak_check_due(1.0, 500, 20, cooldown=None)
+
+
+# ---------------------------------------------------------------------------
+# A random sample of Bads gives the negatives their own shape (#4490)
+# ---------------------------------------------------------------------------
+
+
+def _heavy_negatives(rng, n):
+    """A normal bulk with a heavy upper tail (a Student-t), on the logit scale: what a full labelset's Bads look like."""
+    return -2.0 + 0.4 * rng.standard_t(3, size=n)
+
+
+def _census(seed: int = 0, n_pos: int = 50, n_neg: int = 10_000):
+    """A corpus, its labels, and two folds whose Bads are a random sample of its negatives (every label known)."""
+    rng = np.random.default_rng(seed)
+    corpus = np.concatenate([_heavy_negatives(rng, n_neg), 1.0 + 0.4 * rng.standard_normal(n_pos)])
+    labels = np.concatenate([np.zeros(n_neg), np.ones(n_pos)])
+    goods, bads = _sig(1.0 + 0.4 * rng.standard_normal(30)), _sig(_heavy_negatives(rng, 6000))
+    folds = [(np.concatenate([goods[i::2], bads[i::2]]), np.r_[np.ones(15), np.zeros(3000)]) for i in range(2)]
+    return _sig(corpus), labels, folds
+
+
+def _kept(scores, labels, thr):
+    keep = scores >= thr
+    return int(keep.sum()), int(labels[keep].sum())
+
+
+class TestRandomBads:
+    def test_a_model_keeps_its_bads_scores_only_from_the_minimum(self):
+        from vtscore.training.thresholds.labels_line import RANDOM_BADS_MIN
+
+        rng = np.random.default_rng(0)
+        goods = _sig(rng.normal(1, 0.4, 10))
+        for n_bad, kept in ((RANDOM_BADS_MIN - 1, False), (RANDOM_BADS_MIN, True)):
+            bads = _sig(rng.normal(-2, 0.4, n_bad))
+            m = class_score_model([(np.r_[goods, bads], np.r_[np.ones(10), np.zeros(n_bad)])])
+            assert m is not None and (m.neg_logits is not None) == kept
+            if m.neg_logits is not None:
+                assert m.neg_logits.size == n_bad and np.all(np.diff(m.neg_logits) >= 0)
+                assert "neg_logits" not in m.as_dict(), "the scores ride on the model, not in its summary"
+                assert m == replace(m, neg_logits=None), "they never decide equality"
+
+    def test_a_census_of_bads_takes_their_shape_and_cuts_near_the_positives(self):
+        """The ceiling's case: one normal misses the Bads' heavy tail and the shipped line cut deep."""
+        scores, labels, folds = _census()
+        line = fit_labels_line(folds, scores, None, {})
+        assert line is not None and line.bads_shape
+        normal = _line_on(replace(line.model, neg_logits=None), scores, None, None)
+        assert normal is not None and not normal.bads_shape
+        k_shape, tp_shape = _kept(scores, labels, line.threshold(1.0))
+        k_normal, _ = _kept(scores, labels, normal.threshold(1.0))
+        assert 25 <= k_shape <= 100, k_shape
+        assert k_normal > 2 * 50, "the normal's line runs deep"
+        assert tp_shape >= 20
+
+    def test_bads_picked_from_the_top_keep_the_shipped_line(self):
+        """A session's Bads are many times over-represented at the top of the corpus: not a random sample."""
+        scores, _labels, _folds = _census()
+        rng = np.random.default_rng(1)
+        top = np.sort(_heavy_negatives(rng, 10_000))[::-1][:300]
+        bads = _sig(rng.choice(top, 120, replace=False))
+        goods = _sig(1.0 + 0.4 * rng.standard_normal(30))
+        folds = [(np.r_[goods, bads], np.r_[np.ones(30), np.zeros(120)])]
+        line = fit_labels_line(folds, scores, None, {})
+        assert line is not None and line.model.neg_logits is not None and not line.bads_shape
+        shipped = _line_on(replace(line.model, neg_logits=None), scores, None, None)
+        assert shipped is not None and line.threshold(1.0) == shipped.threshold(1.0)
+
+    def test_a_selected_minority_among_uniform_bads_is_not_a_random_sample(self):
+        """After a spot check: mostly uniform Bads, a fifth picked from the top.  A median test passed these and the
+        line collapsed to one image; the top test does not."""
+        scores, _labels, _folds = _census()
+        rng = np.random.default_rng(2)
+        top = np.sort(_heavy_negatives(rng, 10_000))[::-1][:300]
+        bads = _sig(np.r_[rng.choice(top, 20, replace=False), _heavy_negatives(rng, 100)])
+        goods = _sig(1.0 + 0.4 * rng.standard_normal(30))
+        line = fit_labels_line([(np.r_[goods, bads], np.r_[np.ones(30), np.zeros(120)])], scores, None, {})
+        assert line is not None and not line.bads_shape
+
+    def test_the_in_sample_fallback_carries_no_bads_scores(self):
+        """One Good: the folds cannot split, the head's own scores stand in, and it saw those Bads."""
+        rng = np.random.default_rng(3)
+        corpus = _sig(np.r_[rng.normal(-2, 0.4, 400), [1.0]])
+        labels = {i: False for i in range(150)} | {400: True}
+        line = fit_labels_line(None, corpus, range(corpus.size), labels)
+        assert line is not None and line.model.neg_logits is None and not line.bads_shape
+
+    def test_find_on_a_corpus_with_no_positives_keeps_less_than_the_normal_did(self):
+        """2,000 negatives with the same heavy tail, some of them scoring above the Goods' mean: no line can drop
+        those, but the Bads' shape keeps fewer than the normal and at most 1% at beta <= 1."""
+        scores, _labels, folds = _census()
+        train = fit_labels_line(folds, scores, None, {})
+        assert train is not None
+        empty = _sig(_heavy_negatives(np.random.default_rng(4), 2000))
+        find = train.on_corpus(empty)
+        normal = _line_on(replace(train.model, neg_logits=None), empty, None, None)
+        assert find.bads_shape and normal is not None
+        for beta in (0.25, 1.0, 4.0):
+            k_shape = int((empty >= find.threshold(beta)).sum())
+            assert k_shape < int((empty >= normal.threshold(beta)).sum())
+            if beta <= 1.0:
+                assert k_shape <= 0.01 * empty.size

@@ -11,6 +11,7 @@ rule is replayed on the same scores, so two rules differ in the rule and nothing
     python ceiling_line_4490.py mechanism --cells CEILING_CELLS --out mech.csv
     python ceiling_line_4490.py pair --ceiling ceil_rows.csv --session b025=rows.csv --session b1=... --out pair.csv
     python ceiling_line_4490.py subsample --cells CEILING_CELLS --out sub.csv
+    python ceiling_line_4490.py verify --cells DIR [--cells DIR ...] --priced rows.csv [--priced ...]
     python ceiling_line_4490.py figures --mech mech.csv --ceiling ceil_rows.csv --session b025=rows.csv ... --example NPZ --out DIR
 
 The rules (``RULES``):
@@ -446,6 +447,45 @@ def subsample(cells: str, jobs: int) -> pd.DataFrame:
         )
 
 
+# ----------------------------------------------------------------------------- the built line against the priced rules
+def _verify_cell(path: str) -> list[dict]:
+    from vtscore.eval.line_test_arm import _snapshot_model  # noqa: PLC0415
+
+    out = []
+    for key, snap in load(path).items():
+        short = key.rsplit("/", 1)[1]
+        if snap.get("model") is None:
+            continue
+        s = np.asarray(snap["scores"], dtype=np.float64)
+        line = LL._line_on(_snapshot_model(snap, snap["model"]), s, None, None)
+        for b in BETAS if short == "ceiling" else (float(snap["beta"]),):
+            out.append({"dir": str(Path(path).parent), "cell": Path(path).name.split("__")[0], "key": short, "beta": b,
+                        "k_built": int((s >= line.threshold(b)).sum()), "bads_shape": line.bads_shape})  # fmt: skip
+    return out
+
+
+def verify(cells: list[str], priced: pd.DataFrame, jobs: int) -> pd.DataFrame:
+    """The labels line as built (the library, the model restored from each snapshot) against the priced rules:
+    ``rep_kde`` on the ceiling and ``shipped`` on every session snapshot.  Returns the rows that differ."""
+    with ProcessPoolExecutor(jobs) as ex:
+        built = pd.DataFrame(
+            [
+                r
+                for rr in ex.map(_verify_cell, [str(p) for d in cells for p in testscore_files(d)], chunksize=4)
+                for r in rr
+            ]
+        )
+    want = priced[
+        ((priced.key == "ceiling") & (priced.rule == "rep_kde"))
+        | ((priced.key != "ceiling") & (priced.rule == "shipped"))
+    ]
+    m = built.merge(want[["dir", "cell", "key", "beta", "k"]], on=["dir", "cell", "key", "beta"], how="left")
+    for kind, mm in (("ceiling", m[m.key == "ceiling"]), ("sessions", m[m.key != "ceiling"])):
+        print(f"{kind}: {len(mm)} cuts, {int((mm.k_built == mm.k).sum())} keep the same set, "
+              f"{int(mm.k.isna().sum())} unmatched, the Bads' shape taken on {100 * mm.bads_shape.mean():.1f}%")  # fmt: skip
+    return m[m.k_built != m.k]
+
+
 # ----------------------------------------------------------------------------- figures
 INK, INK2, SURFACE, GRID = "#0b0b0b", "#52514e", "#fcfcfb", "#e4e3df"
 BLUE, ORANGE, AQUA, GRAY = "#2a78d6", "#eb6834", "#1baf7a", "#8a8984"
@@ -574,6 +614,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ceiling", required=True)
     p.add_argument("--session", action="append", required=True, help="tag=rows.csv")
     p.add_argument("--out", required=True)
+    p = sub.add_parser("verify", help="the built line against the priced rules, on the same snapshots")
+    p.add_argument("--cells", action="append", required=True)
+    p.add_argument("--priced", action="append", required=True, help="price rows (run from the same directory)")
+    p.add_argument("--jobs", type=int, default=8)
     p = sub.add_parser("figures")
     p.add_argument("--mech", required=True)
     p.add_argument("--ceiling", required=True)
@@ -600,6 +644,12 @@ def main(argv: list[str] | None = None) -> int:
         d = pair(pd.read_csv(a.ceiling), _sessions(a.session), ["shipped", "rep_kde"])
         d.to_csv(a.out, index=False)
         print(d.round(3).to_string(index=False))
+    elif a.cmd == "verify":
+        bad = verify(a.cells, pd.concat(pd.read_csv(r) for r in a.priced), a.jobs)
+        print(
+            bad.head(20).to_string(index=False) if len(bad) else "the built line matches the priced rules on every cut"
+        )
+        return 1 if len(bad) else 0
     elif a.cmd == "figures":
         figures(pd.read_csv(a.mech), pd.read_csv(a.ceiling), _sessions(a.session), a.example, Path(a.out))
     return 0
