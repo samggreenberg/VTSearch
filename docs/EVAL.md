@@ -305,7 +305,7 @@ A study's headline number is its **final cost** — the metric at the last click
 | | what it is | column it comes from |
 |---|---|---|
 | **stopping point** | the click at which the rules first fired — the *width* | first `t` where `phase == "done"` |
-| **stopping cost** | the metric at that click — the *height* | that row's `cost` (and `average_precision` beside it) |
+| **stopping cost** | the metric at that click — the *height* | that row's objective, `fbeta` on a run that drew its line at a balance and `cost` on one that did not (`average_precision` beside it) |
 
 `phase` has been on every metric row since the harness adopted the app's phase machine, so **this needs no re-run**: a finished study's cells carry it already. Columns beside it (added by #3560) say *which* rule was doing the holding, which `phase` alone cannot:
 
@@ -340,6 +340,11 @@ Smart's two are a **disjunction** — either clears it — so neither alone says
 - **The rules flap.** The phase is derived from the current labelset every step, never latched, so a run can go `done` on one vote and back to `hard` on the next. The app announces on the **first** fire and never re-announces, so first-fire is the faithful stopping point (`t_stop`); `t_sustained` reports the stricter reading, and `n_done_episodes` says how far apart the two are.
 - **They often never fire**, which makes every average a **censored** statistic. Averaging the runs that stopped excludes precisely the slow ones, so the mean flatters, and flatters harder the worse the arm is. `summarise()` leads with the fire *rate*, and its `km_t_stop` is a Kaplan–Meier median that carries the non-firing runs as censored at their own budget — returning `NaN`, honestly, when fewer than half of them ever fired.
 - **Cost at the stop and cost at the budget are different numbers, and the difference has a sign.** Report both, paired within run.
+- **A spot check prompted mid-session hides the phase.** Its rounds are clicks with `phase == "prompt"` (`spot_check="weak"`, below), so the phase machine's answer on those steps is not in the row. `stopping.UNREAD_PHASES` carries the last read state across them: a prompted check can neither fire the rules nor split a `done` stretch into two episodes.
+
+Each stop is also held against **the run's own best** (`{metric}_best`, `{metric}_t_best`, and the distance `{metric}_from_best` and `{metric}_clicks_past_best`, the last two columns of `stopping_table`): a rule that fires long after the run's best costs users clicks, one that fires long before it costs them quality. The best is the extreme of a noisy series, so read the two together.
+
+The State of the App analyzer ([`scripts/experiments/state_of_app/analyze.py`](../scripts/experiments/state_of_app/analyze.py)) writes all of it on every review: `stops.csv`, `margins.csv`, and a "Where the app said stop" block in `summary.md`, per production path and per band, at the review's objective, with a run that never trained kept as one the rules never stopped.
 
 Pass the result to `curves.quality_vs_clicks(..., stops=...)` and the mandatory averaged figure carries a `▽` at each arm's median stopping click, with the arms that mostly never stopped named in the caption rather than silently unmarked.
 

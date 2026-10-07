@@ -1,7 +1,8 @@
 # Reporting the app's stopping rules in eval studies (issue #3560)
 
-**Status:** the measurement layer has shipped; what is owed is the *reporting*
-— re-analysing the influential finished studies and adopting the convention.
+**Status:** the measurement layer has shipped, and the State of the App
+analyzer reports it; what is owed is the *first reading* of a real review, and
+then adopting the convention.
 
 ## Background
 
@@ -26,8 +27,14 @@ What already exists, and is therefore *not* owed:
   gates. See [`docs/EVAL.md`](../EVAL.md#stopping-point-and-stopping-cost-issue-3560).
 - [`scripts/experiments/calibration/stopping.py`](../../scripts/experiments/calibration/stopping.py)
   derives the stopping point and stopping cost from those columns, with the
-  censoring and flapping handled; `curves.quality_vs_clicks(..., stops=…)` marks
-  the stopping click on the mandatory averaged figure.
+  censoring and flapping handled, holds each stop against the run's own best
+  (`{metric}_from_best`, `{metric}_clicks_past_best`), and reads through a spot
+  check prompted mid-session (`phase == "prompt"`); `curves.quality_vs_clicks(..., stops=…)`
+  marks the stopping click on the mandatory averaged figure.
+- The State of the App analyzer
+  ([`state_of_app/analyze.py`](../../scripts/experiments/state_of_app/analyze.py))
+  writes `stops.csv`, `margins.csv` and a "Where the app said stop" block in
+  `summary.md`, per production path and per band, at the review's objective.
 - [`docs/EVAL.md`](../EVAL.md) documents the columns and the derivation.
 
 **The marginal compute cost of all of this is zero.** The phase machine's inputs
@@ -39,31 +46,25 @@ issue. No study gets slower for reporting a stopping point.
 
 <!-- item-sep -->
 
-- **Re-analyse the influential finished studies** — no re-runs. `phase` is in
-  the cells of every study since 2026-07-31, so the enrichment is a read, not a
-  grid. In rough order of influence:
-  [#3156 vg-scale](../experiments/2026-08-25-vg-scale/REPORT.md) (the overview
-  everything else is read against),
+- **Read one State of the App review's stopping block** — no re-run. The
+  three studies this item first named ([#3156 vg-scale](../experiments/2026-08-25-vg-scale/REPORT.md),
   [#2877 acquisition-inclusion](../experiments/2026-08-07-acquisition-inclusion/REPORT.md),
-  [#3267 good-mining](../experiments/2026-08-27-good-mining-3267/REPORT.md).
-  For each: `stopping.stopping_points` over the arm frames `_cells_io.load_arm`
-  already returns, `stopping.summarise`, `stopping.stopping_table` into the
-  report, and a re-generated `cost_vs_clicks.png` with `stops=` passed.
+  [#3267 good-mining](../experiments/2026-08-27-good-mining-3267/REPORT.md))
+  cannot usefully be re-read. Finished study dirs went in the 2026-09-18
+  `/expscratch` deletion (#4001): #4128 confirms #3267's results root is gone,
+  #2877's readers carry the deletion guard, and vg-scale's
+  `scale-3156-map` is unconfirmed. Their committed `viewer.html` pages carry
+  every metric per click but not `phase`, and all three are Cost-era. A
+  State of the App run is the replacement: balance-era, post-margins (so the
+  binding light and the margins are answerable too, not only the stop), and
+  kept on `/expscratch` while it is current. Re-run `analyze.sh` over the
+  newest review's run dir (its `summary.md` then carries the block), read the
+  block, and write what it says into that review's `REPORT.md`.
 
-  Two things to check before quoting a number off an old grid, both of which the
-  code will tell you rather than assume: that the cells are still on
-  `/expscratch` (nothing here can rebuild them), and that `phase` is actually
-  populated — a study run with `autopilot_fidelity=False` for byte-reproduction
-  of a pre-fidelity result has an empty column, and `stopping_points` returns an
-  empty frame rather than a table of zeros.
-
-  What the re-analysis **cannot** answer is which of Smart and Stable was
-  binding, since those cells predate the lights — nor how close either came,
-  since they predate the margins too, and unlike the lights those can never be
-  back-filled (the slope and flip-rate windows are per-step state the run
-  discarded). `stopping.binding_note` and `stopping.has_margins` say so instead
-  of guessing. Those two questions need a re-run, and are the only things here
-  that do.
+  Check before quoting a number: that the run dir is still on `/expscratch`,
+  and that its runs went far enough for the rules to fire at all — a block
+  where `fired` is 0% everywhere is a finding about the budget, not about the
+  rules.
 
 <!-- item-sep -->
 
@@ -74,7 +75,7 @@ issue. No study gets slower for reporting a stopping point.
   belongs in the same list. Proposed shape, which
   `stopping.stopping_table` emits:
 
-  | arm | runs | fired | stop click (KM) | stop click (median of fired) | cost at stop | cost at budget | Δcost (paired) | clicks after stop |
+  | arm | runs | fired | stop click (KM) | stop click (median of fired) | fbeta at stop | fbeta at budget | Δfbeta (paired) | clicks after stop | short of run's best | clicks past best |
 
   On a post-margins study a second block goes beside it, from
   `stopping.margin_table` — the same arms, read as how close each gate came
@@ -102,17 +103,20 @@ issue. No study gets slower for reporting a stopping point.
   right. The questions it makes askable, in the order they get cheaper to
   answer:
 
-  - **Is the stopping cost near the run's own best?** Compare `cost_at_stop`
-    against `min(cost)` over the trajectory. A rule that fires 40 clicks after
-    the run's floor is a rule that costs users clicks; one that fires 40 clicks
-    before it is a rule that costs them quality. Both are readable off cells
-    that already exist.
+  - **Is the stopping cost near the run's own best?** `stopping_points` now
+    carries it (`{metric}_from_best`, `{metric}_clicks_past_best`, the last two
+    columns of the table above). A rule that fires 40 clicks after the run's
+    floor is a rule that costs users clicks; one that fires 40 clicks before it
+    is a rule that costs them quality. What is owed is the reading, which
+    comes with the first State of the App block above. The best is the extreme
+    of a noisy series, so the two columns are read together, never alone.
   - **Which indicator is binding, and is it the right one?** Needs the lights,
-    so it needs a re-run — but only of a grid small enough to answer it. A local
+    which a State of the App run carries, so the block's binding note and margin
+    table answer it from the same read. A local
     probe on synthetic data had Stable holding runs far more often than Smart or
     Span, which if it reproduces means the stopping rule is in practice a
     prediction-flip rule with two decorations. The margins sharpen the same
-    grid's answer: `stable_block_avg` / `stable_block_max` /
+    answer: `stable_block_avg` / `stable_block_max` /
     `stable_block_falling` say *which of Stable's three gates* was doing it, and
     a gate with a median margin barely short of zero and a green share near half
     is a rule flapping rather than a detector failing.
