@@ -104,14 +104,21 @@ class TestTheSigmaFollowsTheBalance:
 
     @pytest.mark.parametrize(
         ("beta", "sigma", "need"),
-        ((None, "0.08", 256), ("1", "0.08", 256), ("1.0", "0.08", 256), ("0.25", "0.16", 1024), (".25", "0.16", 1024)),
-        ids=("unset-is-the-apps-default", "one", "one-point-oh", "quarter", "bare-decimal"),
+        (
+            (None, "0.08", 256),
+            ("1", "0.08", 256),
+            ("1.0", "0.08", 256),
+            ("0.25", "0.13", 676),
+            (".25", "0.13", 676),
+            ("4", "0.10", 400),
+        ),
+        ids=("unset-is-the-apps-default", "one", "one-point-oh", "quarter", "bare-decimal", "four"),
     )
     def test_a_balance_run_is_sized_on_the_objective(self, tmp_path, beta, sigma, need):
-        """(2σ/δ)² at δ = 0.01: 256 cells at beta 1, four times that at beta 1/4."""
+        """(2σ/δ)² at δ = 0.01, with each preset's measured σ (#4584)."""
         out = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", str(need - 1), beta=beta).stdout
         assert f"(σ={sigma}) needs {need}" in out
-        assert f"σ={sigma} is the objective's σ at beta" in out and "provisional" in out
+        assert f"σ={sigma} is the objective's σ at beta" in out and "measured" in out
         ok = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", str(need), beta=beta).stdout
         assert f"ok    A/B resolves δ=0.01 at 2 SE: {need} paired cells >= {need} (σ={sigma}" in ok
 
@@ -119,7 +126,7 @@ class TestTheSigmaFollowsTheBalance:
         out = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", "64", beta="OFF").stdout
         assert "(σ=0.04; floor" in out and "the Δcost σ of #3840" in out
 
-    @pytest.mark.parametrize("beta", ("4", "0.5"))
+    @pytest.mark.parametrize("beta", ("2", "0.5"))
     def test_a_beta_with_no_measured_sigma_asks_for_one(self, tmp_path, beta):
         proc = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", "400", beta=beta)
         assert proc.returncode == 2
