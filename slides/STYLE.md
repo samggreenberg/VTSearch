@@ -443,6 +443,17 @@ the way: write it as the fragment's last line wrapped in
 the manifest marks `+end`. It is hidden rather than removed, so the list does
 not re-centre when it appears.
 
+**It scales with the talk.** A talk cut from the master deck keeps the sections
+it needs, so its outline may be three lines or fifteen, and the theme sizes the
+list to its length rather than to any one deck: every line gets an equal share
+of the slot, so a short outline sits large and well spaced (36px, 80px apart)
+and a long one tightens toward the type floor (22px at sixteen lines). Sixteen
+lines, the closing one included, is the ceiling: past it `build.py --check`
+fails the fragment, because the first and last sections are the ones that would
+run off the slide. A line never wraps, which is one more reason a section's
+line is a bare name. Cutting a talk means deleting lines from its own outline
+fragment and renumbering its `+atN` marks; nothing in the theme changes.
+
 **It is laid out like the deck's other slides**, not as its own kind of page:
 the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that
