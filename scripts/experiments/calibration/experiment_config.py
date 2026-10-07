@@ -1061,6 +1061,13 @@ if _ACQ_P_CROSSING_ENV == "off":
 else:
     ACQ_P_CROSSING = float(_ACQ_P_CROSSING_ENV) if _ACQ_P_CROSSING_ENV else None
 
+#: #3546's two acquisition arms.  ``CALIB_ACQ_ORIGIN=inclusion`` counts the
+#: offset from the run's Inclusion knob instead of the line (the old origin);
+#: ``CALIB_ACQ_TARGET_P`` samples where the labels line's corpus posterior falls
+#: below that share (requires ``CALIB_ACQ_INCLUSION_OFFSET=0``).  Unset = the app.
+ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
+ACQ_TARGET_P = _opt_float("CALIB_ACQ_TARGET_P")
+
 #: The **Autopilot opening** this arm runs (issue #3267), in the grammar of
 #: :mod:`vtscore.eval.startup_schedule` - e.g. ``"n6@k-6,n6@k-2,n6@k0"``.
 #:

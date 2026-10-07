@@ -8,6 +8,15 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+### Added
+
+- **Two acquisition arms for the eval harness** (issue #3546). `simulate_voting_iterations` takes
+  `acq_origin` (`"line"`, the default and the app, or `"inclusion"`: count the acquisition offset
+  from the run's Inclusion knob instead of the line, the old origin) and `acq_target_p` (sample
+  where the labels line's corpus posterior falls below that share, via the new
+  `vtscore.eval.voting_iterations.target_precision_cut(line, p)`; requires
+  `acq_inclusion_offset=0`). Both default to the app's behaviour, and the app is unchanged.
+
 ### Changed
 
 - **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).

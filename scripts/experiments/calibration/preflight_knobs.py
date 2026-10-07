@@ -305,6 +305,11 @@ def probe(C: Any) -> list[str]:
     # shipped ACQUISITION_ARGMAX_FACTOR is None and a number never does.
     if C.ACQ_RANK_PERCENTILE is not None:
         rows.append(("acq_rank_percentile", env("CALIB_ACQ_RANK_PERCENTILE") or "", "<unset> = the app's offset cut"))
+    # #3546's arms: neither has an app counterpart yet.
+    if C.ACQ_ORIGIN != "line":
+        rows.append(("acq_origin", C.ACQ_ORIGIN, "line (the app counts the offset from the line)"))
+    if C.ACQ_TARGET_P is not None:
+        rows.append(("acq_target_p", env("CALIB_ACQ_TARGET_P") or "", "<unset> = the app's offset cut"))
     if resolve_acquisition_factor(C.ACQ_P_CROSSING, run_beta) != resolve_acquisition_factor(None, run_beta):
         rows.append(
             (
