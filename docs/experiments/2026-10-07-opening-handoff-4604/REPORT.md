@@ -15,6 +15,8 @@ The returned set would then gain, on average over clicks 1–50:
 - **Why:** the opening's binary detector *ranks* worse than the typed query (AP 0.34 against 0.43 at click 10), and beta 4 needs the recall that only a good ranking gives.
 - **A vote rule helps but does not fix it.** The rule waits until the detector's set beats the typed query's on the votes so far. That cuts the loss to −0.02 and keeps 75–95% of the gains elsewhere.
 
+**The picture holds at a second prevalence.** Binary Photo was re-priced with the user's pool at 1% (#4583's shipped arm). It gives the same signs and sizes at every preset: +0.09 / +0.02 / −0.04.
+
 Showing a detector during the opening needs a background retrain after each opening vote (#4508).
 
 ## What was priced
@@ -140,6 +142,36 @@ At beta 1/4 the score rewards precision. A few images at the top of even a weake
   - At click 10 it returns 59 at 0.61 / 0.73 (F 0.73).
   - At Hard (click 25) it returns 59 at 0.47 / 0.57 (F 0.56). Its recall never reaches the typed query's in the opening.
 
+## At a 1% pool (Binary Photo)
+
+**Why this check.** #4603's typed-query count multiple was tuned at 0.44% and failed at 2%. So this pricing was repeated at a second prevalence before any rule is chosen.
+
+**The runs.** #4583's shipped arm (calibration fraction 0.3, 2 folds):
+- Binary Photo, 5 seeds: 717 trained runs per preset.
+- The user's pool thinned to 1% (`CALIB_HAYSTACK_PREVALENCE=0.01`).
+- The withheld half stays at the bench's 0.44%.
+
+**The baseline.** The typed query's guarded line was rebuilt on the 1% pool with today's code (`handoff_1pct_4604.sh`). #4583's own baseline predates #4136, so its display line is the old midpoint.
+
+![The returned set over clicks at a 1% pool](figures/handoff_over_clicks_1pct.png)
+
+**Gain against today, mean F-beta over clicks 1–50:**
+
+| | beta 1/4 | beta 1 | beta 4 |
+|---|---|---|---|
+| from the end of the Bad phase, bench pool (0.44%) | +0.09 ± 0.01 | +0.01 ± 0.01 | −0.05 ± 0.01 |
+| from the end of the Bad phase, 1% pool | **+0.09 ± 0.01** | **+0.02 ± 0.01** | **−0.04 ± 0.01** |
+| vote rule, bench pool | +0.07 ± 0.01 | +0.02 ± 0.01 | −0.02 ± 0.004 |
+| vote rule, 1% pool | +0.07 ± 0.01 | +0.02 ± 0.01 | −0.01 ± 0.004 |
+| ceiling, 1% pool | +0.10 | +0.04 | +0.02 |
+
+- **The signs and sizes match at every preset.** Today's curve starts from the same typed-query set: 0.17 / 0.24 / 0.47 at click 10.
+- **Held out across class halves the result is the same.** A tuned click or Goods count again finds the early hand-off at beta 1/4 (+0.03 over clicks 1–150), and nothing at beta 1 (−0.003 to +0.006) or beta 4 (0.000).
+- **The ranking explanation holds, and the gap is smaller.** At click 10 the binary detector's AP is 0.40, against the typed query's 0.42; 23% of runs beat the typed query there, and the detector's mean overtakes it between clicks 25 (0.41) and 40 (0.47). At the bench pool the same numbers were 0.34 against 0.43 and 12%. A 1% pool gives the opening more positives, so the binary β4 loss is a little smaller (−0.04 against −0.05).
+- **Not covered:**
+  - Region Photo was not re-priced at 1%.
+  - Only the user's pool moves here; the withheld half the objective is scored on stays at 0.44%.
+
 ## The issue's first table
 
 The issue's first table gave the hidden detector as 0.45 / 0.43 / 0.51 at clicks 10 / 25 / 50 for binary beta 1/4. Those numbers averaged only the runs that already have a detector at the click.
@@ -153,7 +185,9 @@ The issue's first table gave the hidden detector as 0.45 / 0.43 / 0.51 at clicks
   - That would also give the Smart and Stable indicators models earlier, and Autopilot's phase transitions read them. #4508 lists this as its pricing item.
   - Autopilot's opening picks come from the typed query's sort either way.
 - **The typed query's set is today's guarded line.** #4603 is pricing a beta-aware line for it. A better typed-query set at beta 1/4 and 1 would shrink these gains; the vote rule would follow it, but the fixed rules would not.
-- **One bench.** These are COCO Better runs at its 0.44% prevalence; Region Photo has 2 seeds.
+- **One bench.** These are all COCO Better runs.
+  - The second prevalence covers Binary Photo only, and only the user's pool (1%).
+  - Region Photo has 2 seeds, at 0.44% only.
 - **The cost of the retrain** (latency and load per opening vote) is #4508's to measure.
 
 ## Files
@@ -165,11 +199,13 @@ The scripts are in `scripts/experiments/state_of_app/`.
 | `handoff_4604.sh OUT [DOCS]` | runs the three steps below over the six runs, about 2 minutes at 8 CPUs |
 | `handoff_extract_4604.py` | pulls each run's steps (the detector at every click, shown or not) and picks |
 | `handoff_price_4604.py` | the rules, per path and preset: per-click curves, gains, class halves |
-| `handoff_report_4604.py` | these tables and figures |
+| `handoff_1pct_4604.sh OUT` | the 1% check: rebuilds the typed query's baseline on #4583's 1% pool, then extracts and prices its shipped arm |
+| `handoff_report_4604.py` | these tables and figures, including the 1% ones when that run is in the same dir |
 | `selftest_handoff_4604.py` | planted answers, including that a pick is judged against the previous step's line |
 
 The tables are in `tables/`.
 - `rules.csv`: every rule at every path and preset.
 - `curves.csv`: the named rules' mean F per click.
 - `headline.csv`, `split_half.csv`, `by_band.csv`, `returned_set.csv`, `ap.csv`, `reconcile.csv`.
+- The 1% check: `rules_1pct.csv`, `headline_1pct.csv`, `split_half_1pct.csv`, `ap_1pct.csv`.
 - `provenance.json`: the run and baseline paths.

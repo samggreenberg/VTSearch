@@ -52,8 +52,17 @@ def class_half(cls: str) -> int:
 def load(a: argparse.Namespace):
     steps = pd.read_csv(a.steps)
     picks = pd.read_csv(a.picks)
-    cells = pd.read_csv(a.cells)
-    cells = cells[~cells["never_trained"].astype(bool)][["category", "class", "band", "seed", "shown_from"]]
+    if a.cells:
+        cells = pd.read_csv(a.cells)
+        cells = cells[~cells["never_trained"].astype(bool)][["category", "class", "band", "seed", "shown_from"]]
+    else:
+        # A run with no State of the App analysis (#4583's arms): a trained run is one with steps, and its class
+        # and band come off the category; shown_from is recomputed below either way.
+        cells = steps[RUN].drop_duplicates().copy()
+        cells["class"] = cells["category"].str.split("@").str[0]
+        cells["band"] = cells["category"].str.split("@").str[1]
+        on = steps.loc[steps["app_trained"] == 1].groupby(RUN)["t"].min().rename("shown_from")
+        cells = cells.merge(on, left_on=RUN, right_index=True, how="left").fillna({"shown_from": np.inf})
     base = pd.read_csv(a.baseline)
     base = base[base["embedder"] == a.text_embedder]
     runs = cells.sort_values(RUN).reset_index(drop=True)
@@ -203,7 +212,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--steps", required=True)
     ap.add_argument("--picks", required=True)
-    ap.add_argument("--cells", required=True)
+    ap.add_argument("--cells", help="a State of the App analysis's cells.csv; without it, derived from the steps")
     ap.add_argument("--baseline", required=True)
     ap.add_argument("--text-embedder", default="siglip")
     ap.add_argument("--beta", type=float, required=True)

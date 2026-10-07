@@ -17,7 +17,7 @@ import pandas as pd
 
 STEP_COLS = [
     "dataset", "category", "seed", "embedder", "t", "phase", "app_trained", "threshold", "precision", "recall",
-    "fpr", "n_test_pos", "n_test_neg", "n_good", "n_bad", "smart", "stable", "floor_count", "beta",
+    "fpr", "n_test_pos", "n_test_neg", "n_good", "n_bad", "smart", "stable", "floor_count", "beta", "average_precision",
     "gmm_variant", "schedule", "pool_variant",
 ]  # fmt: skip
 PICK_COLS = [
@@ -42,7 +42,8 @@ def one(args: tuple[str, str, int]) -> tuple[pd.DataFrame, pd.DataFrame]:
         df = df[df["pool_variant"].fillna("").astype(str).str.strip().isin(("", "max"))]
     df = df[df["phase"].fillna("").astype(str).str.strip() != "check"]
     df = df.drop(columns=[c for c in ("gmm_variant", "schedule", "pool_variant") if c in df.columns])
-    pk_path = main[: -len(".csv")] + "__picks.csv"
+    stem, ext = (main[: -len(".csv.gz")], ".csv.gz") if main.endswith(".csv.gz") else (main[: -len(".csv")], ".csv")
+    pk_path = f"{stem}__picks{ext}"
     pk = pd.DataFrame(columns=PICK_COLS)
     if os.path.exists(pk_path) and os.path.getsize(pk_path):
         pk = pd.read_csv(pk_path)
@@ -61,7 +62,8 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--procs", type=int, default=8)
     a = ap.parse_args()
-    files = sorted(f for f in glob.glob(f"{a.exp}/results/cells/task_*.csv") if "__" not in os.path.basename(f))
+    cells = glob.glob(f"{a.exp}/results/cells/task_*.csv") + glob.glob(f"{a.exp}/results/cells/task_*.csv.gz")
+    files = sorted(f for f in cells if "__" not in os.path.basename(f))  # CALIB_CELLS_GZIP runs write .csv.gz
     with Pool(a.procs) as pool:
         parts = pool.map(one, [(f, a.embedder, a.seeds) for f in files], chunksize=8)
     steps = pd.concat([p[0] for p in parts if len(p[0])], ignore_index=True)

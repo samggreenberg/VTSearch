@@ -63,6 +63,10 @@ def main() -> int:
         assert np.isnan(det[0, 3]) and np.isclose(det[0, 4], 0.1) and np.isclose(det[0, 150], 0.6), "carried forward"
         assert dside[0, 8] == 0 and dside[0, 9] == 1, "a pick is judged against the PREVIOUS step's line"
         assert np.isnan(dside[0, 4]), "no detector before click 5's pick"
+        # Without a cells.csv (#4583's arms) the trained runs, class, band and Hard come off the steps.
+        derived = price.load(argparse.Namespace(**{**vars(a), "cells": None}))[0]
+        assert list(derived["category"]) == ["a@large"] and derived["class"][0] == "a" and derived["band"][0] == "large"
+        assert derived["shown_from"][0] == 12
         rs = price.rules(runs, tq, det, shown, kept, lab, tside, dside, 1.0)
         f = {k: v[2][0] for k, v in rs.items()}
         assert np.allclose(f["today"][:12], 0.3) and np.allclose(f["today"][12:], 0.6), "today hands off at Hard"

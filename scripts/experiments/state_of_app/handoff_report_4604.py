@@ -37,9 +37,14 @@ VOTE = "after_bad_votes_m+0.0_p1"
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
 
+#: The second prevalence (``handoff_1pct_4604.sh``): #4583's shipped arm, the user's pool at 1%.
+PCT_TAGS = [f"binary1pct_{b}" for b in ("b025", "b1", "b4")]
+
+
 def title(tag: str) -> str:
     p, b = tag.split("_")
-    return f"{'Binary' if p == 'binary' else 'Region'} Photo, beta {BETA[b]}"
+    name = {"binary": "Binary Photo", "region": "Region Photo", "binary1pct": "Binary Photo, 1% pool"}[p]
+    return f"{name}, beta {BETA[b]}"
 
 
 def half(cls: str) -> int:
@@ -212,15 +217,16 @@ def _axes_style(ax) -> None:
         ax.spines[sp].set_color(GRID)
 
 
-def figure_curves(cur: dict[str, pd.DataFrame], out: Path) -> None:
+def figure_curves(cur: dict[str, pd.DataFrame], out: Path, tags: list[str] = TAGS) -> None:
     lines = [
         ("ceiling_opening", "#1baf7a", "--"),
         ("today", "#8a8985", "-"),
         ("after_bad", "#2a78d6", "-"),
         (VOTE, "#eb6834", "-"),
     ]
-    fig, axes = plt.subplots(2, 3, figsize=(13, 7.4), sharex=True)
-    for ax, tag in zip(axes.flat, TAGS):
+    nrows = len(tags) // 3
+    fig, axes = plt.subplots(nrows, 3, figsize=(13, 3.7 * nrows + 0.6), sharex=True, squeeze=False)
+    for ax, tag in zip(axes.flat, tags):
         c = cur[tag]
         for k, col, ls in lines:
             ax.plot(c["t"], c[k], color=col, lw=1.5 if ls == "--" else 2, ls=ls, label=NAMED[k])
@@ -229,11 +235,11 @@ def figure_curves(cur: dict[str, pd.DataFrame], out: Path) -> None:
         _axes_style(ax)
     for ax in axes[:, 0]:
         ax.set_ylabel("F-beta of the returned set (withheld half)", color=MUTED, fontsize=9)
-    for ax in axes[1, :]:
+    for ax in axes[-1, :]:
         ax.set_xlabel("clicks", color=MUTED, fontsize=9)
     h, lab = axes[0, 0].get_legend_handles_labels()
     fig.legend(h, lab, loc="lower center", ncol=2, frameon=False, fontsize=9)
-    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    fig.tight_layout(rect=(0, 0.14 / nrows, 1, 1))
     fig.savefig(out, dpi=150)
 
 
@@ -296,12 +302,44 @@ def main() -> int:
         u.sort_values("mean", ascending=False).head(12).round(3).to_string(),
     )
     print("\n== examples\n" + "\n".join(examples(a.dir, runs, gains, baselines)))
+    # The second prevalence, when handoff_1pct_4604.sh has priced it into the same dir.
+    pct = all((a.dir / f"summary_{t}.csv").exists() for t in PCT_TAGS)
+    if pct:
+        summ1 = {t: pd.read_csv(a.dir / f"summary_{t}.csv") for t in PCT_TAGS}
+        cur1 = {t: pd.read_csv(a.dir / f"curves_{t}.csv") for t in PCT_TAGS}
+        tables["headline_1pct"] = headline(summ1)
+        tables["split_half_1pct"] = split_half(summ1)
+        # The ranking at 1%: the detector's AP on the withheld half off the steps, against the typed query's.
+        st = pd.read_csv(a.dir / "steps_binary1pct_b1.csv.gz")
+        tb = pd.read_csv(a.dir / "text_baseline_1pct.csv")
+        tb = tb[tb["embedder"] == "siglip"]
+        row: dict[str, object] = {"path": "binary, 1% pool", "typed query AP": tb["text_AP"].mean()}
+        for t in (7, 10, 25, 40, 60):
+            g = st[st["t"] == t].merge(tb[["category", "seed", "text_AP"]], on=["category", "seed"])
+            row[f"AP@{t}"] = g["average_precision"].mean()
+            row[f"beats the typed query @{t}"] = (g["average_precision"] > g["text_AP"]).mean()
+        tables["ap_1pct"] = pd.DataFrame([row])
+        for name in ("headline_1pct", "split_half_1pct", "ap_1pct"):
+            print(f"\n== {name}\n{tables[name].round(3).to_string(index=False)}")
     if a.docs:
         (a.docs / "figures").mkdir(parents=True, exist_ok=True)
         (a.docs / "tables").mkdir(parents=True, exist_ok=True)
         figure_curves(cur, a.docs / "figures" / "handoff_over_clicks.png")
         figure_runs(gains, a.docs / "figures" / "run_gains.png")
-        for name in ("headline", "split_half", "by_band", "returned_set", "ap", "reconcile"):
+        if pct:
+            figure_curves(cur1, a.docs / "figures" / "handoff_over_clicks_1pct.png", PCT_TAGS)
+            pd.concat(summ1.values()).round(5).to_csv(a.docs / "tables" / "rules_1pct.csv", index=False)
+        for name in (
+            "headline",
+            "split_half",
+            "by_band",
+            "returned_set",
+            "ap",
+            "reconcile",
+            "headline_1pct",
+            "split_half_1pct",
+            "ap_1pct",
+        ):
             if name in tables:
                 tables[name].round(4).to_csv(a.docs / "tables" / f"{name}.csv", index=False)
         pd.concat(summ.values()).round(5).to_csv(a.docs / "tables" / "rules.csv", index=False)
