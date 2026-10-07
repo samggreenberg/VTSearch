@@ -23,6 +23,7 @@ per run, with one SE over classes.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path
 
 import matplotlib
@@ -40,9 +41,15 @@ SETS = {
     "T_today": "today: the typed query's set until Hard",
     "T_after_bad": "the walk on the typed query's top, the detector shown from the end of the Bad phase",
     "D": "the walk on the detector's top, which is shown",
+    "D_text": "the walk on the detector's top, the typed query's set shown until Hard",
 }
-COLOR = {"T_today": "#8a8985", "T_after_bad": "#2a78d6", "D": "#eb6834"}
+COLOR = {"T_today": "#8a8985", "T_after_bad": "#2a78d6", "D": "#eb6834", "D_text": "#1baf7a"}
 CLICKS = (10, 25, 50, 100, 150)
+#: Hand-off rules priced on each arm's sessions: a fixed click, and #4604's vote rule (the detector's F-beta on the
+#: honest votes so far at least the typed query's plus a margin, with at least p positives judged).
+FIXED = (10, 15, 20, 25, 30, 40, 50)
+MARGINS = (-0.1, 0.0, 0.1)
+MIN_POS = (1, 3)
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 TRAINED = ("hard", "new", "done", "exhausted")
 
@@ -90,6 +97,66 @@ def walk_stats(picks: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("key")
 
 
+def hard_from(steps: pd.DataFrame, keys: list[str]) -> np.ndarray:
+    """Per run, the first step in a learned phase: where the app shows a detector today (``app_has_detector``)."""
+    on = steps.loc[steps["phase"].astype(str).isin(TRAINED)].groupby(["category", "seed"])["t"].min()
+    first = {f"{c}|{int(s)}": float(t) for (c, s), t in on.items()}
+    return np.array([first.get(k, np.inf) for k in keys])
+
+
+def counts_fbeta(tp: np.ndarray, fp: np.ndarray, fn: np.ndarray, beta: float) -> np.ndarray:
+    b2 = beta * beta
+    den = (1 + b2) * tp + b2 * fn + fp
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(den > 0, (1 + b2) * tp / den, 0.0)
+
+
+def first_true(cond: np.ndarray) -> np.ndarray:
+    return np.where(cond.any(axis=1), cond.argmax(axis=1).astype(float), np.inf)
+
+
+def arm_rules(z: dict, hard: np.ndarray, beta: float) -> dict[str, np.ndarray]:
+    """Per-run per-click F under each hand-off rule on one arm's sessions.
+
+    A rule shows the typed query's set before its hand-off click and the detector after. It never hands off before
+    the end of the Bad phase (the 3 Goods + 1 Bad detector is the session's worst, #4604) nor after Hard, where the
+    app shows the learned sort anyway. ``ceiling`` takes the better set per run and click until Hard.
+    """
+    det, tq, lo = z["det"], z["tq"], z["more"]
+    hcl = {"hard": hard, "more": np.minimum(lo, hard)}
+    for n in FIXED:
+        hcl[f"click_{n}"] = np.minimum(np.maximum(float(n), lo), hard)
+    have = np.isfinite(z["dside"])
+    y = np.where(have, z["lab"], 0.0)
+    dsel, tsel = np.where(have, z["dside"], 0.0), np.where(have, z["tside"], 0.0)
+    fd = counts_fbeta((y * dsel).cumsum(1), ((1 - y) * dsel * have).cumsum(1), (y * (1 - dsel)).cumsum(1), beta)
+    ft = counts_fbeta((y * tsel).cumsum(1), ((1 - y) * tsel * have).cumsum(1), (y * (1 - tsel)).cumsum(1), beta)
+    npos = y.cumsum(1)
+    for m in MARGINS:
+        for mp in MIN_POS:
+            cond = (fd >= ft + m) & (npos >= mp) & np.isfinite(det) & (GRID_T[None, :] >= lo[:, None])
+            hcl[f"votes_m{m:+.1f}_p{mp}"] = np.minimum(first_true(cond), hard)
+    out = {k: curve(h, tq, det) for k, h in hcl.items()}
+    before = (GRID_T[None, :] < hard[:, None]) & np.isfinite(det)
+    out["ceiling"] = np.where(before, np.maximum(det, tq[:, None]), out["hard"])
+    return out
+
+
+def held_out(F: dict[str, np.ndarray], base: np.ndarray, cls: np.ndarray, family: str) -> tuple[str, float, float]:
+    """Tune a family's setting on one class half (by gain over clicks 1-150), score it on the other; both ways."""
+    half = np.array([int(hashlib.md5(c.encode()).hexdigest(), 16) % 2 for c in cls])
+    names = [k for k in F if k.startswith(family)]
+    g150 = {k: (F[k][:, 1:] - base[:, 1:]).mean(axis=1) for k in names}
+    g50 = {k: (F[k][:, 1:51] - base[:, 1:51]).mean(axis=1) for k in names}
+    picks, s150, s50 = [], 0.0, 0.0
+    for h in (0, 1):
+        best = max(names, key=lambda k: g150[k][half == h].mean())
+        picks.append(best)
+        s150 += g150[best][half != h].mean() / 2
+        s50 += g50[best][half != h].mean() / 2
+    return "/".join(picks), s50, s150
+
+
 def ap_by_click(steps: pd.DataFrame, keys: list[str]) -> np.ndarray:
     ap = np.full((len(keys), T + 1), np.nan)
     pos = {k: i for i, k in enumerate(keys)}
@@ -119,9 +186,19 @@ def compare(d: Path, tag: str) -> dict | None:
         "T_after_bad": curve(np.minimum(t["more"][it], t["shown"][it]), tq, t["det"][it]),
         "D": curve(dd["shown"][idd], dd["tq"][idd], dd["det"][idd]),
     }
+    # Arm D's sessions with today's display: the typed query's set until D's own Hard (a measurement, not an app).
+    steps_d = pd.read_csv(d / f"steps_D_{tag}.csv.gz")
+    hard_d = hard_from(steps_d, both)
+    sets["D_text"] = curve(hard_d, dd["tq"][idd], dd["det"][idd])
     cls = t["cls"][it]
     keep = np.isfinite(tq) & np.all([np.isfinite(v).all(axis=1) for v in sets.values()], axis=0)
     sets = {k: v[keep] for k, v in sets.items()}
+    beta = float(BETA[tag.split("_")[1]].replace("1/4", "0.25"))
+    zsel = lambda z, ix: {k: z[k][ix][keep] for k in ("det", "tq", "more", "lab", "tside", "dside")}  # noqa: E731
+    rules = {
+        "T": arm_rules(zsel(t, it), t["shown"][it][keep], beta),
+        "D": arm_rules(zsel(dd, idd), hard_d[keep], beta),
+    }
     cls, keys = cls[keep], [k for k, m in zip(both, keep) if m]
     wt = walk_stats(pd.read_csv(d / f"picks_T_{tag}.csv.gz")).reindex(keys)
     wd = walk_stats(pd.read_csv(d / f"picks_D_{tag}.csv.gz")).reindex(keys)
@@ -134,7 +211,7 @@ def compare(d: Path, tag: str) -> dict | None:
         ]
     )
     ap_t = ap_by_click(pd.read_csv(d / f"steps_T_{tag}.csv.gz"), keys)
-    ap_d = ap_by_click(pd.read_csv(d / f"steps_D_{tag}.csv.gz"), keys)
+    ap_d = ap_by_click(steps_d, keys)
     row: dict = {"tag": tag, "pairs": len(keys), "classes": len(set(cls)), "same_until_walk": float(same.mean())}
     row["only_one_arm"] = len(set(kt) ^ set(kd))
     for name, f in sets.items():
@@ -142,7 +219,13 @@ def compare(d: Path, tag: str) -> dict | None:
         row[f"{name}_1_150"] = f[:, 1:].mean()
         for c in CLICKS:
             row[f"{name}_at_{c}"] = f[:, c].mean()
-    for a, b, lab in (("D", "T_after_bad", "walk"), ("T_after_bad", "T_today", "handoff"), ("D", "T_today", "total")):
+    pairs = (
+        ("D", "T_after_bad", "walk"),
+        ("T_after_bad", "T_today", "handoff"),
+        ("D", "T_today", "total"),
+        ("D_text", "T_today", "walk_hidden"),
+    )
+    for a, b, lab in pairs:
         for lo, hi in ((1, 50), (1, 150)):
             g = (sets[a][:, lo : hi + 1] - sets[b][:, lo : hi + 1]).mean(axis=1)
             row[f"{lab}_{lo}_{hi}"] = g.mean()
@@ -163,14 +246,30 @@ def compare(d: Path, tag: str) -> dict | None:
             row[f"{arm}_goods_{k}"] = w[f"goods_{k}"].mean()
         for c in CLICKS:
             row[f"{arm}_ap_at_{c}"] = np.nanmean(ap[:, c])
+    base = sets["T_today"]
+    rrows = []
+    for arm, F in rules.items():
+        for k, f in F.items():
+            g50, g150 = (f[:, 1:51] - base[:, 1:51]).mean(axis=1), (f[:, 1:] - base[:, 1:]).mean(axis=1)
+            rrows.append({"tag": tag, "arm": arm, "rule": k, "gain_1_50": g50.mean(), "se_1_50": se_over_classes(g50, cls),
+                          "gain_1_150": g150.mean(), "se_1_150": se_over_classes(g150, cls)})  # fmt: skip
+        for fam in ("click_", "votes_"):
+            pick, s50, s150 = held_out(F, base, cls, fam)
+            rrows.append({"tag": tag, "arm": arm, "rule": f"held-out {fam.rstrip('_')} ({pick})", "gain_1_50": s50,
+                          "se_1_50": np.nan, "gain_1_150": s150, "se_1_150": np.nan})  # fmt: skip
     diff = {
-        lab: sets[a] - sets[b] for a, b, lab in (("D", "T_after_bad", "walk"), ("T_after_bad", "T_today", "handoff"))
+        lab: sets[a] - sets[b]
+        for a, b, lab in (
+            ("D", "T_after_bad", "walk"),
+            ("T_after_bad", "T_today", "handoff"),
+            ("D_text", "T_today", "walk_hidden"),
+        )
     }
     band = {}
     for lab, g in diff.items():
         by = pd.DataFrame(g).groupby(cls).mean()
         band[lab] = (g.mean(axis=0), by.std(ddof=1).to_numpy() / np.sqrt(len(by)))
-    return {"row": row, "curves": {k: v.mean(axis=0) for k, v in sets.items()}, "band": band}
+    return {"row": row, "curves": {k: v.mean(axis=0) for k, v in sets.items()}, "band": band, "rules": rrows}
 
 
 def _axes_style(ax) -> None:
@@ -209,6 +308,7 @@ def figure_gain(res: dict[str, dict], out: Path) -> None:
     names = {
         "walk": ("the detector's top against the typed query's, both shown from the end of the Bad phase", "#eb6834"),
         "handoff": ("showing the detector from the end of the Bad phase against today, on today's walk", "#2a78d6"),
+        "walk_hidden": ("the detector's top against today's walk, the typed query shown until Hard in both", "#1baf7a"),
     }
     for ax, tag in zip(axes.flat, tags):
         for lab, (name, col) in names.items():
@@ -242,13 +342,17 @@ def main() -> int:
     for o in outs:
         o.mkdir(parents=True, exist_ok=True)
         summ.to_csv(o / "walk_summary.csv", index=False)
+        pd.DataFrame([x for r in res.values() for x in r["rules"]]).to_csv(o / "walk_rules.csv", index=False)
         pd.DataFrame(
             {f"{tag}:{k}": v for tag, r in res.items() for k, v in r["curves"].items()} | {"t": GRID_T}
         ).to_csv(o / "walk_curves.csv", index=False)
         figure_curves(res, o / "walk_over_clicks.png")
         figure_gain(res, o / "walk_gain_over_clicks.png")
     cols = ["tag", "pairs", "same_until_walk"] + [
-        f"{lab}_1_{hi}{s}" for lab in ("walk", "handoff", "total") for hi in (50, 150) for s in ("", "_se")
+        f"{lab}_1_{hi}{s}"
+        for lab in ("walk", "handoff", "total", "walk_hidden")
+        for hi in (50, 150)
+        for s in ("", "_se")
     ]
     with pd.option_context("display.width", 250, "display.max_columns", 40):
         print(summ[cols].round(3).to_string(index=False))
@@ -259,6 +363,9 @@ def main() -> int:
         )
         print(summ[["tag"] + [c for c in summ.columns if "goods" in c or "hard" in c]].round(2).to_string(index=False))
         print(summ[["tag"] + [c for c in summ.columns if "_ap_at_" in c]].round(3).to_string(index=False))
+        rr = pd.DataFrame([x for r in res.values() for x in r["rules"]])
+        show = rr[rr["rule"].isin(["hard", "more", "ceiling"]) | rr["rule"].str.startswith("held-out")]
+        print(show.round(3).to_string(index=False))
     return 0
 
 
