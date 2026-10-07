@@ -823,3 +823,21 @@ def test_the_opening_is_scored_as_the_text_sort_the_app_shows(run, tmp_path) -> 
     other, other_before = cells.loc["cat1@large"], run["cells"].loc["cat1@large"]
     for col in ("ap_10", "thr_fbeta_10", "thr_fbeta_final"):
         assert other[col] == pytest.approx(other_before[col], nan_ok=True), f"{col}: another run is untouched"
+
+
+def test_the_typed_query_is_read_at_each_presets_own_line_when_the_baseline_has_it() -> None:
+    """#4603: the app draws the typed query's line by count at beta <= 1, so a baseline records one line per
+    preset (``text_line_*_<beta>``); an older baseline is read at its single beta-blind line."""
+    analyze = _load("_sota_analyze", _SOTA / "analyze.py")
+    old = {
+        "text_gmm_precision": 0.2,
+        "text_gmm_recall": 0.6,
+        "text_gmm_fpr": 0.01,
+        "n_test": 1000.0,
+        "n_test_pos": 10.0,
+    }
+    new = {**old, "text_line_precision_b025": 0.6, "text_line_recall_b025": 0.3, "text_line_fpr_b025": 0.001}
+    blind, own = analyze._text_app_line(old, 0.25), analyze._text_app_line(new, 0.25)
+    assert (blind["precision"], blind["recall"]) == (0.2, 0.6)
+    assert (own["precision"], own["recall"]) == (0.6, 0.3)
+    assert analyze._text_app_line(new, 1.0)["precision"] == 0.2, "a preset the baseline lacks reads the blind line"

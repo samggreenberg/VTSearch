@@ -275,6 +275,12 @@ def text_scores(baseline: Path | None) -> dict[tuple, dict[str, float]]:
             "text_gmm_precision": _f(r.get("text_precision")),
             "text_gmm_recall": _f(r.get("text_recall")),
             "text_gmm_fpr": _f(r.get("text_fpr")),
+            # The line the app draws at each preset (#4603), where the baseline records it.
+            **{
+                f"text_line_{m}_{beta_tag(b)}": _f(r.get(f"text_line_{m}_{beta_tag(b)}"))
+                for b in BETAS
+                for m in ("precision", "recall", "fpr")
+            },  # fmt: skip
             "n_test": _f(r.get("n_test")),
             "n_test_pos": _f(r.get("n_test_pos")),
         }
@@ -317,11 +323,18 @@ def _pr_balance(
 
 
 def _text_app_line(text: dict[str, float], beta: float) -> dict[str, float]:
-    """The text sort's own line in the app, the blind GMM cut (``text_sort_threshold``), at *beta*."""
+    """The text sort's own line in the app (``text_sort_threshold`` at *beta*), scored at *beta*.
+
+    Since #4603 the app draws a different line at each preset; a baseline that records it
+    (``text_line_*_<beta>``) is read at it, and an older one at its single beta-blind line.
+    """
+    tag = beta_tag(beta)
+    per_beta = np.isfinite(text.get(f"text_line_recall_{tag}", np.nan))
+    pre = f"text_line_{{}}_{tag}" if per_beta else "text_gmm_{}"
     return _pr_balance(
-        text.get("text_gmm_precision", np.nan),
-        text.get("text_gmm_recall", np.nan),
-        text.get("text_gmm_fpr", np.nan),
+        text.get(pre.format("precision"), np.nan),
+        text.get(pre.format("recall"), np.nan),
+        text.get(pre.format("fpr"), np.nan),
         text.get("n_test_pos", np.nan),
         text.get("n_test", np.nan) - text.get("n_test_pos", np.nan),
         beta,
