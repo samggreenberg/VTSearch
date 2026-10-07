@@ -921,6 +921,24 @@ def test_a_checkpoint_inside_a_spot_check_carries_the_last_detector_on_screen(ru
         assert bool(new["precision"].notna().all()), "carried, not blank"
         assert np.allclose(new["precision"].to_numpy(), old["precision"].to_numpy(), equal_nan=True)
 
+    # Handed over inside a check round with no frame on screen yet: the next frame, at most a round ahead.
+    later = frames[at10].assign(t=12)
+    pd.concat([frames[~at10], later]).to_csv(f, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    ahead = pd.read_csv(out / "balances.csv", dtype={"point": str})
+    new = ahead[(ahead["category"] == "cat1@large") & (ahead["point"] == "10")]
+    old = run["balances"][
+        (run["balances"]["category"] == "cat1@large") & (run["balances"]["point"].astype(str) == "10")
+    ]
+    assert np.allclose(new["fbeta"].to_numpy(), old["fbeta"].to_numpy(), equal_nan=True), "read a round ahead"
+
+
+def test_the_check_round_is_the_harness_picks_a_band() -> None:
+    """#4631: how far ahead a checkpoint may read is one spot-check round, the harness's picks a band."""
+    from vtscore.training.thresholds.spot_check import CHECK_MIN_PICKS
+
+    assert _load("_sota_analyze_round", _SOTA / "analyze.py").CHECK_ROUND == CHECK_MIN_PICKS
+
 
 def test_a_never_trained_run_takes_the_studys_beta(run, rm, tmp_path) -> None:
     """#4631: a run with no rows has no beta of its own; a review runs one beta, so it takes the others'.

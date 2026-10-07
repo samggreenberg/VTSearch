@@ -142,6 +142,10 @@ ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max
 #: The State of the App reports are one per production path (owner, 2026-09-24):
 #: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo").
 PATHS = {"binary": ("siglip", "whole_image"), "region": ("siglip+dinov3_patch", "max_patch")}
+#: A spot check's round of picks (``vtscore.training.thresholds.spot_check.CHECK_MIN_PICKS``, which a test pins):
+#: how far past a checkpoint a run's next rank frame may be read when the run handed over inside a check round
+#: and has no frame on screen by the checkpoint (#4631).
+CHECK_ROUND = 5
 #: Clicks at which a curve is sampled into ``cells.csv`` and ``lines.csv``.
 #: ``launch.sh`` records rank frames at the same clicks.
 CHECKPOINTS = (10, 25, 50, 100, 150)
@@ -695,6 +699,7 @@ def run_tables(
         points: list[tuple[str, float, dict | None, bool]] = [("text", 0, None, True)]
         for c in CHECKPOINTS:
             on_screen_by_c = [t for t in step_at if first_t is not None and first_t <= t <= c]
+            ahead = [t for t in step_at if first_t is not None and first_t <= t and c < t <= c + CHECK_ROUND]
             if not have_frames:
                 points.append((str(c), c, None, False))
             elif c in step_at and first_t is not None and c >= first_t:
@@ -707,6 +712,12 @@ def run_tables(
                 # picks, and the user has its last detector all the while (#4624).  Blank, the point dropped
                 # exactly the weak sessions the check prompts in from the mean (#4631: 157 of 1,440 at click 50).
                 points.append((str(c), c, step_at[max(on_screen_by_c)], False))
+            elif first_t is not None and c >= first_t and ahead:
+                # Handed over a click or two before c and straight into a check round, so no frame is on screen
+                # yet (frames are sparse: every 5 clicks, and only at the checkpoints on the region path).  Its next
+                # frame, at most a round ahead, is the nearest reading of the detector the user has; the last one
+                # before the hand-over can be 50 clicks stale and was on no screen (#4605).
+                points.append((str(c), c, step_at[min(ahead)], False))
             else:
                 # No detector on screen yet at click c: the user still has the text sort.
                 points.append((str(c), c, None, first_t is None or c < first_t))
