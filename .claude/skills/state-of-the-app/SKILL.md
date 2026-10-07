@@ -398,9 +398,9 @@ things keep a report on its link:
   set, beside F1/4 and F4 on the metric menu. It thins the per-seed lines to
   fit the repo's 4,000 KB cap (`SOTA_RUNS_BUDGET_MB`, default 1) and says when
   a page is still over it. A review with one session set commits
-  `analyze.sh`'s `analysis-<path>/viewer.html`. It opens on AP and does not offer
-  cost (#4576); a page built before that gets both from
-  `viewer.py --reskin <page> --default-metric average_precision --hide-metrics cost`.
+  `analyze.sh`'s `analysis-<path>/viewer.html`. It opens on F1 (#4635) and does not
+  offer cost (#4576); a page built before that gets both from
+  `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's
   rounds (#4624): a run inside a prompted check is scored once per round of
   picks, and a mean over "the runs with a row at this click" skipped it between

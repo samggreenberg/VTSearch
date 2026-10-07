@@ -127,6 +127,12 @@ MIRRORS: list[Mirror] = [
             "walk with no Good target, its dry run as done - ported as next_phase(dry_run_stop=, "
             "ran_dry=) and AutopilotFlow(dry_run_stop=)."
         ),
+        divergence=(
+            "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
+            "panel keeps its Done step checked while the phase falls back to hard or new. It is "
+            "computed from nextPhase and never feeds it, so the phase sequence - all next_phase "
+            "reproduces - is unchanged and the harness, which draws no panel, has nothing to port."
+        ),
     ),
     Mirror(
         id="autopilot.vote_targets",

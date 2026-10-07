@@ -56,7 +56,21 @@ export interface AutopilotState {
    * falling back to text/example sort.
    */
   retrainMode: boolean;
+  /**
+   * This run has reached Done (#4621). The phase keeps following the
+   * indicators after that, because it decides what autopilot picks: a vote
+   * that knocks Stable off green sends it back to ``hard`` for boundary items.
+   * But the user was told the detector is trained, so the panel reads this
+   * instead of the phase, keeping Done checked and showing further votes as
+   * an open-ended seventh step rather than bouncing back to step 4. Display
+   * only: it never feeds the phase. Cleared only by falling back into the
+   * opening (votes un-done below its targets) or by a new run.
+   */
+  doneReached: boolean;
 }
+
+/** The phases before the first learned sort: no trained detector yet. */
+const OPENING_PHASES: readonly AutopilotPhase[] = ['good', 'bad', 'more'];
 
 const INITIAL_STATE: AutopilotState = {
   phase: 'idle',
@@ -74,6 +88,7 @@ const INITIAL_STATE: AutopilotState = {
   fracDiversity: 0,
   spanTarget: 0,
   retrainMode: false,
+  doneReached: false,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -206,6 +221,7 @@ export class AutopilotStateService {
       fracDiversity: 0,
       spanTarget: 0,
       retrainMode,
+      doneReached: false,
     });
   }
 
@@ -316,9 +332,18 @@ export class AutopilotStateService {
 
     // Once the machine has moved past the walk it is spent, as a schedule
     // round is in the harness: un-voting a positive later does not resume it.
-    const moreDone = st.moreDone || !['good', 'bad', 'more'].includes(nextPhase);
-    if (nextPhase !== st.phase || st !== this.stateSubject.value || moreDone !== st.moreDone) {
-      this.stateSubject.next({ ...st, phase: nextPhase, moreDone });
+    const opening = OPENING_PHASES.includes(nextPhase);
+    const moreDone = st.moreDone || !opening;
+    // Display only (#4621): never read above, so the phase is the same with or
+    // without it.
+    const doneReached = nextPhase === 'done' || (st.doneReached && !opening);
+    if (
+      nextPhase !== st.phase
+      || st !== this.stateSubject.value
+      || moreDone !== st.moreDone
+      || doneReached !== st.doneReached
+    ) {
+      this.stateSubject.next({ ...st, phase: nextPhase, moreDone, doneReached });
     }
   }
 

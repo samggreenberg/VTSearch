@@ -11,6 +11,8 @@ slice, so a reader can ask their own question instead of asking for a re-run.
 What the page lets a reader pick:
 
 * **dataset** — one, or all of them averaged together;
+* **target size** — on a study whose categories are ``<class>@<band>``: one
+  size, all of them averaged, or each as its own line (#4635);
 * **category** — one within that dataset, or all averaged;
 * **embedder** — any non-empty subset, drawn as **one panel each**.  Embedders
   are never averaged with one another: two embedders are two different
@@ -30,8 +32,9 @@ What the page lets a reader pick:
   FNR, average precision, AUROC: whatever the run emitted, from
   one shared definition
   (:data:`vtscore.eval.calibration_metrics.DETECTION_METRICS`).  The page opens
-  on the objective when the run drew its line at a balance (#4584), else on the
-  first of them, unless the study says otherwise: ``--default-metric``
+  on F1 (:data:`DEFAULT_METRIC`, #4635); a run that emitted no F1 opens on the
+  objective when it drew its line at a balance (#4584), else on the first
+  metric.  A study can say otherwise: ``--default-metric``
   picks the one it opens on and ``--hide-metrics`` takes some off the menu, for
   a study whose report has retired one (the State of the App dropped cost,
   #4576).  Both live in the payload's ``view`` block, so a later ``--reskin``
@@ -225,6 +228,11 @@ RUNS_SCALE = int(os.environ.get("VIEWER_RUNS_SCALE", "1000"))
 RUNS_BUDGET_MB = float(os.environ.get("VIEWER_RUNS_BUDGET_MB", "2.0"))
 
 TEMPLATE = Path(__file__).with_name("viewer_template.html")
+
+#: The metric a page opens on when its study names none (#4635).  The template
+#: makes the choice (its ``OPEN_ON``), so a committed page picks it up on a plain
+#: reskin; the builder only needs it to know when the template cannot.
+DEFAULT_METRIC = "f1"
 
 #: The one placeholder the template carries; see the note in its header comment.
 TOKEN = "__VIEWER" + "_PAYLOAD__"
@@ -885,9 +893,11 @@ def build_viewer(  # noqa: C901
     :func:`load_beta_runs`, #4636).
 
     *default_metric* and *hide_metrics* set the page's opening ``view``; see
-    :func:`opening_view`.  Without a *default_metric*, a frame that carries a
-    beta opens on the objective (#4584), its columns filled from the rates
-    where the cells predate them; any other frame opens on the first metric.
+    :func:`opening_view`.  Without a *default_metric* the page opens on
+    :data:`DEFAULT_METRIC`, F1 (#4635), and the ``view`` says nothing about it.
+    A frame that offers no F1 but carries a beta opens on the objective (#4584),
+    its columns filled from the rates where the cells predate them; any other
+    frame opens on the first metric.
 
     *fill_gaps* carries each run's last scored row through the clicks it has
     no row for (:func:`curves.fill_gaps`, #4624): a run inside a prompted
@@ -937,8 +947,9 @@ def build_viewer(  # noqa: C901
     if not shape.metrics:
         raise SystemExit("viewer: the frame carries none of the known metric columns")
     offered = [m["key"] for m in shape.metrics]
-    if default_metric is None and objective.carries_beta(main) and objective.OBJECTIVE in offered:
-        if objective.OBJECTIVE not in set(hide_metrics):
+    shown = [k for k in offered if k not in set(hide_metrics)]
+    if default_metric is None and DEFAULT_METRIC not in shown and objective.carries_beta(main):
+        if objective.OBJECTIVE in shown:
             default_metric = objective.OBJECTIVE
     # Checked before the expensive part, so a misspelt flag fails in a second.
     view = opening_view(offered, metric=default_metric, hide=hide_metrics)
@@ -1256,8 +1267,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument(
         "--default-metric",
         metavar="KEY",
-        help="the metric the page opens on (default: the objective, fbeta, on a run with a balance, else the "
-        "first it offers); with --reskin, '' reverts to the first it offers",
+        help=f"the metric the page opens on (default: {DEFAULT_METRIC}; without it, the objective, fbeta, on a "
+        "run with a balance, else the first it offers); with --reskin, '' drops the page's own choice",
     )
     ap.add_argument(
         "--hide-metrics",

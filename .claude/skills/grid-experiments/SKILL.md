@@ -493,10 +493,12 @@ performance rows the reports' tables were read off.
 Which metric a page **opens on** is the study's to choose, and so is which ones
 it offers at all: `--default-metric` and `--hide-metrics` write a `view` block
 into the payload, at build time or on a reskin of a page that is already built,
-and a later plain reskin keeps it. Without one the page opens on its first
-metric, which is cost on any run that emits it, so a study whose report retired
-cost passes both, as the State of the App's `analyze.sh` does (#4576). Hiding only takes a metric off the
-menu; its numbers stay in the payload.
+and a later plain reskin keeps it. Without one the page opens on F1 (#4635),
+or on the first metric it offers when the run emitted no F1. The template makes
+that choice, so a plain reskin moves every committed page without a `view` onto
+it. A study whose report retired cost hides it, as the State of the App's
+`analyze.sh` does (#4576). Hiding only takes a metric off the menu; its numbers
+stay in the payload.
 
 **A run inside a spot check stays in the mean.** A prompted check (#4496)
 answers its picks in rounds of about five, so a run inside one is scored once

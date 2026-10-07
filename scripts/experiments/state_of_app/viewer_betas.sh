@@ -52,5 +52,5 @@ python viewer.py \
   --baseline "$BASELINE" --out "$OUT" --runs-budget-mb "${SOTA_RUNS_BUDGET_MB:-1}" \
   --title "State of the App: $DATE, at each balance" \
   --subtitle "coco_better, every class at every size; one set of sessions per preset beta (#4413, #4636), shipped defaults (#4159)" \
-  --default-metric average_precision --hide-metrics cost
+  --hide-metrics cost
 echo "done: $OUT"
