@@ -132,7 +132,11 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # ``vtscore.training.thresholds.conformal_threshold``), so its resolution is
 # bounded by how many calibration scores the pool holds - at ~12 votes a
 # single fold yields only ~4 positive scores, i.e. ~4 usable cut positions;
-# a second fold doubles that for one extra fold fit.
+# a second fold doubles that for one extra fold fit.  #4583 re-measured it
+# above the labels line on the objective at each preset
+# (``docs/experiments/2026-10-07-calsplit-4583/REPORT.md``): four folds are
+# within +0.002 at beta 1/4, 1 and 4, and one fold is 0.006 ± 0.0015 worse at
+# beta 1/4 and 0.002 worse at beta 1 (mean over votes 1-150), so 2 stands.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
 #: The balance the line is drawn at by default (#4413): F-beta's beta, 1 =
 #: precision and recall weighed equally.  The presets are 1/4 / 1 / 4 (#4448).

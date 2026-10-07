@@ -48,6 +48,15 @@ INCLUSION_SEARCH_SPAN = 32.0
 #:   embedder's capability rather than the voting mode: the same row-wise
 #:   calibrator wants opposite splits on ``siglip/whole`` vs ``dinov3/whole``,
 #:   while both ``dinov3`` styles agree on 0.5.
+#:
+#: Both were read on the cost of the *mixture* line.  #4583 re-measured them
+#: above the labels line (#4452), on the objective (#4427) at each preset
+#: (``docs/experiments/2026-10-07-calsplit-4583/REPORT.md``): on SigLIP 0.5
+#: against 0.3 is within ±0.004 of the objective at beta 1/4, 1 and 4 (it
+#: costs 0.004 ± 0.0016 after the check at beta 1) and returns more (+14 items
+#: at beta 1, +92 at beta 4); on the patch space 0.3 against 0.5 is a null on
+#: the objective (−0.006 ± 0.006) and returns 44 fewer.  Neither moves AP.  So
+#: both values stand: no preset is better served by the other split.
 PRODUCTION_SPLIT_BY_SPACE: dict[str, float] = {
     "single_vector": 0.3,
     "patch": 0.5,

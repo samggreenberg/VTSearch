@@ -20,6 +20,7 @@ Contrasts, within each beta, paired on (category, seed):
 * ``count``  f03k4 - f03k2   (four folds against the shipped two)
 * ``both``   f05k4 - f03k2
 * ``interaction`` (f05k4 - f05k2) - (f03k4 - f03k2)
+* ``one fold``  f03k1 - f03k2   (beta 1/4 and 1 only; skipped where not run)
 
 Each is reported as the mean paired difference with an SE clustered on the
 category (five seeds of one class are not five independent runs), by window
@@ -52,10 +53,14 @@ import pandas as pd  # noqa: E402
 RUN = ["category", "seed"]
 BETAS: dict[str, float] = {"b025": 0.25, "b1": 1.0, "b4": 4.0}
 ARMS = [f"f{f}k{k}_{b}" for f in ("03", "05") for k in ("2", "4") for b in BETAS]
+#: One fold against two, added after the grid because #4582 flagged it at beta 1/4
+#: (above the old line); run at 1/4 and 1 only.
+ARMS += ["f03k1_b025", "f03k1_b1"]
 CONTRASTS: dict[str, tuple[str, str]] = {
     "split": ("f05k2", "f03k2"),
     "count": ("f03k4", "f03k2"),
     "both": ("f05k4", "f03k2"),
+    "one fold": ("f03k1", "f03k2"),
 }
 WINDOWS: dict[str, tuple[int, int]] = {
     "votes 1-30": (1, 30),
@@ -145,8 +150,14 @@ def clustered(d: pd.Series) -> tuple[float, float, float, int]:
     return float(d.mean()), se, float(d.std(ddof=1)), int(d.size)
 
 
+#: Each run's paired Δ-objective after the check, per (beta, contrast): the
+#: report's per-run figure.  Filled by :func:`contrasts`.
+RUN_DELTAS: list[pd.DataFrame] = []
+
+
 def contrasts(tables: dict[str, dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows, sig = [], []
+    RUN_DELTAS.clear()
     for btag in BETAS:
         for name, (a, b) in {**CONTRASTS, "interaction": ("", "")}.items():
             if name == "interaction":
@@ -170,6 +181,12 @@ def contrasts(tables: dict[str, dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
                 reads[f"objective, {wname}"] = diff("F", lambda m, lo=lo, hi=hi: window_mean(m, lo, hi))
                 reads[f"AP, {wname}"] = diff("ap", lambda m, lo=lo, hi=hi: window_mean(m, lo, hi))
             reads["objective, after the check"] = diff("after", lambda s: s)
+            RUN_DELTAS.append(
+                reads["objective, after the check"]
+                .rename("delta")
+                .reset_index()
+                .assign(beta=BETAS[btag], contrast=name)
+            )
             reads["returned set size, after the check"] = diff("k_after", lambda s: s)
             reads["precision, after the check"] = diff("p_after", lambda s: s)
             for read, d in reads.items():
@@ -320,6 +337,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         rr["resolved"] = rr["delta"].abs() > 2 * rr["se"]
         paired = pd.concat([paired, rr], ignore_index=True)
     lv = levels(tables)
+    if RUN_DELTAS:
+        pd.concat(RUN_DELTAS, ignore_index=True).to_csv(args.out / "run_deltas.csv", index=False, float_format="%.4g")
     paired.to_csv(args.out / "paired.csv", index=False, float_format="%.5g")
     sigma.to_csv(args.out / "sigma.csv", index=False, float_format="%.4g")
     lv.to_csv(args.out / "levels.csv", index=False, float_format="%.4g")

@@ -28,7 +28,7 @@ import analyze_calsplit_4583 as A  # noqa: E402
 CATS = [f"c{i}@{b}" for i, b in enumerate(["small", "medium", "large"] * 4)]
 SEEDS = range(3)
 #: Planted precision per arm stem; recall is 1, so F-beta = (1+b2) p / (b2 p + 1).
-PLANT = {"f03k2": 0.40, "f05k2": 0.50, "f03k4": 0.45, "f05k4": 0.55}
+PLANT = {"f03k2": 0.40, "f05k2": 0.50, "f03k4": 0.45, "f05k4": 0.55, "f03k1": 0.35}
 CHECK_P = 0.9
 
 
