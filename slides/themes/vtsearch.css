@@ -286,11 +286,20 @@ section.outline ol li.here { font-weight: 700; }
    weight whichever one is marked. */
 section.outline ol li { font-weight: 600; }
 section.outline ol li em { color: var(--ink-soft); font-style: normal; }
-/* Every line is a link to the page its section starts on (build.py
-   `link_outline`), and none of them may look like one: the outline is a slide
-   the room reads, and a click target is a fact about the PDF, not about the
-   talk. So a link takes the colour, weight and decoration of the line it is
-   on — which is also what keeps the `atN` marking below in charge of them. */
+/* Every line's numeral is a link to the page its section starts on (build.py
+   `link_outline`): an empty anchor laid exactly over the numeral the counter
+   above draws, so the numeral jumps and the rest of the slide advances like
+   any other page (#4618). It draws nothing — the outline is a slide the room
+   reads, and a click target is a fact about the PDF, not about the talk — so
+   the numeral keeps the colour the `atN` marking below gives it. Its box is
+   the numeral column's, above: keep the two widths in step. */
+section.outline ol li > a:empty {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2.1em;
+  height: 100%;
+}
 section.outline a { color: inherit; text-decoration: none; }
 
 /* The same outline, shown again before each section with that section marked:

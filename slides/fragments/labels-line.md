@@ -12,9 +12,10 @@
 
 <!-- build: figs/calib-labels-line.build4.png -->
 
-<!-- How the app finds Beta Max's peak when it knows neither *hits* nor
-     *matches* for anything nobody voted on. It expects them, from the labels
-     and the corpus it is deciding, and from nothing else (#4452). -->
+<!-- How the app finds Beta Max's peak when, for anything nobody voted on,
+     it knows neither how many Goods it returned nor how many Goods there are.
+     It expects both, from the labels and the corpus it is deciding, and from
+     nothing else (#4452). -->
 
 <!-- **a** — The votes, each scored by a fold model that never saw it: section
      2's calibration folds, put to a new use. Mostly Bad low and Good high, and
@@ -35,10 +36,10 @@
      being a match, honest near the line. -->
 
 <!-- **d** — Now Beta Max's formula, expected. At each cut down the ranking,
-     *kept* is counted, *hits* is the sum of the kept items' chances, and
-     *matches* is the count above. The peak is the line, in blue; here it keeps
-     227. No count is set and nothing caps it: a corpus with no matches fits a
-     share near zero and returns a handful. -->
+     the items returned are counted, the Goods returned are the sum of their
+     chances, and the possible Goods are the count above. The peak is the
+     line, in blue; here it keeps 227. No count is set and nothing caps it: a
+     corpus with no matches fits a share near zero and returns a handful. -->
 
 <!-- **e** — The other two radios, β = 1/4 and 4: the tighter cut and the
      looser one. A new radio re-cuts this, with no retrain. -->

@@ -36,8 +36,9 @@
      them. Left is β = 4: it returns the most and lets more wrong ones in.
      Right is β = 1/4: only the surest come back, and more are missed. The
      middle is 1, and it is every detector's default (#4413, #4448). It sits
-     with the rows because β is all it sets: the trade, not a place on the
+     under the rows because β is all it sets: the trade, not a place on the
      ranking. -->
 
-<!-- The catch, and the next slide: the formula counts hits and matches, and
-     off the votes the app knows neither. It has to *expect* them. -->
+<!-- The catch, and the next slide: the formula counts the Goods returned
+     and the possible Goods, and off the votes the app knows neither. It has
+     to *expect* them. -->

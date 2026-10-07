@@ -409,7 +409,7 @@ without being told.
 the markdown list says. The pages are numbered in Arabic, so a section is a
 different kind of address from a slide, and "section III" can never be heard
 as "slide 3". The PDF's bookmarks follow suit (`III. Inclination`, then
-`18. The Cutting Room` for a slide in it).
+`17. The Cutting Room` for a slide in it).
 
 **Then show it again before every section**, with that section's line marked.
 Use the same fragment, and let the manifest do the marking:
