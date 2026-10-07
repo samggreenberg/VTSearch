@@ -163,12 +163,25 @@ same edit.
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
   the Hard phase on, a median ~40 clicks in. The harness trains detectors
   during the opening anyway and flags the steps the app would show as
-  `app_trained == 1`. Every user-facing number before a run's first such step
-  (AP, the line at P, the balance, the objective, `curves.csv`) is the text
-  sort's, at its own line. Never read the opening's detectors as what the
-  user has. (A document dataset's dry-run walk is on the learned sort in the
-  app, but the harness flags it 0; the document reviews use their own
-  analyzer.)
+  `app_trained == 1`. Every number the report reads off the session before a
+  run's first such step (AP, the line at P, the balance, the objective,
+  `curves.csv`, `by_click.py`) is the text sort's, at its own line. Never read
+  the opening's detectors as what the session shows. (A document dataset's
+  dry-run walk is on the learned sort in the app, but the harness flags it 0;
+  the document reviews use their own analyzer.)
+- **The viewer draws what the saved labels give, opening included (owner,
+  2026-10-07, #4640).** What decides it is what the Train interface lets a
+  user take away. Had the app refused to save a detector until it was real,
+  the opening's detectors could be left out; since it lets the user export,
+  the page shows what an import gives. And it never refuses: every vote is
+  written to the detector as it is cast, Export labels and Test have no phase
+  gate, and Test or an import retrains from the labelset. So `viewer.py` and
+  `curves.py` do not read `app_trained`. Before a run's first Good and Bad
+  they draw the empty set (Test is refused, #4629), and from there on the
+  harness's detector, whose line is Find's on the withheld half. That is the
+  click-4 dip the report's own curves do not have, and it is not a bug: the
+  report is the session, the viewer is the export. The page says so in its
+  reading note, and `selftest_viewer.py` / `selftest_curves.py` pin it.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
@@ -409,12 +422,14 @@ things keep a report on its link:
   the carry from its own per-seed lines with `viewer.py --reskin <page>
   --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
   it). `analyze.py`'s curves and `by_click.py` already carried. A click where
-  a run has no trained detector (its opening clicks, or every click of a run
-  that never got a Good and a Bad) is scored as the empty returned set, the
-  nothing Find gives that labelset, so the runs that never trained are in its
-  mean as losses (`curves.score_empty_sets`), and a detector that flags
-  nothing counts its precision as 0 rather than undefined; a page built before that is
-  rebuilt with `analyze.sh`, since a reskin has no prevalence to put AP at.
+  a run has no trained detector (before its first Good and Bad, or every click
+  of a run that never got both) is scored as the empty returned set, the
+  nothing Test gives that labelset, so the runs that never trained are in its
+  mean as losses (`curves.score_empty_sets`); from the first Good and Bad on,
+  Autopilot's opening included, it draws the harness's detector (#4640,
+  above). A detector that flags nothing counts its precision as 0 rather than
+  undefined; a page built before that is rebuilt with `analyze.sh`, since a
+  reskin has no prevalence to put AP at.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).
 - **A new kind** (a future modality) needs nothing here: its first report

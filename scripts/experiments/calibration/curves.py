@@ -88,6 +88,12 @@ into a good-looking curve:
    because a hairball with a third of its lines removed looks like a tighter
    arm, not a truncated figure.
 
+**Autopilot's opening is drawn as the detector** (owner, 2026-10-07, #4640).
+The app shows the text sort until the Hard phase (``app_trained``), but the
+user can export the labels or run Test at any click, and either retrains from
+them, so a row is what the user can take away at that click.  Nothing here
+reads ``app_trained``; an analyzer about the session filters on it itself.
+
 **The spot check is not a click.**  A floor-era run ends on its spot check
 (#4272), whose rows sit past ``max_steps`` and come from a model retrained on
 the check's own picks.  ``_cells_io.load_arm`` sets them apart (#4364), so a

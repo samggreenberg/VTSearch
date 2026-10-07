@@ -94,6 +94,17 @@ the chart asserts it holds at every x.  The skyline is the sharper case — draw
 as a rule it would read as "the floor was reachable at click 3", which is the
 one reading the number exists to prevent.
 
+**Through Autopilot's opening the line is the detector, not the session**
+(owner, 2026-10-07, #4640).  The app stays on the text sort until the Hard
+phase (``app_trained``, #4605), but every vote is saved as it is cast, and
+Export labels and Test have no phase gate: a user can take the labels away at
+any click, and an import or a Test retrains from them.  So from a run's first
+Good and Bad the page draws the harness's detector, which is what that gives,
+and nothing here reads ``app_trained``.  Before the first Good and Bad, Test is
+refused and the click is the empty set (:func:`curves.score_empty_sets`).  A
+report that scores the session (``state_of_app/analyze.py``) differs from the
+page through the opening on purpose.
+
 Payload
 -------
 

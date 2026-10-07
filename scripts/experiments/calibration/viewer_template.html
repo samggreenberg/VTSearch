@@ -1186,7 +1186,10 @@
           `click of a run that never got both) counts as what the app returns there, nothing: recall, F1 and the ` +
           `objective 0, precision 0, AP at the class's prevalence, AUROC 0.5. A detector that flags nothing ` +
           `returns the same empty set, so its precision counts as 0 too. So every run is in the mean at every ` +
-          `click, the failing ones included.`
+          `click, the failing ones included. From its first Good and Bad on, a run is drawn at the detector ` +
+          `those labels train, which is what Test or an import of the exported labels gives at that click, ` +
+          `<b>through Autopilot's opening too</b>, where the session itself still shows the text sort (#4640). ` +
+          `An early dip below the notch is what exporting there would get, not what the session shows.`
         : "") +
       (opt.showCov
         ? ` The strip underneath is that fraction, and it drops below full somewhere in this slice.`
