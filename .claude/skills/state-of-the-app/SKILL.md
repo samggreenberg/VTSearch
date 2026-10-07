@@ -231,6 +231,7 @@ bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
 # per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
 python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
+python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until a run's first detector (#4599): the slides' left panel reads it
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 

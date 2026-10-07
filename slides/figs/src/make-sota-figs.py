@@ -196,6 +196,13 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
     the trained runs with a line by that click, the returned size a median. The
     binary review's by default; the region review's (#4534) has the same shape.
     """
+    by_click: dict[float, list[tuple[int, float]]] = {}
+    clicks_csv = source.with_name("objective_by_click.csv")
+    if not clicks_csv.exists():
+        raise SystemExit(f"make-sota-figs: {clicks_csv} is missing: run state_of_app/by_click.py (#4599)")
+    with clicks_csv.open() as f:
+        for row in csv.DictReader(f):
+            by_click.setdefault(float(row["beta"]), []).append((int(row["t"]), float(row["fbeta"])))
     by: dict[float, dict[str, dict[str, str]]] = {}
     with source.open() as f:
         for row in csv.DictReader(f):
@@ -214,9 +221,13 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
             }
             for p in points
         ]
+        curve = by_click[beta]
         out[beta] = {
-            # The typed query at click 0: the text sort under its own blind GMM cut (owner, 2026-10-06).
+            # The typed query at click 0: the text sort at the line the app draws for it (#4599).
             "text": float(rows[TYPED_QUERY]["fbeta"]),
+            # Every click, filled: the typed query until a run's first detector (#4599, `by_click.py`).
+            "curve_t": [t for t, _ in curve],
+            "curve_f": [f for _, f in curve],
             "clicks": list(PHOTO_CLICKS),
             "f": [float(rows[str(c)]["fbeta"]) for c in PHOTO_CLICKS],
             "after": float(rows["after the check"]["fbeta"]),
@@ -476,10 +487,10 @@ def photo_figure(
 ) -> Figure:
     """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
     fig = plt.figure(figsize=FIG_SIZE)
-    lines = {
-        b: ([0] + data[b]["clicks"] + [PHOTO_CHECK_X], [data[b]["text"]] + data[b]["f"] + [data[b]["after"]])
-        for b in data
-    }
+    # Every click, not five checkpoints joined (owner, 2026-10-07: "why is the left curve so coarse?"):
+    # flat on the typed query until the opening's first detectors, their dip, then the climb; then the
+    # step to after the check.
+    lines = {b: (data[b]["curve_t"] + [PHOTO_CHECK_X], data[b]["curve_f"] + [data[b]["after"]]) for b in data}
 
     def ends_and_notch(ax: plt.Axes, _ends: dict) -> None:
         for beta, _label, _w in RADIOS:

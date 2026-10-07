@@ -27,8 +27,11 @@ pass only (the full-label ceiling is still running; see [Not covered](#not-cover
 
 **Analysis:** `analyze.sh` (`SOTA_PATH=region`, 2 seeds) per preset, then `perp.py --kind balance`
 (`perbeta_summary.md`, `precision_recall_path.csv`).
-- **The text sort's baseline is the app's as measured:** the typed query at its midpoint line.
-- #4136 has since changed the display line to the guarded rule. See #4599 for what that does to click 0.
+- **The typed query (click 0) is read at the line the app draws for it today:** the guarded display line of
+  #4136, about 204 images (owner, #4599). The sessions ran before #4136, but it only split the display line from
+  the opening's acquisition cut, which stays the midpoint, so the clicks are unchanged.
+- The analyses' own text baseline is the midpoint line the runs saw; the click-0 rows in
+  `precision_recall_path.csv` and `objective_by_click.csv` are re-scored at the guarded line (#4599).
 - The baseline was rebuilt for both seeds with the runs' own code; its seed-0 rows reproduce the first
   version's F-beta columns exactly.
 
@@ -78,19 +81,19 @@ a median.
 
 | preset | point | precision | recall | F-beta | returned, median | runs |
 |---:|---|---:|---:|---:|---:|---:|
-| 1/4 | typed query | 0.01 | 0.92 | 0.01 | 4519 | 279 |
+| 1/4 | typed query | 0.17 | 0.60 | 0.18 | 204 | 279 |
 | 1/4 | 25 | 0.63 | 0.57 | 0.57 | 43 | 247 |
 | 1/4 | 50 | 0.69 | 0.56 | 0.64 | 39 | 261 |
 | 1/4 | 100 | 0.77 | 0.52 | 0.69 | 35 | 267 |
 | 1/4 | 150 | 0.76 | 0.52 | 0.69 | 36 | 279 |
 | 1/4 | after the check | 0.81 | 0.48 | 0.73 | 30 | 279 |
-| 1 | typed query | 0.01 | 0.92 | 0.02 | 4519 | 279 |
+| 1 | typed query | 0.17 | 0.60 | 0.25 | 204 | 279 |
 | 1 | 25 | 0.51 | 0.66 | 0.49 | 57 | 247 |
 | 1 | 50 | 0.57 | 0.67 | 0.54 | 52 | 261 |
 | 1 | 100 | 0.66 | 0.66 | 0.60 | 48 | 267 |
 | 1 | 150 | 0.63 | 0.66 | 0.60 | 50 | 279 |
 | 1 | after the check | 0.67 | 0.65 | 0.63 | 48 | 279 |
-| 4 | typed query | 0.01 | 0.92 | 0.15 | 4519 | 279 |
+| 4 | typed query | 0.17 | 0.60 | 0.48 | 204 | 279 |
 | 4 | 25 | 0.38 | 0.74 | 0.61 | 100 | 247 |
 | 4 | 50 | 0.42 | 0.78 | 0.63 | 87 | 261 |
 | 4 | 100 | 0.47 | 0.80 | 0.68 | 80 | 267 |
@@ -211,6 +214,9 @@ On the binary path, chair@small never trains in any of 10 seeds.
 - `perbeta_summary.md`: every per-preset table above, from `perp.py --kind balance`.
 - `precision_recall_path.csv`: each preset's returned set from the typed query through the clicks to after the
   check.
+- `objective_by_click.csv`: each preset's objective at every click (`by_click.py`): the typed query until a
+  session's first detector, then its line. The first detector, around click 4, keeps almost nothing, so the curve
+  dips there before it climbs (#4599).
 - `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell.
 - `viewer.html`: the beta-1 sessions, both seeds.
 - **Runs and analyses** are in `/expscratch/sgreenberg/state-of-the-app/2026-10-06-b025|b1|b4/`:
