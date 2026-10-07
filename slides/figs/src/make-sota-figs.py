@@ -451,6 +451,7 @@ def _f_panel(
     extra=None,
     grid_step: float = 0.1,
     major: float = 0.2,
+    top: float = 1.0,
 ) -> plt.Axes:
     """The returned set's F-beta over a session, one line per radio, labelled at its end.
 
@@ -460,14 +461,14 @@ def _f_panel(
     """
     ax = fig.add_axes(LEFT_AXES)
     ax.set_xlim(*xlim)
-    ax.set_ylim(floor, 1.0)
+    ax.set_ylim(floor, top)
     ax.set_xticks(xticks)
-    ax.set_yticks(np.arange(floor, 1.0 + 1e-9, major))
+    ax.set_yticks(np.arange(floor, top + 1e-9, major))
     # The same horizontal lines as the precision-recall panel beside it, on the same
     # y range (owner, 2026-10-07): an F-beta and a precision at one height read
     # level across the slide.
     ax.set_yticks(
-        np.arange(math.ceil(floor / grid_step - 1e-9) * grid_step, 1.0 + grid_step / 2, grid_step), minor=True
+        np.arange(math.ceil(floor / grid_step - 1e-9) * grid_step, top + grid_step / 2, grid_step), minor=True
     )
     ax.tick_params(axis="y", which="minor", length=0)
     ax.yaxis.grid(True, which="both", color=PR_GRID_COLOUR, lw=PR_GRID_LW)
@@ -485,7 +486,7 @@ def _f_panel(
     # type needs and in the ends' own order: never on a leader, which reads as
     # one more line (owner, 2026-10-05; STYLE.md). The gap is a share of the
     # span, so a type's height apart on any floor.
-    label_y = spread_labels([ends[b][1] for b, _, _ in RADIOS], gap=0.075 * (1.0 - floor))
+    label_y = spread_labels([ends[b][1] for b, _, _ in RADIOS], gap=0.075 * (top - floor))
     # A fixed distance in points past the panel's edge, so a mark on the edge (documents end
     # there) never sits under its label.
     for (beta, label, _w), y in zip(RADIOS, label_y, strict=True):
@@ -510,6 +511,16 @@ def _floor(lines: dict[float, tuple[list, list]], also: float | None = None, ste
     if also is not None:
         lowest = min(lowest, also)
     return round(math.floor(round(lowest / step, 6)) * step, 6)
+
+
+def _top(lines: dict[float, tuple[list, list]], data: dict[float, dict]) -> float:
+    """The slide's shared y top: the first 0.2 step at or over every F the left panel draws and every
+    precision the right panel draws, the per-click paths included; at most 1. A 0.2 band nothing
+    reaches is cut (owner, 2026-10-07: "never get to 0.8, but the axis goes to 1.0")."""
+    highest = max(max(ys) for _xs, ys in lines.values())
+    for d in data.values():
+        highest = max(highest, *(point["precision"] for point in d["path"]), *(p for _r, p in d.get("curve_pr") or []))
+    return min(1.0, round(math.ceil(round(highest / 0.2, 6)) * 0.2, 6))
 
 
 def _lowest_precision(data: dict[float, dict]) -> float:
@@ -541,7 +552,7 @@ def photo_figure(
             d = data[beta]
             _mark(ax, [0, *PHOTO_CLICKS, PHOTO_CHECK_X], [d["text"], *d["f"], d["after"]])
 
-    floor = _floor(lines, _lowest_precision(data))
+    floor, top = _floor(lines, _lowest_precision(data)), _top(lines, data)
     ax = _f_panel(
         fig,
         lines,
@@ -551,10 +562,11 @@ def photo_figure(
         floor,
         marks,
         PHOTO_GRID_STEP,
+        top=top,
     )
     ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", END_LABEL])
     if stage >= 2:
-        _pr_paths_panel(fig, data, recall_lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, (floor, 1.0))
+        _pr_paths_panel(fig, data, recall_lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, (floor, top))
     return fig
 
 
@@ -562,16 +574,18 @@ def doc_figure(data: dict[float, dict], stage: int) -> Figure:
     fig = plt.figure(figsize=FIG_SIZE)
     lines = {b: (data[b]["clicks"], data[b]["f"]) for b in data}
     # Numbered every 0.1 on both panels, as the recall axis is: every document set lies above 0.5.
-    floor = _floor(lines, _lowest_precision(data), step=0.1)
+    floor, top = _floor(lines, _lowest_precision(data), step=0.1), _top(lines, data)
 
     def marks(ax: plt.Axes, _ends: dict) -> None:
         # The clicks the precision-recall path marks (`DOC_PR_CLICKS`), at the same places.
         for beta, _label, _w in RADIOS:
             _mark(ax, list(DOC_PR_CLICKS), [data[beta]["f"][c] for c in DOC_PR_CLICKS])
 
-    _f_panel(fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "Clicks", floor, marks, DOC_GRID_STEP, major=0.1)
+    _f_panel(
+        fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "Clicks", floor, marks, DOC_GRID_STEP, major=0.1, top=top
+    )
     if stage >= 2:
-        _pr_paths_panel(fig, data, ylim=(floor, 1.0))
+        _pr_paths_panel(fig, data, ylim=(floor, top))
     return fig
 
 

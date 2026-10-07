@@ -156,7 +156,9 @@ def _spread(ys: list[float], gap: float) -> list[float]:
     return out.tolist()
 
 
-YLIM = (0.3, 1.0)
+#: The F1 axis, cut to the 0.2 bands the lines use (owner, 2026-10-07: keep "any width-0.2 region
+#: that gets used"): the lowest line, the 8-inliers rule, bottoms out near 0.42.
+YLIM = (0.4, 1.0)
 
 
 def _styles() -> dict[str, dict]:
