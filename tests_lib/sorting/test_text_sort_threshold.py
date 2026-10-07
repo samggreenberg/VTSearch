@@ -367,30 +367,58 @@ class TestTheOpeningIsBlindToTheDisplayRule:
     """
 
     STEPS = 40
+    #: A typed-query sort shaped like the real ones: a few matches as a thin
+    #: shoulder on one broad mode.  The guarded rule takes its ``tail`` branch
+    #: here, so its line sits far above the midpoint (27 items admitted against
+    #: 332).  On a sort where the guarded rule keeps the mixture (its ``gmm``
+    #: branch) the two cuts land at the same rank and an opening that wrongly
+    #: sampled at the display line would vote the same items - the test could
+    #: not fail.
+    N_POS, N_NEG = 25, 800
 
-    def _seed_sort(self):
+    def _dataset(self):
         from tests_lib.detectors.test_startup_schedule import _seeded_dataset
 
-        _medias, seed_scores = _seeded_dataset()
-        return list(seed_scores.values())
+        return _seeded_dataset(n_pos=self.N_POS, n_neg=self.N_NEG)
 
-    def test_the_rules_disagree_on_this_sort(self):
-        """Teeth: the identity below would be vacuous on a sort where the two lines coincide."""
-        values = self._seed_sort()
-        assert text_sort_threshold(values, rule="guarded_tail") != text_sort_threshold(values, rule="gmm_midpoint")
+    def _picks(self, schedule):
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+        medias, seed_scores = self._dataset()
+        log: list[dict] = []
+        simulate_voting_iterations(
+            medias,
+            target_category="target",
+            seed=3,
+            dataset_name="stub",
+            max_steps=self.STEPS,
+            seed_scores=seed_scores,
+            atlas_min_node_size=8,
+            startup_schedule=schedule,
+            spot_check="off",
+            pick_sink=log,
+        )
+        return [(p["phase"], p["picked_id"], p["picked_label"]) for p in log]
+
+    def test_the_rules_sit_at_different_ranks_on_this_sort(self):
+        """Teeth: the two lines must admit different items, or the identity below is vacuous."""
+        _medias, seed_scores = self._dataset()
+        values = np.asarray(list(seed_scores.values()))
+        cuts = text_sort_cuts(list(values), rule="guarded_tail")
+        assert cuts.branch == "tail"
+        above_display = int((values >= cuts.threshold).sum())
+        above_acq = int((values >= cuts.acq_threshold).sum())
+        assert above_acq > 5 * above_display, (above_display, above_acq)
 
     @pytest.mark.parametrize("schedule", [None, "PRODUCTION_STARTUP"])
     def test_the_same_items_are_voted_under_both_rules(self, monkeypatch, schedule):
         from vtscore.eval.startup_schedule import PRODUCTION_STARTUP
 
-        from tests_lib.detectors.test_startup_schedule import _run
-
         spec = PRODUCTION_STARTUP if schedule else None
         picks: dict[str, list[tuple[str, int, int]]] = {}
         for rule in TEXT_SORT_CUT_RULES:
             monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", rule)
-            _rows, log = _run(spec, max_steps=self.STEPS)
-            picks[rule] = [(p["phase"], p["picked_id"], p["picked_label"]) for p in log]
+            picks[rule] = self._picks(spec)
         assert picks["guarded_tail"] == picks["gmm_midpoint"]
         phases = [ph for ph, _, _ in picks["gmm_midpoint"]]
         assert "hard" in phases, "the run never left the opening, so the comparison covers no learned pick"
