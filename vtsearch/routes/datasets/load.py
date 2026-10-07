@@ -41,6 +41,7 @@ from vtscore.datasets.load_pipeline import (
 )
 from vtscore.datasets.registry import remove_loaded_id as _reg_remove_loaded
 from vtsearch.autorun_detectors import import_post_load
+from vtsearch.import_hooks import fire_dataset_imported
 from vtsearch.routes._context import require_dataset_header
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
@@ -247,6 +248,7 @@ def import_local_folder():
         build_projection=_form_flag(request.form.get("build_projection")),
         merge_near_duplicates=_form_flag(request.form.get("merge_near_duplicates")),
         post_load=import_post_load(request.form.get("autorun")),
+        on_finished=fire_dataset_imported,
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
@@ -342,6 +344,7 @@ def import_local_files():
         build_projection=_form_flag(request.form.get("build_projection")),
         merge_near_duplicates=_form_flag(request.form.get("merge_near_duplicates")),
         post_load=import_post_load(request.form.get("autorun")),
+        on_finished=fire_dataset_imported,
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
@@ -428,7 +431,12 @@ def load_demo_dataset_route(body: dict):
         field_values["embedders"] = demo_embedders
     abort_if_semantic_only_embedders([embedder_name, *(_parse_embedder_list(demo_embedders) or [])])
 
-    task_id = _run_importer_in_background(importer, field_values, post_load=import_post_load(body.get("autorun")))
+    task_id = _run_importer_in_background(
+        importer,
+        field_values,
+        post_load=import_post_load(body.get("autorun")),
+        on_finished=fire_dataset_imported,
+    )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
@@ -462,6 +470,7 @@ def load_dataset_file():
             "build_projection": "true" if _form_flag(request.form.get("build_projection")) else "false",
         },
         post_load=import_post_load(request.form.get("autorun")),
+        on_finished=fire_dataset_imported,
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 

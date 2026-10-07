@@ -12,6 +12,7 @@ itself lives under :mod:`vtscore.datasets.stages`; the
 
 from __future__ import annotations
 
+import copy
 import gc
 import json
 import time
@@ -33,6 +34,7 @@ from vtscore.concurrency.progress import (
 )
 from vtscore.datasets import export_dataset_to_file
 from vtscore.datasets.clipper_chain import append_cleaner_steps
+from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported
 from vtscore.datasets.loader import apply_custom_metadata_md5
 from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
@@ -500,6 +502,10 @@ def _warmup_embedder_async(media_dict: dict) -> None:
     threading.Thread(target=_run, name="warmup-embedder", daemon=True).start()
 
 
+#: What a cancelled import's tracker carries as its ``error``; see :func:`_failure_message`.
+_CANCELLED_MESSAGE = "Cancelled"
+
+
 def _failure_message(exc: BaseException, fallback: str) -> str:
     """Map a background-import exception onto the string shown to the user.
 
@@ -518,7 +524,7 @@ def _failure_message(exc: BaseException, fallback: str) -> str:
     returned string.
     """
     if isinstance(exc, CancelledError):
-        return "Cancelled"
+        return _CANCELLED_MESSAGE
     if isinstance(exc, ImportError):
         traceback.print_exc()
         return f"Missing dependency: {exc}. Install all required packages with: pip install -e '.[cpu,dev]'"
@@ -601,6 +607,7 @@ def _run_origin_load_in_background(
     n_hint: int | None = None,
     download_size_mb_hint: float | None = None,
     post_load: Callable[[DatasetContext], None] | None = None,
+    on_finished: Callable[[DatasetImported], None] | None = None,
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -629,6 +636,15 @@ def _run_origin_load_in_background(
     the hook does is billed to the load's cost model.  An exception it raises
     is logged and swallowed: the dataset is saved either way.  The app uses it
     to start the importing user's AutoRun detectors on the new dataset.
+
+    *on_finished*, when given, is called once with a
+    :class:`~vtscore.datasets.import_event.DatasetImported` saying how the load
+    ended: after a load that succeeded (following *post_load*) and after one
+    that failed, but never after a cancel.  It runs on the worker thread on the
+    same terms as *post_load*, except that no dataset context is pinned (the
+    event carries everything the hook is given), and an exception it raises is
+    swallowed the same way.  The app uses it to run the functions a server
+    admin names with ``--on-dataset-imported``.
 
     Returns the task_id that can be used to poll progress or cancel.
     """
@@ -833,7 +849,19 @@ def _run_origin_load_in_background(
 
         # Outside the ``finally``: a load that raised past it never reaches
         # here, and one that failed inside it stamped ``error`` on the tracker.
+        # AutoRun's hook goes first: it only spawns a thread, while an
+        # ``on_finished`` hook may block on, say, a mail server.
         _run_post_load(post_load, ctx, tracker)
+        _report_finished(
+            on_finished,
+            ctx,
+            tracker,
+            dataset_id=context_id,
+            name=name or _origin_to_str(origin),
+            user=task.request_user,
+            media_type=media_type,
+            origin=origin,
+        )
 
     return _spawn_import_worker(task, load_task)
 
@@ -849,6 +877,55 @@ def _run_post_load(post_load: Callable[[DatasetContext], None] | None, ctx: Data
             post_load(ctx)
         except Exception:
             traceback.print_exc()
+
+
+def _report_finished(
+    on_finished: Callable[[DatasetImported], None] | None,
+    ctx: DatasetContext,
+    tracker,
+    *,
+    dataset_id: str,
+    name: str,
+    user: str,
+    media_type: str,
+    origin: dict,
+) -> None:
+    """Tell a load's *on_finished* hook how it ended; see :func:`_run_origin_load_in_background`.
+
+    *dataset_id* and *name* are what the load was asked for; on success they
+    are replaced by what the registry saved.
+    """
+    if on_finished is None:
+        return
+    error = tracker.get().get("error") or ""
+    if error == _CANCELLED_MESSAGE:
+        return
+    try:
+        if error:
+            event = DatasetImported(
+                outcome=FAILED,
+                dataset_id="",
+                name=name,
+                user=user,
+                media_type=media_type,
+                n_media=0,
+                origin=copy.deepcopy(origin),
+                error=error,
+            )
+        else:
+            first = next(iter(ctx.medias.values()), {})
+            event = DatasetImported(
+                outcome=SUCCEEDED,
+                dataset_id=dataset_id,
+                name=ctx.dataset_display_name or name,
+                user=user,
+                media_type=media_type or first.get("media_type", ""),
+                n_media=len(ctx.medias),
+                origin=copy.deepcopy(origin),
+            )
+        on_finished(event)
+    except Exception:
+        traceback.print_exc()
 
 
 def consume_chunks_into(
@@ -894,6 +971,7 @@ def _run_importer_in_background(
     field_values: dict,
     *,
     post_load: Callable[[DatasetContext], None] | None = None,
+    on_finished: Callable[[DatasetImported], None] | None = None,
 ) -> str:
     """Start *importer*.run() in a daemon thread.
 
@@ -903,8 +981,8 @@ def _run_importer_in_background(
     field's ``media_type`` (see :func:`auto_chunk_size`); there is no
     user-facing knob.
 
-    *post_load* is forwarded to :func:`_run_origin_load_in_background`,
-    which documents when it runs.
+    *post_load* and *on_finished* are forwarded to
+    :func:`_run_origin_load_in_background`, which documents when they run.
 
     Returns the task_id for progress tracking.
     """
@@ -991,6 +1069,7 @@ def _run_importer_in_background(
         n_hint=n_hint,
         download_size_mb_hint=download_size_mb_hint,
         post_load=post_load,
+        on_finished=on_finished,
     )
 
 

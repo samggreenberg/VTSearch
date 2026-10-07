@@ -46,6 +46,7 @@ from vtscore.datasets.registry import (
 )
 from vtsearch.auth import get_current_user
 from vtsearch.autorun_detectors import import_post_load
+from vtsearch.import_hooks import fire_dataset_imported
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
@@ -729,5 +730,10 @@ def import_dataset(importer_name: str):
     if clipper_params is not None:
         field_values["clipper_params"] = clipper_params
 
-    task_id = _run_importer_in_background(importer, field_values, post_load=import_post_load(autorun_flag))
+    task_id = _run_importer_in_background(
+        importer,
+        field_values,
+        post_load=import_post_load(autorun_flag),
+        on_finished=fire_dataset_imported,
+    )
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})

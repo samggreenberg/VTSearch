@@ -225,7 +225,7 @@ api.spec.to_dict = _to_dict_with_operation_ids
 # module exposes a ``register_*`` function that wires its handlers on in the
 # original order.
 
-from vtsearch import admin_overrides  # noqa: E402
+from vtsearch import admin_overrides, import_hooks  # noqa: E402
 from vtsearch.errors import register_error_handlers  # noqa: E402
 from vtsearch.hooks import register_hooks  # noqa: E402
 
@@ -291,6 +291,13 @@ app.register_blueprint(hf_auth_bp)
 # ---------------------------------------------------------------------------
 # Server startup
 # ---------------------------------------------------------------------------
+
+
+def _report_import_hooks() -> None:
+    """Print the ``--on-dataset-imported`` functions in force, if any."""
+    hooks = import_hooks.describe()
+    if hooks:
+        print(f"\U0001f4e8 Dataset-import hooks: {hooks}", flush=True)
 
 
 def _report_admin_overrides() -> None:
@@ -399,7 +406,9 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     # Deployment-level overrides the gunicorn-launched images can only reach
     # through the environment (they never parse argv). An explicit flag wins.
     admin_overrides.apply_env_overrides()
+    import_hooks.configure_from_env()
     _report_admin_overrides()
+    _report_import_hooks()
     _report_docs_links()
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat

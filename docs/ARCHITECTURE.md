@@ -261,6 +261,7 @@ VTSearch/
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
+│   │   ├── import_event.py         DatasetImported: how an import ended, for on-finished hooks
 │   │   ├── ingest.py               Shared ingest core, driven by ingest_task.py as a background job
 │   │   ├── container.py            Dataset container: a ZIP with `medias.pkl` + `meta.json` and
 │   │   │                           optionally `projection.npz`; the pickle is one member of the container,
@@ -414,6 +415,9 @@ VTSearch/
 │   │                               retention, support email, Semantic-only): one descriptor
 │   │                               per knob carrying its CLI flag, env var, shared validator,
 │   │                               resolution rule, and /api/settings key
+│   ├── import_hooks.py             The admin's --on-dataset-imported functions: flag / env parsing,
+│   │                               startup validation, and the dispatcher the import routes hand
+│   │                               the load pipeline
 │   ├── threading.py                Context-carrying thread helper (user + dataset + detector locals)
 │   ├── achievements.py             Achievement state management
 │   ├── achievements_catalog.py     Static achievement declarations (no state machine)

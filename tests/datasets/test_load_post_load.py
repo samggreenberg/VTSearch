@@ -1,4 +1,4 @@
-"""The load pipeline's ``post_load`` hook (#4252).
+"""The load pipeline's ``post_load`` (#4252) and ``on_finished`` (#4616) hooks.
 
 ``_run_origin_load_in_background(post_load=...)`` is how the app starts a
 user's AutoRun detectors on a freshly imported dataset.  What it owes the
@@ -6,6 +6,11 @@ caller: the hook runs once, only after a load that succeeded, with the new
 dataset pinned as the thread's dataset context, after the load's own task has
 parked terminal - and a hook that raises never turns a saved dataset into a
 failed import.
+
+``on_finished=...`` is how the app runs the functions an admin names with
+``--on-dataset-imported``.  It owes them one ``DatasetImported`` per load that
+succeeded or failed, none for a cancel, after ``post_load``, under the same
+"a raising hook changes nothing" rule.
 
 These drive a real load on the calling thread, the way
 ``test_load_terminal_state.py`` does.
@@ -17,7 +22,8 @@ from unittest import mock
 
 import numpy as np
 
-from vtscore.concurrency.progress import loading_tasks
+from vtscore.concurrency.progress import CancelledError, loading_tasks
+from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported
 
 
 def _sync_thread_factory():
@@ -55,7 +61,14 @@ def _failing_load(_target_medias):
     raise RuntimeError("importer blew up")
 
 
-def _run_load(tmp_path, load_fn, post_load) -> str:
+def _cancelled_load(_target_medias):
+    raise CancelledError("Operation cancelled by user")
+
+
+_ORIGIN = {"importer": "test_post_load", "params": {}}
+
+
+def _run_load(tmp_path, load_fn, post_load=None, on_finished=None) -> str:
     """Run one full load synchronously and return its task id."""
     from vtscore.datasets.load_pipeline import _run_origin_load_in_background
     from vtsearch import settings as settings_mod
@@ -67,10 +80,12 @@ def _run_load(tmp_path, load_fn, post_load) -> str:
     ):
         return _run_origin_load_in_background(
             load_fn,
-            {"importer": "test_post_load", "params": {}},
+            _ORIGIN,
+            name="Post-load test",
             media_type="audio",
             embedder="clap",
             post_load=post_load,
+            on_finished=on_finished,
         )
 
 
@@ -124,6 +139,67 @@ class TestPostLoadHook:
             raise RuntimeError("AutoRun could not start")
 
         task_id = _run_load(tmp_path, _fake_load, hook)
+
+        snapshot = _snapshot(task_id)
+        assert snapshot["status"] == "idle"
+        assert snapshot["error"] is None
+
+
+class TestOnFinishedHook:
+    def test_reports_a_successful_load(self, isolated_settings, tmp_path):
+        from vtscore.datasets.registry import list_datasets
+
+        events: list[DatasetImported] = []
+        _run_load(tmp_path, _fake_load, on_finished=events.append)
+
+        assert len(events) == 1
+        (event,) = events
+        assert event.outcome == SUCCEEDED
+        assert event.dataset_id in [e["id"] for e in list_datasets()], "the saved dataset's id, not the task's"
+        assert event.name == "Post-load test"
+        assert event.user == "default"
+        assert event.media_type == "audio"
+        assert event.n_media == 1
+        assert event.error == ""
+        assert event.origin == _ORIGIN
+        assert event.origin is not _ORIGIN, "a hook must not be able to edit the dataset's recorded origin"
+
+    def test_reports_a_failed_load(self, isolated_settings, tmp_path):
+        events: list[DatasetImported] = []
+        task_id = _run_load(tmp_path, _failing_load, on_finished=events.append)
+
+        assert len(events) == 1
+        (event,) = events
+        assert event.outcome == FAILED
+        assert event.error == "importer blew up" == _snapshot(task_id)["error"]
+        assert event.dataset_id == ""
+        assert event.n_media == 0
+        assert event.name == "Post-load test"
+        assert event.user == "default"
+
+    def test_silent_for_a_cancelled_load(self, isolated_settings, tmp_path):
+        hook = mock.Mock()
+        task_id = _run_load(tmp_path, _cancelled_load, on_finished=hook)
+
+        assert _snapshot(task_id)["error"] == "Cancelled"
+        hook.assert_not_called()
+
+    def test_runs_after_post_load(self, isolated_settings, tmp_path):
+        order: list[str] = []
+        _run_load(
+            tmp_path,
+            _fake_load,
+            post_load=lambda _ctx: order.append("post_load"),
+            on_finished=lambda _event: order.append("on_finished"),
+        )
+
+        assert order == ["post_load", "on_finished"]
+
+    def test_a_raising_hook_does_not_fail_the_import(self, isolated_settings, tmp_path):
+        def hook(_event):
+            raise RuntimeError("mail server unreachable")
+
+        task_id = _run_load(tmp_path, _fake_load, on_finished=hook)
 
         snapshot = _snapshot(task_id)
         assert snapshot["status"] == "idle"
