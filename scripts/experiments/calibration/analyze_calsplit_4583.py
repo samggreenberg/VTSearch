@@ -280,6 +280,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         tables[arm] = arm_tables(frame, anchor, BETAS[btag], complete)
         print(f"{arm}: {prov[arm]['load']}", flush=True)
     paired, sigma = contrasts(tables)
+    # The region phase (the launcher's ``region`` mode): the shipped 0.5 of the
+    # patch space against 0.3, at beta 1, on #4219's 72 classes x 2 seeds.  Its
+    # runs are a subset of the baseline's, so starved runs are never filled.
+    region = args.base / "region"
+    if (region / "r_f05_b1" / "results" / "cells").exists() and (region / "r_f03_b1" / "results" / "cells").exists():
+        for arm in ("r_f05_b1", "r_f03_b1"):
+            frame, p = _cells_io.load_arm(region / arm / "results", keep_check=True)
+            prov[arm] = {"load": _cells_io.describe_load(p), "n_files": p.get("n_files"), "complete": False}
+            tables[arm] = arm_tables(frame, base["text_fbeta_b1"], 1.0, complete=False)
+            print(f"{arm}: {prov[arm]['load']}", flush=True)
+        a, b = tables["r_f03_b1"], tables["r_f05_b1"]
+        reads = {
+            f"objective, {w}": window_mean(a["F"], lo, hi) - window_mean(b["F"], lo, hi)
+            for w, (lo, hi) in WINDOWS.items()
+        }
+        reads.update(
+            {f"AP, {w}": window_mean(a["ap"], lo, hi) - window_mean(b["ap"], lo, hi) for w, (lo, hi) in WINDOWS.items()}
+        )
+        reads["objective, after the check"] = a["after"] - b["after"]
+        reads["returned set size, after the check"] = a["k_after"] - b["k_after"]
+        reads["precision, after the check"] = a["p_after"] - b["p_after"]
+        rrows = []
+        for read, d in reads.items():
+            mean, se, sd, n = clustered(d)
+            rrows.append(
+                {
+                    "beta": 1.0,
+                    "contrast": "region: 0.3 - 0.5",
+                    "read": read,
+                    "stratum": "all",
+                    "n": n,
+                    "delta": mean,
+                    "se": se,
+                    "sd": sd,
+                }
+            )
+        rr = pd.DataFrame(rrows)
+        rr["resolved"] = rr["delta"].abs() > 2 * rr["se"]
+        paired = pd.concat([paired, rr], ignore_index=True)
     lv = levels(tables)
     paired.to_csv(args.out / "paired.csv", index=False, float_format="%.5g")
     sigma.to_csv(args.out / "sigma.csv", index=False, float_format="%.4g")
