@@ -1072,6 +1072,9 @@ else:
 #: below that share; ``off`` forces the offset cut under a balance.  Unset = the
 #: app (the shipped ACQUISITION_TARGET_PRECISION under a balance, #3546).
 ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
+#: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
+#: Autopilot's phase decision.  Unset = the app.
+SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
 _ACQ_TARGET_P_ENV = os.environ.get("CALIB_ACQ_TARGET_P", "").strip().lower()
 ACQ_TARGET_P: float | str | None = (
     "off" if _ACQ_TARGET_P_ENV == "off" else (float(_ACQ_TARGET_P_ENV) if _ACQ_TARGET_P_ENV else None)
