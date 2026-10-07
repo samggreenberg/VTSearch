@@ -22,6 +22,12 @@ not list every commit. Use `git log` for the full history.
   depth below the line that had stopped following the detector. In simulation that finds about 3 more
   matches per 150 votes at every balance setting; 38% of Hard picks are matches (was 19-24%), and the
   final detector is as good or better. The `hard` phase's help text now says what it does.
+- **Autopilot stays Done once it gets there** (issue #4621). Labeling on after **Done!** used to
+  drop the phase panel back to **Refine Boundary** whenever a vote knocked an indicator off green,
+  then jump it forward to Done again when the indicator recovered. Done now stays checked, and a
+  seventh step, **Keep Improving.**, takes over: its light shows the lowest of Smart, Stable and
+  Span, and its line says whether Autopilot is offering boundary items or diverse ones, or that all
+  indicators are green. What Autopilot picks is unchanged.
 
 ### Added
 
