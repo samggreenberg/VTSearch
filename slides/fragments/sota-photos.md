@@ -9,31 +9,29 @@
 <!-- build: figs/sota-photos.build1.png -->
 
 <!-- How the app does today on photos: the State of the App review of
-     2026-10-05. SigLIP, binary votes, Autopilot's opening, all 144 COCO Better
-     cells, ten seeds, and each radio on its own 1,403 trained sessions. The
+     2026-10-05. SigLIP, binary votes, all 144 COCO Better cells, ten seeds:
+     1,403 trained sessions per radio. The
      score is the returned set's F-beta, at the session's own β, on the 10,900
      withheld images Find would search. -->
 
 <!-- **a** — Left: each line is scored at its own β, so this is not a league
      table between radios. Every line starts at the far left, the typed
      query: the text sort at the line the app draws for it (the guarded
-     cut, #4136), which returns about 200 images, F-beta 0.17, 0.24 and
-     0.48. Each line holds there until Autopilot's opening trains a first
-     detector, around click 4. That detector's line keeps almost nothing, so
-     the mean dips (to 0.08 at β 1, 0.12 at β 4) and recovers within a few
-     clicks; at β 4 the clicks pass the typed query again only at click 64.
-     The **∞** is not more clicks: it is the same
-     sessions after the spot check's uniform picks. After 150 clicks and the
-     spot check: 0.64, 0.53 and 0.60. The check's 21 to 30 uniform picks add
-     +0.022 to +0.033 at every radio. Autopilot also runs it mid-session when
-     the labels still overlap, in 43 to 45% of sessions. -->
+     cut, #4136), about 200 images: F-beta 0.17, 0.24 and 0.48. Each line holds there through Autopilot's opening, because the
+     app stays on the text sort until the Hard phase (#4605): 30% of
+     sessions have left it by click 25, half by 40, 91% by 150. From click 23 the lines rise as sessions hand over, steeply at
+     β ¼ and 1 (0.39 and 0.36 by click 30). At β 4 a young detector is no
+     better than the typed query, so that line holds near 0.48 and passes
+     it only at click 38. After 150 clicks and the spot check (**∞**): 0.64,
+     0.53 and 0.60; the check's uniform picks add +0.02 to +0.03. -->
 
 <!-- **b** — Right: the same three sets as precision against recall, each a
      path through the session: every path starts at 0, the typed query's own
-     set (precision 0.17, recall 0.60), the circle 25 is 25 clicks, the dots
-     50, 100 and 150, and ∞ is the set after the
-     spot check. The clicks buy precision, not recall: from click 25 to 100,
-     precision rises about 0.17 on every radio while recall holds within 0.04.
+     set (precision 0.17, recall 0.60), the circle 50 is 50 clicks, the dots
+     25, 100 and 150, and ∞ is the set after the spot check. At 25 most
+     sessions still show the typed query, so the 25s sit near the 0. The
+     clicks buy precision, not recall: from click 50 to 100, precision rises
+     0.06 to 0.13 at every radio while recall moves about 0.05 or less.
      Where they end: 21 kept at precision 0.73 and recall 0.38; 44 at 0.60 and
      0.52; 80 at 0.43 and 0.68. -->
 

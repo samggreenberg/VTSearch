@@ -3,14 +3,17 @@
 Photo Finish and Patch Notes drew the objective as straight segments between five checkpoints
 (25, 50, 100, 150 and after the check), so a session's first clicks read as a steady climb from the
 typed query. The owner (2026-10-07): "shouldn't the FBeta stay flat for the first few clicks, since
-we're measuring and collecting before we're learning?" It does, and then it dips: the first detector
-Autopilot's opening trains keeps almost nothing for a click or two before the line recovers.
+we're measuring and collecting before we're learning?" It does: the app stays on the text sort through
+Autopilot's whole opening and shows a detector only from the Hard phase on (#4605), a median ~40 clicks
+in. (A first version switched at the opening's own first detector, around click 4, and drew a dip there
+that no user sees.)
 
 `curves.csv` (analyze.py) records each run's objective (``thr_fbeta``, at the run's own beta) at every
-click once the run has a detector, and nothing before. This fills the gap the way the user meets it:
+click once the app shows the run's detector (``app_trained``), and nothing before. This fills the gap the
+way the user meets it:
 
-* before a run's first detector, the run scores the **typed query's** own set (the text sort at its own
-  line in the app, `_text_app_line` off the text baseline), which is what the user sees;
+* before that, the run scores the **typed query's** own set (the text sort at its own line in the app,
+  `_text_app_line` off the text baseline), which is what the user sees;
 * after it, a click with no value (a spot-check step) carries the run's last value forward.
 
 The mean over a review's trained runs at each click is the curve; never-trained runs are left out, as

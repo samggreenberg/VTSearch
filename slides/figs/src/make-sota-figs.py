@@ -67,11 +67,11 @@ PHOTO_PATH = PHOTO_REPORT / "precision_recall_path.csv"
 PHOTO_CLICKS = (25, 50, 100, 150)
 #: The photo path's points that get a labelled circle. 100 and 150 sit within 0.01 to
 #: 0.04 of the set after the check on every radio, closer than a circle is wide, so
-#: they are dots on the path: a circle there would cover the end's ∞ (#4533's rule). 50 is a dot too,
-#: since the panel reaches down to the typed query (#4599): it sits within a circle of 25 or of ∞ on
-#: every radio of one slide or the other. "0" is the typed query, where every path starts and which
-#: the three radios share (drawn once).
-PHOTO_CIRCLED = ("0", "25", "∞")
+#: they are dots on the path: a circle there would cover the end's ∞ (#4533's rule). 25 is a dot
+#: too: the app is still on the text sort at click 25 in most sessions (#4605), so every radio's 25
+#: sits within a circle of the typed query's 0 and of the other radios' 25s. "0" is the typed query,
+#: where every path starts and which the three radios share (drawn once).
+PHOTO_CIRCLED = ("0", "50", "∞")
 #: The session's end, after the spot check: "∞", the last point the session reaches (owner, 2026-10-07:
 #: "instead of 'check' meaning the theoretical last point on the graphs, use the infinity symbol").
 END_LABEL = "∞"
@@ -87,7 +87,7 @@ REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
 #: The region review's precision-recall panel: its recall span, and which path points
 #: get a labelled circle (as `PHOTO_CIRCLED`, set from where its points fall).
 REGION_PR_LIM = (0.4, 0.9)
-REGION_CIRCLED = ("0", "25", "∞")
+REGION_CIRCLED = ("0", "50", "∞")
 
 #: The three radios, left panel's line weight and label, in the order
 #: `calib-fbeta` stacks them: the precision end, the middle, the recall end.
@@ -141,6 +141,12 @@ EXPECT = {
     ("photos", 0.25, "text"): 0.17,
     ("photos", 1.0, "text"): 0.24,
     ("photos", 4.0, "text"): 0.48,
+    ("photos", 0.25, "at50"): 0.48,
+    ("photos", 1.0, "at50"): 0.42,
+    ("photos", 4.0, "at50"): 0.50,
+    ("regions", 0.25, "at50"): 0.51,
+    ("regions", 1.0, "at50"): 0.46,
+    ("regions", 4.0, "at50"): 0.57,
     ("regions", 0.25, "text"): 0.18,
     ("regions", 4.0, "text"): 0.48,
     ("regions", 0.25, "after"): 0.73,
@@ -232,11 +238,14 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
         out[beta] = {
             # The typed query at click 0: the text sort at the line the app draws for it (#4599).
             "text": float(rows[TYPED_QUERY]["fbeta"]),
-            # Every click, filled: the typed query until a run's first detector (#4599, `by_click.py`).
+            # Every click, filled: the typed query until the app shows a run's detector, the end of
+            # Autopilot's opening (#4605, `by_click.py`).
             "curve_t": [t for t, _ in curve],
             "curve_f": [f for _, f in curve],
             "clicks": list(PHOTO_CLICKS),
             "f": [float(rows[str(c)]["fbeta"]) for c in PHOTO_CLICKS],
+            # 50 clicks, which the notes quote: the first circle past the typed query (#4605).
+            "at50": float(rows["50"]["fbeta"]),
             "after": float(rows["after the check"]["fbeta"]),
             "path": path,
             **{k: path[-1][k] for k in ("precision", "recall", "kept")},
