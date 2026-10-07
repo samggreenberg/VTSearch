@@ -182,10 +182,10 @@ same edit.
   click-4 dip the report's own curves do not have, and it is not a bug: the
   report is the session, the viewer is the export. The page says so in its
   reading note, and `selftest_viewer.py` / `selftest_curves.py` pin it. The
-  owner wants the app to stop handing out an unreal detector (#4643: until the
-  labels meet the opening's quota, Test gives the typed query's set). When it
-  does, the harness's rows carry that set and the page follows, so the dip
-  goes with the app, not with a viewer rule.
+  owner wants the app to stop handing out an unreal detector (#4643: with too
+  few Goods, Test gives the typed query's set; with too few Bads, the Goods'
+  centroid). When it does, the harness's rows carry those sets and the page
+  follows, so the dip goes with the app, not with a viewer rule.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
