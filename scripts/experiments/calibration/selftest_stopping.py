@@ -33,6 +33,15 @@ And then the margins (issue #3560's second half), where the traps are different:
 * a frame that predates the margins must come back **empty**, not zeroed: unlike
   the lights, nothing can reconstruct these from old cells.
 
+And then the two later additions:
+
+* the stop is held against **the run's own best**, in each metric's own
+  direction (lowest cost, highest AP), and a run that never fired keeps its best
+  but gets no distance from it;
+* a spot check prompted mid-session (``phase == "prompt"``) hides the phase
+  machine's reading, so it must neither fire the rules nor split a ``done``
+  stretch into two episodes.
+
 Run: ``python selftest_stopping.py``
 """
 
@@ -219,6 +228,32 @@ def main() -> int:
     ok &= _check("clicks after the announcement are counted", set(clean["clicks_after_stop"]) == {float(BUDGET - 20)})
     ok &= _check("labelset at the stop is carried through", set(clean["n_good_at_stop"]) == {10.0})
 
+    # --- against the run's own best -------------------------------------------
+    # cost(t) = t/1000 rises, so its best is the FIRST click; AP falls, so its
+    # best (highest) is the first click too.  Each in its own direction.
+    ok &= _check(
+        "the run's best is read in the metric's own direction",
+        set(clean["cost_best"]) == {0.001} and set(clean["average_precision_best"]) == {0.999},
+        str((set(clean["cost_best"]), set(clean["average_precision_best"]))),
+    )
+    ok &= _check("...at the first click it was reached", set(clean["cost_t_best"]) == {1.0})
+    ok &= _check(
+        "the stop's distance from it is never negative, in either direction",
+        np.allclose(clean["cost_from_best"], 0.019) and np.allclose(clean["average_precision_from_best"], 0.019),
+        str((clean["cost_from_best"].tolist(), clean["average_precision_from_best"].tolist())),
+    )
+    ok &= _check(
+        "a stop after the run's best counts its clicks past it, positive",
+        set(clean["cost_clicks_past_best"]) == {19.0},
+        str(set(clean["cost_clicks_past_best"])),
+    )
+    ok &= _check(
+        "a never-stopper keeps its best but gets no distance from it",
+        set(never["cost_best"]) == {0.001}
+        and never["cost_from_best"].isna().all()
+        and never["cost_clicks_past_best"].isna().all(),
+    )
+
     # --- censoring ------------------------------------------------------------
     summary = S.summarise(stops)
     srow = {r["arm"]: r for _, r in summary.iterrows()}
@@ -283,6 +318,47 @@ def main() -> int:
         "an empty frame renders a sentence, not a broken table", "No stopping data" in S.stopping_table(pd.DataFrame())
     )
     ok &= _check("...and an empty frame in gives an empty frame out", S.stopping_points(pd.DataFrame()).empty)
+    ok &= _check(
+        "...and holds the stop against the run's best",
+        "short of run's best" in table and "clicks past best" in table,
+        table,
+    )
+
+    # --- a prompted spot check is not a reading of the phase machine ----------
+    prompt_rows = []
+    for arm, phase_at in (
+        # done from 20, with a check prompted at 30-34 inside the stretch
+        ("inside", lambda t: "prompt" if 30 <= t <= 34 else ("done" if t >= 20 else "hard")),
+        # a check prompted at 15-19 while held, then done from 20
+        ("before", lambda t: "prompt" if 15 <= t <= 19 else ("done" if t >= 20 else "hard")),
+        # done from 20, and the budget runs out inside a prompted check
+        ("trailing", lambda t: "prompt" if t >= 55 else ("done" if t >= 20 else "hard")),
+    ):
+        for t in range(1, BUDGET + 1):
+            prompt_rows.append(
+                {
+                    "arm": arm,
+                    "dataset": "ds",
+                    "category": "cat",
+                    "seed": 0,
+                    "t": t,
+                    "phase": phase_at(t),
+                    "cost": t / 1e3,
+                }
+            )
+    prompted = S.stopping_points(pd.DataFrame(prompt_rows), keys=("arm", "dataset", "category", "seed"))
+    ps_ = {a: g.iloc[0] for a, g in prompted.groupby("arm")}
+    ok &= _check(
+        "a check prompted inside a `done` stretch does not split it",
+        ps_["inside"]["n_done_episodes"] == 1 and ps_["inside"]["t_sustained"] == 20.0,
+        str((ps_["inside"]["n_done_episodes"], ps_["inside"]["t_sustained"])),
+    )
+    ok &= _check("...nor fire the rules itself", ps_["before"]["t_stop"] == 20.0, str(ps_["before"]["t_stop"]))
+    ok &= _check(
+        "...and a budget ending inside one keeps the run's stop sustained, its last click its budget",
+        ps_["trailing"]["t_sustained"] == 20.0 and ps_["trailing"]["t_budget"] == BUDGET,
+        str((ps_["trailing"]["t_sustained"], ps_["trailing"]["t_budget"])),
+    )
 
     # --- margins: how close, not merely whether -------------------------------
     KEYS = ("arm", "dataset", "category", "seed")
