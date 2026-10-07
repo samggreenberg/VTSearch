@@ -551,7 +551,7 @@ export class AutopilotPanelComponent implements OnInit {
         }
         return this.state.stablePlateau
           ? `Done. ${PLATEAU_NOTE} Keep labeling if you want, but more votes are unlikely to change the result; or export your results.`
-          : 'Done. All quality indicators are green. Keep labeling for more accuracy, or export your results.';
+          : 'Done. All quality indicators went green: the detector is trained. Keep labeling for more accuracy, or export your results.';
       case 'improve':
         return `Phase ${stepNumber}: Keep improving. Optional: the detector is trained, and Done stays done. `
           + 'Further votes go where they help most: items near the cutoff while the detector settles, then a broad mix.';
