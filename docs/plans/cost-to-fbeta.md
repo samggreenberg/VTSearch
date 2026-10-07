@@ -113,8 +113,6 @@ cut.
 
 <!-- item-sep -->
 
-- [ ] #4359 — Smart and Stable re-keyed to the balance's line (Opus)
-
 <!-- item-sep -->
 
 <!-- item-sep -->
