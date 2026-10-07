@@ -10,6 +10,27 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Under the label quota a labelset gives the Goods' centroid, not a trained head** (issue #4643).
+  `vtscore.detectors.labelset_training.train_from_labelset` - the app's Test, AutoFind,
+  detector load and CLI - now follows the new `vtscore.detectors.label_quota`: with no Good that
+  resolved it returns `False`; under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads (Autopilot's
+  quorum) it stores the Goods' centroid head and returns `True`, **one Good and no Bad
+  included**; with both met it trains as before. Behaviour change for a library caller: at 1-2
+  Goods or 1-3 Bads the stored model is a centroid head, not the SVM. Pass
+  `label_quota=False` for the old rule (a head from any Good and Bad). The centroid is the new
+  `vtscore.detectors.centroid_head`: `fit_centroid_head(goods, score)` returns a `Linear(D, 1)`
+  ranking by cosine to the unit mean of the Goods, cut at the two-Gaussian midpoint of those
+  cosines on the scored corpus (threshold `CENTROID_THRESHOLD`, 0.5, balance-blind), so every
+  scoring path and a portable weight export take it as they take the linear SVM;
+  `is_centroid_head` tells them apart. `labelset_train_and_score` takes `label_quota`
+  (default `False`, the Train view's learned sort; a cold Find passes `True`), and
+  `model_loading.cached_head_is_current` refuses a trained head while its labelset is under the
+  quota. `install_centroid_head` drops the trained head's re-cut caches, so a balance change
+  leaves the centroid's line where it is. The eval harness's default arm follows
+  (`simulate_voting_iterations(label_quota=None)`): a row from the first Good, the centroid's
+  test metrics under the quota, and a `detector_tier` column; `label_quota=False` is the
+  pre-#4643 arm.
+
 - **The eval harness can hold Autopilot's Smart light yellow** (issue #4359). `simulate_voting_iterations`
   and `vtscore.eval.autopilot_flow.AutopilotFlow` take `smart_gate` (`"app"`, the default and the app,
   or `"never"`: the phase decision reads Smart as yellow, so a session stays in `hard`). A bound

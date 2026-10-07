@@ -746,6 +746,52 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="detectors.label_quota_default",
+        app="py:vtscore.detectors.labelset_training.train_from_labelset",
+        harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
+        kind="default",
+        note=(
+            "The label quota (#4643): train_from_labelset - Test, AutoFind, a load and the CLI - "
+            "gives the Goods' centroid from the first Good until the resolved labels hold "
+            "GOOD_QUOTA Goods and BAD_QUOTA Bads (label_quota.quota_from_groups), the trained head "
+            "from there, and nothing with no Good. The harness's default arm (label_quota=None on "
+            "the app trainer) scores the withheld half the same way: a row from the first Good, "
+            "the centroid's metrics under the quota (label_quota.label_quota, delegated), the "
+            "head's from it. If the app's tiers move - a new tier, a quota read from somewhere "
+            "other than the counts, a tier that needs a Bad - the harness's rows have to move "
+            "with them, and the viewer and curves that read detector_tier."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness counts votes, not resolved labels - every simulated vote "
+            "resolves - and keeps the Train side (acquisition, lights, spot check) on the trained "
+            "head wherever there is a Good and a Bad, as the Train view's learned sort does "
+            "(labelset_train_and_score with label_quota=False)."
+        ),
+        no_harness_pin=(
+            "simulate_voting_iterations is the whole voting loop; the quota's own rows are "
+            "_centroid_test and step_trainers._centroid_step, pinned by "
+            "detectors.label_quota_centroid."
+        ),
+    ),
+    Mirror(
+        id="detectors.label_quota_centroid",
+        app="py:vtscore.detectors.labelset_training.install_centroid_head",
+        harness="vtscore/eval/step_trainers.py::_centroid_step",
+        kind="ported",
+        note=(
+            "The Goods' centroid under the label quota (#4643). Both sides call "
+            "centroid_head.fit_centroid_head, so the head and its cut are delegated; what is "
+            "ported is what they are handed. The app hands it the resolved Good rows of "
+            "build_xy_from_labelset (a boxed Good's patch, else its image-level vector) and the "
+            "haystack it scores (scoring_rows_for_snap's rows: the active dataset in Test, the "
+            "searched one in a cold Find); the harness hands it each Good vote's training "
+            "vector (the style's good_vec, else good_training_vec - the vectors its trained "
+            "head fits on) and the withheld half's scorer (_centroid_test). If the app changes "
+            "which vectors average, or which corpus the midpoint is cut on, or gives the line a "
+            "balance, change the harness to match."
+        ),
+    ),
+    Mirror(
         id="line_test.budgets_default",
         app="py:vtscore.training.thresholds.line_test.LineBudgets",
         harness="vtscore/eval/line_test_arm.py::line_test_row,simulate_line_test",

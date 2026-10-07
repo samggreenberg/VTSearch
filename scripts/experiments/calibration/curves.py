@@ -50,12 +50,12 @@ Three things it refuses to do quietly, because each one turns a failing arm
 into a good-looking curve:
 
 1. **Average over a shrinking denominator.**  The main metric frame starts at
-   the first *trainable* step — before one Good and one Bad vote coexist there
-   is no model, no threshold and no row.  Left that way, a starved cell is
-   not in the average, and an arm that starves on a third of its cells gets
-   its mean computed over the two thirds that worked.  But a user at that
-   click has a labelset the app cannot train, and Find on it returns nothing,
-   so such a click is scored as the empty returned set
+   a run's first Good (#4643; at its first Good *and* Bad in a frame written
+   before it) — before that there is no detector, no threshold and no row.
+   Left that way, a starved cell is not in the average, and an arm that
+   starves on a third of its cells gets its mean computed over the two thirds
+   that worked.  But a user at that click has a labelset Test refuses, and
+   Find on it returns nothing, so such a click is scored as the empty returned set
    (:func:`score_empty_sets`, :data:`EMPTY_SET`), as is a trained detector
    that flags nothing, whose undefined precision counts as 0: every attempted
    run is in the mean at every click, the failing ones at a loss.  Any mean still
@@ -91,8 +91,13 @@ into a good-looking curve:
 **Autopilot's opening is drawn as the detector** (owner, 2026-10-07, #4640).
 The app shows the text sort until the Hard phase (``app_trained``), but the
 user can export the labels or run Test at any click, and either retrains from
-them, so a row is what the user can take away at that click.  Nothing here
-reads ``app_trained``; an analyzer about the session filters on it itself.
+them, so a row is what the user can take away at that click.  Since #4643 that
+is what the label quota gives: from the first Good the Goods' centroid, until
+the labels hold 3 Goods and 4 Bads, and the trained head from there - the
+harness writes the row as that detector and says which in ``detector_tier``.
+Nothing here reads ``app_trained`` or ``detector_tier``: a row is drawn the
+same whichever detector made it, and an analyzer about the session filters on
+``app_trained`` itself.
 
 **The spot check is not a click.**  A floor-era run ends on its spot check
 (#4272), whose rows sit past ``max_steps`` and come from a model retrained on
@@ -357,7 +362,7 @@ def fill_gaps(frame: pd.DataFrame, keys: Sequence[str]) -> pd.DataFrame:
 
     Rows are added only **inside** a run's span: never before its first
     scored click (there is no detector there, and the gap from the text-sort
-    anchor to the first trained click is the honest drawing) and never after
+    anchor to the first scored click is the honest drawing) and never after
     its last (the run is over).  A metric that is NaN on a scored row (an
     undefined precision) stays NaN and is what gets carried: only clicks
     with no row at all are filled.  An added row copies the scored row it
@@ -555,14 +560,21 @@ def attempted_cells(main: pd.DataFrame, baseline: pd.DataFrame | None, keys: Seq
 #: trained detector at, 0 on every row the run itself wrote.
 NO_DETECTOR = "__no_detector"
 
-#: What a click with **no trained detector** scores: the empty returned set.
-#: (A detector that trained and flags nothing returns the same set, and its own
-#: row's undefined precision is counted as this 0 too: :func:`zero_empty_precision`.)
-#: The harness writes no row until a run has a Good and a Bad vote, and the app
-#: gives a user at that point nothing either: a labelset of one class loads as a
-#: detector with no model, and Find on it is refused (a 400 and a toast,
-#: ``vtsearch/routes/detectors/scoring.py``).  So the click counts as a loss
-#: rather than leaving the average (owner, 2026-10-07).  Precision is counted
+#: What a click with **no detector** scores: the empty returned set.
+#: (A detector that flags nothing returns the same set, and its own row's
+#: undefined precision is counted as this 0 too: :func:`zero_empty_precision`.)
+#: The harness writes no row until a run has a Good vote, and the app gives a
+#: user at that point nothing either: with no Good there is nothing to sort
+#: toward, and Test on it is refused (a 400 and a toast,
+#: ``vtsearch/routes/detectors/scoring.py``).  One Good is enough since #4643 -
+#: under the label quota Test gives the Goods' centroid - so in a frame written
+#: since then these are the clicks before the first Good.  A frame written
+#: before it starts at the first Good *and* Bad, when Test refused a labelset
+#: of one class too, so its earlier clicks are scored the same way: each frame
+#: is read as the app that wrote it behaved.  The rule is the same either way -
+#: every click before a run's first row - so nothing here tells the two apart.
+#: So the click counts as a loss rather than leaving the average (owner,
+#: 2026-10-07).  Precision is counted
 #: as 0, not left undefined as :func:`~vtscore.eval.calibration_metrics.detection_metrics`
 #: leaves it for a detector that flags nothing, because here the undefined
 #: value would drop exactly the failing sessions from the mean.  The ranking
@@ -693,8 +705,10 @@ def score_empty_sets(
     (:func:`zero_empty_precision`), and a click with no trained detector at
     all, which has no row, gets one.
 
-    The rows a run writes start at its first click with a Good and a Bad vote,
-    so before that, and at every click of a run that never got one, the mean
+    The rows a run writes start at its first click with a Good vote (#4643:
+    from there Test gives the Goods' centroid; in a frame written before it,
+    at its first Good and Bad), so before that, and at every click of a run
+    that never got one, the mean
     had no value and simply left the run out: the sessions failing hardest
     were the ones missing from the average.  This adds a row for each of those
     clicks, from click 1 to the run's first row (to the last click of the

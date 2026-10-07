@@ -492,24 +492,50 @@ elements (filtering to `good` / `bad`), look up each cached embedding,
 and return `(X_list, y_list, groups, score_rows)` - the same shape
 `_build_vote_xy` produces for live votes.
 
-### `train_from_labelset(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None)`
+### `train_from_labelset(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None, label_quota=True)`
 
 `vtscore/detectors/labelset_training.py`. Populate the cache,
-build `(X, y)`, run `train_and_threshold`, store the result on
-`det_ctx.model` / `det_ctx.threshold`, and stamp
-`det_ctx.model_labels_sig` with the labelset's signature. Returns `True` on success,
-`False` when fewer than 2 cached vectors exist or one class is
-missing. `haystack_for(embedder_name)` may return a `Haystack` to
+build `(X, y)`, store a detector on `det_ctx.model` / `det_ctx.threshold`,
+and stamp `det_ctx.model_labels_sig` with the labelset's signature.
+Which detector follows the **label quota** (#4643, below): with no Good
+that resolved it returns `False`; under `GOOD_QUOTA` Goods or
+`BAD_QUOTA` Bads it stores the Goods' centroid head
+(`install_centroid_head`); with both met it runs `train_and_threshold`.
+`label_quota=False` is the pre-#4643 rule - a trained head from any Good
+and Bad, `False` otherwise - for a caller that wants a head at any count.
+`haystack_for(embedder_name)` may return a `Haystack` to
 fit the line's corpus side on a different population than *snap* (the
 CLI uses it for converted / re-clipped scoring sets); the class model the
-line is cut from comes from the labels either way (#4452).
+line is cut from comes from the labels either way (#4452), and the
+centroid's midpoint is cut on that population.
 
-### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, beta=None)`
+### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, beta=None, label_quota=False)`
 
 `vtscore/detectors/labelset_training.py`. Like `train_and_score`
 but trains on the full labelset (cross-dataset labels) and scores only
 the active `clips_dict`. Returns the same `(results, threshold, model)`
-tuple. *inclusion_value* is deprecated the same way.
+tuple. *inclusion_value* is deprecated the same way. `label_quota=True`
+applies the label quota as `train_from_labelset` does - a cold Find
+passes it; the Train view's learned sort, the sort the user labels on,
+does not, so it defaults to `False`.
+
+### The label quota and the Goods' centroid (#4643)
+
+`vtscore/detectors/label_quota.py` and `vtscore/detectors/centroid_head.py`.
+A labelset gives a detector by its counts alone: `TIER_NONE` with no Good,
+`TIER_CENTROID` under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads -
+Autopilot's own quorum - and `TIER_TRAINED` once both are met.
+`label_quota(n_good, n_bad)` and `labelset_quota(labelset)` return a
+`LabelQuota` (`tier`, `goods_owed`, `bads_owed`, `as_dict()`);
+`served_quota(model, labelset)` is what the app's responses report.
+
+The centroid is `fit_centroid_head(goods, score)`: the unit mean of the
+L2-normalised Good vectors, as a `Linear(D, 1)` scoring
+`CENTROID_LOGIT_SCALE * (cosine - cut)`, where the cut is the
+two-Gaussian midpoint of the max-pooled cosines on the corpus `score`
+scores - the line `cosine_sort_active` draws for several uploaded
+examples. The threshold is `CENTROID_THRESHOLD` (0.5) and does not take
+the balance. `is_centroid_head(model)` tells it from a trained head.
 
 ---
 

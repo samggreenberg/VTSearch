@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
+  AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
+  with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
+  opening quorum), they now give the Goods' centroid: everything ranked by how close it is to the
+  average of the Goods, cut where the scores split, with no Bad needed. One Good is enough to test
+  a detector, and the Test view and AutoFind results say when the centroid was used and how many
+  more Goods and Bads a trained detector needs. The Threshold control does not move the centroid's
+  line. Labels still save on every vote, and Export labels is not gated: whatever imports the labels
+  gets the same rule. The Train view's own sort is unchanged.
 - **Autopilot's Hard and New picks go where the detector is least sure** (issue #3546). They now
   sample where the detector's own model puts even odds on an image being a match, instead of a fixed
   depth below the line that had stopped following the detector. In simulation that finds about 3 more

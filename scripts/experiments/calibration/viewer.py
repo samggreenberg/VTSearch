@@ -98,12 +98,17 @@ one reading the number exists to prevent.
 (owner, 2026-10-07, #4640).  The app stays on the text sort until the Hard
 phase (``app_trained``, #4605), but every vote is saved as it is cast, and
 Export labels and Test have no phase gate: a user can take the labels away at
-any click, and an import or a Test retrains from them.  So from a run's first
-Good and Bad the page draws the harness's detector, which is what that gives,
-and nothing here reads ``app_trained``.  Before the first Good and Bad, Test is
-refused and the click is the empty set (:func:`curves.score_empty_sets`).  A
-report that scores the session (``state_of_app/analyze.py``) differs from the
-page through the opening on purpose.
+any click, and an import or a Test builds a detector from them.  So from a
+run's first Good the page draws the harness's detector, which is what that
+gives: since #4643, the Goods' centroid until the labels hold 3 Goods and 4
+Bads (the label quota), the trained head from there.  The harness writes each
+row as that detector (``detector_tier`` names which); nothing here reads
+``detector_tier`` or ``app_trained``.  Before the first Good, Test is refused
+and the click is the empty set (:func:`curves.score_empty_sets`).  A page built
+from results written before #4643 starts its rows at the first Good and Bad and
+draws a trained head there, the app as it was.  A report that scores the
+session (``state_of_app/analyze.py``) differs from the page through the opening
+on purpose.
 
 Payload
 -------
