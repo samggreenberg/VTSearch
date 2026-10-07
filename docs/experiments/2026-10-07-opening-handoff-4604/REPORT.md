@@ -1,6 +1,8 @@
 # Showing a detector during Autopilot's opening (issue #4604)
 
-**Status (2026-10-07): priced offline, nothing shipped.**
+**Status (2026-10-07): priced offline, nothing shipped.** Re-priced the same day with every run, the 37 binary
+and 9 region runs per preset that never train a detector included at the typed query's set (#4631). Every gain
+moved by at most 0.01, and no ruling changed.
 
 **Ruling (owner, 2026-10-07): per path and preset**, after the 1% check below agreed.
 - Once the app has a detector during the opening (#4508's background retrain), it shows it from the end of the Bad phase on Region Photo at every preset and on Binary Photo at beta 1/4.
@@ -14,14 +16,14 @@ The returned set would then gain, on average over clicks 1–50:
 
 | | beta 1/4 | beta 1 | beta 4 |
 |---|---|---|---|
-| Region Photo | **+0.16 ± 0.01** | **+0.09 ± 0.01** | **+0.04 ± 0.01** |
-| Binary Photo | **+0.09 ± 0.01** | +0.01 ± 0.01 | **−0.05 ± 0.01** |
+| Region Photo | **+0.15 ± 0.01** | **+0.09 ± 0.01** | **+0.04 ± 0.01** |
+| Binary Photo | **+0.08 ± 0.01** | +0.01 ± 0.01 | **−0.05 ± 0.01** |
 
 **Binary Photo loses at beta 4.**
-- **Why:** the opening's binary detector *ranks* worse than the typed query (AP 0.34 against 0.43 at click 10), and beta 4 needs the recall that only a good ranking gives.
-- **A vote rule helps but does not fix it.** The rule waits until the detector's set beats the typed query's on the votes so far. That cuts the loss to −0.02 and keeps 75–95% of the gains elsewhere.
+- **Why:** the opening's binary detector *ranks* worse than the typed query (AP 0.33 against 0.42 at click 10), and beta 4 needs the recall that only a good ranking gives.
+- **A vote rule helps but does not fix it.** The rule waits until the detector's set beats the typed query's on the votes so far. That cuts the loss to −0.02 and keeps 74–94% of the gains elsewhere.
 
-**The picture holds at a second prevalence.** Binary Photo was re-priced with the user's pool at 1% (#4583's shipped arm). It gives the same signs and sizes at every preset: +0.09 / +0.02 / −0.04.
+**The picture holds at a second prevalence.** Binary Photo was re-priced with the user's pool at 1% (#4583's shipped arm). It gives the same signs and sizes at every preset: +0.08 / +0.02 / −0.04.
 
 Showing a detector during the opening needs a background retrain after each opening vote (#4508).
 
@@ -30,7 +32,7 @@ Showing a detector during the opening needs a background retrain after each open
 | | |
 |---|---|
 | runs | the 2026-10-05 Binary Photo and 2026-10-06 Region Photo State of the App runs, as re-scored by #4605 (`analysis-*-4605`) |
-| bench | `coco_better`, 144 class@band cells, presets 1/4, 1 and 4. Binary: 10 seeds, 1,403 trained runs per preset. Region (`siglip+dinov3_patch`, max-patch): 2 seeds, 279 |
+| bench | `coco_better`, 144 class@band cells, presets 1/4, 1 and 4. Binary: 10 seeds, 1,440 runs per preset. Region (`siglip+dinov3_patch`, max-patch): 2 seeds, 288. Every run counts (#4631): the 37 binary and 9 region runs per preset that never train a detector keep the typed query's set under every rule |
 | objective | F-beta of the withheld half above the line the app shows, at the run's preset (#4427) |
 | the typed query's set | today's guarded line (#4136): precision 0.17, recall 0.58, a median of 203 returned |
 | no new sessions | every run's rows carry the opening's own detector at every click (`app_trained == 0`). A rule changes only which set the app *shows*; votes, picks and every point from Hard on are the same sessions |
@@ -57,7 +59,7 @@ Gains are paired per run (rule minus today). ± is one SE over classes, because 
 
 ![The returned set over clicks under each rule](figures/handoff_over_clicks.png)
 
-*Mean F-beta over trained runs, per path and preset.*
+*Mean F-beta over every run, per path and preset.*
 - **Gray, today:** flat on the typed query's set until runs start reaching Hard around click 23.
 - **Blue, the detector from the end of the Bad phase:** steps up at click 7.
 - **Orange, the vote rule:** margin 0, one positive, after the Bad phase.
@@ -69,23 +71,23 @@ At beta 1/4 and 1 the region and binary detectors jump far above the typed query
 
 | | today | from the end of the Bad phase | vote rule | ceiling, in the opening |
 |---|---|---|---|---|
-| Binary, beta 1/4 | 0.31 | 0.39 (**+0.09 ± 0.01**) | 0.37 (**+0.07 ± 0.01**) | 0.41 (+0.11) |
-| Binary, beta 1 | 0.32 | 0.33 (+0.01 ± 0.01) | 0.34 (**+0.02 ± 0.01**) | 0.36 (+0.04) |
-| Binary, beta 4 | 0.48 | 0.43 (**−0.05 ± 0.01**) | 0.46 (**−0.02 ± 0.004**) | 0.49 (+0.01) |
-| Region, beta 1/4 | 0.31 | 0.47 (**+0.16 ± 0.01**) | 0.46 (**+0.15 ± 0.01**) | 0.50 (+0.19) |
-| Region, beta 1 | 0.33 | 0.43 (**+0.09 ± 0.01**) | 0.42 (**+0.09 ± 0.01**) | 0.45 (+0.11) |
-| Region, beta 4 | 0.51 | 0.55 (**+0.04 ± 0.01**) | 0.54 (**+0.03 ± 0.01**) | 0.57 (+0.06) |
+| Binary, beta 1/4 | 0.30 | 0.38 (**+0.08 ± 0.01**) | 0.36 (**+0.07 ± 0.01**) | 0.40 (+0.10) |
+| Binary, beta 1 | 0.31 | 0.32 (+0.01 ± 0.01) | 0.33 (**+0.02 ± 0.01**) | 0.35 (+0.04) |
+| Binary, beta 4 | 0.47 | 0.42 (**−0.05 ± 0.01**) | 0.45 (**−0.02 ± 0.004**) | 0.48 (+0.01) |
+| Region, beta 1/4 | 0.30 | 0.46 (**+0.15 ± 0.01**) | 0.45 (**+0.14 ± 0.01**) | 0.49 (+0.19) |
+| Region, beta 1 | 0.32 | 0.41 (**+0.09 ± 0.01**) | 0.41 (**+0.08 ± 0.01**) | 0.43 (+0.11) |
+| Region, beta 4 | 0.50 | 0.53 (**+0.04 ± 0.01**) | 0.52 (**+0.03 ± 0.01**) | 0.56 (+0.06) |
 
 **At single clicks**, today against the detector from the end of the Bad phase:
 
 | | click 10 | click 25 | click 50 |
 |---|---|---|---|
-| Binary, beta 1/4 | 0.18 → 0.37 | 0.32 → 0.39 | 0.48 → 0.48 |
-| Binary, beta 1 | 0.24 → 0.30 | 0.32 → 0.31 | 0.42 → 0.40 |
-| Binary, beta 4 | 0.48 → 0.39 | 0.47 → 0.40 | 0.50 → 0.47 |
-| Region, beta 1/4 | 0.18 → 0.43 | 0.30 → 0.49 | 0.51 → 0.59 |
-| Region, beta 1 | 0.25 → 0.40 | 0.33 → 0.44 | 0.46 → 0.51 |
-| Region, beta 4 | 0.48 → 0.52 | 0.50 → 0.56 | 0.57 → 0.60 |
+| Binary, beta 1/4 | 0.17 → 0.36 | 0.31 → 0.38 | 0.47 → 0.47 |
+| Binary, beta 1 | 0.24 → 0.29 | 0.31 → 0.31 | 0.41 → 0.39 |
+| Binary, beta 4 | 0.47 → 0.38 | 0.46 → 0.39 | 0.48 → 0.45 |
+| Region, beta 1/4 | 0.17 → 0.42 | 0.29 → 0.47 | 0.49 → 0.57 |
+| Region, beta 1 | 0.24 → 0.39 | 0.32 → 0.42 | 0.45 → 0.49 |
+| Region, beta 4 | 0.47 → 0.50 | 0.49 → 0.54 | 0.55 → 0.58 |
 
 **Over clicks 1–150 the same gains are about 40% as large**, because every rule matches today from Hard on:
 - Region: +0.07 / +0.04 / +0.02.
@@ -93,7 +95,7 @@ At beta 1/4 and 1 the region and binary detectors jump far above the typed query
 
 - **Not from the first detector.** The detector trained on 3 Goods and 1 Bad, at click 4 in most runs, is the session's worst set. The mean F dips to between 0.08 (binary, beta 1) and 0.18 (region, beta 4) at click 4, then recovers by click 7 as the Bad phase adds negatives.
   - Showing it from its first click is +0.02 better at region beta 1/4 and level at binary beta 1/4 and region beta 1.
-  - It is 0.01–0.03 worse elsewhere, and binary beta 4 falls to −0.09.
+  - It is 0.01–0.03 worse elsewhere, and binary beta 4 falls to −0.08.
 - **No tuned count beats the simple rule.** Held out across class halves, over clicks 1–150:
   - *Where the early hand-off pays* (every region preset and binary 1/4): a fixed click or a Goods count lands on the same early hand-off, within 0.01 of its in-sample gain.
   - *Binary beta 1:* nothing is found, −0.006 to −0.002 held out.
@@ -101,31 +103,31 @@ At beta 1/4 and 1 the region and binary detectors jump far above the typed query
 - **The vote rule sees binary beta 4 only dimly.** The opening's votes come from the top of the typed query's sort, so the votes flatter the typed query's set: its recall on them is near 1, against 0.58 on the withheld half.
   - Both sets are judged on the same easy items.
   - Stricter settings trade the remaining loss for gains: margin 0 with three positives costs −0.01 at binary beta 4, but gives up a third of the region gain at beta 4.
-  - Only the strictest setting never loses: margin +0.2 with five positives. It gains +0.01 / 0.00 / 0.00 on binary and +0.07 / +0.03 / 0.00 on region, because at beta 4 on both paths it waits for Hard (`tables/rules.csv`).
+  - Only the strictest setting never loses: margin +0.2 with five positives. It gains +0.01 / 0.00 / 0.00 on binary and +0.06 / +0.03 / 0.00 on region, because at beta 4 on both paths it waits for Hard (`tables/rules.csv`).
 - **Who gains.** Per run, over clicks 1–50:
-  - Region beta 1/4: 9% of runs lose. Binary beta 4: 63% lose.
-  - Medium and large objects gain the most, and small objects the least. Region beta 1/4: +0.18 large, +0.23 medium, +0.06 small (`tables/by_band.csv`).
-- **18% of runs are untouched by any rule over clicks 1–50.**
-  - The typed query's top holds few of their positives, so the Good phase drags on: the first detector arrives at a median click of 27 (binary) to 34 (region).
+  - Region beta 1/4: 9% of runs lose. Binary beta 4: 61% lose.
+  - Medium and large objects gain the most, and small objects the least. Region beta 1/4: +0.18 large, +0.22 medium, +0.05 small (`tables/by_band.csv`).
+- **20% of runs (binary) to 21% (region) are untouched by any rule over clicks 1–50.**
+  - The typed query's top holds few of their positives, so the Good phase drags on: the first detector arrives at a median click of 34 (binary) to 45 (region), counting as never the runs that never train one (#4631).
   - The Bad phase then ends after click 50, or never before Hard.
 
 ![Each run's gain, sorted](figures/run_gains.png)
 
 *Each run's gain over clicks 1–50 from showing the detector at the end of the Bad phase, sorted. The flat zero
-stretch is the 18% of runs whose Bad phase ends after click 50.*
+stretch is the 20% of runs whose Bad phase ends after click 50, or never.*
 
 ## Why Binary Photo loses at beta 4
 
-**The opening's binary detector ranks worse than the typed query; the region detector ranks better.** AP on the withheld half (the typed query's is 0.43):
+**The opening's binary detector ranks worse than the typed query; the region detector ranks better.** AP on the withheld half (the typed query's is 0.42):
 
 | | click 4 | 7 | 10 | 25 | 40 | 60 |
 |---|---|---|---|---|---|---|
-| binary detector | 0.27 | 0.33 | 0.34 | 0.36 | 0.42 | 0.46 |
-| runs where it beats the typed query | 5% | 10% | 12% | 21% | 41% | 58% |
-| region detector | 0.45 | 0.48 | 0.50 | 0.55 | 0.58 | 0.60 |
-| runs where it beats the typed query | 43% | 50% | 55% | 69% | 75% | 81% |
+| binary detector | 0.26 | 0.32 | 0.33 | 0.35 | 0.41 | 0.45 |
+| runs where it beats the typed query | 4% | 10% | 12% | 21% | 40% | 56% |
+| region detector | 0.43 | 0.46 | 0.48 | 0.53 | 0.56 | 0.59 |
+| runs where it beats the typed query | 42% | 48% | 53% | 67% | 73% | 79% |
 
-This is #4384's early AP dip, now read inside the opening.
+This is #4384's early AP dip, now read inside the opening. A run that never trains a detector stays at the typed query's AP throughout (#4631).
 
 At beta 1/4 the score rewards precision. A few images at the top of even a weaker ranking are precise enough to beat the typed query's 203 at precision 0.17. At beta 4 the score rewards recall, and only a deep ranking delivers it. The returned set at click 10, over runs with a detector:
 
@@ -153,7 +155,7 @@ At beta 1/4 the score rewards precision. A few images at the top of even a weake
 **Why this check.** #4603's typed-query count multiple was tuned at 0.44% and failed at 2%. So this pricing was repeated at a second prevalence before any rule is chosen.
 
 **The runs.** #4583's shipped arm (calibration fraction 0.3, 2 folds):
-- Binary Photo, 5 seeds: 717 trained runs per preset.
+- Binary Photo, 5 seeds: 720 runs per preset, the 3 that never train a detector included (#4631).
 - The user's pool thinned to 1% (`CALIB_HAYSTACK_PREVALENCE=0.01`).
 - The withheld half stays at the bench's 0.44%.
 
@@ -165,15 +167,15 @@ At beta 1/4 the score rewards precision. A few images at the top of even a weake
 
 | | beta 1/4 | beta 1 | beta 4 |
 |---|---|---|---|
-| from the end of the Bad phase, bench pool (0.44%) | +0.09 ± 0.01 | +0.01 ± 0.01 | −0.05 ± 0.01 |
-| from the end of the Bad phase, 1% pool | **+0.09 ± 0.01** | **+0.02 ± 0.01** | **−0.04 ± 0.01** |
+| from the end of the Bad phase, bench pool (0.44%) | +0.08 ± 0.01 | +0.01 ± 0.01 | −0.05 ± 0.01 |
+| from the end of the Bad phase, 1% pool | **+0.08 ± 0.01** | **+0.02 ± 0.01** | **−0.04 ± 0.01** |
 | vote rule, bench pool | +0.07 ± 0.01 | +0.02 ± 0.01 | −0.02 ± 0.004 |
 | vote rule, 1% pool | +0.07 ± 0.01 | +0.02 ± 0.01 | −0.01 ± 0.004 |
-| ceiling, 1% pool | +0.10 | +0.04 | +0.02 |
+| ceiling, 1% pool | +0.10 | +0.04 | +0.01 |
 
 - **The signs and sizes match at every preset.** Today's curve starts from the same typed-query set: 0.17 / 0.24 / 0.47 at click 10.
 - **Held out across class halves the result is the same.** A tuned click or Goods count again finds the early hand-off at beta 1/4 (+0.03 over clicks 1–150), and nothing at beta 1 (−0.003 to +0.006) or beta 4 (0.000).
-- **The ranking explanation holds, and the gap is smaller.** At click 10 the binary detector's AP is 0.40, against the typed query's 0.42; 23% of runs beat the typed query there, and the detector's mean overtakes it between clicks 25 (0.41) and 40 (0.47). At the bench pool the same numbers were 0.34 against 0.43 and 12%. A 1% pool gives the opening more positives, so the binary β4 loss is a little smaller (−0.04 against −0.05).
+- **The ranking explanation holds, and the gap is smaller.** At click 10 the binary detector's AP is 0.40, against the typed query's 0.42; 23% of runs beat the typed query there, and the detector's mean overtakes it between clicks 25 (0.41) and 40 (0.47). At the bench pool the same numbers are 0.33 against 0.42 and 12%. A 1% pool gives the opening more positives, so the binary β4 loss is a little smaller (−0.04 against −0.05).
 - **Not covered:**
   - Region Photo was not re-priced at 1%.
   - Only the user's pool moves here; the withheld half the objective is scored on stays at 0.44%.
@@ -181,8 +183,8 @@ At beta 1/4 the score rewards precision. A few images at the top of even a weake
 ## The issue's first table
 
 The issue's first table gave the hidden detector as 0.45 / 0.43 / 0.51 at clicks 10 / 25 / 50 for binary beta 1/4. Those numbers averaged only the runs that already have a detector at the click.
-- At click 10, 19–21% of runs have none yet, and a rule can show them only the typed query's set.
-- Counted that way, the same cells read 0.37 / 0.39 / 0.48 (`tables/reconcile.csv`).
+- At click 10, 21–23% of runs have none yet, and a rule can show them only the typed query's set.
+- Counted that way, the same cells read 0.36 / 0.38 / 0.47 (`tables/reconcile.csv`).
 - The issue's direction holds; its sizes were about 0.05 to 0.1 too high early.
 
 ## What this does not measure

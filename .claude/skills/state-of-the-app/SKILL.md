@@ -159,6 +159,29 @@ same edit.
   user has. (A document dataset's dry-run walk is on the learned sort in the
   app, but the harness flags it 0; the document reviews use their own
   analyzer.)
+- **Every attempted run is in every average (owner, 2026-10-07, #4631).** A
+  run that never trains a detector (150 clicks and no Good; 37 of 1,440 per
+  preset on the 2026-10-05 Binary review, chair@small in all 10 seeds) writes
+  no metric row. A mean over the runs with a value drops exactly the sessions
+  the app failed. Such a run scores **what its session shows: the typed
+  query's own set**, at every click, at the end and after the check. That is
+  the opening rule above for a run that never leaves the opening. Its AP is
+  the text sort's, and its check's effect is 0.
+  - **Why not the viewer's empty set.** The owner picked this over #4629's
+    empty set (objective 0, AP at chance). The viewer reads the harness's
+    detectors and has no opening rule. The two differ in the 4th decimal
+    (typed-query F-beta 0.006 to 0.03 on those runs), and a report says in
+    one line why it differs from its viewer.
+  - **An empty returned set scores precision 0,** never an undefined value
+    that leaves a precision mean. That covers a line that keeps nothing and a
+    detector that flags nothing (`curves.EMPTY_SET`).
+  - **A starved run's beta is the study's** (it has no rows to read one off).
+  - **Every per-click mean fills each run first.** `by_click.py` uses
+    `cells.csv`'s `shown_from`. The share curves and the early-dip table use
+    `analyze.session_balance_steps`, never `balance_steps.csv`'s rows as they
+    stand, which hold only the runs with a frame at that click.
+  - Never filter on `never_trained` before a mean. It is for listing the runs,
+    as `summary.md`'s first table does.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
@@ -401,6 +424,9 @@ things keep a report on its link:
   mean as losses (`curves.score_empty_sets`), and a detector that flags
   nothing counts its precision as 0 rather than undefined; a page built before that is
   rebuilt with `analyze.sh`, since a reskin has no prevalence to put AP at.
+  The report's own tables score a run with no detector at the typed query its
+  session shows instead (owner, 2026-10-07, #4631; see the standing decisions):
+  the viewer has no opening rule, and the report says so in one line.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).
 - **A new kind** (a future modality) needs nothing here: its first report

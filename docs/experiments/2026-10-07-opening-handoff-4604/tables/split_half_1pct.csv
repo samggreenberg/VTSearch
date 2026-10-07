@@ -1,12 +1,12 @@
 cell,family,picked on half 0,scored on half 1,picked on half 1,scored on half 0,held out,best in-sample
-binary1pct_b025,click,click_4,0.0245,click_5,0.0414,0.0329,0.0335
-binary1pct_b025,goods,goods_1,0.0243,goods_3,0.0413,0.0328,0.0336
-binary1pct_b025,votes,votes_m-0.2_p1,0.0224,votes_m-0.2_p1,0.0351,0.0288,0.0291
-binary1pct_b025,after_bad_votes,after_bad_votes_m-0.2_p1,0.0232,after_bad_votes_m-0.2_p1,0.0352,0.0292,0.0294
-binary1pct_b1,click,click_5,-0.0066,click_148,0.0,-0.0033,0.0041
-binary1pct_b1,goods,goods_3,-0.0053,goods_17,0.0032,-0.001,0.0061
+binary1pct_b025,click,click_4,0.0243,click_5,0.0414,0.0328,0.0333
+binary1pct_b025,goods,goods_1,0.0241,goods_3,0.0413,0.0327,0.0334
+binary1pct_b025,votes,votes_m-0.2_p1,0.0222,votes_m-0.2_p1,0.0351,0.0287,0.029
+binary1pct_b025,after_bad_votes,after_bad_votes_m-0.2_p1,0.023,after_bad_votes_m-0.2_p1,0.0352,0.0291,0.0293
+binary1pct_b1,click,click_5,-0.0065,click_148,0.0,-0.0032,0.0041
+binary1pct_b1,goods,goods_3,-0.0052,goods_17,0.0032,-0.001,0.006
 binary1pct_b1,votes,votes_m+0.0_p1,-0.0,votes_m-0.1_p8,0.009,0.0045,0.0074
-binary1pct_b1,after_bad_votes,after_bad_votes_m-0.2_p1,-0.0014,after_bad_votes_m+0.0_p1,0.0141,0.0063,0.0074
+binary1pct_b1,after_bad_votes,after_bad_votes_m-0.2_p1,-0.0014,after_bad_votes_m+0.0_p1,0.0141,0.0063,0.0073
 binary1pct_b4,click,click_78,-0.0002,click_102,0.0011,0.0005,0.0008
 binary1pct_b4,goods,goods_20,0.0,goods_20,0.0,0.0,0.0
 binary1pct_b4,votes,votes_m+0.1_p1,-0.0002,votes_m+0.2_p3,0.0006,0.0002,0.0011
