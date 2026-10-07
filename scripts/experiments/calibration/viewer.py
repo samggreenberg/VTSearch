@@ -96,7 +96,15 @@ is derivable from the other at an acceptable size:
     ``(dataset, embedder, category)``.  Storing ``n`` beside the moments is what
     makes "all categories" and "all datasets" *exact* rather than a mean of
     means — the page pools them properly, weighted by the cells that actually
-    contributed.
+    contributed.  ``cells`` beside them, per ``(group, arm)``, is what coverage
+    divides by: every run *attempted*, the ones that never trained included,
+    read off the caller's cell list or the text-sort baseline
+    (:func:`curves.attempted_cells`).  Every one of those runs is scored at
+    every click, a click with no trained detector as the empty returned set
+    (:func:`curves.score_empty_sets`), so a run that never trained is in
+    the mean as the loss it was rather than out of it.  That needs the
+    baseline (for each run's prevalence, AP's chance level), so a committed
+    page built before it is rebuilt from its results, not reskinned.
 ``agg.omean`` / ``agg.on``
     The oracle companion, on the same axes.  The harness emits the oracle
     **cut** and the two rates it pays there, never the confusion-matrix metrics
@@ -774,6 +782,7 @@ def build_viewer(  # noqa: C901
     default_metric: str | None = None,
     hide_metrics: Sequence[str] = (),
     fill_gaps: bool = True,
+    score_empty_sets: bool = True,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*.
 
@@ -789,6 +798,22 @@ def build_viewer(  # noqa: C901
     mean over the sessions the check did not prompt.  Off only for a study of
     the rows themselves; the page says in its reading note when it is on
     (``gaps_filled``).
+
+    *denominator* is one row per attempted cell, the cells coverage is
+    measured against.  Without one, a *baseline* supplies it
+    (:func:`curves.attempted_cells`): *main* holds only the runs that
+    trained, so a denominator read off it calls a starving group fully
+    measured.  With neither, it is the cells of *main*.
+
+    *score_empty_sets* scores every empty returned set as one
+    (:func:`curves.score_empty_sets`): every attempted run at every click it
+    had no trained detector at, and the undefined precision of a detector
+    that flags nothing, as 0.  The user got nothing back, so the click is a
+    loss, and leaving it out of the mean averaged over the sessions that
+    worked.  The oracle companion follows the same rule: a click with no
+    model gets the same values (there is no cut to move), and an oracle cut
+    that flags nothing counts its precision as 0.  The page says so in its
+    reading note (``empty_sets_scored``).
     """
     if main.empty:
         raise SystemExit("viewer: no rows to build from")
@@ -799,6 +824,16 @@ def build_viewer(  # noqa: C901
     oracle_keys = add_oracle_columns(main)
     if fill_gaps:
         main = curves.fill_gaps(main, ("__group", "arm", "seed"))
+    if (denominator is None or denominator.empty) and baseline is not None and not baseline.empty:
+        denominator = curves.attempted_cells(main, baseline)
+    if score_empty_sets:
+        main = curves.score_empty_sets(main, denominator, baseline)
+        main["__group"] = _group_key(main)
+        added = main[curves.NO_DETECTOR] == 1
+        for k in oracle_keys:
+            if k in main.columns:
+                main.loc[added, OCOL + k] = main.loc[added, k]
+        main = curves.zero_empty_precision(main, OCOL + "precision", OCOL + "recall", OCOL + "fpr")
 
     shape = _Shape(main, arms, denominator, oracle_keys)
     if not shape.metrics:
@@ -924,6 +959,12 @@ def build_viewer(  # noqa: C901
         # committed numbers.  A swap is invisible on screen and inverts the
         # study's finding.
         **({"build": build} if build else {}),
+        # When every empty returned set was scored as one (no detector yet, or
+        # one that flags nothing); absent on a page built before, where those
+        # runs left the mean.
+        # Ahead of `gaps_filled`, which a reskin inserts just before
+        # `payload_kb`, so a built and a reskinned page agree key for key.
+        **({"empty_sets_scored": _now()} if score_empty_sets else {}),
         # When the per-run gaps were carried (#4624); absent on a page that
         # was built without the carry and never reskinned with it.
         **({"gaps_filled": _now()} if fill_gaps else {}),

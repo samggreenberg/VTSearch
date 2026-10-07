@@ -1125,6 +1125,13 @@
         ? ` A run inside a spot check is scored once per round of picks, and between rounds its last scored ` +
           `value stands in, so a check never drops a run from the mean (#4624).`
         : "") +
+      (P.empty_sets_scored
+        ? ` A click where a run has <b>no trained detector</b> yet (before its first Good and Bad, or at every ` +
+          `click of a run that never got both) counts as what the app returns there, nothing: recall, F1 and the ` +
+          `objective 0, precision 0, AP at the class's prevalence, AUROC 0.5. A detector that flags nothing ` +
+          `returns the same empty set, so its precision counts as 0 too. So every run is in the mean at every ` +
+          `click, the failing ones included.`
+        : "") +
       (opt.showCov
         ? ` The strip underneath is that fraction, and it drops below full somewhere in this slice.`
         : ` <b>Every cell is measured at every click here</b>, so the coverage strip is omitted rather than drawn` +
