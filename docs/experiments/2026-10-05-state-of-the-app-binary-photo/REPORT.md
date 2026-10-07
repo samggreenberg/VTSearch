@@ -1,7 +1,8 @@
 # State of the App: Binary Photo — 2026-10-05
 
 **Issue:** #4510. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
-**Interactive viewer:** [`viewer.html`](viewer.html), the beta-1 run's sessions (`2026-10-05-b1`, the app's default preset).
+**Interactive viewer:** [`viewer.html`](viewer.html), the beta-1 run's sessions (`2026-10-05-b1`, the app's default preset),
+re-encoded with #4624's carry (a run inside a spot check keeps its last value between rounds).
 **App:** `dev` at 19ed74aaa. The line comes from the labels (#4452), and its spread floor follows the corpus
 (#4492). Autopilot runs the spot check itself when the labels separate weakly (#4496, PR #4503). The presets are
 beta 1/4, 1 and 4.
@@ -141,6 +142,17 @@ The ranking barely depends on the preset (the beta-1 sessions):
 150 clicks close about three quarters of the gap from the typed query to full labels. AP still dips as sessions
 leave the opening (0.42 → 0.40 at click 25, when 30% have handed over, #4384) and is back above the text level
 by click 50. The first version's 0.35 at click 25 read the opening's own detectors (#4605).
+
+**The viewer's line used to fall from click 133 to 150; the detectors did not (#4624).** The line was the
+mean over the runs with a scored row at each click, and a run inside a prompted spot check (#4496) is scored
+once per round of five picks. Autopilot prompts that check where the labels separate weakly, so at any
+mid-session click the runs missing from the mean were the weak sessions: 208 at click 133, averaging AP 0.22 at
+150. A prompted check has to fit the budget left, so every run has its row at 150 and the weak ones rejoin the
+mean. The 1,195 runs with a row at both clicks rose from 0.584 to 0.589. The viewer now carries a run's last
+scored value through those clicks, and the committed page was re-encoded that way; `viewer_survivors.csv` holds
+the line before and after, with the run count per click.
+
+![The viewer's line before and after the carry, with the runs in it](figures/viewer_survivors.png)
 
 **Against the last review (#4474, 2026-10-04), one note.** On the scoring both reviews used then (the opening's
 own detectors, before #4605), the objective at click 25 rose from 0.42/0.29/0.35 to 0.43/0.34/0.42, the work of
@@ -302,7 +314,11 @@ share a cue with the class.
 - `objective_by_click.csv`: each preset's objective at every click (`by_click.py`, #4599), with the precision and
   recall behind it: the typed query, at the line the app draws for it at that preset (#4136, #4603), until the
   app shows the session's detector (the end of the opening, #4605), then its line.
-- `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell.
+- `viewer_survivors.csv`: per click, the viewer's line as first drawn (the runs with a row at that click), the
+  run count, and the mean with each run's last value carried through spot-check rounds (`survivors_4624.py`,
+  #4624).
+- `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell; the
+  viewer's line before and after the carry.
 - `images.md`, `images/`: the helpful and harmful images, with thumbnails.
 - `why/`: the confuser sheets and `why.csv`.
 - Runs and full analyses: `/expscratch/sgreenberg/state-of-the-app/2026-10-05-b025|b1|b4/analysis-binary-4603/`,

@@ -10,7 +10,8 @@ subset and said nothing".  Every check here is one of those:
 * the mean where coverage is low must fall under the dashed rule, not be drawn
   as though it described the grid;
 * the mean must be computed over the cells that trained (a missing cell is NaN,
-  never a zero, and never a forward-filled level);
+  never a zero, and never a forward-filled level), while a cell inside a spot
+  check round keeps its last scored level rather than dropping out (#4624);
 * ``t=0`` must be the **zero-click text sort**, not the first trainable click,
   so the far left of the figure is what typing got for free;
 * an arm that never beats that anchor must report **no crossover**, not the last
@@ -55,6 +56,9 @@ TEXT_COST = 0.30
 #: the zero-click anchor exists for: it improves with clicks and still never
 #: beats simply typing the query, which is invisible without the anchor.
 PLANT = {"clean": (0.14, 0.0), "starver": (0.10, 2 / 3), "worse": (0.40, 0.0)}
+#: A spot check round (#4624): this run has no row at clicks 21..24.
+GAP_RUN = ("clean", "dsA", "cat0", 0)
+GAP_LO, GAP_HI = 21, 24
 
 
 def _cost(level: float, t: int) -> float:
@@ -71,6 +75,8 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                     if seed < round(starve * N_SEED):
                         continue  # never trained: no main row at all
                     for t in range(FIRST_T, N_STEP + 1):
+                        if (arm, ds, f"cat{cat}", seed) == GAP_RUN and GAP_LO <= t <= GAP_HI:
+                            continue  # inside a spot check round: no row (#4624)
                         rows.append(
                             {
                                 "arm": arm,
@@ -190,6 +196,21 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "the healthy arm's warm curve does not",
             bool((clean.loc[clean["t"] >= FIRST_T, "coverage"] >= C.SOLID_COVERAGE).all()),
+        )
+        # A run inside a spot check round is another matter (#4624): it has a
+        # detector, its last scored one, so it is carried rather than dropped.
+        at = clean[(clean["dataset"] == GAP_RUN[1]) & (clean["t"] == GAP_LO + 1)].iloc[0]
+        ok &= _check(
+            "a run inside a spot check round is still covered between rounds",
+            np.isclose(float(at["coverage"]), 1.0),
+            f"coverage {at['coverage']:.3f}",
+        )
+        n_clean = N_CAT * N_SEED
+        want = ((n_clean - 1) * _cost(PLANT["clean"][0], GAP_LO + 1) + _cost(PLANT["clean"][0], GAP_LO - 1)) / n_clean
+        ok &= _check(
+            "...at its last scored level, not dropped from the mean",
+            np.isclose(float(at["mean"]), want),
+            f"{at['mean']} vs {want}",
         )
         # The gap between the anchor and the first trainable click is dashed for
         # the same reason: nothing was measured in there.
