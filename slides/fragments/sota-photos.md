@@ -26,10 +26,11 @@
      0.53 and 0.60; the check's uniform picks add +0.02 to +0.03. -->
 
 <!-- **b** — Right: the same three sets as precision against recall, each a
-     path through the session: every path starts at 0, the typed query's own
-     set (precision 0.17, recall 0.60), the circle 50 is 50 clicks, the dots
-     25, 100 and 150, and ∞ is the set after the spot check. At 25 most
-     sessions still show the typed query, so the 25s sit near the 0. The
+     path through the session at every click, from the typed query's own set
+     (precision 0.17, recall 0.60). The hollow marks are the same clicks as
+     on the left: the typed query, 25, 50, 100, 150, and ∞ after the spot
+     check. At 25 most sessions still show the typed query, so the 25s sit
+     near the start. The
      clicks buy precision, not recall: from click 50 to 100, precision rises
      0.06 to 0.13 at every radio while recall moves about 0.05 or less.
      Where they end: 21 kept at precision 0.73 and recall 0.38; 44 at 0.60 and

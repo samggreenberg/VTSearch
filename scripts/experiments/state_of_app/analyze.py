@@ -921,11 +921,13 @@ def curves(
                 g["t"].to_numpy(),
                 {m: g[m].to_numpy(dtype=float) for m in BALANCE_CURVE_METRICS},
             )
-    thr_run: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+    # The objective and the precision and recall behind it (the right panel's per-click path, #4605).
+    thr_cols = ("thr_fbeta", "thr_precision", "thr_recall")
+    thr_run: dict[tuple, tuple[np.ndarray, dict[str, np.ndarray]]] = {}
     if thresholds is not None and not thresholds.empty:
         for (arm, cat, seed), g in thresholds[thresholds["point"] == "step"].groupby(["arm", "category", "seed"]):
             g = g.sort_values("t")
-            thr_run[(arm, cat, int(seed))] = (g["t"].to_numpy(), g["thr_fbeta"].to_numpy(dtype=float))
+            thr_run[(arm, cat, int(seed))] = (g["t"].to_numpy(), {m: g[m].to_numpy(dtype=float) for m in thr_cols})
     rows = []
     for r in cells.itertuples():
         key = (r.dataset, r.category, _emb_of(r.arm), _style_of(r.arm), int(r.seed))
@@ -959,13 +961,15 @@ def curves(
                 elif not r.never_trained:
                     v[1:] = np.nan
                 f1_cols[curve_col(metric, floor)] = v
-        # The objective over clicks (#4427): no threshold before the first trained click, then carried forward.
-        thr = np.full(len(grid), np.nan, dtype=float)
+        # The objective over clicks (#4427): no threshold before the app shows a detector (#4605), then carried
+        # forward; with it the precision and recall of the same set.
+        thr = {m: np.full(len(grid), np.nan, dtype=float) for m in thr_cols}
         have_thr = thr_run.get((r.arm, r.category, int(r.seed)))
         if have_thr is not None:
             tt, tv = have_thr
             idx = np.searchsorted(tt, grid, side="right") - 1
-            thr[idx >= 0] = tv[idx[idx >= 0]]
+            for m in thr_cols:
+                thr[m][idx >= 0] = tv[m][idx[idx >= 0]]
         rows.append(
             pd.DataFrame(
                 {
@@ -975,7 +979,7 @@ def curves(
                     "t": grid,
                     "ap": ap,
                     "goods": goods,
-                    "thr_fbeta": thr,
+                    **thr,
                     **f1_cols,
                 }
             )
