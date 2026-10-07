@@ -845,6 +845,26 @@ it). The env-var equivalent is `VTSEARCH_HIDE_INGEST_ETA`; an explicit
 flag wins over it. See
 [When ingest ETAs can't be trusted](DEPLOYMENT.md#when-ingest-etas-cant-be-trusted).
 
+**Run a function when an import finishes** (`--on-dataset-imported
+MODULE:FUNCTION`): call your own function each time a user's dataset
+import from the web app succeeds or fails, for example to email them:
+
+```bash
+python app.py --on-dataset-imported mailer:notify
+```
+
+`MODULE` must be importable on the server (installed, or on
+`PYTHONPATH`); it is imported at startup, so a typo stops the server
+before it serves anything. The flag is repeatable, and the functions run
+in the order given. Each receives one `DatasetImported` event; what it
+carries, and which imports fire it, is in
+[EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks).
+Unlike the overrides above, this has no settings-file counterpart and
+never will: a settings file that could name code to run would let anyone
+who can import settings run code on the server. The env-var equivalent
+is `VTSEARCH_ON_DATASET_IMPORTED` (comma-separated); an explicit flag
+wins over it.
+
 ## Inspecting plugins and the API schema
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin;
