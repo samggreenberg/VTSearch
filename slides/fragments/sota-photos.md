@@ -16,16 +16,22 @@
 
 <!-- **a** — Left: each line is scored at its own β, so this is not a league
      table between radios. Every line starts at the far left, the typed
-     query: the text sort cut at its own blind GMM line, which returns
-     about 4,500 images, F-beta 0.01, 0.02 and 0.15. The **✓** is not more clicks: it is the same
+     query: the text sort at the line the app draws for it (the guarded
+     cut, #4136), which returns about 200 images, F-beta 0.17, 0.24 and
+     0.48. Each line holds there until Autopilot's opening trains a first
+     detector, around click 4. That detector's line keeps almost nothing, so
+     the mean dips (to 0.08 at β 1, 0.12 at β 4) and recovers within a few
+     clicks; at β 4 the clicks pass the typed query again only at click 64.
+     The **∞** is not more clicks: it is the same
      sessions after the spot check's uniform picks. After 150 clicks and the
      spot check: 0.64, 0.53 and 0.60. The check's 21 to 30 uniform picks add
      +0.022 to +0.033 at every radio. Autopilot also runs it mid-session when
      the labels still overlap, in 43 to 45% of sessions. -->
 
 <!-- **b** — Right: the same three sets as precision against recall, each a
-     path through the session: the circles are 25 and 50 clicks, the dots 100
-     and 150 (at β 4 they sit under the circles), and the ✓ is the set after the
+     path through the session: every path starts at 0, the typed query's own
+     set (precision 0.17, recall 0.60), the circle 25 is 25 clicks, the dots
+     50, 100 and 150, and ∞ is the set after the
      spot check. The clicks buy precision, not recall: from click 25 to 100,
      precision rises about 0.17 on every radio while recall holds within 0.04.
      Where they end: 21 kept at precision 0.73 and recall 0.38; 44 at 0.60 and

@@ -17,7 +17,7 @@ way it read the first:
   session, circle and path both in the radio's own weight (#4533): on
   documents (#4517) a circle at each of `DOC_PR_CLICKS` with the click count
   written in it; on photos (#4519) circles at 25 and 50 clicks and the check's
-  ✓, with 100 and 150 as dots on the path (`PHOTO_CIRCLED` says why).
+  ∞, with 100 and 150 as dots on the path (`PHOTO_CIRCLED` says why).
 
 The photo slide is the binary-photo review (SigLIP, binary votes, COCO Better,
 10 seeds, `docs/experiments/2026-10-05-state-of-the-app-binary-photo/`). Its
@@ -67,8 +67,14 @@ PHOTO_PATH = PHOTO_REPORT / "precision_recall_path.csv"
 PHOTO_CLICKS = (25, 50, 100, 150)
 #: The photo path's points that get a labelled circle. 100 and 150 sit within 0.01 to
 #: 0.04 of the set after the check on every radio, closer than a circle is wide, so
-#: they are dots on the path: a circle there would cover the check's ✓ (#4533's rule).
-PHOTO_CIRCLED = ("25", "50", "✓")
+#: they are dots on the path: a circle there would cover the end's ∞ (#4533's rule). 50 is a dot too,
+#: since the panel reaches down to the typed query (#4599): it sits within a circle of 25 or of ∞ on
+#: every radio of one slide or the other. "0" is the typed query, where every path starts and which
+#: the three radios share (drawn once).
+PHOTO_CIRCLED = ("0", "25", "∞")
+#: The session's end, after the spot check: "∞", the last point the session reaches (owner, 2026-10-07:
+#: "instead of 'check' meaning the theoretical last point on the graphs, use the infinity symbol").
+END_LABEL = "∞"
 #: The path's first point in `precision_recall_path.csv` (`perp.py`'s ``TYPED_QUERY``): the text sort under
 #: its own blind GMM cut, before any vote. The F panel starts every radio there, at click 0 (owner,
 #: 2026-10-06: "a text-sort (and GMM-thresh) notch at the far left for 0"); the precision-recall panel
@@ -78,10 +84,10 @@ TYPED_QUERY = "typed query"
 #: region path (DINOv3 patches, `max_patch`, opened on SigLIP's text sort).
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
 REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
-#: The region review's precision-recall panel: its span, and which path points get a
-#: labelled circle (as `PHOTO_CIRCLED`, set from where its points fall).
-REGION_PR_LIM = (0.35, 0.85)
-REGION_CIRCLED = ("25", "50", "✓")
+#: The region review's precision-recall panel: its recall span, and which path points
+#: get a labelled circle (as `PHOTO_CIRCLED`, set from where its points fall).
+REGION_PR_LIM = (0.4, 0.9)
+REGION_CIRCLED = ("0", "25", "∞")
 
 #: The three radios, left panel's line weight and label, in the order
 #: `calib-fbeta` stacks them: the precision end, the middle, the recall end.
@@ -132,11 +138,11 @@ EXPECT = {
     ("documents", 1.0, "kept"): 14,
     ("documents", 4.0, "kept"): 25,
     ("documents", 1.0, "f50"): 0.87,
-    ("photos", 0.25, "text"): 0.01,
-    ("photos", 1.0, "text"): 0.02,
-    ("photos", 4.0, "text"): 0.15,
-    ("regions", 0.25, "text"): 0.01,
-    ("regions", 4.0, "text"): 0.15,
+    ("photos", 0.25, "text"): 0.17,
+    ("photos", 1.0, "text"): 0.24,
+    ("photos", 4.0, "text"): 0.48,
+    ("regions", 0.25, "text"): 0.18,
+    ("regions", 4.0, "text"): 0.48,
     ("regions", 0.25, "after"): 0.73,
     ("regions", 1.0, "after"): 0.63,
     ("regions", 4.0, "after"): 0.72,
@@ -196,12 +202,20 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
     the trained runs with a line by that click, the returned size a median. The
     binary review's by default; the region review's (#4534) has the same shape.
     """
+    by_click: dict[float, list[tuple[int, float]]] = {}
+    clicks_csv = source.with_name("objective_by_click.csv")
+    if not clicks_csv.exists():
+        raise SystemExit(f"make-sota-figs: {clicks_csv} is missing: run state_of_app/by_click.py (#4599)")
+    with clicks_csv.open() as f:
+        for row in csv.DictReader(f):
+            by_click.setdefault(float(row["beta"]), []).append((int(row["t"]), float(row["fbeta"])))
     by: dict[float, dict[str, dict[str, str]]] = {}
     with source.open() as f:
         for row in csv.DictReader(f):
             by.setdefault(float(row["beta"]), {})[row["point"]] = row
-    points = [str(c) for c in PHOTO_CLICKS] + ["after the check"]
-    if set(by) != {0.25, 1.0, 4.0} or any(set(points + [TYPED_QUERY]) - set(by[b]) for b in by):
+    # The path starts at the typed query, "0" (owner, 2026-10-07), and ends after the check, "∞".
+    points = [TYPED_QUERY] + [str(c) for c in PHOTO_CLICKS] + ["after the check"]
+    if set(by) != {0.25, 1.0, 4.0} or any(set(points) - set(by[b]) for b in by):
         raise SystemExit(f"make-sota-figs: {source} does not carry every radio at every point")
     out = {}
     for beta, rows in by.items():
@@ -210,13 +224,17 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
                 "precision": float(rows[p]["precision"]),
                 "recall": float(rows[p]["recall"]),
                 "kept": int(round(float(rows[p]["returned, median"]))),
-                "label": "✓" if p == "after the check" else p,
+                "label": {"after the check": END_LABEL, TYPED_QUERY: "0"}.get(p, p),
             }
             for p in points
         ]
+        curve = by_click[beta]
         out[beta] = {
-            # The typed query at click 0: the text sort under its own blind GMM cut (owner, 2026-10-06).
+            # The typed query at click 0: the text sort at the line the app draws for it (#4599).
             "text": float(rows[TYPED_QUERY]["fbeta"]),
+            # Every click, filled: the typed query until a run's first detector (#4599, `by_click.py`).
+            "curve_t": [t for t, _ in curve],
+            "curve_f": [f for _, f in curve],
             "clicks": list(PHOTO_CLICKS),
             "f": [float(rows[str(c)]["fbeta"]) for c in PHOTO_CLICKS],
             "after": float(rows["after the check"]["fbeta"]),
@@ -313,18 +331,29 @@ GRID_COLOUR = "#e3e7ec"
 PR_GRID_COLOUR, PR_GRID_LW = "#bcc4ce", 1.3
 
 
-def _pr_axes(fig: Figure, lim: tuple[float, float], ticks: list[float], step: float) -> plt.Axes:
-    """The square precision-recall axes, gridded every *step* on both."""
+def _pr_axes(
+    fig: Figure, lim: tuple[float, float], ticks: list[float], step: float, ylim: tuple[float, float] | None = None
+) -> plt.Axes:
+    """The square precision-recall axes, gridded every *step* on both.
+
+    *lim* is recall's span and, unless *ylim* is given, precision's too. The results
+    slides all give *ylim*: the F panel's span beside it, so a precision and an
+    F-beta at one height read level across the slide (owner, 2026-10-07).
+    """
+    ylim = ylim or lim
     ax = fig.add_axes(RIGHT_AXES)
     ax.set_xlim(*lim)
-    ax.set_ylim(*lim)
-    ax.set_xticks(ticks)
-    ax.set_yticks(ticks)
-    # From the first multiple of the step inside the span, so a span that starts
-    # between steps (the region panel's 0.35) keeps its lines on the ticks.
-    lines = np.arange(math.ceil(lim[0] / step - 1e-9) * step, lim[1] + step / 2, step)
-    ax.set_xticks(lines, minor=True)
-    ax.set_yticks(lines, minor=True)
+    ax.set_ylim(*ylim)
+    ax.set_xticks([t for t in ticks if lim[0] - 1e-9 <= t <= lim[1] + 1e-9])
+    ax.set_yticks([t for t in ticks if ylim[0] - 1e-9 <= t <= ylim[1] + 1e-9])
+
+    # From the first multiple of the step inside each span, so a span that starts
+    # between steps (0.35) keeps its lines on the ticks.
+    def grid(span: tuple[float, float]) -> np.ndarray:
+        return np.arange(math.ceil(span[0] / step - 1e-9) * step, span[1] + step / 2, step)
+
+    ax.set_xticks(grid(lim), minor=True)
+    ax.set_yticks(grid(ylim), minor=True)
     ax.tick_params(which="minor", length=0)
     ax.grid(True, which="both", color=PR_GRID_COLOUR, lw=PR_GRID_LW)
     ax.set_axisbelow(True)
@@ -358,11 +387,11 @@ def _circle(ax: plt.Axes, x: float, y: float, beta: float, text: str) -> None:
 CIRCLE_LABEL_PT = CIRCLE_PT / 2 + 6
 
 
-#: The paths' axes: zoomed to where the document sets live, the same span on
-#: both so precision and recall still share a scale.
+#: The paths' recall axis: zoomed to where the document sets live. Precision's
+#: span is the slide's own, shared with the F panel beside it (`_floor`).
 PR_PATH_LIM = (0.5, 1.0)
-#: The photo paths' axes: every photo set lies between 0.27 and 0.73 on both.
-PHOTO_PR_LIM = (0.2, 0.8)
+#: The photo paths' recall axis: every photo set's recall lies between 0.38 and 0.68.
+PHOTO_PR_LIM = (0.3, 0.8)
 
 
 def _pr_paths_panel(
@@ -372,6 +401,7 @@ def _pr_paths_panel(
     ticks: list[float] | None = None,
     step: float = DOC_GRID_STEP,
     circled: tuple[str, ...] | None = None,
+    ylim: tuple[float, float] | None = None,
 ) -> None:
     """Precision against recall, one path per radio through the session's clicks.
 
@@ -379,7 +409,7 @@ def _pr_paths_panel(
     F line are one object on two axes, and nothing joins the radios to one
     another: what the panel shows is how each one's set moves as votes arrive.
     Each point whose label is in *circled* (all of them by default) is a circle
-    with its label in it - a click count, or the check's ✓ - so the points say
+    with its label in it - a click count, or the end's ∞ - so the points say
     when they are without a note to decode them (#4533); any other point is a
     dot on the path. Each path is labelled where it ends; how many each returns
     is in the notes, since a count beside every end would not fit the panel.
@@ -387,7 +417,7 @@ def _pr_paths_panel(
     A point two radios share - on documents, the query crop alone - is drawn
     once, by the first radio to reach it.
     """
-    ax = _pr_axes(fig, lim or PR_PATH_LIM, ticks or [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], step)
+    ax = _pr_axes(fig, lim or PR_PATH_LIM, ticks or [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], step, ylim)
     drawn: set[tuple[float, float]] = set()
     for beta, label, weight in RADIOS:
         path = sets[beta]["path"]
@@ -416,19 +446,35 @@ def _pr_paths_panel(
 
 
 def _f_panel(
-    fig: Figure, lines: dict[float, tuple[list, list]], xlim, xticks, xlabel: str, floor: float, extra=None
+    fig: Figure,
+    lines: dict[float, tuple[list, list]],
+    xlim,
+    xticks,
+    xlabel: str,
+    floor: float,
+    extra=None,
+    grid_step: float = 0.1,
+    major: float = 0.2,
 ) -> plt.Axes:
     """The returned set's F-beta over a session, one line per radio, labelled at its end.
 
-    The axis starts at *floor*, the last 0.2 step under the lowest point the
-    slide draws, rather than at 0: the panel is read for its shape (#4533).
+    The axis starts at *floor*, the last *major* step under the lowest point the
+    slide draws, rather than at 0: the panel is read for its shape (#4533). Its
+    numbers come every *major*, as the precision axis's beside it do.
     """
     ax = fig.add_axes(LEFT_AXES)
     ax.set_xlim(*xlim)
     ax.set_ylim(floor, 1.0)
     ax.set_xticks(xticks)
-    ax.set_yticks(np.arange(floor, 1.0 + 1e-9, 0.2))
-    ax.yaxis.grid(True, color=GRID_COLOUR, lw=1.0)
+    ax.set_yticks(np.arange(floor, 1.0 + 1e-9, major))
+    # The same horizontal lines as the precision-recall panel beside it, on the same
+    # y range (owner, 2026-10-07): an F-beta and a precision at one height read
+    # level across the slide.
+    ax.set_yticks(
+        np.arange(math.ceil(floor / grid_step - 1e-9) * grid_step, 1.0 + grid_step / 2, grid_step), minor=True
+    )
+    ax.tick_params(axis="y", which="minor", length=0)
+    ax.yaxis.grid(True, which="both", color=PR_GRID_COLOUR, lw=PR_GRID_LW)
     ax.set_axisbelow(True)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(r"$\mathregular{F_\beta}$ at that β")
@@ -441,8 +487,9 @@ def _f_panel(
         extra(ax, ends)
     # Each label sits just past its line's end, nudged apart only as far as the
     # type needs and in the ends' own order: never on a leader, which reads as
-    # one more line (owner, 2026-10-05; STYLE.md).
-    label_y = spread_labels([ends[b][1] for b, _, _ in RADIOS], gap=0.075)
+    # one more line (owner, 2026-10-05; STYLE.md). The gap is a share of the
+    # span, so a type's height apart on any floor.
+    label_y = spread_labels([ends[b][1] for b, _, _ in RADIOS], gap=0.075 * (1.0 - floor))
     for (beta, label, _w), y in zip(RADIOS, label_y, strict=True):
         ax.text(
             xlim[1] + (xlim[1] - xlim[0]) * 0.02,
@@ -457,10 +504,18 @@ def _f_panel(
     return ax
 
 
-def _floor(lines: dict[float, tuple[list, list]]) -> float:
-    """The F panel's floor: the last 0.2 step at or under every point it draws."""
+def _floor(lines: dict[float, tuple[list, list]], also: float | None = None, step: float = 0.2) -> float:
+    """The slide's shared y floor: the last *step* at or under every point the F panel draws and, with
+    *also*, the lowest precision the precision-recall panel draws (owner, 2026-10-07: one y scale)."""
     lowest = min(min(ys) for _xs, ys in lines.values())
-    return math.floor(round(lowest / 0.2, 6)) * 0.2
+    if also is not None:
+        lowest = min(lowest, also)
+    return round(math.floor(round(lowest / step, 6)) * step, 6)
+
+
+def _lowest_precision(data: dict[float, dict]) -> float:
+    """The lowest precision on any radio's precision-recall path."""
+    return min(point["precision"] for d in data.values() for point in d["path"])
 
 
 #: Where the photo slide draws "after the check": past the last click, joined
@@ -471,15 +526,15 @@ PHOTO_CHECK_X = 168
 def photo_figure(
     data: dict[float, dict],
     stage: int,
-    pr_lim: tuple[float, float] = PHOTO_PR_LIM,
+    recall_lim: tuple[float, float] = PHOTO_PR_LIM,
     circled: tuple[str, ...] = PHOTO_CIRCLED,
 ) -> Figure:
     """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
     fig = plt.figure(figsize=FIG_SIZE)
-    lines = {
-        b: ([0] + data[b]["clicks"] + [PHOTO_CHECK_X], [data[b]["text"]] + data[b]["f"] + [data[b]["after"]])
-        for b in data
-    }
+    # Every click, not five checkpoints joined (owner, 2026-10-07: "why is the left curve so coarse?"):
+    # flat on the typed query until the opening's first detectors, their dip, then the climb; then the
+    # step to after the check.
+    lines = {b: (data[b]["curve_t"] + [PHOTO_CHECK_X], data[b]["curve_f"] + [data[b]["after"]]) for b in data}
 
     def ends_and_notch(ax: plt.Axes, _ends: dict) -> None:
         for beta, _label, _w in RADIOS:
@@ -487,28 +542,31 @@ def photo_figure(
             # The notch: where every session starts, the typed query's own set.
             ax.plot([0], [data[beta]["text"]], marker="o", markersize=8, color=INK, zorder=4, clip_on=False)
 
+    floor = _floor(lines, _lowest_precision(data))
     ax = _f_panel(
         fig,
         lines,
         (0, PHOTO_CHECK_X + 4),
         [0, 25, 50, 100, 150, PHOTO_CHECK_X],
         "Clicks, then the spot check",
-        _floor(lines),
+        floor,
         ends_and_notch,
+        PHOTO_GRID_STEP,
     )
-    ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", "✓"])
+    ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", END_LABEL])
     if stage >= 2:
-        ticks = [t for t in (0.2, 0.4, 0.6, 0.8, 1.0) if pr_lim[0] - 1e-9 <= t <= pr_lim[1] + 1e-9]
-        _pr_paths_panel(fig, data, pr_lim, ticks, PHOTO_GRID_STEP, circled)
+        _pr_paths_panel(fig, data, recall_lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, circled, (floor, 1.0))
     return fig
 
 
 def doc_figure(data: dict[float, dict], stage: int) -> Figure:
     fig = plt.figure(figsize=FIG_SIZE)
     lines = {b: (data[b]["clicks"], data[b]["f"]) for b in data}
-    _f_panel(fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "Clicks", _floor(lines))
+    # Numbered every 0.1 on both panels, as the recall axis is: every document set lies above 0.5.
+    floor = _floor(lines, _lowest_precision(data), step=0.1)
+    _f_panel(fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "Clicks", floor, grid_step=DOC_GRID_STEP, major=0.1)
     if stage >= 2:
-        _pr_paths_panel(fig, data)
+        _pr_paths_panel(fig, data, ylim=(floor, 1.0))
     return fig
 
 

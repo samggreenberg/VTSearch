@@ -278,6 +278,8 @@ share a cue with the class.
 - `perbeta_summary.md`: every per-preset table above, from `perp.py --kind balance`.
 - `precision_recall_path.csv`: each preset's returned set at 25, 50, 100 and 150 clicks and after the check
   (#4519).
+- `objective_by_click.csv`: each preset's objective at every click (`by_click.py`, #4599): the typed query, at
+  the guarded line the app draws for it since #4136, until a session's first detector, then its line.
 - `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell.
 - `images.md`, `images/`: the helpful and harmful images, with thumbnails.
 - `why/`: the confuser sheets and `why.csv`.

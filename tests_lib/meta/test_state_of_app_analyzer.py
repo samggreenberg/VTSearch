@@ -750,3 +750,25 @@ def test_the_summary_carries_the_stopping_block(run) -> None:
     assert "fbeta at stop" in block and "short of run's best" in block, "the objective, never AP or cost, leads"
     assert "### How close each gate came" in block
     assert set(run["margins"]["category"]) == set(CATS), "margins need rows, so the starved run has none"
+
+
+def test_by_click_fills_the_typed_query_until_a_detector_and_carries_gaps() -> None:
+    """#4599: each run scores its typed query until its first objective, then carries its last value over
+    gaps; never-trained runs stay out, and the mean is over the trained runs only."""
+    filled_curve = _load("_by_click", _SOTA / "by_click.py").filled_curve
+
+    nan = float("nan")
+    rows = []
+    for cat, vals in (("a@large", [nan, nan, 0.4, 0.6]), ("b@large", [nan, nan, nan, 0.8]), ("c@small", [nan] * 4)):
+        rows += [{"category": cat, "seed": 0, "t": t, "thr_fbeta": v} for t, v in enumerate(vals)]
+    rows.append({"category": "b@large", "seed": 0, "t": 4, "thr_fbeta": nan})  # a check step after the detector
+    rows.append({"category": "a@large", "seed": 0, "t": 4, "thr_fbeta": 0.7})
+    curves = pd.DataFrame(rows)
+    trained = pd.DataFrame({"category": ["a@large", "b@large"], "seed": [0, 0]})
+    text = pd.Series({("a@large", 0): 0.1, ("b@large", 0): 0.3, ("c@small", 0): 0.9})
+    got = filled_curve(curves, trained, text).set_index("t")
+    assert got["runs"].tolist() == [2] * 5, "the never-trained run stays out"
+    assert got.loc[0, "fbeta"] == pytest.approx((0.1 + 0.3) / 2), "click 0 is the typed query"
+    assert got.loc[2, "fbeta"] == pytest.approx((0.4 + 0.3) / 2), "b still has only its typed query"
+    assert got.loc[4, "fbeta"] == pytest.approx((0.7 + 0.8) / 2), "b's gap carries its last value"
+    assert got["with_detector"].tolist() == [0, 0, 1, 2, 2]
