@@ -6,7 +6,7 @@ it ships would be right, and what share of the real matches would it ship?*
 The answer is the line's precision and recall on that corpus, each as a
 likely range, and F-beta at the user's balance as the headline, all from
 uniform picks within rank bands: every number here is a function of those
-picks and of nothing the model chose (#4257: model-chosen votes broke 83% of
+picks and of nothing the model chose (#4256: model-chosen votes broke 83% of
 the old estimator's promises).  This module is the sample, its estimators,
 the rule that says where the next round of picks goes, and the rule that
 says when a phase is done.  It is pure statistics over ids, ranks and labels,

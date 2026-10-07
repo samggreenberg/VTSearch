@@ -621,7 +621,7 @@ Two rules make the numbers mean anything:
   failed-the-test exit, and the moment it is used the result is stale.
 - **Every number comes from uniform picks within rank bands**, never from the
   top of the ranking or the boundary walk, which is biased toward the line by
-  design (#4257: model-chosen votes broke 83% of the #4220 estimator's
+  design (#4256: model-chosen votes broke 83% of the #4220 estimator's
   promises). The ranking is frozen for the whole test, which is what makes
   the band design valid, and the app hides the ranked list while a test runs,
   since a pick's place in it would show its rank.
