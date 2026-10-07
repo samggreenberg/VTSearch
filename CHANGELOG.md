@@ -15,6 +15,14 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Changed
+
+- **Autopilot's Hard and New picks go where the detector is least sure** (issue #3546). They now
+  sample where the detector's own model puts even odds on an image being a match, instead of a fixed
+  depth below the line that had stopped following the detector. In simulation that finds about 3 more
+  matches per 150 votes at every balance setting; 38% of Hard picks are matches (was 19-24%), and the
+  final detector is as good or better. The `hard` phase's help text now says what it does.
+
 ### Added
 
 - **A finished test's verdict is kept on the detector** (issue #4526). Reaching

@@ -1855,6 +1855,12 @@ def detector_acquisition_threshold(
 ) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
 
+    Under a balance (*beta*) it is the score where the labels line's corpus
+    posterior falls below :data:`~vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION`
+    (0.5: the items the line's model thinks are even odds; #3546), read off
+    ``ctx.labels_line``.  With no labels line it falls through to the rules
+    below.
+
     Under a balance (*beta*, #4413) it can be a rank instead of a re-cut: the
     score at :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR` of
     the depth of the mixture's F-beta argmax over the unvoted ranking
@@ -1893,7 +1899,19 @@ def detector_acquisition_threshold(
     exactly as they did everywhere before #2876.
     """
     if beta is not None:
-        from vtscore.training.thresholds import acquisition_threshold
+        from vtscore.training.thresholds import (
+            ACQUISITION_TARGET_PRECISION,
+            acquisition_threshold,
+            target_precision_threshold,
+        )
+
+        # #3546: sample where the labels line's own corpus posterior says even
+        # odds.  The line - 4 re-cut below had saturated into a rank pin under
+        # the balance; this follows the class model instead.
+        if ACQUISITION_TARGET_PRECISION is not None and ctx.labels_line is not None:
+            at_target = target_precision_threshold(ctx.labels_line, ACQUISITION_TARGET_PRECISION)
+            if at_target is not None and math.isfinite(at_target):
+                return at_target
 
         at_argmax = acquisition_threshold(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
         if at_argmax is not None:

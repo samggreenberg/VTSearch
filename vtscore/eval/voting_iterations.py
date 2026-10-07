@@ -107,6 +107,7 @@ from vtscore.training.thresholds import (
     NO_GOOD_THRESHOLD,
     NO_BALANCE,
     ACQUISITION_ARGMAX_FACTOR,
+    ACQUISITION_TARGET_PRECISION,
     CHECK_SHAPES,
     CHECK_TRIM,
     acquisition_inclusion,
@@ -114,6 +115,7 @@ from vtscore.training.thresholds import (
     calculate_safe_threshold,
     line_inclusion,
     resolve_line_knobs,
+    target_precision_threshold,
     threshold_from_fold_orderings,
     walk_positives,
 )
@@ -1805,22 +1807,22 @@ def _check_acquisition_3546(
     acq_rank_percentile: Optional[float],
     acq_p_crossing: "float | str | None",
     acq_origin: str,
-    acq_target_p: Optional[float],
+    acq_target_p: "float | str | None",
 ) -> None:
-    """#3546's two arms: the offset's origin, and a target pick precision that replaces every other cut."""
+    """#3546's knobs: the offset's origin, and a target pick precision (the offset is its fallback)."""
     if acq_origin not in ACQ_ORIGINS:
         raise ValueError(f"acq_origin must be one of {ACQ_ORIGINS}, got {acq_origin!r}")
     if acq_origin != "line" and acq_inclusion_offset == 0:
         raise ValueError("acq_origin only moves the offset cut; it needs a nonzero acq_inclusion_offset")
-    if acq_target_p is None:
+    if acq_target_p is None or acq_target_p == ACQ_TARGET_OFF:
         return
-    if acq_inclusion_offset != 0 or acq_rank_percentile is not None or acq_p_crossing not in (None, ACQ_P_CROSSING_OFF):
+    if isinstance(acq_target_p, str) or not 0.0 < float(acq_target_p) < 1.0:
+        raise ValueError(f"acq_target_p must lie in (0, 1) or be {ACQ_TARGET_OFF!r}, got {acq_target_p!r}")
+    if acq_rank_percentile is not None or acq_p_crossing not in (None, ACQ_P_CROSSING_OFF):
         raise ValueError(
-            "acq_target_p replaces the acquisition cut: pass acq_inclusion_offset=0, no acq_rank_percentile "
-            "and no acq_p_crossing to run the target-precision arm"
+            "acq_target_p names the acquisition cut: pass no acq_rank_percentile and no acq_p_crossing "
+            "to run the target-precision arm"
         )
-    if not 0.0 < acq_target_p < 1.0:
-        raise ValueError(f"acq_target_p must lie in (0, 1), got {acq_target_p}")
 
 
 def _check_acquisition_arm(
@@ -1828,7 +1830,7 @@ def _check_acquisition_arm(
     acq_rank_percentile: Optional[float],
     acq_p_crossing: "float | str | None",
     acq_origin: str = "line",
-    acq_target_p: Optional[float] = None,
+    acq_target_p: "float | str | None" = None,
 ) -> None:
     """The acquisition cut's knobs name one cut: the shipped offset, a rank pin, the P-aware crossing (#4409),
     or a target pick precision (#3546); *acq_origin* says where the offset counts from."""
@@ -1866,34 +1868,24 @@ ACQ_P_CROSSING_OFF = "off"
 #: floor-off arm #4333 proposed.
 ACQ_ORIGINS = ("line", "inclusion")
 
+#: ``acq_target_p="off"``: the offset cut even under a balance (the #3546
+#: pricing's control, and every offset arm).
+ACQ_TARGET_OFF = "off"
 
-def target_precision_cut(line: Any, p: float) -> Optional[float]:
-    """The score where the labels line's corpus posterior falls below *p* (#3546): sample where picks are *p* positive.
 
-    *line* is the step's :class:`~vtscore.training.thresholds.labels_line.LabelsLine`; its unvoted scores are best
-    first, and :func:`~vtscore.training.thresholds.labels_line.corpus_posteriors` gives each one's chance of being a
-    positive under the same 3-part corpus fit the line is cut on (the line's own ``unvoted_posteriors`` when it kept
-    them).  The cut is the first (highest) score whose
-    posterior is below *p*; if every item is at least *p*, the deepest score; if none is, the top one.  It states
-    acquisition in the line's own terms, so it calibrates itself: neither the Inclusion step's shortfall nor the
-    fold-anchored scale's saturation can reach it.  ``None`` when there is no line or no unvoted score to read.
+def resolve_acquisition_target(acq_target_p: "float | str | None", beta: Optional[float]) -> Optional[float]:
+    """The target pick precision an arm samples at, or ``None`` for the offset cut (#3546).
+
+    ``None`` is the app's rule: under a balance the shipped
+    :data:`~vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION`, on the
+    Inclusion arm the offset cut.  ``"off"`` forces the offset cut; a number
+    pins the target.
     """
-    import numpy as np  # noqa: PLC0415
-
-    from vtscore.training.thresholds.labels_line import corpus_posteriors  # noqa: PLC0415
-
-    if line is None or getattr(line, "unvoted_scores", None) is None:
+    if acq_target_p == ACQ_TARGET_OFF:
         return None
-    scores = np.asarray(line.unvoted_scores, dtype=np.float64)
-    if scores.size == 0:
-        return None
-    # The posteriors the line was cut on when the fit kept them; a line built by hand computes them.
-    kept = getattr(line, "unvoted_posteriors", None)
-    post = np.asarray(kept, dtype=np.float64) if kept is not None and len(kept) == scores.size else None
-    if post is None:
-        post = corpus_posteriors(line.model, scores)
-    below = np.flatnonzero(post < p)
-    return float(scores[below[0] if below.size else scores.size - 1])
+    if acq_target_p is None:
+        return ACQUISITION_TARGET_PRECISION if beta is not None else None
+    return float(acq_target_p)
 
 
 #: The harness's name for the full balance walk whose end moves the line (what the app shipped before #4427's pricing).
@@ -1946,7 +1938,7 @@ def _resolve_run_knobs(
     head: Optional[str],
     acq_p_crossing: "float | str | None" = None,
     acq_origin: str = "line",
-    acq_target_p: Optional[float] = None,
+    acq_target_p: "float | str | None" = None,
     trainer: str,
     style: Optional[str],
     calibration_seed: Optional[int],
@@ -2143,7 +2135,7 @@ def simulate_voting_iterations(  # noqa: C901
     acq_rank_percentile: Optional[float] = None,
     acq_p_crossing: "float | str | None" = None,
     acq_origin: str = "line",
-    acq_target_p: Optional[float] = None,
+    acq_target_p: "float | str | None" = None,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
@@ -2390,11 +2382,13 @@ def simulate_voting_iterations(  # noqa: C901
         acq_origin: Where the offset counts from (#3546): ``"line"`` (the
             default, the app) or ``"inclusion"``, the run's Inclusion knob
             whatever line the balance drew - the old origin.
-        acq_target_p: The **target pick precision** arm (#3546): sample at the
+        acq_target_p: The **target pick precision** (#3546): sample at the
             score where the labels line's corpus posterior falls below this
-            share (:func:`target_precision_cut`).  Requires
-            ``acq_inclusion_offset=0``; a step with no labels line falls back
-            to the reporting cut.  ``None`` (the default) is the app.
+            share (:func:`~vtscore.training.thresholds.target_precision_threshold`),
+            falling back to the offset cut on a step with no labels line.
+            ``None`` (the default) is the app's rule: under a balance the
+            shipped ``ACQUISITION_TARGET_PRECISION``, on the Inclusion arm the
+            offset cut.  ``"off"`` forces the offset cut under a balance.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -3336,6 +3330,12 @@ def simulate_voting_iterations(  # noqa: C901
             # offset arm, and what the argmax arm falls back to with no mixture
             # estimate, as the app does (#4409).
             offset_cut: float | None = None
+            # The target precision names the cut unless an explicit factor or rank pin does.
+            acq_target = (
+                resolve_acquisition_target(acq_target_p, beta)
+                if acq_factor is None and acq_rank_percentile is None
+                else None
+            )
             if acq_inclusion_offset != 0 and safe_cut is not None:
                 line = details.get("reporting_line") if acq_origin == "line" else None
                 origin = line_inclusion(line, safe_cut) if line is not None else inclusion
@@ -3361,11 +3361,14 @@ def simulate_voting_iterations(  # noqa: C901
                     acq_threshold = float(cand)
                 elif offset_cut is not None:
                     acq_threshold = offset_cut
-            elif acq_target_p is not None:
-                # #3546: sample where the labels line's corpus posterior falls below the target share.
-                cand = target_precision_cut(details.get("find_line"), acq_target_p)
+            elif acq_target is not None:
+                # #3546: sample where the labels line's corpus posterior falls below the
+                # target share, as the app does; the offset cut is the fallback.
+                cand = target_precision_threshold(details.get("find_line"), acq_target)
                 if cand is not None and np.isfinite(cand):
                     acq_threshold = float(cand)
+                elif offset_cut is not None:
+                    acq_threshold = offset_cut
             elif acq_rank_percentile is not None:
                 if sim_pooled_scores:
                     acq_threshold = float(

@@ -537,6 +537,27 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="acquisition.target_precision",
+        app="py:vtscore.state.core.detector_acquisition_threshold",
+        harness="vtscore/eval/voting_iterations.py::resolve_acquisition_target",
+        kind="default",
+        note=(
+            "Where Autopilot's Hard / New picks sample under a balance since #3546 "
+            "(docs/experiments/2026-10-07-acquisition-cut-3546): the app's detector_acquisition_threshold "
+            "reads the library's target_precision_threshold off ctx.labels_line at "
+            "ACQUISITION_TARGET_PRECISION - the score where the line's corpus posterior falls below 0.5 - "
+            "and falls through to the line - 4 re-cut with no labels line. The harness's "
+            "resolve_acquisition_target turns acq_target_p=None into that same constant under a balance "
+            "(and None, the offset cut, otherwise), and its step reads the same library function on the "
+            "step's labels line (details['find_line']), with the offset cut as the same fallback. The "
+            "target cannot drift - both read one constant - so this digest watches the resolution."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts 'off' (the offset cut under a balance, the #3546 control and every "
+            "offset arm) and a pinned target where the app has the constant; the DEFAULT arm passes None."
+        ),
+    ),
+    Mirror(
         id="training.fused_threshold",
         app="py:vtscore.detectors.training._fused_threshold",
         harness="vtscore/eval/voting_iterations.py::_safe_threshold_for_step",

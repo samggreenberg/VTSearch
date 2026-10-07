@@ -8,16 +8,17 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
-### Added
-
-- **Two acquisition arms for the eval harness** (issue #3546). `simulate_voting_iterations` takes
-  `acq_origin` (`"line"`, the default and the app, or `"inclusion"`: count the acquisition offset
-  from the run's Inclusion knob instead of the line, the old origin) and `acq_target_p` (sample
-  where the labels line's corpus posterior falls below that share, via the new
-  `vtscore.eval.voting_iterations.target_precision_cut(line, p)`; requires
-  `acq_inclusion_offset=0`). Both default to the app's behaviour, and the app is unchanged.
-
 ### Changed
+
+- **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
+  now returns the score where the labels line's corpus posterior falls below the new
+  `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new
+  `target_precision_threshold(line, p)` read off `ctx.labels_line`; the line - 4 re-cut
+  (`ACQUISITION_INCLUSION_OFFSET`, unchanged) is its fallback with no labels line. Set the
+  constant to `None` to restore the re-cut. The eval harness's default arm follows
+  (`resolve_acquisition_target`); `simulate_voting_iterations` takes `acq_target_p` (`None` = the app,
+  `"off"` = the offset cut, a number pins it) and `acq_origin` (`"line"`, or `"inclusion"`: the old
+  Inclusion-knob origin for the offset). Priced in `docs/experiments/2026-10-07-acquisition-cut-3546/`.
 
 - **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
   `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen

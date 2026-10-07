@@ -1,7 +1,11 @@
 {
   "acquisition.balance_cut": {
-    "app": "72d53721b881a85cc2f3e9e47ccb72cd9088d8489abae8eecd09a898c1731b12",
+    "app": "6554ee572ad278a844d6201cc6ca404ab799638351efd3c10ee52a30b47ae03f",
     "harness": "29c2fff0e1a8167f2b74a4de7f31313c2bc70579ae6008a97d75b2565721a897"
+  },
+  "acquisition.target_precision": {
+    "app": "6554ee572ad278a844d6201cc6ca404ab799638351efd3c10ee52a30b47ae03f",
+    "harness": "549d2a02a7b1f62f52e164f31e27aa0a91668a27395b09b325dc2bc886551ef4"
   },
   "autopilot.auto_select_next": {
     "app": "6ea3115e16c12d9e370d8475d4b92b12ebafdc870c7513ca1de77faa6fbabb67",

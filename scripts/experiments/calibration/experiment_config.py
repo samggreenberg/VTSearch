@@ -1064,9 +1064,13 @@ else:
 #: #3546's two acquisition arms.  ``CALIB_ACQ_ORIGIN=inclusion`` counts the
 #: offset from the run's Inclusion knob instead of the line (the old origin);
 #: ``CALIB_ACQ_TARGET_P`` samples where the labels line's corpus posterior falls
-#: below that share (requires ``CALIB_ACQ_INCLUSION_OFFSET=0``).  Unset = the app.
+#: below that share; ``off`` forces the offset cut under a balance.  Unset = the
+#: app (the shipped ACQUISITION_TARGET_PRECISION under a balance, #3546).
 ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
-ACQ_TARGET_P = _opt_float("CALIB_ACQ_TARGET_P")
+_ACQ_TARGET_P_ENV = os.environ.get("CALIB_ACQ_TARGET_P", "").strip().lower()
+ACQ_TARGET_P: float | str | None = (
+    "off" if _ACQ_TARGET_P_ENV == "off" else (float(_ACQ_TARGET_P_ENV) if _ACQ_TARGET_P_ENV else None)
+)
 
 #: The **Autopilot opening** this arm runs (issue #3267), in the grammar of
 #: :mod:`vtscore.eval.startup_schedule` - e.g. ``"n6@k-6,n6@k-2,n6@k0"``.

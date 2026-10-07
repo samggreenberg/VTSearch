@@ -308,8 +308,10 @@ def probe(C: Any) -> list[str]:
     # #3546's arms: neither has an app counterpart yet.
     if C.ACQ_ORIGIN != "line":
         rows.append(("acq_origin", C.ACQ_ORIGIN, "line (the app counts the offset from the line)"))
-    if C.ACQ_TARGET_P is not None:
-        rows.append(("acq_target_p", env("CALIB_ACQ_TARGET_P") or "", "<unset> = the app's offset cut"))
+    from vtscore.eval.voting_iterations import resolve_acquisition_target  # noqa: PLC0415
+
+    if resolve_acquisition_target(C.ACQ_TARGET_P, run_beta) != resolve_acquisition_target(None, run_beta):
+        rows.append(("acq_target_p", env("CALIB_ACQ_TARGET_P") or "", "<unset> = the app's target pick precision"))
     if resolve_acquisition_factor(C.ACQ_P_CROSSING, run_beta) != resolve_acquisition_factor(None, run_beta):
         rows.append(
             (

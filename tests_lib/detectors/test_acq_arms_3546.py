@@ -1,8 +1,11 @@
-"""#3546's two acquisition arms: the old Inclusion origin and a target pick precision.
+"""#3546: Autopilot samples at a target pick precision; the old Inclusion origin stays a harness arm.
 
-Both are harness-only arms (the app still samples at the line - 4 offset), so
-what is pinned here is that each names the cut it claims to and that the
-default arm is untouched by either knob.
+Since #3546 the app's acquisition cut under a balance is the score where the
+labels line's corpus posterior falls below ``ACQUISITION_TARGET_PRECISION``
+(:func:`~vtscore.training.thresholds.target_precision_threshold`), and the
+harness's default arm resolves to it.  Pinned here: the cut is where it claims
+to be, the knobs name one cut, the default arm is the app's, and ``"off"``
+restores the line - 4 offset cut.
 """
 
 from __future__ import annotations
@@ -15,9 +18,10 @@ import pytest
 from vtscore.eval.voting_iterations import (
     ACQ_ORIGINS,
     _check_acquisition_arm,
+    resolve_acquisition_target,
     simulate_voting_iterations,
-    target_precision_cut,
 )
+from vtscore.training.thresholds import ACQUISITION_TARGET_PRECISION, target_precision_threshold
 from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine
 
 from .test_max_patch_style import _planted_dataset
@@ -36,13 +40,13 @@ def _line(n_pos: int = 30, n_neg: int = 970, seed: int = 0) -> LabelsLine:
 class TestTheTargetPrecisionCut:
     def test_it_is_one_of_the_unvoted_scores(self):
         line = _line()
-        cut = target_precision_cut(line, 0.5)
+        cut = target_precision_threshold(line, 0.5)
         assert line.unvoted_scores is not None
         assert cut is not None and cut in set(line.unvoted_scores.tolist())
 
     def test_a_higher_target_samples_higher_up(self):
         line = _line()
-        found = [target_precision_cut(line, p) for p in (0.1, 0.25, 0.5, 0.75, 0.9)]
+        found = [target_precision_threshold(line, p) for p in (0.1, 0.25, 0.5, 0.75, 0.9)]
         cuts = [c for c in found if c is not None]
         assert len(cuts) == len(found)
         assert cuts == sorted(cuts), cuts
@@ -54,14 +58,14 @@ class TestTheTargetPrecisionCut:
         line = _line()
         assert line.unvoted_scores is not None
         post = corpus_posteriors(line.model, line.unvoted_scores)
-        cut = target_precision_cut(line, 0.5)
+        cut = target_precision_threshold(line, 0.5)
         i = int(np.flatnonzero(line.unvoted_scores == cut)[0])
         assert post[i] < 0.5 and (i == 0 or post[i - 1] >= 0.5)
 
     def test_no_line_or_no_scores_is_no_cut(self):
-        assert target_precision_cut(None, 0.5) is None
+        assert target_precision_threshold(None, 0.5) is None
         empty = LabelsLine(model=_line().model, prevalence=0.01, unvoted_scores=np.zeros(0))
-        assert target_precision_cut(empty, 0.5) is None
+        assert target_precision_threshold(empty, 0.5) is None
 
 
 class TestTheKnobsNameOneCut:
@@ -76,21 +80,36 @@ class TestTheKnobsNameOneCut:
         _check_acquisition_arm(-4, None, None, "inclusion")
 
     @pytest.mark.parametrize(
-        ("offset", "pct", "cross"),
-        [(-4, None, None), (0, 0.98, None), (0, None, 0.5)],
-        ids=("with-the-offset", "with-a-rank-pin", "with-the-argmax-factor"),
+        ("pct", "cross"), [(0.98, None), (None, 0.5)], ids=("with-a-rank-pin", "with-the-argmax-factor")
     )
-    def test_a_target_precision_replaces_every_other_cut(self, offset, pct, cross):
-        with pytest.raises(ValueError, match="acq_target_p replaces the acquisition cut"):
-            _check_acquisition_arm(offset, pct, cross, "line", 0.5)
+    def test_a_target_precision_and_another_cut_conflict(self, pct, cross):
+        with pytest.raises(ValueError, match="acq_target_p names the acquisition cut"):
+            _check_acquisition_arm(0, pct, cross, "line", 0.5)
 
-    @pytest.mark.parametrize("p", (0.0, 1.0, -0.1, 1.5))
-    def test_a_target_is_a_share(self, p):
+    def test_the_offset_is_the_targets_fallback_not_a_conflict(self):
+        _check_acquisition_arm(-4, None, None, "line", 0.5)
+
+    @pytest.mark.parametrize("p", (0.0, 1.0, -0.1, 1.5, "on"))
+    def test_a_target_is_a_share_or_off(self, p):
         with pytest.raises(ValueError, match=r"must lie in \(0, 1\)"):
             _check_acquisition_arm(0, None, None, "line", p)
 
     def test_the_off_factor_is_not_a_competing_cut(self):
         _check_acquisition_arm(0, None, "off", "line", 0.5)
+
+
+class TestTheDefaultIsTheApps:
+    def test_under_a_balance_the_target_is_the_shipped_one(self):
+        assert ACQUISITION_TARGET_PRECISION == 0.5
+        assert resolve_acquisition_target(None, 1.0) == ACQUISITION_TARGET_PRECISION
+        assert resolve_acquisition_target(None, 0.25) == ACQUISITION_TARGET_PRECISION
+
+    def test_off_and_the_inclusion_arm_are_the_offset_cut(self):
+        assert resolve_acquisition_target("off", 1.0) is None
+        assert resolve_acquisition_target(None, None) is None
+
+    def test_a_pinned_target_is_that_target(self):
+        assert resolve_acquisition_target(0.25, 1.0) == 0.25
 
 
 class TestTheArmsRun:
@@ -123,18 +142,17 @@ class TestTheArmsRun:
         assert base and all("acq_threshold" in r for r in base)
         return [(int(r["t"]), float(r["acq_threshold"])) for r in base]
 
-    def test_the_target_precision_arm_moves_the_selectors_cut(self):
-        control = self._acq()
-        target = self._acq(acq_inclusion_offset=0, acq_target_p=0.5)
-        assert control and target
-        assert all(math.isfinite(a) for _t, a in target)
-        assert [a for _t, a in target] != [a for _t, a in control]
+    def test_the_default_arm_samples_at_the_target(self):
+        default = self._acq()
+        offset = self._acq(acq_target_p="off")
+        assert default and offset
+        assert all(math.isfinite(a) for _t, a in default)
+        assert [a for _t, a in default] != [a for _t, a in offset]
 
-    def test_the_inclusion_origin_moves_the_selectors_cut(self):
-        control = self._acq()
-        old = self._acq(acq_origin="inclusion")
-        assert control and old
-        assert [a for _t, a in old] != [a for _t, a in control]
+    def test_naming_the_shipped_target_is_the_default(self):
+        assert self._acq() == self._acq(acq_target_p=ACQUISITION_TARGET_PRECISION)
 
-    def test_the_default_is_unchanged_by_naming_it(self):
-        assert self._acq() == self._acq(acq_origin="line", acq_target_p=None)
+    def test_the_inclusion_origin_moves_the_offset_cut(self):
+        line = self._acq(acq_target_p="off")
+        old = self._acq(acq_target_p="off", acq_origin="inclusion")
+        assert [a for _t, a in old] != [a for _t, a in line]

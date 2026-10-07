@@ -280,12 +280,17 @@ class TestArmSemanticsEndToEnd:
     def _run(floor):
         from vtscore.eval.voting_iterations import simulate_voting_iterations
 
+        # The floor acts on the fold-anchored estimator.  Since #3546 the
+        # acquisition cut under a balance is the labels line's target pick
+        # precision, which never reads that estimator, so these arms are run
+        # on the offset cut (`acq_target_p="off"`), where the floor still lands.
         return simulate_voting_iterations(
             TestArmSemanticsEndToEnd._medias(),
             "alpha",
             seed=42,
             sim_fraction=0.5,
             exclusion_min_remainder=floor,
+            acq_target_p="off",
         )
 
     @staticmethod

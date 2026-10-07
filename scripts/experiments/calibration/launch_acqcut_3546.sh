@@ -73,7 +73,7 @@ export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}"
 
 # --- ops -----------------------------------------------------------------------
 BUNDLE="${BUNDLE:-8}"
-MEM="${CALIB_MEM:-3G}"
+MEM="${CALIB_MEM:-2G}"  # a 1% cell peaks under 0.8 GB (#4548); 3G cost a third of the memory-capped slots
 TIME="${CALIB_TIME:-4:00:00}"
 # 24 arms x %5 = 120 tasks, 240 charged CPUs: the whole cap.  Lower it if a peer runs.
 CONC="${CALIB_CONC:-5}"
@@ -102,6 +102,12 @@ arm_env() { # sets the arm's knobs and the divergences preflight must see declar
     b4) export CALIB_BETA=4 && ARM_DIVERGES="beta" ;;
     *) echo "unknown arm '$a'; expected one of: $ALL_ARMS" >&2 && exit 2 ;;
   esac
+  # Since #3546 shipped, the app's cut IS tp50, so every offset rule pins
+  # CALIB_ACQ_TARGET_P=off to stay the offset cut; the grid in the report ran
+  # before the ship, when unset meant the offset (the rows are identical).
+  case "$rule" in
+    ctl | line | off2 | off6 | inc0) export CALIB_ACQ_TARGET_P=off && ARM_DIVERGES="$ARM_DIVERGES,acq_target_p" ;;
+  esac
   case "$rule" in
     ctl) ;;
     line) export CALIB_ACQ_INCLUSION_OFFSET=0 && ARM_DIVERGES="$ARM_DIVERGES,acq_offset" ;;
@@ -112,10 +118,8 @@ arm_env() { # sets the arm's knobs and the divergences preflight must see declar
       ARM_DIVERGES="$ARM_DIVERGES,acq_offset,acq_rank_percentile"
       ;;
     inc0) export CALIB_ACQ_ORIGIN=inclusion && ARM_DIVERGES="$ARM_DIVERGES,acq_origin" ;;
-    tp50 | tp25)
-      export CALIB_ACQ_INCLUSION_OFFSET=0 CALIB_ACQ_TARGET_P="0.${rule#tp}"
-      ARM_DIVERGES="$ARM_DIVERGES,acq_offset,acq_target_p"
-      ;;
+    tp50) ;; # the app's cut since #3546
+    tp25) export CALIB_ACQ_TARGET_P=0.25 && ARM_DIVERGES="$ARM_DIVERGES,acq_target_p" ;;
     *) echo "unknown arm '$a'; expected one of: $ALL_ARMS" >&2 && exit 2 ;;
   esac
   ARM_DIVERGES="${ARM_DIVERGES#,}"
