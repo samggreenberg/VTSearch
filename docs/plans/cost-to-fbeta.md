@@ -111,8 +111,6 @@ cut.
 
 <!-- item-sep -->
 
-- [ ] #3546 — Decide the acquisition cut under the balance; the offset's value and the region cross-check ride along (Opus)
-
 <!-- item-sep -->
 
 - [ ] #4359 — Smart and Stable re-keyed to the balance's line (Opus)
