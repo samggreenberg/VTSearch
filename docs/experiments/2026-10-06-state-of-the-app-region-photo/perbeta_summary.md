@@ -45,32 +45,32 @@ One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's 
 | beta 0.25 | DINOv3 region | app line | 0.25 | 25 | 239.243 | 0.285 | 0.556 | 0.287 | 0.567 | 0.46 | 0.0 | 288 |
 | beta 0.25 | DINOv3 region | app line | 0.25 | 50 | 129.741 | 0.509 | 0.505 | 0.496 | 0.623 | 0.669 | 0.0 | 278 |
 | beta 0.25 | DINOv3 region | app line | 0.25 | final | 53.705 | 0.727 | 0.481 | 0.665 | 0.756 | 0.797 | 0.0 | 288 |
-| beta 0.25 | DINOv3 region | app line | 0.25 | ceiling |  |  |  |  |  |  | 0.0 | 0 |
+| beta 0.25 | DINOv3 region | app line | 0.25 | ceiling | 180.771 | 0.433 | 0.859 | 0.442 | 0.815 | 0.496 | 0.0 | 144 |
 | beta 0.25 | DINOv3 region | top-K | 0.25 | text | 32.0 | 0.486 | 0.314 | 0.471 | 0.561 | 0.69 | 0.0 | 288 |
 | beta 0.25 | DINOv3 region | top-K | 0.25 | 25 | 32.0 | 0.488 | 0.315 | 0.472 | 0.567 | 0.688 | 0.0 | 288 |
 | beta 0.25 | DINOv3 region | top-K | 0.25 | 50 | 32.0 | 0.566 | 0.366 | 0.548 | 0.623 | 0.726 | 0.0 | 278 |
 | beta 0.25 | DINOv3 region | top-K | 0.25 | final | 32.0 | 0.705 | 0.456 | 0.682 | 0.756 | 0.816 | 0.0 | 288 |
-| beta 0.25 | DINOv3 region | top-K | 0.25 | ceiling |  |  |  |  |  |  | 0.0 | 0 |
+| beta 0.25 | DINOv3 region | top-K | 0.25 | ceiling | 32.0 | 0.759 | 0.489 | 0.735 | 0.815 | 0.876 | 0.0 | 144 |
 | beta 1 | DINOv3 region | app line | 1.0 | text | 288.312 | 0.166 | 0.583 | 0.238 | 0.45 | 0.568 | 0.0 | 288 |
 | beta 1 | DINOv3 region | app line | 1.0 | 25 | 247.672 | 0.259 | 0.573 | 0.316 | 0.451 | 0.652 | 0.0 | 287 |
 | beta 1 | DINOv3 region | app line | 1.0 | 50 | 147.921 | 0.438 | 0.564 | 0.453 | 0.519 | 0.78 | 0.0 | 280 |
 | beta 1 | DINOv3 region | app line | 1.0 | final | 90.872 | 0.605 | 0.617 | 0.581 | 0.639 | 0.839 | 0.0 | 288 |
-| beta 1 | DINOv3 region | app line | 1.0 | ceiling | 366.848 | 0.377 | 0.899 | 0.462 | 0.665 | 0.603 | 0.0 | 46 |
+| beta 1 | DINOv3 region | app line | 1.0 | ceiling | 319.354 | 0.37 | 0.911 | 0.468 | 0.687 | 0.61 | 0.0 | 144 |
 | beta 1 | DINOv3 region | top-K | 1.0 | text | 32.0 | 0.486 | 0.314 | 0.381 | 0.45 | 0.72 | 0.0 | 288 |
 | beta 1 | DINOv3 region | top-K | 1.0 | 25 | 32.0 | 0.488 | 0.315 | 0.382 | 0.451 | 0.722 | 0.0 | 287 |
 | beta 1 | DINOv3 region | top-K | 1.0 | 50 | 32.0 | 0.567 | 0.366 | 0.444 | 0.519 | 0.729 | 0.0 | 280 |
 | beta 1 | DINOv3 region | top-K | 1.0 | final | 32.0 | 0.705 | 0.456 | 0.553 | 0.639 | 0.797 | 0.0 | 288 |
-| beta 1 | DINOv3 region | top-K | 1.0 | ceiling | 32.0 | 0.728 | 0.462 | 0.564 | 0.665 | 0.849 | 0.0 | 46 |
+| beta 1 | DINOv3 region | top-K | 1.0 | ceiling | 32.0 | 0.759 | 0.489 | 0.593 | 0.687 | 0.863 | 0.0 | 144 |
 | beta 4 | DINOv3 region | app line | 4.0 | text | 288.312 | 0.166 | 0.583 | 0.469 | 0.566 | 0.74 | 0.0 | 288 |
 | beta 4 | DINOv3 region | app line | 4.0 | 25 | 270.547 | 0.23 | 0.585 | 0.489 | 0.567 | 0.76 | 0.0 | 287 |
 | beta 4 | DINOv3 region | app line | 4.0 | 50 | 198.941 | 0.353 | 0.611 | 0.551 | 0.617 | 0.787 | 0.0 | 273 |
 | beta 4 | DINOv3 region | app line | 4.0 | final | 295.701 | 0.427 | 0.757 | 0.659 | 0.722 | 0.842 | 0.0 | 288 |
-| beta 4 | DINOv3 region | app line | 4.0 | ceiling |  |  |  |  |  |  | 0.0 | 0 |
+| beta 4 | DINOv3 region | app line | 4.0 | ceiling | 605.431 | 0.308 | 0.948 | 0.701 | 0.796 | 0.852 | 0.0 | 144 |
 | beta 4 | DINOv3 region | top-K | 4.0 | text | 128.0 | 0.207 | 0.531 | 0.485 | 0.566 | 0.741 | 0.0 | 288 |
 | beta 4 | DINOv3 region | top-K | 4.0 | 25 | 128.0 | 0.206 | 0.529 | 0.484 | 0.567 | 0.738 | 0.0 | 287 |
 | beta 4 | DINOv3 region | top-K | 4.0 | 50 | 128.0 | 0.229 | 0.588 | 0.538 | 0.617 | 0.751 | 0.0 | 273 |
 | beta 4 | DINOv3 region | top-K | 4.0 | final | 128.0 | 0.281 | 0.721 | 0.659 | 0.722 | 0.841 | 0.0 | 288 |
-| beta 4 | DINOv3 region | top-K | 4.0 | ceiling |  |  |  |  |  |  | 0.0 | 0 |
+| beta 4 | DINOv3 region | top-K | 4.0 | ceiling | 128.0 | 0.315 | 0.805 | 0.737 | 0.796 | 0.914 | 0.0 | 144 |
 
 ## The early dip
 
