@@ -575,6 +575,33 @@ class FindLabelRequestSchema(Schema):
     detector_id = fields.String(required=True, validate=validate.Length(min=1))
 
 
+class LabelQuotaSchema(Schema):
+    """Which detector a labelset gave, and the labels it still owes (#4643).
+
+    Built by :func:`vtscore.detectors.label_quota.served_quota`.  Under the
+    label quota (``good_quota`` Goods and ``bad_quota`` Bads) a labelset gives
+    the Goods' centroid, not a trained head; ``goods_owed`` / ``bads_owed`` are
+    what it takes to get one.
+    """
+
+    tier = fields.String(
+        required=True,
+        validate=validate.OneOf(["none", "centroid", "trained"]),
+        metadata={
+            "description": (
+                "``centroid``: the Goods' centroid cut with a GMM, given under the quota; "
+                "``trained``: the trained head; ``none``: no Good to sort toward."
+            )
+        },
+    )
+    n_good = fields.Integer(required=True)
+    n_bad = fields.Integer(required=True)
+    goods_owed = fields.Integer(required=True)
+    bads_owed = fields.Integer(required=True)
+    good_quota = fields.Integer(required=True)
+    bad_quota = fields.Integer(required=True)
+
+
 class FindLabelResponseSchema(Schema):
     """Response for ``POST /api/find-label`` (success path)."""
 
@@ -586,6 +613,9 @@ class FindLabelResponseSchema(Schema):
     good_count = fields.Integer(required=True)
     bad_count = fields.Integer(required=True)
     detector_name = fields.String(required=True)
+    # Which detector the labels gave: the trained head, or under the quota the
+    # Goods' centroid, with the labels still owed (#4643).
+    label_quota = fields.Nested(LabelQuotaSchema, required=True)
 
 
 class FindQueueIdsQuerySchema(Schema):
@@ -682,6 +712,9 @@ class _AutoDetectResultSchema(Schema):
     # What the balance says about ``threshold`` (#4272, #4413); ``null`` for a
     # detector with no trained context to ask.
     balance = fields.Nested(BalanceStateSchema, allow_none=True)
+    # Which detector the labels gave (#4643): under the quota, the Goods'
+    # centroid; ``null`` from a caller that does not report it.
+    label_quota = fields.Nested(LabelQuotaSchema, allow_none=True)
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)

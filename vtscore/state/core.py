@@ -1801,6 +1801,7 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
     ``None`` when no balance is set (a library caller's choice; the app
     always sets one).
     """
+    from vtscore.detectors.centroid_head import is_centroid_head
     from vtscore.training.thresholds import balance_state, gate_balance_state
 
     if beta is None:
@@ -1811,14 +1812,17 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
         state = gate_balance_state(beta, ctx.gate_passed, voted).as_dict()
     else:
         # Under the labelset's line (#4452) the count is what the threshold keeps
-        # of the ranking scored last - possibly none - not the count rule's.
+        # of the ranking scored last - possibly none - not the count rule's.  So
+        # it is under the Goods' centroid (#4643), whose midpoint the balance
+        # does not move: the count is what that line keeps.
+        drawn = ctx.labels_line is not None or is_centroid_head(ctx.model)
         state = balance_state(
             beta,
             ctx.precision_check,
             ctx.line_ranking,
             voted,
-            proposal=detector_balance_proposal(ctx, beta) if ctx.labels_line is None else None,
-            threshold=ctx.threshold if ctx.labels_line is not None else None,
+            proposal=None if drawn else detector_balance_proposal(ctx, beta),
+            threshold=ctx.threshold if drawn else None,
         ).as_dict()
     state.update(detector_check_prompt(ctx, len(voted)))
     return state

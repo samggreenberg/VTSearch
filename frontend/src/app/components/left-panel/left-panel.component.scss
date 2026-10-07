@@ -167,6 +167,12 @@
   flex-shrink: 0;
 }
 
+// The Goods'-centroid note under Test's tabs (#4643).
+.find-detector-note {
+  padding: var(--space-xs) var(--space-md);
+  flex-shrink: 0;
+}
+
 // Icon-only action cluster (Browse / To Dataset / Export) sitting on the
 // Threshold heading's line. Mirrors the right panel's ``.goods-actions``: compact,
 // borderless, tooltip-labelled.

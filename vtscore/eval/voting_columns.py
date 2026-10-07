@@ -173,6 +173,15 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: did (issue #3560).  Declared just above.
     *STOPPING_MARGIN_COLUMNS,
     "app_trained",
+    #: Which detector a Test at this click gives (#4643): ``centroid`` - the
+    #: Goods' centroid, under the label quota (from the first Good until the
+    #: votes hold :data:`~vtscore.detectors.label_quota.GOOD_QUOTA` Goods and
+    #: :data:`~vtscore.detectors.label_quota.BAD_QUOTA` Bads) - or ``trained``.
+    #: The row's test metrics are that detector's.  Unlike ``app_trained`` it is
+    #: about the labels, not the session: Autopilot's opening shows the text
+    #: sort, but its labels are a click away from Test.  Absent from frames
+    #: written before #4643, whose rows all came from a trained head.
+    "detector_tier",
     #: The parameterised opening this run took (issue #3267), verbatim - so a
     #: pooled frame says which arm each row came from without depending on the
     #: directory it was read out of.  Empty on every run that took the app's

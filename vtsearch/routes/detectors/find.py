@@ -564,6 +564,9 @@ def _score_with_cold_detector(
             rows=rows,
             on_progress=_on_label,
             beta=cfg.beta,
+            # A Find hands the detector out: under the label quota it is the
+            # Goods' centroid, as Test and AutoFind give (#4643).
+            label_quota=True,
         )
         if model is None:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
