@@ -47,6 +47,8 @@ their own (datasource importers, seed importers, media sources) — is
 
 - [Authentication Providers](#authentication-providers): pluggable
   `LoginProvider` ABC
+- [Dataset-Import Hooks](#dataset-import-hooks): a function of yours,
+  named by the server admin, that runs when a user's import finishes
 - [Dependency Management](#dependency-management): pyproject.toml as
   the single source of truth, with deptry guarding drift
 - [Quick Reference: Checklist for Each Extension Type](#quick-reference-checklist-for-each-extension-type):
@@ -143,6 +145,72 @@ settings and data directories hang off the username are in
 features) and `ApiKeyLoginProvider` (`--login api_key`: `Authorization:
 Bearer` keys hashed in `data/api_keys.json`); both are worked examples of
 the interface.
+
+---
+
+## Dataset-Import Hooks
+
+To act when a user's import finishes (email them, post to a chat
+channel, record it somewhere), write a plain function and have the
+server admin name it at startup. There is nothing to subclass or
+register, and the code stays out of this repository.
+
+```python
+# mailer.py: anywhere importable on the server (installed, or on PYTHONPATH)
+from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported
+
+
+def notify(event: DatasetImported) -> None:
+    address = address_for(event.user)  # VTSearch stores no email addresses
+    if event.outcome == SUCCEEDED:
+        send(address, f"{event.name} is ready: {event.n_media} {event.media_type} items")
+    elif event.outcome == FAILED:
+        send(address, f"Importing {event.name} failed: {event.error}")
+```
+
+```bash
+python app.py --on-dataset-imported mailer:notify
+VTSEARCH_ON_DATASET_IMPORTED=mailer:notify     # gunicorn / Docker, which never parse argv
+```
+
+The event is a frozen `DatasetImported`:
+
+| Field | Meaning |
+|-------|---------|
+| `outcome` | `SUCCEEDED` (`"succeeded"`) or `FAILED` (`"failed"`). Compare against both exactly, so the hook keeps behaving if another outcome is ever added. |
+| `dataset_id` | The saved dataset's id; empty on failure. |
+| `name` | The saved display name on success (the registry may have made it unique); the requested name on failure. |
+| `user` | The VTSearch username that started the import. |
+| `media_type` | `"image"`, `"audio"`, …; empty if a failure came before the type was known. |
+| `n_media` | Items in the saved dataset; `0` on failure. |
+| `origin` | The importer and parameters the dataset was built from (a copy). |
+| `error` | The message the user was shown; empty on success. |
+
+Fields may be added; none will be removed or change meaning without a
+`vtscore/CHANGELOG.md` entry.
+
+**Which imports fire it.** The ones a user starts and waits for: the Add
+Dataset dialog's importers, local folder and file uploads, demo datasets,
+and an uploaded dataset file. That is the same set that offers to run
+the user's AutoFind detectors. Reloading a saved dataset, combining
+datasets, the CLI's `--autodetect`, and a cancelled import do not.
+
+**When and where it runs.** On the import's worker thread, after the
+progress bar already shows the import as finished and after AutoFind (if
+any) has started, so a hook that waits on a slow mail server holds up
+nothing the user sees. Several hooks run in the order the admin named
+them. A hook that raises is logged and the next one still runs; the
+dataset is saved either way.
+
+**Configuration is the admin's, per server.** The module is imported at
+startup: a bad `--on-dataset-imported` stops the server with an error,
+and a bad `VTSEARCH_ON_DATASET_IMPORTED` is reported on stdout and
+installs none of that variable's hooks. The startup log lists the hooks
+in force. There is deliberately no settings-file key for this: a
+settings file that could name code to run would let anyone who can
+import settings run code on the server. The wiring is
+`vtsearch/import_hooks.py`; the pipeline side is the `on_finished`
+callback in `vtscore/datasets/load_pipeline.py`.
 
 ---
 

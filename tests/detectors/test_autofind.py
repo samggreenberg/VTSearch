@@ -410,7 +410,7 @@ class TestImportRoutesPassTheChoice:
 
         captured: dict = {}
 
-        def fake_run(importer, field_values, *, post_load=None):
+        def fake_run(importer, field_values, *, post_load=None, on_finished=None):
             captured.update(field_values=dict(field_values), post_load=post_load)
             return "task"
 
@@ -432,7 +432,7 @@ class TestImportRoutesPassTheChoice:
 
         captured: dict = {}
 
-        def fake_run(importer, field_values, *, post_load=None):
+        def fake_run(importer, field_values, *, post_load=None, on_finished=None):
             captured.update(post_load=post_load)
             return "task"
 

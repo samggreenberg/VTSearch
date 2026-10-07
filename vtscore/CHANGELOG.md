@@ -265,6 +265,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`DatasetImported`, how a dataset import ended** (issue #4616).
+  `vtscore.datasets.import_event` adds a frozen `DatasetImported(outcome,
+  dataset_id, name, user, media_type, n_media, origin, error)` with the
+  `SUCCEEDED` / `FAILED` outcome constants and their `ImportOutcome` type. The load pipeline hands one to its
+  new `on_finished` callback after a load that succeeded or failed (never after
+  a cancel); the app passes it to the admin's `--on-dataset-imported` hooks.
+  Additive: no existing signature changed meaning.
+
 - **Every eval row carries the objective** (issue #4584). The voting-iterations
   and calibration frames (`VOTING_COLUMNS`, `CALIBRATION_COLUMNS`) gain
   `FBETA_COLUMNS`: `fbeta`, F-beta of the withheld half above the row's

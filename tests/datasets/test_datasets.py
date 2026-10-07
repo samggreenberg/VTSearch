@@ -129,7 +129,7 @@ class TestDatasetEndpoints:
 
         captured: dict = {}
 
-        def _fake_runner(importer, field_values, *, post_load=None):
+        def _fake_runner(importer, field_values, *, post_load=None, on_finished=None):
             captured["field_values"] = dict(field_values)
             return "task-demo-trio"
 

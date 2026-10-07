@@ -173,9 +173,11 @@ def reset_state():
     """
     from vtsearch.autofind import clear_autofind_runs
     from vtsearch.autorun_processors import clear_all_autorun
+    from vtsearch.import_hooks import clear_import_hooks
 
     clear_all_autorun()
     clear_autofind_runs()
+    clear_import_hooks()
 
     reset_shared_state(_test_medias_snapshot)
 

@@ -22,7 +22,7 @@ from typing import Any
 
 from vtscore.media import set_progress_callback
 
-from vtsearch import admin_overrides
+from vtsearch import admin_overrides, import_hooks
 from vtsearch.logging_config import setup_logging
 from vtsearch.port_preflight import _acquire_single_instance_lock, _preflight_port
 
@@ -310,6 +310,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # owns their flag spellings, help text, env-var equivalents and validators
     # together.
     admin_overrides.register_override_flags(parser)
+    # Not an admin override: it has no persisted setting to override, and must
+    # never get one (see vtsearch.import_hooks).
+    import_hooks.add_cli_argument(parser)
     return parser
 
 
@@ -481,6 +484,14 @@ def _apply_admin_overrides(args, parser) -> None:
     try:
         admin_overrides.apply_flag_values(args)
     except admin_overrides.OverrideValueError as exc:
+        parser.error(str(exc))
+
+
+def _apply_import_hooks(args, parser) -> None:
+    """Import the ``--on-dataset-imported`` functions now, so a typo fails at startup."""
+    try:
+        import_hooks.configure_from_args(args)
+    except import_hooks.HookSpecError as exc:
         parser.error(str(exc))
 
 
@@ -849,6 +860,7 @@ def main(app, initialize_server) -> None:
 
     _apply_verbosity(args)
     _apply_admin_overrides(args, parser)
+    _apply_import_hooks(args, parser)
 
     if args.autodetect:
         _run_autodetect(args, parser, importer, exporter)

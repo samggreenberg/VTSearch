@@ -38,6 +38,15 @@ not list every commit. Use `git log` for the full history.
   `autorun_on_import` off. The autorun *processors* (`/api/autorun-extractors`,
   `/api/autorun-localizers`) are a different thing and keep their names.
 
+- **Run your own function when an import finishes** (issue #4616). A server
+  admin can name functions with `--on-dataset-imported module:function` (or
+  `VTSEARCH_ON_DATASET_IMPORTED`, comma-separated), and each is called with a
+  `DatasetImported` event whenever a user's import from the web app succeeds or
+  fails, for example to email them. The code lives outside this repository; the
+  module only has to be importable on the server. A bad spec stops the server at
+  startup (the env form warns instead), and there is no settings-file key for it.
+  See [EXTENDING.md § Dataset-Import Hooks](docs/EXTENDING.md#dataset-import-hooks).
+
 - **A finished test's verdict is kept on the detector** (issue #4526). Reaching
   Done in Find's Test autopilot saves the verdict with the detector, one per
   collection it was tested on: the share right and the share found as ranges,
