@@ -1,0 +1,85 @@
+{
+  "arms": {
+    "f03k2_b025": {
+      "load": "717/720 cells with data, 94,105 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f03k2_b1": {
+      "load": "717/720 cells with data, 93,692 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f03k2_b4": {
+      "load": "717/720 cells with data, 93,824 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f03k4_b025": {
+      "load": "717/720 cells with data, 94,648 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f03k4_b1": {
+      "load": "717/720 cells with data, 94,392 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f03k4_b4": {
+      "load": "717/720 cells with data, 94,453 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f05k2_b025": {
+      "load": "717/720 cells with data, 93,286 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f05k2_b1": {
+      "load": "717/720 cells with data, 93,127 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f05k2_b4": {
+      "load": "717/720 cells with data, 92,960 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f05k4_b025": {
+      "load": "717/720 cells with data, 93,577 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f05k4_b1": {
+      "load": "717/720 cells with data, 93,337 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f05k4_b4": {
+      "load": "717/720 cells with data, 93,288 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f03k1_b025": {
+      "load": "717/720 cells with data, 94,095 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "f03k1_b1": {
+      "load": "717/720 cells with data, 94,120 rows, 3 starved (header-only; not data loss)",
+      "n_files": 720,
+      "complete": true
+    },
+    "r_f05_b1": {
+      "load": "143/144 cells with data, 19,084 rows, 1 starved (header-only; not data loss)",
+      "n_files": 144,
+      "complete": false
+    },
+    "r_f03_b1": {
+      "load": "143/144 cells with data, 19,034 rows, 1 starved (header-only; not data loss)",
+      "n_files": 144,
+      "complete": false
+    }
+  },
+  "problems": []
+}

@@ -105,8 +105,6 @@ cut.
 
 <!-- item-sep -->
 
-- [ ] #4583 — Calibration fraction and fold count under the labels line, at the three presets (Sonnet; Opus if the spaces disagree)
-
 <!-- item-sep -->
 
 - [ ] #4584 — The A/B tooling decides and sizes on cost: give it the objective, measure its σ (Sonnet)
