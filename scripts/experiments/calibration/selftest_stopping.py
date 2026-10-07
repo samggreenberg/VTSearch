@@ -297,6 +297,12 @@ def main() -> int:
     )
     note = S.binding_note(summary)
     ok &= _check("the binding note names it", "stable" in note and "binding rule" in note, note)
+    tie = S.binding_note(pd.DataFrame([{"blocked_smart": 1.0, "blocked_stable": 1.0, "blocked_span": 0.5}]))
+    ok &= _check(
+        "...and reports a tie as one, not as whichever light is listed first",
+        "tie as the binding rule" in tie and "**smart**" in tie and "**stable**" in tie and "**span**" not in tie,
+        tie,
+    )
 
     dark = main_df.drop(columns=list(S.LIGHT_COLUMNS))
     dark_summary = S.summarise(S.stopping_points(dark, keys=("arm", "dataset", "category", "seed")))

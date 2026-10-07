@@ -725,6 +725,12 @@ def binding_note(summary: pd.DataFrame) -> str:
             "Stable inside `hard`. Re-run to answer it."
         )
     means = {c: float(summary[f"blocked_{c}"].mean(skipna=True)) for c in LIGHT_COLUMNS}
-    worst = max(means, key=lambda c: means[c] if math.isfinite(means[c]) else -1.0)
+    top = max((v for v in means.values() if math.isfinite(v)), default=float("nan"))
     parts = ", ".join(f"{c} {means[c]:.0%}" if math.isfinite(means[c]) else f"{c} —" for c in LIGHT_COLUMNS)
-    return f"Share of held steps each indicator was not green: {parts}. **{worst}** is the binding rule."
+    head = f"Share of held steps each indicator was not green: {parts}."
+    # A tie is reported as one: naming the first of several equal lights would
+    # pin the block on whichever this module happens to list first.
+    worst = [c for c in LIGHT_COLUMNS if means[c] == top]
+    if len(worst) > 1:
+        return f"{head} {', '.join(f'**{c}**' for c in worst)} tie as the binding rule."
+    return f"{head} **{worst[0]}** is the binding rule." if worst else head

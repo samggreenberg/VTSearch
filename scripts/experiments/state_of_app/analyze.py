@@ -28,6 +28,12 @@ Reads one State of the App run (``launch.sh``) and writes, under ``--out``:
   and per image x detector, early and late separately.
 * ``harmful_pairs.csv`` -- the (image, class, label) pairs that hurt past
   -``Z_FLAG``, net of cell, label and phase: the hand-review list (#4179).
+* ``stops.csv`` / ``margins.csv`` -- one row per run: where the app's stopping
+  rules first fired (the click Autopilot says *All quality indicators are
+  green*), the objective and AP there, at the budget and at the run's own
+  best, and how far short each gate was over the clicks it held (#3560,
+  ``calibration/stopping.py``).  A run that never trained is kept as one the
+  rules never stopped.
 * ``summary.md`` -- the tables a reader starts from.
 
 **The metrics (owner, 2026-09-30, #4357).**  #4223 retired FPR + FNR as the
@@ -117,6 +123,8 @@ from _rank_metrics import (  # noqa: E402
     line_metrics,
     parse_ranks,
 )
+import objective  # noqa: E402
+import stopping  # noqa: E402
 
 #: The two production paths, as the harness names them.
 ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max_patch"): "DINOv3 region"}
@@ -191,6 +199,10 @@ CURVE_METRICS = ("f1", "precision", "recall", "oracle_recall")
 
 #: The balance's curves: the returned set's F-beta and its share of the best cut, with precision and recall.
 BALANCE_CURVE_METRICS = ("fbeta", "fb_share", "precision", "recall")
+
+#: What the stopping block reads at the app's stop (#3560): the objective (a run that drew its line at a
+#: balance), and AP beside it.  Never cost (#4357), so not ``stopping.DEFAULT_METRICS``.
+STOP_METRICS = (objective.OBJECTIVE, "average_precision")
 
 
 def curve_col(metric: str, floor: Any) -> str:
@@ -694,6 +706,111 @@ def run_tables(
         pd.DataFrame(pool_steps),
         pd.DataFrame(thresholds),
     )
+
+
+def _band(category: pd.Series) -> pd.Series:
+    """The size half of a ``class@band`` category; blank where there is none."""
+    return category.astype(str).str.split("@").str[1].fillna("")
+
+
+def stopping_tables(base: pd.DataFrame, cells: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """``(stops, margins)``: per run, where the app's stopping rules fired and how close each gate came (#3560).
+
+    The app announces "All quality indicators are green" the first time Smart,
+    Stable and Span are all green, and a user may stop there; the session keeps
+    clicking to the budget either way.  ``stopping.stopping_points`` reads that
+    stop and the objective there off the ordinary clicks (the end-of-run check's
+    rows are not clicks), and ``stopping.margins`` how far short each gate was
+    over the clicks it held.
+
+    **A run that never trained a detector is kept.**  It has no row to read, but
+    it is a session the rules never stopped, so it enters the fire rate as a run
+    that did not fire, censored at its last click.  Dropping it would raise the
+    fire rate by exactly the runs the review most needs to see.
+    """
+    stops = mg = pd.DataFrame()
+    ordinary = base[~_is_check(base)] if not base.empty and "phase" in base.columns else pd.DataFrame()
+    if not ordinary.empty:
+        arm = [ARMS.get((e, s), f"{e}/{s}") for e, s in zip(ordinary["embedder"], ordinary["style"], strict=True)]
+        ordinary = ordinary.assign(arm=arm)
+        keys = ("arm", *RUN_KEY)
+        stops = stopping.stopping_points(ordinary, keys=keys, metrics=STOP_METRICS)
+        mg = stopping.margins(ordinary, keys=keys)
+    starved = cells[cells["never_trained"].astype(bool)] if not cells.empty else cells
+    if not starved.empty:
+        rows = []
+        for r in starved.to_dict("records"):
+            emb, style = _ARM_OF.get(r["arm"]) or tuple(str(r["arm"]).split("/", 1))
+            rows.append(
+                {
+                    "arm": r["arm"],
+                    "dataset": r["dataset"],
+                    "category": r["category"],
+                    "embedder": emb,
+                    "style": style,
+                    "seed": int(r["seed"]),
+                    "n_steps": 0,
+                    "t_budget": int(r["final_t"]),
+                    "stopped": False,
+                    "t_stop": np.nan,
+                    "t_sustained": np.nan,
+                    "n_done_episodes": 0,
+                    "clicks_after_stop": np.nan,
+                }
+            )
+        stops = pd.concat([stops, pd.DataFrame(rows)], ignore_index=True) if not stops.empty else pd.DataFrame(rows)
+    if not stops.empty:
+        stops["stopped"] = stops["stopped"].astype(bool)
+    for df in (stops, mg):
+        if not df.empty:
+            df["band"] = _band(df["category"])
+    return stops, mg
+
+
+def stopping_md(stops: pd.DataFrame, mg: pd.DataFrame) -> list[str]:
+    """The summary's stopping block: where the app said stop, what the line scored there, and what held it."""
+    if stops.empty:
+        return []
+    # The objective where the sessions drew their line at a balance, else AP; decided on the runs, not on
+    # whether any of them fired, so a review where nothing fired still names the objective.
+    obj_at = f"{objective.OBJECTIVE}_at_stop"
+    metric = objective.OBJECTIVE if obj_at in stops.columns else "average_precision"
+    by_arm = stopping.summarise(stops, by=("arm",), metrics=STOP_METRICS)
+    out = [
+        "## Where the app said stop (#3560)",
+        "",
+        "The app announces *All quality indicators are green* the first time Smart, Stable and Span are all "
+        "green, and a user may stop there; the session keeps clicking to the budget either way. A run's **stop** "
+        "is that first click. `fired` counts the runs the rules stopped at all, and every column after it "
+        "describes only those, so read it first. The KM median carries the runs that never fired as censored "
+        "at their last click, and is blank when fewer than half fired. "
+        f"`{metric} at stop` and `at budget` are the line's {metric} at the stop and at the last click, Δ "
+        "paired within run; `short of run's best` is how far the stop fell below the best the run ever "
+        "reached, and `clicks past best` how many clicks after that best it fired (negative: before it). "
+        "The best is the top of a noisy series, so read those two together.",
+        "",
+        stopping.stopping_table(by_arm, metric=metric),
+        "",
+    ]
+    note = stopping.binding_note(by_arm)
+    if note:
+        out += [note, "", "Per band:", ""]
+    else:
+        out += ["Per band:", ""]
+    out += [stopping.stopping_table(stopping.summarise(stops, by=("arm", "band"), metrics=STOP_METRICS), metric=metric)]
+    out += [
+        "",
+        "### How close each gate came, over the clicks it held",
+        "",
+        "The median margin to green over each run's held clicks (before its stop, or all of them when it never "
+        "stopped): positive is satisfied with that much room, negative is short by that much. In brackets, the "
+        "share of held clicks the gate was green at: a margin just under zero at about half is a rule flapping, "
+        "at 0% a wall. Smart's two gates are an either-or.",
+        "",
+        stopping.margin_table(stopping.summarise_margins(mg, by=("arm",))),
+        "",
+    ]
+    return out
 
 
 def curves(
@@ -1256,6 +1373,8 @@ def summary(
     null: tuple | None = None,
     balances: pd.DataFrame | None = None,
     pools: pd.DataFrame | None = None,
+    stops: pd.DataFrame | None = None,
+    margins: pd.DataFrame | None = None,
 ) -> None:
     lines_md = ["# State of the App -- summary tables", ""]
     if not cells.empty and cells["never_trained"].any():
@@ -1312,6 +1431,8 @@ def summary(
                 _md(chk),
                 "",
             ]
+        if stops is not None:
+            lines_md += stopping_md(stops, margins if margins is not None else pd.DataFrame())
         by_band = ["text_ap", "final_ap", "ceiling_ap", "text_f1", "final_f1", "ceiling_f1", "positives_found"]
         lines_md += ["## Per path and band", "", _md(cells.groupby(["arm", "band"])[by_band].mean().round(3)), ""]
         band_line = lines[(lines["point"] == "final") & (lines["floor"] == 0.5)]
@@ -1433,7 +1554,20 @@ def main() -> int:
     det.to_csv(args.out / "image_detector.csv", index=False)
     if not inf.empty:
         harmful_pairs(inf).to_csv(args.out / "harmful_pairs.csv", index=False)
-    summary(cells, lines, img, args.out, image_null(inf) if not inf.empty else None, balances=balances, pools=pools)
+    stops, margins = stopping_tables(base, cells)
+    stops.to_csv(args.out / "stops.csv", index=False)
+    margins.to_csv(args.out / "margins.csv", index=False)
+    summary(
+        cells,
+        lines,
+        img,
+        args.out,
+        image_null(inf) if not inf.empty else None,
+        balances=balances,
+        pools=pools,
+        stops=stops,
+        margins=margins,
+    )
     n_frames = "no rank frames" if frames.empty else f"{len(frames)} rank frames"
     print(f"{len(cells)} runs, {len(inf)} credited clicks, {len(img)} images, {n_frames} -> {args.out}")
     return 0
