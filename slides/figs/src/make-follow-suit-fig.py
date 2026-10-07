@@ -151,7 +151,7 @@ def _figure(curves: dict, today: bool) -> Figure:
                     va="center", clip_on=False)  # fmt: skip
         # The notch: the typed query, where both lines start.
         ax.plot([0], [float(xy[0])], marker="o", color=INK, markersize=8, zorder=5, clip_on=False)
-    fig.text(left - 0.075, (top + bottom) / 2, r"$\mathregular{F_\beta}$ at the row's β", rotation=90, ha="center",
+    fig.text(left - 0.075, (top + bottom) / 2, "Fβ at the row's β", rotation=90, ha="center",
              va="center", fontsize=17)  # fmt: skip
     return fig
 

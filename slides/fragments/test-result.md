@@ -12,7 +12,7 @@
      picks, laid out as the pane lays it out. -->
 
 <!-- **a** — The headline is the balance: F-beta at the radio's β, here 1,
-     so F₁, 0.54, likely 0.35–0.67. It is the one number that weighs the two
+     so F1, 0.54, likely 0.35–0.67. It is the one number that weighs the two
      mistakes the way the radio does. Right, likely
      44–66%. Found in words, about half of them found, with its range: words,
      because below the line the model is helping. The chart is Precision by

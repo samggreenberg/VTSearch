@@ -25,7 +25,7 @@
      sure and the band is biggest, upward: 2, 4 and 4 of 5. -->
 
 <!-- **c** — Round 4, the allocation rule: which band's next round would
-     narrow the F₁ range most, averaged over what that round could find?
+     narrow the F1 range most, averaged over what that round could find?
      0.078 for the 16, against 0.041 and 0.019 for the eights. It is the
      greedy face of Neyman allocation: picks go where a band is big and
      unsure. 1 of 5, and that is 20 picks, the phase's budget. -->

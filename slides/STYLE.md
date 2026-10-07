@@ -52,6 +52,11 @@ Helvetica headline looks like it was pasted in from a different document.
 An underscore is fine inside a backticked identifier — `rule_inefficiency` is
 the literal name of a column, not a subscript, and code type says so.
 
+**Except the F-scores: F1, Fβ, F4, F¼, never subscripted** (owner, 2026-10-07:
+"we don't write F_1; we write F1"). The same goes for slide text, figure labels and
+notes. ¼ keeps its fraction glyph. The notes may still spell it "F-beta" where a
+speaker says it aloud.
+
 <!-- item-sep -->
 
 ## Colour means something; emphasis does not use colour

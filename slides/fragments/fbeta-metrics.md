@@ -24,12 +24,12 @@
      easy to max: return everything and recall is 1; return one sure book and
      precision is 1. -->
 
-<!-- **c** — F₁ is their harmonic mean. Unlike the plain average, it is high
-     only when both are: precision 1 and recall 0.1 average 0.55, and F₁ is
-     0.18. Here both are 0.80, so F₁ is 0.80. -->
+<!-- **c** — F1 is their harmonic mean. Unlike the plain average, it is high
+     only when both are: precision 1 and recall 0.1 average 0.55, and F1 is
+     0.18. Here both are 0.80, so F1 is 0.80. -->
 
 <!-- **d** — F-beta is the same mean with recall weighted β times as heavily
-     as precision: β = 1 is F₁, β above 1 leans to recall, below 1 to
+     as precision: β = 1 is F1, β above 1 leans to recall, below 1 to
      precision. The second line is the same score in counts, the form the next
      two slides evaluate. Spread out, its bottom is (1 + β²)·hits + β²·misses
      + false alarms, so a miss weighs β² false alarms. -->

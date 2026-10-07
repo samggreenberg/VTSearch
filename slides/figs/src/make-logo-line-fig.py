@@ -91,8 +91,8 @@ CLASSES, MAX_VOTES = 36, 50
 plt.rcParams.update(
     {
         "font.family": ["DejaVu Sans"],
-        # F₁'s subscript is set as mathtext, in the figure's own face, as on
-        # F-ing Metrics (`make-calib-figs._sub`).
+        # Any mathtext is set in the figure's own face, as on F-ing Metrics
+        # (`make-calib-figs._sub`). F1 itself has no subscript (owner, 2026-10-07).
         "mathtext.fontset": "dejavusans",
         "font.size": 17,
         "text.color": INK,
@@ -156,7 +156,9 @@ def _spread(ys: list[float], gap: float) -> list[float]:
     return out.tolist()
 
 
-YLIM = (0.3, 1.0)
+#: The F1 axis, cut to the 0.2 bands the lines use (owner, 2026-10-07: keep "any width-0.2 region
+#: that gets used"): the lowest line, the 8-inliers rule, bottoms out near 0.42.
+YLIM = (0.4, 1.0)
 
 
 def _styles() -> dict[str, dict]:
@@ -182,9 +184,9 @@ def _figure(lines: dict[str, tuple[np.ndarray, np.ndarray]], label_y: dict[str, 
     ax.yaxis.grid(True, color="#e3e7ec", lw=1.0)
     ax.set_axisbelow(True)
     ax.set_xlabel("Votes")
-    # Two characters read upright; turned on its side, F₁ is a thing to tilt
+    # Two characters read upright; turned on its side, F1 is a thing to tilt
     # your head at.
-    ax.set_ylabel(r"$\mathregular{F_1}$", rotation=0, ha="right", va="center", labelpad=12)
+    ax.set_ylabel("F1", rotation=0, ha="right", va="center", labelpad=12)
 
     shown = [("oracle", ORACLE_LABEL)] + [(key, label) for key, label, _ in RULES[:k]]
     for key, label in shown:
