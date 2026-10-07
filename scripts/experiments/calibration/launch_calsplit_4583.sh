@@ -22,9 +22,15 @@
 # Every arm is its own trajectory (the knobs move the line, the line moves the
 # questions); arms pair on (category, seed), same commit for all twelve.
 #
-# The region contrast the issue also asks for (siglip+dinov3_patch, max_patch,
-# 0.3 vs 0.5 at beta 1) needs its own prepare and costs ~2 h / 17 GB a cell; it
-# is a second phase, launched after this binary grid is read.
+# REGION (phase 2).  The issue's region contrast: siglip+dinov3_patch, max_patch,
+# beta 1, the shipped 0.5 (the patch space's default) against 0.3, which #4582's
+# re-score found better at beta <= 1 above the old line.  #4219's 72 classes
+# (the hardest and easiest quartiles) x 2 seeds, because a region cell costs
+# ~2 h and ~17 GB (#4219).  Its own prepare; one cell per task.
+#   bash launch_calsplit_4583.sh region-prepare   # ONCE
+#   bash launch_calsplit_4583.sh region-size      # time one cell of r_f05_b1
+#   bash launch_calsplit_4583.sh region           # both arms
+#   bash launch_calsplit_4583.sh region-status
 #
 # BUNDLED TASKS.  12 x 720 = 8,640 cells is over the per-user 2,000-task submit
 # cap (MaxSubmitPU counts array tasks).  Each array task runs BUNDLE cells
@@ -170,7 +176,76 @@ submit_bundled() { # arm n_tasks array_spec
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && $body"
 }
 
+# --- region (phase 2) -------------------------------------------------------------
+REGION_ARMS="r_f05_b1 r_f03_b1"
+region_env() {
+  export CALIB_COCO_BETTER_EMBEDDERS=siglip+dinov3_patch
+  export CALIB_CATEGORY_FILE="$WT/docs/experiments/2026-09-28-head-switch-4219/region_categories.txt"
+  export CALIB_N_SEEDS="${REGION_SEEDS:-2}"
+  unset CALIB_CALIBRATION_FRACTION CALIB_CALIBRATE_COUNT CALIB_BETA
+  ARM_DIVERGES=""
+  case "${1:-}" in
+    r_f05_b1 | prepare | sizing) ;;
+    r_f03_b1) export CALIB_CALIBRATION_FRACTION=0.3 && ARM_DIVERGES=calibration_fraction ;;
+    *) echo "unknown region arm '$1'; expected one of: $REGION_ARMS" >&2 && exit 2 ;;
+  esac
+  BASE="$BASE/region"
+  LADDER="$BASE"
+  MEM="${REGION_MEM:-20G}"
+  TIME="${REGION_TIME:-5:00:00}"
+  CONC="${REGION_CONC:-25}"
+  BUNDLE=1
+}
+
 case "$MODE" in
+  region-prepare)
+    region_env prepare
+    set_exp prepare
+    P=$(sbatch --parsable --job-name=calsplit4583-region-prep --mem=32G --cpus-per-task=2 \
+      --time=3:00:00 --partition=cpu --export=ALL --output="$CALIB_EXP/logs/prepare-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+    require_jobid "$P" "region prepare"
+    echo "region prepare job: $P -> $CALIB_EXP/logs/prepare-$P.out"
+    ;;
+
+  region-size)
+    region_env sizing
+    set_exp sizing
+    link_prepare
+    J=$(sbatch --parsable --job-name=calsplit4583-region-size --mem="$MEM" --cpus-per-task=1 --time="$TIME" \
+      --partition=cpu --export=ALL --output="$CALIB_EXP/logs/size-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index 0 --outdir $CALIB_RESULTS/cells")
+    require_jobid "$J" "region size"
+    echo "region size job $J; then sacct -j $J --format=Elapsed,MaxRSS,State"
+    ;;
+
+  region)
+    for a in $REGION_ARMS; do
+      (
+        region_env "$a"
+        set_exp "$a"
+        link_prepare
+        N=$(grid_size)
+        [[ "$N" =~ ^[0-9]+$ && "$N" -gt 0 ]] || {
+          echo "ERROR: cell count '$N' for $a" >&2
+          exit 1
+        }
+        run_preflight
+        J=$(submit_bundled "$N" "$N" "0-$((N - 1))%$CONC")
+        require_jobid "$J" "$a"
+        echo "$a: $N cells, one per task -> job $J"
+      ) || exit 1
+    done
+    ;;
+
+  region-status)
+    for a in $REGION_ARMS; do
+      d="$BASE/region/$a/results/cells"
+      n="$(find "$d" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null | wc -l)"
+      printf '%-9s %4s cells written\n' "$a" "$n"
+    done
+    ;;
+
   plan)
     for a in $ALL_ARMS; do
       arm_env "$a"
@@ -228,7 +303,7 @@ case "$MODE" in
     ;;
 
   *)
-    echo "usage: $0 {plan|size [ARM]|arms [ARM..]|status}" >&2
+    echo "usage: $0 {plan|size [ARM]|arms [ARM..]|status|region-prepare|region-size|region|region-status}" >&2
     exit 2
     ;;
 esac
