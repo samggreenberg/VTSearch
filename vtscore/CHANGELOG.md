@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
+  now returns the score where the labels line's corpus posterior falls below the new
+  `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new
+  `target_precision_threshold(line, p)` read off `ctx.labels_line`; the line - 4 re-cut
+  (`ACQUISITION_INCLUSION_OFFSET`, unchanged) is its fallback with no labels line. Set the
+  constant to `None` to restore the re-cut. The eval harness's default arm follows
+  (`resolve_acquisition_target`); `simulate_voting_iterations` takes `acq_target_p` (`None` = the app,
+  `"off"` = the offset cut, a number pins it) and `acq_origin` (`"line"`, or `"inclusion"`: the old
+  Inclusion-knob origin for the offset). Priced in `docs/experiments/2026-10-07-acquisition-cut-3546/`.
+
 - **A typed-query sort's display line takes the balance** (issue #4603).
   `text_sort_cuts(scores, rule=None, beta=None)` and `text_sort_threshold(..., beta=None)`:
   at `beta <= TEXT_SORT_COUNT_MAX_BETA` (1) the guarded rule draws the line by count

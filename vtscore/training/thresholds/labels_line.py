@@ -393,6 +393,31 @@ def corpus_posteriors(
     return r1
 
 
+def target_precision_threshold(line: "LabelsLine | None", p: float) -> float | None:
+    """The score where *line*'s corpus posterior falls below *p*: Autopilot samples where picks are *p* positive (#3546).
+
+    *line*'s unvoted scores are best first, and its ``unvoted_posteriors`` are
+    each one's chance of being a positive under the 3-part corpus fit the line
+    is cut on (:func:`corpus_posteriors`; computed here for a line built by
+    hand).  The cut is the first (highest) score whose posterior is below *p*;
+    if every item is at least *p*, the deepest score; if none is, the top one.
+    It states acquisition in the line's own terms, so neither the Inclusion
+    step's shortfall nor the fold-anchored scale's saturation can reach it.
+    ``None`` with no line or no unvoted score.
+    """
+    if line is None or line.unvoted_scores is None:
+        return None
+    scores = np.asarray(line.unvoted_scores, dtype=np.float64)
+    if scores.size == 0:
+        return None
+    kept = line.unvoted_posteriors
+    post = np.asarray(kept, dtype=np.float64) if kept is not None and len(kept) == scores.size else None
+    if post is None:
+        post = corpus_posteriors(line.model, scores)
+    below = np.flatnonzero(post < p)
+    return float(scores[below[0] if below.size else scores.size - 1])
+
+
 def estimate_positives(model: ClassScoreModel, unvoted_scores: Any, n_good: int, prior: float | None = None) -> float:
     """How many positives a corpus holds: its Good votes plus the EM estimate among its unvoted items (:func:`fit_corpus`)."""
     del prior  # the corpus fit starts from a fixed small share

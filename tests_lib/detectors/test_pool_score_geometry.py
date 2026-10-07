@@ -168,6 +168,11 @@ class TestPoolPercentilesLocateTheCut:
         steps below the reporting one, which *raises* it - so it can only sit
         further up the ranking, i.e. at a percentile at or above the reporting
         cut's.  Measured in mismatched spaces this said nothing.
+
+        The ordering is the offset re-cut's, so the arm is run on it
+        (``acq_target_p="off"``): since #3546 the default cut under a balance is
+        the labels line's target pick precision, which sits wherever the
+        posterior crosses 0.5 and can fall on either side of the line.
         """
         medias, target = _planted_dataset(n_per_cat=20, seed=42)
         seed_scores = resolve_style("max_patch").exemplar_sims(medias, target)
@@ -181,6 +186,7 @@ class TestPoolPercentilesLocateTheCut:
             style="max_patch",
             seed_scores=seed_scores,
             atlas_min_node_size=5,
+            acq_target_p="off",
         )
         assert rows
         for r in rows:

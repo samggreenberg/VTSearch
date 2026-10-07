@@ -1,0 +1,101 @@
+{
+  "arms": {
+    "ctl_b025": {
+      "load": "430/432 cells with data, 56,313 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "ctl_b1": {
+      "load": "430/432 cells with data, 56,037 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "ctl_b4": {
+      "load": "430/432 cells with data, 56,105 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "line_b025": {
+      "load": "430/432 cells with data, 54,070 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "line_b1": {
+      "load": "430/432 cells with data, 53,326 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "line_b4": {
+      "load": "430/432 cells with data, 55,041 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "off2_b025": {
+      "load": "430/432 cells with data, 56,261 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "off2_b1": {
+      "load": "430/432 cells with data, 56,183 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "off2_b4": {
+      "load": "430/432 cells with data, 56,621 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "off6_b025": {
+      "load": "430/432 cells with data, 56,327 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "off6_b1": {
+      "load": "430/432 cells with data, 56,054 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "off6_b4": {
+      "load": "430/432 cells with data, 56,015 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "pin985_b025": {
+      "load": "430/432 cells with data, 55,637 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "pin985_b1": {
+      "load": "430/432 cells with data, 55,351 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "pin985_b4": {
+      "load": "430/432 cells with data, 55,547 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "inc0_b025": {
+      "load": "430/432 cells with data, 58,256 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "inc0_b1": {
+      "load": "430/432 cells with data, 58,076 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "inc0_b4": {
+      "load": "430/432 cells with data, 58,262 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "tp50_b025": {
+      "load": "430/432 cells with data, 54,141 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "tp50_b1": {
+      "load": "430/432 cells with data, 53,996 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "tp50_b4": {
+      "load": "430/432 cells with data, 53,424 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "tp25_b025": {
+      "load": "430/432 cells with data, 53,949 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "tp25_b1": {
+      "load": "430/432 cells with data, 53,843 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "tp25_b4": {
+      "load": "430/432 cells with data, 53,335 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    }
+  },
+  "problems": []
+}

@@ -291,6 +291,22 @@ ACQUISITION_INCLUSION_OFFSET = -4
 #: the factor as a knob for the re-pricing (#4428).
 ACQUISITION_ARGMAX_FACTOR: float | None = None
 
+#: Under the balance, Autopilot's ``hard`` / ``new`` picks sample where the
+#: labels line's corpus posterior falls below this share (#3546,
+#: :func:`~vtscore.training.thresholds.labels_line.target_precision_threshold`):
+#: the items the line's own model thinks are even odds.  It replaces the line -
+#: 4 re-cut, which under the balance had become a rank pin nobody chose (near
+#: the 98.5th pool percentile at every preset, flat from vote 50 to 150).
+#: Priced on today's app, coco_better, 1% pool, 3 seeds, against line - 4
+#: (``docs/experiments/2026-10-07-acquisition-cut-3546/REPORT.md``): Goods by
+#: vote 150 +3.0 / +3.0 / +3.8 at beta 1/4 / 1 / 4, Hard picks Good 38% at every
+#: preset (was 19-24%), AP +0.012 to +0.016, the objective at vote 150 +0.012 to
+#: +0.019 and after the check +0.000 / +0.003 / +0.008; never resolvably worse.
+#: 0.25 was close but behind on every read; sampling at the line itself lost 3.7
+#: Goods at beta 4.  ``None`` restores the line - 4 re-cut, which stays the
+#: fallback for a detector with no labels line.
+ACQUISITION_TARGET_PRECISION: float | None = 0.5
+
 
 def acquisition_inclusion(inclusion_value: float, offset: float = ACQUISITION_INCLUSION_OFFSET) -> float:
     """The inclusion the **selector's** cut is taken at, given the reporting one.

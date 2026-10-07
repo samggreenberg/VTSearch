@@ -313,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
-        f"acq_p_crossing={cfg.ACQ_P_CROSSING} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
@@ -435,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
             acq_inclusion_offset=cfg.ACQ_INCLUSION_OFFSET,
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
             acq_p_crossing=cfg.ACQ_P_CROSSING,
+            acq_origin=cfg.ACQ_ORIGIN,
+            acq_target_p=cfg.ACQ_TARGET_P,
             walk_picks=cfg.WALK_PICKS,
             walk_tol=cfg.WALK_TOL,
             walk_fine=cfg.WALK_FINE,

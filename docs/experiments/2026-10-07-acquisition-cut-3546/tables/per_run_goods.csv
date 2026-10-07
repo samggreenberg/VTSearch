@@ -1,0 +1,1291 @@
+beta,category,seed,ctl,tp50
+b025,airplane@large,0,55.0,25.0
+b025,airplane@large,1,53.0,42.0
+b025,airplane@large,2,54.0,22.0
+b025,airplane@medium,0,43.0,36.0
+b025,airplane@medium,1,52.0,41.0
+b025,airplane@medium,2,43.0,26.0
+b025,airplane@small,0,31.0,36.0
+b025,airplane@small,1,28.0,38.0
+b025,airplane@small,2,37.0,39.0
+b025,apple@large,0,46.0,48.0
+b025,apple@large,1,45.0,47.0
+b025,apple@large,2,49.0,50.0
+b025,apple@medium,0,27.0,39.0
+b025,apple@medium,1,31.0,38.0
+b025,apple@medium,2,32.0,39.0
+b025,bag or luggage@large,0,24.0,45.0
+b025,bag or luggage@large,1,32.0,43.0
+b025,bag or luggage@large,2,27.0,37.0
+b025,bag or luggage@medium,0,16.0,18.0
+b025,bag or luggage@medium,1,15.0,16.0
+b025,bag or luggage@medium,2,17.0,14.0
+b025,bag or luggage@small,0,7.0,5.0
+b025,bag or luggage@small,1,6.0,7.0
+b025,bag or luggage@small,2,4.0,6.0
+b025,banana@large,0,41.0,46.0
+b025,banana@large,1,40.0,41.0
+b025,banana@large,2,43.0,46.0
+b025,banana@medium,0,24.0,46.0
+b025,banana@medium,1,25.0,33.0
+b025,banana@medium,2,26.0,41.0
+b025,baseball bat@large,0,41.0,32.0
+b025,baseball bat@large,1,49.0,37.0
+b025,baseball bat@large,2,49.0,49.0
+b025,baseball bat@medium,0,47.0,23.0
+b025,baseball bat@medium,1,46.0,28.0
+b025,baseball bat@medium,2,51.0,32.0
+b025,baseball bat@small,0,40.0,34.0
+b025,baseball bat@small,1,51.0,25.0
+b025,baseball bat@small,2,47.0,30.0
+b025,bench@large,0,29.0,44.0
+b025,bench@large,1,33.0,47.0
+b025,bench@large,2,28.0,42.0
+b025,bench@medium,0,12.0,14.0
+b025,bench@medium,1,15.0,15.0
+b025,bench@medium,2,19.0,21.0
+b025,bench@small,0,1.0,1.0
+b025,bench@small,1,1.0,1.0
+b025,bench@small,2,2.0,2.0
+b025,bicycle@large,0,31.0,50.0
+b025,bicycle@large,1,45.0,43.0
+b025,bicycle@large,2,39.0,51.0
+b025,bicycle@medium,0,22.0,26.0
+b025,bicycle@medium,1,33.0,40.0
+b025,bicycle@medium,2,25.0,29.0
+b025,bicycle@small,0,7.0,8.0
+b025,bicycle@small,1,12.0,16.0
+b025,bicycle@small,2,6.0,6.0
+b025,bird@large,0,52.0,48.0
+b025,bird@large,1,44.0,41.0
+b025,bird@large,2,44.0,39.0
+b025,bird@medium,0,31.0,44.0
+b025,bird@medium,1,40.0,52.0
+b025,bird@medium,2,40.0,51.0
+b025,bird@small,0,20.0,19.0
+b025,bird@small,1,20.0,21.0
+b025,bird@small,2,17.0,14.0
+b025,boat@large,0,37.0,40.0
+b025,boat@large,1,39.0,54.0
+b025,boat@large,2,36.0,50.0
+b025,boat@medium,0,37.0,42.0
+b025,boat@medium,1,23.0,48.0
+b025,boat@medium,2,30.0,42.0
+b025,boat@small,0,28.0,30.0
+b025,boat@small,1,27.0,32.0
+b025,boat@small,2,20.0,30.0
+b025,book@large,0,22.0,47.0
+b025,book@large,1,21.0,47.0
+b025,book@large,2,31.0,45.0
+b025,book@medium,0,8.0,12.0
+b025,book@medium,1,9.0,8.0
+b025,book@medium,2,15.0,15.0
+b025,book@small,0,10.0,9.0
+b025,book@small,1,13.0,12.0
+b025,book@small,2,9.0,7.0
+b025,bottle@large,0,30.0,37.0
+b025,bottle@large,1,22.0,34.0
+b025,bottle@large,2,38.0,47.0
+b025,bottle@medium,0,13.0,13.0
+b025,bottle@medium,1,16.0,17.0
+b025,bottle@medium,2,10.0,13.0
+b025,bottle@small,0,3.0,3.0
+b025,bottle@small,1,3.0,3.0
+b025,bottle@small,2,3.0,4.0
+b025,bowl@large,0,26.0,30.0
+b025,bowl@large,1,33.0,39.0
+b025,bowl@large,2,33.0,33.0
+b025,bowl@medium,0,12.0,19.0
+b025,bowl@medium,1,14.0,20.0
+b025,bowl@medium,2,14.0,19.0
+b025,bowl@small,0,1.0,1.0
+b025,bowl@small,2,2.0,2.0
+b025,bus@large,0,37.0,52.0
+b025,bus@large,1,40.0,50.0
+b025,bus@large,2,43.0,56.0
+b025,bus@medium,0,23.0,29.0
+b025,bus@medium,1,27.0,29.0
+b025,bus@medium,2,22.0,26.0
+b025,bus@small,0,15.0,21.0
+b025,bus@small,1,17.0,21.0
+b025,bus@small,2,18.0,16.0
+b025,cell phone@large,0,37.0,43.0
+b025,cell phone@large,1,47.0,46.0
+b025,cell phone@large,2,48.0,39.0
+b025,cell phone@medium,0,27.0,38.0
+b025,cell phone@medium,1,26.0,33.0
+b025,cell phone@medium,2,37.0,38.0
+b025,cell phone@small,0,13.0,17.0
+b025,cell phone@small,1,18.0,20.0
+b025,cell phone@small,2,13.0,18.0
+b025,chair@large,0,21.0,20.0
+b025,chair@large,1,16.0,19.0
+b025,chair@large,2,19.0,21.0
+b025,chair@medium,0,7.0,14.0
+b025,chair@medium,1,5.0,8.0
+b025,chair@medium,2,5.0,6.0
+b025,chair@small,0,1.0,1.0
+b025,chair@small,2,2.0,2.0
+b025,clock@large,0,41.0,39.0
+b025,clock@large,1,50.0,29.0
+b025,clock@large,2,40.0,43.0
+b025,clock@medium,0,33.0,37.0
+b025,clock@medium,1,28.0,36.0
+b025,clock@medium,2,38.0,34.0
+b025,clock@small,0,9.0,15.0
+b025,clock@small,1,8.0,15.0
+b025,clock@small,2,11.0,20.0
+b025,dining table@large,0,21.0,24.0
+b025,dining table@large,1,21.0,22.0
+b025,dining table@large,2,27.0,29.0
+b025,dining table@medium,0,22.0,21.0
+b025,dining table@medium,1,25.0,28.0
+b025,dining table@medium,2,22.0,24.0
+b025,dining table@small,0,13.0,14.0
+b025,dining table@small,1,5.0,8.0
+b025,dining table@small,2,11.0,11.0
+b025,dog@large,0,45.0,43.0
+b025,dog@large,1,39.0,35.0
+b025,dog@large,2,48.0,42.0
+b025,dog@medium,0,38.0,40.0
+b025,dog@medium,1,31.0,43.0
+b025,dog@medium,2,26.0,40.0
+b025,dog@small,0,11.0,14.0
+b025,dog@small,1,8.0,13.0
+b025,dog@small,2,8.0,10.0
+b025,enclosed road vehicle@large,0,31.0,32.0
+b025,enclosed road vehicle@large,1,27.0,35.0
+b025,enclosed road vehicle@large,2,33.0,32.0
+b025,enclosed road vehicle@medium,0,16.0,20.0
+b025,enclosed road vehicle@medium,1,15.0,16.0
+b025,enclosed road vehicle@medium,2,14.0,16.0
+b025,enclosed road vehicle@small,0,13.0,18.0
+b025,enclosed road vehicle@small,1,3.0,3.0
+b025,enclosed road vehicle@small,2,10.0,17.0
+b025,fire hydrant@large,0,47.0,41.0
+b025,fire hydrant@large,1,43.0,39.0
+b025,fire hydrant@large,2,40.0,32.0
+b025,fire hydrant@medium,0,35.0,35.0
+b025,fire hydrant@medium,1,23.0,42.0
+b025,fire hydrant@medium,2,32.0,35.0
+b025,fire hydrant@small,0,26.0,27.0
+b025,fire hydrant@small,1,17.0,26.0
+b025,fire hydrant@small,2,22.0,24.0
+b025,fork@large,0,39.0,46.0
+b025,fork@large,1,34.0,36.0
+b025,fork@large,2,45.0,46.0
+b025,fork@medium,0,27.0,28.0
+b025,fork@medium,1,34.0,35.0
+b025,fork@medium,2,25.0,25.0
+b025,fork@small,0,14.0,16.0
+b025,fork@small,1,27.0,33.0
+b025,fork@small,2,23.0,27.0
+b025,frisbee@large,0,39.0,41.0
+b025,frisbee@large,1,41.0,42.0
+b025,frisbee@large,2,40.0,48.0
+b025,frisbee@medium,0,34.0,51.0
+b025,frisbee@medium,1,37.0,55.0
+b025,frisbee@medium,2,34.0,54.0
+b025,frisbee@small,0,33.0,50.0
+b025,frisbee@small,1,33.0,43.0
+b025,frisbee@small,2,39.0,50.0
+b025,keyboard@large,0,41.0,42.0
+b025,keyboard@large,1,43.0,46.0
+b025,keyboard@large,2,40.0,45.0
+b025,keyboard@medium,0,37.0,44.0
+b025,keyboard@medium,1,36.0,47.0
+b025,keyboard@medium,2,32.0,37.0
+b025,keyboard@small,0,10.0,22.0
+b025,keyboard@small,1,14.0,24.0
+b025,keyboard@small,2,12.0,12.0
+b025,kite@large,0,53.0,35.0
+b025,kite@large,1,47.0,44.0
+b025,kite@large,2,37.0,35.0
+b025,kite@medium,0,45.0,50.0
+b025,kite@medium,1,45.0,50.0
+b025,kite@medium,2,38.0,49.0
+b025,kite@small,0,41.0,53.0
+b025,kite@small,1,34.0,45.0
+b025,kite@small,2,36.0,46.0
+b025,knife@large,0,23.0,28.0
+b025,knife@large,1,31.0,23.0
+b025,knife@large,2,26.0,25.0
+b025,knife@medium,0,11.0,26.0
+b025,knife@medium,1,11.0,3.0
+b025,knife@medium,2,20.0,20.0
+b025,knife@small,0,1.0,1.0
+b025,knife@small,1,3.0,5.0
+b025,knife@small,2,2.0,2.0
+b025,laptop@large,0,34.0,55.0
+b025,laptop@large,1,40.0,52.0
+b025,laptop@large,2,40.0,47.0
+b025,laptop@medium,0,31.0,36.0
+b025,laptop@medium,1,27.0,30.0
+b025,laptop@medium,2,26.0,39.0
+b025,laptop@small,0,7.0,6.0
+b025,laptop@small,1,6.0,6.0
+b025,laptop@small,2,5.0,5.0
+b025,microwave@large,0,40.0,42.0
+b025,microwave@large,1,30.0,40.0
+b025,microwave@large,2,39.0,44.0
+b025,microwave@medium,0,34.0,35.0
+b025,microwave@medium,1,25.0,38.0
+b025,microwave@medium,2,32.0,34.0
+b025,microwave@small,0,24.0,28.0
+b025,microwave@small,1,30.0,29.0
+b025,microwave@small,2,9.0,9.0
+b025,motorcycle@large,0,40.0,45.0
+b025,motorcycle@large,1,39.0,28.0
+b025,motorcycle@large,2,44.0,44.0
+b025,motorcycle@medium,0,23.0,39.0
+b025,motorcycle@medium,1,25.0,39.0
+b025,motorcycle@medium,2,21.0,45.0
+b025,motorcycle@small,0,10.0,20.0
+b025,motorcycle@small,1,17.0,18.0
+b025,motorcycle@small,2,12.0,17.0
+b025,mouse@large,0,49.0,53.0
+b025,mouse@large,1,43.0,51.0
+b025,mouse@large,2,42.0,46.0
+b025,mouse@medium,0,35.0,35.0
+b025,mouse@medium,1,43.0,46.0
+b025,mouse@medium,2,48.0,55.0
+b025,mouse@small,0,26.0,42.0
+b025,mouse@small,1,29.0,40.0
+b025,mouse@small,2,30.0,40.0
+b025,orange@large,0,50.0,39.0
+b025,orange@large,1,40.0,44.0
+b025,orange@large,2,43.0,51.0
+b025,orange@medium,0,23.0,29.0
+b025,orange@medium,1,29.0,43.0
+b025,orange@medium,2,29.0,51.0
+b025,parking meter@large,0,40.0,55.0
+b025,parking meter@large,1,28.0,48.0
+b025,parking meter@large,2,26.0,47.0
+b025,parking meter@medium,0,32.0,32.0
+b025,parking meter@medium,1,36.0,37.0
+b025,parking meter@medium,2,36.0,37.0
+b025,parking meter@small,0,15.0,15.0
+b025,parking meter@small,1,18.0,18.0
+b025,parking meter@small,2,16.0,23.0
+b025,person@large,0,45.0,29.0
+b025,person@large,1,34.0,36.0
+b025,person@large,2,44.0,36.0
+b025,person@medium,0,15.0,32.0
+b025,person@medium,1,16.0,32.0
+b025,person@medium,2,21.0,30.0
+b025,person@small,0,1.0,1.0
+b025,person@small,1,1.0,1.0
+b025,person@small,2,1.0,1.0
+b025,remote@large,0,34.0,45.0
+b025,remote@large,1,34.0,48.0
+b025,remote@large,2,41.0,53.0
+b025,remote@medium,0,36.0,47.0
+b025,remote@medium,1,33.0,36.0
+b025,remote@medium,2,34.0,36.0
+b025,remote@small,0,27.0,32.0
+b025,remote@small,1,15.0,23.0
+b025,remote@small,2,18.0,29.0
+b025,scissors@large,0,49.0,39.0
+b025,scissors@large,1,42.0,52.0
+b025,scissors@large,2,41.0,46.0
+b025,scissors@medium,0,34.0,37.0
+b025,scissors@medium,1,26.0,26.0
+b025,scissors@medium,2,29.0,34.0
+b025,scissors@small,0,17.0,19.0
+b025,scissors@small,1,14.0,15.0
+b025,scissors@small,2,14.0,9.0
+b025,single serving drinking vessel@large,0,37.0,45.0
+b025,single serving drinking vessel@large,1,47.0,49.0
+b025,single serving drinking vessel@large,2,33.0,51.0
+b025,single serving drinking vessel@medium,0,24.0,31.0
+b025,single serving drinking vessel@medium,1,30.0,36.0
+b025,single serving drinking vessel@medium,2,31.0,30.0
+b025,single serving drinking vessel@small,0,6.0,6.0
+b025,single serving drinking vessel@small,1,9.0,11.0
+b025,single serving drinking vessel@small,2,11.0,18.0
+b025,sink@large,0,39.0,49.0
+b025,sink@large,1,49.0,52.0
+b025,sink@large,2,41.0,46.0
+b025,sink@medium,0,34.0,39.0
+b025,sink@medium,1,27.0,34.0
+b025,sink@medium,2,32.0,38.0
+b025,sink@small,0,13.0,19.0
+b025,sink@small,1,9.0,32.0
+b025,sink@small,2,18.0,26.0
+b025,skateboard@large,0,53.0,25.0
+b025,skateboard@large,1,50.0,28.0
+b025,skateboard@large,2,53.0,28.0
+b025,skateboard@medium,0,48.0,31.0
+b025,skateboard@medium,1,49.0,30.0
+b025,skateboard@medium,2,45.0,41.0
+b025,skateboard@small,0,41.0,54.0
+b025,skateboard@small,1,34.0,47.0
+b025,skateboard@small,2,35.0,47.0
+b025,skis@large,0,46.0,38.0
+b025,skis@large,1,44.0,44.0
+b025,skis@large,2,44.0,44.0
+b025,skis@medium,0,43.0,43.0
+b025,skis@medium,1,51.0,52.0
+b025,skis@medium,2,50.0,36.0
+b025,skis@small,0,46.0,47.0
+b025,skis@small,1,50.0,52.0
+b025,skis@small,2,59.0,58.0
+b025,snowboard@large,0,55.0,57.0
+b025,snowboard@large,1,49.0,54.0
+b025,snowboard@large,2,45.0,49.0
+b025,snowboard@medium,0,46.0,54.0
+b025,snowboard@medium,1,51.0,52.0
+b025,snowboard@medium,2,35.0,39.0
+b025,snowboard@small,0,45.0,46.0
+b025,snowboard@small,1,36.0,38.0
+b025,snowboard@small,2,45.0,47.0
+b025,spoon@large,0,40.0,43.0
+b025,spoon@large,1,41.0,39.0
+b025,spoon@large,2,41.0,41.0
+b025,spoon@medium,0,20.0,23.0
+b025,spoon@medium,1,28.0,27.0
+b025,spoon@medium,2,20.0,24.0
+b025,spoon@small,0,4.0,4.0
+b025,spoon@small,1,4.0,5.0
+b025,spoon@small,2,5.0,5.0
+b025,stop sign@large,0,53.0,52.0
+b025,stop sign@large,1,44.0,51.0
+b025,stop sign@large,2,41.0,42.0
+b025,stop sign@medium,0,38.0,48.0
+b025,stop sign@medium,1,27.0,35.0
+b025,stop sign@medium,2,37.0,42.0
+b025,stop sign@small,0,5.0,6.0
+b025,stop sign@small,1,9.0,12.0
+b025,stop sign@small,2,6.0,7.0
+b025,surfboard@large,0,39.0,43.0
+b025,surfboard@large,1,49.0,37.0
+b025,surfboard@large,2,41.0,33.0
+b025,surfboard@medium,0,46.0,53.0
+b025,surfboard@medium,1,54.0,56.0
+b025,surfboard@medium,2,46.0,36.0
+b025,surfboard@small,0,43.0,52.0
+b025,surfboard@small,1,37.0,37.0
+b025,surfboard@small,2,46.0,52.0
+b025,tennis racket@large,0,53.0,22.0
+b025,tennis racket@large,1,53.0,24.0
+b025,tennis racket@large,2,45.0,27.0
+b025,tennis racket@medium,0,38.0,22.0
+b025,tennis racket@medium,1,47.0,24.0
+b025,tennis racket@medium,2,53.0,25.0
+b025,tennis racket@small,0,52.0,26.0
+b025,tennis racket@small,1,44.0,27.0
+b025,tennis racket@small,2,48.0,21.0
+b025,tie@large,0,40.0,44.0
+b025,tie@large,1,41.0,44.0
+b025,tie@large,2,38.0,45.0
+b025,tie@medium,0,29.0,43.0
+b025,tie@medium,1,31.0,41.0
+b025,tie@medium,2,27.0,52.0
+b025,tie@small,0,22.0,25.0
+b025,tie@small,1,9.0,17.0
+b025,tie@small,2,29.0,30.0
+b025,toothbrush@large,0,45.0,45.0
+b025,toothbrush@large,1,48.0,47.0
+b025,toothbrush@large,2,41.0,50.0
+b025,toothbrush@medium,0,25.0,44.0
+b025,toothbrush@medium,1,38.0,53.0
+b025,toothbrush@medium,2,33.0,45.0
+b025,toothbrush@small,0,34.0,37.0
+b025,toothbrush@small,1,31.0,35.0
+b025,toothbrush@small,2,37.0,43.0
+b025,traffic light@large,0,28.0,43.0
+b025,traffic light@large,1,27.0,46.0
+b025,traffic light@large,2,41.0,47.0
+b025,traffic light@medium,0,35.0,35.0
+b025,traffic light@medium,1,33.0,44.0
+b025,traffic light@medium,2,25.0,37.0
+b025,traffic light@small,0,27.0,27.0
+b025,traffic light@small,1,21.0,21.0
+b025,traffic light@small,2,22.0,23.0
+b025,tv@large,0,32.0,45.0
+b025,tv@large,1,32.0,47.0
+b025,tv@large,2,34.0,49.0
+b025,tv@medium,0,25.0,26.0
+b025,tv@medium,1,25.0,27.0
+b025,tv@medium,2,16.0,27.0
+b025,tv@small,0,5.0,5.0
+b025,tv@small,1,4.0,8.0
+b025,tv@small,2,3.0,3.0
+b025,umbrella@large,0,29.0,39.0
+b025,umbrella@large,1,23.0,45.0
+b025,umbrella@large,2,25.0,39.0
+b025,umbrella@medium,0,26.0,29.0
+b025,umbrella@medium,1,26.0,31.0
+b025,umbrella@medium,2,32.0,30.0
+b025,umbrella@small,0,8.0,8.0
+b025,umbrella@small,1,12.0,11.0
+b025,umbrella@small,2,16.0,14.0
+b025,vase or potted plant@large,0,29.0,37.0
+b025,vase or potted plant@large,1,37.0,41.0
+b025,vase or potted plant@large,2,30.0,36.0
+b025,vase or potted plant@medium,0,18.0,20.0
+b025,vase or potted plant@medium,1,20.0,18.0
+b025,vase or potted plant@medium,2,19.0,21.0
+b025,vase or potted plant@small,0,3.0,3.0
+b025,vase or potted plant@small,1,7.0,5.0
+b025,vase or potted plant@small,2,4.0,5.0
+b1,airplane@large,0,55.0,25.0
+b1,airplane@large,1,53.0,42.0
+b1,airplane@large,2,54.0,22.0
+b1,airplane@medium,0,43.0,36.0
+b1,airplane@medium,1,55.0,41.0
+b1,airplane@medium,2,43.0,26.0
+b1,airplane@small,0,30.0,36.0
+b1,airplane@small,1,30.0,38.0
+b1,airplane@small,2,37.0,39.0
+b1,apple@large,0,46.0,48.0
+b1,apple@large,1,45.0,47.0
+b1,apple@large,2,50.0,50.0
+b1,apple@medium,0,27.0,39.0
+b1,apple@medium,1,31.0,38.0
+b1,apple@medium,2,28.0,40.0
+b1,bag or luggage@large,0,24.0,45.0
+b1,bag or luggage@large,1,32.0,43.0
+b1,bag or luggage@large,2,27.0,37.0
+b1,bag or luggage@medium,0,17.0,17.0
+b1,bag or luggage@medium,1,12.0,19.0
+b1,bag or luggage@medium,2,14.0,16.0
+b1,bag or luggage@small,0,4.0,5.0
+b1,bag or luggage@small,1,5.0,6.0
+b1,bag or luggage@small,2,7.0,6.0
+b1,banana@large,0,40.0,46.0
+b1,banana@large,1,40.0,41.0
+b1,banana@large,2,41.0,46.0
+b1,banana@medium,0,23.0,46.0
+b1,banana@medium,1,28.0,33.0
+b1,banana@medium,2,26.0,41.0
+b1,baseball bat@large,0,45.0,32.0
+b1,baseball bat@large,1,48.0,37.0
+b1,baseball bat@large,2,47.0,49.0
+b1,baseball bat@medium,0,47.0,23.0
+b1,baseball bat@medium,1,46.0,28.0
+b1,baseball bat@medium,2,49.0,32.0
+b1,baseball bat@small,0,40.0,34.0
+b1,baseball bat@small,1,52.0,25.0
+b1,baseball bat@small,2,47.0,30.0
+b1,bench@large,0,29.0,44.0
+b1,bench@large,1,33.0,47.0
+b1,bench@large,2,28.0,42.0
+b1,bench@medium,0,16.0,14.0
+b1,bench@medium,1,15.0,15.0
+b1,bench@medium,2,19.0,21.0
+b1,bench@small,0,1.0,1.0
+b1,bench@small,1,1.0,1.0
+b1,bench@small,2,2.0,2.0
+b1,bicycle@large,0,31.0,50.0
+b1,bicycle@large,1,42.0,43.0
+b1,bicycle@large,2,40.0,51.0
+b1,bicycle@medium,0,22.0,26.0
+b1,bicycle@medium,1,35.0,40.0
+b1,bicycle@medium,2,23.0,29.0
+b1,bicycle@small,0,5.0,7.0
+b1,bicycle@small,1,12.0,15.0
+b1,bicycle@small,2,9.0,6.0
+b1,bird@large,0,52.0,48.0
+b1,bird@large,1,44.0,41.0
+b1,bird@large,2,44.0,39.0
+b1,bird@medium,0,31.0,44.0
+b1,bird@medium,1,40.0,52.0
+b1,bird@medium,2,35.0,50.0
+b1,bird@small,0,17.0,19.0
+b1,bird@small,1,21.0,21.0
+b1,bird@small,2,15.0,19.0
+b1,boat@large,0,32.0,40.0
+b1,boat@large,1,40.0,54.0
+b1,boat@large,2,33.0,50.0
+b1,boat@medium,0,37.0,42.0
+b1,boat@medium,1,23.0,48.0
+b1,boat@medium,2,32.0,41.0
+b1,boat@small,0,29.0,30.0
+b1,boat@small,1,27.0,32.0
+b1,boat@small,2,20.0,30.0
+b1,book@large,0,22.0,47.0
+b1,book@large,1,21.0,47.0
+b1,book@large,2,31.0,45.0
+b1,book@medium,0,10.0,13.0
+b1,book@medium,1,8.0,8.0
+b1,book@medium,2,17.0,18.0
+b1,book@small,0,13.0,9.0
+b1,book@small,1,11.0,12.0
+b1,book@small,2,10.0,7.0
+b1,bottle@large,0,22.0,37.0
+b1,bottle@large,1,22.0,34.0
+b1,bottle@large,2,38.0,47.0
+b1,bottle@medium,0,17.0,13.0
+b1,bottle@medium,1,14.0,17.0
+b1,bottle@medium,2,9.0,13.0
+b1,bottle@small,0,3.0,3.0
+b1,bottle@small,1,3.0,3.0
+b1,bottle@small,2,3.0,4.0
+b1,bowl@large,0,32.0,31.0
+b1,bowl@large,1,27.0,39.0
+b1,bowl@large,2,33.0,33.0
+b1,bowl@medium,0,16.0,19.0
+b1,bowl@medium,1,15.0,16.0
+b1,bowl@medium,2,8.0,19.0
+b1,bowl@small,0,1.0,1.0
+b1,bowl@small,2,2.0,2.0
+b1,bus@large,0,37.0,52.0
+b1,bus@large,1,41.0,50.0
+b1,bus@large,2,49.0,56.0
+b1,bus@medium,0,23.0,29.0
+b1,bus@medium,1,27.0,29.0
+b1,bus@medium,2,22.0,26.0
+b1,bus@small,0,14.0,21.0
+b1,bus@small,1,17.0,21.0
+b1,bus@small,2,12.0,16.0
+b1,cell phone@large,0,36.0,43.0
+b1,cell phone@large,1,44.0,46.0
+b1,cell phone@large,2,48.0,39.0
+b1,cell phone@medium,0,35.0,36.0
+b1,cell phone@medium,1,26.0,33.0
+b1,cell phone@medium,2,37.0,38.0
+b1,cell phone@small,0,12.0,17.0
+b1,cell phone@small,1,18.0,20.0
+b1,cell phone@small,2,14.0,18.0
+b1,chair@large,0,18.0,20.0
+b1,chair@large,1,20.0,18.0
+b1,chair@large,2,21.0,21.0
+b1,chair@medium,0,9.0,14.0
+b1,chair@medium,1,8.0,7.0
+b1,chair@medium,2,6.0,6.0
+b1,chair@small,0,1.0,1.0
+b1,chair@small,2,2.0,2.0
+b1,clock@large,0,45.0,39.0
+b1,clock@large,1,50.0,29.0
+b1,clock@large,2,40.0,43.0
+b1,clock@medium,0,33.0,37.0
+b1,clock@medium,1,26.0,36.0
+b1,clock@medium,2,38.0,34.0
+b1,clock@small,0,8.0,15.0
+b1,clock@small,1,8.0,15.0
+b1,clock@small,2,11.0,20.0
+b1,dining table@large,0,21.0,24.0
+b1,dining table@large,1,22.0,19.0
+b1,dining table@large,2,28.0,29.0
+b1,dining table@medium,0,20.0,21.0
+b1,dining table@medium,1,22.0,28.0
+b1,dining table@medium,2,21.0,24.0
+b1,dining table@small,0,12.0,15.0
+b1,dining table@small,1,5.0,8.0
+b1,dining table@small,2,11.0,12.0
+b1,dog@large,0,45.0,43.0
+b1,dog@large,1,40.0,36.0
+b1,dog@large,2,51.0,42.0
+b1,dog@medium,0,32.0,40.0
+b1,dog@medium,1,35.0,43.0
+b1,dog@medium,2,35.0,40.0
+b1,dog@small,0,15.0,14.0
+b1,dog@small,1,9.0,13.0
+b1,dog@small,2,6.0,10.0
+b1,enclosed road vehicle@large,0,31.0,32.0
+b1,enclosed road vehicle@large,1,33.0,35.0
+b1,enclosed road vehicle@large,2,33.0,32.0
+b1,enclosed road vehicle@medium,0,18.0,19.0
+b1,enclosed road vehicle@medium,1,15.0,15.0
+b1,enclosed road vehicle@medium,2,14.0,16.0
+b1,enclosed road vehicle@small,0,16.0,17.0
+b1,enclosed road vehicle@small,1,3.0,3.0
+b1,enclosed road vehicle@small,2,14.0,17.0
+b1,fire hydrant@large,0,47.0,41.0
+b1,fire hydrant@large,1,47.0,39.0
+b1,fire hydrant@large,2,38.0,32.0
+b1,fire hydrant@medium,0,32.0,35.0
+b1,fire hydrant@medium,1,23.0,41.0
+b1,fire hydrant@medium,2,32.0,35.0
+b1,fire hydrant@small,0,25.0,27.0
+b1,fire hydrant@small,1,20.0,20.0
+b1,fire hydrant@small,2,18.0,24.0
+b1,fork@large,0,42.0,46.0
+b1,fork@large,1,35.0,36.0
+b1,fork@large,2,35.0,46.0
+b1,fork@medium,0,26.0,28.0
+b1,fork@medium,1,33.0,35.0
+b1,fork@medium,2,20.0,24.0
+b1,fork@small,0,16.0,16.0
+b1,fork@small,1,27.0,33.0
+b1,fork@small,2,22.0,29.0
+b1,frisbee@large,0,42.0,41.0
+b1,frisbee@large,1,43.0,42.0
+b1,frisbee@large,2,40.0,48.0
+b1,frisbee@medium,0,28.0,51.0
+b1,frisbee@medium,1,39.0,55.0
+b1,frisbee@medium,2,34.0,54.0
+b1,frisbee@small,0,39.0,50.0
+b1,frisbee@small,1,37.0,43.0
+b1,frisbee@small,2,39.0,50.0
+b1,keyboard@large,0,40.0,42.0
+b1,keyboard@large,1,39.0,46.0
+b1,keyboard@large,2,35.0,45.0
+b1,keyboard@medium,0,29.0,44.0
+b1,keyboard@medium,1,36.0,47.0
+b1,keyboard@medium,2,29.0,37.0
+b1,keyboard@small,0,10.0,22.0
+b1,keyboard@small,1,10.0,24.0
+b1,keyboard@small,2,12.0,12.0
+b1,kite@large,0,56.0,35.0
+b1,kite@large,1,43.0,44.0
+b1,kite@large,2,39.0,35.0
+b1,kite@medium,0,49.0,50.0
+b1,kite@medium,1,46.0,50.0
+b1,kite@medium,2,39.0,49.0
+b1,kite@small,0,34.0,53.0
+b1,kite@small,1,34.0,45.0
+b1,kite@small,2,36.0,46.0
+b1,knife@large,0,23.0,28.0
+b1,knife@large,1,11.0,23.0
+b1,knife@large,2,27.0,26.0
+b1,knife@medium,0,16.0,26.0
+b1,knife@medium,1,10.0,3.0
+b1,knife@medium,2,21.0,20.0
+b1,knife@small,0,1.0,1.0
+b1,knife@small,1,3.0,5.0
+b1,knife@small,2,2.0,2.0
+b1,laptop@large,0,36.0,55.0
+b1,laptop@large,1,39.0,52.0
+b1,laptop@large,2,41.0,47.0
+b1,laptop@medium,0,29.0,37.0
+b1,laptop@medium,1,27.0,30.0
+b1,laptop@medium,2,28.0,39.0
+b1,laptop@small,0,6.0,6.0
+b1,laptop@small,1,8.0,6.0
+b1,laptop@small,2,7.0,5.0
+b1,microwave@large,0,40.0,42.0
+b1,microwave@large,1,30.0,40.0
+b1,microwave@large,2,39.0,44.0
+b1,microwave@medium,0,33.0,38.0
+b1,microwave@medium,1,31.0,37.0
+b1,microwave@medium,2,30.0,35.0
+b1,microwave@small,0,18.0,28.0
+b1,microwave@small,1,26.0,29.0
+b1,microwave@small,2,9.0,9.0
+b1,motorcycle@large,0,38.0,45.0
+b1,motorcycle@large,1,39.0,28.0
+b1,motorcycle@large,2,45.0,44.0
+b1,motorcycle@medium,0,23.0,39.0
+b1,motorcycle@medium,1,25.0,40.0
+b1,motorcycle@medium,2,26.0,47.0
+b1,motorcycle@small,0,15.0,20.0
+b1,motorcycle@small,1,13.0,20.0
+b1,motorcycle@small,2,13.0,18.0
+b1,mouse@large,0,48.0,53.0
+b1,mouse@large,1,44.0,51.0
+b1,mouse@large,2,41.0,46.0
+b1,mouse@medium,0,38.0,35.0
+b1,mouse@medium,1,43.0,47.0
+b1,mouse@medium,2,54.0,55.0
+b1,mouse@small,0,33.0,42.0
+b1,mouse@small,1,40.0,40.0
+b1,mouse@small,2,33.0,40.0
+b1,orange@large,0,49.0,39.0
+b1,orange@large,1,42.0,44.0
+b1,orange@large,2,47.0,51.0
+b1,orange@medium,0,25.0,29.0
+b1,orange@medium,1,30.0,42.0
+b1,orange@medium,2,34.0,51.0
+b1,parking meter@large,0,37.0,55.0
+b1,parking meter@large,1,28.0,48.0
+b1,parking meter@large,2,27.0,47.0
+b1,parking meter@medium,0,32.0,32.0
+b1,parking meter@medium,1,35.0,37.0
+b1,parking meter@medium,2,36.0,37.0
+b1,parking meter@small,0,14.0,15.0
+b1,parking meter@small,1,17.0,18.0
+b1,parking meter@small,2,13.0,20.0
+b1,person@large,0,47.0,29.0
+b1,person@large,1,35.0,36.0
+b1,person@large,2,47.0,39.0
+b1,person@medium,0,14.0,32.0
+b1,person@medium,1,12.0,32.0
+b1,person@medium,2,19.0,30.0
+b1,person@small,0,1.0,1.0
+b1,person@small,1,1.0,1.0
+b1,person@small,2,1.0,1.0
+b1,remote@large,0,34.0,45.0
+b1,remote@large,1,34.0,48.0
+b1,remote@large,2,42.0,53.0
+b1,remote@medium,0,33.0,46.0
+b1,remote@medium,1,32.0,36.0
+b1,remote@medium,2,35.0,37.0
+b1,remote@small,0,30.0,32.0
+b1,remote@small,1,20.0,23.0
+b1,remote@small,2,19.0,29.0
+b1,scissors@large,0,49.0,39.0
+b1,scissors@large,1,47.0,52.0
+b1,scissors@large,2,41.0,46.0
+b1,scissors@medium,0,34.0,37.0
+b1,scissors@medium,1,26.0,26.0
+b1,scissors@medium,2,29.0,34.0
+b1,scissors@small,0,19.0,19.0
+b1,scissors@small,1,12.0,15.0
+b1,scissors@small,2,12.0,10.0
+b1,single serving drinking vessel@large,0,31.0,45.0
+b1,single serving drinking vessel@large,1,35.0,48.0
+b1,single serving drinking vessel@large,2,38.0,51.0
+b1,single serving drinking vessel@medium,0,21.0,32.0
+b1,single serving drinking vessel@medium,1,35.0,34.0
+b1,single serving drinking vessel@medium,2,27.0,31.0
+b1,single serving drinking vessel@small,0,7.0,6.0
+b1,single serving drinking vessel@small,1,9.0,11.0
+b1,single serving drinking vessel@small,2,11.0,17.0
+b1,sink@large,0,45.0,48.0
+b1,sink@large,1,53.0,51.0
+b1,sink@large,2,41.0,46.0
+b1,sink@medium,0,34.0,37.0
+b1,sink@medium,1,26.0,32.0
+b1,sink@medium,2,34.0,38.0
+b1,sink@small,0,10.0,16.0
+b1,sink@small,1,19.0,31.0
+b1,sink@small,2,26.0,24.0
+b1,skateboard@large,0,52.0,25.0
+b1,skateboard@large,1,52.0,28.0
+b1,skateboard@large,2,50.0,28.0
+b1,skateboard@medium,0,52.0,31.0
+b1,skateboard@medium,1,47.0,30.0
+b1,skateboard@medium,2,45.0,41.0
+b1,skateboard@small,0,42.0,54.0
+b1,skateboard@small,1,31.0,47.0
+b1,skateboard@small,2,37.0,47.0
+b1,skis@large,0,46.0,38.0
+b1,skis@large,1,44.0,44.0
+b1,skis@large,2,44.0,44.0
+b1,skis@medium,0,44.0,43.0
+b1,skis@medium,1,52.0,52.0
+b1,skis@medium,2,50.0,36.0
+b1,skis@small,0,47.0,47.0
+b1,skis@small,1,50.0,52.0
+b1,skis@small,2,55.0,58.0
+b1,snowboard@large,0,51.0,57.0
+b1,snowboard@large,1,48.0,54.0
+b1,snowboard@large,2,46.0,49.0
+b1,snowboard@medium,0,51.0,54.0
+b1,snowboard@medium,1,49.0,52.0
+b1,snowboard@medium,2,36.0,39.0
+b1,snowboard@small,0,46.0,46.0
+b1,snowboard@small,1,35.0,38.0
+b1,snowboard@small,2,46.0,47.0
+b1,spoon@large,0,39.0,44.0
+b1,spoon@large,1,38.0,37.0
+b1,spoon@large,2,41.0,41.0
+b1,spoon@medium,0,24.0,22.0
+b1,spoon@medium,1,27.0,28.0
+b1,spoon@medium,2,22.0,25.0
+b1,spoon@small,0,4.0,4.0
+b1,spoon@small,1,4.0,5.0
+b1,spoon@small,2,7.0,8.0
+b1,stop sign@large,0,54.0,52.0
+b1,stop sign@large,1,47.0,51.0
+b1,stop sign@large,2,39.0,42.0
+b1,stop sign@medium,0,40.0,48.0
+b1,stop sign@medium,1,32.0,35.0
+b1,stop sign@medium,2,38.0,42.0
+b1,stop sign@small,0,5.0,7.0
+b1,stop sign@small,1,9.0,12.0
+b1,stop sign@small,2,8.0,7.0
+b1,surfboard@large,0,38.0,43.0
+b1,surfboard@large,1,49.0,37.0
+b1,surfboard@large,2,38.0,33.0
+b1,surfboard@medium,0,45.0,53.0
+b1,surfboard@medium,1,45.0,56.0
+b1,surfboard@medium,2,45.0,36.0
+b1,surfboard@small,0,44.0,52.0
+b1,surfboard@small,1,37.0,37.0
+b1,surfboard@small,2,48.0,52.0
+b1,tennis racket@large,0,53.0,22.0
+b1,tennis racket@large,1,53.0,24.0
+b1,tennis racket@large,2,45.0,27.0
+b1,tennis racket@medium,0,38.0,22.0
+b1,tennis racket@medium,1,47.0,24.0
+b1,tennis racket@medium,2,55.0,25.0
+b1,tennis racket@small,0,55.0,26.0
+b1,tennis racket@small,1,44.0,27.0
+b1,tennis racket@small,2,48.0,21.0
+b1,tie@large,0,40.0,44.0
+b1,tie@large,1,39.0,44.0
+b1,tie@large,2,31.0,45.0
+b1,tie@medium,0,29.0,43.0
+b1,tie@medium,1,31.0,41.0
+b1,tie@medium,2,27.0,52.0
+b1,tie@small,0,21.0,26.0
+b1,tie@small,1,10.0,17.0
+b1,tie@small,2,29.0,30.0
+b1,toothbrush@large,0,45.0,45.0
+b1,toothbrush@large,1,48.0,47.0
+b1,toothbrush@large,2,43.0,50.0
+b1,toothbrush@medium,0,28.0,44.0
+b1,toothbrush@medium,1,39.0,53.0
+b1,toothbrush@medium,2,31.0,45.0
+b1,toothbrush@small,0,30.0,37.0
+b1,toothbrush@small,1,30.0,35.0
+b1,toothbrush@small,2,43.0,43.0
+b1,traffic light@large,0,29.0,43.0
+b1,traffic light@large,1,24.0,46.0
+b1,traffic light@large,2,31.0,47.0
+b1,traffic light@medium,0,35.0,37.0
+b1,traffic light@medium,1,38.0,44.0
+b1,traffic light@medium,2,25.0,37.0
+b1,traffic light@small,0,27.0,26.0
+b1,traffic light@small,1,21.0,21.0
+b1,traffic light@small,2,21.0,23.0
+b1,tv@large,0,34.0,45.0
+b1,tv@large,1,34.0,47.0
+b1,tv@large,2,36.0,49.0
+b1,tv@medium,0,23.0,26.0
+b1,tv@medium,1,28.0,27.0
+b1,tv@medium,2,24.0,27.0
+b1,tv@small,0,5.0,5.0
+b1,tv@small,1,5.0,8.0
+b1,tv@small,2,3.0,3.0
+b1,umbrella@large,0,29.0,39.0
+b1,umbrella@large,1,23.0,45.0
+b1,umbrella@large,2,25.0,39.0
+b1,umbrella@medium,0,26.0,29.0
+b1,umbrella@medium,1,26.0,31.0
+b1,umbrella@medium,2,32.0,30.0
+b1,umbrella@small,0,10.0,13.0
+b1,umbrella@small,1,8.0,10.0
+b1,umbrella@small,2,10.0,12.0
+b1,vase or potted plant@large,0,29.0,37.0
+b1,vase or potted plant@large,1,36.0,41.0
+b1,vase or potted plant@large,2,30.0,36.0
+b1,vase or potted plant@medium,0,15.0,20.0
+b1,vase or potted plant@medium,1,18.0,19.0
+b1,vase or potted plant@medium,2,19.0,21.0
+b1,vase or potted plant@small,0,3.0,3.0
+b1,vase or potted plant@small,1,9.0,5.0
+b1,vase or potted plant@small,2,4.0,6.0
+b4,airplane@large,0,56.0,25.0
+b4,airplane@large,1,53.0,42.0
+b4,airplane@large,2,54.0,22.0
+b4,airplane@medium,0,43.0,36.0
+b4,airplane@medium,1,52.0,41.0
+b4,airplane@medium,2,41.0,26.0
+b4,airplane@small,0,29.0,36.0
+b4,airplane@small,1,30.0,38.0
+b4,airplane@small,2,38.0,37.0
+b4,apple@large,0,45.0,48.0
+b4,apple@large,1,44.0,47.0
+b4,apple@large,2,49.0,50.0
+b4,apple@medium,0,24.0,39.0
+b4,apple@medium,1,32.0,36.0
+b4,apple@medium,2,36.0,38.0
+b4,bag or luggage@large,0,24.0,43.0
+b4,bag or luggage@large,1,27.0,42.0
+b4,bag or luggage@large,2,27.0,34.0
+b4,bag or luggage@medium,0,14.0,17.0
+b4,bag or luggage@medium,1,13.0,19.0
+b4,bag or luggage@medium,2,11.0,15.0
+b4,bag or luggage@small,0,7.0,4.0
+b4,bag or luggage@small,1,5.0,7.0
+b4,bag or luggage@small,2,5.0,6.0
+b4,banana@large,0,34.0,46.0
+b4,banana@large,1,43.0,41.0
+b4,banana@large,2,44.0,46.0
+b4,banana@medium,0,25.0,46.0
+b4,banana@medium,1,29.0,33.0
+b4,banana@medium,2,25.0,35.0
+b4,baseball bat@large,0,45.0,32.0
+b4,baseball bat@large,1,48.0,37.0
+b4,baseball bat@large,2,48.0,47.0
+b4,baseball bat@medium,0,47.0,23.0
+b4,baseball bat@medium,1,47.0,27.0
+b4,baseball bat@medium,2,51.0,32.0
+b4,baseball bat@small,0,40.0,34.0
+b4,baseball bat@small,1,52.0,25.0
+b4,baseball bat@small,2,47.0,30.0
+b4,bench@large,0,29.0,42.0
+b4,bench@large,1,31.0,47.0
+b4,bench@large,2,29.0,41.0
+b4,bench@medium,0,12.0,13.0
+b4,bench@medium,1,12.0,15.0
+b4,bench@medium,2,18.0,21.0
+b4,bench@small,0,1.0,1.0
+b4,bench@small,1,1.0,1.0
+b4,bench@small,2,2.0,2.0
+b4,bicycle@large,0,31.0,49.0
+b4,bicycle@large,1,39.0,42.0
+b4,bicycle@large,2,45.0,51.0
+b4,bicycle@medium,0,23.0,25.0
+b4,bicycle@medium,1,34.0,38.0
+b4,bicycle@medium,2,20.0,28.0
+b4,bicycle@small,0,8.0,6.0
+b4,bicycle@small,1,14.0,14.0
+b4,bicycle@small,2,6.0,6.0
+b4,bird@large,0,53.0,45.0
+b4,bird@large,1,44.0,39.0
+b4,bird@large,2,44.0,42.0
+b4,bird@medium,0,33.0,44.0
+b4,bird@medium,1,42.0,51.0
+b4,bird@medium,2,36.0,49.0
+b4,bird@small,0,17.0,18.0
+b4,bird@small,1,18.0,22.0
+b4,bird@small,2,17.0,19.0
+b4,boat@large,0,36.0,40.0
+b4,boat@large,1,40.0,54.0
+b4,boat@large,2,34.0,50.0
+b4,boat@medium,0,36.0,42.0
+b4,boat@medium,1,25.0,47.0
+b4,boat@medium,2,31.0,42.0
+b4,boat@small,0,24.0,30.0
+b4,boat@small,1,24.0,31.0
+b4,boat@small,2,30.0,28.0
+b4,book@large,0,22.0,48.0
+b4,book@large,1,21.0,47.0
+b4,book@large,2,31.0,44.0
+b4,book@medium,0,7.0,13.0
+b4,book@medium,1,7.0,7.0
+b4,book@medium,2,12.0,21.0
+b4,book@small,0,6.0,9.0
+b4,book@small,1,10.0,12.0
+b4,book@small,2,9.0,10.0
+b4,bottle@large,0,30.0,36.0
+b4,bottle@large,1,22.0,31.0
+b4,bottle@large,2,34.0,48.0
+b4,bottle@medium,0,11.0,14.0
+b4,bottle@medium,1,15.0,17.0
+b4,bottle@medium,2,9.0,12.0
+b4,bottle@small,0,3.0,3.0
+b4,bottle@small,1,3.0,3.0
+b4,bottle@small,2,3.0,4.0
+b4,bowl@large,0,22.0,31.0
+b4,bowl@large,1,23.0,32.0
+b4,bowl@large,2,25.0,33.0
+b4,bowl@medium,0,16.0,15.0
+b4,bowl@medium,1,13.0,15.0
+b4,bowl@medium,2,10.0,14.0
+b4,bowl@small,0,1.0,1.0
+b4,bowl@small,2,2.0,2.0
+b4,bus@large,0,30.0,52.0
+b4,bus@large,1,41.0,50.0
+b4,bus@large,2,52.0,56.0
+b4,bus@medium,0,25.0,29.0
+b4,bus@medium,1,27.0,31.0
+b4,bus@medium,2,22.0,27.0
+b4,bus@small,0,11.0,24.0
+b4,bus@small,1,12.0,21.0
+b4,bus@small,2,17.0,16.0
+b4,cell phone@large,0,34.0,43.0
+b4,cell phone@large,1,47.0,47.0
+b4,cell phone@large,2,46.0,39.0
+b4,cell phone@medium,0,28.0,36.0
+b4,cell phone@medium,1,23.0,34.0
+b4,cell phone@medium,2,35.0,41.0
+b4,cell phone@small,0,14.0,16.0
+b4,cell phone@small,1,19.0,22.0
+b4,cell phone@small,2,15.0,20.0
+b4,chair@large,0,18.0,20.0
+b4,chair@large,1,18.0,23.0
+b4,chair@large,2,22.0,22.0
+b4,chair@medium,0,8.0,11.0
+b4,chair@medium,1,6.0,8.0
+b4,chair@medium,2,5.0,6.0
+b4,chair@small,0,1.0,1.0
+b4,chair@small,2,2.0,2.0
+b4,clock@large,0,43.0,39.0
+b4,clock@large,1,50.0,29.0
+b4,clock@large,2,40.0,43.0
+b4,clock@medium,0,31.0,36.0
+b4,clock@medium,1,33.0,36.0
+b4,clock@medium,2,37.0,35.0
+b4,clock@small,0,9.0,15.0
+b4,clock@small,1,8.0,15.0
+b4,clock@small,2,11.0,19.0
+b4,dining table@large,0,18.0,24.0
+b4,dining table@large,1,18.0,20.0
+b4,dining table@large,2,26.0,29.0
+b4,dining table@medium,0,17.0,21.0
+b4,dining table@medium,1,21.0,26.0
+b4,dining table@medium,2,19.0,23.0
+b4,dining table@small,0,14.0,17.0
+b4,dining table@small,1,6.0,7.0
+b4,dining table@small,2,8.0,9.0
+b4,dog@large,0,43.0,43.0
+b4,dog@large,1,45.0,37.0
+b4,dog@large,2,46.0,42.0
+b4,dog@medium,0,23.0,39.0
+b4,dog@medium,1,28.0,41.0
+b4,dog@medium,2,32.0,40.0
+b4,dog@small,0,12.0,12.0
+b4,dog@small,1,10.0,13.0
+b4,dog@small,2,8.0,9.0
+b4,enclosed road vehicle@large,0,30.0,32.0
+b4,enclosed road vehicle@large,1,28.0,33.0
+b4,enclosed road vehicle@large,2,25.0,34.0
+b4,enclosed road vehicle@medium,0,17.0,20.0
+b4,enclosed road vehicle@medium,1,12.0,15.0
+b4,enclosed road vehicle@medium,2,10.0,16.0
+b4,enclosed road vehicle@small,0,13.0,17.0
+b4,enclosed road vehicle@small,1,3.0,3.0
+b4,enclosed road vehicle@small,2,13.0,15.0
+b4,fire hydrant@large,0,49.0,41.0
+b4,fire hydrant@large,1,46.0,39.0
+b4,fire hydrant@large,2,41.0,32.0
+b4,fire hydrant@medium,0,26.0,34.0
+b4,fire hydrant@medium,1,23.0,40.0
+b4,fire hydrant@medium,2,29.0,35.0
+b4,fire hydrant@small,0,24.0,24.0
+b4,fire hydrant@small,1,18.0,21.0
+b4,fire hydrant@small,2,18.0,17.0
+b4,fork@large,0,27.0,45.0
+b4,fork@large,1,32.0,37.0
+b4,fork@large,2,37.0,41.0
+b4,fork@medium,0,21.0,25.0
+b4,fork@medium,1,28.0,35.0
+b4,fork@medium,2,22.0,22.0
+b4,fork@small,0,14.0,21.0
+b4,fork@small,1,26.0,33.0
+b4,fork@small,2,22.0,27.0
+b4,frisbee@large,0,43.0,43.0
+b4,frisbee@large,1,44.0,42.0
+b4,frisbee@large,2,37.0,48.0
+b4,frisbee@medium,0,29.0,51.0
+b4,frisbee@medium,1,34.0,55.0
+b4,frisbee@medium,2,35.0,53.0
+b4,frisbee@small,0,31.0,51.0
+b4,frisbee@small,1,30.0,44.0
+b4,frisbee@small,2,39.0,51.0
+b4,keyboard@large,0,37.0,42.0
+b4,keyboard@large,1,40.0,45.0
+b4,keyboard@large,2,38.0,44.0
+b4,keyboard@medium,0,32.0,45.0
+b4,keyboard@medium,1,29.0,46.0
+b4,keyboard@medium,2,29.0,37.0
+b4,keyboard@small,0,12.0,22.0
+b4,keyboard@small,1,11.0,23.0
+b4,keyboard@small,2,12.0,12.0
+b4,kite@large,0,56.0,35.0
+b4,kite@large,1,45.0,44.0
+b4,kite@large,2,38.0,35.0
+b4,kite@medium,0,47.0,50.0
+b4,kite@medium,1,44.0,50.0
+b4,kite@medium,2,41.0,49.0
+b4,kite@small,0,32.0,53.0
+b4,kite@small,1,32.0,45.0
+b4,kite@small,2,34.0,41.0
+b4,knife@large,0,32.0,27.0
+b4,knife@large,1,19.0,25.0
+b4,knife@large,2,13.0,24.0
+b4,knife@medium,0,21.0,20.0
+b4,knife@medium,1,6.0,3.0
+b4,knife@medium,2,15.0,18.0
+b4,knife@small,0,1.0,1.0
+b4,knife@small,1,4.0,5.0
+b4,knife@small,2,2.0,2.0
+b4,laptop@large,0,29.0,55.0
+b4,laptop@large,1,31.0,51.0
+b4,laptop@large,2,34.0,47.0
+b4,laptop@medium,0,28.0,36.0
+b4,laptop@medium,1,23.0,30.0
+b4,laptop@medium,2,31.0,39.0
+b4,laptop@small,0,6.0,5.0
+b4,laptop@small,1,7.0,6.0
+b4,laptop@small,2,6.0,4.0
+b4,microwave@large,0,40.0,42.0
+b4,microwave@large,1,30.0,38.0
+b4,microwave@large,2,32.0,44.0
+b4,microwave@medium,0,29.0,35.0
+b4,microwave@medium,1,30.0,35.0
+b4,microwave@medium,2,26.0,34.0
+b4,microwave@small,0,22.0,28.0
+b4,microwave@small,1,19.0,27.0
+b4,microwave@small,2,9.0,9.0
+b4,motorcycle@large,0,41.0,45.0
+b4,motorcycle@large,1,39.0,28.0
+b4,motorcycle@large,2,48.0,44.0
+b4,motorcycle@medium,0,32.0,38.0
+b4,motorcycle@medium,1,28.0,37.0
+b4,motorcycle@medium,2,29.0,43.0
+b4,motorcycle@small,0,8.0,18.0
+b4,motorcycle@small,1,13.0,17.0
+b4,motorcycle@small,2,10.0,15.0
+b4,mouse@large,0,47.0,53.0
+b4,mouse@large,1,43.0,51.0
+b4,mouse@large,2,44.0,46.0
+b4,mouse@medium,0,33.0,34.0
+b4,mouse@medium,1,43.0,45.0
+b4,mouse@medium,2,51.0,55.0
+b4,mouse@small,0,21.0,42.0
+b4,mouse@small,1,23.0,40.0
+b4,mouse@small,2,32.0,40.0
+b4,orange@large,0,47.0,39.0
+b4,orange@large,1,40.0,43.0
+b4,orange@large,2,42.0,51.0
+b4,orange@medium,0,20.0,29.0
+b4,orange@medium,1,30.0,42.0
+b4,orange@medium,2,25.0,50.0
+b4,parking meter@large,0,37.0,55.0
+b4,parking meter@large,1,28.0,48.0
+b4,parking meter@large,2,25.0,47.0
+b4,parking meter@medium,0,26.0,29.0
+b4,parking meter@medium,1,27.0,37.0
+b4,parking meter@medium,2,33.0,37.0
+b4,parking meter@small,0,12.0,14.0
+b4,parking meter@small,1,12.0,19.0
+b4,parking meter@small,2,9.0,20.0
+b4,person@large,0,45.0,29.0
+b4,person@large,1,33.0,36.0
+b4,person@large,2,37.0,43.0
+b4,person@medium,0,12.0,34.0
+b4,person@medium,1,17.0,25.0
+b4,person@medium,2,22.0,33.0
+b4,person@small,0,1.0,1.0
+b4,person@small,1,1.0,1.0
+b4,person@small,2,1.0,1.0
+b4,remote@large,0,34.0,45.0
+b4,remote@large,1,38.0,48.0
+b4,remote@large,2,38.0,53.0
+b4,remote@medium,0,33.0,44.0
+b4,remote@medium,1,28.0,36.0
+b4,remote@medium,2,27.0,36.0
+b4,remote@small,0,27.0,30.0
+b4,remote@small,1,19.0,23.0
+b4,remote@small,2,19.0,29.0
+b4,scissors@large,0,48.0,39.0
+b4,scissors@large,1,41.0,52.0
+b4,scissors@large,2,40.0,47.0
+b4,scissors@medium,0,35.0,34.0
+b4,scissors@medium,1,23.0,25.0
+b4,scissors@medium,2,29.0,32.0
+b4,scissors@small,0,13.0,16.0
+b4,scissors@small,1,13.0,17.0
+b4,scissors@small,2,10.0,9.0
+b4,single serving drinking vessel@large,0,38.0,44.0
+b4,single serving drinking vessel@large,1,30.0,46.0
+b4,single serving drinking vessel@large,2,37.0,48.0
+b4,single serving drinking vessel@medium,0,23.0,30.0
+b4,single serving drinking vessel@medium,1,24.0,34.0
+b4,single serving drinking vessel@medium,2,25.0,33.0
+b4,single serving drinking vessel@small,0,5.0,6.0
+b4,single serving drinking vessel@small,1,9.0,13.0
+b4,single serving drinking vessel@small,2,11.0,16.0
+b4,sink@large,0,37.0,48.0
+b4,sink@large,1,52.0,51.0
+b4,sink@large,2,25.0,45.0
+b4,sink@medium,0,30.0,37.0
+b4,sink@medium,1,27.0,33.0
+b4,sink@medium,2,29.0,34.0
+b4,sink@small,0,8.0,23.0
+b4,sink@small,1,22.0,29.0
+b4,sink@small,2,14.0,21.0
+b4,skateboard@large,0,53.0,25.0
+b4,skateboard@large,1,53.0,28.0
+b4,skateboard@large,2,54.0,28.0
+b4,skateboard@medium,0,49.0,31.0
+b4,skateboard@medium,1,46.0,30.0
+b4,skateboard@medium,2,43.0,41.0
+b4,skateboard@small,0,34.0,54.0
+b4,skateboard@small,1,31.0,47.0
+b4,skateboard@small,2,33.0,47.0
+b4,skis@large,0,46.0,38.0
+b4,skis@large,1,44.0,43.0
+b4,skis@large,2,44.0,44.0
+b4,skis@medium,0,45.0,42.0
+b4,skis@medium,1,52.0,52.0
+b4,skis@medium,2,50.0,36.0
+b4,skis@small,0,47.0,47.0
+b4,skis@small,1,51.0,51.0
+b4,skis@small,2,56.0,58.0
+b4,snowboard@large,0,53.0,57.0
+b4,snowboard@large,1,43.0,54.0
+b4,snowboard@large,2,47.0,49.0
+b4,snowboard@medium,0,49.0,54.0
+b4,snowboard@medium,1,48.0,52.0
+b4,snowboard@medium,2,35.0,39.0
+b4,snowboard@small,0,43.0,46.0
+b4,snowboard@small,1,36.0,38.0
+b4,snowboard@small,2,42.0,44.0
+b4,spoon@large,0,43.0,44.0
+b4,spoon@large,1,36.0,38.0
+b4,spoon@large,2,39.0,42.0
+b4,spoon@medium,0,21.0,22.0
+b4,spoon@medium,1,27.0,28.0
+b4,spoon@medium,2,17.0,23.0
+b4,spoon@small,0,5.0,4.0
+b4,spoon@small,1,4.0,10.0
+b4,spoon@small,2,5.0,8.0
+b4,stop sign@large,0,53.0,52.0
+b4,stop sign@large,1,45.0,51.0
+b4,stop sign@large,2,40.0,42.0
+b4,stop sign@medium,0,39.0,48.0
+b4,stop sign@medium,1,30.0,35.0
+b4,stop sign@medium,2,37.0,42.0
+b4,stop sign@small,0,4.0,6.0
+b4,stop sign@small,1,9.0,13.0
+b4,stop sign@small,2,8.0,6.0
+b4,surfboard@large,0,42.0,43.0
+b4,surfboard@large,1,48.0,37.0
+b4,surfboard@large,2,38.0,33.0
+b4,surfboard@medium,0,47.0,53.0
+b4,surfboard@medium,1,45.0,56.0
+b4,surfboard@medium,2,45.0,36.0
+b4,surfboard@small,0,48.0,52.0
+b4,surfboard@small,1,41.0,37.0
+b4,surfboard@small,2,44.0,52.0
+b4,tennis racket@large,0,32.0,22.0
+b4,tennis racket@large,1,53.0,24.0
+b4,tennis racket@large,2,45.0,27.0
+b4,tennis racket@medium,0,35.0,22.0
+b4,tennis racket@medium,1,47.0,24.0
+b4,tennis racket@medium,2,56.0,25.0
+b4,tennis racket@small,0,55.0,26.0
+b4,tennis racket@small,1,44.0,27.0
+b4,tennis racket@small,2,48.0,21.0
+b4,tie@large,0,41.0,44.0
+b4,tie@large,1,41.0,44.0
+b4,tie@large,2,37.0,45.0
+b4,tie@medium,0,29.0,42.0
+b4,tie@medium,1,31.0,41.0
+b4,tie@medium,2,29.0,52.0
+b4,tie@small,0,20.0,26.0
+b4,tie@small,1,9.0,20.0
+b4,tie@small,2,21.0,30.0
+b4,toothbrush@large,0,45.0,45.0
+b4,toothbrush@large,1,48.0,47.0
+b4,toothbrush@large,2,39.0,47.0
+b4,toothbrush@medium,0,34.0,44.0
+b4,toothbrush@medium,1,27.0,53.0
+b4,toothbrush@medium,2,33.0,45.0
+b4,toothbrush@small,0,29.0,37.0
+b4,toothbrush@small,1,30.0,32.0
+b4,toothbrush@small,2,29.0,43.0
+b4,traffic light@large,0,29.0,43.0
+b4,traffic light@large,1,24.0,46.0
+b4,traffic light@large,2,32.0,47.0
+b4,traffic light@medium,0,32.0,35.0
+b4,traffic light@medium,1,28.0,44.0
+b4,traffic light@medium,2,28.0,38.0
+b4,traffic light@small,0,24.0,29.0
+b4,traffic light@small,1,21.0,21.0
+b4,traffic light@small,2,20.0,23.0
+b4,tv@large,0,26.0,44.0
+b4,tv@large,1,26.0,48.0
+b4,tv@large,2,31.0,47.0
+b4,tv@medium,0,18.0,23.0
+b4,tv@medium,1,23.0,22.0
+b4,tv@medium,2,19.0,24.0
+b4,tv@small,0,5.0,5.0
+b4,tv@small,1,8.0,5.0
+b4,tv@small,2,3.0,3.0
+b4,umbrella@large,0,27.0,38.0
+b4,umbrella@large,1,23.0,45.0
+b4,umbrella@large,2,25.0,39.0
+b4,umbrella@medium,0,22.0,29.0
+b4,umbrella@medium,1,27.0,32.0
+b4,umbrella@medium,2,23.0,31.0
+b4,umbrella@small,0,8.0,9.0
+b4,umbrella@small,1,11.0,10.0
+b4,umbrella@small,2,13.0,14.0
+b4,vase or potted plant@large,0,29.0,37.0
+b4,vase or potted plant@large,1,25.0,41.0
+b4,vase or potted plant@large,2,30.0,36.0
+b4,vase or potted plant@medium,0,14.0,18.0
+b4,vase or potted plant@medium,1,18.0,18.0
+b4,vase or potted plant@medium,2,20.0,19.0
+b4,vase or potted plant@small,0,3.0,3.0
+b4,vase or potted plant@small,1,5.0,6.0
+b4,vase or potted plant@small,2,4.0,5.0

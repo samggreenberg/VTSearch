@@ -473,7 +473,7 @@ export class AutopilotPanelComponent implements OnInit {
         return this.state.dryRunStop
           ? `Keep labeling the detector's best matches. Stops after ${this.state.moreDryRun} in a row that are not good.`
           : 'Keep labeling the best matches for your search. Stops once the matches stop turning up goods.';
-      case 'hard': return 'The system shows you items near the good/bad cutoff. Labeling these improves accuracy where it matters most.';
+      case 'hard': return 'The system shows you the items it is least sure about, about even odds of being a match. Labeling these improves accuracy where it matters most.';
       case 'new': return 'Explore a broad mix of items the system is less certain about, ensuring nothing important is missed.';
       case 'done':
         if (this.state.dryRunStop) return `${dryRunNote(this.state.moreDryRun)} You can continue labeling or export your results.`;
