@@ -259,13 +259,6 @@ restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via
 schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
 
 # ---------------------------------------------------------------------------
-# ``PrecisionFloorEstimate.curve_for`` is public ``vtscore`` API, documented in
-# ``vtscore/CHANGELOG.md``: it applies one detector's evidence to another
-# corpus. Its in-app caller was retired, but out-of-tree code may call it.
-# ---------------------------------------------------------------------------
-curve_for  # noqa: F821 - vtscore.training.thresholds.PrecisionFloorEstimate public method
-
-# ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
 # ignores certain kwargs. Callers pass the kwarg by name, so the parameter
 # must exist in the mock's signature even though the mock discards it.
