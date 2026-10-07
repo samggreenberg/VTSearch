@@ -29,8 +29,8 @@
      sessions, half as often as on the binary path. -->
 
 <!-- **b** — Right: the same sets as precision against recall, each a path
-     through the session: circles at 25 and 50 clicks, dots at 100 and 150,
-     the ✓ after the check. As on photos, the clicks buy precision: from 25
+     through the session: a circle at 25 clicks, dots at 50, 100 and 150,
+     ∞ after the check, all from the typed query's 0. As on photos, the clicks buy precision: from 25
      to 100 it rises 0.09 to 0.15 at every radio while recall holds. Where
      they end: 30 kept at precision 0.81 and recall 0.48; 48 at 0.67 and
      0.65; 92 at 0.45 and 0.82. -->

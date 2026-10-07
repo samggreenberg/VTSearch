@@ -17,7 +17,7 @@ way it read the first:
   session, circle and path both in the radio's own weight (#4533): on
   documents (#4517) a circle at each of `DOC_PR_CLICKS` with the click count
   written in it; on photos (#4519) circles at 25 and 50 clicks and the check's
-  ✓, with 100 and 150 as dots on the path (`PHOTO_CIRCLED` says why).
+  ∞, with 100 and 150 as dots on the path (`PHOTO_CIRCLED` says why).
 
 The photo slide is the binary-photo review (SigLIP, binary votes, COCO Better,
 10 seeds, `docs/experiments/2026-10-05-state-of-the-app-binary-photo/`). Its
@@ -67,8 +67,14 @@ PHOTO_PATH = PHOTO_REPORT / "precision_recall_path.csv"
 PHOTO_CLICKS = (25, 50, 100, 150)
 #: The photo path's points that get a labelled circle. 100 and 150 sit within 0.01 to
 #: 0.04 of the set after the check on every radio, closer than a circle is wide, so
-#: they are dots on the path: a circle there would cover the check's ✓ (#4533's rule).
-PHOTO_CIRCLED = ("25", "50", "✓")
+#: they are dots on the path: a circle there would cover the end's ∞ (#4533's rule). 50 is a dot too,
+#: since the panel reaches down to the typed query (#4599): it sits within a circle of 25 or of ∞ on
+#: every radio of one slide or the other. "0" is the typed query, where every path starts and which
+#: the three radios share (drawn once).
+PHOTO_CIRCLED = ("0", "25", "∞")
+#: The session's end, after the spot check: "∞", the last point the session reaches (owner, 2026-10-07:
+#: "instead of 'check' meaning the theoretical last point on the graphs, use the infinity symbol").
+END_LABEL = "∞"
 #: The path's first point in `precision_recall_path.csv` (`perp.py`'s ``TYPED_QUERY``): the text sort under
 #: its own blind GMM cut, before any vote. The F panel starts every radio there, at click 0 (owner,
 #: 2026-10-06: "a text-sort (and GMM-thresh) notch at the far left for 0"); the precision-recall panel
@@ -80,8 +86,8 @@ REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
 REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
 #: The region review's precision-recall panel: its span, and which path points get a
 #: labelled circle (as `PHOTO_CIRCLED`, set from where its points fall).
-REGION_PR_LIM = (0.35, 0.85)
-REGION_CIRCLED = ("25", "50", "✓")
+REGION_PR_LIM = ((0.4, 0.9), (0.1, 0.9))
+REGION_CIRCLED = ("0", "25", "∞")
 
 #: The three radios, left panel's line weight and label, in the order
 #: `calib-fbeta` stacks them: the precision end, the middle, the recall end.
@@ -207,8 +213,9 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
     with source.open() as f:
         for row in csv.DictReader(f):
             by.setdefault(float(row["beta"]), {})[row["point"]] = row
-    points = [str(c) for c in PHOTO_CLICKS] + ["after the check"]
-    if set(by) != {0.25, 1.0, 4.0} or any(set(points + [TYPED_QUERY]) - set(by[b]) for b in by):
+    # The path starts at the typed query, "0" (owner, 2026-10-07), and ends after the check, "∞".
+    points = [TYPED_QUERY] + [str(c) for c in PHOTO_CLICKS] + ["after the check"]
+    if set(by) != {0.25, 1.0, 4.0} or any(set(points) - set(by[b]) for b in by):
         raise SystemExit(f"make-sota-figs: {source} does not carry every radio at every point")
     out = {}
     for beta, rows in by.items():
@@ -217,7 +224,7 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
                 "precision": float(rows[p]["precision"]),
                 "recall": float(rows[p]["recall"]),
                 "kept": int(round(float(rows[p]["returned, median"]))),
-                "label": "✓" if p == "after the check" else p,
+                "label": {"after the check": END_LABEL, TYPED_QUERY: "0"}.get(p, p),
             }
             for p in points
         ]
@@ -324,18 +331,29 @@ GRID_COLOUR = "#e3e7ec"
 PR_GRID_COLOUR, PR_GRID_LW = "#bcc4ce", 1.3
 
 
-def _pr_axes(fig: Figure, lim: tuple[float, float], ticks: list[float], step: float) -> plt.Axes:
-    """The square precision-recall axes, gridded every *step* on both."""
+def _pr_axes(
+    fig: Figure, lim: tuple[float, float], ticks: list[float], step: float, ylim: tuple[float, float] | None = None
+) -> plt.Axes:
+    """The square precision-recall axes, gridded every *step* on both.
+
+    *lim* is recall's span and, unless *ylim* is given, precision's too. The photo
+    paths start at the typed query, precision ~0.17, while their recall stays in a
+    band half as wide (#4599): one span for both squeezed the circles together.
+    """
+    ylim = ylim or lim
     ax = fig.add_axes(RIGHT_AXES)
     ax.set_xlim(*lim)
-    ax.set_ylim(*lim)
-    ax.set_xticks(ticks)
-    ax.set_yticks(ticks)
-    # From the first multiple of the step inside the span, so a span that starts
-    # between steps (the region panel's 0.35) keeps its lines on the ticks.
-    lines = np.arange(math.ceil(lim[0] / step - 1e-9) * step, lim[1] + step / 2, step)
-    ax.set_xticks(lines, minor=True)
-    ax.set_yticks(lines, minor=True)
+    ax.set_ylim(*ylim)
+    ax.set_xticks([t for t in ticks if lim[0] - 1e-9 <= t <= lim[1] + 1e-9])
+    ax.set_yticks([t for t in ticks if ylim[0] - 1e-9 <= t <= ylim[1] + 1e-9])
+
+    # From the first multiple of the step inside each span, so a span that starts
+    # between steps (0.35) keeps its lines on the ticks.
+    def grid(span: tuple[float, float]) -> np.ndarray:
+        return np.arange(math.ceil(span[0] / step - 1e-9) * step, span[1] + step / 2, step)
+
+    ax.set_xticks(grid(lim), minor=True)
+    ax.set_yticks(grid(ylim), minor=True)
     ax.tick_params(which="minor", length=0)
     ax.grid(True, which="both", color=PR_GRID_COLOUR, lw=PR_GRID_LW)
     ax.set_axisbelow(True)
@@ -373,7 +391,8 @@ CIRCLE_LABEL_PT = CIRCLE_PT / 2 + 6
 #: both so precision and recall still share a scale.
 PR_PATH_LIM = (0.5, 1.0)
 #: The photo paths' axes: every photo set lies between 0.27 and 0.73 on both.
-PHOTO_PR_LIM = (0.2, 0.8)
+#: The photo panel's (recall, precision) spans: precision reaches down to the typed query's ~0.17.
+PHOTO_PR_LIM = ((0.3, 0.8), (0.1, 0.8))
 
 
 def _pr_paths_panel(
@@ -383,6 +402,7 @@ def _pr_paths_panel(
     ticks: list[float] | None = None,
     step: float = DOC_GRID_STEP,
     circled: tuple[str, ...] | None = None,
+    ylim: tuple[float, float] | None = None,
 ) -> None:
     """Precision against recall, one path per radio through the session's clicks.
 
@@ -390,7 +410,7 @@ def _pr_paths_panel(
     F line are one object on two axes, and nothing joins the radios to one
     another: what the panel shows is how each one's set moves as votes arrive.
     Each point whose label is in *circled* (all of them by default) is a circle
-    with its label in it - a click count, or the check's ✓ - so the points say
+    with its label in it - a click count, or the end's ∞ - so the points say
     when they are without a note to decode them (#4533); any other point is a
     dot on the path. Each path is labelled where it ends; how many each returns
     is in the notes, since a count beside every end would not fit the panel.
@@ -398,7 +418,7 @@ def _pr_paths_panel(
     A point two radios share - on documents, the query crop alone - is drawn
     once, by the first radio to reach it.
     """
-    ax = _pr_axes(fig, lim or PR_PATH_LIM, ticks or [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], step)
+    ax = _pr_axes(fig, lim or PR_PATH_LIM, ticks or [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], step, ylim)
     drawn: set[tuple[float, float]] = set()
     for beta, label, weight in RADIOS:
         path = sets[beta]["path"]
@@ -482,7 +502,7 @@ PHOTO_CHECK_X = 168
 def photo_figure(
     data: dict[float, dict],
     stage: int,
-    pr_lim: tuple[float, float] = PHOTO_PR_LIM,
+    pr_lim: tuple[tuple[float, float], tuple[float, float]] = PHOTO_PR_LIM,
     circled: tuple[str, ...] = PHOTO_CIRCLED,
 ) -> Figure:
     """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
@@ -507,10 +527,9 @@ def photo_figure(
         _floor(lines),
         ends_and_notch,
     )
-    ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", "✓"])
+    ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", END_LABEL])
     if stage >= 2:
-        ticks = [t for t in (0.2, 0.4, 0.6, 0.8, 1.0) if pr_lim[0] - 1e-9 <= t <= pr_lim[1] + 1e-9]
-        _pr_paths_panel(fig, data, pr_lim, ticks, PHOTO_GRID_STEP, circled)
+        _pr_paths_panel(fig, data, pr_lim[0], [0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, circled, pr_lim[1])
     return fig
 
 
