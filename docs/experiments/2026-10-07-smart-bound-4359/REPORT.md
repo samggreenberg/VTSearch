@@ -43,9 +43,9 @@ after it.*
 - **The ceiling is small.** No gate could keep a session in Hard longer than this arm does, and it buys at most
   +0.009 averaged over votes, +0.004 at vote 150, and nothing resolvable after the check. A re-keyed Smart would
   buy a fraction of that.
-- **Hard has little left to give once Smart is green.** The ~55 extra Hard picks per session are 20% Good,
-  against 38% for the Hard picks before Smart goes green. The target-precision cut (#3546) took most of what
-  Hard offers early.
+- **Hard has little left to give once Smart is green.** Holding sessions in Hard drops their Hard picks from 38%
+  Good to 20% overall, so the ~55 extra picks per session are Good less often than that. The target-precision
+  cut (#3546) took most of what Hard offers early.
 - **Smart's real cost is what it tells the user.** On today's app it says "you can likely stop" at about vote 42
   (Done at a mean vote 84 to 91 across the presets) with 0.15 of the objective still to come. The simulated user keeps voting to 150
   regardless, so that cost does not show up here. It is a question about when to stop, which belongs to
