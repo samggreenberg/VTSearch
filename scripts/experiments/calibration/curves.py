@@ -31,6 +31,14 @@ reading the ranked haystack is *free* and is what clicking has to beat.  Pass
 for nothing, the far right is what the clicking got, and the distance between
 them is the whole value of the loop.
 
+A metric about the returned set (precision, recall, F1, F1/4, F4, the
+objective) is anchored at **the set the text sort's own line returns**, at the
+balance the curve's line was drawn at (:func:`text_line_values`): the line the
+app draws on the typed query at that preset since #4603, else its beta-blind
+cut.  One rule on both sides of the gap (#4474), so a session set at beta 4
+starts from the long list the app shows at beta 4, not from the same notch as
+one at beta 1/4.
+
 The anchor is **each series' own leftmost point**, not a rule across the panel.
 A horizontal reference line dominated the figure to make a point the leftmost
 marker already makes, and it implied a level that holds at every click when it
@@ -142,7 +150,13 @@ BASELINE_LABEL = os.environ.get("CURVE_BASELINE_LABEL", "text sort, 0 clicks")
 
 #: Where to look for a metric's zero-click value in a ``text_baseline.py`` frame.
 #: Tried in order; the metric's own name is the last resort so a caller can hand
-#: over a frame that simply uses the same column name.
+#: over a frame that simply uses the same column name.  A cut metric is read off
+#: the text sort's own line first (:func:`text_line_values`); its columns here
+#: are the beta-blind cut, the same line that falls back to, for a baseline
+#: that carries only them.  The baseline's ``text_fbeta_b*`` columns are not
+#: here: they score the text sort's top 32 / 128 (the retired count cap), and an
+#: anchor drawn at a fixed count beside a curve drawn at the app's line compares
+#: two rules (owner, 2026-10-04, #4474).
 BASELINE_COLUMNS: dict[str, tuple[str, ...]] = {
     "cost": ("text_cost",),
     "oracle_cost": ("text_oracle_cost",),
@@ -153,12 +167,13 @@ BASELINE_COLUMNS: dict[str, tuple[str, ...]] = {
     "f1": ("text_f1",),
     "fpr": ("text_fpr",),
     "fnr": ("text_fnr",),
-    # The text sort's returned set at each preset balance (`text_baseline.py`);
-    # `fbeta` itself resolves to the run's own preset in `resolve_metric`.
-    "fbeta_b025": ("text_fbeta_b025",),
-    "fbeta_b1": ("text_fbeta_b1",),
-    "fbeta_b4": ("text_fbeta_b4",),
 }
+
+#: The metrics that are a statement about one returned set, and so are read at
+#: click 0 off the one set the text sort's line returns (:func:`text_line_values`).
+LINE_METRICS: frozenset[str] = frozenset(
+    {"precision", "recall", "f1", "fpr", "fnr", objective.OBJECTIVE, "fbeta_b025", "fbeta_b1", "fbeta_b4"}
+)
 
 
 def resolve_metric(
@@ -168,9 +183,11 @@ def resolve_metric(
 
     No *metric* is the decision metric (:func:`objective.primary_metric`): the
     objective, ``fbeta``, on a frame that carries a beta, else ``cost``.  An
-    objective column the frame predates is filled from its rates; the direction
-    comes from the one table the viewer reads; and ``fbeta``'s zero-click anchor
-    is the text sort's at the frame's preset, where it has a single one.
+    objective column the frame predates is filled from its rates, and the
+    direction comes from the one table the viewer reads.  *baseline_col* is
+    passed through: with none named, :func:`baseline_map` reads a cut metric's
+    zero-click anchor off the text sort's line at the frame's own beta
+    (:func:`objective.frame_beta`).
     """
     if metric is None:
         metric = objective.primary_metric(main)
@@ -178,24 +195,72 @@ def resolve_metric(
         main = objective.with_objective(main)
     if lower_is_better is None:
         lower_is_better = objective.lower_is_better(metric)
-    if baseline_col is None and metric == objective.OBJECTIVE:
-        baseline_col = objective_anchor_column(main)
     return main, metric, lower_is_better, baseline_col
 
 
-def objective_anchor_column(main: pd.DataFrame) -> str | None:
-    """The text baseline's column for ``fbeta``'s zero-click anchor: the text sort at the frame's preset.
+def text_line_rates(baseline: pd.DataFrame, beta: float | None) -> pd.DataFrame | None:
+    """``precision`` / ``recall`` / ``fpr`` of the set the text sort's own line returns, per baseline row.
 
-    ``None`` unless every balance row was drawn at one preset beta, since the
-    text sort was scored at the presets only (``text_fbeta_b025`` / ``_b1`` /
-    ``_b4``).
+    The line is the one the app draws on the typed query (#4474: the anchor and
+    the curve beside it must be one rule).  At *beta* where the baseline
+    recorded it (``text_line_precision_<tag>`` / ``_recall_`` / ``_fpr_``):
+    since #4603 the app draws a different line at each preset.  Otherwise, row
+    by row, the beta-blind cut every baseline carries (``text_precision`` /
+    ``text_recall`` / ``text_fpr``), which is the line the app drew before
+    #4603 and the one a frame with no balance opened on; ``analyze.py``'s
+    ``_text_app_line`` reads it the same way.  An empty set's undefined
+    precision counts as 0, as a detector's does (:func:`zero_empty_precision`).
+    ``None`` when the baseline carries neither line.
     """
+    from vtscore.eval.voting_columns import beta_tag  # noqa: PLC0415
+
+    blind = ("text_precision", "text_recall", "text_fpr")
+    if not set(blind[:2]) <= set(baseline.columns):
+        return None
+
+    def col(name: str) -> pd.Series:
+        if name not in baseline.columns:
+            return pd.Series(np.nan, index=baseline.index)
+        return pd.to_numeric(baseline[name], errors="coerce")
+
+    rates = pd.DataFrame({"precision": col(blind[0]), "recall": col(blind[1]), "fpr": col(blind[2])})
+    if beta is not None and np.isfinite(beta):
+        tag = beta_tag(float(beta))
+        own = pd.DataFrame(
+            {m: col(f"text_line_{m}_{tag}") for m in ("precision", "recall", "fpr")}, index=baseline.index
+        )
+        rates = own.where(own["recall"].notna(), rates, axis=0)
+    return zero_empty_precision(rates)
+
+
+def text_line_values(baseline: pd.DataFrame, metric: str, beta: float | None) -> pd.Series | None:
+    """*metric* of the set the text sort's line returns (:func:`text_line_rates`), per baseline row.
+
+    Every cut metric is scored on that one set, through the same
+    :func:`~vtscore.eval.calibration_metrics.fbeta_from_rates` the analyzers
+    fill a row's objective with, so F1, F1/4 and F4 at click 0 and the curve
+    they anchor read the same rule.  ``fbeta`` is at *beta*, the balance the
+    frame's line was drawn at; with none there is no objective and so no
+    anchor.  ``None`` for a metric that is not a statement about one set, or
+    a baseline with no line to read.
+    """
+    from vtscore.eval.calibration_metrics import fbeta_from_rates  # noqa: PLC0415
     from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
 
-    betas = objective.frame_betas(main)
-    if len(betas) == 1 and betas[0] in RANK_FRAME_BETAS:
-        return f"text_fbeta_{beta_tag(betas[0])}"
-    return None
+    if metric not in LINE_METRICS:
+        return None
+    if metric == objective.OBJECTIVE and (beta is None or not np.isfinite(beta)):
+        return None
+    rates = text_line_rates(baseline, beta)
+    if rates is None:
+        return None
+    if metric in ("precision", "recall", "fpr"):
+        return rates[metric]
+    if metric == "fnr":
+        return 1.0 - rates["recall"]
+    scored_at = {"f1": 1.0, objective.OBJECTIVE: beta, **{f"fbeta_{beta_tag(b)}": b for b in RANK_FRAME_BETAS}}
+    f = fbeta_from_rates(rates["precision"].to_numpy(), rates["recall"].to_numpy(), float(scored_at[metric]))
+    return pd.Series(f, index=baseline.index)
 
 
 def _keys(df: pd.DataFrame, keys: Sequence[str] = KEYS) -> list[str]:
@@ -220,6 +285,7 @@ def baseline_map(
     metric: str,
     keys: list[str],
     baseline_col: str | None = None,
+    beta: float | None = None,
 ) -> dict[tuple, float]:
     """``cell key -> the metric's zero-click value``, or ``{}``.
 
@@ -228,9 +294,20 @@ def baseline_map(
     metric frame keyed the same way.  A baseline lacking the metric entirely
     yields ``{}`` — the figure then simply has no anchor, rather than an anchor
     invented from the wrong column.
+
+    With no *baseline_col* named, a cut metric is read off the set the text
+    sort's own line returns at *beta*, the balance the curve's line was drawn
+    at (:func:`text_line_values`), so the notch and the curve are one rule.
     """
     if baseline is None or baseline.empty:
         return {}
+    kk = [k for k in keys if k in baseline.columns]
+    if not kk:
+        return {}
+    if baseline_col is None:
+        line = text_line_values(baseline, metric, beta)
+        if line is not None:
+            return _cell_means(baseline, kk, line)
     col = baseline_col
     if col is None:
         for cand in (*BASELINE_COLUMNS.get(metric, ()), metric):
@@ -239,10 +316,11 @@ def baseline_map(
                 break
     if col is None or col not in baseline.columns:
         return {}
-    kk = [k for k in keys if k in baseline.columns]
-    if not kk:
-        return {}
-    g = baseline.groupby(kk, dropna=False)[col].mean()
+    return _cell_means(baseline, kk, baseline[col])
+
+
+def _cell_means(baseline: pd.DataFrame, kk: list[str], values: pd.Series) -> dict[tuple, float]:
+    g = pd.to_numeric(values, errors="coerce").groupby([baseline[k] for k in kk], dropna=False).mean()
     return {(k if isinstance(k, tuple) else (k,)): float(v) for k, v in g.items() if np.isfinite(v)}
 
 
@@ -820,7 +898,7 @@ def mean_figure(  # noqa: C901
     if not datasets or not arms_present:
         return None, pd.DataFrame()
 
-    base = baseline_map(baseline, metric, kk, baseline_col)
+    base = baseline_map(baseline, metric, kk, baseline_col, objective.frame_beta(main))
     t_index = np.arange(0 if base else 1, int(main["t"].max()) + 1)
     index = _cell_index(main, kk, denominator)
     rows: list[dict] = []
@@ -1009,7 +1087,7 @@ def per_run_figures(  # noqa: C901
     norm = _prevalence_norm(prevalence)
     cmap = plt.get_cmap("viridis_r")
     index = _cell_index(main, kk, denominator)
-    base = baseline_map(baseline, metric, kk, baseline_col)
+    base = baseline_map(baseline, metric, kk, baseline_col, objective.frame_beta(main))
     t_max = int(main["t"].max())
     written: list[str] = []
     outdir.mkdir(parents=True, exist_ok=True)

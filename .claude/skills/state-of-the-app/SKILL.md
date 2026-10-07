@@ -92,6 +92,16 @@ same edit.
   `main`, then switched the same day). A report commits its viewer so the link
   has one. See
   [Where the owner reads it](#where-the-owner-reads-it-the-stable-links).
+- **The viewer carries every balance (owner, 2026-10-07, #4636):** the
+  committed viewer holds all three session sets, a chip per beta the sessions
+  ran at, and offers F1/4 and F4 beside F1 on the metric menu. The two are
+  different questions: the chip is how the app at that beta trained, checked
+  and drew its line; the metric is the beta its returned set is scored at.
+  The objective (`fbeta`) is the diagonal, each set at its own beta. With the
+  Target size filter, a reader can ask "how do we do on large targets at
+  beta 4" without a re-run. `viewer_betas.sh` builds it (below); each set's
+  click 0 is the text sort's own line at that set's beta (#4603), so the
+  notch and the curve are one rule (#4474).
 - **Seeds per path, sized by cost:** Binary Photo is cheap (~7 min and ~1 GB a
   run, ~10-15 min per seed for all 144 cells), so it takes **as many seeds as
   a night allows** (owner, 2026-09-24: per-image claims need repeat clicks, and
@@ -244,6 +254,7 @@ SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per p
 # per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
 python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
 python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until the app shows a run's detector (the opening's end, #4605): the slides' left panel reads it
+srun -p cpu --mem=16G -c 2 -t 60 bash viewer_betas.sh <date>   # the committed viewer: every session set on one page, a chip per beta (#4636) -> <date>-betas/viewer.html
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 
@@ -382,9 +393,12 @@ things keep a report on its link:
   directory named `*-state-of-the-app-*` whose title names no kind fails
   `tests_lib/meta/test_publish_sota_site.py` unless that test lists it as a
   deliberate side-report (the per-floor control is the one today).
-- **The viewer.** Commit `viewer.html` beside `REPORT.md`. `analyze.sh` already
-  writes it to `analysis-<path>/viewer.html`; for the per-preset sessions take
-  the beta-1 run's, the app's default arm. It opens on AP and does not offer
+- **The viewer.** Commit `viewer.html` beside `REPORT.md`. For the per-preset
+  sessions it is `viewer_betas.sh <date>`'s page (#4636): one chip per session
+  set, beside F1/4 and F4 on the metric menu. It thins the per-seed lines to
+  fit the repo's 4,000 KB cap (`SOTA_RUNS_BUDGET_MB`, default 1) and says when
+  a page is still over it. A review with one session set commits
+  `analyze.sh`'s `analysis-<path>/viewer.html`. It opens on AP and does not offer
   cost (#4576); a page built before that gets both from
   `viewer.py --reskin <page> --default-metric average_precision --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's
