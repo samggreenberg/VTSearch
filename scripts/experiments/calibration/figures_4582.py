@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """#4582 figures, from the CSVs ``rescore_fbeta_4582.py`` wrote.
 
-    python figures_4582.py --data docs/experiments/2026-10-06-cost-fbeta-rescore-4582/data \\
+    python figures_4582.py --data docs/experiments/2026-10-06-cost-fbeta-rescore-4582/tables \\
         --out docs/experiments/2026-10-06-cost-fbeta-rescore-4582/figures
 
 * ``ladder_044.png`` - #4184's seven rungs on the 0.44% pool, per click, in cost

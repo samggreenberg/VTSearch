@@ -30,7 +30,7 @@ fraction, fold count and beta off its rows.
   check row.
 
 Each contrast is the changed arm minus the shipped arm, paired on (category, seed), with the SE clustered on
-category. A star means more than 2 SE from zero.
+category. Bold means more than 2 SE from zero.
 
 ## Result
 
@@ -92,8 +92,8 @@ so it is not this study's subject.*
 
 ## The σ this grid gives #4584
 
-The per-run SD of the paired Δ-objective, the number an A/B on today's app is sized with, is in `data/sigma.csv`
-(by window) and `data/sigma_ab_window.csv`. The latter is in `analyze_ab`'s decision window, which is what
+The per-run SD of the paired Δ-objective, the number an A/B on today's app is sized with, is in `tables/sigma.csv`
+(by window) and `tables/sigma_ab_window.csv`. The latter is in `analyze_ab`'s decision window, which is what
 `preflight.sh` uses: 0.054–0.059 at beta 1/4, 0.030–0.035 at beta 1, 0.038–0.044 at beta 4. A line-only knob like
 these parts trajectories less than an acquisition change, so #4584 set the defaults from the larger acquisition-type
 σ (0.13 / 0.08 / 0.10; `docs/experiments/2026-10-07-objective-sigma-4584/README.md`). At those defaults, this
@@ -119,7 +119,7 @@ python figures_4583.py --data OUT --out OUT/figures
 python selftest_analyze_calsplit_4583.py          # planted answers
 ```
 
-`data/` holds the outputs this report quotes:
+`tables/` holds the outputs this report quotes:
 - `paired.csv`: every contrast by read, window and size band.
 - `levels.csv`: per arm.
 - `curves.csv`: the objective per vote.

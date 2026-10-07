@@ -139,7 +139,7 @@ Paired 0.3 − 0.5, pooled over the four vote bands (12 classes × 4 seeds per s
 | `dinov3_patch` max-patch | −0.002 ± 0.002 | **+0.015 ± 0.007** | **+0.012 ± 0.005** | +0.001 ± 0.002 | +0.003 ± 0.003 |
 
 - **Single-vector spaces: settled.** 0.3 wins at beta 1/4 and 1 by about twice its cost margin, ties at beta 4
-  (wins on CLIP-L), and no band is resolvably against it at any beta (the per-band rows are in `data/paired.csv`).
+  (wins on CLIP-L), and no band is resolvably against it at any beta (the per-band rows are in `tables/paired.csv`).
 - **`dinov3_patch`: the decision flips at beta ≤ 1.** Cost kept 0.5 because 0.3 lost on whole-image (+0.015).
   On F-beta, 0.3 is better at beta 1/4 and 1 on both geometries, and worse only at beta 4 on whole-image.
   The pattern fits a split that moves the line: more training votes give a line that returns less, which
@@ -235,7 +235,7 @@ srun --ntasks=1 --cpus-per-task=4 --mem=48G python rescore_fbeta_4582.py --out O
 python figures_4582.py --data OUT --out OUT/figures
 ```
 
-`data/` holds the outputs this report quotes:
+`tables/` holds the outputs this report quotes:
 - `paired.csv`: every Δ, by study, arm, stratum, window and metric.
 - `levels_*.csv` and `curves_*.csv`: means per arm.
 - `runs_*.csv`: each run's last click, for the examples.

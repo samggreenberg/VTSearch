@@ -1,0 +1,2146 @@
+dataset,embedder,category,seed,arm,cost,f025,f1,f4,average_precision,precision,recall,t
+coco_better,siglip,airplane@large,0,svm,0.086,0.04451,0.08061,0.427,0.98,0.042,1,150
+coco_better,siglip,airplane@medium,0,svm,0.061,0.0751,0.1326,0.5651,0.94,0.071,1,150
+coco_better,siglip,airplane@small,0,svm,0.173,0.03499,0.06382,0.3626,0.753,0.033,0.965,150
+coco_better,siglip,apple@large,0,svm,0.085,0.05296,0.09524,0.4722,0.926,0.05,1,150
+coco_better,siglip,apple@medium,0,svm,0.21,0.02546,0.04683,0.2915,0.434,0.024,0.961,150
+coco_better,siglip,bag or luggage@large,0,svm,0.325,0.01486,0.0276,0.1928,0.661,0.014,0.956,150
+coco_better,siglip,bag or luggage@medium,0,svm,0.512,0.01168,0.0217,0.1536,0.05,0.011,0.809,150
+coco_better,siglip,bag or luggage@small,0,svm,0.692,0.01485,0.02718,0.1603,0.014,0.014,0.462,150
+coco_better,siglip,banana@large,0,svm,0.225,0.02016,0.03729,0.2477,0.86,0.019,1,150
+coco_better,siglip,banana@medium,0,svm,0.351,0.01486,0.02758,0.1911,0.349,0.014,0.913,150
+coco_better,siglip,baseball bat@large,0,svm,0.081,0.05613,0.1007,0.4876,0.911,0.053,1,150
+coco_better,siglip,baseball bat@medium,0,svm,0.072,0.08247,0.1445,0.5836,0.906,0.078,0.981,150
+coco_better,siglip,baseball bat@small,0,svm,0.12,0.06982,0.1234,0.5314,0.909,0.066,0.95,150
+coco_better,siglip,bench@large,0,svm,0.248,0.02016,0.03724,0.2434,0.645,0.019,0.93,150
+coco_better,siglip,bench@medium,0,svm,0.791,0.008492,0.01575,0.1087,0.037,0.008,0.51,150
+coco_better,siglip,bench@small,0,svm,0.71,0.01061,0.01962,0.1294,0.011,0.01,0.51,150
+coco_better,siglip,bicycle@large,0,svm,0.1,0.04134,0.07507,0.4083,0.87,0.039,1,150
+coco_better,siglip,bicycle@medium,0,svm,0.329,0.0191,0.0353,0.2324,0.178,0.018,0.909,150
+coco_better,siglip,bicycle@small,0,svm,0.415,0.0138,0.02561,0.1776,0.066,0.013,0.851,150
+coco_better,siglip,bird@large,0,svm,0.058,0.06773,0.1203,0.5375,0.99,0.064,1,150
+coco_better,siglip,bird@medium,0,svm,0.34,0.01804,0.03336,0.2209,0.509,0.017,0.882,150
+coco_better,siglip,bird@small,0,svm,0.582,0.0138,0.0255,0.1681,0.048,0.013,0.661,150
+coco_better,siglip,boat@large,0,svm,0.177,0.0297,0.05447,0.3287,0.875,0.028,1,150
+coco_better,siglip,boat@medium,0,svm,0.226,0.02334,0.04301,0.2737,0.274,0.022,0.96,150
+coco_better,siglip,boat@small,0,svm,0.264,0.02122,0.03919,0.2552,0.194,0.02,0.963,150
+coco_better,siglip,book@large,0,svm,0.233,0.01698,0.0315,0.2166,0.669,0.016,1,150
+coco_better,siglip,book@medium,0,svm,0.538,0.01168,0.02169,0.1522,0.057,0.011,0.771,150
+coco_better,siglip,bottle@large,0,svm,0.29,0.01698,0.0315,0.2166,0.422,0.016,1,150
+coco_better,siglip,bottle@medium,0,svm,0.526,0.01804,0.03319,0.2081,0.068,0.017,0.7,150
+coco_better,siglip,bottle@small,0,svm,1.061,0.004246,0.007871,0.05392,0.005,0.004,0.245,150
+coco_better,siglip,bowl@large,0,svm,0.259,0.02122,0.03919,0.2551,0.112,0.02,0.962,150
+coco_better,siglip,bowl@medium,0,svm,0.407,0.01486,0.02756,0.1899,0.052,0.014,0.885,150
+coco_better,siglip,bus@large,0,svm,0.156,0.02652,0.04878,0.3036,0.856,0.025,1,150
+coco_better,siglip,bus@medium,0,svm,0.338,0.01486,0.02759,0.192,0.265,0.014,0.935,150
+coco_better,siglip,bus@small,0,svm,0.356,0.01698,0.0314,0.2083,0.091,0.016,0.837,150
+coco_better,siglip,cell phone@large,0,svm,0.122,0.04134,0.07507,0.4083,0.86,0.039,1,150
+coco_better,siglip,cell phone@medium,0,svm,0.319,0.01592,0.02953,0.203,0.158,0.015,0.938,150
+coco_better,siglip,cell phone@small,0,svm,0.557,0.01168,0.02167,0.1503,0.067,0.011,0.72,150
+coco_better,siglip,chair@large,0,svm,0.588,0.01168,0.02168,0.1509,0.031,0.011,0.736,150
+coco_better,siglip,chair@medium,0,svm,0.834,0.008491,0.01573,0.107,0.018,0.008,0.473,150
+coco_better,siglip,clock@large,0,svm,0.079,0.07615,0.1342,0.5632,0.98,0.072,0.982,150
+coco_better,siglip,clock@medium,0,svm,0.414,0.01486,0.02756,0.19,0.631,0.014,0.887,150
+coco_better,siglip,clock@small,0,svm,0.599,0.01274,0.02356,0.1569,0.232,0.012,0.64,150
+coco_better,siglip,dining table@large,0,svm,0.274,0.02652,0.04867,0.2954,0.196,0.025,0.912,150
+coco_better,siglip,dining table@medium,0,svm,0.429,0.02439,0.04459,0.2596,0.095,0.023,0.727,150
+coco_better,siglip,dining table@small,0,svm,0.824,0.01166,0.02124,0.1187,0.014,0.011,0.306,150
+coco_better,siglip,dog@large,0,svm,0.197,0.02122,0.03922,0.2576,0.548,0.02,1,150
+coco_better,siglip,dog@medium,0,svm,0.359,0.0138,0.02564,0.1809,0.244,0.013,0.938,150
+coco_better,siglip,dog@small,0,svm,0.64,0.01485,0.02725,0.1655,0.041,0.014,0.511,150
+coco_better,siglip,enclosed road vehicle@large,0,svm,0.387,0.0191,0.03528,0.2306,0.33,0.018,0.881,150
+coco_better,siglip,enclosed road vehicle@medium,0,svm,0.427,0.01062,0.01977,0.1434,0.02,0.01,0.861,150
+coco_better,siglip,enclosed road vehicle@small,0,svm,0.551,0.0138,0.02551,0.1689,0.033,0.013,0.674,150
+coco_better,siglip,fire hydrant@large,0,svm,0.059,0.07194,0.1273,0.5536,0.965,0.068,1,150
+coco_better,siglip,fire hydrant@medium,0,svm,0.264,0.01486,0.02761,0.1944,0.51,0.014,1,150
+coco_better,siglip,fire hydrant@small,0,svm,0.369,0.01804,0.03335,0.2202,0.062,0.017,0.87,150
+coco_better,siglip,fork@large,0,svm,0.156,0.02334,0.04305,0.2766,0.289,0.022,1,150
+coco_better,siglip,fork@medium,0,svm,0.196,0.02334,0.04305,0.2766,0.146,0.022,1,150
+coco_better,siglip,fork@small,0,svm,0.347,0.01804,0.03335,0.2206,0.207,0.017,0.878,150
+coco_better,siglip,frisbee@large,0,svm,0.176,0.02652,0.04878,0.3036,0.843,0.025,1,150
+coco_better,siglip,frisbee@medium,0,svm,0.182,0.02334,0.04305,0.2766,0.68,0.022,1,150
+coco_better,siglip,frisbee@small,0,svm,0.162,0.03287,0.06005,0.3471,0.631,0.031,0.957,150
+coco_better,siglip,keyboard@large,0,svm,0.139,0.03605,0.06576,0.3744,0.593,0.034,1,150
+coco_better,siglip,keyboard@medium,0,svm,0.155,0.02652,0.04878,0.3036,0.449,0.025,1,150
+coco_better,siglip,keyboard@small,0,svm,0.46,0.01592,0.02947,0.198,0.028,0.015,0.833,150
+coco_better,siglip,kite@large,0,svm,0.08,0.04557,0.08245,0.4331,0.969,0.043,1,150
+coco_better,siglip,kite@medium,0,svm,0.134,0.02758,0.05068,0.3121,0.853,0.026,1,150
+coco_better,siglip,kite@small,0,svm,0.124,0.03922,0.07131,0.392,0.862,0.037,0.979,150
+coco_better,siglip,knife@large,0,svm,0.203,0.02652,0.04873,0.2998,0.174,0.025,0.958,150
+coco_better,siglip,knife@medium,0,svm,0.327,0.01698,0.03145,0.2125,0.04,0.016,0.915,150
+coco_better,siglip,laptop@large,0,svm,0.116,0.03499,0.06389,0.3671,0.774,0.033,1,150
+coco_better,siglip,laptop@medium,0,svm,0.239,0.02122,0.0392,0.2564,0.186,0.02,0.981,150
+coco_better,siglip,laptop@small,0,svm,0.926,0.05701,0.06588,0.07803,0.021,0.056,0.08,150
+coco_better,siglip,microwave@large,0,svm,0.197,0.02652,0.04876,0.3019,0.678,0.025,0.981,150
+coco_better,siglip,microwave@medium,0,svm,0.281,0.01698,0.03147,0.2146,0.215,0.016,0.957,150
+coco_better,siglip,microwave@small,0,svm,0.202,0.01804,0.03343,0.2272,0.111,0.017,1,150
+coco_better,siglip,motorcycle@large,0,svm,0.115,0.04028,0.07322,0.4017,0.958,0.038,1,150
+coco_better,siglip,motorcycle@medium,0,svm,0.323,0.01592,0.02954,0.204,0.418,0.015,0.961,150
+coco_better,siglip,motorcycle@small,0,svm,0.543,0.01062,0.01974,0.1405,0.051,0.01,0.761,150
+coco_better,siglip,mouse@large,0,svm,0.114,0.03393,0.06202,0.3598,0.807,0.032,1,150
+coco_better,siglip,mouse@medium,0,svm,0.154,0.03393,0.06202,0.3598,0.537,0.032,1,150
+coco_better,siglip,mouse@small,0,svm,0.187,0.02864,0.05255,0.3187,0.454,0.027,0.981,150
+coco_better,siglip,orange@large,0,svm,0.1,0.04239,0.07692,0.4146,0.915,0.04,1,150
+coco_better,siglip,orange@medium,0,svm,0.309,0.02122,0.0392,0.2567,0.668,0.02,0.986,150
+coco_better,siglip,parking meter@large,0,svm,0.219,0.01804,0.03343,0.2272,0.873,0.017,1,150
+coco_better,siglip,parking meter@medium,0,svm,0.253,0.02122,0.03922,0.2576,0.333,0.02,1,150
+coco_better,siglip,parking meter@small,0,svm,0.38,0.02122,0.03906,0.2452,0.06,0.02,0.828,150
+coco_better,siglip,person@large,0,svm,0.225,0.03181,0.05822,0.3423,0.578,0.03,0.98,150
+coco_better,siglip,person@medium,0,svm,0.29,0.02758,0.0506,0.3064,0.259,0.026,0.94,150
+coco_better,siglip,remote@large,0,svm,0.209,0.02758,0.05063,0.3087,0.631,0.026,0.963,150
+coco_better,siglip,remote@medium,0,svm,0.265,0.01698,0.03145,0.2127,0.083,0.016,0.919,150
+coco_better,siglip,remote@small,0,svm,0.334,0.01804,0.03337,0.2223,0.182,0.017,0.907,150
+coco_better,siglip,scissors@large,0,svm,0.073,0.05296,0.09524,0.4722,0.918,0.05,1,150
+coco_better,siglip,scissors@medium,0,svm,0.322,0.0191,0.03527,0.23,0.226,0.018,0.872,150
+coco_better,siglip,scissors@small,0,svm,0.437,0.01274,0.02365,0.1651,0.016,0.012,0.814,150
+coco_better,siglip,single serving drinking vessel@large,0,svm,0.337,0.01486,0.02761,0.1937,0.36,0.014,0.98,150
+coco_better,siglip,single serving drinking vessel@medium,0,svm,0.325,0.01486,0.02761,0.1944,0.132,0.014,1,150
+coco_better,siglip,single serving drinking vessel@small,0,svm,0.563,0.01274,0.02361,0.1613,0.025,0.012,0.725,150
+coco_better,siglip,sink@large,0,svm,0.233,0.02016,0.03728,0.2465,0.408,0.019,0.979,150
+coco_better,siglip,sink@medium,0,svm,0.229,0.0371,0.06735,0.365,0.199,0.035,0.889,150
+coco_better,siglip,sink@small,0,svm,0.412,0.01274,0.02369,0.1688,0.144,0.012,0.92,150
+coco_better,siglip,skateboard@large,0,svm,0.082,0.04979,0.08978,0.4561,0.952,0.047,1,150
+coco_better,siglip,skateboard@medium,0,svm,0.08,0.05296,0.09524,0.4722,0.976,0.05,1,150
+coco_better,siglip,skateboard@small,0,svm,0.241,0.02122,0.03916,0.2531,0.672,0.02,0.932,150
+coco_better,siglip,skis@large,0,svm,0.072,0.06351,0.1132,0.5204,0.936,0.06,1,150
+coco_better,siglip,skis@medium,0,svm,0.096,0.04979,0.08978,0.4561,0.918,0.047,1,150
+coco_better,siglip,skis@small,0,svm,0.08,0.05718,0.1025,0.4925,0.827,0.054,1,150
+coco_better,siglip,snowboard@large,0,svm,0.09,0.04239,0.07692,0.4146,0.806,0.04,1,150
+coco_better,siglip,snowboard@medium,0,svm,0.093,0.05296,0.09513,0.4673,0.707,0.05,0.977,150
+coco_better,siglip,snowboard@small,0,svm,0.075,0.06246,0.1114,0.5159,0.624,0.059,1,150
+coco_better,siglip,spoon@large,0,svm,0.26,0.01592,0.02956,0.2056,0.163,0.015,1,150
+coco_better,siglip,spoon@medium,0,svm,0.241,0.02864,0.05248,0.3134,0.145,0.027,0.93,150
+coco_better,siglip,spoon@small,0,svm,0.88,0.00637,0.01186,0.0861,0.007,0.006,0.52,150
+coco_better,siglip,stop sign@large,0,svm,0.085,0.04451,0.08061,0.427,0.935,0.042,1,150
+coco_better,siglip,stop sign@medium,0,svm,0.191,0.02228,0.04112,0.2656,0.547,0.021,0.977,150
+coco_better,siglip,stop sign@small,0,svm,0.817,0.007431,0.01382,0.09856,0.012,0.007,0.54,150
+coco_better,siglip,surfboard@large,0,svm,0.147,0.03393,0.06202,0.3598,0.96,0.032,1,150
+coco_better,siglip,surfboard@medium,0,svm,0.127,0.03816,0.06945,0.3853,0.906,0.036,0.979,150
+coco_better,siglip,surfboard@small,0,svm,0.071,0.05929,0.1061,0.5021,0.897,0.056,1,150
+coco_better,siglip,tennis racket@large,0,svm,0.059,0.06878,0.1221,0.5417,0.995,0.065,1,150
+coco_better,siglip,tennis racket@medium,0,svm,0.073,0.08983,0.1565,0.6066,0.983,0.085,0.984,150
+coco_better,siglip,tennis racket@small,0,svm,0.082,0.06351,0.1131,0.5147,0.979,0.06,0.978,150
+coco_better,siglip,tie@large,0,svm,0.14,0.04028,0.07317,0.399,0.854,0.038,0.982,150
+coco_better,siglip,tie@medium,0,svm,0.161,0.0297,0.05447,0.3287,0.637,0.028,1,150
+coco_better,siglip,tie@small,0,svm,0.45,0.0138,0.0256,0.1767,0.149,0.013,0.83,150
+coco_better,siglip,toothbrush@large,0,svm,0.114,0.04239,0.07692,0.4146,0.984,0.04,1,150
+coco_better,siglip,toothbrush@medium,0,svm,0.291,0.02334,0.04293,0.2671,0.451,0.022,0.88,150
+coco_better,siglip,toothbrush@small,0,svm,0.259,0.0191,0.03534,0.2353,0.238,0.018,0.959,150
+coco_better,siglip,traffic light@large,0,svm,0.147,0.03182,0.05825,0.3446,0.862,0.03,1,150
+coco_better,siglip,traffic light@medium,0,svm,0.151,0.03393,0.06202,0.3598,0.415,0.032,1,150
+coco_better,siglip,traffic light@small,0,svm,0.356,0.01592,0.02951,0.2011,0.065,0.015,0.896,150
+coco_better,siglip,tv@large,0,svm,0.173,0.03181,0.05818,0.3396,0.445,0.03,0.957,150
+coco_better,siglip,tv@medium,0,svm,0.313,0.02122,0.03912,0.2497,0.201,0.02,0.885,150
+coco_better,siglip,tv@small,0,svm,0.626,0.007433,0.01386,0.1021,0.025,0.007,0.676,150
+coco_better,siglip,umbrella@large,0,svm,0.254,0.02334,0.04302,0.2741,0.42,0.022,0.966,150
+coco_better,siglip,umbrella@medium,0,svm,0.426,0.01698,0.03138,0.2067,0.324,0.016,0.811,150
+coco_better,siglip,umbrella@small,0,svm,0.446,0.01698,0.03132,0.202,0.076,0.016,0.739,150
+coco_better,siglip,vase or potted plant@large,0,svm,0.317,0.01698,0.03148,0.2148,0.618,0.016,0.962,150
+coco_better,siglip,vase or potted plant@medium,0,svm,0.614,0.009555,0.01777,0.1271,0.149,0.009,0.708,150
+coco_better,siglip,vase or potted plant@small,0,svm,0.644,0.01062,0.0197,0.1371,0.132,0.01,0.667,150
+coco_better,siglip,airplane@large,1,svm,0.077,0.05296,0.09524,0.4722,0.976,0.05,1,150
+coco_better,siglip,airplane@medium,1,svm,0.116,0.03182,0.05825,0.3446,0.98,0.03,1,150
+coco_better,siglip,airplane@small,1,svm,0.257,0.02969,0.0543,0.3172,0.745,0.028,0.895,150
+coco_better,siglip,apple@large,1,svm,0.114,0.04028,0.07322,0.4017,0.925,0.038,1,150
+coco_better,siglip,apple@medium,1,svm,0.216,0.02334,0.04303,0.2752,0.367,0.022,0.981,150
+coco_better,siglip,bag or luggage@large,1,svm,0.29,0.03497,0.06345,0.3413,0.626,0.033,0.82,150
+coco_better,siglip,bag or luggage@medium,1,svm,0.456,0.01486,0.02752,0.1861,0.114,0.014,0.804,150
+coco_better,siglip,bag or luggage@small,1,svm,1,0,0,0,0.015,,0,150
+coco_better,siglip,banana@large,1,svm,0.096,0.04557,0.08245,0.4331,0.888,0.043,1,150
+coco_better,siglip,banana@medium,1,svm,0.296,0.02334,0.04297,0.2704,0.503,0.022,0.919,150
+coco_better,siglip,baseball bat@large,1,svm,0.064,0.06457,0.115,0.5248,0.909,0.061,1,150
+coco_better,siglip,baseball bat@medium,1,svm,0.075,0.0614,0.1096,0.5114,0.875,0.058,1,150
+coco_better,siglip,baseball bat@small,1,svm,0.094,0.07404,0.1305,0.5483,0.912,0.07,0.957,150
+coco_better,siglip,bench@large,1,svm,0.382,0.01592,0.02948,0.1987,0.42,0.015,0.848,150
+coco_better,siglip,bench@medium,1,svm,0.851,0.006369,0.01183,0.08284,0.014,0.006,0.415,150
+coco_better,siglip,bench@small,1,svm,1,0,0,0,0.005,,0,150
+coco_better,siglip,bicycle@large,1,svm,0.168,0.03076,0.05633,0.3346,0.79,0.029,0.98,150
+coco_better,siglip,bicycle@medium,1,svm,0.304,0.0138,0.02565,0.1813,0.137,0.013,0.95,150
+coco_better,siglip,bicycle@small,1,svm,0.389,0.01804,0.03334,0.2193,0.078,0.017,0.855,150
+coco_better,siglip,bird@large,1,svm,0.105,0.04557,0.08245,0.4331,0.804,0.043,1,150
+coco_better,siglip,bird@medium,1,svm,0.345,0.01486,0.02756,0.19,0.472,0.014,0.886,150
+coco_better,siglip,bird@small,1,svm,0.681,0.008493,0.0158,0.1126,0.058,0.008,0.617,150
+coco_better,siglip,boat@large,1,svm,0.194,0.02016,0.03729,0.2477,0.887,0.019,1,150
+coco_better,siglip,boat@medium,1,svm,0.218,0.02228,0.0411,0.2642,0.441,0.021,0.957,150
+coco_better,siglip,boat@small,1,svm,0.227,0.02334,0.04302,0.2738,0.227,0.022,0.962,150
+coco_better,siglip,book@large,1,svm,0.251,0.0244,0.04488,0.2791,0.457,0.023,0.918,150
+coco_better,siglip,book@medium,1,svm,0.618,0.01591,0.02924,0.18,0.032,0.015,0.576,150
+coco_better,siglip,book@small,1,svm,0.533,0.0138,0.02549,0.1675,0.041,0.013,0.651,150
+coco_better,siglip,bottle@large,1,svm,0.297,0.01804,0.03341,0.2253,0.376,0.017,0.962,150
+coco_better,siglip,bottle@medium,1,svm,0.5,0.01274,0.02366,0.1659,0.065,0.012,0.836,150
+coco_better,siglip,bowl@large,1,svm,0.273,0.02652,0.04861,0.2917,0.137,0.025,0.875,150
+coco_better,siglip,bowl@medium,1,svm,0.421,0.01274,0.02367,0.1671,0.035,0.012,0.87,150
+coco_better,siglip,bus@large,1,svm,0.194,0.02546,0.04685,0.2931,0.709,0.024,0.98,150
+coco_better,siglip,bus@medium,1,svm,0.275,0.02334,0.04298,0.2711,0.093,0.022,0.927,150
+coco_better,siglip,bus@small,1,svm,0.438,0.01486,0.02754,0.1874,0.059,0.014,0.83,150
+coco_better,siglip,cell phone@large,1,svm,0.105,0.0519,0.09333,0.4628,0.896,0.049,0.98,150
+coco_better,siglip,cell phone@medium,1,svm,0.312,0.0244,0.04482,0.2752,0.27,0.023,0.875,150
+coco_better,siglip,cell phone@small,1,svm,0.623,0.007433,0.01387,0.1031,0.033,0.007,0.725,150
+coco_better,siglip,chair@large,1,svm,0.502,0.01486,0.02746,0.1813,0.038,0.014,0.717,150
+coco_better,siglip,chair@medium,1,svm,0.738,0.009552,0.0177,0.1204,0.022,0.009,0.532,150
+coco_better,siglip,clock@large,1,svm,0.196,0.02334,0.04305,0.2766,0.951,0.022,1,150
+coco_better,siglip,clock@medium,1,svm,0.382,0.01168,0.02173,0.1565,0.499,0.011,0.902,150
+coco_better,siglip,clock@small,1,svm,0.697,0.008493,0.0158,0.1133,0.282,0.008,0.638,150
+coco_better,siglip,dining table@large,1,svm,0.289,0.0191,0.03535,0.2366,0.167,0.018,0.982,150
+coco_better,siglip,dining table@medium,1,svm,0.429,0.0138,0.02561,0.1776,0.096,0.013,0.851,150
+coco_better,siglip,dining table@small,1,svm,0.78,0.01061,0.0195,0.1206,0.038,0.01,0.391,150
+coco_better,siglip,dog@large,1,svm,0.228,0.02016,0.03729,0.2477,0.764,0.019,1,150
+coco_better,siglip,dog@medium,1,svm,0.382,0.01168,0.02174,0.1572,0.501,0.011,0.927,150
+coco_better,siglip,dog@small,1,svm,0.609,0.01908,0.03475,0.1942,0.02,0.018,0.5,150
+coco_better,siglip,enclosed road vehicle@large,1,svm,0.375,0.01592,0.02953,0.2034,0.46,0.015,0.947,150
+coco_better,siglip,enclosed road vehicle@medium,1,svm,0.42,0.0191,0.03524,0.2276,0.057,0.018,0.836,150
+coco_better,siglip,fire hydrant@large,1,svm,0.034,0.1245,0.2111,0.6946,0.992,0.118,1,150
+coco_better,siglip,fire hydrant@medium,1,svm,0.34,0.01698,0.03144,0.2117,0.385,0.016,0.898,150
+coco_better,siglip,fire hydrant@small,1,svm,0.393,0.01698,0.03141,0.2093,0.054,0.016,0.855,150
+coco_better,siglip,fork@large,1,svm,0.135,0.03922,0.07136,0.3951,0.27,0.037,1,150
+coco_better,siglip,fork@medium,1,svm,0.256,0.0191,0.03533,0.2352,0.093,0.018,0.956,150
+coco_better,siglip,fork@small,1,svm,0.393,0.01486,0.02755,0.1883,0.101,0.014,0.848,150
+coco_better,siglip,frisbee@large,1,svm,0.201,0.02228,0.04114,0.2672,0.773,0.021,1,150
+coco_better,siglip,frisbee@medium,1,svm,0.204,0.02122,0.0392,0.2561,0.585,0.02,0.977,150
+coco_better,siglip,frisbee@small,1,svm,0.136,0.04028,0.07317,0.3988,0.619,0.038,0.981,150
+coco_better,siglip,keyboard@large,1,svm,0.132,0.03499,0.06389,0.3671,0.503,0.033,1,150
+coco_better,siglip,keyboard@medium,1,svm,0.199,0.02122,0.03922,0.2576,0.547,0.02,1,150
+coco_better,siglip,keyboard@small,1,svm,0.315,0.01592,0.02954,0.204,0.08,0.015,0.96,150
+coco_better,siglip,kite@large,1,svm,0.117,0.03816,0.0695,0.3883,0.957,0.036,1,150
+coco_better,siglip,kite@medium,1,svm,0.101,0.04134,0.07507,0.4083,0.926,0.039,1,150
+coco_better,siglip,kite@small,1,svm,0.149,0.03182,0.05825,0.3446,0.768,0.03,1,150
+coco_better,siglip,knife@large,1,svm,0.31,0.02334,0.04295,0.2687,0.184,0.022,0.898,150
+coco_better,siglip,knife@medium,1,svm,0.371,0.01274,0.0237,0.1699,0.064,0.012,0.957,150
+coco_better,siglip,knife@small,1,svm,0.718,0.007432,0.01384,0.1,0.007,0.007,0.591,150
+coco_better,siglip,laptop@large,1,svm,0.218,0.02016,0.03729,0.2477,0.436,0.019,1,150
+coco_better,siglip,laptop@medium,1,svm,0.332,0.02016,0.03723,0.2426,0.181,0.019,0.917,150
+coco_better,siglip,laptop@small,1,svm,0.723,0.007432,0.01385,0.1012,0.014,0.007,0.638,150
+coco_better,siglip,microwave@large,1,svm,0.151,0.03182,0.05825,0.3446,0.647,0.03,1,150
+coco_better,siglip,microwave@medium,1,svm,0.259,0.01592,0.02955,0.2047,0.237,0.015,0.976,150
+coco_better,siglip,microwave@small,1,svm,0.364,0.0191,0.03528,0.2305,0.189,0.018,0.879,150
+coco_better,siglip,motorcycle@large,1,svm,0.125,0.04028,0.07322,0.4017,0.924,0.038,1,150
+coco_better,siglip,motorcycle@medium,1,svm,0.342,0.01486,0.02758,0.1912,0.181,0.014,0.915,150
+coco_better,siglip,motorcycle@small,1,svm,0.476,0.01592,0.02945,0.1965,0.105,0.015,0.806,150
+coco_better,siglip,mouse@large,1,svm,0.137,0.03182,0.05825,0.3446,0.775,0.03,1,150
+coco_better,siglip,mouse@medium,1,svm,0.159,0.02864,0.05258,0.3205,0.525,0.027,1,150
+coco_better,siglip,mouse@small,1,svm,0.204,0.02334,0.04303,0.2751,0.587,0.022,0.979,150
+coco_better,siglip,orange@large,1,svm,0.08,0.05824,0.1043,0.4973,0.889,0.055,1,150
+coco_better,siglip,orange@medium,1,svm,0.138,0.0371,0.06759,0.3786,0.624,0.035,0.98,150
+coco_better,siglip,parking meter@large,1,svm,0.229,0.02016,0.03729,0.2477,0.953,0.019,1,150
+coco_better,siglip,parking meter@medium,1,svm,0.262,0.01698,0.0315,0.2166,0.421,0.016,1,150
+coco_better,siglip,parking meter@small,1,svm,0.392,0.01698,0.03141,0.2088,0.118,0.016,0.846,150
+coco_better,siglip,person@large,1,svm,0.242,0.02758,0.05068,0.3121,0.83,0.026,1,150
+coco_better,siglip,person@medium,1,svm,0.354,0.02546,0.04672,0.2839,0.132,0.024,0.878,150
+coco_better,siglip,person@small,1,svm,0.812,0.01167,0.0215,0.1362,0.175,0.011,0.472,150
+coco_better,siglip,remote@large,1,svm,0.212,0.02016,0.03729,0.2477,0.611,0.019,1,150
+coco_better,siglip,remote@medium,1,svm,0.271,0.0138,0.02567,0.1829,0.283,0.013,1,150
+coco_better,siglip,remote@small,1,svm,0.332,0.0191,0.03532,0.2338,0.305,0.018,0.932,150
+coco_better,siglip,scissors@large,1,svm,0.14,0.02758,0.05068,0.3121,0.93,0.026,1,150
+coco_better,siglip,scissors@medium,1,svm,0.294,0.0191,0.03535,0.2367,0.488,0.018,0.984,150
+coco_better,siglip,scissors@small,1,svm,0.31,0.01592,0.02955,0.2049,0.078,0.015,0.981,150
+coco_better,siglip,single serving drinking vessel@large,1,svm,0.286,0.01592,0.02956,0.2056,0.239,0.015,1,150
+coco_better,siglip,single serving drinking vessel@medium,1,svm,0.326,0.0138,0.02566,0.1822,0.213,0.013,0.977,150
+coco_better,siglip,single serving drinking vessel@small,1,svm,0.402,0.01486,0.02757,0.1906,0.054,0.014,0.9,150
+coco_better,siglip,sink@large,1,svm,0.211,0.02016,0.03728,0.2463,0.358,0.019,0.977,150
+coco_better,siglip,sink@medium,1,svm,0.315,0.01592,0.02955,0.2048,0.304,0.015,0.98,150
+coco_better,siglip,sink@small,1,svm,0.299,0.01274,0.02371,0.1704,0.178,0.012,0.974,150
+coco_better,siglip,skateboard@large,1,svm,0.091,0.04451,0.08061,0.427,0.978,0.042,1,150
+coco_better,siglip,skateboard@medium,1,svm,0.109,0.03922,0.07136,0.3951,0.981,0.037,1,150
+coco_better,siglip,skateboard@small,1,svm,0.214,0.02228,0.04112,0.2659,0.708,0.021,0.98,150
+coco_better,siglip,skis@large,1,svm,0.027,0.1579,0.2609,0.75,0.898,0.15,1,150
+coco_better,siglip,skis@medium,1,svm,0.083,0.05085,0.0916,0.4615,0.899,0.048,1,150
+coco_better,siglip,skis@small,1,svm,0.097,0.04345,0.07877,0.4209,0.819,0.041,1,150
+coco_better,siglip,snowboard@large,1,svm,0.076,0.05296,0.09524,0.4722,0.888,0.05,1,150
+coco_better,siglip,snowboard@medium,1,svm,0.074,0.05507,0.09886,0.4825,0.656,0.052,1,150
+coco_better,siglip,snowboard@small,1,svm,0.1,0.05402,0.09705,0.4774,0.639,0.051,1,150
+coco_better,siglip,spoon@large,1,svm,0.239,0.02228,0.0411,0.2644,0.116,0.021,0.96,150
+coco_better,siglip,spoon@medium,1,svm,0.349,0.01486,0.02759,0.1922,0.064,0.014,0.939,150
+coco_better,siglip,spoon@small,1,svm,0.722,0.01167,0.02149,0.1354,0.027,0.011,0.462,150
+coco_better,siglip,stop sign@large,1,svm,0.094,0.05612,0.1006,0.483,0.943,0.053,0.98,150
+coco_better,siglip,stop sign@medium,1,svm,0.232,0.02864,0.05251,0.3156,0.636,0.027,0.951,150
+coco_better,siglip,stop sign@small,1,svm,0.584,0.01062,0.01972,0.1389,0.014,0.01,0.714,150
+coco_better,siglip,surfboard@large,1,svm,0.159,0.02334,0.04305,0.2766,0.918,0.022,1,150
+coco_better,siglip,surfboard@medium,1,svm,0.071,0.05296,0.09524,0.4722,0.935,0.05,1,150
+coco_better,siglip,surfboard@small,1,svm,0.093,0.05507,0.09886,0.4825,0.838,0.052,1,150
+coco_better,siglip,tennis racket@large,1,svm,0.103,0.04028,0.07322,0.4017,0.996,0.038,1,150
+coco_better,siglip,tennis racket@medium,1,svm,0.124,0.03711,0.06763,0.3814,0.994,0.035,1,150
+coco_better,siglip,tennis racket@small,1,svm,0.056,0.08458,0.1481,0.5965,0.982,0.08,1,150
+coco_better,siglip,tie@large,1,svm,0.204,0.02758,0.05063,0.3086,0.822,0.026,0.962,150
+coco_better,siglip,tie@medium,1,svm,0.14,0.03393,0.06202,0.3598,0.673,0.032,1,150
+coco_better,siglip,tie@small,1,svm,0.447,0.01592,0.02946,0.1972,0.084,0.015,0.818,150
+coco_better,siglip,toothbrush@large,1,svm,0.086,0.04979,0.08978,0.4561,0.985,0.047,1,150
+coco_better,siglip,toothbrush@medium,1,svm,0.175,0.02334,0.04303,0.2749,0.522,0.022,0.976,150
+coco_better,siglip,toothbrush@small,1,svm,0.288,0.02228,0.04105,0.2605,0.281,0.021,0.907,150
+coco_better,siglip,traffic light@large,1,svm,0.118,0.03816,0.0695,0.3883,0.879,0.036,1,150
+coco_better,siglip,traffic light@medium,1,svm,0.136,0.03182,0.05825,0.3446,0.36,0.03,1,150
+coco_better,siglip,traffic light@small,1,svm,0.374,0.0138,0.02563,0.1792,0.092,0.013,0.891,150
+coco_better,siglip,tv@large,1,svm,0.245,0.0191,0.03535,0.2364,0.448,0.018,0.978,150
+coco_better,siglip,tv@medium,1,svm,0.326,0.01698,0.03145,0.2125,0.172,0.016,0.915,150
+coco_better,siglip,tv@small,1,svm,0.776,0.008491,0.01573,0.1068,0.021,0.008,0.468,150
+coco_better,siglip,umbrella@large,1,svm,0.212,0.02228,0.04114,0.2672,0.736,0.021,1,150
+coco_better,siglip,umbrella@medium,1,svm,0.385,0.0138,0.02561,0.178,0.2,0.013,0.86,150
+coco_better,siglip,umbrella@small,1,svm,0.423,0.01486,0.02752,0.1864,0.119,0.014,0.809,150
+coco_better,siglip,vase or potted plant@large,1,svm,0.351,0.01486,0.02758,0.1911,0.538,0.014,0.913,150
+coco_better,siglip,vase or potted plant@medium,1,svm,0.397,0.0191,0.03522,0.2256,0.103,0.018,0.808,150
+coco_better,siglip,vase or potted plant@small,1,svm,0.612,0.01168,0.02163,0.147,0.083,0.011,0.646,150
+coco_better,siglip,airplane@large,2,svm,0.043,0.08878,0.155,0.6092,0.984,0.084,1,150
+coco_better,siglip,airplane@medium,2,svm,0.09,0.0519,0.09342,0.4669,0.904,0.049,1,150
+coco_better,siglip,airplane@small,2,svm,0.17,0.03922,0.07121,0.3864,0.802,0.037,0.943,150
+coco_better,siglip,apple@large,2,svm,0.043,0.09614,0.1668,0.6299,0.883,0.091,1,150
+coco_better,siglip,apple@medium,2,svm,0.28,0.04026,0.07264,0.3711,0.352,0.038,0.821,150
+coco_better,siglip,bag or luggage@large,2,svm,0.304,0.02863,0.05236,0.3055,0.652,0.027,0.86,150
+coco_better,siglip,bag or luggage@medium,2,svm,0.633,0.01274,0.02357,0.1581,0.066,0.012,0.661,150
+coco_better,siglip,bag or luggage@small,2,svm,1,0,0,0,0.017,,0,150
+coco_better,siglip,banana@large,2,svm,0.085,0.05296,0.09524,0.4722,0.921,0.05,1,150
+coco_better,siglip,banana@medium,2,svm,0.328,0.01698,0.03145,0.2129,0.52,0.016,0.923,150
+coco_better,siglip,baseball bat@large,2,svm,0.156,0.02652,0.04878,0.3036,0.862,0.025,1,150
+coco_better,siglip,baseball bat@medium,2,svm,0.088,0.04873,0.08795,0.4505,0.911,0.046,1,150
+coco_better,siglip,baseball bat@small,2,svm,0.111,0.04873,0.08788,0.4468,0.915,0.046,0.981,150
+coco_better,siglip,bench@large,2,svm,0.351,0.0191,0.03526,0.2292,0.484,0.018,0.86,150
+coco_better,siglip,bench@medium,2,svm,0.709,0.008493,0.01578,0.1117,0.019,0.008,0.587,150
+coco_better,siglip,bench@small,2,svm,0.749,0.007431,0.01381,0.09722,0.013,0.007,0.5,150
+coco_better,siglip,bicycle@large,2,svm,0.205,0.02334,0.04303,0.2752,0.774,0.022,0.98,150
+coco_better,siglip,bicycle@medium,2,svm,0.275,0.02758,0.05054,0.302,0.198,0.026,0.897,150
+coco_better,siglip,bicycle@small,2,svm,0.599,0.01168,0.02164,0.148,0.024,0.011,0.667,150
+coco_better,siglip,bird@large,2,svm,0.089,0.06667,0.1184,0.5285,0.923,0.063,0.982,150
+coco_better,siglip,bird@medium,2,svm,0.38,0.01274,0.02368,0.1676,0.558,0.012,0.884,150
+coco_better,siglip,bird@small,2,svm,0.623,0.01273,0.02352,0.1535,0.032,0.012,0.583,150
+coco_better,siglip,boat@large,2,svm,0.212,0.02228,0.04112,0.2659,0.753,0.021,0.98,150
+coco_better,siglip,boat@medium,2,svm,0.247,0.0191,0.03535,0.2365,0.565,0.018,0.98,150
+coco_better,siglip,boat@small,2,svm,0.231,0.02122,0.03918,0.2547,0.119,0.02,0.956,150
+coco_better,siglip,book@large,2,svm,0.247,0.02122,0.03918,0.2549,0.449,0.02,0.958,150
+coco_better,siglip,book@medium,2,svm,0.423,0.0138,0.02561,0.1775,0.038,0.013,0.848,150
+coco_better,siglip,book@small,2,svm,0.716,0.009553,0.0177,0.1208,0.021,0.009,0.54,150
+coco_better,siglip,bottle@large,2,svm,0.372,0.01274,0.0237,0.1699,0.436,0.012,0.955,150
+coco_better,siglip,bottle@medium,2,svm,0.438,0.01168,0.02173,0.1562,0.061,0.011,0.894,150
+coco_better,siglip,bottle@small,2,svm,0.452,0.01274,0.02365,0.1651,0.023,0.012,0.814,150
+coco_better,siglip,bowl@large,2,svm,0.255,0.02334,0.04299,0.2722,0.177,0.022,0.941,150
+coco_better,siglip,bowl@medium,2,svm,0.406,0.01592,0.02949,0.1998,0.078,0.015,0.868,150
+coco_better,siglip,bowl@small,2,svm,0.714,0.01061,0.01961,0.1288,0.013,0.01,0.5,150
+coco_better,siglip,bus@large,2,svm,0.182,0.02758,0.05062,0.3079,0.562,0.026,0.955,150
+coco_better,siglip,bus@medium,2,svm,0.343,0.01698,0.03147,0.2142,0.132,0.016,0.948,150
+coco_better,siglip,bus@small,2,svm,0.565,0.01697,0.03118,0.1917,0.121,0.016,0.611,150
+coco_better,siglip,cell phone@large,2,svm,0.068,0.0614,0.1096,0.5114,0.871,0.058,1,150
+coco_better,siglip,cell phone@medium,2,svm,0.452,0.01062,0.01976,0.1424,0.131,0.01,0.825,150
+coco_better,siglip,cell phone@small,2,svm,0.551,0.01168,0.02167,0.1501,0.072,0.011,0.717,150
+coco_better,siglip,chair@large,2,svm,0.418,0.01274,0.02368,0.1678,0.043,0.012,0.891,150
+coco_better,siglip,chair@medium,2,svm,0.666,0.008493,0.01579,0.1118,0.021,0.008,0.59,150
+coco_better,siglip,clock@large,2,svm,0.172,0.02546,0.04688,0.2948,0.946,0.024,1,150
+coco_better,siglip,clock@medium,2,svm,0.374,0.01592,0.0295,0.2005,0.601,0.015,0.882,150
+coco_better,siglip,clock@small,2,svm,0.703,0.008492,0.01577,0.1101,0.083,0.008,0.545,150
+coco_better,siglip,dining table@large,2,svm,0.299,0.0138,0.02565,0.1812,0.127,0.013,0.946,150
+coco_better,siglip,dining table@medium,2,svm,0.38,0.02016,0.03714,0.236,0.176,0.019,0.824,150
+coco_better,siglip,dining table@small,2,svm,0.708,0.007432,0.01384,0.1003,0.031,0.007,0.6,150
+coco_better,siglip,dog@large,2,svm,0.248,0.01486,0.02761,0.1944,0.819,0.014,1,150
+coco_better,siglip,dog@medium,2,svm,0.49,0.01168,0.0217,0.1536,0.254,0.011,0.809,150
+coco_better,siglip,dog@small,2,svm,0.542,0.01168,0.02171,0.1545,0.015,0.011,0.836,150
+coco_better,siglip,enclosed road vehicle@large,2,svm,0.351,0.02228,0.04099,0.256,0.268,0.021,0.852,150
+coco_better,siglip,enclosed road vehicle@medium,2,svm,0.4,0.01804,0.03334,0.2193,0.066,0.017,0.855,150
+coco_better,siglip,enclosed road vehicle@small,2,svm,0.554,0.01485,0.0274,0.1762,0.036,0.014,0.638,150
+coco_better,siglip,fire hydrant@large,2,svm,0.088,0.05402,0.09705,0.4774,0.994,0.051,1,150
+coco_better,siglip,fire hydrant@medium,2,svm,0.281,0.01804,0.03342,0.2263,0.412,0.017,0.981,150
+coco_better,siglip,fire hydrant@small,2,svm,0.344,0.0138,0.02565,0.1816,0.127,0.013,0.959,150
+coco_better,siglip,fork@large,2,svm,0.135,0.02864,0.05258,0.3205,0.211,0.027,1,150
+coco_better,siglip,fork@medium,2,svm,0.246,0.01804,0.03343,0.2272,0.153,0.017,1,150
+coco_better,siglip,fork@small,2,svm,0.254,0.02122,0.03918,0.2551,0.136,0.02,0.961,150
+coco_better,siglip,frisbee@large,2,svm,0.121,0.03816,0.0695,0.3883,0.906,0.036,1,150
+coco_better,siglip,frisbee@medium,2,svm,0.167,0.02758,0.05065,0.3101,0.691,0.026,0.978,150
+coco_better,siglip,frisbee@small,2,svm,0.167,0.03181,0.05818,0.3396,0.493,0.03,0.957,150
+coco_better,siglip,keyboard@large,2,svm,0.119,0.03922,0.07136,0.3951,0.621,0.037,1,150
+coco_better,siglip,keyboard@medium,2,svm,0.253,0.02334,0.04302,0.2741,0.482,0.022,0.966,150
+coco_better,siglip,keyboard@small,2,svm,0.604,0.01062,0.01971,0.1378,0.036,0.01,0.686,150
+coco_better,siglip,kite@large,2,svm,0.146,0.04134,0.07503,0.4057,0.924,0.039,0.984,150
+coco_better,siglip,kite@medium,2,svm,0.113,0.04028,0.07322,0.4017,0.907,0.038,1,150
+coco_better,siglip,kite@small,2,svm,0.179,0.0297,0.05445,0.3268,0.675,0.028,0.981,150
+coco_better,siglip,knife@large,2,svm,0.24,0.01698,0.0315,0.2166,0.243,0.016,1,150
+coco_better,siglip,knife@medium,2,svm,0.449,0.01168,0.02173,0.1555,0.055,0.011,0.87,150
+coco_better,siglip,laptop@large,2,svm,0.124,0.03816,0.0695,0.3883,0.496,0.036,1,150
+coco_better,siglip,laptop@medium,2,svm,0.196,0.02016,0.03729,0.2477,0.174,0.019,1,150
+coco_better,siglip,laptop@small,2,svm,1.148,0.003186,0.005951,0.04506,0.004,0.003,0.364,150
+coco_better,siglip,microwave@large,2,svm,0.201,0.02652,0.04873,0.2999,0.563,0.025,0.959,150
+coco_better,siglip,microwave@medium,2,svm,0.228,0.02969,0.05436,0.3212,0.214,0.028,0.93,150
+coco_better,siglip,microwave@small,2,svm,0.548,0.01062,0.01974,0.1401,0.157,0.01,0.75,150
+coco_better,siglip,motorcycle@large,2,svm,0.158,0.02758,0.05068,0.3121,0.932,0.026,1,150
+coco_better,siglip,motorcycle@medium,2,svm,0.402,0.01274,0.02368,0.1679,0.318,0.012,0.894,150
+coco_better,siglip,motorcycle@small,2,svm,0.293,0.01804,0.03341,0.2253,0.143,0.017,0.963,150
+coco_better,siglip,mouse@large,2,svm,0.073,0.06351,0.1132,0.5204,0.803,0.06,1,150
+coco_better,siglip,mouse@medium,2,svm,0.114,0.03182,0.05825,0.3446,0.4,0.03,1,150
+coco_better,siglip,mouse@small,2,svm,0.235,0.02758,0.05058,0.305,0.381,0.026,0.926,150
+coco_better,siglip,orange@large,2,svm,0.06,0.06984,0.1238,0.5457,0.914,0.066,1,150
+coco_better,siglip,orange@medium,2,svm,0.163,0.02652,0.04875,0.3015,0.661,0.025,0.977,150
+coco_better,siglip,parking meter@large,2,svm,0.228,0.02016,0.03729,0.2477,0.945,0.019,1,150
+coco_better,siglip,parking meter@medium,2,svm,0.367,0.01274,0.02371,0.1706,0.385,0.012,0.98,150
+coco_better,siglip,parking meter@small,2,svm,0.436,0.01698,0.03137,0.2058,0.071,0.016,0.796,150
+coco_better,siglip,person@large,2,svm,0.271,0.0244,0.04494,0.2841,0.646,0.023,0.978,150
+coco_better,siglip,person@medium,2,svm,0.414,0.02122,0.03905,0.2451,0.132,0.02,0.826,150
+coco_better,siglip,person@small,2,svm,0.7,0.01379,0.02544,0.1635,0.041,0.013,0.592,150
+coco_better,siglip,remote@large,2,svm,0.234,0.0191,0.03535,0.2364,0.688,0.018,0.978,150
+coco_better,siglip,remote@medium,2,svm,0.323,0.02334,0.04287,0.2633,0.166,0.022,0.837,150
+coco_better,siglip,remote@small,2,svm,0.215,0.02334,0.04305,0.2766,0.289,0.022,1,150
+coco_better,siglip,scissors@large,2,svm,0.13,0.03499,0.06389,0.3671,0.921,0.033,1,150
+coco_better,siglip,scissors@medium,2,svm,0.396,0.01592,0.02949,0.1999,0.423,0.015,0.87,150
+coco_better,siglip,scissors@small,2,svm,0.566,0.009556,0.01781,0.1307,0.035,0.009,0.846,150
+coco_better,siglip,single serving drinking vessel@large,2,svm,0.323,0.01592,0.02953,0.2028,0.164,0.015,0.933,150
+coco_better,siglip,single serving drinking vessel@medium,2,svm,0.364,0.01804,0.03333,0.219,0.092,0.017,0.851,150
+coco_better,siglip,single serving drinking vessel@small,2,svm,0.379,0.01486,0.02757,0.1904,0.055,0.014,0.896,150
+coco_better,siglip,sink@large,2,svm,0.221,0.02334,0.04301,0.2734,0.249,0.022,0.957,150
+coco_better,siglip,sink@medium,2,svm,0.245,0.02757,0.05053,0.3016,0.298,0.026,0.894,150
+coco_better,siglip,sink@small,2,svm,0.328,0.01804,0.03339,0.2233,0.282,0.017,0.925,150
+coco_better,siglip,skateboard@large,2,svm,0.069,0.05718,0.1025,0.4925,0.969,0.054,1,150
+coco_better,siglip,skateboard@medium,2,svm,0.109,0.04345,0.07877,0.4209,0.964,0.041,1,150
+coco_better,siglip,skateboard@small,2,svm,0.237,0.02122,0.03918,0.2549,0.749,0.02,0.958,150
+coco_better,siglip,skis@large,2,svm,0.085,0.05718,0.1025,0.4925,0.898,0.054,1,150
+coco_better,siglip,skis@medium,2,svm,0.056,0.07616,0.1343,0.5688,0.891,0.072,1,150
+coco_better,siglip,skis@small,2,svm,0.079,0.04134,0.07507,0.4083,0.776,0.039,1,150
+coco_better,siglip,snowboard@large,2,svm,0.188,0.02652,0.04876,0.3018,0.838,0.025,0.98,150
+coco_better,siglip,snowboard@medium,2,svm,0.122,0.04451,0.08061,0.427,0.735,0.042,1,150
+coco_better,siglip,snowboard@small,2,svm,0.053,0.08247,0.1447,0.5899,0.444,0.078,1,150
+coco_better,siglip,spoon@large,2,svm,0.267,0.01698,0.0315,0.2166,0.106,0.016,1,150
+coco_better,siglip,spoon@medium,2,svm,0.327,0.01592,0.02953,0.2031,0.08,0.015,0.939,150
+coco_better,siglip,spoon@small,2,svm,0.861,0.006371,0.01187,0.08665,0.009,0.006,0.542,150
+coco_better,siglip,stop sign@large,2,svm,0.112,0.04451,0.08061,0.427,0.93,0.042,1,150
+coco_better,siglip,stop sign@medium,2,svm,0.259,0.03181,0.05799,0.328,0.481,0.03,0.865,150
+coco_better,siglip,stop sign@small,2,svm,0.708,0.009554,0.01774,0.1243,0.024,0.009,0.623,150
+coco_better,siglip,surfboard@large,2,svm,0.202,0.02334,0.04305,0.2766,0.847,0.022,1,150
+coco_better,siglip,surfboard@medium,2,svm,0.119,0.03922,0.07136,0.3951,0.91,0.037,1,150
+coco_better,siglip,surfboard@small,2,svm,0.073,0.05718,0.1025,0.4925,0.868,0.054,1,150
+coco_better,siglip,tennis racket@large,2,svm,0.054,0.08458,0.1481,0.5965,0.991,0.08,1,150
+coco_better,siglip,tennis racket@medium,2,svm,0.121,0.03076,0.05637,0.3367,0.996,0.029,1,150
+coco_better,siglip,tennis racket@small,2,svm,0.076,0.05929,0.1061,0.5021,0.982,0.056,1,150
+coco_better,siglip,tie@large,2,svm,0.161,0.03181,0.05822,0.3424,0.789,0.03,0.981,150
+coco_better,siglip,tie@medium,2,svm,0.121,0.03499,0.06389,0.3671,0.656,0.033,1,150
+coco_better,siglip,tie@small,2,svm,0.519,0.01592,0.02937,0.1898,0.276,0.015,0.698,150
+coco_better,siglip,toothbrush@large,2,svm,0.179,0.02546,0.04688,0.2948,0.966,0.024,1,150
+coco_better,siglip,toothbrush@medium,2,svm,0.323,0.0138,0.02566,0.1822,0.54,0.013,0.978,150
+coco_better,siglip,toothbrush@small,2,svm,0.261,0.01804,0.03341,0.225,0.141,0.017,0.956,150
+coco_better,siglip,traffic light@large,2,svm,0.131,0.03393,0.06202,0.3598,0.838,0.032,1,150
+coco_better,siglip,traffic light@medium,2,svm,0.219,0.03392,0.06181,0.347,0.315,0.032,0.902,150
+coco_better,siglip,traffic light@small,2,svm,0.333,0.01274,0.02369,0.1689,0.102,0.012,0.925,150
+coco_better,siglip,tv@large,2,svm,0.254,0.01592,0.02956,0.2056,0.401,0.015,1,150
+coco_better,siglip,tv@medium,2,svm,0.425,0.01698,0.03138,0.2066,0.202,0.016,0.808,150
+coco_better,siglip,tv@small,2,svm,0.761,0.009552,0.01768,0.1182,0.013,0.009,0.49,150
+coco_better,siglip,umbrella@large,2,svm,0.262,0.0244,0.04491,0.2819,0.495,0.023,0.951,150
+coco_better,siglip,umbrella@medium,2,svm,0.444,0.01486,0.02753,0.1873,0.267,0.014,0.827,150
+coco_better,siglip,umbrella@small,2,svm,0.455,0.01698,0.03134,0.2031,0.073,0.016,0.755,150
+coco_better,siglip,vase or potted plant@large,2,svm,0.409,0.01486,0.02758,0.1918,0.62,0.014,0.93,150
+coco_better,siglip,vase or potted plant@medium,2,svm,0.464,0.01592,0.02942,0.1941,0.155,0.015,0.765,150
+coco_better,siglip,vase or potted plant@small,2,svm,1.007,0.005307,0.009835,0.06701,0.005,0.005,0.298,150
+coco_better,siglip,airplane@large,3,svm,0.069,0.06351,0.1132,0.5204,0.976,0.06,1,150
+coco_better,siglip,airplane@medium,3,svm,0.127,0.03182,0.05825,0.3446,0.908,0.03,1,150
+coco_better,siglip,airplane@small,3,svm,0.219,0.04238,0.07642,0.3887,0.722,0.04,0.854,150
+coco_better,siglip,apple@large,3,svm,0.098,0.05296,0.09524,0.4722,0.884,0.05,1,150
+coco_better,siglip,apple@medium,3,svm,0.214,0.02228,0.04112,0.2658,0.355,0.021,0.979,150
+coco_better,siglip,bag or luggage@large,3,svm,0.277,0.02228,0.04106,0.2615,0.647,0.021,0.92,150
+coco_better,siglip,bag or luggage@medium,3,svm,0.437,0.0138,0.02562,0.1787,0.079,0.013,0.88,150
+coco_better,siglip,bag or luggage@small,3,svm,0.541,0.0138,0.02556,0.1735,0.046,0.013,0.759,150
+coco_better,siglip,banana@large,3,svm,0.172,0.03181,0.05822,0.3426,0.847,0.03,0.982,150
+coco_better,siglip,banana@medium,3,svm,0.319,0.01698,0.03143,0.211,0.472,0.016,0.886,150
+coco_better,siglip,baseball bat@large,3,svm,0.063,0.06667,0.1185,0.5334,0.919,0.063,1,150
+coco_better,siglip,baseball bat@medium,3,svm,0.069,0.06246,0.1114,0.5159,0.904,0.059,1,150
+coco_better,siglip,baseball bat@small,3,svm,0.081,0.0772,0.1359,0.5671,0.954,0.073,0.983,150
+coco_better,siglip,bench@large,3,svm,0.303,0.01804,0.0334,0.2242,0.638,0.017,0.941,150
+coco_better,siglip,bench@medium,3,svm,0.689,0.01061,0.01967,0.134,0.044,0.01,0.596,150
+coco_better,siglip,bench@small,3,svm,0.787,0.009551,0.01766,0.1167,0.009,0.009,0.463,150
+coco_better,siglip,bicycle@large,3,svm,0.159,0.04028,0.07312,0.3965,0.648,0.038,0.966,150
+coco_better,siglip,bicycle@medium,3,svm,0.376,0.0191,0.03526,0.229,0.12,0.018,0.857,150
+coco_better,siglip,bicycle@small,3,svm,0.457,0.02016,0.03705,0.229,0.037,0.019,0.741,150
+coco_better,siglip,bird@large,3,svm,0.12,0.05506,0.09868,0.4745,0.827,0.052,0.964,150
+coco_better,siglip,bird@medium,3,svm,0.364,0.01592,0.0295,0.2004,0.52,0.015,0.88,150
+coco_better,siglip,bird@small,3,svm,0.598,0.01485,0.02737,0.1736,0.016,0.014,0.604,150
+coco_better,siglip,boat@large,3,svm,0.213,0.02546,0.04683,0.2915,0.876,0.024,0.961,150
+coco_better,siglip,boat@medium,3,svm,0.27,0.0191,0.03532,0.2338,0.289,0.018,0.933,150
+coco_better,siglip,boat@small,3,svm,0.217,0.02122,0.03922,0.2576,0.164,0.02,1,150
+coco_better,siglip,book@large,3,svm,0.253,0.0191,0.03534,0.2352,0.49,0.018,0.957,150
+coco_better,siglip,book@medium,3,svm,0.522,0.01274,0.02364,0.1644,0.025,0.012,0.796,150
+coco_better,siglip,book@small,3,svm,0.507,0.01698,0.03126,0.1976,0.208,0.016,0.68,150
+coco_better,siglip,bottle@large,3,svm,0.284,0.02334,0.04295,0.269,0.224,0.022,0.902,150
+coco_better,siglip,bottle@medium,3,svm,0.447,0.0138,0.02565,0.1812,0.069,0.013,0.948,150
+coco_better,siglip,bottle@small,3,svm,0.702,0.008493,0.01578,0.1112,0.01,0.008,0.575,150
+coco_better,siglip,bowl@large,3,svm,0.301,0.01804,0.0334,0.2241,0.123,0.017,0.94,150
+coco_better,siglip,bowl@medium,3,svm,0.395,0.01486,0.02758,0.1915,0.097,0.014,0.923,150
+coco_better,siglip,bowl@small,3,svm,0.857,0.007429,0.01374,0.09135,0.012,0.007,0.37,150
+coco_better,siglip,bus@large,3,svm,0.232,0.02122,0.03922,0.2576,0.702,0.02,1,150
+coco_better,siglip,bus@medium,3,svm,0.344,0.02122,0.03911,0.2493,0.145,0.02,0.879,150
+coco_better,siglip,bus@small,3,svm,0.429,0.009556,0.01781,0.1312,0.114,0.009,0.865,150
+coco_better,siglip,cell phone@large,3,svm,0.084,0.05929,0.1059,0.4963,0.879,0.056,0.976,150
+coco_better,siglip,cell phone@medium,3,svm,0.338,0.01698,0.03148,0.215,0.332,0.016,0.965,150
+coco_better,siglip,cell phone@small,3,svm,0.383,0.01698,0.0314,0.2081,0.035,0.016,0.833,150
+coco_better,siglip,chair@large,3,svm,0.4,0.02016,0.03716,0.2375,0.053,0.019,0.845,150
+coco_better,siglip,chair@medium,3,svm,1.03,0.004247,0.007919,0.05844,0.01,0.004,0.391,150
+coco_better,siglip,clock@large,3,svm,0.224,0.02228,0.04112,0.2659,0.944,0.021,0.98,150
+coco_better,siglip,clock@medium,3,svm,0.386,0.01486,0.02757,0.1908,0.469,0.014,0.906,150
+coco_better,siglip,clock@small,3,svm,0.67,0.01061,0.01964,0.1314,0.198,0.01,0.545,150
+coco_better,siglip,dining table@large,3,svm,0.381,0.01274,0.02367,0.1672,0.081,0.012,0.872,150
+coco_better,siglip,dining table@medium,3,svm,0.466,0.01274,0.02364,0.1642,0.051,0.012,0.791,150
+coco_better,siglip,dining table@small,3,svm,0.675,0.02014,0.03652,0.1958,0.023,0.019,0.468,150
+coco_better,siglip,dog@large,3,svm,0.183,0.02122,0.03922,0.2576,0.866,0.02,1,150
+coco_better,siglip,dog@medium,3,svm,0.382,0.01168,0.02173,0.1563,0.227,0.011,0.897,150
+coco_better,siglip,dog@small,3,svm,0.669,0.01696,0.03093,0.175,0.036,0.016,0.462,150
+coco_better,siglip,enclosed road vehicle@large,3,svm,0.346,0.01592,0.02954,0.204,0.479,0.015,0.96,150
+coco_better,siglip,enclosed road vehicle@medium,3,svm,0.437,0.01168,0.02173,0.156,0.053,0.011,0.886,150
+coco_better,siglip,enclosed road vehicle@small,3,svm,0.668,0.01061,0.01968,0.1349,0.016,0.01,0.615,150
+coco_better,siglip,fire hydrant@large,3,svm,0.093,0.04028,0.07322,0.4017,0.971,0.038,1,150
+coco_better,siglip,fire hydrant@medium,3,svm,0.305,0.01804,0.03343,0.2272,0.436,0.017,1,150
+coco_better,siglip,fire hydrant@small,3,svm,0.369,0.0138,0.02563,0.1791,0.056,0.013,0.889,150
+coco_better,siglip,fork@large,3,svm,0.196,0.02652,0.04876,0.3019,0.247,0.025,0.981,150
+coco_better,siglip,fork@medium,3,svm,0.136,0.03076,0.05637,0.3367,0.173,0.029,1,150
+coco_better,siglip,fork@small,3,svm,0.247,0.01486,0.02761,0.1944,0.173,0.014,1,150
+coco_better,siglip,frisbee@large,3,svm,0.188,0.02334,0.04305,0.2766,0.703,0.022,1,150
+coco_better,siglip,frisbee@medium,3,svm,0.166,0.0371,0.06755,0.3764,0.566,0.035,0.964,150
+coco_better,siglip,frisbee@small,3,svm,0.165,0.02758,0.05065,0.3101,0.561,0.026,0.978,150
+coco_better,siglip,keyboard@large,3,svm,0.107,0.03816,0.0695,0.3883,0.602,0.036,1,150
+coco_better,siglip,keyboard@medium,3,svm,0.142,0.03499,0.06385,0.3644,0.418,0.033,0.979,150
+coco_better,siglip,keyboard@small,3,svm,0.608,0.009555,0.01777,0.1268,0.015,0.009,0.696,150
+coco_better,siglip,kite@large,3,svm,0.127,0.03076,0.05637,0.3367,0.982,0.029,1,150
+coco_better,siglip,kite@medium,3,svm,0.109,0.04028,0.07322,0.4017,0.882,0.038,1,150
+coco_better,siglip,kite@small,3,svm,0.147,0.03182,0.05825,0.3446,0.794,0.03,1,150
+coco_better,siglip,knife@large,3,svm,0.403,0.0191,0.03519,0.2235,0.209,0.018,0.78,150
+coco_better,siglip,knife@medium,3,svm,0.679,0.01167,0.02157,0.142,0.015,0.011,0.556,150
+coco_better,siglip,knife@small,3,svm,0.758,0.008493,0.01578,0.1116,0.008,0.008,0.585,150
+coco_better,siglip,laptop@large,3,svm,0.096,0.05085,0.0916,0.4615,0.673,0.048,1,150
+coco_better,siglip,laptop@medium,3,svm,0.274,0.01592,0.02955,0.2047,0.229,0.015,0.977,150
+coco_better,siglip,microwave@large,3,svm,0.175,0.03181,0.05818,0.34,0.537,0.03,0.96,150
+coco_better,siglip,microwave@medium,3,svm,0.198,0.02652,0.04876,0.3019,0.197,0.025,0.981,150
+coco_better,siglip,microwave@small,3,svm,0.252,0.01804,0.03342,0.2262,0.343,0.017,0.979,150
+coco_better,siglip,motorcycle@large,3,svm,0.139,0.03287,0.06014,0.3523,0.945,0.031,1,150
+coco_better,siglip,motorcycle@medium,3,svm,0.372,0.01592,0.02951,0.2017,0.388,0.015,0.909,150
+coco_better,siglip,motorcycle@small,3,svm,0.673,0.01167,0.02162,0.1458,0.021,0.011,0.623,150
+coco_better,siglip,mouse@large,3,svm,0.078,0.05613,0.1007,0.4876,0.822,0.053,1,150
+coco_better,siglip,mouse@medium,3,svm,0.155,0.03076,0.05637,0.3367,0.54,0.029,1,150
+coco_better,siglip,mouse@small,3,svm,0.281,0.01804,0.03341,0.2251,0.366,0.017,0.959,150
+coco_better,siglip,orange@large,3,svm,0.07,0.05824,0.1043,0.4973,0.937,0.055,1,150
+coco_better,siglip,orange@medium,3,svm,0.258,0.03709,0.06725,0.3595,0.537,0.035,0.855,150
+coco_better,siglip,parking meter@large,3,svm,0.222,0.02016,0.03729,0.2477,0.872,0.019,1,150
+coco_better,siglip,parking meter@medium,3,svm,0.254,0.02016,0.03728,0.2466,0.325,0.019,0.981,150
+coco_better,siglip,parking meter@small,3,svm,0.372,0.01804,0.03333,0.2185,0.08,0.017,0.843,150
+coco_better,siglip,person@large,3,svm,0.261,0.03287,0.06007,0.3482,0.685,0.031,0.966,150
+coco_better,siglip,person@medium,3,svm,0.544,0.01698,0.03129,0.1995,0.097,0.016,0.705,150
+coco_better,siglip,person@small,3,svm,0.746,0.01485,0.02725,0.1653,0.159,0.014,0.509,150
+coco_better,siglip,remote@large,3,svm,0.169,0.02864,0.05258,0.3205,0.742,0.027,1,150
+coco_better,siglip,remote@medium,3,svm,0.229,0.02969,0.05436,0.3209,0.149,0.028,0.927,150
+coco_better,siglip,remote@small,3,svm,0.345,0.01486,0.02759,0.1921,0.177,0.014,0.938,150
+coco_better,siglip,scissors@large,3,svm,0.113,0.04768,0.08605,0.4412,0.946,0.045,0.981,150
+coco_better,siglip,scissors@medium,3,svm,0.299,0.01592,0.02954,0.2039,0.364,0.015,0.957,150
+coco_better,siglip,scissors@small,3,svm,0.392,0.0138,0.02563,0.1794,0.087,0.013,0.896,150
+coco_better,siglip,single serving drinking vessel@large,3,svm,0.311,0.01592,0.02956,0.2056,0.262,0.015,1,150
+coco_better,siglip,single serving drinking vessel@medium,3,svm,0.371,0.01698,0.03146,0.2131,0.068,0.016,0.927,150
+coco_better,siglip,single serving drinking vessel@small,3,svm,0.622,0.01168,0.02163,0.147,0.036,0.011,0.646,150
+coco_better,siglip,sink@large,3,svm,0.172,0.03393,0.06194,0.355,0.27,0.032,0.962,150
+coco_better,siglip,sink@medium,3,svm,0.277,0.02334,0.04298,0.2711,0.211,0.022,0.927,150
+coco_better,siglip,sink@small,3,svm,0.294,0.0138,0.02566,0.1822,0.176,0.013,0.976,150
+coco_better,siglip,skateboard@large,3,svm,0.14,0.03499,0.06389,0.3671,0.972,0.033,1,150
+coco_better,siglip,skateboard@medium,3,svm,0.151,0.02864,0.05258,0.3205,0.942,0.027,1,150
+coco_better,siglip,skateboard@small,3,svm,0.185,0.02758,0.05068,0.3121,0.802,0.026,1,150
+coco_better,siglip,skis@large,3,svm,0.114,0.03816,0.0695,0.3883,0.848,0.036,1,150
+coco_better,siglip,skis@medium,3,svm,0.058,0.073,0.1291,0.5575,0.887,0.069,1,150
+coco_better,siglip,skis@small,3,svm,0.07,0.06246,0.1114,0.5159,0.804,0.059,1,150
+coco_better,siglip,snowboard@large,3,svm,0.129,0.03287,0.06014,0.3523,0.87,0.031,1,150
+coco_better,siglip,snowboard@medium,3,svm,0.097,0.04239,0.07692,0.4146,0.559,0.04,1,150
+coco_better,siglip,snowboard@small,3,svm,0.091,0.05085,0.0916,0.4615,0.646,0.048,1,150
+coco_better,siglip,spoon@large,3,svm,0.255,0.01804,0.03342,0.2262,0.187,0.017,0.979,150
+coco_better,siglip,spoon@medium,3,svm,0.272,0.01698,0.03147,0.2145,0.087,0.016,0.956,150
+coco_better,siglip,spoon@small,3,svm,0.801,0.009548,0.01758,0.1105,0.027,0.009,0.375,150
+coco_better,siglip,stop sign@large,3,svm,0.099,0.04239,0.07692,0.4146,0.933,0.04,1,150
+coco_better,siglip,stop sign@medium,3,svm,0.197,0.0244,0.04495,0.2843,0.417,0.023,0.98,150
+coco_better,siglip,stop sign@small,3,svm,0.58,0.009555,0.01777,0.1272,0.014,0.009,0.711,150
+coco_better,siglip,surfboard@large,3,svm,0.202,0.02334,0.04305,0.2766,0.899,0.022,1,150
+coco_better,siglip,surfboard@medium,3,svm,0.089,0.04662,0.08429,0.439,0.891,0.044,1,150
+coco_better,siglip,surfboard@small,3,svm,0.076,0.06246,0.1114,0.5159,0.903,0.059,1,150
+coco_better,siglip,tennis racket@large,3,svm,0.133,0.03499,0.06389,0.3671,0.992,0.033,1,150
+coco_better,siglip,tennis racket@medium,3,svm,0.085,0.06667,0.1184,0.5282,0.976,0.063,0.981,150
+coco_better,siglip,tennis racket@small,3,svm,0.097,0.04557,0.08245,0.4331,1,0.043,1,150
+coco_better,siglip,tie@large,3,svm,0.105,0.04768,0.08612,0.4448,0.95,0.045,1,150
+coco_better,siglip,tie@medium,3,svm,0.19,0.02652,0.04876,0.3018,0.667,0.025,0.98,150
+coco_better,siglip,tie@small,3,svm,0.474,0.01486,0.02748,0.183,0.119,0.014,0.745,150
+coco_better,siglip,toothbrush@large,3,svm,0.063,0.06562,0.1168,0.5291,0.977,0.062,1,150
+coco_better,siglip,toothbrush@medium,3,svm,0.249,0.0191,0.03535,0.2365,0.548,0.018,0.98,150
+coco_better,siglip,toothbrush@small,3,svm,0.234,0.02016,0.03726,0.2449,0.226,0.019,0.953,150
+coco_better,siglip,traffic light@large,3,svm,0.163,0.02758,0.05068,0.3121,0.889,0.026,1,150
+coco_better,siglip,traffic light@medium,3,svm,0.154,0.03076,0.05637,0.3367,0.415,0.029,1,150
+coco_better,siglip,traffic light@small,3,svm,0.26,0.02228,0.0411,0.2647,0.224,0.021,0.964,150
+coco_better,siglip,tv@large,3,svm,0.168,0.0371,0.06755,0.3764,0.462,0.035,0.964,150
+coco_better,siglip,tv@medium,3,svm,0.382,0.0138,0.02561,0.178,0.181,0.013,0.86,150
+coco_better,siglip,tv@small,3,svm,0.793,0.00849,0.01571,0.1052,0.02,0.008,0.438,150
+coco_better,siglip,umbrella@large,3,svm,0.268,0.02334,0.04298,0.2711,0.443,0.022,0.927,150
+coco_better,siglip,umbrella@medium,3,svm,0.435,0.01486,0.02755,0.1887,0.299,0.014,0.857,150
+coco_better,siglip,umbrella@small,3,svm,0.414,0.0138,0.02562,0.1787,0.071,0.013,0.878,150
+coco_better,siglip,vase or potted plant@large,3,svm,0.355,0.0191,0.03532,0.2339,0.508,0.018,0.935,150
+coco_better,siglip,vase or potted plant@medium,3,svm,0.4,0.01486,0.02755,0.1887,0.223,0.014,0.857,150
+coco_better,siglip,vase or potted plant@small,3,svm,1,0,0,0,0.003,,0,150
+coco_better,siglip,airplane@large,4,svm,0.06,0.0751,0.1326,0.5651,0.97,0.071,1,150
+coco_better,siglip,airplane@medium,4,svm,0.057,0.05824,0.1043,0.4973,0.911,0.055,1,150
+coco_better,siglip,airplane@small,4,svm,0.232,0.02864,0.05247,0.3133,0.779,0.027,0.929,150
+coco_better,siglip,apple@large,4,svm,0.08,0.04239,0.07692,0.4146,0.809,0.04,1,150
+coco_better,siglip,apple@medium,4,svm,0.193,0.02334,0.043,0.2729,0.355,0.022,0.95,150
+coco_better,siglip,bag or luggage@large,4,svm,0.331,0.01698,0.03146,0.2138,0.435,0.016,0.94,150
+coco_better,siglip,bag or luggage@medium,4,svm,0.453,0.01486,0.02752,0.1861,0.079,0.014,0.804,150
+coco_better,siglip,bag or luggage@small,4,svm,0.506,0.009556,0.0178,0.1294,0.038,0.009,0.789,150
+coco_better,siglip,banana@large,4,svm,0.121,0.03711,0.06763,0.3814,0.915,0.035,1,150
+coco_better,siglip,banana@medium,4,svm,0.298,0.02122,0.03914,0.2513,0.451,0.02,0.906,150
+coco_better,siglip,baseball bat@large,4,svm,0.117,0.04557,0.08245,0.4331,0.879,0.043,1,150
+coco_better,siglip,baseball bat@medium,4,svm,0.023,0.1537,0.2548,0.744,0.931,0.146,1,150
+coco_better,siglip,baseball bat@small,4,svm,0.166,0.03816,0.06933,0.3787,0.907,0.036,0.935,150
+coco_better,siglip,bench@large,4,svm,0.332,0.01698,0.03144,0.2113,0.343,0.016,0.891,150
+coco_better,siglip,bench@medium,4,svm,0.645,0.01168,0.02164,0.1474,0.042,0.011,0.655,150
+coco_better,siglip,bench@small,4,svm,0.804,0.00849,0.01572,0.1056,0.01,0.008,0.444,150
+coco_better,siglip,bicycle@large,4,svm,0.216,0.0244,0.04495,0.2843,0.796,0.023,0.981,150
+coco_better,siglip,bicycle@medium,4,svm,0.392,0.0138,0.02562,0.1782,0.222,0.013,0.867,150
+coco_better,siglip,bicycle@small,4,svm,0.584,0.01274,0.02357,0.158,0.029,0.012,0.66,150
+coco_better,siglip,bird@large,4,svm,0.104,0.04134,0.07507,0.4083,0.975,0.039,1,150
+coco_better,siglip,bird@medium,4,svm,0.315,0.0244,0.04476,0.2709,0.591,0.023,0.83,150
+coco_better,siglip,bird@small,4,svm,0.526,0.01274,0.02362,0.162,0.048,0.012,0.74,150
+coco_better,siglip,boat@large,4,svm,0.207,0.02122,0.0392,0.2561,0.774,0.02,0.977,150
+coco_better,siglip,boat@medium,4,svm,0.174,0.02652,0.04878,0.3036,0.617,0.025,1,150
+coco_better,siglip,boat@small,4,svm,0.315,0.02016,0.03724,0.2436,0.186,0.019,0.933,150
+coco_better,siglip,book@large,4,svm,0.296,0.0191,0.03533,0.2344,0.515,0.018,0.943,150
+coco_better,siglip,book@medium,4,svm,0.589,0.0138,0.02548,0.1669,0.015,0.013,0.642,150
+coco_better,siglip,book@small,4,svm,0.513,0.01592,0.02937,0.1895,0.03,0.015,0.694,150
+coco_better,siglip,bottle@large,4,svm,0.321,0.01592,0.02953,0.203,0.541,0.015,0.936,150
+coco_better,siglip,bottle@medium,4,svm,0.485,0.01486,0.0275,0.1841,0.046,0.014,0.765,150
+coco_better,siglip,bottle@small,4,svm,0.439,0.01486,0.02754,0.1879,0.054,0.014,0.84,150
+coco_better,siglip,bowl@large,4,svm,0.253,0.02969,0.05433,0.3192,0.244,0.028,0.912,150
+coco_better,siglip,bowl@medium,4,svm,0.346,0.01804,0.03337,0.2222,0.052,0.017,0.904,150
+coco_better,siglip,bus@large,4,svm,0.212,0.0244,0.04495,0.2843,0.699,0.023,0.981,150
+coco_better,siglip,bus@medium,4,svm,0.282,0.02016,0.03723,0.2426,0.211,0.019,0.918,150
+coco_better,siglip,bus@small,4,svm,0.401,0.01274,0.02367,0.1664,0.057,0.012,0.85,150
+coco_better,siglip,cell phone@large,4,svm,0.103,0.04345,0.07877,0.4209,0.903,0.041,1,150
+coco_better,siglip,cell phone@medium,4,svm,0.425,0.01274,0.02367,0.1672,0.18,0.012,0.872,150
+coco_better,siglip,cell phone@small,4,svm,0.464,0.01274,0.02365,0.1651,0.124,0.012,0.816,150
+coco_better,siglip,chair@large,4,svm,0.602,0.01168,0.02163,0.1473,0.041,0.011,0.652,150
+coco_better,siglip,chair@medium,4,svm,0.868,0.00743,0.01378,0.09511,0.008,0.007,0.446,150
+coco_better,siglip,clock@large,4,svm,0.186,0.02546,0.04685,0.2931,0.949,0.024,0.979,150
+coco_better,siglip,clock@medium,4,svm,0.444,0.0138,0.02562,0.1782,0.606,0.013,0.865,150
+coco_better,siglip,clock@small,4,svm,0.701,0.01167,0.02153,0.139,0.119,0.011,0.509,150
+coco_better,siglip,dining table@large,4,svm,0.315,0.02122,0.03916,0.2531,0.202,0.02,0.932,150
+coco_better,siglip,dining table@medium,4,svm,0.467,0.01592,0.02944,0.1955,0.17,0.015,0.788,150
+coco_better,siglip,dining table@small,4,svm,0.727,0.009555,0.01777,0.1267,0.037,0.009,0.695,150
+coco_better,siglip,dog@large,4,svm,0.224,0.0191,0.03536,0.2376,0.793,0.018,1,150
+coco_better,siglip,dog@medium,4,svm,0.376,0.01486,0.02758,0.1916,0.247,0.014,0.925,150
+coco_better,siglip,dog@small,4,svm,0.647,0.01696,0.03097,0.1773,0.02,0.016,0.479,150
+coco_better,siglip,enclosed road vehicle@large,4,svm,0.351,0.02122,0.0391,0.2486,0.263,0.02,0.87,150
+coco_better,siglip,enclosed road vehicle@medium,4,svm,0.461,0.01168,0.02172,0.1554,0.044,0.011,0.864,150
+coco_better,siglip,enclosed road vehicle@small,4,svm,0.718,0.009554,0.01774,0.1243,0.021,0.009,0.623,150
+coco_better,siglip,fire hydrant@large,4,svm,0.072,0.0614,0.1096,0.5114,0.964,0.058,1,150
+coco_better,siglip,fire hydrant@medium,4,svm,0.232,0.02122,0.0392,0.2563,0.441,0.02,0.98,150
+coco_better,siglip,fire hydrant@small,4,svm,0.401,0.01486,0.02758,0.191,0.062,0.014,0.911,150
+coco_better,siglip,fork@large,4,svm,0.147,0.03182,0.05825,0.3446,0.221,0.03,1,150
+coco_better,siglip,fork@medium,4,svm,0.217,0.02334,0.04303,0.2752,0.105,0.022,0.981,150
+coco_better,siglip,fork@small,4,svm,0.259,0.01592,0.02956,0.2056,0.137,0.015,1,150
+coco_better,siglip,frisbee@large,4,svm,0.122,0.03605,0.06576,0.3744,0.872,0.034,1,150
+coco_better,siglip,frisbee@medium,4,svm,0.179,0.0191,0.03536,0.2376,0.64,0.018,1,150
+coco_better,siglip,frisbee@small,4,svm,0.194,0.02652,0.04873,0.2998,0.624,0.025,0.958,150
+coco_better,siglip,keyboard@large,4,svm,0.147,0.03499,0.06385,0.3646,0.61,0.033,0.98,150
+coco_better,siglip,keyboard@medium,4,svm,0.169,0.02864,0.05255,0.3185,0.572,0.027,0.979,150
+coco_better,siglip,keyboard@small,4,svm,0.394,0.01486,0.02756,0.1899,0.085,0.014,0.885,150
+coco_better,siglip,kite@large,4,svm,0.142,0.02864,0.05258,0.3205,0.98,0.027,1,150
+coco_better,siglip,kite@medium,4,svm,0.092,0.04451,0.08061,0.427,0.799,0.042,1,150
+coco_better,siglip,kite@small,4,svm,0.133,0.03711,0.06763,0.3814,0.884,0.035,1,150
+coco_better,siglip,knife@large,4,svm,0.338,0.01592,0.02954,0.2041,0.18,0.015,0.962,150
+coco_better,siglip,knife@medium,4,svm,0.412,0.01274,0.02368,0.1678,0.052,0.012,0.891,150
+coco_better,siglip,laptop@large,4,svm,0.168,0.02652,0.04878,0.3036,0.441,0.025,1,150
+coco_better,siglip,laptop@medium,4,svm,0.319,0.01698,0.03148,0.2148,0.161,0.016,0.962,150
+coco_better,siglip,laptop@small,4,svm,1.15,0.003186,0.00595,0.04491,0.004,0.003,0.354,150
+coco_better,siglip,microwave@large,4,svm,0.162,0.03075,0.05629,0.3315,0.545,0.029,0.952,150
+coco_better,siglip,microwave@medium,4,svm,0.193,0.03393,0.0619,0.3528,0.274,0.032,0.945,150
+coco_better,siglip,microwave@small,4,svm,0.631,0.009554,0.01776,0.1258,0.049,0.009,0.667,150
+coco_better,siglip,motorcycle@large,4,svm,0.115,0.03816,0.0695,0.3883,0.924,0.036,1,150
+coco_better,siglip,motorcycle@medium,4,svm,0.384,0.01698,0.03142,0.2103,0.248,0.016,0.873,150
+coco_better,siglip,motorcycle@small,4,svm,0.297,0.01592,0.02955,0.2048,0.13,0.015,0.98,150
+coco_better,siglip,mouse@large,4,svm,0.083,0.05507,0.09886,0.4825,0.809,0.052,1,150
+coco_better,siglip,mouse@medium,4,svm,0.161,0.04028,0.07312,0.3965,0.49,0.038,0.966,150
+coco_better,siglip,mouse@small,4,svm,0.202,0.02334,0.04303,0.2751,0.566,0.022,0.979,150
+coco_better,siglip,orange@large,4,svm,0.086,0.04873,0.08795,0.4505,0.947,0.046,1,150
+coco_better,siglip,orange@medium,4,svm,0.322,0.01698,0.03147,0.2139,0.431,0.016,0.942,150
+coco_better,siglip,parking meter@large,4,svm,0.282,0.01486,0.02761,0.1944,0.868,0.014,1,150
+coco_better,siglip,parking meter@medium,4,svm,0.253,0.01698,0.0315,0.2166,0.41,0.016,1,150
+coco_better,siglip,parking meter@small,4,svm,0.396,0.01698,0.03141,0.2094,0.1,0.016,0.857,150
+coco_better,siglip,person@large,4,svm,0.235,0.0297,0.05444,0.3267,0.781,0.028,0.98,150
+coco_better,siglip,person@medium,4,svm,0.642,0.0212,0.03864,0.2176,0.189,0.02,0.569,150
+coco_better,siglip,person@small,4,svm,0.78,0.009552,0.01768,0.1188,0.024,0.009,0.5,150
+coco_better,siglip,remote@large,4,svm,0.198,0.02652,0.04876,0.3019,0.738,0.025,0.981,150
+coco_better,siglip,remote@medium,4,svm,0.437,0.02121,0.03892,0.2354,0.134,0.02,0.72,150
+coco_better,siglip,remote@small,4,svm,0.353,0.01804,0.03338,0.2226,0.325,0.017,0.911,150
+coco_better,siglip,scissors@large,4,svm,0.07,0.05507,0.09886,0.4825,0.927,0.052,1,150
+coco_better,siglip,scissors@medium,4,svm,0.333,0.01592,0.02954,0.2041,0.416,0.015,0.963,150
+coco_better,siglip,scissors@small,4,svm,0.317,0.01486,0.02761,0.1937,0.141,0.014,0.98,150
+coco_better,siglip,single serving drinking vessel@large,4,svm,0.285,0.0191,0.03535,0.2366,0.261,0.018,0.981,150
+coco_better,siglip,single serving drinking vessel@medium,4,svm,0.314,0.02334,0.04294,0.2679,0.147,0.022,0.889,150
+coco_better,siglip,single serving drinking vessel@small,4,svm,0.458,0.01592,0.0294,0.1924,0.076,0.015,0.738,150
+coco_better,siglip,sink@large,4,svm,0.173,0.02334,0.04305,0.2766,0.331,0.022,1,150
+coco_better,siglip,sink@medium,4,svm,0.269,0.02016,0.03726,0.2455,0.436,0.019,0.963,150
+coco_better,siglip,sink@small,4,svm,0.365,0.01486,0.02759,0.1922,0.06,0.014,0.941,150
+coco_better,siglip,skateboard@large,4,svm,0.142,0.03605,0.06576,0.3744,0.983,0.034,1,150
+coco_better,siglip,skateboard@medium,4,svm,0.076,0.05613,0.1007,0.4876,0.97,0.053,1,150
+coco_better,siglip,skateboard@small,4,svm,0.243,0.01804,0.03342,0.2261,0.764,0.017,0.977,150
+coco_better,siglip,skis@large,4,svm,0.071,0.06773,0.1203,0.5375,0.976,0.064,1,150
+coco_better,siglip,skis@medium,4,svm,0.076,0.04979,0.08978,0.4561,0.906,0.047,1,150
+coco_better,siglip,skis@small,4,svm,0.088,0.04873,0.08795,0.4505,0.734,0.046,1,150
+coco_better,siglip,snowboard@large,4,svm,0.124,0.03393,0.06202,0.3598,0.822,0.032,1,150
+coco_better,siglip,snowboard@medium,4,svm,0.133,0.04028,0.07322,0.4017,0.743,0.038,1,150
+coco_better,siglip,snowboard@small,4,svm,0.067,0.06562,0.1168,0.5291,0.587,0.062,1,150
+coco_better,siglip,spoon@large,4,svm,0.302,0.01698,0.0315,0.2166,0.307,0.016,1,150
+coco_better,siglip,spoon@medium,4,svm,0.312,0.01804,0.0334,0.2243,0.1,0.017,0.943,150
+coco_better,siglip,spoon@small,4,svm,0.839,0.007432,0.01382,0.09871,0.021,0.007,0.545,150
+coco_better,siglip,stop sign@large,4,svm,0.129,0.03922,0.07131,0.3921,0.904,0.037,0.98,150
+coco_better,siglip,stop sign@medium,4,svm,0.162,0.04027,0.07304,0.3919,0.529,0.038,0.938,150
+coco_better,siglip,stop sign@small,4,svm,0.439,0.01168,0.02172,0.1554,0.033,0.011,0.864,150
+coco_better,siglip,surfboard@large,4,svm,0.168,0.0244,0.04497,0.2858,0.898,0.023,1,150
+coco_better,siglip,surfboard@medium,4,svm,0.095,0.04345,0.07877,0.4209,0.92,0.041,1,150
+coco_better,siglip,surfboard@small,4,svm,0.064,0.07194,0.1273,0.5536,0.918,0.068,1,150
+coco_better,siglip,tennis racket@large,4,svm,0.067,0.06667,0.1185,0.5334,0.994,0.063,1,150
+coco_better,siglip,tennis racket@medium,4,svm,0.11,0.04451,0.08061,0.427,0.981,0.042,1,150
+coco_better,siglip,tennis racket@small,4,svm,0.147,0.03076,0.05637,0.3367,0.984,0.029,1,150
+coco_better,siglip,tie@large,4,svm,0.071,0.06457,0.115,0.5248,0.933,0.061,1,150
+coco_better,siglip,tie@medium,4,svm,0.203,0.02546,0.04685,0.2932,0.686,0.024,0.981,150
+coco_better,siglip,tie@small,4,svm,0.672,0.009553,0.01773,0.1227,0.131,0.009,0.583,150
+coco_better,siglip,toothbrush@large,4,svm,0.124,0.03816,0.0695,0.3883,0.886,0.036,1,150
+coco_better,siglip,toothbrush@medium,4,svm,0.231,0.02016,0.03728,0.2465,0.608,0.019,0.979,150
+coco_better,siglip,toothbrush@small,4,svm,0.268,0.02122,0.03914,0.2519,0.253,0.02,0.915,150
+coco_better,siglip,traffic light@large,4,svm,0.118,0.03393,0.06202,0.3598,0.897,0.032,1,150
+coco_better,siglip,traffic light@medium,4,svm,0.175,0.02334,0.04305,0.2766,0.415,0.022,1,150
+coco_better,siglip,traffic light@small,4,svm,0.42,0.01592,0.02948,0.199,0.275,0.015,0.852,150
+coco_better,siglip,tv@large,4,svm,0.205,0.02122,0.0392,0.256,0.387,0.02,0.976,150
+coco_better,siglip,tv@medium,4,svm,0.281,0.02228,0.04107,0.2617,0.145,0.021,0.923,150
+coco_better,siglip,umbrella@large,4,svm,0.29,0.01592,0.02955,0.2048,0.691,0.015,0.98,150
+coco_better,siglip,umbrella@medium,4,svm,0.332,0.01698,0.03144,0.2116,0.114,0.016,0.896,150
+coco_better,siglip,umbrella@small,4,svm,0.508,0.01909,0.03507,0.2148,0.026,0.018,0.678,150
+coco_better,siglip,vase or potted plant@large,4,svm,0.335,0.01486,0.02759,0.1919,0.554,0.014,0.933,150
+coco_better,siglip,vase or potted plant@medium,4,svm,0.535,0.01168,0.0217,0.1533,0.118,0.011,0.8,150
+coco_better,siglip,airplane@large,0,lrconv,0.141,0.02758,0.05068,0.3121,0.973,0.026,1,150
+coco_better,siglip,airplane@medium,0,lrconv,0.06,0.07616,0.1343,0.5688,0.952,0.072,1,150
+coco_better,siglip,airplane@small,0,lrconv,0.178,0.03816,0.06936,0.3805,0.741,0.036,0.947,150
+coco_better,siglip,apple@large,0,lrconv,0.078,0.05824,0.1043,0.4973,0.893,0.055,1,150
+coco_better,siglip,apple@medium,0,lrconv,0.274,0.01698,0.0315,0.2166,0.304,0.016,1,150
+coco_better,siglip,bag or luggage@large,0,lrconv,0.343,0.01592,0.02951,0.2018,0.599,0.015,0.911,150
+coco_better,siglip,bag or luggage@medium,0,lrconv,0.363,0.01592,0.0295,0.201,0.05,0.015,0.894,150
+coco_better,siglip,bag or luggage@small,0,lrconv,0.586,0.0212,0.03857,0.2132,0.018,0.02,0.538,150
+coco_better,siglip,banana@large,0,lrconv,0.125,0.03605,0.06576,0.3744,0.902,0.034,1,150
+coco_better,siglip,banana@medium,0,lrconv,0.353,0.01486,0.02757,0.1902,0.312,0.014,0.891,150
+coco_better,siglip,baseball bat@large,0,lrconv,0.063,0.07089,0.1256,0.5497,0.893,0.067,1,150
+coco_better,siglip,baseball bat@medium,0,lrconv,0.063,0.09823,0.1699,0.6282,0.883,0.093,0.981,150
+coco_better,siglip,baseball bat@small,0,lrconv,0.1,0.09611,0.1661,0.6108,0.915,0.091,0.95,150
+coco_better,siglip,bench@large,0,lrconv,0.321,0.0138,0.02565,0.1814,0.629,0.013,0.953,150
+coco_better,siglip,bench@medium,0,lrconv,0.781,0.008492,0.01575,0.1087,0.036,0.008,0.51,150
+coco_better,siglip,bench@small,0,lrconv,0.717,0.01061,0.01962,0.1294,0.01,0.01,0.51,150
+coco_better,siglip,bicycle@large,0,lrconv,0.163,0.02652,0.04878,0.3036,0.866,0.025,1,150
+coco_better,siglip,bicycle@medium,0,lrconv,0.291,0.0191,0.03534,0.2356,0.145,0.018,0.964,150
+coco_better,siglip,bicycle@small,0,lrconv,0.376,0.01486,0.02756,0.1894,0.061,0.014,0.872,150
+coco_better,siglip,bird@large,0,lrconv,0.084,0.04768,0.08612,0.4448,0.95,0.045,1,150
+coco_better,siglip,bird@medium,0,lrconv,0.363,0.01698,0.03143,0.2108,0.488,0.016,0.882,150
+coco_better,siglip,bird@small,0,lrconv,0.589,0.01274,0.02358,0.159,0.081,0.012,0.679,150
+coco_better,siglip,boat@large,0,lrconv,0.172,0.03076,0.05637,0.3367,0.87,0.029,1,150
+coco_better,siglip,boat@medium,0,lrconv,0.218,0.0244,0.04492,0.2827,0.44,0.023,0.96,150
+coco_better,siglip,boat@small,0,lrconv,0.234,0.02334,0.04302,0.2739,0.164,0.022,0.963,150
+coco_better,siglip,book@large,0,lrconv,0.253,0.01698,0.03148,0.2155,0.352,0.016,0.976,150
+coco_better,siglip,book@medium,0,lrconv,0.462,0.0138,0.02559,0.1759,0.067,0.013,0.812,150
+coco_better,siglip,bottle@large,0,lrconv,0.29,0.01698,0.0315,0.2166,0.463,0.016,1,150
+coco_better,siglip,bottle@medium,0,lrconv,0.463,0.01698,0.03137,0.2061,0.04,0.016,0.8,150
+coco_better,siglip,bottle@small,0,lrconv,1.061,0.003183,0.005867,0.0374,0.004,0.003,0.132,150
+coco_better,siglip,bowl@large,0,lrconv,0.275,0.02016,0.03726,0.2454,0.228,0.019,0.962,150
+coco_better,siglip,bowl@medium,0,lrconv,0.29,0.0191,0.03534,0.2355,0.058,0.018,0.962,150
+coco_better,siglip,bus@large,0,lrconv,0.163,0.02864,0.05255,0.3184,0.852,0.027,0.978,150
+coco_better,siglip,bus@medium,0,lrconv,0.317,0.01592,0.02953,0.2029,0.279,0.015,0.935,150
+coco_better,siglip,bus@small,0,lrconv,0.442,0.01486,0.0275,0.1842,0.069,0.014,0.767,150
+coco_better,siglip,cell phone@large,0,lrconv,0.081,0.0614,0.1096,0.5114,0.899,0.058,1,150
+coco_better,siglip,cell phone@medium,0,lrconv,0.412,0.0138,0.02561,0.1777,0.175,0.013,0.854,150
+coco_better,siglip,cell phone@small,0,lrconv,0.547,0.01168,0.02168,0.1511,0.071,0.011,0.74,150
+coco_better,siglip,chair@large,0,lrconv,0.517,0.01274,0.02366,0.1657,0.033,0.012,0.83,150
+coco_better,siglip,chair@medium,0,lrconv,0.884,0.007431,0.01382,0.09814,0.01,0.007,0.527,150
+coco_better,siglip,clock@large,0,lrconv,0.14,0.03922,0.07131,0.3924,0.982,0.037,0.982,150
+coco_better,siglip,clock@medium,0,lrconv,0.448,0.0138,0.02562,0.1783,0.611,0.013,0.868,150
+coco_better,siglip,clock@small,0,lrconv,0.591,0.01168,0.02165,0.1486,0.175,0.011,0.68,150
+coco_better,siglip,dining table@large,0,lrconv,0.259,0.02758,0.05059,0.3054,0.209,0.026,0.93,150
+coco_better,siglip,dining table@medium,0,lrconv,0.399,0.02545,0.04654,0.2715,0.132,0.024,0.764,150
+coco_better,siglip,dining table@small,0,lrconv,0.764,0.01378,0.02511,0.1411,0.019,0.013,0.367,150
+coco_better,siglip,dog@large,0,lrconv,0.197,0.02122,0.03922,0.2576,0.409,0.02,1,150
+coco_better,siglip,dog@medium,0,lrconv,0.362,0.0138,0.02564,0.1809,0.22,0.013,0.938,150
+coco_better,siglip,dog@small,0,lrconv,0.575,0.01803,0.03299,0.1937,0.039,0.017,0.553,150
+coco_better,siglip,enclosed road vehicle@large,0,lrconv,0.38,0.0191,0.03529,0.2317,0.309,0.018,0.898,150
+coco_better,siglip,enclosed road vehicle@medium,0,lrconv,0.436,0.01062,0.01976,0.1426,0.038,0.01,0.833,150
+coco_better,siglip,enclosed road vehicle@small,0,lrconv,0.533,0.01591,0.02933,0.1864,0.03,0.015,0.652,150
+coco_better,siglip,fire hydrant@large,0,lrconv,0.129,0.03499,0.06389,0.3671,0.965,0.033,1,150
+coco_better,siglip,fire hydrant@medium,0,lrconv,0.225,0.0191,0.03535,0.2363,0.424,0.018,0.977,150
+coco_better,siglip,fire hydrant@small,0,lrconv,0.298,0.02546,0.04671,0.2831,0.138,0.024,0.87,150
+coco_better,siglip,fork@large,0,lrconv,0.157,0.02334,0.04305,0.2766,0.186,0.022,1,150
+coco_better,siglip,fork@medium,0,lrconv,0.266,0.0191,0.03534,0.2354,0.104,0.018,0.96,150
+coco_better,siglip,fork@small,0,lrconv,0.291,0.02016,0.03723,0.2426,0.201,0.019,0.918,150
+coco_better,siglip,frisbee@large,0,lrconv,0.14,0.03393,0.06202,0.3598,0.625,0.032,1,150
+coco_better,siglip,frisbee@medium,0,lrconv,0.158,0.02758,0.05068,0.3121,0.756,0.026,1,150
+coco_better,siglip,frisbee@small,0,lrconv,0.186,0.0244,0.04494,0.2841,0.536,0.023,0.978,150
+coco_better,siglip,keyboard@large,0,lrconv,0.137,0.03605,0.06576,0.3744,0.58,0.034,1,150
+coco_better,siglip,keyboard@medium,0,lrconv,0.147,0.0371,0.06753,0.3752,0.406,0.035,0.956,150
+coco_better,siglip,keyboard@small,0,lrconv,0.429,0.01592,0.0295,0.2005,0.062,0.015,0.883,150
+coco_better,siglip,kite@large,0,lrconv,0.128,0.0297,0.05447,0.3287,0.96,0.028,1,150
+coco_better,siglip,kite@medium,0,lrconv,0.117,0.03182,0.05825,0.3446,0.839,0.03,1,150
+coco_better,siglip,kite@small,0,lrconv,0.175,0.02652,0.04875,0.3017,0.838,0.025,0.979,150
+coco_better,siglip,knife@large,0,lrconv,0.186,0.02652,0.04875,0.3017,0.155,0.025,0.979,150
+coco_better,siglip,knife@medium,0,lrconv,0.529,0.0138,0.02551,0.1693,0.031,0.013,0.681,150
+coco_better,siglip,laptop@large,0,lrconv,0.09,0.04451,0.08061,0.427,0.602,0.042,1,150
+coco_better,siglip,laptop@medium,0,lrconv,0.19,0.02758,0.05066,0.3104,0.196,0.026,0.981,150
+coco_better,siglip,laptop@small,0,lrconv,1,0,0,0,0.032,,0,150
+coco_better,siglip,microwave@large,0,lrconv,0.215,0.0244,0.04495,0.2843,0.581,0.023,0.981,150
+coco_better,siglip,microwave@medium,0,lrconv,0.244,0.02016,0.03726,0.2451,0.164,0.019,0.957,150
+coco_better,siglip,microwave@small,0,lrconv,0.16,0.02652,0.04875,0.3015,0.196,0.025,0.976,150
+coco_better,siglip,motorcycle@large,0,lrconv,0.126,0.03711,0.06763,0.3814,0.938,0.035,1,150
+coco_better,siglip,motorcycle@medium,0,lrconv,0.256,0.02016,0.03726,0.2454,0.398,0.019,0.961,150
+coco_better,siglip,motorcycle@small,0,lrconv,0.5,0.01274,0.02363,0.1629,0.039,0.012,0.761,150
+coco_better,siglip,mouse@large,0,lrconv,0.092,0.04134,0.07507,0.4083,0.812,0.039,1,150
+coco_better,siglip,mouse@medium,0,lrconv,0.148,0.03499,0.06389,0.3671,0.598,0.033,1,150
+coco_better,siglip,mouse@small,0,lrconv,0.122,0.05401,0.09687,0.4693,0.445,0.051,0.963,150
+coco_better,siglip,orange@large,0,lrconv,0.1,0.04239,0.07692,0.4146,0.919,0.04,1,150
+coco_better,siglip,orange@medium,0,lrconv,0.277,0.0244,0.04494,0.2835,0.568,0.023,0.971,150
+coco_better,siglip,parking meter@large,0,lrconv,0.186,0.02122,0.03922,0.2576,0.87,0.02,1,150
+coco_better,siglip,parking meter@medium,0,lrconv,0.242,0.02228,0.04114,0.2672,0.251,0.021,1,150
+coco_better,siglip,parking meter@small,0,lrconv,0.373,0.02334,0.04284,0.2607,0.068,0.022,0.81,150
+coco_better,siglip,person@large,0,lrconv,0.233,0.03076,0.05633,0.3346,0.543,0.029,0.98,150
+coco_better,siglip,person@medium,0,lrconv,0.358,0.02016,0.03726,0.2453,0.21,0.019,0.96,150
+coco_better,siglip,remote@large,0,lrconv,0.198,0.02652,0.04876,0.3019,0.689,0.025,0.981,150
+coco_better,siglip,remote@medium,0,lrconv,0.246,0.01486,0.0276,0.1935,0.3,0.014,0.973,150
+coco_better,siglip,remote@small,0,lrconv,0.211,0.02546,0.04685,0.2932,0.149,0.024,0.981,150
+coco_better,siglip,scissors@large,0,lrconv,0.146,0.02652,0.04878,0.3036,0.93,0.025,1,150
+coco_better,siglip,scissors@medium,0,lrconv,0.388,0.0138,0.02563,0.1793,0.347,0.013,0.894,150
+coco_better,siglip,scissors@small,0,lrconv,0.401,0.0138,0.0256,0.177,0.019,0.013,0.837,150
+coco_better,siglip,single serving drinking vessel@large,0,lrconv,0.299,0.01592,0.02956,0.2056,0.465,0.015,1,150
+coco_better,siglip,single serving drinking vessel@medium,0,lrconv,0.317,0.02228,0.04102,0.2585,0.225,0.021,0.882,150
+coco_better,siglip,single serving drinking vessel@small,0,lrconv,0.547,0.01486,0.02744,0.1794,0.028,0.014,0.686,150
+coco_better,siglip,sink@large,0,lrconv,0.208,0.02334,0.04303,0.2751,0.343,0.022,0.979,150
+coco_better,siglip,sink@medium,0,lrconv,0.253,0.03392,0.06173,0.3425,0.129,0.032,0.87,150
+coco_better,siglip,sink@small,0,lrconv,0.513,0.01062,0.01978,0.1438,0.12,0.01,0.88,150
+coco_better,siglip,skateboard@large,0,lrconv,0.081,0.05085,0.0916,0.4615,0.948,0.048,1,150
+coco_better,siglip,skateboard@medium,0,lrconv,0.091,0.04662,0.08429,0.439,0.946,0.044,1,150
+coco_better,siglip,skateboard@small,0,lrconv,0.272,0.02228,0.04103,0.2588,0.685,0.021,0.886,150
+coco_better,siglip,skis@large,0,lrconv,0.081,0.05718,0.1025,0.4925,0.892,0.054,1,150
+coco_better,siglip,skis@medium,0,lrconv,0.066,0.07089,0.1256,0.5497,0.924,0.067,1,150
+coco_better,siglip,skis@small,0,lrconv,0.061,0.07405,0.1308,0.5613,0.808,0.07,1,150
+coco_better,siglip,snowboard@large,0,lrconv,0.083,0.04557,0.08245,0.4331,0.856,0.043,1,150
+coco_better,siglip,snowboard@medium,0,lrconv,0.092,0.04239,0.07692,0.4146,0.579,0.04,1,150
+coco_better,siglip,snowboard@small,0,lrconv,0.075,0.06246,0.1114,0.5159,0.543,0.059,1,150
+coco_better,siglip,spoon@large,0,lrconv,0.183,0.02228,0.04114,0.2672,0.079,0.021,1,150
+coco_better,siglip,spoon@medium,0,lrconv,0.269,0.02334,0.043,0.2727,0.172,0.022,0.947,150
+coco_better,siglip,spoon@small,0,lrconv,0.708,0.01061,0.01962,0.13,0.012,0.01,0.52,150
+coco_better,siglip,stop sign@large,0,lrconv,0.081,0.04662,0.08429,0.439,0.927,0.044,1,150
+coco_better,siglip,stop sign@medium,0,lrconv,0.139,0.03181,0.05821,0.342,0.569,0.03,0.977,150
+coco_better,siglip,stop sign@small,0,lrconv,0.752,0.008492,0.01576,0.1091,0.014,0.008,0.52,150
+coco_better,siglip,surfboard@large,0,lrconv,0.112,0.04451,0.08061,0.427,0.898,0.042,1,150
+coco_better,siglip,surfboard@medium,0,lrconv,0.105,0.04768,0.08604,0.4408,0.904,0.045,0.979,150
+coco_better,siglip,surfboard@small,0,lrconv,0.131,0.03287,0.06014,0.3523,0.879,0.031,1,150
+coco_better,siglip,tennis racket@large,0,lrconv,0.075,0.05507,0.09886,0.4825,0.992,0.052,1,150
+coco_better,siglip,tennis racket@medium,0,lrconv,0.12,0.05084,0.09153,0.4583,0.982,0.048,0.984,150
+coco_better,siglip,tennis racket@small,0,lrconv,0.036,0.2315,0.3605,0.814,0.979,0.221,0.978,150
+coco_better,siglip,tie@large,0,lrconv,0.235,0.0244,0.04493,0.283,0.801,0.023,0.964,150
+coco_better,siglip,tie@medium,0,lrconv,0.139,0.03393,0.06202,0.3598,0.639,0.032,1,150
+coco_better,siglip,tie@small,0,lrconv,0.289,0.02228,0.04105,0.2604,0.172,0.021,0.906,150
+coco_better,siglip,toothbrush@large,0,lrconv,0.151,0.03182,0.05825,0.3446,0.93,0.03,1,150
+coco_better,siglip,toothbrush@medium,0,lrconv,0.249,0.0244,0.04488,0.2793,0.518,0.023,0.92,150
+coco_better,siglip,toothbrush@small,0,lrconv,0.287,0.02122,0.03913,0.2507,0.225,0.02,0.898,150
+coco_better,siglip,traffic light@large,0,lrconv,0.151,0.03076,0.05637,0.3367,0.84,0.029,1,150
+coco_better,siglip,traffic light@medium,0,lrconv,0.15,0.03393,0.06202,0.3598,0.323,0.032,1,150
+coco_better,siglip,traffic light@small,0,lrconv,0.29,0.0191,0.03531,0.2329,0.075,0.018,0.917,150
+coco_better,siglip,tv@large,0,lrconv,0.172,0.03181,0.05818,0.3396,0.462,0.03,0.957,150
+coco_better,siglip,tv@medium,0,lrconv,0.279,0.02228,0.04107,0.2617,0.162,0.021,0.923,150
+coco_better,siglip,tv@small,0,lrconv,0.516,0.009555,0.01779,0.1285,0.038,0.009,0.757,150
+coco_better,siglip,umbrella@large,0,lrconv,0.22,0.02546,0.04686,0.2934,0.598,0.024,0.983,150
+coco_better,siglip,umbrella@medium,0,lrconv,0.329,0.01486,0.02761,0.1938,0.255,0.014,0.981,150
+coco_better,siglip,umbrella@small,0,lrconv,0.383,0.0138,0.02563,0.1792,0.053,0.013,0.891,150
+coco_better,siglip,vase or potted plant@large,0,lrconv,0.312,0.01804,0.0334,0.2243,0.622,0.017,0.943,150
+coco_better,siglip,vase or potted plant@medium,0,lrconv,0.604,0.01062,0.01972,0.1387,0.163,0.01,0.708,150
+coco_better,siglip,vase or potted plant@small,0,lrconv,0.561,0.02754,0.04956,0.2474,0.12,0.026,0.529,150
+coco_better,siglip,airplane@large,1,lrconv,0.064,0.08877,0.1547,0.6018,0.969,0.084,0.979,150
+coco_better,siglip,airplane@medium,1,lrconv,0.07,0.0519,0.09342,0.4669,0.953,0.049,1,150
+coco_better,siglip,airplane@small,1,lrconv,0.239,0.03815,0.06916,0.3694,0.746,0.036,0.877,150
+coco_better,siglip,apple@large,1,lrconv,0.097,0.04662,0.08429,0.439,0.846,0.044,1,150
+coco_better,siglip,apple@medium,1,lrconv,0.213,0.02228,0.04114,0.2672,0.299,0.021,1,150
+coco_better,siglip,bag or luggage@large,1,lrconv,0.316,0.02863,0.05228,0.3006,0.616,0.027,0.82,150
+coco_better,siglip,bag or luggage@medium,1,lrconv,0.477,0.01274,0.02367,0.1669,0.068,0.012,0.863,150
+coco_better,siglip,bag or luggage@small,1,lrconv,0.599,0.01591,0.02923,0.1795,0.022,0.015,0.571,150
+coco_better,siglip,banana@large,1,lrconv,0.124,0.03499,0.06389,0.3671,0.828,0.033,1,150
+coco_better,siglip,banana@medium,1,lrconv,0.296,0.02546,0.04676,0.2863,0.488,0.024,0.903,150
+coco_better,siglip,baseball bat@large,1,lrconv,0.084,0.04979,0.08978,0.4561,0.886,0.047,1,150
+coco_better,siglip,baseball bat@medium,1,lrconv,0.078,0.0751,0.1324,0.5593,0.855,0.071,0.981,150
+coco_better,siglip,baseball bat@small,1,lrconv,0.099,0.06772,0.12,0.5256,0.911,0.064,0.957,150
+coco_better,siglip,bench@large,1,lrconv,0.406,0.01486,0.02753,0.1872,0.421,0.014,0.826,150
+coco_better,siglip,bench@medium,1,lrconv,0.9,0.005308,0.009865,0.06975,0.013,0.005,0.366,150
+coco_better,siglip,bench@small,1,lrconv,1,0,0,0,0.005,,0,150
+coco_better,siglip,bicycle@large,1,lrconv,0.24,0.0191,0.03536,0.2376,0.791,0.018,1,150
+coco_better,siglip,bicycle@medium,1,lrconv,0.289,0.01486,0.02759,0.1926,0.129,0.014,0.95,150
+coco_better,siglip,bicycle@small,1,lrconv,0.362,0.02228,0.04095,0.2531,0.058,0.021,0.818,150
+coco_better,siglip,bird@large,1,lrconv,0.058,0.1108,0.1897,0.6585,0.909,0.105,0.982,150
+coco_better,siglip,bird@medium,1,lrconv,0.3,0.0191,0.03528,0.2309,0.693,0.018,0.886,150
+coco_better,siglip,bird@small,1,lrconv,0.699,0.009553,0.01771,0.1214,0.07,0.009,0.553,150
+coco_better,siglip,boat@large,1,lrconv,0.171,0.02228,0.04114,0.2672,0.872,0.021,1,150
+coco_better,siglip,boat@medium,1,lrconv,0.237,0.02016,0.03726,0.2451,0.504,0.019,0.957,150
+coco_better,siglip,boat@small,1,lrconv,0.278,0.02016,0.03725,0.2442,0.222,0.019,0.942,150
+coco_better,siglip,book@large,1,lrconv,0.209,0.02864,0.05249,0.3144,0.463,0.027,0.939,150
+coco_better,siglip,book@medium,1,lrconv,0.474,0.02439,0.04449,0.2534,0.05,0.023,0.678,150
+coco_better,siglip,book@small,1,lrconv,0.514,0.01062,0.01975,0.1414,0.09,0.01,0.791,150
+coco_better,siglip,bottle@large,1,lrconv,0.265,0.0191,0.03536,0.2376,0.305,0.018,1,150
+coco_better,siglip,bottle@medium,1,lrconv,0.445,0.0138,0.02563,0.1792,0.069,0.013,0.891,150
+coco_better,siglip,bowl@large,1,lrconv,0.232,0.0244,0.0449,0.2808,0.155,0.023,0.938,150
+coco_better,siglip,bowl@medium,1,lrconv,0.459,0.01274,0.02366,0.1655,0.036,0.012,0.826,150
+coco_better,siglip,bus@large,1,lrconv,0.154,0.0371,0.06754,0.3756,0.745,0.035,0.959,150
+coco_better,siglip,bus@medium,1,lrconv,0.239,0.02546,0.04681,0.2901,0.094,0.024,0.945,150
+coco_better,siglip,bus@small,1,lrconv,0.398,0.01592,0.02949,0.1998,0.058,0.015,0.868,150
+coco_better,siglip,cell phone@large,1,lrconv,0.143,0.03605,0.06572,0.3717,0.856,0.034,0.98,150
+coco_better,siglip,cell phone@medium,1,lrconv,0.307,0.0244,0.04482,0.2752,0.245,0.023,0.875,150
+coco_better,siglip,cell phone@small,1,lrconv,0.378,0.01168,0.02174,0.1571,0.031,0.011,0.925,150
+coco_better,siglip,chair@large,1,lrconv,0.483,0.01274,0.02365,0.1647,0.032,0.012,0.804,150
+coco_better,siglip,chair@medium,1,lrconv,0.761,0.008492,0.01575,0.1088,0.025,0.008,0.511,150
+coco_better,siglip,clock@large,1,lrconv,0.184,0.0244,0.04497,0.2858,0.947,0.023,1,150
+coco_better,siglip,clock@medium,1,lrconv,0.359,0.01274,0.02368,0.1682,0.377,0.012,0.902,150
+coco_better,siglip,clock@small,1,lrconv,0.611,0.009555,0.01777,0.127,0.256,0.009,0.702,150
+coco_better,siglip,dining table@large,1,lrconv,0.317,0.02016,0.03724,0.2432,0.18,0.019,0.927,150
+coco_better,siglip,dining table@medium,1,lrconv,0.486,0.0138,0.02557,0.1738,0.118,0.013,0.766,150
+coco_better,siglip,dining table@small,1,lrconv,0.648,0.01379,0.02537,0.158,0.039,0.013,0.522,150
+coco_better,siglip,dog@large,1,lrconv,0.213,0.02122,0.03922,0.2576,0.757,0.02,1,150
+coco_better,siglip,dog@medium,1,lrconv,0.546,0.007434,0.0139,0.1067,0.216,0.007,0.976,150
+coco_better,siglip,dog@small,1,lrconv,0.459,0.01486,0.02749,0.1839,0.019,0.014,0.761,150
+coco_better,siglip,enclosed road vehicle@large,1,lrconv,0.322,0.0191,0.03534,0.2357,0.38,0.018,0.965,150
+coco_better,siglip,enclosed road vehicle@medium,1,lrconv,0.429,0.02016,0.03712,0.2343,0.059,0.019,0.803,150
+coco_better,siglip,fire hydrant@large,1,lrconv,0.198,0.02334,0.04305,0.2766,0.948,0.022,1,150
+coco_better,siglip,fire hydrant@medium,1,lrconv,0.255,0.01804,0.03342,0.2262,0.401,0.017,0.98,150
+coco_better,siglip,fire hydrant@small,1,lrconv,0.33,0.01698,0.03147,0.214,0.103,0.016,0.945,150
+coco_better,siglip,fork@large,1,lrconv,0.106,0.04979,0.08978,0.4561,0.212,0.047,1,150
+coco_better,siglip,fork@medium,1,lrconv,0.214,0.02122,0.0392,0.2562,0.055,0.02,0.978,150
+coco_better,siglip,fork@small,1,lrconv,0.319,0.0138,0.02566,0.1822,0.139,0.013,0.978,150
+coco_better,siglip,frisbee@large,1,lrconv,0.185,0.02334,0.04305,0.2766,0.812,0.022,1,150
+coco_better,siglip,frisbee@medium,1,lrconv,0.172,0.02546,0.04685,0.2929,0.593,0.024,0.977,150
+coco_better,siglip,frisbee@small,1,lrconv,0.126,0.04345,0.07871,0.4177,0.614,0.041,0.981,150
+coco_better,siglip,keyboard@large,1,lrconv,0.115,0.04662,0.08422,0.4353,0.592,0.044,0.98,150
+coco_better,siglip,keyboard@medium,1,lrconv,0.113,0.03605,0.06576,0.3744,0.542,0.034,1,150
+coco_better,siglip,keyboard@small,1,lrconv,0.307,0.01698,0.03146,0.2138,0.135,0.016,0.94,150
+coco_better,siglip,kite@large,1,lrconv,0.114,0.03922,0.07136,0.3951,0.951,0.037,1,150
+coco_better,siglip,kite@medium,1,lrconv,0.115,0.03605,0.06576,0.3744,0.901,0.034,1,150
+coco_better,siglip,kite@small,1,lrconv,0.133,0.03605,0.06576,0.3744,0.778,0.034,1,150
+coco_better,siglip,knife@large,1,lrconv,0.247,0.02758,0.05059,0.3056,0.269,0.026,0.932,150
+coco_better,siglip,knife@medium,1,lrconv,0.638,0.009555,0.01776,0.1261,0.04,0.009,0.674,150
+coco_better,siglip,knife@small,1,lrconv,0.722,0.01167,0.02145,0.1329,0.009,0.011,0.432,150
+coco_better,siglip,laptop@large,1,lrconv,0.105,0.04028,0.07322,0.4017,0.278,0.038,1,150
+coco_better,siglip,laptop@medium,1,lrconv,0.25,0.02334,0.04304,0.2754,0.223,0.022,0.983,150
+coco_better,siglip,laptop@small,1,lrconv,0.472,0.0138,0.02557,0.1738,0.025,0.013,0.766,150
+coco_better,siglip,microwave@large,1,lrconv,0.18,0.03287,0.06007,0.3478,0.628,0.031,0.963,150
+coco_better,siglip,microwave@medium,1,lrconv,0.248,0.01698,0.03148,0.2155,0.224,0.016,0.976,150
+coco_better,siglip,microwave@small,1,lrconv,0.289,0.02757,0.05051,0.3,0.247,0.026,0.879,150
+coco_better,siglip,motorcycle@large,1,lrconv,0.128,0.03922,0.07136,0.3951,0.909,0.037,1,150
+coco_better,siglip,motorcycle@medium,1,lrconv,0.512,0.0138,0.02553,0.1705,0.1,0.013,0.702,150
+coco_better,siglip,motorcycle@small,1,lrconv,0.382,0.0191,0.03527,0.23,0.132,0.018,0.871,150
+coco_better,siglip,mouse@large,1,lrconv,0.073,0.05824,0.1043,0.4973,0.817,0.055,1,150
+coco_better,siglip,mouse@medium,1,lrconv,0.152,0.0297,0.05447,0.3287,0.508,0.028,1,150
+coco_better,siglip,mouse@small,1,lrconv,0.169,0.03287,0.06006,0.3472,0.521,0.031,0.958,150
+coco_better,siglip,orange@large,1,lrconv,0.132,0.03605,0.06576,0.3744,0.886,0.034,1,150
+coco_better,siglip,orange@medium,1,lrconv,0.093,0.04768,0.08612,0.4448,0.729,0.045,1,150
+coco_better,siglip,parking meter@large,1,lrconv,0.22,0.02016,0.03729,0.2477,0.954,0.019,1,150
+coco_better,siglip,parking meter@medium,1,lrconv,0.22,0.02228,0.04112,0.2659,0.355,0.021,0.98,150
+coco_better,siglip,parking meter@small,1,lrconv,0.394,0.0138,0.02563,0.1797,0.086,0.013,0.904,150
+coco_better,siglip,person@large,1,lrconv,0.162,0.04028,0.07322,0.4017,0.739,0.038,1,150
+coco_better,siglip,person@medium,1,lrconv,0.37,0.02334,0.04292,0.267,0.083,0.022,0.878,150
+coco_better,siglip,person@small,1,lrconv,0.791,0.01906,0.03419,0.1657,0.172,0.018,0.34,150
+coco_better,siglip,remote@large,1,lrconv,0.191,0.02228,0.04114,0.2672,0.621,0.021,1,150
+coco_better,siglip,remote@medium,1,lrconv,0.223,0.01592,0.02956,0.2056,0.306,0.015,1,150
+coco_better,siglip,remote@small,1,lrconv,0.262,0.02228,0.04111,0.2649,0.307,0.021,0.966,150
+coco_better,siglip,scissors@large,1,lrconv,0.207,0.0191,0.03536,0.2376,0.915,0.018,1,150
+coco_better,siglip,scissors@medium,1,lrconv,0.271,0.02122,0.0392,0.2566,0.389,0.02,0.984,150
+coco_better,siglip,scissors@small,1,lrconv,0.366,0.02333,0.0428,0.2585,0.036,0.022,0.788,150
+coco_better,siglip,single serving drinking vessel@large,1,lrconv,0.247,0.02122,0.03918,0.2548,0.288,0.02,0.957,150
+coco_better,siglip,single serving drinking vessel@medium,1,lrconv,0.331,0.0138,0.02566,0.1822,0.182,0.013,0.977,150
+coco_better,siglip,single serving drinking vessel@small,1,lrconv,0.352,0.01592,0.02953,0.2031,0.037,0.015,0.94,150
+coco_better,siglip,sink@large,1,lrconv,0.155,0.02864,0.05255,0.3183,0.271,0.027,0.977,150
+coco_better,siglip,sink@medium,1,lrconv,0.263,0.02863,0.0524,0.3081,0.213,0.027,0.882,150
+coco_better,siglip,sink@small,1,lrconv,0.28,0.0138,0.02566,0.1821,0.155,0.013,0.974,150
+coco_better,siglip,skateboard@large,1,lrconv,0.09,0.04557,0.08245,0.4331,0.988,0.043,1,150
+coco_better,siglip,skateboard@medium,1,lrconv,0.079,0.05296,0.09524,0.4722,0.944,0.05,1,150
+coco_better,siglip,skateboard@small,1,lrconv,0.198,0.0244,0.04495,0.2843,0.67,0.023,0.98,150
+coco_better,siglip,skis@large,1,lrconv,0.065,0.073,0.1291,0.5575,0.813,0.069,1,150
+coco_better,siglip,skis@medium,1,lrconv,0.07,0.05929,0.1061,0.5021,0.892,0.056,1,150
+coco_better,siglip,skis@small,1,lrconv,0.041,0.09824,0.1702,0.6355,0.722,0.093,1,150
+coco_better,siglip,snowboard@large,1,lrconv,0.065,0.0614,0.1096,0.5114,0.847,0.058,1,150
+coco_better,siglip,snowboard@medium,1,lrconv,0.058,0.06878,0.1221,0.5417,0.643,0.065,1,150
+coco_better,siglip,snowboard@small,1,lrconv,0.075,0.06984,0.1238,0.5457,0.681,0.066,1,150
+coco_better,siglip,spoon@large,1,lrconv,0.223,0.02228,0.04112,0.2659,0.145,0.021,0.98,150
+coco_better,siglip,spoon@medium,1,lrconv,0.281,0.01592,0.02956,0.2056,0.101,0.015,1,150
+coco_better,siglip,spoon@small,1,lrconv,0.548,0.01697,0.03121,0.1938,0.042,0.016,0.635,150
+coco_better,siglip,stop sign@large,1,lrconv,0.109,0.04768,0.08605,0.441,0.929,0.045,0.98,150
+coco_better,siglip,stop sign@medium,1,lrconv,0.185,0.03816,0.06937,0.3811,0.607,0.036,0.951,150
+coco_better,siglip,stop sign@small,1,lrconv,0.624,0.01061,0.01969,0.1357,0.015,0.01,0.633,150
+coco_better,siglip,surfboard@large,1,lrconv,0.181,0.02016,0.03729,0.2477,0.866,0.019,1,150
+coco_better,siglip,surfboard@medium,1,lrconv,0.06,0.0614,0.1096,0.5114,0.937,0.058,1,150
+coco_better,siglip,surfboard@small,1,lrconv,0.079,0.06351,0.1132,0.5204,0.867,0.06,1,150
+coco_better,siglip,tennis racket@large,1,lrconv,0.054,0.0751,0.1326,0.5651,0.994,0.071,1,150
+coco_better,siglip,tennis racket@medium,1,lrconv,0.039,0.1077,0.1851,0.6588,0.997,0.102,1,150
+coco_better,siglip,tennis racket@small,1,lrconv,0.056,0.08353,0.1464,0.5932,0.979,0.079,1,150
+coco_better,siglip,tie@large,1,lrconv,0.145,0.04133,0.07496,0.4021,0.9,0.039,0.962,150
+coco_better,siglip,tie@medium,1,lrconv,0.119,0.04028,0.07322,0.4017,0.67,0.038,1,150
+coco_better,siglip,tie@small,1,lrconv,0.43,0.01592,0.02947,0.1981,0.097,0.015,0.836,150
+coco_better,siglip,toothbrush@large,1,lrconv,0.113,0.04556,0.08239,0.4295,0.936,0.043,0.98,150
+coco_better,siglip,toothbrush@medium,1,lrconv,0.301,0.01592,0.02951,0.2014,0.453,0.015,0.902,150
+coco_better,siglip,toothbrush@small,1,lrconv,0.248,0.02122,0.0392,0.2564,0.177,0.02,0.981,150
+coco_better,siglip,traffic light@large,1,lrconv,0.124,0.03605,0.06576,0.3744,0.87,0.034,1,150
+coco_better,siglip,traffic light@medium,1,lrconv,0.142,0.0297,0.05447,0.3287,0.405,0.028,1,150
+coco_better,siglip,traffic light@small,1,lrconv,0.29,0.0191,0.0353,0.2326,0.089,0.018,0.913,150
+coco_better,siglip,tv@large,1,lrconv,0.227,0.02016,0.03728,0.2464,0.482,0.019,0.978,150
+coco_better,siglip,tv@medium,1,lrconv,0.268,0.0244,0.04485,0.277,0.307,0.023,0.894,150
+coco_better,siglip,tv@small,1,lrconv,0.694,0.01061,0.01962,0.1295,0.026,0.01,0.511,150
+coco_better,siglip,umbrella@large,1,lrconv,0.241,0.0244,0.0449,0.2812,0.441,0.023,0.943,150
+coco_better,siglip,umbrella@medium,1,lrconv,0.427,0.0138,0.02558,0.175,0.275,0.013,0.791,150
+coco_better,siglip,umbrella@small,1,lrconv,0.45,0.0138,0.02558,0.1748,0.102,0.013,0.787,150
+coco_better,siglip,vase or potted plant@large,1,lrconv,0.337,0.01698,0.03144,0.2113,0.525,0.016,0.891,150
+coco_better,siglip,vase or potted plant@medium,1,lrconv,0.539,0.0138,0.02553,0.171,0.15,0.013,0.712,150
+coco_better,siglip,vase or potted plant@small,1,lrconv,0.539,0.02965,0.05325,0.2606,0.082,0.028,0.542,150
+coco_better,siglip,airplane@large,2,lrconv,0.102,0.04028,0.07322,0.4017,0.964,0.038,1,150
+coco_better,siglip,airplane@medium,2,lrconv,0.058,0.07826,0.1378,0.576,0.911,0.074,1,150
+coco_better,siglip,airplane@small,2,lrconv,0.172,0.0445,0.08035,0.4136,0.802,0.042,0.925,150
+coco_better,siglip,apple@large,2,lrconv,0.091,0.04768,0.08612,0.4448,0.809,0.045,1,150
+coco_better,siglip,apple@medium,2,lrconv,0.252,0.02546,0.04679,0.2887,0.404,0.024,0.929,150
+coco_better,siglip,bag or luggage@large,2,lrconv,0.325,0.02969,0.05416,0.3085,0.634,0.028,0.825,150
+coco_better,siglip,bag or luggage@medium,2,lrconv,0.589,0.0138,0.02553,0.171,0.074,0.013,0.712,150
+coco_better,siglip,bag or luggage@small,2,lrconv,1,0,0,0,0.024,,0,150
+coco_better,siglip,banana@large,2,lrconv,0.113,0.04028,0.07322,0.4017,0.887,0.038,1,150
+coco_better,siglip,banana@medium,2,lrconv,0.378,0.01486,0.02757,0.1907,0.526,0.014,0.904,150
+coco_better,siglip,baseball bat@large,2,lrconv,0.107,0.03816,0.0695,0.3883,0.868,0.036,1,150
+coco_better,siglip,baseball bat@medium,2,lrconv,0.106,0.04028,0.07322,0.4017,0.845,0.038,1,150
+coco_better,siglip,baseball bat@small,2,lrconv,0.101,0.06877,0.1218,0.531,0.908,0.065,0.962,150
+coco_better,siglip,bench@large,2,lrconv,0.431,0.01168,0.02174,0.157,0.515,0.011,0.92,150
+coco_better,siglip,bench@medium,2,lrconv,0.719,0.008492,0.01578,0.1109,0.02,0.008,0.565,150
+coco_better,siglip,bench@small,2,lrconv,0.721,0.007432,0.01383,0.09949,0.015,0.007,0.571,150
+coco_better,siglip,bicycle@large,2,lrconv,0.22,0.02334,0.04301,0.2736,0.75,0.022,0.959,150
+coco_better,siglip,bicycle@medium,2,lrconv,0.279,0.02969,0.05427,0.3153,0.206,0.028,0.879,150
+coco_better,siglip,bicycle@small,2,lrconv,0.637,0.01061,0.0197,0.1363,0.028,0.01,0.647,150
+coco_better,siglip,bird@large,2,lrconv,0.149,0.0371,0.06759,0.3789,0.889,0.035,0.982,150
+coco_better,siglip,bird@medium,2,lrconv,0.387,0.0138,0.02561,0.178,0.53,0.013,0.86,150
+coco_better,siglip,bird@small,2,lrconv,0.579,0.01062,0.01972,0.1387,0.034,0.01,0.708,150
+coco_better,siglip,boat@large,2,lrconv,0.219,0.02228,0.04112,0.2659,0.742,0.021,0.98,150
+coco_better,siglip,boat@medium,2,lrconv,0.286,0.01698,0.03147,0.2147,0.437,0.016,0.959,150
+coco_better,siglip,boat@small,2,lrconv,0.237,0.02863,0.05241,0.3089,0.234,0.027,0.889,150
+coco_better,siglip,book@large,2,lrconv,0.21,0.02546,0.04683,0.2913,0.437,0.024,0.958,150
+coco_better,siglip,book@medium,2,lrconv,0.56,0.01168,0.02167,0.1501,0.022,0.011,0.717,150
+coco_better,siglip,book@small,2,lrconv,0.565,0.01591,0.02929,0.1838,0.03,0.015,0.62,150
+coco_better,siglip,bottle@large,2,lrconv,0.283,0.01592,0.02955,0.2047,0.417,0.015,0.977,150
+coco_better,siglip,bottle@medium,2,lrconv,0.506,0.01274,0.02363,0.1631,0.058,0.012,0.766,150
+coco_better,siglip,bottle@small,2,lrconv,0.496,0.0138,0.02554,0.1715,0.023,0.013,0.721,150
+coco_better,siglip,bowl@large,2,lrconv,0.307,0.0191,0.03531,0.2332,0.139,0.018,0.922,150
+coco_better,siglip,bowl@medium,2,lrconv,0.443,0.01592,0.02946,0.1968,0.06,0.015,0.811,150
+coco_better,siglip,bowl@small,2,lrconv,0.807,0.01483,0.02667,0.1322,0.015,0.014,0.28,150
+coco_better,siglip,bus@large,2,lrconv,0.165,0.03181,0.05817,0.3394,0.622,0.03,0.955,150
+coco_better,siglip,bus@medium,2,lrconv,0.267,0.02334,0.043,0.2727,0.286,0.022,0.948,150
+coco_better,siglip,bus@small,2,lrconv,0.579,0.0138,0.0255,0.1685,0.128,0.013,0.667,150
+coco_better,siglip,cell phone@large,2,lrconv,0.121,0.0519,0.09323,0.4581,0.807,0.049,0.958,150
+coco_better,siglip,cell phone@medium,2,lrconv,0.365,0.01168,0.02175,0.1578,0.171,0.011,0.95,150
+coco_better,siglip,cell phone@small,2,lrconv,0.617,0.009555,0.01778,0.1274,0.069,0.009,0.717,150
+coco_better,siglip,chair@large,2,lrconv,0.387,0.0191,0.03521,0.2253,0.036,0.018,0.804,150
+coco_better,siglip,chair@medium,2,lrconv,0.656,0.009553,0.01772,0.1219,0.026,0.009,0.564,150
+coco_better,siglip,clock@large,2,lrconv,0.155,0.02758,0.05068,0.3121,0.94,0.026,1,150
+coco_better,siglip,clock@medium,2,lrconv,0.442,0.01274,0.02368,0.1675,0.577,0.012,0.882,150
+coco_better,siglip,clock@small,2,lrconv,0.655,0.01061,0.01965,0.1326,0.08,0.01,0.568,150
+coco_better,siglip,dining table@large,2,lrconv,0.259,0.01698,0.03147,0.2141,0.047,0.016,0.946,150
+coco_better,siglip,dining table@medium,2,lrconv,0.356,0.01698,0.03145,0.2129,0.187,0.016,0.922,150
+coco_better,siglip,dining table@small,2,lrconv,0.537,0.01062,0.01973,0.1393,0.024,0.01,0.725,150
+coco_better,siglip,dog@large,2,lrconv,0.191,0.0191,0.03536,0.2376,0.443,0.018,1,150
+coco_better,siglip,dog@medium,2,lrconv,0.456,0.01274,0.02366,0.1657,0.317,0.012,0.83,150
+coco_better,siglip,dog@small,2,lrconv,0.511,0.0138,0.02556,0.1737,0.019,0.013,0.764,150
+coco_better,siglip,enclosed road vehicle@large,2,lrconv,0.357,0.0191,0.03529,0.2311,0.254,0.018,0.889,150
+coco_better,siglip,enclosed road vehicle@medium,2,lrconv,0.45,0.01698,0.03137,0.2061,0.064,0.016,0.8,150
+coco_better,siglip,enclosed road vehicle@small,2,lrconv,0.504,0.02015,0.0369,0.2188,0.039,0.019,0.638,150
+coco_better,siglip,fire hydrant@large,2,lrconv,0.119,0.04028,0.07322,0.4017,0.976,0.038,1,150
+coco_better,siglip,fire hydrant@medium,2,lrconv,0.257,0.02122,0.03919,0.2551,0.321,0.02,0.962,150
+coco_better,siglip,fire hydrant@small,2,lrconv,0.326,0.01592,0.02953,0.2031,0.135,0.015,0.939,150
+coco_better,siglip,fork@large,2,lrconv,0.135,0.02864,0.05258,0.3205,0.235,0.027,1,150
+coco_better,siglip,fork@medium,2,lrconv,0.25,0.02016,0.03726,0.2453,0.087,0.019,0.959,150
+coco_better,siglip,fork@small,2,lrconv,0.222,0.0244,0.04492,0.2827,0.141,0.023,0.961,150
+coco_better,siglip,frisbee@large,2,lrconv,0.162,0.02864,0.05258,0.3205,0.819,0.027,1,150
+coco_better,siglip,frisbee@medium,2,lrconv,0.214,0.0191,0.03536,0.2376,0.654,0.018,1,150
+coco_better,siglip,frisbee@small,2,lrconv,0.125,0.04767,0.08596,0.4366,0.371,0.045,0.957,150
+coco_better,siglip,keyboard@large,2,lrconv,0.12,0.03922,0.07136,0.3951,0.617,0.037,1,150
+coco_better,siglip,keyboard@medium,2,lrconv,0.18,0.03181,0.05822,0.3427,0.528,0.03,0.983,150
+coco_better,siglip,keyboard@small,2,lrconv,0.447,0.01274,0.02367,0.1669,0.065,0.012,0.863,150
+coco_better,siglip,kite@large,2,lrconv,0.152,0.03922,0.07132,0.3927,0.922,0.037,0.984,150
+coco_better,siglip,kite@medium,2,lrconv,0.119,0.03816,0.0695,0.3883,0.896,0.036,1,150
+coco_better,siglip,kite@small,2,lrconv,0.224,0.02334,0.04303,0.2752,0.742,0.022,0.981,150
+coco_better,siglip,knife@large,2,lrconv,0.283,0.01486,0.02761,0.1944,0.296,0.014,1,150
+coco_better,siglip,knife@medium,2,lrconv,0.562,0.01062,0.01972,0.139,0.046,0.01,0.717,150
+coco_better,siglip,laptop@large,2,lrconv,0.072,0.06457,0.115,0.5248,0.607,0.061,1,150
+coco_better,siglip,laptop@medium,2,lrconv,0.17,0.02334,0.04305,0.2766,0.106,0.022,1,150
+coco_better,siglip,laptop@small,2,lrconv,1.166,0.003185,0.005939,0.04378,0.004,0.003,0.291,150
+coco_better,siglip,microwave@large,2,lrconv,0.127,0.03393,0.06202,0.3598,0.609,0.032,1,150
+coco_better,siglip,microwave@medium,2,lrconv,0.272,0.03709,0.06721,0.3573,0.188,0.035,0.842,150
+coco_better,siglip,microwave@small,2,lrconv,0.33,0.02016,0.03717,0.2382,0.229,0.019,0.854,150
+coco_better,siglip,motorcycle@large,2,lrconv,0.153,0.02864,0.05258,0.3205,0.922,0.027,1,150
+coco_better,siglip,motorcycle@medium,2,lrconv,0.3,0.0191,0.03529,0.2314,0.307,0.018,0.894,150
+coco_better,siglip,motorcycle@small,2,lrconv,0.256,0.0191,0.03536,0.2376,0.208,0.018,1,150
+coco_better,siglip,mouse@large,2,lrconv,0.19,0.02546,0.04688,0.2948,0.814,0.024,1,150
+coco_better,siglip,mouse@medium,2,lrconv,0.114,0.03182,0.05825,0.3446,0.368,0.03,1,150
+coco_better,siglip,mouse@small,2,lrconv,0.171,0.03922,0.07121,0.3866,0.408,0.037,0.944,150
+coco_better,siglip,orange@large,2,lrconv,0.086,0.06351,0.1131,0.5153,0.921,0.06,0.98,150
+coco_better,siglip,orange@medium,2,lrconv,0.155,0.04133,0.07486,0.3968,0.637,0.039,0.93,150
+coco_better,siglip,parking meter@large,2,lrconv,0.195,0.02334,0.04305,0.2766,0.912,0.022,1,150
+coco_better,siglip,parking meter@medium,2,lrconv,0.266,0.01698,0.0315,0.2166,0.278,0.016,1,150
+coco_better,siglip,parking meter@small,2,lrconv,0.38,0.02228,0.04092,0.251,0.056,0.021,0.796,150
+coco_better,siglip,person@large,2,lrconv,0.233,0.02652,0.04878,0.3036,0.72,0.025,1,150
+coco_better,siglip,person@medium,2,lrconv,0.471,0.02545,0.0464,0.2629,0.107,0.024,0.696,150
+coco_better,siglip,person@small,2,lrconv,0.733,0.01485,0.02722,0.1633,0.038,0.014,0.49,150
+coco_better,siglip,remote@large,2,lrconv,0.221,0.0244,0.04489,0.2804,0.564,0.023,0.933,150
+coco_better,siglip,remote@medium,2,lrconv,0.254,0.02334,0.04297,0.2703,0.178,0.022,0.918,150
+coco_better,siglip,remote@small,2,lrconv,0.212,0.0244,0.04497,0.2858,0.301,0.023,1,150
+coco_better,siglip,scissors@large,2,lrconv,0.15,0.03076,0.05637,0.3367,0.911,0.029,1,150
+coco_better,siglip,scissors@medium,2,lrconv,0.444,0.01486,0.02754,0.1876,0.375,0.014,0.833,150
+coco_better,siglip,scissors@small,2,lrconv,0.521,0.01062,0.01977,0.1435,0.04,0.01,0.865,150
+coco_better,siglip,single serving drinking vessel@large,2,lrconv,0.198,0.02228,0.04114,0.2672,0.382,0.021,1,150
+coco_better,siglip,single serving drinking vessel@medium,2,lrconv,0.382,0.01698,0.03141,0.2091,0.155,0.016,0.851,150
+coco_better,siglip,single serving drinking vessel@small,2,lrconv,0.378,0.01486,0.02757,0.1904,0.062,0.014,0.896,150
+coco_better,siglip,sink@large,2,lrconv,0.23,0.02228,0.0411,0.2642,0.264,0.021,0.957,150
+coco_better,siglip,sink@medium,2,lrconv,0.261,0.02228,0.04106,0.2611,0.271,0.021,0.915,150
+coco_better,siglip,sink@small,2,lrconv,0.325,0.02228,0.04101,0.2574,0.304,0.021,0.868,150
+coco_better,siglip,skateboard@large,2,lrconv,0.055,0.07194,0.1273,0.5536,0.958,0.068,1,150
+coco_better,siglip,skateboard@medium,2,lrconv,0.13,0.03605,0.06576,0.3744,0.957,0.034,1,150
+coco_better,siglip,skateboard@small,2,lrconv,0.232,0.0191,0.03536,0.2376,0.751,0.018,1,150
+coco_better,siglip,skis@large,2,lrconv,0.098,0.04979,0.08978,0.4561,0.888,0.047,1,150
+coco_better,siglip,skis@medium,2,lrconv,0.018,0.2037,0.325,0.8036,0.791,0.194,1,150
+coco_better,siglip,skis@small,2,lrconv,0.056,0.05718,0.1025,0.4925,0.796,0.054,1,150
+coco_better,siglip,snowboard@large,2,lrconv,0.077,0.05718,0.1025,0.4925,0.872,0.054,1,150
+coco_better,siglip,snowboard@medium,2,lrconv,0.086,0.0614,0.1096,0.5114,0.609,0.058,1,150
+coco_better,siglip,snowboard@small,2,lrconv,0.039,0.1077,0.1851,0.6588,0.51,0.102,1,150
+coco_better,siglip,spoon@large,2,lrconv,0.303,0.01592,0.02955,0.2048,0.118,0.015,0.98,150
+coco_better,siglip,spoon@medium,2,lrconv,0.302,0.01698,0.03147,0.2147,0.17,0.016,0.959,150
+coco_better,siglip,spoon@small,2,lrconv,0.686,0.01167,0.02155,0.1398,0.016,0.011,0.521,150
+coco_better,siglip,stop sign@large,2,lrconv,0.079,0.06246,0.1114,0.5159,0.928,0.059,1,150
+coco_better,siglip,stop sign@medium,2,lrconv,0.218,0.03075,0.05623,0.3281,0.526,0.029,0.923,150
+coco_better,siglip,stop sign@small,2,lrconv,0.495,0.0138,0.02557,0.1742,0.027,0.013,0.774,150
+coco_better,siglip,surfboard@large,2,lrconv,0.098,0.04768,0.08612,0.4448,0.883,0.045,1,150
+coco_better,siglip,surfboard@medium,2,lrconv,0.087,0.05296,0.09524,0.4722,0.908,0.05,1,150
+coco_better,siglip,surfboard@small,2,lrconv,0.069,0.06035,0.1079,0.5068,0.835,0.057,1,150
+coco_better,siglip,tennis racket@large,2,lrconv,0.071,0.06667,0.1185,0.5334,0.98,0.063,1,150
+coco_better,siglip,tennis racket@medium,2,lrconv,0.062,0.05718,0.1025,0.4925,0.995,0.054,1,150
+coco_better,siglip,tennis racket@small,2,lrconv,0.105,0.04345,0.07877,0.4209,0.979,0.041,1,150
+coco_better,siglip,tie@large,2,lrconv,0.164,0.02864,0.05258,0.3205,0.881,0.027,1,150
+coco_better,siglip,tie@medium,2,lrconv,0.167,0.02546,0.04688,0.2948,0.707,0.024,1,150
+coco_better,siglip,tie@small,2,lrconv,0.398,0.0191,0.03522,0.2258,0.246,0.018,0.811,150
+coco_better,siglip,toothbrush@large,2,lrconv,0.187,0.0244,0.04497,0.2858,0.962,0.023,1,150
+coco_better,siglip,toothbrush@medium,2,lrconv,0.242,0.02228,0.04108,0.2626,0.49,0.021,0.935,150
+coco_better,siglip,toothbrush@small,2,lrconv,0.274,0.01698,0.03147,0.2145,0.122,0.016,0.956,150
+coco_better,siglip,traffic light@large,2,lrconv,0.078,0.05613,0.1007,0.4876,0.804,0.053,1,150
+coco_better,siglip,traffic light@medium,2,lrconv,0.214,0.03604,0.06553,0.3606,0.243,0.034,0.902,150
+coco_better,siglip,traffic light@small,2,lrconv,0.246,0.01804,0.0334,0.2247,0.111,0.017,0.95,150
+coco_better,siglip,tv@large,2,lrconv,0.265,0.01486,0.02761,0.1944,0.473,0.014,1,150
+coco_better,siglip,tv@medium,2,lrconv,0.39,0.01804,0.03332,0.2175,0.21,0.017,0.827,150
+coco_better,siglip,tv@small,2,lrconv,0.683,0.0159,0.02903,0.1664,0.018,0.015,0.451,150
+coco_better,siglip,umbrella@large,2,lrconv,0.243,0.02758,0.05062,0.3075,0.498,0.026,0.951,150
+coco_better,siglip,umbrella@medium,2,lrconv,0.474,0.01486,0.0275,0.1843,0.254,0.014,0.769,150
+coco_better,siglip,umbrella@small,2,lrconv,0.455,0.01698,0.03134,0.2031,0.065,0.016,0.755,150
+coco_better,siglip,vase or potted plant@large,2,lrconv,0.414,0.01274,0.02371,0.1706,0.536,0.012,0.982,150
+coco_better,siglip,vase or potted plant@medium,2,lrconv,0.467,0.01486,0.02751,0.1851,0.154,0.014,0.784,150
+coco_better,siglip,vase or potted plant@small,2,lrconv,1.041,0.004245,0.007851,0.05217,0.005,0.004,0.211,150
+coco_better,siglip,airplane@large,3,lrconv,0.069,0.08457,0.1479,0.5897,0.953,0.08,0.98,150
+coco_better,siglip,airplane@medium,3,lrconv,0.081,0.04873,0.08795,0.4505,0.906,0.046,1,150
+coco_better,siglip,airplane@small,3,lrconv,0.184,0.05083,0.09102,0.4353,0.751,0.048,0.878,150
+coco_better,siglip,apple@large,3,lrconv,0.166,0.03182,0.05825,0.3446,0.925,0.03,1,150
+coco_better,siglip,apple@medium,3,lrconv,0.341,0.0138,0.02566,0.1823,0.204,0.013,0.979,150
+coco_better,siglip,bag or luggage@large,3,lrconv,0.297,0.02016,0.03723,0.2428,0.623,0.019,0.92,150
+coco_better,siglip,bag or luggage@medium,3,lrconv,0.491,0.01274,0.02366,0.166,0.051,0.012,0.84,150
+coco_better,siglip,bag or luggage@small,3,lrconv,0.47,0.01698,0.03137,0.2056,0.05,0.016,0.793,150
+coco_better,siglip,banana@large,3,lrconv,0.129,0.04345,0.07871,0.4179,0.843,0.041,0.982,150
+coco_better,siglip,banana@medium,3,lrconv,0.341,0.01592,0.0295,0.2006,0.451,0.015,0.886,150
+coco_better,siglip,baseball bat@large,3,lrconv,0.099,0.04345,0.07877,0.4209,0.887,0.041,1,150
+coco_better,siglip,baseball bat@medium,3,lrconv,0.068,0.06351,0.1132,0.5204,0.88,0.06,1,150
+coco_better,siglip,baseball bat@small,3,lrconv,0.09,0.06878,0.1219,0.5369,0.952,0.065,0.983,150
+coco_better,siglip,bench@large,3,lrconv,0.438,0.0138,0.02561,0.1773,0.454,0.013,0.843,150
+coco_better,siglip,bench@medium,3,lrconv,0.64,0.01167,0.0216,0.1444,0.025,0.011,0.596,150
+coco_better,siglip,bench@small,3,lrconv,0.713,0.01061,0.01963,0.131,0.01,0.01,0.537,150
+coco_better,siglip,bicycle@large,3,lrconv,0.24,0.02334,0.04304,0.2754,0.772,0.022,0.983,150
+coco_better,siglip,bicycle@medium,3,lrconv,0.419,0.01698,0.0314,0.2084,0.268,0.016,0.839,150
+coco_better,siglip,bicycle@small,3,lrconv,0.497,0.01698,0.03132,0.2022,0.036,0.016,0.741,150
+coco_better,siglip,bird@large,3,lrconv,0.154,0.03499,0.06385,0.3648,0.825,0.033,0.982,150
+coco_better,siglip,bird@medium,3,lrconv,0.333,0.01592,0.02953,0.2031,0.584,0.015,0.94,150
+coco_better,siglip,bird@small,3,lrconv,0.552,0.01274,0.0236,0.1609,0.028,0.012,0.717,150
+coco_better,siglip,boat@large,3,lrconv,0.247,0.02122,0.03918,0.2551,0.874,0.02,0.961,150
+coco_better,siglip,boat@medium,3,lrconv,0.349,0.0138,0.02564,0.1807,0.392,0.013,0.933,150
+coco_better,siglip,boat@small,3,lrconv,0.237,0.02016,0.03729,0.2477,0.141,0.019,1,150
+coco_better,siglip,book@large,3,lrconv,0.234,0.02122,0.03918,0.2548,0.441,0.02,0.957,150
+coco_better,siglip,book@medium,3,lrconv,0.445,0.0191,0.03517,0.2218,0.027,0.018,0.759,150
+coco_better,siglip,book@small,3,lrconv,0.629,0.01167,0.02163,0.1467,0.057,0.011,0.64,150
+coco_better,siglip,bottle@large,3,lrconv,0.231,0.02228,0.04112,0.2659,0.52,0.021,0.98,150
+coco_better,siglip,bottle@medium,3,lrconv,0.419,0.01486,0.02759,0.1918,0.067,0.014,0.931,150
+coco_better,siglip,bottle@small,3,lrconv,0.74,0.008492,0.01575,0.1083,0.008,0.008,0.5,150
+coco_better,siglip,bowl@large,3,lrconv,0.291,0.0191,0.03532,0.2342,0.122,0.018,0.94,150
+coco_better,siglip,bowl@medium,3,lrconv,0.379,0.01486,0.02758,0.1915,0.085,0.014,0.923,150
+coco_better,siglip,bowl@small,3,lrconv,0.81,0.01377,0.02486,0.1274,0.013,0.013,0.283,150
+coco_better,siglip,bus@large,3,lrconv,0.169,0.02864,0.05258,0.3205,0.782,0.027,1,150
+coco_better,siglip,bus@medium,3,lrconv,0.36,0.02228,0.04098,0.2554,0.149,0.021,0.845,150
+coco_better,siglip,bus@small,3,lrconv,0.255,0.01804,0.03338,0.223,0.079,0.017,0.919,150
+coco_better,siglip,cell phone@large,3,lrconv,0.118,0.03922,0.0713,0.3915,0.855,0.037,0.976,150
+coco_better,siglip,cell phone@medium,3,lrconv,0.381,0.01698,0.03144,0.2115,0.248,0.016,0.895,150
+coco_better,siglip,cell phone@small,3,lrconv,0.41,0.0138,0.02561,0.1777,0.095,0.013,0.854,150
+coco_better,siglip,chair@large,3,lrconv,0.416,0.02333,0.04279,0.2573,0.04,0.022,0.776,150
+coco_better,siglip,chair@medium,3,lrconv,1.013,0.004247,0.007914,0.05797,0.007,0.004,0.37,150
+coco_better,siglip,clock@large,3,lrconv,0.202,0.02546,0.04685,0.2931,0.949,0.024,0.98,150
+coco_better,siglip,clock@medium,3,lrconv,0.546,0.009557,0.01783,0.1331,0.522,0.009,0.962,150
+coco_better,siglip,clock@small,3,lrconv,0.632,0.01167,0.02158,0.1428,0.201,0.011,0.568,150
+coco_better,siglip,dining table@large,3,lrconv,0.32,0.0138,0.02565,0.1813,0.068,0.013,0.949,150
+coco_better,siglip,dining table@medium,3,lrconv,0.377,0.01486,0.02755,0.1888,0.084,0.014,0.86,150
+coco_better,siglip,dining table@small,3,lrconv,0.647,0.02225,0.04025,0.2107,0.022,0.021,0.484,150
+coco_better,siglip,dog@large,3,lrconv,0.231,0.01698,0.0315,0.2166,0.573,0.016,1,150
+coco_better,siglip,dog@medium,3,lrconv,0.345,0.01168,0.02175,0.1577,0.197,0.011,0.949,150
+coco_better,siglip,dog@small,3,lrconv,0.744,0.01801,0.03241,0.1618,0.046,0.017,0.346,150
+coco_better,siglip,enclosed road vehicle@large,3,lrconv,0.382,0.01592,0.02951,0.2013,0.374,0.015,0.9,150
+coco_better,siglip,enclosed road vehicle@medium,3,lrconv,0.406,0.0138,0.02561,0.1781,0.04,0.013,0.864,150
+coco_better,siglip,enclosed road vehicle@small,3,lrconv,0.711,0.01167,0.02154,0.1396,0.017,0.011,0.519,150
+coco_better,siglip,fire hydrant@large,3,lrconv,0.057,0.06457,0.115,0.5248,0.959,0.061,1,150
+coco_better,siglip,fire hydrant@medium,3,lrconv,0.279,0.02016,0.03728,0.2467,0.339,0.019,0.983,150
+coco_better,siglip,fire hydrant@small,3,lrconv,0.318,0.0138,0.02565,0.1815,0.064,0.013,0.956,150
+coco_better,siglip,fork@large,3,lrconv,0.119,0.04028,0.07322,0.4017,0.278,0.038,1,150
+coco_better,siglip,fork@medium,3,lrconv,0.219,0.02122,0.0392,0.2562,0.233,0.02,0.979,150
+coco_better,siglip,fork@small,3,lrconv,0.232,0.01804,0.03342,0.226,0.177,0.017,0.976,150
+coco_better,siglip,frisbee@large,3,lrconv,0.161,0.03076,0.05633,0.3346,0.651,0.029,0.98,150
+coco_better,siglip,frisbee@medium,3,lrconv,0.149,0.0371,0.06759,0.3789,0.592,0.035,0.982,150
+coco_better,siglip,frisbee@small,3,lrconv,0.169,0.02652,0.04875,0.3016,0.497,0.025,0.978,150
+coco_better,siglip,keyboard@large,3,lrconv,0.111,0.03605,0.06576,0.3744,0.55,0.034,1,150
+coco_better,siglip,keyboard@medium,3,lrconv,0.145,0.03393,0.06197,0.3572,0.259,0.032,0.979,150
+coco_better,siglip,keyboard@small,3,lrconv,0.416,0.01698,0.03136,0.205,0.035,0.016,0.783,150
+coco_better,siglip,kite@large,3,lrconv,0.154,0.02546,0.04688,0.2948,0.931,0.024,1,150
+coco_better,siglip,kite@medium,3,lrconv,0.108,0.04134,0.07507,0.4083,0.869,0.039,1,150
+coco_better,siglip,kite@small,3,lrconv,0.137,0.03393,0.06202,0.3598,0.772,0.032,1,150
+coco_better,siglip,knife@large,3,lrconv,0.202,0.02228,0.04114,0.2672,0.242,0.021,1,150
+coco_better,siglip,knife@medium,3,lrconv,0.38,0.01698,0.03142,0.2102,0.031,0.016,0.87,150
+coco_better,siglip,knife@small,3,lrconv,0.833,0.009547,0.01754,0.1075,0.009,0.009,0.34,150
+coco_better,siglip,laptop@large,3,lrconv,0.094,0.0519,0.09342,0.4669,0.484,0.049,1,150
+coco_better,siglip,laptop@medium,3,lrconv,0.19,0.02334,0.04303,0.2749,0.175,0.022,0.977,150
+coco_better,siglip,microwave@large,3,lrconv,0.175,0.02864,0.05255,0.3186,0.532,0.027,0.98,150
+coco_better,siglip,microwave@medium,3,lrconv,0.158,0.03816,0.0694,0.3828,0.225,0.036,0.962,150
+coco_better,siglip,microwave@small,3,lrconv,0.198,0.02334,0.04303,0.2751,0.375,0.022,0.979,150
+coco_better,siglip,motorcycle@large,3,lrconv,0.12,0.03816,0.0695,0.3883,0.943,0.036,1,150
+coco_better,siglip,motorcycle@medium,3,lrconv,0.363,0.01592,0.02952,0.2026,0.325,0.015,0.927,150
+coco_better,siglip,motorcycle@small,3,lrconv,0.49,0.01698,0.03134,0.2031,0.047,0.016,0.754,150
+coco_better,siglip,mouse@large,3,lrconv,0.143,0.03182,0.05825,0.3446,0.801,0.03,1,150
+coco_better,siglip,mouse@medium,3,lrconv,0.14,0.03393,0.06202,0.3598,0.546,0.032,1,150
+coco_better,siglip,mouse@small,3,lrconv,0.201,0.02652,0.04873,0.2999,0.411,0.025,0.959,150
+coco_better,siglip,orange@large,3,lrconv,0.111,0.03711,0.06763,0.3814,0.933,0.035,1,150
+coco_better,siglip,orange@medium,3,lrconv,0.19,0.03075,0.05631,0.3328,0.526,0.029,0.964,150
+coco_better,siglip,parking meter@large,3,lrconv,0.175,0.02546,0.04688,0.2948,0.883,0.024,1,150
+coco_better,siglip,parking meter@medium,3,lrconv,0.243,0.02016,0.03729,0.2477,0.338,0.019,1,150
+coco_better,siglip,parking meter@small,3,lrconv,0.304,0.02122,0.03911,0.2495,0.12,0.02,0.882,150
+coco_better,siglip,person@large,3,lrconv,0.284,0.0297,0.05442,0.3252,0.668,0.028,0.966,150
+coco_better,siglip,person@medium,3,lrconv,0.63,0.02014,0.03667,0.2043,0.1,0.019,0.523,150
+coco_better,siglip,person@small,3,lrconv,0.78,0.01273,0.02345,0.1481,0.147,0.012,0.509,150
+coco_better,siglip,remote@large,3,lrconv,0.204,0.03075,0.05627,0.3304,0.72,0.029,0.943,150
+coco_better,siglip,remote@medium,3,lrconv,0.25,0.02228,0.0411,0.2647,0.179,0.021,0.964,150
+coco_better,siglip,remote@small,3,lrconv,0.361,0.01592,0.02949,0.2001,0.106,0.015,0.875,150
+coco_better,siglip,scissors@large,3,lrconv,0.11,0.04134,0.07507,0.4083,0.93,0.039,1,150
+coco_better,siglip,scissors@medium,3,lrconv,0.496,0.008496,0.01587,0.1203,0.335,0.008,0.979,150
+coco_better,siglip,scissors@small,3,lrconv,0.309,0.01486,0.02761,0.1937,0.073,0.014,0.979,150
+coco_better,siglip,single serving drinking vessel@large,3,lrconv,0.231,0.02016,0.03729,0.2477,0.212,0.019,1,150
+coco_better,siglip,single serving drinking vessel@medium,3,lrconv,0.344,0.01698,0.03148,0.2149,0.148,0.016,0.964,150
+coco_better,siglip,single serving drinking vessel@small,3,lrconv,0.554,0.0138,0.0255,0.1685,0.054,0.013,0.667,150
+coco_better,siglip,sink@large,3,lrconv,0.177,0.0297,0.05445,0.3268,0.362,0.028,0.981,150
+coco_better,siglip,sink@medium,3,lrconv,0.304,0.02016,0.03724,0.2432,0.208,0.019,0.927,150
+coco_better,siglip,sink@small,3,lrconv,0.348,0.01062,0.0198,0.1466,0.118,0.01,1,150
+coco_better,siglip,skateboard@large,3,lrconv,0.126,0.03816,0.0695,0.3883,0.966,0.036,1,150
+coco_better,siglip,skateboard@medium,3,lrconv,0.162,0.02758,0.05068,0.3121,0.974,0.026,1,150
+coco_better,siglip,skateboard@small,3,lrconv,0.239,0.02228,0.04112,0.266,0.797,0.021,0.982,150
+coco_better,siglip,skis@large,3,lrconv,0.033,0.1192,0.2031,0.6841,0.811,0.113,1,150
+coco_better,siglip,skis@medium,3,lrconv,0.055,0.07721,0.1361,0.5724,0.891,0.073,1,150
+coco_better,siglip,skis@small,3,lrconv,0.07,0.06246,0.1114,0.5159,0.806,0.059,1,150
+coco_better,siglip,snowboard@large,3,lrconv,0.075,0.05507,0.09886,0.4825,0.827,0.052,1,150
+coco_better,siglip,snowboard@medium,3,lrconv,0.054,0.07405,0.1308,0.5613,0.738,0.07,1,150
+coco_better,siglip,snowboard@small,3,lrconv,0.054,0.08247,0.1447,0.5899,0.61,0.078,1,150
+coco_better,siglip,spoon@large,3,lrconv,0.273,0.01804,0.03341,0.2251,0.185,0.017,0.958,150
+coco_better,siglip,spoon@medium,3,lrconv,0.396,0.01062,0.0198,0.1461,0.067,0.01,0.978,150
+coco_better,siglip,spoon@small,3,lrconv,0.568,0.01591,0.02927,0.1825,0.045,0.015,0.604,150
+coco_better,siglip,stop sign@large,3,lrconv,0.095,0.04451,0.08061,0.427,0.916,0.042,1,150
+coco_better,siglip,stop sign@medium,3,lrconv,0.192,0.02546,0.04685,0.2931,0.528,0.024,0.98,150
+coco_better,siglip,stop sign@small,3,lrconv,0.555,0.01062,0.01972,0.1388,0.017,0.01,0.711,150
+coco_better,siglip,surfboard@large,3,lrconv,0.168,0.02864,0.05258,0.3205,0.922,0.027,1,150
+coco_better,siglip,surfboard@medium,3,lrconv,0.093,0.04451,0.08061,0.427,0.886,0.042,1,150
+coco_better,siglip,surfboard@small,3,lrconv,0.085,0.05613,0.1007,0.4876,0.896,0.053,1,150
+coco_better,siglip,tennis racket@large,3,lrconv,0.077,0.05929,0.1061,0.5021,0.995,0.056,1,150
+coco_better,siglip,tennis racket@medium,3,lrconv,0.063,0.09718,0.1682,0.6255,0.974,0.092,0.981,150
+coco_better,siglip,tennis racket@small,3,lrconv,0.066,0.06667,0.1185,0.5334,1,0.063,1,150
+coco_better,siglip,tie@large,3,lrconv,0.102,0.04873,0.08795,0.4505,0.942,0.046,1,150
+coco_better,siglip,tie@medium,3,lrconv,0.18,0.02758,0.05066,0.3103,0.692,0.026,0.98,150
+coco_better,siglip,tie@small,3,lrconv,0.54,0.01274,0.02358,0.1591,0.181,0.012,0.681,150
+coco_better,siglip,toothbrush@large,3,lrconv,0.16,0.02758,0.05068,0.3121,0.93,0.026,1,150
+coco_better,siglip,toothbrush@medium,3,lrconv,0.248,0.02122,0.03918,0.2551,0.538,0.02,0.961,150
+coco_better,siglip,toothbrush@small,3,lrconv,0.269,0.01804,0.03339,0.2236,0.221,0.017,0.93,150
+coco_better,siglip,traffic light@large,3,lrconv,0.144,0.03499,0.06385,0.3646,0.885,0.033,0.98,150
+coco_better,siglip,traffic light@medium,3,lrconv,0.151,0.03182,0.05825,0.3446,0.423,0.03,1,150
+coco_better,siglip,traffic light@small,3,lrconv,0.207,0.02652,0.04876,0.302,0.208,0.025,0.982,150
+coco_better,siglip,tv@large,3,lrconv,0.174,0.03499,0.06382,0.3625,0.455,0.033,0.964,150
+coco_better,siglip,tv@medium,3,lrconv,0.33,0.01698,0.03143,0.2109,0.257,0.016,0.884,150
+coco_better,siglip,tv@small,3,lrconv,0.814,0.008489,0.01567,0.1014,0.016,0.008,0.375,150
+coco_better,siglip,umbrella@large,3,lrconv,0.263,0.02228,0.04109,0.2634,0.613,0.021,0.945,150
+coco_better,siglip,umbrella@medium,3,lrconv,0.319,0.0191,0.03532,0.2336,0.156,0.018,0.929,150
+coco_better,siglip,umbrella@small,3,lrconv,0.564,0.01168,0.02166,0.1492,0.067,0.011,0.694,150
+coco_better,siglip,vase or potted plant@large,3,lrconv,0.368,0.01804,0.03339,0.2239,0.503,0.017,0.935,150
+coco_better,siglip,vase or potted plant@medium,3,lrconv,0.367,0.01486,0.02758,0.1913,0.227,0.014,0.918,150
+coco_better,siglip,vase or potted plant@small,3,lrconv,1,0,0,0,0.003,,0,150
+coco_better,siglip,airplane@large,4,lrconv,0.048,0.09194,0.1601,0.6183,0.975,0.087,1,150
+coco_better,siglip,airplane@medium,4,lrconv,0.066,0.05085,0.0916,0.4615,0.925,0.048,1,150
+coco_better,siglip,airplane@small,4,lrconv,0.242,0.03287,0.05992,0.3388,0.724,0.031,0.893,150
+coco_better,siglip,apple@large,4,lrconv,0.163,0.02122,0.03922,0.2576,0.784,0.02,1,150
+coco_better,siglip,apple@medium,4,lrconv,0.291,0.01274,0.02372,0.1711,0.358,0.012,1,150
+coco_better,siglip,bag or luggage@large,4,lrconv,0.364,0.0138,0.02565,0.1816,0.687,0.013,0.96,150
+coco_better,siglip,bag or luggage@medium,4,lrconv,0.407,0.01486,0.02757,0.1907,0.059,0.014,0.902,150
+coco_better,siglip,bag or luggage@small,4,lrconv,0.478,0.01062,0.01975,0.1413,0.042,0.01,0.789,150
+coco_better,siglip,banana@large,4,lrconv,0.135,0.03393,0.06202,0.3598,0.915,0.032,1,150
+coco_better,siglip,banana@medium,4,lrconv,0.34,0.0191,0.03528,0.231,0.478,0.018,0.887,150
+coco_better,siglip,baseball bat@large,4,lrconv,0.111,0.04768,0.08612,0.4448,0.857,0.045,1,150
+coco_better,siglip,baseball bat@medium,4,lrconv,0.124,0.03287,0.06014,0.3523,0.85,0.031,1,150
+coco_better,siglip,baseball bat@small,4,lrconv,0.122,0.0656,0.1163,0.5114,0.903,0.062,0.935,150
+coco_better,siglip,bench@large,4,lrconv,0.334,0.01804,0.03335,0.2202,0.352,0.017,0.87,150
+coco_better,siglip,bench@medium,4,lrconv,0.707,0.009554,0.01774,0.1241,0.021,0.009,0.618,150
+coco_better,siglip,bench@small,4,lrconv,0.837,0.00743,0.01379,0.09582,0.01,0.007,0.463,150
+coco_better,siglip,bicycle@large,4,lrconv,0.3,0.01698,0.03149,0.2157,0.775,0.016,0.981,150
+coco_better,siglip,bicycle@medium,4,lrconv,0.299,0.01804,0.03338,0.2226,0.262,0.017,0.911,150
+coco_better,siglip,bicycle@small,4,lrconv,0.521,0.01486,0.02745,0.1803,0.037,0.014,0.7,150
+coco_better,siglip,bird@large,4,lrconv,0.037,0.1098,0.1884,0.6637,0.927,0.104,1,150
+coco_better,siglip,bird@medium,4,lrconv,0.341,0.01486,0.02758,0.1912,0.566,0.014,0.915,150
+coco_better,siglip,bird@small,4,lrconv,0.574,0.01168,0.02166,0.1494,0.078,0.011,0.7,150
+coco_better,siglip,boat@large,4,lrconv,0.209,0.02122,0.0392,0.2561,0.734,0.02,0.977,150
+coco_better,siglip,boat@medium,4,lrconv,0.206,0.0244,0.04495,0.2843,0.56,0.023,0.98,150
+coco_better,siglip,boat@small,4,lrconv,0.306,0.02228,0.04106,0.2613,0.187,0.021,0.917,150
+coco_better,siglip,book@large,4,lrconv,0.206,0.02546,0.04685,0.2932,0.448,0.024,0.981,150
+coco_better,siglip,book@medium,4,lrconv,0.37,0.02016,0.03715,0.2364,0.042,0.019,0.83,150
+coco_better,siglip,book@small,4,lrconv,0.363,0.01698,0.03143,0.2106,0.049,0.016,0.878,150
+coco_better,siglip,bottle@large,4,lrconv,0.324,0.01698,0.03145,0.2125,0.539,0.016,0.915,150
+coco_better,siglip,bottle@medium,4,lrconv,0.373,0.01804,0.03334,0.2197,0.045,0.017,0.863,150
+coco_better,siglip,bottle@small,4,lrconv,0.47,0.01592,0.02942,0.1938,0.047,0.015,0.76,150
+coco_better,siglip,bowl@large,4,lrconv,0.257,0.03181,0.05805,0.332,0.239,0.03,0.895,150
+coco_better,siglip,bowl@medium,4,lrconv,0.406,0.01486,0.02756,0.1899,0.071,0.014,0.885,150
+coco_better,siglip,bus@large,4,lrconv,0.173,0.03076,0.05633,0.3347,0.708,0.029,0.981,150
+coco_better,siglip,bus@medium,4,lrconv,0.269,0.02228,0.04106,0.2613,0.274,0.021,0.918,150
+coco_better,siglip,bus@small,4,lrconv,0.323,0.01486,0.02757,0.1906,0.052,0.014,0.9,150
+coco_better,siglip,cell phone@large,4,lrconv,0.067,0.06562,0.1168,0.5291,0.955,0.062,1,150
+coco_better,siglip,cell phone@medium,4,lrconv,0.31,0.01698,0.03146,0.2136,0.291,0.016,0.936,150
+coco_better,siglip,cell phone@small,4,lrconv,0.406,0.01486,0.02755,0.1887,0.171,0.014,0.857,150
+coco_better,siglip,chair@large,4,lrconv,0.436,0.01168,0.02174,0.1568,0.065,0.011,0.913,150
+coco_better,siglip,chair@medium,4,lrconv,0.909,0.007428,0.01373,0.09058,0.007,0.007,0.357,150
+coco_better,siglip,clock@large,4,lrconv,0.097,0.05296,0.09514,0.4678,0.96,0.05,0.979,150
+coco_better,siglip,clock@medium,4,lrconv,0.397,0.01592,0.02949,0.1996,0.373,0.015,0.865,150
+coco_better,siglip,clock@small,4,lrconv,0.673,0.01273,0.02347,0.1496,0.154,0.012,0.528,150
+coco_better,siglip,dining table@large,4,lrconv,0.384,0.02334,0.04284,0.2611,0.065,0.022,0.814,150
+coco_better,siglip,dining table@medium,4,lrconv,0.389,0.01592,0.0295,0.2006,0.081,0.015,0.885,150
+coco_better,siglip,dining table@small,4,lrconv,0.631,0.01168,0.02169,0.1519,0.05,0.011,0.763,150
+coco_better,siglip,dog@large,4,lrconv,0.16,0.02652,0.04878,0.3036,0.606,0.025,1,150
+coco_better,siglip,dog@medium,4,lrconv,0.427,0.01168,0.02175,0.1581,0.266,0.011,0.962,150
+coco_better,siglip,dog@small,4,lrconv,0.667,0.02224,0.03999,0.1977,0.021,0.021,0.417,150
+coco_better,siglip,enclosed road vehicle@large,4,lrconv,0.338,0.01698,0.03148,0.2149,0.336,0.016,0.963,150
+coco_better,siglip,enclosed road vehicle@medium,4,lrconv,0.424,0.01274,0.02367,0.1669,0.034,0.012,0.864,150
+coco_better,siglip,enclosed road vehicle@small,4,lrconv,0.756,0.009552,0.01769,0.1193,0.019,0.009,0.509,150
+coco_better,siglip,fire hydrant@large,4,lrconv,0.081,0.05402,0.09705,0.4774,0.965,0.051,1,150
+coco_better,siglip,fire hydrant@medium,4,lrconv,0.236,0.02016,0.03728,0.2465,0.531,0.019,0.98,150
+coco_better,siglip,fire hydrant@small,4,lrconv,0.361,0.01592,0.02953,0.2034,0.082,0.015,0.946,150
+coco_better,siglip,fork@large,4,lrconv,0.183,0.02546,0.04688,0.2948,0.139,0.024,1,150
+coco_better,siglip,fork@medium,4,lrconv,0.214,0.02864,0.0525,0.3147,0.065,0.027,0.942,150
+coco_better,siglip,fork@small,4,lrconv,0.25,0.01804,0.03342,0.2261,0.124,0.017,0.978,150
+coco_better,siglip,frisbee@large,4,lrconv,0.155,0.02864,0.05258,0.3205,0.786,0.027,1,150
+coco_better,siglip,frisbee@medium,4,lrconv,0.132,0.02546,0.04688,0.2948,0.562,0.024,1,150
+coco_better,siglip,frisbee@small,4,lrconv,0.17,0.03181,0.05818,0.3398,0.627,0.03,0.958,150
+coco_better,siglip,keyboard@large,4,lrconv,0.237,0.02122,0.0392,0.2563,0.619,0.02,0.98,150
+coco_better,siglip,keyboard@medium,4,lrconv,0.191,0.02546,0.04685,0.2931,0.424,0.024,0.979,150
+coco_better,siglip,keyboard@small,4,lrconv,0.293,0.01804,0.03341,0.2253,0.136,0.017,0.962,150
+coco_better,siglip,kite@large,4,lrconv,0.078,0.05085,0.0916,0.4615,0.974,0.048,1,150
+coco_better,siglip,kite@medium,4,lrconv,0.12,0.03499,0.06389,0.3671,0.89,0.033,1,150
+coco_better,siglip,kite@small,4,lrconv,0.116,0.04134,0.07507,0.4083,0.871,0.039,1,150
+coco_better,siglip,knife@large,4,lrconv,0.192,0.02652,0.04876,0.3019,0.169,0.025,0.981,150
+coco_better,siglip,knife@medium,4,lrconv,0.399,0.01274,0.02368,0.1678,0.022,0.012,0.891,150
+coco_better,siglip,laptop@large,4,lrconv,0.075,0.05718,0.1025,0.4925,0.424,0.054,1,150
+coco_better,siglip,laptop@medium,4,lrconv,0.252,0.0191,0.03536,0.2376,0.203,0.018,1,150
+coco_better,siglip,laptop@small,4,lrconv,1.16,0.003185,0.005939,0.0438,0.004,0.003,0.292,150
+coco_better,siglip,microwave@large,4,lrconv,0.175,0.02122,0.03922,0.2576,0.589,0.02,1,150
+coco_better,siglip,microwave@medium,4,lrconv,0.183,0.03604,0.06564,0.3668,0.283,0.034,0.945,150
+coco_better,siglip,microwave@small,4,lrconv,0.403,0.0138,0.02562,0.1786,0.121,0.013,0.875,150
+coco_better,siglip,motorcycle@large,4,lrconv,0.121,0.03605,0.06576,0.3744,0.927,0.034,1,150
+coco_better,siglip,motorcycle@medium,4,lrconv,0.333,0.0191,0.0353,0.2324,0.327,0.018,0.909,150
+coco_better,siglip,motorcycle@small,4,lrconv,0.291,0.01804,0.0334,0.2241,0.083,0.017,0.94,150
+coco_better,siglip,mouse@large,4,lrconv,0.093,0.04873,0.08795,0.4505,0.761,0.046,1,150
+coco_better,siglip,mouse@medium,4,lrconv,0.14,0.03816,0.0695,0.3883,0.446,0.036,1,150
+coco_better,siglip,mouse@small,4,lrconv,0.139,0.03076,0.05637,0.3367,0.579,0.029,1,150
+coco_better,siglip,orange@large,4,lrconv,0.149,0.02864,0.05258,0.3205,0.905,0.027,1,150
+coco_better,siglip,orange@medium,4,lrconv,0.176,0.02652,0.04878,0.3036,0.51,0.025,1,150
+coco_better,siglip,parking meter@large,4,lrconv,0.177,0.02334,0.04305,0.2766,0.916,0.022,1,150
+coco_better,siglip,parking meter@medium,4,lrconv,0.204,0.02122,0.03922,0.2576,0.267,0.02,1,150
+coco_better,siglip,parking meter@small,4,lrconv,0.312,0.0191,0.03532,0.2336,0.085,0.018,0.929,150
+coco_better,siglip,person@large,4,lrconv,0.214,0.03287,0.0601,0.3499,0.726,0.031,0.98,150
+coco_better,siglip,person@medium,4,lrconv,0.494,0.02545,0.04646,0.2666,0.224,0.024,0.724,150
+coco_better,siglip,person@small,4,lrconv,0.785,0.01061,0.01957,0.1254,0.023,0.01,0.45,150
+coco_better,siglip,remote@large,4,lrconv,0.172,0.03076,0.05633,0.3347,0.731,0.029,0.981,150
+coco_better,siglip,remote@medium,4,lrconv,0.42,0.02333,0.0427,0.2512,0.141,0.022,0.72,150
+coco_better,siglip,remote@small,4,lrconv,0.27,0.02016,0.03728,0.2466,0.203,0.019,0.982,150
+coco_better,siglip,scissors@large,4,lrconv,0.113,0.03393,0.06202,0.3598,0.927,0.032,1,150
+coco_better,siglip,scissors@medium,4,lrconv,0.31,0.01698,0.03148,0.2149,0.413,0.016,0.963,150
+coco_better,siglip,scissors@small,4,lrconv,0.286,0.01592,0.02955,0.2048,0.111,0.015,0.98,150
+coco_better,siglip,single serving drinking vessel@large,4,lrconv,0.237,0.02228,0.04114,0.2672,0.326,0.021,1,150
+coco_better,siglip,single serving drinking vessel@medium,4,lrconv,0.338,0.0191,0.0353,0.2323,0.188,0.018,0.907,150
+coco_better,siglip,single serving drinking vessel@small,4,lrconv,0.381,0.0138,0.02562,0.1788,0.042,0.013,0.881,150
+coco_better,siglip,sink@large,4,lrconv,0.11,0.03711,0.06763,0.3814,0.304,0.035,1,150
+coco_better,siglip,sink@medium,4,lrconv,0.191,0.03393,0.0619,0.3527,0.279,0.032,0.944,150
+coco_better,siglip,sink@small,4,lrconv,0.367,0.01592,0.02951,0.2014,0.254,0.015,0.902,150
+coco_better,siglip,skateboard@large,4,lrconv,0.104,0.04873,0.08795,0.4505,0.952,0.046,1,150
+coco_better,siglip,skateboard@medium,4,lrconv,0.146,0.0297,0.05447,0.3287,0.949,0.028,1,150
+coco_better,siglip,skateboard@small,4,lrconv,0.238,0.01804,0.03342,0.2261,0.772,0.017,0.977,150
+coco_better,siglip,skis@large,4,lrconv,0.074,0.06562,0.1168,0.5291,0.931,0.062,1,150
+coco_better,siglip,skis@medium,4,lrconv,0.064,0.05824,0.1043,0.4973,0.863,0.055,1,150
+coco_better,siglip,skis@small,4,lrconv,0.064,0.06562,0.1168,0.5291,0.809,0.062,1,150
+coco_better,siglip,snowboard@large,4,lrconv,0.11,0.03816,0.0695,0.3883,0.881,0.036,1,150
+coco_better,siglip,snowboard@medium,4,lrconv,0.049,0.1014,0.1752,0.6435,0.741,0.096,1,150
+coco_better,siglip,snowboard@small,4,lrconv,0.034,0.1224,0.2079,0.6905,0.568,0.116,1,150
+coco_better,siglip,spoon@large,4,lrconv,0.28,0.02122,0.03917,0.2541,0.195,0.02,0.947,150
+coco_better,siglip,spoon@medium,4,lrconv,0.32,0.01698,0.03148,0.2148,0.089,0.016,0.962,150
+coco_better,siglip,spoon@small,4,lrconv,0.606,0.01697,0.03112,0.1871,0.031,0.016,0.564,150
+coco_better,siglip,stop sign@large,4,lrconv,0.116,0.04451,0.08055,0.4236,0.89,0.042,0.98,150
+coco_better,siglip,stop sign@medium,4,lrconv,0.165,0.03922,0.07119,0.3856,0.454,0.037,0.938,150
+coco_better,siglip,stop sign@small,4,lrconv,0.437,0.01486,0.0275,0.1845,0.031,0.014,0.773,150
+coco_better,siglip,surfboard@large,4,lrconv,0.187,0.02122,0.03922,0.2576,0.9,0.02,1,150
+coco_better,siglip,surfboard@medium,4,lrconv,0.085,0.04873,0.08795,0.4505,0.912,0.046,1,150
+coco_better,siglip,surfboard@small,4,lrconv,0.069,0.06667,0.1185,0.5334,0.912,0.063,1,150
+coco_better,siglip,tennis racket@large,4,lrconv,0.039,0.9789,0.9709,0.963,0.996,0.98,0.962,150
+coco_better,siglip,tennis racket@medium,4,lrconv,0.126,0.03922,0.07136,0.3951,0.981,0.037,1,150
+coco_better,siglip,tennis racket@small,4,lrconv,0.097,0.04557,0.08245,0.4331,0.981,0.043,1,150
+coco_better,siglip,tie@large,4,lrconv,0.143,0.03287,0.06014,0.3523,0.91,0.031,1,150
+coco_better,siglip,tie@medium,4,lrconv,0.121,0.03922,0.07136,0.3951,0.607,0.037,1,150
+coco_better,siglip,tie@small,4,lrconv,0.546,0.01591,0.0293,0.1842,0.104,0.015,0.625,150
+coco_better,siglip,toothbrush@large,4,lrconv,0.111,0.04134,0.07507,0.4083,0.938,0.039,1,150
+coco_better,siglip,toothbrush@medium,4,lrconv,0.242,0.02228,0.04108,0.2628,0.58,0.021,0.938,150
+coco_better,siglip,toothbrush@small,4,lrconv,0.315,0.01698,0.03145,0.2125,0.165,0.016,0.915,150
+coco_better,siglip,traffic light@large,4,lrconv,0.134,0.03076,0.05637,0.3367,0.876,0.029,1,150
+coco_better,siglip,traffic light@medium,4,lrconv,0.248,0.02652,0.04863,0.2928,0.256,0.025,0.886,150
+coco_better,siglip,traffic light@small,4,lrconv,0.329,0.01592,0.02954,0.2041,0.174,0.015,0.963,150
+coco_better,siglip,tv@large,4,lrconv,0.214,0.02016,0.03727,0.2463,0.362,0.019,0.976,150
+coco_better,siglip,tv@medium,4,lrconv,0.266,0.02228,0.04108,0.2631,0.125,0.021,0.942,150
+coco_better,siglip,umbrella@large,4,lrconv,0.272,0.02016,0.03725,0.244,0.652,0.019,0.939,150
+coco_better,siglip,umbrella@medium,4,lrconv,0.454,0.01592,0.02941,0.1932,0.254,0.015,0.75,150
+coco_better,siglip,umbrella@small,4,lrconv,0.409,0.02545,0.0465,0.2694,0.04,0.024,0.746,150
+coco_better,siglip,vase or potted plant@large,4,lrconv,0.286,0.01698,0.03147,0.2145,0.539,0.016,0.956,150
+coco_better,siglip,vase or potted plant@medium,4,lrconv,0.566,0.01062,0.01974,0.1404,0.139,0.01,0.76,150
+coco_better,siglip,airplane@large,0,svmc01,0.088,0.05718,0.1023,0.4872,0.967,0.054,0.977,150
+coco_better,siglip,airplane@medium,0,svmc01,0.106,0.04451,0.08061,0.427,0.945,0.042,1,150
+coco_better,siglip,airplane@small,0,svmc01,0.209,0.02864,0.05253,0.3171,0.755,0.027,0.965,150
+coco_better,siglip,apple@large,0,svmc01,0.076,0.05929,0.1061,0.5021,0.893,0.056,1,150
+coco_better,siglip,apple@medium,0,svmc01,0.304,0.01592,0.02955,0.2048,0.314,0.015,0.98,150
+coco_better,siglip,bag or luggage@large,0,svmc01,0.281,0.01592,0.02955,0.2048,0.69,0.015,0.978,150
+coco_better,siglip,bag or luggage@medium,0,svmc01,0.438,0.0138,0.02561,0.1776,0.077,0.013,0.851,150
+coco_better,siglip,bag or luggage@small,0,svmc01,0.555,0.02015,0.03683,0.2139,0.017,0.019,0.596,150
+coco_better,siglip,banana@large,0,svmc01,0.169,0.02652,0.04878,0.3036,0.93,0.025,1,150
+coco_better,siglip,banana@medium,0,svmc01,0.352,0.01486,0.02757,0.1902,0.308,0.014,0.891,150
+coco_better,siglip,baseball bat@large,0,svmc01,0.203,0.02334,0.04305,0.2766,0.904,0.022,1,150
+coco_better,siglip,baseball bat@medium,0,svmc01,0.075,0.0614,0.1096,0.5114,0.887,0.058,1,150
+coco_better,siglip,baseball bat@small,0,svmc01,0.133,0.05928,0.1058,0.4899,0.907,0.056,0.95,150
+coco_better,siglip,bench@large,0,svmc01,0.372,0.01274,0.02369,0.1691,0.628,0.012,0.93,150
+coco_better,siglip,bench@medium,0,svmc01,0.719,0.008493,0.0158,0.1129,0.043,0.008,0.627,150
+coco_better,siglip,bench@small,0,svmc01,0.712,0.008493,0.01579,0.1125,0.01,0.008,0.612,150
+coco_better,siglip,bicycle@large,0,svmc01,0.158,0.02652,0.04878,0.3036,0.841,0.025,1,150
+coco_better,siglip,bicycle@medium,0,svmc01,0.318,0.01698,0.03148,0.2149,0.142,0.016,0.964,150
+coco_better,siglip,bicycle@small,0,svmc01,0.406,0.0138,0.02562,0.1784,0.064,0.013,0.872,150
+coco_better,siglip,bird@large,0,svmc01,0.137,0.04133,0.07495,0.4013,0.812,0.039,0.957,150
+coco_better,siglip,bird@medium,0,svmc01,0.342,0.01804,0.03336,0.2209,0.494,0.017,0.882,150
+coco_better,siglip,bird@small,0,svmc01,0.542,0.01274,0.02364,0.164,0.122,0.012,0.786,150
+coco_better,siglip,boat@large,0,svmc01,0.211,0.0244,0.04497,0.2858,0.875,0.023,1,150
+coco_better,siglip,boat@medium,0,svmc01,0.22,0.0244,0.04492,0.2827,0.235,0.023,0.96,150
+coco_better,siglip,boat@small,0,svmc01,0.225,0.02122,0.03922,0.2576,0.207,0.02,1,150
+coco_better,siglip,book@large,0,svmc01,0.333,0.01168,0.02176,0.159,0.447,0.011,1,150
+coco_better,siglip,book@medium,0,svmc01,0.457,0.01168,0.02173,0.1557,0.061,0.011,0.875,150
+coco_better,siglip,bottle@large,0,svmc01,0.366,0.0138,0.02567,0.1829,0.468,0.013,1,150
+coco_better,siglip,bottle@medium,0,svmc01,0.58,0.01486,0.02744,0.1792,0.04,0.014,0.683,150
+coco_better,siglip,bottle@small,0,svmc01,1.089,0.003185,0.005921,0.04207,0.004,0.003,0.226,150
+coco_better,siglip,bowl@large,0,svmc01,0.308,0.01592,0.02956,0.2056,0.236,0.015,1,150
+coco_better,siglip,bowl@medium,0,svmc01,0.376,0.01698,0.03143,0.211,0.053,0.016,0.885,150
+coco_better,siglip,bus@large,0,svmc01,0.181,0.02334,0.04305,0.2766,0.847,0.022,1,150
+coco_better,siglip,bus@medium,0,svmc01,0.329,0.0138,0.02566,0.1822,0.271,0.013,0.978,150
+coco_better,siglip,bus@small,0,svmc01,0.406,0.01592,0.02944,0.1956,0.078,0.015,0.791,150
+coco_better,siglip,cell phone@large,0,svmc01,0.14,0.03605,0.06576,0.3744,0.835,0.034,1,150
+coco_better,siglip,cell phone@medium,0,svmc01,0.376,0.01274,0.0237,0.1699,0.272,0.012,0.958,150
+coco_better,siglip,cell phone@small,0,svmc01,0.52,0.01168,0.0217,0.1533,0.062,0.011,0.8,150
+coco_better,siglip,chair@large,0,svmc01,0.666,0.01061,0.0197,0.1368,0.022,0.01,0.66,150
+coco_better,siglip,chair@medium,0,svmc01,0.801,0.008492,0.01575,0.1087,0.015,0.008,0.509,150
+coco_better,siglip,clock@large,0,svmc01,0.127,0.04451,0.08055,0.4239,0.98,0.042,0.982,150
+coco_better,siglip,clock@medium,0,svmc01,0.457,0.01274,0.02368,0.1677,0.622,0.012,0.887,150
+coco_better,siglip,clock@small,0,svmc01,0.598,0.01168,0.02164,0.1476,0.225,0.011,0.66,150
+coco_better,siglip,dining table@large,0,svmc01,0.288,0.02122,0.03919,0.2553,0.084,0.02,0.965,150
+coco_better,siglip,dining table@medium,0,svmc01,0.378,0.01592,0.02952,0.2026,0.152,0.015,0.927,150
+coco_better,siglip,dining table@small,0,svmc01,0.76,0.01167,0.02142,0.1306,0.016,0.011,0.408,150
+coco_better,siglip,dog@large,0,svmc01,0.224,0.01804,0.03343,0.2272,0.855,0.017,1,150
+coco_better,siglip,dog@medium,0,svmc01,0.398,0.01168,0.02176,0.1585,0.115,0.011,0.979,150
+coco_better,siglip,dog@small,0,svmc01,0.519,0.01168,0.02169,0.1521,0.039,0.011,0.766,150
+coco_better,siglip,enclosed road vehicle@large,0,svmc01,0.275,0.02334,0.04302,0.2741,0.256,0.022,0.966,150
+coco_better,siglip,enclosed road vehicle@medium,0,svmc01,0.319,0.0138,0.02564,0.1801,0.06,0.013,0.917,150
+coco_better,siglip,enclosed road vehicle@small,0,svmc01,0.52,0.01486,0.02745,0.1801,0.031,0.014,0.696,150
+coco_better,siglip,fire hydrant@large,0,svmc01,0.08,0.05402,0.09705,0.4774,0.965,0.051,1,150
+coco_better,siglip,fire hydrant@medium,0,svmc01,0.311,0.01274,0.02372,0.1711,0.504,0.012,1,150
+coco_better,siglip,fire hydrant@small,0,svmc01,0.314,0.02122,0.03912,0.25,0.129,0.02,0.889,150
+coco_better,siglip,fork@large,0,svmc01,0.196,0.0191,0.03536,0.2376,0.252,0.018,1,150
+coco_better,siglip,fork@medium,0,svmc01,0.248,0.01804,0.03343,0.2272,0.156,0.017,1,150
+coco_better,siglip,fork@small,0,svmc01,0.321,0.01698,0.03145,0.2127,0.211,0.016,0.918,150
+coco_better,siglip,frisbee@large,0,svmc01,0.186,0.02546,0.04688,0.2948,0.837,0.024,1,150
+coco_better,siglip,frisbee@medium,0,svmc01,0.172,0.02546,0.04688,0.2948,0.79,0.024,1,150
+coco_better,siglip,frisbee@small,0,svmc01,0.218,0.02016,0.03728,0.2464,0.546,0.019,0.978,150
+coco_better,siglip,keyboard@large,0,svmc01,0.167,0.0297,0.05447,0.3287,0.59,0.028,1,150
+coco_better,siglip,keyboard@medium,0,svmc01,0.177,0.02546,0.04685,0.293,0.356,0.024,0.978,150
+coco_better,siglip,keyboard@small,0,svmc01,0.434,0.01698,0.03141,0.209,0.047,0.016,0.85,150
+coco_better,siglip,kite@large,0,svmc01,0.101,0.04662,0.0842,0.4346,0.904,0.044,0.976,150
+coco_better,siglip,kite@medium,0,svmc01,0.178,0.02122,0.03922,0.2576,0.812,0.02,1,150
+coco_better,siglip,kite@small,0,svmc01,0.153,0.03076,0.05633,0.3345,0.828,0.029,0.979,150
+coco_better,siglip,knife@large,0,svmc01,0.21,0.02334,0.04303,0.2751,0.173,0.022,0.979,150
+coco_better,siglip,knife@medium,0,svmc01,0.498,0.009556,0.01782,0.1318,0.032,0.009,0.894,150
+coco_better,siglip,laptop@large,0,svmc01,0.092,0.04345,0.07877,0.4209,0.499,0.041,1,150
+coco_better,siglip,laptop@medium,0,svmc01,0.278,0.01698,0.0315,0.2166,0.14,0.016,1,150
+coco_better,siglip,laptop@small,0,svmc01,0.482,0.01168,0.02172,0.1552,0.025,0.011,0.86,150
+coco_better,siglip,microwave@large,0,svmc01,0.175,0.03076,0.05633,0.3347,0.63,0.029,0.981,150
+coco_better,siglip,microwave@medium,0,svmc01,0.311,0.01486,0.02761,0.1937,0.166,0.014,0.979,150
+coco_better,siglip,microwave@small,0,svmc01,0.228,0.02546,0.04676,0.2862,0.146,0.024,0.902,150
+coco_better,siglip,motorcycle@large,0,svmc01,0.119,0.03922,0.07136,0.3951,0.968,0.037,1,150
+coco_better,siglip,motorcycle@medium,0,svmc01,0.37,0.01486,0.02758,0.1915,0.383,0.014,0.922,150
+coco_better,siglip,motorcycle@small,0,svmc01,0.471,0.01274,0.02364,0.1638,0.036,0.012,0.783,150
+coco_better,siglip,mouse@large,0,svmc01,0.147,0.02652,0.04878,0.3036,0.841,0.025,1,150
+coco_better,siglip,mouse@medium,0,svmc01,0.173,0.03076,0.05637,0.3367,0.555,0.029,1,150
+coco_better,siglip,mouse@small,0,svmc01,0.205,0.0244,0.04497,0.2858,0.387,0.023,1,150
+coco_better,siglip,orange@large,0,svmc01,0.169,0.02546,0.04688,0.2948,0.847,0.024,1,150
+coco_better,siglip,orange@medium,0,svmc01,0.281,0.02334,0.04304,0.2756,0.665,0.022,0.986,150
+coco_better,siglip,parking meter@large,0,svmc01,0.246,0.01592,0.02956,0.2056,0.871,0.015,1,150
+coco_better,siglip,parking meter@medium,0,svmc01,0.227,0.02334,0.04305,0.2766,0.306,0.022,1,150
+coco_better,siglip,parking meter@small,0,svmc01,0.348,0.02228,0.04098,0.2554,0.074,0.021,0.845,150
+coco_better,siglip,person@large,0,svmc01,0.267,0.02546,0.04688,0.2948,0.717,0.024,1,150
+coco_better,siglip,person@medium,0,svmc01,0.293,0.02546,0.04683,0.2914,0.156,0.024,0.96,150
+coco_better,siglip,remote@large,0,svmc01,0.221,0.02546,0.04683,0.2917,0.666,0.024,0.963,150
+coco_better,siglip,remote@medium,0,svmc01,0.265,0.0138,0.02566,0.1821,0.116,0.013,0.973,150
+coco_better,siglip,remote@small,0,svmc01,0.289,0.0191,0.03534,0.2356,0.16,0.018,0.963,150
+coco_better,siglip,scissors@large,0,svmc01,0.083,0.04662,0.08429,0.439,0.929,0.044,1,150
+coco_better,siglip,scissors@medium,0,svmc01,0.353,0.0138,0.02564,0.1808,0.37,0.013,0.936,150
+coco_better,siglip,scissors@small,0,svmc01,0.392,0.01062,0.01979,0.1456,0.022,0.01,0.953,150
+coco_better,siglip,single serving drinking vessel@large,0,svmc01,0.36,0.01486,0.0276,0.1929,0.406,0.014,0.959,150
+coco_better,siglip,single serving drinking vessel@medium,0,svmc01,0.291,0.01804,0.03342,0.2262,0.127,0.017,0.98,150
+coco_better,siglip,single serving drinking vessel@small,0,svmc01,0.586,0.01168,0.02166,0.1497,0.026,0.011,0.706,150
+coco_better,siglip,sink@large,0,svmc01,0.277,0.01592,0.02956,0.2056,0.255,0.015,1,150
+coco_better,siglip,sink@medium,0,svmc01,0.28,0.02863,0.05237,0.3067,0.131,0.027,0.87,150
+coco_better,siglip,sink@small,0,svmc01,0.607,0.008495,0.01586,0.1191,0.113,0.008,0.9,150
+coco_better,siglip,skateboard@large,0,svmc01,0.158,0.02652,0.04878,0.3036,0.955,0.025,1,150
+coco_better,siglip,skateboard@medium,0,svmc01,0.097,0.04345,0.07877,0.4209,0.934,0.041,1,150
+coco_better,siglip,skateboard@small,0,svmc01,0.257,0.0191,0.03532,0.2338,0.651,0.018,0.932,150
+coco_better,siglip,skis@large,0,svmc01,0.061,0.07405,0.1308,0.5613,0.914,0.07,1,150
+coco_better,siglip,skis@medium,0,svmc01,0.077,0.06246,0.1114,0.5159,0.913,0.059,1,150
+coco_better,siglip,skis@small,0,svmc01,0.07,0.06457,0.115,0.5248,0.818,0.061,1,150
+coco_better,siglip,snowboard@large,0,svmc01,0.088,0.04239,0.07692,0.4146,0.845,0.04,1,150
+coco_better,siglip,snowboard@medium,0,svmc01,0.071,0.05402,0.09705,0.4774,0.555,0.051,1,150
+coco_better,siglip,snowboard@small,0,svmc01,0.075,0.06246,0.1114,0.5159,0.539,0.059,1,150
+coco_better,siglip,spoon@large,0,svmc01,0.331,0.01274,0.02372,0.1711,0.213,0.012,1,150
+coco_better,siglip,spoon@medium,0,svmc01,0.311,0.01804,0.03341,0.2255,0.139,0.017,0.965,150
+coco_better,siglip,spoon@small,0,svmc01,0.821,0.006371,0.01189,0.0887,0.009,0.006,0.64,150
+coco_better,siglip,stop sign@large,0,svmc01,0.111,0.03499,0.06389,0.3671,0.934,0.033,1,150
+coco_better,siglip,stop sign@medium,0,svmc01,0.159,0.03287,0.06005,0.3466,0.523,0.031,0.953,150
+coco_better,siglip,stop sign@small,0,svmc01,0.791,0.007431,0.01382,0.09856,0.013,0.007,0.54,150
+coco_better,siglip,surfboard@large,0,svmc01,0.185,0.02758,0.05068,0.3121,0.921,0.026,1,150
+coco_better,siglip,surfboard@medium,0,svmc01,0.121,0.03393,0.06202,0.3598,0.908,0.032,1,150
+coco_better,siglip,surfboard@small,0,svmc01,0.11,0.03922,0.07136,0.3951,0.874,0.037,1,150
+coco_better,siglip,tennis racket@large,0,svmc01,0.107,0.03922,0.07136,0.3951,0.985,0.037,1,150
+coco_better,siglip,tennis racket@medium,0,svmc01,0.103,0.0614,0.1095,0.5074,0.981,0.058,0.984,150
+coco_better,siglip,tennis racket@small,0,svmc01,0.143,0.02758,0.05068,0.3121,0.978,0.026,1,150
+coco_better,siglip,tie@large,0,svmc01,0.145,0.04345,0.07865,0.4148,0.843,0.041,0.964,150
+coco_better,siglip,tie@medium,0,svmc01,0.223,0.02122,0.03922,0.2576,0.575,0.02,1,150
+coco_better,siglip,tie@small,0,svmc01,0.372,0.01698,0.03142,0.21,0.107,0.016,0.868,150
+coco_better,siglip,toothbrush@large,0,svmc01,0.061,0.07616,0.1343,0.5688,0.972,0.072,1,150
+coco_better,siglip,toothbrush@medium,0,svmc01,0.247,0.0191,0.03535,0.2365,0.537,0.018,0.98,150
+coco_better,siglip,toothbrush@small,0,svmc01,0.284,0.0191,0.03532,0.2342,0.201,0.018,0.939,150
+coco_better,siglip,traffic light@large,0,svmc01,0.163,0.02864,0.05258,0.3205,0.849,0.027,1,150
+coco_better,siglip,traffic light@medium,0,svmc01,0.206,0.0244,0.04497,0.2858,0.407,0.023,1,150
+coco_better,siglip,traffic light@small,0,svmc01,0.324,0.01592,0.02953,0.203,0.077,0.015,0.938,150
+coco_better,siglip,tv@large,0,svmc01,0.207,0.02546,0.04683,0.2912,0.419,0.024,0.957,150
+coco_better,siglip,tv@medium,0,svmc01,0.35,0.01592,0.02952,0.2024,0.143,0.015,0.923,150
+coco_better,siglip,tv@small,0,svmc01,0.536,0.008495,0.01584,0.1169,0.035,0.008,0.784,150
+coco_better,siglip,umbrella@large,0,svmc01,0.258,0.02228,0.04112,0.2661,0.588,0.021,0.983,150
+coco_better,siglip,umbrella@medium,0,svmc01,0.4,0.0191,0.03522,0.2258,0.244,0.018,0.811,150
+coco_better,siglip,umbrella@small,0,svmc01,0.49,0.01486,0.02746,0.1813,0.041,0.014,0.717,150
+coco_better,siglip,vase or potted plant@large,0,svmc01,0.328,0.01592,0.02954,0.2041,0.625,0.015,0.962,150
+coco_better,siglip,vase or potted plant@medium,0,svmc01,0.48,0.01274,0.02364,0.1642,0.072,0.012,0.792,150
+coco_better,siglip,vase or potted plant@small,0,svmc01,0.58,0.01168,0.02166,0.1497,0.124,0.011,0.706,150
+coco_better,siglip,airplane@large,1,svmc01,0.073,0.0751,0.1324,0.5587,0.974,0.071,0.979,150
+coco_better,siglip,airplane@medium,1,svmc01,0.11,0.03393,0.06202,0.3598,0.928,0.032,1,150
+coco_better,siglip,airplane@small,1,svmc01,0.278,0.0244,0.04487,0.2786,0.736,0.023,0.912,150
+coco_better,siglip,apple@large,1,svmc01,0.191,0.0244,0.04497,0.2858,0.783,0.023,1,150
+coco_better,siglip,apple@medium,1,svmc01,0.223,0.02122,0.03922,0.2576,0.339,0.02,1,150
+coco_better,siglip,bag or luggage@large,1,svmc01,0.327,0.0191,0.03529,0.2318,0.657,0.018,0.9,150
+coco_better,siglip,bag or luggage@medium,1,svmc01,0.348,0.01592,0.02953,0.2032,0.121,0.015,0.941,150
+coco_better,siglip,bag or luggage@small,1,svmc01,0.637,0.009555,0.01778,0.1273,0.02,0.009,0.714,150
+coco_better,siglip,banana@large,1,svmc01,0.158,0.02758,0.05068,0.3121,0.905,0.026,1,150
+coco_better,siglip,banana@medium,1,svmc01,0.334,0.02228,0.04103,0.2589,0.483,0.021,0.887,150
+coco_better,siglip,baseball bat@large,1,svmc01,0.104,0.04134,0.07507,0.4083,0.915,0.039,1,150
+coco_better,siglip,baseball bat@medium,1,svmc01,0.078,0.05929,0.1061,0.5021,0.869,0.056,1,150
+coco_better,siglip,baseball bat@small,1,svmc01,0.133,0.04345,0.07863,0.4135,0.902,0.041,0.957,150
+coco_better,siglip,bench@large,1,svmc01,0.364,0.01592,0.02949,0.1999,0.516,0.015,0.87,150
+coco_better,siglip,bench@medium,1,svmc01,0.766,0.006371,0.01187,0.0871,0.008,0.006,0.561,150
+coco_better,siglip,bench@small,1,svmc01,1,0,0,0,0.005,0,0,150
+coco_better,siglip,bicycle@large,1,svmc01,0.24,0.0191,0.03536,0.2376,0.787,0.018,1,150
+coco_better,siglip,bicycle@medium,1,svmc01,0.379,0.01168,0.02174,0.1571,0.136,0.011,0.925,150
+coco_better,siglip,bicycle@small,1,svmc01,0.343,0.02016,0.03719,0.2396,0.066,0.019,0.873,150
+coco_better,siglip,bird@large,1,svmc01,0.109,0.0519,0.09334,0.4632,0.877,0.049,0.982,150
+coco_better,siglip,bird@medium,1,svmc01,0.32,0.0191,0.03527,0.2295,0.544,0.018,0.864,150
+coco_better,siglip,bird@small,1,svmc01,0.502,0.009556,0.01782,0.1313,0.035,0.009,0.872,150
+coco_better,siglip,boat@large,1,svmc01,0.243,0.01592,0.02956,0.2056,0.88,0.015,1,150
+coco_better,siglip,boat@medium,1,svmc01,0.224,0.02016,0.03728,0.2464,0.474,0.019,0.978,150
+coco_better,siglip,boat@small,1,svmc01,0.358,0.01592,0.02951,0.2015,0.25,0.015,0.904,150
+coco_better,siglip,book@large,1,svmc01,0.222,0.02652,0.0487,0.298,0.475,0.025,0.939,150
+coco_better,siglip,book@medium,1,svmc01,0.513,0.01803,0.03319,0.2077,0.046,0.017,0.695,150
+coco_better,siglip,book@small,1,svmc01,0.544,0.01168,0.02166,0.1493,0.052,0.011,0.698,150
+coco_better,siglip,bottle@large,1,svmc01,0.289,0.01804,0.03342,0.2263,0.231,0.017,0.981,150
+coco_better,siglip,bottle@medium,1,svmc01,0.465,0.01274,0.02369,0.1684,0.068,0.012,0.909,150
+coco_better,siglip,bowl@large,1,svmc01,0.346,0.02334,0.04284,0.2609,0.123,0.022,0.812,150
+coco_better,siglip,bowl@medium,1,svmc01,0.446,0.01168,0.02173,0.1555,0.061,0.011,0.87,150
+coco_better,siglip,bus@large,1,svmc01,0.208,0.02334,0.04303,0.2752,0.734,0.022,0.98,150
+coco_better,siglip,bus@medium,1,svmc01,0.276,0.02016,0.03727,0.2456,0.089,0.019,0.964,150
+coco_better,siglip,bus@small,1,svmc01,0.404,0.01486,0.02756,0.19,0.095,0.014,0.887,150
+coco_better,siglip,cell phone@large,1,svmc01,0.129,0.04028,0.07316,0.3987,0.834,0.038,0.98,150
+coco_better,siglip,cell phone@medium,1,svmc01,0.331,0.02016,0.03721,0.241,0.245,0.019,0.893,150
+coco_better,siglip,cell phone@small,1,svmc01,0.646,0.007433,0.01386,0.1026,0.09,0.007,0.7,150
+coco_better,siglip,chair@large,1,svmc01,0.543,0.01062,0.01975,0.1418,0.043,0.01,0.804,150
+coco_better,siglip,chair@medium,1,svmc01,0.752,0.008492,0.01576,0.1096,0.025,0.008,0.532,150
+coco_better,siglip,clock@large,1,svmc01,0.163,0.02758,0.05068,0.3121,0.959,0.026,1,150
+coco_better,siglip,clock@medium,1,svmc01,0.463,0.009557,0.01782,0.1319,0.566,0.009,0.902,150
+coco_better,siglip,clock@small,1,svmc01,0.651,0.008494,0.01582,0.1155,0.305,0.008,0.723,150
+coco_better,siglip,dining table@large,1,svmc01,0.381,0.01698,0.03145,0.2122,0.174,0.016,0.909,150
+coco_better,siglip,dining table@medium,1,svmc01,0.386,0.01486,0.02757,0.1903,0.163,0.014,0.894,150
+coco_better,siglip,dining table@small,1,svmc01,0.742,0.01061,0.01955,0.1243,0.032,0.01,0.435,150
+coco_better,siglip,dog@large,1,svmc01,0.24,0.0191,0.03536,0.2376,0.719,0.018,1,150
+coco_better,siglip,dog@medium,1,svmc01,0.414,0.01062,0.01978,0.1444,0.139,0.01,0.902,150
+coco_better,siglip,dog@small,1,svmc01,0.509,0.01062,0.01976,0.1424,0.025,0.01,0.826,150
+coco_better,siglip,enclosed road vehicle@large,1,svmc01,0.333,0.02016,0.03724,0.2434,0.457,0.019,0.93,150
+coco_better,siglip,enclosed road vehicle@medium,1,svmc01,0.489,0.01592,0.02946,0.1973,0.052,0.015,0.82,150
+coco_better,siglip,fire hydrant@large,1,svmc01,0.078,0.05718,0.1025,0.4925,0.982,0.054,1,150
+coco_better,siglip,fire hydrant@medium,1,svmc01,0.33,0.01592,0.02952,0.2022,0.388,0.015,0.918,150
+coco_better,siglip,fire hydrant@small,1,svmc01,0.339,0.0191,0.03529,0.2313,0.079,0.018,0.891,150
+coco_better,siglip,fork@large,1,svmc01,0.086,0.06035,0.1079,0.5068,0.138,0.057,1,150
+coco_better,siglip,fork@medium,1,svmc01,0.262,0.01698,0.03148,0.2156,0.053,0.016,0.978,150
+coco_better,siglip,fork@small,1,svmc01,0.334,0.01804,0.03335,0.2202,0.114,0.017,0.87,150
+coco_better,siglip,frisbee@large,1,svmc01,0.251,0.01804,0.03343,0.2272,0.975,0.017,1,150
+coco_better,siglip,frisbee@medium,1,svmc01,0.201,0.02122,0.0392,0.2561,0.566,0.02,0.977,150
+coco_better,siglip,frisbee@small,1,svmc01,0.17,0.03076,0.05633,0.3347,0.592,0.029,0.981,150
+coco_better,siglip,keyboard@large,1,svmc01,0.161,0.02864,0.05258,0.3205,0.629,0.027,1,150
+coco_better,siglip,keyboard@medium,1,svmc01,0.161,0.02546,0.04688,0.2948,0.526,0.024,1,150
+coco_better,siglip,keyboard@small,1,svmc01,0.315,0.01592,0.02954,0.204,0.139,0.015,0.96,150
+coco_better,siglip,kite@large,1,svmc01,0.17,0.02652,0.04878,0.3036,0.955,0.025,1,150
+coco_better,siglip,kite@medium,1,svmc01,0.127,0.03287,0.06014,0.3523,0.894,0.031,1,150
+coco_better,siglip,kite@small,1,svmc01,0.16,0.0297,0.05447,0.3287,0.765,0.028,1,150
+coco_better,siglip,knife@large,1,svmc01,0.24,0.02228,0.04114,0.2672,0.206,0.021,1,150
+coco_better,siglip,knife@medium,1,svmc01,0.67,0.008494,0.01581,0.1143,0.043,0.008,0.674,150
+coco_better,siglip,knife@small,1,svmc01,0.708,0.008493,0.01578,0.111,0.009,0.008,0.568,150
+coco_better,siglip,laptop@large,1,svmc01,0.134,0.03182,0.05825,0.3446,0.255,0.03,1,150
+coco_better,siglip,laptop@medium,1,svmc01,0.332,0.01698,0.03149,0.2158,0.222,0.016,0.983,150
+coco_better,siglip,laptop@small,1,svmc01,0.539,0.01062,0.01975,0.1413,0.02,0.01,0.787,150
+coco_better,siglip,microwave@large,1,svmc01,0.193,0.0297,0.05442,0.3249,0.64,0.028,0.963,150
+coco_better,siglip,microwave@medium,1,svmc01,0.246,0.01698,0.03148,0.2155,0.238,0.016,0.976,150
+coco_better,siglip,microwave@small,1,svmc01,0.299,0.02122,0.03916,0.253,0.239,0.02,0.931,150
+coco_better,siglip,motorcycle@large,1,svmc01,0.164,0.03076,0.05637,0.3367,0.927,0.029,1,150
+coco_better,siglip,motorcycle@medium,1,svmc01,0.326,0.01486,0.02759,0.192,0.201,0.014,0.936,150
+coco_better,siglip,motorcycle@small,1,svmc01,0.403,0.0191,0.03526,0.2289,0.125,0.018,0.855,150
+coco_better,siglip,mouse@large,1,svmc01,0.192,0.02334,0.04305,0.2766,0.752,0.022,1,150
+coco_better,siglip,mouse@medium,1,svmc01,0.161,0.02758,0.05068,0.3121,0.529,0.026,1,150
+coco_better,siglip,mouse@small,1,svmc01,0.157,0.03076,0.05633,0.3345,0.509,0.029,0.979,150
+coco_better,siglip,orange@large,1,svmc01,0.125,0.03816,0.0695,0.3883,0.884,0.036,1,150
+coco_better,siglip,orange@medium,1,svmc01,0.197,0.02758,0.05063,0.3085,0.618,0.026,0.961,150
+coco_better,siglip,parking meter@large,1,svmc01,0.252,0.01804,0.03343,0.2272,0.951,0.017,1,150
+coco_better,siglip,parking meter@medium,1,svmc01,0.252,0.01804,0.03343,0.2272,0.346,0.017,1,150
+coco_better,siglip,parking meter@small,1,svmc01,0.4,0.0138,0.02564,0.1804,0.066,0.013,0.923,150
+coco_better,siglip,person@large,1,svmc01,0.124,0.06034,0.1077,0.5019,0.872,0.057,0.98,150
+coco_better,siglip,person@medium,1,svmc01,0.419,0.02439,0.04471,0.2674,0.061,0.023,0.796,150
+coco_better,siglip,person@small,1,svmc01,0.78,0.01273,0.02345,0.1481,0.174,0.012,0.509,150
+coco_better,siglip,remote@large,1,svmc01,0.214,0.02016,0.03729,0.2477,0.761,0.019,1,150
+coco_better,siglip,remote@medium,1,svmc01,0.226,0.01804,0.03342,0.226,0.287,0.017,0.975,150
+coco_better,siglip,remote@small,1,svmc01,0.311,0.01804,0.03342,0.2264,0.3,0.017,0.983,150
+coco_better,siglip,scissors@large,1,svmc01,0.146,0.02652,0.04878,0.3036,0.944,0.025,1,150
+coco_better,siglip,scissors@medium,1,svmc01,0.328,0.01698,0.03149,0.2158,0.493,0.016,0.984,150
+coco_better,siglip,scissors@small,1,svmc01,0.324,0.01486,0.02761,0.1938,0.057,0.014,0.981,150
+coco_better,siglip,single serving drinking vessel@large,1,svmc01,0.26,0.01698,0.0315,0.2166,0.248,0.016,1,150
+coco_better,siglip,single serving drinking vessel@medium,1,svmc01,0.277,0.01698,0.03148,0.2155,0.178,0.016,0.977,150
+coco_better,siglip,single serving drinking vessel@small,1,svmc01,0.766,0.008493,0.01578,0.1114,0.04,0.008,0.58,150
+coco_better,siglip,sink@large,1,svmc01,0.246,0.01592,0.02956,0.2056,0.287,0.015,1,150
+coco_better,siglip,sink@medium,1,svmc01,0.282,0.01804,0.03342,0.2262,0.298,0.017,0.98,150
+coco_better,siglip,sink@small,1,svmc01,0.467,0.008496,0.01587,0.1202,0.053,0.008,0.974,150
+coco_better,siglip,skateboard@large,1,svmc01,0.083,0.04873,0.08795,0.4505,0.986,0.046,1,150
+coco_better,siglip,skateboard@medium,1,svmc01,0.063,0.06562,0.1168,0.5291,0.966,0.062,1,150
+coco_better,siglip,skateboard@small,1,svmc01,0.251,0.0191,0.03535,0.2365,0.719,0.018,0.98,150
+coco_better,siglip,skis@large,1,svmc01,0.048,0.09719,0.1685,0.6327,0.834,0.092,1,150
+coco_better,siglip,skis@medium,1,svmc01,0.077,0.05402,0.09705,0.4774,0.901,0.051,1,150
+coco_better,siglip,skis@small,1,svmc01,0.043,0.09299,0.1618,0.6213,0.735,0.088,1,150
+coco_better,siglip,snowboard@large,1,svmc01,0.063,0.06246,0.1114,0.5159,0.89,0.059,1,150
+coco_better,siglip,snowboard@medium,1,svmc01,0.07,0.05824,0.1043,0.4973,0.554,0.055,1,150
+coco_better,siglip,snowboard@small,1,svmc01,0.053,0.09824,0.1702,0.6355,0.651,0.093,1,150
+coco_better,siglip,spoon@large,1,svmc01,0.197,0.02334,0.04305,0.2766,0.079,0.022,1,150
+coco_better,siglip,spoon@medium,1,svmc01,0.295,0.01592,0.02955,0.2048,0.092,0.015,0.98,150
+coco_better,siglip,spoon@small,1,svmc01,0.674,0.02119,0.03819,0.1936,0.038,0.02,0.423,150
+coco_better,siglip,stop sign@large,1,svmc01,0.122,0.04133,0.07501,0.4051,0.929,0.039,0.98,150
+coco_better,siglip,stop sign@medium,1,svmc01,0.201,0.03393,0.06192,0.3536,0.588,0.032,0.951,150
+coco_better,siglip,stop sign@small,1,svmc01,0.646,0.009554,0.01776,0.1254,0.012,0.009,0.653,150
+coco_better,siglip,surfboard@large,1,svmc01,0.192,0.0191,0.03536,0.2376,0.923,0.018,1,150
+coco_better,siglip,surfboard@medium,1,svmc01,0.108,0.03499,0.06389,0.3671,0.926,0.033,1,150
+coco_better,siglip,surfboard@small,1,svmc01,0.116,0.04451,0.08061,0.427,0.858,0.042,1,150
+coco_better,siglip,tennis racket@large,1,svmc01,0.064,0.06351,0.1132,0.5204,0.992,0.06,1,150
+coco_better,siglip,tennis racket@medium,1,svmc01,0.072,0.06246,0.1114,0.5159,0.996,0.059,1,150
+coco_better,siglip,tennis racket@small,1,svmc01,0.064,0.0751,0.1326,0.5651,0.978,0.071,1,150
+coco_better,siglip,tie@large,1,svmc01,0.131,0.04767,0.08598,0.4375,0.887,0.045,0.962,150
+coco_better,siglip,tie@medium,1,svmc01,0.222,0.02334,0.04303,0.2752,0.652,0.022,0.981,150
+coco_better,siglip,tie@small,1,svmc01,0.565,0.02226,0.04049,0.2237,0.035,0.021,0.564,150
+coco_better,siglip,toothbrush@large,1,svmc01,0.231,0.0191,0.03536,0.2376,0.959,0.018,1,150
+coco_better,siglip,toothbrush@medium,1,svmc01,0.273,0.01486,0.0276,0.1936,0.324,0.014,0.976,150
+coco_better,siglip,toothbrush@small,1,svmc01,0.279,0.02016,0.03725,0.2443,0.25,0.019,0.944,150
+coco_better,siglip,traffic light@large,1,svmc01,0.158,0.02864,0.05258,0.3205,0.87,0.027,1,150
+coco_better,siglip,traffic light@medium,1,svmc01,0.245,0.02228,0.04108,0.2627,0.348,0.021,0.936,150
+coco_better,siglip,traffic light@small,1,svmc01,0.28,0.02016,0.03723,0.2423,0.114,0.019,0.913,150
+coco_better,siglip,tv@large,1,svmc01,0.323,0.0138,0.02566,0.1822,0.458,0.013,0.978,150
+coco_better,siglip,tv@medium,1,svmc01,0.33,0.01592,0.02953,0.203,0.137,0.015,0.936,150
+coco_better,siglip,tv@small,1,svmc01,0.748,0.008492,0.01575,0.1088,0.025,0.008,0.511,150
+coco_better,siglip,umbrella@large,1,svmc01,0.23,0.02122,0.03922,0.2576,0.617,0.02,1,150
+coco_better,siglip,umbrella@medium,1,svmc01,0.491,0.01062,0.01976,0.1421,0.243,0.01,0.814,150
+coco_better,siglip,umbrella@small,1,svmc01,0.432,0.01486,0.02752,0.1864,0.122,0.014,0.809,150
+coco_better,siglip,vase or potted plant@large,1,svmc01,0.388,0.01274,0.02369,0.1686,0.507,0.012,0.913,150
+coco_better,siglip,vase or potted plant@medium,1,svmc01,0.44,0.0138,0.02562,0.1782,0.159,0.013,0.865,150
+coco_better,siglip,vase or potted plant@small,1,svmc01,0.57,0.01168,0.02166,0.1498,0.08,0.011,0.708,150
+coco_better,siglip,airplane@large,2,svmc01,0.075,0.07194,0.1272,0.5472,0.961,0.068,0.978,150
+coco_better,siglip,airplane@medium,2,svmc01,0.099,0.04768,0.08612,0.4448,0.912,0.045,1,150
+coco_better,siglip,airplane@small,2,svmc01,0.206,0.02969,0.05439,0.3227,0.797,0.028,0.943,150
+coco_better,siglip,apple@large,2,svmc01,0.108,0.04134,0.07507,0.4083,0.819,0.039,1,150
+coco_better,siglip,apple@medium,2,svmc01,0.315,0.02757,0.05044,0.2955,0.368,0.026,0.839,150
+coco_better,siglip,bag or luggage@large,2,svmc01,0.352,0.02122,0.03911,0.2491,0.644,0.02,0.877,150
+coco_better,siglip,bag or luggage@medium,2,svmc01,0.567,0.01486,0.02746,0.181,0.078,0.014,0.712,150
+coco_better,siglip,bag or luggage@small,2,svmc01,0.681,0.008494,0.01583,0.1163,0.024,0.008,0.755,150
+coco_better,siglip,banana@large,2,svmc01,0.109,0.04239,0.07692,0.4146,0.932,0.04,1,150
+coco_better,siglip,banana@medium,2,svmc01,0.391,0.0138,0.02564,0.1804,0.434,0.013,0.923,150
+coco_better,siglip,baseball bat@large,2,svmc01,0.18,0.02334,0.04305,0.2766,0.863,0.022,1,150
+coco_better,siglip,baseball bat@medium,2,svmc01,0.147,0.0297,0.05447,0.3287,0.838,0.028,1,150
+coco_better,siglip,baseball bat@small,2,svmc01,0.088,0.1307,0.2192,0.6787,0.892,0.124,0.942,150
+coco_better,siglip,bench@large,2,svmc01,0.347,0.01804,0.03336,0.2208,0.532,0.017,0.88,150
+coco_better,siglip,bench@medium,2,svmc01,0.595,0.01167,0.02162,0.1462,0.034,0.011,0.63,150
+coco_better,siglip,bench@small,2,svmc01,0.713,0.007432,0.01384,0.1008,0.013,0.007,0.619,150
+coco_better,siglip,bicycle@large,2,svmc01,0.205,0.02864,0.05249,0.3144,0.799,0.027,0.939,150
+coco_better,siglip,bicycle@medium,2,svmc01,0.295,0.02334,0.04297,0.27,0.196,0.022,0.914,150
+coco_better,siglip,bicycle@small,2,svmc01,0.689,0.009554,0.01775,0.1244,0.025,0.009,0.627,150
+coco_better,siglip,bird@large,2,svmc01,0.152,0.03605,0.06572,0.372,0.843,0.034,0.982,150
+coco_better,siglip,bird@medium,2,svmc01,0.342,0.0138,0.02564,0.1806,0.549,0.013,0.93,150
+coco_better,siglip,bird@small,2,svmc01,0.642,0.01061,0.01969,0.1354,0.05,0.01,0.625,150
+coco_better,siglip,boat@large,2,svmc01,0.188,0.02864,0.05252,0.3164,0.745,0.027,0.959,150
+coco_better,siglip,boat@medium,2,svmc01,0.293,0.01698,0.03147,0.2147,0.564,0.016,0.959,150
+coco_better,siglip,boat@small,2,svmc01,0.247,0.0191,0.03533,0.2352,0.242,0.018,0.956,150
+coco_better,siglip,book@large,2,svmc01,0.228,0.02122,0.0392,0.2562,0.414,0.02,0.979,150
+coco_better,siglip,book@medium,2,svmc01,0.52,0.01168,0.02169,0.1519,0.028,0.011,0.761,150
+coco_better,siglip,book@small,2,svmc01,0.61,0.01379,0.02543,0.1627,0.028,0.013,0.58,150
+coco_better,siglip,bottle@large,2,svmc01,0.262,0.01592,0.02956,0.2056,0.28,0.015,1,150
+coco_better,siglip,bottle@medium,2,svmc01,0.471,0.0138,0.02558,0.1748,0.046,0.013,0.787,150
+coco_better,siglip,bottle@small,2,svmc01,0.465,0.01168,0.02171,0.1545,0.022,0.011,0.837,150
+coco_better,siglip,bowl@large,2,svmc01,0.389,0.01486,0.02758,0.1915,0.067,0.014,0.922,150
+coco_better,siglip,bowl@medium,2,svmc01,0.346,0.01486,0.02761,0.1938,0.102,0.014,0.981,150
+coco_better,siglip,bowl@small,2,svmc01,0.74,0.008493,0.01578,0.1114,0.014,0.008,0.58,150
+coco_better,siglip,bus@large,2,svmc01,0.202,0.02228,0.04112,0.2656,0.584,0.021,0.977,150
+coco_better,siglip,bus@medium,2,svmc01,0.367,0.01698,0.03145,0.2125,0.198,0.016,0.914,150
+coco_better,siglip,bus@small,2,svmc01,0.578,0.0138,0.02549,0.1673,0.128,0.013,0.648,150
+coco_better,siglip,cell phone@large,2,svmc01,0.172,0.02864,0.05255,0.3185,0.819,0.027,0.979,150
+coco_better,siglip,cell phone@medium,2,svmc01,0.356,0.0138,0.02562,0.1786,0.239,0.013,0.875,150
+coco_better,siglip,cell phone@small,2,svmc01,0.451,0.01062,0.01978,0.1441,0.026,0.01,0.891,150
+coco_better,siglip,chair@large,2,svmc01,0.347,0.01804,0.03335,0.2202,0.032,0.017,0.87,150
+coco_better,siglip,chair@medium,2,svmc01,0.64,0.009554,0.01774,0.124,0.033,0.009,0.615,150
+coco_better,siglip,clock@large,2,svmc01,0.21,0.02122,0.03922,0.2576,0.933,0.02,1,150
+coco_better,siglip,clock@medium,2,svmc01,0.452,0.01168,0.02174,0.157,0.486,0.011,0.922,150
+coco_better,siglip,clock@small,2,svmc01,0.659,0.009553,0.01773,0.123,0.136,0.009,0.591,150
+coco_better,siglip,dining table@large,2,svmc01,0.307,0.0138,0.02565,0.1812,0.097,0.013,0.946,150
+coco_better,siglip,dining table@medium,2,svmc01,0.531,0.01486,0.02746,0.1807,0.107,0.014,0.706,150
+coco_better,siglip,dining table@small,2,svmc01,0.658,0.007433,0.01387,0.1031,0.018,0.007,0.725,150
+coco_better,siglip,dog@large,2,svmc01,0.268,0.0138,0.02567,0.1829,0.784,0.013,1,150
+coco_better,siglip,dog@medium,2,svmc01,0.307,0.01804,0.03338,0.2228,0.385,0.017,0.915,150
+coco_better,siglip,dog@small,2,svmc01,0.522,0.01274,0.02365,0.1645,0.017,0.012,0.8,150
+coco_better,siglip,enclosed road vehicle@large,2,svmc01,0.396,0.01592,0.02951,0.2016,0.259,0.015,0.907,150
+coco_better,siglip,enclosed road vehicle@medium,2,svmc01,0.428,0.01804,0.03331,0.2169,0.031,0.017,0.818,150
+coco_better,siglip,enclosed road vehicle@small,2,svmc01,0.444,0.02015,0.03703,0.2274,0.037,0.019,0.723,150
+coco_better,siglip,fire hydrant@large,2,svmc01,0.158,0.03076,0.05637,0.3367,0.974,0.029,1,150
+coco_better,siglip,fire hydrant@medium,2,svmc01,0.31,0.01592,0.02956,0.2056,0.438,0.015,1,150
+coco_better,siglip,fire hydrant@small,2,svmc01,0.372,0.0138,0.02564,0.1802,0.193,0.013,0.918,150
+coco_better,siglip,fork@large,2,svmc01,0.184,0.02122,0.03922,0.2576,0.143,0.02,1,150
+coco_better,siglip,fork@medium,2,svmc01,0.388,0.01274,0.0237,0.1694,0.049,0.012,0.939,150
+coco_better,siglip,fork@small,2,svmc01,0.266,0.02016,0.03726,0.2454,0.128,0.019,0.961,150
+coco_better,siglip,frisbee@large,2,svmc01,0.163,0.02864,0.05258,0.3205,0.92,0.027,1,150
+coco_better,siglip,frisbee@medium,2,svmc01,0.283,0.01486,0.02761,0.1944,0.781,0.014,1,150
+coco_better,siglip,frisbee@small,2,svmc01,0.158,0.0297,0.05444,0.3265,0.351,0.028,0.978,150
+coco_better,siglip,keyboard@large,2,svmc01,0.148,0.03182,0.05825,0.3446,0.616,0.03,1,150
+coco_better,siglip,keyboard@medium,2,svmc01,0.122,0.05718,0.1023,0.4846,0.576,0.054,0.966,150
+coco_better,siglip,keyboard@small,2,svmc01,0.42,0.01592,0.02946,0.1975,0.052,0.015,0.824,150
+coco_better,siglip,kite@large,2,svmc01,0.194,0.0297,0.05445,0.3271,0.919,0.028,0.984,150
+coco_better,siglip,kite@medium,2,svmc01,0.142,0.03182,0.05825,0.3446,0.91,0.03,1,150
+coco_better,siglip,kite@small,2,svmc01,0.19,0.02758,0.05066,0.3104,0.674,0.026,0.981,150
+coco_better,siglip,knife@large,2,svmc01,0.396,0.01274,0.02368,0.1678,0.222,0.012,0.889,150
+coco_better,siglip,knife@medium,2,svmc01,0.392,0.01062,0.0198,0.1466,0.146,0.01,1,150
+coco_better,siglip,laptop@large,2,svmc01,0.1,0.04768,0.08612,0.4448,0.508,0.045,1,150
+coco_better,siglip,laptop@medium,2,svmc01,0.223,0.01804,0.03343,0.2272,0.153,0.017,1,150
+coco_better,siglip,laptop@small,2,svmc01,1.168,0.003186,0.005951,0.04506,0.004,0.003,0.364,150
+coco_better,siglip,microwave@large,2,svmc01,0.339,0.01274,0.02372,0.1711,0.692,0.012,1,150
+coco_better,siglip,microwave@medium,2,svmc01,0.223,0.0244,0.04495,0.2844,0.195,0.023,0.982,150
+coco_better,siglip,microwave@small,2,svmc01,0.434,0.0138,0.0256,0.1768,0.219,0.013,0.833,150
+coco_better,siglip,motorcycle@large,2,svmc01,0.183,0.0244,0.04497,0.2858,0.94,0.023,1,150
+coco_better,siglip,motorcycle@medium,2,svmc01,0.404,0.01274,0.02368,0.1679,0.324,0.012,0.894,150
+coco_better,siglip,motorcycle@small,2,svmc01,0.282,0.01698,0.0315,0.2166,0.099,0.016,1,150
+coco_better,siglip,mouse@large,2,svmc01,0.132,0.03605,0.06576,0.3744,0.787,0.034,1,150
+coco_better,siglip,mouse@medium,2,svmc01,0.178,0.02016,0.03729,0.2477,0.439,0.019,1,150
+coco_better,siglip,mouse@small,2,svmc01,0.198,0.03181,0.05815,0.3381,0.395,0.03,0.944,150
+coco_better,siglip,orange@large,2,svmc01,0.187,0.02334,0.04305,0.2766,0.933,0.022,1,150
+coco_better,siglip,orange@medium,2,svmc01,0.197,0.03287,0.05995,0.3407,0.562,0.031,0.907,150
+coco_better,siglip,parking meter@large,2,svmc01,0.211,0.02122,0.03922,0.2576,0.937,0.02,1,150
+coco_better,siglip,parking meter@medium,2,svmc01,0.273,0.01698,0.03149,0.2157,0.273,0.016,0.98,150
+coco_better,siglip,parking meter@small,2,svmc01,0.382,0.02016,0.03713,0.2353,0.07,0.019,0.815,150
+coco_better,siglip,person@large,2,svmc01,0.251,0.02652,0.04875,0.3016,0.437,0.025,0.978,150
+coco_better,siglip,person@medium,2,svmc01,0.439,0.02333,0.04276,0.2557,0.094,0.022,0.761,150
+coco_better,siglip,person@small,2,svmc01,0.675,0.01379,0.02548,0.1663,0.042,0.013,0.633,150
+coco_better,siglip,remote@large,2,svmc01,0.225,0.02016,0.03728,0.2464,0.606,0.019,0.978,150
+coco_better,siglip,remote@medium,2,svmc01,0.489,0.01592,0.02938,0.1908,0.07,0.015,0.714,150
+coco_better,siglip,remote@small,2,svmc01,0.267,0.0191,0.03536,0.2376,0.231,0.018,1,150
+coco_better,siglip,scissors@large,2,svmc01,0.163,0.02864,0.05258,0.3205,0.913,0.027,1,150
+coco_better,siglip,scissors@medium,2,svmc01,0.432,0.01486,0.02754,0.1876,0.405,0.014,0.833,150
+coco_better,siglip,scissors@small,2,svmc01,0.54,0.009557,0.01782,0.132,0.035,0.009,0.904,150
+coco_better,siglip,single serving drinking vessel@large,2,svmc01,0.315,0.0138,0.02567,0.1829,0.386,0.013,1,150
+coco_better,siglip,single serving drinking vessel@medium,2,svmc01,0.38,0.01592,0.02949,0.2,0.187,0.015,0.872,150
+coco_better,siglip,single serving drinking vessel@small,2,svmc01,0.445,0.01168,0.02175,0.158,0.058,0.011,0.958,150
+coco_better,siglip,sink@large,2,svmc01,0.249,0.02016,0.03726,0.2451,0.26,0.019,0.957,150
+coco_better,siglip,sink@medium,2,svmc01,0.271,0.02969,0.05422,0.3118,0.276,0.028,0.851,150
+coco_better,siglip,sink@small,2,svmc01,0.343,0.0191,0.03528,0.231,0.304,0.018,0.887,150
+coco_better,siglip,skateboard@large,2,svmc01,0.109,0.03711,0.06763,0.3814,0.943,0.035,1,150
+coco_better,siglip,skateboard@medium,2,svmc01,0.091,0.05085,0.0916,0.4615,0.938,0.048,1,150
+coco_better,siglip,skateboard@small,2,svmc01,0.286,0.01698,0.03147,0.2146,0.747,0.016,0.958,150
+coco_better,siglip,skis@large,2,svmc01,0.122,0.04028,0.07322,0.4017,0.894,0.038,1,150
+coco_better,siglip,skis@medium,2,svmc01,0.085,0.05085,0.0916,0.4615,0.889,0.048,1,150
+coco_better,siglip,skis@small,2,svmc01,0.074,0.04345,0.07877,0.4209,0.801,0.041,1,150
+coco_better,siglip,snowboard@large,2,svmc01,0.078,0.05718,0.1025,0.4925,0.797,0.054,1,150
+coco_better,siglip,snowboard@medium,2,svmc01,0.075,0.06984,0.1238,0.5457,0.634,0.066,1,150
+coco_better,siglip,snowboard@small,2,svmc01,0.059,0.0751,0.1326,0.5651,0.452,0.071,1,150
+coco_better,siglip,spoon@large,2,svmc01,0.237,0.0191,0.03536,0.2376,0.143,0.018,1,150
+coco_better,siglip,spoon@medium,2,svmc01,0.424,0.01062,0.0198,0.1461,0.19,0.01,0.98,150
+coco_better,siglip,spoon@small,2,svmc01,0.889,0.00531,0.009912,0.07441,0.012,0.005,0.562,150
+coco_better,siglip,stop sign@large,2,svmc01,0.104,0.04768,0.08612,0.4448,0.932,0.045,1,150
+coco_better,siglip,stop sign@medium,2,svmc01,0.216,0.02758,0.0506,0.3066,0.497,0.026,0.942,150
+coco_better,siglip,stop sign@small,2,svmc01,0.653,0.01061,0.0197,0.1368,0.024,0.01,0.66,150
+coco_better,siglip,surfboard@large,2,svmc01,0.131,0.03605,0.06576,0.3744,0.869,0.034,1,150
+coco_better,siglip,surfboard@medium,2,svmc01,0.137,0.03393,0.06202,0.3598,0.905,0.032,1,150
+coco_better,siglip,surfboard@small,2,svmc01,0.077,0.05402,0.09705,0.4774,0.874,0.051,1,150
+coco_better,siglip,tennis racket@large,2,svmc01,0.084,0.05718,0.1025,0.4925,0.996,0.054,1,150
+coco_better,siglip,tennis racket@medium,2,svmc01,0.057,0.0614,0.1096,0.5114,0.995,0.058,1,150
+coco_better,siglip,tennis racket@small,2,svmc01,0.089,0.05085,0.0916,0.4615,0.979,0.048,1,150
+coco_better,siglip,tie@large,2,svmc01,0.185,0.02758,0.05066,0.3104,0.864,0.026,0.981,150
+coco_better,siglip,tie@medium,2,svmc01,0.147,0.02864,0.05258,0.3205,0.644,0.027,1,150
+coco_better,siglip,tie@small,2,svmc01,0.542,0.02015,0.03684,0.2149,0.13,0.019,0.604,150
+coco_better,siglip,toothbrush@large,2,svmc01,0.23,0.0191,0.03536,0.2376,0.965,0.018,1,150
+coco_better,siglip,toothbrush@medium,2,svmc01,0.342,0.0138,0.02565,0.1815,0.547,0.013,0.957,150
+coco_better,siglip,toothbrush@small,2,svmc01,0.306,0.01486,0.0276,0.1928,0.132,0.014,0.956,150
+coco_better,siglip,traffic light@large,2,svmc01,0.147,0.03076,0.05637,0.3367,0.838,0.029,1,150
+coco_better,siglip,traffic light@medium,2,svmc01,0.209,0.02228,0.04114,0.2672,0.432,0.021,1,150
+coco_better,siglip,traffic light@small,2,svmc01,0.284,0.01486,0.02759,0.1926,0.137,0.014,0.95,150
+coco_better,siglip,tv@large,2,svmc01,0.296,0.0138,0.02567,0.1829,0.427,0.013,1,150
+coco_better,siglip,tv@medium,2,svmc01,0.371,0.01804,0.03334,0.2199,0.194,0.017,0.865,150
+coco_better,siglip,tv@small,2,svmc01,0.682,0.01061,0.01965,0.1327,0.016,0.01,0.569,150
+coco_better,siglip,umbrella@large,2,svmc01,0.294,0.02122,0.03918,0.2544,0.468,0.02,0.951,150
+coco_better,siglip,umbrella@medium,2,svmc01,0.472,0.01274,0.02366,0.1656,0.217,0.012,0.827,150
+coco_better,siglip,umbrella@small,2,svmc01,0.543,0.01062,0.01977,0.143,0.037,0.01,0.849,150
+coco_better,siglip,vase or potted plant@large,2,svmc01,0.426,0.0138,0.02565,0.1812,0.627,0.013,0.947,150
+coco_better,siglip,vase or potted plant@medium,2,svmc01,0.47,0.0265,0.04814,0.2626,0.148,0.025,0.647,150
+coco_better,siglip,vase or potted plant@small,2,svmc01,1.027,0.005306,0.009813,0.06517,0.005,0.005,0.263,150
+coco_better,siglip,airplane@large,3,svmc01,0.193,0.02546,0.04685,0.2931,0.951,0.024,0.98,150
+coco_better,siglip,airplane@medium,3,svmc01,0.196,0.02016,0.03729,0.2477,0.917,0.019,1,150
+coco_better,siglip,airplane@small,3,svmc01,0.209,0.02969,0.05431,0.318,0.721,0.028,0.902,150
+coco_better,siglip,apple@large,3,svmc01,0.101,0.05085,0.0916,0.4615,0.868,0.048,1,150
+coco_better,siglip,apple@medium,3,svmc01,0.264,0.01698,0.03149,0.2156,0.364,0.016,0.979,150
+coco_better,siglip,bag or luggage@large,3,svmc01,0.291,0.02122,0.03915,0.2523,0.638,0.02,0.92,150
+coco_better,siglip,bag or luggage@medium,3,svmc01,0.58,0.01062,0.01975,0.1411,0.037,0.01,0.78,150
+coco_better,siglip,bag or luggage@small,3,svmc01,0.556,0.0138,0.02556,0.1735,0.025,0.013,0.759,150
+coco_better,siglip,banana@large,3,svmc01,0.177,0.03076,0.05634,0.3348,0.843,0.029,0.982,150
+coco_better,siglip,banana@medium,3,svmc01,0.354,0.01274,0.02369,0.1692,0.395,0.012,0.932,150
+coco_better,siglip,baseball bat@large,3,svmc01,0.129,0.03393,0.06202,0.3598,0.874,0.032,1,150
+coco_better,siglip,baseball bat@medium,3,svmc01,0.1,0.04345,0.07877,0.4209,0.878,0.041,1,150
+coco_better,siglip,baseball bat@small,3,svmc01,0.08,0.0772,0.1359,0.5671,0.935,0.073,0.983,150
+coco_better,siglip,bench@large,3,svmc01,0.426,0.01486,0.02754,0.188,0.343,0.014,0.843,150
+coco_better,siglip,bench@medium,3,svmc01,0.689,0.01061,0.01967,0.134,0.066,0.01,0.596,150
+coco_better,siglip,bench@small,3,svmc01,0.774,0.008493,0.01578,0.1112,0.01,0.008,0.574,150
+coco_better,siglip,bicycle@large,3,svmc01,0.304,0.01804,0.03342,0.2264,0.598,0.017,0.983,150
+coco_better,siglip,bicycle@medium,3,svmc01,0.464,0.01486,0.02753,0.187,0.272,0.014,0.821,150
+coco_better,siglip,bicycle@small,3,svmc01,0.497,0.01592,0.02942,0.1937,0.048,0.015,0.759,150
+coco_better,siglip,bird@large,3,svmc01,0.203,0.02652,0.04876,0.302,0.821,0.025,0.982,150
+coco_better,siglip,bird@medium,3,svmc01,0.367,0.0138,0.02565,0.181,0.573,0.013,0.94,150
+coco_better,siglip,bird@small,3,svmc01,0.619,0.01062,0.01971,0.1376,0.021,0.01,0.679,150
+coco_better,siglip,boat@large,3,svmc01,0.296,0.01698,0.03148,0.2148,0.891,0.016,0.961,150
+coco_better,siglip,boat@medium,3,svmc01,0.347,0.0138,0.02564,0.1807,0.501,0.013,0.933,150
+coco_better,siglip,boat@small,3,svmc01,0.297,0.01592,0.02956,0.2056,0.128,0.015,1,150
+coco_better,siglip,book@large,3,svmc01,0.219,0.02016,0.03729,0.2477,0.331,0.019,1,150
+coco_better,siglip,book@medium,3,svmc01,0.504,0.01803,0.03318,0.2069,0.024,0.017,0.685,150
+coco_better,siglip,book@small,3,svmc01,0.566,0.01591,0.02929,0.1838,0.066,0.015,0.62,150
+coco_better,siglip,bottle@large,3,svmc01,0.326,0.01698,0.03146,0.2138,0.351,0.016,0.941,150
+coco_better,siglip,bottle@medium,3,svmc01,0.402,0.0138,0.02566,0.1824,0.063,0.013,0.983,150
+coco_better,siglip,bottle@small,3,svmc01,0.722,0.007432,0.01384,0.1003,0.008,0.007,0.6,150
+coco_better,siglip,bowl@large,3,svmc01,0.347,0.0138,0.02566,0.1823,0.125,0.013,0.98,150
+coco_better,siglip,bowl@medium,3,svmc01,0.358,0.01698,0.03144,0.212,0.057,0.016,0.904,150
+coco_better,siglip,bowl@small,3,svmc01,0.859,0.00637,0.01185,0.08494,0.012,0.006,0.478,150
+coco_better,siglip,bus@large,3,svmc01,0.286,0.01698,0.0315,0.2166,0.584,0.016,1,150
+coco_better,siglip,bus@medium,3,svmc01,0.383,0.0191,0.03525,0.2282,0.148,0.018,0.845,150
+coco_better,siglip,bus@small,3,svmc01,0.336,0.0138,0.02563,0.1792,0.073,0.013,0.892,150
+coco_better,siglip,cell phone@large,3,svmc01,0.114,0.04133,0.075,0.4044,0.865,0.039,0.976,150
+coco_better,siglip,cell phone@medium,3,svmc01,0.358,0.01592,0.02953,0.2034,0.263,0.015,0.947,150
+coco_better,siglip,cell phone@small,3,svmc01,0.403,0.0138,0.02563,0.1794,0.097,0.013,0.896,150
+coco_better,siglip,chair@large,3,svmc01,0.36,0.02122,0.03911,0.2493,0.042,0.02,0.879,150
+coco_better,siglip,chair@medium,3,svmc01,1.053,0.004247,0.007919,0.05844,0.007,0.004,0.391,150
+coco_better,siglip,clock@large,3,svmc01,0.208,0.0244,0.04495,0.2843,0.95,0.023,0.98,150
+coco_better,siglip,clock@medium,3,svmc01,0.524,0.009557,0.01783,0.1331,0.512,0.009,0.962,150
+coco_better,siglip,clock@small,3,svmc01,0.684,0.009553,0.01772,0.1221,0.198,0.009,0.568,150
+coco_better,siglip,dining table@large,3,svmc01,0.437,0.01168,0.02171,0.154,0.036,0.011,0.821,150
+coco_better,siglip,dining table@medium,3,svmc01,0.491,0.0138,0.02555,0.1727,0.053,0.013,0.744,150
+coco_better,siglip,dining table@small,3,svmc01,0.625,0.02226,0.04036,0.2162,0.021,0.021,0.516,150
+coco_better,siglip,dog@large,3,svmc01,0.293,0.0138,0.02567,0.1829,0.828,0.013,1,150
+coco_better,siglip,dog@medium,3,svmc01,0.409,0.009557,0.01783,0.1328,0.401,0.009,0.949,150
+coco_better,siglip,dog@small,3,svmc01,0.649,0.02014,0.0365,0.1948,0.045,0.019,0.462,150
+coco_better,siglip,enclosed road vehicle@large,3,svmc01,0.351,0.01486,0.0276,0.193,0.426,0.014,0.96,150
+coco_better,siglip,enclosed road vehicle@medium,3,svmc01,0.516,0.01274,0.02362,0.1624,0.045,0.012,0.75,150
+coco_better,siglip,enclosed road vehicle@small,3,svmc01,0.678,0.01061,0.01968,0.1349,0.017,0.01,0.615,150
+coco_better,siglip,fire hydrant@large,3,svmc01,0.1,0.03816,0.0695,0.3883,0.948,0.036,1,150
+coco_better,siglip,fire hydrant@medium,3,svmc01,0.31,0.01804,0.03342,0.2264,0.444,0.017,0.983,150
+coco_better,siglip,fire hydrant@small,3,svmc01,0.298,0.01486,0.0276,0.1936,0.157,0.014,0.978,150
+coco_better,siglip,fork@large,3,svmc01,0.14,0.03393,0.06202,0.3598,0.335,0.032,1,150
+coco_better,siglip,fork@medium,3,svmc01,0.244,0.01804,0.03343,0.2272,0.27,0.017,1,150
+coco_better,siglip,fork@small,3,svmc01,0.272,0.01486,0.0276,0.1936,0.182,0.014,0.976,150
+coco_better,siglip,frisbee@large,3,svmc01,0.236,0.0191,0.03536,0.2376,0.875,0.018,1,150
+coco_better,siglip,frisbee@medium,3,svmc01,0.182,0.0297,0.05445,0.3269,0.602,0.028,0.982,150
+coco_better,siglip,frisbee@small,3,svmc01,0.177,0.02546,0.04685,0.293,0.543,0.024,0.978,150
+coco_better,siglip,keyboard@large,3,svmc01,0.164,0.02864,0.05255,0.3184,0.519,0.027,0.978,150
+coco_better,siglip,keyboard@medium,3,svmc01,0.258,0.01698,0.0315,0.2166,0.498,0.016,1,150
+coco_better,siglip,keyboard@small,3,svmc01,0.497,0.01168,0.0217,0.1534,0.024,0.011,0.804,150
+coco_better,siglip,kite@large,3,svmc01,0.178,0.02228,0.04114,0.2672,0.981,0.021,1,150
+coco_better,siglip,kite@medium,3,svmc01,0.148,0.0297,0.05447,0.3287,0.873,0.028,1,150
+coco_better,siglip,kite@small,3,svmc01,0.171,0.02758,0.05068,0.3121,0.773,0.026,1,150
+coco_better,siglip,knife@large,3,svmc01,0.396,0.01804,0.03331,0.217,0.209,0.017,0.82,150
+coco_better,siglip,knife@medium,3,svmc01,0.415,0.01168,0.02176,0.159,0.045,0.011,1,150
+coco_better,siglip,knife@small,3,svmc01,0.785,0.008492,0.01575,0.1087,0.008,0.008,0.509,150
+coco_better,siglip,laptop@large,3,svmc01,0.123,0.04028,0.07322,0.4017,0.579,0.038,1,150
+coco_better,siglip,laptop@medium,3,svmc01,0.236,0.01804,0.03342,0.2261,0.184,0.017,0.977,150
+coco_better,siglip,microwave@large,3,svmc01,0.259,0.01804,0.03342,0.2262,0.522,0.017,0.98,150
+coco_better,siglip,microwave@medium,3,svmc01,0.167,0.03499,0.06381,0.3622,0.24,0.033,0.962,150
+coco_better,siglip,microwave@small,3,svmc01,0.23,0.0191,0.03536,0.2376,0.35,0.018,1,150
+coco_better,siglip,motorcycle@large,3,svmc01,0.129,0.03499,0.06389,0.3671,0.939,0.033,1,150
+coco_better,siglip,motorcycle@medium,3,svmc01,0.387,0.01486,0.02758,0.1909,0.36,0.014,0.909,150
+coco_better,siglip,motorcycle@small,3,svmc01,0.555,0.0138,0.02556,0.1732,0.041,0.013,0.754,150
+coco_better,siglip,mouse@large,3,svmc01,0.131,0.03393,0.06202,0.3598,0.804,0.032,1,150
+coco_better,siglip,mouse@medium,3,svmc01,0.188,0.02546,0.04688,0.2948,0.545,0.024,1,150
+coco_better,siglip,mouse@small,3,svmc01,0.201,0.0244,0.04495,0.2843,0.395,0.023,0.98,150
+coco_better,siglip,orange@large,3,svmc01,0.08,0.0519,0.09342,0.4669,0.91,0.049,1,150
+coco_better,siglip,orange@medium,3,svmc01,0.261,0.03181,0.05801,0.3291,0.51,0.03,0.873,150
+coco_better,siglip,parking meter@large,3,svmc01,0.229,0.02122,0.0392,0.2563,0.871,0.02,0.98,150
+coco_better,siglip,parking meter@medium,3,svmc01,0.313,0.01592,0.02955,0.2049,0.313,0.015,0.981,150
+coco_better,siglip,parking meter@small,3,svmc01,0.278,0.02016,0.03725,0.2441,0.069,0.019,0.941,150
+coco_better,siglip,person@large,3,svmc01,0.228,0.03816,0.06941,0.3834,0.62,0.036,0.966,150
+coco_better,siglip,person@medium,3,svmc01,0.555,0.01698,0.03127,0.1978,0.108,0.016,0.682,150
+coco_better,siglip,person@small,3,svmc01,0.708,0.01379,0.02547,0.1657,0.151,0.013,0.623,150
+coco_better,siglip,remote@large,3,svmc01,0.223,0.02334,0.04303,0.2752,0.758,0.022,0.981,150
+coco_better,siglip,remote@medium,3,svmc01,0.266,0.02122,0.03919,0.2553,0.334,0.02,0.964,150
+coco_better,siglip,remote@small,3,svmc01,0.32,0.01592,0.02953,0.203,0.186,0.015,0.938,150
+coco_better,siglip,scissors@large,3,svmc01,0.139,0.03287,0.06014,0.3523,0.939,0.031,1,150
+coco_better,siglip,scissors@medium,3,svmc01,0.302,0.01486,0.02761,0.1937,0.344,0.014,0.979,150
+coco_better,siglip,scissors@small,3,svmc01,0.35,0.01274,0.02372,0.1711,0.072,0.012,1,150
+coco_better,siglip,single serving drinking vessel@large,3,svmc01,0.32,0.01486,0.02761,0.1944,0.257,0.014,1,150
+coco_better,siglip,single serving drinking vessel@medium,3,svmc01,0.34,0.0191,0.0353,0.2324,0.114,0.018,0.909,150
+coco_better,siglip,single serving drinking vessel@small,3,svmc01,0.597,0.01168,0.02165,0.1489,0.05,0.011,0.688,150
+coco_better,siglip,sink@large,3,svmc01,0.149,0.03499,0.06385,0.3647,0.35,0.033,0.981,150
+coco_better,siglip,sink@medium,3,svmc01,0.261,0.02969,0.05429,0.3167,0.219,0.028,0.891,150
+coco_better,siglip,sink@small,3,svmc01,0.318,0.01168,0.02176,0.159,0.09,0.011,1,150
+coco_better,siglip,skateboard@large,3,svmc01,0.124,0.03922,0.07136,0.3951,0.965,0.037,1,150
+coco_better,siglip,skateboard@medium,3,svmc01,0.091,0.04768,0.08612,0.4448,0.932,0.045,1,150
+coco_better,siglip,skateboard@small,3,svmc01,0.19,0.02652,0.04878,0.3036,0.828,0.025,1,150
+coco_better,siglip,skis@large,3,svmc01,0.133,0.03287,0.06014,0.3523,0.825,0.031,1,150
+coco_better,siglip,skis@medium,3,svmc01,0.059,0.07194,0.1273,0.5536,0.897,0.068,1,150
+coco_better,siglip,skis@small,3,svmc01,0.07,0.06351,0.1132,0.5204,0.811,0.06,1,150
+coco_better,siglip,snowboard@large,3,svmc01,0.11,0.03816,0.0695,0.3883,0.793,0.036,1,150
+coco_better,siglip,snowboard@medium,3,svmc01,0.077,0.05296,0.09524,0.4722,0.728,0.05,1,150
+coco_better,siglip,snowboard@small,3,svmc01,0.062,0.073,0.1291,0.5575,0.607,0.069,1,150
+coco_better,siglip,spoon@large,3,svmc01,0.326,0.0138,0.02566,0.1823,0.22,0.013,0.979,150
+coco_better,siglip,spoon@medium,3,svmc01,0.31,0.0138,0.02566,0.1822,0.08,0.013,0.978,150
+coco_better,siglip,spoon@small,3,svmc01,0.583,0.01591,0.02925,0.1806,0.044,0.015,0.583,150
+coco_better,siglip,stop sign@large,3,svmc01,0.137,0.03076,0.05637,0.3367,0.934,0.029,1,150
+coco_better,siglip,stop sign@medium,3,svmc01,0.22,0.02016,0.03729,0.2477,0.522,0.019,1,150
+coco_better,siglip,stop sign@small,3,svmc01,0.599,0.009555,0.01777,0.1272,0.016,0.009,0.711,150
+coco_better,siglip,surfboard@large,3,svmc01,0.223,0.02122,0.03922,0.2576,0.914,0.02,1,150
+coco_better,siglip,surfboard@medium,3,svmc01,0.081,0.05085,0.0916,0.4615,0.871,0.048,1,150
+coco_better,siglip,surfboard@small,3,svmc01,0.113,0.04239,0.07692,0.4146,0.894,0.04,1,150
+coco_better,siglip,tennis racket@large,3,svmc01,0.099,0.04662,0.08429,0.439,0.986,0.044,1,150
+coco_better,siglip,tennis racket@medium,3,svmc01,0.129,0.04133,0.07502,0.4052,0.97,0.039,0.981,150
+coco_better,siglip,tennis racket@small,3,svmc01,0.153,0.0297,0.05447,0.3287,0.999,0.028,1,150
+coco_better,siglip,tie@large,3,svmc01,0.149,0.03393,0.06202,0.3598,0.936,0.032,1,150
+coco_better,siglip,tie@medium,3,svmc01,0.217,0.02334,0.04303,0.2752,0.658,0.022,0.98,150
+coco_better,siglip,tie@small,3,svmc01,0.392,0.01592,0.02947,0.1978,0.086,0.015,0.83,150
+coco_better,siglip,toothbrush@large,3,svmc01,0.147,0.0297,0.05447,0.3287,0.907,0.028,1,150
+coco_better,siglip,toothbrush@medium,3,svmc01,0.243,0.02016,0.03728,0.2465,0.554,0.019,0.98,150
+coco_better,siglip,toothbrush@small,3,svmc01,0.343,0.01168,0.02176,0.1585,0.203,0.011,0.977,150
+coco_better,siglip,traffic light@large,3,svmc01,0.144,0.04133,0.07495,0.4017,0.839,0.039,0.959,150
+coco_better,siglip,traffic light@medium,3,svmc01,0.199,0.0244,0.04497,0.2858,0.433,0.023,1,150
+coco_better,siglip,traffic light@small,3,svmc01,0.214,0.02334,0.04305,0.2766,0.187,0.022,1,150
+coco_better,siglip,tv@large,3,svmc01,0.198,0.03075,0.05631,0.3328,0.468,0.029,0.964,150
+coco_better,siglip,tv@medium,3,svmc01,0.38,0.01168,0.02174,0.1572,0.184,0.011,0.93,150
+coco_better,siglip,tv@small,3,svmc01,0.807,0.00849,0.01571,0.1052,0.02,0.008,0.438,150
+coco_better,siglip,umbrella@large,3,svmc01,0.33,0.01698,0.03148,0.2149,0.586,0.016,0.964,150
+coco_better,siglip,umbrella@medium,3,svmc01,0.36,0.01486,0.02761,0.1938,0.347,0.014,0.982,150
+coco_better,siglip,umbrella@small,3,svmc01,0.468,0.0138,0.02557,0.1743,0.051,0.013,0.776,150
+coco_better,siglip,vase or potted plant@large,3,svmc01,0.433,0.01486,0.02759,0.1927,0.486,0.014,0.952,150
+coco_better,siglip,vase or potted plant@medium,3,svmc01,0.368,0.01486,0.02758,0.1913,0.075,0.014,0.918,150
+coco_better,siglip,vase or potted plant@small,3,svmc01,1,0,0,0,0.003,,0,150
+coco_better,siglip,airplane@large,4,svmc01,0.046,0.09509,0.1651,0.627,0.981,0.09,1,150
+coco_better,siglip,airplane@medium,4,svmc01,0.085,0.04028,0.07322,0.4017,0.946,0.038,1,150
+coco_better,siglip,airplane@small,4,svmc01,0.257,0.02546,0.04679,0.2887,0.721,0.024,0.929,150
+coco_better,siglip,apple@large,4,svmc01,0.397,0.008496,0.01587,0.1206,0.769,0.008,1,150
+coco_better,siglip,apple@medium,4,svmc01,0.309,0.01168,0.02176,0.159,0.348,0.011,1,150
+coco_better,siglip,bag or luggage@large,4,svmc01,0.239,0.02122,0.0392,0.2563,0.696,0.02,0.98,150
+coco_better,siglip,bag or luggage@medium,4,svmc01,0.409,0.01274,0.0237,0.1694,0.125,0.012,0.941,150
+coco_better,siglip,bag or luggage@small,4,svmc01,0.467,0.01168,0.0217,0.1529,0.04,0.011,0.789,150
+coco_better,siglip,banana@large,4,svmc01,0.076,0.05824,0.1043,0.4973,0.883,0.055,1,150
+coco_better,siglip,banana@medium,4,svmc01,0.247,0.02758,0.05055,0.3029,0.203,0.026,0.906,150
+coco_better,siglip,baseball bat@large,4,svmc01,0.164,0.03287,0.06014,0.3523,0.864,0.031,1,150
+coco_better,siglip,baseball bat@medium,4,svmc01,0.131,0.03182,0.05825,0.3446,0.83,0.03,1,150
+coco_better,siglip,baseball bat@small,4,svmc01,0.143,0.04873,0.08769,0.4376,0.901,0.046,0.935,150
+coco_better,siglip,bench@large,4,svmc01,0.417,0.01274,0.02368,0.1678,0.43,0.012,0.891,150
+coco_better,siglip,bench@medium,4,svmc01,0.814,0.008491,0.01574,0.1079,0.038,0.008,0.491,150
+coco_better,siglip,bench@small,4,svmc01,0.743,0.008493,0.01579,0.1119,0.009,0.008,0.593,150
+coco_better,siglip,bicycle@large,4,svmc01,0.204,0.02334,0.04305,0.2766,0.831,0.022,1,150
+coco_better,siglip,bicycle@medium,4,svmc01,0.404,0.01274,0.02368,0.1678,0.272,0.012,0.889,150
+coco_better,siglip,bicycle@small,4,svmc01,0.535,0.01274,0.02361,0.1611,0.038,0.012,0.72,150
+coco_better,siglip,bird@large,4,svmc01,0.091,0.04768,0.08612,0.4448,0.957,0.045,1,150
+coco_better,siglip,bird@medium,4,svmc01,0.39,0.01592,0.02947,0.1978,0.504,0.015,0.83,150
+coco_better,siglip,bird@small,4,svmc01,0.481,0.01062,0.01978,0.1438,0.067,0.01,0.88,150
+coco_better,siglip,boat@large,4,svmc01,0.27,0.01486,0.02761,0.1944,0.819,0.014,1,150
+coco_better,siglip,boat@medium,4,svmc01,0.251,0.01804,0.03343,0.2272,0.582,0.017,1,150
+coco_better,siglip,boat@small,4,svmc01,0.366,0.0191,0.03528,0.2307,0.213,0.018,0.883,150
+coco_better,siglip,book@large,4,svmc01,0.253,0.02228,0.0411,0.2646,0.407,0.021,0.962,150
+coco_better,siglip,book@medium,4,svmc01,0.494,0.01486,0.02749,0.1835,0.017,0.014,0.755,150
+coco_better,siglip,book@small,4,svmc01,0.401,0.01486,0.02756,0.1896,0.049,0.014,0.878,150
+coco_better,siglip,bottle@large,4,svmc01,0.362,0.01274,0.02372,0.1711,0.431,0.012,1,150
+coco_better,siglip,bottle@medium,4,svmc01,0.526,0.0138,0.02555,0.1728,0.044,0.013,0.745,150
+coco_better,siglip,bottle@small,4,svmc01,0.484,0.0138,0.02557,0.1745,0.047,0.013,0.78,150
+coco_better,siglip,bowl@large,4,svmc01,0.267,0.02122,0.0392,0.2564,0.25,0.02,0.982,150
+coco_better,siglip,bowl@medium,4,svmc01,0.313,0.01698,0.03148,0.2148,0.046,0.016,0.962,150
+coco_better,siglip,bus@large,4,svmc01,0.207,0.02334,0.04305,0.2766,0.675,0.022,1,150
+coco_better,siglip,bus@medium,4,svmc01,0.289,0.01804,0.0334,0.2241,0.289,0.017,0.939,150
+coco_better,siglip,bus@small,4,svmc01,0.385,0.0138,0.02561,0.1776,0.051,0.013,0.85,150
+coco_better,siglip,cell phone@large,4,svmc01,0.13,0.03499,0.06389,0.3671,0.937,0.033,1,150
+coco_better,siglip,cell phone@medium,4,svmc01,0.338,0.0138,0.02566,0.1823,0.261,0.013,0.979,150
+coco_better,siglip,cell phone@small,4,svmc01,0.472,0.01168,0.02172,0.1551,0.136,0.011,0.857,150
+coco_better,siglip,chair@large,4,svmc01,0.456,0.01168,0.02174,0.1568,0.048,0.011,0.913,150
+coco_better,siglip,chair@medium,4,svmc01,0.965,0.006369,0.01181,0.08121,0.006,0.006,0.375,150
+coco_better,siglip,clock@large,4,svmc01,0.137,0.03605,0.06572,0.3715,0.949,0.034,0.979,150
+coco_better,siglip,clock@medium,4,svmc01,0.526,0.01062,0.01977,0.1435,0.612,0.01,0.865,150
+coco_better,siglip,clock@small,4,svmc01,0.684,0.01061,0.01965,0.1325,0.132,0.01,0.566,150
+coco_better,siglip,dining table@large,4,svmc01,0.41,0.02545,0.04654,0.2714,0.044,0.024,0.763,150
+coco_better,siglip,dining table@medium,4,svmc01,0.454,0.0138,0.02562,0.1782,0.184,0.013,0.865,150
+coco_better,siglip,dining table@small,4,svmc01,0.643,0.01062,0.01974,0.1405,0.052,0.01,0.763,150
+coco_better,siglip,dog@large,4,svmc01,0.156,0.02758,0.05068,0.3121,0.544,0.026,1,150
+coco_better,siglip,dog@medium,4,svmc01,0.44,0.01168,0.02175,0.1581,0.206,0.011,0.962,150
+coco_better,siglip,dog@small,4,svmc01,0.647,0.01908,0.03464,0.1879,0.019,0.018,0.458,150
+coco_better,siglip,enclosed road vehicle@large,4,svmc01,0.393,0.01486,0.0276,0.1931,0.422,0.014,0.963,150
+coco_better,siglip,enclosed road vehicle@medium,4,svmc01,0.404,0.01168,0.02174,0.1573,0.065,0.011,0.932,150
+coco_better,siglip,enclosed road vehicle@small,4,svmc01,0.739,0.009554,0.01774,0.1235,0.019,0.009,0.604,150
+coco_better,siglip,fire hydrant@large,4,svmc01,0.135,0.03393,0.06202,0.3598,0.958,0.032,1,150
+coco_better,siglip,fire hydrant@medium,4,svmc01,0.257,0.0191,0.03535,0.2365,0.517,0.018,0.98,150
+coco_better,siglip,fire hydrant@small,4,svmc01,0.319,0.01804,0.0334,0.2245,0.111,0.017,0.946,150
+coco_better,siglip,fork@large,4,svmc01,0.165,0.02758,0.05068,0.3121,0.154,0.026,1,150
+coco_better,siglip,fork@medium,4,svmc01,0.267,0.0191,0.03535,0.2366,0.137,0.018,0.981,150
+coco_better,siglip,fork@small,4,svmc01,0.32,0.01592,0.02953,0.2029,0.091,0.015,0.935,150
+coco_better,siglip,frisbee@large,4,svmc01,0.163,0.02758,0.05068,0.3121,0.735,0.026,1,150
+coco_better,siglip,frisbee@medium,4,svmc01,0.217,0.01592,0.02956,0.2056,0.654,0.015,1,150
+coco_better,siglip,frisbee@small,4,svmc01,0.193,0.0244,0.04494,0.2842,0.631,0.023,0.979,150
+coco_better,siglip,keyboard@large,4,svmc01,0.168,0.03076,0.05633,0.3346,0.623,0.029,0.98,150
+coco_better,siglip,keyboard@medium,4,svmc01,0.248,0.01804,0.03343,0.2272,0.526,0.017,1,150
+coco_better,siglip,keyboard@small,4,svmc01,0.329,0.01592,0.02954,0.2041,0.12,0.015,0.962,150
+coco_better,siglip,kite@large,4,svmc01,0.126,0.03287,0.06014,0.3523,0.958,0.031,1,150
+coco_better,siglip,kite@medium,4,svmc01,0.145,0.02864,0.05258,0.3205,0.821,0.027,1,150
+coco_better,siglip,kite@small,4,svmc01,0.136,0.03605,0.06576,0.3744,0.747,0.034,1,150
+coco_better,siglip,knife@large,4,svmc01,0.308,0.01592,0.02955,0.2049,0.214,0.015,0.981,150
+coco_better,siglip,knife@medium,4,svmc01,0.364,0.01274,0.02371,0.1705,0.034,0.012,0.978,150
+coco_better,siglip,laptop@large,4,svmc01,0.104,0.04239,0.07692,0.4146,0.43,0.04,1,150
+coco_better,siglip,laptop@medium,4,svmc01,0.331,0.01486,0.02761,0.1938,0.218,0.014,0.981,150
+coco_better,siglip,laptop@small,4,svmc01,1.159,0.003186,0.005952,0.04521,0.004,0.003,0.375,150
+coco_better,siglip,microwave@large,4,svmc01,0.279,0.0138,0.02567,0.1829,0.642,0.013,1,150
+coco_better,siglip,microwave@medium,4,svmc01,0.301,0.0191,0.03533,0.2345,0.302,0.018,0.945,150
+coco_better,siglip,microwave@small,4,svmc01,0.467,0.01168,0.02172,0.155,0.107,0.011,0.854,150
+coco_better,siglip,motorcycle@large,4,svmc01,0.163,0.02758,0.05068,0.3121,0.923,0.026,1,150
+coco_better,siglip,motorcycle@medium,4,svmc01,0.311,0.01804,0.03341,0.2254,0.249,0.017,0.964,150
+coco_better,siglip,motorcycle@small,4,svmc01,0.301,0.01698,0.03148,0.2147,0.1,0.016,0.96,150
+coco_better,siglip,mouse@large,4,svmc01,0.105,0.04451,0.08061,0.427,0.776,0.042,1,150
+coco_better,siglip,mouse@medium,4,svmc01,0.172,0.03393,0.06198,0.3577,0.519,0.032,0.983,150
+coco_better,siglip,mouse@small,4,svmc01,0.203,0.02122,0.03922,0.2576,0.579,0.02,1,150
+coco_better,siglip,orange@large,4,svmc01,0.09,0.04662,0.08429,0.439,0.94,0.044,1,150
+coco_better,siglip,orange@medium,4,svmc01,0.333,0.0138,0.02567,0.1829,0.586,0.013,1,150
+coco_better,siglip,parking meter@large,4,svmc01,0.309,0.0138,0.02567,0.1829,0.869,0.013,1,150
+coco_better,siglip,parking meter@medium,4,svmc01,0.326,0.0138,0.02567,0.1829,0.363,0.013,1,150
+coco_better,siglip,parking meter@small,4,svmc01,0.369,0.01592,0.02951,0.2018,0.079,0.015,0.911,150
+coco_better,siglip,person@large,4,svmc01,0.28,0.02334,0.04305,0.2766,0.848,0.022,1,150
+coco_better,siglip,person@medium,4,svmc01,0.386,0.02757,0.05048,0.2981,0.335,0.026,0.862,150
+coco_better,siglip,person@small,4,svmc01,0.678,0.01167,0.02162,0.1459,0.025,0.011,0.625,150
+coco_better,siglip,remote@large,4,svmc01,0.255,0.0191,0.03536,0.2376,0.672,0.018,1,150
+coco_better,siglip,remote@medium,4,svmc01,0.338,0.01592,0.02952,0.2022,0.358,0.015,0.92,150
+coco_better,siglip,remote@small,4,svmc01,0.341,0.01592,0.02954,0.2042,0.34,0.015,0.964,150
+coco_better,siglip,scissors@large,4,svmc01,0.163,0.0244,0.04497,0.2858,0.928,0.023,1,150
+coco_better,siglip,scissors@medium,4,svmc01,0.363,0.01486,0.0276,0.1931,0.419,0.014,0.963,150
+coco_better,siglip,scissors@small,4,svmc01,0.364,0.01274,0.02371,0.1706,0.066,0.012,0.98,150
+coco_better,siglip,single serving drinking vessel@large,4,svmc01,0.266,0.0191,0.03536,0.2376,0.262,0.018,1,150
+coco_better,siglip,single serving drinking vessel@medium,4,svmc01,0.354,0.01698,0.03147,0.214,0.19,0.016,0.944,150
+coco_better,siglip,single serving drinking vessel@small,4,svmc01,0.441,0.01168,0.02172,0.1551,0.035,0.011,0.857,150
+coco_better,siglip,sink@large,4,svmc01,0.073,0.05507,0.09886,0.4825,0.497,0.052,1,150
+coco_better,siglip,sink@medium,4,svmc01,0.238,0.02334,0.04302,0.2739,0.324,0.022,0.963,150
+coco_better,siglip,sink@small,4,svmc01,0.36,0.01486,0.02758,0.1915,0.22,0.014,0.922,150
+coco_better,siglip,skateboard@large,4,svmc01,0.151,0.03393,0.06202,0.3598,0.965,0.032,1,150
+coco_better,siglip,skateboard@medium,4,svmc01,0.087,0.04873,0.08795,0.4505,0.948,0.046,1,150
+coco_better,siglip,skateboard@small,4,svmc01,0.265,0.01592,0.02955,0.2047,0.747,0.015,0.977,150
+coco_better,siglip,skis@large,4,svmc01,0.14,0.03605,0.06576,0.3744,0.95,0.034,1,150
+coco_better,siglip,skis@medium,4,svmc01,0.08,0.04662,0.08429,0.439,0.857,0.044,1,150
+coco_better,siglip,skis@small,4,svmc01,0.078,0.05507,0.09886,0.4825,0.793,0.052,1,150
+coco_better,siglip,snowboard@large,4,svmc01,0.098,0.04345,0.07877,0.4209,0.836,0.041,1,150
+coco_better,siglip,snowboard@medium,4,svmc01,0.08,0.06457,0.115,0.5248,0.772,0.061,1,150
+coco_better,siglip,snowboard@small,4,svmc01,0.095,0.04662,0.08429,0.439,0.494,0.044,1,150
+coco_better,siglip,spoon@large,4,svmc01,0.348,0.01486,0.02761,0.1944,0.218,0.014,1,150
+coco_better,siglip,spoon@medium,4,svmc01,0.345,0.01486,0.02761,0.1938,0.096,0.014,0.981,150
+coco_better,siglip,spoon@small,4,svmc01,0.744,0.008493,0.01579,0.1121,0.026,0.008,0.6,150
+coco_better,siglip,stop sign@large,4,svmc01,0.128,0.03922,0.07131,0.3921,0.896,0.037,0.98,150
+coco_better,siglip,stop sign@medium,4,svmc01,0.174,0.03075,0.0563,0.3321,0.506,0.029,0.958,150
+coco_better,siglip,stop sign@small,4,svmc01,0.461,0.01168,0.02172,0.1546,0.02,0.011,0.841,150
+coco_better,siglip,surfboard@large,4,svmc01,0.208,0.0191,0.03536,0.2376,0.895,0.018,1,150
+coco_better,siglip,surfboard@medium,4,svmc01,0.117,0.03605,0.06576,0.3744,0.919,0.034,1,150
+coco_better,siglip,surfboard@small,4,svmc01,0.11,0.04345,0.07877,0.4209,0.902,0.041,1,150
+coco_better,siglip,tennis racket@large,4,svmc01,0.077,0.9765,0.9506,0.9262,0.996,0.98,0.923,150
+coco_better,siglip,tennis racket@medium,4,svmc01,0.166,0.0297,0.05447,0.3287,0.978,0.028,1,150
+coco_better,siglip,tennis racket@small,4,svmc01,0.316,0.0138,0.02567,0.1829,0.982,0.013,1,150
+coco_better,siglip,tie@large,4,svmc01,0.122,0.03922,0.07136,0.3951,0.889,0.037,1,150
+coco_better,siglip,tie@medium,4,svmc01,0.288,0.01698,0.0315,0.2166,0.732,0.016,1,150
+coco_better,siglip,tie@small,4,svmc01,0.409,0.01486,0.02754,0.1876,0.146,0.014,0.833,150
+coco_better,siglip,toothbrush@large,4,svmc01,0.206,0.02334,0.04305,0.2766,0.93,0.022,1,150
+coco_better,siglip,toothbrush@medium,4,svmc01,0.246,0.01804,0.03343,0.2272,0.633,0.017,1,150
+coco_better,siglip,toothbrush@small,4,svmc01,0.263,0.02122,0.03914,0.2519,0.158,0.02,0.915,150
+coco_better,siglip,traffic light@large,4,svmc01,0.181,0.02228,0.04114,0.2672,0.871,0.021,1,150
+coco_better,siglip,traffic light@medium,4,svmc01,0.201,0.02016,0.03729,0.2477,0.485,0.019,1,150
+coco_better,siglip,traffic light@small,4,svmc01,0.281,0.02122,0.03917,0.2539,0.069,0.02,0.944,150
+coco_better,siglip,tv@large,4,svmc01,0.255,0.01698,0.03148,0.2155,0.337,0.016,0.976,150
+coco_better,siglip,tv@medium,4,svmc01,0.292,0.02122,0.03915,0.2525,0.138,0.02,0.923,150
+coco_better,siglip,umbrella@large,4,svmc01,0.295,0.01698,0.03147,0.2147,0.694,0.016,0.959,150
+coco_better,siglip,umbrella@medium,4,svmc01,0.439,0.0138,0.02559,0.1759,0.256,0.013,0.812,150
+coco_better,siglip,umbrella@small,4,svmc01,0.458,0.02121,0.03893,0.2363,0.024,0.02,0.729,150
+coco_better,siglip,vase or potted plant@large,4,svmc01,0.327,0.0138,0.02565,0.1815,0.552,0.013,0.956,150
+coco_better,siglip,vase or potted plant@medium,4,svmc01,0.536,0.01168,0.02169,0.1518,0.18,0.011,0.76,150
+coco_better,siglip,book@small,0,svm,0.669,0.008495,0.01584,0.1167,0.016,0.008,0.774,150
+coco_better,siglip,book@small,0,lrconv,0.669,0.008495,0.01584,0.1167,0.016,0.008,0.774,150
+coco_better,siglip,book@small,0,svmc01,0.669,0.008495,0.01584,0.1167,0.016,0.008,0.774,150
+coco_better,siglip,bottle@small,1,svm,0.931,0.005309,0.009894,0.07259,0.028,0.005,0.468,150
+coco_better,siglip,bottle@small,1,lrconv,0.931,0.005309,0.009894,0.07259,0.028,0.005,0.468,150
+coco_better,siglip,bottle@small,1,svmc01,0.931,0.005309,0.009894,0.07259,0.028,0.005,0.468,150
+coco_better,siglip,bowl@small,0,svm,0.614,0.01062,0.01974,0.1403,0.009,0.01,0.755,150
+coco_better,siglip,bowl@small,0,lrconv,0.614,0.01062,0.01974,0.1403,0.009,0.01,0.755,150
+coco_better,siglip,bowl@small,0,svmc01,0.614,0.01062,0.01974,0.1403,0.009,0.01,0.755,150
+coco_better,siglip,bowl@small,1,svm,0.697,0.007433,0.01385,0.1019,0.007,0.007,0.667,150
+coco_better,siglip,bowl@small,1,lrconv,0.697,0.007433,0.01385,0.1019,0.007,0.007,0.667,150
+coco_better,siglip,bowl@small,1,svmc01,0.697,0.007433,0.01385,0.1019,0.007,0.007,0.667,150
+coco_better,siglip,bowl@small,4,svm,0.678,0.009555,0.01776,0.1263,0.008,0.009,0.68,150
+coco_better,siglip,bowl@small,4,lrconv,0.678,0.009555,0.01776,0.1263,0.008,0.009,0.68,150
+coco_better,siglip,bowl@small,4,svmc01,0.678,0.009555,0.01776,0.1263,0.008,0.009,0.68,150
+coco_better,siglip,enclosed road vehicle@small,1,svm,0.602,0.01062,0.01977,0.1433,0.035,0.01,0.857,150
+coco_better,siglip,enclosed road vehicle@small,1,lrconv,0.602,0.01062,0.01977,0.1433,0.035,0.01,0.857,150
+coco_better,siglip,enclosed road vehicle@small,1,svmc01,0.602,0.01062,0.01977,0.1433,0.035,0.01,0.857,150
+coco_better,siglip,knife@small,0,svm,0.791,0.007433,0.01386,0.1023,0.008,0.007,0.685,150
+coco_better,siglip,knife@small,0,lrconv,0.791,0.007433,0.01386,0.1023,0.008,0.007,0.685,150
+coco_better,siglip,knife@small,0,svmc01,0.791,0.007433,0.01386,0.1023,0.008,0.007,0.685,150
+coco_better,siglip,knife@small,2,svm,0.958,0.005309,0.009905,0.07369,0.006,0.005,0.521,150
+coco_better,siglip,knife@small,2,lrconv,0.958,0.005309,0.009905,0.07369,0.006,0.005,0.521,150
+coco_better,siglip,knife@small,2,svmc01,0.958,0.005309,0.009905,0.07369,0.006,0.005,0.521,150
+coco_better,siglip,knife@small,4,svm,0.78,0.006372,0.0119,0.08973,0.007,0.006,0.702,150
+coco_better,siglip,knife@small,4,lrconv,0.78,0.006372,0.0119,0.08973,0.007,0.006,0.702,150
+coco_better,siglip,knife@small,4,svmc01,0.78,0.006372,0.0119,0.08973,0.007,0.006,0.702,150
+coco_better,siglip,laptop@small,3,svm,0.53,0.008495,0.01585,0.1179,0.016,0.008,0.833,150
+coco_better,siglip,laptop@small,3,lrconv,0.53,0.008495,0.01585,0.1179,0.016,0.008,0.833,150
+coco_better,siglip,laptop@small,3,svmc01,0.53,0.008495,0.01585,0.1179,0.016,0.008,0.833,150
+coco_better,siglip,person@small,0,svm,0.891,0.008493,0.0158,0.1128,0.009,0.008,0.623,150
+coco_better,siglip,person@small,0,lrconv,0.891,0.008493,0.0158,0.1128,0.009,0.008,0.623,150
+coco_better,siglip,person@small,0,svmc01,0.891,0.008493,0.0158,0.1128,0.009,0.008,0.623,150
+coco_better,siglip,tv@small,4,svm,0.676,0.007433,0.01388,0.1045,0.011,0.007,0.809,150
+coco_better,siglip,tv@small,4,lrconv,0.676,0.007433,0.01388,0.1045,0.011,0.007,0.809,150
+coco_better,siglip,tv@small,4,svmc01,0.676,0.007433,0.01388,0.1045,0.011,0.007,0.809,150
+coco_better,siglip,vase or potted plant@small,4,svm,0.552,0.009556,0.01782,0.1316,0.016,0.009,0.885,150
+coco_better,siglip,vase or potted plant@small,4,lrconv,0.552,0.009556,0.01782,0.1316,0.016,0.009,0.885,150
+coco_better,siglip,vase or potted plant@small,4,svmc01,0.552,0.009556,0.01782,0.1316,0.016,0.009,0.885,150
