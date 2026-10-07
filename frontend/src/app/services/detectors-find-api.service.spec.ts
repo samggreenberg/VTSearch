@@ -18,9 +18,9 @@ describe('DetectorsFindApiService', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('getAutorunRun should GET the run by id', () => {
-    service.getAutorunRun('_autorun_1').subscribe();
-    const req = httpMock.expectOne('/api/autorun/runs/_autorun_1');
+  it('getAutofindRun should GET the run by id', () => {
+    service.getAutofindRun('_autofind_1').subscribe();
+    const req = httpMock.expectOne('/api/autofind/runs/_autofind_1');
     expect(req.request.method).toBe('GET');
     req.flush({});
   });

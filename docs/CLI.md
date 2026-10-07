@@ -16,7 +16,7 @@ Everything here goes through one entry point, `python app.py`. With no workflow 
 ## Auto-detect (run detectors on a dataset)
 
 Import a dataset, save it to the dashboard, score every item with the
-detectors flagged for Auto-Find, and output the items each model predicts as
+detectors flagged for AutoFind, and output the items each model predicts as
 "Good." Add `--tempimport` to score it without keeping it (see [Saving the
 dataset to the dashboard](#saving-the-dataset-to-the-dashboard---tempimport)).
 
@@ -31,18 +31,18 @@ head, and applies it to the dataset.  See below for the exact format.
 only detector scored (see [Importing labels into a
 detector](#importing-labels-into-a-detector)).
 
-### Which user's Auto-Find list runs
+### Which user's AutoFind list runs
 
-`autofind_detectors` (and the Auto-Find results exporter) are **per-user**:
-each user curates their own list on the Dashboard's **AutoRun** detector tab
-(move a detector between **Drafts** and **AutoRun** with its ⋯ menu). By default the
+`autofind_detectors` (and the AutoFind results exporter) are **per-user**:
+each user curates their own list on the Dashboard's **AutoFind** detector tab
+(move a detector between **Drafts** and **AutoFind** with its ⋯ menu). By default the
 CLI runs as the built-in **`default`** user. Its list is the one the web app's
-**AutoRun** tab edits on a server without logins; only when that user has no
+**AutoFind** tab edits on a server without logins; only when that user has no
 list of its own does the run fall back to the `--settings` file's
 `autofind_detectors` (so the flat-file workflow above still works on a fresh
 install).
 
-To run *another* user's Auto-Find list (e.g. a nightly cron of their favorite
+To run *another* user's AutoFind list (e.g. a nightly cron of their favorite
 detectors), authenticate with `--user` + `--api-key`, mirroring the server's
 `api_key` login:
 
@@ -51,7 +51,7 @@ python app.py --autodetect --dataset data.pkl --user alice --api-key "$ALICE_KEY
 ```
 
 The key is checked against `data/api_keys.json` (the same file the server's
-`--login api_key` uses); on success the run reads `alice`'s Auto-Find list and
+`--login api_key` uses); on success the run reads `alice`'s AutoFind list and
 results exporter, and the imported dataset is saved to `alice`'s dashboard.
 Without `--user`, the `default` user (and the `--settings` file) applies.
 
@@ -67,14 +67,14 @@ Detection then runs over that saved copy, so its hits are the ones Find would
 give on that dashboard row.
 
 ```bash
-# Import a folder, save it to the dashboard, and run the Auto-Find detectors on it.
+# Import a folder, save it to the dashboard, and run the AutoFind detectors on it.
 python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json
 ```
 
 With a saving run the import is the point and detection is the extra: when no
-Auto-Find detector is configured, or none applies to the dataset's media type,
+AutoFind detector is configured, or none applies to the dataset's media type,
 the dataset is still saved and the run ends with a `Detection skipped: …` note
-and exit status 0. That also makes `--autodetect` with an empty Auto-Find list
+and exit status 0. That also makes `--autodetect` with an empty AutoFind list
 a plain headless import.
 
 A `--dataset` pickle is **copied** in (the dashboard deletes a dataset's pickle
@@ -195,7 +195,7 @@ labels**. The `--dataset`/`--importer` still supplies the embedder space the
 detector trains in; the media is embedded but the hits are discarded.
 
 ```bash
-# One bundle per Auto-Find detector, named after the detector.
+# One bundle per AutoFind detector, named after the detector.
 python app.py --autodetect --dataset data.pkl --settings settings.json \
   --exporter portable_detector --filepath 'data/{detector_name}-detector.zip'
 ```
@@ -341,7 +341,7 @@ Source:
   Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)
 
 Settings: settings.json
-Auto-Find detectors (2):
+AutoFind detectors (2):
   - Dog Barks  [media_type=audio, labels=12, file=data/detectors/dog_barks.json]
   - Cat Meows  [media_type=audio, labels=8, file=data/detectors/cat_meows.json]
 
@@ -361,7 +361,7 @@ typos in a cron-style invocation fail immediately instead of after a
 multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
 is announced as part of the plan but skipped (no detector JSON is
 modified), and the plan lists that detector alone, under
-`Detectors (1; overrides the settings' Auto-Find list)`. In
+`Detectors (1; overrides the settings' AutoFind list)`. In
 `--progress-format json` the `dry_run_plan` event's `autofind_detectors` lists
 whichever detectors the run would score, and `detectors_source` says where they
 came from: `autofind` (the settings file) or `override` (`--import-labels-into`).
@@ -386,11 +386,11 @@ headlessly. Three flags work together:
 `--label-importer-field`.
 
 **The detector you import into is the one the run scores with.** The settings
-file's `autofind_detectors` list (the Dashboard's **AutoRun** tab) is not
-consulted, so the detector need not be on AutoRun, and nothing else on AutoRun
+file's `autofind_detectors` list (the Dashboard's **AutoFind** tab) is not
+consulted, so the detector need not be on AutoFind, and nothing else on AutoFind
 runs alongside it. Labelling a detector and running it over a new dataset is
 therefore a single command that never needs the UI. The settings file still
-supplies everything else it normally does — `detectors_dir`, and the Auto-Find
+supplies everything else it normally does — `detectors_dir`, and the AutoFind
 results exporter when there is no `--exporter`.
 
 ```bash
@@ -670,8 +670,8 @@ python app.py --login api_key    # Bearer-key auth against data/api_keys.json
   cookie; useful for low-stakes multi-user setups.
 - **`api_key`** authenticates each request via an `Authorization: Bearer <key>`
   header, checking the key against `data/api_keys.json`. This is the same key
-  store the CLI's `--user` + `--api-key` flags use (see [Which user's Auto-Find
-  list runs](#which-users-auto-find-list-runs) above), so a key minted for the
+  store the CLI's `--user` + `--api-key` flags use (see [Which user's AutoFind
+  list runs](#which-users-autofind-list-runs) above), so a key minted for the
   server also works for a per-user `--autodetect` run.
 
 Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).

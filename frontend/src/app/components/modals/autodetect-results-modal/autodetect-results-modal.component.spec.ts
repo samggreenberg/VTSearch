@@ -1,10 +1,14 @@
+import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { AutoDetectResultsModalComponent } from './autodetect-results-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { BrowseSubsetPrepService } from '../../../services/browse-subset-prep.service';
+import { ContextSwitchService } from '../../../services/context-switch.service';
 import { ToastService } from '../../../services/toast.service';
 
 describe('AutoDetectResultsModalComponent', () => {
@@ -142,7 +146,7 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(rows.length).toBe(2); // good hits by default
   });
 
-  // An Auto-Find auto-export can format the run into a third-party site's URL
+  // An AutoFind auto-export can format the run into a third-party site's URL
   // rather than delivering it anywhere (#2898). It's offered as a click, not
   // opened on arrival: these results land from an async response, where an
   // unprompted window.open() is what popup blockers exist to stop.
@@ -241,5 +245,108 @@ describe('AutoDetectResultsModalComponent', () => {
       expect(component.exporting()).toBe(false);
       expect(toast.success).toHaveBeenCalledWith(expect.objectContaining({ message: 'Exported 2 results to csv' }));
     });
+  });
+});
+
+/**
+ * The dialog's Browse button (#4615): the listed rows' media, once each, are
+ * mapped on their own once the run's dataset is active, and Browse's Back
+ * returns to these results.
+ */
+describe('AutoDetectResultsModalComponent Browse', () => {
+  let component: AutoDetectResultsModalComponent;
+  let fixture: ComponentFixture<AutoDetectResultsModalComponent>;
+  let switched: Subject<void>;
+  let contextSwitch: { applyActivePair: ReturnType<typeof vi.fn> };
+  let browsePrep: { preparing: WritableSignal<boolean>; start: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn> };
+
+  const run = {
+    run_id: '_autofind_7',
+    dataset_id: 'ds1',
+    dataset_name: 'Birds',
+    media_type: 'audio',
+    detectors_run: 2,
+    results: {
+      owl: {
+        hits: [
+          { id: 1, md5: 'a' },
+          { id: 2, md5: 'b' },
+        ],
+        negative_hits: [{ id: 3, md5: 'c' }],
+      },
+      // A second detector that also called item 2 Good: one item on the map.
+      wren: { hits: [{ id: 2, md5: 'b' }], negative_hits: [] },
+    },
+  };
+
+  beforeEach(async () => {
+    switched = new Subject<void>();
+    contextSwitch = { applyActivePair: vi.fn(() => switched) };
+    browsePrep = {
+      preparing: signal(false),
+      start: vi.fn(),
+      cancel: vi.fn(),
+    };
+    await TestBed.configureTestingModule({
+      imports: [AutoDetectResultsModalComponent],
+      providers: [
+        ...provideZoneless(),
+        ...provideHttpTesting(),
+        { provide: ToastService, useValue: { success: vi.fn() } },
+        { provide: ContextSwitchService, useValue: contextSwitch },
+        { provide: BrowseSubsetPrepService, useValue: browsePrep },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AutoDetectResultsModalComponent);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('data', run as any);
+  });
+
+  it('browses the listed rows, once each, following the Good / Bad / Both filter', () => {
+    expect(component.browseIds).toEqual([1, 2]);
+    component.exportSides = 'bad';
+    expect(component.browseIds).toEqual([3]);
+    component.exportSides = 'both';
+    expect(component.browseIds).toEqual([1, 2, 3]);
+  });
+
+  it('makes the run dataset active, then builds the map with a Back to these results', () => {
+    const closed = vi.fn();
+    component.closed.subscribe(closed);
+
+    component.browse();
+    expect(contextSwitch.applyActivePair).toHaveBeenCalledWith('ds1', '');
+    expect(component.browseStarting()).toBe(true);
+    expect(browsePrep.start).not.toHaveBeenCalled();
+
+    switched.next();
+    expect(component.browseStarting()).toBe(false);
+    expect(browsePrep.start).toHaveBeenCalledWith('ds1', [1, 2], { kind: 'results', runId: '_autofind_7' }, expect.any(Function));
+
+    // The dialog closes only once the map is ready and Browse opens.
+    expect(closed).not.toHaveBeenCalled();
+    browsePrep.start.mock.calls[0][3]();
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts nothing when the dataset fails to load', () => {
+    component.browse();
+    switched.complete();
+    expect(browsePrep.start).not.toHaveBeenCalled();
+    expect(component.browseStarting()).toBe(false);
+  });
+
+  it('is unavailable for results that name no run or dataset', () => {
+    fixture.componentRef.setInput('data', { ...run, run_id: undefined } as any);
+    expect(component.browseBlocker).not.toBe('');
+    component.browse();
+    expect(contextSwitch.applyActivePair).not.toHaveBeenCalled();
+  });
+
+  it('cancels a map still building when the dialog is closed', () => {
+    browsePrep.preparing.set(true);
+    component.close();
+    expect(browsePrep.cancel).toHaveBeenCalled();
   });
 });

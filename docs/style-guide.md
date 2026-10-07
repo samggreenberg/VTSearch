@@ -397,7 +397,7 @@ Subclasses extend the base via SCSS `@extend`, so they inherit every rule and ad
 
 **Vertical rail - `.side-tab-bar` / `.side-tab`** (`_components.scss`). A fixed-width (140px) column of tabs down the left edge of a modal, with a 3px left-border active indicator instead of an underline. The Settings modal's rail is its only consumer today; it's the extract-and-fold target for any other vertical rail. Active class: `.side-tab--active`.
 
-**Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). A tab strip whose active tab visually flows into the inset content region below it: the active tab's background matches `.view-tab-content` so the border between them disappears, leaving only the accent underline. Use when the tabs sit *inside* a panel and own a bordered content box (the Auto-Find and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
+**Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). A tab strip whose active tab visually flows into the inset content region below it: the active tab's background matches `.view-tab-content` so the border between them disappears, leaving only the accent underline. Use when the tabs sit *inside* a panel and own a bordered content box (the AutoFind and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
 
 Note the state-class inconsistency: `.tab` takes `.active`, while `.side-tab` and `.view-tab` take `--active` modifiers. Match the primitive you're using.
 
@@ -633,7 +633,7 @@ CSS classes) are exempt - this rule is about *visible* strings only.
 | The trained ranker (the product's core object) | **detector** | model |
 | Making a detector by voting good/bad | **Train** (verb) / **Learned** (the sort mode) | — |
 | Measuring a detector's line on a dataset it never trained on | **Test** (the Dashboard button and its view) | — |
-| Running detectors across datasets to collect their matches | **Find** (the Dashboard button) / **AutoRun** (the detector tab, and the runs it starts on every import and from the CLI) / **Auto-Find** (the settings tab for where those results go) | — |
+| Running detectors across datasets to collect their matches | **Find** (the Dashboard button) / **AutoFind** (the detector tab, and the runs it starts on every import and from the CLI) / **AutoFind** (the settings tab for where those results go) | — |
 | The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
 
 `Train`, `Test` and `Find` are the three flow verbs surfaced to users; keep

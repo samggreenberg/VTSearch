@@ -129,7 +129,7 @@ class CoreConfig:
     # route every hardcoded ``data/`` path through this field.
     data_dir: Path
 
-    # Auto-Find results exporter (server-tier). When an autodetect run has no
+    # AutoFind results exporter (server-tier). When an autodetect run has no
     # explicit ``--exporter``, the CLI falls back to this exporter +
     # field-value map. ``""`` means "no configured exporter" (CLI defaults to
     # ``gui``). Defaulted here so library-only ``CoreConfig(...)`` constructions

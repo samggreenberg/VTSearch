@@ -5,7 +5,7 @@ it never trained on: uniform picks from rank bands on both sides of the line,
 and from them the line's precision, recall and F-beta as likely ranges
 (:class:`~vtscore.training.thresholds.LineTest`).  This module keeps the
 result of a finished test on the detector itself, so the detector's Stats and
-the Dashboard's AutoRun tab can say what it was measured to ship, and so a
+the Dashboard's AutoFind tab can say what it was measured to ship, and so a
 later test of the same dataset can resume from the picks already taken.
 
 **What persists.**  One verdict per tested dataset, under

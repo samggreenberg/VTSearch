@@ -68,7 +68,7 @@ function compactCount(n: number): string {
  * retired Stats modal's *Checked by you* curve: unbiased, from the uniform
  * picks alone), and the two trust chips (Training-domain overlap, Evidence
  * coverage) that were behind the Stats button. At Done, the verdict with its
- * three exits, **Move to AutoRun**, **Lean the Threshold** (the ranges each
+ * three exits, **Move to AutoFind**, **Lean the Threshold** (the ranges each
  * preset would ship, re-estimated from the picks already taken) and **Add
  * Corrections and retrain**; and *Nothing to test* when the line keeps fewer
  * items than one round.
@@ -101,8 +101,8 @@ export class LineTestResultComponent {
   /** Bumped by the host when the session's checks changed under a finished test (corrections, Review votes). */
   readonly refresh = input(0);
 
-  /** Move the detector to AutoRun. */
-  readonly moveToAutoRun = output<void>();
+  /** Move the detector to AutoFind. */
+  readonly moveToAutoFind = output<void>();
   /** Lean the Threshold to a preset (a beta). */
   readonly lean = output<number>();
   /** Fold the session's corrections into the detector and retrain. */
@@ -214,7 +214,7 @@ export class LineTestResultComponent {
     return (
       `On this collection the line keeps the top ${t.line_count.toLocaleString()}: likely ${estimatePercent(e.precision)} ` +
       `of them are right, with ${found}. ` +
-      `That is what AutoRun would ship from a collection like this one.`
+      `That is what AutoFind would ship from a collection like this one.`
     );
   });
 

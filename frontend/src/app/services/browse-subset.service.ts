@@ -1,5 +1,18 @@
 import { Injectable } from '@angular/core';
 
+/**
+ * Where a subset browse was launched from, and so where its **Back** returns:
+ * the Test view, or the Find Results dialog of run *runId* (#4615), which
+ * reopens on the Dashboard. Rides the browse URL's query (`from=results&run=…`)
+ * rather than the in-memory handoff, so it survives a reload.
+ */
+export type BrowseSubsetOrigin = { kind: 'test' } | { kind: 'results'; runId: string };
+
+/** The `/browse/:datasetId` query params that open a subset browse from *origin*. */
+export function subsetBrowseQueryParams(origin: BrowseSubsetOrigin): Record<string, string | number> {
+  return origin.kind === 'results' ? { subset: 1, from: 'results', run: origin.runId } : { subset: 1 };
+}
+
 /** A subset of media ids to browse as its own UMAP projection. */
 export interface BrowseSubset {
   /** Dataset the ids belong to (guards against a stale handoff). */
@@ -9,9 +22,10 @@ export interface BrowseSubset {
 }
 
 /**
- * Carries the subset selection from the Find view to the Browse view across a
- * route navigation. The Find view stashes the positive ids here and navigates
- * to `/browse/:datasetId?subset=1`; the Browse view reads them back on init.
+ * Carries the subset selection from the Test view (or the Find Results dialog)
+ * to the Browse view across a route navigation. The launcher stashes the ids
+ * here and navigates to `/browse/:datasetId?subset=1`; the Browse view reads
+ * them back on init.
  *
  * In-memory only: a hard reload of the browse page loses the handoff (the
  * subset projection is ephemeral and recomputed on demand anyway), and the

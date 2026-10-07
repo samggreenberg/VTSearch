@@ -136,7 +136,7 @@ class ResultsExporter(PluginBase):
     ``find_results``
         A scored run: hit lists per detector, with scores and thresholds.
         Implement :meth:`export_find_results`.  Produced by
-        ``POST /api/auto-detect``, the Auto-Find auto-export, and CLI
+        ``POST /api/auto-detect``, the AutoFind auto-export, and CLI
         ``--autodetect``.
 
     ``labelset``

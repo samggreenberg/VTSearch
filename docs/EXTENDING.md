@@ -192,11 +192,11 @@ Fields may be added; none will be removed or change meaning without a
 **Which imports fire it.** The ones a user starts and waits for: the Add
 Dataset dialog's importers, local folder and file uploads, demo datasets,
 and an uploaded dataset file. That is the same set that offers to run
-the user's AutoRun detectors. Reloading a saved dataset, combining
+the user's AutoFind detectors. Reloading a saved dataset, combining
 datasets, the CLI's `--autodetect`, and a cancelled import do not.
 
 **When and where it runs.** On the import's worker thread, after the
-progress bar already shows the import as finished and after AutoRun (if
+progress bar already shows the import as finished and after AutoFind (if
 any) has started, so a hook that waits on a slow mail server holds up
 nothing the user sees. Several hooks run in the order the admin named
 them. A hook that raises is logged and the next one still runs; the
@@ -443,7 +443,7 @@ detectors in a different sense, covered below.
 
 For ML classifiers, create a detector instead: register it via
 `POST /api/detectors/registry`, label items in the right pane, and toggle
-its Auto-Find flag with `PUT /api/detectors/registry/<id>/autofind`.
+its AutoFind flag with `PUT /api/detectors/registry/<id>/autofind`.
 
 ### New Login Provider Checklist
 

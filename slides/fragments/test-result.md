@@ -25,7 +25,7 @@
 <!-- **c** — Lean the Threshold: the same draws read at the line each radio
      would draw on this pile. β 4 keeps 121, 17–28% right, against a true 23%;
      β ¼ keeps 11, 55–82%, against 73%. Pick one and the Threshold moves,
-     with nothing re-scored. The other two exits: Move to AutoRun, the
+     with nothing re-scored. The other two exits: Move to AutoFind, the
      reason the test exists, and Add Corrections, the failed-the-test one.
      The verdict is kept on the detector, one per pile, and a test opened
      again on the same ranking picks up its picks. -->

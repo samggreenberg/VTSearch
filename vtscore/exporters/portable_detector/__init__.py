@@ -81,7 +81,7 @@ class PortableDetectorResultsExporter(ResultsExporter):
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         """Not supported: this exporter needs the trained classifier, not hits.
 
-        The results-only path (the GUI Auto-Find auto-export) can't build a
+        The results-only path (the GUI AutoFind auto-export) can't build a
         bundle because it never sees the trained MLP.  Use the CLI/pipeline
         path (``--exporter portable_detector`` with ``--autodetect``) instead;
         for interactive one-off exports, the GUI's portable-export modal.

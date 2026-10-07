@@ -156,7 +156,7 @@ describe('DashboardComponent', () => {
     expect(component.selectedDetectorIds.has('m2')).toBe(true);
   });
 
-  describe('detector Drafts/AutoRun tabs', () => {
+  describe('detector Drafts/AutoFind tabs', () => {
     const mixed = [
       { id: 'm1', name: 'Draft A', media_type: 'audio' },
       { id: 'm2', name: 'Frozen B', media_type: 'audio', autofind: true },
@@ -167,10 +167,10 @@ describe('DashboardComponent', () => {
       flushInitialRequests([], mixed);
       expect(component.detectorTab()).toBe('drafts');
       expect(component.draftDetectors.map((d) => d.id)).toEqual(['m1', 'm3']);
-      expect(component.autorunDetectors.map((d) => d.id)).toEqual(['m2']);
+      expect(component.autofindDetectors.map((d) => d.id)).toEqual(['m2']);
       expect(component.sortedDetectors.map((d) => d.id).sort()).toEqual(['m1', 'm3']);
 
-      component.setDetectorTab('autorun');
+      component.setDetectorTab('autofind');
       expect(component.sortedDetectors.map((d) => d.id)).toEqual(['m2']);
     });
 
@@ -178,7 +178,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests([], mixed);
       component.toggleDetectorCheckbox('m1');
       expect(component.selectedDetectorIds.size).toBe(1);
-      component.setDetectorTab('autorun');
+      component.setDetectorTab('autofind');
       expect(component.selectedDetectorIds.size).toBe(0);
     });
 
@@ -188,14 +188,14 @@ describe('DashboardComponent', () => {
       expect([...component.selectedDetectorIds].sort()).toEqual(['m1', 'm3']);
       expect(component.detectorSelectionState).toBe('all');
 
-      component.setDetectorTab('autorun');
+      component.setDetectorTab('autofind');
       component.toggleAllDetectors();
       expect([...component.selectedDetectorIds]).toEqual(['m2']);
     });
 
     it('moves a detector between tabs via the autofind endpoint and refreshes', () => {
       flushInitialRequests([], mixed);
-      component.setDetectorAutorun(component.detectors[0], true);
+      component.setDetectorAutofind(component.detectors[0], true);
       const put = httpMock.expectOne('/api/detectors/registry/m1/autofind');
       expect(put.request.method).toBe('PUT');
       expect(put.request.body).toEqual({ autofind: true });
@@ -210,13 +210,13 @@ describe('DashboardComponent', () => {
         ],
       });
       TestBed.tick();
-      expect(component.autorunDetectors.map((d) => d.id).sort()).toEqual(['m1', 'm2']);
+      expect(component.autofindDetectors.map((d) => d.id).sort()).toEqual(['m1', 'm2']);
       expect(component.selectedDetectorIds.has('m1')).toBe(false);
     });
 
     it('switches back to the Drafts tab when a new detector is registered', () => {
       flushInitialRequests([], mixed);
-      component.setDetectorTab('autorun');
+      component.setDetectorTab('autofind');
 
       component.refresh();
       httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
@@ -234,7 +234,7 @@ describe('DashboardComponent', () => {
         [{ id: 'd1', name: 'Data', media_type: 'audio' }],
         [{ id: 'm2', name: 'Frozen B', media_type: 'audio', num_training: 5, autofind: true }],
       );
-      component.setDetectorTab('autorun');
+      component.setDetectorTab('autofind');
       component.toggleDetectorSelection('m2', new MouseEvent('click'));
       expect(component.selectedDetectorIds.has('m2')).toBe(true);
       expect(component.labelEnabled).toBe(false);
@@ -245,7 +245,7 @@ describe('DashboardComponent', () => {
 
     describe('Test follows the visible tab only (#4228)', () => {
       const dataset = [{ id: 'd1', name: 'Data', media_type: 'audio' }];
-      const loneAutorun = [
+      const loneAutofind = [
         { id: 'm2', name: 'Frozen B', media_type: 'audio', num_training: 5, autofind: true },
       ];
 
@@ -261,19 +261,19 @@ describe('DashboardComponent', () => {
         drainBackgroundRequests();
       }
 
-      it('does not auto-select a lone AutoRun detector while Drafts is showing', () => {
-        flushInitialRequests(dataset, loneAutorun);
+      it('does not auto-select a lone AutoFind detector while Drafts is showing', () => {
+        flushInitialRequests(dataset, loneAutofind);
         expect(component.detectorTab()).toBe('drafts');
         expect(component.selectedDetectorIds.size).toBe(0);
         expect(component.findEnabled).toBe(false);
         expect(component.findHint).toBe('Select a detector in the table above');
       });
 
-      it('leaves Drafts empty after selecting on AutoRun and switching back, across refreshes', () => {
-        flushInitialRequests(dataset, loneAutorun);
-        component.setDetectorTab('autorun');
+      it('leaves Drafts empty after selecting on AutoFind and switching back, across refreshes', () => {
+        flushInitialRequests(dataset, loneAutofind);
+        component.setDetectorTab('autofind');
         // With the grid showing it, the lone detector is auto-selected again.
-        refreshRegistry(loneAutorun);
+        refreshRegistry(loneAutofind);
         expect(component.selectedDetectorIds.has('m2')).toBe(true);
         expect(component.findEnabled).toBe(true);
 
@@ -281,18 +281,18 @@ describe('DashboardComponent', () => {
         expect(component.selectedDetectorIds.size).toBe(0);
         expect(component.findEnabled).toBe(false);
         // A later registry refresh used to reselect the hidden detector.
-        refreshRegistry(loneAutorun);
+        refreshRegistry(loneAutofind);
         expect(component.selectedDetectorIds.size).toBe(0);
         expect(component.findEnabled).toBe(false);
       });
 
-      it('leaves Drafts empty when its only detector moves to AutoRun', () => {
+      it('leaves Drafts empty when its only detector moves to AutoFind', () => {
         flushInitialRequests(dataset, [
           { id: 'm1', name: 'Draft A', media_type: 'audio', num_training: 5 },
         ]);
         expect(component.selectedDetectorIds.has('m1')).toBe(true);
 
-        component.setDetectorAutorun(component.detectors[0], true);
+        component.setDetectorAutofind(component.detectors[0], true);
         httpMock.expectOne('/api/detectors/registry/m1/autofind').flush({ id: 'm1', autofind: true });
         httpMock.expectOne('/api/datasets/registry').flush({ datasets: dataset });
         httpMock.expectOne('/api/detectors/registry').flush({
@@ -305,9 +305,9 @@ describe('DashboardComponent', () => {
         expect(component.findEnabled).toBe(false);
       });
 
-      it('lands a detector created from Train on the AutoRun tab on Drafts, selected', () => {
-        flushInitialRequests(dataset, loneAutorun);
-        component.setDetectorTab('autorun');
+      it('lands a detector created from Train on the AutoFind tab on Drafts, selected', () => {
+        flushInitialRequests(dataset, loneAutofind);
+        component.setDetectorTab('autofind');
         const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
 
         // Train with no detector selected opens the new-detector modal and
@@ -316,7 +316,7 @@ describe('DashboardComponent', () => {
         expect(component.trainAfterModelCreation).toBe(true);
         // The created event refreshes the registry itself.
         TestBed.inject(NewThingFlowsService).emitDetectorCreated('m9');
-        refreshRegistry([...loneAutorun, { id: 'm9', name: 'Fresh', media_type: 'audio' }], false);
+        refreshRegistry([...loneAutofind, { id: 'm9', name: 'Fresh', media_type: 'audio' }], false);
 
         expect(component.detectorTab()).toBe('drafts');
         expect(component.selectedDetectorIds.has('m9')).toBe(true);
@@ -324,7 +324,7 @@ describe('DashboardComponent', () => {
       });
     });
 
-    it('hides the Combine and Delete-selected section actions on the AutoRun tab', async () => {
+    it('hides the Combine and Delete-selected section actions on the AutoFind tab', async () => {
       flushInitialRequests([], mixed);
       await fixture.whenStable();
       fixture.detectChanges();
@@ -333,7 +333,7 @@ describe('DashboardComponent', () => {
       expect(detectorSection.querySelector('[aria-label="Combine selected detectors"]')).toBeTruthy();
       expect(detectorSection.querySelector('[aria-label="Delete selected"]')).toBeTruthy();
 
-      component.setDetectorTab('autorun');
+      component.setDetectorTab('autofind');
       fixture.detectChanges();
       expect(detectorSection.querySelector('[aria-label="Combine selected detectors"]')).toBeNull();
       expect(detectorSection.querySelector('[aria-label="Delete selected"]')).toBeNull();
@@ -397,7 +397,7 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests(datasets, detectors);
     selection.selectOnly('dataset', ['d2']);
-    component.setDetectorTab('autorun');
+    component.setDetectorTab('autofind');
     selection.selectOnly('detector', ['m2']);
 
     fixture.destroy();
@@ -412,8 +412,8 @@ describe('DashboardComponent', () => {
 
     expect(component.selectedDatasetIds.has('d2')).toBe(true);
     // The tab travels with the selection it scopes: a returning user must not
-    // land on Drafts with a hidden AutoRun row still feeding the actions.
-    expect(component.detectorTab()).toBe('autorun');
+    // land on Drafts with a hidden AutoFind row still feeding the actions.
+    expect(component.detectorTab()).toBe('autofind');
     expect(component.selectedDetectorIds.has('m2')).toBe(true);
   });
 
@@ -736,7 +736,7 @@ describe('DashboardComponent', () => {
       selection.selectOnly('detector', ['m1']);
       expect(component.findEnabled).toBe(false);
       expect(component.findHint).toBe('Select exactly 1 dataset');
-      expect(component.autorunEnabled).toBe(true);
+      expect(component.autofindEnabled).toBe(true);
     });
 
     it('should hint about multiple detectors, leaving Find enabled', () => {
@@ -750,7 +750,7 @@ describe('DashboardComponent', () => {
       selection.selectOnly('detector', ['m1', 'm2']);
       expect(component.findEnabled).toBe(false);
       expect(component.findHint).toBe('Select exactly 1 detector');
-      expect(component.autorunEnabled).toBe(true);
+      expect(component.autofindEnabled).toBe(true);
     });
   });
 
@@ -764,7 +764,7 @@ describe('DashboardComponent', () => {
       { id: 'm2', name: 'M2', media_type: 'audio', num_training: 5 },
     ];
 
-    function autorunButton(): HTMLButtonElement {
+    function autofindButton(): HTMLButtonElement {
       fixture.detectChanges();
       const buttons = Array.from(
         (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.dashboard-actions button'),
@@ -776,7 +776,7 @@ describe('DashboardComponent', () => {
 
     it('sits in the action bar after Train and Test', () => {
       flushInitialRequests();
-      autorunButton();
+      autofindButton();
       const labels = Array.from(
         (fixture.nativeElement as HTMLElement).querySelectorAll('.dashboard-actions button'),
       ).map((b) => b.textContent?.trim());
@@ -785,19 +785,19 @@ describe('DashboardComponent', () => {
 
     it('is disabled, with the hint Test gives, until a dataset and a detector are ticked', () => {
       flushInitialRequests();
-      expect(component.autorunEnabled).toBe(false);
-      expect(component.autorunHint).toBe('Select a dataset and detector above');
-      expect(autorunButton().disabled).toBe(true);
+      expect(component.autofindEnabled).toBe(false);
+      expect(component.autofindHint).toBe('Select a dataset and detector above');
+      expect(autofindButton().disabled).toBe(true);
     });
 
     it('is enabled for every ticked dataset and every ticked detector of one media type', () => {
       flushInitialRequests(audioDatasets, audioDetectors);
       selection.selectOnly('dataset', ['d1', 'd2']);
       selection.selectOnly('detector', ['m1', 'm2']);
-      expect(component.autorunEnabled).toBe(true);
-      expect(autorunButton().disabled).toBe(false);
-      expect(component.autorunHint).toBe(
-        'Run every selected detector on every selected dataset, as AutoRun does, and show the results as each run finishes',
+      expect(component.autofindEnabled).toBe(true);
+      expect(autofindButton().disabled).toBe(false);
+      expect(component.autofindHint).toBe(
+        'Run every selected detector on every selected dataset, as AutoFind does, and show the results as each run finishes',
       );
     });
 
@@ -808,16 +808,16 @@ describe('DashboardComponent', () => {
       );
       selection.selectOnly('dataset', ['d1', 'd3']);
       selection.selectOnly('detector', ['m1']);
-      expect(component.autorunEnabled).toBe(false);
-      expect(component.autorunHint).toBe('Media type mismatch');
+      expect(component.autofindEnabled).toBe(false);
+      expect(component.autofindHint).toBe('Media type mismatch');
     });
 
     it('is disabled while any ticked detector is untrained', () => {
       flushInitialRequests(audioDatasets, [...audioDetectors, { id: 'm3', name: 'New', media_type: 'audio', num_training: 0 }]);
       selection.selectOnly('dataset', ['d1']);
       selection.selectOnly('detector', ['m1', 'm3']);
-      expect(component.autorunEnabled).toBe(false);
-      expect(component.autorunHint).toBe('Detector has no training labels');
+      expect(component.autofindEnabled).toBe(false);
+      expect(component.autofindHint).toBe('Detector has no training labels');
     });
 
     it('starts one run per ticked dataset, restricted to the ticked detectors', () => {
@@ -825,41 +825,41 @@ describe('DashboardComponent', () => {
       selection.selectOnly('dataset', ['d1', 'd2']);
       selection.selectOnly('detector', ['m1', 'm2']);
 
-      component.onAutorun();
+      component.onAutofind();
 
       for (const id of ['d1', 'd2']) {
-        const req = httpMock.expectOne(`/api/datasets/registry/${id}/autorun`);
+        const req = httpMock.expectOne(`/api/datasets/registry/${id}/autofind`);
         expect(req.request.method).toBe('POST');
         expect(req.request.body).toEqual({ detector_ids: ['m1', 'm2'] });
-        req.flush({ ok: true, message: 'AutoRun started', task_id: `_autorun_${id}` });
+        req.flush({ ok: true, message: 'AutoFind started', task_id: `_autofind_${id}` });
       }
     });
 
     it('loads an unloaded ticked dataset before running on it', () => {
       flushInitialRequests([{ id: 'd1', name: 'Cold', media_type: 'audio', loaded: false }], [audioDetectors[0]]);
 
-      component.onAutorun();
+      component.onAutofind();
 
       // An empty task_id means the load needed no background work.
       httpMock.expectOne('/api/datasets/registry/d1/load').flush({ ok: true, message: 'Already loaded', task_id: '' });
-      const req = httpMock.expectOne('/api/datasets/registry/d1/autorun');
+      const req = httpMock.expectOne('/api/datasets/registry/d1/autofind');
       expect(req.request.body).toEqual({ detector_ids: ['m1'] });
-      req.flush({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' });
+      req.flush({ ok: true, message: 'AutoFind started', task_id: '_autofind_1' });
     });
 
     it('does nothing while disabled', () => {
       flushInitialRequests(audioDatasets, [{ id: 'm3', name: 'New', media_type: 'audio', num_training: 0 }]);
       selection.selectOnly('dataset', ['d1']);
-      component.onAutorun();
-      httpMock.expectNone((r) => r.url.endsWith('/autorun'));
+      component.onAutofind();
+      httpMock.expectNone((r) => r.url.endsWith('/autofind'));
     });
 
-    it("leaves the row menu's Run AutoRun on the AutoRun list (no body)", () => {
+    it("leaves the row menu's Run AutoFind on the AutoFind list (no body)", () => {
       flushInitialRequests([audioDatasets[0]]);
-      component.runAutorun(audioDatasets[0]);
-      const req = httpMock.expectOne('/api/datasets/registry/d1/autorun');
+      component.runAutofind(audioDatasets[0]);
+      const req = httpMock.expectOne('/api/datasets/registry/d1/autofind');
       expect(req.request.body).toBeNull();
-      req.flush({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' });
+      req.flush({ ok: true, message: 'AutoFind started', task_id: '_autofind_1' });
     });
   });
 
@@ -1069,15 +1069,15 @@ describe('DashboardComponent', () => {
     });
 
     it('locks the grid to Drafts when there are no detectors', () => {
-      selection.setDetectorTab('autorun');
+      selection.setDetectorTab('autofind');
       renderWith();
       expect(selection.detectorTab()).toBe('drafts');
     });
 
-    it('leaves the AutoRun tab alone once detectors exist', () => {
-      selection.setDetectorTab('autorun');
+    it('leaves the AutoFind tab alone once detectors exist', () => {
+      selection.setDetectorTab('autofind');
       renderWith([], [{ id: 'm1', name: 'M', media_type: 'image', autofind: true }]);
-      expect(selection.detectorTab()).toBe('autorun');
+      expect(selection.detectorTab()).toBe('autofind');
     });
 
     it('points at Train when an empty detector and a matching dataset are selected', () => {

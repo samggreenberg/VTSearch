@@ -15,12 +15,12 @@ has to be importable on the server (installed, or on ``PYTHONPATH``).
 
 **Which imports count.** The ones a user starts and waits for: the Add Dataset
 dialog's importers, local folder and file uploads, demo datasets, and an
-uploaded dataset file -- the same set that offers to run the user's AutoRun
+uploaded dataset file -- the same set that offers to run the user's AutoFind
 detectors.  Reloading a saved dataset, combining datasets, and the
 CLI's ``--autodetect`` do not fire the hooks.
 
 **When and where they run.** On the import's worker thread, after the progress
-bar has already shown the import as finished, and after AutoRun (if any) has
+bar has already shown the import as finished, and after AutoFind (if any) has
 started.  So a hook that blocks on a slow mail server holds up nothing the user
 can see.  Hooks run in the order they were named.  One that raises is logged
 and the next still runs; the dataset is saved either way.

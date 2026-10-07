@@ -807,13 +807,13 @@ class DatasetLoadDemoRequestSchema(Schema):
         load_default="false",
         metadata={"description": "When 'true', collapse near-duplicate media into dupe sets at ingest."},
     )
-    autorun = fields.String(
+    autofind = fields.String(
         load_default=None,
         allow_none=True,
         metadata={
             "description": (
-                "'true' / 'false': whether to run the caller's AutoRun detectors on the dataset once it "
-                "is saved, remembered as their `autorun_on_import` setting. Omitted, that setting decides."
+                "'true' / 'false': whether to run the caller's AutoFind detectors on the dataset once it "
+                "is saved, remembered as their `autofind_on_import` setting. Omitted, that setting decides."
             )
         },
     )
@@ -1143,13 +1143,13 @@ class DatasetRegistryLoadResponseSchema(Schema):
     task_id = fields.String(load_default="")
 
 
-class DatasetAutorunRequestSchema(Schema):
-    """Body for ``POST /api/datasets/registry/<id>/autorun``.
+class DatasetAutofindRequestSchema(Schema):
+    """Body for ``POST /api/datasets/registry/<id>/autofind``.
 
     The body is optional.  Without ``detector_ids`` the run scores with the
-    caller's AutoRun detectors (the dataset ⋯ **Run AutoRun**); with it, with
+    caller's AutoFind detectors (the dataset ⋯ **Run AutoFind**); with it, with
     exactly the detectors those registry ids name, drafts included (the
-    Dashboard's big **AutoRun** button).  Declared as ``fields.Raw`` with
+    Dashboard's big **Find** button).  Declared as ``fields.Raw`` with
     :func:`list_of_strings` so a non-string id is a 422 rather than coerced.
     """
 
@@ -1158,8 +1158,8 @@ class DatasetAutorunRequestSchema(Schema):
         validate=list_of_strings,
         metadata={
             "description": (
-                "Registry ids of the detectors to run, in place of the caller's AutoRun list. "
-                "Omit to run the AutoRun list."
+                "Registry ids of the detectors to run, in place of the caller's AutoFind list. "
+                "Omit to run the AutoFind list."
             ),
             "type": "array",
             "items": {"type": "string"},
@@ -1324,7 +1324,7 @@ __all__ = [
     "DashboardDiskUsageResponseSchema",
     "DashboardRamUsageResponseSchema",
     "DatasetAllImportersListResponseSchema",
-    "DatasetAutorunRequestSchema",
+    "DatasetAutofindRequestSchema",
     "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",
     "DatasetCombineRequestSchema",

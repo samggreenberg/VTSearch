@@ -169,7 +169,7 @@ class TestImportRoutesPassTheHook:
             return "task"
 
         monkeypatch.setattr(staging_mod, "_run_importer_in_background", fake_run)
-        resp = client.post("/api/dataset/import/synthetic", json={"autorun": "false"})
+        resp = client.post("/api/dataset/import/synthetic", json={"autofind": "false"})
         assert resp.status_code == 200, resp.get_json()
         assert captured["on_finished"] is import_hooks.fire_dataset_imported
 

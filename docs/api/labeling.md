@@ -42,7 +42,7 @@ Since #4452 the line comes **from the labels alone**, so an exported labelset
 draws it again on any corpus: the calibration folds' held-out scores of the
 votes give a class model (two normals of one spread on the logit scale);
 fits over the unvoted scores of the corpus being decided (the Train dataset in
-Train, the searched dataset in Find, AutoRun and the CLI) give how many
+Train, the searched dataset in Find, AutoFind and the CLI) give how many
 positives it holds and each item's chance of being one; and the threshold is
 the cut where the expected F-beta of what it would return from that corpus
 peaks ([`docs/ML.md`](../ML.md#threshold-calibration) has the model). There is no count and no cap: the line keeps every unvoted
@@ -111,7 +111,7 @@ action keeps working on it, and the app draws it the same in both, with the
 state and its ranges under the Threshold control in Train (in Find the
 control reads the [test of the line](find.md#test-the-line) instead). It is
 never `null` for want of a check. A
-headless run (AutoRun, the CLI) has nobody to vote, so it exports the
+headless run (AutoFind, the CLI) has nobody to vote, so it exports the
 `unchecked` line and records it as such.
 
 ### The spot check

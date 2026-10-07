@@ -635,7 +635,7 @@ def _run_origin_load_in_background(
     recorders have finished - so the dataset row is already live, and nothing
     the hook does is billed to the load's cost model.  An exception it raises
     is logged and swallowed: the dataset is saved either way.  The app uses it
-    to start the importing user's AutoRun detectors on the new dataset.
+    to start the importing user's AutoFind detectors on the new dataset.
 
     *on_finished*, when given, is called once with a
     :class:`~vtscore.datasets.import_event.DatasetImported` saying how the load
@@ -849,7 +849,7 @@ def _run_origin_load_in_background(
 
         # Outside the ``finally``: a load that raised past it never reaches
         # here, and one that failed inside it stamped ``error`` on the tracker.
-        # AutoRun's hook goes first: it only spawns a thread, while an
+        # AutoFind's hook goes first: it only spawns a thread, while an
         # ``on_finished`` hook may block on, say, a mail server.
         _run_post_load(post_load, ctx, tracker)
         _report_finished(

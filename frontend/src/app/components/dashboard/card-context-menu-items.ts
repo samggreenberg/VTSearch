@@ -6,7 +6,7 @@ import type { ContextMenuItem } from '../context-menu/context-menu.component';
  * point. The Actions column renders only the two universal verbs inline (Load
  * when unloaded, Delete); the ⋯ overflow button reuses this same list but drops
  * those inline verbs (see ``overflowMenuItems``) so it reads as "more" — Browse,
- * Rename, Stats, dataset-only Run AutoRun, and detector-only Import Labels /
+ * Rename, Stats, dataset-only Run AutoFind, and detector-only Import Labels /
  * Export labels, plus Edit-access in multi-user mode — rather than repeating
  * icons already visible in the row.
  * Rename is additionally surfaced as a pencil next to the row name. Availability
@@ -58,8 +58,8 @@ const ICON = {
       '<path d="M10 11v6"/><path d="M14 11v6"/>' +
       '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
   ),
-  // A bolt: AutoRun is the detectors that run by themselves.
-  autorun: svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
+  // A bolt: AutoFind is the detectors that run by themselves.
+  autofind: svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
   lock: svg(
     '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>' +
       '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
@@ -111,15 +111,15 @@ function securityItem(access: CardMenuAccess): ContextMenuItem {
 }
 
 /**
- * Dataset menu. ``autorunDetectorCount`` is how many of the user's AutoRun
- * detectors are for this dataset's media type: "Run AutoRun" runs them now
+ * Dataset menu. ``autofindDetectorCount`` is how many of the user's AutoFind
+ * detectors are for this dataset's media type: "Run AutoFind" runs them now
  * (loading the dataset first if it isn't), and is disabled - with the reason
  * as its tooltip - when there are none to run.
  */
 export function buildDatasetCardMenuItems(
   dataset: { loaded?: boolean; media_type?: string } | undefined,
   access: CardMenuAccess,
-  autorunDetectorCount = 0,
+  autofindDetectorCount = 0,
 ): ContextMenuItem[] {
   const items: ContextMenuItem[] = [];
   if (!dataset?.loaded) {
@@ -127,13 +127,13 @@ export function buildDatasetCardMenuItems(
   }
   items.push({ id: 'browse', label: 'Browse dataset', title: 'Browse dataset', iconSvg: ICON.browse });
   items.push({
-    id: 'autorun',
-    label: 'Run AutoRun',
-    title: autorunDetectorCount
-      ? `Run your ${autorunDetectorCount} AutoRun detector${autorunDetectorCount === 1 ? '' : 's'} on this dataset now`
-      : `None of your AutoRun detectors are for ${dataset?.media_type || 'this media type'}; move one to the AutoRun tab first`,
-    iconSvg: ICON.autorun,
-    disabled: autorunDetectorCount === 0,
+    id: 'autofind',
+    label: 'Run AutoFind',
+    title: autofindDetectorCount
+      ? `Run your ${autofindDetectorCount} AutoFind detector${autofindDetectorCount === 1 ? '' : 's'} on this dataset now`
+      : `None of your AutoFind detectors are for ${dataset?.media_type || 'this media type'}; move one to the AutoFind tab first`,
+    iconSvg: ICON.autofind,
+    disabled: autofindDetectorCount === 0,
   });
   if (!access.isDefaultLogin) {
     items.push(securityItem(access));
@@ -145,11 +145,11 @@ export function buildDatasetCardMenuItems(
 }
 
 /**
- * Detector menu. An AutoRun detector (``autofind``) is frozen: the editing
+ * Detector menu. An AutoFind detector (``autofind``) is frozen: the editing
  * verbs (Rename, Import Labels, Delete) are omitted entirely — the only way
  * to change it is "Move to Drafts" first — while the read/use verbs (Load,
  * Browse, Export labels, Stats) stay. A draft detector instead offers
- * "Move to AutoRun" to finalize it.
+ * "Move to AutoFind" to finalize it.
  */
 export function buildDetectorCardMenuItems(
   detector: { detector_loaded?: boolean; autofind?: boolean } | undefined,
@@ -191,8 +191,8 @@ export function buildDetectorCardMenuItems(
     });
   } else {
     items.push({
-      id: 'move-to-autorun',
-      label: 'Move to AutoRun',
+      id: 'move-to-autofind',
+      label: 'Move to AutoFind',
       title: 'Finalize this detector: freeze it against edits and auto-run it on every dataset as it is imported',
       iconSvg: ICON.lock,
     });

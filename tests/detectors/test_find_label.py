@@ -189,7 +189,7 @@ class TestFindModeIsPerDetector:
 
 
 class TestAutoDetect:
-    """``POST /api/auto-detect`` iterates detectors flagged for Auto-Find."""
+    """``POST /api/auto-detect`` iterates detectors flagged for AutoFind."""
 
     def test_no_autofind_models_returns_400(self, client):
         resp = client.post("/api/auto-detect", json={})
@@ -218,7 +218,7 @@ class TestAutoDetect:
         assert len(result["hits"]) + len(result["negative_hits"]) == NUM_MEDIAS
 
     def test_autofind_hits_carry_the_media_fields_the_table_renders(self, client):
-        """Hits must carry the media fields the Auto-Find results table shows.
+        """Hits must carry the media fields the AutoFind results table shows.
 
         ``_HitSchema`` used to declare only ``id``/``score``, and a declared
         marshmallow schema drops every undeclared key on dump (``unknown =
@@ -287,7 +287,7 @@ class TestAutoDetect:
         assert resp.status_code == 400
 
     def test_missing_detector_is_reported_not_silently_skipped(self, client):
-        """A stale Auto-Find entry (detector file deleted) shows up in
+        """A stale AutoFind entry (detector file deleted) shows up in
         ``missing_detectors`` while the surviving detectors still run."""
         from vtsearch.settings import add_autofind_detector
 

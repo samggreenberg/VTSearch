@@ -14,7 +14,7 @@ POST /api/exporters/field-options/<exporter_name>
     the same contract the importer families use, so an exporter whose
     destination list is only knowable at runtime (a mailbox, a bucket, a
     remote queue) can populate its select in the Export modal and in the
-    Auto-Find results-exporter settings.
+    AutoFind results-exporter settings.
 
 POST /api/exporters/export
     Run a specific exporter on the payload supplied in the request body.

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize, take } from 'rxjs/operators';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -7,6 +8,9 @@ import {
   ClipboardColumn,
   ClipboardCopyComponent,
 } from '../../clipboard-copy/clipboard-copy.component';
+import { ActiveContextService } from '../../../services/active-context.service';
+import { BrowseSubsetPrepService } from '../../../services/browse-subset-prep.service';
+import { ContextSwitchService } from '../../../services/context-switch.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { PluginTemplateVarsService } from '../../../services/plugin-template-vars.service';
@@ -21,16 +25,18 @@ import { IconComponent } from '../../icon/icon.component';
 import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import { visibleFields } from '../../../utils/plugin-fields';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 
-/** The AutoRun Results dialog: one AutoRun run's hits on one dataset, with
- *  the good / bad / both filter, copy-to-clipboard, and an Export button that
- *  sends the listed rows to any exporter that reads a scored run. Mounted once
- *  in `AppComponent`, fed by `AutoRunService`. */
+/** The Find Results dialog: one Find or AutoFind run's hits on one dataset,
+ *  with the good / bad / both filter, copy-to-clipboard, an Export button that
+ *  sends the listed rows to any exporter that reads a scored run, and a Browse
+ *  button that opens the listed items in Browse (#4615). Mounted once in
+ *  `AppComponent`, fed by `AutoFindService`. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ModalComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, ProgressBarComponent],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })
@@ -38,6 +44,13 @@ export class AutoDetectResultsModalComponent implements OnInit {
   private exportersApi = inject(ExportersApiService);
   private templateVars = inject(PluginTemplateVarsService);
   private toast = inject(ToastService);
+  private activeContext = inject(ActiveContextService);
+  private contextSwitch = inject(ContextSwitchService);
+  /** Builds the Browse map while the dialog shows its progress. */
+  readonly browsePrep = inject(BrowseSubsetPrepService);
+  /** Browse was clicked and the run's dataset is being made active (and
+   *  loaded, if it was unloaded) before the map build starts. */
+  readonly browseStarting = signal(false);
 
   readonly data = input<AutoDetectResultsData>({ results: {} });
   readonly closed = output<void>();
@@ -86,7 +99,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   }
 
   /**
-   * The Auto-Find auto-export's `open_url`, if it returned an openable one.
+   * The AutoFind auto-export's `open_url`, if it returned an openable one.
    *
    * An exporter can format the run's results into a third-party site's URL
    * instead of (or as well as) delivering them somewhere; the same key drives
@@ -266,7 +279,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
             detail: openUrl && !opened ? 'Your browser blocked the new tab.' : response?.message,
             action: openUrl ? { label: 'Open', title: openUrl, onClick: () => openExternalUrl(openUrl) } : undefined,
             autoDismissMs: openUrl && !opened ? 0 : undefined,
-            dedupKey: 'autorun-results-export',
+            dedupKey: 'autofind-results-export',
           });
         },
         error: () => {
@@ -277,7 +290,52 @@ export class AutoDetectResultsModalComponent implements OnInit {
       });
   }
 
+  /** The listed rows' media ids, once each: what Browse lays out. A media
+   *  two detectors both called Good is one item on the map. */
+  get browseIds(): number[] {
+    const ids = new Set<number>();
+    for (const hit of this.displayHits) {
+      if (typeof hit.id === 'number') ids.add(hit.id);
+    }
+    return [...ids];
+  }
+
+  /** Why Browse is unavailable, or `''` when it isn't. */
+  get browseBlocker(): string {
+    if (!this.data().dataset_id || !this.data().run_id) return 'These results name no dataset to browse';
+    if (this.browseIds.length === 0) return 'No listed items to browse';
+    return '';
+  }
+
+  /**
+   * Open the listed items in Browse, as a map of their own. As in the Test
+   * view, the map is built here, behind a progress bar with a Cancel, and the
+   * dialog hands off to Browse only once it is ready; the run's dataset is
+   * made active first, since the build scores against the active dataset.
+   * Browse's Back reopens these results.
+   */
+  browse(): void {
+    const datasetId = this.data().dataset_id;
+    const runId = this.data().run_id;
+    const ids = this.browseIds;
+    if (this.browseBlocker || !datasetId || !runId || this.browseStarting() || this.browsePrep.preparing()) return;
+    this.browseStarting.set(true);
+    // Completes without emitting when the load fails; its own toast says why.
+    this.contextSwitch
+      .applyActivePair(datasetId, this.activeContext.modelId || '')
+      .pipe(
+        take(1),
+        finalize(() => this.browseStarting.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() =>
+        this.browsePrep.start(datasetId, ids, { kind: 'results', runId }, () => this.closed.emit()),
+      );
+  }
+
   close(): void {
+    // A map still building would navigate away from wherever the user went.
+    if (this.browsePrep.preparing()) this.browsePrep.cancel();
     this.closed.emit();
   }
 }

@@ -24,7 +24,7 @@ import { getDatasetStats } from '../generated/api-client/fn/datasets-registry/ge
 import { listRegisteredDatasets } from '../generated/api-client/fn/datasets-registry/list-registered-datasets';
 import { loadRegisteredDataset } from '../generated/api-client/fn/datasets-registry/load-registered-dataset';
 import { renameRegisteredDataset } from '../generated/api-client/fn/datasets-registry/rename-registered-dataset';
-import { runDatasetAutorun } from '../generated/api-client/fn/datasets-registry/run-dataset-autorun';
+import { runDatasetAutofind } from '../generated/api-client/fn/datasets-registry/run-dataset-autofind';
 import { unloadRegisteredDataset } from '../generated/api-client/fn/datasets-registry/unload-registered-dataset';
 import { updateDatasetReaders } from '../generated/api-client/fn/datasets-registry/update-dataset-readers';
 
@@ -60,14 +60,14 @@ export class DatasetsRegistryApiService {
     }).pipe(map((r) => r.body));
   }
 
-  /** Start a background AutoRun on a loaded dataset. Without *detectorIds* it
-   *  runs the caller's AutoRun detectors (the dataset ⋯ **Run AutoRun**); with
+  /** Start a background AutoFind on a loaded dataset. Without *detectorIds* it
+   *  runs the caller's AutoFind detectors (the dataset ⋯ **Run AutoFind**); with
    *  them, exactly those detectors, drafts included (the Dashboard's big
-   *  **AutoRun** button). Resolves with the ``task_id``; progress arrives on
+   *  **AutoFind** button). Resolves with the ``task_id``; progress arrives on
    *  the ``loading-tasks`` channel on a row keyed to the dataset, and the
-   *  finished row's ``autorun`` block names the results. */
-  runAutorun(datasetId: string, detectorIds?: string[]): Observable<DatasetRegistryLoadResponse> {
-    return runDatasetAutorun(this.http, this.config.rootUrl, {
+   *  finished row's ``autofind`` block names the results. */
+  runAutofind(datasetId: string, detectorIds?: string[]): Observable<DatasetRegistryLoadResponse> {
+    return runDatasetAutofind(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
       body: detectorIds ? { detector_ids: detectorIds } : undefined,
     }).pipe(map((r) => r.body));

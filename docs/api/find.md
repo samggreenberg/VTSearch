@@ -12,8 +12,8 @@ the line below. It was called Find until #4525, and these routes, their
 fields (`find_mode`, `find_scores`) and the `find` SSE channel keep that name,
 so "Find mode" and "the Find pass" on this page mean the Test view's session.
 The Dashboard's **Find** button is something else: it starts a background
-AutoRun per ticked dataset
-([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)).
+AutoFind per ticked dataset
+([`POST /api/datasets/registry/{dataset_id}/autofind`](datasets.md#run-autofind-on-a-registered-dataset)).
 
 Several endpoints here read or mutate the active dataset / detector context via
 the [`X-Dataset-Id` / `X-Detector-Id` headers](../API.md#context-headers-x-dataset-id--x-detector-id);
@@ -187,9 +187,9 @@ POST /api/auto-detect
 ```
 
 **Body:** `{"detector_name": ""}` — omit / empty to run **every** detector
-flagged for Auto-Find on the active dataset's media type, or name a single one.
+flagged for AutoFind on the active dataset's media type, or name a single one.
 
-Scores the active dataset with each Auto-Find detector, training each head on
+Scores the active dataset with each AutoFind detector, training each head on
 demand, and returns one result column per detector.
 
 →
@@ -218,29 +218,30 @@ line - the labels' line with the corpus side fitted on the active dataset, the
 same line a Find there draws (#4452) - and the server logs that the set was
 never checked.
 
-When an exporter is configured for Auto-Find, an `auto_export` object
+When an exporter is configured for AutoFind, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
 extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
-AutoRun detectors for the media type), **404** (named detector not on the
-caller's AutoRun list), **409** (cancelled).
+AutoFind detectors for the media type), **404** (named detector not on the
+caller's AutoFind list), **409** (cancelled).
 
 This is the synchronous, scripted form. The Dashboard runs the same detectors
-in the **background** instead - after a web import (see the `autorun` flag
+in the **background** instead - after a web import (see the `autofind` flag
 under [Loading Datasets](datasets.md#loading-datasets)) and from a dataset's
-⋯ **Run AutoRun**
-([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)),
+⋯ **Run AutoFind**
+([`POST /api/datasets/registry/{dataset_id}/autofind`](datasets.md#run-autofind-on-a-registered-dataset)),
 whose big **Find** button runs the ticked detectors in their place -
 and keeps each run's results for the user who started it:
 
-### AutoRun results
+### AutoFind results
 
 ```
-GET /api/autorun/runs/{run_id}
+GET /api/autofind/runs/{run_id}
 ```
 
 `run_id` is the background run's `task_id`. Returns the body above
 (`auto_export` included when an exporter ran) plus `run_id`, `dataset_id`,
-`dataset_name`, `trigger` (`"import"` or `"manual"`) and `created_at`.
+`dataset_name`, `trigger` (`"import"`, `"manual"` for the ⋯ **Run AutoFind**,
+or `"find"` for the **Find** button's picked detectors) and `created_at`.
 Runs live in memory only, and only the most recent few, so **404** covers an
 unknown run, another user's, one that has aged out, and any from before a
 restart alike.
@@ -261,7 +262,7 @@ POST /api/line-test/forget
 Test mode's test of the line the Find pass drew (#4524; the design is
 [*The test sample*](../../vtscore/docs/packages/training.md#the-test-sample-linetest-linebudgets-line_phase-found_words), the statistics
 `vtscore/training/thresholds/line_test.py`). The question is *if this line
-went to AutoRun, what share of what it ships would be right, and what share of
+went to AutoFind, what share of what it ships would be right, and what share of
 the real matches would it ship?* The answer comes from **uniform picks within
 rank bands** on both sides of the line, never from the ranking's top or from
 the model: the user votes each pick, and the picks say, as likely ranges, the
@@ -382,7 +383,7 @@ Train vote, Add Corrections, an import) no longer matches it. A stale verdict
 stays, flagged. One finished after Add Corrections already folded the test set
 in is stale from the start. Two readers show it: the detector's
 [stats](detectors.md#detector-statistics) (`test_verdicts`, every verdict, newest first) and the
-[detector listing](detectors.md#list-registered-detectors), where an AutoRun detector
+[detector listing](detectors.md#list-registered-detectors), where an AutoFind detector
 carries `test_verdict`, its newest.
 
 ### Find stats (detector evaluation)

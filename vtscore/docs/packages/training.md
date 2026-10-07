@@ -605,11 +605,11 @@ within rank bands; this module is the sample, its estimators, the allocation
 rule and the phase machine, pure statistics over ids, ranks and labels that
 the app's routes and the eval harness both call.
 
-**Why it is shaped this way.** AutoRun ships the set above the line unchecked,
+**Why it is shaped this way.** AutoFind ships the set above the line unchecked,
 and nobody downstream can tell a wrong match from a missed one, so a test
 reports both halves, the line's precision and recall on the corpus at the
 user's balance, with F-beta at that balance as the headline, all from one set
-of draws. The corpus stands in for the future datasets AutoRun will see; the
+of draws. The corpus stands in for the future datasets AutoFind will see; the
 app's two trust checks (training-domain overlap, evidence coverage) are the
 caveat on that extrapolation. The verdict is a reading of the ranges, never a
 threshold the app enforces (#4267: *do your best, and say how close we got*).

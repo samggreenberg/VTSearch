@@ -17,6 +17,27 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **AutoRun is now AutoFind; its ⋯ run opens no dialog, and Find Results
+  gains Browse** (issue #4615). The Dashboard's **AutoRun** tab, the detector
+  ⋯ menu's **Move to AutoRun**, the dataset ⋯ menu's **Run AutoRun** and the
+  Add Dataset dialog's checkbox all say **AutoFind**, as the Settings tab
+  (formerly *Auto-Find*) and its exporter do. AutoFind is the unattended path,
+  the app's twin of the command line's run: a dataset's ⋯ **Run AutoFind** now
+  ends with the same notice an import's run gives (*AutoFind finished on
+  "Birds": 12 hits*, with **View results**) instead of opening the results
+  dialog. The big **Find** button still opens its results as they land, and
+  its runs are called Find on the dataset row and in their notices. The
+  dialog, now **Find Results**, gains a **Browse** button that lays the listed
+  items (Good, Bad or Both) out in Browse as a map of their own; **← Back to
+  Find Results** returns to the Dashboard with them open again. The API
+  follows the name: `POST /api/datasets/registry/<id>/autofind`,
+  `GET /api/autofind/runs/<run_id>`, the import form's `autofind` flag, the
+  `autofind` block on a run's `loading-tasks` row (whose `trigger` is now
+  also `find` for the Find button's runs) and the `autofind_on_import`
+  setting, which starts back at its default (on) for anyone who had turned
+  `autorun_on_import` off. The autorun *processors* (`/api/autorun-extractors`,
+  `/api/autorun-localizers`) are a different thing and keep their names.
+
 - **Run your own function when an import finishes** (issue #4616). A server
   admin can name functions with `--on-dataset-imported module:function` (or
   `VTSEARCH_ON_DATASET_IMPORTED`, comma-separated), and each is called with a

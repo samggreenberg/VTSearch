@@ -2,7 +2,7 @@
 
 Validates that the ``_state_lock`` in ``vtsearch.state`` correctly
 serialises concurrent access to votes, click-times, label history, and
-Auto-Find detectors.  Also validates the ``_settings_lock`` in
+AutoFind detectors.  Also validates the ``_settings_lock`` in
 ``vtsearch.settings`` and the ``_progress_lock`` in
 ``vtscore.detectors.labeling_progress``.
 """

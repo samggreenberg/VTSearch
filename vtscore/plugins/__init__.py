@@ -240,7 +240,7 @@ class PluginField:
     #:
     #: Hiding is a **GUI affordance only**, the field-level sibling of
     #: :attr:`PluginBase.hidden_from_picker`.  The field keeps its CLI
-    #: flag (so a scripted or Auto-Find run can still override the fixed
+    #: flag (so a scripted or AutoFind run can still override the fixed
     #: value), keeps its place in ``to_dict()`` on the wire, and is
     #: validated, normalised and template-substituted exactly like a
     #: visible one.  It is *not* an access control: the value ships to

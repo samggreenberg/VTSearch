@@ -82,7 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Import a dataset from the command line, save it to the dashboard, and run the "
-            "Auto-Find detectors on it (export the predicted-Good items). With no Auto-Find "
+            "AutoFind detectors on it (export the predicted-Good items). With no AutoFind "
             "detector for its media type the dataset is saved and detection is skipped."
         ),
     )
@@ -99,7 +99,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help=(
-            "Run --autodetect as this user, so their per-user Auto-Find list "
+            "Run --autodetect as this user, so their per-user AutoFind list "
             "(autofind_detectors) and results exporter apply. Requires --api-key "
             "to authenticate against data/api_keys.json (same credentials as the "
             "server's api_key login). Without --user the run uses the built-in "
@@ -226,7 +226,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Detector name to merge labels into before scoring. Used with "
             "--autodetect plus --label-importer-file. That detector is then "
-            "the only one the run scores with: the settings file's Auto-Find "
+            "the only one the run scores with: the settings file's AutoFind "
             "list is not consulted."
         ),
     )
@@ -496,12 +496,12 @@ def _apply_import_hooks(args, parser) -> None:
 
 
 def _authenticate_cli_user(args, parser) -> None:
-    """Establish and authenticate the ``--user`` an Auto-Find run executes as."""
+    """Establish and authenticate the ``--user`` an AutoFind run executes as."""
     from vtscore import cli_progress
 
-    # Establish (and authenticate) the user this Auto-Find runs as, mirroring
+    # Establish (and authenticate) the user this AutoFind runs as, mirroring
     # the server's api_key login. With --user the run reads that user's
-    # per-user Auto-Find list + results exporter; without it, the built-in
+    # per-user AutoFind list + results exporter; without it, the built-in
     # "default" user applies (which reads the --settings flat file).
     if args.user:
         from vtscore.config import DATA_DIR
@@ -525,14 +525,14 @@ def _authenticate_cli_user(args, parser) -> None:
         # what get_user_data_dir() consults to resolve per-user paths. Without
         # this the default provider stays installed and ignores the username, so
         # data/<user>/user_settings.json would silently read (and write) through
-        # to the default user's flat file -- i.e. the wrong Auto-Find list and
+        # to the default user's flat file -- i.e. the wrong AutoFind list and
         # exporter config, under the right username. Mirrors _run_server's
         # --login api_key setup so a CLI run resolves paths identically.
         set_login_provider(_provider)
         set_thread_user(args.user)
         cli_progress.emit(
             "authenticated_user",
-            text=f"Running Auto-Find as user {args.user!r}.",
+            text=f"Running AutoFind as user {args.user!r}.",
             user=args.user,
         )
     elif args.api_key:
@@ -689,8 +689,8 @@ def _dispatch_autodetect(
     """Run the autodetect workflow via the importer- or pickle-file code path.
 
     ``--import-labels-into NAME`` makes NAME the run's only detector, in place
-    of the settings file's Auto-Find list, so a labelled detector can be run
-    headlessly without first moving it to AutoRun in the UI (#4235).
+    of the settings file's AutoFind list, so a labelled detector can be run
+    headlessly without first moving it to AutoFind in the UI (#4235).
     """
     from vtscore.cli import (
         autodetect_importer_main,

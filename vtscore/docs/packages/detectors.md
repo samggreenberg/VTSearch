@@ -103,7 +103,7 @@ type's embedder, and the resulting `(X_list, y_list)` is fed into
 labelset changes. Changing the labels does not drop the head.
 Instead, every writer of `.model` stamps `.model_labels_sig` with
 `model_loading.labelset_signature` of the labels it trained from, and
-`resolve_or_train_detector` (Find, Auto-Find, the portable export)
+`resolve_or_train_detector` (Find, AutoFind, the portable export)
 reuses the head only while `model_loading.cached_head_is_current` says
 the saved labelset still has that signature (sorted `(label,
 stable_element_id, region_box)` triples). No weights are ever persisted -

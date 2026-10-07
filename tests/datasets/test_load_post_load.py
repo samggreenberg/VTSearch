@@ -1,7 +1,7 @@
 """The load pipeline's ``post_load`` (#4252) and ``on_finished`` (#4616) hooks.
 
 ``_run_origin_load_in_background(post_load=...)`` is how the app starts a
-user's AutoRun detectors on a freshly imported dataset.  What it owes the
+user's AutoFind detectors on a freshly imported dataset.  What it owes the
 caller: the hook runs once, only after a load that succeeded, with the new
 dataset pinned as the thread's dataset context, after the load's own task has
 parked terminal - and a hook that raises never turns a saved dataset into a
@@ -136,7 +136,7 @@ class TestPostLoadHook:
 
     def test_a_raising_hook_does_not_fail_the_import(self, isolated_settings, tmp_path):
         def hook(_ctx):
-            raise RuntimeError("AutoRun could not start")
+            raise RuntimeError("AutoFind could not start")
 
         task_id = _run_load(tmp_path, _fake_load, hook)
 

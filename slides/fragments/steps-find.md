@@ -25,4 +25,4 @@
 <!-- **b** — The Review tab: the new photos, best match first. Check any you
      like with Good or Bad, or don't. Export sends the matches wherever they
      are needed — a file, an email, a folder — and once you trust the
-     detector, Find (or AutoRun) does all five steps on every new pile. -->
+     detector, Find (or AutoFind) does all five steps on every new pile. -->

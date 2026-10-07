@@ -359,7 +359,7 @@ class TestTheVerdictIsKept:
         (verdict,) = _kept()
         assert verdict.line_count == 100
 
-    def test_the_autorun_tab_reads_the_latest_verdict_of_an_autorun_detector(self, client):
+    def test_the_autofind_tab_reads_the_latest_verdict_of_an_autofind_detector(self, client):
         detector_id = _run_find(client)
         _plant_big_corpus()
 
@@ -369,7 +369,7 @@ class TestTheVerdictIsKept:
 
         resp = client.put(f"/api/detectors/registry/{detector_id}/autofind", json={"autofind": True})
         assert resp.status_code == 200, resp.get_json()
-        assert entry()["test_verdict"] is None, "an AutoRun detector never tested"
+        assert entry()["test_verdict"] is None, "an AutoFind detector never tested"
         _vote_until_done(client, _start(client), _clean_line)
         row = entry()["test_verdict"]
         assert row["dataset_id"] == _kept()[0].dataset_id and row["stale"] is False

@@ -422,8 +422,8 @@ VTSearch/
 │   ├── achievements.py             Achievement state management
 │   ├── achievements_catalog.py     Static achievement declarations (no state machine)
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
-│   ├── autorun_detectors.py        Runs a user's AutoRun detectors on a dataset: /api/auto-detect's core,
-│   │                               the background run after an import / from Run AutoRun / the AutoRun
+│   ├── autofind.py                 Runs a user's AutoFind detectors on a dataset: /api/auto-detect's core,
+│   │                               the background run after an import / from Run AutoFind / the Find
 │   │                               button (ticked detectors), kept results
 │   ├── logging_config.py           Logging setup
 │   ├── diagnose.py                 One switch applying the diagnostic slow-request / GC log thresholds
@@ -922,9 +922,9 @@ field lists — this document names the tiers and the shape, not every key.
   the `browse_*` canvas preferences, `grid_icon_size_*`, `focus_mode_*`,
   `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
   `settings_source`, `achievement_state`, and the
-  **Auto-Find** keys `autofind_detectors`, `autofind_exporter`,
-  `autofind_exporter_field_values`, and `autorun_on_import` (whether a web
-  import runs the AutoRun detectors; the Add Dataset checkbox's memory).
+  **AutoFind** keys `autofind_detectors`, `autofind_exporter`,
+  `autofind_exporter_field_values`, and `autofind_on_import` (whether a web
+  import runs the AutoFind detectors; the Add Dataset checkbox's memory).
 
 Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
@@ -941,7 +941,7 @@ than being re-plumbed per knob.
 
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.
-The Auto-Find keys read through to the server file for the built-in `default`
+The AutoFind keys read through to the server file for the built-in `default`
 user (CLI / single-user back-compat); see `_DEFAULT_USER_FALLBACK_KEYS`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).
@@ -1124,7 +1124,7 @@ the prior thread-local automatically), so per-user writes — autopilot toggles,
 sync-source exports — land in the right file. A single-file
 `data/settings.json` that pre-dates the split is **not** migrated: its
 per-user keys simply have no effect where they sit, and the file is left as
-written (the one exception is the Auto-Find trio, which the built-in `default`
+written (the one exception is the AutoFind trio, which the built-in `default`
 user reads through to — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
 
 ---

@@ -163,8 +163,8 @@ export interface LoadingTask extends ProgressEvent {
   detector_id?: string;
   media_type?: string;
   embedder?: string;
-  /** Present on a background AutoRun's row (task ids starting `_autorun_`). */
-  autorun?: AutoRunTaskInfo;
+  /** Present on a background AutoFind's row (task ids starting `_autofind_`). */
+  autofind?: AutoFindTaskInfo;
 }
 
 /** One row of a multi-media import specification.  See
@@ -221,8 +221,8 @@ export interface VotingIterationsResponse {
 export type { AutoFindExportStatus } from '../generated/api-client/models/auto-find-export-status';
 
 /**
- * One row of the AutoRun results table: a scored `Hit` from an AutoRun run
- * (`GET /api/autorun/runs/<run_id>`, same shape as `POST /api/auto-detect`).
+ * One row of the AutoFind results table: a scored `Hit` from an AutoFind run
+ * (`GET /api/autofind/runs/<run_id>`, same shape as `POST /api/auto-detect`).
  * Every field is optional so the table tolerates a sparse hit, but the *names
  * and types* still come from the generated model, so a backend rename breaks
  * the template that renders the column.
@@ -244,43 +244,46 @@ export type AutoDetectDetectorResult = Partial<
 };
 
 /**
- * What the AutoRun Results modal renders: one AutoRun run's results
- * (`GET /api/autorun/runs/<run_id>`), which is the `POST /api/auto-detect`
+ * What the Find Results modal renders: one AutoFind run's results
+ * (`GET /api/autofind/runs/<run_id>`), which is the `POST /api/auto-detect`
  * body plus the dataset it scored.
  */
 export interface AutoDetectResultsData {
   media_type?: string;
   detectors_run?: number;
   results: Record<string, AutoDetectDetectorResult>;
-  /** AutoRun list entries whose detector file no longer exists on disk. */
+  /** AutoFind list entries whose detector file no longer exists on disk. */
   missing_detectors?: string[];
   /** Auto-export outcome (only when a results exporter ran). */
   auto_export?: AutoFindExportStatus;
   /** The dataset the run scored. */
   dataset_id?: string;
   dataset_name?: string;
+  /** The background run these results came from (`GET /api/autofind/runs/<run_id>`). */
+  run_id?: string;
 }
 
 /**
- * The `autorun` block on a background AutoRun's `loading-tasks` row (see
- * `vtsearch/autorun_detectors.py`). The identity half is there from the
+ * The `autofind` block on a background AutoFind's `loading-tasks` row (see
+ * `vtsearch/autofind.py`). The identity half is there from the
  * first frame; the counts arrive with the terminal (`idle`) frame of a run
  * that finished.
  */
-export interface AutoRunTaskInfo {
-  /** Same as the task id; what `GET /api/autorun/runs/<run_id>` answers to. */
+export interface AutoFindTaskInfo {
+  /** Same as the task id; what `GET /api/autofind/runs/<run_id>` answers to. */
   run_id: string;
   /** The user who started the run; only they can read its results. */
   owner: string;
-  /** `import`: a finished web import started it. `manual`: the dataset ⋯ menu did. */
-  trigger: 'import' | 'manual';
+  /** `import`: a finished web import started it. `manual`: the dataset ⋯
+   *  menu's Run AutoFind did. `find`: the Dashboard's Find button did. */
+  trigger: 'import' | 'manual' | 'find';
   dataset_id: string;
   dataset_name: string;
   detectors_run?: number;
   total_hits?: number;
   missing_detectors?: string[];
   auto_export?: AutoFindExportStatus | null;
-  /** Set on an import's run that had nothing to run (the user's AutoRun
+  /** Set on an import's run that had nothing to run (the user's AutoFind
    *  detectors are for another media type, or need an embedder the dataset
    *  lacks): the reason. Such a row is idle from its first frame. */
   skipped?: string;

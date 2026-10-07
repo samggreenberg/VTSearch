@@ -882,7 +882,7 @@ class TestFilepathTemplateExpansion:
 
     def test_date_only_templates_expand(self, tmp_path):
         """{YYYYMMDD} and the {YYYY}/{MM}/{DD} parts expand to today's UTC
-        date, so a daily scheduled Auto-Find can write date-named files."""
+        date, so a daily scheduled AutoFind can write date-named files."""
         from datetime import datetime as real_dt
         from datetime import timezone
 

@@ -944,7 +944,7 @@ async function shootFind(page) {
     step(3, dashButton('Test')),
   ]);
 
-  // Test, not Find: since #4525 the Find button runs AutoRun and opens no view.
+  // Test, not Find: since #4525 the Find button runs AutoFind and opens no view.
   await page.getByRole('button', { name: 'Test', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
@@ -1009,7 +1009,7 @@ async function shootFind(page) {
  * The Find slide's payoff used to be the verification screen — the results in a
  * left-hand panel with the viewer beside them — which is a picture of somebody
  * checking their answers rather than a picture of what they got. Not viewing
- * results in the tool is a feature: an autorun detector mails a list of
+ * results in the tool is a feature: an AutoFind detector mails a list of
  * references and nobody opens anything (#3779). So the reveal is the frames.
  *
  * And the frames are twelve out of the production pile's `book/` folder, not

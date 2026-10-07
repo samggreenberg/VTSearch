@@ -18,7 +18,7 @@
           (click)="activeSettingsTab.set('autofind')"
           title="Detectors that auto-run on import, and what to do with their results">
           <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autofind'"></vt-icon>
-          Auto-Find
+          AutoFind
         </button>
         <button
           class="side-tab"
@@ -223,9 +223,9 @@
           ></vt-import-defaults-settings>
         }
 
-        <!-- Auto-Find -->
+        <!-- AutoFind -->
         @if (activeSettingsTab() === 'autofind') {
-          <h3>Auto-Find</h3>
+          <h3>AutoFind</h3>
           <vt-auto-find-settings
             [autofindExporter]="autofindExporter"
             [autofindExporterFieldValues]="autofindExporterFieldValues"
