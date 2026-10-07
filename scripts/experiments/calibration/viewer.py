@@ -188,6 +188,7 @@ import re
 from collections.abc import Mapping, Sequence
 from fractions import Fraction
 from pathlib import Path
+from typing import Any
 
 import common
 
@@ -842,12 +843,12 @@ def _baselines(
     return out
 
 
-def _anchor_key(rec: Mapping[str, object]) -> tuple[str, str, str, int]:
+def _anchor_key(rec: Mapping[str, Any]) -> tuple[str, str, str, int]:
     return (
         str(rec.get("dataset", "")),
         str(rec.get("embedder", "")),
         str(rec.get("category", "")),
-        int(rec.get("seed", 0)),  # type: ignore[call-overload]
+        int(rec.get("seed", 0)),
     )
 
 
