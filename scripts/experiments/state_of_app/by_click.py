@@ -16,8 +16,9 @@ way the user meets it:
   `_text_app_line` off the text baseline), which is what the user sees;
 * after it, a click with no value (a spot-check step) carries the run's last value forward.
 
-The mean over a review's trained runs at each click is the curve; never-trained runs are left out, as
-in the path table (`perp.py`). Click 0 is the typed query, so the curve starts on the notch.
+The mean over every run of the review at each click is the curve (#4631): a run that never trained a
+detector is never shown one, so it scores its typed query at every click (owner, 2026-10-07: what its
+session shows, over the viewer's empty set). Click 0 is the typed query, so the curve starts on the notch.
 
     python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/... --run 4=<b4>/... \\
         --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv
@@ -50,24 +51,31 @@ def typed_query(baseline: pd.DataFrame, embedder: str, beta: float, metric: str 
     return pd.Series(out, dtype=float)
 
 
-def filled_curve(curves: pd.DataFrame, trained: pd.DataFrame, text: pd.Series, col: str = "thr_fbeta") -> pd.DataFrame:
-    """``t, fbeta, runs, with_detector``: the mean over *trained* runs of the filled *col* at each click.
+def filled_curve(curves: pd.DataFrame, runs: pd.DataFrame, text: pd.Series, col: str = "thr_fbeta") -> pd.DataFrame:
+    """``t, fbeta, runs, with_detector``: the mean over *runs* (every run of the review) of the filled *col*.
 
-    A run scores *text* (its typed query) at every click before its first ``thr_fbeta`` (the app shows its
-    detector from there, #4605); after that, a missing click carries the last value forward. *col* is
-    ``thr_fbeta`` or the ``thr_precision`` / ``thr_recall`` behind it (the right panel's path); the
-    column is named ``fbeta`` whichever it is.
+    A run scores *text* (its typed query) at every click before the app shows its detector (#4605): its
+    ``shown_from`` in ``cells.csv``, never for a run that never trained; without that column, its first
+    ``thr_fbeta``. After that, a missing click carries the last value forward. *col* is ``thr_fbeta`` or the
+    ``thr_precision`` / ``thr_recall`` behind it (the right panel's path); the column is named ``fbeta``
+    whichever it is.
     """
-    c = curves.merge(trained[RUN], on=RUN)
+    c = curves.merge(runs[RUN], on=RUN)
 
-    # unstack, not pivot_table(dropna=False): the latter rebuilds every category x seed pair and so brings
-    # back the never-trained runs this was meant to leave out; unstack keeps the all-empty early clicks.
+    # unstack, not pivot_table(dropna=False): the latter rebuilds every category x seed pair, runs no review
+    # attempted included; unstack keeps the all-empty early clicks.
     def wide_of(name: str) -> pd.DataFrame:
         w = c.drop_duplicates(RUN + ["t"]).set_index(RUN + ["t"])[name].unstack("t")
         return w.reindex(columns=range(int(c["t"].min()), int(c["t"].max()) + 1))
 
     wide = wide_of(col)
-    started = wide_of("thr_fbeta").notna().cummax(axis=1)
+    if "shown_from" in runs:
+        first = runs.set_index(RUN)["shown_from"].astype(float).reindex(wide.index).to_numpy()
+        started = pd.DataFrame(
+            wide.columns.to_numpy()[None, :] >= first[:, None], index=wide.index, columns=wide.columns
+        )
+    else:
+        started = wide_of("thr_fbeta").notna().cummax(axis=1)
     carried = wide.ffill(axis=1)
     tq = pd.Series([text.get((cat, int(seed)), np.nan) for cat, seed in wide.index], index=wide.index)
     filled = carried.where(started, other=tq.to_numpy()[:, None] * np.ones(wide.shape))
@@ -93,15 +101,14 @@ def main(argv: list[str] | None = None) -> int:
     for spec in args.run:
         beta_s, d = spec.split("=", 1)
         beta = float(beta_s)
-        cells = pd.read_csv(Path(d) / "cells.csv")
-        trained = cells[~cells["never_trained"].astype(bool)]
+        cells = pd.read_csv(Path(d) / "cells.csv")  # every run, the never-trained included (#4631)
         curves = pd.read_csv(Path(d) / "curves.csv")
-        curve = filled_curve(curves, trained, typed_query(baseline, args.embedder, beta))
+        curve = filled_curve(curves, cells, typed_query(baseline, args.embedder, beta))
         # The precision and recall behind it, where the analysis carries them (#4605): the right panel's path.
         for m in ("precision", "recall"):
             if f"thr_{m}" in curves:
                 tq = typed_query(baseline, args.embedder, beta, m)
-                curve[m] = filled_curve(curves, trained, tq, f"thr_{m}")["fbeta"].to_numpy()
+                curve[m] = filled_curve(curves, cells, tq, f"thr_{m}")["fbeta"].to_numpy()
         rows.append(curve.assign(beta=f"{beta:g}"))
     out = pd.concat(rows)
     out = out[[c for c in ("beta", "t", "fbeta", "precision", "recall", "runs", "with_detector") if c in out]]

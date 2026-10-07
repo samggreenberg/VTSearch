@@ -172,8 +172,10 @@ def balance_metrics(ranks: np.ndarray, n: int, n_pos: int, beta: float, k: int |
     ``None`` reads the balance's cap (the floor schedule's 32 at beta <= 1, 128
     above), which is what a run before the column, the text sort and the
     ceiling keep.  ``k == 0`` is an empty returned set (#4452's line can keep
-    nothing): it finds none of the positives, so recall and F-beta are 0 and
-    precision is undefined.
+    nothing): it finds none of the positives, so recall and F-beta are 0, and
+    so is precision (owner, 2026-10-07, #4631): a user who got nothing back
+    got a loss, and an undefined precision would drop exactly those runs from
+    a precision mean (``curves.EMPTY_SET``).  Without positives it is undefined.
     """
     nan = float("nan")
     if n <= 0:
@@ -184,7 +186,7 @@ def balance_metrics(ranks: np.ndarray, n: int, n_pos: int, beta: float, k: int |
         best = oracle_fbeta(ranks, n_pos, beta)
         return {
             "k": 0,
-            "precision": nan,
+            "precision": 0.0 if n_pos > 0 else nan,
             "recall": 0.0 if n_pos > 0 else nan,
             "fbeta": 0.0 if n_pos > 0 else nan,
             "oracle_fbeta": best,
