@@ -95,9 +95,10 @@ at the end of every run, success or failure, with the pass count or the gate tha
 blocked. The status is informational, not a required check (#4149): the merge gate
 is a full green `./run-tests.sh` on every surface, and cloud sessions, which cannot
 reach the GRID, merge without it. From the GRID, though, post it: it is the only
-machine-readable record that a commit passed. Submit dev's copy of the script
-(`git show origin/dev:scripts/slurm/suite.sbatch > <scratch>/suite.sbatch`), never
-the branch's own. A new commit on the branch needs a new run, because the status
+machine-readable record that a commit passed. Submit the shared checkout's copy,
+`/exp/$USER/projects/VTSearch/scripts/slurm/suite.sbatch` (fast-forward that
+checkout first if it is behind `origin/dev`), never the branch's own. The old
+`/exp/$USER/suite.sbatch` is a stub that exits 2 (#4100). A new commit on the branch needs a new run, because the status
 belongs to the SHA. See `docs/branch-protection.md`.
 
 **Never delete a dirty or unmerged worktree**, yours or anyone's, and never
