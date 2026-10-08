@@ -133,6 +133,14 @@ def autodetect_importer_main_chunked(
   importer's `validate_cli_field_values`, then call `run_cli(...)` or
   `run_chunked_cli(...)` (thin when the importer's `reference_files`
   field asks for it) and embed whatever the load left unembedded.
+- **`save_dataset=True`** first imports the source through the GUI's load
+  pipeline and registers it, then scores the saved pickle; having no
+  applicable detector ends the run with a `detection_skipped` event instead of
+  an error. When the run's `CoreConfig.autofind_cli_delete_dataset` is on, the
+  dataset it imported is unregistered (pickle included) once its detectors have
+  scored it and the exporter has run, with a `dataset_deleted` event. A run
+  that detected nothing or failed keeps it, and so does a pickle that already
+  was a registered dataset, since the run did not import it.
 - **Chunked variants** stream the source in `chunk_size`-sized
   batches; peak RAM stays at roughly `chunk_size` medias regardless
   of total length. Detectors are trained **once** against the first

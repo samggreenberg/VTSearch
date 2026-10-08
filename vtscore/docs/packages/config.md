@@ -82,7 +82,9 @@ after the table do have defaults, precisely so a library-only
 
 Optional (defaulted) fields: `autofind_exporter` (`str`, `""`),
 `autofind_exporter_field_values` (`dict[str, dict[str, str]]`, `{}` -
-keyed by exporter name), `projection_n_neighbors` (`int`,
+keyed by exporter name), `autofind_cli_delete_dataset` (`bool`, `False` -
+whether a saving CLI run deletes the dataset it imported once its detectors
+have run; see [cli.md](cli.md#behaviour)), `projection_n_neighbors` (`int`,
 `PROJECTION_N_NEIGHBORS`), `projection_min_dist` (`float`,
 `PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
 `signpost_vocab` (`dict[str, list[str]]`, `{}`), `hide_ingest_eta`
