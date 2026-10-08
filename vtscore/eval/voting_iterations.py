@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.eval.al_strategies import ALContext, is_autopilot_strategy, select_next
+from vtscore.eval.al_strategies import ALContext, band_pick, is_autopilot_strategy, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
@@ -420,6 +420,10 @@ _OPENING_PHASES = frozenset({"good", "bad", "more"})
 #: Where Autopilot's ``more`` walk can draw (#4637): ``"seed"`` is the app, the
 #: top of the text sort; ``"detector"`` the top of the step's detector ranking.
 MORE_WALKS = ("seed", "detector")
+
+#: The pick-log phase of a band pick (#4482): an ordinary click, past the opening,
+#: drawn the way the spot check draws (:func:`~vtscore.eval.al_strategies.band_pick`).
+BAND_PHASE = "band"
 
 
 def _preference_line_for_step(
@@ -2271,6 +2275,7 @@ def simulate_voting_iterations(  # noqa: C901
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
+    band_share: Optional[int] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_steps: Optional[Sequence[int]] = None,
@@ -2503,6 +2508,14 @@ def simulate_voting_iterations(  # noqa: C901
             (``app_trained``): the app showing the opening's detector from the
             end of the Bad phase (#4604).  Needs the app's own opening (no
             *startup_schedule*, no *opening_diversity*) and the phase machine.
+        band_share: An experiment knob (issue #4482): one in *band_share* of
+            Autopilot's picks past the opening (the phases where the app shows
+            a detector) is a **band pick** instead of the phase's own, a draw
+            uniform within one band of the unvoted ranking, cycling through the
+            bands a spot check starts from
+            (:func:`~vtscore.eval.al_strategies.band_pick`).  It is an ordinary
+            click, logged with phase ``"band"``.  ``None`` - the default - is the
+            app.  Needs the balance (*beta*) and the phase machine.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -2804,6 +2817,8 @@ def simulate_voting_iterations(  # noqa: C901
     start_time = time.monotonic()
 
     diversity = _parse_opening_diversity(opening_diversity)
+    if band_share is not None and (isinstance(band_share, bool) or not isinstance(band_share, int) or band_share < 1):
+        raise ValueError(f"band_share must be an integer >= 1 (one pick in band_share) or None; got {band_share!r}")
     if more_walk not in MORE_WALKS:
         raise ValueError(f"more_walk must be one of {MORE_WALKS}; got {more_walk!r}")
     if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
@@ -3121,6 +3136,11 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(
             "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
         )
+    if band_share is not None and (flow is None or beta is None):
+        raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
+    # #4482's band picks: how many picks past the opening, and how many of them were band picks.
+    learned_picks = 0
+    band_picks = 0
     # Each schedule round's cut on the seed sort, resolved once: the app fits a
     # cosine sort's GMM over the whole sort and never refits it as votes come
     # in, so these are constants of the run rather than per-step state.
@@ -3407,29 +3427,48 @@ def simulate_voting_iterations(  # noqa: C901
             phase = flow.phase if flow is not None else None
             startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
             startup_cut = startup_cuts[startup_round] if startup_round >= 0 else None
-            ctx = ALContext(
-                pool_ids=pool,
-                embeddings=sim_embeddings,
-                labeled=labeled,
-                scores=pool_scores,
-                model=step,
-                # The ONLY consumer that moves.  Reporting, the metric rows and the
-                # phase machine all stay on ``threshold``.
-                threshold=acq_threshold,
-                atlas=atlas,
-                rng=rng,
-                pool_labels=pool_labels,
-                seed_scores=seed_scores,
-                phase=phase,
-                startup_cut=startup_cut,
-                uncertainty=pool_uncertainty,
-                opening_diversity=diversity,
-                more_walk=more_walk,
-            )
-            cid = select_next(strategy, ctx)
-            is_positive = _cast(cid, phase)
+            cid = None
+            pick_phase = phase
+            if band_share is not None and phase is not None and app_has_detector(phase) and pool_scores:
+                # #4482: every band_share-th pick past the opening is a band pick, on its
+                # own generator so the rest of the run's draws are the arm-free run's.
+                learned_picks += 1
+                if learned_picks % band_share == 0:
+                    assert beta is not None
+                    cid = band_pick(
+                        pool,
+                        pool_scores,
+                        balance_schedule(beta).candidate,
+                        band_picks,
+                        np.random.default_rng([seed, 4482, len(good_votes) + len(bad_votes)]),
+                    )
+                    if cid is not None:
+                        band_picks += 1
+                        pick_phase = BAND_PHASE
+            if cid is None:
+                ctx = ALContext(
+                    pool_ids=pool,
+                    embeddings=sim_embeddings,
+                    labeled=labeled,
+                    scores=pool_scores,
+                    model=step,
+                    # The ONLY consumer that moves.  Reporting, the metric rows and the
+                    # phase machine all stay on ``threshold``.
+                    threshold=acq_threshold,
+                    atlas=atlas,
+                    rng=rng,
+                    pool_labels=pool_labels,
+                    seed_scores=seed_scores,
+                    phase=phase,
+                    startup_cut=startup_cut,
+                    uncertainty=pool_uncertainty,
+                    opening_diversity=diversity,
+                    more_walk=more_walk,
+                )
+                cid = select_next(strategy, ctx)
+            is_positive = _cast(cid, pick_phase)
             t = len(good_votes) + len(bad_votes)
-            _log_pick(cid, is_positive, phase, startup_round, startup_cut)
+            _log_pick(cid, is_positive, pick_phase, startup_round, startup_cut)
 
         n_votes_now = len(good_votes) + len(bad_votes)
         # Need at least 1 good and 1 bad to train

@@ -94,6 +94,7 @@ _DIVERGENT = [
     ({"CALIB_STARTUP_SCHEDULE": "g3@top,b4@mid"}, "startup_schedule"),
     ({"CALIB_OPENING_DIVERSITY": "0.85/1"}, "opening_diversity"),
     ({"CALIB_MORE_WALK": "detector"}, "more_walk"),
+    ({"CALIB_BAND_SHARE": "8"}, "band_share"),
     ({"CALIB_BETA": "off"}, "beta"),
     ({"CALIB_BETA": "4"}, "beta"),
     ({"CALIB_WALK_SHAPE": "walk"}, "walk_shape"),
@@ -169,6 +170,8 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_WALK_SHAPE": "wlak"}, "walk_shape"),
         ({"CALIB_BETA": "100"}, "beta"),
         ({"CALIB_MORE_WALK": "learned"}, "more_walk"),
+        ({"CALIB_BAND_SHARE": "0"}, "band_share"),
+        ({"CALIB_BAND_SHARE": "one"}, "band_share"),
     ],
 )
 def test_a_value_the_harness_refuses_is_refused(check, env, knob):

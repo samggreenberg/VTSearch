@@ -60,8 +60,11 @@ from typing import TYPE_CHECKING, Any, Optional
 import numpy as np
 
 from vtscore.eval.startup_schedule import is_startup_phase
+from vtscore.training.thresholds.spot_check import band_edges, bands_for
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from vtscore.coverage.atlas import CoverageAtlas
 
 
@@ -459,6 +462,27 @@ def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
         if pick is not None:
             return pick
     return _uniform_pick(ctx, pool)
+
+
+def band_pick(
+    pool_ids: Sequence[int], scores: Mapping[int, float], candidate: int, k: int, rng: np.random.Generator
+) -> Optional[int]:
+    """The *k*-th band pick (#4482): a uniform draw within one band of the unvoted ranking, the way the check draws.
+
+    The unvoted ranking (*pool_ids* by *scores*, highest first, ties by id) is cut
+    into the spot check's bands (the top 8, the next 8, 16, 32, ...,
+    :func:`~vtscore.training.thresholds.spot_check.band_edges`).  The picks cycle
+    through the bands that hold the balance's cap *candidate* (the top 32 at
+    beta <= 1, 128 above it: the bands a check starts from), so the *k*-th takes
+    band ``k mod n`` and an item uniformly within it.  ``None`` when nothing in
+    the pool is scored.
+    """
+    ranking = sorted((i for i in pool_ids if i in scores), key=lambda i: (-scores[i], i))
+    if not ranking:
+        return None
+    edges = band_edges(len(ranking))
+    b = k % bands_for(candidate, edges)
+    return ranking[int(rng.integers(edges[b], edges[b + 1]))]
 
 
 def _select_autopilot(ctx: ALContext) -> int:
