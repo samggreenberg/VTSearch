@@ -18,38 +18,41 @@
 
 <!-- build: figs/calib-fold-anchored-flow.build7.png -->
 
-<!-- The headline is the iteration: the blend averaged two finished answers;
-     this fuses the evidence *before* answering. -->
+<!-- Appendix. The blend averaged two answers; this fuses the evidence
+     first. -->
 
-<!-- **a**, **b** — Recapitulation, so move fast: the corpus, the votes, the
-     model, the split, a model per half. -->
+<!-- **a**, **b** — A recap, so move fast: corpus, votes, model, split,
+     folds. -->
 
 <!-- **c** — Where the two lines meet. Each fold model scores the whole corpus,
      and that is the panel underneath: bare bars with nothing over them. The
      shape of the data, and all anyone has. -->
 
-<!-- **d** — Fit it, and there is iteration 2 again: one low component, one
-     high. But every question mark asks the same thing — *which is the Good
+<!-- **d** — Fit it, and there is Oops! All Haystack again: one low component,
+     one high. But every question mark asks the same thing — *which is the Good
      one?* — and the fit cannot answer, having read no labels. -->
 
-<!-- **e** — So bring the other evidence. The held-out votes arrive on each
-     fold's own baseline, the same checks and crosses as iteration 1, and the
-     crossed strokes above say where they came from: fold 1 is read by the
-     votes fold 1 never trained on. Nothing is decided yet. -->
+<!-- **e** — Now the other evidence: the held-out votes, on each fold's own
+     baseline as in Grade My Own Homework. The crossed strokes say where they
+     came from: fold 1 is read by the votes fold 1 never trained on. Nothing
+     is decided yet. -->
 
 <!-- **f** — Read the two together, and the question marks give way to
      hatching. The shape did not change; the components are now *identified*.
-     That is the line the iteration turns on — labels identify the components,
+     That is the line this slide turns on — labels identify the components,
      they do not estimate them, and identification is the cheap question. -->
 
-<!-- If anyone asks how the two pages relate to the code: there is one
-     estimator, not two. `fit_anchored_score_gmm` reads the corpus and the votes
-     in the same EM, each vote weighted κ times over — the deck takes it apart
-     into e and f because at the shipped κ the votes move the *shape* by almost
-     nothing while settling the identity outright, which is the whole claim. The
-     next slide draws that mechanism. -->
+<!-- If asked about the code: one estimator, `fit_anchored_score_gmm`, one
+     EM over the corpus and the votes, each vote weighted κ times. At the
+     shipped κ the votes barely move the shape and settle the identity, which
+     is why e and f split it. The next slide draws it. -->
 
 <!-- **g** — Each fold cuts at the midpoint of its own two means. **h** —
      Undercut the last line in the same breath: averaging θ₁ and θ₂ is drawn
-     plainly and production does not do it, because two fold models score on
+     plainly and production did not do it, because two fold models score on
      scales that need not agree. -->
+
+<!-- Measured in F-beta: 0.031, 0.042 and 0.076 over the blend at β ¼, 1
+     and 4, and 0.21 to 0.33 under cross-calibration (#4582). Today's line
+     reverses this slide's claim: the labels estimate the Good component, and
+     the corpus fits only its share and the rest. -->

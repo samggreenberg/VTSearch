@@ -209,7 +209,7 @@ STEPS = (
     ("good", "Good", "the top of your query", "query-top", f"{GOOD_TARGET} Goods"),
     ("bad", "Bad", "at your query's line", "query-line", f"{BAD_TARGET} Bads"),
     ("more", "More", "the top, again", "query-top", f"{MORE_TARGET} Goods, or {MORE_DRY_RUN} in a row without one"),
-    ("hard", "Boundary", "at the detector's line", "detector-line", "Smart and Stable both green"),
+    ("hard", "Boundary", "at even odds", "detector-odds", "Smart and Stable both green"),
     ("new", "Diversity", "a cell nobody voted in", "atlas", "Span green as well"),
     ("done", "Done", "every light green", "lights", "you say: keep going, or leave"),
 )
@@ -221,6 +221,10 @@ NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 4.3, 7.6, 7.95
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
 QUERY_LINE, DETECTOR_LINE = 0.62, 0.68
+#: Where Boundary asks on the detector's strip: the first item, best first, the
+#: line's own fit calls even odds (#3546, #4632). Inside the line, as it is at
+#: the middle radio every detector starts on; at β ¼ the two nearly meet.
+DETECTOR_ODDS = 0.80
 
 
 def _check_step_order() -> None:
@@ -311,8 +315,9 @@ def _steps_stage(stage: int) -> Figure:
             _pick(ax, PICTURE_X1 - 0.12, y)
         elif picture == "query-line":
             _pick(ax, _strip(ax, y, "your query", QUERY_LINE), y)
-        elif picture == "detector-line":
-            _pick(ax, _strip(ax, y, "the detector", DETECTOR_LINE), y)
+        elif picture == "detector-odds":
+            _strip(ax, y, "the detector", DETECTOR_LINE)
+            _pick(ax, PICTURE_X0 + DETECTOR_ODDS * (PICTURE_X1 - PICTURE_X0), y)
         elif picture == "atlas":
             _mini_tree(ax, y)
         else:

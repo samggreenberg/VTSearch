@@ -6,11 +6,12 @@
 # detector, answer questions, run it over media nobody voted on — because a
 # room that has not seen the tool cannot be told about a threshold inside it.
 #
-# Then the ideas, in order: four iterations on where the line goes, then the
-# axis the *user* sets — F-beta, the three-radio balance that asks which
-# mistake they mind more (#4413, #4448), and the line the labels draw at its
-# peak (#4452). Then the places the loop never asks about, the steps Autopilot
-# takes and when it says stop (#4610), the data the experiments run on and how
+# Then the ideas, in order: the three the line is built from — held-out
+# scores, the unlabeled corpus, and the mixture fit — then the axis the *user*
+# sets — F-beta, the three-radio balance that asks which mistake they mind
+# more (#4413, #4448), and the line the labels draw at its peak (#4452). Then
+# the places the loop never asks about, the steps Autopilot takes and when it
+# says stop (#4610), the data the experiments run on and how
 # the app does on it, how a user tests a detector on
 # their own pile and how often that test is right, the region-voting idea (whose
 # measured verdict waits for the runs still reporting), and documents — logos
@@ -52,16 +53,17 @@ slides:
   embed-flow
   vote-boundary
 
-  # II — Calibration
+  # II — Calibration: the three ideas the labels line (section III) is built
+  # from, and only those (#4670). The folds' held-out scores are its class
+  # model; the unlabeled corpus is where it counts the matches; EM is how it
+  # fits that corpus. The rules that once stacked on these — the blend, the
+  # fused cut, rank transfer, the 70/30 split — are in the appendix: measured
+  # in F-beta, none of them beat cross-calibration (#4582, #4583), and none
+  # draws today's line.
   outline-hold-the-line +at2
   xcal
   gmm-idea
   gmm-em
-  blend
-  anchored-gmm
-  anchored-em
-  quantile-transfer
-  split-fraction
 
   # III — Inclination: why a line needs one, what F1 and F-beta are (#4517),
   # F-beta's peak and the three-radio balance that sets its beta (#4413,
@@ -72,8 +74,9 @@ slides:
   # says about the line without moving it (#4427, #4452, #4517). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after Conclusion.
-  # Second Cut stays last: the acquisition cut is measured from wherever the
-  # line lands, so it has to follow the slide that says where that is.
+  # Second Cut stays last: Autopilot asks where What to Expect's fit puts
+  # even odds (#3546, #4632), so it has to follow the slides that draw that
+  # fit and say where the line lands beside it.
   outline-hold-the-line +at3
   inclusion-rank
   fbeta-metrics
@@ -238,14 +241,26 @@ slides:
   # Experimentation (#4563): only β ¼ separates, which is an answer to a question
   # rather than a slide to walk a room through.
   follow-suit
-  # Then the Inclusion slider's iterations — how the old user control was made
-  # to mean something. Inclusion is no longer a control (#4269); it survives
-  # only as the unit Second Cut's re-pricing is taken in.
+  # Then the line rules that stacked on section II's ideas and did not last,
+  # moved out of Calibration (#4670). Measured in F-beta at the three presets,
+  # none beat cross-calibration (#4582, at the 0.44% pool), and each slide's
+  # notes say what it measured against the rule before it. None draws
+  # today's line; the fused cut and rank transfer survive only as the
+  # fallback for a session whose votes cannot support the labels' model, and
+  # the 70/30 split ships as a null (#4583).
+  blend
+  anchored-gmm
+  anchored-em
+  quantile-transfer
+  split-fraction
+  # Weight and See: how the blend's weight moves with votes (#4618). What
+  # remains of the schedule is the fallback for sessions too young for the
+  # folds; it is parked here pending deletion.
+  blend-schedule
+  # Last, the Inclusion slider's iterations — how the old user control was
+  # made to mean something. Inclusion is no longer a control (#4269); it
+  # survives only as the unit of the fallback acquisition cut, for a detector
+  # with no labels line.
   inclusion-knob
   inclusion-walk
   inclusion-tilt
-  # Last, Weight and See: how the blend's weight moves with votes, moved out
-  # of Calibration (#4618). Above Average's fused cut replaced the blend, and
-  # what remains of the schedule is the fallback for sessions too young for
-  # its folds; it is parked here pending deletion.
-  blend-schedule

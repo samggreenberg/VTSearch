@@ -854,6 +854,25 @@ available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
 `true` / `yes` / `on`) for the gunicorn-launched Docker images; an
 explicit `--semantic-only` flag wins over it.
 
+**Autopilot only** (`--autopilot-only`): keep Train and Test on their
+Autopilot tabs, for a deployment whose users should only see the guided
+flow:
+
+```bash
+python app.py --autopilot-only
+```
+
+Train loses its Manual tab and Test its Review tab, and neither view
+renders a tab bar. Like `--semantic-only`, this is a **server-wide
+override** that can only turn the lock on: there is no
+`--no-autopilot-only`, the persisted `autopilot_only` setting can turn it
+on too, and neither is editable via the Settings dialog or the settings
+API (the Settings ▸ Server tab reports it). The env-var equivalent is
+`VTSEARCH_AUTOPILOT_ONLY`; an explicit flag wins over it. See
+[`autopilot_only`](DEPLOYMENT.md#server-tier--datasettingsjson) for what
+it means for Test's Review actions, and for a detector Autopilot can't
+start.
+
 **Run a function when an import finishes** (`--on-dataset-imported
 MODULE:FUNCTION`): call your own function each time a user's dataset
 import from the web app succeeds or fails, for example to email them:

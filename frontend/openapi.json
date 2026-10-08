@@ -191,6 +191,10 @@
           "autopilot_hard_reds": {
             "type": "integer"
           },
+          "autopilot_only": {
+            "readOnly": true,
+            "type": "boolean"
+          },
           "autopilot_resort_interval": {
             "type": "integer"
           },
