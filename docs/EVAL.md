@@ -438,6 +438,8 @@ Each metric row carries the operating point at that step's threshold — `cost` 
 
 #### The supervised skyline and training regret (`skyline_arms`)
 
+The calibration frame carries two oracles, one per objective. `oracle_threshold` / `oracle_cost` / `oracle_fpr` / `oracle_fnr` is the **cost** objective's: the cut with the lowest weighted FPR + FNR on the test half. It prices the two error rates, so on a rare class it cuts deep (recall about 0.85 at precision about 0.1 on COCO Better) and is no ceiling on F-beta. `oracle_fbeta` (at the row's beta) and `oracle_fbeta_b025` / `_b1` / `_b4` are the **F-beta** objective's: the best F-beta any cut of the test ranking reaches, with `fbeta_oracle_threshold` / `_fpr` / `_fnr` the cut that reaches `oracle_fbeta` (`calibration_metrics.oracle_fbeta_metrics`, #4654). A row's `fbeta_*` over its `oracle_fbeta_*` is the State of the App's "share of the best cut".
+
 `cost = oracle_cost + regret` splits a step's cost into "the ranking" and "the cut", but `oracle_cost` still conflates two causes that call for opposite fixes: **no linear head in this embedding can separate the class**, and **a head could, but 10–200 clicks did not find it**. Pass `skyline_arms=["skyline_train_full"]` (requires `emit_calibration_metrics`) to split them:
 
 ```

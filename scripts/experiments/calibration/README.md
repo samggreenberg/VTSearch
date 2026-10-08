@@ -591,7 +591,7 @@ their own without a re-run.
 | arms | any **non-empty** subset |
 | seeds | averaged, or every seed its own line |
 | metric | cost, precision, recall, F1, the objective (F-beta at the run's balance; the page opens on it when the run drew its line at one, #4584), FPR, FNR, average precision, AUROC |
-| draw › oracle threshold | off (default), or the cheating-threshold line dotted beside the solid performance line |
+| draw › best cut / cost-optimal cut | off (default), or the cheating-threshold line dotted beside the solid performance line: the **best cut** on a run that carries `oracle_fbeta*` (an F metric's best value over every cut, so never below the line; precision, recall and the rates at the cut the run's objective draws), the **cost-optimal cut** on an older run, which on a rare class sits below the line on precision and F (#4654). Click 0 carries the text sort's own |
 | draw › overlay on one chart | off (default), one chart per varying dimension with its ±1 SD shadow; on, all of them on one chart in distinct hues, shadows off |
 
 **Overlay is the shadow/comparison trade, made explicit.** Off, every varying

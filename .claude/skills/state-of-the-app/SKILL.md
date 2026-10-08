@@ -215,6 +215,17 @@ same edit.
   change only at the next review's run. The page says so in its reading
   note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (A typed-query
   tier was dropped: a labelset does not carry the query.)
+- **The viewer's dotted line is the best cut (owner, 2026-10-08, #4654).** On
+  an F metric it is the best that F any cut of the same ranking reaches, the
+  report's "best cut", so it never sits below the line; precision, recall and
+  the rates read the cut the session's own F-beta would have drawn; click 0
+  carries the text sort's. The harness records it from #4654 on
+  (`oracle_fbeta*`, `fbeta_oracle_*`; `text_baseline.py`'s
+  `text_oracle_{precision,recall,fpr}_b*`). A page built from earlier runs
+  can only draw the cost cut those runs carried, which on a rare class cuts
+  deep (recall about 0.85, precision about 0.1) and sat under F1 on the
+  2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
+  reskin cannot add the best cut: the next review's run draws it.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
@@ -444,7 +455,8 @@ things keep a report on its link:
   set, beside F1/4 and F4 on the metric menu. It thins the per-seed lines to
   fit the repo's 4,000 KB cap (`SOTA_RUNS_BUDGET_MB`, default 1) and says when
   a page is still over it. A review with one session set commits
-  `analyze.sh`'s `analysis-<path>/viewer.html`. It opens on F1 (#4635) and does not
+  `analyze.sh`'s `analysis-<path>/viewer.html`, which holds that path's panels
+  only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
   offer cost (#4576); a page built before that gets both from
   `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's

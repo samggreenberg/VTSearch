@@ -50,7 +50,12 @@ What the page lets a reader pick:
   number is a ban on pooling, and two lines pool nothing;
 * **oracle** — off (the default), or the same model's score at the cut the test
   labels say it should have used, drawn dotted beside the solid performance
-  line.  The gap between them is the calibration regret.
+  line.  Which cut that is follows the run (:func:`oracle_kind`, #4654): on a
+  run that carries the objective's oracle, the **best cut** (an F metric's best
+  value over every cut, so never below the line; the other cut metrics at the
+  cut the run's objective draws), and on an older run the **cost-optimal cut**,
+  which the page names as such because on a rare class it cuts deep and sits
+  below the line on precision and F.  Click 0 carries the text sort's own.
 
 Four reference quantities, and each is drawn as what it is
 ------------------------------------------------------------
@@ -66,7 +71,9 @@ about not letting a point be read as a line:
     The same momentary model with a **cheating threshold** — the cut a reader
     would have picked knowing the test labels.  Same hue, dotted.  It is not a
     rival system; it is the ceiling this system's *threshold rule* left on the
-    table, so it shares the colour and differs only in style.
+    table, so it shares the colour and differs only in style.  A ceiling only
+    for the objective it optimises: the cost cut a run before #4654 carried is
+    none on F, which is why such a page calls it the cost-optimal cut.
 ``text sort`` (a point, notched in the **left** margin)
     What typing the query got for free, at zero clicks.  A metric about the
     returned set is read off the set the text sort's own line returns, at the
