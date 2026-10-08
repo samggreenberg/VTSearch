@@ -993,7 +993,6 @@ def train_from_labelset(
     snap: dict[int, dict[str, Any]] | None,
     haystack_for: "Callable[[str], Haystack | None] | None" = None,
     on_progress: ProgressCallback | None = None,
-    label_quota: bool = True,
 ) -> bool:
     """Populate the embedding cache, build (X, y), train, and store on *det_ctx*.
 
@@ -1003,9 +1002,7 @@ def train_from_labelset(
     to a vector: none with no Good (``False``), the Goods' centroid
     (:func:`install_centroid_head`) under either quota, the trained head once
     both are met.  Either is stamped with *labelset*'s signature, so Find
-    reuses it only until the labels change (issue #4204).  *label_quota*
-    ``False`` is the pre-#4643 rule, for a library caller that wants a trained
-    head from any Good and Bad: ``True`` once both are there, else ``False``.
+    reuses it only until the labels change (issue #4204).
 
     *snap* does two jobs, and a caller that scores something other than what it
     loaded needs them separated.  It is the snapshot the labelset's elements
@@ -1027,12 +1024,9 @@ def train_from_labelset(
         on_progress=on_progress,
     )
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
-    from vtscore.detectors.label_quota import TIER_CENTROID, TIER_NONE, TIER_TRAINED, quota_from_groups
+    from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED, quota_from_groups
 
-    quota = quota_from_groups(groups)
-    tier = quota.tier
-    if not label_quota:
-        tier = TIER_TRAINED if quota.n_good and quota.n_bad else TIER_NONE
+    tier = quota_from_groups(groups).tier
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the threshold's pass in that same space.
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None

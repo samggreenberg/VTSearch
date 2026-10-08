@@ -237,21 +237,18 @@ class TestTrainFromLabelset:
         assert lt.train_from_labelset(ctx, make([1, 2, 3], [40, 41, 42, 43]), media_type="image", snap=snap) is True
         assert ctx.model is not None and not is_centroid_head(ctx.model)
 
-    def test_the_escape_hatch_trains_a_head_from_any_good_and_bad(self, labels):
-        snap, make = labels
-        ctx = _ctx()
-        assert lt.train_from_labelset(ctx, make([1], [40]), media_type="image", snap=snap, label_quota=False)
-        assert ctx.model is not None and not is_centroid_head(ctx.model)
-        assert lt.train_from_labelset(_ctx(), make([1], []), media_type="image", snap=snap, label_quota=False) is False
-
     def test_a_trained_head_cached_under_the_quota_is_not_handed_out(self, labels):
         """The Train view's learned sort trains from any Good and Bad and stamps the same signature (#4643)."""
+        from vtscore.detectors.learned_sort import update_det_ctx_with_trained_model
         from vtscore.detectors.model_loading import cached_head_is_current
 
         snap, make = labels
         ctx = _ctx()
         under = make([1, 2], [40])
-        lt.train_from_labelset(ctx, under, media_type="image", snap=snap, label_quota=False)
+        # What the learned sort does: train on the labelset with no quota, then store the head.
+        _results, threshold, model = lt.labelset_train_and_score(ctx, under, media_type="image", clips_dict=snap)
+        assert model is not None and not is_centroid_head(model)
+        update_det_ctx_with_trained_model(ctx, model, threshold, under, {}, snap, [], [])
         assert not cached_head_is_current(ctx, under), "a head on 2 Goods and 1 Bad would be handed out"
         at = make([1, 2, 3], [40, 41, 42, 43])
         lt.train_from_labelset(ctx, at, media_type="image", snap=snap)

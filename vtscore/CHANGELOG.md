@@ -16,8 +16,8 @@ instead, since every commit on `dev` is effectively a new app release.)
   resolved it returns `False`; under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads (Autopilot's
   quorum) it stores the Goods' centroid head and returns `True`, **one Good and no Bad
   included**; with both met it trains as before. Behaviour change for a library caller: at 1-2
-  Goods or 1-3 Bads the stored model is a centroid head, not the SVM. Pass
-  `label_quota=False` for the old rule (a head from any Good and Bad). The centroid is the new
+  Goods or 1-3 Bads the stored model is a centroid head, not the SVM, and there is no switch
+  back: a head fitted to that few labels is what the rule exists to stop. The centroid is the new
   `vtscore.detectors.centroid_head`: `fit_centroid_head(goods, score)` returns a `Linear(D, 1)`
   ranking by cosine to the unit mean of the Goods, cut at the two-Gaussian midpoint of those
   cosines on the scored corpus (threshold `CENTROID_THRESHOLD`, 0.5, balance-blind), so every

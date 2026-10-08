@@ -492,7 +492,7 @@ elements (filtering to `good` / `bad`), look up each cached embedding,
 and return `(X_list, y_list, groups, score_rows)` - the same shape
 `_build_vote_xy` produces for live votes.
 
-### `train_from_labelset(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None, label_quota=True)`
+### `train_from_labelset(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None)`
 
 `vtscore/detectors/labelset_training.py`. Populate the cache,
 build `(X, y)`, store a detector on `det_ctx.model` / `det_ctx.threshold`,
@@ -501,8 +501,6 @@ Which detector follows the **label quota** (#4643, below): with no Good
 that resolved it returns `False`; under `GOOD_QUOTA` Goods or
 `BAD_QUOTA` Bads it stores the Goods' centroid head
 (`install_centroid_head`); with both met it runs `train_and_threshold`.
-`label_quota=False` is the pre-#4643 rule - a trained head from any Good
-and Bad, `False` otherwise - for a caller that wants a head at any count.
 `haystack_for(embedder_name)` may return a `Haystack` to
 fit the line's corpus side on a different population than *snap* (the
 CLI uses it for converted / re-clipped scoring sets); the class model the
