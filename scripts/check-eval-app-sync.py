@@ -759,7 +759,8 @@ MIRRORS: list[Mirror] = [
             "the centroid's metrics under the quota (label_quota.label_quota, delegated), the "
             "head's from it. If the app's tiers move - a new tier, a quota read from somewhere "
             "other than the counts, a tier that needs a Bad - the harness's rows have to move "
-            "with them, and the viewer and curves that read detector_tier."
+            "with them, and so do the notes that describe them (curves.py, viewer.py and its "
+            "reading note, the state-of-the-app and grid-experiments skills)."
         ),
         divergence=(
             "INTENTIONAL: the harness counts votes, not resolved labels - every simulated vote "
