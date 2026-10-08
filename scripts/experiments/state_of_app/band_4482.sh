@@ -31,7 +31,7 @@ dirs)
     ln -sfn "$GRID_SRC/prepare_info.json" "$r/prepare_info.json"
     ln -sfn "$GRID_SRC/crops" "$r/crops"
     cat >"$r/grid_shape.json" <<EOF
-{"n_cells": 288, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $SEEDS,
+{"n_cells": $((288 * SEEDS)), "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $SEEDS,
  "max_steps": ${STEPS[$arm]}, "cell_order": "seed", "test_bands": "all", "job_name": "band4482-$arm-b1",
  "note": "#4482 arm $arm (CALIB_BAND_SHARE=${SHARE[$arm]:-unset}, ${STEPS[$arm]} clicks), beta 1, binary only, trajectory pass; grid symlinked from $GRID_SRC"}
 EOF
