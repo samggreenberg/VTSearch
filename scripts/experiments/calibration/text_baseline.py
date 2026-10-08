@@ -20,6 +20,9 @@ the text sort's test half, at every floor the app offers (#4357):
 ``text_{k,precision,shortfall,meets,recall,oracle_recall}_x{10,50,90}``, read
 off the positives' ranks by ``_rank_metrics.line_metrics`` - the same
 definition the State of the App reads the clicked detector's rank frames with.
+At each preset it also carries the text sort's best cut (#4654): its F-beta,
+``text_oracle_fbeta_b*`` (``_rank_metrics.balance_metrics``), and that cut's
+``text_oracle_{precision,recall,fpr}_b*``, where the viewer's dotted line starts.
 """
 
 from __future__ import annotations
@@ -66,7 +69,7 @@ def main() -> int:
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.score_dumps import write_prediction_dump
     from vtscore.eval.voting_iterations import thin_haystack
-    from vtscore.eval.calibration_metrics import detection_metrics
+    from vtscore.eval.calibration_metrics import detection_metrics, oracle_fbeta_cut
     from vtscore.training.thresholds import inclusion_cost_weights, text_sort_threshold
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -232,6 +235,18 @@ def main() -> int:
                         )
                         line_cols[f"text_line_recall_{tag}"] = round(float((at & (y == 1)).sum() / npos), 6)
                         line_cols[f"text_line_fpr_{tag}"] = round(float((at & (y == 0)).sum() / nneg), 6)
+                    # The text sort's best cut at each preset (#4654), where the
+                    # viewer's dotted line starts on precision, recall and the
+                    # rates.  Its F-beta is balance_cols' text_oracle_fbeta_<tag>,
+                    # the State of the App's "best cut".
+                    for b in BETAS:
+                        o_thr, _o_fb, o_fpr, o_fnr = oracle_fbeta_cut(s, y, b)
+                        tag = beta_tag(b)
+                        line_cols[f"text_oracle_precision_{tag}"] = round(
+                            detection_metrics(s, y, o_thr)["precision"], 6
+                        )
+                        line_cols[f"text_oracle_recall_{tag}"] = round(1.0 - o_fnr, 6)
+                        line_cols[f"text_oracle_fpr_{tag}"] = round(o_fpr, 6)
                     rows.append(
                         {
                             "dataset": ds,

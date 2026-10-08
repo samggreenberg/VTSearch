@@ -210,6 +210,140 @@ def _check(label: str, ok: bool, detail: str = "") -> bool:
     return ok
 
 
+#: The objective's oracle (#4654), planted on a balance arm and an Inclusion arm.
+#: The cost cut is deep (recall 0.90 at FPR 0.20), as it is on a rare class; the
+#: best F1 cut is shallow (recall 0.65 at FPR 0.01).  The line's own F1 is 0.50:
+#: above the cost cut's reconstructed F1 (0.39), below the best cut's 0.62.
+BEST = {"oracle_fbeta": 0.62, "oracle_fbeta_b025": 0.70, "oracle_fbeta_b1": 0.62, "oracle_fbeta_b4": 0.66}
+BEST_FPR, BEST_FNR = 0.01, 0.35
+COST_FPR, COST_FNR = 0.20, 0.10
+#: The text sort's best cut at beta 1, as text_baseline.py records it.
+TEXT_BEST = {"text_oracle_fbeta_b1": 0.40, "text_oracle_fbeta_b025": 0.45, "text_oracle_fbeta_b4": 0.50}
+TEXT_BEST_PRECISION, TEXT_BEST_RECALL = 0.50, 0.35
+
+
+def _best_cut_checks(tmp: Path) -> bool:
+    """The dotted line on a run that carries the objective's oracle: the best cut, never below the line (#4654)."""
+    rows, cells, base = [], [], []
+    for arm, beta in (("b1", 1.0), ("off", np.nan)):
+        for seed in range(2):
+            cells.append({"arm": arm, "dataset": "dsA", "embedder": "embA", "category": "rich", "seed": seed})
+            for t in range(1, 11):
+                rows.append(
+                    {
+                        "arm": arm,
+                        "dataset": "dsA",
+                        "embedder": "embA",
+                        "category": "rich",
+                        "seed": seed,
+                        "t": t,
+                        "beta": beta,
+                        "cost": 0.3,
+                        "precision": 0.55,
+                        "recall": 0.46,
+                        "f1": 0.50,
+                        "average_precision": 0.6,
+                        "oracle_cost": 0.3,
+                        "oracle_fpr": COST_FPR,
+                        "oracle_fnr": COST_FNR,
+                        **BEST,
+                        "oracle_fbeta": BEST["oracle_fbeta"] if np.isfinite(beta) else np.nan,
+                        "fbeta_oracle_threshold": 0.7 if np.isfinite(beta) else np.nan,
+                        "fbeta_oracle_fpr": BEST_FPR if np.isfinite(beta) else np.nan,
+                        "fbeta_oracle_fnr": BEST_FNR if np.isfinite(beta) else np.nan,
+                        "n_test_pos": N_TEST_POS,
+                        "n_test_neg": N_TEST_NEG,
+                    }
+                )
+    for seed in range(2):
+        base.append(
+            {
+                "dataset": "dsA",
+                "embedder": "embA",
+                "category": "rich",
+                "seed": seed,
+                "supports_text": 1,
+                "text_cost": 0.5,
+                "text_precision": 0.3,
+                "text_recall": 0.4,
+                "text_f1": 0.34,
+                "text_AP": 0.4,
+                "text_oracle_cost": 0.45,
+                **TEXT_BEST,
+                "text_oracle_precision_b1": TEXT_BEST_PRECISION,
+                "text_oracle_recall_b1": TEXT_BEST_RECALL,
+                "text_oracle_fpr_b1": 0.004,
+            }
+        )
+    P = _payload(
+        V.build_viewer(
+            pd.DataFrame(rows),
+            tmp / "best.html",
+            arms=["b1", "off"],
+            denominator=pd.DataFrame(cells),
+            baseline=pd.DataFrame(base),
+            runs_budget_mb=0.25,
+        )
+    )
+    keys = [m["key"] for m in P["metrics"]]
+    oracle_on = {m["key"]: m["oracle"] for m in P["metrics"]}
+    omean = _decode(P["agg"]["omean"])
+    mean = _decode(P["agg"]["mean"])
+    step = 1.0 / P["agg"]["omean"]["scale"]
+    ai = {a: i for i, a in enumerate(P["arms"])}
+    z, ti = P["t"].index(0), P["t"].index(10)
+
+    def at(arm: str, key: str, i: int, arr: np.ndarray = omean) -> float:
+        return float(arr[0, ai[arm], keys.index(key), i])
+
+    tp, fp = N_TEST_POS * (1.0 - BEST_FNR), N_TEST_NEG * BEST_FPR
+    ctp, cfp = N_TEST_POS * (1.0 - COST_FNR), N_TEST_NEG * COST_FPR
+    ok = _check("a run that carries the best cut says the dotted line is it", P.get("oracle_kind") == "best")
+    ok &= _check(
+        "every F metric gets a dotted line, the presets beside F1 included",
+        all(oracle_on[k] for k in ("fbeta_b025", "f1", "fbeta_b4", "fbeta")),
+        str(oracle_on),
+    )
+    ok &= _check(
+        "an F metric's oracle is the best that F any cut reaches, not the cost cut's",
+        abs(at("b1", "f1", ti) - BEST["oracle_fbeta_b1"]) <= 2 * step
+        and abs(at("b1", "fbeta_b4", ti) - BEST["oracle_fbeta_b4"]) <= 2 * step,
+        f"{at('b1', 'f1', ti)} {at('b1', 'fbeta_b4', ti)}",
+    )
+    ok &= _check(
+        "...so it never sits below the line, which the cost cut's F1 did (#4654)",
+        at("b1", "f1", ti) >= at("b1", "f1", ti, mean) and 2 * ctp / (2 * ctp + cfp + N_TEST_POS * COST_FNR) < 0.5,
+        f"{at('b1', 'f1', ti)} vs {at('b1', 'f1', ti, mean)}",
+    )
+    ok &= _check(
+        "precision and recall are read at the best F-beta's cut on a balance arm",
+        abs(at("b1", "precision", ti) - tp / (tp + fp)) <= 2 * step
+        and abs(at("b1", "recall", ti) - (1.0 - BEST_FNR)) <= 2 * step,
+        f"{at('b1', 'precision', ti)} {at('b1', 'recall', ti)}",
+    )
+    ok &= _check(
+        "...and at the cost cut on an arm no balance drew, whose objective that is",
+        abs(at("off", "precision", ti) - ctp / (ctp + cfp)) <= 2 * step
+        and abs(at("off", "recall", ti) - (1.0 - COST_FNR)) <= 2 * step,
+        f"{at('off', 'precision', ti)} {at('off', 'recall', ti)}",
+    )
+    ok &= _check(
+        "click 0 carries the text sort's own best cut (#4654)",
+        abs(at("b1", "f1", z) - TEXT_BEST["text_oracle_fbeta_b1"]) <= 2 * step
+        and abs(at("b1", "fbeta_b025", z) - TEXT_BEST["text_oracle_fbeta_b025"]) <= 2 * step
+        and abs(at("b1", "precision", z) - TEXT_BEST_PRECISION) <= 2 * step
+        and abs(at("b1", "recall", z) - TEXT_BEST_RECALL) <= 2 * step
+        and abs(at("b1", "cost", z) - 0.45) <= 2 * step,
+        f"f1 {at('b1', 'f1', z)} precision {at('b1', 'precision', z)}",
+    )
+    ok &= _check(
+        "...and none on the rates where no balance says which cut that is",
+        not np.isfinite(at("off", "precision", z)) and abs(at("off", "f1", z) - 0.40) <= 2 * step,
+        f"{at('off', 'precision', z)} {at('off', 'f1', z)}",
+    )
+    return ok
+
+
 def main() -> int:  # noqa: C901
     tmp = Path(tempfile.mkdtemp(prefix="viewer-selftest-"))
     try:
@@ -666,9 +800,15 @@ def main() -> int:  # noqa: C901
             not np.isfinite(omean[g0, a0, keys.index("average_precision"), ti]),
         )
         ok &= _check(
-            "the oracle line does not reach back to click 0 (there is no model there)",
+            "the oracle line does not reach back to click 0 (the baseline carries no text-sort oracle)",
             not np.isfinite(omean[g0, a0, keys.index("cost"), P["t"].index(0)]),
         )
+        ok &= _check(
+            "a run that emitted only the cost cut says that is what the dotted line is (#4654)",
+            P.get("oracle_kind") == "cost",
+            str(P.get("oracle_kind")),
+        )
+        ok &= _best_cut_checks(tmp)
 
         # --- the supervised skyline -----------------------------------------
         ok &= _check(
@@ -890,6 +1030,74 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "the template opens on the builder's DEFAULT_METRIC when the view names none",
             f'const OPEN_ON = "{V.DEFAULT_METRIC}";' in shell and "metric" not in P.get("view", {}),
+        )
+
+        # --- what the page calls an embedder (#4655) --------------------------
+        # A composite key like `siglip+dinov3_patch` is one path, and read bare
+        # it looks like two embedders compared.  One set of labels serves every
+        # page of a study, so a label for an embedder the page lacks is dropped;
+        # and a committed page has to be relabelled without its results.
+        named = {"embB": "the B path", "embA": "the A path", "embZ": "never ran"}
+        ok &= _check("a page built without labels carries no block, so it shows the keys", "embedder_labels" not in P)
+        labelled = V.build_viewer(
+            main_df,
+            tmp / "labelled.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            skyline=sky,
+            runs_budget_mb=0.25,
+            embedder_labels=named,
+        )
+        PB = _payload(labelled)
+        ok &= _check(
+            "the build keeps the labels of the page's embedders, in the page's order",
+            list(PB.get("embedder_labels", {}).items()) == [("embA", "the A path"), ("embB", "the B path")],
+            str(PB.get("embedder_labels")),
+        )
+        ok &= _check(
+            "...right after the embedders they name",
+            list(PB).index("embedder_labels") == list(PB).index("embedders") + 1,
+            str(list(PB)[:8]),
+        )
+        relabelled = tmp / "relabelled.html"
+        shutil.copyfile(out, relabelled)
+        V.reskin(relabelled, embedder_labels=named)
+        PR = _payload(relabelled)
+        ok &= _check(
+            "a reskin puts the same block on a page built without one, key for key",
+            PR.get("embedder_labels") == PB["embedder_labels"] and list(PR) == list(PB),
+            f"{list(PR)[:8]}",
+        )
+        ok &= _check(
+            "...touching nothing else in the payload",
+            {k: v for k, v in PR.items() if k != "embedder_labels"} == P,
+        )
+        V.reskin(relabelled, subtitle="one path, not two")
+        ok &= _check(
+            "a reskin with a subtitle replaces it and keeps the labels",
+            _payload(relabelled)["subtitle"] == "one path, not two"
+            and _payload(relabelled).get("embedder_labels") == PB["embedder_labels"],
+        )
+        V.reskin(relabelled, subtitle=P["subtitle"], embedder_labels={})
+        ok &= _check(
+            "an empty mapping drops the block and restores the original payload", blob(relabelled) == blob(out)
+        )
+        ok &= _check("the template reads the block the builder writes", "P.embedder_labels" in shell)
+        for label, specs in (
+            ("a label with no key", ["=the A path"]),
+            ("a key with no label", ["embA="]),
+            ("a key named twice", ["embA=one", "embA=two"]),
+        ):
+            try:
+                V.parse_embedder_labels(specs)
+            except SystemExit as exc:
+                ok &= _check(f"--embedder-label refuses {label}", True, str(exc))
+            else:
+                ok &= _check(f"--embedder-label refuses {label}", False, "parsed anyway")
+        ok &= _check(
+            "...and splits at the first '=', so a label may hold one",
+            V.parse_embedder_labels(["embA=F=1"]) == {"embA": "F=1"},
         )
 
         def refuses(label: str, **kw) -> bool:

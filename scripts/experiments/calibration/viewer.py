@@ -18,7 +18,10 @@ What the page lets a reader pick:
   are never averaged with one another: two embedders are two different
   representations of the haystack, and their mean is a number describing no
   system anyone could run.  Faceting makes that structural rather than a rule
-  someone has to remember;
+  someone has to remember.  An embedder is named by its key unless the study
+  gives it a label (``--embedder-label``): the State of the App's region path
+  is the composite key ``siglip+dinov3_patch``, which read bare looks like two
+  embedders compared (#4655);
 * **arms** — any non-empty subset.  Non-empty for the same reason the embedder
   subset is: an empty selection has no honest rendering, since the page either
   goes blank or falls back to "all" and a reader who misses that takes a chart
@@ -50,7 +53,12 @@ What the page lets a reader pick:
   number is a ban on pooling, and two lines pool nothing;
 * **oracle** — off (the default), or the same model's score at the cut the test
   labels say it should have used, drawn dotted beside the solid performance
-  line.  The gap between them is the calibration regret.
+  line.  Which cut that is follows the run (:func:`oracle_kind`, #4654): on a
+  run that carries the objective's oracle, the **best cut** (an F metric's best
+  value over every cut, so never below the line; the other cut metrics at the
+  cut the run's objective draws), and on an older run the **cost-optimal cut**,
+  which the page names as such because on a rare class it cuts deep and sits
+  below the line on precision and F.  Click 0 carries the text sort's own.
 
 Four reference quantities, and each is drawn as what it is
 ------------------------------------------------------------
@@ -66,7 +74,9 @@ about not letting a point be read as a line:
     The same momentary model with a **cheating threshold** — the cut a reader
     would have picked knowing the test labels.  Same hue, dotted.  It is not a
     rival system; it is the ceiling this system's *threshold rule* left on the
-    table, so it shares the colour and differs only in style.
+    table, so it shares the colour and differs only in style.  A ceiling only
+    for the objective it optimises: the cost cut a run before #4654 carried is
+    none on F, which is why such a page calls it the cost-optimal cut.
 ``text sort`` (a point, notched in the **left** margin)
     What typing the query got for free, at zero clicks.  A metric about the
     returned set is read off the set the text sort's own line returns, at the
@@ -193,6 +203,13 @@ the same two flags set that on a page that is already built::
     python viewer.py ... --default-metric average_precision --hide-metrics cost
     python viewer.py --reskin path/to/viewer.html \\
         --default-metric average_precision --hide-metrics cost
+
+A page names an embedder by a label rather than its key, and a reskin can
+re-label a committed page (#4655)::
+
+    python viewer.py ... --embedder-label "siglip+dinov3_patch=DINOv3 region"
+    python viewer.py --reskin path/to/viewer.html \\
+        --embedder-label "siglip+dinov3_patch=DINOv3 region"
 """
 
 from __future__ import annotations
@@ -339,25 +356,66 @@ OCOL = "__oracle__"
 RANKING_METRICS: frozenset[str] = frozenset({"average_precision", "auroc"})
 
 
+#: The metric each best-cut column bounds (#4654): ``oracle_<col>`` is the best
+#: ``<col>`` any cut of the row's test ranking reaches.  F1 reads the beta-1
+#: column, since ``f1`` is ``fbeta_b1`` exactly.
+BEST_CUT_COLUMNS: dict[str, str] = {
+    "fbeta": "oracle_fbeta",
+    "fbeta_b025": "oracle_fbeta_b025",
+    "f1": "oracle_fbeta_b1",
+    "fbeta_b4": "oracle_fbeta_b4",
+}
+
+#: What the dotted line is on a page, by what the run emitted (the payload's
+#: ``oracle_kind``).  ``best``: the objective's oracle (#4654), the best F-beta
+#: any cut reaches, with the rates at the cut that reaches it.  ``cost``: all a
+#: run from before #4654 emitted, the cut where weighted FPR + FNR is lowest.
+#: The two differ by a lot on a rare class, where the cost cut runs deep and
+#: sits *below* a good line on precision and F (#4654), so the page names
+#: which one it draws.
+ORACLE_BEST, ORACLE_COST = "best", "cost"
+
+
+def _num(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(np.nan, index=df.index, dtype=float)
+    return pd.to_numeric(df[col], errors="coerce")
+
+
+def oracle_kind(main: pd.DataFrame) -> str:
+    """:data:`ORACLE_BEST` when the rows carry the objective's oracle (#4654), else :data:`ORACLE_COST`."""
+    if any(_num(main, col).notna().any() for col in BEST_CUT_COLUMNS.values()):
+        return ORACLE_BEST
+    return ORACLE_COST
+
+
 def add_oracle_columns(main: pd.DataFrame) -> list[str]:
     """Fill ``__oracle__<metric>`` in place; return the metrics that got one.
 
-    The harness emits the oracle **cut** and the two rates it pays there
-    (``oracle_threshold`` / ``oracle_cost`` / ``oracle_fpr`` / ``oracle_fnr``)
-    but not the confusion-matrix metrics at that cut.  It does not need to: an
-    ``(FPR, FNR)`` pair plus the split's own class counts — ``n_test_pos`` and
-    ``n_test_neg``, on every row — is a full confusion matrix, so precision,
-    recall and F1 at the oracle cut are *reconstructed exactly* here rather than
-    left off the page.  Deriving them beats re-running the grid to emit four
-    more columns, and it beats offering the oracle on cost alone: "the cut cost
-    us 0.1" and "the cut cost us 11 points of recall" are the same fact in the
-    two units a reader actually thinks in.
+    The oracle is the same model's scores cut with the test labels in hand, and
+    which cut that is depends on the objective (:func:`oracle_kind`):
 
-    The conventions are :func:`~vtscore.eval.calibration_metrics.detection_metrics`'s,
-    because a derived precision that treated "flagged nothing" as 0 rather than
-    NaN would read as a catastrophically bad oracle where the truth is that the
-    oracle declined to flag anything — which on a rare class is often the
-    cost-minimising move.
+    * **The objective's oracle** (``best``, rows from #4654 on).  An F metric's
+      oracle is the best that F any cut reaches (``oracle_fbeta*``), so it is
+      never below the line, and the gap is what the line left on the table.
+      Precision, recall and the two rates are read at the cut the row's own
+      objective draws: the best F-beta at the row's ``beta``
+      (``fbeta_oracle_fpr`` / ``_fnr``), or, on a row no balance drew, the
+      lowest cost (``oracle_fpr`` / ``_fnr``), which is that row's objective.
+    * **The cost oracle** (``cost``, a run before #4654).  Every cut metric at
+      the cost-minimising cut, the only one such a run emitted.  On a rare class
+      that cut runs deep, so its precision and F1 can sit below the line: it is
+      the cost objective's ceiling, not F's (#4654), and the page says so.
+
+    ``cost`` is the cost cut's under both.  The harness emits a cut's two rates,
+    never the confusion-matrix metrics at it: an ``(FPR, FNR)`` pair plus the
+    split's own class counts (``n_test_pos`` / ``n_test_neg``, on every row) is
+    a full confusion matrix, so precision (and the cost cut's F1) is
+    *reconstructed exactly* here.  The conventions are
+    :func:`~vtscore.eval.calibration_metrics.detection_metrics`'s, because a
+    derived precision that treated "flagged nothing" as 0 rather than NaN would
+    read as a catastrophically bad oracle where the truth is that the oracle
+    declined to flag anything.
 
     Returns the metric keys that ended up with an oracle column, so
     :func:`_metric_list` can flag them and the page can hide the control where
@@ -366,28 +424,39 @@ def add_oracle_columns(main: pd.DataFrame) -> list[str]:
     have = set(main.columns)
     got: list[str] = []
     if "oracle_cost" in have:
-        main[OCOL + "cost"] = pd.to_numeric(main["oracle_cost"], errors="coerce")
+        main[OCOL + "cost"] = _num(main, "oracle_cost")
         got.append("cost")
-    if not {"oracle_fpr", "oracle_fnr"} <= have:
+    best = oracle_kind(main) == ORACLE_BEST
+    if best:
+        for key, col in BEST_CUT_COLUMNS.items():
+            if col in have:
+                main[OCOL + key] = _num(main, col)
+                got.append(key)
+        drawn = np.isfinite(_num(main, "beta"))
+        fpr = _num(main, "fbeta_oracle_fpr").where(drawn, _num(main, "oracle_fpr"))
+        fnr = _num(main, "fbeta_oracle_fnr").where(drawn, _num(main, "oracle_fnr"))
+    elif {"oracle_fpr", "oracle_fnr"} <= have:
+        fpr, fnr = _num(main, "oracle_fpr"), _num(main, "oracle_fnr")
+    else:
         return got
-    fpr = pd.to_numeric(main["oracle_fpr"], errors="coerce")
-    fnr = pd.to_numeric(main["oracle_fnr"], errors="coerce")
     main[OCOL + "fpr"] = fpr
     main[OCOL + "fnr"] = fnr
     main[OCOL + "recall"] = 1.0 - fnr
     got += ["fpr", "fnr", "recall"]
     if not {"n_test_pos", "n_test_neg"} <= have:
         return got
-    n_pos = pd.to_numeric(main["n_test_pos"], errors="coerce")
-    n_neg = pd.to_numeric(main["n_test_neg"], errors="coerce")
+    n_pos = _num(main, "n_test_pos")
+    n_neg = _num(main, "n_test_neg")
     tp = n_pos * (1.0 - fnr)
     fn = n_pos * fnr
     fp = n_neg * fpr
     flagged = tp + fp
-    f1_denom = 2.0 * tp + fp + fn
     main[OCOL + "precision"] = (tp / flagged).where(flagged > 0)
-    main[OCOL + "f1"] = (2.0 * tp / f1_denom).where(f1_denom > 0)
-    got += ["precision", "f1"]
+    got.append("precision")
+    if not best:
+        f1_denom = 2.0 * tp + fp + fn
+        main[OCOL + "f1"] = (2.0 * tp / f1_denom).where(f1_denom > 0)
+        got.append("f1")
     return [k for k in got if main[OCOL + k].notna().any()]
 
 
@@ -524,6 +593,7 @@ def _agg_arrays(  # noqa: C901
     t_full: np.ndarray,
     base: dict[str, dict[str, dict[tuple, float]]],
     cells: dict[tuple[str, str], int],
+    obase: dict[str, dict[str, dict[tuple, float]]] | None = None,
 ) -> dict[str, np.ndarray]:
     """``mean`` / ``sd`` / ``n`` / ``cells`` over ``(group, arm, metric, click)``.
 
@@ -539,7 +609,9 @@ def _agg_arrays(  # noqa: C901
     metric's, because the two genuinely differ: an oracle that declines to flag
     anything has an undefined precision at a click where the trained cut's
     precision is perfectly well defined, and pooling that cell in at weight 1
-    with a NaN would poison the whole average.
+    with a NaN would poison the whole average.  Its click 0 is the text sort's
+    own oracle (*obase*, :func:`_oracle_baselines`, #4654), weighted by the
+    cells that have one.
     """
     nG, nA, nM, nT = len(shape.groups), len(shape.arms), len(shape.metrics), len(t_full)
     mean = np.full((nG, nA, nM, nT), np.nan)
@@ -611,6 +683,15 @@ def _agg_arrays(  # noqa: C901
                     mean[gi, ai, mi, z] = float(arr.mean())
                     sd[gi, ai, mi, z] = float(arr.std())
                     n[gi, ai, mi, z] = float(ncells[gi, ai])
+                ocells: dict[tuple[str, str, str], list[float]] = {}
+                for (d, e, c, _s), v in ((obase or {}).get(arm, {}).get(spec["key"]) or {}).items():
+                    ocells.setdefault((d, e, c), []).append(v)
+                for group, vals in ocells.items():
+                    gi = shape.gi.get(group)
+                    if gi is None or ncells[gi, ai] <= 0:
+                        continue
+                    omean[gi, ai, mi, z] = float(np.mean(vals))
+                    on[gi, ai, mi, z] = float(len(vals))
     return {"mean": mean, "sd": sd, "n": n, "cells": ncells, "omean": omean, "on": on}
 
 
@@ -732,6 +813,48 @@ BETA_ARMS_CONTROL = {
     "title": "Sessions' beta",
     "hint": "one or more; the balance each set of sessions ran at, which F1/4, F1 and F4 then score",
 }
+
+
+def parse_embedder_labels(specs: Sequence[str]) -> dict[str, str]:
+    """``KEY=LABEL`` pairs; refuses a malformed pair and a key named twice.
+
+    Split at the first ``=``: an embedder key never holds one, a label may.
+    """
+    labels: dict[str, str] = {}
+    for spec in specs:
+        key, sep, label = spec.partition("=")
+        key, label = key.strip(), label.strip()
+        if not sep or not key or not label:
+            raise SystemExit(f"--embedder-label wants KEY=LABEL, got {spec!r}")
+        if key in labels:
+            raise SystemExit(f"--embedder-label names {key!r} twice")
+        labels[key] = label
+    return labels
+
+
+def page_embedder_labels(embedders: Sequence[str], labels: Mapping[str, str] | None) -> dict[str, str]:
+    """The labels for the embedders a page carries, in the page's order.
+
+    A label for an embedder the page does not carry is dropped, so one set of
+    labels serves every page of a study: the State of the App names both paths
+    and each path's page keeps its own (#4655).
+    """
+    return {e: labels[e] for e in embedders if labels and e in labels}
+
+
+def _with_embedder_labels(payload: dict, labels: Mapping[str, str]) -> dict:
+    """*payload* with its ``embedder_labels`` block replaced, in place.
+
+    The block sits right after ``embedders``, where a build puts it, so a
+    built and a relabelled page agree key for key; an empty mapping drops it.
+    """
+    items = [(k, v) for k, v in payload.items() if k != "embedder_labels"]
+    if labels:
+        at = next(i for i, (k, _v) in enumerate(items) if k == "embedders") + 1
+        items.insert(at, ("embedder_labels", dict(labels)))
+    payload.clear()
+    payload.update(items)
+    return payload
 
 
 def beta_label(beta: float) -> str:
@@ -867,6 +990,68 @@ def _baselines(
     return out
 
 
+def text_oracle_values(baseline: pd.DataFrame, metric: str, beta: float | None, kind: str) -> pd.Series | None:
+    """*metric* at the text sort's oracle, per baseline row: where the dotted line starts (#4654).
+
+    The same oracle the rows carry (:func:`add_oracle_columns`), on the typed
+    query's ranking.  Under :data:`ORACLE_BEST` an F metric reads the best that
+    F any cut of the text sort reaches (``text_oracle_fbeta_<tag>``, the State
+    of the App's "best cut"; ``fbeta`` at *beta*, F1 at beta 1), and precision,
+    recall and the rates read the cut the best F-beta at *beta* draws
+    (``text_oracle_{precision,recall,fpr}_<tag>``); with no *beta* there is no
+    such cut.  ``cost`` is the cost cut's under either kind
+    (``text_oracle_cost``).  ``None`` where the baseline has no column for it,
+    as a baseline from before #4654 has none for the rates.
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
+
+    def col(name: str) -> pd.Series | None:
+        return pd.to_numeric(baseline[name], errors="coerce") if name in baseline.columns else None
+
+    if metric == "cost":
+        return col("text_oracle_cost")
+    if kind != ORACLE_BEST:
+        return None
+    presets = {"f1": 1.0, **{f"fbeta_{beta_tag(b)}": b for b in RANK_FRAME_BETAS}}
+    if metric in presets:
+        return col(f"text_oracle_fbeta_{beta_tag(presets[metric])}")
+    if beta is None or not np.isfinite(beta):
+        return None
+    tag = beta_tag(float(beta))
+    if metric == objective.OBJECTIVE:
+        return col(f"text_oracle_fbeta_{tag}")
+    if metric in ("precision", "recall", "fpr"):
+        return col(f"text_oracle_{metric}_{tag}")
+    if metric == "fnr":
+        recall = col(f"text_oracle_recall_{tag}")
+        return None if recall is None else 1.0 - recall
+    return None
+
+
+def _oracle_baselines(
+    baseline: pd.DataFrame | None, shape: _Shape, arm_betas: Mapping[str, float | None], kind: str
+) -> dict[str, dict[str, dict[tuple, float]]]:
+    """:func:`_baselines` for the dotted line: ``arm -> metric -> {cell: the text sort's oracle}`` (#4654)."""
+    if baseline is None or baseline.empty:
+        return {}
+    keys = [k for k in ("dataset", "embedder", "category", "seed") if k in baseline.columns]
+    out: dict[str, dict[str, dict[tuple, float]]] = {}
+    for arm in shape.arms:
+        maps: dict[str, dict[tuple, float]] = {}
+        for spec in shape.metrics:
+            if not spec.get("oracle"):
+                continue
+            vals = text_oracle_values(baseline, spec["key"], arm_betas.get(arm), kind)
+            if vals is None:
+                continue
+            m = curves._cell_means(baseline, keys, vals)  # noqa: SLF001
+            if m:
+                maps[spec["key"]] = {_anchor_key(dict(zip(keys, k, strict=False))): v for k, v in m.items()}
+        if maps:
+            out[arm] = maps
+    return out
+
+
 def _anchor_key(rec: Mapping[str, Any]) -> tuple[str, str, str, int]:
     return (
         str(rec.get("dataset", "")),
@@ -900,6 +1085,7 @@ def build_viewer(  # noqa: C901
     fill_gaps: bool = True,
     score_empty_sets: bool = True,
     arms_control: Mapping[str, str] | None = None,
+    embedder_labels: Mapping[str, str] | None = None,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*.
 
@@ -907,6 +1093,10 @@ def build_viewer(  # noqa: C901
     arms are not a study's configurations: a review's session sets, one per
     preset, are a balance the reader picks (:data:`BETA_ARMS_CONTROL`,
     :func:`load_beta_runs`, #4636).
+
+    *embedder_labels* names an embedder on the page by what it is rather than
+    by its key (:func:`page_embedder_labels`, #4655); an embedder without one
+    shows its key.
 
     *default_metric* and *hide_metrics* set the page's opening ``view``; see
     :func:`opening_view`.  Without a *default_metric* the page opens on
@@ -945,6 +1135,7 @@ def build_viewer(  # noqa: C901
     if "embedder" not in main.columns:
         main["embedder"] = ""
     main["__group"] = _group_key(main)
+    kind = oracle_kind(main)
     oracle_keys = add_oracle_columns(main)
     if fill_gaps:
         main = curves.fill_gaps(main, ("__group", "arm", "seed"))
@@ -962,6 +1153,7 @@ def build_viewer(  # noqa: C901
     shape = _Shape(main, arms, denominator, oracle_keys)
     if not shape.metrics:
         raise SystemExit("viewer: the frame carries none of the known metric columns")
+    emb_labels = page_embedder_labels(shape.embedders, embedder_labels)
     offered = [m["key"] for m in shape.metrics]
     shown = [k for k in offered if k not in set(hide_metrics)]
     if default_metric is None and DEFAULT_METRIC not in shown and objective.carries_beta(main):
@@ -984,8 +1176,9 @@ def build_viewer(  # noqa: C901
     base = _baselines(baseline, shape, arm_betas)
     has_anchor = bool(base)
     t_full = np.arange(0 if has_anchor else 1, int(main["t"].max()) + 1)
+    obase = _oracle_baselines(baseline, shape, arm_betas, kind) if has_anchor else {}
 
-    ag = _agg_arrays(main, shape, t_full, base, cells)
+    ag = _agg_arrays(main, shape, t_full, base, cells, obase)
     agg = {
         "mean": _encode(ag["mean"]),
         "sd": _encode(ag["sd"]),
@@ -1062,6 +1255,9 @@ def build_viewer(  # noqa: C901
         "solid_coverage": curves.SOLID_COVERAGE,
         "datasets": shape.datasets,
         "embedders": shape.embedders,
+        # What the page calls each embedder, where its key would mislead
+        # (#4655).  Absent otherwise, and the page then shows the keys.
+        **({"embedder_labels": emb_labels} if emb_labels else {}),
         "categories": shape.categories,
         "arms": shape.arms,
         # What the arm chips choose between, when it is not a configuration:
@@ -1077,6 +1273,9 @@ def build_viewer(  # noqa: C901
         "runs_note": runs_note,
         "n_cells": int(sum(cells.values())),
         "oracle_metrics": [k for k in oracle_keys if k not in RANKING_METRICS],
+        # Which cut the dotted line is (#4654): the objective's best cut, or the
+        # cost cut a run before it emitted.  A page without the key is the latter.
+        "oracle_kind": kind,
         # How this page was built, when the builder knew (the CLI does; an
         # analyzer calling `build_viewer` is itself in the tree, so its
         # invocation is already recoverable and it passes nothing).
@@ -1205,6 +1404,9 @@ def reskin(
     default_metric: str | None = None,
     hide_metrics: Sequence[str] | None = None,
     fill_gaps: bool = False,
+    title: str | None = None,
+    subtitle: str | None = None,
+    embedder_labels: Mapping[str, str] | None = None,
 ) -> Path:
     """Re-substitute *page*'s own payload into the current template, in place.
 
@@ -1223,9 +1425,14 @@ def reskin(
     *default_metric* and *hide_metrics* rewrite the payload's ``view`` block
     (:func:`opening_view`), each only when given: ``""`` and ``[]`` clear their
     half.  *fill_gaps* carries the per-seed lines through their gaps and
-    re-averages them (:func:`fill_payload_gaps`, #4624).  With none of the
-    three, the payload is copied byte for byte, ``view`` included, so a
-    template push never undoes a study's choice.
+    re-averages them (:func:`fill_payload_gaps`, #4624).  *title* and
+    *subtitle* replace the page's own, for a heading that named the wrong thing
+    (#4654: a Binary page said "SigLIP binary and DINOv3 region").
+    *embedder_labels* replaces its ``embedder_labels`` block
+    (:func:`page_embedder_labels`; an empty mapping drops it), for a panel
+    that showed a key where it should name a path (#4655).  Each only when
+    given.  With none of these, the payload is copied byte for byte, ``view``
+    included, so a template push never undoes a study's choice.
     """
     page = Path(page)
     html = page.read_text(encoding="utf-8")
@@ -1233,10 +1440,17 @@ def reskin(
     if not m:
         raise SystemExit(f"{page}: no payload script tag - not a viewer page")
     blob = m.group(1)
-    if default_metric is not None or hide_metrics is not None or fill_gaps:
+    relabel = title is not None or subtitle is not None or embedder_labels is not None
+    if default_metric is not None or hide_metrics is not None or fill_gaps or relabel:
         payload = json.loads(blob)
+        if title is not None:
+            payload["title"] = title
+        if subtitle is not None:
+            payload["subtitle"] = subtitle
         if fill_gaps:
             fill_payload_gaps(payload)
+        if embedder_labels is not None:
+            _with_embedder_labels(payload, page_embedder_labels(payload["embedders"], embedder_labels))
         if default_metric is not None or hide_metrics is not None:
             was = payload.pop("view", None) or {}
             view = opening_view(
@@ -1252,6 +1466,14 @@ def reskin(
         raise SystemExit(f"{template}: expected exactly 1 {TOKEN}, found {fresh.count(TOKEN)}")
     page.write_text(fresh.replace(TOKEN, blob), encoding="utf-8")
     return page
+
+
+def _only_embedders(df: pd.DataFrame | None, embedders: str | None) -> pd.DataFrame | None:
+    """*df*'s rows for the comma-separated *embedders*, or *df* as it is when none are named."""
+    if df is None or not embedders or "embedder" not in df.columns:
+        return df
+    keep = {e for e in embedders.replace(",", " ").split() if e}
+    return df[df["embedder"].astype(str).isin(keep)]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1278,8 +1500,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ap.add_argument("--out", help="path to write the HTML to")
     ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
-    ap.add_argument("--title", default="Quality over clicks")
-    ap.add_argument("--subtitle", default="")
+    ap.add_argument("--title", default=None, help="the page's heading (default: Quality over clicks)")
+    ap.add_argument("--subtitle", default=None, help="the line under it; with --reskin, each replaces the page's own")
+    ap.add_argument(
+        "--embedder-label",
+        action="append",
+        metavar="KEY=LABEL",
+        help="what the page calls the embedder KEY (#4655); repeat it per embedder. A label for an embedder the "
+        "page does not carry is dropped, so one set serves every page of a study. With --reskin, replaces the "
+        "page's labels",
+    )
     ap.add_argument(
         "--default-metric",
         metavar="KEY",
@@ -1301,6 +1531,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ap.add_argument("--runs-budget-mb", type=float, default=RUNS_BUDGET_MB)
     ap.add_argument(
+        "--embedders",
+        default=None,
+        metavar="A,B",
+        help="keep only these embedders' cells (default: every one the results hold), so a page built per path "
+        "holds that path's panels and no other (#4654)",
+    )
+    ap.add_argument(
         "--no-skyline",
         action="store_true",
         help="skip the supervised-skyline pass over the cell CSVs (issue #3322)",
@@ -1315,9 +1552,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = ap.parse_args(list(argv) if argv is not None else None)
     hide = None if args.hide_metrics is None else [k for k in args.hide_metrics.replace(",", " ").split() if k]
 
+    labels = None if args.embedder_label is None else parse_embedder_labels(args.embedder_label)
     if args.reskin:
         for page in args.reskin:
-            out = reskin(Path(page), default_metric=args.default_metric, hide_metrics=hide, fill_gaps=args.fill_gaps)
+            out = reskin(
+                Path(page),
+                default_metric=args.default_metric,
+                hide_metrics=hide,
+                fill_gaps=args.fill_gaps,
+                title=args.title,
+                subtitle=args.subtitle,
+                embedder_labels=labels,
+            )
             print(f"reskinned {out}  ({out.stat().st_size / 1e6:.2f} MB)")
         return 0
     if args.fill_gaps:
@@ -1329,9 +1575,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
     common_kw = {
         "baseline": baseline,
-        "title": args.title,
-        "subtitle": args.subtitle,
+        "title": args.title if args.title is not None else "Quality over clicks",
+        "subtitle": args.subtitle or "",
         "runs_budget_mb": args.runs_budget_mb,
+        "embedder_labels": labels,
         "default_metric": args.default_metric or None,
         "hide_metrics": hide or (),
     }
@@ -1340,6 +1587,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ap.error("--skyline-results goes with --results; each --beta-run directory carries its own skyline")
         runs = parse_beta_runs(args.beta_run)
         frame, skyline, arms = load_beta_runs(runs, skyline=not args.no_skyline)
+        frame, skyline = _only_embedders(frame, args.embedders), _only_embedders(skyline, args.embedders)
         out = build_viewer(
             frame,
             Path(args.out),
@@ -1376,6 +1624,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # on why a floor is allowed to arrive later than the curve it sits beside.
     sky_root = Path(args.skyline_results or args.results)
     skyline = None if args.no_skyline else load_skyline(sky_root, dirs, arms)
+    frame, skyline = _only_embedders(frame, args.embedders), _only_embedders(skyline, args.embedders)
+    if frame.empty:
+        print(f"no rows under {args.results} for embedders {args.embedders}")
+        return 2
     if args.skyline_results:
         print(f"skyline from {sky_root} ({0 if skyline is None else len(skyline)} rows)")
     out = build_viewer(

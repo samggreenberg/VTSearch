@@ -86,6 +86,23 @@ same edit.
   report follows the same shape. Each goes in its own directory,
   `docs/experiments/<date>-state-of-the-app-<path>-<modality>/`, and is written
   when ITS runs finish; one path does not wait for the other.
+- **Each page names its path, and the Region report sets the two side by side
+  (owner, 2026-10-08, #4655).** A reader took the Region viewer for a
+  SigLIP-vs-DINOv3 comparison. Its subtitle named both paths (`analyze.sh` put
+  one subtitle on every page), and its one panel showed the composite key
+  `siglip+dinov3_patch`. That key is ONE path: SigLIP ranks the typed query,
+  since DINOv3 has no text side, and DINOv3 patches carry the clicks.
+  - `analyze.sh` keeps only `SOTA_PATH`'s path on the page and names it in the
+    subtitle (`viewer.py --embedders`, #4654).
+  - Every SotA viewer names its panels by path: `--embedder-label`, `SigLIP
+    binary` and `DINOv3 region`, as in `analyze.py`'s `ARMS`.
+  - The comparison a reader wants is the two paths. So a Region Photo report
+    carries `compare_paths.py`'s figures (`vs_binary_objective.png`,
+    `vs_binary_path.png`) and its table, against the newest Binary Photo review
+    of the same app. It reads the two reports' committed `objective_by_click.csv`
+    and `precision_recall_path.csv`, so it needs nothing from the GRID.
+  - The report names that binary review and its seeds, and says the two are not
+    paired by seed. It is still two paths as they ship, not an A/B.
 - **Stable links that follow `dev` (owner, 2026-10-06):** the newest report
   of each kind, and its `viewer.html`, have fixed URLs on GitHub Pages that
   move as soon as a report merges to `dev` (first set to follow releases to
@@ -223,6 +240,17 @@ same edit.
   change only at the next review's run. The page says so in its reading
   note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (A typed-query
   tier was dropped: a labelset does not carry the query.)
+- **The viewer's dotted line is the best cut (owner, 2026-10-08, #4654).** On
+  an F metric it is the best that F any cut of the same ranking reaches, the
+  report's "best cut", so it never sits below the line; precision, recall and
+  the rates read the cut the session's own F-beta would have drawn; click 0
+  carries the text sort's. The harness records it from #4654 on
+  (`oracle_fbeta*`, `fbeta_oracle_*`; `text_baseline.py`'s
+  `text_oracle_{precision,recall,fpr}_b*`). A page built from earlier runs
+  can only draw the cost cut those runs carried, which on a rare class cuts
+  deep (recall about 0.85, precision about 0.1) and sat under F1 on the
+  2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
+  reskin cannot add the best cut: the next review's run draws it.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
@@ -310,6 +338,7 @@ python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/ana
 python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until the app shows a run's detector (the opening's end, #4605): the slides' left panel reads it
 srun -p cpu --mem=16G -c 2 -t 60 bash viewer_betas.sh <date>   # the committed viewer: every session set on one page, a chip per beta (#4636) -> <date>-betas/viewer.html
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
+python compare_paths.py --binary <binary report dir> --region <region report dir> --out <region report dir>/figures   # the two paths side by side (#4655): two figures, the table on stdout; reads committed CSVs, runs anywhere
 ```
 
 - **Output:** everything lands in `/expscratch/$USER/state-of-the-app/<date>/`,
@@ -402,7 +431,9 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
    table), which the deck's Photo Finish panel draws. Then the ranking: mean text-only AP, AP at 25 and 50
    clicks, the final AP against the ceiling's, with Goods found at the same
    points. F1 at the line (`f1_over_clicks.png`) is secondary: it cannot see
-   the balance.
+   the balance. A Region Photo report adds **Against the binary path**
+   (`compare_paths.py`, #4655): both paths' objective over clicks and returned
+   set per preset, and the band table's binary columns.
 2. **The spot check:** where the F-beta walk ends (the kept set's F-beta
    against the best cut's), its precision and recall ranges, and how often
    the precision range held the truth (a floor-era report also said how often
@@ -452,7 +483,8 @@ things keep a report on its link:
   set, beside F1/4 and F4 on the metric menu. It thins the per-seed lines to
   fit the repo's 4,000 KB cap (`SOTA_RUNS_BUDGET_MB`, default 1) and says when
   a page is still over it. A review with one session set commits
-  `analyze.sh`'s `analysis-<path>/viewer.html`. It opens on F1 (#4635) and does not
+  `analyze.sh`'s `analysis-<path>/viewer.html`, which holds that path's panels
+  only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
   offer cost (#4576); a page built before that gets both from
   `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's

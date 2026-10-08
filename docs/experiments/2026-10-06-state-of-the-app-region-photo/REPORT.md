@@ -9,6 +9,10 @@ read (#4510): the labels line (#4452), the corpus-relative spread floor (#4492),
 check (#4496), and presets of beta 1/4, 1 and 4.
 **Path:** the region path. DINOv3 patch embeddings, with box votes trained as patches and a photo scored by
 its best patch (`max_patch`). It opens on SigLIP's text sort.
+- The harness and the viewer call it `siglip+dinov3_patch`. That is this one path, not two embedders: SigLIP
+  ranks the typed query at click 0, since DINOv3 has no text side, and DINOv3 patches carry every click after.
+- The SigLIP binary path is its own review, [Binary Photo, 2026-10-05](../2026-10-05-state-of-the-app-binary-photo/REPORT.md).
+  [Against the binary path](#against-the-binary-path) sets the two side by side.
 **Bench:** `coco_better`, 144 cells (49 classes at every size they have).
 **Seeds:** 2. **Sessions:** one set per preset (`SOTA_BETA=0.25|1|4`), 288 runs each and 864 in all. The
 full-label ceiling ran for seed 0 only (array 891581, 2026-10-07, 144 runs, shared by the three presets), so
@@ -59,6 +63,10 @@ every ceiling number here is seed 0's (#4552).
   0.48/0.38/0.48 to 0.47/0.36/0.47. The class and band tables now count every run too, which moves the classes
   whose small band never trains (bowl, chair). AP over all runs does not move. The viewer (#4629) scores a
   click with no detector as the empty set instead: it reads the harness's detectors and has no opening rule.
+- **Relabelled 2026-10-08 (#4655): the paths side by side.** The viewer's subtitle read "SigLIP binary and DINOv3
+  region" and its one panel `siglip+dinov3_patch`, which read as a comparison of the two. Both now name this
+  path (the subtitle from #4654). [Against the binary path](#against-the-binary-path) is new, and the band table carries the binary
+  path's columns. No number moved.
 
 A **review**, not an experiment: the app as it ships on the region path, the way a user meets it.
 - **The session.** The user types a query and sees the text sort, then votes for 150 clicks while Autopilot picks
@@ -97,6 +105,7 @@ A **review**, not an experiment: the app as it ships on the region path, the way
      0.005: seed 0 alone read 0.74/0.63/0.72 (over its trained runs, before #4631).
    - This is a description of the two paths as they ship, not an A/B: the paths differ in embedding, votes and
      scoring.
+   - Every click and preset side by side: [Against the binary path](#against-the-binary-path).
 3. **The check pays more than on the binary path:** +0.034 to +0.046 per session, against +0.022 to +0.031
    (a run that never trains has no check and adds 0). Part of it is the 8% of sessions that train a detector but
    never leave the opening in 150 clicks: the check is where they first see one. At 1 it cuts the share of runs
@@ -106,6 +115,46 @@ A **review**, not an experiment: the app as it ships on the region path, the way
    scores 0.44/0.47/0.70 at the three presets, against the 150-click session's 0.67/0.58/0.66. It returns a mean
    of 181, 319 and 605 images at precision 0.43, 0.37 and 0.31. As on the binary path, only beta 4, which rewards
    depth, comes out ahead.
+
+### Against the binary path
+
+This path against [Binary Photo, 2026-10-05](../2026-10-05-state-of-the-app-binary-photo/REPORT.md) (#4510), each
+as it ships (#4655).
+- **Two reviews, not an A/B.** The paths differ in embedding, votes and scoring.
+- **Scored the same way.** Both reviews ran the same app and are scored under the same rules (#4603, #4605,
+  #4631). The numbers come from each report's own `objective_by_click.csv` and `precision_recall_path.csv`.
+- **Not paired by seed.** The binary review ran 10 seeds (1,440 runs a preset) and this one 2 (288). Seed 1
+  moved no region number by more than 0.02, which sizes the noise in the region rows.
+
+![The objective over clicks, both paths, per preset](figures/vs_binary_objective.png)
+
+The objective at each point, then the returned set after the check (✓):
+
+| preset | path | typed query | 25 | 50 | 100 | 150 | after the check | precision ✓ | recall ✓ | returned ✓, median |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1/4 | SigLIP binary | 0.47 | 0.45 | 0.50 | 0.56 | 0.60 | 0.62 | 0.71 | 0.37 | 20 |
+| 1/4 | DINOv3 region | 0.47 | 0.42 | 0.53 | 0.63 | 0.67 | 0.71 | 0.79 | 0.46 | 29 |
+| 1/4 | *region − binary* | +0.00 | −0.02 | +0.03 | +0.07 | +0.07 | +0.09 | +0.08 | +0.09 | +9 |
+| 1 | SigLIP binary | 0.36 | 0.36 | 0.41 | 0.46 | 0.49 | 0.51 | 0.58 | 0.51 | 43 |
+| 1 | DINOv3 region | 0.36 | 0.36 | 0.45 | 0.55 | 0.58 | 0.61 | 0.65 | 0.63 | 47 |
+| 1 | *region − binary* | +0.00 | +0.00 | +0.04 | +0.09 | +0.09 | +0.10 | +0.07 | +0.12 | +4 |
+| 4 | SigLIP binary | 0.47 | 0.46 | 0.48 | 0.53 | 0.56 | 0.59 | 0.42 | 0.66 | 83 |
+| 4 | DINOv3 region | 0.47 | 0.49 | 0.55 | 0.63 | 0.66 | 0.70 | 0.44 | 0.80 | 94 |
+| 4 | *region − binary* | +0.00 | +0.03 | +0.07 | +0.10 | +0.10 | +0.12 | +0.02 | +0.14 | +10 |
+
+- **The two start together.** Both open on the same typed query and hand over at the same clicks, so they are
+  within 0.03 at 25 clicks.
+- **From 50 clicks the region path leads at every preset.** The lead is 0.03 to 0.07 at 50 and 0.07 to 0.10 by
+  100, and it holds to 150. After the check it is 0.09, 0.10 and 0.12.
+- **What the lead buys depends on the preset:**
+  - at 1/4, precision and recall both (+0.08 and +0.09);
+  - at 1, more recall than precision (+0.12 against +0.07);
+  - at 4, nearly all recall (+0.14 against +0.02), on a median of 94 images returned against 83.
+
+![The returned set, both paths, per preset](figures/vs_binary_path.png)
+
+The size bands and the hardest classes are set side by side
+[below](#where-it-does-well-and-where-it-does-poorly).
 
 ### The returned set through the session
 
@@ -207,14 +256,15 @@ the next retrain learns from.
 
 **By size band** (beta 1, every run; the objective after the check, and the ranking's AP):
 
-| band (runs) | objective | returned, median | text AP | AP at 150 | full-label AP (seed 0) | Goods found |
-|---|---:|---:|---:|---:|---:|---:|
-| large (98) | 0.81 | 50 | 0.70 | 0.88 | 0.89 | 36 |
-| medium (98) | 0.66 | 47 | 0.38 | 0.70 | 0.71 | 26 |
-| small (92; 9 never train) | 0.35 | 44 | 0.16 | 0.31 | 0.43 | 13 |
+| band (runs) | objective | binary objective | returned, median | text AP | AP at 150 | binary AP at 150 | full-label AP (seed 0) | Goods found |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| large (98) | 0.81 | 0.77 | 50 | 0.70 | 0.88 | 0.80 | 0.89 | 36 |
+| medium (98) | 0.66 | 0.49 | 47 | 0.38 | 0.70 | 0.50 | 0.71 | 26 |
+| small (92; 9 never train) | 0.35 | 0.26 | 44 | 0.16 | 0.31 | 0.24 | 0.43 | 13 |
 
-Against the binary path (0.77/0.49/0.26 by band), the gain is in **medium and small**: +0.17 and +0.09, against
-+0.04 for large.
+The binary columns are Binary Photo's own band table (10 seeds). The gain over the binary path is in **medium and
+small**: +0.17 and +0.09 on the objective, against +0.04 for large. On AP it is +0.20 at medium, against +0.08 at
+large and +0.07 at small.
 
 **The binary path's hardest classes are where regions help most:**
 
@@ -277,7 +327,11 @@ Seed 0's 144 runs (beta 1), where the ceiling ran; the 5 that never train a dete
   session's detector (the end of Autopilot's opening, #4605), then its line. An earlier version
   switched at the opening's own first detector, around click 4, and drew a dip there that no user sees.
 - `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell.
-- `viewer.html`: the beta-1 sessions, both seeds.
+  - `vs_binary_objective.png` and `vs_binary_path.png`, with the table in
+    [Against the binary path](#against-the-binary-path), come from
+    `scripts/experiments/state_of_app/compare_paths.py`, run on this directory and the Binary Photo report's
+    (#4655). It reads the two reports' committed CSVs, so it needs nothing from the GRID.
+- `viewer.html`: the beta-1 sessions, both seeds. Its subtitle (#4654) and panel (#4655) name this path.
 - **Runs and analyses** are in `/expscratch/sgreenberg/state-of-the-app/2026-10-06-b025|b1|b4/`:
   - `analysis-region-4631/`: **this version's**, both seeds, every run counted (#4631), the opening scored as
     the text sort (#4605), on a baseline with each preset's own line (#4603,
