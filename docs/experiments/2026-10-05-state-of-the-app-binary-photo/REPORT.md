@@ -8,7 +8,7 @@ re-encoded with #4624's carry (a run inside a spot check keeps its last value be
 beta 1/4, 1 and 4.
 **Path:** SigLIP whole-image embedding, binary (Good/Bad) votes, Autopilot's shipped opening. The DINOv3 region
 path is its own review; [Region Photo, 2026-10-06](../2026-10-06-state-of-the-app-region-photo/REPORT.md#against-the-binary-path)
-sets the two side by side, and the viewer's subtitle and panel name this path alone (#4655).
+sets the two side by side, and the viewer's subtitle (#4654) and panel (#4655) name this path alone.
 **Bench:** `coco_better`, all 49 classes at every size they have: 144 cells.
 **Seeds:** 10. **Sessions:** one set per preset (`SOTA_BETA=0.25|1|4`), 1,440 runs each and 4,320 in all, plus one
 full-label ceiling pass shared by the three.

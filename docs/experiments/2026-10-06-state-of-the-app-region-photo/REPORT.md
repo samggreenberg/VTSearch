@@ -65,7 +65,7 @@ every ceiling number here is seed 0's (#4552).
   click with no detector as the empty set instead: it reads the harness's detectors and has no opening rule.
 - **Relabelled 2026-10-08 (#4655): the paths side by side.** The viewer's subtitle read "SigLIP binary and DINOv3
   region" and its one panel `siglip+dinov3_patch`, which read as a comparison of the two. Both now name this
-  path. [Against the binary path](#against-the-binary-path) is new, and the band table carries the binary
+  path (the subtitle from #4654). [Against the binary path](#against-the-binary-path) is new, and the band table carries the binary
   path's columns. No number moved.
 
 A **review**, not an experiment: the app as it ships on the region path, the way a user meets it.
@@ -331,7 +331,7 @@ Seed 0's 144 runs (beta 1), where the ceiling ran; the 5 that never train a dete
     [Against the binary path](#against-the-binary-path), come from
     `scripts/experiments/state_of_app/compare_paths.py`, run on this directory and the Binary Photo report's
     (#4655). It reads the two reports' committed CSVs, so it needs nothing from the GRID.
-- `viewer.html`: the beta-1 sessions, both seeds. Its subtitle and panel name this path (#4655).
+- `viewer.html`: the beta-1 sessions, both seeds. Its subtitle (#4654) and panel (#4655) name this path.
 - **Runs and analyses** are in `/expscratch/sgreenberg/state-of-the-app/2026-10-06-b025|b1|b4/`:
   - `analysis-region-4631/`: **this version's**, both seeds, every run counted (#4631), the opening scored as
     the text sort (#4605), on a baseline with each preset's own line (#4603,

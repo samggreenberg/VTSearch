@@ -19,6 +19,8 @@ from vtscore.eval.calibration_metrics import (
     negative_block_null,
     operating_cost,
     oracle_cut,
+    oracle_fbeta_cut,
+    oracle_fbeta_metrics,
     pool_blocks,
     pool_segment,
     segment_counts,
@@ -235,3 +237,80 @@ def test_fbeta_from_rates_reads_back_what_the_row_carries():
 def test_fbeta_from_rates_is_nan_where_the_row_has_no_value():
     out = fbeta_from_rates(np.array([0.5, 0.5, np.nan]), np.array([np.nan, 0.5, 0.0]), np.array([1.0, np.nan, 1.0]))
     assert np.isnan(out[0]) and np.isnan(out[1]) and out[2] == 0.0
+
+
+def _brute_best_fbeta(scores, labels, beta):
+    """Independent O(n^2) best cut: every observed score as the threshold, highest first on a tie."""
+    best = None
+    for t in sorted(np.unique(scores), reverse=True):
+        f = _brute_fbeta(scores, labels, t, beta)
+        if best is None or f > best[0] + 1e-12:
+            best = (f, t)
+    assert best is not None
+    return best
+
+
+@pytest.mark.parametrize("seed", range(25))
+def test_oracle_fbeta_cut_matches_bruteforce(seed):
+    rng = np.random.default_rng(seed)
+    n = int(rng.integers(5, 80))
+    labels = (rng.random(n) < 0.2).astype(float)
+    labels[0] = 1.0  # at least one positive
+    scores = rng.normal(labels, 1.0).round(1)  # rounding forces ties
+    for beta in (0.25, 1.0, 4.0):
+        thr, best, fpr, fnr = oracle_fbeta_cut(scores, labels, beta)
+        b_best, b_thr = _brute_best_fbeta(scores, labels, beta)
+        assert best == pytest.approx(b_best, abs=1e-9)
+        assert thr == b_thr  # ties in F-beta go to the higher threshold, as oracle_cut's do
+        # The cut realises what it reports.
+        assert _brute_fbeta(scores, labels, thr, beta) == pytest.approx(best, abs=1e-9)
+        _cost, fpr2, fnr2 = operating_cost(scores, labels, thr, 1.0, 1.0)
+        assert (fpr, fnr) == pytest.approx((fpr2, fnr2), abs=1e-12)
+
+
+def test_the_best_cut_bounds_every_cut_and_the_cost_cut_is_no_ceiling_on_it():
+    """#4654: on a rare class the cost oracle cuts deep, so its F1 sits under a good line's; the F1 oracle never does."""
+    rng = np.random.default_rng(42)
+    labels = (rng.random(5000) < 0.01).astype(float)
+    scores = rng.normal(2.5 * labels, 1.0)
+    best = oracle_fbeta_cut(scores, labels, 1.0)[1]
+    for t in np.quantile(scores, np.linspace(0.5, 0.999, 60)):
+        assert fbeta_metrics(scores, labels, float(t), 1.0)["fbeta"] <= best + 1e-12
+    cost_thr = oracle_cut(scores, labels, 1.0, 1.0)[0]
+    cost_cut = detection_metrics(scores, labels, cost_thr)
+    assert cost_cut["recall"] > 0.75 and cost_cut["precision"] < 0.2  # the deep cut the viewer used to draw
+    assert cost_cut["f1"] < best - 0.1
+
+
+def test_oracle_fbeta_metrics_carries_each_preset_and_the_rows_own_cut():
+    rng = np.random.default_rng(7)
+    labels = (rng.random(400) < 0.05).astype(float)
+    scores = rng.normal(2.0 * labels, 1.0)
+    out = oracle_fbeta_metrics(scores, labels, 4.0)
+    assert set(out) == {
+        "oracle_fbeta",
+        "oracle_fbeta_b025",
+        "oracle_fbeta_b1",
+        "oracle_fbeta_b4",
+        "fbeta_oracle_threshold",
+        "fbeta_oracle_fpr",
+        "fbeta_oracle_fnr",
+    }
+    for col, beta in (("oracle_fbeta_b025", 0.25), ("oracle_fbeta_b1", 1.0), ("oracle_fbeta_b4", 4.0)):
+        assert out[col] == pytest.approx(oracle_fbeta_cut(scores, labels, beta)[1])
+    assert out["oracle_fbeta"] == out["oracle_fbeta_b4"]  # the row's own beta
+    thr, _best, fpr, fnr = oracle_fbeta_cut(scores, labels, 4.0)
+    assert (out["fbeta_oracle_threshold"], out["fbeta_oracle_fpr"], out["fbeta_oracle_fnr"]) == (thr, fpr, fnr)
+    # Each oracle bounds the row's own F-beta at any threshold.
+    row = fbeta_metrics(scores, labels, float(np.quantile(scores, 0.97)), 4.0)
+    for col in ("fbeta", "fbeta_b025", "fbeta_b1", "fbeta_b4"):
+        assert row[col] <= out[f"oracle_{col}"] + 1e-12
+
+
+def test_oracle_fbeta_has_no_value_without_a_balance_or_without_positives():
+    scores = np.array([0.9, 0.5, 0.1])
+    out = oracle_fbeta_metrics(scores, np.array([1.0, 0.0, 0.0]), None)
+    assert np.isnan(out["oracle_fbeta"]) and np.isnan(out["fbeta_oracle_threshold"])  # no balance drew a line
+    assert out["oracle_fbeta_b1"] == pytest.approx(1.0)  # the presets are filled anyway
+    assert all(np.isnan(v) for v in oracle_fbeta_metrics(scores, np.zeros(3), 1.0).values())
+    assert all(np.isnan(v) for v in oracle_fbeta_cut(np.array([]), np.array([]), 1.0))
