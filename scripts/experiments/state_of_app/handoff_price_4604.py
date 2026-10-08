@@ -69,14 +69,19 @@ def load(a: argparse.Namespace):
     idx = {(c, int(s)): i for i, (c, s) in enumerate(zip(runs["category"], runs["seed"]))}
     n = len(runs)
 
-    # The typed query's set: the guarded line, scored on the withheld half (text_baseline.py).
+    # The typed query's set, scored on the withheld half (text_baseline.py): the line the app draws at this
+    # preset when the baseline records one (#4603, ``text_line_*_<beta>``), else the beta-blind guarded line.
+    tag = f"{a.beta:g}".replace(".", "") if a.beta < 1 else f"{a.beta:g}"
+    per_beta = f"text_line_recall_b{tag}" in base.columns
+    col = (lambda m: f"text_line_{m}_b{tag}") if per_beta else (lambda m: f"text_{m}")
+    print(f"typed query's set: {'the per-preset line (#4603)' if per_beta else 'the guarded line'}")
     tq = np.full(n, np.nan)
     cut = np.full(n, np.nan)
     for r in base.to_dict("records"):
         i = idx.get((r["category"], int(r["seed"])))
         if i is not None:
-            tq[i] = fbeta(np.array([r["text_precision"]]), np.array([r["text_recall"]]), a.beta)[0]
-            cut[i] = r["text_gmm_cut"]
+            tq[i] = fbeta(np.array([r[col("precision")]]), np.array([r[col("recall")]]), a.beta)[0]
+            cut[i] = r[col("cut")] if per_beta else r["text_gmm_cut"]
 
     # The detector the harness trained at every step, shown or not; carried forward over clicks with no row.
     det = np.full((n, T + 1), np.nan)

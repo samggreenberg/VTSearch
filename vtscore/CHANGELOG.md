@@ -10,6 +10,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The eval harness can walk Autopilot's More on the detector's top** (issue #4637). `simulate_voting_iterations`
+  takes `more_walk` (`"seed"`, the default and the app: the top of the typed query's sort; or `"detector"`: the More
+  walk takes the top of the step's detector ranking, and its steps record `app_trained = 1`), and
+  `vtscore.eval.autopilot_flow.app_has_detector` takes `more_shown`. An experiment arm; the app is unchanged.
+
 - **Under the label quota a labelset gives the Goods' centroid, not a trained head** (issue #4643).
   `vtscore.detectors.labelset_training.train_from_labelset` - the app's Test, AutoFind,
   detector load and CLI - now follows the new `vtscore.detectors.label_quota`: with no Good that

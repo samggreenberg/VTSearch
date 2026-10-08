@@ -169,7 +169,9 @@ MIRRORS: list[Mirror] = [
             "(stop_rule 'dry_run', #4488) 'more' and 'done' draw off learned+top; the harness "
             "does not model that row, because vtscore.eval simulates photo datasets. Documents are "
             "simulated by scripts/experiments/fullmarks/sota_documents.py, which clicks the top of "
-            "the retrained structural ranking at every step."
+            "the retrained structural ranking at every step. The harness's more_walk='detector' (#4637) "
+            "is an experiment arm that walks a photo dataset's 'more' on the detector's top; the "
+            "default, 'seed', is the app's row."
         ),
     ),
     Mirror(

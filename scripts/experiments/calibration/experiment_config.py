@@ -1103,6 +1103,11 @@ STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 #: to at least k of the Bads voted so far.  Unset (the default) is the app.
 OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or None
 
+#: Issue #4637's More-walk knob: ``detector`` walks the top of the detector's
+#: ranking from the end of the Bad phase and shows it there (#4604).  Unset (the
+#: default, ``seed``) is the app: the top of the text sort.
+MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
+
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
 #: only frame that records the **opening**, which emits no main row because no

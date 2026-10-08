@@ -135,6 +135,12 @@ class ALContext:
             cosine >= ``tau`` to at least ``k`` of the Bads voted so far: the
             text query's sibling cluster (keyboards for "laptop"), voted Bad
             again and again.  ``None`` - the default - is the app.
+        more_walk: Where the ``more`` walk draws (issue #4637), an experiment
+            knob.  ``"seed"`` - the default - is the app: the top of the text or
+            example sort, the Good phase's draw resumed.  ``"detector"`` takes
+            the top of the current detector's ranking (``scores``) instead: the
+            app showing the opening's detector from the end of the Bad phase
+            (#4604) and walking the list it shows.
     """
 
     pool_ids: list[int]
@@ -151,6 +157,7 @@ class ALContext:
     startup_cut: Optional[float] = None
     uncertainty: Optional[dict[int, float]] = None
     opening_diversity: Optional[tuple[float, int]] = None
+    more_walk: str = "seed"
 
 
 # ------------------------------------------------------------------
@@ -429,6 +436,10 @@ def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
 
     if is_startup_phase(phase):
         return _pick_startup_round(ctx)
+    if phase == "more" and ctx.more_walk == "detector" and ctx.scores:
+        # #4637's arm: the walk takes the top of the detector's ranking, the
+        # list the app would show from the end of the Bad phase (#4604).
+        return max(ctx.pool_ids, key=lambda i: ctx.scores.get(i, -np.inf))
     if phase in ("good", "more"):
         # The ``more`` walk (#4282) is the Good phase's draw resumed: the top of
         # the same seed sort.

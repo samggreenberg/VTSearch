@@ -42,6 +42,7 @@ def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
+        MORE_WALKS,
         PRODUCTION_HEAD,
         PRODUCTION_PATCH_STYLE,
         resolve_acquisition_factor,
@@ -240,6 +241,11 @@ def probe(C: Any) -> list[str]:
     # #4197's diversity pass is an experiment knob with no app counterpart.
     if C.OPENING_DIVERSITY is not None:
         rows.append(("opening_diversity", C.OPENING_DIVERSITY, "<unset> = the app's opening, no diversity pass"))
+    # #4637's More walk on the detector's top: an arm the app does not take.
+    if C.MORE_WALK not in MORE_WALKS:
+        refuse("more_walk", "CALIB_MORE_WALK", "must be one of %s" % ", ".join(MORE_WALKS))
+    elif C.MORE_WALK != harness_default("more_walk"):
+        rows.append(("more_walk", C.MORE_WALK, "<unset> = seed, the app's walk down the text sort"))
 
     # The balance the line is drawn at (#4413).  Unset is the app's default;
     # the precision floor went in #4421 (experiment_config refuses its knob).

@@ -367,18 +367,24 @@ def _num(v: Any) -> float:
     return float("nan") if v is None else float(v)
 
 
-def app_has_detector(phase: str) -> bool:
+def app_has_detector(phase: str, *, more_shown: bool = False) -> bool:
     """Whether the app would have a trained detector on screen in *phase*.
 
     The harness records this per step as ``app_trained``: a threshold computed
     at a step where this is false is a number no user ever sees, and studies
     about threshold quality (issue #2788) must filter on it rather than
     counting every simulated step.
+
+    *more_shown* is #4637's arm, not the app: the ``more`` walk draws off the
+    detector's ranking, so the detector is on screen from the end of the Bad
+    phase (#4604).
     """
     if is_startup_phase(phase):
         # A schedule's rounds are on the seed sort by construction, so the app
         # would have no detector on screen however many votes have been cast.
         return False
+    if more_shown and phase == "more":
+        return True
     return phase in TRAINED_PHASES
 
 
