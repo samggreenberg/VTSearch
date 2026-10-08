@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -56,7 +57,7 @@ def scratch_dir(tmp_path):
     return tmp_path
 
 
-def _registered(name: str, beta: float | None = None) -> tuple[DetectorContext, object]:
+def _registered(name: str, beta: float | None = None) -> tuple[DetectorContext, Path]:
     """A registered detector with a file; *beta* kept on it when given."""
     from vtscore.detectors.registry import register_detector
 

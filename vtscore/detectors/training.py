@@ -544,7 +544,9 @@ def train_and_threshold(
 
     The balance is *det_ctx*'s own (:func:`vtscore.state.detector_beta`:
     the balance the detector keeps, seeded on first read; #4665), or with no
-    *det_ctx* the active detector context's (``line_knobs()``).  A live
+    *det_ctx* (or one that is not a
+    :class:`~vtscore.state.core.DetectorContext`) the active detector
+    context's (``line_knobs()``).  A live
     detector's context is the active one, so both read the same value; a
     throwaway context that trains a cold detector (AutoFind, the CLI, Find
     over a detector nobody loaded) is seeded from that detector's JSON and
@@ -628,6 +630,7 @@ def train_and_threshold(
     import torch
 
     from vtscore.state import (
+        DetectorContext,
         detector_beta,
         get_calibrate_count,
         get_calibration_fraction,
@@ -663,8 +666,9 @@ def train_and_threshold(
     # actually has.
     hidden_dim = LINEAR_SVM_HEAD
 
-    # Which preference draws the line (#4413): the detector's own (#4665).
-    beta = detector_beta(det_ctx) if det_ctx is not None else line_knobs()["beta"]
+    # Which preference draws the line (#4413): the detector's own (#4665).  A
+    # caller's duck-typed context carries no balance, and takes the active one's.
+    beta = detector_beta(det_ctx) if isinstance(det_ctx, DetectorContext) else line_knobs()["beta"]
     # The user's persisted split wins; unset resolves to the per-space
     # production default for this detector's embedder (issue #3287).
     calibration_fraction = resolve_calibration_fraction(get_calibration_fraction(), embedder_name)
