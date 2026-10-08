@@ -23,9 +23,16 @@
 // would push the buttons off-centre from the Advanced toggle beside them.
 .form-actions { display: flex; justify-content: flex-end; gap: var(--space-md); }
 
+// The importer forms indent from the tab rows above them. When the source
+// picker shows none (a lone category holding a lone importer, #4669), there
+// is nothing to indent from, so zero the indent for the sibling forms too.
+:host:has(vt-source-picker.chromeless) {
+  --importer-indent: 0;
+}
+
 // The Run AutoFind box sits under whichever picker is showing; indent it like
 // the importer forms (`.importer-form`) so it lines up with their controls
 // rather than with the tab bars.
 .autofind-toggle {
-  padding-left: var(--space-2xl);
+  padding-left: var(--importer-indent, var(--space-2xl));
 }
