@@ -188,6 +188,14 @@ same edit.
     that leaves a precision mean. That covers a line that keeps nothing and a
     detector that flags nothing (`curves.EMPTY_SET`).
   - **A starved run's beta is the study's** (it has no rows to read one off).
+  - **The same holds after the check for a run that never leaves the opening
+    (#4653).** Such a run may hold a Good or two, and it still runs the
+    end-of-session check. That check is on a detector the app does not show
+    (its rows carry `app_trained == 0`); since #4643 it is the Goods'
+    centroid cut at its midpoint, about half the corpus. Such a run keeps its
+    typed query's set after the check, and the check's effect is 0. The check
+    row's own `app_trained` decides. In #4651's draft, 24 of 288 runs per
+    preset were like this.
   - **Every per-click mean fills each run first.** `by_click.py` uses
     `cells.csv`'s `shown_from`. The share curves and the early-dip table use
     `analyze.session_balance_steps`, never `balance_steps.csv`'s rows as they
