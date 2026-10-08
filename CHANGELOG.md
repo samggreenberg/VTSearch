@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
+  hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
+  show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
+  sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
+  form, which is no longer indented.
 - **A detector on a dataset that can't search by text needs an example item** (issue #4666). The
   New Detector dialog used to let a text-only detector through with a warning that Autopilot
   could not start until it was trained. **Create** now stays disabled until you add an example
