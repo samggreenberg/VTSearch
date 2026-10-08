@@ -1336,6 +1336,8 @@ def reskin(
     default_metric: str | None = None,
     hide_metrics: Sequence[str] | None = None,
     fill_gaps: bool = False,
+    title: str | None = None,
+    subtitle: str | None = None,
 ) -> Path:
     """Re-substitute *page*'s own payload into the current template, in place.
 
@@ -1354,8 +1356,10 @@ def reskin(
     *default_metric* and *hide_metrics* rewrite the payload's ``view`` block
     (:func:`opening_view`), each only when given: ``""`` and ``[]`` clear their
     half.  *fill_gaps* carries the per-seed lines through their gaps and
-    re-averages them (:func:`fill_payload_gaps`, #4624).  With none of the
-    three, the payload is copied byte for byte, ``view`` included, so a
+    re-averages them (:func:`fill_payload_gaps`, #4624).  *title* and
+    *subtitle* replace the page's own, for a heading that named the wrong thing
+    (#4654: a Binary page said "SigLIP binary and DINOv3 region").  With none of
+    these, the payload is copied byte for byte, ``view`` included, so a
     template push never undoes a study's choice.
     """
     page = Path(page)
@@ -1364,8 +1368,12 @@ def reskin(
     if not m:
         raise SystemExit(f"{page}: no payload script tag - not a viewer page")
     blob = m.group(1)
-    if default_metric is not None or hide_metrics is not None or fill_gaps:
+    if default_metric is not None or hide_metrics is not None or fill_gaps or title is not None or subtitle is not None:
         payload = json.loads(blob)
+        if title is not None:
+            payload["title"] = title
+        if subtitle is not None:
+            payload["subtitle"] = subtitle
         if fill_gaps:
             fill_payload_gaps(payload)
         if default_metric is not None or hide_metrics is not None:
@@ -1383,6 +1391,14 @@ def reskin(
         raise SystemExit(f"{template}: expected exactly 1 {TOKEN}, found {fresh.count(TOKEN)}")
     page.write_text(fresh.replace(TOKEN, blob), encoding="utf-8")
     return page
+
+
+def _only_embedders(df: pd.DataFrame | None, embedders: str | None) -> pd.DataFrame | None:
+    """*df*'s rows for the comma-separated *embedders*, or *df* as it is when none are named."""
+    if df is None or not embedders or "embedder" not in df.columns:
+        return df
+    keep = {e for e in embedders.replace(",", " ").split() if e}
+    return df[df["embedder"].astype(str).isin(keep)]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1409,8 +1425,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ap.add_argument("--out", help="path to write the HTML to")
     ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
-    ap.add_argument("--title", default="Quality over clicks")
-    ap.add_argument("--subtitle", default="")
+    ap.add_argument("--title", default=None, help="the page's heading (default: Quality over clicks)")
+    ap.add_argument("--subtitle", default=None, help="the line under it; with --reskin, each replaces the page's own")
     ap.add_argument(
         "--default-metric",
         metavar="KEY",
@@ -1432,6 +1448,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ap.add_argument("--runs-budget-mb", type=float, default=RUNS_BUDGET_MB)
     ap.add_argument(
+        "--embedders",
+        default=None,
+        metavar="A,B",
+        help="keep only these embedders' cells (default: every one the results hold), so a page built per path "
+        "holds that path's panels and no other (#4654)",
+    )
+    ap.add_argument(
         "--no-skyline",
         action="store_true",
         help="skip the supervised-skyline pass over the cell CSVs (issue #3322)",
@@ -1448,7 +1471,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.reskin:
         for page in args.reskin:
-            out = reskin(Path(page), default_metric=args.default_metric, hide_metrics=hide, fill_gaps=args.fill_gaps)
+            out = reskin(
+                Path(page),
+                default_metric=args.default_metric,
+                hide_metrics=hide,
+                fill_gaps=args.fill_gaps,
+                title=args.title,
+                subtitle=args.subtitle,
+            )
             print(f"reskinned {out}  ({out.stat().st_size / 1e6:.2f} MB)")
         return 0
     if args.fill_gaps:
@@ -1460,8 +1490,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
     common_kw = {
         "baseline": baseline,
-        "title": args.title,
-        "subtitle": args.subtitle,
+        "title": args.title if args.title is not None else "Quality over clicks",
+        "subtitle": args.subtitle or "",
         "runs_budget_mb": args.runs_budget_mb,
         "default_metric": args.default_metric or None,
         "hide_metrics": hide or (),
@@ -1471,6 +1501,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ap.error("--skyline-results goes with --results; each --beta-run directory carries its own skyline")
         runs = parse_beta_runs(args.beta_run)
         frame, skyline, arms = load_beta_runs(runs, skyline=not args.no_skyline)
+        frame, skyline = _only_embedders(frame, args.embedders), _only_embedders(skyline, args.embedders)
         out = build_viewer(
             frame,
             Path(args.out),
@@ -1507,6 +1538,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # on why a floor is allowed to arrive later than the curve it sits beside.
     sky_root = Path(args.skyline_results or args.results)
     skyline = None if args.no_skyline else load_skyline(sky_root, dirs, arms)
+    frame, skyline = _only_embedders(frame, args.embedders), _only_embedders(skyline, args.embedders)
+    if frame.empty:
+        print(f"no rows under {args.results} for embedders {args.embedders}")
+        return 2
     if args.skyline_results:
         print(f"skyline from {sky_root} ({0 if skyline is None else len(skyline)} rows)")
     out = build_viewer(
