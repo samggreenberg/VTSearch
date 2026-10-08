@@ -1,23 +1,21 @@
 # Progress-bar timing profiling
 
-Tools for measuring how long each phase of a long-running task takes on a given
-machine, and for fitting the coefficients that pace VTSearch's progress bars.
+Developer tools for measuring how long each phase of a dataset import takes,
+and for fitting the coefficients that pace its progress bar.
 
-There are two consumers of these measurements:
+`LOAD_COST_MODEL` and `FINALIZE_SLOT_SHARES` in
+`vtscore/datasets/stages/_load_cost_model.py` are fitted constants shipped with
+the app, covering every demo-backed media type (image / audio / video / text /
+document) × loadable registered embedder × `{cpu, cuda, cuda+cuml}`. Cells that
+cannot load in the measuring environment (`video/videomae`,
+`video/languagebind`, `audio/paraspeechclap`) and the `face` media type (no demo
+datasets) fall back to the static profile. Re-fit these when the load pipeline's
+cost shape changes or a new embedder lands.
 
-- **The checked-in defaults.** `LOAD_COST_MODEL` and `FINALIZE_SLOT_SHARES` in
-  `vtscore/datasets/stages/_load_cost_model.py` are fitted constants shipped with
-  the app, covering every demo-backed media type (image / audio / video / text /
-  document) × loadable registered embedder × `{cpu, cuda, cuda+cuml}`. Cells that
-  cannot load in the measuring environment (`video/videomae`,
-  `video/languagebind`, `audio/paraspeechclap`) and the `face` media type (no demo
-  datasets) fall back to the static profile. Re-fit these when the load pipeline's
-  cost shape changes or a new embedder lands.
-- **A deployment's own profile.** An operator can measure their hardware with
-  `tune_timing_profile.py` and override any cell — plus every non-dataset task —
-  through a `VTSEARCH_TIMING_PROFILE` JSON. See `vtscore/timing/` and
-  `docs/DEPLOYMENT.md` § *Progress-bar timing profile*. That path needs nothing
-  from this directory beyond the recorder env vars.
+(A per-deployment override of these constants — `VTSEARCH_TIMING_PROFILE`, fitted
+by a `tune_timing_profile.py` that lived here — was retired with the import ETA
+in #4667. Imports publish no remaining-time estimate, so the constants only shape
+how the bar paces across phases.)
 
 ## Re-fitting the checked-in defaults
 
@@ -60,10 +58,10 @@ emit no row, and keep their static ballpark share via the `_finalize_slots` merg
 **What the weights do.** The unified load bar paces across four phases —
 **download (+ extract), load, embed, finalize** — using a weight vector
 (`load_step_weights` in `vtscore/datasets/stages/_common.py`, applied by
-`ProgressTracker._overall_raw_fraction` in `vtscore/concurrency/progress.py`). The weights only shape *pacing*; the
-overall ETA self-corrects from real elapsed-vs-fraction, so bad weights make the
-bar race one phase and crawl another rather than making the final ETA wrong. That
-bounds the value of this work: smooth honest pacing, not a time oracle.
+`ProgressTracker._overall_raw_fraction` in `vtscore/concurrency/progress.py`). The weights only shape *pacing*:
+bad weights make the bar race one phase and crawl another. An import publishes no
+ETA (#4667), so that bounds the value of this work: smooth honest pacing, not a
+time oracle.
 
 **Why a single vector can't be right.** The phases scale with `n` differently:
 
@@ -104,6 +102,6 @@ measurement rather than the fit — see the note in `_load_cost_model.py`.
 This is the calibration-coverage counterpart to `AdaptiveLoadPacer`
 (`vtscore/datasets/stages/_common.py`), which paces the bar at runtime from
 observed rates but doesn't replace the value of a better prior. Non-goals:
-predicting absolute load time (the ETA self-corrects); a persistent online model
+predicting absolute load time (imports show no ETA); a persistent online model
 (the coefficients are checked-in constants); calibrating non-dataset bars
 (detector load, Find, sort).

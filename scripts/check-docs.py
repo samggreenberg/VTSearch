@@ -78,6 +78,14 @@ ALLOWED_PATHS: dict[str, str] = {
     "vtscore/media/image/embedder_myclip.py": "fictional path in the embedder extension guide",
     "vtscore/media/text/embedder_minilm.py": "fictional path in the embedder extension guide",
     "vtscore/labels/sources/sqlite/": "fictional path in the labelset-source guide",
+    # Retired code that finished study reports still cite as the code they ran.
+    # The admin timing profile, its fitter, its tuning script and the studies
+    # that measured them were removed with the dataset-import ETA (#4667); the
+    # reports link the last tree that held them (80e7724ce).
+    "vtscore/timing/fit.py": "timing-profile fitter, retired in #4667",
+    "scripts/profiling/tune_timing_profile.py": "timing-profile tuning script, retired in #4667",
+    "tests_lib/core/test_timing_branches.py": "timing-profile branch tests, retired in #4667",
+    "scripts/experiments/drive_cold/": "timing-profile study scripts (#3521, #3595), retired in #4667",
 }
 
 # Documents exempt from the PATH check (only PATH — links, anchors, leaks and

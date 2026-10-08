@@ -101,6 +101,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Removed
 
+- **Imports no longer show a time-left estimate, and the switches around it are gone**
+  (issue #4667). The estimate on dataset imports, staging imports and labelset
+  missing-media fetches swung too wildly to trust, so it is gone for everyone; those bars
+  still fill, count and name their step, and every other progress bar keeps its estimate.
+  With it go the operator switch that hid it (`--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA`, `"hide_ingest_eta"` and its Settings ▸ Server row) and the
+  per-deployment timing profile that tuned the progress bars' pacing
+  (`VTSEARCH_TIMING_PROFILE`, `VTSEARCH_TIMING_RECORD`,
+  `scripts/profiling/tune_timing_profile.py`). A server started with `--hide-ingest-eta`
+  must drop the flag, which is no longer accepted; the two environment variables and the
+  settings key are ignored. Every bar now paces from the weights the app ships with.
+
 - **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
   and Evidence coverage chips, its 2×2 of your checks and its precision chart
   now live in the Autopilot tab's result pane; the chart draws the test's

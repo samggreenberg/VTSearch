@@ -416,6 +416,10 @@ Recorded so the next study does not over-read this one.
 
 ## Reproducing
 
+These scripts, the recorder and the fitter were retired with the import ETA
+(#4667); check out the [last tree that held them](https://github.com/samggreenberg/VTSearch/tree/80e7724cea4688205ee1c99de2d25b72df7c93fb/scripts/experiments/timing_r2)
+to run them.
+
 ```bash
 sbatch scripts/experiments/timing_r2/run_timing_3345.sbatch          # leg 1
 sbatch scripts/experiments/timing_r2/run_timing_3345_fixed.sbatch    # leg 2

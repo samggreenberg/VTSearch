@@ -59,7 +59,7 @@ whose `__init__.py` re-exports nothing.
 | `vtscore.concurrency` | Async jobs, memory budget, long-running progress | [packages/concurrency.md](packages/concurrency.md) |
 | `vtscore.security` | Path / URL validation, allowlist pickle loader | [packages/security.md](packages/security.md) |
 | `vtscore.projection` | VTSBrowse: UMAP layout, hex-tile pyramid, region signposts | [packages/projection.md](packages/projection.md) |
-| `vtscore.timing` | Measured per-step cost model behind every progress bar | [packages/timing.md](packages/timing.md) |
+| `vtscore.timing` | Shipped per-step weights behind every progress bar | [packages/timing.md](packages/timing.md) |
 | `vtscore.utils` | Hit dicts, content hashes, score sanitisation, synthetic media | [packages/utils.md](packages/utils.md) |
 | `vtscore.cli` | Flask-free CLI entry points (autodetect, pipeline, progress) | [packages/cli.md](packages/cli.md) |
 | `vtscore.io`, `.gpu_backends`, `.single_instance` | Top-level runtime modules: file I/O, cuML routing, the port lock | [packages/runtime-modules.md](packages/runtime-modules.md) |

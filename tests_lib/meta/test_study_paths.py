@@ -92,8 +92,6 @@ def test_every_patched_reader_calls_the_guard(rel: str) -> None:
         "calibration/analyse_good_mining.sh",
         "calibration/status_acq_2877.sh",
         "calibration/probe_acq_divergence.sh",
-        "drive_cold/analyze_drive_3521.sbatch",
-        "timing_r2/analyze_timing_3345.sbatch",
     ],
 )
 def test_every_patched_shell_reader_carries_the_guard_inline(rel: str) -> None:

@@ -111,8 +111,8 @@ class ProgressTracker:
             remaining-time estimate: ``eta_seconds`` stays ``None`` on every
             snapshot, which every consumer already renders as "no ETA". The
             bar itself (``current``/``total``, ``overall``) is unaffected. For
-            deployments whose jobs are too erratic to predict, where a wrong
-            estimate is worse than none (issue #4233).
+            jobs too erratic to predict, where a wrong estimate is worse than
+            none: every ingest tracker is built this way (issue #4667).
     """
 
     #: Minimum elapsed time (seconds) before an ETA is computed. Below this we
@@ -596,26 +596,18 @@ PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
 
 
 def ingest_eta_hidden() -> bool:
-    """Whether this deployment withholds the ETA from ingest progress bars.
+    """Deprecated: always ``True``.  Ingest progress bars never publish an ETA.
 
     An *ingest* is work that brings new media in — a dataset import, a
     staging import, a labelset's missing-media fetch. Its cost is set by the
-    network, the source's disks and the files themselves, so on some
-    deployments no timing profile can predict it and the published estimate
-    swings wildly (issue #4233). An operator switches it off with the
-    ``hide_ingest_eta`` admin setting, which reaches the library as
-    :attr:`vtscore.config.CoreConfig.hide_ingest_eta`; the ingest paths pass
-    ``publish_eta=not ingest_eta_hidden()`` when they create their tracker.
-
-    Reads as ``False`` (ETAs shown) when no :class:`~vtscore.config.CoreConfig`
-    builder is installed, so library-only callers keep the default behaviour.
+    network, the source's disks and the files themselves, so its estimate
+    swung too wildly to be worth showing. It used to be an operator switch
+    (``CoreConfig.hide_ingest_eta``, issue #4233); since issue #4667 the
+    ingest paths build their trackers with ``publish_eta=False``
+    unconditionally and nothing calls this. Kept so out-of-tree callers keep
+    importing it.
     """
-    try:
-        from vtscore.config import CoreConfig  # noqa: PLC0415
-
-        return bool(CoreConfig.from_settings().hide_ingest_eta)
-    except Exception:
-        return False
+    return True
 
 
 # ---------------------------------------------------------------------------

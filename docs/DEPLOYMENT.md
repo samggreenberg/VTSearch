@@ -12,7 +12,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 4. [Network dependencies](#network-dependencies)
 5. [Offline deployment](#offline-deployment)
 6. [Data directory layout](#data-directory-layout)
-7. [Progress-bar timing profile](#progress-bar-timing-profile)
+7. [Progress-bar estimates](#progress-bar-estimates)
 8. [Docker production notes](#docker-production-notes)
 9. [Dependency structure](#dependency-structure)
 10. [Troubleshooting](#troubleshooting)
@@ -131,7 +131,6 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
 | `VTSEARCH_ON_DATASET_IMPORTED` | unset | Comma-separated `module:function` specs to call when a user's dataset import from the web app succeeds or fails, e.g. to email them (see [EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)). Each module must be importable on the server. A spec that fails to load is reported on stdout and none of the variable's hooks are installed. Env-var equivalent of `--on-dataset-imported`, for the gunicorn images; an explicit flag wins. Deliberately not a setting: nothing in the settings file can name code to run. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock the deployment to **Semantic** embedders, hiding the prototype Patch Semantic and Structural types from every picker and rejecting them at the dataset-load / detector-create routes. Env-var equivalent of `--semantic-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `semantic_only` server setting. |
-| `VTSEARCH_HIDE_INGEST_ETA` | unset | Set to `1`/`true`/`yes`/`on` to hide the remaining-time estimate on **ingest** progress bars (dataset imports, staging imports, and a labelset's missing-media fetch), for a deployment where those jobs are too erratic for any timing profile to predict. The bars still fill and show their counts; opening a dataset, sorts, Find and training keep their ETA. Env-var equivalent of `--hide-ingest-eta`, for the gunicorn images; an explicit flag wins, and either beats the persisted `hide_ingest_eta` server setting. See [When ingest ETAs can't be trusted](#when-ingest-etas-cant-be-trusted). |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Stamps every newly created dataset with an expiry this many days out. Positive integers only; anything else is ignored with a warning on stdout. Env-var equivalent of `--dataset-max-age-days`, for the gunicorn images; an explicit flag wins. |
 | `VTSEARCH_SOLO_MEDIA_TYPE` | unset | Lock the whole instance to one mediaType: the importer and new-detector flows hide their mediaType pickers, converter offerings are filtered to converters that output this type, and that type's default embedder is preloaded at startup. Must be a registered media-type id (`audio`, `image`, `video`, `text`, `document`). Env-var equivalent of `--solo-media-type`, for the gunicorn images; an explicit flag wins, and either beats the persisted `solo_media_type` server setting. |
 | `VTSEARCH_SOLO_EMBEDDERS` | unset | Comma-separated `TYPE=EMBEDDER` pairs (e.g. `image=siglip,audio=clap`) locking the embedder for those mediaTypes, so the importer modal hides its embedder picker for each. A per-process *fallback*: any user who picks their own embedder in the settings UI overrides it for themselves. Env-var equivalent of the repeatable `--solo-embedder`; an explicit flag wins. |
@@ -141,9 +140,7 @@ documented workarounds; this section describes the code as it stands.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VTSEARCH_TIMING_PROFILE` | unset | Path to a timing-profile JSON measured on this environment's hardware. Tells every instance how long each step of each long-running task takes here, so progress bars pace and predict against reality instead of the shipped defaults. See [Progress-bar timing profile](#progress-bar-timing-profile). |
-| `VTSEARCH_TIMING_RECORD` | unset | Path to a JSONL sink. When set, every long-running task — dataset imports included — appends one row per step as it finishes. This is how you gather the measurements the profile is fit from; leave it unset in steady state. |
-| `VTSEARCH_PROFILE_LOAD` | unset | Path to a second JSONL sink, written only by dataset imports and in more detail: it additionally splits cold from cached downloads and the finalize step into its sub-slots. (Both recorders mark cold vs warm model loads.) Optional — imports already feed `VTSEARCH_TIMING_RECORD` above. Arm it as well when you are calibrating the load pipeline specifically; the fitter reads both files and both row shapes. |
+| `VTSEARCH_PROFILE_LOAD` | unset | Path to a JSONL sink. When set, every dataset import appends one row per phase (download, load, embed, finalize and its sub-slots), marking cold vs warm model loads and cold vs cached downloads. Developer tooling: `scripts/profiling/` fits these rows into the load cost model the app ships with. Leave it unset in production. See [Progress-bar estimates](#progress-bar-estimates). |
 
 ### Dataset-ingest concurrency
 
@@ -623,7 +620,6 @@ working.
     {"label": "Lab data policy", "url": "/wiki/data-policy"}
   ],
   "semantic_only": false,
-  "hide_ingest_eta": false,
   "solo_media_type": null,
   "projection_n_neighbors": 15,
   "projection_min_dist": 0.1,
@@ -683,12 +679,6 @@ working.
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with
   `--semantic-only` / `VTSEARCH_SEMANTIC_ONLY`.
-- `hide_ingest_eta`: withholds the remaining-time estimate from ingest progress
-  bars (dataset imports, staging imports, a labelset's missing-media fetch)
-  while leaving the bars and their counts in place. Other progress bars keep
-  their ETA. Also settable with `--hide-ingest-eta` /
-  `VTSEARCH_HIDE_INGEST_ETA`. See
-  [When ingest ETAs can't be trusted](#when-ingest-etas-cant-be-trusted).
 - `solo_media_type`: narrows the whole instance to one media type. The importer
   and new-detector flows hide their media-type pickers and lock to it, the
   converter picker filters to converters that output it, and media-type steps
@@ -786,204 +776,42 @@ An abridged example; the full field list is `UserSettings` in
 
 ---
 
-## Progress-bar timing profile
+## Progress-bar estimates
 
 Every long-running operation — importing a dataset, opening one, loading a
 detector, a text search, a Find, a train-and-score, a promote — shows one
-progress bar that fills across several steps and reports a remaining-time
-estimate. To pace that bar the server needs a prior for what each step *costs*,
-and to keep the estimate from drifting it needs that prior to be roughly right.
+progress bar that fills across several steps. To pace that bar the server
+splits it between the steps by a weight per step, shipped with the app: the
+dataset import's from a cost model measured on one GPU cluster
+(`vtscore/datasets/stages/_load_cost_model.py`), the rest from the hand-tuned
+vectors in `vtscore/timing/tasks.py`. A deployment on very different hardware
+may see a bar race one phase and crawl the next; it never affects correctness,
+results, or what gets stored. There is nothing to configure.
 
-VTSearch ships defaults for those costs, measured on one GPU cluster. Your
-hardware is not that cluster. A profile replaces the shipped numbers with ones
-measured here.
+**Imports show no remaining-time estimate.** An import's rate is set by the
+network, the source's disks and the files themselves — a shared filesystem whose
+throughput depends on who else is on it, a remote archive that stalls and
+resumes, files that range from kilobytes to gigabytes — and its estimate swung
+from "About 10 sec left" to "About 45 min left" within one job. So the
+dataset-import, staging-import and labelset missing-media bars publish none
+(`eta_seconds` is always `null` on their progress events); they still fill,
+count and name their step, so users can see the import is moving.
 
-### What a profile changes (and what it can't)
+**Every other bar** (opening a dataset, loading a detector, sorts, Find,
+train-and-score, promote) shows an estimate, extrapolated from the job's own
+elapsed time and progress. It is never exact, so the server does not publish its
+raw estimate: it snaps to a coarse ladder and holds each rung until the
+underlying estimate moves decisively, which is why the UI says "About 10 min
+left" and keeps saying it rather than counting through every revision. A
+genuinely slowing job still reports the increase; what it no longer does is
+twitch.
 
-A profile only affects **pacing and prediction**. A wrong or missing profile
-makes a bar race one phase and crawl the next, and makes its ETA converge slowly;
-it never affects correctness, results, or what gets stored. Deploying without one
-is entirely supported — that is what the shipped defaults are for.
-
-What it buys you is worth having, though. The cost of each step is affine in the
-job's size:
-
-```
-seconds ≈ a + b·n + per_mb·archive_mb
-```
-
-The fixed part `a` matters enormously at small `n` (an 8-second encoder load *is*
-a 1000-item text search) and not at all at large `n`. A single fixed weight
-vector cannot be right at both ends, which is exactly the failure that makes a
-bar's estimate climb: the job is paced as if the expensive phase were nearly
-over.
-
-### Gathering the measurements
-
-**Recommended: observe real usage.** Point the recorder at a file and run
-normally:
-
-```bash
-VTSEARCH_TIMING_RECORD=/var/lib/vtsearch/timings.jsonl \
-VTSEARCH_SERVER_INIT=1 gunicorn ...
-```
-
-Each task appends one row per step as it completes. This has no side effects and
-no performance cost worth measuring (a file append per task), and it captures the
-datasets your users actually load at the sizes they actually are — a mix no
-synthetic sweep reproduces. Let it run for a day or a week, then fit:
-
-```bash
-python scripts/profiling/tune_timing_profile.py --fit-only \
-    --out /etc/vtsearch/timing-profile.json \
-    /var/lib/vtsearch/timings.jsonl
-```
-
-Dataset imports are the one family with a **second**, richer recorder available:
-setting `VTSEARCH_PROFILE_LOAD=/var/lib/vtsearch/loads.jsonl` alongside the one
-above makes every import also write a load-specific row that distinguishes cold
-from warm model loads, cold from cached downloads, and the sub-slots inside the
-finalize step. It is optional — imports already appear in the main sink — but if
-you are calibrating the load pipeline in particular, arm both and pass both files
-to `--fit-only`, which accepts either row shape.
-
-**Alternative: drive the workloads.** When you want numbers immediately —
-commissioning a node, or after a hardware change — the script can exercise the
-tasks itself against datasets and detectors you name:
-
-```bash
-python scripts/profiling/tune_timing_profile.py --drive \
-    --out timing-profile.json --datasets ds-a,ds-b,ds-c --reps 3
-```
-
-By default `--drive` runs only the read-only families (opening a dataset, text
-search, Find). The others mutate state — loading a detector seeds example votes,
-**train-and-score overwrites the active dataset's labels**, promote creates a
-dataset, an import writes one, a staging import leaves a pkl behind — so they
-require `--allow-mutating` and should be pointed at a scratch `--data-dir`, never
-at live user data.
-
-Either way the script ends by printing a coverage report naming which task
-families got measured and which fell back to the defaults, so a thin sweep is
-visible rather than silently half-effective. Each measured family is broken
-down by **cell specificity**, because "5 cells" reads like five measurements
-and may be one measurement plus four fallbacks:
-
-```
-  dataset_load     5 cells, 24 step-samples
-                   exact  (device|media|embedder)  2 cells, 6 affine (median r² 1.00)
-                   rollup (device|media|*)         2 cells, 4 affine (median r² 0.98, 1 below 0.90)
-                   rollup (device|*|*)             1 cell, 2 affine (median r² 0.29, 2 below 0.90)
-```
-
-The levels are listed in the order lookup tries them, so the first one with a
-cell for a given media type and encoder is what will actually pace that job.
-Expect the exact cells to fit far better than the rollups; if a family has
-*only* rollup lines, the sweep never covered the media types you care about.
-
-### Deploying it
-
-```bash
-VTSEARCH_TIMING_PROFILE=/etc/vtsearch/timing-profile.json
-```
-
-The file is read once per process at startup. It is plain JSON and safe to
-hand-edit; a malformed one logs a warning and falls back to the defaults rather
-than failing the server. Coefficients are keyed by a *cell* —
-`device|media_type|embedder` — with `*` or an empty component as a wildcard, and
-lookup walks from the most specific key to the least:
-
-```json
-{
-  "schema": "vtsearch-timing-profile",
-  "version": 1,
-  "host": "prod-gpu-01",
-  "tasks": {
-    "text_sort": {
-      "cells": {
-        "cuda+cuml|image|siglip": {
-          "samples": 12,
-          "steps": {
-            "load_model":  {"a": 8.2},
-            "embed_query": {"a": 0.04},
-            "score":       {"a": 0.1, "b": 0.00012}
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-A step whose cost **forks** — the coverage atlas of a dataset open is restored
-from the pickle in ~10 ms or rebuilt from scratch at 0.0026 s/item — carries a
-set of coefficients per branch, nested under the step:
-
-```json
-"coverage": {
-  "a": 0.2, "b": 0.0026,
-  "branches": {"restored": {"a": 0.009}, "rebuilt": {"a": 0.2, "b": 0.0026}}
-}
-```
-
-The server names the branch it is taking when it asks for its weights, so one
-profile paces both. This matters more than it sounds: measured on the same two
-datasets, a restore ran 110-700x faster than a rebuild, and a profile carrying
-only one of those numbers put **up to 0.94 of the progress bar in the wrong
-step** on the other branch. Both are correct measurements; neither is a cost
-model on its own. A sweep that only ever exercised one path emits no split (one
-branch measured says nothing about the branch nobody ran) and the coverage
-report names the step, so a half-measured fork is visible rather than silent.
-`--drive --cold-atlas` is what exercises the rebuild branch: it rebuilds each
-named dataset's atlas through the on-demand endpoint, in memory, leaving the
-pickles untouched.
-
-The fit emits rollup cells (`cuda||`) alongside precise ones, so measuring three
-exemplar datasets still improves pacing for every dataset that host will see.
-A rollup is only reached for a combination the sweep never measured, so it is
-always an extrapolation — and the fit refuses to make one it has already
-contradicted: when the rows behind a rollup disagree about a step by more than
-3x (an image import at 0.014 s/item pooled with an audio one at 0.102, say),
-that step is left out of the cell and falls through to the shipped default
-instead. The coverage report says how many steps were withheld that way. If
-you see a lot of them, the sweep is spanning media types too unlike each other
-for one cell to describe; measure them separately rather than widening it.
-
-Re-run the tuning whenever the hardware, storage, or GPU stack changes. Nothing
-expires a profile automatically; a stale one costs accuracy, never correctness.
-
-### A note on the ETA itself
-
-Even a perfectly tuned profile cannot make a remaining-time estimate exact — it
-is an extrapolation from a rate that is still changing. So the server never
-publishes its raw estimate: it snaps to a coarse ladder and holds each rung until
-the underlying estimate moves decisively, which is why the UI says
-"About 10 min left" and keeps saying it rather than counting through every
-revision. A genuinely slowing job still reports the increase; what it no longer
-does is twitch.
-
-### When ingest ETAs can't be trusted
-
-Some deployments ingest from sources nobody can predict: a shared network
-filesystem whose throughput depends on who else is on it, remote archives that
-stall and resume, collections whose files range from kilobytes to gigabytes. On
-those, an import's rate changes too much for any profile to fix, and the ETA
-can climb from "About 10 sec left" to "About 45 min left" in one job. An
-estimate that far off is worse than none.
-
-For that case, switch the estimate off on ingest bars:
-
-```bash
-VTSEARCH_HIDE_INGEST_ETA=1     # or --hide-ingest-eta, or "hide_ingest_eta": true in data/settings.json
-```
-
-The dataset-import, staging-import and labelset missing-media bars then publish
-no remaining-time estimate (`eta_seconds` is always `null` on their progress
-events), but they still fill, count and name their step, so users can see the
-import is moving. Every other bar (opening a dataset, loading a detector,
-sorts, Find, train-and-score, promote) keeps its ETA. The switch only affects
-display: a profile and the recorders keep working with it on, and the
-Settings ▸ Server tab reports whether it is on.
+Earlier versions let an operator hide the import estimate
+(`--hide-ingest-eta`, `VTSEARCH_HIDE_INGEST_ETA`, `"hide_ingest_eta"`) and tune
+the per-step weights to their own hardware (`VTSEARCH_TIMING_PROFILE`,
+`VTSEARCH_TIMING_RECORD`, `scripts/profiling/tune_timing_profile.py`). All of
+those were removed (#4667): the flag is no longer accepted, and the variables
+and the settings key are ignored.
 
 ---
 

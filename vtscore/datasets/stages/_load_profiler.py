@@ -113,9 +113,6 @@ def resolve_download_size_mb(dataset_id: str = "") -> Optional[float]:
     per-MB rate, so a row without this is a row those two steps cannot use.
     Resolution order is explicit override, then the demo catalogue's declared
     size; a non-demo import has no declared archive and yields ``None``.
-
-    Shared by both recorders (``VTSEARCH_PROFILE_LOAD`` and
-    ``VTSEARCH_TIMING_RECORD``) so their rows agree on the same load's size.
     """
     dataset_id = dataset_id or os.environ.get("VTSEARCH_PROFILE_DATASET_ID", "")
     override = os.environ.get("VTSEARCH_PROFILE_DOWNLOAD_MB", "").strip()
