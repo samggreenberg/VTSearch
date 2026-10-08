@@ -11,24 +11,24 @@
      split they would be different numbers anyway. One thing changes between
      these two pages, and it is the divider through D₀. -->
 
-<!-- **a** — Every fold in this section has made the same quiet choice, and
-     none of the last five slides said so out loud: half the votes train the
-     fold model, half are held out to read its threshold from. Fifty-fifty was
-     never measured. It was the obvious split, and it stayed. -->
+<!-- **a** — Every fold in this deck has made the same quiet choice, and no
+     slide has said so out loud: half the votes train the fold model, half
+     are held out to read its threshold from. Fifty-fifty was never measured.
+     It was the obvious split, and it stayed. -->
 
-<!-- **b** — So we measured it, and it moved. Seventy percent into Train — and
-     that is why the divider becomes two. Each fold draws its *own* seventy
-     percent out of the same votes, so at 70/30 the two training halves cannot
-     be halves any more: they overlap, and forty percent of the votes train
-     both fold models. Each one bows into the other's side; the lens in the
-     middle is in both. -->
+<!-- **b** — So it was measured, under the mixture line, and it moved.
+     Seventy percent into Train — and that is why the divider becomes two.
+     Each fold draws its *own* seventy percent out of the same votes, so at
+     70/30 the two training halves cannot be halves any more: they overlap,
+     and forty percent of the votes train both fold models. Each one bows
+     into the other's side; the lens in the middle is in both. -->
 
 <!-- At twenty votes the move is four votes crossing the line: fourteen train
      the model, six place the cut. -->
 
-<!-- And the reason it goes that way rather than the other. Early on the fold
-     model is the starved thing — it is fitting a whole decision boundary out
-     of ten examples — while the threshold it needs is one quantile of one
-     list, and a quantile does not need many scores to sit in roughly the right
-     place. So the scarce votes are worth more in Train. The measured curves
-     belong to the results slides, which come later. -->
+<!-- The reason given was that the fold model is the starved thing, while a
+     threshold is one quantile of one list. Today's line reads the held-out
+     scores as a class model, not one quantile, and re-measured under it the
+     split makes no difference: within 0.004 of F-beta either way at every
+     radio (#4583). Holding out half returns more, 92 more items at β 4, for
+     no recall the objective sees. 70/30 ships because nothing beats it. -->
