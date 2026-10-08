@@ -287,12 +287,14 @@
       </div>
     } @else {
       <div class="tab-panel-autopilot" [class.collapsed]="autopilotCollapsed()" role="tabpanel" aria-label="Autopilot mode">
-        @if (autopilotOnly() && autopilotDisabled()) {
-          <!-- No Manual to fall back to (#4666): say why nothing is running. -->
+        @if (autopilotOnly() && autopilotDisabled() && !autopilotCollapsed()) {
+          <!-- No Manual to fall back to (#4666): say why nothing is running.
+               Collapsed, the panel keeps its strip and the toggle that opens it. -->
           <p class="info-text autopilot-blocked-note" role="note">
-            Autopilot can't start here. This dataset's embedder can't search by text,
-            and this detector has no example item to start from. Open a dataset that
-            can search by text, or make a new detector with an example item.
+            Autopilot can't start here. This dataset can't search by text, and this
+            detector has neither an example item nor enough labels to start from.
+            Open a dataset that can search by text, or make a new detector with an
+            example item.
           </p>
         } @else {
         <vt-autopilot-panel

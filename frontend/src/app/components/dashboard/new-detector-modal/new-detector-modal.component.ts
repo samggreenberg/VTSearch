@@ -1305,6 +1305,13 @@ export class NewDetectorModalComponent implements OnInit {
       this.error.set('An example (text or media) is required');
       return;
     }
+    // Enter in the text field reaches here past the disabled Create button: a
+    // description alone can't start a detector on a dataset that can't search
+    // by text (#4666).
+    if (!this.hasExample) {
+      this.error.set(this.exampleHint);
+      return;
+    }
 
     this.submitting.set(true);
     this.error.set('');

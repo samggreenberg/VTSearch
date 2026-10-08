@@ -368,6 +368,13 @@ describe('NewDetectorModalComponent', () => {
       expect(component.blankSubmitTitle).toContain("can't search by text");
     });
 
+    it('refuses Enter in the text field, which bypasses the Create button', () => {
+      component.pendingText.set('a red car');
+      component.submit();
+      expect(component.error()).toContain("can't search by text");
+      httpMock.expectNone('/api/detectors/registry');
+    });
+
     it('names the example it needs in the hint', async () => {
       component.pendingText.set('a red car');
       await fixture.whenStable();
