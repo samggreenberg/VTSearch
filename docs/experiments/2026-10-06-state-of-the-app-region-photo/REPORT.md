@@ -2,7 +2,8 @@
 
 **Issue:** #4534; seeds and follow-ups #4552. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
 **Interactive viewer:** [`viewer.html`](viewer.html), the beta-1 run's sessions (`2026-10-06-b1`, the app's default
-preset), both seeds, re-encoded with #4624's carry (a run inside a spot check keeps its last value between
+preset), both seeds, all 284 attempted runs (rebuilt for #4630: a click with no detector scores as an empty set, AP
+at chance), with #4624's carry (a run inside a spot check keeps its last value between
 rounds; before it, the averaged line skipped the 22 runs mid-check at click 133 and fell as they rejoined by 150).
 **App:** `dev` at e530b4c0d (2026-10-05 evening). The app is the same one the Binary Photo review of 2026-10-05
 read (#4510): the labels line (#4452), the corpus-relative spread floor (#4492), Autopilot's weak-separation
