@@ -210,5 +210,60 @@ describe('SourcePickerComponent', () => {
       await settleZoneless(fixture);
       expect(fixture.nativeElement.querySelector('.importer-subtab')).not.toBeNull();
     });
+
+    describe('hideSoloTabBar (#4669)', () => {
+      const soloTab: ImporterPickerTab[] = [{ id: 'server', label: 'Server' }];
+
+      it('keeps a lone tab by default', async () => {
+        fixture.componentRef.setInput('visibleImporterTabs', soloTab);
+        fixture.componentRef.setInput('activeTab', 'server');
+        await settleZoneless(fixture);
+        expect(fixture.nativeElement.querySelector('.tab-bar .tab')).not.toBeNull();
+      });
+
+      it('hides the bar when the lone tab is active, keeping its sub-tabs', async () => {
+        fixture.componentRef.setInput('hideSoloTabBar', true);
+        fixture.componentRef.setInput('visibleImporterTabs', soloTab);
+        fixture.componentRef.setInput('activeTab', 'server');
+        fixture.componentRef.setInput('importersForActiveTab', importers);
+        await settleZoneless(fixture);
+        expect(fixture.nativeElement.querySelector('.tab-bar')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('.importer-subtab').length).toBe(2);
+        // The sub-tabs still render, so the forms below keep their indent.
+        expect(fixture.nativeElement.classList.contains('chromeless')).toBe(false);
+      });
+
+      it('keeps the lone tab while it is unselected, so it can still be picked', async () => {
+        fixture.componentRef.setInput('hideSoloTabBar', true);
+        fixture.componentRef.setInput('visibleImporterTabs', soloTab);
+        await settleZoneless(fixture);
+        expect(fixture.nativeElement.querySelector('.tab-bar .tab')).not.toBeNull();
+      });
+
+      it('keeps the bar when there is more than one tab', async () => {
+        fixture.componentRef.setInput('hideSoloTabBar', true);
+        fixture.componentRef.setInput('visibleImporterTabs', tabs);
+        fixture.componentRef.setInput('activeTab', 'server');
+        await settleZoneless(fixture);
+        expect(fixture.nativeElement.querySelectorAll('.tab-bar .tab').length).toBe(2);
+      });
+
+      it('marks the host chromeless when the lone tab holds a lone importer', async () => {
+        fixture.componentRef.setInput('hideSoloTabBar', true);
+        fixture.componentRef.setInput('visibleImporterTabs', soloTab);
+        fixture.componentRef.setInput('activeTab', 'server');
+        fixture.componentRef.setInput('importersForActiveTab', [importers[0]]);
+        fixture.componentRef.setInput('selectedImporter', importers[0]);
+        await settleZoneless(fixture);
+        expect(fixture.nativeElement.querySelector('.tab-bar')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.importer-subtab-bar')).toBeNull();
+        expect(fixture.nativeElement.classList.contains('chromeless')).toBe(true);
+
+        // A caller that labels every source keeps the sub-tab, so it isn't.
+        fixture.componentRef.setInput('alwaysShowSubtabBar', true);
+        await settleZoneless(fixture);
+        expect(fixture.nativeElement.classList.contains('chromeless')).toBe(false);
+      });
+    });
   });
 });

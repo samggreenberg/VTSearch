@@ -26,7 +26,11 @@ not list every commit. Use `git log` for the full history.
   detector made before this change, or by AutoFind or the CLI, uses your last pick until you set
   one. Combine keeps the sources' Threshold when they all agree. Find, AutoFind and
   `--autodetect` draw each detector's line at the Threshold it keeps.
-
+- **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
+  hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
+  show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
+  sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
+  form, which is no longer indented.
 - **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
   AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
   with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own

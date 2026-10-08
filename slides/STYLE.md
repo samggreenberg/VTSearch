@@ -235,9 +235,9 @@ the repair is one of these three, in rising order of cost:
   `calib-quantile-flow` and `vote-boundary` are repaired this way and pay
   nothing at all.
 - **Move the one thing that reaches left.** Often the ink in the reserve is a
-  single object, not the drawing: `calib-acq-flow`'s `D_0` block, or the
-  "Unlabeled" label that used to hang off the left edge of `D`<sub>−1</sub> in
-  three figures and held all three two units right of where they wanted to sit.
+  single object, not the drawing: the "Unlabeled" label that used to hang off
+  the left edge of `D`<sub>−1</sub> in three figures held all three two units
+  right of where they wanted to sit.
   Drop it, shift it to the other side, or give its row back the space
   elsewhere.
 - **Indent the axis.** When the top row genuinely spans the drawing —

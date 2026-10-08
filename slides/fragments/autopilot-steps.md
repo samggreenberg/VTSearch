@@ -23,7 +23,7 @@
      vote 150 against the old two-step opening. -->
 
 <!-- **b** — Boundary is the first step on the detector's own ranking, and it
-     is Second Cut's pick: the unvoted item nearest the line it asks with. It
+     is Second Cut's pick: the unvoted item the line's fit calls even odds. It
      runs until two lights are green, Smart and Stable, the next two slides.
      Past the opening, Autopilot may also stop to run Spot Check by itself
      when the labels separate weakly (#4496), then carry on. -->
