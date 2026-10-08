@@ -325,6 +325,17 @@ def beta_tag(beta: float) -> str:
 #: whatever beta drew the line.
 FBETA_COLUMNS: tuple[str, ...] = ("fbeta", *(f"fbeta_{beta_tag(b)}" for b in RANK_FRAME_BETAS))
 
+#: The objective's oracle (#4654), on the calibration frame beside the cost
+#: oracle (``oracle_threshold`` / ``oracle_cost`` / ``oracle_fpr`` / ``oracle_fnr``).
+#: ``oracle_<col>`` is the best F-beta any cut of the row's test ranking reaches
+#: at that ``FBETA_COLUMNS`` entry's beta, so it bounds the entry from above;
+#: ``fbeta_oracle_*`` is the cut that reaches ``oracle_fbeta``, at the row's own
+#: beta.  The cost oracle is no ceiling on F-beta: it prices the error rates,
+#: and on a rare class it cuts deep.  One definition,
+#: :func:`vtscore.eval.calibration_metrics.oracle_fbeta_metrics`.
+ORACLE_FBETA_COLUMNS: tuple[str, ...] = tuple(f"oracle_{c}" for c in FBETA_COLUMNS)
+FBETA_ORACLE_CUT_COLUMNS: tuple[str, ...] = ("fbeta_oracle_threshold", "fbeta_oracle_fpr", "fbeta_oracle_fnr")
+
 
 VOTING_COLUMNS: tuple[str, ...] = (
     *IDENT_COLUMNS,
@@ -651,6 +662,8 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "oracle_cost",
     "oracle_fpr",
     "oracle_fnr",
+    *ORACLE_FBETA_COLUMNS,
+    *FBETA_ORACLE_CUT_COLUMNS,
     "regret",
     "oracle_threshold_honest",
     "oracle_cost_honest",
