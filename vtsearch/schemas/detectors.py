@@ -352,6 +352,12 @@ class DetectorRegistryCreateRequestSchema(Schema):
     # name is also accepted and classified.  See patch-embedder.md →
     # "Per-detector embedder type".
     embedder_type = fields.String(load_default="")
+    # The detector's balance, F-beta's beta (#4665): which way its line leans
+    # between false positives and false negatives, kept on the detector and
+    # what Autopilot runs at.  Clamped to [0.25, 4] as ``POST /api/balance``
+    # clamps it.  Omitted or null keeps none: the detector takes the user's
+    # balance (their last pick) when it is loaded.
+    beta = fields.Float(load_default=None, allow_none=True)
 
 
 class DetectorRegistryCreateResponseSchema(Schema):

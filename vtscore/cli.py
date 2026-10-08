@@ -253,6 +253,7 @@ def _load_and_train_detectors(
     )
     from vtscore.detectors.store import _detector_path, _read_detector
     from vtscore.detectors.labelset_training import Haystack, train_from_labelset
+    from vtscore.state import seed_detector_beta
     from vtscore.state.core import DetectorContext
 
     dataset_spec = extract_input_spec_from_medias(snap)
@@ -317,6 +318,9 @@ def _load_and_train_detectors(
             raise ValueError(f"Detector '{det_name}' has no labels.")
 
         det_ctx = DetectorContext(det_name, media_type=det_media_type or media_type)
+        # The context is keyed by name, not a registry id, so it is handed the
+        # balance the detector keeps (#4665) from the JSON already read.
+        seed_detector_beta(det_ctx, det)
 
         target_type = det_media_type or media_type
 
@@ -416,19 +420,19 @@ def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
 def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
     """What the balance says about *det_name*'s trained cut: unchecked, because nobody can vote.
 
-    Read at the balance the training read (:func:`vtscore.state.line_knobs`,
-    #4413).  A headless run cannot spot-check its line (#4272), so it exports
+    Read at the balance the training read: the detector's own
+    (:func:`vtscore.state.detector_beta`, #4413, #4665).  A headless run cannot spot-check its line (#4272), so it exports
     the balance's unchecked set - the cap or the mixture's F-beta argmax,
     whichever is smaller (#4389) - and the ``detector_unchecked`` event is
     the run's record that the set it exports was never checked.  ``None``
     with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
     the Inclusion 0 cut, and there is no set to report.
     """
-    from vtscore.state import get_beta  # noqa: PLC0415
+    from vtscore.state import detector_beta  # noqa: PLC0415
     from vtscore.state.core import detector_balance_state  # noqa: PLC0415
     from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
 
-    balance = detector_balance_state(det_ctx, get_beta())
+    balance = detector_balance_state(det_ctx, detector_beta(det_ctx))
     if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         cli_progress.emit(
             "detector_unchecked",

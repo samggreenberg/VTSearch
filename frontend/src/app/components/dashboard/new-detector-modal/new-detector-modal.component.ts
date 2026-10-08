@@ -2,6 +2,7 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   HostListener,
   inject,
@@ -69,6 +70,8 @@ import { sortRowsByColumn } from '../../../utils/sort-rows';
 import { revealInScrollParent } from '../../../utils/reveal-in-scroll-parent';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { BalanceComponent } from '../../left-panel/balance/balance.component';
+import { DEFAULT_BETA, nearestBalancePreset } from '../../../utils/line-balance';
 
 type ModalView = 'main' | 'media-picker';
 type ModalTab = 'blank' | 'trained';
@@ -106,7 +109,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -170,6 +173,18 @@ export class NewDetectorModalComponent implements OnInit {
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
   readonly error = signal('');
+
+  /** The balance the user picked in this form; null until they pick one. */
+  private readonly pickedBeta = signal<number | null>(null);
+  /**
+   * The new detector's balance, F-beta's beta (#4665): which way its line
+   * leans, kept on the detector and what Autopilot runs at. It starts on the
+   * user's own balance (their last pick, which settings carry), shown as the
+   * preset the Threshold control would snap it to.
+   */
+  readonly beta = computed(
+    () => this.pickedBeta() ?? nearestBalancePreset(this.settingsState.settingsSignal()?.beta ?? DEFAULT_BETA).value,
+  );
 
   /** Live snapshot of the background task that pulls the imported labels'
    *  media into the active dataset, while Create & Import waits it out.
@@ -1199,6 +1214,7 @@ export class NewDetectorModalComponent implements OnInit {
     const params: Record<string, unknown> = {
       name: trimmedName,
       embedder_type: this.submittedEmbedderType(),
+      beta: this.beta(),
       ...this.labelImporterValues,
     };
 
@@ -1268,6 +1284,11 @@ export class NewDetectorModalComponent implements OnInit {
     return formatProgressMessage(this.ingestTask(), 'Fetching the imported labels’ media…');
   }
 
+  /** The user picked a balance on the form's Threshold control. */
+  pickBeta(value: number): void {
+    this.pickedBeta.set(value);
+  }
+
   // --- Submit ---
 
   submit(): void {
@@ -1326,6 +1347,7 @@ export class NewDetectorModalComponent implements OnInit {
         media_example: mediaExample,
         examples: examplesPayload,
         embedder_type: this.submittedEmbedderType(),
+        beta: this.beta(),
       })
       .subscribe({
         next: (resp: any) => {

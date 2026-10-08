@@ -440,6 +440,13 @@ def combine_detectors(body: dict):  # noqa: C901
     # first train against a dataset.
     source_types = {(s.get("embedder_type", "") or "") for s in sources}
     combined_type = next(iter(source_types)) if len(source_types) == 1 else ""
+    # Likewise the balance (#4665): kept only when every source keeps the same
+    # one.  Otherwise the combined detector keeps none and takes the user's
+    # balance when it is loaded.
+    from vtscore.detectors.balance import BETA_KEY, stored_beta
+
+    source_betas = {stored_beta(s) for s in sources}
+    combined_beta = next(iter(source_betas)) if len(source_betas) == 1 else None
 
     new_data = {
         "name": new_name,
@@ -452,6 +459,8 @@ def combine_detectors(body: dict):  # noqa: C901
         "labelset": merged.to_dict(),
         "combined_from": list(names),
     }
+    if combined_beta is not None:
+        new_data[BETA_KEY] = combined_beta
     _write_detector(new_path, new_data)
 
     # The Dashboard lists the detector *registry*, not the detectors folder, so
