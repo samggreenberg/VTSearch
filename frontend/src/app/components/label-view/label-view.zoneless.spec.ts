@@ -22,6 +22,10 @@ import { provideHttpTesting } from '../../testing/test-providers';
 import { lineBalance, wireBalance } from '../../testing/line-balance';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 
+/** Both side panels open: the layout these specs were written against. The
+ *  folds, and their hidden default, have their own specs (#4673). */
+const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
+
 /**
  * Zoneless staleness canary for the label view.
  * Phase 2.4 signalized label-view's subscribe/timer/effect
@@ -86,7 +90,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -180,7 +184,7 @@ describe('LabelViewComponent', () => {
     // range (`settings_models.py`), and the centre panel writes it straight
     // onto `HTMLMediaElement.volume`, which throws on anything outside it.
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 0.8 }),
+      req.flush({ volume: 0.8, ...PANELS_OPEN }),
     );
     // /api/dataset/status
     httpMock.match('/api/dataset/status').forEach(req =>
@@ -586,6 +590,90 @@ describe('LabelViewComponent', () => {
     });
   });
 
+  describe('folding the side panels (#4673)', () => {
+    /** Open the view on the saved settings *saved* (no hide keys: the hidden default).
+     *  `settleResource`, not `settleZoneless`: the view's pollers keep requests
+     *  open, so it never reads stable. */
+    async function open(saved: Record<string, unknown> = {}): Promise<LeftPanelComponent> {
+      TestBed.tick();
+      TestBed.tick();
+      httpMock
+        .match((req) => req.url === '/api/settings' && req.method === 'GET')
+        .forEach((req) => req.flush({ volume: 0.8, ...saved }));
+      flushInitialRequests();
+      await settleResource();
+      return fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
+    }
+
+    const el = () => fixture.nativeElement as HTMLElement;
+    const layout = () => el().querySelector('.layout')!.classList;
+    const settingsPuts = () =>
+      httpMock.match((req) => req.url === '/api/settings' && req.method === 'PUT').map((req) => {
+        req.flush({});
+        return req.request.body;
+      });
+
+    it('opens Train with both sides folded by default', async () => {
+      const left = await open();
+      expect(left.activeTab()).toBe('autopilot');
+      expect(layout()).toContain('layout--left-collapsed');
+      expect(layout()).toContain('layout--right-collapsed');
+      expect(el().querySelector('.panel-left .collapsed-steps')).not.toBeNull();
+      expect(el().querySelector('vt-right-panel')).toBeNull();
+      expect(el().querySelector('.panel-right .side-strip')!.textContent).toContain('Labels');
+    });
+
+    it('keeps the left open on the Manual tab, which is driven from its list', async () => {
+      const left = await open();
+      left.setTab('manual');
+      await settleResource();
+      expect(layout()).not.toContain('layout--left-collapsed');
+      expect(el().querySelector('.left-tabs')).not.toBeNull();
+    });
+
+    it('opens the right from its strip and remembers it, keeping the left as it was', async () => {
+      await open();
+      el().querySelector<HTMLButtonElement>('.panel-right .side-strip')!.click();
+      await settleResource();
+      expect(el().querySelector('vt-right-panel')).not.toBeNull();
+      expect(layout()).not.toContain('layout--right-collapsed');
+      expect(layout()).toContain('layout--left-collapsed');
+      expect(settingsPuts()).toEqual([{ hide_right_panel: false }]);
+    });
+
+    it('folds a side open in the settings from its own arrow, keeping its width for later', async () => {
+      await open({ hide_left_panel: false, hide_right_panel: false });
+      expect(layout()).not.toContain('layout--right-collapsed');
+      component.onRightWidthChange(260);
+      el().querySelector<HTMLButtonElement>('.panel-right .side-bar button')!.click();
+      await settleResource();
+      expect(layout()).toContain('layout--right-collapsed');
+      expect(settingsPuts()).toEqual([{ hide_right_panel: true }]);
+      expect(component.rightWidth()).toBe(260);
+      expect(component.rightExtent()).toBe(component.COLLAPSED_WIDTH);
+    });
+
+    it('opens a folded side only once its divider is dragged past the panel minimum', async () => {
+      await open();
+      component.onRightWidthChange(component.RIGHT_MIN - 50);
+      component.onRightResizeEnd(component.RIGHT_MIN - 50);
+      expect(component.rightCollapsed()).toBe(true);
+      expect(settingsPuts()).toEqual([]);
+
+      component.onRightWidthChange(component.RIGHT_MIN + 30);
+      expect(component.rightCollapsed()).toBe(false);
+      expect(component.rightWidth()).toBe(component.RIGHT_MIN + 30);
+      expect(settingsPuts()).toEqual([{ hide_right_panel: false }]);
+    });
+
+    it('polls the votes with the right folded: the poll is the view\'s', async () => {
+      const poll = vi.spyOn(TestBed.inject(VoteStateService), 'startPolling');
+      await open();
+      expect(el().querySelector('vt-right-panel')).toBeNull();
+      expect(poll).toHaveBeenCalled();
+    });
+  });
+
   it('should render 3-panel layout', () => {
     flushInitialRequests();
     TestBed.tick();
@@ -834,9 +922,10 @@ describe('LabelViewComponent', () => {
     expect(el.querySelector('vt-center-panel')).toBeTruthy();
   });
 
-  it('should render right panel component', () => {
+  it('should render right panel component', async () => {
     flushInitialRequests();
-    TestBed.tick();
+    // The right panel waits for the settings to say it is open.
+    await settleResource();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-right-panel')).toBeTruthy();
   });
@@ -932,7 +1021,7 @@ describe('LabelViewComponent', () => {
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 0.8 }),
+      req.flush({ volume: 0.8, ...PANELS_OPEN }),
     );
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
@@ -985,7 +1074,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/votes').forEach(req =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/dataset/status').forEach(req =>
         req.flush({ display_name: 'DINOv3 dataset' }),
       );

@@ -613,12 +613,25 @@ async function warnIfMotionForced(): Promise<void> {
   }
 }
 
+/**
+ * Open both side panels of Train and Test for the run. They start folded to a
+ * strip (#4673), and the shots are of what is in them: the vote piles, the work
+ * queue, the test's result. A recipe that wants a fold clicks its arrow.
+ */
+async function openSidePanels(): Promise<void> {
+  await appClient(APP).api('/api/settings', {
+    method: 'PUT',
+    body: { hide_left_panel: false, hide_right_panel: false },
+  });
+}
+
 const firstLine = (e: any) => String(e?.message || e).split('\n')[0];
 const secs = (s: number) => `${s.toFixed(1)}s`;
 
 async function main() {
   await mkdir(ASSETS, { recursive: true });
   await warnIfMotionForced();
+  await openSidePanels();
   const browser: Browser = await launchChromium();
   const started = Date.now();
   const results: { id: string; theme: Theme; written?: Promise<void>; err?: string }[] = [];

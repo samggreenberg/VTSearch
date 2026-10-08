@@ -13,6 +13,7 @@ import { ExportModalComponent } from '../modals/export-modal/export-modal.compon
 import { LineTestPanelComponent } from './line-test-panel/line-test-panel.component';
 import { LineTestResultComponent } from './line-test-result/line-test-result.component';
 import { LineTestStageComponent } from './line-test-stage/line-test-stage.component';
+import { SidePanelToggleComponent } from '../side-panel-toggle/side-panel-toggle.component';
 import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
@@ -40,6 +41,7 @@ import {
   SettingsStateService,
   type PerMediaTypePref,
 } from '../../services/settings-state.service';
+import { PanelHideStateService, type PanelSide } from '../../services/panel-hide-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { BrowseSubsetPrepService } from '../../services/browse-subset-prep.service';
 import {
@@ -81,6 +83,7 @@ const BALANCE_POST_DEBOUNCE_MS = 150;
     LineTestPanelComponent,
     LineTestStageComponent,
     LineTestResultComponent,
+    SidePanelToggleComponent,
   ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
@@ -104,6 +107,8 @@ export class FindViewComponent implements OnInit, OnDestroy {
   sortState = inject(SortStateService);
   private sortingApi = inject(SortingApiService);
   private settingsState = inject(SettingsStateService);
+  /** Public: the template hands the left panel `panelHide.left()`. */
+  readonly panelHide = inject(PanelHideStateService);
   private browseSubset = inject(BrowseSubsetService);
   /** Public: the wait overlay binds this service's progress signals directly. */
   browsePrep = inject(BrowseSubsetPrepService);
@@ -232,6 +237,23 @@ export class FindViewComponent implements OnInit, OnDestroy {
   /** Bumped when the session's checks changed under a finished test, so the result pane re-reads them. */
   readonly resultRefresh = signal(0);
 
+  /**
+   * The side panels' folds (#4673). The left folds on the Autopilot tab only:
+   * Review is driven from its list. The right folds on both tabs, but a
+   * verdict opens it on its own (the stage says "read the result on the
+   * right") until the user folds it again; that is this test's, so the saved
+   * setting is not touched by it.
+   */
+  readonly leftCollapsed = computed(() => this.panelHide.left() && this.findTab() === 'autopilot');
+  private readonly verdictShown = computed(() => this.findTab() === 'autopilot' && this.lineTest.phase() === 'done');
+  /** The user folded the verdict's pane; cleared when the test leaves Done. */
+  private readonly verdictFolded = signal(false);
+  readonly rightCollapsed = computed(
+    () => this.panelHide.right() && !(this.verdictShown() && !this.verdictFolded()),
+  );
+  /** A folded side's strip, in px; the `.layout--*-collapsed` rules in the SCSS match it. */
+  private readonly COLLAPSED_WIDTH = 48;
+
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
   private readonly CENTER_MIN = 100;
@@ -342,6 +364,11 @@ export class FindViewComponent implements OnInit, OnDestroy {
       }
     });
 
+    // The next verdict opens the result pane again (see `rightCollapsed`).
+    effect(() => {
+      if (this.lineTest.phase() !== 'done') this.verdictFolded.set(false);
+    });
+
     // Warm the images the boundary walk will show next while the reviewer is
     // looking at this one (#3896) — the same fix as the Train view's, for the
     // same shape: {@link advanceToBoundary} runs only once the vote POST is
@@ -402,6 +429,9 @@ export class FindViewComponent implements OnInit, OnDestroy {
     }
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
+    // Stopped in `ngOnDestroy`. The view's, not the right panel's: that one
+    // unmounts while it is folded (#4673).
+    this.voteState.startPolling();
     // The left work queue (ranking minus verified items) is the
     // `unverifiedSortOrder` computed, which tracks sortOrder + verifiedIds.
     this.loadSettings();
@@ -569,7 +599,8 @@ export class FindViewComponent implements OnInit, OnDestroy {
     if (!this.dragging) return;
     const layoutRect = this.layoutRef().nativeElement.getBoundingClientRect();
     let newWidth = event.clientX - layoutRect.left;
-    const leftMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+    if (!this.dragOpens('left', newWidth)) return;
+    const leftMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightExtent();
     newWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, newWidth));
     // `leftWidth` is not template-bound — it only drives the `--left-width` CSS
     // custom property set imperatively here — so no CD is needed and the former
@@ -582,11 +613,13 @@ export class FindViewComponent implements OnInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+    // Released before the drag opened a folded side: nothing moved.
+    if (this.leftCollapsed()) return;
     const leftPanelEl = this.layoutRef().nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
     if (leftPanelEl) {
       const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth);
       if (snapped !== null) {
-        const leftMax = this.layoutRef().nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+        const leftMax = this.layoutRef().nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightExtent();
         const clamped = Math.max(this.LEFT_MIN, Math.min(leftMax, snapped));
         this.leftWidth = clamped;
         this.layoutRef().nativeElement.style.setProperty('--left-width', `${clamped}px`);
@@ -610,7 +643,8 @@ export class FindViewComponent implements OnInit, OnDestroy {
     if (!this.draggingRight) return;
     const layoutRect = this.layoutRef().nativeElement.getBoundingClientRect();
     let newWidth = layoutRect.right - event.clientX;
-    const rightMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+    if (!this.dragOpens('right', newWidth)) return;
+    const rightMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftExtent();
     newWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, newWidth));
     this.rightWidth = newWidth;
     this.layoutRef().nativeElement.style.setProperty('--right-width', `${newWidth}px`);
@@ -620,18 +654,54 @@ export class FindViewComponent implements OnInit, OnDestroy {
     this.draggingRight = false;
     document.removeEventListener('mousemove', this.boundRightMouseMove);
     document.removeEventListener('mouseup', this.boundRightMouseUp);
+    if (this.rightCollapsed()) return;
     const rightPanelEl = this.layoutRef().nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
     if (rightPanelEl) {
       const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth);
       if (snapped !== null) {
         const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width;
-        const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+        const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftExtent();
         const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
         this.rightWidth = clamped;
         this.layoutRef().nativeElement.style.setProperty('--right-width', `${clamped}px`);
       }
     }
     this.savePanelPx('right');
+  }
+
+  /** A folded side's divider does nothing until it is dragged out past the
+   *  panel's minimum, which opens the side there. False while it stays folded. */
+  private dragOpens(side: PanelSide, width: number): boolean {
+    if (!(side === 'left' ? this.leftCollapsed() : this.rightCollapsed())) return true;
+    if (width < (side === 'left' ? this.LEFT_MIN : this.RIGHT_MIN)) return false;
+    this.openPanel(side);
+    return true;
+  }
+
+  /** The width each side takes in the grid: its strip's while folded. */
+  private leftExtent(): number {
+    return this.leftCollapsed() ? this.COLLAPSED_WIDTH : this.leftWidth;
+  }
+
+  private rightExtent(): number {
+    return this.rightCollapsed() ? this.COLLAPSED_WIDTH : this.rightWidth;
+  }
+
+  /** Fold or open a side (#4673), remembering it; the open width survives the fold. */
+  onTogglePanel(side: PanelSide): void {
+    if (side === 'left') {
+      this.panelHide.set('left', !this.leftCollapsed());
+    } else if (this.rightCollapsed()) {
+      this.openPanel('right');
+    } else {
+      this.verdictFolded.set(true);
+      this.panelHide.set('right', true);
+    }
+  }
+
+  private openPanel(side: PanelSide): void {
+    if (side === 'right') this.verdictFolded.set(false);
+    this.panelHide.set(side, false);
   }
 
   // --- Data loading ---
@@ -1064,13 +1134,13 @@ export class FindViewComponent implements OnInit, OnDestroy {
     const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width || 1200;
     const leftPx = this.panelPxPref.left.value();
     if (leftPx != null) {
-      const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+      const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightExtent();
       this.leftWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx));
       this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     }
     const rightPx = this.panelPxPref.right.value();
     if (rightPx != null) {
-      const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+      const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftExtent();
       this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx));
       this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     }

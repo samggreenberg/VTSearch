@@ -175,12 +175,12 @@ export class RightPanelComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.settingsState.load();
-    this.voteState.startPolling();
+    // The votes poll is the view's, not the panel's: the panel unmounts while
+    // it is folded (#4673), and the left list colours from the same votes.
     this.subscribeToLabelset();
   }
 
   ngOnDestroy(): void {
-    this.voteState.stopPolling();
     this.labelsetState.stopPolling();
   }
 

@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  flex-shrink: 0;
+}
+
+// Folded, the toggle *is* the pane: it fills the strip's column top to bottom.
+:host(.folded) {
+  height: 100%;
+}
+
+.side-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  height: 100%;
+  padding: var(--space-sm) 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-base);
+
+  &:hover {
+    background: var(--bg-hover);
+
+    // The arrow is a `.collapse-toggle` that is not a button of its own (the
+    // whole strip is), so it lights with the strip rather than on its own hover.
+    .collapse-toggle {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+    }
+  }
+}
+
+.side-strip-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: var(--font-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+}
+
+// Open, a slim row with the arrow on the edge nearest the centre.
+.side-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-xs) var(--space-sm) 0;
+
+  &.side-bar--right {
+    justify-content: flex-start;
+  }
+}

@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Train and Test fold either side panel to a strip, and open with both folded** (issue #4673).
+  The left panel's fold (Autopilot's collapse, Train only until now) comes to Test's Autopilot tab,
+  and the right panel gains one in both views. Each side folds to a thin strip on its own: click
+  the strip, or drag its divider out, to open it, and the ◀ / ▶ at its top folds it again. The
+  left folds on the Autopilot tab only, since Manual and Review are driven from its list. Both
+  start folded, leaving the item in the middle the room, and each remembers your choice; the
+  Settings modal's Appearance tab has **Hide left panel in Train and Test** and **Hide right panel
+  in Train and Test** in place of Autopilot's **Hide autopilot panel**. A test that reaches
+  **Done!** opens its result on its own. The `hide_autopilot` setting is now `hide_left_panel`,
+  beside a new `hide_right_panel`, both `true` by default; a saved `hide_autopilot` is not
+  carried over.
 - **Choose a detector's Threshold when you create it, and Autopilot follows it** (issue #4665).
   The New Detector form (Blank and Trained) now has the Threshold control, the same three radios
   from False Positives to False Negatives as the Manual tab. The choice is saved with the detector,

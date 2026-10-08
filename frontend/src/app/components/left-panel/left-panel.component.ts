@@ -22,6 +22,7 @@ import { StripeOverviewComponent } from './stripe-overview/stripe-overview.compo
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
+import { SidePanelToggleComponent } from '../side-panel-toggle/side-panel-toggle.component';
 import { Media, MediaTypeInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
@@ -49,6 +50,7 @@ export type { SortMode, SelectMode, SortedItem };
     AutopilotPanelComponent,
     ViewControlsComponent,
     IconComponent,
+    SidePanelToggleComponent,
   ],
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
@@ -98,7 +100,12 @@ export class LeftPanelComponent implements OnInit {
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly loadSortLabel = input('');
   readonly textQuery = input('');
-  readonly autopilotCollapsed = input(false);
+  /**
+   * The user has hidden the left panel (`hide_left_panel`, #4673). It folds
+   * to its strip on the Autopilot tab only, Train's or Test's: Manual and
+   * Review are driven from the list, so they keep it. See {@link folded}.
+   */
+  readonly collapsed = input(false);
   readonly autopilotEnabled = input(true);
   /**
    * True when Autopilot cannot run on the active (dataset, detector) pair: the
@@ -176,7 +183,8 @@ export class LeftPanelComponent implements OnInit {
   readonly autopilotStart = output<void>();
   readonly autopilotStop = output<void>();
   readonly autopilotRefocus = output<void>();
-  readonly autopilotToggleCollapse = output<void>();
+  /** The strip's arrow, or the ◀ at the head of the Autopilot tab: the host flips `collapsed`. */
+  readonly toggleCollapse = output<void>();
   readonly autopilotEnabledChange = output<boolean>();
   /** Find: the user picked a tab (#4524). */
   readonly findTabChange = output<'autopilot' | 'review'>();
@@ -184,6 +192,13 @@ export class LeftPanelComponent implements OnInit {
   readonly mediaListComponent = viewChild(MediaListComponent);
 
   readonly activeTab = signal<'manual' | 'autopilot'>('autopilot');
+
+  /** Folded to the strip: hidden, and on an Autopilot tab (Train's own, or Test's `findTab`). */
+  readonly folded = computed(
+    () =>
+      this.collapsed() &&
+      (this.panelMode() === 'find' ? this.findTab() : this.activeTab()) === 'autopilot',
+  );
 
   private readonly datasetsListingsApi = inject(DatasetsListingsApiService);
   private readonly embedderCaps = inject(EmbedderCapabilityService);
