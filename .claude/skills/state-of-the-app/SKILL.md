@@ -161,8 +161,10 @@ same edit.
     whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
 - **The opening is the text sort (#4605).** The app stays on the text sort
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
-  the Hard phase on, a median ~40 clicks in. The harness trains detectors
-  during the opening anyway and flags the steps the app would show as
+  the Hard phase on, a median ~40 clicks in. The harness scores the detector
+  Test would give during the opening anyway (from the first Good: the Goods'
+  centroid under the label quota, then the trained head; #4643,
+  `detector_tier`) and flags the steps the app would show as
   `app_trained == 1`. Every number the report reads off the session before a
   run's first such step (AP, the line at P, the balance, the objective,
   `curves.csv`, `by_click.py`) is the text sort's, at its own line. Never read
@@ -198,17 +200,21 @@ same edit.
   the opening's detectors could be left out; since it lets the user export,
   the page shows what an import gives. And it never refuses: every vote is
   written to the detector as it is cast, Export labels and Test have no phase
-  gate, and Test or an import retrains from the labelset. So `viewer.py` and
-  `curves.py` do not read `app_trained`. Before a run's first Good and Bad
-  they draw the empty set (Test is refused, #4629), and from there on the
-  harness's detector, whose line is Find's on the withheld half. That is the
-  click-4 dip the report's own curves do not have, and it is not a bug: the
-  report is the session, the viewer is the export. The page says so in its
-  reading note, and `selftest_viewer.py` / `selftest_curves.py` pin it. The
-  owner wants the app to stop handing out an unreal detector (#4643: with too
-  few Goods, Test gives the typed query's set; with too few Bads, the Goods'
-  centroid). When it does, the harness's rows carry those sets and the page
-  follows, so the dip goes with the app, not with a viewer rule.
+  gate, and Test or an import builds a detector from the labelset. So
+  `viewer.py` and `curves.py` read neither `app_trained` nor `detector_tier`.
+  Before a run's first Good they draw the empty set (Test is refused, #4629),
+  and from there on the harness's detector, which is what Test gives: since
+  #4643 the app no longer hands out a head fitted to too few labels, so under
+  the label quota (3 Goods and 4 Bads, Autopilot's own quorum) that is the
+  Goods' centroid, cut at its midpoint on the withheld half, and from the
+  quota the trained head, whose line is Find's there. The report is the
+  session, the viewer is the export, so the two still differ through the
+  opening; the click-4 dip the head on 3 Goods and 1 Bad drew (#4640) went
+  with the app, not with a viewer rule. A review run before #4643 starts its
+  rows at the first Good and Bad and draws that head; the committed pages
+  change only at the next review's run. The page says so in its reading
+  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (A typed-query
+  tier was dropped: a labelset does not carry the query.)
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
   line once the voting steps are spent, so every run ends with
@@ -449,12 +455,13 @@ things keep a report on its link:
   the carry from its own per-seed lines with `viewer.py --reskin <page>
   --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
   it). `analyze.py`'s curves and `by_click.py` already carried. A click where
-  a run has no trained detector (before its first Good and Bad, or every click
-  of a run that never got both) is scored as the empty returned set, the
-  nothing Test gives that labelset, so the runs that never trained are in its
-  mean as losses (`curves.score_empty_sets`); from the first Good and Bad on,
-  Autopilot's opening included, it draws the harness's detector (#4640,
-  above). A detector that flags nothing counts its precision as 0 rather than
+  a run has no detector (before its first Good, or every click of a run that
+  never got one; before its first Good and Bad in a review run before #4643)
+  is scored as the empty returned set, the nothing Test gives that labelset,
+  so the runs that never trained are in its mean as losses
+  (`curves.score_empty_sets`); from the first Good on, Autopilot's opening
+  included, it draws the harness's detector, the Goods' centroid under the
+  label quota (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
   undefined; a page built before that is rebuilt with `analyze.sh`, since a
   reskin has no prevalence to put AP at.
   The report's own tables score a run with no detector at the typed query its

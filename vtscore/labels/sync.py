@@ -219,7 +219,11 @@ def _push_to_labelset_source() -> None:
     # input_spec / media_type alongside the in-memory threshold.  Anything
     # missing is simply omitted from detector_meta.
     detector_data = _read_detector(_detector_path(ctx.name)) or {}
-    threshold = ctx.threshold if ctx.model is not None else None
+    # A Goods' centroid's threshold (#4643) is its own head's 0.5, which says
+    # nothing about the labels to anyone without that head: leave it out.
+    from vtscore.detectors.centroid_head import is_centroid_head
+
+    threshold = ctx.threshold if ctx.model is not None and not is_centroid_head(ctx.model) else None
     detector_meta = build_detector_meta(detector_data, threshold=threshold)
 
     # Serialize against any in-progress sync_from on another thread.

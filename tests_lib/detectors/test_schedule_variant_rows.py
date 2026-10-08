@@ -87,6 +87,9 @@ def harness_rows():
     return simulate_voting_iterations(
         medias,
         target_category="cat0",
+        # The trained head's cut is the subject: under the label quota (#4643)
+        # the early rows are the Goods' centroid's, which carries none of it.
+        label_quota=False,
         seed=0,
         dataset_name="planted",
         inclusion=0,

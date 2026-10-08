@@ -295,6 +295,7 @@ Two columns make this visible in the output:
 
 - **`phase`** — the Autopilot phase after that vote (`good` / `bad` / `hard` / `new` / `done` / `exhausted`).
 - **`app_trained`** — `1` exactly when the app would have had a trained detector on screen. **A threshold recorded where this is `0` is one no user would ever see**, so any analysis of threshold quality should filter on it.
+- **`detector_tier`** — which detector a Test at that click gives (#4643): `centroid`, the Goods' centroid, from the first Good until the votes hold 3 Goods and 4 Bads (the label quota, [`ML.md`](ML.md#below-the-label-quota-the-goods-centroid-not-a-head)), else `trained`. The row's test metrics are that detector's, cut where Test cuts it on the withheld half; the Train side (acquisition, the lights, the spot check) runs on the trained head wherever there is a Good and a Bad, as the Train view's learned sort does. `label_quota=False` is the pre-#4643 arm: no row before the first Good and Bad, the head from there. The study extras that vary the trained head's cut (variant rows, fit-quality, rank and precision frames) ride only trained steps under the quota.
 
 Metrics are still recorded at every trainable step in both modes — fidelity changes the *vote order* and the `app_trained` flag, not measurement coverage.
 
@@ -464,7 +465,7 @@ Set `CALIB_SKYLINE_ARMS=skyline_train_full` to turn the arm on in the calibratio
 
 #### The pick log (`pick_sink`)
 
-Pass a list as `pick_sink` to get one row per **click** (columns: `PICK_COLUMNS`) — what was picked, whether it was a positive, and where on the seed sort it came from. The main frame starts at the first *trainable* step, because before one Good and one Bad vote coexist there is no model, no threshold and no metrics row; so the opening is exactly the part it does not record. An opening that never finds both classes emits **no main row at all**, which is a result about that opening rather than a missing cell.
+Pass a list as `pick_sink` to get one row per **click** (columns: `PICK_COLUMNS`) — what was picked, whether it was a positive, and where on the seed sort it came from. The main frame starts at the first Good (#4643: from there Test gives the Goods' centroid; before it, at the first Good and Bad), because before it there is no detector, no threshold and no metrics row; so the start of the opening is exactly the part it does not record. An opening that never finds a Good emits **no main row at all**, which is a result about that opening rather than a missing cell.
 
 Pass `autopilot_fidelity=False` to reproduce studies published before the flow was aligned (the Max-Patch, MLP-vs-SVM, and Inclusion-knob reports); that path is byte-for-byte the old behaviour. New studies should leave it on.
 

@@ -312,12 +312,18 @@ def score_detector(
         positive_hits.sort(key=lambda x: x["score"], reverse=True)
         negative_hits.sort(key=lambda x: x["score"], reverse=True)
 
+        from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
+        from vtscore.detectors.label_quota import served_quota  # noqa: PLC0415
+
         return name, {
             "detector_name": name,
             "threshold": round(threshold, 4),
             # The balance's state on that cut: unchecked, headless (#4247,
             # #4272, #4413).
             "balance": balance,
+            # Which detector the labels gave: under the quota, the Goods'
+            # centroid rather than a trained head (#4643).
+            "label_quota": served_quota(mlp, LabelSet.from_dict(det_data.get("labelset") or {})),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
             "negative_hits": negative_hits,

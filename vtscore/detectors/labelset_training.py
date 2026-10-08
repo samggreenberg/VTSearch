@@ -746,8 +746,10 @@ def labelset_resolution_report(
             }
             for elem in failures[:3]
         ]
-    elif not has_good or not has_bad:
-        diagnostic["hint"] = "Every label resolved, but they are all the same class (need both good and bad)"
+    elif not has_good:
+        # Under the label quota (#4643) a Good is all a detector needs: below
+        # the quota the Goods' centroid answers, so no Bad is required.
+        diagnostic["hint"] = "Every label resolved, but none is a Good: a detector needs at least one Good label"
     return diagnostic
 
 
@@ -950,6 +952,39 @@ class Haystack(NamedTuple):
     to_source: dict[int, int]
 
 
+def install_centroid_head(
+    det_ctx,
+    goods: list[np.ndarray],
+    score: Callable[[Any], Any],
+    labelset: LabelSet | None,
+) -> tuple[Any, float]:
+    """Store the Goods' centroid head on *det_ctx* as its detector, and return ``(head, threshold)``.
+
+    What a labelset under the quota gives (#4643): see
+    :mod:`~vtscore.detectors.centroid_head`.  *score* scores a head over the
+    corpus the line is cut on (:func:`~vtscore.detectors.centroid_head.fit_centroid_head`).
+
+    Every cache a trained head's retrain leaves for a later re-cut is dropped:
+    the centroid has no calibration folds, no fitted cut and no labels line, so
+    a balance change finds nothing to re-cut and its line stays the midpoint.
+    No ranking is kept either; a Find pass builds one from its own scores.  The
+    head is stamped with *labelset*'s signature like a trained one (#4204).
+    """
+    from vtscore.detectors.centroid_head import fit_centroid_head
+    from vtscore.detectors.model_loading import labelset_signature
+
+    head, threshold = fit_centroid_head(goods, score)
+    det_ctx.model = head
+    det_ctx.model_labels_sig = labelset_signature(labelset)
+    det_ctx.threshold = threshold
+    det_ctx.calibration_cache = None
+    det_ctx.anchored_cut_cache = None
+    det_ctx.labels_line = None
+    det_ctx.line_ranking = None
+    det_ctx.gate_passed = None
+    return head, threshold
+
+
 def train_from_labelset(
     det_ctx,
     labelset: LabelSet,
@@ -961,10 +996,13 @@ def train_from_labelset(
 ) -> bool:
     """Populate the embedding cache, build (X, y), train, and store on *det_ctx*.
 
-    Returns ``True`` when an MLP was trained (need ≥1 good and ≥1 bad cached
-    vector); otherwise leaves ``det_ctx.model`` untouched.  A trained head is
-    stamped with *labelset*'s signature, so Find reuses it only until the
-    labels change (issue #4204).
+    Returns ``True`` when a detector was stored on *det_ctx*; otherwise leaves
+    ``det_ctx.model`` untouched.  Which detector follows the label quota
+    (#4643, :mod:`~vtscore.detectors.label_quota`) on the labels that resolved
+    to a vector: none with no Good (``False``), the Goods' centroid
+    (:func:`install_centroid_head`) under either quota, the trained head once
+    both are met.  Either is stamped with *labelset*'s signature, so Find
+    reuses it only until the labels change (issue #4204).
 
     *snap* does two jobs, and a caller that scores something other than what it
     loaded needs them separated.  It is the snapshot the labelset's elements
@@ -986,18 +1024,31 @@ def train_from_labelset(
         on_progress=on_progress,
     )
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
-    if len(X_list) < 2:
-        return False
-    if not any(y == 1.0 for y in y_list) or not any(y == 0.0 for y in y_list):
+    from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED, quota_from_groups
+
+    tier = quota_from_groups(groups).tier
+    # populate_label_embeddings stamped det_ctx.embedder with the space the
+    # labels were embedded in; score the threshold's pass in that same space.
+    haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
+    if tier == TIER_CENTROID:
+        from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
+
+        hay = haystack.medias if haystack is not None else snap
+        rows = scoring_rows_for_snap(hay, det_ctx.embedder or None) if hay else None
+        install_centroid_head(
+            det_ctx,
+            [x for x, y in zip(X_list, y_list, strict=True) if y == 1.0],
+            (lambda head: score_rows_with_model(head, rows)[0]) if rows is not None else (lambda _head: []),
+            labelset,
+        )
+        return True
+    if tier != TIER_TRAINED:
         return False
 
     from vtscore.detectors.training import train_and_threshold
 
-    # populate_label_embeddings stamped det_ctx.embedder with the space the
-    # labels were embedded in; score the safe-threshold pass in that same space.
     # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
     # (otherwise a balance change can't move the cutoff — see train_and_threshold).
-    haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
     labels = labeled_media_labels(labelset, snap)
     voted_ids = set(labels)
     if haystack is not None:
@@ -1037,6 +1088,7 @@ def labelset_train_and_score(
     rows: Any = None,
     on_progress: ProgressCallback | None = None,
     beta: float | None = None,
+    label_quota: bool = False,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
@@ -1071,14 +1123,42 @@ def labelset_train_and_score(
     *inclusion_value* is deprecated
     (#4269): leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and
     any other value raises ``ValueError``.
+
+    *label_quota* applies the label quota (#4643) as
+    :func:`train_from_labelset` does: a caller handing a detector out (a cold
+    Find) passes ``True`` and gets the Goods' centroid under the quota, cut on
+    *clips_dict*, and nothing with no Good.  The Train view's learned sort
+    leaves it ``False``: the head it trains is the sort the user labels on, not
+    a detector anyone takes away.
     """
     from vtscore.config.core_config import _retired_inclusion
-    from vtscore.detectors.training import _train_and_score_xy
+    from vtscore.detectors.training import _format_results, _train_and_score_xy, score_rows_with_model
 
     _retired_inclusion("labelset_train_and_score(inclusion_value=...)", inclusion_value)
 
     populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict, on_progress=on_progress)
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
+    if label_quota:
+        from vtscore.detectors.label_quota import TIER_CENTROID, TIER_NONE, quota_from_groups
+        from vtscore.detectors.training import detector_score_embedder, scoring_rows_for_snap
+
+        tier = quota_from_groups(groups).tier
+        if tier == TIER_NONE:
+            return [], 0.5, None
+        if tier == TIER_CENTROID:
+            if rows is None:
+                rows = scoring_rows_for_snap(clips_dict, detector_score_embedder(det_ctx, clips_dict))
+            centroid_rows = rows
+            head, threshold = install_centroid_head(
+                det_ctx,
+                [x for x, y in zip(X_list, y_list, strict=True) if y == 1.0],
+                lambda h: score_rows_with_model(h, centroid_rows)[0],
+                labelset,
+            )
+            scores, best_region = score_rows_with_model(head, centroid_rows)
+            results = _format_results(centroid_rows.ids, scores, best_region, clips_dict)
+            results, threshold = maybe_labelset_structural_rerank(det_ctx, labelset, results, threshold, clips_dict)
+            return results, threshold, head
     results, threshold, model = _train_and_score_xy(
         X_list,
         y_list,

@@ -65,7 +65,8 @@ def _media(cid: int, vec: np.ndarray, grid: np.ndarray | None = None) -> dict:
 def _cold_corpus(n: int = 60) -> dict[int, dict]:
     """A plain (grid-less) corpus with a broad spread of scores.
 
-    Ids 1-6 sit at the two poles and carry the detector's labels; the rest fill
+    Ids 1-7 sit at the two poles and carry the detector's labels - three Goods
+    and four Bads, the label quota (#4643), so they train a head; the rest fill
     the space between them, so the population the threshold is fitted on is
     genuinely a distribution rather than two spikes.
     """
@@ -73,9 +74,9 @@ def _cold_corpus(n: int = 60) -> dict[int, dict]:
     corpus: dict[int, dict] = {}
     for cid in range(1, 4):
         corpus[cid] = _media(cid, _basis(1))
-    for cid in range(4, 7):
+    for cid in range(4, 8):
         corpus[cid] = _media(cid, _basis(0))
-    for cid in range(7, n + 1):
+    for cid in range(8, n + 1):
         # A cloud tilted towards the Good pole, which is what makes the two cuts
         # land in different places (a symmetric cloud puts them both mid-gap).
         vec = _basis(1) * rng.uniform(0.2, 1.0) + _basis(0) * rng.uniform(0.0, 0.8)
@@ -99,6 +100,7 @@ def _cold_config() -> dict:
                     {"md5": "m4", "label": "bad"},
                     {"md5": "m5", "label": "bad"},
                     {"md5": "m6", "label": "bad"},
+                    {"md5": "m7", "label": "bad"},
                 ]
             },
         },
@@ -144,7 +146,7 @@ class TestColdFindCutsOnTheCorpusItDecides:
             "the estimator was fitted without the haystack Find already holds (issue #3516)"
         )
         assert set(call["final_ids"]) == set(corpus)
-        assert call["voted_ids"] == {1, 2, 3, 4, 5, 6}, (
+        assert call["voted_ids"] == {1, 2, 3, 4, 5, 6, 7}, (
             "the labelled media must be named so the estimator can drop them from the haystack it fits on (issue #3308)"
         )
 
@@ -257,8 +259,8 @@ class TestColdFindIsTheAppsLabelsetTraining:
             for name in ("ds-a", "ds-b"):
                 find_mod._score_dataset({"name": name, "pkl_path": "ignored"}, [dc], 0, 0)
 
-        assert len(resolved) == 6, (
-            f"{len(resolved)} origin resolutions for 6 labels over 2 datasets: the cold "
+        assert len(resolved) == 7, (
+            f"{len(resolved)} origin resolutions for 7 labels over 2 datasets: the cold "
             "context is being rebuilt per dataset instead of held for the run"
         )
 

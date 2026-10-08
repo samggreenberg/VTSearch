@@ -234,6 +234,16 @@ def find_label(body: dict):
         )
         if mlp is None:
             find_idle()
+            if diagnostic is not None and not diagnostic["has_good"] and not diagnostic["failed_resolution"]:
+                # Every label resolved and none is a Good: there is nothing to
+                # sort toward (#4643).  One Good is enough - below the label
+                # quota the Goods' centroid answers - so name that, not a
+                # resolution failure.
+                abort(
+                    400,
+                    message=f"Detector '{d['name']}' needs at least one Good label before it can be tested.",
+                    resolution_diagnostic=diagnostic,
+                )
             if diagnostic is not None:
                 error_msg = (
                     f"Detector '{d['name']}' could not be trained: "
@@ -402,6 +412,8 @@ def find_label(body: dict):
         from vtscore.state.core import detector_balance_state  # noqa: PLC0415
         from vtsearch.state import get_beta  # noqa: PLC0415
 
+        from vtscore.detectors.label_quota import served_quota  # noqa: PLC0415
+
         return {
             "ok": True,
             "results": results,
@@ -411,6 +423,8 @@ def find_label(body: dict):
             "good_count": good_count,
             "bad_count": bad_count,
             "detector_name": d.get("name", ""),
+            # Which detector the labels gave, and what is still owed (#4643).
+            "label_quota": served_quota(mlp, labelset),
         }
 
 

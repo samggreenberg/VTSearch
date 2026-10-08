@@ -92,6 +92,34 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(component.displayHits.length).toBe(1);
   });
 
+  it("names the detectors that ran as the Goods' centroid, with what they owe (#4643)", async () => {
+    const quota = (tier: string, goods: number, bads: number) => ({
+      tier,
+      n_good: 3 - goods,
+      n_bad: 4 - bads,
+      goods_owed: goods,
+      bads_owed: bads,
+      good_quota: 3,
+      bad_quota: 4,
+    });
+    fixture.componentRef.setInput('data', {
+      ...mockData,
+      results: {
+        under: { detector_name: 'Under', hits: [], label_quota: quota('centroid', 1, 3) },
+        trained: { detector_name: 'Trained', hits: [], label_quota: quota('trained', 0, 0) },
+      },
+    } as any);
+    await flushInit();
+    expect(component.centroidDetectors).toEqual(['Under (1 more Good and 3 more Bads)']);
+    expect(fixture.nativeElement.querySelector('.centroid-note')?.textContent).toContain("Goods' centroid");
+  });
+
+  it('says nothing about the centroid when every detector trained', async () => {
+    await flushInit();
+    expect(component.centroidDetectors).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.centroid-note')).toBeNull();
+  });
+
   it('should display all hits when both selected', async () => {
     await flushInit();
     component.exportSides = 'both';

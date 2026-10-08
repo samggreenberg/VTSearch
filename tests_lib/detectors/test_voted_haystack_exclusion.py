@@ -295,7 +295,9 @@ class TestArmSemanticsEndToEnd:
 
     @staticmethod
     def _cuts(rows) -> list[float]:
-        return [round(r["acq_threshold"], 9) for r in rows]
+        # The floor acts on the Train side: a row with no Bad yet (the Goods'
+        # centroid's, #4643) has no head and so no acquisition cut.
+        return [round(r["acq_threshold"], 9) for r in rows if r["n_bad"] > 0]
 
     def test_default_arm_is_the_shipped_floor(self):
         """The load-bearing one: `None` must be byte-identical to the app's floor.

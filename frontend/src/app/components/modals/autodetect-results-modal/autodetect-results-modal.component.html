@@ -15,6 +15,14 @@
     }
   </div>
 
+  <!-- Detectors under the label quota ran as the Goods' centroid (#4643). -->
+  @if (centroidDetectors.length) {
+    <p class="info-text centroid-note" role="note">
+      Too few labels for a trained detector, so these ran as the Goods' centroid:
+      {{ centroidDetectors.join('; ') }}.
+    </p>
+  }
+
   <!-- Stale AutoFind references (detector files deleted out from under the list) -->
   @if (data().missing_detectors?.length) {
     <div class="auto-export-status auto-export-status--error">

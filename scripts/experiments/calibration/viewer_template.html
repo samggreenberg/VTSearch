@@ -1182,14 +1182,16 @@
           `value stands in, so a check never drops a run from the mean (#4624).`
         : "") +
       (P.empty_sets_scored
-        ? ` A click where a run has <b>no trained detector</b> yet (before its first Good and Bad, or at every ` +
-          `click of a run that never got both) counts as what the app returns there, nothing: recall, F1 and the ` +
+        ? ` A click where a run has <b>no detector</b> yet (before its first Good, or at every click of a run ` +
+          `that never got one) counts as what the app returns there, nothing: recall, F1 and the ` +
           `objective 0, precision 0, AP at the class's prevalence, AUROC 0.5. A detector that flags nothing ` +
           `returns the same empty set, so its precision counts as 0 too. So every run is in the mean at every ` +
-          `click, the failing ones included. From its first Good and Bad on, a run is drawn at the detector ` +
-          `those labels train, which is what Test or an import of the exported labels gives at that click, ` +
+          `click, the failing ones included. From its first Good on, a run is drawn at the detector its labels ` +
+          `give, which is what Test or an import of the exported labels gives at that click: <b>the Goods' ` +
+          `centroid</b> until the labels hold 3 Goods and 4 Bads, the trained detector from there (#4643), ` +
           `<b>through Autopilot's opening too</b>, where the session itself still shows the text sort (#4640). ` +
-          `An early dip below the notch is what exporting there would get, not what the session shows.`
+          `A dip below the notch there is what exporting would get, not what the session shows. Results run ` +
+          `before #4643 start at the first Good and Bad, with a trained detector from there, as the app did.`
         : "") +
       (opt.showCov
         ? ` The strip underneath is that fraction, and it drops below full somewhere in this slice.`
@@ -1197,7 +1199,7 @@
           ` as a flat 100% line: nothing in this slice dropped out.`));
     if (P.anchor.has) bits.push(
       `<b>The notch in the left margin is the ${esc(P.anchor.label)}</b> — what typing the query got for free. ` +
-      `Nothing joins it to the curve on purpose: no detector exists between it and the first trained click, so the ` +
+      `Nothing joins it to the curve on purpose: nothing was measured between it and the first scored click, so the ` +
       `gap is the honest drawing. A curve is worth its clicks once it has crossed that notch.`);
     if (opt.showSky) bits.push(
       `<b>The notch in the right margin is the ${esc(P.skyline.label)}</b> — the same head, through the same ` +

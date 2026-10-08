@@ -25,6 +25,11 @@
         title="Review the ranked list under the line yourself: walk the boundary, verify items into the Good and Bad piles, and send the matches on."
       >Review</button>
     </div>
+    @if (findDetectorNote()) {
+      <!-- Under the label quota the detector is the Goods' centroid (#4643):
+           said on both tabs, since both read its line. -->
+      <p class="info-text find-detector-note" role="note">{{ findDetectorNote() }}</p>
+    }
 
     @if (findTab() === 'autopilot') {
       <div class="tab-panel-autopilot" role="tabpanel" aria-label="Test autopilot">

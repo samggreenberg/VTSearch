@@ -480,7 +480,7 @@ def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:
             want = f1(float(precision), float(recall))
             assert steps.loc[int(t), "thr_fbeta"] == pytest.approx(want)
             assert c.loc[int(t), "thr_fbeta"] == pytest.approx(want)
-        first = int(ordinary["t"].min())
+        first = int(np.asarray(ordinary["t"]).min())
         assert np.allclose(c.loc[0 : first - 1, "thr_fbeta"], cells.loc[cat, "text_thr_fbeta"]), (
             "the typed query's set until the first trained click (#4631)"
         )
@@ -918,8 +918,10 @@ def test_a_checkpoint_inside_a_spot_check_carries_the_last_detector_on_screen(ru
     for table, before in ((bal, run["balances"]), (lines, run["lines"])):
         new = table[(table["category"] == "cat1@large") & (table["point"] == "10")]
         old = before[(before["category"] == "cat1@large") & (before["point"].astype(str) == "10")]
-        assert bool(new["precision"].notna().all()), "carried, not blank"
-        assert np.allclose(new["precision"].to_numpy(), old["precision"].to_numpy(), equal_nan=True)
+        # Plain arrays: pyright types a frame indexed by a mask as an ndarray here.
+        got = np.asarray(new["precision"], dtype=float)
+        assert bool(np.isfinite(got).all()), "carried, not blank"
+        assert np.allclose(got, np.asarray(old["precision"], dtype=float), equal_nan=True)
 
     # Handed over inside a check round with no frame on screen yet: the next frame, at most a round ahead.
     later = frames[at10].assign(t=12)
@@ -930,7 +932,9 @@ def test_a_checkpoint_inside_a_spot_check_carries_the_last_detector_on_screen(ru
     old = run["balances"][
         (run["balances"]["category"] == "cat1@large") & (run["balances"]["point"].astype(str) == "10")
     ]
-    assert np.allclose(new["fbeta"].to_numpy(), old["fbeta"].to_numpy(), equal_nan=True), "read a round ahead"
+    assert np.allclose(np.asarray(new["fbeta"], dtype=float), np.asarray(old["fbeta"], dtype=float), equal_nan=True), (
+        "read a round ahead"
+    )
 
 
 def test_the_check_round_is_the_harness_picks_a_band() -> None:

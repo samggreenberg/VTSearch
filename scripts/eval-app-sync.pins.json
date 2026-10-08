@@ -43,6 +43,13 @@
     "app": "fd583ae911acc83d83c31dc74d821c189e778401b2baed42a2f2148d2425df96",
     "harness": "841d7ec31d00d8827250dae11129fd7ff71bd42c83883414a595a7f73c2dc5b1"
   },
+  "detectors.label_quota_centroid": {
+    "app": "b03bf4cca2c22ba76b72940268718ba54141021c861d1e5678e07ea0ffca49e3",
+    "harness": "39c747b2268d92b035fb457840c4c405b28f0686d423c435000a762d6d1fb0ea"
+  },
+  "detectors.label_quota_default": {
+    "app": "4962bc3c927f1aaf6b51792ed211cbc0cd43b389fa710d4e62acbb78730bf6b1"
+  },
   "line_test.budgets_default": {
     "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",
     "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"

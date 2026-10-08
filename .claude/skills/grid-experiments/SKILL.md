@@ -517,9 +517,11 @@ refuses a page whose per-seed lines were thinned to fit the budget (rebuild
 that one from its cells).
 
 **A run with no detector stays in the mean too, as a loss.** Before a run's
-first Good and Bad vote, and at every click of a run that never got both, the
-harness writes no row, and a user there has nothing: the labelset loads as a
-detector with no model and Find on it is refused. Both the viewer and
+first Good vote, and at every click of a run that never got one, the harness
+writes no row, and a user there has nothing: with no Good there is nothing to
+sort toward, and Test on it is refused. (In results run before #4643 the rows
+start at the first Good *and* Bad, when Test refused one class too; the same
+rule - every click before a run's first row - reads both.) Both the viewer and
 `curves.py` now score those clicks as the empty returned set
 (`curves.score_empty_sets`, `curves.EMPTY_SET`: recall, F1 and the objective
 0, precision 0, FPR 0, FNR 1, AP the test split's prevalence, AUROC 0.5, cost
@@ -533,18 +535,27 @@ reading note (`empty_sets_scored`). This needs each run's prevalence, which a
 built page does not carry, so a committed page built before it is **rebuilt**
 from its results, not reskinned.
 
-**From the first Good and Bad on, both draw the harness's detector, Autopilot's
+**From the first Good on, both draw the harness's detector, Autopilot's
 opening included** (owner, 2026-10-07, #4640). The session stays on the text
 sort until the Hard phase (`app_trained`, #4605), but the user can export the
-labels and run Test at any click, and either retrains from the labelset. So
-the page shows what that gives, and neither module reads `app_trained`. A
-report that scores the *session* filters on it itself, as the State of the App
-analyzer does.
+labels and run Test at any click, and either builds a detector from the
+labelset. So the page shows what that gives, and neither module reads
+`app_trained`. Since #4643 that is the label quota's: the Goods' centroid until
+the labels hold 3 Goods and 4 Bads, the trained head from there. The harness
+writes each row as that detector and names it in `detector_tier`, which
+neither module reads either. A report that scores the *session* filters on
+`app_trained` itself, as the State of the App analyzer does. A study that wants
+the trained head at every Good-and-Bad step, and the study extras that vary
+its cut (variant rows, fit-quality, rank and precision frames, which ride only
+trained steps under the quota), runs `label_quota=False`
+(`simulate_voting_iterations`; `CALIB_LABEL_QUOTA=off` in a cell), the
+pre-#4643 arm. `preflight_knobs.py` lists it as off-production.
 
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
 the weighted pooling against a hand-computed answer, the click-0 anchor, the
-budget note, the carry through a spot check round, and the empty-set score of a
-click with no detector; `selftest_curves.py` is
+budget note, the carry through a spot check round, the empty-set score of a
+click with no detector, and that a Goods'-centroid row is drawn like any other;
+`selftest_curves.py` is
 the PNGs'. Both run in the suite (`tests_lib/meta/test_calibration_viewer.py`).
 
 **The metrics come from the harness, not from the viewer.** `cost`, `precision`,

@@ -62,6 +62,9 @@ from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_co
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
+from vtscore.detectors.centroid_head import CENTROID_THRESHOLD
+from vtscore.detectors.label_quota import TIER_CENTROID
+from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
     APP_TRAINER,
@@ -73,6 +76,7 @@ from vtscore.eval.step_model import (
 )
 from vtscore.eval.step_trainers import (
     _build_eval_atlas,
+    _centroid_step,
     _labelset_error_costs,
     _score_pool,
     _train_and_calibrate,
@@ -1346,6 +1350,68 @@ def _calibration_metric_rows(
     return rows, base_scores, labels, [int(i) for i in ids]
 
 
+def _centroid_test(
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+    beta: float | None,
+    calibration_rows: bool,
+) -> tuple[StepModel, list[dict[str, Any]], "tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None"]:
+    """What a Test on the withheld half gives under the label quota (#4643): the Goods' centroid.
+
+    The centroid is cut where Test cuts it, on the corpus it searches - here
+    the withheld half - so the step is built (:func:`_centroid_step`) with that
+    half's scorer, in the run's own geometry, and scored on it at
+    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  Its line
+    does not take the balance, so there is no Find line to re-draw: *beta*
+    only weights the F-beta columns.
+
+    Returns the step, its metric rows (one, from :func:`_calibration_metric_rows`
+    when *calibration_rows*, else :func:`_evaluate_on_test`'s), and the
+    calibration path's ``(rows, scores, labels, ids)`` or ``None``.
+    """
+    from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
+
+    def _score(step: StepModel) -> list[float]:
+        return _score_media_ids(step, clips_dict, list(test_ids), region_aware=region_aware, style_obj=style_obj)
+
+    step = _centroid_step(
+        good_votes, clips_dict, target_category, _score, region_voting=region_voting, style_obj=style_obj
+    )
+    if calibration_rows:
+        calibration = _calibration_metric_rows(
+            step,
+            CENTROID_THRESHOLD,
+            {"provenance": "centroid", "beta": beta},
+            clips_dict,
+            test_ids,
+            target_category,
+            inclusion,
+            style_obj,
+            [],
+            0,
+        )
+        return step, calibration[0], calibration
+    metrics = _evaluate_on_test(
+        step,
+        CENTROID_THRESHOLD,
+        clips_dict,
+        test_ids,
+        target_category,
+        inclusion,
+        region_aware=region_aware,
+        style_obj=style_obj,
+        beta=beta,
+    )
+    return step, [metrics], None
+
+
 # ------------------------------------------------------------------
 # Supervised skyline (issue #3322)
 # ------------------------------------------------------------------
@@ -2229,6 +2295,7 @@ def simulate_voting_iterations(  # noqa: C901
     weak_min_t: int = WEAK_CHECK_MIN_VOTES,
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
+    label_quota: Optional[bool] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2660,6 +2727,19 @@ def simulate_voting_iterations(  # noqa: C901
             example sort), where the app trains no detector and so has neither
             a separation to read nor a ranking to check.  Without a flow
             (a non-Autopilot strategy) both prompt anywhere.
+        label_quota: Whether the withheld half is scored as Test scores it
+            under the app's label quota (#4643,
+            :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
+            the app: on the ``"app"`` trainer, from the first Good vote until
+            the votes meet the quota, a row's test metrics are the Goods'
+            centroid's (:func:`_centroid_test`), cut on the withheld half, and
+            ``detector_tier`` says ``centroid``; from the quota on they are the
+            trained head's, as before.  The Train side - acquisition, the
+            lights, the spot check - still runs on the trained head wherever
+            there is a Good and a Bad, because the Train view's learned sort
+            does.  ``False`` is the pre-#4643 arm: no row before the first Good
+            and Bad, the head from there.  The standalone trainers are not the
+            app and default to ``False``.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -2668,7 +2748,9 @@ def simulate_voting_iterations(  # noqa: C901
         xcal_seconds, pool_score_seconds, test_score_seconds, backend, device,
         elapsed_seconds``.  ``n_good``/``n_bad`` report the vote counts behind
         each row so callers can tell apart metrics learned from a 1-vs-1 model
-        and a many-vs-many one.  ``app_trained`` is 1 exactly when the app would
+        and a many-vs-many one.  Under the label quota the rows start at the
+        first Good vote, and ``detector_tier`` (``centroid`` / ``trained``)
+        says which detector a Test there gives.  ``app_trained`` is 1 exactly when the app would
         have had a trained detector on screen at that step: a threshold recorded
         where it is 0 is one no user would ever see, which is what issue #2788's
         cold-start degenerates turned out to be.  Under ``test_bands`` each row
@@ -2750,6 +2832,9 @@ def simulate_voting_iterations(  # noqa: C901
     # The arm draws the app's labels line (#4452): a balance with no forced check shape.
     labels_arm = beta is not None and line_shape is None
     _check_inclusion_arm(inclusion, beta)
+    # Test's label quota (#4643): the app's rule on the app's trainer unless the
+    # arm says otherwise.  A standalone trainer is not the app.
+    quota_on = (trainer == APP_TRAINER) if label_quota is None else bool(label_quota)
     # The acquisition cut's rule (#4409): the shipped argmax factor under a
     # balance unless the arm says otherwise, the offset everywhere else.
     acq_factor = resolve_acquisition_factor(acq_p_crossing, beta)
@@ -3162,6 +3247,78 @@ def simulate_voting_iterations(  # noqa: C901
         return schedule.rounds * (walk_picks or schedule.picks)
 
     t = 0
+
+    def _ident_row(
+        t: int,
+        row_phase: str,
+        acq_threshold: float,
+        threshold: float,
+        pool_scores: dict[int, float],
+        details: dict[str, Any],
+        tier: str,
+    ) -> dict[str, Any]:
+        """The identifying columns shared by every row a step emits.
+
+        Read off the run's live state (the votes, the pool, the phase machine)
+        as it stands when called, plus what the step computed.  A step with no
+        trained head yet (a Good and no Bad, under the label quota) passes NaN
+        lines, no pool scores and no details beyond the balance.
+        """
+        return {
+            "seed": seed,
+            "dataset": dataset_name,
+            "category": target_category,
+            "strategy": strategy,
+            "trainer": trainer,
+            # Blank on the standalone SVM trainers: they fit no head, so
+            # naming one here would attribute the row to a head never trained.
+            "head": head if trainer == APP_TRAINER else "",
+            "style": style or "",
+            "prevalence_arm": prevalence_arm,
+            "realized_prevalence": realized_prevalence,
+            "t": t,
+            "n_good": len(good_votes),
+            "n_bad": len(bad_votes),
+            # The haystack the threshold was fitted on, and what is left of it
+            # after this step's votes.  `n_remainder` is *exactly* the quantity
+            # the #3308 exclusion floor is compared against
+            # (`apply_vote_exclusion` counts the unvoted scores), and `pool` has
+            # already had this step's vote removed by the time this row is
+            # built - so an analyzer can reconstruct, per step, whether the
+            # exclusion fired, without the harness having to report it (#3312).
+            # Their ratio is the axis the mechanism runs on: the effect is
+            # bounded by the votes' share of the haystack.
+            "n_haystack": len(sim_ids),
+            "n_remainder": len(pool),
+            "phase": row_phase,
+            # The three lights behind that phase (#3560).  Already computed by
+            # `flow.update` above and previously discarded; the phase alone
+            # cannot say whether Smart or Stable is what holds a run in `hard`.
+            "smart": flow.smart if flow is not None else "",
+            "stable": flow.stable if flow is not None else "",
+            "span": flow.span if flow is not None else "",
+            "span_level": flow.span_level if flow is not None else -1,
+            "span_depth": flow.span_depth if flow is not None else -1,
+            "span_target": flow.span_target if flow is not None else -1,
+            # How close each rule came to firing, beside whether it did (#3560).
+            # Read off the dicts the phase machine already built this step, so a
+            # margin cannot disagree with the light above it; NaN where no phase
+            # machine ran, or where the rule itself declined to fit one.
+            **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
+            "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
+            "startup_schedule": startup_schedule or "",
+            "calibration_seed": calibration_seed,
+            "acq_threshold": round(float(acq_threshold), 6),
+            # Measured against the pool the selector ranks, not the test set, so
+            # the pair answers "how much did the sampling position move".
+            "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
+            "report_pool_percentile": _pool_percentile(pool_scores, threshold),
+            **_line_columns(details),
+            # Which detector a Test at this click gives (#4643): the Goods'
+            # centroid under the label quota, else the trained head.
+            "detector_tier": tier,
+        }
+
     while True:
         picks: list[int] | None = None
         # The vote count before this step's votes: a frame is due at every
@@ -3265,6 +3422,59 @@ def simulate_voting_iterations(  # noqa: C901
                     span=atlas.span_info() if atlas is not None else None,
                     last_vote_good=is_positive,
                 )
+            if quota_on and good_votes:
+                # No head without a Bad, but Test gives the Goods' centroid
+                # from the first Good (#4643), so this click has a row.  The
+                # Train side has nothing to record: no line, no pool scores.
+                # The row's balance is the one a trained step records, which
+                # only the safe-threshold path draws a line at.
+                row_beta = beta if safe_thresholds else None
+                t_test = time.monotonic()
+                c_step, c_rows, _c_cal = _centroid_test(
+                    good_votes,
+                    clips_dict,
+                    test_ids,
+                    target_category,
+                    inclusion,
+                    region_voting=region_voting,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                    beta=row_beta,
+                    calibration_rows=emit_calibration_metrics and style_obj is not None,
+                )
+                c_seconds = time.monotonic() - t_test
+                c_bands = _band_metrics(
+                    c_step,
+                    CENTROID_THRESHOLD,
+                    unfiltered,
+                    band_cohorts if test_bands else None,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                    neg_ids=band_neg_ids,
+                    target_category=target_category,
+                )
+                c_ident = _ident_row(
+                    t,
+                    flow.phase if flow is not None else "",
+                    float("nan"),
+                    float("nan"),
+                    {},
+                    {"beta": row_beta},
+                    "centroid",
+                )
+                c_timing = {
+                    "calibrate_count": 0,
+                    "train_seconds": float("nan"),
+                    "final_score_seconds": float("nan"),
+                    "xcal_seconds": float("nan"),
+                    "pool_score_seconds": float("nan"),
+                    "test_score_seconds": round(c_seconds, 6),
+                    "backend": c_step.backend,
+                    "device": c_step.device,
+                    "elapsed_seconds": round(time.monotonic() - start_time, 3),
+                }
+                for mr in c_rows:
+                    rows.append({**c_ident, **mr, **c_bands, **c_timing})
             continue
 
         # The live fold count for THIS step.  Constant unless #3314's schedule
@@ -3444,13 +3654,32 @@ def simulate_voting_iterations(  # noqa: C901
 
         details.pop("find_threshold", None)
         details.pop("find_on_test", None)
+        # Under the label quota a Test here gives the Goods' centroid, not this
+        # head (#4643): the withheld half is scored as that.
+        centroid = quota_on and label_quota_tier(len(good_votes), len(bad_votes)).tier == TIER_CENTROID
+        centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
         # metrics row, but both paths score the same test set here.
         calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None = None
         metrics: dict[str, float] = {}
         t_test = time.monotonic()
-        if emit_calibration_metrics and style_obj is not None:
+        if centroid:
+            centroid_step, c_rows, calibration = _centroid_test(
+                good_votes,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                region_voting=region_voting,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                beta=details.get("beta"),
+                calibration_rows=emit_calibration_metrics and style_obj is not None,
+            )
+            if calibration is None:
+                metrics = c_rows[0]
+        elif emit_calibration_metrics and style_obj is not None:
             calibration = _calibration_metric_rows(
                 step,
                 threshold,
@@ -3515,10 +3744,10 @@ def simulate_voting_iterations(  # noqa: C901
         # per-pooling rows, whose own thresholds re-cut the headline columns and
         # not this one.
         band_metrics = _band_metrics(
-            step,
+            centroid_step if centroid_step is not None else step,
             # The size bands are cohorts of the withheld half, so they are cut
             # where Find cuts it (#4452); the Train side's threshold otherwise.
-            details.get("find_threshold", threshold),
+            CENTROID_THRESHOLD if centroid_step is not None else details.get("find_threshold", threshold),
             unfiltered,
             band_cohorts if test_bands else None,
             region_aware=region_aware,
@@ -3588,57 +3817,15 @@ def simulate_voting_iterations(  # noqa: C901
             )
 
         # Identifying columns shared by every row this step emits.
-        base_row = {
-            "seed": seed,
-            "dataset": dataset_name,
-            "category": target_category,
-            "strategy": strategy,
-            "trainer": trainer,
-            # Blank on the standalone SVM trainers: they fit no head, so
-            # naming one here would attribute the row to a head never trained.
-            "head": head if trainer == APP_TRAINER else "",
-            "style": style or "",
-            "prevalence_arm": prevalence_arm,
-            "realized_prevalence": realized_prevalence,
-            "t": t,
-            "n_good": len(good_votes),
-            "n_bad": len(bad_votes),
-            # The haystack the threshold was fitted on, and what is left of it
-            # after this step's votes.  `n_remainder` is *exactly* the quantity
-            # the #3308 exclusion floor is compared against
-            # (`apply_vote_exclusion` counts the unvoted scores), and `pool` has
-            # already had this step's vote removed by the time this row is
-            # built - so an analyzer can reconstruct, per step, whether the
-            # exclusion fired, without the harness having to report it (#3312).
-            # Their ratio is the axis the mechanism runs on: the effect is
-            # bounded by the votes' share of the haystack.
-            "n_haystack": len(sim_ids),
-            "n_remainder": len(pool),
-            "phase": check_phase if picks is not None else (flow.phase if flow is not None else ""),
-            # The three lights behind that phase (#3560).  Already computed by
-            # `flow.update` above and previously discarded; the phase alone
-            # cannot say whether Smart or Stable is what holds a run in `hard`.
-            "smart": flow.smart if flow is not None else "",
-            "stable": flow.stable if flow is not None else "",
-            "span": flow.span if flow is not None else "",
-            "span_level": flow.span_level if flow is not None else -1,
-            "span_depth": flow.span_depth if flow is not None else -1,
-            "span_target": flow.span_target if flow is not None else -1,
-            # How close each rule came to firing, beside whether it did (#3560).
-            # Read off the dicts the phase machine already built this step, so a
-            # margin cannot disagree with the light above it; NaN where no phase
-            # machine ran, or where the rule itself declined to fit one.
-            **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
-            "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
-            "startup_schedule": startup_schedule or "",
-            "calibration_seed": calibration_seed,
-            "acq_threshold": round(float(acq_threshold), 6),
-            # Measured against the pool the selector ranks, not the test set, so
-            # the pair answers "how much did the sampling position move".
-            "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
-            "report_pool_percentile": _pool_percentile(pool_scores, threshold),
-            **_line_columns(details),
-        }
+        base_row = _ident_row(
+            t,
+            check_phase if picks is not None else (flow.phase if flow is not None else ""),
+            acq_threshold,
+            threshold,
+            pool_scores,
+            details,
+            "centroid" if centroid else "trained",
+        )
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
             # but #3314's scheduled arm - and recorded regardless, because a
@@ -3660,7 +3847,30 @@ def simulate_voting_iterations(  # noqa: C901
             "elapsed_seconds": round(time.monotonic() - start_time, 3),
         }
 
-        if calibration is not None:
+        if calibration is not None and centroid:
+            # The Goods' centroid's row (#4643).  The study extras below all
+            # vary the trained head's cut, which no Test gives at this click.
+            # The Test arm still starts from here if this is the last click:
+            # the centroid's line keeps the same set at every balance.
+            metric_rows, base_scores, base_labels, base_ids = calibration
+            if (rank_frame_sink is not None or line_test_sink is not None) and (
+                picks is None or check_phase == "prompt"
+            ):
+                last_ordinary = {
+                    "t": t,
+                    "test_ids": base_ids,
+                    "test_scores": base_scores,
+                    "test_labels": base_labels,
+                    "pool_ranking": line_ranking,
+                    "voted": frozenset(good_votes) | frozenset(bad_votes),
+                    "pool_labels": pool_labels,
+                    "vote_labels": {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                    "find_on_test": None,
+                    "fallback_threshold": CENTROID_THRESHOLD,
+                }
+            for mr in metric_rows:
+                rows.append({**base_row, **mr, **band_metrics, **timing_cols})
+        elif calibration is not None:
             metric_rows, base_scores, base_labels, base_ids = calibration
             # A prompted check's rounds are clicks (#4496); the end-of-run check's are not.
             is_click = picks is None or check_phase == "prompt"
@@ -3972,6 +4182,8 @@ def simulate_voting_iterations(  # noqa: C901
             "report_pool_percentile": float("nan"),
             # No line state: a skyline belongs to no step, so no line was cut on it.
             **_line_columns({}),
+            # The skyline is fitted to every label; no Test gives it (#4643).
+            "detector_tier": "",
         }
         rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 

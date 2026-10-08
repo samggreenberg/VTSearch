@@ -50,6 +50,8 @@ import {
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { lineBalanceFrom } from '../../utils/line-balance';
 import { testLineState } from '../../utils/line-test';
+import { centroidNote } from '../../utils/label-quota';
+import type { LabelQuota } from '../../generated/api-client/models/label-quota';
 import {
   coerceFocusMode,
   coerceNonEmptyString,
@@ -218,6 +220,13 @@ export class FindViewComponent implements OnInit, OnDestroy {
   readonly balanceLineState = computed(() =>
     testLineState(this.lineTest.response(), this.sortState.sortOrder ? this.sortState.aboveThreshold : null),
   );
+  /**
+   * Which detector the last scoring pass was given (#4643): under the label
+   * quota the Goods' centroid, which the left panel says, with the labels it
+   * still owes. Null before a pass, or while one runs.
+   */
+  readonly labelQuota = signal<LabelQuota | null>(null);
+  readonly detectorNote = computed(() => centroidNote(this.labelQuota()));
   /** Bumped when the session's checks changed under a finished test, so the result pane re-reads them. */
   readonly resultRefresh = signal(0);
 
@@ -481,6 +490,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Scoring with detector…');
     this.sortState.setSortProgress(0, 0);
+    this.labelQuota.set(null);
 
     // Start polling for progress concurrently
     this.sortState.startFindProgressTracking();
@@ -505,6 +515,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
           // of the set the balance keeps, and the balance's state rides with
           // it (#4272, #4413).
           this.sortState.setSortResults(sorted, threshold, lineBalanceFrom(response.balance));
+          this.labelQuota.set(response.label_quota ?? null);
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);

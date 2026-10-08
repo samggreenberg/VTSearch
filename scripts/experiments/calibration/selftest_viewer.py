@@ -25,14 +25,17 @@ screen, so both are checked against values that are known by construction:
   its last scored value, with nothing carried before its first row or after
   its last, and a reskin must get the same carry from the per-seed lines
   (#4624);
-* a click with **no trained detector** (before a run's first Good and Bad, or
-  any click of a run that never got both) must be in the mean as the empty
+* a click with **no detector** (before a run's first row: its first Good since
+  #4643, its first Good and Bad before; or any click of a run that never got
+  one) must be in the mean as the empty
   returned set the app gives there, a loss and not a gap, with the runs read
   off the text-sort baseline when there is no cell list, never a group or a
   seed the run never ran;
 * a click in **Autopilot's opening** (``app_trained == 0``) must be drawn at the
   harness's detector, what an export of the labels gives there, not at the
-  text sort the session shows: the page does not read the flag (#4640).
+  text sort the session shows: the page does not read the flag (#4640).  Under
+  the label quota that detector is the Goods' centroid (``detector_tier``,
+  #4643): its rows are drawn like any other, and the reading note says so.
 
 Run: ``python selftest_viewer.py``
 """
@@ -481,10 +484,34 @@ def main() -> int:  # noqa: C901
             abs(p_open - 0.7) <= step,
             f"{p_open} vs 0.7 (text sort 0.4)",
         )
+        page_text = re.sub(r'<script id="payload".*?</script>', "", out.read_text(), flags=re.S)
         ok &= _check(
             "...and the page's reading note says the opening is drawn as the detector",
-            "through Autopilot's opening"
-            in re.sub(r'<script id="payload".*?</script>', "", out.read_text(), flags=re.S),
+            "through Autopilot's opening" in page_text,
+        )
+
+        # --- the label quota (#4643) ------------------------------------------
+        # Under the quota Test gives the Goods' centroid, and the harness writes
+        # those rows as that detector, naming it in `detector_tier`.  The page
+        # draws what Test gives whichever detector it is: the column is not
+        # read, and the reading note names the centroid and the quota.
+        tiered = main_df.assign(detector_tier=np.where(main_df["t"] < OPENING_END, "centroid", "trained"))
+        PT = _payload(
+            V.build_viewer(
+                tiered, tmp / "tiered.html", arms=ARMS, denominator=cells, baseline=base, skyline=sky,
+                runs_budget_mb=0.25,
+            )
+        )  # fmt: skip
+        ok &= _check(
+            "a frame that names the Goods' centroid's rows (detector_tier) builds the same page as one without",
+            all(
+                np.array_equal(_decode(PT["agg"][k]), _decode(P["agg"][k]), equal_nan=True)
+                for k in ("mean", "sd", "n", "omean", "on")
+            ),
+        )
+        ok &= _check(
+            "...and the reading note names the Goods' centroid and the quota",
+            "the Goods' " in page_text and "3 Goods and 4 Bads" in page_text and "before its first Good," in page_text,
         )
 
         # --- a spot check's rounds (#4624) -----------------------------------
