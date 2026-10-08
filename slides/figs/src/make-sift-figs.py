@@ -100,6 +100,7 @@ OUT = Path(__file__).resolve().parent.parent
 INK = "#14181f"
 SOFT = "#5b6472"
 RULE = "#d8dee6"
+FAINT = "#eceff3"  # a grid under a `RULE` grid, there but not read first
 BLUE = "#0b5fa5"  # the shipped thing: here, the matcher's own keypoints
 RED = "#b91c1c"  # the negative side: matches no fit explains
 GREEN = "#0d8a5f"  # the positive side: the mark, and matches that agree on it
@@ -153,11 +154,8 @@ EXPECT = {
     "budget_inliers_8192": 101,
     "tile_page_keypoints": 7685,
     "tile_on_crest": 442,
-    # The best tile is the app's pick through `tile_projection_v1`, which only
-    # a machine holding that asset can run, so these two are not pinned yet
-    # (#4455). `tiles_fig` refuses to draw until they are.
-    "tile_best_keypoints": None,
-    "tile_best_crest": None,
+    "tile_best_keypoints": 350,
+    "tile_best_crest": 350,
     "ranked": (101, 91, 91),
     "found_by_query": 6,
     "found_by_vote": 32,
@@ -802,19 +800,23 @@ def tiles_fig() -> None:
         right = draw_scan(ax, p.image, 7.0, 1.05, height=4.4, fade=0.6)
         # Each layer's tiles start on a grid of half a tile, and the fine layer's
         # grid holds the coarse one's, so the coarse lines are drawn over it, heavier.
+        # The fine grid is faint as well as thin: at `RULE` it made the page graph paper.
         for k, (tw, th) in enumerate(TILE_LAYERS):
-            lw, z = (1.2, 2.0) if k == 0 else (0.6, 1.5)
+            color, lw, z = (RULE, 1.2, 2.0) if k == 0 else (FAINT, 0.5, 1.5)
             for gx in np.arange(0, 1 + 1e-9, tw / 2):
-                ax.plot(*right.xy([[gx * pw, 0], [gx * pw, ph]]).T, color=RULE, lw=lw, zorder=z)
+                ax.plot(*right.xy([[gx * pw, 0], [gx * pw, ph]]).T, color=color, lw=lw, zorder=z)
             for gy in np.arange(0, 1 + 1e-9, th / 2):
-                ax.plot(*right.xy([[0, gy * ph], [pw, gy * ph]]).T, color=RULE, lw=lw, zorder=z)
+                ax.plot(*right.xy([[0, gy * ph], [pw, gy * ph]]).T, color=color, lw=lw, zorder=z)
         # Only what the winning tile's vector sums over.
         draw_dots(ax, right, pts[in_tile & ~on], color=SOFT, size=1.3)
         draw_dots(ax, right, pts[in_tile & on], color=GREEN, size=1.6)
         tile_px = (round(tx0 * pw), round(ty0 * ph), round((tx1 - tx0) * pw), round((ty1 - ty0) * ph))
         draw_box(ax, right, tile_px, color=GREEN, lw=2.6)
         text(ax, 7.0, 0.7, "one vector per tile", size=COUNT_PT, fontweight="bold")
-        text(ax, 7.0, 0.28, f"the crest: {n_crest} of its tile's {n_tile}, {n_crest / n_tile:.0%}")
+        if n_crest == n_tile:
+            text(ax, 7.0, 0.28, f"the crest: all {n_tile} of its tile's keypoints")
+        else:
+            text(ax, 7.0, 0.28, f"the crest: {n_crest} of its tile's {n_tile}, {n_crest / n_tile:.0%}")
 
     build("logo-tiles", draw, 2)
 
