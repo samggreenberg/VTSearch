@@ -32,6 +32,15 @@
  *
  * A target that resolves to nothing is an error, not a silent omission: a
  * numbered picture missing its "3" is worse than no picture.
+ *
+ * Every mark stays inside the picture (#4686). An outline is drawn `pad` outside
+ * its target, so the outline round a target that runs to the window's edge (a
+ * whole side panel) lost that side, and a disc set beside a target near a
+ * cropped shot's edge lost half its number. So outlines, discs and labels are
+ * all kept inside the viewport (an outline is drawn just inside an edge its
+ * target touches), `drawCallouts` returns the box its marks cover so a harness
+ * that crops can grow the crop to hold them, and a mark that still does not fit
+ * is an error.
  */
 
 const ACCENT = '#e8453c';
@@ -45,6 +54,8 @@ const SIZES = {
   disc: 38,
   discFont: 23,
   labelFont: 18,
+  /** How far inside the viewport an outline whose target meets its edge is drawn. */
+  edge: 2,
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -73,6 +84,9 @@ export async function resolveBox(page, target) {
  *
  * Replaces any layer an earlier call drew, so a harness can photograph the same
  * moment clean and then numbered without the first set leaking into the second.
+ *
+ * Returns the viewport box `{ x, y, w, h }` every mark drawn lies within, so a
+ * harness that crops the frame can widen the crop to take them all in.
  */
 export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
   const resolved = [];
@@ -82,7 +96,7 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
     resolved.push({ ...c, box });
   }
   const sizes = Object.fromEntries(Object.entries(SIZES).map(([k, v]) => [k, v * scale]));
-  await page.evaluate(
+  return page.evaluate(
     ({ items, sizes, accent, layerId }) => {
       document.getElementById(layerId)?.remove();
       const layer = document.createElement('div');
@@ -94,6 +108,14 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      // Put a label pill at (left, top), pulled back on screen: a callout near
+      // an edge slides along it rather than off it.
+      const place = (l, left, top) => {
+        const r = l.getBoundingClientRect();
+        l.style.left = `${clamp(left, 4, vw - 4 - r.width)}px`;
+        l.style.top = `${clamp(top, 4, vh - 4 - r.height)}px`;
+        return l;
+      };
       const pill = (text, left, top) => {
         const l = document.createElement('div');
         l.textContent = text;
@@ -106,19 +128,26 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
           boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
         });
         layer.appendChild(l);
-        // Keep the pill on screen: a callout near the right edge flips left.
-        const r = l.getBoundingClientRect();
-        if (r.right > vw - 4) l.style.left = `${Math.max(4, vw - 4 - r.width)}px`;
-        return l;
+        return place(l, left, top);
       };
-      for (const a of items) {
+      for (const [i, a] of items.entries()) {
         const { x, y, w, h } = a.box;
         const pad = sizes.pad;
+        // The outline, `pad` clear of the target, except on a side where that
+        // would put it past the viewport's edge (a panel running to the edge of
+        // the window): there it is drawn just inside.
+        const left = Math.max(x - pad, sizes.edge);
+        const top = Math.max(y - pad, sizes.edge);
+        const right = Math.min(x + w + pad, vw - sizes.edge);
+        const bottom = Math.min(y + h + pad, vh - sizes.edge);
+        if (right - left < sizes.stroke * 2 || bottom - top < sizes.stroke * 2) {
+          throw new Error(`callout ${i + 1} (${a.label ?? a.step ?? a.kind}): its target is off screen`);
+        }
         const d = document.createElement('div');
         Object.assign(d.style, {
           position: 'absolute',
-          left: `${x - pad}px`, top: `${y - pad}px`,
-          width: `${w + pad * 2}px`, height: `${h + pad * 2}px`,
+          left: `${left}px`, top: `${top}px`,
+          width: `${right - left}px`, height: `${bottom - top}px`,
           border: `${sizes.stroke}px solid ${accent}`, borderRadius: `${sizes.radius}px`,
           boxShadow: a.kind === 'highlight' ? '0 0 0 4000px rgba(0,0,0,0.28)' : 'none',
           boxSizing: 'border-box',
@@ -128,13 +157,13 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
           // The disc touches the outline on the side `at` names, pulled back
           // on screen when the target hugs a viewport edge.
           const r = sizes.disc / 2;
-          const touch = r + pad - sizes.stroke;
+          const touch = r - sizes.stroke;
           const [px, py] = {
-            left: [x - touch, y + h / 2],
-            right: [x + w + touch, y + h / 2],
-            top: [x + w / 2, y - touch],
-            bottom: [x + w / 2, y + h + touch],
-            corner: [x - pad, y - pad],
+            left: [left - touch, (top + bottom) / 2],
+            right: [right + touch, (top + bottom) / 2],
+            top: [(left + right) / 2, top - touch],
+            bottom: [(left + right) / 2, bottom + touch],
+            corner: [left, top],
           }[a.at || 'left'];
           const cx = clamp(px, r + 2, vw - r - 2);
           const cy = clamp(py, r + 2, vh - r - 2);
@@ -153,7 +182,7 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
             // On the far side of the disc from the target, so it covers neither.
             const l = pill(a.label, cx + r + sizes.pad, cy - sizes.labelFont * 0.75);
             if (a.at === 'left' || !a.at) {
-              l.style.left = `${Math.max(4, cx - r - sizes.pad - l.getBoundingClientRect().width)}px`;
+              place(l, cx - r - sizes.pad - l.getBoundingClientRect().width, cy - sizes.labelFont * 0.75);
             }
           }
         } else if (a.label) {
@@ -170,6 +199,25 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
           else pill(a.label, x + pad + 4, y + pad + 6);
         }
       }
+      // Everything above is placed to stay on screen. A mark that still is not
+      // (a label wider than the window) would ship cropped, so it fails the
+      // shot instead.
+      let bounds = null;
+      for (const el of layer.children) {
+        const b = el.getBoundingClientRect();
+        if (b.left < -0.5 || b.top < -0.5 || b.right > vw + 0.5 || b.bottom > vh + 0.5) {
+          throw new Error(`callout mark "${(el.textContent || 'outline').slice(0, 40)}" runs off screen`);
+        }
+        bounds = bounds
+          ? {
+              left: Math.min(bounds.left, b.left), top: Math.min(bounds.top, b.top),
+              right: Math.max(bounds.right, b.right), bottom: Math.max(bounds.bottom, b.bottom),
+            }
+          : { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+      }
+      return bounds && {
+        x: bounds.left, y: bounds.top, w: bounds.right - bounds.left, h: bounds.bottom - bounds.top,
+      };
     },
     { items: resolved, sizes, accent: ACCENT, layerId: LAYER_ID }
   );

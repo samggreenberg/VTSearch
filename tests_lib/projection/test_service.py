@@ -12,6 +12,7 @@ context, not the arrangement itself.
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from unittest.mock import patch
@@ -258,6 +259,103 @@ class TestSubsetLayout:
             _await_build()
 
         assert sorted(ctx._subset_projection.ids) == [1, 2]
+
+
+class TestPrepSubsetLayout:
+    """The speculative subset build behind the Find Results dialog (#4683).
+
+    It must leave exactly the layout Browse's own build asks for, and it must
+    never start a fit on a server with other work in flight.
+    """
+
+    @staticmethod
+    def _busy():
+        """Make the server busy the way a dataset load does."""
+        return progress_mod.loading_tasks.create_task("busy-load", "Loading")
+
+    @staticmethod
+    def _held_fit(release, started):
+        """A fake fit that blocks until *release*, so a build stays in flight."""
+
+        def fit(matrix, ids, **kwargs):
+            started.set()
+            assert release.wait(timeout=10)
+            return _fake_fit(matrix, ids, **kwargs)
+
+        return patch("vtscore.projection.fit_projection", side_effect=fit)
+
+    def test_an_idle_server_starts_the_fit_browse_would(self):
+        ctx = _ctx("svc-prep")
+        with _faked_fit() as fit:
+            answer = svc.prep_subset_layout(ctx, [3, 1, 2, 1])
+            assert answer["status"] == "building"
+            _await_build()
+            # Browse's own build then finds the map ready: no second fit.
+            assert svc.build_layout(ctx, ids=[1, 2, 3])["status"] == "ready"
+        assert fit.call_count == 1
+        assert sorted(ctx._subset_projection.ids) == [1, 2, 3]
+
+    def test_a_busy_server_starts_nothing_and_leaves_the_current_subset_standing(self):
+        ctx = _ctx("svc-prep-busy")
+        proj, pyr = _layout(ctx, "hex", pid="being-browsed")
+        svc.install_layout(ctx, proj, pyr, subset=True)
+        ctx._subset_ids = list(proj.ids)
+        self._busy()
+
+        with _faked_fit() as fit:
+            answer = svc.prep_subset_layout(ctx, [1, 2])
+        fit.assert_not_called()
+        assert answer == {"status": "busy", "reason": "a dataset task is running"}
+        assert ctx._subset_projection is proj
+        assert ctx._subset_ids == list(proj.ids)
+
+    def test_a_layout_already_built_for_the_ids_is_ready_however_busy(self):
+        ctx = _ctx("svc-prep-built")
+        proj, pyr = _layout(ctx, "hex", pid="sub-pid")
+        svc.install_layout(ctx, proj, pyr, subset=True)
+        ctx._subset_ids = list(proj.ids)
+        self._busy()
+
+        with _faked_fit() as fit:
+            answer = svc.prep_subset_layout(ctx, list(reversed(proj.ids)))
+        fit.assert_not_called()
+        assert answer == {"status": "ready", "projection_id": "sub-pid"}
+
+    def test_browse_attaches_to_the_fit_the_prep_started(self):
+        ctx = _ctx("svc-prep-attach")
+        release, started = threading.Event(), threading.Event()
+        with self._held_fit(release, started) as fit:
+            first = svc.prep_subset_layout(ctx, [1, 2, 3])
+            assert started.wait(timeout=10)
+            # The fit in flight makes the server busy, but it is *this* fit:
+            # asking again, or pressing Browse, joins it rather than queueing.
+            again = svc.prep_subset_layout(ctx, [1, 2, 3])
+            browse = svc.build_layout(ctx, ids=[1, 2, 3])
+            release.set()
+            _await_build()
+        assert first["status"] == again["status"] == browse["status"] == "building"
+        assert first["job_id"] == again["job_id"] == browse["job_id"]
+        assert fit.call_count == 1
+
+    def test_another_subsets_fit_in_flight_is_busy(self):
+        ctx = _ctx("svc-prep-other")
+        release, started = threading.Event(), threading.Event()
+        with self._held_fit(release, started) as fit:
+            svc.build_layout(ctx, ids=[4, 5, 6])
+            assert started.wait(timeout=10)
+            answer = svc.prep_subset_layout(ctx, [1, 2, 3])
+            release.set()
+            _await_build()
+        assert answer == {"status": "busy", "reason": "a projection job is running"}
+        assert fit.call_count == 1
+        assert ctx._subset_ids == [4, 5, 6]
+
+    def test_nothing_to_lay_out_is_refused_as_the_build_would(self):
+        with pytest.raises(svc.NothingToProject, match="No items selected"):
+            svc.prep_subset_layout(_ctx(), [])
+        self._busy()
+        with pytest.raises(svc.NothingToProject):
+            svc.prep_subset_layout(_ctx(), [404])
 
 
 class TestRemoveFromSubset:

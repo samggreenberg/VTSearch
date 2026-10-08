@@ -142,8 +142,9 @@ export interface Shot {
    */
   rerunPerTheme?: boolean;
   /**
-   * What to frame, grown by `pad` CSS px on every side; omit for the full
-   * viewport. A small padded clip of one button is how the guide's inline
+   * What to frame, grown by `pad` CSS px on every side, and further where the
+   * shot's callouts reach past that (#4686); omit for the full viewport. A
+   * small padded clip of one button is how the guide's inline
    * crops are made — the tiny pictures set into a sentence next to the words
    * "click **+**" so a first-time reader can find the button (#4202).
    */

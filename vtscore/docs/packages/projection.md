@@ -38,7 +38,7 @@ for the background-job runner the builds ride on.
 | Module | Concern |
 |--------|---------|
 | `vtscore/projection/store.py` | Where a layout lives on disk: `pkl_path_for`, `persist_projection`, `load_persisted_layout`, and the `projection_params_match` freshness guard |
-| `vtscore/projection/service.py` | The state machine: `build_layout`, `fit_and_install_layout`, the subset fit and cull, and the meta / labels / tile payloads |
+| `vtscore/projection/service.py` | The state machine: `build_layout`, `fit_and_install_layout`, the subset fit and cull, `prep_subset_layout` (that subset fit started ahead of a Browse the user is likely to ask for, only on an otherwise idle server), and the meta / labels / tile payloads |
 
 **Signposts** - the "street sign" naming layer.
 

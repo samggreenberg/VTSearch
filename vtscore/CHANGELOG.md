@@ -360,6 +360,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A subset layout can be started ahead of the click, on an idle server** (issue #4683).
+  `vtscore.projection.service.prep_subset_layout(ctx, ids)` starts the same fit
+  `build_layout(ctx, ids=ids)` would, so a later build of those ids finds it ready or joins it,
+  but answers `{"status": "busy", "reason": ...}` and starts nothing while
+  `vtscore.concurrency.async_jobs.busy_reason()` names work in flight: a loading-tasks or
+  detector-loading row, a job on a user-visible `JobManager`, or the shared sort / eval / find bar
+  mid-run. Additive: no existing signature changed.
+
 - **A saving CLI run can delete what it imported once AutoFind has run** (issue #4674).
   `CoreConfig` gains `autofind_cli_delete_dataset` (`bool`, default `False`; the app fills
   it from the per-user setting of the same name). With it on, a `save_dataset=True` run of
