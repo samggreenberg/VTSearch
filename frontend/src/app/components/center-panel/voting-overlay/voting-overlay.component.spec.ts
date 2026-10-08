@@ -85,7 +85,7 @@ describe('VotingOverlayComponent', () => {
     const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
     expect(hint).toBeTruthy();
     expect(hint.classList).toContain('toasty-hint--above');
-    expect(hint.textContent).toContain('Click Good or Bad');
+    expect(hint.textContent).toContain('Click Bad / Good');
     expect(hint.textContent).toContain('Autopilot');
   });
 

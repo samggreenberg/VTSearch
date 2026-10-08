@@ -1163,7 +1163,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.dashboardHint).toBe('test-or-find');
       expect(hintTexts(el)).toEqual([
-        'Your detector is trained! Click Test to see how well it does on this dataset, or Find to collect its matches.',
+        'Click Test to eval or improve this detector. Or Find to collect its matches.',
       ]);
     });
 
@@ -1180,7 +1180,7 @@ describe('DashboardComponent', () => {
       TestBed.tick();
       expect(component.dashboardHint).toBe('test-or-find');
       expect(component.findEnabled).toBe(false);
-      expect(hintTexts(el)[0]).toContain('Click Find to run them over the selected datasets');
+      expect(hintTexts(el)).toEqual(['Click Find to run these detectors on this dataset.']);
     });
 
     it('has Toasty point at the detector + once a dataset exists (#4680)', async () => {
@@ -1232,7 +1232,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.showTrainHint).toBe(true);
       expect(hintTexts(el)).toEqual([
-        'Click Train to teach your new detector. You mark examples Good or Bad, and it learns from every one.',
+        'Click Train to teach your new detector. Mark examples Good or Bad for it to learn.',
       ]);
     });
 

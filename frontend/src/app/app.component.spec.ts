@@ -147,7 +147,7 @@ describe('AppComponent', () => {
     autopilot.handoff.set({ kind: 'all-labeled', votes: 40 });
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('header vt-toasty-hint')?.textContent).toContain(
-      "That's every item in this dataset labeled!",
+      "You've labeled every item in this dataset!",
     );
 
     autopilot.handoff.set(null);

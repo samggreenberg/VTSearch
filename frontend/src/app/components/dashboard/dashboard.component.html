@@ -417,21 +417,20 @@
     }
     @case ('train') {
       <vt-toasty-hint hintId="train" [anchor]="trainBtn" side="above" reach="right">
-        Click <strong>Train</strong> to teach your new detector. You mark examples Good or Bad, and
-        it learns from every one.
+        Click <strong>Train</strong> to teach your new detector. Mark examples Good or Bad for it to
+        learn.
       </vt-toasty-hint>
     }
     @case ('test-or-find') {
       <!-- Test takes one dataset and one detector; Find takes any number. -->
       @if (findEnabled) {
         <vt-toasty-hint hintId="test-or-find" [anchor]="testBtn" side="above" reach="right">
-          Your detector is trained! Click <strong>Test</strong> to see how well it does on this
-          dataset, or <strong>Find</strong> to collect its matches.
+          Click <strong>Test</strong> to eval or improve this detector. Or <strong>Find</strong> to
+          collect its matches.
         </vt-toasty-hint>
       } @else {
         <vt-toasty-hint hintId="test-or-find" [anchor]="findBtn" side="above" reach="left">
-          Your detectors are trained! Click <strong>Find</strong> to run them over the selected
-          datasets and collect their matches.
+          Click <strong>Find</strong> to run these detectors on this dataset.
         </vt-toasty-hint>
       }
     }
