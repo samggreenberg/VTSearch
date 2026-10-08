@@ -61,7 +61,7 @@ def start_ingest_task(
     ``medias`` proxy — ``spawn`` replays the dataset context, so the proxy
     resolves to the same dataset inside the worker.
     """
-    from vtscore.concurrency.progress import detector_loading_tasks, ingest_eta_hidden
+    from vtscore.concurrency.progress import detector_loading_tasks
 
     tracker = detector_loading_tasks.create_task(
         task_id,
@@ -69,7 +69,9 @@ def start_ingest_task(
         detector_id=detector_id,
         media_type=media_type,
         extra_fields={"ingest_result": None},
-        publish_eta=not ingest_eta_hidden(),
+        # A fetch's cost is set by the network and the files themselves; its
+        # remaining-time estimate swung too wildly to show (#4667).
+        publish_eta=False,
     )
     base_msg = f"Fetching {len(entries)} missing media…"
     tracker.update("loading", base_msg, 0, len(entries), step=1, total_steps=1)

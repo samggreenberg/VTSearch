@@ -384,11 +384,10 @@ VTSearch/
 │   │   ├── sort_results_cache.py   Per-detector cache of the last sort's result rows
 │   │   └── media_lookup.py         Origin-keyed lookup, collapse_duplicates
 │   │
-│   ├── timing/                     Per-environment cost model for progress-bar pacing + ETAs
-│   │   ├── tasks.py                TaskSpec registry: each long-running task's ordered steps
-│   │   ├── profile.py              VTSEARCH_TIMING_PROFILE loader + (device, media, embedder) lookup
-│   │   ├── recorder.py             VTSEARCH_TIMING_RECORD step-boundary recorder (off by default)
-│   │   └── fit.py                  Fits recorded rows into a profile document
+│   ├── timing/                     Shipped per-step weights that pace each progress bar
+│   │   ├── tasks.py                TaskSpec registry: each long-running task's ordered steps + default terms
+│   │   ├── profile.py              step_weights(): defaults → weight vector (+ deprecated profile shims)
+│   │   └── recorder.py             Deprecated no-op recorder shims (#4667)
 │   │
 │   ├── plugins/                    PluginBase, PluginField, PluginRegistry (shared plugin infra)
 │   │   ├── inventory.py            Enumerates every registered family (python app.py --list-plugins)
@@ -766,13 +765,15 @@ application as-is.
 
 A task that reports `step` / `total_steps` gets a single whole-job `overall`
 fraction and an `eta_seconds`, both derived from a per-step **weight vector**.
-Those weights come from `vtscore/timing/`, which models each step's cost as
-`a + b·n + per_mb·archive_mb` per `(device, media_type, embedder)` cell. Each
-long-running task is registered in `vtscore/timing/tasks.py` and asks for its
-weights at its entry point rather than carrying a literal vector; an admin
-profile at `VTSEARCH_TIMING_PROFILE` (measured by
-`scripts/profiling/tune_timing_profile.py`) overrides the shipped defaults per
-cell. See [DEPLOYMENT.md](DEPLOYMENT.md#progress-bar-timing-profile).
+Each long-running task is registered in `vtscore/timing/tasks.py` with its
+shipped default terms and asks `vtscore.timing.step_weights` for its vector at
+its entry point rather than carrying a literal one; a dataset import paces from
+the measured, `n`-aware cost model in
+`vtscore/datasets/stages/_load_cost_model.py` instead. Ingest trackers (dataset
+and staging imports, a labelset's missing-media fetch) are built with
+`publish_eta=False`, so their `eta_seconds` is always `None`: an import's rate
+is too erratic to estimate (#4667). See
+[DEPLOYMENT.md](DEPLOYMENT.md#progress-bar-estimates).
 
 `eta_seconds` is published **coarse and sticky**: the tracker snaps its
 internally-smoothed estimate onto a geometric ladder and holds each rung until
@@ -913,7 +914,7 @@ field lists — this document names the tiers and the shape, not every key.
   deployment-level knobs an operator sets — `saved_datasets_dir`,
   `detectors_dir`, `max_concurrent_*`, `hidden_plugins`,
   `dataset_max_age_days`, `support_email`, `docs_links`, `semantic_only`,
-  `hide_ingest_eta`, `solo_media_type`, `projection_n_neighbors`,
+  `solo_media_type`, `projection_n_neighbors`,
   `projection_min_dist`,
   `browse_signpost_vocab`, `default_settings_source`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
@@ -928,9 +929,9 @@ field lists — this document names the tiers and the shape, not every key.
   `autofind_exporter_field_values`, and `autofind_on_import` (whether a web
   import runs the AutoFind detectors; the Add Dataset checkbox's memory).
 
-Seven settings double as **admin overrides**: an operator can pin the
+Six settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
-`support_email`, `semantic_only` and `hide_ingest_eta`, plus the per-user
+`support_email` and `semantic_only`, plus the per-user
 `solo_embedder_per_media_type`, at startup, for every user and for the life
 of the process, without the settings file. Each is
 declared once in `vtsearch/admin_overrides.py` — a descriptor carrying its CLI

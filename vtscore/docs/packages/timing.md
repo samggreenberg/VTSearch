@@ -1,18 +1,17 @@
 # `vtscore.timing`
 
-How long each step of a long-running task will take, measured rather
-than guessed.
+How each long-running task's progress bar splits across its steps.
 
 Every long-running VTSearch operation - a dataset load, a detector load,
 a text sort, a Find, a train-and-score, a promote - reports progress as
 `step` / `total_steps` and paces its unified bar with a per-step
 **weight vector** (`ProgressTracker.set_step_weights`). A weight vector
 that is wrong in the same direction for a whole job makes a progress bar
-race one phase, crawl the next, and walk its ETA *upward*.
+race one phase and crawl the next.
 
-This package replaces hand-guessed vectors with a per-environment cost
-model: a deployment measures itself once, and every instance in that
-environment predicts its own timings thereafter.
+This package is where those vectors come from: each task declares its
+ordered steps and shipped default terms once, and asks for its vector at
+its entry point instead of carrying a literal one.
 
 Related docs: [`concurrency.md`](concurrency.md) for `ProgressTracker`
 and the bar these weights drive.
@@ -21,104 +20,47 @@ and the bar these weights drive.
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/timing/tasks.py` | `TASKS` / `TaskSpec` - the canonical registry of task families and their ordered steps |
-| `vtscore/timing/profile.py` | Load, resolve and apply a profile: `step_weights`, `step_terms`, `slot_shares`, `active_profile` |
-| `vtscore/timing/recorder.py` | Env-gated recorder that measures what each step really took |
-| `vtscore/timing/fit.py` | Turn recorded timings into a profile document (the writer for the format `profile.py` reads): `load_rows`, `normalize_row`, `affine_fit`, `fit_step`, `fit_branches`, `fit_profile`, `coverage_report` |
+| `vtscore/timing/tasks.py` | `TASKS` / `TaskSpec` - the canonical registry of task families, their ordered steps and default terms |
+| `vtscore/timing/profile.py` | Turn the defaults into a weight vector: `step_weights`, `step_terms`; device helpers; the deprecated profile shims |
+| `vtscore/timing/recorder.py` | Deprecated no-op shims for the retired timing recorder |
 
 The package root re-exports the `profile`, `recorder` and `tasks` API
-listed below (see its `__all__`); `fit` is imported by submodule.
+listed below (see its `__all__`).
 
 ---
 
-## The cost model
+## Where the weights come from
 
-Each step gets an affine cost:
+1. **The shipped defaults** in `vtscore/timing/tasks.py`. Default terms
+   are **pseudo-seconds**: only their ratios are meaningful.
+2. **`dataset_load`** is the exception: it ships no flat terms, because
+   its model is the measured affine table in
+   `vtscore/datasets/stages/_load_cost_model.py`, which is already
+   `n`-aware per `(device, media_type, embedder)` cell. That table is
+   refitted by developers with the scripts under `scripts/profiling/`.
+3. **The caller's fallback** (usually equal weighting), if the task is
+   unknown entirely.
 
-```
-T_step ≈ a + b · n + per_mb · archive_mb
-```
-
-`n` is the task's natural scale variable - items to embed, labels to
-train on, medias to score. `archive_mb` covers the byte-scaled phases of
-a download.
-
-Coefficients are keyed by a **cell**: `(device, media_type, embedder)`.
-That granularity is the point. The same step costs wildly different
-amounts on a V100 versus a laptop CPU, and on 200-character texts versus
-30-second videos; a single global constant cannot be right for both.
-
-A step that **forks** carries a second set of coefficients per branch,
-nested under the step's own `branches` key:
-
-```json
-"coverage": {
-  "a": 0.2, "b": 0.0026,
-  "branches": {
-    "restored": {"a": 0.009},
-    "rebuilt":  {"a": 0.2, "b": 0.0026}
-  }
-}
-```
-
-The cell is not keyed by branch, because the branch is not a property of
-the environment - it is a property of the run, decided while the job is
-already under way (a coverage atlas restored from cache costs
-milliseconds; rebuilt, seconds). So the split lives inside the step, and
-a caller that knows which path it is on passes `branch=` to
-`step_weights` / `step_terms` to be priced from it.
-
-The step's top-level coefficients are the dear branch, so a caller that
-cannot name its path, and a profile without `branches`, behave as if the
-split did not exist. `branches` is additive; the profile schema
-(`SCHEMA_NAME = "vtsearch-timing-profile"`, `SCHEMA_VERSION = 1`) is
-unchanged by it.
-
-## The three-layer resolution
-
-A cell resolves most-specific-first:
-
-1. **The admin profile** - a JSON file named by
-   `VTSEARCH_TIMING_PROFILE` (`profile.PROFILE_ENV_VAR`), produced by
-   the repo's `scripts/profiling/tune_timing_profile.py` on the hardware
-   that will actually serve the app.
-2. **The shipped defaults** in `vtscore/timing/tasks.py` (and, for
-   `dataset_load`, the calibrated table in
-   `vtscore/datasets/stages/_load_cost_model.py`). These reproduce the
-   pre-profile hand-tuned weights *exactly*, so an instance with no
-   profile paces as it always did.
-3. **Equal weighting**, if the task is unknown entirely.
-
-Default terms are **pseudo-seconds**: only their ratios are meaningful,
-because nobody measured them. A profile replaces them with real seconds,
-which is what makes the ETA stop drifting.
-
-Nothing persists at runtime and nothing is cached across processes: the
-profile is read once per process at first use, and `reload_profile()`
-re-reads it.
+Nothing here touches disk.
 
 ---
 
 ## Task registry
 
 Every task driving a `step`/`total_steps` bar registers a `TaskSpec` in
-`TASKS`. The registry is the shared vocabulary between three parties
-that would otherwise drift apart: the **task code**, which needs one
-weight per tracker step; the **recorder**, which must label a measured
-duration with a step name; and the **tuning script**, which fits per
-step and writes the profile JSON keyed by those same names.
+`TASKS`.
 
 | Field | Meaning |
 |-------|---------|
-| `name` | Stable identifier - the profile JSON's task key, the label in recorded rows, and the `--tasks` selector. **Never rename one** without migrating the profiles admins have already generated |
-| `steps` | Ordered cost-*phase* names; profile coefficients are keyed by these |
+| `name` | Stable identifier - the key callers pass to `step_weights` |
+| `steps` | Ordered cost-*phase* names |
 | `step_index` | 1-based tracker step each phase reports against, parallel to `steps` |
 | `tracker_steps` | How many step numbers the task reports - the length of the weight vector |
 | `scale` | Human description of what `n` counts |
-| `default_terms` | Shipped fallback pseudo-seconds, parallel to `steps` (may be empty) |
+| `default_terms` | Shipped pseudo-seconds, parallel to `steps` (may be empty) |
 | `media_default_terms` | Per-media-type overrides of `default_terms` (`{"audio": (...)}`), each parallel to `steps`; read through `defaults_for(media_type)`, which falls back to `default_terms` for any media type not named |
-| `byte_scaled` | Which phases get a per-MB rate instead of a per-item slope |
-| `loads_encoder` | Whether a run can pay a cold encoder load (and so records `cold_model`) |
+| `byte_scaled` | Which phases scale with archive bytes rather than item count (descriptive) |
+| `loads_encoder` | Whether a run can pay a cold encoder load (descriptive) |
 
 Registered today: `dataset_load`, `dataset_open`, `dataset_promote`,
 `dataset_stage`, `detector_load`, `text_sort`, `find`,
@@ -126,20 +68,14 @@ Registered today: `dataset_load`, `dataset_open`, `dataset_promote`,
 
 **Phases versus tracker steps.** Usually they are the same and
 `step_index` is just `(1, 2, 3, …)`. A task may model one step as
-several phases that scale differently - `dataset_load`'s step 1 covers
-both the network transfer and the archive unpack, both byte-scaled but
-at very different rates - in which case the phases share a tracker step
-and `step_weights` sums their predicted seconds back into that slot.
-
-`dataset_load` deliberately carries **no** default terms: its shipped
-model is the measured affine table in `_load_cost_model`, which is
-already `n`-aware per cell and better than any flat vector.
+several phases - `dataset_load`'s step 1 covers both the network
+transfer and the archive unpack - in which case the phases share a
+tracker step and `step_weights` sums their terms back into that slot.
 
 `dataset_open` is the one task with a per-media override: reading an
 audio pickle is a much larger share of an open than reading an image
 pickle, so audio ships `(0.40, 0.60)` beside the task-wide `(0.15, 0.85)`
-(#4105). The override only replaces the no-profile fallback; a profile
-cell that prices a step still wins.
+(#4105).
 
 Adding a long-running task means adding a `TaskSpec` here, then calling
 `step_weights(...)` at the task's entry point instead of writing a
@@ -152,29 +88,22 @@ literal vector.
 ```python
 from vtscore.timing import step_weights
 
-weights = step_weights(
-    "text_sort",
-    device=device, media_type="image", embedder="siglip",
-    n=len(medias),
-    fallback=[0.2, 0.8],
-)
+weights = step_weights("text_sort", media_type="image", fallback=[0.2, 0.8])
 if weights:
     tracker.set_step_weights(weights)
 ```
 
 The vector has one entry per tracker step and sums to 1, ready for
 `set_step_weights`. Pass a `fallback` - `step_weights` returns it when
-the task is unknown or nothing resolves.
+the task is unknown or ships no terms.
 
 ### Steps this run will skip
 
-A cost model answers "how long does this step take". It cannot answer
-"does this step happen at all", and where a step forks on process state
-the second question is the one that decides the bar. A text sort's
+A default answers "how big a share of the job is this step". It cannot
+answer "does this step happen at all", and where a step forks on process
+state the second question is the one that decides the bar. A text sort's
 `load_model` is seconds on a process's first sort and **exactly zero**
-on every later one, so no single coefficient paces both branches: fitted
-from the warm runs the step is free (and gets floored back up, below),
-fitted from the cold one it eats a bar that will not move.
+on every later one (#3596).
 
 The caller usually knows which branch it is on before it starts. Name
 the steps that will not run and they are priced at zero for this run:
@@ -182,255 +111,53 @@ the steps that will not run and they are priced at zero for this run:
 ```python
 weights = step_weights(
     "text_sort",
-    media_type="image", embedder="siglip", n=len(medias),
+    media_type="image",
     skip_steps=() if encoder_is_cold else ("load_model",),
 )
 ```
 
-This needs no measurement and no branch axis in the profile format - a
-step that does not run costs nothing, and that is knowable in advance
-where a step's *cost* is not. Steps whose cost merely varies by branch
-(a coverage atlas restored versus rebuilt) are the other half of the
-problem, and they do need that axis - see below.
-
-### Steps whose cost varies by branch
-
-A step that runs either way but costs two different things cannot be
-skipped, and no coefficient describes both. Name the branch instead and
-it is priced from that branch's own
-[coefficients](#the-cost-model):
-
-```python
-weights = step_weights(
-    "dataset_open",
-    media_type=media_type, embedder=embedder, n=len(medias),
-    branch="restored",          # or a {step: branch} mapping
-)
-```
-
-**A task whose expensive step forks this way should call `step_weights`
-twice**: once on the way in with its best guess (e.g. the branch the last
-run took), and again the moment it knows, before the expensive part runs.
-Re-weighting mid-job only ever moves the bar forward; the tracker clamps
-its overall fraction to be monotonic.
-
 | Function | Description |
 |----------|-------------|
-| `step_weights(task, *, device, media_type, embedder, n, size_mb, skip_steps, branch, fallback)` | Normalised per-tracker-step weights, or *fallback* |
-| `step_terms(...)` | The same prediction before normalisation - predicted seconds keyed by step name, or `None` (takes `skip_steps` and `branch` too) |
-| `branch=` (on both) | Which path a forking step is taking on *this* run: a branch name, or a `{step: branch}` mapping. Sharpens the answer where the profile has that branch and changes nothing where it does not, so a caller that knows should always say |
-| `slot_shares(task, step, *, device, media_type, embedder)` | Measured sub-stage shares *within* one step, for steps that pace several ordered sub-stages behind one number (today only the dataset load's `finalize`). Raw weights; the consumer normalises |
-| `profile_covers(task)` | Whether the active profile has any measured cell for *task* - for callers that want to branch on coverage before asking for weights |
-| `active_profile()` / `reload_profile(path=None)` | The parsed `TimingProfile` (cells of `StepCoeffs`); re-read it |
+| `step_weights(task, *, media_type, skip_steps, fallback, ...)` | Normalised per-tracker-step weights, or *fallback* |
+| `step_terms(task, *, media_type, skip_steps, ...)` | The same before normalisation - the shipped terms keyed by step name, or `None` |
 | `known_tasks()` / `task_spec(name)` | Registry lookups |
-| `cell_keys(device, media_type, embedder)` / `normalize_device(device)` | Cell-key resolution, most specific first |
-| `note_branch(step, branch)` | Name the path *step* took on the run recording this thread. A no-op when nothing is recording, so ordinary product code calls it unconditionally |
-| `note_no_encoder_load()` | Declare that this run instantiated no encoder, so it does not claim the residency key the next run needs |
-| `record_task(tracker, task, *, media_type, embedder, status_phases, auto_finish, only_phases)` / `recording_enabled()` | Wrap one run of *task* for recording (a no-op object when disarmed); whether the recorder is armed |
+| `cell_keys(device, media_type, embedder)` / `normalize_device(device)` | `device|media|embedder` key resolution, most specific first, and the coarse `cuda`/`cpu` device key |
+
+Both lookup functions still accept `device`, `embedder`, `n`, `size_mb`
+and `branch`, which selected and scaled the retired profile's cells
+(below). The shipped defaults have none of those axes, so they are
+ignored.
 
 ---
 
-## Recording
+## Retired: the per-environment profile
 
-Arm the recorder by pointing `VTSEARCH_TIMING_RECORD`
-(`recorder.RECORD_ENV_VAR`) at a JSONL path.
-Each task wrapped in `record_task` then appends one row per step:
+Until #4667 a deployment could measure itself and override the shipped
+terms per cell: a recorder armed by `VTSEARCH_TIMING_RECORD` wrote one
+JSONL row per step, a tuning script fitted the rows into a profile JSON
+(`schema: vtsearch-timing-profile`), and `VTSEARCH_TIMING_PROFILE`
+pointed every instance at it. Its main job was steadying the
+remaining-time estimate on dataset imports, and that estimate was
+removed: an import's rate is set by the network, the source's disks and
+the files themselves, and no table predicted it well enough to show.
+The recorder, the fitter (`vtscore.timing.fit`) and the tuning script
+were deleted with it; neither environment variable is read any more.
 
-```json
-{"task": "text_sort", "device": "cuda", "cuml": true, "media_type": "image",
- "embedder": "siglip", "n": 12403, "size_mb": 0.0, "step": "score",
- "seconds": 1.83, "ok": true, "cold_model": false}
-```
+The public names are kept as **deprecated no-ops** so out-of-tree code
+keeps importing them:
 
-`cold_model` says whether this run was the first in the process to need
-its `(media_type, embedder)` encoder, and so the one that paid to
-download and instantiate it. Without it a once-per-process cost is
-unfittable: a text sort's model load measures 15 s once and 0 s on the
-next 47, and a fitter that cannot separate the two populations medians
-them into "free". Only tasks whose `TaskSpec` declares `loads_encoder`
-take part - a `dataset_open` reads a pkl and touches no encoder, so it
-neither carries the field nor claims a key that the genuinely cold sort
-behind it needs.
+| Name | Now |
+|------|-----|
+| `active_profile()` / `reload_profile(path=None)` / `parse_profile(raw, source="")` | Always `EMPTY_PROFILE` (falsy) |
+| `TimingProfile`, `EMPTY_PROFILE`, `StepCoeffs` | Kept as types; `StepCoeffs` still evaluates `a + b·n + per_mb·archive_mb` |
+| `profile_covers(task)` | Always `False` |
+| `slot_shares(task, step, ...)` | Always `None` |
+| `record_task(...)` | A `TaskTimingRecorder` whose every method does nothing |
+| `recording_enabled()` | Always `False` |
+| `note_branch(step, branch)` / `note_no_encoder_load()` | Do nothing |
+| `CHEAP_BRANCHES` / `DEAR_BRANCHES` | Unchanged constants; nothing reads them |
+| `profile.PROFILE_ENV_VAR`, `profile.SCHEMA_NAME`, `profile.SCHEMA_VERSION`, `recorder.RECORD_ENV_VAR` | Unchanged constants; nothing reads them |
 
-### Which branch a step took
-
-`cold_model` is a property of the **run**. A step's cost can also fork on
-a cache that is neither the encoder nor scoped to the process, and those
-forks are recorded per **step**, in a `branch` field, by the code that
-chooses them (`note_branch`):
-
-| step | cheap branch | dear branch |
-|---|---|---|
-| `dataset_open` · `coverage` | `restored` (the atlas cached in the pickle), `deferred` (past the auto-build threshold) | `rebuilt` |
-| `dataset_load` / `dataset_stage` · `embed` | `cached` (the demo embeddings pkl) | `fresh` |
-
-The vocabulary is `CHEAP_BRANCHES` / `DEAR_BRANCHES` in `tasks.py`, and
-both the fitter and the lookup read it: a forked step is priced from the
-runs that did the work, a step whose runs *all* read a cache withholds
-its whole cell so the task keeps its shipped defaults, and a step
-measured on both paths additionally carries
-[per-branch coefficients](#the-cost-model) for a caller that can name
-its own branch. A row without the field is not a claim that the step
-never forks - unmarked rows fit as they always did.
-
-Without the field, a sweep that only ever hit the cache would fit a
-step nobody waits on as free and starve the rebuild path of bar.
-
-A run that satisfied itself from a cache also calls
-`note_no_encoder_load()`: it instantiated no model, so it must not claim
-the residency key that the next run - the one that really pays the load
-- needs in order to be written cold.
-
-Because the recorder sits behind an env var, an admin has two ways to
-gather data and both produce the same file:
-
-- **Drive it.** Run the tuning script, which exercises each task family
-  against exemplar datasets with the recorder armed. It also *arranges*
-  the dear branch where that is cheap and non-destructive: `--cold-embed`
-  (on by default) clears the demo embeddings cache before each measured
-  import, and `--cold-atlas` rebuilds each dataset's coverage atlas
-  through the on-demand endpoint rather than editing anybody's pickle.
-- **Watch it.** Set `VTSEARCH_TIMING_RECORD` on the real server and let
-  real users generate the timings. This measures the production mix
-  directly - the datasets people actually load, at the sizes they
-  actually are - which no synthetic sweep reproduces.
-
-When disarmed the cost is one `os.environ` lookup per task and a couple
-of no-op method calls: no tracker subscription, no file handle.
-
-### Two recorders, side by side
-
-The dataset-load pipeline carries an older, richer recorder
-(`vtscore/datasets/stages/_load_profiler.py`) that additionally
-distinguishes cold from cached downloads and splits finalize into its
-sub-slots. Both run on the same load. They answer different questions,
-are armed by different env vars, and write different files - and the
-fitter reads both row shapes, so a pre-existing dataset-load calibration
-sweep folds into a new profile rather than being re-measured.
-
----
-
-## Fitting
-
-`vtscore/timing/fit.py` is the writer for the format `profile.py` reads.
-It lives next to the reader so the two cannot drift: a schema change has
-to be made in one directory or it will not round-trip.
-`normalize_row` flattens both recorder shapes into one.
-
-The fit is deliberately plain. Per `(task, cell, step)`:
-
-- **Byte-scaled steps** (a download and its unpack) get a per-MB rate:
-  the median of `seconds / archive_mb`. Regressing these against item
-  count would ask `n` to explain something it cannot see - 500 videos
-  and 500 text files are the same `n` and two orders of magnitude apart
-  in bytes.
-- **Everything else** gets ordinary least squares against `n`: the
-  intercept is what the step costs at all (loading an encoder, opening a
-  file) and the slope is what each additional item adds.
-- **Cold runs are held out** when the warm ones can carry the regression
-  alone. A cold run pays once-per-process costs no later run repeats -
-  the encoder download, the CUDA context, the first forward pass - and it
-  always lands at whichever `n` ran first, so it has enormous leverage on
-  the slope. The holdout stops short of costing a cell its only line:
-  below two distinct warm sizes no slope is estimable, and a two-run
-  sweep's first run is always the cold one. When the warm runs then
-  measure a step as *exactly* free while a cold one measured it as real,
-  the step is not free here but deferred, and it keeps a small floor
-  rather than 0 so the bar still shows a slice for it. The floor is a
-  guard against a confident zero, not a cost model, and on a short task
-  it is most of the predicted total - which is why a caller that can
-  tell the branches apart should pass the step as
-  [skipped](#steps-this-run-will-skip) rather than lean on it.
-- A fit with no spread in `n`, or one that comes back with a **negative**
-  slope (noise beating signal on a short step), collapses to the median
-  seconds with no slope. A confidently wrong slope extrapolates badly at
-  sizes the sweep never visited; a flat median merely stops improving.
-- **A step measured on both paths is also fitted per branch** and stored
-  under the step's `branches` key, each branch fitted from its own rows
-  by the same `fit_step` (so the cold/warm holdout and the median
-  fallback apply within a branch as they do without one). A step whose
-  runs all took *one* branch gets no split: one branch measured is not
-  evidence about the branch nobody ran, and writing it as a split would
-  suggest the profile knows something it does not. `--cold-atlas` is
-  what produces both branches for `dataset_open` in a single sweep.
-
-### Is the fit any good?
-
-`affine_fit` returns an OLS r² and `StepCoeffs` keeps it, so a profile can
-be read for whether its cost model describes the deployment it was measured
-on. `tune_timing_profile.py`'s coverage report prints it per task:
-
-```
-  dataset_load     5 cells, 24 step-samples
-                   exact  (device|media|embedder)  2 cells, 6 affine (median r² 1.00)
-                   rollup (device|media|*)         2 cells, 4 affine (median r² 0.98, 1 below 0.90), 4 byte-rate
-                   rollup (device|*|*)             1 cell, 2 affine (median r² 0.29, 2 below 0.90), 1 step withheld (pooled groups disagree)
-```
-
-The counts are **split by specificity**, in the order
-[`cell_keys`](#the-three-layer-resolution) tries them, because pooling the levels hides the
-one that matters most: `(device, *, *)` is the cell guaranteed to match, and
-it is the weakest. Read down the block and the first level with a cell for
-your media type and encoder is the one that will pace that job. A bare
-"5 cells" cannot tell you whether a sweep bought five measurements or one
-measurement and four fallbacks.
-
-Read the three counts before the r². **A missing r² is not a bad fit** - it
-means the step was not fitted as a line at all, which happens two ways: a
-byte-scaled step is a per-MB rate by design, and the median fallback above
-declined to draw one. `to_json` omits the key rather than writing a
-misleading zero, and `from_json` restores it as `NaN`.
-
-**A sweep at one dataset size produces no r² anywhere.** One size means one
-`n` per cell, `affine_fit` finds no x-variance and returns `(mean, 0, 0)`,
-and every step lands in the median fallback. Drive several sizes per
-(media type, embedder) - four is comfortable - or the profile is a table of
-averages with no scaling term and nothing to judge it by.
-
-Two cautions (measured in
-[this study](../../../docs/experiments/2026-09-02-timing-r2-3345/REPORT.md)):
-
-- **A high r² is not a well-paced step.** r² asks whether the points lie on
-  the line; a bar wants to know how far off the prediction is.
-- **The rollup cells are much weaker than the exact ones**, which matters
-  because the least-specific cell is the one that always matches.
-
-### Contradicted rollups are not emitted
-
-A rollup is only ever *reached* for a combination the sweep never measured:
-`cell_keys` tries every more specific key first, and the fitter emits a cell
-for everything it saw. So `(device, media, *)` serves only encoders that
-media type was never measured with, and `(device, *, *)` only media types the
-sweep never touched at all. Extrapolation is the rollup's whole job - which
-is why it must not be built by averaging rows measured to be unlike.
-
-Before fitting a rollup step, `fit.py` fits each pooled group on its own and
-asks what the step costs at a size all of them cover. If the cheapest and
-dearest answers differ by more than `_MAX_ROLLUP_SPREAD` (3x), that step is
-**left out of the cell**, and `step_terms` falls it through to the shipped
-default while the rest of the cell still applies (e.g. a device-wide
-rollup that would average an image import and an audio import 7x apart).
-The threshold sits well above healthy scatter, so it fires on
-disagreement rather than noise. A merely imprecise rollup still beats the shipped default
-and is kept; a rollup with one group behind it is a rename of the cell it
-backs up and is never suppressed. The withheld count is printed in the
-coverage report, because a step the profile does *not* contain is invisible
-to anything that reads the profile.
-
-### When the task is too short to pace at all
-
-A sample count is also silent about whether there is anything to pace. The
-coverage report says it directly:
-
-```
-  text_sort        3 cells, 288 step-samples
-                   TOO SHORT TO PACE: a typical run totals 0.90 s at the swept sizes (load_model 0.00, embed_query 0.05, score 0.85) — the bar is decided by which of these is largest, which is below the error any fit of them carries
-                   load_model: measured 0.00 s on 47 of 48 runs and real on 1 — deferred, so it is priced at the 0.50 s floor, 36% of the predicted total; a caller that knows the step will be skipped should say so
-```
-
-A large sample count does not help such a task. The first line is why
-coefficients cannot fix it: when the whole run is under a second, the
-ranking of three tiny numbers decides the bar and an absolute error far too
-small to fit reorders them. The second names the mechanism behind most of it
-and the remedy - the deferred floor, and the
-[skip](#steps-this-run-will-skip) that makes it moot on the warm branch.
+The studies that measured the profile are written up under
+[`docs/experiments/`](../../../docs/experiments/), for example
+[the r² study](../../../docs/experiments/2026-09-02-timing-r2-3345/REPORT.md).
