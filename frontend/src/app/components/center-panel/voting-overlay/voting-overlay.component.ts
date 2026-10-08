@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, input, OnDestroy, output, signal } from '@angular/core';
 import { IconComponent } from '../../icon/icon.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-voting-overlay',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IconComponent, ToastyHintComponent],
   templateUrl: './voting-overlay.component.html',
   styleUrl: './voting-overlay.component.scss',
 })
@@ -23,9 +24,8 @@ export class VotingOverlayComponent implements OnDestroy {
    *  taking hover, and drop out of the tab order. */
   readonly unavailable = input(false);
   readonly spinningVote = input<'good' | 'bad' | null>(null);
-  /** When true, renders the faint first-vote hint above the buttons. The
-   *  parent decides when to show this (zero votes + not previously dismissed)
-   *  and dismisses it on first vote. */
+  /** When true, Toasty stands over the buttons asking for a first vote
+   *  (#4680). The parent decides when, and drops it on the first vote. */
   readonly showHint = input(false);
   readonly voted = output<'good' | 'bad'>();
 

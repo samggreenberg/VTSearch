@@ -10,6 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { HintId, HintsService } from '../../services/hints.service';
+import { TOASTY_FACES, ToastyFace } from '../../utils/toasty-faces';
 
 /** The subset of `DOMRect` the placement needs; lets specs pass plain objects. */
 export interface RectLike {
@@ -110,8 +111,10 @@ export class ToastyHintComponent {
   readonly side = input<ToastyHintSide>('below');
   /** Which way the bubble would rather reach; it flips if that runs off the edge. */
   readonly reach = input<ToastyHintReach>('left');
-  /** Toasty's picture: the logo, unless a hint asks for another pose. */
-  readonly image = input('logo.png');
+  /** Toasty's face: happy for a next step, surprised when something needs
+   *  fixing, sad when something went wrong. */
+  readonly face = input<ToastyFace>('happy');
+  readonly faceSrc = computed(() => TOASTY_FACES[this.face()]);
 
   private readonly hints = inject(HintsService);
   readonly shown = computed(() => this.hints.isShown(this.hintId()));

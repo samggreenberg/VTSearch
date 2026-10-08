@@ -736,7 +736,6 @@ An abridged example; the full field list is `UserSettings` in
   "show_animations": "show",
   "show_usage_bars": "default",
   "show_metadata": false,
-  "label_hint_dismissed": false,
   "hide_all_hints": false,
   "hidden_hints": [],
   "enable_achievements": true,

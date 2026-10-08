@@ -434,11 +434,6 @@ class UserSettings(BaseModel):
     # "RAM / Disk bars" pulldown in the appearance settings.
     show_usage_bars: UsageBarsMode = "default"
     show_metadata: bool = False
-    # Set to True once the user dismisses the zero-votes "Use ← / → or click"
-    # hint that overlays the Good/Bad buttons when a fresh labeling session
-    # has no votes yet. Persisting it keeps the hint from re-appearing every
-    # time the same user starts a new session.
-    label_hint_dismissed: bool = False
     # Toasty's hints (#4680): the speech bubbles King Toasty shows beside the
     # control a new user should click next ("Click + to add a dataset", ...).
     # ``hide_all_hints`` is the bubble's "Hide all hints" checkbox (and the

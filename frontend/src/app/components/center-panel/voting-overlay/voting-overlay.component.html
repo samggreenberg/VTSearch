@@ -1,9 +1,4 @@
-@if (showHint()) {
-  <div class="vote-hint" role="status" aria-live="polite">
-    Use &larr; / &rarr; or click. Autopilot will find the next question.
-  </div>
-}
-<div class="vote-buttons">
+<div class="vote-buttons" #voteButtons>
   <button
     class="btn-bad"
     [disabled]="unavailable()"
@@ -27,3 +22,9 @@
     Good
   </button>
 </div>
+@if (showHint()) {
+  <vt-toasty-hint hintId="start-voting" [anchor]="voteButtons" side="above" reach="right">
+    Is this what you're looking for? Click <strong>Good</strong> or <strong>Bad</strong>, or press
+    &rarr; or &larr;. Autopilot picks what to ask next, and your detector learns from every answer.
+  </vt-toasty-hint>
+}

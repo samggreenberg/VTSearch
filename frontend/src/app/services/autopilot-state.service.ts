@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 
@@ -69,6 +69,19 @@ export interface AutopilotState {
   doneReached: boolean;
 }
 
+/**
+ * Toasty's hand-off when a run that trained the detector ends (#4680): `done`
+ * when every quality light went green (or a document walk ran dry, with
+ * `dryRun` set to the run of misses), `all-labeled` when nothing is left to
+ * label. `votes` is the vote total it was raised at; any vote or undo after
+ * that drops it.
+ */
+export interface AutopilotHandoff {
+  kind: 'done' | 'all-labeled';
+  votes: number;
+  dryRun?: number;
+}
+
 /** The phases before the first learned sort: no trained detector yet. */
 const OPENING_PHASES: readonly AutopilotPhase[] = ['good', 'bad', 'more'];
 
@@ -98,12 +111,20 @@ export class AutopilotStateService {
   readonly state$ = this.stateSubject.asObservable();
 
   /**
-   * Whether the terminal-phase hand-off (the "trained" modal) has already been
+   * The hand-off hint on show, or `null` (#4680). Toasty gives it under the
+   * top bar's Dashboard button, which is in `AppComponent`, so it lives here
+   * rather than on the panel that raises it. Cleared by any vote after it
+   * went up, by a new run or a stop, and when the Train view goes away.
+   */
+  readonly handoff = signal<AutopilotHandoff | null>(null);
+
+  /**
+   * Whether the terminal-phase hand-off (Toasty's "trained" hint) has already been
    * shown for the current autopilot run.
    *
    * This lives on the service rather than on the panel component on purpose:
    * the panel is destroyed and rebuilt every time the user switches the
-   * left-panel tab, so a component-scoped flag would re-open the modal on each
+   * left-panel tab, so a component-scoped flag would raise the hint again on each
    * return.
    */
   private completionAnnounced = false;
@@ -203,6 +224,7 @@ export class AutopilotStateService {
 
   activate(retrainMode = false): void {
     if (this.running) return;
+    this.handoff.set(null);
     this.completionAnnounced = false;
     this.startedTrained = false;
     this.initialLabelsetKnown = false;
@@ -226,6 +248,7 @@ export class AutopilotStateService {
   }
 
   deactivate(): void {
+    this.handoff.set(null);
     this.stateSubject.next({ ...this.stateSubject.value, phase: 'idle' });
   }
 
@@ -348,6 +371,7 @@ export class AutopilotStateService {
   }
 
   clear(): void {
+    this.handoff.set(null);
     this.completionAnnounced = false;
     this.startedTrained = false;
     this.initialLabelsetKnown = false;
