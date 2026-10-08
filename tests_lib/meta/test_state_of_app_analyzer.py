@@ -841,6 +841,38 @@ def test_the_opening_is_scored_as_the_text_sort_the_app_shows(run, tmp_path) -> 
         assert other[col] == pytest.approx(other_before[col], nan_ok=True), f"{col}: another run is untouched"
 
 
+def test_a_run_that_never_leaves_the_opening_keeps_its_typed_query_after_the_check(run, tmp_path) -> None:
+    """#4653: a run still in Autopilot's opening at its last click checks a detector no screen shows (since
+    #4643 the Goods' centroid cut at its midpoint, half the corpus), so after the check it keeps the typed
+    query's set and the check's effect is 0 (#4631). The check row's own ``app_trained`` decides."""
+    exp = tmp_path / "never_shown"
+    shutil.copytree(run["exp"] / "results", exp / "results")
+    main = exp / "results" / "cells" / "task_0000.csv"  # cat0@small
+    df = pd.read_csv(main)
+    assert (df["phase"].astype(str) == "check").any(), "the fixture's run checks at the end"
+    df["app_trained"] = 0
+    df.to_csv(main, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    cells = pd.read_csv(out / "cells.csv").set_index("category")
+    row, before = cells.loc["cat0@small"], run["cells"].loc["cat0@small"]
+    assert not np.isfinite(row["shown_from"])
+    for m in ("fbeta", "precision", "recall", "returned"):
+        assert row[f"thr_{m}_final"] == pytest.approx(row[f"text_thr_{m}"]), f"{m}: the typed query's set"
+    assert row["thr_walk_effect"] == 0.0
+    assert before["thr_returned_final"] != pytest.approx(row["thr_returned_final"]), "the check row moved it before"
+    thr = pd.read_csv(out / "thresholds.csv")
+    fin = thr[(thr["category"] == "cat0@small") & (thr["point"] == "final")].iloc[0]
+    assert fin["thr_fbeta"] == pytest.approx(row["text_thr_fbeta"])
+
+    # A check whose own row the app shows still moves the set, whatever the clicks before it showed.
+    is_check = df["phase"].astype(str) == "check"
+    df.loc[is_check, "app_trained"] = 1
+    df.to_csv(main, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    shown_check = pd.read_csv(out / "cells.csv").set_index("category").loc["cat0@small"]
+    assert shown_check["thr_fbeta_final"] == pytest.approx(before["thr_fbeta_final"])
+
+
 def test_the_typed_query_is_read_at_each_presets_own_line_when_the_baseline_has_it() -> None:
     """#4603: the app draws the typed query's line by count at beta <= 1, so a baseline records one line per
     preset (``text_line_*_<beta>``); an older baseline is read at its single beta-blind line."""
