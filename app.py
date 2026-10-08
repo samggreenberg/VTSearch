@@ -340,6 +340,7 @@ _OVERRIDE_ICONS = {
     "support_email": "\U0001f4e7",
     "semantic_only": "\U0001f512",
     "hide_ingest_eta": "\u23f3",
+    "autopilot_only": "\U0001f9ed",
 }
 
 _OVERRIDE_LABELS = {
@@ -350,6 +351,7 @@ _OVERRIDE_LABELS = {
     "support_email": "Support email",
     "semantic_only": "Semantic embedders only",
     "hide_ingest_eta": "Ingest ETAs hidden",
+    "autopilot_only": "Autopilot only",
 }
 
 

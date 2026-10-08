@@ -195,6 +195,13 @@ class AppSettingsSchema(Schema):
     # surfaced read-only here so the Server settings tab can report it. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     hide_ingest_eta = fields.Boolean(dump_only=True)
+    # Server-tier switch that locks Train and Test to their Autopilot tabs
+    # (#4666). Set via the ``--autopilot-only`` CLI flag /
+    # ``VTSEARCH_AUTOPILOT_ONLY`` env var (process-wide, all users) or the
+    # persisted settings file; surfaced read-only here so the SPA can drop the
+    # Manual and Review tabs and the Server settings tab can report it. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    autopilot_only = fields.Boolean(dump_only=True)
     # Server-tier solo-mediaType restriction. Set via the
     # ``--solo-media-type`` CLI flag (process-wide, all users) or the
     # persisted settings file; surfaced read-only here as the value actually

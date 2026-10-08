@@ -2,10 +2,11 @@
 
 An *admin override* is a server-wide restriction an operator sets at startup:
 it applies to every user, is fixed for the lifetime of the process, and is not
-editable through ``PUT /api/settings``. Seven exist today -- the solo
+editable through ``PUT /api/settings``. Eight exist today -- the solo
 mediaType lock, the per-mediaType solo-embedder locks, the plugin hide list,
 the dataset retention window, the support-email address, the Semantic-only
-embedder lock, and the switch that hides ingest progress-bar ETAs.
+embedder lock, the switch that hides ingest progress-bar ETAs, and the
+Autopilot-only lock on Train and Test.
 
 Each one used to be spelled out four times: a ``set_cli_X`` / ``get_cli_X`` /
 ``get_effective_X`` triad in :mod:`vtsearch.settings`, an ``_apply_X`` argparse
@@ -492,6 +493,26 @@ _REGISTRY: tuple[AdminOverride, ...] = (
             "and is not editable via the settings API. There is no "
             "--no-hide-ingest-eta: the flag can only hide, never re-show ETAs "
             "the persisted hide_ingest_eta setting hid."
+        ),
+    ),
+    AdminOverride(
+        name="autopilot_only",
+        flag="--autopilot-only",
+        env="VTSEARCH_AUTOPILOT_ONLY",
+        kind="switch",
+        persisted_getter="get_autopilot_only",
+        effective_key="autopilot_only",
+        resolve=_resolve_switch,
+        help=(
+            "Lock Train and Test to their Autopilot tabs: Train's Manual tab "
+            "and Test's Review tab are removed, and neither view renders a tab "
+            "bar. The New Detector dialog already requires an example item for "
+            "a dataset whose embedder can't search by text, so Autopilot always "
+            "has a first sort to start from. Applies to all users for the "
+            "lifetime of the process and is not editable via the settings API. "
+            "There is no --no-autopilot-only: the flag can only enable the "
+            "lock, never loosen one the persisted autopilot_only setting asked "
+            "for."
         ),
     ),
 )

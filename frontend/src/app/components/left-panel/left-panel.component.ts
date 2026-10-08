@@ -109,6 +109,14 @@ export class LeftPanelComponent implements OnInit {
    * (the parent flips this back to ``false`` once both label classes exist).
    */
   readonly autopilotDisabled = input(false);
+  /**
+   * The server's `autopilot_only` lock (#4666): Train has no Manual tab and
+   * Test no Review tab, and neither renders its tab bar. Train stays on
+   * Autopilot whatever the user's `autopilot_enabled` preference says; when
+   * Autopilot has no way to seed its first sort (`autopilotDisabled`) the panel
+   * says why instead of falling back to Manual.
+   */
+  readonly autopilotOnly = input(false);
   /** 'label' = full labeling UI (default), 'find' = the Test view's Autopilot / Review tabs (#4524, #4525) */
   readonly panelMode = input<'label' | 'find'>('label');
   /**
@@ -264,10 +272,28 @@ export class LeftPanelComponent implements OnInit {
         // back to Manual so the user can label by hand; the doomed text sort is
         // also skipped upstream. When it flips back to available we leave the
         // user where they are and just re-enable the tab.
-        if (disabled && this.activeTab() === 'autopilot') {
-          this.activeTab.set('manual');
+        //
+        // Under the Autopilot-only lock there is no Manual to fall back to:
+        // stop, stay on the tab (which says why), and start again once a seed
+        // exists.
+        if (this.panelMode() !== 'label' || this.activeTab() !== 'autopilot') return;
+        if (disabled) {
+          if (!this.autopilotOnly()) this.activeTab.set('manual');
           this.autopilotStop.emit();
+        } else if (this.autopilotOnly()) {
+          this.autopilotStart.emit();
         }
+      });
+    });
+
+    // The lock can land after `ngOnInit` (settings still loading on a deep
+    // link into Train), with the panel already on Manual: move to Autopilot.
+    effect(() => {
+      if (!this.autopilotOnly()) return;
+      untracked(() => {
+        if (this.panelMode() !== 'label' || this.activeTab() !== 'manual') return;
+        this.activeTab.set('autopilot');
+        if (!this.autopilotDisabled()) this.autopilotStart.emit();
       });
     });
   }
@@ -279,9 +305,9 @@ export class LeftPanelComponent implements OnInit {
       // Find mode doesn't use tabs; keep manual as a no-op default
       this.activeTab.set('manual');
     } else {
-      const startAutopilot = this.autopilotEnabled() && !this.autopilotDisabled();
-      this.activeTab.set(startAutopilot ? 'autopilot' : 'manual');
-      if (startAutopilot) {
+      const onAutopilot = this.autopilotOnly() || (this.autopilotEnabled() && !this.autopilotDisabled());
+      this.activeTab.set(onAutopilot ? 'autopilot' : 'manual');
+      if (onAutopilot && !this.autopilotDisabled()) {
         this.autopilotStart.emit();
       }
     }
@@ -313,6 +339,8 @@ export class LeftPanelComponent implements OnInit {
   setTab(tab: 'manual' | 'autopilot'): void {
     // Autopilot can't be entered while it has no way to seed a first sort.
     if (tab === 'autopilot' && this.autopilotDisabled()) return;
+    // Nor can Manual be under the Autopilot-only lock (#4666).
+    if (tab === 'manual' && this.autopilotOnly()) return;
     if (tab === this.activeTab()) {
       if (tab === 'autopilot') {
         this.autopilotRefocus.emit();
