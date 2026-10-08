@@ -1213,7 +1213,12 @@ def build_viewer(  # noqa: C901
     runs_note = ""
     full_vals, index = _runs_arrays(main, shape, t_full, base)
     sizes: dict[str, int] = {k: _payload_bytes(v) for k, v in agg.items()}
-    if len(index):
+    if runs_budget_mb <= 0:
+        # A budget of 0 asks for the averaged view alone (#4651): a review with many seeds and several
+        # session sets busts the repo's file cap even at the coarsest per-seed grid, and the average over
+        # every seed is the point of the page. The page disables its "each seed" mode and says why.
+        runs_note = "Per-seed lines are omitted (a budget of 0): the page holds the averaged view over every seed."
+    elif len(index):
         candidates = [len(t_full), 120, 80, 60, 45, 34, 26, 20, 15]
         candidates = [c for i, c in enumerate(candidates) if c <= len(t_full) and c not in candidates[:i]]
         pos = {int(t): i for i, t in enumerate(t_full)}
@@ -1529,7 +1534,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "rounds, #4624) and re-average the page from its per-seed lines; refused on a page whose per-seed "
         "lines were thinned. A build does this by itself.",
     )
-    ap.add_argument("--runs-budget-mb", type=float, default=RUNS_BUDGET_MB)
+    ap.add_argument(
+        "--runs-budget-mb",
+        type=float,
+        default=RUNS_BUDGET_MB,
+        help="byte budget for the per-seed lines, thinned along clicks to fit; 0 omits them and keeps the "
+        "averaged view only (#4651)",
+    )
     ap.add_argument(
         "--embedders",
         default=None,

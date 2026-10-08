@@ -15,7 +15,9 @@
 #   SOTA_ROOT    default: /expscratch/$USER/state-of-the-app
 #   SOTA_RUNS_BUDGET_MB   the per-seed payload (default 1): three sets triple the
 #                page, and it has to fit the repo's 4,000 KB cap to be committed.
-#                viewer.py says when it does not.
+#                viewer.py says when it does not. 0 drops the per-seed lines and
+#                keeps the average over every seed: 24 seeds x 3 sets are over the
+#                cap even at the coarsest per-seed grid (#4651).
 #
 # Run it on a compute node (srun -p cpu --mem=16G -c 2): it reads every cell of
 # three runs. Run analyze.sh on the -b1 run first, for its text baseline.
