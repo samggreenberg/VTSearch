@@ -28,6 +28,16 @@
 
 .importer-picker { gap: 0; margin-bottom: var(--space-lg); }
 
+// No tab rows to show (one category, one importer - see `chromeless` in
+// the component): drop the then-empty wrapper so its margin doesn't open a
+// gap above the form, and the indent below, which only exists to sit the
+// controls under the tabs.
+:host(.chromeless) {
+  --importer-indent: 0;
+
+  .importer-picker { display: none; }
+}
+
 .demo-picker {
   gap: var(--space-lg);
   // Fill the host so the demo table inside can be the only scrollable
@@ -52,7 +62,8 @@
 // reads top-down: category tabs → importer tabs → controls).
 // `.demo-picker` is intentionally NOT indented; its inner media-type
 // tab bar must line up with the category and importer tabs above it.
+// `--importer-indent` is zeroed when there are no tabs (`.chromeless`).
 .local-folder-uploader,
 .server-folder-browser {
-  padding-left: var(--space-2xl);
+  padding-left: var(--importer-indent, var(--space-2xl));
 }

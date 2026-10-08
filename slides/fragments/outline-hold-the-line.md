@@ -25,9 +25,9 @@
      its slides is where the whole talk's object turns up: one line through a
      ranking, doing two jobs. -->
 
-<!-- **c** — Section II puts the line where the *data* says. Four ideas in
-     order, each one repairing what the last one starved on. It ends on the
-     estimator the app still fits to choose its next question. -->
+<!-- **c** — Section II is the three ideas the line is built from: scores
+     from models that never saw the votes, the unlabeled corpus the votes
+     came out of, and the algorithm that fits a mixture to it. -->
 
 <!-- **d** — Section III is the line the app draws today: F-beta, the three
      radios that set its β, the line the labels put at its peak, what that

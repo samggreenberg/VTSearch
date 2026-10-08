@@ -14,17 +14,18 @@ address printed on the slide, not `95`). `build.py` works both out from the
 manifest, since they are facts about fragments that no rendered page carries,
 and leaves them in `_build/<deck>[...].nav.json` for this script to write in.
 It also sets the PDF to open with the bookmarks showing, and makes the middle
-of every audience page a link to the next page, so a viewer with no slideshow
-mode is one anyway: click the slide, get the next (`link_advance`). Where a page
-has links of its own there — the outline's section numerals — the area is
-carved around them, so each click lands on exactly one link.
+of every page — audience or speaker — a link to the next page, so a viewer with
+no slideshow mode is one anyway: click the slide, get the next (`link_advance`).
+Where a page has links of its own there — the outline's section numerals — the
+area is carved around them, so each click lands on exactly one link.
 
 The speaker deck needs one thing more. Its outline is a *picture* — a PNG of
 the audience slide beside the notes — so the links the audience deck gets for
 free have to be laid over it by hand. `--probe` names a PDF of the outline
 slides alone (`build.py`'s `probe_bodies`), whose links Chromium has measured
 and which point at speaker pages; each one is scaled from its slide into the
-miniature drawn on the matching speaker page.
+miniature drawn on the matching speaker page. They go in before the
+click-to-advance area, so it is carved around them as on the audience page.
 
 Needs PyMuPDF, which the project already depends on (the `agpl` extra), or
 `pip install pymupdf`.
@@ -155,7 +156,8 @@ def link_advance(doc: pymupdf.Document, pages: list[int]) -> int:
     A link the page already carries inside that area keeps its ground: the area
     is carved around it (`carve`), because overlapping links leave which one a
     click lands on up to the viewer. That is the outline, whose numerals jump to
-    their sections while the rest of it advances (#4618).
+    their sections while the rest of it advances (#4618) — on a speaker page
+    too, once `link_miniatures` has laid them over the miniature (#4634).
     """
     for number in pages:
         page = doc[number - 1]
@@ -191,13 +193,17 @@ def main() -> int:
     # Preview honour it; Chrome's viewer ignores it, harmlessly.
     doc.set_pagemode("UseOutlines")
     doc.set_page_labels(page_labels(nav["labels"]))
-    advances = link_advance(doc, nav.get("advance", []))
     links = 0
     if nav.get("probe"):
         if args.probe is None:
             sys.exit(f"pdf_nav.py: {args.nav} has outline links to lay over miniatures; pass --probe")
         with pymupdf.open(args.probe) as probe:
             links = link_miniatures(doc, probe, nav["probe"])
+    # After the miniatures' links, which the click-to-advance area has to be
+    # carved around like any link Chromium drew; laid first, it would cover
+    # them, and which of two overlapping links a click means is the viewer's
+    # guess.
+    advances = link_advance(doc, nav.get("advance", []))
 
     # An incremental save appends the new objects instead of rewriting a file
     # of a hundred megabytes of figures, which is both faster and leaves every
