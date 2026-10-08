@@ -806,3 +806,70 @@ class TestSingletonRegistry:
         finally:
             job.cancel()
             job.done_event.wait(timeout=5)
+
+
+class TestBusyReason:
+    """``busy_reason`` gates speculative work on a server with nothing else to do (#4683)."""
+
+    @staticmethod
+    def _hold(manager: JobManager):
+        """Start a job on *manager* that runs until cancelled; return it once running."""
+        started = threading.Event()
+
+        def _target(job):
+            started.set()
+            while True:
+                check_job_cancelled()
+                job.cancel_event.wait(0.01)
+
+        job = manager.start("sig", _target, dataset_id="ds", detector_id="det")
+        assert started.wait(timeout=5)
+        return job
+
+    def test_an_idle_process_has_no_reason(self):
+        from vtscore.concurrency.async_jobs import busy_reason
+
+        assert busy_reason() is None
+
+    @pytest.mark.parametrize("tracker_name", ["loading_tasks", "detector_loading_tasks"])
+    def test_a_working_task_row_is_busy_until_it_ends(self, tracker_name):
+        from vtscore.concurrency import progress
+        from vtscore.concurrency.async_jobs import busy_reason
+
+        tracker = getattr(progress, tracker_name).create_task("busy-row", "Loading")
+        assert busy_reason() is not None
+        tracker.update("idle", "done", 1, 1)
+        assert busy_reason() is None
+
+    def test_a_user_visible_job_is_busy(self):
+        from vtscore.concurrency.async_jobs import busy_reason, projection_jobs
+
+        job = self._hold(projection_jobs)
+        try:
+            assert busy_reason() == "a projection job is running"
+        finally:
+            job.cancel()
+            assert job.done_event.wait(timeout=5)
+        assert busy_reason() is None
+
+    def test_a_hidden_warm_up_is_not(self):
+        """The internal warm-ups are speculative work too, and may run for long."""
+        from vtscore.concurrency.async_jobs import archive_thumbnail_jobs, busy_reason
+
+        job = self._hold(archive_thumbnail_jobs)
+        try:
+            assert busy_reason() is None
+        finally:
+            job.cancel()
+            assert job.done_event.wait(timeout=5)
+
+    @pytest.mark.parametrize("tracker_name", ["sort_progress", "eval_progress", "find_progress"])
+    def test_a_shared_bar_mid_run_is_busy(self, tracker_name):
+        from vtscore.concurrency import progress
+        from vtscore.concurrency.async_jobs import busy_reason
+
+        tracker = getattr(progress, tracker_name)
+        tracker.update("running", "Scoring…", 1, 10)
+        assert busy_reason() is not None
+        tracker.update("idle", "", 0, 0)
+        assert busy_reason() is None

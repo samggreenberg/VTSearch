@@ -17,11 +17,13 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
+from vtsearch.hooks import state_sync_exempt
 from vtsearch.routes._context import require_dataset_header, require_detector_header
 from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
+    AutoFindBrowsePrepResponseSchema,
     AutoFindRunResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
     FindEvidenceCoverageResponseSchema,
@@ -831,3 +833,33 @@ def get_autofind_run(run_id: str):
     if record is None:
         abort(404, message="AutoFind results not found")
     return record
+
+
+@detector_scoring_bp.route("/api/autofind/runs/<run_id>/browse-prep", methods=["POST"])
+@state_sync_exempt
+@detector_scoring_bp.response(200, AutoFindBrowsePrepResponseSchema)
+@detector_scoring_bp.alt_response(
+    404,
+    description="No such run for the caller: unknown, another user's, or aged out of the kept window.",
+)
+def prep_autofind_run_browse(run_id: str):
+    """Start laying out a finished run's Good results for Browse, if the server is idle.
+
+    The Find Results dialog asks this while it is open (#4683), so its Browse
+    button finds the map built, or part-way there, rather than starting a fit
+    when pressed.  The map is the one that button builds: the run's Good
+    results on the run's own dataset, which need not be the caller's active one
+    (no ``X-Dataset-Id`` is read).  Nothing is started while other work is in
+    flight: ``busy`` says to ask again later.
+
+    ``@state_sync_exempt``: the dialog repeats the request while the server is
+    busy, which is exactly when ``_state_lock`` is most likely held, and the
+    handler reads no request proxy - it resolves the run's dataset by id.
+    """
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtsearch.autofind import prep_run_browse  # noqa: PLC0415
+
+    answer = prep_run_browse(run_id, get_current_user())
+    if answer is None:
+        abort(404, message="AutoFind results not found")
+    return answer

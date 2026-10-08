@@ -197,7 +197,19 @@ register it here for the active-jobs surface to pick up.
 `[{dataset_id, detector_id, job_types}, ...]` for every (dataset,
 detector) pair with at least one running or pending job across every
 user-visible manager. Jobs missing `dataset_id` / `detector_id` are
-dropped. `reset_all_async_jobs_for_tests()` walks the whole of
+dropped.
+
+`busy_reason()` answers a wider question - *is anything the user asked
+for still running?* - for work started only on the chance it will be
+wanted (the Find Results dialog's Browse prep, #4683). It returns a short
+description of the first thing it finds, or `None`: a `loading-tasks` or
+detector-loading row still working, a running or pending job on any
+user-visible manager, or the shared sort / eval / find bar mid-run. The
+hidden managers do not count; they are speculative work themselves, and
+the archive thumbnail sweep can run for as long as a large archive takes
+to read.
+
+`reset_all_async_jobs_for_tests()` walks the whole of
 `JOB_MANAGERS` — hidden managers included, since test isolation cares
 about every daemon thread — and clears state. Register a new manager
 in `JOB_MANAGERS` only; never keep a second hand-maintained list.

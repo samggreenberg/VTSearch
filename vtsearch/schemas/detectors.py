@@ -813,6 +813,39 @@ class AutoFindRunResponseSchema(AutoDetectResponseSchema):
     created_at = fields.Float(required=True, metadata={"description": "Unix seconds the run finished."})
 
 
+class AutoFindBrowsePrepResponseSchema(Schema):
+    """Response for ``POST /api/autofind/runs/<run_id>/browse-prep``.
+
+    Where getting the run's Good results ready to Browse stands.  Never an
+    error: the request is a hint, and Browse's own build reports any failure
+    when it is pressed.
+    """
+
+    status = fields.String(
+        required=True,
+        validate=validate.OneOf(["ready", "building", "busy", "skipped"]),
+        metadata={
+            "description": (
+                "``ready`` when the map is built, ``building`` when its fit is under "
+                "way, ``busy`` when other work is in flight and nothing was started "
+                "(ask again later), ``skipped`` when there is nothing to prepare."
+            )
+        },
+    )
+    job_id = fields.String(
+        load_default=None,
+        metadata={"description": "The fit's projection job, while ``building``."},
+    )
+    projection_id = fields.String(
+        load_default=None,
+        metadata={"description": "The built layout, when ``ready``."},
+    )
+    reason = fields.String(
+        load_default=None,
+        metadata={"description": "What is in the way, when ``busy`` or ``skipped``."},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Find schemas (vtsearch/routes/detectors/find.py)
 # ---------------------------------------------------------------------------
@@ -1110,6 +1143,7 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
+    "AutoFindBrowsePrepResponseSchema",
     "AutoFindRunResponseSchema",
     "DetectorBrowsePositivesReleaseResponseSchema",
     "DetectorBrowsePositivesResponseSchema",

@@ -546,6 +546,43 @@
         ],
         "type": "object"
       },
+      "AutoFindBrowsePrepResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "default": null,
+            "description": "The fit's projection job, while ``building``.",
+            "nullable": true,
+            "type": "string"
+          },
+          "projection_id": {
+            "default": null,
+            "description": "The built layout, when ``ready``.",
+            "nullable": true,
+            "type": "string"
+          },
+          "reason": {
+            "default": null,
+            "description": "What is in the way, when ``busy`` or ``skipped``.",
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "``ready`` when the map is built, ``building`` when its fit is under way, ``busy`` when other work is in flight and nothing was started (ask again later), ``skipped`` when there is nothing to prepare.",
+            "enum": [
+              "ready",
+              "building",
+              "busy",
+              "skipped"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
       "AutoFindRunResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8649,6 +8686,45 @@
           }
         }
       ]
+    },
+    "/api/autofind/runs/{run_id}/browse-prep": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The Find Results dialog asks this while it is open (#4683), so its Browse\nbutton finds the map built, or part-way there, rather than starting a fit\nwhen pressed.  The map is the one that button builds: the run's Good\nresults on the run's own dataset, which need not be the caller's active one\n(no ``X-Dataset-Id`` is read).  Nothing is started while other work is in\nflight: ``busy`` says to ask again later.\n\n``@state_sync_exempt``: the dialog repeats the request while the server is\nbusy, which is exactly when ``_state_lock`` is most likely held, and the\nhandler reads no request proxy - it resolves the run's dataset by id.",
+        "operationId": "prep_autofind_run_browse",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoFindBrowsePrepResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Start laying out a finished run's Good results for Browse, if the server is idle.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
     },
     "/api/autorun-extractors": {
       "get": {
