@@ -158,6 +158,9 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_cli_delete_dataset": {
+            "type": "boolean"
+          },
           "autofind_detectors": {
             "items": {
               "type": "string"
@@ -6831,6 +6834,9 @@
       "SettingsUpdate": {
         "properties": {
           "audio_playing": {
+            "type": "boolean"
+          },
+          "autofind_cli_delete_dataset": {
             "type": "boolean"
           },
           "autofind_detectors": {

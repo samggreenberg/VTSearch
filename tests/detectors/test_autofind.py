@@ -464,6 +464,40 @@ class TestImportRoutesPassTheChoice:
         assert settings.get_autofind_on_import() is False
 
 
+class TestWebRunsNeverDelete:
+    """``autofind_cli_delete_dataset`` (#4674) is for the command line alone:
+    AutoFind started from the web app keeps its dataset whatever it says."""
+
+    def test_run_autofind_keeps_the_dataset(self, client):
+        from vtscore.datasets.registry import get_dataset
+
+        settings.set_autofind_cli_delete_dataset(True)
+        entry, _ctx = _registered_copy("Kept after Run AutoFind")
+        _autofind_detector("ar-keep")
+
+        final = wait_for_loading_task(_start(client, entry["id"]))
+
+        assert final["error"] is None, final
+        assert final["autofind"]["detectors_run"] == 1
+        assert get_dataset(entry["id"]) is not None
+
+    def test_import_triggered_run_keeps_the_dataset(self, client):
+        from vtscore.datasets.registry import get_dataset
+
+        settings.set_autofind_cli_delete_dataset(True)
+        entry, ctx = _registered_copy("Kept after import")
+        _autofind_detector()
+
+        hook = import_post_load("true")
+        assert hook is not None
+        hook(ctx)
+
+        (row,) = _autofind_tasks()
+        final = wait_for_loading_task(row["task_id"])
+        assert final["error"] is None, final
+        assert get_dataset(entry["id"]) is not None
+
+
 class TestKeptRuns:
     """Kept results are bounded by run count and by total hits, oldest first."""
 

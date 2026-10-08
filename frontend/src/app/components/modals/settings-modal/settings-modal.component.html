@@ -231,6 +231,12 @@
             [autofindExporterFieldValues]="autofindExporterFieldValues"
             (exporterChange)="onAutofindExporterChange($event)"
           ></vt-auto-find-settings>
+          <h4 class="subhead">Command Line</h4>
+          <label class="checkbox-row" title="Delete the dataset a command-line AutoFind imported, once its detectors have run">
+            <input type="checkbox" [ngModel]="settings().autofind_cli_delete_dataset" (ngModelChange)="onToggle('autofind_cli_delete_dataset', $event)" />
+            Delete the dataset after AutoFind
+            <vt-field-hint-icon hint="When on, an AutoFind run from the command line (python app.py --autodetect) deletes the dataset it imported once its AutoFind detectors have run and the results are exported. A run with no AutoFind detector to run keeps its dataset, and AutoFind run from the dashboard never deletes anything."></vt-field-hint-icon>
+          </label>
         }
 
         <!-- Autopilot & Actions -->

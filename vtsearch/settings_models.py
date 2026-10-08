@@ -468,6 +468,13 @@ class UserSettings(BaseModel):
     # left it last time. Defaults on - moving a detector to AutoFind is the
     # user saying they want it run on what they import.
     autofind_on_import: bool = True
+    # Whether a command-line AutoFind (``--autodetect`` / ``--pipeline``)
+    # deletes the dataset it imported once its detectors have run (#4674).
+    # Off by default: the CLI keeps what it imports on the dashboard.  Only the
+    # CLI reads it - a run from the web app never deletes - and a run that
+    # detected nothing (no AutoFind detectors, or none for the media type)
+    # keeps its dataset, because there the import was the whole point.
+    autofind_cli_delete_dataset: bool = False
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview
