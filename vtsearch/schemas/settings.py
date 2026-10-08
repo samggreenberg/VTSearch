@@ -218,6 +218,9 @@ class AppSettingsSchema(Schema):
     # is saved; the Add Dataset dialog's "Run AutoFind" checkbox starts from it,
     # and each import that sends the box remembers its state here.
     autofind_on_import = fields.Boolean()
+    # Whether a command-line AutoFind deletes the dataset it imported once its
+    # detectors have run (#4674); the AutoFind settings tab's checkbox.
+    autofind_cli_delete_dataset = fields.Boolean()
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -323,6 +326,7 @@ class SettingsUpdateSchema(Schema):
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Raw()
     autofind_on_import = fields.Boolean()
+    autofind_cli_delete_dataset = fields.Boolean()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()
