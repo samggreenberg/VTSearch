@@ -1144,16 +1144,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Embedder of the single active/selected dataset (mirrors
-   *  ``activeDatasetMediaType``). Empty when ambiguous or unrecorded; lets the
-   *  new-detector modal warn about text-only detectors on no-text datasets. */
+   *  ``activeDatasetMediaType``). Empty when ambiguous or unrecorded. */
   get activeDatasetEmbedder(): string {
+    return this.embedderSourceDataset?.embedder ?? '';
+  }
+
+  /** Every embedder that dataset binds; with the primary above, lets the
+   *  new-detector modal require an example item when none can search by text
+   *  (#4666). */
+  get activeDatasetEmbedders(): string[] {
+    return this.embedderSourceDataset?.bound_embedders ?? [];
+  }
+
+  /** The dataset the two getters above describe: the single selected one when
+   *  it records an embedder, else the first loaded one. */
+  private get embedderSourceDataset(): DatasetRegistryEntry | undefined {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
       const sel = this.datasetState.datasetById().get(selId);
-      if (sel?.embedder) return sel.embedder;
+      if (sel?.embedder) return sel;
     }
-    const loaded = this.datasets.find((d) => d.loaded);
-    return loaded?.embedder ?? '';
+    return this.datasets.find((d) => d.loaded);
   }
 
   openNewDetectorModal(): void {
@@ -1161,6 +1172,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.newThingFlows.openNewDetector({
       defaultMediaType: this.activeDatasetMediaType,
       datasetEmbedder: this.activeDatasetEmbedder,
+      datasetEmbedders: this.activeDatasetEmbedders,
     });
   }
 

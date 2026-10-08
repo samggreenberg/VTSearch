@@ -866,6 +866,10 @@ defaults don't fit your workflow, you're debugging a weird
 ranking, or you want to label under an unusual regime (e.g. pure
 diversity sampling with no voting).
 
+Your server may not offer it: an administrator can set VTSearch to
+**Autopilot only**, which removes the Manual tab (and Test's **Review** tab),
+leaving Autopilot with no tab bar. Settings ▸ Server shows whether it is on.
+
 The Manual tab shows three control rows above the media list.
 
 <picture>
@@ -1111,8 +1115,8 @@ It has two tabs:
   the bottom left, beside **Cancel**; collapsed by default) so you can
   choose which one this detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
   That choice fixes what the detector is compatible with later. If the
-  dataset's embedder can't search by text, you'll see a note that you can
-  still create the detector but must label a few examples to train it.
+  dataset's embedder can't search by text, a text description has nothing to
+  rank by there, so **Create** stays disabled until you add an example item.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server
@@ -1148,6 +1152,9 @@ Manual split applied to testing:
   the test's picks already in the piles. A user who wants the list without
   testing clicks **Review** once scoring ends; the test waits on its tab, and
   the Threshold stays frozen until it reaches **Done!**.
+
+On a server set to **Autopilot only**, Test shows the Autopilot alone, with
+no tab bar and no Review tab.
 
 Test is where you decide whether to trust a detector. To run detectors you
 already trust and collect what they match, with no view to work through, use

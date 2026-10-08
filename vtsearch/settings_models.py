@@ -324,6 +324,17 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
+    # Lock Train and Test to their **Autopilot** tabs (#4666).  An operator who
+    # wants users on the guided flow only can drop Train's Manual tab and
+    # Test's Review tab; the tab bars then do not render at all, so the left
+    # pane is just the Autopilot panel.  A UI simplification, not a permission
+    # boundary: the backend serves the same routes either way.  Set with the
+    # ``--autopilot-only`` CLI flag / ``VTSEARCH_AUTOPILOT_ONLY`` env var
+    # (process-wide, wins for the process lifetime) or by editing this key in
+    # the settings file.  See
+    # :func:`vtsearch.settings.get_effective_autopilot_only`.
+    autopilot_only: bool = False
+
     # Solo-mediaType streamlining. An admin-set restriction: when set, the
     # importer and new-detector flows hide their mediaType pickers and lock to
     # this type, the converter picker filters to converters whose output is

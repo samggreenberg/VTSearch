@@ -372,7 +372,7 @@ describe('ContextPulldownComponent', () => {
       await createPulldown('detector');
       activeContext.setIntent('d1', '');
       setRegistry(
-        [makeDataset('d1', 'Alpha', { media_type: 'image', embedder: 'siglip' })],
+        [makeDataset('d1', 'Alpha', { media_type: 'image', embedder: 'siglip', bound_embedders: ['siglip', 'dinov2_patch'] })],
         [],
       );
       const openSpy = vi.spyOn(newThingFlows, 'openNewDetector');
@@ -381,6 +381,7 @@ describe('ContextPulldownComponent', () => {
       expect(openSpy).toHaveBeenCalledWith({
         defaultMediaType: 'image',
         datasetEmbedder: 'siglip',
+        datasetEmbedders: ['siglip', 'dinov2_patch'],
       });
     });
 
