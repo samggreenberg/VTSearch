@@ -376,7 +376,7 @@ class TestImportLabelsIntoDetectorCLI:
 class TestImportLabelsIntoRunsThatDetector:
     def test_flag_run_scores_imported_detector_not_autofind_list(self, client, tmp_path, monkeypatch):
         """``--autodetect --import-labels-into NAME`` scores with NAME alone:
-        the settings file's Auto-Find list names only a detector that does not
+        the settings file's AutoFind list names only a detector that does not
         exist, so the run fails unless that list is bypassed - and the
         detector is not on it, so it would never run if it were read."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
@@ -398,7 +398,7 @@ class TestImportLabelsIntoRunsThatDetector:
                 },
             ]
         }
-        _write_trainable_model("Not On AutoRun", labelset)
+        _write_trainable_model("Not On AutoFind", labelset)
         labels_path = tmp_path / "new_labels.json"
         labels_path.write_text(json.dumps({"labels": [{"md5": "a" * 32, "label": "good"}]}))
 
@@ -419,7 +419,7 @@ class TestImportLabelsIntoRunsThatDetector:
                 "--settings",
                 str(settings_path),
                 "--import-labels-into",
-                "Not On AutoRun",
+                "Not On AutoFind",
                 "--label-importer-file",
                 str(labels_path),
                 "--exporter",
@@ -431,7 +431,7 @@ class TestImportLabelsIntoRunsThatDetector:
         cli_main.main(None, None)
 
         results = json.loads(out_path.read_text()).get("results", {})
-        assert list(results) == ["Not On AutoRun"]
+        assert list(results) == ["Not On AutoFind"]
         # The settings file is read, never rewritten.
         on_disk = json.loads(settings_path.read_text())
         assert on_disk["autofind_detectors"] == ["nonexistent-detector"]

@@ -5,7 +5,7 @@ to [Running the app](#running-the-app) in order, then open the
 [User Guide](user/USER_GUIDE.md#step-by-step-your-first-search) to load a dataset
 and train your first detector. [Docker](#docker) replaces the Python and Node
 steps if you would rather not install them, and the [SLURM](#running-on-a-slurm-gpu-cluster)
-section is for shared GPU clusters. You will need Python 3.10+, Git, and (for the
+section is for shared GPU clusters. You will need Python 3.11+, Git, and (for the
 frontend build) Node.js 20.19+.
 
 ## Table of Contents
@@ -40,7 +40,7 @@ frontend build) Node.js 20.19+.
 
 ## Prerequisites
 
-You need **Python 3.10+** installed. Check by running:
+You need **Python 3.11+** installed. Check by running:
 
 ```bash
 python3 --version
@@ -238,10 +238,10 @@ and install problems on GPU boxes are covered in
 ### Picking the CUDA tag
 
 When a GPU is visible, `scripts/detect_cuda_tag.py` picks the torch wheel's
-CUDA tag from the GPU's compute capability; pass an explicit `cuXYZ` tag only
-to override it. If the tag can't be determined it falls back to `cu124`. You can
-preview the choice without installing anything:
-`python scripts/detect_cuda_tag.py`.
+CUDA tag from the GPU's compute capability and the driver's CUDA version; pass
+an explicit `cuXYZ` tag only to override it. If the tag can't be determined it
+falls back to `cu124`, the widest wheel. You can preview the choice without
+installing anything: `python scripts/detect_cuda_tag.py`.
 
 Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
 for certain GPU architectures, so it has to match your hardware. There's a
@@ -249,9 +249,14 @@ for certain GPU architectures, so it has to match your hardware. There's a
 on `cu121`+, Blackwell on `cu128`+ — and a **ceiling**: the newest wheels
 *drop* the oldest architectures, so "just use the latest tag" is wrong for old
 hardware. For example, `cu128` dropped Volta (`sm_70`), so a **Tesla V100 needs
-`cu124`** (or `cu121`/`cu118`), not `cu128`. Rule of thumb: pick the oldest tag
-your driver supports that still covers your GPU; `cu124` is a safe default
-spanning Volta through Hopper (and what the auto-detect picks for those cards).
+`cu124`** (or `cu121`/`cu118`), not `cu128` or `cu129`. Rule of thumb: pick the
+newest tag your driver supports that still covers your GPU. `cu129` is what
+the auto-detect picks for Turing through Blackwell on a driver at CUDA 12.9 or
+later, and it is the **only tag that gets cuML** (GPU UMAP / k-means): its
+torch pins the CUDA 12.9 libraries that RAPIDS ≥ 26.8 is built on, and RAPIDS
+≥ 26.8 is the first whose cudf takes the pandas 3 that `pyproject.toml` pins
+(#4390). A Volta card, or an older driver, steps down to `cu124` (or older),
+where the installer skips cuML and the app runs UMAP / k-means on the CPU.
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
 runtime and falls back to CPU (with a warning) rather than crashing, but you
@@ -270,9 +275,12 @@ over-strict dependency pins. In a git checkout they also install the
 The **GPU** path additionally:
 
 - installs **cuML / RAPIDS** from NVIDIA's package index for GPU-accelerated
-  UMAP and k-means. This is a **multi-GB** download; it is best-effort (a
-  failure leaves the CPU fallback in place) and `VTSEARCH_SKIP_CUML=1` skips it,
-  e.g. on a host that can't reach `pypi.nvidia.com`.
+  UMAP and k-means, on the `cu129` tag only (see
+  [Picking the CUDA tag](#picking-the-cuda-tag); on any other tag the step
+  skips itself with a message). This is a **multi-GB** download; it is
+  best-effort (a failure leaves the CPU fallback in place) and
+  `VTSEARCH_SKIP_CUML=1` skips it, e.g. on a host that can't reach
+  `pypi.nvidia.com`.
 - runs a **smoke test** at the end (a CUDA op through torch, then a cuML import)
   and warns if either fails.
 - on a driver that isn't DKMS-managed, offers to convert it so the next kernel
@@ -535,12 +543,15 @@ with a shared filesystem.
    ```
 
 2. **Create the virtualenv and install the GPU dependencies.** Match the CUDA
-   wheel to your cluster's drivers (HLTCOE L40S nodes use CUDA 12.4 → `cu124`):
+   wheel to your cluster's drivers and cards (a node whose driver reports CUDA
+   12.4 takes `cu124`; a Turing-or-newer card on a driver at CUDA 12.9 or
+   later takes `cu129`, the one tag that also gets cuML; a V100 takes `cu124`
+   whatever the driver):
 
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   bash scripts/install.sh cu124         # or cu118 / cu121 / cu128 to match your node's GPU
+   bash scripts/install.sh cu129         # or cu118 / cu121 / cu124 / cu128 to match your node's GPU and driver
    ```
 
    The scripts default to a venv named `.venv` in the project dir; override with
@@ -548,12 +559,12 @@ with a shared filesystem.
 
    > **Module-based Python (e.g. the HLTCOE Grid).** Many clusters ship Python
    > only via environment modules, and the system `python3` may be too old
-   > (VTSearch needs 3.10+). Load a recent one first, and build the venv with
+   > (VTSearch needs 3.11+). Load a recent one first, and build the venv with
    > the **versioned** interpreter name so a `pyenv` shim on your `PATH` can't
    > shadow it:
    >
    > ```bash
-   > module avail python                 # find an available 3.10+ module
+   > module avail python                 # find an available 3.11+ module
    > module load python/3.12.3
    > which python3.12                     # should be the module's, not a pyenv shim
    > python3.12 -m venv .venv

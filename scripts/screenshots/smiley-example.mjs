@@ -68,8 +68,8 @@ export const FIXTURES = {
  * clears `FIXTURES` in turn before its empty-app frame).
  */
 export const BOOK_FIXTURES = {
-  datasets: ['photos', 'photos-prod', 'photo-regions'],
-  detectors: ['Books', 'books-regions'],
+  datasets: ['photos-train', 'photos-prod', 'photo-regions'],
+  detectors: ['Book detector', 'books-regions'],
 };
 
 /**

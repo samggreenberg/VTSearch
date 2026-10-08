@@ -24,11 +24,14 @@ See Phase 3 of ``../docs/architecture.md``.
 
 from __future__ import annotations
 
+from vtscore.config.runtime import DEFAULT_BETA
+
 import math
 import threading
+import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, overload
 
 
 # Reentrant lock protecting all mutable state.
@@ -957,7 +960,7 @@ class DetectorContext:
         # ``verified_ids`` are the ids the human has explicitly verified this Find
         # session (a dict used as an ordered set, like ``good_votes``);
         # ``find_scores`` is the frozen per-item detector score from the single
-        # scoring pass, so a floor (cutoff) change re-thresholds without
+        # scoring pass, so a balance (cutoff) change re-thresholds without
         # re-scoring.  Both are in-memory only and never persisted.
         "verified_ids",
         "find_scores",
@@ -968,13 +971,10 @@ class DetectorContext:
         # ``GET /api/find/stats``.  Cleared on a fresh find-label scoring pass and
         # on any session reset (clear votes / dataset switch).
         "find_eval_stale",
-        # The detector's precision floor (#4245): the fraction of what its cut
-        # returns that should be right, or ``None`` for "no floor - the line is
-        # the Inclusion 0 cut".  Per detector and seeded from the user's setting
-        # on first read (#3416).  ``None`` is a real value here, so seeding is
-        # tracked in its own flag.
-        "min_precision",
-        "min_precision_seeded",
+        # The detector's balance (#4413): F-beta's beta, per detector and seeded
+        # from the user's setting on first read (#3416), tracked in its own flag.
+        "beta",
+        "beta_seeded",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
         "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
@@ -1021,12 +1021,12 @@ class DetectorContext:
         # labelset, because nothing that changes the labels drops ``model``
         # (issue #4204).  In-memory only, never persisted.
         "model_labels_sig",  # tuple | None
-        # Structural (SIFT/VLAD) detectors carry a *second* learned object next
-        # to the retrieval MLP: the match-statistic verification classifier
-        # (None until trained / for non-structural detectors).  In-memory only,
-        # re-derived from votes on every retrain, never persisted.  See
-        # docs/plans/structural-embedder.md.
-        "verification_classifier",  # nn.Sequential | None
+        # Structural detectors on a tiled (document) dataset keep every
+        # (template, page) geometric fit here across retrains, so a vote verifies
+        # one new template instead of the whole shortlist (#3928).  In-memory
+        # only; entries record the features they were computed on, so a dataset
+        # reload misses rather than reusing them.
+        "structural_verification_cache",  # VerificationCache | None
         "threshold",  # decision threshold
         # Cross-dataset training-corpus counts (from on-disk labelset).  These
         # are independent of ``good_votes``/``bad_votes``, which only count
@@ -1057,8 +1057,8 @@ class DetectorContext:
         # labels, calibrate_count, calibration_fraction, hidden_dim), the
         # folds carry the per-fold held-out ``(scores, labels)``, the
         # fallback sentinel, and the trained fold models, and *holdout_rows*
-        # names the training row behind each held-out score (the precision
-        # floor maps them back to votes, #4245).  Because the operating point
+        # names the training row behind each held-out score, for a
+        # ``holdout_sink`` a cache hit must still fill.  Because the operating point
         # is deliberately absent from *key*, a re-cut at another inclusion
         # (the acquisition cut, Smart's pricing) hits the cache and only
         # re-runs the cheap quantile rule (no fold refit); a label/embedder
@@ -1070,32 +1070,54 @@ class DetectorContext:
         # measured midpoint cut at inclusion 0 and tilts monotonically away
         # from it (issue #2865).  Written on every retrain that computes a safe
         # threshold; read by ``recut_detector_threshold`` so every re-cut (a
-        # floor change, the acquisition cut) uses the *shipped*
+        # balance change, the acquisition cut) uses the *shipped*
         # estimator instead of the raw cross-calibration one.  Holds fitted Gaussians and
         # sorted score samples - process-scoped, never serialised.
         "anchored_cut_cache",  # FoldAnchoredCut | None
-        # The #4220 precision estimate (``PrecisionFloorEstimate``): the final
-        # model's haystack and the calibration folds' held-out votes that may
-        # serve as evidence, with the curve fitted on first use.  Written on
-        # every retrain beside ``anchored_cut_cache``.  Since #4272 it no
-        # longer draws the line - the spot check does - and feeds only the Find
-        # Stats precision curve.  Score arrays only - process-scoped, never
-        # serialised.
-        "precision_floor_cache",  # PrecisionFloorEstimate | None
+        # Retired (#4362): always ``None``.  It held the #4220 precision
+        # estimate a retrain parked for the Find Stats curve; the curve went
+        # with #4360 and nothing builds the estimate any more.  Kept so an
+        # out-of-tree reader of the attribute sees "no estimate" rather than
+        # an ``AttributeError``.
+        "precision_floor_cache",  # None
         # The ranking the line is drawn over (``LineRanking``, #4272): the
         # haystack the last retrain scored, sorted, with the items the trainer
-        # held as voted.  The floor keeps the top *count* unvoted items of it;
+        # held as voted.  The balance keeps the top *count* unvoted items of it;
         # a re-cut (``recut_detector_threshold``) and the spot check's
         # candidate both read it.  Ids and scores only - never serialised.
         "line_ranking",  # LineRanking | None
+        # The items the structural verification gate passed on the last
+        # re-rank (#4505): a structural detector's line is the gate's boundary,
+        # so ``line_ranking`` is dropped and this is what the balance counts.
+        # An unordered set, never a ranking a check could walk; cleared
+        # wherever ``line_ranking`` is written or dropped.  Ids only.
+        "gate_passed",  # frozenset[int] | None
         # The spot check (``SpotCheck``, #4272) that last finished on this
         # detector - its fixed candidate, labels, verdict and the fingerprint
         # of the set it left the line on - and the one running now, if any.
         # A finished result is kept across retrains and goes stale rather than
-        # vanishing; a running check keeps the floor's state as it was until it
+        # vanishing; a running check keeps the line's state as it was until it
         # ends.  Ids and labels only - never serialised.
         "precision_check",  # SpotCheck | None (finished)
         "precision_check_run",  # SpotCheck | None (running)
+        # Test mode's test of the line (``LineTest``, #4524): the one running
+        # on this detector's Find session, or the last finished one, over the
+        # frozen Find scores.  Picks, labels and band counts only - never
+        # serialised itself: a finished test's verdict is kept on the
+        # detector's JSON instead (``vtscore.detectors.line_verdicts``,
+        # #4526).  Goes wherever the spot check goes: a vote clear, a dataset
+        # switch, a fresh Find pass.
+        "line_test",  # LineTest | None
+        # How many votes the detector held when its last spot check ended,
+        # finished or cancelled: the weak-separation rule's cooldown counts
+        # from it (``weak_check_due``, #4496).  Goes with the check.
+        "check_ended_votes",  # int | None
+        # The line the labels imply (``LabelsLine``, #4452): the class model
+        # the last retrain's calibration folds fitted from the labels, and the
+        # prevalence it estimated on the corpus scored last (a Find pass over a
+        # new dataset re-estimates it there).  A balance change re-cuts it.
+        # Goes with the head.
+        "labels_line",  # LabelsLine | None
     )
 
     def __init__(
@@ -1138,8 +1160,8 @@ class DetectorContext:
         # version that scored this pass; flipped True when its labelset changes
         # underneath (corrections folded in + retrain).
         self.find_eval_stale: bool = False
-        self.min_precision: float | None = None
-        self.min_precision_seeded: bool = False
+        self.beta: float | None = DEFAULT_BETA
+        self.beta_seeded: bool = False
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
         # Embeddings for every saved labelset element, keyed by
@@ -1154,9 +1176,7 @@ class DetectorContext:
         self.label_score_regions: dict[str, list[Any]] = {}
         self.model: Any = None  # nn.Sequential | None
         self.model_labels_sig: tuple | None = None
-        # Match-statistic verification classifier for structural detectors;
-        # None for non-structural detectors and until first trained.
-        self.verification_classifier: Any = None  # nn.Sequential | None
+        self.structural_verification_cache: Any = None  # VerificationCache | None
         self.threshold: float = 0.5
         self.labelset_good_count: int = 0
         self.labelset_bad_count: int = 0
@@ -1168,10 +1188,14 @@ class DetectorContext:
         self.labelset_source: dict[str, Any] | None = None
         self.calibration_cache: tuple[Any, ...] | None = None
         self.anchored_cut_cache: Any = None  # FoldAnchoredCut | None
-        self.precision_floor_cache: Any = None  # PrecisionFloorEstimate | None
+        self.precision_floor_cache: Any = None  # retired (#4362): always None
         self.line_ranking: Any = None  # LineRanking | None
+        self.gate_passed: frozenset[Any] | None = None
         self.precision_check: Any = None  # SpotCheck | None
         self.precision_check_run: Any = None  # SpotCheck | None
+        self.line_test: Any = None  # LineTest | None
+        self.check_ended_votes: int | None = None
+        self.labels_line: Any = None  # LabelsLine | None
 
 
 # ---------------------------------------------------------------------------
@@ -1595,34 +1619,61 @@ def invalidate_loaded_detector_models() -> None:
             ctx.threshold = 0.5
 
 
+def _recut_balance(ctx: "DetectorContext", beta: float) -> float | None:
+    """The balance's line for *ctx* at *beta*, or ``None`` for the caller's fallbacks.
+
+    The labels' line (#4452) when the last retrain fitted one: its class model
+    cut at *beta* and the prevalence it was cut at, reading nothing from the
+    ranking, so it moves the same in Train and in Find.  A trained head with no
+    class model (too few votes, one class) draws no count on the corpus: the
+    fallbacks answer, as the retrain's did.  Only a context with no head at
+    all still reads the count rule over its ranking (#4413).
+    """
+    from vtscore.training.thresholds import balance_line  # noqa: PLC0415
+
+    if ctx.labels_line is not None:
+        return float(ctx.labels_line.threshold(beta))
+    if ctx.model is not None:
+        return None
+    return balance_line(
+        ctx.line_ranking,
+        beta,
+        ctx.precision_check,
+        human_voted_ids(ctx),
+        proposal=detector_balance_proposal(ctx, beta),
+    )
+
+
 def recut_detector_threshold(
     ctx: "DetectorContext",
     inclusion_value: float | None = None,
     *,
-    min_precision: float | None = None,
+    beta: float | None = None,
 ) -> float | None:
     """The threshold *ctx*'s cached estimators cut at an operating point, or ``None``.
 
-    The one place a detector's cut is re-derived without a retrain.  A floor
+    The one place a detector's cut is re-derived without a retrain.  A balance
     change (:func:`recompute_detector_thresholds`), the acquisition cut
     (:func:`detector_acquisition_threshold`) and Smart's pricing all read it.
 
-    The operating point is a precision floor (*min_precision*) or, when no
-    floor is given, an inclusion (*inclusion_value*) - the internal unit, not
-    a user preference (#4269).
+    The operating point is a balance (*beta*) or, when none is given, an
+    inclusion (*inclusion_value*) - the internal unit, not a user preference
+    (#4269).
 
-    **Under a floor the line keeps a set** (#4272): the top *count* unvoted
-    items of the ranking the last retrain scored (``ctx.line_ranking``), where
-    *count* is the set the detector's last spot check ended on, or the floor's
-    unchecked starting candidate before any check
-    (:func:`~vtscore.training.thresholds.floor_line`, shared with training and
-    the eval harness).  Nothing falls back to the Inclusion 0 cut any more.
-    The unvoted remainder is read against the live votes, so the line follows
-    the ranking at the same count as votes come in.  With no ranking to read
-    (never trained against a haystack, or a structural detector) the floor
-    has no line and the fallbacks below answer at the inclusion given.
+    **Under a balance** (#4413) the line is :func:`_recut_balance`'s: the
+    labels' line (#4452) when the last retrain fitted one.  A context with no
+    trained head keeps a set (#4272): the top *count* unvoted items of the
+    ranking the last retrain scored (``ctx.line_ranking``), where *count* is
+    the set the detector's last spot check ended on where the check's shape
+    lets it move the line, or else the mixture's F-beta argmax under the
+    balance's cap (:func:`~vtscore.training.thresholds.balance_line`, shared
+    with training and the eval harness).  The unvoted remainder is read against the live
+    votes, so the line follows the ranking at the same count as votes come
+    in.  With no ranking to read (never trained against a haystack, or a
+    structural detector) the balance has no line and the fallbacks below
+    answer at the inclusion given.
 
-    With no floor, in order:
+    With no balance, in order:
 
     * **The fold-anchored estimator** (``ctx.anchored_cut_cache``), when training
       fitted one - the shipped cut, re-cut at *inclusion_value*.  Arithmetic on
@@ -1643,12 +1694,12 @@ def recut_detector_threshold(
       touch of the stepper, which could even admit *fewer* items on a step
       toward lenient.
     """
-    from vtscore.training.thresholds import floor_line, reporting_line
+    from vtscore.training.thresholds import reporting_line
 
-    if min_precision is None and inclusion_value is None:
-        raise ValueError("an operating point needs an inclusion or a precision floor")
-    if min_precision is not None:
-        kept = floor_line(ctx.line_ranking, min_precision, ctx.precision_check, human_voted_ids(ctx))
+    if beta is None and inclusion_value is None:
+        raise ValueError("an operating point needs an inclusion or a balance")
+    if beta is not None:
+        kept = _recut_balance(ctx, beta)
         if kept is not None:
             return kept
     line = reporting_line(
@@ -1671,23 +1722,25 @@ def recut_detector_threshold(
 
 
 def detector_precision_floor(ctx: "DetectorContext", min_precision: float) -> Any:
-    """The #4220 estimator's verdict for *ctx* at *min_precision*: a :class:`~vtscore.training.thresholds.PrecisionFloorCut`.
+    """Deprecated (#4362): always an ``insufficient_evidence`` :class:`~vtscore.training.thresholds.PrecisionFloorCut`.
 
-    Reads the estimate the last retrain cached, fitting its curve on first use.
-    A detector with no estimate - never trained, trained without a haystack, or
-    a structural detector - has no evidence, so the verdict is
-    ``insufficient_evidence`` with zero calibration positives.
-
-    Off the line's path since #4272: the spot check decides the line
-    (:func:`detector_floor_state`).  Kept as library API for callers that want
-    the estimator's own reading.
+    It read the #4220 estimate a retrain parked on ``ctx.precision_floor_cache``.
+    A retrain no longer builds that estimate, so there is never evidence to
+    read: the verdict is ``insufficient_evidence`` with zero calibration
+    positives, as it always was for a detector with no estimate.  The spot
+    check decides the line (:func:`detector_balance_state`).  A caller that
+    wants the estimator's own reading builds a
+    :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` itself.
     """
     from vtscore.training.thresholds import unpromised
 
-    estimate = ctx.precision_floor_cache
-    if estimate is None:
-        return unpromised(min_precision)
-    return estimate.cut(min_precision)
+    warnings.warn(
+        "detector_precision_floor() is deprecated: a retrain no longer builds the #4220 precision estimate "
+        "(#4362), so its verdict is always insufficient_evidence. Read detector_balance_state() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return unpromised(min_precision)
 
 
 def human_voted_ids(ctx: "DetectorContext") -> set[int]:
@@ -1701,29 +1754,125 @@ def human_voted_ids(ctx: "DetectorContext") -> set[int]:
     return set(ctx.good_votes) | set(ctx.bad_votes)
 
 
-def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any] | None:
-    """What the precision floor says about *ctx*'s current line, for a response that carries the line.
+def detector_line_labels(ctx: "DetectorContext") -> dict[int, bool]:
+    """The human votes as anchors for the line's mixture: ``{media id: is Good}`` over :func:`human_voted_ids`."""
+    return {cid: cid in ctx.good_votes for cid in human_voted_ids(ctx)}
+
+
+def detector_balance_proposal(ctx: "DetectorContext", beta: float) -> int | None:
+    """The mixture's F-beta argmax on *ctx*'s ranking at *beta* (#4413), or ``None``: the unchecked balance line's proposal."""
+    from vtscore.training.thresholds import fbeta_count
+
+    return fbeta_count(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
+def detector_balance_positives(ctx: "DetectorContext") -> float | None:
+    """The mixture's count of positives among *ctx*'s unvoted ranking (#4413): a balance walk's recall denominator."""
+    from vtscore.training.thresholds import mixture_positives
+
+    return mixture_positives(ctx.line_ranking, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
+def detector_walk_positives(ctx: "DetectorContext", beta: float) -> float:
+    """The positives a balance walk over *ctx*'s ranking reads recall against (#4419): the mixture's count, else the cap."""
+    from vtscore.training.thresholds import walk_positives
+
+    return walk_positives(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
+@overload
+def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any]: ...
+@overload
+def detector_balance_state(ctx: "DetectorContext", beta: None) -> None: ...
+@overload
+def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[str, Any] | None: ...
+def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[str, Any] | None:
+    """What the balance says about *ctx*'s current line (#4413), for a response that carries the line.
 
     Every place a detector's threshold leaves the process - a sort result, a
-    Find pass, a floor change, a headless export - reports it beside the
+    Find pass, a balance change, a headless export - reports it beside the
     threshold (#4247, #4272).  ``status`` is ``unchecked`` (the line is the
-    floor's starting candidate, no check has run), ``confirmed`` (the last spot
-    check's range clears the floor) or ``short`` (it ended below it, and the
-    line keeps the top 32 it ended on); ``count`` is the size of the set the
-    line keeps; ``range`` is the check's likely range for how much of that set
-    is right, with ``stale`` once the ranking under it has moved since the
-    check; ``schedule`` is what a check at this floor costs.  ``None`` when no
-    floor is set (a library caller's choice; the app always sets one).
+    mixture's F-beta argmax under the cap) or ``checked`` (the last balance
+    walk's peak); ``count`` the set's size; ``precision`` and ``recall`` the
+    walk's likely ranges and ``fbeta`` its estimate, with ``stale`` once the
+    ranking under them moved; ``schedule`` is what a check at this balance
+    costs.  On a structural detector's line ``status`` is ``gate`` and
+    ``count`` is what the verification gate passes, unvoted (#4505).
+    ``None`` when no balance is set (a library caller's choice; the app
+    always sets one).
     """
-    from vtscore.training.thresholds import floor_state
+    from vtscore.detectors.centroid_head import is_centroid_head
+    from vtscore.training.thresholds import balance_state, gate_balance_state
 
-    if min_precision is None:
+    if beta is None:
         return None
-    return floor_state(min_precision, ctx.precision_check, ctx.line_ranking, human_voted_ids(ctx)).as_dict()
+    voted = human_voted_ids(ctx)
+    if ctx.line_ranking is None and ctx.gate_passed is not None:
+        # The line is the verification gate's boundary: no ranking, no check.
+        state = gate_balance_state(beta, ctx.gate_passed, voted).as_dict()
+    else:
+        # Under the labelset's line (#4452) the count is what the threshold keeps
+        # of the ranking scored last - possibly none - not the count rule's.  So
+        # it is under the Goods' centroid (#4643), whose midpoint the balance
+        # does not move: the count is what that line keeps.
+        drawn = ctx.labels_line is not None or is_centroid_head(ctx.model)
+        state = balance_state(
+            beta,
+            ctx.precision_check,
+            ctx.line_ranking,
+            voted,
+            proposal=None if drawn else detector_balance_proposal(ctx, beta),
+            threshold=ctx.threshold if drawn else None,
+        ).as_dict()
+    state.update(detector_check_prompt(ctx, len(voted)))
+    return state
 
 
-def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: float | None = None) -> float:
+def detector_check_prompt(ctx: "DetectorContext", n_votes: int) -> dict[str, Any]:
+    """Whether *ctx*'s labels separate weakly enough that a spot check is due (#4496).
+
+    ``separation`` is the labels line's d' (``None`` before a retrain has drawn
+    one, or when it is unbounded); ``check_due`` is :func:`weak_check_due` on
+    it, counted from the vote total when the last check ended.  Never due in
+    Find, which offers no check (#4317), nor while a check is running, nor on
+    a line a check cannot walk (#4489): no ranking - a structural detector's
+    line is the verification gate's boundary - or nothing in it unvoted, where
+    a check would be refused.
+    """
+    from vtscore.training.thresholds import weak_check_due  # noqa: PLC0415
+
+    sep = ctx.labels_line.separation if ctx.labels_line is not None else None
+    ranking = ctx.line_ranking
+    due = (
+        not ctx.find_mode
+        and ctx.precision_check_run is None
+        and ranking is not None
+        and ranking.unvoted_ids(human_voted_ids(ctx)).size > 0
+        and weak_check_due(sep, n_votes, ctx.check_ended_votes)
+    )
+    shown = round(float(sep), 4) if sep is not None and math.isfinite(sep) else None
+    return {"separation": shown, "check_due": bool(due)}
+
+
+def detector_acquisition_threshold(
+    ctx: "DetectorContext", inclusion_value: float | None = None, *, beta: float | None = None
+) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
+
+    Under a balance (*beta*) it is the score where the labels line's corpus
+    posterior falls below :data:`~vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION`
+    (0.5: the items the line's model thinks are even odds; #3546), read off
+    ``ctx.labels_line``.  With no labels line it falls through to the rules
+    below.
+
+    Under a balance (*beta*, #4413) it can be a rank instead of a re-cut: the
+    score at :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR` of
+    the depth of the mixture's F-beta argmax over the unvoted ranking
+    (:func:`~vtscore.training.thresholds.acquisition_threshold`, #4409).  That
+    factor is ``None`` since the #4427 revert (the rank cut harvested the
+    user's unvoted top and few fresh images cleared the threshold), so the
+    balance falls through to the offset below like everything else; a mixture
+    with no estimate does too.
 
     **Not the decision line.**  ``ctx.threshold`` is what the user sees and what
     Find calls a match; this is a second cut taken from the *same* fitted
@@ -1735,11 +1884,11 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
 
     The offset is relative to **the inclusion the reporting cut sits at**.
     *inclusion_value* names it when the caller knows it in those units (the
-    Inclusion 0 cut of a detector with no floor).  ``None`` recovers it from ``ctx.threshold`` through
+    Inclusion 0 cut of a detector with no balance).  ``None`` recovers it from ``ctx.threshold`` through
     :meth:`~vtscore.training.thresholds.FoldAnchoredCut.inclusion_for_threshold`,
-    which is the path a cut chosen by another rule takes: under a precision
-    floor (#4224) the reporting cut is wherever the set the floor keeps ends,
-    and acquisition samples four steps stricter than *that*.
+    which is the path a cut chosen by another rule takes: under a balance the
+    reporting cut is wherever the set the balance keeps ends, and acquisition
+    samples four steps stricter than *that*.
 
     Derived on demand rather than stored beside ``ctx.threshold``: there are
     four places that write a threshold onto a detector context, and a second
@@ -1753,82 +1902,101 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
     threshold is not on the estimator's scale) - the two jobs coincide there,
     exactly as they did everywhere before #2876.
     """
+    if beta is not None:
+        from vtscore.training.thresholds import (
+            ACQUISITION_TARGET_PRECISION,
+            acquisition_threshold,
+            target_precision_threshold,
+        )
+
+        # #3546: sample where the labels line's own corpus posterior says even
+        # odds.  The line - 4 re-cut below had saturated into a rank pin under
+        # the balance; this follows the class model instead.
+        if ACQUISITION_TARGET_PRECISION is not None and ctx.labels_line is not None:
+            at_target = target_precision_threshold(ctx.labels_line, ACQUISITION_TARGET_PRECISION)
+            if at_target is not None and math.isfinite(at_target):
+                return at_target
+
+        at_argmax = acquisition_threshold(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
+        if at_argmax is not None:
+            return at_argmax
     cut = ctx.anchored_cut_cache
     if cut is None:
         return ctx.threshold
     from vtscore.training.thresholds import acquisition_inclusion
 
     reporting = inclusion_value if inclusion_value is not None else cut.inclusion_for_threshold(ctx.threshold)
-    # A floor that promised nothing drew its line at the fallback inclusion;
-    # the caller names it (see ``detector_line_inclusion``) so acquisition
-    # samples exactly its offset below it rather than below the strict end of
-    # whatever plateau that cut shares.
+    # A line with no balance is drawn at the fallback inclusion; the caller
+    # names it (see ``detector_line_inclusion``) so acquisition samples exactly
+    # its offset below it rather than below the strict end of whatever plateau
+    # that cut shares.
     if reporting is None:
         return ctx.threshold
     candidate = float(cut.threshold_at(acquisition_inclusion(reporting)))
     return candidate if math.isfinite(candidate) else ctx.threshold
 
 
-def detector_line_inclusion(ctx: "DetectorContext", min_precision: float | None) -> float | None:
+def detector_line_inclusion(ctx: "DetectorContext", beta: float | None) -> float | None:
     """The inclusion *ctx*'s reporting line sits at, for Autopilot's acquisition offset.
 
-    Under a floor the line keeps a set rather than an inclusion, so it is
-    ``None`` and :func:`detector_acquisition_threshold` recovers it from the
-    line itself (owner, 2026-09-28: acquisition sits at *X - 4*, where *X* is
-    the derived inclusion of the production cut).  With no floor it is
-    Inclusion 0, the line's own cut (#4269).
+    Under a balance (#4413) the line keeps a set rather than an inclusion,
+    so it is ``None`` and :func:`detector_acquisition_threshold`
+    recovers it from the line itself (owner, 2026-09-28: acquisition sits at
+    *X - 4*, where *X* is the derived inclusion of the production cut).  With
+    no preference it is Inclusion 0, the line's own cut (#4269).
     """
     from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
 
-    if min_precision is not None:
+    if beta is not None:
         return None
     return float(PRECISION_FLOOR_FALLBACK_INCLUSION)
 
 
-def recompute_detector_thresholds(min_precision: float | None) -> None:
-    """Re-derive each loaded detector's threshold at its own floor, leaving the MLP in place.
+def recompute_detector_thresholds(beta: float | None) -> None:
+    """Re-derive each loaded detector's threshold at its own balance, leaving the MLP in place.
 
-    The precision floor is a pure cutoff knob: a change must not drop the model
-    or re-score the haystack - only move the threshold over already-computed
+    The balance is a pure cutoff knob: a change must not drop the model or
+    re-score the haystack - only move the threshold over already-computed
     scores (:func:`recut_detector_threshold`).  Detectors with nothing cached
     to re-cut are left untouched; the next training pass computes the
-    threshold at the new floor.
+    threshold at the new balance.
 
-    **Each detector is re-cut at its own floor.**  The floor is per detector
-    (``DetectorContext.min_precision``, seeded from the user's setting on
-    first read; see #3416), and :func:`vtscore.state.set_min_precision` writes
-    only the active detector's.  *min_precision* is what a detector that has
-    not read its own floor yet takes - the user's setting, which is what that
-    first read will seed it with.  A detector already holding its own floor
-    keeps its cut.  Under a floor the line keeps the set the floor keeps
-    (#4272); with no floor it is the Inclusion 0 cut (#4269).
+    **Each detector is re-cut at its own balance.**  The balance is per
+    detector (``DetectorContext.beta``, seeded from the user's setting on
+    first read; see #3416), and :func:`vtscore.state.set_beta` writes only
+    the active detector's.  *beta* is what a detector that has not read its
+    own balance yet takes - the user's setting, which is what that first read
+    will seed it with.  A detector already holding its own balance keeps its
+    cut.  With no balance at all (*beta* ``None`` and none seeded, a library
+    caller's choice) the line is the Inclusion 0 cut (#4269).
     """
     from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
 
     with _state_lock:
         for ctx in loaded_detector_contexts():
-            floor = ctx.min_precision if ctx.min_precision_seeded else min_precision
-            threshold = recut_detector_threshold(ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=floor)
+            own = ctx.beta if ctx.beta_seeded else beta
+            threshold = recut_detector_threshold(ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, beta=own)
             if threshold is not None:
                 ctx.threshold = threshold
 
 
-def user_min_precision() -> float | None:
-    """The user's precision floor: what a detector that has not read its own yet will be seeded with.
+def user_beta() -> float | None:
+    """The user's balance: what a detector that has not read its own yet will be seeded with.
 
-    ``None`` - no floor - when no settings builder is registered (a
+    ``None`` - no balance - when no settings builder is registered (a
     library-only process that never configured one), rather than raising.
     """
     from vtscore.config import CoreConfig
 
     try:
-        return CoreConfig.from_settings().min_precision
+        beta = CoreConfig.from_settings().beta
     except RuntimeError:
         return None
+    return None if beta is None else float(beta)
 
 
 def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
-    """Deprecated: accepts only ``0``, and re-cuts every loaded detector at its floor.
+    """Deprecated: accepts only ``0``, and re-cuts every loaded detector at its balance.
 
     Inclusion is no longer a user preference (#4269), so there is no Inclusion
     change to follow.  ``0`` is accepted with a ``DeprecationWarning`` and
@@ -1838,7 +2006,7 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
     from vtscore.config.core_config import _retired_inclusion
 
     _retired_inclusion("vtscore.state.core.recompute_detector_thresholds_for_inclusion()", inclusion_value)
-    recompute_detector_thresholds(user_min_precision())
+    recompute_detector_thresholds(user_beta())
 
 
 # ---------------------------------------------------------------------------
@@ -1849,7 +2017,7 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
 # a full DatasetContext / DetectorContext reference can stay one-liners.
 # Dataset-intrinsic scalars (coverage_atlas, dataset_display_name) delegate
 # to the active DatasetContext.  Detector-related scalars (click_counter,
-# min_precision) delegate to the active DetectorContext.
+# beta) delegate to the active DetectorContext.
 # ---------------------------------------------------------------------------
 
 
@@ -1869,27 +2037,27 @@ def _set_dataset_display_name(value: str | None) -> None:
     get_active_context().dataset_display_name = value
 
 
-def _get_min_precision() -> tuple[bool, float | None]:
-    """``(seeded, value)`` for the active detector's floor."""
+def _get_beta() -> tuple[bool, float | None]:
+    """``(seeded, value)`` for the active detector's balance (#4413)."""
     ctx = get_active_detector_context()
-    return ctx.min_precision_seeded, ctx.min_precision
+    return ctx.beta_seeded, ctx.beta
 
 
-def _set_min_precision(value: float | None) -> None:
+def _set_beta(value: float | None) -> None:
     ctx = get_active_detector_context()
-    # The floor is cached per-detector for fast reads, but its canonical
+    # The balance is cached per-detector for fast reads, but its canonical
     # persisted home is the per-user settings store (written by the caller's
     # ``_persist_setting`` hook).  When a Flask request identifies no detector
     # (e.g. the VTSBrowser, which has a dataset but no loaded detector), the
     # active context is the frozen request-missing sentinel; there is no
     # detector to cache the value on, so skip the cache write rather than
     # raising ``RequestMissingContextError``.  The user-settings persist still
-    # runs, so a floor echoed back by a bulk settings save is a harmless no-op
-    # instead of a 400.
+    # runs, so a balance echoed back by a bulk settings save is a harmless
+    # no-op instead of a 400.
     if is_request_missing_detector_context(ctx):
         return
-    ctx.min_precision = value
-    ctx.min_precision_seeded = True
+    ctx.beta = None if value is None else float(value)
+    ctx.beta_seeded = True
 
 
 # ---------------------------------------------------------------------------

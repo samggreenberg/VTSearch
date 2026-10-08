@@ -72,6 +72,9 @@ def _rows(rung: str, cat: str, seed: int, *, live: str | None = None) -> pd.Data
                 "threshold_provenance": "fold_anchored[2/2]",
                 "seed_mode": "text",
                 "n_test_pos": 10,
+                # #4519: each rung returns a set at precision 0.5, recall 0.5 (F1 0.5).
+                "precision": 0.5,
+                "recall": 0.5,
             }
         )
     return pd.DataFrame(rows)
@@ -108,6 +111,9 @@ def build(root: Path, *, mislabel: bool = False, lose: bool = False, drop: bool 
                 "text_cost": TEXT,
                 "n_test_pos": 9 if stale else 10,
                 "text_AP": 0.3,
+                # The text sort's own line: precision 0.2, recall 0.8, F1 0.32.
+                "text_precision": 0.2,
+                "text_recall": 0.8,
             }
             for c in CATS
             for s in SEEDS
@@ -141,6 +147,13 @@ def main() -> int:
         check(abs(curve.loc[(rung, 0), "mean"] - TEXT) < TOL, f"{rung}: t=0 is the text notch", failures)
         check(abs(curve.loc[(rung, 3), "mean"] - TEXT) < TOL, f"{rung}: an unshown detector reads as text", failures)
     check(abs(curve.loc[("r1_xcal", 10), "mean"] - 0.5) < TOL, "r1 level recovered", failures)
+    # #4519: the returned set's F1, anchored on the text sort's own line (F1 0.32) before a detector shows.
+    text_f1 = 2 * 0.2 * 0.8 / (0.2 + 0.8)
+    check(abs(curve.loc[("r1_xcal", 0), "f1_mean"] - text_f1) < TOL, "F1 at t=0 is the text sort's line", failures)
+    check(abs(curve.loc[("r1_xcal", 10), "f1_mean"] - 0.5) < TOL, "F1 level recovered", failures)
+    want_r2_f1 = (17 * 0.5 + text_f1) / 18
+    check(abs(curve.loc[("r2_gmm", 10), "f1_mean"] - want_r2_f1) < TOL, "F1 fills the starved cell with text", failures)
+    check(abs(curve.loc[("r1_xcal", 10), "f025_mean"] - 0.5) < TOL, "F at 1/4 of P = R is that value", failures)
     want_r2 = (17 * 0.45 + TEXT) / 18
     check(
         abs(curve.loc[("r2_gmm", 10), "mean"] - want_r2) < TOL, "starved cell filled with text, not dropped", failures

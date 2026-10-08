@@ -4,7 +4,7 @@
       [medias]="mediaState.mediasSignal()"
       [sortOrder]="sortState.sortOrder"
       [threshold]="sortState.threshold"
-      [floor]="sortState.floor"
+      [balance]="sortState.balance"
       [selectedId]="mediaState.selectedId()"
       [goodVotes]="voteState.goodVotes"
       [badVotes]="voteState.badVotes"
@@ -14,7 +14,7 @@
       [votesLoaded]="voteState.votesLoaded"
       [sortMode]="sortState.sortMode"
       [selectMode]="sortState.selectMode"
-      [minPrecision]="sortState.minPrecision"
+      [beta]="sortState.beta"
       [returned]="sortState.aboveThreshold"
       [sortBusy]="sortState.sortBusy"
       [sortStatus]="sortState.sortStatus"
@@ -32,8 +32,8 @@
       [textQuery]="sortState.textQuery"
       (sortModeChange)="onSortModeChange($event)"
       (selectModeChange)="onSelectModeChange($event)"
-      (minPrecisionChange)="onMinPrecisionChange($event)"
-      (floorCheck)="onFloorCheck()"
+      (betaChange)="onBetaChange($event)"
+      (check)="onSpotCheck()"
       (textSort)="onTextSort($event)"
       (learnedSort)="onLearnedSort(false)"
       (loadSort)="onLoadSort()"
@@ -131,8 +131,8 @@
   />
 }
 
-@if (showFloorCheck()) {
-  <vt-floor-check-modal (closed)="onFloorCheckClosed()" (voted)="onFloorCheckVoted($event)" />
+@if (showSpotCheck()) {
+  <vt-spot-check-modal [intro]="spotCheckIntro()" (closed)="onSpotCheckClosed()" (voted)="onSpotCheckVoted($event)" />
 }
 
 @if (showResortPrompt()) {

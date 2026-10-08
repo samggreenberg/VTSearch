@@ -17,15 +17,19 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from vtscore.config.runtime import DEFAULT_MIN_PRECISION, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+from vtscore.config.runtime import (
+    DEFAULT_BETA,
+    PROJECTION_MIN_DIST,
+    PROJECTION_N_NEIGHBORS,
+)
 
 
 def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) -> None:
     """Refuse a non-zero Inclusion passed to a retired name, and warn about a zero one.
 
-    Inclusion is no longer a user preference (#4269): the precision floor is
-    the operating point, and a detector with no promise draws its line at the
-    Inclusion 0 cut.  The names that used to set it (*where*) stay importable
+    Inclusion is no longer a user preference (#4269): the balance is the
+    operating point (#4413), and a detector with no balance draws its line at
+    the Inclusion 0 cut.  The names that used to set it (*where*) stay importable
     so an out-of-tree caller keeps working, but only at 0 - the one value that
     still means what it did.  Any other value is refused rather than ignored,
     because a knob that silently stops moving the line is worse than an error.
@@ -38,11 +42,11 @@ def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) 
     if value != 0:
         raise ValueError(
             f"{where}: Inclusion is retired as a user preference and is fixed at 0; got {value!r}. "
-            "Set a precision floor instead (min_precision= / vtscore.state.set_min_precision)."
+            "Set a balance instead (beta= / vtscore.state.set_beta)."
         )
     warnings.warn(
         f"{where} is deprecated: Inclusion is retired as a user preference and is always 0. "
-        "Set a precision floor instead (min_precision= / vtscore.state.set_min_precision).",
+        "Set a balance instead (beta= / vtscore.state.set_beta).",
         DeprecationWarning,
         stacklevel=stacklevel,
     )
@@ -125,7 +129,7 @@ class CoreConfig:
     # route every hardcoded ``data/`` path through this field.
     data_dir: Path
 
-    # Auto-Find results exporter (server-tier). When an autodetect run has no
+    # AutoFind results exporter (server-tier). When an autodetect run has no
     # explicit ``--exporter``, the CLI falls back to this exporter +
     # field-value map. ``""`` means "no configured exporter" (CLI defaults to
     # ``gui``). Defaulted here so library-only ``CoreConfig(...)`` constructions
@@ -172,13 +176,13 @@ class CoreConfig:
     # without the app shim keep working unchanged.
     hide_ingest_eta: bool = False
 
-    # The user's precision floor (#4245): the fraction of what a detector's cut
-    # returns that should be right, or ``None`` for no floor - the line is then
-    # the Inclusion 0 cut, with nothing promised.  Seeds each detector's own
-    # floor on first read (``vtscore.state.get_min_precision``).  The app always
-    # sets one; ``None`` survives for library callers.  Defaulted here so
-    # library-only ``CoreConfig(...)`` constructions keep working.
-    min_precision: float | None = DEFAULT_MIN_PRECISION
+    # The balance (#4413): F-beta's beta, the preference the line is drawn at,
+    # or ``None`` for no balance - the line is then the Inclusion 0 cut.  Seeds
+    # each detector's own balance on first read (``vtscore.state.get_beta``).
+    # The app always sets one; ``None`` survives for library callers.
+    # Defaulted here so library-only ``CoreConfig(...)`` constructions keep
+    # working.
+    beta: float | None = DEFAULT_BETA
 
     # Deprecated (#4269): Inclusion is no longer a user preference, so nothing
     # reads this.  ``None`` is "not given"; ``0`` is accepted with a

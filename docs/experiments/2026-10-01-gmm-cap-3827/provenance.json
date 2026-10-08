@@ -1,0 +1,38 @@
+{
+  "inputs": {
+    "0.44%": {
+      "dir": "/expscratch/sgreenberg/div-4197/natural-new/results/cells",
+      "cells": 720,
+      "sha": "f3fc3d16390bc27f"
+    },
+    "0.1%": {
+      "dir": "/expscratch/sgreenberg/div-4197/p0.001-new/results/cells",
+      "cells": 720,
+      "sha": "f78cd5a7e5a6dc6c"
+    },
+    "5%": {
+      "dir": "/expscratch/sgreenberg/guard-4303/h0.05-new/results/cells",
+      "cells": 720,
+      "sha": "3269320755f81062"
+    }
+  },
+  "steps": [
+    50,
+    150
+  ],
+  "seed": 3827,
+  "caps": [
+    5000,
+    10000,
+    25000,
+    50000,
+    100000,
+    0
+  ],
+  "sizes": [
+    0,
+    100000,
+    250000,
+    2000000
+  ]
+}

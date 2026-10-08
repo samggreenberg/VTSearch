@@ -121,7 +121,7 @@ canonical persisted form.
 | `textsort_suggestions` | `list[str]` | LRU of recent text-sort queries |
 | `find_initial_labels` | `dict[int, str]` | Labels the detector applied during a Find run |
 | `verified_ids` | `dict[int, None]` | IDs the human explicitly verified this Find session |
-| `find_scores` | `dict[int, float]` | Frozen per-item score, so a floor change re-thresholds without re-scoring |
+| `find_scores` | `dict[int, float]` | Frozen per-item score, so a balance change re-thresholds without re-scoring |
 | `find_eval_stale` | `bool` | The labelset changed since this Find evaluation was scored |
 | `training_medias` | `dict[int, dict[str, Any]]` | Voted medias with embeddings |
 | `label_embeddings` | `dict[str, np.ndarray]` | `stable_element_id -> embedding`, built from origins |
@@ -130,21 +130,22 @@ canonical persisted form.
 | `label_negative_regions` / `label_score_regions` | `dict[str, list[np.ndarray]]` | Per-element patch stacks on patch datasets (flooded negatives; full score rows) |
 | `model` | `torch.nn.Sequential \| None` | Trained head (process-lifetime only) |
 | `model_labels_sig` | `tuple \| None` | Signature of the labels `model` was trained on, so a stale head is detected |
-| `verification_classifier` | `torch.nn.Sequential \| None` | Structural detectors' second head: match-statistic verification |
+| `structural_verification_cache` | `VerificationCache \| None` | Structural detectors on a tiled dataset: every (template, page) geometric fit, reused across retrains (#3928) |
 | `threshold` | `float` | Calibrated decision threshold |
 | `labelset_good_count` / `labelset_bad_count` | `int` | Counts from the on-disk labelset (cross-dataset) |
 | `votes_dataset_id` | `str` | Dataset ID the cid-keyed dicts are valid against |
 | `cached_labelset` | `LabelSet \| None` | Parsed labelset, reused across requests |
 | `cached_labelset_mtime` / `cached_labelset_media_type` | `float` / `str` | Mtime and media type of the JSON the cache was built from |
 | `labelset_source` | `dict \| None` | Active sync target |
-| `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another floor or inclusion re-runs only the cheap cut |
+| `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another balance or inclusion re-runs only the cheap cut |
 | `anchored_cut_cache` | `FoldAnchoredCut \| None` | The fold-anchored population estimator behind the current threshold |
-| `precision_floor_cache` | `PrecisionFloorEstimate \| None` | The #4220 estimate the Find Stats curve reads; off the line's path since #4272 |
-| `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the floor keeps the top *count* unvoted items of it, and the spot check draws its candidate from it |
-| `precision_check` / `precision_check_run` | `SpotCheck \| None` | The floor's last finished spot check (kept across retrains; its range goes `stale`) and the one running now |
+| `precision_floor_cache` | `None` | Retired (#4362): always `None`. It held the #4220 estimate a retrain parked for the Find Stats curve, which went in #4360 |
+| `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the balance's state counts the unvoted items of it the line keeps, and the spot check draws its bands from it |
+| `precision_check` / `precision_check_run` | `SpotCheck \| None` | The balance's last finished spot check (kept across retrains; its ranges go `stale`) and the one running now |
+| `check_ended_votes` | `int \| None` | The vote total when the last spot check ended, finished or closed: the weak-separation prompt's cooldown counts from it (`weak_check_due`, #4496) |
 
 Everything in this table is in-memory only. `model`,
-`verification_classifier`, `label_embeddings`, `label_local_features`
+`label_embeddings`, `label_local_features`
 and the region stacks are all re-derived from the labelset's origins on
 the next process start.
 
@@ -584,15 +585,15 @@ username to a data directory.
 
 ## Setting-persistence hooks
 
-Some library helpers - `get_min_precision`, `set_min_precision`,
-`set_calibrate_count`, `set_calibration_fraction` - read or write
+Some library helpers - `get_beta`, `set_beta`, `set_calibrate_count`,
+`set_calibration_fraction` - read or write
 user-pref values that a **host** owns. The library exposes the hook
 surface; the host installs the persistence callbacks. Library-only
 consumers see purely in-memory mutation.
 
 ```python
 # vtscore/state/__init__.py
-KNOWN_SETTING_KEYS = frozenset({"min_precision", "calibrate_count", "calibration_fraction"})
+KNOWN_SETTING_KEYS = frozenset({"beta", "calibrate_count", "calibration_fraction"})
 
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Install the persister for *key*, which must be in
@@ -605,21 +606,22 @@ A host wires it at startup:
 ```python
 from vtscore.state import register_setting_persister
 
-register_setting_persister("min_precision", my_settings.save_min_precision)
+register_setting_persister("beta", my_settings.save_beta)
 ```
 
-`get_min_precision()` seeds its first read from `CoreConfig.from_settings()`
-(see [config.md](config.md)), per detector. The floor is a float in `(0, 1]`
-or `None`: `None` means no floor, and the line is the Inclusion 0 cut (the app
-always sets one). Under a floor the line keeps a set - the top *count* unvoted
-items of `line_ranking`, *count* being the set the last spot check ended on or
-the floor's starting candidate (#4272) - and `set_min_precision` moves the
-active detector's line there with no retrain
-(`recut_detector_threshold(ctx, min_precision=...)`) and, in Find mode,
-re-splits the unverified items. `detector_floor_state(ctx, min_precision)`
-is the state every response carries beside the line, and
-`human_voted_ids(ctx)` names the votes a candidate excludes (the verified
-items in Find mode, the vote dicts otherwise).
+`get_beta()` seeds its first read from `CoreConfig.from_settings()`
+(see [config.md](config.md)), per detector: the **balance**, F-beta's beta in
+`[0.25, 4]` (#4413). `user_beta()` is the value a detector that has not read
+its own yet will be seeded with, `None` when no settings builder is
+registered. The line is the labels' cut at that beta (#4452; the retrain
+parks it as `DetectorContext.labels_line`), and `set_beta` moves the active
+detector's line there with no retrain (`recut_detector_threshold(ctx, beta=...)`, through
+`recompute_detector_thresholds(beta)`) and, in Find mode, re-splits the
+unverified items. `line_knobs()` (`{"beta": b}`) is what every retrain and
+re-cut passes on. `detector_balance_state(ctx, beta)` is the state every
+response carries beside the line, and `human_voted_ids(ctx)` names the votes
+a candidate excludes (the verified items in Find mode, the vote dicts
+otherwise).
 
 **Inclusion is retired as a user preference** (#4269). `get_inclusion()` is
 deprecated and always returns `0`; `set_inclusion()` accepts only `0`, with a

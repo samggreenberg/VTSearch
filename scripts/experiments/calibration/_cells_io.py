@@ -62,6 +62,25 @@ def legacy_datasets(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+#: The ``phase`` the harness gives the end-of-run spot check's rows (#4272).
+CHECK_PHASE = "check"
+
+
+def check_rows(df: pd.DataFrame) -> pd.Series:
+    """True on the rows of the spot check a floor-era run ends on.
+
+    Since #4272 the default arm checks its line once the voting steps are spent.
+    The check's rounds are cast as votes and each emits a row with ``phase ==
+    "check"``, and ``t`` still counts every vote, so those rows sit past
+    ``max_steps``, drawn with a model retrained on the check's own picks.  They
+    are not clicks.  A frame from before #4272, or one with no ``phase`` column,
+    has none.
+    """
+    if "phase" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["phase"].fillna("").astype(str).str.strip() == CHECK_PHASE
+
+
 def _blank(s: pd.Series) -> pd.Series:
     """True where a tag column is empty/NaN - i.e. the arm's own base row."""
     return s.isna() | (s.astype(str).str.strip().isin(("", "nan", "None")))
@@ -219,8 +238,12 @@ def describe_load(prov: dict) -> str:
     Accepts the provenance of **either** loader -- see :data:`LOSS_KEYS`.  The
     starved cells are reported last and worded apart from the losses above
     them, because they are a result of the experiment rather than a hole in it.
+    The spot-check rows ``load_arm`` sets apart are named too, but they are
+    neither a loss nor a result about the clicks.
     """
     parts = [f"{prov['n_read']}/{prov['n_files']} cells with data", f"{prov.get('n_rows', 0):,} rows"]
+    if prov.get("check_rows"):
+        parts.append(f"{prov['check_rows']:,} spot-check rows set apart (not clicks)")
     for label, keys in LOSS_KEYS:
         n = sum(len(prov.get(key) or ()) for key in keys)
         if n:
@@ -231,7 +254,7 @@ def describe_load(prov: dict) -> str:
     return ", ".join(parts)
 
 
-def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
+def load_arm(arm_dir: Path, *, keep_check: bool = False) -> tuple[pd.DataFrame, dict]:
     """Concatenate one arm's cell CSVs, keeping only its base rows.
 
     Returns ``(frame, provenance)``; provenance counts the files read, the
@@ -252,8 +275,27 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
     concatenating first holds 34x the frame that is wanted, which is fine at
     #2847's grid size and is where a long-horizon run with hundreds of cells
     dies, AFTER the cells have been paid for.
+
+    **The spot check is set apart too** (#4364).  A floor-era run ends on its
+    spot check, whose rows (:func:`check_rows`) carry no variant tag and so pass
+    the base-row filter.  Every caller reads the frame as clicks: "final" is the
+    last row, and ``curves.py`` and ``viewer.py`` draw one point per row.  So
+    the check rows are dropped by default, counted in ``check_rows``, and
+    ``keep_check=True`` keeps them for a study of the check itself.  The State
+    of the App analyzer reads them for the check's own columns (#4357).
     """
-    df, base = load_cells(arm_dir / "cells", per_file=_base_rows)
+    n_check = 0
+
+    def per_file(df: pd.DataFrame) -> pd.DataFrame:
+        nonlocal n_check
+        df = _base_rows(df)
+        if keep_check:
+            return df
+        check = check_rows(df)
+        n_check += int(check.sum())
+        return df[~check]
+
+    df, base = load_cells(arm_dir / "cells", per_file=per_file)
     prov = {
         "n_files": base["n_files"],
         "n_read": base["n_read"],
@@ -273,6 +315,10 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
         #: Wrote rows, none of them base rows.  A tag-column bug, never a
         #: legitimate result, so it is named apart from the cells above.
         "no_base_rows": base["filtered_out"],
+        #: Spot-check rows dropped from the frame; 0 under ``keep_check``.  A
+        #: count of rows, not a list of cells: every checked cell also wrote
+        #: its clicks, since the check starts from a trained step's ranking.
+        "check_rows": n_check,
     }
     # A starved cell that ran with skyline arms on still writes the skyline row:
     # it is emitted once per run whatever the votes did (#3322, and on the

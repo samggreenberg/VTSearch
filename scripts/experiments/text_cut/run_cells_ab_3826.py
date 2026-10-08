@@ -4,10 +4,15 @@
     TEXTCUT_ARM=guarded_tail python run_cells_ab_3826.py --index 0
 
 The arm is ``VTSEARCH_TEXT_SORT_CUT``, the same flag the app reads, so a cell
-here draws its opening's line exactly as the app would.  The line is not
-output-only.  Autopilot's Bad phase votes the unlabelled items nearest it
-(``al_strategies._pick_bad_phase``), so the two arms vote on different items
-from the first Bad pick onward.  Only two whole runs can price that.
+here draws its opening's line exactly as the app would.  When this A/B ran the
+line was not output-only: Autopilot's Bad phase voted the unlabelled items
+nearest it (``al_strategies._pick_bad_phase``), so the two arms voted on
+different items from the first Bad pick onward, and only two whole runs could
+price that.  Since #4136 the flag draws the *display* line only and the Bad
+phase samples at the midpoint under both arms, so a re-run of this A/B
+measures no trajectory difference by construction
+(``tests_lib/sorting/test_text_sort_threshold.py`` pins the opening's picks
+against the rule).
 
 The wrapper refuses to run unless the rule the thresholds module actually
 resolved is the arm named.  A flag that failed to reach the module would

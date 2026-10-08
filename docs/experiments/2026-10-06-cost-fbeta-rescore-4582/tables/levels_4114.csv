@@ -1,0 +1,16 @@
+study,arm,window,metric,mean
+4114,linear,clicks 1-150,cost,0.38849
+4114,lrconv,clicks 1-150,cost,0.36002
+4114,svm,clicks 1-150,cost,0.36579
+4114,linear,clicks 1-150,f025,0.025203
+4114,lrconv,clicks 1-150,f025,0.024276
+4114,svm,clicks 1-150,f025,0.023251
+4114,linear,clicks 1-150,f1,0.043566
+4114,lrconv,clicks 1-150,f1,0.043013
+4114,svm,clicks 1-150,f1,0.041971
+4114,linear,clicks 1-150,f4,0.23869
+4114,lrconv,clicks 1-150,f4,0.24561
+4114,svm,clicks 1-150,f4,0.24452
+4114,linear,clicks 1-150,average_precision,0.41075
+4114,lrconv,clicks 1-150,average_precision,0.40683
+4114,svm,clicks 1-150,average_precision,0.41203

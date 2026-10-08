@@ -1,0 +1,186 @@
+{
+  "3287": {
+    "pages": [
+      {
+        "source": "docs/experiments/2026-08-27-calibration-fraction-3287/viewer.html",
+        "runs": 720,
+        "arms": [
+          "0.30",
+          "0.40",
+          "0.50",
+          "0.60",
+          "0.70"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      },
+      {
+        "source": "docs/experiments/2026-08-27-calibration-fraction-3287/clip/viewer.html",
+        "runs": 240,
+        "arms": [
+          "0.30",
+          "0.40",
+          "0.50",
+          "0.60",
+          "0.70"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      },
+      {
+        "source": "docs/experiments/2026-08-27-calibration-fraction-3287/clip_l/viewer.html",
+        "runs": 240,
+        "arms": [
+          "0.30",
+          "0.40",
+          "0.50",
+          "0.60",
+          "0.70"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      },
+      {
+        "source": "docs/experiments/2026-08-27-calibration-fraction-3287/siglip2l/viewer.html",
+        "runs": 240,
+        "arms": [
+          "0.30",
+          "0.40",
+          "0.50",
+          "0.60",
+          "0.70"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      }
+    ]
+  },
+  "3314": {
+    "pages": [
+      {
+        "source": "docs/experiments/2026-08-28-calibration-fold-count-3310/viewer.html",
+        "runs": 864,
+        "arms": [
+          "K=1",
+          "K=2",
+          "K=3",
+          "K=4",
+          "K=6",
+          "K=8"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      }
+    ]
+  },
+  "4114": {
+    "pages": [
+      {
+        "source": "docs/experiments/2026-09-27-logreg-head-4114/viewer.html",
+        "runs": 2145,
+        "arms": [
+          "linear",
+          "lrconv",
+          "svm"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      }
+    ]
+  },
+  "4219": {
+    "pages": [
+      {
+        "source": "docs/experiments/2026-09-28-head-switch-4219/viewer.html",
+        "runs": 2145,
+        "arms": [
+          "lrconv",
+          "svm",
+          "svmc01"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      }
+    ]
+  },
+  "4219r": {
+    "pages": [
+      {
+        "source": "docs/experiments/2026-09-28-head-switch-4219/region/viewer.html",
+        "runs": 284,
+        "arms": [
+          "lrconv",
+          "svm"
+        ],
+        "clicks": "0..150",
+        "runs_scale": 1000
+      }
+    ]
+  },
+  "4184": {
+    "arms": {
+      "r1_xcal": {
+        "dir": "/expscratch/sgreenberg/progression-4184/r1_xcal/results",
+        "load": "702/720 cells with data, 97,073 rows, 18 starved (header-only; not data loss)",
+        "cells": 650,
+        "lost": 0
+      },
+      "r2_gmm": {
+        "dir": "/expscratch/sgreenberg/progression-4184/r2_gmm/results",
+        "load": "702/720 cells with data, 97,073 rows, 18 starved (header-only; not data loss)",
+        "cells": 650,
+        "lost": 0
+      },
+      "r3_blend": {
+        "dir": "/expscratch/sgreenberg/progression-4184/r3_blend/results",
+        "load": "702/720 cells with data, 97,073 rows, 18 starved (header-only; not data loss)",
+        "cells": 650,
+        "lost": 0
+      },
+      "r4_rawmean": {
+        "dir": "/expscratch/sgreenberg/progression-4184/r4_rawmean/results",
+        "load": "702/720 cells with data, 97,073 rows, 18 starved (header-only; not data loss)",
+        "cells": 650,
+        "lost": 0
+      },
+      "r5_anchored": {
+        "dir": "/expscratch/sgreenberg/progression-4184/r5_anchored/results",
+        "load": "702/720 cells with data, 97,073 rows, 18 starved (header-only; not data loss)",
+        "cells": 650,
+        "lost": 0
+      },
+      "r6_split70": {
+        "dir": "/expscratch/sgreenberg/progression-4184/r6_split70/results",
+        "load": "702/720 cells with data, 97,073 rows, 18 starved (header-only; not data loss)",
+        "cells": 650,
+        "lost": 0
+      },
+      "r7_acq4": {
+        "dir": "/expscratch/sgreenberg/progression-4184/r7_acq4/results",
+        "load": "702/720 cells with data, 97,073 rows, 18 starved (header-only; not data loss)",
+        "cells": 650,
+        "lost": 0
+      }
+    }
+  },
+  "3826ab": {
+    "arms": {
+      "gmm_midpoint": {
+        "dir": "/expscratch/sgreenberg/textcut-ab-3826/ab_gmm_midpoint/results",
+        "load": "84/84 cells with data, 8,172 rows",
+        "cells": 84,
+        "lost": 0
+      },
+      "guarded_tail": {
+        "dir": "/expscratch/sgreenberg/textcut-ab-3826/ab_guarded_tail/results",
+        "load": "84/84 cells with data, 8,162 rows",
+        "cells": 84,
+        "lost": 0
+      }
+    }
+  },
+  "3826": {
+    "parts": 26,
+    "sorts_paired": 1120
+  }
+}

@@ -77,8 +77,8 @@ def main() -> int:
     flagged = int((seen["resid_z"].abs() > 3).sum())
     lines = [
         f"Images tested (clicked 10+ times): {len(seen)} of {len(img)}; {flagged} past |z| > 3. "
-        "*Net* is the mean cost removed per click beyond what an average click with the same "
-        "cell, label and phase removed; *z* is that in standard errors.",
+        "*Net* is the mean held-out AP added per click beyond what an average click with the same "
+        "cell, label and phase added; *z* is that in standard errors.",
         "",
     ]
     for title, df in picks.items():
@@ -96,7 +96,7 @@ def main() -> int:
             fmt = lambda x: "" if pd.isna(x) else f"{x:+.3f}"  # noqa: E731
             lines.append(
                 f"| {cell} | {int(r.image_id)} | {int(r.n_obs)} | {int(r.n_detectors)} | {int(r.clicked_as_positive)} "
-                f"| {fmt(r.resid)} | {r.resid_z:+.1f} | {fmt(r.help_cost)} | {fmt(r.help_early)} | {fmt(r.help_late)} |"
+                f"| {fmt(r.resid)} | {r.resid_z:+.1f} | {fmt(r.help_ap)} | {fmt(r.help_early)} | {fmt(r.help_late)} |"
             )
         lines.append("")
     (args.out.parent / "images.md").write_text("\n".join(lines))

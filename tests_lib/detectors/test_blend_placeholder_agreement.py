@@ -69,9 +69,9 @@ def _snap(rng: np.random.Generator, n: int = 12) -> dict[int, dict]:
     }
 
 
-@pytest.mark.usefixtures("no_precision_floor")
+@pytest.mark.usefixtures("no_balance")
 class TestPlaceholderAgreement:
-    """With no floor: under one, the line keeps the floor's set whatever the fit did (#4272)."""
+    """With no balance: under one, the line keeps the balance's set whatever the fit did (#4272)."""
 
     def test_both_paths_admit_nothing_when_the_gmm_degenerates(self, degenerate_gmm):
         rng = np.random.default_rng(2841)

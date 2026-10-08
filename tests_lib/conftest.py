@@ -225,19 +225,37 @@ def reset_contexts(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def no_precision_floor():
-    """No precision floor, so every line is the Inclusion 0 cut, with no promise attempted.
+def no_balance():
+    """No balance, so every line is the Inclusion 0 cut, with no set kept.
 
-    The app always sets a floor (#4269); a library caller can still leave it
-    unset.  For tests whose subject is a line no floor decides.
-    ``reset_contexts`` re-registers the default builder before the next test,
-    so nothing needs undoing.
+    The app always sets a balance (#4413); a library caller can still leave it
+    aside (``CoreConfig(beta=None)``).  For tests whose subject is a line no
+    preference decides.  ``reset_contexts`` re-registers the default builder
+    before the next test, so nothing needs undoing.
     """
     import dataclasses
 
     config.register_core_config_builder(
-        lambda path=None: dataclasses.replace(_lib_default_core_config(path), min_precision=None)
+        lambda path=None: dataclasses.replace(_lib_default_core_config(path), beta=None)
     )
+
+
+@pytest.fixture
+def schedule_only(monkeypatch):
+    """The unchecked line at the balance's cap alone: the mixture's proposal (#4389, #4413) set aside.
+
+    Before any check the line keeps the smaller of the cap and the mixture's
+    F-beta argmax; on a fixture corpus of a few dozen synthetic items the
+    argmax is whatever the fit says that day.  For tests whose subject is the
+    cap, the walk or a carrier of the state, not the mixture - that rule is
+    pinned in ``tests_lib/sorting/test_balance.py``.  Both seams: the package
+    name the app's local imports read, and the harness's module binding.
+    """
+    import vtscore.eval.voting_iterations as harness
+    import vtscore.training.thresholds as thresholds
+
+    monkeypatch.setattr(thresholds, "fbeta_count", lambda *_a, **_k: None)
+    monkeypatch.setattr(harness, "fbeta_count", lambda *_a, **_k: None)
 
 
 @pytest.hookimpl(trylast=True)

@@ -19,7 +19,7 @@
  *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
  *      --hue-step  red    a numbered click marker, as the screenshot draws it
- *                         (scripts/screenshots/callouts.mjs) — the Step-By-Step
+ *                         (scripts/screenshots/callouts.mjs) — the Instruction
  *                         slides' side lists only
  *
  *    Use them through the .cut / .neg / .pos span classes, and only when the
@@ -187,13 +187,18 @@ section.statement h1 { font-size: 54px; line-height: 1.2; }
 /* Outline slide: the "where this is going" list. Numbered, quiet numerals, one
    line per section so the audience can hold the whole shape at once.
 
+   The numerals are Roman (#4563): the deck's page numbers are Arabic, so a
+   section reads as a different kind of address from a slide, and "section
+   III" can never be mistaken for "slide 3". build.py's bookmarks print them
+   the same way (`roman`).
+
    Laid out like every other slide in the deck rather than as its own kind of
    page: the headline sits in the same top-left notch a full-bleed figure
    leaves for it (`section.full` below, and `slide_figure.TITLE_NOTCH_PX`),
    and the list occupies the rectangle a figure would. The outline *is* this
    slide's figure — it is the one thing the room is meant to look at — so it
    gets the slot the deck gives figures, and the audience is not asked to
-   re-find the title on the one slide that comes back six times. */
+   re-find the title on the one slide that comes back before every section. */
 section.outline {
   padding: 42px 60px;
   align-content: start;
@@ -216,30 +221,63 @@ section.outline ol {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  font-size: 34px;
   padding-left: 0;
   list-style: none;
   counter-reset: outline;
+  /* The list sizes itself to its length, so a talk cut down to three sections
+     and the master deck's nine both fill the slot (#4598). Every line gets an
+     equal share of the slot's height, its *pitch*, out of 600 of its 618px,
+     up to 80px; the type is 0.56 of the pitch, between 22px (the floor is 20)
+     and 36px. So two to seven lines are 80px apart at 36px, ten are 60px
+     apart at 33.6px, and sixteen, the most the slot holds, are 37.5px apart
+     at 22px. A line is never two lines tall (`white-space: nowrap` below),
+     which is what lets one number stand for a line: a section's line is a
+     bare name (slides/STYLE.md). */
+  --outline-lines: 1;
+  --outline-pitch: min(80px, calc(600px / var(--outline-lines)));
+  font-size: clamp(22px, calc(var(--outline-pitch) * 0.56), 36px);
 }
+/* How many lines the list has, the closing line included (it is hidden, not
+   removed, so it keeps its share): CSS cannot count, so each rule says "at
+   least k", and the last that matches wins. Sixteen is the ceiling, and
+   build.py's OUTLINE_MAX_LINES fails a longer outline at `--check` rather than
+   letting it run off the slot; keep the two in step. */
+section.outline ol:has(> li:nth-child(2)) { --outline-lines: 2; }
+section.outline ol:has(> li:nth-child(3)) { --outline-lines: 3; }
+section.outline ol:has(> li:nth-child(4)) { --outline-lines: 4; }
+section.outline ol:has(> li:nth-child(5)) { --outline-lines: 5; }
+section.outline ol:has(> li:nth-child(6)) { --outline-lines: 6; }
+section.outline ol:has(> li:nth-child(7)) { --outline-lines: 7; }
+section.outline ol:has(> li:nth-child(8)) { --outline-lines: 8; }
+section.outline ol:has(> li:nth-child(9)) { --outline-lines: 9; }
+section.outline ol:has(> li:nth-child(10)) { --outline-lines: 10; }
+section.outline ol:has(> li:nth-child(11)) { --outline-lines: 11; }
+section.outline ol:has(> li:nth-child(12)) { --outline-lines: 12; }
+section.outline ol:has(> li:nth-child(13)) { --outline-lines: 13; }
+section.outline ol:has(> li:nth-child(14)) { --outline-lines: 14; }
+section.outline ol:has(> li:nth-child(15)) { --outline-lines: 15; }
+section.outline ol:has(> li:nth-child(16)) { --outline-lines: 16; }
 section.outline ol li {
   counter-increment: outline;
-  margin-bottom: 0.5em;
-  padding-left: 1.9em;
+  margin: 0;
+  line-height: var(--outline-pitch);
+  white-space: nowrap;
+  padding-left: 2.75em;
   position: relative;
 }
+/* Right-aligned in a column wider than any numeral the ceiling allows, so the
+   names start on one line whatever their numeral's width: the widest of I to
+   XVI is XIV, measured at 1.77em in the deck's face, against VIII's 1.59. */
 section.outline ol li::before {
-  content: counter(outline);
+  content: counter(outline, upper-roman);
   position: absolute;
   left: 0;
-  width: 1.25em;
+  width: 2.1em;
   text-align: right;
   color: var(--ink-soft);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-/* The trailing item's own bottom margin would otherwise push the whole list
-   above the centre of the slot it is centred in. */
-section.outline ol li:last-child { margin-bottom: 0; }
 /* The section we are about to enter, or the one being revisited. */
 section.outline ol li.here { font-weight: 700; }
 /* Weight is set here, not with `**bold**` in the fragment: the whole point of
@@ -248,6 +286,21 @@ section.outline ol li.here { font-weight: 700; }
    weight whichever one is marked. */
 section.outline ol li { font-weight: 600; }
 section.outline ol li em { color: var(--ink-soft); font-style: normal; }
+/* Every line's numeral is a link to the page its section starts on (build.py
+   `link_outline`): an empty anchor laid exactly over the numeral the counter
+   above draws, so the numeral jumps and the rest of the slide advances like
+   any other page (#4618). It draws nothing — the outline is a slide the room
+   reads, and a click target is a fact about the PDF, not about the talk — so
+   the numeral keeps the colour the `atN` marking below gives it. Its box is
+   the numeral column's, above: keep the two widths in step. */
+section.outline ol li > a:empty {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2.1em;
+  height: 100%;
+}
+section.outline a { color: inherit; text-decoration: none; }
 
 /* The same outline, shown again before each section with that section marked:
    `outline-<deck> +at3` in the manifest. The marked line goes bold and the
@@ -264,7 +317,15 @@ section.outline.at4 ol li:nth-of-type(4),
 section.outline.at5 ol li:nth-of-type(5),
 section.outline.at6 ol li:nth-of-type(6),
 section.outline.at7 ol li:nth-of-type(7),
-section.outline.at8 ol li:nth-of-type(8) { color: var(--ink); font-weight: 700; }
+section.outline.at8 ol li:nth-of-type(8),
+section.outline.at9 ol li:nth-of-type(9),
+section.outline.at10 ol li:nth-of-type(10),
+section.outline.at11 ol li:nth-of-type(11),
+section.outline.at12 ol li:nth-of-type(12),
+section.outline.at13 ol li:nth-of-type(13),
+section.outline.at14 ol li:nth-of-type(14),
+section.outline.at15 ol li:nth-of-type(15),
+section.outline.at16 ol li:nth-of-type(16) { color: var(--ink); font-weight: 700; }
 section.outline.at1 ol li:nth-of-type(1)::before,
 section.outline.at2 ol li:nth-of-type(2)::before,
 section.outline.at3 ol li:nth-of-type(3)::before,
@@ -272,9 +333,17 @@ section.outline.at4 ol li:nth-of-type(4)::before,
 section.outline.at5 ol li:nth-of-type(5)::before,
 section.outline.at6 ol li:nth-of-type(6)::before,
 section.outline.at7 ol li:nth-of-type(7)::before,
-section.outline.at8 ol li:nth-of-type(8)::before { color: var(--ink-soft); }
+section.outline.at8 ol li:nth-of-type(8)::before,
+section.outline.at9 ol li:nth-of-type(9)::before,
+section.outline.at10 ol li:nth-of-type(10)::before,
+section.outline.at11 ol li:nth-of-type(11)::before,
+section.outline.at12 ol li:nth-of-type(12)::before,
+section.outline.at13 ol li:nth-of-type(13)::before,
+section.outline.at14 ol li:nth-of-type(14)::before,
+section.outline.at15 ol li:nth-of-type(15)::before,
+section.outline.at16 ol li:nth-of-type(16)::before { color: var(--ink-soft); }
 
-/* The closing line. `The End` is not a section the room is walked through, so
+/* The closing line. `Conclusion` is not a section the room is walked through, so
    it is not on the list they are shown on the way: the fragment wraps it in
    `<span class="closing">`, every showing hides it, and the one showing that
    closes the deck — `outline-<deck> +end` in the manifest — reveals it as the
@@ -343,7 +412,7 @@ section.full .side { max-width: 300px; margin-top: 64px; }
 section.full .side p { margin: 0 0 0.9em; line-height: 1.3; }
 section.full .side .indent { display: inline-block; padding-left: 1.2em; }
 
-/* Step-By-Step: the side column is the key to the screenshot beside it. The
+/* Instruction: the side column is the key to the screenshot beside it. The
    figure marks each control with a red numbered disc, so the list's numbers
    are those discs — the same number in the same mark, and the room can match
    a line to a place on the screen without being told. The fragment writes a
@@ -499,6 +568,21 @@ section.speaker .speaker-notes {
   color: var(--ink);
 }
 section.speaker .speaker-notes p { margin: 0 0 0.4em; }
+/* The slide's number, printed once and large. The miniatures are rendered from
+   the deck's unnumbered cut, because the audience deck's 20px folio comes out
+   about 8px in a thumbnail and repeats on every frame of the contact sheet;
+   this is the same number the room sees, at a size a presenter finds at a
+   glance. It sits in the page's bottom padding, so it never takes a line from
+   the notes build.py budgets for. */
+section.speaker .speaker-pageno {
+  position: absolute;
+  right: 42px;
+  bottom: 3px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
 
 /* --- Pagination ------------------------------------------------------ */
 
@@ -522,6 +606,22 @@ section .pageno {
 
 section.lead .pageno,
 section.statement .pageno { display: none; }
+
+/* A results slide's date, in the top-right corner, set like the page number.
+   The deck ages unevenly: a mechanism slide holds for months, while a chart of
+   measured numbers is true of the app on the day it ran. So a slide that charts
+   an experiment says, on its face, when the experiment ran — the room can see
+   how fresh a number is, and the presenter can see which charts are due a
+   re-run. Top right because it is the one corner every chart leaves empty: the
+   bottom-left one holds an axis label on some of them. See *A results slide
+   carries its date* in STYLE.md. */
+section .asof {
+  position: absolute;
+  right: 70px;
+  top: 30px;
+  font-size: 20px;
+  color: var(--ink-soft);
+}
 
 /* A split-background slide is not the full slide. Marpit renders its text into
    a `foreignObject` the width of the text column, so nothing inside the section
@@ -556,3 +656,11 @@ section .pageno-letter {
 }
 section.speaker .pageno,
 section.speaker .pageno-letter { display: none; }
+/* Inside a section, the number is also a link back to the outline that opened
+   it (build.py `section_homes`), on the audience page and the speaker page
+   alike. Like the outline's own links it must not look like one: the folio is
+   an address, and a blue underlined address is a claim about the PDF that the
+   room has no use for. */
+section .pageno a,
+section .pageno-letter a,
+section.speaker .speaker-pageno a { color: inherit; text-decoration: none; }

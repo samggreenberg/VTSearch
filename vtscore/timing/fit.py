@@ -536,7 +536,7 @@ def _fit_task_cells(spec, cells: _CellSamples, slots: _CellSlots, min_samples: i
         # Withhold the **whole cell**, not just the offending step, when a step
         # only ever measured a cached path. Dropping one step looks like the
         # rollup case above but behaves quite differently: ``step_terms`` fills
-        # a missing step from ``TaskSpec.default_terms``, which are documented
+        # a missing step from ``TaskSpec.defaults_for(media_type)``, which are documented
         # pseudo-seconds whose ratios alone are meaningful. Pairing one measured
         # step in real seconds with another in pseudo-seconds produces a weight
         # vector in no units at all — for ``dataset_open`` a measured 2.5 s of

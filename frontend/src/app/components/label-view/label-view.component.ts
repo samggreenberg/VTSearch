@@ -29,13 +29,13 @@ import { VoteHistoryService } from '../../services/vote-history.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { AutopilotStateService, type AutopilotPhase } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
-import { FloorCheckModalComponent, type FloorCheckVoted } from '../modals/floor-check-modal/floor-check-modal.component';
+import { SpotCheckModalComponent, type SpotCheckVoted } from '../modals/spot-check-modal/spot-check-modal.component';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
@@ -50,6 +50,14 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
 /** What armed a {@link LabelViewComponent.seedRankingIfUnranked} run. */
 type SeedTrigger = 'entry' | 'pair' | 'retrain';
 
+/** Autopilot's opening phases, on the text or example sort: no detector is trained there (#4496). */
+const AUTOPILOT_OPENING: ReadonlySet<AutopilotPhase> = new Set<AutopilotPhase>(['idle', 'good', 'bad', 'more']);
+
+/** What the spot check says when Autopilot opened it (#4496). */
+const AUTOPILOT_CHECK_INTRO =
+  'Your Good and Bad labels still overlap, so Autopilot is checking the line: a few picks drawn ' +
+  'evenly down the list teach the detector where it falls.';
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-view',
@@ -60,7 +68,7 @@ type SeedTrigger = 'entry' | 'pair' | 'retrain';
     RightPanelComponent,
     ProgressModalComponent,
     ResortPromptModalComponent,
-    FloorCheckModalComponent,
+    SpotCheckModalComponent,
     ContextMenuComponent,
     MediaCropModalComponent,
     PanelResizeDirective
@@ -96,6 +104,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
+  private readonly leftPanel = viewChild(LeftPanelComponent);
 
   /** Name of the trainable model owning the labels shown on the right pane.
    *  Empty when no trainable model is active; the right pane then falls
@@ -205,8 +214,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get focusModeLeft(): 'click' | 'hover' { return this.panelState.focusModeLeft; }
   get focusModeRight(): 'click' | 'hover' { return this.panelState.focusModeRight; }
 
-  /** The precision floor's spot check is open (#4273). */
-  readonly showFloorCheck = signal(false);
+  /** The balance's spot check is open (#4273, #4413). */
+  readonly showSpotCheck = signal(false);
+  /** Why the open spot check opened, when Autopilot ran it (#4496); null when the user asked for it. */
+  readonly spotCheckIntro = signal<string | null>(null);
 
   // Re-sort prompt state
   readonly showResortPrompt = signal(false);
@@ -282,6 +293,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Armed on entry and on each pair reload; consumed once medias first render
    *  to snap both panels tight to the grid (see ``snapPanelsOnLoad``). */
   private pendingSnapOnLoad = false;
+  /** A left-panel snap found no grid to measure, and is still owed: the
+   *  Autopilot tab has none, and it is the tab a fresh app opens on (#4347).
+   *  Paid when the grid next mounts (see the left-grid effect in the
+   *  constructor); cleared by any snap that lands. */
+  private leftSnapOwed = false;
   /** True from entry, and from each pair reload, until the user acts on the
    *  centre: the item on screen is then the view's pick, not the user's, and
    *  every ranking that lands for the pair re-picks it. See the effect in the
@@ -304,6 +320,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // store then drops the stale picks and fetches the new ones. A prediction
     // that is still wrong at vote time costs one unused fetch, never a wrong
     // image: the store hands bytes back only for the URL they were fetched from.
+    // #4496: Autopilot checks when the server says one is due. The balance
+    // lands with each learned sort, and the check waits for the sort to settle.
+    effect(() => {
+      const due = this.sortState.balance?.checkDue ?? false;
+      if (!due || this.sortState.sortBusy) return;
+      untracked(() => this.runDueCheck());
+    });
     effect(() => {
       const id = this.mediaState.selectedId();
       const upcoming = this.sortRunner.peekUpcomingMedia(id, PREFETCH_DEPTH);
@@ -389,6 +412,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     });
 
+    // Pay a left-panel snap that found no grid, once the grid mounts. Only the
+    // Manual tab has one, and Autopilot is on by default, so a fresh app's first
+    // Train view opens with nothing for the on-load snap to measure: it gave up,
+    // and the first Manual grid showed the restored width's gap (#4347).
+    effect(() => {
+      const grid = this.leftPanel()?.mediaListComponent();
+      untracked(() => {
+        if (grid && this.leftSnapOwed && this.snapLoadFrames.left === null) {
+          this.snapWhenGridReady('left');
+        }
+      });
+    });
+
     // Place the centre viewer's item on entry and after a pair switch, and keep
     // placing it until the user acts on it.
     //
@@ -470,7 +506,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
-    this.pairScope.seedMinPrecision();
+    this.pairScope.seedBeta();
 
     // Reload data when the active pair changes via the top-bar switcher.
     // Skip the first emission; `ngOnInit` above already triggered the
@@ -496,13 +532,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         // fired: the same vote load usually moves the phase as well, and that
         // branch below sorts on its own.
         if (!prev.retrainMode && curr.retrainMode) this.scheduleSeedRanking('retrain');
+        // A document dataset's stop rule arrives with its first labeling status,
+        // which can land after the walk began on the seed sort (#4488).
+        if (!prev.dryRunStop && curr.dryRunStop && prev.phase === 'more' && curr.phase === 'more') {
+          this.sortState.setSortMode('learned');
+          this.sortRunner.onLearnedSort(false);
+        }
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
         // 'more' (#4282) resumes the Good phase's draw: the top of the seed sort
-        // the Bad phase left on screen.
+        // the Bad phase left on screen. On a document dataset it walks the
+        // detector's own ranking instead, which is where its dry run was measured
+        // as the stop (#4488).
         if (curr.phase === 'good' || curr.phase === 'more') {
           this.sortState.setSelectMode('top');
-          if (curr.retrainMode) {
+          if (curr.retrainMode || (curr.phase === 'more' && curr.dryRunStop)) {
             this.sortState.setSortMode('learned');
             this.sortRunner.onLearnedSort(false);
           }
@@ -716,12 +760,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  passes `animate = false` so the panel simply appears tight instead of
    *  visibly shrinking as the view opens. No-op for the snap step when the panel
    *  isn't in grid mode; the width is still persisted so drag-release always
-   *  records where the user left the divider. */
+   *  records where the user left the divider, and a left snap is owed until
+   *  the grid mounts (see {@link leftSnapOwed}). */
   private popPanelTight(side: 'left' | 'right', animate = true): void {
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
     const panelEl = this.layoutRef().nativeElement.querySelector(selector) as HTMLElement | null;
     const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
     const snapped = panelEl ? snapPanelWidthToGridColumns(panelEl, currentWidth) : null;
+    if (side === 'left') this.leftSnapOwed = snapped === null;
     if (snapped !== null) {
       const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width;
       const otherWidth = side === 'left' ? this.rightWidth() : this.leftWidth();
@@ -759,7 +805,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  needs the panel at its applied width with a real ``--grid-goal-width`` and a
    *  nonzero client width; on first open those land a frame or two after the
    *  medias arrive, so poll a bounded number of animation frames until it can
-   *  read a column count, then snap without animating. */
+   *  read a column count, then snap without animating. A left poll that runs
+   *  out leaves the snap owed, for the grid's mount to retry. */
   private snapWhenGridReady(side: 'left' | 'right', attempt = 0): void {
     const MAX_ATTEMPTS = 60;
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
@@ -773,6 +820,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     if (attempt >= MAX_ATTEMPTS) {
       this.snapLoadFrames[side] = null;
+      if (side === 'left') this.leftSnapOwed = true;
       return;
     }
     this.snapLoadFrames[side] = requestAnimationFrame(() => this.snapWhenGridReady(side, attempt + 1));
@@ -917,36 +965,55 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortRunner.onSelectModeChange(mode);
   }
 
-  // --- Precision floor ---
+  // --- Balance ---
 
-  onMinPrecisionChange(value: number): void {
-    this.sortRunner.onMinPrecisionChange(value);
+  onBetaChange(value: number): void {
+    this.sortRunner.onBetaChange(value);
   }
 
-  /** The floor control's "Check N picks": open the spot check (#4273). */
-  onFloorCheck(): void {
+  /** The balance control's "Check N picks": open the spot check (#4273). */
+  onSpotCheck(): void {
     if (this.sortState.sortBusy) return;
-    this.showFloorCheck.set(true);
+    this.spotCheckIntro.set(null);
+    this.showSpotCheck.set(true);
+  }
+
+  /**
+   * Autopilot runs the spot check itself when the labels separate weakly (#4496): the server's
+   * `check_due`, read once a learned sort has landed. Only past Autopilot's opening: on the text or
+   * example sort no detector is trained, so there is neither a separation to read nor a list to
+   * check. Never over another step.
+   */
+  private runDueCheck(): void {
+    if (!this.autopilotStateService.running) return;
+    if (AUTOPILOT_OPENING.has(this.autopilotStateService.state.phase)) return;
+    if (this.showSpotCheck() || this.showResortPrompt()) return;
+    this.spotCheckIntro.set(AUTOPILOT_CHECK_INTRO);
+    this.showSpotCheck.set(true);
   }
 
   /**
    * A round of the check landed. Its votes are ordinary votes, so the piles
-   * catch up; a finished check has moved the line to the set it ended on.
-   * No re-sort here: the owner's model is that *later* votes retrain and move
-   * the list under a result, and the next ordinary vote does that as usual.
+   * catch up; a finished check has moved the line to the set where its
+   * balance peaked. No re-sort here: the owner's model is that *later* votes
+   * retrain and move the list under a result, and the next ordinary vote does
+   * that as usual.
    */
-  onFloorCheckVoted(event: FloorCheckVoted): void {
+  onSpotCheckVoted(event: SpotCheckVoted): void {
     this.voteState.loadVotes();
     this.labelsetState.refresh();
     if (event.finished) this.sortRunner.refreshLine();
   }
 
-  /** The check closed, however it ended: catch up on anything it left behind. */
-  onFloorCheckClosed(): void {
-    this.showFloorCheck.set(false);
+  /** The check closed, however it ended: catch up on anything it left behind, and let Autopilot carry on. */
+  onSpotCheckClosed(): void {
+    this.showSpotCheck.set(false);
+    this.spotCheckIntro.set(null);
     this.voteState.loadVotes();
     this.labelsetState.refresh();
     this.sortRunner.refreshLine();
+    // The check's picks are votes, and the item in the centre may be one of them.
+    if (this.autopilotStateService.running) this.sortRunner.autoSelectNext();
   }
 
   // --- Media selection ---
@@ -1251,7 +1318,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Retrain mode: the subscription already set sortMode='learned' and
     // kicked off learned sort for whatever phase we're in.  Nothing more to do.
-    if (state.retrainMode) {
+    // Nor for a document dataset's walk, which draws off the learned sort too
+    // (#4488).
+    if (state.retrainMode || (phase === 'more' && state.dryRunStop)) {
       return;
     }
 
@@ -1296,8 +1365,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * replace the learned ranking (#4318).
    */
   private get autopilotSeedWanted(): boolean {
-    const { phase, retrainMode } = this.autopilotStateService.state;
-    return !retrainMode && (phase === 'good' || phase === 'bad' || phase === 'more');
+    const { phase, retrainMode, dryRunStop } = this.autopilotStateService.state;
+    return !retrainMode && (phase === 'good' || phase === 'bad' || (phase === 'more' && !dryRunStop));
   }
 
   private triggerAutopilotTextSort(autoSelect = true): void {
@@ -1432,7 +1501,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       : (isMediaBased ? 'load' : 'text');
 
     // Map autopilot phase to the same Sort + Select that autopilot was using.
-    if (phase === 'good' || phase === 'more') {
+    // A document dataset's walk and its Done draw off the learned sort's top
+    // (#4488).
+    if (state.dryRunStop && (phase === 'more' || phase === 'done')) {
+      this.sortState.setSortMode('learned');
+      this.sortState.setSelectMode('top');
+    } else if (phase === 'good' || phase === 'more') {
       this.sortState.setSortMode(earlySortMode);
       this.sortState.setSelectMode('top');
     } else if (phase === 'bad') {

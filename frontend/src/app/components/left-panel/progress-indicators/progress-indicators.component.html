@@ -9,6 +9,18 @@
         (cancel)="onCancel()"
       />
     </div>
+  } @else if (dryRunStop) {
+    <!-- A document dataset stops on the dry run, not the three lights (#4488). -->
+    <div
+      class="labeling-indicator dry-run-indicator"
+      role="status"
+      [attr.data-status]="dryRunStatus"
+      aria-label="Dry run indicator"
+      [title]="dryRunTooltip"
+    >
+      <span class="indicator-dot"></span>
+      <span class="indicator-label">Dry run {{ dryRunCount }}/{{ dryRunTarget }}</span>
+    </div>
   } @else {
     <button
       class="labeling-indicator"

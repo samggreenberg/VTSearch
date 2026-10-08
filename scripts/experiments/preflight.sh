@@ -32,6 +32,9 @@ CONC=""
 DIVERGES="${PREFLIGHT_DIVERGES:-}"
 HARVEST_BAR=""
 PILOT_CELLS=""
+RESOLVE_DELTA=""
+RESOLVE_SIGMA=""
+PAIRED_CELLS=""
 
 # This script's own directory, so check 16c can reach its sibling sizing script
 # without depending on VTS_REPO -- which check 4 may already have failed on.
@@ -54,6 +57,9 @@ while [[ $# -gt 0 ]]; do
     --conc) CONC="$2"; shift 2 ;;
     --require-harvest-headroom) HARVEST_BAR="$2"; shift 2 ;;
     --pilot-cells) PILOT_CELLS="$2"; shift 2 ;;
+    --resolve-delta) RESOLVE_DELTA="$2"; shift 2 ;;
+    --sigma) RESOLVE_SIGMA="$2"; shift 2 ;;
+    --paired-cells) PAIRED_CELLS="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
@@ -68,6 +74,10 @@ done
   echo "                    [--require-harvest-headroom BAR]  # the pre-registered compression bar," >&2
   echo "                    [--pilot-cells DIR]               # sized off a pilot of the DEEPEST arm" >&2
   echo "                    (or declare both once with CALIB_HARVEST_BAR / CALIB_HARVEST_PILOT)" >&2
+  echo "                    [--resolve-delta D [--sigma S] [--paired-cells N]]" >&2
+  echo "                                               # a trajectory A/B: refuse a grid too small to resolve D" >&2
+  echo "                                               # (D in the decision metric's units: the objective at" >&2
+  echo "                                               #  CALIB_BETA's balance, or cost with CALIB_BETA=off)" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
@@ -98,6 +108,57 @@ esac
 # loop without the invocation line having to carry it.
 HARVEST_BAR="${HARVEST_BAR:-${CALIB_HARVEST_BAR:-}}"
 PILOT_CELLS="${PILOT_CELLS:-${CALIB_HARVEST_PILOT:-}}"
+
+# Check 17's arguments.  A malformed δ or σ is a usage error rather than a failed
+# check: until the gate knows what was asked it cannot say what the grid resolves,
+# and a FAIL line would read as a verdict on the grid.
+if [[ -z "$RESOLVE_DELTA" && ( -n "$RESOLVE_SIGMA" || -n "$PAIRED_CELLS" ) ]]; then
+  echo "--sigma and --paired-cells size an A/B against --resolve-delta; pass that too" >&2
+  exit 2
+fi
+# The default σ is the decision metric's, and the decision metric follows the
+# balance the run draws its line at (#4584): `analyze_ab.py` decides a balance
+# run on the objective, F-beta at the run's beta, so the grid is sized in its
+# units.  Unset CALIB_BETA is the app's default balance (beta 1); only `off` (the
+# Inclusion arm) is decided, and sized, on cost.  The objective's σ is known only
+# at the presets #4584 could read off published paired SEs, so anywhere else the
+# gate asks for `--sigma` rather than guess.
+SIGMA_WHY="--sigma"
+if [[ -n "$RESOLVE_DELTA" && -z "$RESOLVE_SIGMA" ]]; then
+  SIGMA_BETA="${CALIB_BETA:-}"
+  SIGMA_BETA="${SIGMA_BETA,,}"
+  SIGMA_BETA="${SIGMA_BETA//[[:space:]]/}"
+  case "$SIGMA_BETA" in
+    ""|default|app) SIGMA_BETA=1 ;;
+  esac
+  if [[ "$SIGMA_BETA" == off ]]; then
+    RESOLVE_SIGMA=0.04
+    SIGMA_WHY="the Δcost σ of #3840, for a run with no balance (CALIB_BETA=off)"
+  elif [[ "$SIGMA_BETA" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]]; then
+    RESOLVE_SIGMA=$(awk -v b="$SIGMA_BETA" 'BEGIN { if (b == 0.25) print "0.13"; else if (b == 1) print "0.08"; else if (b == 4) print "0.10" }')
+    if [[ -z "$RESOLVE_SIGMA" ]]; then
+      echo "--resolve-delta: no σ is measured yet for the objective at beta $SIGMA_BETA (#4584); pass --sigma" >&2
+      exit 2
+    fi
+    SIGMA_WHY="the objective's σ at beta $SIGMA_BETA, measured per cell on same-commit pairs (#4584)"
+  else
+    echo "CALIB_BETA=${CALIB_BETA:-} is not 'off', a beta, or unset (= the app's default)" >&2
+    exit 2
+  fi
+fi
+if [[ -n "$RESOLVE_DELTA" ]]; then
+  for pair in "--resolve-delta=$RESOLVE_DELTA" "--sigma=$RESOLVE_SIGMA"; do
+    v="${pair#*=}"
+    if ! [[ "$v" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$ ]] || ! awk -v x="$v" 'BEGIN { exit !(x + 0 > 0) }'; then
+      echo "${pair%%=*} wants a positive number, got '$v'" >&2
+      exit 2
+    fi
+  done
+  if [[ -n "$PAIRED_CELLS" && ! "$PAIRED_CELLS" =~ ^[0-9]+$ ]]; then
+    echo "--paired-cells wants a whole number of cells, got '$PAIRED_CELLS'" >&2
+    exit 2
+  fi
+fi
 
 FAILED=0
 say_fail() {
@@ -572,197 +633,22 @@ fi
 # divergence must be **declared** to pass: `--diverges head,anchor_weight`.  That
 # is the whole design - a study is always allowed to pin the axis it sweeps, and
 # is never allowed to pin one silently.
+#
+# That covers the session the simulated user runs as well as the detector: the
+# opening, the preference the line is drawn at, the spot check and its walk, and
+# where acquisition samples.  Until #4549 those passed unread, so a launcher
+# could run an opening or a check nobody ships and preflight said ok.
+KNOB_PROBE="$REPO/scripts/experiments/calibration/preflight_knobs.py"
 if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
   say_fail "pinned knobs NOT compared against production: python cannot import the tree (see above)"
-elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
-  DIVERGENCE=$(CALIB_EXP="$EXP" python - "$REPO" <<'PYDIV' 2>&1
-import os
-import pathlib
-import sys
-
-repo = sys.argv[1]
-sys.path.insert(0, str(pathlib.Path(repo) / "scripts" / "experiments" / "calibration"))
-import common  # noqa: E402
-
-common.setup_env()
-# Imported with the RUN'S OWN ENVIRONMENT, so every knob below reads the value
-# this run will actually use - the env var if it set one, else the harness
-# default.  Re-deriving the defaults here as literals is what let #3400's three
-# stale ones sit unnoticed: the check compared a launcher's pin against the app
-# and never noticed that *not pinning* resolved to a study-era value.  An unset
-# knob is only "the shipped arm" if the harness resolves it there, so that is
-# what gets compared.
-import experiment_config as C  # noqa: E402
-from vtscore.eval.voting_iterations import PRODUCTION_HEAD, PRODUCTION_PATCH_STYLE  # noqa: E402
-from vtscore.training import thresholds as T  # noqa: E402
-
-
-def env(name):
-    v = os.environ.get(name)
-    return v.strip() if v and v.strip() else None
-
-
-rows = []
-
-
-def pinned(knob, var, shipped):
-    """A scalar knob: unset means the harness resolves it to the shipped value."""
-    v = env(var)
-    if v is not None and v != str(shipped):
-        rows.append((knob, v, str(shipped)))
-
-
-def must_contain(knob, var, shipped, effective):
-    """A set-valued knob: the shipped value has to be IN what the run resolves
-    it to, or the run has no arm to compare its challengers against.
-
-    *effective* is the resolved list off ``experiment_config``, so this catches a
-    stale harness default exactly as it catches a stale launcher pin - and says
-    which of the two it is, because the remedy differs (drop the pin vs. fix the
-    default).
-    """
-    got = [str(x).strip() for x in effective]
-    if str(shipped) in got:
-        return
-    source = "pinned in %s" % var if env(var) else "harness default; %s is unset" % var
-    rows.append((knob, "%s (%s)" % (",".join(got), source), "a set containing " + str(shipped)))
-
-
-pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
-# The pipeline, the vote order and the standalone cut (#3959): unset is the app's
-# own on all three, so any value is a run-level arm the study must declare.
-pinned("trainer", "CALIB_TRAINER", "app")
-pinned("strategy", "CALIB_STRATEGY", "autopilot")
-pinned("standalone_cut", "CALIB_STANDALONE_CUT", "raw")
-
-# The heads' own fit knobs are app env vars, not CALIB_* ones (#3197), so a
-# launcher that exports them changes the detector without touching any knob
-# above.  Their shipped values are the literal defaults in `config/runtime.py`,
-# read from its source because `vtscore.config` has already resolved them from
-# THIS run's environment - comparing the env var against the imported constant
-# would compare the pin against itself.
-import inspect  # noqa: E402
-import re  # noqa: E402
-
-from vtscore.config import runtime as _RT  # noqa: E402
-
-_RT_SRC = inspect.getsource(_RT)
-
-
-def pinned_app_env(knob, var):
-    v = env(var)
-    if v is None:
-        return
-    m = re.search(r'os\.environ\.get\(\s*"%s"\s*,\s*"([^"]*)"' % re.escape(var), _RT_SRC)
-    if m is None:
-        rows.append((knob, v, "<shipped default not found in config/runtime.py>"))
-        return
-    try:
-        same = float(v) == float(m.group(1))
-    except ValueError:
-        same = v == m.group(1)
-    if not same:
-        rows.append((knob, v, m.group(1)))
-
-
-pinned_app_env("svm_head_c", "VTSEARCH_SVM_HEAD_C")
-pinned_app_env("train_epochs", "VTSEARCH_TRAIN_EPOCHS")
-pinned_app_env("train_patience", "VTSEARCH_TRAIN_PATIENCE")
-pinned("acq_offset", "CALIB_ACQ_INCLUSION_OFFSET", T.ACQUISITION_INCLUSION_OFFSET)
-pinned("calibrate_count", "CALIB_CALIBRATE_COUNT", 2)
-# The LIVE cut rule (#3557) - unset resolves to FOLD_ANCHOR_CUT_RULE inside the
-# harness.  Distinct from `cut_rule` below, which is the set of RE-CUTS riding
-# the trajectory: this one moves the trajectory itself (acquisition re-cuts the
-# same estimator), so a pinned value is a run-level arm and must be declared.
-pinned("live_cut_rule", "CALIB_LIVE_CUT_RULE", T.FOLD_ANCHOR_CUT_RULE)
-# A RETIRED live threshold rule (#4184) - unset is the shipped fold-anchored
-# cut.  Any value replaces the cut acquisition reads, so it is always a
-# run-level divergence the study must declare.
-v = env("CALIB_LIVE_THRESHOLD")
-if v is not None:
-    rows.append(("live_threshold", v, "<unset> = the shipped fold-anchored cut"))
-# The Train/Calibrate split of each calibration fold (#3287/#3290).  The
-# shipped default is no longer one scalar: unset resolves per embedder through
-# `production_split_for` (PRODUCTION_SPLIT_BY_SPACE), exactly as the app does,
-# so an unset env var IS the production arm.  A pinned scalar can match at
-# most one space on a run that mixes them, so - like CALIB_BLEND_SCHEDULE - an
-# explicit pin is always a divergence the study must declare.
-v = env("CALIB_CALIBRATION_FRACTION")
-if v is not None:
-    per_space = ", ".join("%s=%g" % (k, f) for k, f in sorted(T.PRODUCTION_SPLIT_BY_SPACE.items()))
-    rows.append(("calibration_fraction", v, "<unset> = the app's per-space default (%s)" % per_space))
-
-# The app has no safe-thresholds switch any more (#2799): fusion is always on.
-# Read off the resolved config rather than the env var, because until #3400 the
-# harness default was 0: an unset var passed this check while the run measured
-# the unfused control - the one arm the app can no longer produce.
-if not C.SAFE_THRESHOLDS:
-    rows.append(("safe_thresholds", env("CALIB_SAFE_THRESHOLDS") or "<unset> = 0", "1 (the app has no switch)"))
-
-# The #3796 calibration-split draw.  Production pins the split to
-# CALIBRATION_SPLIT_SEED and #2934 pinned it on purpose, so an unset env var IS
-# the production arm and ANY list is a divergence - including a one-element list
-# holding today's constant, which freezes the arm against a pin that can move.
-# The sweep is legitimate and is the only thing that can measure the pin's cost;
-# what it may not be is silent, because a grid whose cells calibrate off
-# nineteen splits nobody ships looks exactly like a grid that does not.
-v = env("CALIB_CALIBRATION_SEEDS")
-if v is not None:
-    rows.append(("calibration_seed", v, "<unset> = the app's pinned split (%d)" % T.CALIBRATION_SPLIT_SEED))
-
-# An explicit schedule overrides the app's per-mode default (#2841).
-v = env("CALIB_BLEND_SCHEDULE")
-if v is not None:
-    rows.append(("blend_schedule", v, "<unset> = the app's per-mode default"))
-
-# The #3314 adaptive fold count.  The app has no such thing: `calibrate_count`
-# is a constant there, so ANY schedule is a divergence and has to be declared -
-# including one whose early phase happens to equal today's constant, since the
-# knob's whole effect is that the count stops being one.  Checked separately
-# from `calibrate_count` above because the two can be set together and mean
-# different arms (the schedule's tail IS `calibrate_count`).
-v = env("CALIB_FOLD_COUNT_SCHEDULE")
-if v is not None:
-    rows.append(("fold_count_schedule", v, "<unset> = a constant calibrate_count, as the app has"))
-
-# The #3308 voted-media exclusion floor, which #3312 sweeps as an arm axis.
-# Unset resolves through the app's own `resolve_exclusion_floor`, so an unset
-# env var IS the production arm.  Every other value is a divergence - INCLUDING
-# a numeric pin that happens to equal today's shipped floor, because pinning it
-# freezes the arm against a constant that can move underneath the study.
-v = env("CALIB_EXCLUDE_VOTED")
-if v is not None and v.strip().lower() not in ("", "default", "app"):
-    rows.append(
-        (
-            "exclusion_floor",
-            v,
-            "<unset> = the app's own floor (currently %g)" % T.resolve_exclusion_floor(None),
-        )
-    )
-
-# The anchored/fold-anchored grid (#2852) is emitted only under CALIB_ANCHORED=1
-# and is off by default.  Checking its knobs unconditionally makes every study
-# that does not use the family declare a divergence it does not have - and a
-# declared-but-fictional divergence is worse than no check, because the next
-# reader cannot tell the real ones from the noise.  Check them when the family is
-# actually on; say plainly that they were skipped when it is not.
-if os.environ.get("CALIB_ANCHORED") == "1":
-    must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, C.ANCHORED_RULES)
-    must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, C.ANCHORED_FOLD_COMBINES)
-    must_contain(
-        "anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, ["%g" % w for w in C.ANCHORED_WEIGHTS]
-    )
-else:
-    print("SKIPPED\tanchored grid (CALIB_ANCHORED is not 1, so no anchored row is emitted)")
-must_contain("patch_style", "CALIB_PATCH_STYLES", PRODUCTION_PATCH_STYLE, C.PATCH_STYLES)
-
-if not rows:
-    print("MATCHES")
-else:
-    for knob, got, want in rows:
-        print("DIVERGES\t%s\t%s\t%s" % (knob, got, want))
-PYDIV
-)
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" && ! -f "$KNOB_PROBE" ]]; then
+  say_fail "pinned knobs NOT compared against production: $REPO predates calibration/preflight_knobs.py (#4549)"
+elif [[ -n "$REPO" && -f "$KNOB_PROBE" ]]; then
+  # The probe lives beside the experiment_config it imports, in the tree the jobs
+  # will run, so the two can never be from different commits.  It is a file
+  # rather than a heredoc so its rules are unit-tested
+  # (tests_lib/meta/test_preflight_knobs.py).
+  DIVERGENCE=$(CALIB_EXP="$EXP" python "$KNOB_PROBE" "$REPO" 2>&1)
   # Tag-dispatched rather than prefix-matched on the whole blob: the probe emits
   # SKIPPED lines for knob families this run does not enable, and those have to
   # be *reported* (a skipped check is not a passed one) without being mistaken
@@ -786,6 +672,11 @@ PYDIV
           say_fail "UNDECLARED divergence from production: $knob = $got, shipped is $want"
           unacked=$((unacked + 1))
         fi ;;
+      REFUSED)
+        # A value the harness itself rejects: every cell would die on it once the
+        # array is queued, so no declaration excuses it.
+        understood=1
+        say_fail "$knob = $got is a value the harness refuses: $want" ;;
       *)
         say_fail "could not compare this run's knobs against production: $tag $knob $got $want"
         understood=1 ;;
@@ -796,7 +687,7 @@ PYDIV
   fi
   if [[ "$unacked" -gt 0 ]]; then
     echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
-    echo "        -> if it is not, the run would measure a detector nobody ships"
+    echo "        -> if it is not, the run would measure a detector or a session nobody ships"
   fi
 fi
 
@@ -1287,6 +1178,96 @@ PY
       ;;
     *) say_fail "could not check the horizon against the haystack: $HORIZON" ;;
   esac
+  fi
+fi
+
+# --- 17. A trajectory A/B too small to resolve the effect it is for -----------
+# The two arms of a trajectory A/B vote on different items from the first Hard
+# pick at which their thresholds differ, so every cell carries run-to-run noise
+# whatever the arm does.  #3840 measured it: SE of the paired mean Δcost is
+# σ/√n with σ ≈ 0.04, validated on 399 fresh cells against a pre-registered
+# prediction, and σ does NOT shrink with the size of the change (0.034-0.066
+# whether an arm moves 0.05% of the haystack or 20%).  So resolving δ at 2 SE
+# takes n = (2σ/δ)² paired cells: 64 for 0.01, 400 for 0.004, 1600 for 0.002.
+# #3825 ran 114 cells on a question that needed 400, and found its floor in the
+# write-up, after the grid had run.
+#
+# Opt-in with the δ the study means to resolve.  The count is read off the grid
+# the way `analyze_ab.py` pairs it (each style its own cell, via
+# `run_cells.paired_cell_count`), so it cannot drift from what the jobs run.
+# `run_cells.py --print-cells` is the wrong number: it counts array tasks, and a
+# task holding `whole_image,max_patch` is two paired cells.  `--paired-cells N`
+# supplies the count for a grid `run_cells.py` does not enumerate.
+#
+# The default σ is the decision metric's (see the argument parsing above): the
+# objective's at the run's beta on a balance run (#4584: 0.13 at beta 1/4, 0.08
+# at beta 1, 0.10 at beta 4, the per-cell sd of the paired Δ in analyze_ab's
+# all-steps window; see the grid-experiments skill), #3840's 0.04 on cost with CALIB_BETA=off
+# (the #3585 environments at 100 votes).  Neither is universal (#3796 saw 0.056
+# on `vg_scale_any` at 150 votes), so a study on another environment set reads
+# σ off its first seeds and passes `--sigma`.  Do not shrink it for a "small"
+# arm: that is the one thing #3840 ruled out.  Pass δ in the decision metric's
+# units: a Δcost of 0.01 is not a Δ-objective of 0.01.
+if [[ -n "$RESOLVE_DELTA" ]]; then
+  N_PAIRED="$PAIRED_CELLS"
+  N_SEEDS=""
+  if [[ -z "$N_PAIRED" ]]; then
+    INFO17="$(resolve_info)"
+    if [[ -z "$INFO17" ]]; then
+      say_fail "--resolve-delta: no prepare_info.json under ${CALIB_RESULTS:-$EXP/results} to count the grid from"
+      echo "        -> run prepare first, or pass --paired-cells N"
+    elif [[ -z "$REPO" ]]; then
+      say_fail "--resolve-delta: VTS_REPO is unset, so the grid the jobs run cannot be counted"
+      echo "        -> set VTS_REPO, or pass --paired-cells N"
+    elif [[ "$PY_USABLE" == "0" ]]; then
+      say_fail "A/B resolution NOT checked: python cannot import the tree (see above)"
+    else
+      PAIRCHK=$(cd "$REPO/scripts/experiments/calibration" && CALIB_EXP="$EXP" python - "$INFO17" <<'PY' 2>&1
+import json
+import sys
+
+sys.path.insert(0, ".")
+import experiment_config as cfg  # noqa: E402
+import run_cells  # noqa: E402
+
+print("COUNT\t%d\t%d" % (run_cells.paired_cell_count(json.load(open(sys.argv[1]))), len(cfg.SEEDS)))
+PY
+      )
+      PAIRCHK=$(printf '%s\n' "$PAIRCHK" | tail -1)
+      count_re=$'^COUNT\t([0-9]+)\t([0-9]+)$'
+      if [[ "$PAIRCHK" =~ $count_re ]]; then
+        N_PAIRED="${BASH_REMATCH[1]}"
+        N_SEEDS="${BASH_REMATCH[2]}"
+      else
+        say_fail "could not count this grid's paired cells: $PAIRCHK"
+      fi
+    fi
+  fi
+  if [[ -n "$N_PAIRED" ]]; then
+    # (2σ/δ)² lands a hair either side of a whole number in floating point
+    # (2*0.04/0.004 is 20.000000000000004), so round up only past a tolerance -
+    # otherwise the table's own 400 comes back as 401.
+    NEED=$(awk -v s="$RESOLVE_SIGMA" -v d="$RESOLVE_DELTA" \
+      'BEGIN { x = (2 * s / d) ^ 2; n = int(x); if (x - n > 1e-9) n++; if (n < 1) n = 1; print n }')
+    FLOOR=$(awk -v s="$RESOLVE_SIGMA" -v n="$N_PAIRED" 'BEGIN { if (n > 0) printf "%.3g", 2 * s / sqrt(n) }')
+    if (( N_PAIRED < NEED )); then
+      say_fail "this A/B has $N_PAIRED paired cells; resolving δ=$RESOLVE_DELTA at 2 SE (σ=$RESOLVE_SIGMA) needs $NEED"
+      if [[ -n "$FLOOR" ]]; then
+        echo "        -> at $N_PAIRED cells it resolves δ ≈ $FLOOR, so a smaller true effect reads as a null"
+      fi
+      if [[ -n "$N_SEEDS" ]] && (( N_SEEDS > 0 && N_PAIRED > 0 )); then
+        PER_SEED=$(( N_PAIRED / N_SEEDS ))
+        if (( PER_SEED > 0 )); then
+          SEEDS_NEED=$(( (NEED + PER_SEED - 1) / PER_SEED ))
+          echo "        -> grow by seeds: each adds $PER_SEED paired cells, so CALIB_N_SEEDS=$SEEDS_NEED gives $(( SEEDS_NEED * PER_SEED ))"
+        fi
+      fi
+      echo "        -> a small change does not get a smaller σ (#3840); if δ needs more cells than"
+      echo "           you can run, the admitted-set gate is the instrument, not this A/B"
+    else
+      say_ok "A/B resolves δ=$RESOLVE_DELTA at 2 SE: $N_PAIRED paired cells >= $NEED (σ=$RESOLVE_SIGMA; floor δ ≈ $FLOOR)"
+    fi
+    echo "        -> σ=$RESOLVE_SIGMA is $SIGMA_WHY"
   fi
 fi
 

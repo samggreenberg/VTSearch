@@ -58,6 +58,30 @@ export class ProgressIndicatorsComponent {
     return this.sortBar.indeterminate;
   }
 
+  /** The dataset stops on the dry run, not Smart / Stable / Diverse: a document dataset (#4488). */
+  get dryRunStop(): boolean {
+    return this.labelingStatus()?.stop_rule === 'dry_run';
+  }
+
+  get dryRunStatus(): string {
+    return this.labelingStatus()?.dry_run?.status || '';
+  }
+
+  /** Votes in a row without a Good, as the backend counts them. */
+  get dryRunCount(): number {
+    return (this.labelingStatus()?.dry_run?.['run'] as number | undefined) ?? 0;
+  }
+
+  get dryRunTarget(): number {
+    return (this.labelingStatus()?.dry_run?.['target'] as number | undefined) ?? 16;
+  }
+
+  get dryRunTooltip(): string {
+    return `Dry run: your votes in a row since the last good one. At ${this.dryRunTarget}, while labeling `
+      + 'the detector\'s best matches, they have stopped turning up goods: the documents it can find are likely found. '
+      + 'A good vote starts the count again.';
+  }
+
   get smartStatus(): string {
     return this.labelingStatus()?.smart.status || '';
   }
@@ -68,14 +92,6 @@ export class ProgressIndicatorsComponent {
 
   get spanStatus(): string {
     return this.labelingStatus()?.span.status || '';
-  }
-
-  get smartSubtext(): string {
-    const status = this.labelingStatus();
-    if (!status?.smart) return '';
-    const s = status.smart;
-    if (s['cost'] != null) return `Cost: ${(s['cost'] as number).toFixed(3)}`;
-    return '';
   }
 
   get stableSubtext(): string {
@@ -112,7 +128,7 @@ export class ProgressIndicatorsComponent {
     const drift = this.smartDriftWithinNoise
       ? ' The cost still drifts down, but by less than it bounces around between retrains, so the drift is noise rather than progress.'
       : '';
-    return this.smartSubtext ? `${meaning}${drift} ${this.smartSubtext}.` : `${meaning}${drift}`;
+    return `${meaning}${drift}`;
   }
 
   get stableTooltip(): string {

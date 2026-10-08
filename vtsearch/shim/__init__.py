@@ -137,7 +137,7 @@ def register_app_persistence_hooks() -> None:
 
     register_last_embedder_persistence_hook(settings.set_last_embedder_for_media_type)
 
-    register_setting_persister("min_precision", settings.set_min_precision)
+    register_setting_persister("beta", settings.set_beta)
     register_setting_persister("calibrate_count", settings.set_calibrate_count)
     register_setting_persister("calibration_fraction", settings.set_calibration_fraction)
 
@@ -212,7 +212,7 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
         calibration_fraction=_settings.get_calibration_fraction(),
         enrich_descriptions=_settings.get_enrich_descriptions(),
         autopilot_goal_diversity=_settings.get_autopilot_goal_diversity(),
-        min_precision=_settings.get_min_precision(),
+        beta=_settings.get_beta(),
         data_dir=DATA_DIR,
         autofind_exporter=_settings.get_autofind_exporter(),
         autofind_exporter_field_values={

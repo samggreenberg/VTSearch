@@ -1,5 +1,6 @@
 <!-- _class: full -->
 <!-- frames: equal -->
+<!-- bookmark: Data, Set: SPODS, Tobacco800, StaVer, UCSF -->
 
 ![bg fit](figs/data-set-ucsf.webp)
 
@@ -11,8 +12,9 @@
 
 <!-- build: figs/data-set-staver.webp -->
 
-<!-- Finding a logo on a document: four public sets to build from. The
-     pages are real pages, drawn with whatever boxes each source ships. -->
+<!-- That is the matcher. Now the pile it is measured on: four public sets
+     to build from. The pages are real pages, drawn with whatever boxes each
+     source ships. -->
 
 <!-- **a** — SPODS. Pseudo-official documents made for the dataset, each
      carrying logos, stamps and signatures, with a pixel mask for each kind.

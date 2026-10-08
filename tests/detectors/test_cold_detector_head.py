@@ -73,7 +73,10 @@ def _media(cid: int, vec: np.ndarray, grid: np.ndarray | None = None) -> dict:
 
 
 def _patch_corpus() -> dict[int, dict]:
-    """Six patch media: the odd ones carry the signal in a *patch*, not the image row.
+    """Seven patch media: the odd ones carry the signal in a *patch*, not the image row.
+
+    Three Goods and four Bads: the label quota (#4643), so the labels train a
+    head rather than giving the Goods' centroid.
 
     Every image-level vector is ``basis(0)``; ids 1-3 hide ``basis(1)`` in their
     second grid cell.  A head that only ever saw image-level vectors cannot
@@ -82,7 +85,7 @@ def _patch_corpus() -> dict[int, dict]:
     corpus: dict[int, dict] = {}
     for cid in (1, 2, 3):
         corpus[cid] = _media(cid, _basis(0), grid=_grid(_basis(0), _basis(1)))
-    for cid in (4, 5, 6):
+    for cid in (4, 5, 6, 7):
         corpus[cid] = _media(cid, _basis(0), grid=_grid(_basis(0), _basis(2)))
     return corpus
 
@@ -235,7 +238,7 @@ class TestColdTrainIsTheAppsLabelsetTraining:
 
         neg_bags = {g for g, y in zip(seen["groups"], seen["y"], strict=True) if y == 0.0}
         n_neg_rows = sum(1 for y in seen["y"] if y == 0.0)
-        assert len(neg_bags) == 3, "the three Bad labels did not each become one bag"
+        assert len(neg_bags) == 4, "the four Bad labels did not each become one bag"
         assert n_neg_rows > len(neg_bags), (
             f"{n_neg_rows} negative rows for {len(neg_bags)} Bad labels: the patch stack was not flooded"
         )
@@ -278,7 +281,7 @@ class TestColdHeadIsScoredAtItsGeometry:
         mismatch inverted, so the route now scores the shared
         ``scoring_rows_for_snap`` stack like every other scorer.
         """
-        import vtsearch.autorun_detectors as autorun_mod
+        import vtsearch.autofind as autofind_mod
         from vtsearch.settings import add_autofind_detector
 
         corpus = _patch_corpus()
@@ -293,7 +296,7 @@ class TestColdHeadIsScoredAtItsGeometry:
             linear.weight.copy_(torch.tensor([[0.0, 10.0, 0.0, 0.0]]))
             linear.bias.copy_(torch.tensor([-5.0]))
         head = nn.Sequential(linear).eval()
-        monkeypatch.setattr(autorun_mod, "resolve_or_train_detector", lambda *a, **k: (head, 0.5, None))
+        monkeypatch.setattr(autofind_mod, "resolve_or_train_detector", lambda *a, **k: (head, 0.5, None))
 
         resp = client.post("/api/auto-detect", json={})
         assert resp.status_code == 200, resp.get_json()
@@ -301,25 +304,27 @@ class TestColdHeadIsScoredAtItsGeometry:
         assert {h["id"] for h in result["hits"]} == {1, 2, 3}, (
             "the hot patches never reached the head: auto-detect is scoring image-level vectors"
         )
-        assert {h["id"] for h in result["negative_hits"]} == {4, 5, 6}
+        assert {h["id"] for h in result["negative_hits"]} == {4, 5, 6, 7}
 
 
 class TestColdTrainDiagnostic:
     """The labelset path only declines to train; the routes still owe an answer."""
 
     def test_find_label_reports_why_it_could_not_train(self, client):
-        """An all-one-class labelset 400s with the counts and a hint.
+        """A labelset with no Good 400s with the counts and a hint.
 
         ``train_from_labelset`` returns a bare ``False`` here, so the report is
         rebuilt from what the training pass left on the context - which is what
         keeps the find-label UI's "why did this produce nothing?" answer alive.
+        One Good would do (#4643): the Goods' centroid needs no Bad, so only a
+        labelset with no Good has nothing to sort toward.
         """
         corpus = _patch_corpus()
         _activate(corpus)
         detector_id = _write_detector("cold-one-class", corpus)
         data = _read("cold-one-class")
         for entry in data["labelset"]["labels"]:
-            entry["label"] = "good"
+            entry["label"] = "bad"
         from vtscore.detectors.store import _detector_path
         from vtscore.detectors.store import _write_detector as write
 
@@ -327,12 +332,33 @@ class TestColdTrainDiagnostic:
 
         resp = client.post("/api/find-label", json={"detector_id": detector_id})
         assert resp.status_code == 400, resp.get_json()
-        diag = resp.get_json()["resolution_diagnostic"]
-        assert diag["total_labels"] == 6
-        assert diag["dataset_matched"] == 6, "every label is in the active dataset and must be counted as matched"
+        body = resp.get_json()
+        assert "at least one Good" in body["message"]
+        diag = body["resolution_diagnostic"]
+        assert diag["total_labels"] == 7
+        assert diag["dataset_matched"] == 7, "every label is in the active dataset and must be counted as matched"
         assert diag["failed_resolution"] == 0
-        assert diag["has_good"] is True and diag["has_bad"] is False
-        assert "hint" in diag
+        assert diag["has_good"] is False and diag["has_bad"] is True
+        assert "none is a Good" in diag["hint"]
+
+    def test_find_label_gives_the_goods_centroid_without_a_bad(self, client):
+        """All Goods is under the quota, not a refusal: Test gives their centroid (#4643)."""
+        corpus = _patch_corpus()
+        _activate(corpus)
+        detector_id = _write_detector("cold-all-good", corpus)
+        data = _read("cold-all-good")
+        for entry in data["labelset"]["labels"]:
+            entry["label"] = "good"
+        from vtscore.detectors.store import _detector_path
+        from vtscore.detectors.store import _write_detector as write
+
+        write(_detector_path("cold-all-good"), data)
+
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        quota = resp.get_json()["label_quota"]
+        assert quota["tier"] == "centroid"
+        assert (quota["n_good"], quota["n_bad"], quota["goods_owed"], quota["bads_owed"]) == (7, 0, 0, 4)
 
     def test_unresolvable_labels_are_counted_and_sampled(self):
         """Labels that resolve nowhere are reported with up to three samples."""
@@ -353,11 +379,11 @@ class TestColdTrainDiagnostic:
 
         assert mlp is None and threshold == 0.5
         assert diag is not None
-        assert diag["total_labels"] == 6
+        assert diag["total_labels"] == 7
         assert diag["dataset_matched"] == 0
-        assert diag["needed_resolution"] == 6
+        assert diag["needed_resolution"] == 7
         assert diag["resolved_from_origin"] == 0
-        assert diag["failed_resolution"] == 6
+        assert diag["failed_resolution"] == 7
         assert diag["media_type"] == "image"
         assert len(diag["sample_failures"]) == 3
         assert diag["sample_failures"][0]["origin"]["importer"] == "no_such_importer"

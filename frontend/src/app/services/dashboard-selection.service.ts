@@ -5,9 +5,9 @@ import { DatasetStateService } from './dataset-state.service';
 export type SelectionKind = 'dataset' | 'detector';
 
 /** Which detector-grid tab is showing: Drafts (editable, `!autofind`) or
- *  AutoRun (frozen, `autofind` — auto-run against each dataset on import).
+ *  AutoFind (frozen, `autofind` — auto-run against each dataset on import).
  *  A detector lives in exactly one tab; the ⋯ menu moves it between them. */
-export type DetectorTab = 'drafts' | 'autorun';
+export type DetectorTab = 'drafts' | 'autofind';
 
 /** Header master-checkbox tri-state for one grid. */
 export type SelectionState = 'none' | 'some' | 'all';
@@ -19,7 +19,7 @@ export type SelectionState = 'none' | 'some' | 'all';
  *
  * Two selection concepts coexist:
  *  - **active/loaded context** (`ActiveContextService`) — the pair the
- *    backend has loaded, which the pulldown shows on the label/find/browse
+ *    backend has loaded, which the pulldown shows on the label/test/browse
  *    views (there are no tables there to select from).
  *  - **table selection** (this service) — the highlighted rows that drive
  *    Train / Find / Combine / Delete.
@@ -207,7 +207,7 @@ export class DashboardSelectionService {
   private tabOf(id: string): DetectorTab | null {
     const entry = this.datasetState.detectorById().get(id);
     if (!entry) return null;
-    return entry.autofind ? 'autorun' : 'drafts';
+    return entry.autofind ? 'autofind' : 'drafts';
   }
 
   /** Publish a new set, skipping the write when nothing changed so an

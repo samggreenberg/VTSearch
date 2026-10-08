@@ -6,6 +6,15 @@ Endpoints for running detectors against data: multi-dataset **Find**, the
 active-dataset **Find Label** / **Auto-Detect** flows, and their evaluation
 stats and cancel companions.
 
+**Naming.** The app's **Test** view (`/test/:datasetId/:detectorId`) is the
+caller of Find Label, the find stats, corrections and queues, and the test of
+the line below. It was called Find until #4525, and these routes, their
+fields (`find_mode`, `find_scores`) and the `find` SSE channel keep that name,
+so "Find mode" and "the Find pass" on this page mean the Test view's session.
+The Dashboard's **Find** button is something else: it starts a background
+AutoFind per ticked dataset
+([`POST /api/datasets/registry/{dataset_id}/autofind`](datasets.md#run-autofind-on-a-registered-dataset)).
+
 Several endpoints here read or mutate the active dataset / detector context via
 the [`X-Dataset-Id` / `X-Detector-Id` headers](../API.md#context-headers-x-dataset-id--x-detector-id);
 the required ones are marked below.
@@ -133,9 +142,14 @@ POST /api/find-label
 
 Scores every loaded media with the given detector and applies Good/Bad labels
 to **all** elements by threshold, freezing scores and initial labels for the
-Find verification workflow. If no trained head is cached in the detector
-context, it trains on the fly from the detector's labelset (resolving label
-origins as needed).
+Find verification workflow. If no current head is cached in the detector
+context, it builds one on the fly from the detector's labelset (resolving label
+origins as needed). Which one follows the **label quota** (#4643): under 3
+Goods or 4 Bads the detector is the Goods' centroid (every item ranked by its
+cosine to the average of the Goods, cut at the midpoint of a two-Gaussian fit
+to those cosines on this dataset), and from there the trained head. One Good is
+enough; a labelset with no Good is a **400** that says so. `label_quota` says
+which detector the pass got and what it still owes.
 
 Items the human has **verified** (see `verified` on [`GET
 /api/votes`](medias.md)) keep their existing vote and click-time: re-scoring is
@@ -151,20 +165,33 @@ everywhere except those held votes.
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
   "threshold": 0.5,
-  "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
+  "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
   "good_count": 42,
   "bad_count": 458,
-  "detector_name": "Dog Barks"
+  "detector_name": "Dog Barks",
+  "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4}
 }
 ```
 
-`floor` is the [floor state](labeling.md#the-floor-state) of `threshold`:
-the set the Good/Bad split keeps, and whether a spot check confirmed the
-floor on it. A fresh pass is `unchecked` until one runs. On patch-region-aware
-datasets each result additionally carries `best_region`.
-Errors: **400** (no medias loaded, or detector has no labels), **404**
-(detector not found), **409** (active dataset can't supply the detector's
-embedder type, or the run was cancelled).
+`label_quota.tier` is `centroid` for the Goods' centroid, `trained` for the
+trained head; `n_good` / `n_bad` are the detector's labels and `goods_owed` /
+`bads_owed` what a trained head still needs. The centroid's line is its own
+midpoint (its `threshold` is always 0.5 on its own scale) and does not take
+the balance: `balance` then counts what that line keeps, and a balance change
+leaves it where it is.
+
+`balance` is the [line state](labeling.md#the-line-state) of `threshold`:
+the set the Good/Bad split keeps, and what a spot check found on it. The
+threshold is the labels' line (#4452): the class model the detector's labels
+give its head, with the corpus side (how many positives, each item's chance)
+re-fitted on this dataset's scores - what a Train on a dataset like this one
+would draw. Nothing is counted on the scored corpus, so a dataset with
+nothing like the target can come back with no Good split at all. A fresh pass
+is `unchecked` until a check runs. On
+patch-region-aware datasets each result additionally carries `best_region`.
+Errors: **400** (no medias loaded, the detector has no labels, or none of
+them is a Good), **404** (detector not found), **409** (active dataset can't
+supply the detector's embedder type, or the run was cancelled).
 
 ### Auto-Detect
 
@@ -173,9 +200,9 @@ POST /api/auto-detect
 ```
 
 **Body:** `{"detector_name": ""}` — omit / empty to run **every** detector
-flagged for Auto-Find on the active dataset's media type, or name a single one.
+flagged for AutoFind on the active dataset's media type, or name a single one.
 
-Scores the active dataset with each Auto-Find detector, training each head on
+Scores the active dataset with each AutoFind detector, training each head on
 demand, and returns one result column per detector.
 
 →
@@ -187,7 +214,8 @@ demand, and returns one result column per detector.
     "Dog Barks": {
       "detector_name": "Dog Barks",
       "threshold": 0.5,
-      "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
+      "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
+      "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -197,36 +225,185 @@ demand, and returns one result column per detector.
 }
 ```
 
-Each detector's `floor` is the [floor state](labeling.md#the-floor-state) of
-its `threshold` (`null` only when there was no trained context to ask). Nobody
-can vote in a headless run, so every detector exports its floor's `unchecked`
-starting candidate, and the server logs that the set was never checked.
+Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
+under the label quota runs as the Goods' centroid, and its hits are the
+centroid's. A detector with no Good is left out of `results`, as one that
+cannot be scored always was.
 
-When an exporter is configured for Auto-Find, an `auto_export` object
+Each detector's `balance` is the [line state](labeling.md#the-line-state) of
+its `threshold` (`null` only when there was no trained context to ask).
+Nobody can vote in a headless run, so every detector exports its `unchecked`
+line - the labels' line with the corpus side fitted on the active dataset, the
+same line a Find there draws (#4452) - and the server logs that the set was
+never checked.
+
+When an exporter is configured for AutoFind, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
 extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
-AutoRun detectors for the media type), **404** (named detector not on the
-caller's AutoRun list), **409** (cancelled).
+AutoFind detectors for the media type), **404** (named detector not on the
+caller's AutoFind list), **409** (cancelled).
 
 This is the synchronous, scripted form. The Dashboard runs the same detectors
-in the **background** instead - after a web import (see the `autorun` flag
+in the **background** instead - after a web import (see the `autofind` flag
 under [Loading Datasets](datasets.md#loading-datasets)) and from a dataset's
-⋯ **Run AutoRun**
-([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)) -
+⋯ **Run AutoFind**
+([`POST /api/datasets/registry/{dataset_id}/autofind`](datasets.md#run-autofind-on-a-registered-dataset)),
+whose big **Find** button runs the ticked detectors in their place -
 and keeps each run's results for the user who started it:
 
-### AutoRun results
+### AutoFind results
 
 ```
-GET /api/autorun/runs/{run_id}
+GET /api/autofind/runs/{run_id}
 ```
 
 `run_id` is the background run's `task_id`. Returns the body above
 (`auto_export` included when an exporter ran) plus `run_id`, `dataset_id`,
-`dataset_name`, `trigger` (`"import"` or `"manual"`) and `created_at`.
+`dataset_name`, `trigger` (`"import"`, `"manual"` for the ⋯ **Run AutoFind**,
+or `"find"` for the **Find** button's picked detectors) and `created_at`.
 Runs live in memory only, and only the most recent few, so **404** covers an
 unknown run, another user's, one that has aged out, and any from before a
 restart alike.
+
+### Test the line
+
+```
+GET  /api/line-test
+POST /api/line-test/start
+POST /api/line-test/votes
+POST /api/line-test/unvote
+POST /api/line-test/cancel
+POST /api/line-test/forget
+```
+
+**All but `GET` require** `X-Detector-Id`.
+
+Test mode's test of the line the Find pass drew (#4524; the design is
+[*The test sample*](../../vtscore/docs/packages/training.md#the-test-sample-linetest-linebudgets-line_phase-found_words), the statistics
+`vtscore/training/thresholds/line_test.py`). The question is *if this line
+went to AutoFind, what share of what it ships would be right, and what share of
+the real matches would it ship?* The answer comes from **uniform picks within
+rank bands** on both sides of the line, never from the ranking's top or from
+the model: the user votes each pick, and the picks say, as likely ranges, the
+line's precision and recall on this corpus and F-beta at the balance. Unlike
+the [spot check](labeling.md#the-spot-check), a test never moves the line and
+never trains: the ranking is frozen for the whole test, which is what makes the
+band design valid.
+
+Every verb returns the same body:
+
+```json
+{
+  "balance": {"beta": 1.0, "status": "unchecked", "count": 64, "...": "..."},
+  "threshold": 0.43, "line_count": 64,
+  "test": {
+    "phase": "matches",
+    "report": {"phase": "matches", "matches_stop": null, "misses_stop": null,
+               "matches_width": 0.41, "misses_width": 0.38, "picks_above": 5, "picks_below": 0},
+    "beta": 1.0, "line_count": 64, "size": 1200,
+    "round": 2, "picks_per_round": 5,
+    "band": {"index": 2, "side": "above", "lo": 17, "hi": 32},
+    "picks": [412, 77, 903, 15, 260],
+    "labelled": 5,
+    "bands": [{"index": 0, "side": "above", "lo": 1, "hi": 8, "labelled": 0, "right": 0, "range": null}, "..."],
+    "estimates": {
+      "beta": 1.0,
+      "precision": {"point": 0.78, "lo": 0.58, "hi": 0.96},
+      "recall": {"point": 0.52, "lo": 0.31, "hi": 0.74},
+      "fbeta": {"point": 0.62, "lo": 0.45, "hi": 0.79},
+      "found": "about half of them found",
+      "positives_above": {"point": 50.1, "lo": 37, "hi": 61},
+      "positives_below": {"point": 46.3, "lo": 20, "hi": 80},
+      "tail_positives": 12.4, "tail_from_model": true,
+      "labelled": 5,
+      "at_edges": [{"count": 8, "side": "above", "precision": {"...": "..."}, "recall": {"...": "..."}, "fbeta": {"...": "..."}, "found": "..."}, "..."]
+    },
+    "budgets": {"matches_width": 0.2, "misses_width": 0.25, "matches_picks": 40, "misses_picks": 40,
+                "picks_per_round": 5, "dry_run_share": 0.05, "model_weight": 5, "alpha": 0.05},
+    "kept_at": null, "class_model": true
+  },
+  "stale": false, "moved": false,
+  "presets": [{"beta": 0.25, "count": 31, "precision": {"...": "..."}, "recall": {"...": "..."}, "fbeta": {"...": "..."}, "found": "..."}, "..."]
+}
+```
+
+- **`start`** freezes the ranking off the pass's frozen scores (best first)
+  and the line at the detector's threshold (`line_count` items at or above
+  it), takes the labels line's chance per item as the auxiliary below the line
+  when the detector has a class model, and deals the first round. A test
+  already running is replaced; a finished test of the same line is returned
+  as it is. So is a [kept verdict](#the-kept-verdict) for this dataset that is
+  not stale and was drawn from this very ranking and line: the test resumes
+  from its picks (`test.kept_at` is when they were taken, `null` for a test
+  begun afresh), and they are session votes again. **409** with no Find pass
+  to test.
+- **`votes`** takes `{"votes": [{"id": 412, "label": "good"}, ...]}` on the
+  round's `picks`. Each vote is a **session vote** with provenance `test`:
+  verified in Find mode (it lands in the Review tab's piles) and kept out of
+  the labelset like every Find vote, never a training label. The test records
+  it against the pick's band and the ranges move; a partial round waits for
+  the rest, and a whole round deals the next. The vote that finishes the test
+  keeps its verdict on the detector. **400** for an id that is not one of the
+  round's picks; **409** with no test running.
+- **`unvote`** takes `{"id": 412}` and takes one vote of the current round
+  back (the ↓ key): the pick returns to `picks` and its session vote is
+  lifted. **400** for a vote not of this round.
+- **`cancel`** drops a running test; its votes so far stay session votes. A
+  finished test is left as it is. Always **200**.
+- **`forget`** drops the [kept verdict](#the-kept-verdict) for this dataset,
+  and a finished test in memory with it, so the next `start` deals a fresh
+  test even over a ranking a kept verdict was drawn from. It is a reset, which
+  the screenshot harness calls between shots; the app has no button for it,
+  because a retrain already marks a verdict stale, a changed ranking already
+  deals a fresh test, and a second test of an unchanged ranking measures
+  nothing the first did not. A running test is left as it is, and the
+  forgotten test's picks stay session votes. **200** whether or not anything
+  was kept.
+
+`test.phase` is derived from the sample on every read
+(`vtscore.training.thresholds.line_phase`): `matches` (precision, picks from
+the bands above the line, the band holding the line first, then the band
+whose round would narrow the F-beta range most), `misses` (recall, a walk
+down the bands below the line, a band a round), `done`, or `nothing` (the
+line keeps fewer items than one round). With a class model the walk runs to
+`budgets.misses_picks`; without one (`test.class_model` is `false`: a
+structural or document detector) it stops at the first band with no match,
+and the recall below the bands it reached is unmeasured, so the app reads it
+in words only (#4523). `report` says why each finished phase ended (`width`,
+`budget`, `exhausted`, `dry_run`; the misses phase ends on `width` or
+`dry_run` only without a class model) and carries the ranges' current widths
+for the app's phase lights. `estimates` is every number from one set of joint
+draws, and `null` when there is nothing to test; `at_edges` re-estimates the
+line at every band edge from the same draws.
+
+`presets` is the line each balance preset (beta 1/4, 1, 4) would draw on this
+corpus and what the picks already taken say it would ship - the verdict's
+**Lean the Threshold** - and is empty before a test or when the detector has
+no class model to draw a line at another balance with. `stale` is `true`
+once corrections have been folded into the detector since the test (the
+detector has now seen the test set); `moved` once the line no longer keeps the
+set the test measured (the balance changed, or the ranking did). A fresh
+`/api/find-label` pass, a vote clear and a dataset switch all drop the test.
+
+#### The kept verdict
+
+A finished test outlives the session (#4526;
+`vtscore/detectors/line_verdicts.py`). The vote that brings a test to `done`
+writes its verdict into the detector's JSON beside the labelset, under
+`test_verdicts`, one per tested dataset (a newer test of the same dataset
+replaces the older): the dataset's id and name, when it finished, the balance
+and the line it ran at, the picks' ids and labels with the band each came
+from, and the precision, recall and F-beta ranges. Ids, labels and numbers
+only, never a score vector or a model. `nothing` leaves no verdict.
+
+A verdict is **stale** once the detector has been retrained: it records a
+digest of the training labels' signature, and any change to the labels (a
+Train vote, Add Corrections, an import) no longer matches it. A stale verdict
+stays, flagged. One finished after Add Corrections already folded the test set
+in is stale from the start. Two readers show it: the detector's
+[stats](detectors.md#detector-statistics) (`test_verdicts`, every verdict, newest first) and the
+[detector listing](detectors.md#list-registered-detectors), where an AutoFind detector
+carries `test_verdict`, its newest.
 
 ### Find stats (detector evaluation)
 
@@ -236,8 +413,9 @@ GET /api/find/stats
 
 Pure-read detector-evaluation stats over the adopted Find label set: a 2×2
 confusion of the adopted label vs. the detector's original call, the Kept rate,
-what the precision floor says about the line, and the precision curve the Stats
-chart draws.
+what the balance says about the line, and the checked-precision curve. The
+app's result pane reads the 2×2 once a [test of the line](#test-the-line) is
+done; the curve it draws is the test's, not this one.
 
 →
 ```json
@@ -250,12 +428,11 @@ chart draws.
   "agreement_rate": 0.93,
   "verified_precision": 0.82, "verified_called_good": 17, "verified_kept_good": 14,
   "threshold": 0.5, "n_scored": 500, "n_returned": 45, "stale": false,
-  "floor": {"min_precision": 0.5, "status": "confirmed", "count": 32, "range": {"lo": 0.55, "hi": 1.0, "labelled": 5, "right": 5, "stale": false}, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
+  "balance": {"beta": 1.0, "status": "checked", "count": 48, "precision": {"lo": 0.55, "hi": 0.8, "labelled": 15, "right": 10, "stale": false}, "recall": {"lo": 0.3, "hi": 0.6, "labelled": 15, "right": 10, "stale": false}, "fbeta": 0.61, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
   "precision_curve": [
     {"n_returned": 1, "threshold": 0.98, "checked": 1, "checked_good": 1,
-     "verified_precision": 1.0, "estimated_precision": 0.91}, ...
-  ],
-  "estimate_status": "estimated", "calibration_positives": 14, "min_calibration_positives": 10
+     "verified_precision": 1.0}, ...
+  ]
 }
 ```
 
@@ -266,20 +443,14 @@ chart draws.
   top `n_returned` items, sampled at about 40 log-spaced counts plus the current
   cut's (`n_returned` at the top level). `verified_precision` is
   `checked_good / checked` over the items in it the user verified (`null` when
-  none). `estimated_precision` is the #4220 estimator's lower-bound curve (the
-  detector's `precision_floor_cache`, applied to this Find run's scores as the
-  corpus, sampled to 50,000 above that): the held-out calibration votes the
-  learned sort chose, and the whole haystack the detector trained against,
-  voted items included, as the reference pool. It is a model-based reading of
-  the ranking; the line itself is drawn by the spot check, not by this curve
-  (see [labeling.md](labeling.md#get--set-the-precision-floor)).
-- `estimate_status` says whether the curve carries an estimate: `estimated`;
-  `insufficient_evidence` when those votes hold fewer than
-  `min_calibration_positives` Good ones (the precision floor's own gate); or
-  `unavailable` when the detector has no calibration folds.
-- `floor` is the [floor state](labeling.md#the-floor-state) of the line at
-  `threshold`: the floor it was cut at (the chart draws it across at that
-  precision), the set the line keeps, and the spot check's likely range for it.
+  none). The curve carries no model-based estimate: the #4220 estimator breaks
+  most of its "at least" promises once its reference pool is consistent
+  (#4256), so the only range the chart shows for unchecked items is the spot
+  check's, in `balance` (#4360, #4413).
+- `balance` is the [line state](labeling.md#the-line-state) of the line at
+  `threshold`: the set the line keeps (possibly none), and the spot check's
+  likely ranges for the set it audited. The chart's legend says which it is
+  (`Line: checked (48 kept)` or `Line: the top 32, unchecked`).
 - `stale` is `true` once corrections have been folded into the detector since
   this Find run scored.
 

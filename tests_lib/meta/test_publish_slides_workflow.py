@@ -1,8 +1,8 @@
 """Tests for the slide-deck publishing workflow.
 
-`.github/workflows/publish-slides.yml` is the repository's only GitHub Actions
-workflow, and it is the one piece of tooling here whose failures are invisible
-locally: it renders the decks and pushes the PDFs to the rolling
+`.github/workflows/publish-slides.yml` is one of the repository's two GitHub
+Actions workflows (both publishers, neither a gate), and its failures are
+invisible locally: it renders the decks and pushes the PDFs to the rolling
 ``slides-latest`` release, so nothing in ``./run-tests.sh`` ever executes it and
 a typo only shows up as a stale release nobody is watching.
 
@@ -103,12 +103,13 @@ def test_repository_has_no_other_workflows() -> None:
     """A guard on the claim CLAUDE.md makes about this repo.
 
     `./run-tests.sh` is the only gate here, and that is only true while no
-    workflow runs tests. A second workflow appearing is not necessarily wrong,
-    but it has to be a decision someone made on purpose -- and it has to update
-    the docs that promise there is no CI backstop.
+    workflow runs tests. Both workflows only publish: this one the slide decks,
+    publish-sota.yml the State of the App links. Another workflow appearing is
+    not necessarily wrong, but it has to be a decision someone made on purpose --
+    and it has to update the docs that promise there is no CI backstop.
     """
     workflows = sorted(p.name for p in (REPO_ROOT / ".github/workflows").iterdir())
-    assert workflows == ["publish-slides.yml"], (
+    assert workflows == ["publish-slides.yml", "publish-sota.yml"], (
         f"unexpected workflow(s): {workflows}. If this is deliberate, update the "
-        f"'no CI backstop' claims in CLAUDE.md and run-tests.sh in the same commit."
+        f"'no CI backstop' claims in CLAUDE.md, docs/TESTING.md and run-tests.sh in the same commit."
     )

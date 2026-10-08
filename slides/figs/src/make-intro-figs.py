@@ -1368,12 +1368,42 @@ def vote_boundary_fig() -> None:
     )
 
 
-def _vote_boundary_stage(stage: int) -> plt.Figure:
+def second_cut_fig() -> None:
+    """Pics on a Plane's last page, asking somewhere else: Second Cut's opening (#4517).
+
+    Second Cut opens on page 8j as it stands — the first detector, its looser
+    and tighter cuts, and the question on the line — and then this: the same
+    page with the question moved to the unvoted item just inside the *tighter*
+    cut (`_inside_item`). That is the move the slide is about, drawn where the
+    room first learned to read it, before the statistics say how far in to go.
+    """
+    save(
+        _vote_boundary_stage(FLASHBACK_STAGE, ask_inside=True),
+        OUT,
+        "vote-boundary-second-cut.png",
+        column=FULL_BLEED,
+        tight=False,
+        notch=VOTE_NOTCH_PX,
+    )
+
+
+def _inside_item(model: SVC, width: float, pts: np.ndarray, labeled: tuple[int, ...]) -> int:
+    """The unvoted item nearest the tighter cut from inside it, wholly clear of the dashed line."""
+    curve = _contour(model)
+    depth = np.hypot(*(pts[:, None, :] - curve[None, :, :]).transpose(2, 0, 1)).min(axis=1)
+    eligible = (model.decision_function(pts) > 0) & (depth >= width + R)
+    eligible[list(labeled)] = False
+    assert eligible.any(), "no unvoted item sits inside the tighter cut"
+    return int(np.flatnonzero(eligible)[np.argmin(depth[eligible])])
+
+
+def _vote_boundary_stage(stage: int, ask_inside: bool = False) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative).
 
     `FLASHBACK_STAGE` is the one page that is not cumulative: it re-draws step
     `FLASHBACK_OF` and adds the band to *that* detector, so `step` below is
-    what the page shows and `stage` is only which page it is.
+    what the page shows and `stage` is only which page it is. *ask_inside*
+    moves that page's question inside the tighter cut (`second_cut_fig`).
     """
     pts, first, second, curve, _curve_after, asked, asked_again, labeled = _scene()
     seed_good, seed_bad = _seed_votes()
@@ -1398,7 +1428,11 @@ def _vote_boundary_stage(stage: int) -> plt.Figure:
     # being asked on it. Page j is the one that puts the question back, because
     # its whole point is that those cuts were on offer when the question was
     # picked (#3301).
-    asking = {asked} if step == 5 else ({asked_again} if step == 8 else set())
+    asking = (
+        {_inside_item(first, _band_width(first, pts, labeled), pts, labeled)}
+        if ask_inside
+        else ({asked} if step == 5 else ({asked_again} if step == 8 else set()))
+    )
 
     # ── stages 9 and 10: the same detector, cut looser and cut tighter ───────
     # Drawn under the items, and only on the two pages that are about it: page
@@ -1907,5 +1941,6 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
 
 if __name__ == "__main__":
     vote_boundary_fig()
+    second_cut_fig()
     embed_flow_fig()
     print("wrote figures to", OUT)

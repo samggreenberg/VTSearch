@@ -11,10 +11,10 @@ context, and that context is **not re-derivable**: the ranking that surfaced
 the item is client-side ephemeral state and the model that produced its score
 is overwritten by the next retrain.  So it is recorded at click time, here.
 
-This module owns the vocabulary and the validation.  One reader changes
-behaviour: the precision floor (#4245) calibrates its promise only on votes
-the learned sort chose (:func:`calibrates_precision`), because a vote picked by
-any other ranker skews the posterior it fits (#4222).  Every other use -
+This module owns the vocabulary and the validation.  No reader changes a
+threshold today.  The one that did - the #4220 precision estimate, which
+calibrated only on votes the learned sort chose (:func:`calibrates_precision`,
+#4245) - retired with the estimate's parking (#4362).  Every other use -
 partitioning the conformal calibration, for one - is gated on the experiment
 pre-registered in ``docs/plans/provenance-partitioned-calibration.md``.
 
@@ -51,6 +51,7 @@ cases by their flow and discard the variable that actually predicts the bias.
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any
 
 #: Namespace key under which provenance is stored in ``LabeledElement.metadata``.
@@ -85,6 +86,12 @@ SCHEMA_VERSION = 1
 #:                       drawn uniformly from the top of the ranking, never by
 #:                       a model.  Ordinary training labels, tagged so the
 #:                       check's own votes can be told from the rest.
+#: ``test``            - a pick of Test mode's test sample (#4527,
+#:                       :mod:`vtscore.training.thresholds.line_test`): drawn
+#:                       uniformly from a rank band on a corpus the detector
+#:                       never trained on.  Never a training label - the point
+#:                       of a test set is that the detector has not seen it -
+#:                       so a later merge must tell it from a ``check`` vote.
 #: ``unknown``         - unattributed; the default for legacy votes.
 FLOWS = frozenset(
     {
@@ -97,6 +104,7 @@ FLOWS = frozenset(
         "bulk",
         "undo",
         "check",
+        "test",
         "unknown",
     }
 )
@@ -209,42 +217,36 @@ def normalize_provenance(raw: Any) -> dict[str, Any] | None:
 #: score-only.  Every other flow is either not a draw (``seed_example``,
 #: ``import``, ``undo``, ``unknown``) or selects on the label the vote records
 #: (``find_verify`` and ``labelset_review`` correct what looks wrong; ``bulk``
-#: adopts a set the user chose by eye).
+#: adopts a set the user chose by eye).  Read only by the deprecated
+#: :func:`calibrates_precision` (#4362).
 PRECISION_CALIBRATION_FLOWS = frozenset({"autopilot", "list_review"})
 
 #: The draws off the learned ranking that are score-only: its head (``top``) and
 #: the band around the acquisition cut (``hard``).  ``new`` is excluded: the
 #: coverage atlas picks the node on embedding coverage and only then reads the
-#: score inside it, so the selection is not score-only (owner, 2026-09-28;
-#: #4261 measures whether counting it would break promises).
+#: score inside it, so the selection is not score-only (owner, 2026-09-28).
+#: Read only by the deprecated :func:`calibrates_precision` (#4362).
 PRECISION_CALIBRATION_SELECT_MODES = frozenset({"top", "hard"})
 
 
-def calibrates_precision(provenance: dict[str, Any] | None) -> bool:
-    """Whether a vote with this provenance may calibrate a precision-floor promise.
+def _retired_calibration_filter(where: str) -> None:
+    """Warn that *where* belongs to the retired #4245 calibration filter (#4362).
 
-    A vote picked by any ranker but the learned sort - the text sort of
-    Autopilot's opening, an example sort, a list sorted by anything but the
-    current model - was chosen on information the model's score lacks, which
-    makes the positives it finds the easy ones.  #4222 measured it: with the
-    opening's text walk raised to 20 Goods, half the promises made at X = 50%
-    broke.  Leaving those votes out keeps the gate shut there (#4256: 0 of 19
-    promises broke, in 0.71% of frames).
-
-    This filter does **not** make the posterior unbiased.  The learned sort's
-    draws were chosen on an earlier model's score, and #4256 found them just as
-    optimistic: against a reference pool without the voted items they break 83%
-    of X = 50% promises.  The shipped promise holds through the reference pool's
-    in-sample offset (#4221); random verification (#4257) is the selection-free
-    route.
-
-    So a vote calibrates only when its recorded flow draws off a ranking
-    (:data:`PRECISION_CALIBRATION_FLOWS`), that ranking was the learned sort,
-    and the draw was a rank position (:data:`PRECISION_CALIBRATION_SELECT_MODES`).
-    A vote with no provenance, or one recorded before a field existed, does not:
-    an unattributed vote is not evidence of a fair draw.  Such votes still train
-    the model; they only stay out of the promise's evidence and its gate.
+    The filter chose which held-out votes the #4220 precision estimate could
+    use as evidence.  A retrain no longer builds that estimate, so the filter's
+    names answer as they always did but nothing reads the answer.  Called
+    directly by the retired name, so the warning points at that name's caller.
     """
+    warnings.warn(
+        f"{where} is deprecated: it chose which votes the #4220 precision estimate could use as evidence, "
+        "and a retrain no longer builds that estimate (#4362). It will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
+def _calibrates_precision(provenance: dict[str, Any] | None) -> bool:
+    """:func:`calibrates_precision`'s rule, without the warning, for the other retired names that apply it."""
     if not provenance:
         return False
     return (
@@ -252,6 +254,25 @@ def calibrates_precision(provenance: dict[str, Any] | None) -> bool:
         and provenance.get("sort_kind") == "learned"
         and provenance.get("select_mode") in PRECISION_CALIBRATION_SELECT_MODES
     )
+
+
+def calibrates_precision(provenance: dict[str, Any] | None) -> bool:
+    """Deprecated (#4362): whether a vote with this provenance could calibrate a precision-floor promise.
+
+    The #4245 filter on the #4220 estimate's evidence.  A vote picked by any
+    ranker but the learned sort was chosen on information the model's score
+    lacks, which makes the positives it finds the easy ones (#4222).  So a vote
+    calibrated only when its recorded flow draws off a ranking
+    (:data:`PRECISION_CALIBRATION_FLOWS`), that ranking was the learned sort,
+    and the draw was a rank position (:data:`PRECISION_CALIBRATION_SELECT_MODES`);
+    a vote with no provenance did not.
+
+    A retrain no longer builds the estimate, so nothing reads this answer.  It
+    still answers by the same rule, with a ``DeprecationWarning``, so an
+    out-of-tree caller keeps working until the name is removed.
+    """
+    _retired_calibration_filter("calibrates_precision()")
+    return _calibrates_precision(provenance)
 
 
 def coerce_provenance(raw: Any) -> dict[str, Any] | None:

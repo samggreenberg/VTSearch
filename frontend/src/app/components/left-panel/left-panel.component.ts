@@ -15,7 +15,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { SortBarComponent } from './sort-bar/sort-bar.component';
 import { SelectModeComponent } from './select-mode/select-mode.component';
-import { PrecisionFloorComponent } from './precision-floor/precision-floor.component';
+import { BalanceComponent } from './balance/balance.component';
 import { ProgressIndicatorsComponent } from './progress-indicators/progress-indicators.component';
 import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
@@ -29,7 +29,8 @@ import { EmbedderCapabilityService } from '../../services/embedder-capability.se
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { allItemsLabeled } from '../../utils/all-labeled';
-import { DEFAULT_MIN_PRECISION, type LineFloor } from '../../utils/line-floor';
+import { DEFAULT_BETA, type LineBalance } from '../../utils/line-balance';
+import type { TestLineState } from '../../utils/line-test';
 
 export type { SortMode, SelectMode, SortedItem };
 
@@ -41,7 +42,7 @@ export type { SortMode, SelectMode, SortedItem };
     CommonModule,
     SortBarComponent,
     SelectModeComponent,
-    PrecisionFloorComponent,
+    BalanceComponent,
     ProgressIndicatorsComponent,
     MediaListComponent,
     StripeOverviewComponent,
@@ -56,8 +57,8 @@ export class LeftPanelComponent implements OnInit {
   readonly medias = input<Media[]>([]);
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
-  /** What the precision floor says about `threshold` (#4247), for the list line and minimap marker. */
-  readonly floor = input<LineFloor | null>(null);
+  /** What the balance says about `threshold` (#4247, #4413), for the list line and minimap marker. */
+  readonly balance = input<LineBalance | null>(null);
   /** True when the ranking is windowed and more rows can be paged in. */
   readonly sortHasMore = input(false);
   /** True while a page fetch is in flight. */
@@ -81,9 +82,9 @@ export class LeftPanelComponent implements OnInit {
   readonly votesLoaded = input(false);
   readonly sortMode = input<SortMode>('text');
   readonly selectMode = input<SelectMode>('top');
-  /** The active detector's precision floor (#4246). */
-  readonly minPrecision = input<number>(DEFAULT_MIN_PRECISION);
-  /** How many items the line returns, for the floor control's count; null when unknown. */
+  /** The active detector's balance, F-beta's beta (#4413). */
+  readonly beta = input<number>(DEFAULT_BETA);
+  /** How many items the line returns, for the balance control's count; null when unknown. */
   readonly returned = input<number | null>(null);
   readonly sortBusy = input(false);
   readonly sortStatus = input('');
@@ -108,8 +109,25 @@ export class LeftPanelComponent implements OnInit {
    * (the parent flips this back to ``false`` once both label classes exist).
    */
   readonly autopilotDisabled = input(false);
-  /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
+  /** 'label' = full labeling UI (default), 'find' = the Test view's Autopilot / Review tabs (#4524, #4525) */
   readonly panelMode = input<'label' | 'find'>('label');
+  /**
+   * Find's tab (#4524): `autopilot` is the Test autopilot, whose phase panel the
+   * host projects as `[findAutopilot]`; `review` is today's Find in full, the
+   * ranked work queue under the line. The host owns it, since the centre and
+   * right panes switch with it.
+   */
+  readonly findTab = input<'autopilot' | 'review'>('autopilot');
+  /** Find: the balance is frozen while a test phase runs (#4524). */
+  readonly balanceLocked = input(false);
+  /** Find: the balance control's state line, this corpus's test result or untested (#4524). */
+  readonly balanceLineState = input<TestLineState | null>(null);
+  /**
+   * Find: what to say about the detector the pass was given, on both tabs
+   * (#4643): under the label quota it is the Goods' centroid, not a trained
+   * detector. Empty for a trained one.
+   */
+  readonly findDetectorNote = input('');
   /** Disable all interaction (used during Find scoring). */
   readonly disabled = input(false);
   /** Display name of the current dataset. */
@@ -117,10 +135,10 @@ export class LeftPanelComponent implements OnInit {
 
   readonly sortModeChange = output<SortMode>();
   readonly selectModeChange = output<SelectMode>();
-  /** The user picked a precision floor (a fraction). */
-  readonly minPrecisionChange = output<number>();
+  /** The user picked a balance (a beta). */
+  readonly betaChange = output<number>();
   /** The Threshold control's "Check N picks", in Train only: the host opens the spot check (#4273, #4317). */
-  readonly floorCheck = output<void>();
+  readonly check = output<void>();
   readonly textSort = output<string>();
   readonly learnedSort = output<void>();
   readonly loadSort = output<void>();
@@ -152,6 +170,8 @@ export class LeftPanelComponent implements OnInit {
   readonly autopilotRefocus = output<void>();
   readonly autopilotToggleCollapse = output<void>();
   readonly autopilotEnabledChange = output<boolean>();
+  /** Find: the user picked a tab (#4524). */
+  readonly findTabChange = output<'autopilot' | 'review'>();
 
   readonly mediaListComponent = viewChild(MediaListComponent);
 

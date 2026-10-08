@@ -1,0 +1,333 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BalanceComponent } from './balance.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
+import { BALANCE_STATES, CHECKED_PRECISION, CHECKED_RECALL, lineBalance } from '../../../testing/line-balance';
+import type { LineBalance } from '../../../utils/line-balance';
+
+describe('BalanceComponent (#4413, #4317)', () => {
+  let component: BalanceComponent;
+  let fixture: ComponentFixture<BalanceComponent>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [BalanceComponent],
+      providers: [...provideZoneless()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(BalanceComponent);
+    component = fixture.componentInstance;
+    await settleZoneless(fixture);
+  });
+
+  async function show(
+    value: number | null,
+    balance: LineBalance | null = null,
+    returned: number | null = null,
+    busy = false,
+  ) {
+    fixture.componentRef.setInput('value', value);
+    fixture.componentRef.setInput('balance', balance);
+    fixture.componentRef.setInput('returned', returned);
+    fixture.componentRef.setInput('busy', busy);
+    await settleZoneless(fixture);
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  const root = () => fixture.nativeElement as HTMLElement;
+  const radios = () => Array.from(root().querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
+  const checkedValue = () => radios().find((r) => r.checked)?.value ?? null;
+  const state = () => root().querySelector('.balance-state');
+  const stateText = () => root().querySelector('.balance-state-text');
+  const hints = () => root().querySelectorAll('vt-field-hint-icon');
+
+  describe('in Test (#4524)', () => {
+    it('freezes the radios while a test phase runs, and says why', async () => {
+      await show(1, lineBalance('unchecked'));
+      fixture.componentRef.setInput('locked', true);
+      await settleZoneless(fixture);
+      expect(radios().every((r) => r.disabled)).toBe(true);
+      expect((root().querySelector('.spectrum-radio') as HTMLElement).title).toContain('frozen while a test phase runs');
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      component.onPick({ target: radios()[0] } as unknown as Event, 4);
+      expect(emitted).not.toHaveBeenCalled();
+      expect(checkedValue()).toBe('1');
+    });
+
+    it('shows the host\'s state line in place of the check\'s, with its dot', async () => {
+      await show(1, lineBalance('checked'));
+      fixture.componentRef.setInput('lineState', { text: 'Untested · top 64 kept', title: 'No test yet.', dot: 'yellow' });
+      await settleZoneless(fixture);
+      expect(stateText()!.textContent).toContain('Untested · top 64 kept');
+      expect(stateText()!.textContent).not.toContain('Checked');
+      expect((stateText() as HTMLElement).title).toBe('No test yet.');
+      expect(state()!.getAttribute('data-status')).toBe('yellow');
+    });
+  });
+
+  describe('the spectrum (#4317)', () => {
+    it('reads "Threshold:", from False Positives to False Negatives', () => {
+      expect(root().querySelector('.balance-label')!.textContent!.trim()).toBe('Threshold:');
+      const ends = Array.from(root().querySelectorAll('.spectrum-bar span')).map((e) => e.textContent!.trim());
+      expect(ends).toEqual(['False Positives', 'False Negatives']);
+      expect(root().textContent).not.toContain('Lean');
+      expect(root().querySelector('select')).toBeNull();
+    });
+
+    it('offers three radios under it, beta 4 / 1 / 0.25 left to right, starting at the balanced middle', () => {
+      expect(radios().map((r) => r.value)).toEqual(['4', '1', '0.25']);
+      expect(checkedValue()).toBe('1');
+      // One grid column per third of the spectrum, each radio centred in its own.
+      expect(root().querySelectorAll('.spectrum-radios > .spectrum-radio').length).toBe(3);
+    });
+
+    it('names no balance and numbers none: each radio says where it sits only in its tooltip', () => {
+      expect(root().querySelector('.balance-spectrum')!.textContent!.replace(/\s+/g, '')).toBe('FalsePositivesFalseNegatives');
+      expect(root().querySelector('.balance-head')!.textContent).not.toMatch(/\d/);
+      const titles = Array.from(root().querySelectorAll('.spectrum-radio')).map((l) => l.getAttribute('title'));
+      expect(titles[0]).toMatch(/^Toward false positives/);
+      expect(titles[1]).toBe('Between the two');
+      expect(titles[2]).toMatch(/^Toward false negatives/);
+      expect(radios().map((r) => r.getAttribute('aria-label'))).toEqual(titles);
+    });
+
+    it('is one radio group, labelled by its heading', () => {
+      const group = root().querySelector('[role="radiogroup"]')!;
+      expect(root().querySelector(`#${group.getAttribute('aria-labelledby')}`)!.textContent!.trim()).toBe('Threshold:');
+      expect(new Set(radios().map((r) => r.name)).size).toBe(1);
+    });
+
+    it('is never a range slider, whose arrow keys would move it as they cast votes', () => {
+      expect(root().querySelector('input[type="range"]')).toBeNull();
+    });
+
+    it('follows the value through every transition', async () => {
+      for (const value of [0.25, 4, 1]) {
+        await show(value);
+        expect(checkedValue()).toBe(String(value));
+      }
+    });
+
+    it('emits the picked balance as a beta', () => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      radios()[0].click();
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(4);
+    });
+
+    it('shows the balance the host holds, not the click: a dropped pick leaves it where it was', async () => {
+      await show(1);
+      radios()[2].click();
+      await settleZoneless(fixture);
+      // The host never took the pick (Find drops one mid-pass).
+      expect(checkedValue()).toBe('1');
+      await show(0.25);
+      expect(checkedValue()).toBe('0.25');
+    });
+
+    it('does not re-emit the balance it already shows', () => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      radios()[1].click();
+      expect(emitted).not.toHaveBeenCalled();
+    });
+
+    it('hands focus back after a pick, so the arrow keys vote again', () => {
+      radios()[2].focus();
+      expect(document.activeElement).toBe(radios()[2]);
+      radios()[2].click();
+      expect(document.activeElement).not.toBe(radios()[2]);
+    });
+  });
+
+  /** A stored balance off the list: one set through the CLI or the API. */
+  describe('a stored balance off the list', () => {
+    it.each<[number, number]>([
+      [8, 4],
+      [2, 4],
+      [1.5, 1],
+      [0.75, 1],
+      [0.5, 0.25],
+    ])('shows %s on the nearest radio in log space, %s, and snaps to it', async (stored, snapped) => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      await show(stored);
+      expect(checkedValue()).toBe(String(snapped));
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(snapped);
+    });
+
+    it('waits for a running sort before it snaps', async () => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      await show(2, null, null, true);
+      expect(emitted).not.toHaveBeenCalled();
+      expect(checkedValue()).toBe('4');
+
+      fixture.componentRef.setInput('busy', false);
+      await settleZoneless(fixture);
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(4);
+    });
+
+    it('leaves a preset alone', async () => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      for (const value of [4, 1, 0.25]) await show(value);
+      expect(emitted).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the state line', () => {
+    it('is absent with no line from the detector', async () => {
+      await show(1, null);
+      expect(state()).toBeNull();
+    });
+
+    it('says a checked line is checked, with the share right, how many were found in words, and the count kept', async () => {
+      await show(0.25, lineBalance('checked', { beta: 0.25 }), 1234);
+      expect(state()!.getAttribute('data-status')).toBe('green');
+      expect(stateText()!.textContent).toContain('Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept');
+      // An advisory check (#4427, every beta since #4452): the ranges describe the audited set, the line keeps its own count.
+      expect(stateText()!.getAttribute('title')).toContain('5 random picks from the top 32');
+      expect(stateText()!.getAttribute('title')).toContain('a check informs the line and does not move it');
+    });
+
+    it('reads the count off the result, never the preset', async () => {
+      await show(4, lineBalance('checked', { beta: 4, count: 64 }));
+      expect(stateText()!.textContent).toContain('64 kept');
+    });
+
+    it('says an unchecked line keeps the starting candidate', async () => {
+      await show(4, lineBalance('unchecked', { beta: 4, count: 128 }), 300);
+      expect(state()!.getAttribute('data-status')).toBe('yellow');
+      expect(stateText()!.textContent).toContain('Top 128 kept, unchecked');
+      expect(stateText()!.getAttribute('title')).toContain('nothing has measured how much of it is right');
+      expect(stateText()!.textContent).not.toMatch(/likely|%\s*right/);
+    });
+
+    it('says how many pass the verification gate on a structural line, with no dot and no check (#4505)', async () => {
+      await show(1, lineBalance('gate', { count: 12 }), 40);
+      expect(state()!.getAttribute('data-status')).toBe('none');
+      expect(stateText()!.textContent).toContain('12 pass the verification gate');
+      expect(stateText()!.textContent).not.toMatch(/unchecked|Top \d/);
+      expect(stateText()!.getAttribute('title')).toContain('The verification gate draws this line');
+      expect(root().querySelector('.balance-check-btn')).toBeNull();
+    });
+
+    it('never shows red: nothing falls short of a balance', async () => {
+      for (const status of BALANCE_STATES) {
+        await show(1, lineBalance(status), 300);
+        expect(state()!.getAttribute('data-status')).not.toBe('red');
+        expect(stateText()!.textContent).not.toMatch(/short|confirmed/i);
+      }
+    });
+
+    it('prices a check off the schedule, rounds and all, on the check button', async () => {
+      await show(4, lineBalance('unchecked', { beta: 4, count: 128, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
+      expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('5 random picks a band, walking the list from the top 128');
+      // A trim-shaped state (#4427's beta-2 shape for the count line; the fixture still sends it above beta 1).
+      expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('steps to a shorter list while the balance does not fall');
+    });
+
+    it('notes a stale checked range only in the tooltip', async () => {
+      const fresh = lineBalance('checked');
+      await show(1, fresh, 300);
+      const freshText = stateText()!.textContent;
+      const freshMarkup = state()!.outerHTML.replace(/title="[^"]*"/g, '');
+      await show(1, lineBalance('checked', { precision: { ...CHECKED_PRECISION, stale: true }, recall: { ...CHECKED_RECALL, stale: true } }), 300);
+      expect(stateText()!.textContent).toBe(freshText);
+      expect(state()!.outerHTML.replace(/title="[^"]*"/g, '')).toBe(freshMarkup);
+      expect(stateText()!.getAttribute('title')).toContain('Measured before your later votes');
+    });
+
+    it.each(BALANCE_STATES)('never shows an estimate from the model (%s)', async (status) => {
+      await show(1, lineBalance(status), 300);
+      expect(stateText()!.textContent).not.toMatch(/estimated|F-?beta|F1/i);
+    });
+
+    it('describes the line it was cut at, not a pick still on its way to the server', async () => {
+      await show(0.25, lineBalance('unchecked', { beta: 1, count: 40 }), 40);
+      expect(checkedValue()).toBe('0.25');
+      expect(stateText()!.textContent).toContain('Top 40 kept');
+    });
+  });
+
+  describe('the check affordance (#4273)', () => {
+    const checkBtn = () => (fixture.nativeElement as HTMLElement).querySelector('.balance-check-btn') as HTMLButtonElement | null;
+
+    it('is absent with no line to check', async () => {
+      await show(1, null);
+      expect(checkBtn()).toBeNull();
+    });
+
+    it.each(BALANCE_STATES)('offers a check in the %s state, and runs it on click', async (status) => {
+      await show(1, lineBalance(status), 32);
+      const emitted = vi.spyOn(component.check, 'emit');
+      expect(checkBtn()!.textContent!.trim()).toBe('Check 5 picks');
+      checkBtn()!.click();
+      expect(emitted).toHaveBeenCalledOnce();
+    });
+
+    it('reads the pick count off the schedule: 5 a band at the false-negatives end too (#4388)', async () => {
+      await show(0.25, lineBalance('checked', { beta: 0.25, schedule: { candidate: 32, rounds: 3, picks: 5 } }));
+      expect(checkBtn()!.textContent!.trim()).toBe('Check 5 picks');
+    });
+
+    it('is held while the host cannot run a check', async () => {
+      fixture.componentRef.setInput('checkable', false);
+      await show(1, lineBalance('unchecked'));
+      expect(checkBtn()!.disabled).toBe(true);
+    });
+
+    it.each(BALANCE_STATES)('is absent where the host offers no check, Find (%s, #4317)', async (status) => {
+      fixture.componentRef.setInput('offerCheck', false);
+      await show(1, lineBalance(status), 32);
+      expect(checkBtn()).toBeNull();
+      expect(stateText()).not.toBeNull();
+    });
+
+    it.each(BALANCE_STATES)('is absent on a line a check cannot walk, a structural detector\'s (%s, #4489)', async (status) => {
+      await show(1, lineBalance(status, { checkable: false }), 32);
+      expect(checkBtn()).toBeNull();
+      expect(stateText()).not.toBeNull();
+    });
+
+    describe('when the labels separate weakly (#4496)', () => {
+      const dueNote = () => (fixture.nativeElement as HTMLElement).querySelector('.balance-due');
+
+      it('calls for the check: the primary button and a note saying why', async () => {
+        await show(1, lineBalance('unchecked', { checkDue: true, separation: 0.8 }), 32);
+        expect(checkBtn()!.classList).toContain('btn--primary');
+        expect(checkBtn()!.classList).not.toContain('btn--toolbar');
+        expect(dueNote()!.textContent).toContain('still overlap');
+      });
+
+      it('stays a quiet toolbar button when no check is due', async () => {
+        await show(1, lineBalance('unchecked', { checkDue: false, separation: 3.1 }), 32);
+        expect(checkBtn()!.classList).toContain('btn--toolbar');
+        expect(dueNote()).toBeNull();
+      });
+
+      it('says nothing where no check is offered, even when one would be due', async () => {
+        fixture.componentRef.setInput('offerCheck', false);
+        await show(1, lineBalance('unchecked', { checkDue: true }), 32);
+        expect(checkBtn()).toBeNull();
+        expect(dueNote()).toBeNull();
+      });
+    });
+  });
+
+  describe('the "what does this mean" hint', () => {
+    it('sits beside "Threshold", with or without a state line', async () => {
+      for (const balance of [null, lineBalance('unchecked')]) {
+        await show(1, balance, 10);
+        expect(hints().length).toBe(1);
+        expect(hints()[0].closest('.balance-head')).not.toBeNull();
+      }
+      expect(hints()[0].querySelector('.field-hint-icon')!.getAttribute('aria-label')).toBe('What the threshold means');
+    });
+
+    it('is one sentence pair, not a page (#4317)', () => {
+      expect(component.hint.length).toBeLessThan(200);
+      expect(component.hint.match(/\./g)!.length).toBeLessThanOrEqual(2);
+    });
+
+    it('opens below the control, so the left panel cannot clip it', () => {
+      expect(hints()[0].querySelector('.field-hint-icon')!.classList).toContain('field-hint-icon--below-block');
+    });
+  });
+});

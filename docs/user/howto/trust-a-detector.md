@@ -2,22 +2,30 @@
 
 A detector is only as good as the examples it learned from. Point it at
 pictures unlike any of them and it still gives an answer for every one; it
-just has nothing to base it on. The **Stats** window in Find tells you how
-often that is happening, so you know which calls to check by hand before you
-rely on them.
+just has nothing to base it on. The result pane in Test answers two
+questions before you rely on it: how right its line is on *this* collection,
+measured on pictures you answered yourself, and how often it is calling
+pictures it has never seen the like of, so you know which calls to check by
+hand.
 
 This page picks up where [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search)
 ends: the `Yellow Smileys` detector, trained on `drawings`, has just been run
-over `drawings-new` with **Find**. It is at its most useful for a detector
+over `drawings-new` with **Test**. It is at its most useful for a detector
 someone *else* trained, since you don't know what that one has seen. The red
 numbers in each screenshot show where to click, in order.
 
-## Step 1: Open the Stats
+## Step 1: Test the line
 
-In Find, click **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-stats.dark.webp" /><img src="../assets/icon-stats.light.webp" alt="The Stats button in the Find view" height="24" /></picture>, the pie-chart button at the top of the
-**Verified Good** pile. The **Detector Stats** window opens.
+Test opens on its **Autopilot** tab, which shows you pictures picked at random
+from either side of the line, a round of five at a time. Answer each with
+**Good** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-good.dark.webp" /><img src="../assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-bad.dark.webp" /><img src="../assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`) until the
+phases on the left read **Done!**: first **Check the matches** (pictures
+above the line), then **Check the misses** (below it). A few dozen answers
+is usual. The ranges on the right narrow as you go.
 
 ## Step 2: Read the two trust checks
+
+With the verdict up, two checks below it say how far the result carries:
 
 1. **Compare against**: pick the dataset the detector was trained on
    (`drawings` here). VTSearch can't tell which one that was, so it asks.
@@ -31,7 +39,7 @@ In Find, click **Stats** <picture><source media="(prefers-color-scheme: dark)" s
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/trust-stats.dark.webp" />
-  <img src="../assets/trust-stats.light.webp" alt="Step 2: in Detector Stats, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it" width="720" />
+  <img src="../assets/trust-stats.light.webp" alt="Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it" width="400" />
 </picture>
 
 The two checks answer the same question from different ends:
@@ -49,35 +57,45 @@ The verdict after each figure (*largely in-domain* or *likely domain shift*;
 *mostly backed by labeled evidence* or *often calling without support*) is
 VTSearch's reading of it. The line under each gives the numbers behind it.
 
-## Step 3: Read what you have already checked
+## Step 3: Read what the picks said
 
-Lower down, **Detector Accuracy** sets the detector's calls against the
-answers the dataset has now: the ones you checked by hand, and the detector's
-own call for the rest.
+Above the trust checks, the result reads the picks:
 
-- **Kept Good** / **Detector Good**: matches you both agree on.
-- **Marked Bad** / **Detector Good**: wrong matches you took out.
-- **Kept Good** / **Detector Bad**: matches the detector missed and you
-  rescued.
-- **Agreement rate**: how often the answers agree with the detector's calls,
-  over the whole dataset.
-- **Kept rate**: of the matches you have checked by hand, the share you kept
-  **Good**.
+- **Right**: of the pictures the line keeps, the likely share that are
+  matches, as a range; the picks above the line measured it.
+- **Found**: of all the matches in the collection, the share the line keeps,
+  in words; the picks below the line measured it, read against the
+  detector's own estimate of what the deepest part of the list holds.
+- **Balance (F-beta)**: the two weighed the way your Threshold weighs them.
+- **Your checks** sets the detector's calls against your answers: matches you
+  both agree on, wrong matches you took out, matches the detector missed and
+  you rescued, and the agreement rate over the whole collection.
 
-Until you have checked some pictures ([Check and correct a detector's calls](check-and-correct.md)),
-every answer is the detector's own, so it agrees with itself completely and
-**Kept rate** has no matches to count. The figures start to mean something
-once you have checked a few dozen pictures near the line.
+The ranges come from the random picks alone, never from the pictures the
+detector chose to show you, which is what makes them honest about the
+collection as a whole.
 
 ## Step 4: Act on it
 
-- **Both shares small, accuracy high**: trust the unchecked calls and send the
-  matches on ([Send your matches somewhere](export-matches.md)).
+- **Both shares small, the ranges high**: trust the unchecked calls. **Move
+  to AutoFind** puts the detector on your AutoFind list, to ship its matches
+  from every dataset like this one; or send these matches on
+  ([Send your matches somewhere](export-matches.md)).
+- **A range too low for what you will do with the matches**: **Lean the
+  Threshold** shows what each balance would ship on this collection, from the
+  same picks; pick one, and test again.
 - **A large share atypical, or in an evidence vacuum**: the detector needs
-  examples from this kind of picture. Check a few dozen pictures by hand, hand
-  them to the detector with **Add Corrections to Detector**, and run Find
-  again ([Check and correct a detector's calls](check-and-correct.md)). That
+  examples from this kind of picture. **Add Corrections and retrain** hands it
+  the picks you disagreed with, and the pictures you check by hand on the
+  **Review** tab; then run Test again
+  ([Check and correct a detector's calls](check-and-correct.md)). That
   teaches it more than moving the Threshold would.
+
+Whichever you pick, the verdict stays with the detector: its **Stats** list it
+under *Tested on*, and the Dashboard's AutoFind tab shows the latest under its
+name, marked *out of date* once it is retrained. Test the same collection again
+later, with nothing retrained, and the test resumes from the picks you already
+took.
 
 There is no way to list just the flagged pictures: the figures are a count,
 not a selection. The pictures nearest the detector's line are the ones to
@@ -86,6 +104,6 @@ check first.
 ## Where next
 
 - [Catch the borderline matches](borderline-matches.md): the precision chart
-  at the bottom of the same window.
+  in the same pane.
 - [How far to trust the score](../USER_GUIDE.md#how-far-to-trust-the-score),
   in the user guide.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """COCO val2017 on demand, and the two photo corpora the deck's figures need.
 
-    python slides/figs/src/coco_fixture.py photos          # -> prints the path
+    python slides/figs/src/coco_fixture.py photos-train    # -> prints the path
     python slides/figs/src/coco_fixture.py photo-regions
 
 The deck's running example is **book** (see `make-book-figs.py` for why), so
@@ -52,7 +52,7 @@ ANNOTATIONS_URL = "http://images.cocodataset.org/annotations/annotations_trainva
 
 #: The two corpora, as `{category: how many images}`.
 #:
-#: `photos` is the three-panel shot's pile: books, rare-ish, among a few
+#: `photos-train` is the three-panel shot's pile: books, rare-ish, among a few
 #: hundred photographs of other things. The negatives are deliberately weighted
 #: toward the rectangular, printed and shelved — a laptop, a monitor, a
 #: keyboard, a phone, a clock — because a corpus whose only non-books are
@@ -60,7 +60,7 @@ ANNOTATIONS_URL = "http://images.cocodataset.org/annotations/annotations_trainva
 #: point is that the boundary is hard.
 #:
 #: `photos-prod` is the *production* pile the Find slide scores: the same fifteen
-#: subjects in the same proportions, and not one frame in common with `photos`.
+#: subjects in the same proportions, and not one frame in common with `photos-train`.
 #: Sharing nothing is the slide's whole claim — the detector was voted on one
 #: pile and is now ranking media it has never seen — so it is enforced here
 #: rather than left to a comment (see `DISJOINT_FROM`).
@@ -69,7 +69,7 @@ ANNOTATIONS_URL = "http://images.cocodataset.org/annotations/annotations_trainva
 #: many times the work per image, and the shot only ever shows one item and the
 #: strip of thumbnails beside it.
 PLANS = {
-    "photos": {
+    "photos-train": {
         "book": 44,
         "laptop": 18,
         "tv": 16,
@@ -118,12 +118,12 @@ PLANS = {
 #:
 #: The Find slide claims the detector is ranking media nobody voted on. A
 #: `photos-prod` built by re-running the same "largest box first" selection
-#: would hand back exactly the frames `photos` already took, and the claim
+#: would hand back exactly the frames `photos-train` already took, and the claim
 #: would be false in the one figure that makes it. So the reserved plan's
 #: frames are struck out of the candidate list before the second plan chooses,
 #: which leaves `photos-prod` the next-best frames of each category rather than
 #: a reshuffle.
-DISJOINT_FROM = {"photos-prod": "photos"}
+DISJOINT_FROM = {"photos-prod": "photos-train"}
 
 
 def ensure_corpus() -> Path:

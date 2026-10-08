@@ -708,24 +708,13 @@ else:
         raise ValueError(f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} must not be negative")
 
 
-#: The precision floor the reporting line is drawn at (#4245).  Unset is the
-#: app's own default floor - a live detector's line - resolved by
-#: ``vtscore.training.thresholds.resolve_min_precision``; ``off`` is the
-#: Inclusion arm every study before #4245 ran, and the one an Inclusion sweep
-#: needs, because a set floor wins over the knob; a number pins a floor.
-_MIN_PRECISION_ENV = os.environ.get("CALIB_MIN_PRECISION", "").strip().lower()
-MIN_PRECISION: float | str | None
-if _MIN_PRECISION_ENV in ("", "default", "app"):
-    MIN_PRECISION = None
-elif _MIN_PRECISION_ENV == "off":
-    MIN_PRECISION = "off"
-else:
-    try:
-        MIN_PRECISION = float(_MIN_PRECISION_ENV)
-    except ValueError:
-        raise ValueError(
-            f"CALIB_MIN_PRECISION={_MIN_PRECISION_ENV!r} is not 'off', a floor in (0, 1], or unset (= the app's default)"
-        ) from None
+# The precision floor's arm went with the floor (#4421).  A stale export would
+# otherwise run the default balance while the operator thinks it ran a floor.
+if os.environ.get("CALIB_MIN_PRECISION", "").strip():
+    raise ValueError(
+        "CALIB_MIN_PRECISION was removed with the precision floor (#4421): set CALIB_BETA instead "
+        "(a beta, or 'off' for the Inclusion arm)"
+    )
 
 
 def exclusion_arm_name() -> str:
@@ -989,6 +978,26 @@ def _opt_float(name: str) -> float | None:
 #: that consumes it (the conformal quantiles, ``FoldAnchoredCut.threshold_at``)
 #: is continuous in ``k``.  Parsing this as an int would silently refuse the
 #: half-step grid rather than fail, so it is a float.
+#: The balance the reporting line is drawn at (#4413), resolved by
+#: ``vtscore.training.thresholds.resolve_line_knobs``.  Unset is the app's own
+#: default balance - a live detector's line; a number pins the balance arm
+#: (``1`` is the balanced preset, 0.25 and 4 the leaning ones, #4448); ``off``
+#: is the Inclusion arm every study before #4245 ran, and the one an Inclusion
+#: sweep needs, because a set balance wins over the knob.
+_BETA_ENV = os.environ.get("CALIB_BETA", "").strip().lower()
+BETA: float | str | None
+if _BETA_ENV in ("", "default", "app"):
+    BETA = None
+elif _BETA_ENV == "off":
+    BETA = "off"
+else:
+    try:
+        BETA = float(_BETA_ENV)
+    except ValueError:
+        raise ValueError(
+            f"CALIB_BETA={_BETA_ENV!r} is not 'off', a beta in [0.25, 4], or unset (= the app's default)"
+        ) from None
+
 ACQ_INCLUSION_OFFSET = _opt_float("CALIB_ACQ_INCLUSION_OFFSET")
 if ACQ_INCLUSION_OFFSET is None:
     from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET
@@ -1000,22 +1009,104 @@ if ACQ_INCLUSION_OFFSET is None:
 #: ``CALIB_ACQ_INCLUSION_OFFSET=0``; the two name the same cut.
 ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 
+#: The P-aware acquisition arm (#4409): the acquisition cut at this multiple of
+#: the depth where the session's mixture says the unvoted ranking stops being
+#: P right (1.0 = at the crossing; under a balance, the F-beta argmax).  A
+#: number requires ``CALIB_ACQ_INCLUSION_OFFSET=0`` and a preference.  Unset is
+#: the shipped cut - under a balance ``ACQUISITION_ARGMAX_FACTOR``, which has
+#: been ``None`` since the #4427 revert, so the line - 4 offset there as
+#: everywhere; ``off`` forces the offset under a balance whatever ships (the
+#: pricing's control).
+#: The balance walk's arms (#4427), all off = the app's walk: picks a band
+#: (``CALIB_WALK_PICKS``, the schedule's 5), the tolerance a deeper step may
+#: fall within and still be looked past (``CALIB_WALK_TOL``, 0) and whether
+#: every band past the start is split in two (``CALIB_WALK_FINE=1``).
+WALK_PICKS = int(_opt_float("CALIB_WALK_PICKS") or 0) or None
+WALK_TOL = _opt_float("CALIB_WALK_TOL") or 0.0
+WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true", "yes")
+#: The precision guard (``CALIB_WALK_GUARD``: a deeper band whose audited share right is below it
+#: times the start set's ends the walk) and the check's shape (``CALIB_WALK_SHAPE``: unset is the app's,
+#: advisory at every preset since #4452 (#4427 had priced advisory at beta <= 1 and trim above for the
+#: count line); ``walk`` the full walk whose end moves the line, ``advisory`` or ``trim`` a forced shape).
+WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
+WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
+#: When the simulated user checks (#4496): unset is the harness's default, the app's (``weak``: the end-of-run check
+#: plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate weakly, d' below
+#: ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's constants);
+#: ``end`` (the end-of-run check only, the pre-#4496 harness) or ``off``.
+SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None
+WEAK_D = _opt_float("CALIB_WEAK_D")
+_weak_min_t = _opt_float("CALIB_WEAK_MIN_T")
+WEAK_MIN_T = None if _weak_min_t is None else int(_weak_min_t)
+_weak_repeat = _opt_float("CALIB_WEAK_REPEAT")
+WEAK_REPEAT = None if _weak_repeat is None else int(_weak_repeat)
+#: Where the weak check may prompt (``CALIB_WEAK_PHASE``): unset is the harness's default, the app's ``learned`` (#4503)
+#: - only once Autopilot has left its text-sort opening, where the app has no detector to read separation from;
+#: ``any`` is the arm #4496 priced first, a prompt anywhere in the flow.
+WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
+#: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
+#: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
+#: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
+SAVE_TEST_SCORES = os.environ.get("CALIB_SAVE_TEST_SCORES", "").strip().lower() in ("1", "true", "yes")
+#: Clicks at which to keep a snapshot too (``CALIB_SAVE_TEST_SCORES_AT=10,25,50``; #4490 prices a line rule over clicks):
+#: the first ordinary step at or past each, saved as ``t<N>``.  Each snapshot also carries the step's calibration folds.
+SAVE_TEST_SCORES_AT = tuple(
+    int(x) for x in os.environ.get("CALIB_SAVE_TEST_SCORES_AT", "").replace(" ", "").split(",") if x
+)
+#: The Test arm (#4523, ``CALIB_LINE_TEST=1``): after the last ordinary click, run Test mode's autopilot on the
+#: withheld half with every pick answered from the truth, at the app's default budgets, into
+#: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.
+LINE_TEST = os.environ.get("CALIB_LINE_TEST", "").strip().lower() in ("1", "true", "yes")
+SIM_SIZE = int(os.environ["CALIB_SIM_SIZE"]) if os.environ.get("CALIB_SIM_SIZE", "").strip() else None
+
+_ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
+ACQ_P_CROSSING: float | str | None
+if _ACQ_P_CROSSING_ENV == "off":
+    ACQ_P_CROSSING = "off"
+else:
+    ACQ_P_CROSSING = float(_ACQ_P_CROSSING_ENV) if _ACQ_P_CROSSING_ENV else None
+
+#: #3546's two acquisition arms.  ``CALIB_ACQ_ORIGIN=inclusion`` counts the
+#: offset from the run's Inclusion knob instead of the line (the old origin);
+#: ``CALIB_ACQ_TARGET_P`` samples where the labels line's corpus posterior falls
+#: below that share; ``off`` forces the offset cut under a balance.  Unset = the
+#: app (the shipped ACQUISITION_TARGET_PRECISION under a balance, #3546).
+ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
+#: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
+#: Autopilot's phase decision.  Unset = the app.
+SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
+#: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
+#: the first Good until 3 Goods and 4 Bads); ``CALIB_LABEL_QUOTA=off`` is the
+#: pre-#4643 arm, a trained head from the first Good and Bad, which the study
+#: extras that vary its cut need at every such step.
+LABEL_QUOTA: bool | None = False if os.environ.get("CALIB_LABEL_QUOTA", "").strip().lower() == "off" else None
+_ACQ_TARGET_P_ENV = os.environ.get("CALIB_ACQ_TARGET_P", "").strip().lower()
+ACQ_TARGET_P: float | str | None = (
+    "off" if _ACQ_TARGET_P_ENV == "off" else (float(_ACQ_TARGET_P_ENV) if _ACQ_TARGET_P_ENV else None)
+)
+
 #: The **Autopilot opening** this arm runs (issue #3267), in the grammar of
 #: :mod:`vtscore.eval.startup_schedule` - e.g. ``"n6@k-6,n6@k-2,n6@k0"``.
 #:
-#: Unset = the app's own opening (three positives off the top of the seed sort,
-#: then four negatives at its cutoff), which is what every study before #3267
-#: ran and what the `prod` control arm must keep running.  Do **not** write the
-#: production spelling in here as a "default": a schedule string frozen in this
-#: file goes stale the moment the app's opening moves, and the control arm would
-#: then quietly stop being the control.  ``PRODUCTION_STARTUP`` exists for a run
-#: that wants to name it explicitly, and is pinned against the app.
+#: Unset = the app's own opening, which is what the `prod` control arm must keep
+#: running.  ``PRODUCTION_STARTUP`` spells it; it is not restated here, because
+#: this comment went on describing the opening from before #4282 after it moved
+#: (#4549).  Do **not** write the production spelling in here as a "default"
+#: either: a schedule string frozen in this file goes stale the moment the app's
+#: opening moves, and the control arm would then quietly stop being the control.
+#: ``PRODUCTION_STARTUP`` exists for a run that wants to name it explicitly, and
+#: is pinned against the app; preflight check 12 compares a set schedule to it.
 STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 
 #: Issue #4197's opening-diversity knob, ``"<tau>/<k>"``: while Autopilot's
 #: opening walks the top of the text sort, pass over candidates with cosine >= tau
 #: to at least k of the Bads voted so far.  Unset (the default) is the app.
 OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or None
+
+#: Issue #4637's More-walk knob: ``detector`` walks the top of the detector's
+#: ranking from the end of the Bad phase and shows it there (#4604).  Unset (the
+#: default, ``seed``) is the app: the top of the text sort.
+MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
@@ -1044,6 +1135,14 @@ HAYSTACK_PREVALENCE = (
 #: held-out vote scores with its own haystack - what a precision-floor
 #: estimator reads, and the truth it is graded on.  Unset = off.
 PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").replace(",", " ").split())
+
+#: Record a rank frame (``task_NNNN__rankframes.csv``) at these steps (issue
+#: #4357), e.g. ``10,25,50,100,150``: where the positives sit in the test half's
+#: ranking and in the session's unvoted pool, a few dozen integers a frame.  Any
+#: value also records the ``last`` ordinary step and the skyline arms.  It is
+#: what a floor's line at any *X* is read off, so the State of the App turns it
+#: on.  Unset = off.
+RANK_FRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_RANK_FRAME_STEPS", "").replace(",", " ").split())
 
 #: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
 #: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
@@ -1159,6 +1258,18 @@ def styles_for(dataset: str, embedder: str) -> list[str]:
     if is_patch_embedder(embedder) and not BOXED_BY_DATASET.get(dataset, False):
         return SINGLE_STYLES
     return styles_for_embedder(embedder)
+
+
+def cell_styles(dataset: str, embedder: str) -> list[str | None]:
+    """The styles one array task actually runs for ``(dataset, embedder)``.
+
+    :func:`styles_for` under the app pipeline.  A standalone trainer (#3959) has
+    no head for a detection style to drive, so it runs once, style-less, on the
+    whole-image path.  ``run_cells.main`` runs exactly this list and
+    ``run_cells.ab_pair_keys`` counts it, so the A/B sizing gate (#4111) and the
+    run cannot disagree about how many paired cells a grid holds.
+    """
+    return styles_for(dataset, embedder) if TRAINER == "app" else [None]
 
 
 def embedders_for_dataset(dataset: str) -> list[str]:

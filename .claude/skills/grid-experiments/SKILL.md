@@ -95,9 +95,10 @@ at the end of every run, success or failure, with the pass count or the gate tha
 blocked. The status is informational, not a required check (#4149): the merge gate
 is a full green `./run-tests.sh` on every surface, and cloud sessions, which cannot
 reach the GRID, merge without it. From the GRID, though, post it: it is the only
-machine-readable record that a commit passed. Submit dev's copy of the script
-(`git show origin/dev:scripts/slurm/suite.sbatch > <scratch>/suite.sbatch`), never
-the branch's own. A new commit on the branch needs a new run, because the status
+machine-readable record that a commit passed. Submit the shared checkout's copy,
+`/exp/$USER/projects/VTSearch/scripts/slurm/suite.sbatch` (fast-forward that
+checkout first if it is behind `origin/dev`), never the branch's own. The old
+`/exp/$USER/suite.sbatch` is a stub that exits 2 (#4100). A new commit on the branch needs a new run, because the status
 belongs to the SHA. See `docs/branch-protection.md`.
 
 **Never delete a dirty or unmerged worktree**, yours or anyone's, and never
@@ -159,21 +160,75 @@ Then check the two things a script cannot:
   horizon can be far cheaper than it looks — and a region/patch cell can be 10×
   a whole-image one, which changes the arm budget entirely.
 
-### Size an A/B before you launch it (#3840)
+### Size an A/B before you launch it (#3840, #4584)
 
 A trajectory A/B's resolution is known in advance, so decide the grid from it
 rather than discovering the floor in the write-up:
 
-> **SE of the paired mean Δcost = σ/√n, σ ≈ 0.04** for any two arms whose
-> thresholds differ. To resolve δ at 2 SE: **n = (2σ/δ)²** paired cells
-> (80% power: (2.8σ/δ)²).
+> **SE of the paired mean Δ = σ/√n**, with σ the per-cell sd of the paired Δ
+> of the **decision metric**, for any two arms whose thresholds differ. To
+> resolve δ at 2 SE: **n = (2σ/δ)²** paired cells (80% power: (2.8σ/δ)²).
 
-| δ | 0.02 | 0.01 | 0.005 | 0.004 | 0.002 |
-|---|---|---|---|---|---|
-| cells at 2 SE | 16 | 64 | 260 | 400 | 1,600 |
+The decision metric follows the balance the run draws its line at. A balance
+run (any `CALIB_BETA`, including unset, which is the app's default beta 1) is
+decided on the **objective**, `fbeta`: F-beta of the withheld half above the
+threshold the app holds, at the run's own beta (#4427). Only `CALIB_BETA=off`,
+the Inclusion arm, is decided on `cost`. σ differs by metric and by beta, and
+δ is in that metric's units: a grid sized for Δcost 0.01 resolves only about
+0.02 to 0.04 of F-beta.
 
-Validated on 399 fresh cells against a pre-registered prediction
-(`docs/experiments/2026-09-22-ab-resolution-3840/REPORT.md`). What goes with it:
+| decision metric | σ per cell | δ = 0.02 | 0.01 | 0.005 | 0.004 | 0.002 |
+|---|---|---|---|---|---|---|
+| Δcost, `CALIB_BETA=off` (measured, #3840) | 0.04 | 16 | 64 | 256 | 400 | 1,600 |
+| Δ-objective at beta 1/4 (measured, #4584) | 0.13 | 169 | 676 | 2,704 | 4,225 | 16,900 |
+| Δ-objective at beta 1 (measured, #4584) | 0.08 | 64 | 256 | 1,024 | 1,600 | 6,400 |
+| Δ-objective at beta 4 (measured, #4584) | 0.10 | 100 | 400 | 1,600 | 2,500 | 10,000 |
+
+The cost row was validated on 399 fresh cells against a pre-registered
+prediction (`docs/experiments/2026-09-22-ab-resolution-3840/REPORT.md`). The
+objective rows are the per-cell sd of the paired Δ in `analyze_ab`'s decision
+window (scope `app_visible`, all steps, each arm's own rows), measured on
+same-commit pairs of today's app on `coco_better` (binary SigLIP, 1% pool,
+150 votes; #4584):
+
+| pair | beta 1/4 | beta 1 | beta 4 |
+|---|---|---|---|
+| #4583's calibration split / fold count (3 contrasts, 685 runs each) | 0.054–0.059 | 0.030–0.035 | 0.038–0.044 |
+| #4428's acquisition depth, `x0.25` vs shipped (414 runs, 300 votes) | | 0.082 | |
+
+**σ depends on how far the two arms' trajectories part:** an arm that changes
+what Autopilot asks (acquisition) parts them more than one that only moves the
+line (calibration), about 2.4× here. The table takes the larger, acquisition-type
+σ at beta 1 and scales beta 1/4 and 4 by the ratios measured within #4583
+(×1.6, ×1.24), so it is conservative for a line-only knob. Point reads are
+noisier than the all-steps window: at vote 150 the per-cell sd is 0.09 / 0.05 /
+0.06 on the #4583 pairs, so a decision taken at one vote needs about twice the
+cells.
+
+**Preflight enforces it (#4111).** Give it the δ the A/B is meant to resolve:
+
+```bash
+bash scripts/experiments/preflight.sh --exp "$CALIB_EXP" ... --resolve-delta 0.004
+```
+
+It refuses a grid with fewer than (2σ/δ)² paired cells, and prints the δ the grid
+*can* resolve, the `CALIB_N_SEEDS` that would get there, and which σ it used.
+The default σ is the table's for the launch's `CALIB_BETA`: 0.13 at 1/4, 0.08 at
+1 or unset, 0.10 at 4, 0.04 with `off`. At a beta the table has no σ for
+(anything off the presets) it stops and asks for `--sigma`, which overrides the
+default anywhere. It counts paired cells the way `analyze_ab.py` pairs them, one per
+style (`run_cells.py --print-paired-cells`). `--print-cells` gives a different
+number: it counts array tasks, and a `whole_image,max_patch` task is two paired
+cells (42 tasks vs 57 paired cells a seed on the #3585 environments).
+`--paired-cells N` supplies the count for a grid `run_cells.py` does not
+enumerate. `analyze_ab.py` decides on the same metric (`fbeta` when the runs
+carry a beta, refusing a pair drawn at two different betas; `cost` otherwise)
+and prints the same floor (`resolvable_delta_2se`) beside every Δ it writes,
+including the pooled line, so a report cannot quote a Δ without it. Cells
+written before the `fbeta` columns have them filled from `precision` and
+`recall`.
+
+What goes with it:
 
 - **A small change does not get a cheaper A/B.** Trajectories part by vote ~5 and
   σ is 0.034–0.066 whether an arm moves 0.05% of the haystack or 20%. If δ needs
@@ -436,9 +491,73 @@ by a second, cheaper pass over the same cells and merged in with
 `--skyline-results`; re-running the loop for it would have replaced the
 performance rows the reports' tables were read off.
 
+Which metric a page **opens on** is the study's to choose, and so is which ones
+it offers at all: `--default-metric` and `--hide-metrics` write a `view` block
+into the payload, at build time or on a reskin of a page that is already built,
+and a later plain reskin keeps it. Without one the page opens on F1 (#4635),
+or on the first metric it offers when the run emitted no F1. The template makes
+that choice, so a plain reskin moves every committed page without a `view` onto
+it. A study whose report retired cost hides it, as the State of the App's
+`analyze.sh` does (#4576). Hiding only takes a metric off the menu; its numbers
+stay in the payload.
+
+**A run inside a spot check stays in the mean.** A prompted check (#4496)
+answers its picks in rounds of about five, so a run inside one is scored once
+per round and has no row at the clicks between. Both the viewer's averaged
+line and `curves.py`'s PNG mean used to be taken over "the runs with a row at
+this click", which skipped exactly those runs, and a check prompts where the
+labels separate weakly, so what it skipped was the weak sessions: a survivor's
+mean that fell at the end of every review as the checks ran out of budget and
+the weak runs came back (#4624). Both now carry each run's last scored row
+through the clicks it has none for (`curves.fill_gaps`): inside the run's span
+only, never before its first row or after its last, and a metric undefined on
+a scored row stays undefined. The page says so in its reading note
+(`gaps_filled`). A committed page built before the carry gets it from its own
+per-seed lines with `python viewer.py --reskin <page> --fill-gaps`, which
+refuses a page whose per-seed lines were thinned to fit the budget (rebuild
+that one from its cells).
+
+**A run with no detector stays in the mean too, as a loss.** Before a run's
+first Good vote, and at every click of a run that never got one, the harness
+writes no row, and a user there has nothing: with no Good there is nothing to
+sort toward, and Test on it is refused. (In results run before #4643 the rows
+start at the first Good *and* Bad, when Test refused one class too; the same
+rule - every click before a run's first row - reads both.) Both the viewer and
+`curves.py` now score those clicks as the empty returned set
+(`curves.score_empty_sets`, `curves.EMPTY_SET`: recall, F1 and the objective
+0, precision 0, FPR 0, FNR 1, AP the test split's prevalence, AUROC 0.5, cost
+the miss weight), so a failing run is averaged in rather than averaged out
+(owner, 2026-10-07). A trained detector that flags nothing returns the same
+set, so its precision, which the harness leaves undefined, counts as 0 too
+(`curves.zero_empty_precision`; the viewer's oracle line as well). The runs scored are the caller's cell list or, without
+one, every run the text-sort baseline lists in a group the arm trained in
+(`curves.attempted_cells`), so pass `--baseline`. The page says so in its
+reading note (`empty_sets_scored`). This needs each run's prevalence, which a
+built page does not carry, so a committed page built before it is **rebuilt**
+from its results, not reskinned.
+
+**From the first Good on, both draw the harness's detector, Autopilot's
+opening included** (owner, 2026-10-07, #4640). The session stays on the text
+sort until the Hard phase (`app_trained`, #4605), but the user can export the
+labels and run Test at any click, and either builds a detector from the
+labelset. So the page shows what that gives, and neither module reads
+`app_trained`. Since #4643 that is the label quota's: the Goods' centroid until
+the labels hold 3 Goods and 4 Bads, the trained head from there. The harness
+writes each row as that detector and names it in `detector_tier`, which
+neither module reads either. A report that scores the *session* filters on
+`app_trained` itself, as the State of the App analyzer does. A study that wants
+the trained head at every Good-and-Bad step, and the study extras that vary
+its cut (variant rows, fit-quality, rank and precision frames, which ride only
+trained steps under the quota), runs `label_quota=False`
+(`simulate_voting_iterations`; `CALIB_LABEL_QUOTA=off` in a cell), the
+pre-#4643 arm. `preflight_knobs.py` lists it as off-production.
+
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
-the weighted pooling against a hand-computed answer, the click-0 anchor, and the
-budget note.
+the weighted pooling against a hand-computed answer, the click-0 anchor, the
+budget note, the carry through a spot check round, the empty-set score of a
+click with no detector, and that a Goods'-centroid row is drawn like any other;
+`selftest_curves.py` is
+the PNGs'. Both run in the suite (`tests_lib/meta/test_calibration_viewer.py`).
 
 **The metrics come from the harness, not from the viewer.** `cost`, `precision`,
 `recall`, `f1`, `fpr`, `fnr`, `average_precision` and `auroc` are emitted by
@@ -481,6 +600,38 @@ the first, and the point is that both renderings say the same thing.
 Reports cite only analysis code that is **in the tree**: `scripts/check-docs.py`
 now enforces that for `docs/experiments/`. A report whose script never got
 committed cannot be reproduced or extended, however good its numbers were.
+
+### Close what the study answered
+
+A study rarely settles only the issue it was filed for. Its result also answers,
+narrows or moots sibling questions, and nothing closes those for you: the release
+sweep (`docs/RELEASE.md` step 6) closes an issue only when a PR names it, and a
+sideways answer names nothing. On 2026-09-30, 10 of 41 open `experiment` issues
+were already answered or moot this way, the oldest for a month. The #4267 ruling
+alone had mooted five, and two of those ended on a comment saying "that's the
+owner's call" that no one ever answered.
+
+So before the report's PR opens, list the open `experiment` issues (`list_issues`
+with `labels: ["experiment"]`, `state: OPEN`; the titles are enough to find
+candidates) and read the ones the result bears on: the same knob, the same plan
+file, the same `depends-on` chain, anything the report cites. Then, for each:
+
+- **Answered by this study.** Put `Closes #N` in the PR body next to the study's
+  own issue, comment `Addressed in #M`, and add `solved` with `assignees: []`:
+  the same motion as any fix PR (CLAUDE.md), so the release sweep closes it.
+- **Moot.** The result removed what it was tuning, or contradicted its premise.
+  Close it `not_planned` now, with a one-line comment naming what mooted it, and
+  prune any `docs/plans/` pointer to it in the same PR.
+- **Changed but not settled.** Comment what changed: a new constraint, a
+  narrower question, a lifted blocker. A comment that begins "Before picking
+  this up" is how the next session learns the ground moved.
+- **Only the owner can say.** Whether a question still earns GRID time is a
+  decision: ask it with `AskUserQuestion` in this session. Do not leave it in an
+  issue comment for the owner to find.
+
+The same holds for a session that records an owner ruling or ships a change that
+decides a question, whether or not a GRID run was involved. `docs/RELEASE.md`
+step 6c sweeps the queue at each release for anything this missed.
 
 ## When something breaks
 

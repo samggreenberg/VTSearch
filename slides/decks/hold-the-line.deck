@@ -7,33 +7,42 @@
 # room that has not seen the tool cannot be told about a threshold inside it.
 #
 # Then the ideas, in order: four iterations on where the line goes, then the
-# same machinery walked a second time along the axis the *user* sets — a
-# slider, and then the precision floor that replaced it (#4244). Then the
-# places the loop never asks about, the data the
-# experiments run on, the region-voting idea (whose measured verdict waits for
-# the Results section with the runs still reporting), and logos.
+# axis the *user* sets — F-beta, the three-radio balance that asks which
+# mistake they mind more (#4413, #4448), and the line the labels draw at its
+# peak (#4452). Then the places the loop never asks about, the steps Autopilot
+# takes and when it says stop (#4610), the data the experiments run on and how
+# the app does on it, how a user tests a detector on
+# their own pile and how often that test is right, the region-voting idea (whose
+# measured verdict waits for the runs still reporting), and documents — logos
+# on scanned pages — ending on how the app does on them.
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in the reports the presenter notes cite (see #3246, #3265).
 #
-# The outline fragment appears ten times: once bare, as the opening list, and
-# then once before each section marked with `+at1` … `+at8`. It is one slide
-# shown ten ways rather than ten slides — `build.py` numbers it 1a…1j — and the
-# last showing, `+end`, is the deck's closing slide: it is the only one that
-# shows "The End", as its marked line.
+# The outline fragment appears twelve times: once bare, as the opening list,
+# and then once before each section marked with `+at1` … `+at10`. It is one
+# slide shown twelve ways rather than twelve slides — `build.py` numbers it
+# 1a…1l — and the last showing, `+end`, is the deck's closing slide: it is the
+# only one that shows "Conclusion", as its marked line. Sections are numbered in
+# Roman numerals (I … X), slides in Arabic, so the two never read alike.
 #
 # This is the master deck: every fragment a talk might want is named here, and
-# a talk cuts its own manifest from it. Section 8, Step by Step, is the one most
+# a talk cuts its own manifest from it. Section X, Instruction, is the one most
 # talks cut — it is a how-to for users, not an argument for data scientists — and
-# a talk *for* users moves it up to follow section 1 instead.
+# a talk *for* users moves it up to follow section I instead.
 
 theme: vtsearch
+# PDF metadata. Marp takes the title from the first heading unaided, but the
+# language it guesses from the locale of whatever machine renders it (`POSIX`
+# on a CI runner), and that is what a screen reader reads the deck in.
+author: Sam Greenberg
+lang: en
 
 slides:
   title-hold-the-line
   outline-hold-the-line
 
-  # 1 — VTSearch
+  # I — Mission: the tool, from nothing, and what it is for.
   outline-hold-the-line +at1
   problem
   make-detector
@@ -43,51 +52,75 @@ slides:
   embed-flow
   vote-boundary
 
-  # 2 — Calibration
+  # II — Calibration
   outline-hold-the-line +at2
   xcal
   gmm-idea
   gmm-em
   blend
-  blend-schedule
   anchored-gmm
   anchored-em
   quantile-transfer
   split-fraction
 
-  # 3 — Preference: why a line needs one, the slider we shipped and what it
-  # took to make it mean anything, then the number a person can actually say
-  # — a precision floor — and the spot check that earns it (#4224, #4267).
+  # III — Inclination: why a line needs one, what F1 and F-beta are (#4517),
+  # F-beta's peak and the three-radio balance that sets its beta (#4413,
+  # #4448), the line the labels draw at its expected peak (#4452), and why
+  # the labels are what it is drawn from: they are all Find has (#4517). Then
+  # the question that line cannot answer before anyone checks (how many of
+  # what it keeps are right), Clopper–Pearson on its own, and what a check
+  # says about the line without moving it (#4427, #4452, #4517). Present
+  # tense throughout: the deck says what the app does, and the slider that
+  # came before the balance is in the appendix after Conclusion.
   # Second Cut stays last: the acquisition cut is measured from wherever the
   # line lands, so it has to follow the slide that says where that is.
   outline-hold-the-line +at3
   inclusion-rank
-  inclusion-cost
-  inclusion-knob
-  inclusion-walk
-  inclusion-tilt
+  fbeta-metrics
+  fbeta-maps
+  balance-fbeta
+  labels-line
+  transfer-student
   floor-ask
+  clopper-pearson
   floor-check
   inclusion-acq
 
-  # 4 — Exploration: the Coverage Atlas, how autopilot decides what to ask
-  # when the answer is not "whatever is nearest the line". It follows Preference
+  # IV — Exploration: the Coverage Atlas, how autopilot decides what to ask
+  # when the answer is not "whatever is nearest the line". It follows Inclination
   # because Second Cut has just said the threshold decides what gets asked, and
   # the honest reading of these four is "and here is the half of that the
   # threshold does not do".
   #
   # The order is the argument, not the code: the blind spot the atlas exists
-  # for, the structure, the second job that structure also does, and how badly
-  # it does it. That last one stays last whatever happens to the rest — it is
+  # for, the structure, the second job that structure also does, the atlas
+  # doing it on that very room (#4517), and how badly it does it. That last one stays last whatever happens to the rest — it is
   # the only slide here that reports a loss, and a loss read before the
   # mechanism is just a reason not to listen.
   outline-hold-the-line +at4
   atlas-blindspot
   atlas-cells
   atlas-depth
+  atlas-far
   atlas-pvalues
 
-  # 5 — Experiments: the photographs the experiments run on. Every dataset
+  # V — Navigation: Autopilot from end to end (#4610). Sections III and IV are
+  # the two ways it asks; this is the order it asks them in, and when it tells
+  # the user they can stop. The steps first, then one slide per light — Smart,
+  # Stable, Span, each drawn by the shipped rule on a planted session
+  # (`make-autopilot-figs.py`) — then the ways a run ends and what the app says.
+  # Last, where the stop fired when it was measured: #3945's sessions, the only
+  # stopping numbers committed so far, until a State of the App review's
+  # stopping block replaces them (#4611).
+  outline-hold-the-line +at5
+  autopilot-steps
+  autopilot-smart
+  autopilot-stable
+  autopilot-span
+  autopilot-done
+  autopilot-stop
+
+  # VI — Experimentation: the photographs the experiments run on. Every dataset
   # arrives on one card, "Data, Set" (`make-data-cards.py`): the sets somebody
   # else made, a slide of what they do not give you, then what we built from
   # them, in the same card — COCO into COCO Better (`coco_better` in code;
@@ -96,48 +129,123 @@ slides:
   # The figures are generated from the config the pile builds against, so a
   # rebuilt dataset is a re-run of the figure scripts rather than an edit here —
   # but the presenter notes carry numbers too, and those are hand-written.
-  outline-hold-the-line +at5
+  outline-hold-the-line +at6
   data-set-coco
   data-coco-better-complement
   data-coco-problems
   data-set-coco-better
-  # The whole ladder on COCO Better (#4184): one cost curve per threshold
-  # idea, drawn on a pool thinned to 5% positive by the owner's call; the
-  # natural-pool result is in the notes and the study's REPORT.md.
-  progression
+  # Follow Suit, what the work since the first rule bought (#4548), is in the
+  # appendix after Conclusion: only β ¼ pulls away from cross-calibration, so
+  # in the run of the talk it read as "the work changed nothing" (#4563).
+  # How the app does on that bench today: the State of the App review, each
+  # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
+  sota-photos
 
-  # 6 — Regions
-  outline-hold-the-line +at6
+  # VII — Examination: the Test button (#4594, #4598), how a user finds out
+  # what section VI just measured, on their own pile. It follows Experimentation
+  # because its last slide grades the Test on the COCO Better sessions the room
+  # has just met. The question and its two rules; the background, one idea a
+  # slide — stratified bands, one band's Beta posterior, the joint Monte Carlo
+  # draws, the prior borrowed from neighbouring bands above the line (#4539,
+  # #4560) and the model's count corrected below it (#4523); then the app — the
+  # autopilot's rounds and stop, the result pane, and how often its ranges hold.
+  # The bands and Clopper–Pearson it builds on are Spot Check's and Home on the
+  # Range's, in section III. Every figure but the last runs the shipped
+  # `LineTest` on a planted pile (`make-test-figs.py`); the last is #4560's
+  # shipped summary.
+  outline-hold-the-line +at7
+  test-question
+  test-bands
+  test-posterior
+  test-draws
+  test-pool
+  test-model
+  test-rounds
+  test-result
+  test-coverage
+
+  # VIII — Region: the region vote in the app, what a patch is and the model
+  # that makes them (DINOv3, #4517), and the maximum a photo is then scored by.
+  outline-hold-the-line +at8
   voting-modes
-  evt-midpoint
+  patches
   evt-gumbel
+  # How the app does on the region path today: the State of the App review
+  # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
+  sota-regions
 
-  # 7 — Logos. The logo slide opens it because it introduces the idea of logo
-  # detection before the room is asked to find logos on documents. It is the
+  # IX — Document(ation): logos on scanned pages. The logo slide opens it
+  # because it introduces the idea of logo detection before the room is asked
+  # to find logos on documents. It is the
   # `book` slide's claim made a second time, in the one domain where a room
   # expects a concept to have a published spec sheet: eight results for one
   # query, arriving one at a time, and the presenter asks about each without
-  # answering. Then the same "Data, Set" card as section 5, for the document
-  # sources and FullMarks, built from the FullMarks datasheet.
-  outline-hold-the-line +at7
+  # answering.
+  #
+  # Then how we find one, before the data built to test it (#4517): the
+  # shipped matcher on real Tobacco800 pages (`make-sift-figs.py`), with a
+  # FullMarks crest as the running example. The background comes first, in
+  # the order a page is checked: keypoints, then matching and RANSAC. Then the
+  # three things the documents changed: the keypoint budget, the shortlist and
+  # why a page vector cannot build one, and the votes. Tiles shipped after
+  # these slides were drawn (#4378, #4415): the notes say so, and the tiles
+  # figure still draws the old single-layer pick until #4455 pins the app's own.
+  outline-hold-the-line +at9
   logo-grid
+  logo-keypoints
+  logo-match
+  logo-budget
+  logo-stages
+  logo-tiles
+  logo-votes
+  # Then the same "Data, Set" card as section VI, for the document sources and
+  # FullMarks, built from the FullMarks datasheet.
   data-set-fullmarks-sources
   data-fullmarks-problems
   data-set-fullmarks
   data-fullmarks-shape
+  # Last, where the line goes on documents: Goods rank, Bads set the line
+  # (#4367), and tight fits hold it before the first Bad (#4440), charted from
+  # the three runs' committed CSVs (`make-logo-line-fig.py`). Then the same
+  # line at the other two radios: the recall end adds pages above a floor
+  # under the Goods' own fits (#4458), the precision end trims to pages that
+  # beat every Bad by a margin (#4479) — a schematic on the shipped constants.
+  logo-line
+  logo-balance
+  # And how it does: the document review's two panels, one run of the app per
+  # radio (`make-sota-figs.py`, from the committed per-step CSVs).
+  sota-documents
 
-  # 8 — Step by Step: the tool as a how-to (#4202). Section 1 shows the same
+  # X — Instruction: the tool as a how-to (#4202). Section I shows the same
   # session as an argument; this shows it as instructions, every click marked
   # with a numbered red disc and the numbers keyed down the side, so the pages
   # still work as a handout with nobody talking over them. One session, shot
   # once (`shoot-ui-figs.mjs`), from an empty app: load a pile of photos, make a
   # detector, train it, load a pile it never saw, and Find.
-  outline-hold-the-line +at8
+  outline-hold-the-line +at10
   steps-load-train
   steps-make-detector
   steps-train
   steps-load-test
   steps-find
 
-  # The End
+  # Conclusion
   outline-hold-the-line +end
+
+  # Appendix, for questions. First, what the work since the first rule bought
+  # (#4548): each preset off its own sessions against cross-calibration, scored
+  # at its own beta, on the pool thinned to 1% positive. Moved here from
+  # Experimentation (#4563): only β ¼ separates, which is an answer to a question
+  # rather than a slide to walk a room through.
+  follow-suit
+  # Then the Inclusion slider's iterations — how the old user control was made
+  # to mean something. Inclusion is no longer a control (#4269); it survives
+  # only as the unit Second Cut's re-pricing is taken in.
+  inclusion-knob
+  inclusion-walk
+  inclusion-tilt
+  # Last, Weight and See: how the blend's weight moves with votes, moved out
+  # of Calibration (#4618). Above Average's fused cut replaced the blend, and
+  # what remains of the schedule is the fallback for sessions too young for
+  # its folds; it is parked here pending deletion.
+  blend-schedule

@@ -203,7 +203,7 @@ def clear_all() -> None:
 #: fire - the same failure mode :data:`vtscore.achievements_hooks.KNOWN_EVENTS`
 #: exists to catch, so this seam rejects it the same way rather than accepting
 #: a registration nothing will ever call.
-KNOWN_SETTING_KEYS: frozenset[str] = frozenset({"min_precision", "calibrate_count", "calibration_fraction"})
+KNOWN_SETTING_KEYS: frozenset[str] = frozenset({"beta", "calibrate_count", "calibration_fraction"})
 
 #: Setting keys the library used to persist and no longer does.  Registering a
 #: persister for one is accepted with a ``DeprecationWarning`` rather than
@@ -245,13 +245,13 @@ def get_inclusion() -> int:
     """Deprecated: always ``0``.
 
     Inclusion is no longer a user preference (#4269).  The operating point is
-    the precision floor (:func:`get_min_precision`), and a line with no promise
-    is the Inclusion 0 cut.  Inclusion survives only as the internal unit the
+    the balance (:func:`get_beta`, #4413), and a line with no balance is the
+    Inclusion 0 cut.  Inclusion survives only as the internal unit the
     threshold machinery measures cuts in.
     """
     warnings.warn(
         "vtscore.state.get_inclusion() is deprecated: Inclusion is retired as a user preference and is "
-        "always 0. Read the precision floor instead (vtscore.state.get_min_precision).",
+        "always 0. Read the balance instead (vtscore.state.get_beta).",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -264,49 +264,58 @@ def set_inclusion(value: int) -> None:
     Inclusion is no longer a user preference (#4269), so there is no stored
     value to move.  ``0`` is accepted with a ``DeprecationWarning``; any other
     value raises ``ValueError`` rather than being silently ignored.  Set a
-    precision floor with :func:`set_min_precision` instead.
+    balance with :func:`set_beta` instead.
     """
     from vtscore.config.core_config import _retired_inclusion
 
     _retired_inclusion("vtscore.state.set_inclusion()", value)
 
 
-def get_min_precision() -> float | None:
-    """The active detector's precision floor, or ``None`` when no floor is set.
+def line_knobs() -> dict[str, float | None]:
+    """The preference the active detector's line is drawn at, as the trainer's keywords (#4413): ``{"beta": b}``.
 
-    Seeded from the user's setting (``CoreConfig.min_precision``) the first
-    time it is read for a detector.  A float in ``(0, 1]`` means the cut
-    returns as much as it can while at least that fraction of it is right, and
-    falls back to the Inclusion 0 cut when it can promise nothing (#4245).
-    ``None`` means no floor: the line is the Inclusion 0 cut, with no promise
-    attempted.  The app always sets a floor; ``None`` survives for library
-    callers (#4269).
+    What every retrain and re-cut passes on, so one setting moves every line.
+    """
+    return {"beta": get_beta()}
+
+
+def get_beta() -> float | None:
+    """The active detector's balance (#4413): F-beta's beta, seeded from the user's setting on first read.
+
+    Draws the line: the labels' line cut at this beta (#4452).  ``None``
+    means no balance: the line is the Inclusion 0 cut.  The app
+    always sets a balance; ``None`` survives for library callers
+    (``CoreConfig(beta=None)``).
     """
     from vtscore.config import CoreConfig
 
     with _state_lock:
-        seeded, val = _core._get_min_precision()
+        seeded, val = _core._get_beta()
         if not seeded:
-            val = CoreConfig.from_settings().min_precision
-            _core._set_min_precision(val)
+            raw = CoreConfig.from_settings().beta
+            val = None if raw is None else float(raw)
+            _core._set_beta(val)
         return val
 
 
-def set_min_precision(value: float | None) -> None:
-    """Set the active detector's precision floor (``None`` clears it) and persist it via the registered hook.
+def set_beta(value: float) -> None:
+    """Set the active detector's balance and persist it; the line re-cuts (no retrain).
 
-    A pure cutoff knob: the active detector re-cuts its cached estimators at
-    the new floor (no retrain), and in Find mode the unverified items re-split
-    over the frozen scores.  Other loaded detectors keep their
-    own floor; one that has not read its floor yet takes this one.
+    A pure cutoff knob: the active detector re-cuts its cached ranking at the
+    new balance, and in Find mode the unverified items re-split over the
+    frozen scores.  Other loaded detectors keep their own balance; one that
+    has not read its balance yet takes this one.
     """
-    if value is not None and not 0.0 < value <= 1.0:
-        raise ValueError(f"precision floor must be in (0, 1], got {value!r}")
+    from vtscore.training.thresholds import BETA_MAX, BETA_MIN
+
+    value = float(value)
+    if not BETA_MIN <= value <= BETA_MAX:
+        raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {value!r}")
     with _state_lock:
-        seeded, old = _core._get_min_precision()
+        seeded, old = _core._get_beta()
         changed = not seeded or value != old
-        _core._set_min_precision(value)
-        _persist_setting("min_precision", value)
+        _core._set_beta(value)
+        _persist_setting("beta", value)
     if changed:
         _core.recompute_detector_thresholds(value)
         rethreshold_unverified_find_items()

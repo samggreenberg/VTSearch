@@ -76,9 +76,8 @@ class AppSettingsSchema(Schema):
 
     # Per-user, scalar
     volume = fields.Float()
-    # The precision floor (#4245).  Never ``null``: every detector has a floor
-    # (#4269), and a stored ``null`` reads as the default.
-    min_precision = fields.Float()
+    # The balance (#4413): F-beta's beta, the preference every line is drawn at.
+    beta = fields.Float()
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -211,7 +210,7 @@ class AppSettingsSchema(Schema):
     # ``SettingsUpdateSchema`` - not editable via PUT.
     browse_signpost_vocab = _PerMediaTypeStringListDict(dump_only=True)
 
-    # Auto-Find (per-user, editable from the Auto-Find settings tab).
+    # AutoFind (per-user, editable from the AutoFind settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run
     # on import; ``autofind_exporter`` is the chosen results-exporter name
     # ("" = none); ``autofind_exporter_field_values`` keeps each exporter's
@@ -222,10 +221,10 @@ class AppSettingsSchema(Schema):
         keys=fields.String(),
         values=fields.Dict(keys=fields.String(), values=fields.String()),
     )
-    # Whether a web import runs the user's AutoRun detectors once the dataset
-    # is saved; the Add Dataset dialog's "Run AutoRun" checkbox starts from it,
+    # Whether a web import runs the user's AutoFind detectors once the dataset
+    # is saved; the Add Dataset dialog's "Run AutoFind" checkbox starts from it,
     # and each import that sends the box remembers its state here.
-    autorun_on_import = fields.Boolean()
+    autofind_on_import = fields.Boolean()
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -272,9 +271,8 @@ class SettingsUpdateSchema(Schema):
     """
 
     volume = fields.Float()
-    # The precision floor (#4245).  Never ``null``: every detector has a floor
-    # (#4269), and a stored ``null`` reads as the default.
-    min_precision = fields.Float()
+    # The balance (#4413): F-beta's beta, the preference every line is drawn at.
+    beta = fields.Float()
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -325,13 +323,13 @@ class SettingsUpdateSchema(Schema):
     # PUT /api/settings. It is dump_only in AppSettingsSchema.
 
     autofind_detectors = fields.List(fields.String())
-    # Auto-Find results exporter. ``autofind_exporter`` is validated against the
+    # AutoFind results exporter. ``autofind_exporter`` is validated against the
     # exporter registry in the route layer; ``autofind_exporter_field_values``
     # is a free-form ``{exporter_name: {field_key: value}}`` map (per-field
     # validation runs at export time against the chosen plugin's schema).
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Raw()
-    autorun_on_import = fields.Boolean()
+    autofind_on_import = fields.Boolean()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()

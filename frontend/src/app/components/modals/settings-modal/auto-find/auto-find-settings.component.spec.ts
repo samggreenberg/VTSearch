@@ -12,10 +12,10 @@ import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../../testing/settle-resource';
 
 /**
- * Unit spec for the Auto-Find settings sub-panel. The panel loads the pickable
+ * Unit spec for the AutoFind settings sub-panel. The panel loads the pickable
  * exporters (a tab strip whose active tab is the auto-export target), keeping
  * per-exporter field values that it emits to the parent. (Which detectors
- * auto-run is chosen on the Dashboard's Drafts/AutoRun tabs, not here.) The
+ * auto-run is chosen on the Dashboard's Drafts/AutoFind tabs, not here.) The
  * exporters API service is stubbed so the init subscription resolves
  * synchronously.
  */
@@ -143,10 +143,10 @@ describe('AutoFindSettingsComponent', () => {
     expect(component.exporters().map((e) => e.name)).toEqual(['server_json_file', 'email']);
   });
 
-  it('points at the Dashboard AutoRun tab instead of hosting a detector checklist', async () => {
+  it('points at the Dashboard AutoFind tab instead of hosting a detector checklist', async () => {
     await create();
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('AutoRun');
+    expect(text).toContain('AutoFind');
     expect(text).not.toContain('Loading detectors…');
   });
 

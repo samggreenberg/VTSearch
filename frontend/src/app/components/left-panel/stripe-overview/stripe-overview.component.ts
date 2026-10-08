@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { SortedItem } from '../left-panel.component';
-import { floorExplanation, type LineFloor } from '../../../utils/line-floor';
+import { balanceExplanation, type LineBalance } from '../../../utils/line-balance';
 
-/** The strip's tooltip; the precision floor's state adds a sentence of its own. */
+/** The strip's tooltip; the balance's state adds a sentence of its own. */
 const STRIPE_TITLE =
   'Minimap of all items in sort order. Green = good votes, red = bad votes, white = selected. Click to jump.';
 
@@ -30,8 +30,8 @@ export const STRIPE_MAX_ITEMS = 20000;
 export class StripeOverviewComponent {
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
-  /** What the precision floor says about `threshold` (#4272); the marker draws the same in every state. */
-  readonly floor = input<LineFloor | null>(null);
+  /** What the balance says about `threshold` (#4272, #4413); the marker draws the same in every state. */
+  readonly balance = input<LineBalance | null>(null);
   readonly selectedId = input<number | null>(null);
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
@@ -44,7 +44,7 @@ export class StripeOverviewComponent {
   readonly cachedThresholdPosition = computed(() => this.buildThresholdPosition());
   /** The strip's tooltip; the 1px marker is too thin to carry one of its own. */
   readonly stripeTitle = computed(() => {
-    const state = floorExplanation(this.floor());
+    const state = balanceExplanation(this.balance());
     return state ? `${STRIPE_TITLE} The line: ${state}` : STRIPE_TITLE;
   });
 
@@ -75,6 +75,8 @@ export class StripeOverviewComponent {
     this.stripeClick.emit(index);
   }
 
+  /** There is a ranking to draw. Without one the strip still holds its place
+   *  in the layout, as an empty track. */
   get visible(): boolean {
     const sortOrder = this.sortOrder();
     return sortOrder !== null && sortOrder.length > 0;

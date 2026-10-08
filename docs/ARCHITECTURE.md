@@ -261,6 +261,7 @@ VTSearch/
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
+│   │   ├── import_event.py         DatasetImported: how an import ended, for on-finished hooks
 │   │   ├── ingest.py               Shared ingest core, driven by ingest_task.py as a background job
 │   │   ├── container.py            Dataset container: a ZIP with `medias.pkl` + `meta.json` and
 │   │   │                           optionally `projection.npz`; the pickle is one member of the container,
@@ -414,12 +415,16 @@ VTSearch/
 │   │                               retention, support email, Semantic-only): one descriptor
 │   │                               per knob carrying its CLI flag, env var, shared validator,
 │   │                               resolution rule, and /api/settings key
+│   ├── import_hooks.py             The admin's --on-dataset-imported functions: flag / env parsing,
+│   │                               startup validation, and the dispatcher the import routes hand
+│   │                               the load pipeline
 │   ├── threading.py                Context-carrying thread helper (user + dataset + detector locals)
 │   ├── achievements.py             Achievement state management
 │   ├── achievements_catalog.py     Static achievement declarations (no state machine)
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
-│   ├── autorun_detectors.py        Runs a user's AutoRun detectors on a dataset: /api/auto-detect's core,
-│   │                               the background run after an import / from Run AutoRun, kept results
+│   ├── autofind.py                 Runs a user's AutoFind detectors on a dataset: /api/auto-detect's core,
+│   │                               the background run after an import / from Run AutoFind / the Find
+│   │                               button (ticked detectors), kept results
 │   ├── logging_config.py           Logging setup
 │   ├── diagnose.py                 One switch applying the diagnostic slow-request / GC log thresholds
 │   ├── torch_threads.py            Native-math thread count for the server process
@@ -891,7 +896,9 @@ protected by `_state_lock` (a `threading.RLock`):
 | `textsort_suggestions` | `list[str]` | `DetectorContext` | Text queries that received a Good vote (most recent last) |
 
 Other per-context values are reached through accessor functions rather than
-proxies: `get_min_precision()` / `set_min_precision()` (per detector),
+proxies: `get_beta()` / `set_beta()` (per detector, seeded from the `beta`
+setting; the balance that draws the line, #4413), `line_knobs()`
+(`{"beta": b}`, what every retrain and re-cut passes on),
 `get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
 only truly global (cross-dataset) state is `autorun_extractors` /
 `autorun_localizers` in `vtsearch/autorun_processors.py`.
@@ -909,15 +916,15 @@ field lists — this document names the tiers and the shape, not every key.
   `browse_signpost_vocab`, `default_settings_source`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
   everything else — the preferences a user arrives with. `volume`, `theme`,
-  `min_precision`, `enrich_descriptions`, `calibrate_count`,
+  `beta`, `enrich_descriptions`, `calibrate_count`,
   `calibration_fraction`, `audio_playing`, `show_animations`, `show_usage_bars`,
   `show_metadata`,
   the `browse_*` canvas preferences, `grid_icon_size_*`, `focus_mode_*`,
   `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
   `settings_source`, `achievement_state`, and the
-  **Auto-Find** keys `autofind_detectors`, `autofind_exporter`,
-  `autofind_exporter_field_values`, and `autorun_on_import` (whether a web
-  import runs the AutoRun detectors; the Add Dataset checkbox's memory).
+  **AutoFind** keys `autofind_detectors`, `autofind_exporter`,
+  `autofind_exporter_field_values`, and `autofind_on_import` (whether a web
+  import runs the AutoFind detectors; the Add Dataset checkbox's memory).
 
 Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
@@ -934,7 +941,7 @@ than being re-plumbed per knob.
 
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.
-The Auto-Find keys read through to the server file for the built-in `default`
+The AutoFind keys read through to the server file for the built-in `default`
 user (CLI / single-user back-compat); see `_DEFAULT_USER_FALLBACK_KEYS`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).
@@ -981,7 +988,7 @@ per-detector state in `DetectorContext` objects:
 | Context | Key state |
 |---------|-----------|
 | `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins |
-| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `min_precision`, `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `verification_classifier`, `threshold`, the calibration / anchored-cut / precision-floor caches, the ranking the line keeps a set of (`line_ranking`) and the floor's spot check (`precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
+| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `beta` / `beta_seeded` (the balance, #4413), `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`, the calibration / anchored-cut caches (and `precision_floor_cache`, always `None` since #4362), the ranking the line keeps a set of (`line_ranking`) and the line's spot check (`precision_check`, `precision_check_run`; the balance's walk), the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the
 "No Persisted Vectors or MLPs" rule in `CLAUDE.md`.  Origins are the persisted
@@ -1117,7 +1124,7 @@ the prior thread-local automatically), so per-user writes — autopilot toggles,
 sync-source exports — land in the right file. A single-file
 `data/settings.json` that pre-dates the split is **not** migrated: its
 per-user keys simply have no effect where they sit, and the file is left as
-written (the one exception is the Auto-Find trio, which the built-in `default`
+written (the one exception is the AutoFind trio, which the built-in `default`
 user reads through to — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
 
 ---

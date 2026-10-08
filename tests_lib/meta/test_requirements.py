@@ -9,6 +9,7 @@ catches that class of bug at CI time.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -121,4 +122,67 @@ def test_slim_requirements_include_image_deps(req_file: Path) -> None:
         f"{req_file.name} ships image embedders but is missing: {sorted(missing)}\n"
         "Add them to that file under the PyTorch heading so they resolve against "
         "the same wheel index as torch."
+    )
+
+
+# Packages held to the same version bound in every environment. pandas is held
+# on one major (#4381; 3 since #4390) because its majors differ in both inline
+# annotations and runtime semantics. The slim files install the app with `--no-deps -e .`, so
+# pyproject.toml's bound never reaches their images, and each file has to repeat
+# it. Otherwise lifting the bound in pyproject.toml alone would silently leave
+# those images on the old major.
+_SAME_BOUND_EVERYWHERE = ("pandas",)
+
+
+def _split_requirement(line: str) -> tuple[str, str]:
+    """``"pandas<3  # why"`` -> ``("pandas", "<3")``."""
+    line = line.split("#", 1)[0].strip()
+    name = re.split(r"[>=<!~;\[\]\s]", line)[0]
+    return _normalise(name), line[len(name) :].replace(" ", "")
+
+
+def _file_bounds(path: Path) -> dict[str, str]:
+    bounds: dict[str, str] = {}
+    for raw in path.read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line and not line.startswith("-"):
+            name, spec = _split_requirement(line)
+            bounds[name] = spec
+    return bounds
+
+
+def _pyproject_bounds() -> dict[str, str]:
+    deps = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"]["dependencies"]
+    return dict(_split_requirement(dep) for dep in deps)
+
+
+_BOUND_CASES = [
+    (req_file, package)
+    for req_file in _SLIM_FILES
+    for package in _SAME_BOUND_EVERYWHERE
+    if package in _file_bounds(req_file)
+]
+
+
+def test_same_bound_packages_are_declared() -> None:
+    # Guard the parametrisation below: a package missing from pyproject.toml,
+    # or declared in no slim file, would leave nothing for it to check.
+    pyproject = _pyproject_bounds()
+    for package in _SAME_BOUND_EVERYWHERE:
+        assert package in pyproject, f"pyproject.toml no longer declares {package}"
+        assert any(p == package for _, p in _BOUND_CASES), f"no slim requirements file declares {package}"
+
+
+@pytest.mark.parametrize(
+    ("req_file", "package"),
+    _BOUND_CASES,
+    ids=[f"{f.name}-{p}" for f, p in _BOUND_CASES],
+)
+def test_slim_requirements_repeat_pyproject_bound(req_file: Path, package: str) -> None:
+    expected = _pyproject_bounds()[package]
+    declared = _file_bounds(req_file)[package]
+    assert declared == expected, (
+        f"{req_file.name} declares {package}{declared or ' (unbounded)'}, but pyproject.toml "
+        f"declares {package}{expected or ' (unbounded)'}. The slim images install the app "
+        "`--no-deps`, so they only get the bound this file gives them; change both together."
     )

@@ -36,7 +36,7 @@
 @if (loadingTask() && !loadingTask()!.error) {
   <!-- Inline progress: replace the middle columns with a progress bar. For a
        projection build (the Browse button's pre-build) we keep the actions
-       column so the Browse eye stays put and waggles, mirroring how Find/Train
+       column so the Browse eye stays put and waggles, mirroring how Test/Train
        waggle while their job runs; a plain dataset load replaces the actions
        column too. -->
   <td [attr.colspan]="taskKind() === 'projection' ? columnOrder().length : columnOrder().length + 1">
@@ -48,7 +48,7 @@
       [eta]="taskProgressInfo.eta"
       [bar]="taskBar"
       [smooth]="true"
-      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : effectiveTaskKind === 'autorun' ? 'Stop this AutoRun' : 'Cancel this dataset load'"
+      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : effectiveTaskKind === 'autofind' ? 'Stop this AutoFind' : effectiveTaskKind === 'find' ? 'Stop this Find' : 'Cancel this dataset load'"
       [cancelling]="taskCancelling"
       (cancel)="onCancelTask()"
     />

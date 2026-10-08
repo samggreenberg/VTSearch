@@ -23,11 +23,10 @@ export type VoteFlow =
  * Recorded at click time because the surfacing context is *not
  * re-derivable* — `sortOrder` is ephemeral client state and the model behind
  * `score` is overwritten by the next retrain — so a vote not annotated now is
- * annotated never. One server-side reader changes behaviour: the precision
- * floor calibrates its promise only on votes drawn off the learned sort
- * (`calibrates_precision` in `vtscore/datasets/vote_provenance.py`, #4245), so
- * `sort_kind` and `select_mode` here decide which votes count as evidence.
- * See also `docs/plans/provenance-partitioned-calibration.md`.
+ * annotated never. No server-side reader changes a threshold today: the one
+ * that did, the precision estimate's evidence filter (#4245), retired with the
+ * estimate in #4362. See `docs/plans/provenance-partitioned-calibration.md`
+ * for the use still gated on an experiment.
  *
  * Deliberately narrower than the generated `VoteProvenance` model, which
  * carries every value the wire format allows including the ones only the

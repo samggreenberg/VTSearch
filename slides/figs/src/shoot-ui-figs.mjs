@@ -10,7 +10,8 @@
  *
  *   steps          `figs/ui-steps-*[.buildN].webp`         — the same session,
  *                                                            numbered (#4202)
- *   make-detector  `figs/ui-make-detector[.buildN].webp`  — name the concept
+ *   make-detector  `figs/ui-make-detector[.buildN].webp`  — an empty app, a pile,
+ *                                                            then name the concept
  *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly
  *   find           `figs/ui-find*.webp`                    — score unseen media
  *   region-voting  `figs/ui-region-voting.webp`           — vote on a region
@@ -21,15 +22,16 @@
  * `find` runs. Nothing is staged through the API that a slide shows being done
  * by hand.
  *
- * The `steps` group is the Step-By-Step section's figures: the moments of the
+ * The `steps` group is the Instruction section's figures: the moments of the
  * session a user has to click through, photographed a second time with red
  * numbered markers on the controls (`scripts/screenshots/callouts.mjs`). Where
  * a moment is also an intro frame, it is shot twice in a row — clean, then
  * numbered — so the two sections of the deck show one session, not two. Nothing is staged through the API that the slide claims was done by
  * hand: `train-loop` votes by clicking Good and Bad, and which button it
- * clicks is decided by the filename of whatever autopilot chose to serve — so
- * the piles that accumulate in the right-hand panel are a real session's, and
- * the ranking `find` then shows is a real trained head's.
+ * clicks is decided by the filename of whatever autopilot chose to serve — the
+ * picks of a spot check autopilot opens included — so the piles that
+ * accumulate in the right-hand panel are a real session's, and the ranking
+ * `find` then shows is a real trained head's.
  *
  * One output of the `find` group is not a screenshot at all.
  * `figs/ui-find-grid.webp` is a contact sheet of the top of that ranking with
@@ -168,9 +170,12 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // laptops on a contact sheet, and the honest fix is to answer more questions
 // rather than to photograph fewer of the results (#3779). Still inside the
 // twenty minutes the deck says the whole task is worth.
+//
+// A spot check's answers count towards all three (`answerSpotCheck`): they are
+// votes, and they land in the same piles.
 const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
-// The numbered markers on the Step-By-Step frames, scaled for the slot. The
+// The numbered markers on the Instruction frames, scaled for the slot. The
 // app is drawn at about 0.74x on the slide (870 of 1180 CSS px), and the
 // numbers are text the room has to read, so they answer to the 20px type
 // floor (`slides/STYLE.md`): the drawer's 23px digit at 1.3x lands at 22px.
@@ -208,6 +213,27 @@ const DEFAULT_LAYOUT = {
   panel_pct_left: { image: 260 },
   panel_pct_right: { image: 300 },
 };
+// The Label view for the train loop, narrowed on the right to two columns of
+// votes rather than three (#4443). The piles that grow there are the slide's
+// evidence that answers accumulate, not its subject: at three columns they
+// took a quarter of the app and pulled the eye off the item in the middle,
+// which is the one thing on screen the audience is being asked to judge. The
+// centre gets the width back. The panel snaps to whole grid columns
+// (`snapPanelWidthToGridColumns`), so this is a value inside the two-column
+// band, and `shootTrainLoop` checks the column count rather than trusting it.
+const TRAIN_LAYOUT = {
+  ...DEFAULT_LAYOUT,
+  panel_pct_right: { image: 215 },
+};
+const TRAIN_VOTE_COLUMNS = 2;
+// What the Find slide's dashboard says the production pile holds (#4443). The
+// pile is 240 photographs, because that is what embeds on a laptop in the time
+// a re-shoot is worth; the scale the tool is *for* is tens of thousands, and a
+// slide that says 240 tells the room the tool is a way to search a folder they
+// could have scrolled. So the count cell is painted over for that one frame
+// and its numbered twin — the only number in the session that is not the
+// app's own, and it is not a number any later slide computes from.
+const PROD_ITEMS_SHOWN = '10,000';
 
 const log = (...a) => console.log('[slide-shots]', ...a);
 const app = appClient(APP, log);
@@ -266,7 +292,7 @@ function compose(png, name) {
 /**
  * Shoot the page as it stands with *callouts* drawn over it, then take them off.
  *
- * The Step-By-Step frames are the session's own moments with numbers on them,
+ * The Instruction frames are the session's own moments with numbers on them,
  * so the caller shoots the clean frame (if the intro wants one) and this one
  * back to back, without the page changing in between.
  */
@@ -377,9 +403,10 @@ async function deselectAll(page, tag) {
  * the one we want: selection persists server-side, so a rerun (or the previous
  * shot's fixture) can leave the wrong rows ticked.
  *
- * Match the name cell exactly, not the row's text — `photos` is a substring of
- * `photos-prod`, and a substring match ticks both, which leaves Train and Find
- * permanently disabled and looks exactly like a hung page.
+ * Match the name cell exactly, not the row's text — one dataset's name can be
+ * a substring of another's (the training pile was once `photos`, inside
+ * `photos-prod`), and a substring match ticks both, which leaves Train and
+ * Find permanently disabled and looks exactly like a hung page.
  */
 async function selectOnly(page, tag, name) {
   const rows = page.locator(tag);
@@ -393,6 +420,42 @@ async function selectOnly(page, tag, name) {
     await box.click();
     await page.waitForTimeout(350);
   }
+}
+
+/**
+ * Fail the run unless the row called *name* is already ticked.
+ *
+ * The Instruction slides tell the user there is nothing to tick: a dataset or
+ * detector that has just been added is selected on its own (the dashboard's
+ * `reconcileSelection`), so Train and Find are one click (#4443). The harness
+ * still drives selection itself (`selectOnly`) so a rerun cannot shoot the
+ * wrong rows, which means it would also paper over the app no longer doing
+ * that — so check first.
+ */
+async function assertTicked(page, tag, name) {
+  const row = page.locator(tag).filter({
+    has: page.locator('.name-cell', { hasText: new RegExp(`^\\s*${name}\\s*$`) }),
+  });
+  const state = await row.first().locator('.select-checkbox').first().getAttribute('aria-checked');
+  if (state !== 'true') {
+    throw new Error(`${name} was not selected on its own; the Instruction slides say it is (#4443)`);
+  }
+}
+
+/** Paint the # ITEMS cell of the row called *name*. See `PROD_ITEMS_SHOWN`. */
+async function paintItemCount(page, name, shown) {
+  const painted = await page.evaluate(({ name, shown }) => {
+    const table = [...document.querySelectorAll('tr[vt-dataset-card]')][0]?.closest('table');
+    const headers = [...(table?.querySelectorAll('thead th') ?? [])];
+    const col = headers.findIndex((th) => /#\s*items/i.test(th.textContent));
+    const row = [...document.querySelectorAll('tr[vt-dataset-card]')]
+      .find((r) => r.querySelector('.name-cell')?.textContent.trim() === name);
+    const cell = row?.children[col];
+    if (col < 0 || !cell) return false;
+    cell.textContent = shown;
+    return true;
+  }, { name, shown });
+  if (!painted) throw new Error(`no # ITEMS cell for ${name} on the dashboard`);
 }
 
 async function openDashboard(page) {
@@ -417,10 +480,15 @@ async function openDashboard(page) {
  * `shownPath`) by setting the element's value without an input event, which
  * leaves the form's model — and so the import — on the real path.
  */
-async function shootImport(page, name, figure) {
+async function shootImport(page, name, figure, clean = null) {
   await openDashboard(page);
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
+  // The empty app is also the intro's first frame (#4443): `make-detector`
+  // opens on the dashboard's two empty cards, each pointing at its own **+**,
+  // before the pile arrives — the arrow to the detectors' **+** on the next
+  // frame reads as the second of two, not as an arrow from nowhere.
+  if (clean) await shoot(page, clean);
   await shootNumbered(page, `${figure}.build1`, [step(1, 'button[title="Import a new dataset"]:not(.inline-add-btn)')]);
 
   await page.locator('button[title="Import a new dataset"]:not(.inline-add-btn)').click();
@@ -458,22 +526,29 @@ async function shootImport(page, name, figure) {
 /**
  * Step 2 — name the concept.
  *
- * Three intro pages, and they are the clicks: the dashboard with a pile of
+ * Four intro pages, and they are the clicks: the empty dashboard (shot by
+ * `shootImport`, before the pile is imported), the dashboard with a pile of
  * media and no detector, the dialog, the dialog with the concept written into
  * it. The dataset row is selected first because the modal takes its media type
  * and its embedder from whatever is active — a detector created against
  * nothing is a detector the next two shots could not use.
  *
- * The first and last of them are shot again, numbered, for the Step-By-Step
- * slide: the **+**, then the phrase, the name, and Create.
+ * The name is left as the dialog fills it in (#4443): the user types one word,
+ * and "Book detector" is the dialog's own suggestion for it. Typing a name of
+ * the harness's choosing would put a step on the slide that nobody has to do.
+ *
+ * The second and last of them are shot again, numbered, for the Instruction
+ * slide: the **+**, then the phrase and Create — no number on the name, which
+ * is filled in for the user.
  */
 async function shootMakeDetector(page) {
   await openDashboard(page);
+  await assertTicked(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
   await selectOnly(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
   await deselectAll(page, 'tr[vt-detector-card]');
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
-  await shoot(page, 'ui-make-detector.build1');
+  await shoot(page, 'ui-make-detector.build2');
   await shootNumbered(page, 'ui-steps-make-detector.build1', [
     step(1, 'button[title="Create a new detector"]:not(.inline-add-btn)'),
   ]);
@@ -481,19 +556,21 @@ async function shootMakeDetector(page) {
   await page.locator('button[title="Create a new detector"]:not(.inline-add-btn)').click();
   await page.waitForSelector('.new-detector-form', { timeout: 20000 });
   await page.waitForTimeout(900);
-  await shoot(page, 'ui-make-detector.build2');
+  await shoot(page, 'ui-make-detector.build3');
 
   // The text tab is the default, and it is the one the deck's argument needs:
   // the whole claim of the slide before this is that the concept is a phrase
   // somebody can say and not a query they can write.
   await page.locator('.example-panel input.form-input').first().fill(BOOK_TEXT);
-  await page.locator('#detector-name').fill(BOOK_DETECTOR);
   await page.waitForTimeout(700);
+  const named = await page.locator('#detector-name').inputValue();
+  if (named !== BOOK_DETECTOR) {
+    throw new Error(`the dialog named the detector ${named}, not ${BOOK_DETECTOR} (book-example.mjs)`);
+  }
   await shoot(page, 'ui-make-detector');
   await shootNumbered(page, 'ui-steps-make-detector', [
     step(2, '.example-panel input.form-input'),
-    step(3, '#detector-name'),
-    step(4, { selector: 'vt-modal .btn--primary', hasText: 'Create' }, 'right'),
+    step(3, { selector: 'vt-modal .btn--primary', hasText: 'Create' }, 'right'),
   ]);
 
   // The detector is still created — the next two groups are the same session —
@@ -516,9 +593,14 @@ async function shootMakeDetector(page) {
  * grow through the build are the piles a person would have produced, and the
  * one thing a staged screenshot cannot show — that the tool asks about items
  * it cannot call, and is sometimes told no — is visible in them.
+ *
+ * Null when Autopilot's spot check stood over the item and nothing was cast:
+ * the caller answers the check (`answerSpotCheck`) and asks again, about
+ * whatever is served once it closes.
  */
 async function voteServed(page) {
-  const viewer = page.locator('img.image-element').first();
+  // The centre's own viewer: the spot check draws its picks in another.
+  const viewer = page.locator(CENTRE_ITEM).first();
   // Read the served item only once the viewer has stopped changing. The button
   // is chosen from this alt, so a read taken mid-swap decides the vote from one
   // item and casts it on another — which is how a stack of paperbacks ended up
@@ -542,14 +624,30 @@ async function voteServed(page) {
   if (!served(before)) throw new Error(`the viewer never settled on a served item (alt ${before})`);
   const good = isBook(before);
   if ((await viewer.getAttribute('alt')) !== before) return voteServed(page);
-  await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
-  // The vote retrains the head and re-sorts, and autopilot then serves a
-  // different item. Waiting on the served item *changing* waits for all of it;
-  // waiting on a fixed delay waits for whichever part happens to be slowest.
+  // The check opens when a retrain lands, which is at no moment this script
+  // chooses (#4556): it can be up already, or come up while the click waits.
+  // Either way its backdrop takes the click, so nothing is cast.
+  if (await spotCheckOpen(page)) return null;
+  const cast = await page
+    .locator(`vt-center-panel ${good ? '.btn-good' : '.btn-bad'}`)
+    .first()
+    .click()
+    .then(
+      () => true,
+      async (err) => {
+        if (await spotCheckOpen(page)) return false;
+        throw err;
+      }
+    );
+  if (!cast) return null;
+  // Autopilot serves the next item as soon as the vote lands, and retrains
+  // after it: the re-sort is scheduled, not awaited (`scheduleLearnedSort`).
+  // So the served item *changing* is the vote done, and the retrain — the
+  // thing that can open the spot check — is still to come.
   await page
     .waitForFunction(
-      (prev) => document.querySelector('img.image-element')?.alt !== prev,
-      before,
+      ({ sel, prev }) => document.querySelector(sel)?.alt !== prev,
+      { sel: CENTRE_ITEM, prev: before },
       { timeout: 120000 }
     )
     .catch(() => {});
@@ -585,6 +683,118 @@ async function assertVoted(filename, good) {
   }
 }
 
+/** The item in the Label view's centre, as against a spot-check pick. */
+const CENTRE_ITEM = 'vt-center-panel img.image-element';
+const SPOT_CHECK = 'vt-spot-check-modal';
+
+const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) > 0;
+
+/**
+ * Answer Autopilot's spot check, if it has one open, as truthfully as the loop
+ * votes; the answers, Good as true, in the order they were given.
+ *
+ * Autopilot runs the check itself when the labels separate weakly (#4496):
+ * from the tenth vote, once a retrain lands, which is a moment this script
+ * does not choose (#4556). Its picks are the loop's question asked in a dialog
+ * and its answers are ordinary votes, so it is answered the same way — by the
+ * pick's file name, one at a time, round after round until the walk ends —
+ * and its votes join the piles the last page shows. That is the session a
+ * user has. Cancelling would not be: the check stays due, and comes back.
+ *
+ * It is not photographed. The train-loop slide's subject is one question
+ * repeated, and a frame of the check would need a slide of its own saying why
+ * Autopilot asks, which the intro has no room to make.
+ *
+ * Unlike the centre, a pick cannot be swapped under the read: the check moves
+ * to another only when it is voted, so the name read is the pick the click
+ * answers.
+ */
+async function answerSpotCheck(page) {
+  const modal = page.locator(SPOT_CHECK);
+  if (!(await modal.count())) return [];
+  log('autopilot opened a spot check; answering it');
+  const pick = modal.locator('.pick-stage img.image-element');
+  const answers = [];
+  for (let guard = 0; guard < 400 && (await modal.count()); guard++) {
+    // A refused start or a lost round is not something to photograph around.
+    const error = modal.locator('.error-text');
+    if (await error.count()) throw new Error(`the spot check failed: ${(await error.first().textContent()).trim()}`);
+    if (await modal.locator('.check-result').count()) {
+      log(`spot check: ${(await modal.locator('.check-result-headline').textContent()).trim()}`);
+      await modal.getByRole('button', { name: 'Done', exact: true }).click();
+      break;
+    }
+    // Nothing to read while it draws a round; and a pick's file name, never
+    // the viewer's placeholder, as in `voteServed`.
+    const name = (await pick.count()) ? await pick.first().getAttribute('alt') : null;
+    if (!/^[^/\s]+\/[^/]+\.\w+$/.test(name || '')) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+    const good = isBook(name);
+    await modal.locator(good ? '.btn-good' : '.btn-bad').click();
+    answers.push({ name, good });
+    // On to the next pick; or, on a round's last, the round goes to the server
+    // with the pick still on screen, and the next round or the result replaces it.
+    await page.waitForFunction(
+      ({ sel, prev }) => {
+        const m = document.querySelector(sel);
+        if (!m || m.querySelector('.check-result, .error-text')) return true;
+        return m.querySelector('.pick-stage img.image-element')?.alt !== prev;
+      },
+      { sel: SPOT_CHECK, prev: name },
+      { timeout: 120000 }
+    );
+  }
+  await modal.waitFor({ state: 'detached', timeout: 30000 });
+  for (const { name, good } of answers) await assertVoted(name, good);
+  return answers.map((a) => a.good);
+}
+
+/**
+ * Watch the page's learned sorts, so the train loop can wait for the last
+ * vote's retrain rather than for a delay.
+ *
+ * `settled()` resolves once none has been in flight for `SORT_QUIET_MS`: a
+ * retrain is a POST and then a poll of its job, and the quiet has to outlast
+ * the poll's slow interval (2s) or a gap between polls reads as settled. A
+ * sort a newer one supersedes is aborted, which ends its request too.
+ */
+const LEARNED_SORT = /^\/api\/learned-sort(\/result)?$/;
+const SORT_QUIET_MS = 3500;
+
+function watchLearnedSorts(page) {
+  const pending = new Set();
+  let last = Date.now();
+  const sort = (req) => LEARNED_SORT.test(new URL(req.url()).pathname);
+  const start = (req) => {
+    if (!sort(req)) return;
+    pending.add(req);
+    last = Date.now();
+  };
+  const end = (req) => {
+    if (!pending.delete(req)) return;
+    last = Date.now();
+  };
+  page.on('request', start);
+  page.on('requestfinished', end);
+  page.on('requestfailed', end);
+  return {
+    async settled(timeout = 300000) {
+      const deadline = Date.now() + timeout;
+      while (pending.size || Date.now() - last < SORT_QUIET_MS) {
+        if (Date.now() > deadline) throw new Error('the learned sort never settled');
+        await page.waitForTimeout(250);
+      }
+    },
+    stop() {
+      page.off('request', start);
+      page.off('requestfinished', end);
+      page.off('requestfailed', end);
+    },
+  };
+}
+
 /**
  * Step 3 — answer, and answer again.
  *
@@ -594,38 +804,55 @@ async function assertVoted(filename, good) {
  * for the reason `collapseIntoAutopilot` gives — what is left is the item and
  * the two buttons.
  *
- * The Step-By-Step slide gets two numbered pages out of it: the dashboard with
- * the pile and the detector ticked and Train waiting, and the first question
- * with Good and Bad marked.
+ * The Instruction slide gets two numbered pages out of it: the dashboard with
+ * Train waiting — the pile and the detector are already ticked, because each
+ * was selected the moment it was added, so the only number is on Train
+ * (#4443) — and the first question with Good and Bad marked.
  */
 async function shootTrainLoop(page) {
+  // The narrower right panel goes in first, and the page is reloaded to read
+  // it, for the reason `shootFind` gives. The dashboard has no media panels.
+  await app.api('/api/settings', { method: 'PUT', body: TRAIN_LAYOUT });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
+  await assertTicked(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
+  await assertTicked(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
   await selectOnly(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
   await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
   await page.mouse.move(700, 60);
   await page.waitForTimeout(400);
-  await shootNumbered(page, 'ui-steps-train.build1', [
-    step(1, datasetRow(TRAIN_DATASET)),
-    step(2, detectorRow(BOOK_DETECTOR)),
-    step(3, dashButton('Train')),
-  ]);
+  await shootNumbered(page, 'ui-steps-train.build1', [step(1, dashButton('Train'))]);
 
+  const sorts = watchLearnedSorts(page);
   await enterLabelView(page, TRAIN_DATASET, BOOK_DETECTOR);
   await collapseIntoAutopilot(page);
   await page.waitForSelector('.btn-good', { timeout: 120000 });
   await page.waitForTimeout(1500);
   await shootNumbered(page, 'ui-steps-train', [
-    step(4, '.btn-good', 'right'),
-    step(5, '.btn-bad'),
+    step(2, '.btn-good', 'right'),
+    step(3, '.btn-bad'),
   ]);
 
   let cast = 0;
+  let checked = 0;
   const tally = { good: 0, bad: 0 };
+  const count = (good) => {
+    tally[good ? 'good' : 'bad']++;
+    cast++;
+  };
+  const answerCheck = async () => {
+    const answers = await answerSpotCheck(page);
+    answers.forEach(count);
+    checked += answers.length;
+  };
+  // One vote on the centre item, answering whatever spot check is in its way.
+  const answer = async () => {
+    let good;
+    while ((good = await voteServed(page)) === null) await answerCheck();
+    count(good);
+  };
   for (const stage of TRAIN_STAGES) {
-    while (cast < stage) {
-      tally[(await voteServed(page)) ? 'good' : 'bad']++;
-      cast++;
-    }
+    while (cast < stage) await answer();
     const page_no = TRAIN_STAGES.indexOf(stage) + 1;
     await shoot(page, `ui-train-loop.build${page_no}`);
   }
@@ -633,12 +860,32 @@ async function shootTrainLoop(page) {
     cast < TRAIN_FINAL.maxVotes
     && (tally.good < TRAIN_FINAL.good || tally.bad < TRAIN_FINAL.bad)
   ) {
-    tally[(await voteServed(page)) ? 'good' : 'bad']++;
-    cast++;
+    await answer();
   }
-  log(`train loop: ${cast} votes — ${tally.good} good / ${tally.bad} bad`);
+  // The last vote's retrain is still to land, and it can open the check: the
+  // last page is the session once it is still, not a frame before a dialog.
+  await sorts.settled();
+  while (await spotCheckOpen(page)) {
+    await answerCheck();
+    await sorts.settled();
+  }
+  sorts.stop();
+  log(`train loop: ${cast} votes (${checked} in spot checks) — ${tally.good} good / ${tally.bad} bad`);
   if (!tally.bad) throw new Error('no Bad votes: the detector has nothing to separate');
+  await assertVoteColumns(page);
   await shoot(page, 'ui-train-loop');
+}
+
+/** Fail the run unless the vote piles are `TRAIN_VOTE_COLUMNS` wide. */
+async function assertVoteColumns(page) {
+  const columns = await page.evaluate(() => {
+    const cells = [...document.querySelectorAll('.panel-right .vote-entry')];
+    const top = cells.length ? cells[0].getBoundingClientRect().top : 0;
+    return cells.filter((c) => Math.abs(c.getBoundingClientRect().top - top) < 2).length;
+  });
+  if (columns !== TRAIN_VOTE_COLUMNS) {
+    throw new Error(`the vote piles are ${columns} columns wide, not ${TRAIN_VOTE_COLUMNS}: adjust TRAIN_LAYOUT`);
+  }
 }
 
 /**
@@ -662,7 +909,7 @@ async function scrollResults(page, to) {
  * Two slides out of one session. `ui-find[.build1]` is the click-by-click one:
  * the dashboard with the *production* pile selected beside the detector, then
  * the top of the ranking it produces. `photos-prod` does not share a single
- * frame with `photos` (`coco_fixture.DISJOINT_FROM`), which is the only reason
+ * frame with `photos-train` (`coco_fixture.DISJOINT_FROM`), which is the only reason
  * that slide is allowed to say what it says.
  *
  * `ui-find-line` is the same screen scrolled down to the line the tool drew
@@ -679,27 +926,38 @@ async function shootFind(page) {
   await app.api('/api/settings', { method: 'PUT', body: FIND_LINE_LAYOUT });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
+  for (const [tag, name] of [['tr[vt-dataset-card]', TEST_DATASET], ['tr[vt-detector-card]', BOOK_DETECTOR]]) {
+    await assertTicked(page, tag, name).then(
+      () => log(`find: ${name} already ticked`),
+      () => log(`find: ${name} NOT ticked on arrival`),
+    );
+  }
   await selectOnly(page, 'tr[vt-dataset-card]', TEST_DATASET);
   await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
+  await paintItemCount(page, TEST_DATASET, PROD_ITEMS_SHOWN);
   await shoot(page, 'ui-find.build1');
   await shootNumbered(page, 'ui-steps-find.build1', [
     step(1, datasetRow(TEST_DATASET)),
     step(2, detectorRow(BOOK_DETECTOR)),
-    step(3, dashButton('Find')),
+    step(3, dashButton('Test')),
   ]);
 
-  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  // Test, not Find: since #4525 the Find button runs AutoFind and opens no view.
+  await page.getByRole('button', { name: 'Test', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
-  await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
   // photographing a progress bar.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 })
     .catch(() => {});
+  // Test opens on its Autopilot tab, which hides the ranking (#4524); the
+  // slides show the ranking, on the Review tab.
+  await page.locator('.left-tab[title^="Review"]').first().click();
+  await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   await page.waitForTimeout(3000);
 
-  // The Step-By-Step slide's last page: the results a user lands on, best
+  // The Instruction slide's last page: the results a user lands on, best
   // first, and the button that sends them somewhere.
   await shootNumbered(page, 'ui-steps-find', [
     step(4, '.panel-left', 'corner'),
@@ -751,7 +1009,7 @@ async function shootFind(page) {
  * The Find slide's payoff used to be the verification screen — the results in a
  * left-hand panel with the viewer beside them — which is a picture of somebody
  * checking their answers rather than a picture of what they got. Not viewing
- * results in the tool is a feature: an autorun detector mails a list of
+ * results in the tool is a feature: an AutoFind detector mails a list of
  * references and nobody opens anything (#3779). So the reveal is the frames.
  *
  * And the frames are twelve out of the production pile's `book/` folder, not
@@ -897,7 +1155,7 @@ async function shootSession(page) {
   if (strangers.length) {
     log(`warning: the first frame is meant to show an empty app, but it holds ${strangers.join(', ')}`);
   }
-  await shootImport(page, TRAIN_DATASET, 'ui-steps-load-train');
+  await shootImport(page, TRAIN_DATASET, 'ui-steps-load-train', 'ui-make-detector.build1');
   await shootMakeDetector(page);
   await shootTrainLoop(page);
   await shootImport(page, TEST_DATASET, 'ui-steps-load-test');

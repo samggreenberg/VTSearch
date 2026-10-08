@@ -171,11 +171,13 @@ def reset_state():
     :func:`tests_shared.state_reset.reset_shared_state`, which the library
     suite calls too.  Only the app-tier extras are spelled out here.
     """
-    from vtsearch.autorun_detectors import clear_autorun_runs
+    from vtsearch.autofind import clear_autofind_runs
     from vtsearch.autorun_processors import clear_all_autorun
+    from vtsearch.import_hooks import clear_import_hooks
 
     clear_all_autorun()
-    clear_autorun_runs()
+    clear_autofind_runs()
+    clear_import_hooks()
 
     reset_shared_state(_test_medias_snapshot)
 
@@ -184,7 +186,7 @@ def reset_state():
     # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
     # behaviour, which wipes the module-level ``_core_config_builder``
     # installed at app startup.  Re-register defensively so any later test
-    # that calls ``CoreConfig.from_settings()`` (e.g. via ``get_min_precision()``)
+    # that calls ``CoreConfig.from_settings()`` (e.g. via ``get_beta()``)
     # still has a backing implementation.
     from vtsearch.shim import register_app_config_builder
 
@@ -425,6 +427,24 @@ def client():
     with app_module.app.test_client() as c:
         _install_active_context_headers(c)
         yield c
+
+
+@pytest.fixture
+def schedule_only(monkeypatch):
+    """The unchecked line at the balance's cap alone: the mixture's proposal (#4389, #4413) set aside.
+
+    Before any check the line keeps the smaller of the cap and the mixture's
+    F-beta argmax; on a fixture corpus of a few dozen synthetic items the
+    argmax is whatever the fit says that day.  For tests whose subject is the
+    cap, the walk or a carrier of the state, not the mixture - that rule is
+    pinned in ``tests_lib/sorting/test_balance.py``.  Both seams: the package
+    name the app's local imports read, and the harness's module binding.
+    """
+    import vtscore.eval.voting_iterations as harness
+    import vtscore.training.thresholds as thresholds
+
+    monkeypatch.setattr(thresholds, "fbeta_count", lambda *_a, **_k: None)
+    monkeypatch.setattr(harness, "fbeta_count", lambda *_a, **_k: None)
 
 
 def _wait_for_job(job_manager, *, timeout: float = 30.0) -> None:

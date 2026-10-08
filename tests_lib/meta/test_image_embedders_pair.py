@@ -18,11 +18,15 @@ These tests make the copy checkable instead of aspirational:
 * both must install the same requirements file, each naming its own wheel index
   (that index is the whole reason the requirements pair was collapsed into one
   file -- see issue #3431 -- so a dropped ``--extra-index-url`` would silently
-  put a 2 GB CUDA torch in the CPU image, or a CPU-only torch in the GPU one).
+  put a 2 GB CUDA torch in the CPU image, or a CPU-only torch in the GPU one), and
+* the GPU one must pin torch from its index with ``--index-url`` before that,
+  because an extra index only adds candidates and PyPI's torch can outrank the
+  CUDA index's newest build (#4390).
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -41,8 +45,11 @@ REQUIREMENTS = "requirements/image-embedders.txt"
 # The one axis the shared requirements file deliberately leaves to the caller.
 WHEEL_INDEX = {
     CPU.name: "--extra-index-url https://download.pytorch.org/whl/cpu",
-    GPU.name: "--extra-index-url https://download.pytorch.org/whl/cu121",
+    GPU.name: "--extra-index-url https://download.pytorch.org/whl/cu129",
 }
+
+# The GPU image's torch pin: the same index as the sole source, not an extra one.
+GPU_TORCH_PIN = re.compile(r"(?<![\w-])--index-url https://download\.pytorch\.org/whl/cu129\b")
 
 
 def _shared_body(path: Path) -> str:
@@ -99,6 +106,33 @@ def test_each_dockerfile_names_its_own_wheel_index(dockerfile: Path) -> None:
         "carries no --extra-index-url (that is the only thing the CPU and GPU dependency sets "
         "ever differed by), so without it pip resolves torch from PyPI and the image ships the "
         "wrong build."
+    )
+
+
+def test_gpu_twin_pins_torch_from_its_cuda_index_first() -> None:
+    """``--extra-index-url`` alone let PyPI's torch into the GPU image (#4390).
+
+    pip takes the highest version across every index it is given. The CPU index
+    publishes each release as ``X+cpu``, which sorts above PyPI's plain ``X``, so
+    the CPU twin resolves its own build. The cu129 index stops at 2.13.0, though,
+    and PyPI's 2.14.1 is a CUDA 13 build, so the GPU image shipped it on a CUDA
+    12.9 base whose admitted drivers cannot run it. docker/Dockerfile.gpu and
+    scripts/install.sh already pin torch with ``--index-url`` first.
+    """
+    text = GPU.read_text()
+    pin = GPU_TORCH_PIN.search(text)
+    assert pin, (
+        f"docker/{GPU.name} must install torch with `--index-url "
+        "https://download.pytorch.org/whl/cu129` (PyPI out of the candidate set) before "
+        f"installing {REQUIREMENTS}; with only --extra-index-url, a newer PyPI torch wins."
+    )
+    pinned = text[pin.start() : text.index("&&", pin.start())]
+    assert re.search(r"\btorch\b", pinned) and "torchvision" in pinned, (
+        f"docker/{GPU.name}'s `--index-url` pip call must name torch and torchvision; it reads:\n{pinned}"
+    )
+    assert pin.start() < text.index(f"-r {REQUIREMENTS}"), (
+        f"docker/{GPU.name} must pin torch before installing {REQUIREMENTS}, which would "
+        "otherwise resolve torch itself against PyPI plus the extra index."
     )
 
 

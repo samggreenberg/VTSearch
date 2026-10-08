@@ -1,0 +1,17 @@
+{
+ "pricing_dir": "/expscratch/sgreenberg/empty-sets-4631/handoff",
+ "baselines": {
+  "binary": "/expscratch/sgreenberg/notch-4599/text_baseline-guarded-binary10.csv",
+  "region": "/expscratch/sgreenberg/state-of-the-app/2026-10-06-b1/text_baseline-2seeds-post4136.csv"
+ },
+ "ap": {
+  "binary": [
+   "/expscratch/sgreenberg/state-of-the-app/2026-10-05-b1/analysis-binary",
+   "/expscratch/sgreenberg/state-of-the-app/2026-10-05-b1/analysis-binary-4605"
+  ],
+  "region": [
+   "/expscratch/sgreenberg/state-of-the-app/2026-10-06-b1/analysis-region",
+   "/expscratch/sgreenberg/state-of-the-app/2026-10-06-b1/analysis-region-4605"
+  ]
+ }
+}

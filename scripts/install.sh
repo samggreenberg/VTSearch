@@ -41,6 +41,7 @@ set -euo pipefail
 #   bash scripts/install.sh cu121      # ...
 #   bash scripts/install.sh cu124      # for CUDA 12.4 (V100/Volta, A100, H100)
 #   bash scripts/install.sh cu128      # for CUDA 12.8 (Blackwell; drops Volta)
+#   bash scripts/install.sh cu129      # for CUDA 12.9 (Turing..Blackwell; the tag cuML needs)
 #
 # About the CUDA tag (only relevant to GPU installs): it selects which prebuilt
 # torch wheel you get, and each wheel only ships kernel images for a fixed set
@@ -48,10 +49,14 @@ set -euo pipefail
 # tags: Ampere/Ada work on cu118+, Hopper (H100) on cu121+, Blackwell (B100/B200,
 # RTX 50xx) on cu128+. But the newest wheels also DROP the oldest architectures,
 # so "just use the latest tag" is wrong for old hardware: cu128 dropped Volta
-# (sm_70), so a Tesla V100 needs cu124 (or cu121/cu118), NOT cu128. Rule of
-# thumb: use the oldest tag your driver supports that still covers your GPU.
-# cu124 is a safe default that spans Volta through Hopper, and what the
-# auto-detect picks for those cards.
+# (sm_70), so a Tesla V100 needs cu124 (or cu121/cu118), NOT cu128 or cu129.
+# Rule of thumb: use the newest tag your driver supports that still covers
+# your GPU. cu129 is the default the auto-detect picks for Turing through
+# Blackwell: its torch pins the CUDA 12.9 libraries that RAPIDS >= 26.8 is
+# built on, so it is the only tag on which the optional cuML step below runs
+# (RAPIDS >= 26.8 is the first whose cudf takes the pandas 3 that
+# pyproject.toml pins, #4390). A Volta card, or a driver older than CUDA 12.9,
+# steps down to cu124 (or older) and the app runs UMAP / k-means on the CPU.
 #
 # (VTSearch also smoke-tests CUDA at runtime and falls back to CPU if the
 # installed wheel can't run on the GPU, so a mismatch degrades instead of
@@ -810,7 +815,9 @@ EOF
 # --- CUDA tag resolution -----------------------------------------------------
 # Echo a cuXYZ tag for the GPU. An explicit arg wins; otherwise auto-detect via
 # detect_cuda_tag.py (which prints its reasoning to stderr -> the terminal), and
-# fall back to the safe Volta..Hopper default if it can't tell.
+# fall back to cu124 if it can't tell: the widest wheel (Volta..Hopper), so a GPU
+# we could not identify still gets a torch that runs on it, at the cost of the
+# cuML step (which needs cu129; see vts_install_cuml).
 vts_resolve_cuda_tag() {
     local explicit="${1:-}"
     if [ -n "$explicit" ]; then
@@ -920,7 +927,7 @@ vts_install_cpu() {
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
 
-    vts_progress_step "Checking Python version (>= 3.10)"
+    vts_progress_step "Checking Python version (>= 3.11)"
     # shellcheck source=_check-python.sh
     source "$SCRIPT_DIR/_check-python.sh"
 
@@ -953,17 +960,19 @@ vts_install_cpu() {
 #   - It's a multi-gigabyte RAPIDS stack (cudf, rmm, cupy, ...) and lives on a
 #     separate index (pypi.nvidia.com), so a slow/unreachable index or a
 #     resolver hiccup must NOT abort an otherwise-good GPU install.
-#   - The wheel is CUDA-major-pinned: cu11* tags -> cuml-cu11, cu12* -> cuml-cu12.
-#   - The cu12 wheel is ALSO capped below RAPIDS 26 (see VTS_CUML_CU12_SPEC).
-#     RAPIDS 26.x raised its CUDA floor to require nvidia-nvjitlink-cu12>=12.9,
-#     but the torch CUDA wheels we pin (cu124 = CUDA 12.4 .. cu128 = CUDA 12.8)
-#     top out at 12.8 and no torch wheel ships 12.9 yet, so an UNpinned
-#     cuml-cu12 floats to 26.x and pip dies with an nvjitlink conflict (and
-#     cupy then JIT-compiles cuVS/raft kernels against mismatched CUDA-13 fp8
-#     headers -> "cuda_fp8.hpp: this declaration has no storage class" at fit
-#     time). 25.x declares cuda-toolkit==12.* and resolves cleanly against the
-#     pinned torch. Bump the cap once a torch wheel ships the CUDA minor 26.x
-#     needs. See docs/DEPLOYMENT.md "cuML crashes compiling a kernel".
+#   - The wheel is CUDA-major-pinned: cu12* tags -> cuml-cu12, cu13* -> cuml-cu13.
+#   - RAPIDS is floored at 26.8, and that floor decides WHICH CUDA tags get cuML.
+#     pandas is held at >= 3 everywhere (pyproject.toml, #4381), and cudf, which
+#     cuML depends on, is the first to take pandas 3 at 26.8: an older RAPIDS
+#     would downgrade pandas to 2.x in this very step (#4390). RAPIDS 26.x in
+#     turn requires nvidia-nvjitlink-cu12>=12.9, which only the cu129 torch wheel
+#     pins -- cu124 pins ==12.4.x and cu128 ==12.8.x, so pip reports a conflict
+#     there, and a stack assembled anyway has cupy JIT-compiling cuVS/raft
+#     kernels against mismatched headers ("cuda_fp8.hpp: this declaration has no
+#     storage class" at fit time). So cuML is installed on cu129 (and cu13x)
+#     only; on cu118..cu128 this step is SKIPPED with a message and the app
+#     uses the CPU fallback. See docs/DEPLOYMENT.md "cuML crashes compiling a
+#     kernel".
 #   - RAPIDS ships linux-only wheels for a fixed Python range; on an unsupported
 #     platform/Python this step just warns and the app uses the CPU fallback.
 #
@@ -977,29 +986,41 @@ vts_install_cuml() {
         return 0
     fi
 
-    # The cu12 spec is capped below RAPIDS 26 (whose CUDA-12.9 floor outruns the
-    # torch CUDA wheels we pin); see the header comment above. Override the cap
-    # via VTS_CUML_CU12_SPEC, e.g. once a matching torch wheel exists:
-    #   VTS_CUML_CU12_SPEC='cuml-cu12' bash scripts/install.sh cu128
+    # The spec follows the CUDA tag; see the header comment above for why only
+    # cu129 (and cu13x) get one. VTS_CUML_CU12_SPEC replaces it outright -- and
+    # un-skips the step -- for anyone assembling a different RAPIDS on their own
+    # terms, e.g. RAPIDS 25 on a Volta card at the cost of pandas dropping to 2:
+    #   VTS_CUML_CU12_SPEC='cuml-cu12<26' bash scripts/install.sh cu124
     local cuml_pkg
-    case "$cuda_tag" in
-        cu11*) cuml_pkg="cuml-cu11" ;;
-        *) cuml_pkg="${VTS_CUML_CU12_SPEC:-cuml-cu12<26}" ;;  # cu12x + anything else
-    esac
+    if [ -n "${VTS_CUML_CU12_SPEC:-}" ]; then
+        cuml_pkg="$VTS_CUML_CU12_SPEC"
+    else
+        case "$cuda_tag" in
+            cu13*) cuml_pkg="cuml-cu13>=26.8" ;;
+            cu129) cuml_pkg="cuml-cu12>=26.8" ;;
+            *)
+                echo "  (skipped: cuML needs RAPIDS >= 26.8, the first release whose cudf takes"
+                echo "   the pandas 3 pinned in pyproject.toml, and RAPIDS >= 26.8 needs the CUDA"
+                echo "   12.9 libraries that only the cu129 torch wheel pins; this install is"
+                echo "   ${cuda_tag}. GPU UMAP/k-means will use the CPU fallback. If the GPU is"
+                echo "   Turing or newer and the driver supports CUDA 12.9, re-run as"
+                echo "   'bash scripts/install.sh cu129' to get cuML.)"
+                return 0
+                ;;
+        esac
+    fi
 
-    # Heads-up: cuML depends on NEWER nvidia-*-cu12 runtime wheels than the torch
-    # build pins exactly (e.g. cu124 torch pins ==12.4.x), so installing it upgrades
-    # those libs and pip emits a red "dependency conflicts" report naming torch's
-    # now-unsatisfied pins. This is distinct from the FATAL RAPIDS-26 nvjitlink/fp8
-    # break the cuml-cu12<26 cap above prevents -- this one is cosmetic. That is
-    # EXPECTED and non-fatal -- pip still completes the install and does not roll
-    # anything back, and CUDA 12.x runtimes are compatible across minor versions.
-    # vts_run captures that report into a log instead of letting it scroll past as
-    # a scary red wall (it surfaces only if the install actually fails); the GPU
-    # smoke test below then confirms torch + cuML coexist. This is a multi-GB
-    # RAPIDS download, so the heartbeat's elapsed-time counter is the liveness cue.
-    echo "  (cuML is a large multi-GB download; the heartbeat below shows progress."
-    echo "   A cosmetic pip 'dependency conflicts' report is captured, not shown.)"
+    # On cu129 the two stacks share one set of nvidia-*-cu12 wheels: torch pins
+    # them exactly at 12.9.x and RAPIDS 26.8 accepts those, so pip should install
+    # this cleanly. A red "dependency conflicts" report here means the venv holds
+    # a torch from another tag (a venv built before #4390, or VTS_CUML_CU12_SPEC
+    # pairing a RAPIDS with a torch that pins other CUDA libs); pip still
+    # completes the install and rolls nothing back, and the GPU smoke test below
+    # is what decides whether torch + cuML actually coexist. vts_run captures the
+    # report into a log instead of letting it scroll past (it surfaces only if
+    # the install fails). This is a multi-GB RAPIDS download, so the heartbeat's
+    # elapsed-time counter is the liveness cue.
+    echo "  (cuML is a large multi-GB download; the heartbeat below shows progress.)"
 
     # Isolated pass against the NVIDIA index. vts_run is guarded so `set -e` can't
     # abort the install on failure; the runtime cuML detection degrades to CPU.
@@ -1117,7 +1138,7 @@ vts_install_gpu() {
     vts_maybe_convert_driver_to_dkms
     vts_report_driver_persistence
 
-    vts_progress_step "Checking Python version (>= 3.10)"
+    vts_progress_step "Checking Python version (>= 3.11)"
     # shellcheck source=_check-python.sh
     source "$SCRIPT_DIR/_check-python.sh"
 

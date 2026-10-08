@@ -22,8 +22,9 @@
     </div>
     @if (showPartialLabelsetNote) {
       <p class="info-text partial-labelset-note">
-        Exports only the {{ labelFilter }} examples. Training needs both classes, so this file
-        can't rebuild the detector on its own &mdash; choose <strong>All</strong> for that.
+        Exports only the {{ labelFilter }} examples. A trained detector needs both classes, so this
+        file rebuilds {{ labelFilter === 'good' ? "at most the Goods' centroid" : 'no detector' }} on its
+        own &mdash; choose <strong>All</strong> for the detector.
       </p>
     }
   </div>

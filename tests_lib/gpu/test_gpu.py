@@ -416,7 +416,7 @@ class TestTrainAndScoreGPU:
         finally:
             config.TRAIN_EPOCHS = saved
 
-    def test_with_a_precision_floor(self):
+    def test_with_a_balance(self):
         import vtscore.config as config
 
         saved = config.TRAIN_EPOCHS
@@ -426,7 +426,7 @@ class TestTrainAndScoreGPU:
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
-            results, threshold, _model = train_and_score(clips_dict, good, bad, min_precision=0.75)
+            results, threshold, _model = train_and_score(clips_dict, good, bad, beta=2.0)
             assert len(results) == 20
             assert isinstance(threshold, float)
         finally:
@@ -803,3 +803,33 @@ class TestGPUMemoryCleanup:
         final_mem = torch.cuda.memory_allocated(device)
         # Memory should return close to initial (within 5 MB tolerance for E5)
         assert final_mem - initial_mem < 5_000_000
+
+
+# ---------------------------------------------------------------------------
+# Tiled Stage 1 (#4391): GPU scoring equals the CPU path
+# ---------------------------------------------------------------------------
+
+
+class TestTiledStage1GPU:
+    def test_gpu_page_max_equals_the_cpu_path(self, monkeypatch):
+        from vtscore.training import structural_stage1 as s1
+
+        rng = np.random.default_rng(0)
+        counts = rng.integers(1, 9, size=300)
+        rows = rng.standard_normal((int(counts.sum()), 32)).astype(np.float32)
+        tiles = (rows / np.linalg.norm(rows, axis=1, keepdims=True)).astype(np.float16)
+        starts = np.concatenate([[0], np.cumsum(counts)[:-1]]).astype(np.int64)
+        queries = rng.standard_normal((5, 32)).astype(np.float32)
+        queries /= np.linalg.norm(queries, axis=1, keepdims=True)
+
+        s1._GPU_CACHE.clear()
+        on_gpu = s1._gpu_page_max(tiles, starts, queries)
+        assert on_gpu is not None and s1._GPU_CACHE  # the device copy is kept
+        on_cpu = s1._cpu_page_max(tiles, starts, queries)
+        np.testing.assert_allclose(on_gpu.score, on_cpu.score, atol=1e-5)
+        # #4481: the same best pairs, so the exact scores, and the order, are bit-identical.
+        np.testing.assert_array_equal(on_gpu.tile, on_cpu.tile)
+        np.testing.assert_array_equal(on_gpu.query, on_cpu.query)
+        exact_gpu = s1.exact_page_scores(tiles, queries, on_gpu)
+        monkeypatch.setattr(s1, "_cuda", lambda: False)
+        np.testing.assert_array_equal(exact_gpu, s1._page_scores(tiles, starts, queries))

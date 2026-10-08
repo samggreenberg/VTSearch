@@ -10,7 +10,9 @@
 
 <!-- build: figs/calib-knob-flow.build3.png -->
 
-<!-- The knob is defined; now watch it not work. -->
+<!-- Appendix. Before the balance, the control was a slider, Inclusion,
+     minus ten to plus ten: each step up doubled the price of a miss, each
+     step down the price of a false alarm. Defined; now watch it not work. -->
 
 <!-- **a** — One fold model's score axis, with its held-out votes standing on
      it. That is the whole of the evidence: nothing is fitted, and the rule

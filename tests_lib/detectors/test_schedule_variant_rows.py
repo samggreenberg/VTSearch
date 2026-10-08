@@ -87,6 +87,9 @@ def harness_rows():
     return simulate_voting_iterations(
         medias,
         target_category="cat0",
+        # The trained head's cut is the subject: under the label quota (#4643)
+        # the early rows are the Goods' centroid's, which carries none of it.
+        label_quota=False,
         seed=0,
         dataset_name="planted",
         inclusion=0,
@@ -97,8 +100,8 @@ def harness_rows():
         emit_calibration_metrics=True,
         schedule_variants=_VARIANTS,
         # The Inclusion arm: the shipped schedule reproduces the estimator's
-        # fallback steps, which a floor's set would replace (#4272).
-        min_precision="off",
+        # fallback steps, which a balance's set would replace (#4272).
+        beta="off",
     )
 
 

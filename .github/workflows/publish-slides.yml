@@ -45,9 +45,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      # slides/build.py is pure stdlib and Marp arrives via npx, so there is
-      # nothing to install: the only external need is a browser for Marp's PDF
-      # export, and publish-slides.sh finds the runner's Chrome itself.
+      # slides/build.py is pure stdlib and Marp arrives via npx; the one
+      # install is PyMuPDF, which slides/pdf_nav.py uses to write each PDF's
+      # bookmarks and page labels (render.sh fails without it rather than
+      # publishing a deck with no navigation). The browser for Marp's PDF
+      # export is the runner's own Chrome, which publish-slides.sh finds itself.
+      - name: Install PyMuPDF
+        run: python -m pip install pymupdf
+
       - name: Render and publish
         env:
           GH_TOKEN: ${{ github.token }}

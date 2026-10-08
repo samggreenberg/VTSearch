@@ -1,0 +1,22 @@
+{
+  "tier": "m",
+  "corpus_version": "v5.0",
+  "max_v": 50,
+  "tiled_top_k": 2000,
+  "tile_layers": [
+    [
+      0.25,
+      0.18
+    ],
+    [
+      0.125,
+      0.09
+    ]
+  ],
+  "projection": "tile_projection_v1",
+  "stoplist": "off",
+  "swap_halves": true,
+  "seed_crop": null,
+  "classes": "",
+  "started": "2026-10-03T14:50:58"
+}

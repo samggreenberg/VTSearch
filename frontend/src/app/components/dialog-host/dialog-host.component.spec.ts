@@ -99,6 +99,21 @@ describe('DialogHostComponent', () => {
     );
   });
 
+  // #4380: a `\n` in the message is a line break, not a collapsed space. The
+  // text sits in its own element (so the icon stays a separate flex item) and
+  // that element is `white-space: pre-line`.
+  it('renders newlines in the message as line breaks', async () => {
+    const promise = dialogService.confirmDestructive('Delete 2 detectors?\n"a", "b"', '(Labels only.)');
+    await settleZoneless(fixture);
+
+    const text = fixture.nativeElement.querySelector('.dialog-message__text') as HTMLElement;
+    expect(text.textContent).toBe('Delete 2 detectors?\n"a", "b"\n(Labels only.)');
+    expect(getComputedStyle(text).whiteSpace).toBe('pre-line');
+
+    component.onClosed();
+    await promise;
+  });
+
   // The button labels are driven by the `dialogButtons` signal; a prompt with an
   // input must repaint the text field too, again from the plain method call.
   it('renders the prompt input and OK/Cancel buttons (zoneless canary)', async () => {

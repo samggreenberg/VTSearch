@@ -1,0 +1,66 @@
+{
+  "r1_xcal": {
+    "n_files": 720,
+    "n_read": 717,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [
+      "task_0177.csv.gz",
+      "task_0186.csv.gz",
+      "task_0609.csv.gz"
+    ],
+    "no_base_rows": [],
+    "check_rows": 0,
+    "n_rows_all": 3340118,
+    "n_rows": 101401,
+    "dir": "<run>/r1_xcal/results"
+  },
+  "r8_labels": {
+    "n_files": 720,
+    "n_read": 717,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [
+      "task_0177.csv.gz",
+      "task_0186.csv.gz",
+      "task_0609.csv.gz"
+    ],
+    "no_base_rows": [],
+    "check_rows": 2999,
+    "n_rows_all": 3086405,
+    "n_rows": 90709,
+    "dir": "<run>/r8_labels/results"
+  },
+  "r8_labels_b025": {
+    "n_files": 720,
+    "n_read": 717,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [
+      "task_0177.csv.gz",
+      "task_0186.csv.gz",
+      "task_0609.csv.gz"
+    ],
+    "no_base_rows": [],
+    "check_rows": 2996,
+    "n_rows_all": 3099514,
+    "n_rows": 91109,
+    "dir": "<run>/r8_labels_b025/results"
+  },
+  "r8_labels_b4": {
+    "n_files": 720,
+    "n_read": 717,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [
+      "task_0177.csv.gz",
+      "task_0186.csv.gz",
+      "task_0609.csv.gz"
+    ],
+    "no_base_rows": [],
+    "check_rows": 4359,
+    "n_rows_all": 3090230,
+    "n_rows": 89465,
+    "dir": "<run>/r8_labels_b4/results"
+  }
+}

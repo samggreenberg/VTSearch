@@ -45,13 +45,13 @@
      occasional one the whole point — with no second mode to learn and nothing
      to configure between answers. -->
 
-<!-- **f** — Twenty-five questions in — twelve Good, thirteen Bad, a few
-     minutes, the whole budget this task was ever going to get. Note what it
-     asks *now*: a woman on the phone, a stack of books — or files — out of
-     focus behind her. What is left is the frames where the books are
-     *present* and the picture is not about them — exactly the line the rest
-     of the talk is about. -->
+<!-- **f** — Forty-eight answers in — twenty-nine Good, nineteen Bad, a few
+     minutes, the whole budget this task was ever going to get. Twenty came
+     from a spot check autopilot ran on its own partway (a later slide). Note
+     what it asks *now*: not a shelf or a stack, but a man beside a rack of
+     bicycles. The easy books are answered; what is left is what the model
+     cannot yet place — the line the rest of the talk is about. -->
 
 <!-- If someone asks where the rest of the corpus went: there is a manual mode
-     with the whole pile in a grid, sort controls and a threshold slider — a
+     with the whole pile in a grid, sort controls and a threshold control — a
      character in the second half of the talk. -->

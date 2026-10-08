@@ -1,8 +1,8 @@
-"""The CLI resolves the Auto-Find list + exporter from the running user.
+"""The CLI resolves the AutoFind list + exporter from the running user.
 
 ``--autodetect --user X`` authenticates X and sets the thread-local user; the
 pipeline then builds its config via ``CoreConfig.from_settings()``, which must
-reflect that user's per-user Auto-Find settings (detector list + exporter).
+reflect that user's per-user AutoFind settings (detector list + exporter).
 Without ``--user`` the built-in "default" user applies, reading through to the
 server ``--settings`` file.
 """

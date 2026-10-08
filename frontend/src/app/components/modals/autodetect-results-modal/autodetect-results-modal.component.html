@@ -1,4 +1,4 @@
-<vt-modal title="AutoRun Results" [open]="true" (closed)="close()">
+<vt-modal title="Find Results" [open]="true" (closed)="close()">
   <!-- Summary -->
   <div class="results-summary">
     @if (data().dataset_name) {
@@ -15,10 +15,18 @@
     }
   </div>
 
-  <!-- Stale Auto-Find references (detector files deleted out from under the list) -->
+  <!-- Detectors under the label quota ran as the Goods' centroid (#4643). -->
+  @if (centroidDetectors.length) {
+    <p class="info-text centroid-note" role="note">
+      Too few labels for a trained detector, so these ran as the Goods' centroid:
+      {{ centroidDetectors.join('; ') }}.
+    </p>
+  }
+
+  <!-- Stale AutoFind references (detector files deleted out from under the list) -->
   @if (data().missing_detectors?.length) {
     <div class="auto-export-status auto-export-status--error">
-      &#9888; Skipped {{ data().missing_detectors!.length }} AutoRun detector(s) whose
+      &#9888; Skipped {{ data().missing_detectors!.length }} AutoFind detector(s) whose
       file no longer exists: {{ data().missing_detectors!.join(', ') }}.
     </div>
   }
@@ -43,9 +51,26 @@
     </div>
   }
 
-  <!-- Results table -->
+  <!-- Results table, or Browse building its map: built here, behind a bar
+       with a Cancel, as the Test view's Browse does, and opened only once the
+       map is ready. -->
   <div class="results-table-wrapper">
-    @if (displayHits.length === 0) {
+    @if (browsePrep.preparing()) {
+      <div class="browse-wait" role="status" aria-live="polite">
+        <p class="browse-wait-message">Please wait: building the map to browse…</p>
+        <vt-progress-bar
+          [indeterminate]="browsePrep.bar().indeterminate"
+          [pulsing]="!!browsePrep.bar().pulsing"
+          [pulseTo]="browsePrep.bar().pulseTo ?? null"
+          [smooth]="true"
+          [value]="browsePrep.bar().value"
+          [max]="browsePrep.bar().max"
+        />
+        <span class="browse-wait-line">{{ browsePrep.count() }} {{ browsePrep.eta() }}</span>
+        <span class="browse-wait-line">{{ browsePrep.detail() }}</span>
+        <button class="btn btn--secondary btn--sm" (click)="browsePrep.cancel()">Cancel</button>
+      </div>
+    } @else if (displayHits.length === 0) {
       <p class="empty-state">No hits found.</p>
     } @else {
       <table class="data-table results-table">
@@ -139,6 +164,14 @@
 
   <div class="export-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Close</button>
+    <button
+      class="btn btn--secondary"
+      (click)="browse()"
+      [disabled]="!!browseBlocker || browseStarting() || browsePrep.preparing()"
+      [title]="browseBlocker || 'Open the listed items in Browse, laid out as a map of their own'"
+    >
+      Browse
+    </button>
     @if (activeExporter; as exp) {
       <button
         class="btn btn--primary"

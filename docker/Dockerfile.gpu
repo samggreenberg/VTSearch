@@ -22,23 +22,37 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build:prod
 
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+# Ubuntu 24.04 is the first CUDA base whose system Python (3.12) is not EOL;
+# 22.04's is 3.10. The CUDA minor matches the cu129 torch wheel and the RAPIDS
+# 26.8 stack installed below, which both carry CUDA 12.9 libraries of their
+# own; the base sets the host-driver floor (`NVIDIA_REQUIRE_CUDA`: a driver new
+# enough for CUDA 12.9, or one of the R535..R570 branches; see docs/DEPLOYMENT.md
+# "Choosing an image"). Anything older would let the container start on a
+# driver the wheels then fail on.
+FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04
 
 # Avoid interactive prompts during apt-get
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Python 3.10 + native libs for opencv, librosa, etc.
+# Python 3.12 + native libs for opencv, librosa, etc.
+#
+# Ubuntu 24.04 marks its system Python externally managed (PEP 668), so pip
+# refuses to install into it; everything goes into a venv on PATH instead. The
+# base also ships an `ubuntu` user holding UID 1000, which the non-root user
+# created below needs.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3.10 \
-        python3.10-venv \
-        python3-pip \
+        python3 \
+        python3-venv \
         libsndfile1 \
         ffmpeg \
         libgl1 \
         libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/* && \
-    ln -sf /usr/bin/python3.10 /usr/bin/python
+    python3 -m venv /opt/venv && \
+    userdel --remove ubuntu
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH
 
 WORKDIR /app
 
@@ -63,16 +77,20 @@ ARG REQUIREMENTS=gpu.txt
 # Pre-install numpy/scipy as binary-only wheels so the PyTorch extra-index
 # cannot pull in source tarballs that require g++. Then pin torch from the CUDA
 # index with --index-url (NOT --extra-index-url): otherwise PyPI stays a
-# candidate and a newer PyPI torch overrides the cu121 build with a wrong-arch
+# candidate and a newer PyPI torch overrides the cu129 build with a wrong-arch
 # wheel (cudaErrorNoKernelImageForDevice at runtime on unsupported GPUs).
+# cu129 is the tag whose torch pins the CUDA 12.9 libraries the cuML layer
+# below is built on (scripts/install.sh picks the same tag on Turing..Blackwell
+# hosts); it ships no Volta (sm_70) kernels, so a V100 host needs install.sh
+# with cu124 rather than this image.
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir --only-binary :all: numpy scipy && \
     pip install --no-cache-dir \
-        --index-url https://download.pytorch.org/whl/cu121 \
+        --index-url https://download.pytorch.org/whl/cu129 \
         --prefer-binary \
         torch torchvision torchaudio && \
     pip install --no-cache-dir \
-        --extra-index-url https://download.pytorch.org/whl/cu121 \
+        --extra-index-url https://download.pytorch.org/whl/cu129 \
         --prefer-binary \
         -r "requirements/$REQUIREMENTS"
 
@@ -104,15 +122,17 @@ RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
 # resolve against the pinned torch build, rather than silently shipping a 12 GB
 # GPU image that still runs UMAP on the CPU. Adds ~3-4 GB to the image.
 #
-# Capped below RAPIDS 26 to match scripts/install.sh: 26.x requires
-# nvidia-nvjitlink-cu12>=12.9, which the cu121 torch pinned above (CUDA 12.1)
-# can't satisfy, so an unpinned cuml-cu12 would fail this fail-loud layer. 25.x
-# declares cuda-toolkit==12.* and resolves cleanly. See docs/DEPLOYMENT.md
+# Floored at RAPIDS 26.8 to match scripts/install.sh: it is the first RAPIDS
+# whose cudf takes the pandas 3 that pyproject.toml pins (an older one would
+# downgrade pandas here, #4390), and it requires nvidia-nvjitlink-cu12>=12.9,
+# which the cu129 torch pinned above satisfies with the same 12.9.x libraries
+# RAPIDS is built on. `pandas>=3` is repeated so a RAPIDS that could not take it
+# fails this layer instead of quietly moving pandas. See docs/DEPLOYMENT.md
 # "cuML crashes compiling a kernel".
 RUN pip install --no-cache-dir \
         --extra-index-url https://pypi.nvidia.com \
         --prefer-binary \
-        "cuml-cu12<26"
+        "cuml-cu12>=26.8" "pandas>=3"
 
 # ---------- application layer ----------
 COPY . .

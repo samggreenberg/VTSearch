@@ -1,7 +1,7 @@
 """Command-line interface utilities for VTSearch.
 
 The only CLI workflow is autodetect: load a dataset (from pickle or via an
-importer), score it against the detectors flagged for Auto-Find in the settings
+importer), score it against the detectors flagged for AutoFind in the settings
 file, and export the results.  With ``save_dataset`` the source is first
 imported through the GUI's own load pipeline and registered, so it shows up on
 the dashboard, and the run then scores that saved dataset.
@@ -106,7 +106,7 @@ def _print_dry_run_plan(
 
     With *override_detectors* the plan lists those instead of the settings
     file's *autofind_detectors*, and says so - the run will not read the
-    Auto-Find list at all.
+    AutoFind list at all.
     """
     print("DRY RUN - no media will be loaded, embedded, scored, or exported.", flush=True)
     print("", flush=True)
@@ -115,10 +115,10 @@ def _print_dry_run_plan(
     print("", flush=True)
 
     print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
-    detector_names, heading, count_note = autofind_detectors, "Auto-Find detectors", ""
+    detector_names, heading, count_note = autofind_detectors, "AutoFind detectors", ""
     if override_detectors is not None:
         detector_names = override_detectors
-        heading, count_note = "Detectors", "; overrides the settings' Auto-Find list"
+        heading, count_note = "Detectors", "; overrides the settings' AutoFind list"
     if not detector_names:
         if source_description.get("save_dataset"):
             print(f"{heading}: (none - the dataset would be saved and detection skipped)", flush=True)
@@ -239,9 +239,9 @@ def _load_and_train_detectors(
     whichever it is handed (issue #3647).  ``None`` keeps the loaded medias as
     the haystack, for callers with no scoring pass to agree with.
 
-    Returns a ``{name: {"mlp": nn.Sequential, "threshold": float, "floor": dict, ...}}``
-    map; ``floor`` is what the precision floor says about ``threshold``
-    (:func:`_record_floor_state`).  Raises :class:`ValueError` if a detector cannot be trained - for example
+    Returns a ``{name: {"mlp": nn.Sequential, "threshold": float, "balance": dict, ...}}``
+    map; ``balance`` is what the balance says about ``threshold``
+    (:func:`_record_line_state`).  Raises :class:`ValueError` if a detector cannot be trained - for example
     when none of its labels' origin files are resolvable from the CLI
     environment.
     """
@@ -351,8 +351,8 @@ def _load_and_train_detectors(
             cached = len(det_ctx.label_embeddings)
             total = len(labelset.elements)
             raise ValueError(
-                f"Detector '{det_name}': could not train MLP "
-                f"(resolved {cached} of {total} label origins, need ≥1 good and ≥1 bad). "
+                f"Detector '{det_name}': could not build a detector "
+                f"(resolved {cached} of {total} label origins, need ≥1 good). "
                 "The original media may not be reachable from the CLI - for example, "
                 "labels collected through the local_folder importer have no resolve_file() path."
             )
@@ -362,12 +362,14 @@ def _load_and_train_detectors(
         # type, and the labelset good/bad tallies.
         from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
 
+        _report_centroid(det_name, det_ctx, labelset)
+        # The balance's state on that threshold - unchecked, headless (#4272,
+        # #4413); it rides into every result the detector produces.
+        balance = _record_line_state(det_name, det_ctx)
         out[det_name] = {
             "mlp": det_ctx.model,
             "threshold": det_ctx.threshold,
-            # The floor's state on that threshold - unchecked, headless (#4272);
-            # it rides into every result the detector produces.
-            "floor": _record_floor_state(det_name, det_ctx),
+            "balance": balance,
             "embedder": det_ctx.embedder or "",
             "media_type": det_media_type or media_type,
             "embedder_type": detector_embedder_type_from_data(det),
@@ -381,33 +383,65 @@ def _load_and_train_detectors(
     return out
 
 
-def _record_floor_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
-    """What the precision floor says about *det_name*'s trained cut: unchecked, because nobody can vote.
+def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
+    """Say so when *det_name*'s labels are under the quota and it scores as the Goods' centroid (#4643).
 
-    Read at the floor the training read (:func:`vtscore.state.get_min_precision`).
-    A headless run cannot spot-check its floor (#4272), so it exports the
-    floor's starting candidate - the top 128 unvoted at 10%, the top 64 at
-    25%, the top 32 at 50% and above - and the ``detector_unchecked`` event
-    is the run's record that the set it exports was never checked.
+    The run still scores and exports: the centroid is the detector those labels
+    give, here as in Test and AutoFind.  The ``detector_centroid`` event is the
+    record that it was not a trained head, and what the labelset still owes.
     """
-    from vtscore.state import get_min_precision  # noqa: PLC0415
-    from vtscore.state.core import detector_floor_state  # noqa: PLC0415
-    from vtscore.training.thresholds import FLOOR_UNCHECKED  # noqa: PLC0415
+    from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
+    from vtscore.detectors.label_quota import labelset_quota, served_quota  # noqa: PLC0415
 
-    state = detector_floor_state(det_ctx, get_min_precision())
-    if state is not None and state["status"] == FLOOR_UNCHECKED:
+    if not is_centroid_head(det_ctx.model):
+        return
+    quota = labelset_quota(labelset)
+    owed = [
+        f"{n} more {kind}{'' if n == 1 else 's'}"
+        for n, kind in ((quota.goods_owed, "Good"), (quota.bads_owed, "Bad"))
+        if n
+    ]
+    cli_progress.emit(
+        "detector_centroid",
+        text=(
+            f"Detector '{det_name}' has {quota.n_good} Good and {quota.n_bad} Bad labels, under the quota, so it "
+            f"scores as the Goods' centroid, not a trained detector"
+            + (f" ({' and '.join(owed)} for one)." if owed else ".")
+        ),
+        detector=det_name,
+        **served_quota(det_ctx.model, labelset),
+    )
+
+
+def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
+    """What the balance says about *det_name*'s trained cut: unchecked, because nobody can vote.
+
+    Read at the balance the training read (:func:`vtscore.state.line_knobs`,
+    #4413).  A headless run cannot spot-check its line (#4272), so it exports
+    the balance's unchecked set - the cap or the mixture's F-beta argmax,
+    whichever is smaller (#4389) - and the ``detector_unchecked`` event is
+    the run's record that the set it exports was never checked.  ``None``
+    with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
+    the Inclusion 0 cut, and there is no set to report.
+    """
+    from vtscore.state import get_beta  # noqa: PLC0415
+    from vtscore.state.core import detector_balance_state  # noqa: PLC0415
+    from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
+
+    balance = detector_balance_state(det_ctx, get_beta())
+    if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         cli_progress.emit(
             "detector_unchecked",
             text=(
-                f"Detector '{det_name}' exports its top {state['count']} unchecked (aiming at "
-                f"{100 * state['min_precision']:.0f}% right); nobody is here to check it."
+                f"Detector '{det_name}' exports its top {balance['count']} unchecked ({aim_words(balance)}); "
+                "nobody is here to check it."
             ),
             detector=det_name,
-            min_precision=state["min_precision"],
-            status=state["status"],
-            count=state["count"],
+            beta=balance["beta"],
+            status=balance["status"],
+            count=balance["count"],
         )
-    return state
+    return balance
 
 
 def _score_medias_with_detectors(
@@ -599,7 +633,7 @@ def _score_direct_all(
         out[det_name] = {
             "detector_name": det_name,
             "threshold": round(threshold, 4),
-            "floor": info.get("floor"),
+            "balance": info.get("balance"),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
             "negative_hits": negative_hits,
@@ -663,7 +697,7 @@ def _score_one_detector(
     return {
         "detector_name": det_name,
         "threshold": round(threshold, 4),
-        "floor": info.get("floor"),
+        "balance": info.get("balance"),
         "total_hits": len(positive_hits),
         "hits": positive_hits,
         "negative_hits": negative_hits,
@@ -1362,7 +1396,7 @@ def _run_dry_run(
 
 
 class _NoApplicableDetectorsError(ValueError):
-    """No Auto-Find (or override) detector applies to the loaded media.
+    """No AutoFind (or override) detector applies to the loaded media.
 
     A ``ValueError`` so every caller that already reports the message keeps
     doing so; the subclass only exists so a saving run (``save_dataset``) can
@@ -1377,7 +1411,7 @@ def _train_detectors_for_first_chunk(
     override_detectors: list[str] | None,
     autofind_detectors: list[str],
 ) -> tuple[dict[str, dict[str, Any]], _RoutedSnapshots]:
-    """Train each Auto-Find (or override) detector once against the first chunk.
+    """Train each AutoFind (or override) detector once against the first chunk.
 
     Returns the trained detectors alongside the routed snapshots their
     thresholds were calibrated on, so the caller can score this same chunk
@@ -1400,7 +1434,7 @@ def _train_detectors_for_first_chunk(
                 f"None of the requested detectors ({requested}) applies to media type: {media_type}."
             )
         raise _NoApplicableDetectorsError(
-            f"No Auto-Find detectors found for media type: {media_type}. "
+            f"No AutoFind detectors found for media type: {media_type}. "
             "Add detectors to the settings file's autofind_detectors list."
         )
     return detector_mlps, routed
@@ -1582,7 +1616,11 @@ def _run_streaming_pipeline(
     header = {
         "media_type": media_type,
         "detectors": [
-            {"detector_name": name, "threshold": round(info["threshold"], 4), "floor": info.get("floor")}
+            {
+                "detector_name": name,
+                "threshold": round(info["threshold"], 4),
+                "balance": info.get("balance"),
+            }
             for name, info in detector_mlps.items()
         ],
         "keep_negatives": bool(keep_negatives),
@@ -1638,7 +1676,7 @@ def _run_pipeline(
     autofind_detectors = list(config.autofind_detectors)
     detector_names = list(override_detectors) if override_detectors is not None else autofind_detectors
 
-    # When no explicit ``--exporter`` was given, fall back to the Auto-Find
+    # When no explicit ``--exporter`` was given, fall back to the AutoFind
     # results exporter configured in settings (its per-exporter field values
     # come along too). An explicit ``--exporter`` always wins; if neither is
     # set the downstream default (``gui``) applies.
@@ -1661,7 +1699,7 @@ def _run_pipeline(
     if skip_without_detectors and not detector_names:
         # Checked before the source is opened: with nothing to score, reading
         # the whole dataset back in would be wasted work.
-        _emit_detection_skipped("no Auto-Find detectors are configured")
+        _emit_detection_skipped("no AutoFind detectors are configured")
         return
 
     try:
@@ -1979,7 +2017,7 @@ def autodetect_main(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
 ) -> None:
-    """CLI entry point: run autodetect with all Auto-Find detectors.
+    """CLI entry point: run autodetect with all AutoFind detectors.
 
     With *save_dataset* the source is first saved to the dashboard and the run
     scores that saved copy; having no applicable detector then ends the run

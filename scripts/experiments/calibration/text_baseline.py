@@ -14,6 +14,15 @@ first draw.
 Text is only available where the embedder has a text tower: ``dinov3_patch`` is
 vision-only and ``embed_text`` returns None there, which is reported as n/a
 rather than silently skipped.
+
+Besides the GMM cut, each row carries the line a precision floor would keep on
+the text sort's test half, at every floor the app offers (#4357):
+``text_{k,precision,shortfall,meets,recall,oracle_recall}_x{10,50,90}``, read
+off the positives' ranks by ``_rank_metrics.line_metrics`` - the same
+definition the State of the App reads the clicked detector's rank frames with.
+At each preset it also carries the text sort's best cut (#4654): its F-beta,
+``text_oracle_fbeta_b*`` (``_rank_metrics.balance_metrics``), and that cut's
+``text_oracle_{precision,recall,fpr}_b*``, where the viewer's dotted line starts.
 """
 
 from __future__ import annotations
@@ -60,12 +69,21 @@ def main() -> int:
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.score_dumps import write_prediction_dump
     from vtscore.eval.voting_iterations import thin_haystack
-    from vtscore.eval.calibration_metrics import detection_metrics
+    from vtscore.eval.calibration_metrics import detection_metrics, oracle_fbeta_cut
     from vtscore.training.thresholds import inclusion_cost_weights, text_sort_threshold
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
+    from _rank_metrics import (  # noqa: PLC0415
+        BETAS,
+        FLOORS,
+        balance_metrics,
+        beta_tag,
+        floor_tag,
+        line_metrics,
+        ranks_from_scores,
+    )
 
     prepare = json.loads((Path(args.results) / "prepare_info.json").read_text())
     wf, wn = inclusion_cost_weights(cfg.INCLUSION)
@@ -136,9 +154,13 @@ def main() -> int:
                 labels = np.asarray([1 if media_is_positive(medias_cat[i], cat) else 0 for i in ids])
 
                 # The app cuts the haystack it can see: every media, not a split,
-                # with the text route's own rule (the GMM midpoint unless
-                # VTSEARCH_TEXT_SORT_CUT says otherwise, #3826).
+                # with the text route's own *display* rule (the guarded line
+                # unless VTSEARCH_TEXT_SORT_CUT says otherwise; #3826, #4136).
+                # Click 0 scores what the user sees.  The midpoint the opening
+                # samples at is the cells' business, not this anchor's.
                 gmm_cut = float(text_sort_threshold([float(s) for s in scores]))
+                # The line at each preset (#4603): at beta 1 or below the app draws it by count.
+                line_cut = {b: float(text_sort_threshold([float(s) for s in scores], beta=b)) for b in BETAS}
 
                 for seed in cfg.SEEDS:
                     sim_ids, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
@@ -150,7 +172,9 @@ def main() -> int:
                         p = cfg.HAYSTACK_PREVALENCE
                         seen = set(thin_haystack(medias_cat, sim_ids, cat, p, seed))
                         seen |= set(thin_haystack(medias_cat, test_ids, cat, p, seed))
-                        gmm_cut = float(text_sort_threshold([float(s) for i, s in zip(ids, scores) if i in seen]))
+                        seen_scores = [float(s) for i, s in zip(ids, scores) if i in seen]
+                        gmm_cut = float(text_sort_threshold(seen_scores))
+                        line_cut = {b: float(text_sort_threshold(seen_scores, beta=b)) for b in BETAS}
                     tset = set(test_ids)
                     mask = np.asarray([i in tset for i in ids])
                     y, s = labels[mask], scores[mask]
@@ -188,6 +212,41 @@ def main() -> int:
                     tp = np.cumsum(ys)
                     fp = np.cumsum(1 - ys)
                     ocost = np.min(wf * (fp / max(nneg, 1)) + wn * ((npos - tp) / max(npos, 1)))
+                    # The line each floor would keep on this sort (#4357).
+                    ranks = ranks_from_scores([i for i in ids if i in tset], s, y)
+                    floor_cols = {
+                        f"text_{name}_{floor_tag(x)}": round(float(v), 6)
+                        for x in FLOORS
+                        for name, v in line_metrics(ranks, int(mask.sum()), npos, x).items()
+                    }
+                    balance_cols = {
+                        f"text_{name}_{beta_tag(b)}": round(float(v), 6)
+                        for b in BETAS
+                        for name, v in balance_metrics(ranks, int(mask.sum()), npos, b, None).items()
+                    }
+                    # The app's own line at each preset (#4603), as text_precision etc. score the beta-blind one.
+                    line_cols = {}
+                    for b in BETAS:
+                        at = s >= line_cut[b]
+                        tag = beta_tag(b)
+                        line_cols[f"text_line_cut_{tag}"] = round(line_cut[b], 6)
+                        line_cols[f"text_line_precision_{tag}"] = round(
+                            detection_metrics(s, y, line_cut[b])["precision"], 6
+                        )
+                        line_cols[f"text_line_recall_{tag}"] = round(float((at & (y == 1)).sum() / npos), 6)
+                        line_cols[f"text_line_fpr_{tag}"] = round(float((at & (y == 0)).sum() / nneg), 6)
+                    # The text sort's best cut at each preset (#4654), where the
+                    # viewer's dotted line starts on precision, recall and the
+                    # rates.  Its F-beta is balance_cols' text_oracle_fbeta_<tag>,
+                    # the State of the App's "best cut".
+                    for b in BETAS:
+                        o_thr, _o_fb, o_fpr, o_fnr = oracle_fbeta_cut(s, y, b)
+                        tag = beta_tag(b)
+                        line_cols[f"text_oracle_precision_{tag}"] = round(
+                            detection_metrics(s, y, o_thr)["precision"], 6
+                        )
+                        line_cols[f"text_oracle_recall_{tag}"] = round(1.0 - o_fnr, 6)
+                        line_cols[f"text_oracle_fpr_{tag}"] = round(o_fpr, 6)
                     rows.append(
                         {
                             "dataset": ds,
@@ -209,6 +268,9 @@ def main() -> int:
                             "text_oracle_cost": round(float(ocost), 6),
                             "text_AP": round(float(average_precision_score(y, s)), 6),
                             "text_auroc": round(float(roc_auc_score(y, s)), 6),
+                            **floor_cols,
+                            **balance_cols,
+                            **line_cols,
                         }
                     )
                 common.log(

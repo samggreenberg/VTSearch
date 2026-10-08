@@ -1,0 +1,61 @@
+<div class="balance">
+  <div class="balance-head">
+    <span class="balance-label" [id]="labelId">Threshold:</span>
+    <vt-field-hint-icon [hint]="hint" ariaLabel="What the threshold means" placement="below-block" />
+    <!-- Controls that belong on the heading's line (Find's work-queue actions). -->
+    <ng-content select="[balanceActions]" />
+  </div>
+  <div class="balance-spectrum" role="radiogroup" [attr.aria-labelledby]="labelId">
+    <!-- The spectrum: its two ends over a track. Each radio's own label says
+         where it sits, so the picture is hidden from assistive tech. -->
+    <div class="spectrum-bar" aria-hidden="true">
+      <div class="spectrum-ends">
+        <span>False Positives</span>
+        <span>False Negatives</span>
+      </div>
+      <div class="spectrum-track"></div>
+    </div>
+    <!-- One radio under each third of the spectrum, with no word or number (#4317). -->
+    <div class="spectrum-radios">
+      @for (opt of options; track opt.value) {
+        <label class="spectrum-radio" [class.locked]="locked()" [title]="locked() ? lockedHint : opt.hint">
+          <input
+            #radio
+            type="radio"
+            [name]="groupName"
+            [value]="opt.value"
+            [checked]="opt.value === selected()"
+            [disabled]="locked()"
+            [attr.aria-label]="opt.hint"
+            (change)="onPick($event, opt.value)"
+          />
+        </label>
+      }
+    </div>
+  </div>
+  @if (summary(); as text) {
+    <!-- The dot rides inside the note, so a narrow panel wraps the check
+         button below the note rather than squeezing the note beside it. -->
+    <p class="balance-state" [attr.data-status]="dot()">
+      <span class="balance-state-text" role="status" [title]="explanation() ?? ''"
+        ><span class="indicator-dot" aria-hidden="true"></span>{{ text }}</span
+      >
+      @if (checkText(); as label) {
+        <button
+          type="button"
+          class="btn balance-check-btn"
+          [class.btn--toolbar]="!due()"
+          [class.btn--primary]="due()"
+          [disabled]="!checkable()"
+          [title]="checkHint()"
+          (click)="check.emit()"
+        >
+          {{ label }}
+        </button>
+      }
+    </p>
+    @if (dueNote(); as note) {
+      <p class="balance-due" role="status">{{ note }}</p>
+    }
+  }
+</div>

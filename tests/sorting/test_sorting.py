@@ -512,10 +512,10 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] != first_key
 
-    def test_floor_change_reuses_cached_orderings(self):
-        """The precision floor is a pure threshold knob: a retrain at another
-        floor must reuse the cached fold orderings (no fold refit) and only
-        re-run the cheap cut."""
+    def test_balance_change_reuses_cached_orderings(self):
+        """The balance is a pure threshold knob: a retrain at another balance
+        must reuse the cached fold orderings (no fold refit) and only re-run
+        the cheap cut."""
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
@@ -527,7 +527,7 @@ class TestCalibrationCache:
             good_votes,
             bad_votes,
             det_ctx=det_ctx,
-            min_precision=0.5,
+            beta=1.0,
         )
         assert det_ctx.calibration_cache is not None
         key_before = det_ctx.calibration_cache[0]
@@ -542,9 +542,9 @@ class TestCalibrationCache:
                 good_votes,
                 bad_votes,
                 det_ctx=det_ctx,
-                min_precision=0.9,
+                beta=2.0,
             )
-        # No fold refit, and the cache key is unchanged (the floor is not in it).
+        # No fold refit, and the cache key is unchanged (the balance is not in it).
         assert patched.call_count == 0
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] == key_before
@@ -630,17 +630,43 @@ class TestLearnedSort:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "acq_threshold" in data
-        # A fold-anchored fit is not guaranteed on this fixture; where there is
-        # one the acquisition cut sits above the decision line, and where there
-        # is not the two coincide.  Never below - that is the falsified
-        # direction.
-        assert data["acq_threshold"] >= data["threshold"]
+        # Under the balance (the default, #4413) the acquisition cut is a rank:
+        # the score at half the depth of the mixture's F-beta argmax (#4409),
+        # the library's own reading of the context the sort just trained.
+        from vtscore.state.core import detector_acquisition_threshold, get_active_detector_context
 
-    def test_text_sort_carries_no_acquisition_cut(self, client):
-        """No detector behind it, so there is nothing to re-cut."""
+        ctx = get_active_detector_context()
+        assert data["acq_threshold"] == round(detector_acquisition_threshold(ctx, None, beta=1.0), 4)
+
+    def test_text_sort_carries_the_midpoint_as_its_acquisition_cut(self, client, monkeypatch):
+        """A text sort carries two lines too (#4136): the display line as ``threshold``
+        and the mixture midpoint as ``acq_threshold``, so the Hard select samples
+        where it did before the guarded display line shipped."""
+        import vtscore.training.thresholds as T
+        from vtscore.training.thresholds import TextSortCuts
+
+        seen: list[list[float]] = []
+
+        def fake_cuts(scores, beta=None):
+            seen.append(list(scores))
+            return TextSortCuts(0.9, 0.3, "tail")
+
+        monkeypatch.setattr(T, "text_sort_cuts", fake_cuts)
         resp = client.post("/api/sort", json={"text": "a sound"})
         assert resp.status_code == 200
-        assert resp.get_json()["acq_threshold"] is None
+        data = resp.get_json()
+        assert (data["threshold"], data["acq_threshold"]) == (0.9, 0.3)
+        # Both drawn over the whole ranking, in one call.
+        assert len(seen) == 1 and len(seen[0]) == NUM_MEDIAS
+        # The green region reads the display line, not the sampling position.
+        assert data["above_threshold"] == sum(r["similarity"] >= 0.9 for r in data["results"])
+
+    def test_text_sort_acquisition_cut_is_a_number_under_the_default_rule(self, client):
+        resp = client.post("/api/sort", json={"text": "a sound"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data["acq_threshold"], float)
+        assert isinstance(data["threshold"], float)
 
     def test_only_good_votes_returns_400(self, client):
         good_votes.update({k: None for k in [1, 2]})
@@ -719,7 +745,7 @@ class TestLearnedSortAsync:
 
         A dataset switch drops ``line_ranking`` (media ids are per dataset), and
         coming back with the same votes used to hit the signature cache: the
-        response drew a line and a floor state while the detector held no
+        response drew a line and a balance state while the detector held no
         ranking, so Train's spot check refused with "No ranking to check".
         """
         from vtscore.concurrency.async_jobs import learned_sort_jobs

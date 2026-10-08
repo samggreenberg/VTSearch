@@ -1,4 +1,4 @@
-"""Stage-2 geometric re-rank + match-statistic verification classifier.
+"""Stage-2 geometric re-rank by the inlier gate.
 
 This is the chokepoint the structural-embedder design
 (``docs/plans/structural-embedder.md``) calls for: the one place that knows
@@ -12,14 +12,15 @@ that knows max-over-regions for patch embedders.
   geometrically verifies it against the **templates** derived from the user's
   RegionYes votes (RANSAC similarity fit via the dataset's
   :class:`~vtscore.media.structural.StructuralMatcher`).  Candidates are
-  re-ranked by a verification score: either the learned **match-statistic
-  classifier** (when there are enough votes to train it) or, before then, the
-  cold-start inlier gate.
+  re-ranked by the best template's inlier count, reported as the inlier gate's
+  score.
 
-The verification score is a probability in ``[0, 1]``; the classifier's
-decision boundary (and the cold-start gate's ``DEFAULT_MIN_INLIERS`` mapping)
-both sit at :data:`STRUCTURAL_DECISION_THRESHOLD`, so "score >= threshold"
-means "geometrically a match" in either regime.
+The verification score is in ``[0, 1]`` and crosses
+:data:`STRUCTURAL_DECISION_THRESHOLD` at ``DEFAULT_MIN_INLIERS``, so "score >=
+threshold" means "geometrically a match".  Votes add templates; they do not
+train a scorer.  A match-statistic MLP trained from the votes used to replace
+the gate from 3 votes on, and it ranked worse than the inliers on documents and
+photos alike, its accept decision included (#4169).
 
 Library-tier and import-clean: no Flask, no app-tier imports.  ``torch`` and the
 embedder registry are imported lazily so the pure data helpers
@@ -30,18 +31,26 @@ embedder registry are imported lazily so the pure data helpers
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, Optional
 
 import numpy as np
 
+from vtscore.training.structural_stage1 import (
+    VerificationCache,
+    example_queries,
+    snapshot_has_tiles,
+    tiled_stage1,
+    tiled_top_k,
+    vote_queries,
+)
 from vtscore.media.structural import (
     DEFAULT_MIN_INLIERS,
     MatchStats,
     StructuralFeatures,
     StructuralMatcher,
-    match_stats_to_features,
 )
 
 _log = logging.getLogger(__name__)
@@ -60,20 +69,46 @@ beyond the shortlist are not geometrically verified and score 0 - the accepted
 K trade-off for an instance-search tool.
 """
 
-MIN_VERIFICATION_VOTES = 3
-"""Vote count below which the match-statistic classifier is not trained.
-
-Mirrors the safe-threshold GMM fallback the detector MLP uses below 6 labels:
-with too few votes we fall back to :class:`VerificationScorer`'s cold-start
-inlier gate instead of a useless classifier.
-"""
-
 STRUCTURAL_DECISION_THRESHOLD = 0.5
+
+#: Decimals a verification score is stored with, and the line is rounded to the same way
+#: (#4464): an unrounded line dropped pages at exactly the Bad ceiling + 1 inliers whenever
+#: their stored score rounded down. At 6 decimals two adjacent inlier counts stay apart up
+#: to ~2,800 inliers (n / (n + 8) moves by 8 / ((n + 8)(n + 9))); at 4 only to ~275.
+SCORE_DECIMALS = 6
+
+#: The recall end of the balance (#4458, owner 2026-10-03). From beta >= RECALL_BETA (nearer the
+#: preset 4 than 1, in log space) the returned set is the beta-1 line's set plus every verified page
+#: with at least max(RECALL_MIN_INLIERS, ceil(RECALL_GOOD_FRACTION x the Goods' median leave-one-out
+#: inliers)) inliers, whatever the Bad ceiling and the geometry cuts say. Class-split CV on FullMarks
+#: tier m chose the floor for beta 4 (both folds alike); the union with the beta-1 set keeps the
+#: slider monotone: F4 share of the best cut +0.066 [+0.030, +0.109] over clicks 0-25, no click worse.
+#: Beta 1/4 and 1 keep the shipped line (round 2 found no rule that passed for them).
+RECALL_BETA = 2.0
+RECALL_MIN_INLIERS = 10
+RECALL_GOOD_FRACTION = 0.25
+
+#: The precision end of the balance (#4479), the recall end's mirror. At beta <= PRECISION_BETA
+#: (nearer the preset 1/4 than 1) the returned set is the beta-1 line's set intersected with the
+#: verified pages with at least max(PRECISION_MIN_INLIERS, ceil(PRECISION_GOOD_FRACTION x the Goods'
+#: median leave-one-out inliers), the Bad ceiling + PRECISION_CEILING_MARGIN + 1) inliers - a subset
+#: of beta 1's set. Click 0's line (the example sort) rises to PRECISION_MIN_INLIERS.
+PRECISION_BETA = 0.5
+PRECISION_MIN_INLIERS = 16
+PRECISION_GOOD_FRACTION = 0.5
+PRECISION_CEILING_MARGIN = 4
+
+#: Geometry cuts for the returned set before a detector's first Bad vote (#4440). Until
+#: then #4367's Bad ceiling is just the 8-inlier gate, which passes hard negatives on
+#: documents. A fit must also have inlier ratio >= this and median reprojection error <=
+#: :data:`GEOMETRY_REPROJ_MAX` (normalised units). Both were fit on FullMarks tier ``s``'s
+#: box-template pairs past the gate (#4434), and scored out of sample on tier ``m``:
+#: +0.23 F1 at 10 clicks.
+GEOMETRY_RATIO_MIN = 0.75
+GEOMETRY_REPROJ_MAX = 0.004887
 """Decision boundary of the verification score.
 
-The match-statistic classifier emits a sigmoid probability whose boundary is
-0.5; the cold-start gate maps ``inlier_count == DEFAULT_MIN_INLIERS`` to 0.5
-too, so a single threshold separates match/non-match in both regimes.
+The inlier gate maps ``inlier_count == DEFAULT_MIN_INLIERS`` to 0.5.
 """
 
 
@@ -129,9 +164,8 @@ def build_templates(
     RegionYes votes restrict the template to the boxed keypoints
     (:func:`filter_features_to_box`); whole-image Yes votes keep every keypoint.
     Good votes whose media has no ``local_features`` (or isn't in *snap*) are
-    skipped.  The media id is retained so the verification-classifier training
-    can hold the item's own template out (leave-one-out) and avoid a trivial
-    self-match positive.
+    skipped.  The media id is retained so a caller can tell templates apart
+    (``best_match_stats_many``'s *skip*).
     """
     templates: list[tuple[Any, StructuralFeatures]] = []
     for cid in good_votes:
@@ -189,8 +223,8 @@ def best_match_stats_many(
     behaves exactly as before.
 
     *skip*, when given, is called as ``skip(template_key, candidate_index)`` and
-    suppresses that template for that candidate; it is how the verification
-    classifier holds out an item's own template (leave-one-out).
+    suppresses that template for that candidate, e.g. to hold an item's own
+    template out (leave-one-out).
     """
     if not templates or not candidates:
         return [MatchStats() for _ in candidates]
@@ -217,115 +251,45 @@ def best_match_stats_many(
 
 
 # --------------------------------------------------------------------------
-# Verification classifier (the genuinely-structural learnable)
+# Verification score (the inlier gate)
 # --------------------------------------------------------------------------
 
 
 @dataclass
 class VerificationScorer:
-    """Maps a :class:`MatchStats` to a match probability in ``[0, 1]``.
+    """Maps a :class:`MatchStats` to a match score in ``[0, 1)``: ``n / (n + min_inliers)``.
 
-    Wraps either the trained match-statistic classifier (*model*) or, before
-    there are enough votes to train one, the cold-start inlier gate.  Both put
-    their decision boundary at :data:`STRUCTURAL_DECISION_THRESHOLD`.
+    Monotone in the inlier count *n*, crossing :data:`STRUCTURAL_DECISION_THRESHOLD`
+    exactly at *min_inliers* (so ``MatchStats.is_match`` and "score >= 0.5" agree).
+    It never saturates, so a threshold above the gate (the Bad ceiling, #4367) is
+    still a threshold on this scale (:meth:`threshold_for`).
     """
 
-    model: Optional[Any] = None  # nn.Sequential | None
     min_inliers: int = DEFAULT_MIN_INLIERS
+    #: Optional geometry cuts (#4440): a fit with a lower inlier ratio or a larger median
+    #: reprojection error scores half its value, below the line but in the same order.
+    ratio_min: Optional[float] = None
+    reproj_max: Optional[float] = None
+    #: With geometry cuts, a fit with at least this many inliers is not demoted however loose
+    #: it is: the recall end of the balance keeps it (#4458).
+    loose_ok_from: Optional[int] = None
 
     def score(self, stats: MatchStats) -> float:
-        """Probability that *stats* represents a genuine instance match."""
-        if self.model is None:
-            # Cold-start: a continuous gate that crosses 0.5 exactly at
-            # ``min_inliers`` (so ``MatchStats.is_match`` and "score >= 0.5"
-            # agree) and saturates at 1.0 by ``2 * min_inliers``.
-            if not stats.model_ok:
-                return 0.0
-            return float(min(1.0, stats.inlier_count / (2.0 * self.min_inliers)))
+        """The score for *stats*; 0 when RANSAC found no sane model."""
+        if not stats.model_ok:
+            return 0.0
+        value = self.threshold_for(stats.inlier_count)
+        loose = (self.ratio_min is not None and stats.inlier_ratio < self.ratio_min) or (
+            self.reproj_max is not None and stats.median_reproj_error > self.reproj_max
+        )
+        if loose and self.loose_ok_from is not None and stats.inlier_count >= self.loose_ok_from:
+            return value
+        return value / 2.0 if loose else value
 
-        import torch  # noqa: PLC0415
-
-        from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
-
-        feat = match_stats_to_features(stats)
-        with torch.no_grad():
-            x = torch.from_numpy(feat).unsqueeze(0).to(next(self.model.parameters()).device)
-            prob = sigmoid_to_finite_scores(self.model(x))[0]
-        # ``sigmoid_to_finite_scores`` sentinels non-finite logits to -1.0;
-        # clamp that to 0.0 so a destabilised classifier never out-ranks a real
-        # match (and never reports a negative "probability").
-        return float(prob) if prob >= 0.0 else 0.0
-
-
-def train_verification_classifier(
-    templates: list[tuple[Any, StructuralFeatures]],
-    good_votes: Any,
-    bad_votes: Any,
-    snap: dict[Any, dict],
-    matcher: StructuralMatcher,
-) -> Optional[Any]:
-    """Train the match-statistic classifier from RegionYes / No votes.
-
-    Each labelled item is verified against the templates (max-over-templates),
-    its :class:`MatchStats` stacked into the fixed-D
-    :func:`~vtscore.media.structural.match_stats_to_features` vector, and a tiny
-    MLP trained over those vectors: RegionYes / Yes that verify are positives,
-    No are negatives.  The classifier's decision boundary **is** the calibrated
-    match threshold, so threshold calibration falls out for free.
-
-    A Good vote's own template is held out when computing its positive example
-    (leave-one-out) so a trivial self-match doesn't dominate training.  Returns
-    ``None`` (cold-start) when there are fewer than
-    :data:`MIN_VERIFICATION_VOTES` votes, when either class ends up empty, or
-    when training is otherwise impossible - the caller then uses the inlier
-    gate.
-    """
-    if len(good_votes) + len(bad_votes) < MIN_VERIFICATION_VOTES:
-        return None
-
-    feats: list[np.ndarray] = []
-    labels: list[float] = []
-    all_templates = [tpl for _, tpl in templates]
-
-    # Positives: each Good vote verified against every template *but its own*
-    # (leave-one-out), so a trivial self-match cannot dominate training.  An item
-    # that was the only template has nothing left to verify against, so it is not
-    # a usable training example at all.
-    good_pairs = [
-        (cid, cand)
-        for cid in good_votes
-        if (cand := _local_features(snap.get(cid))) is not None
-        and cand.count > 0
-        and any(tc != cid for tc, _ in templates)
-    ]
-    good_ids = [cid for cid, _ in good_pairs]
-    for stats in best_match_stats_many(
-        templates, [c for _, c in good_pairs], matcher, skip=lambda key, i: key == good_ids[i]
-    ):
-        feats.append(match_stats_to_features(stats))
-        labels.append(1.0)
-
-    bad_cands = [f for cid in bad_votes if (f := _local_features(snap.get(cid))) is not None and f.count > 0]
-    for stats in best_match_stats_many([(None, tpl) for tpl in all_templates], bad_cands, matcher):
-        feats.append(match_stats_to_features(stats))
-        labels.append(0.0)
-
-    num_pos = sum(1 for v in labels if v == 1.0)
-    num_neg = len(labels) - num_pos
-    if len(feats) < 2 or num_pos == 0 or num_neg == 0:
-        return None
-
-    import torch  # noqa: PLC0415
-
-    from vtscore.training.mlp import train_model  # noqa: PLC0415
-
-    X = torch.from_numpy(np.stack(feats).astype(np.float32, copy=False))
-    y = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)
-    try:
-        return train_model(X, y, X.shape[1])
-    except ValueError:
-        # train_model rejects single-class data; guarded above, but stay defensive.
-        return None
+    def threshold_for(self, inliers: float) -> float:
+        """The score at which a fit has exactly *inliers* inliers."""
+        n = max(0.0, float(inliers))
+        return float(n / (n + self.min_inliers)) if n > 0 else 0.0
 
 
 # --------------------------------------------------------------------------
@@ -342,12 +306,17 @@ def structural_rerank(
     *,
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
+    template_keys: Optional[Sequence[Any]] = None,
+    cache: Optional[Any] = None,
+    parents: Optional[dict[Any, tuple[Any, StructuralFeatures]]] = None,
 ) -> list[dict]:
     """Re-rank Stage-1 *results* by geometric verification of the top-*K*.
 
     *results* is the Stage-1-sorted list of ``{"id", score_key, ...}`` dicts.
     The top-*K* are geometrically verified against *template_features*
-    (max-over-templates) and re-ordered by the resulting verification score;
+    (max-over-templates) and re-ordered by the resulting verification score,
+    then by raw inlier count (the gate saturates at ``2 * min_inliers``, and past
+    that more inliers is still the stronger fit, #4169);
     each gets that score in *score_key* and the inlier bounding box in
     ``best_region`` (reusing patch's overlay machinery).  Candidates beyond the
     shortlist are left in Stage-1 order behind the re-ranked block and scored 0
@@ -357,6 +326,12 @@ def structural_rerank(
     Order and score stay consistent (an item's position matches its reported
     score within each block) so the existing threshold/colouring path needs no
     special-casing.  When there are no templates the input is returned unchanged.
+
+    With a *cache* (a :class:`~vtscore.training.structural_stage1.VerificationCache`)
+    and one *template_keys* entry per template, fits already computed on an
+    earlier retrain are reused and only new (template, page) pairs are verified.
+    *parents* (pruned template key -> unpruned ``(key, features)``) limits a
+    stop-listed template to the pages its unpruned self passes (#4432).
     """
     if not results or not template_features:
         return list(results)
@@ -368,30 +343,41 @@ def structural_rerank(
     # the descriptor matching is the bulk of Stage-2 latency and batches into a
     # single (GPU-able) distance computation per template.
     verifiable = [(i, f) for i, e in enumerate(head) if (f := _local_features(snap.get(e.get("id")))) and f.count > 0]
-    batched = best_match_stats_many([(None, tpl) for tpl in template_features], [f for _, f in verifiable], matcher)
+    if cache is not None and template_keys is not None:
+        batched = cache.best_many(
+            list(zip(template_keys, template_features)),
+            [(head[i].get("id"), f) for i, f in verifiable],
+            matcher,
+            parents=parents,
+        )
+    else:
+        batched = best_match_stats_many([(None, tpl) for tpl in template_features], [f for _, f in verifiable], matcher)
     stats_by_pos = {pos: st for (pos, _), st in zip(verifiable, batched)}
 
-    scored: list[tuple[float, float, dict]] = []
+    scored: list[tuple[float, int, float, dict]] = []
     for pos, entry in enumerate(head):
         verification = 0.0
+        inliers = 0
         box: Optional[tuple[float, float, float, float]] = None
         stats = stats_by_pos.get(pos)
         if stats is not None:
             verification = scorer.score(stats)
+            inliers = stats.inlier_count if stats.model_ok else 0
             box = stats.inlier_box
         new = dict(entry)
         stage1 = float(new.get(score_key, 0.0) or 0.0)
-        new[score_key] = round(verification, 4)
+        new[score_key] = round(verification, SCORE_DECIMALS)
         if box is not None:
             new["best_region"] = [float(c) for c in box]
         else:
             new.pop("best_region", None)
-        scored.append((verification, stage1, new))
+        scored.append((verification, inliers, stage1, new))
 
-    # Re-rank the shortlist by verification score, breaking ties by the Stage-1
-    # score so a strong VLAD candidate wins among equally-(un)verified items.
-    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-    out = [s[2] for s in scored]
+    # Re-rank the shortlist by verification score, then inliers, breaking the
+    # remaining ties by the Stage-1 score so a strong VLAD candidate wins among
+    # equally-(un)verified items.
+    scored.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
+    out = [s[3] for s in scored]
 
     for entry in tail:
         new = dict(entry)
@@ -439,13 +425,14 @@ def maybe_structural_rerank(
     threshold: float,
     snap: dict[Any, dict],
     good_votes: Any,
-    bad_votes: Any,
     region_boxes: dict[Any, tuple[float, float, float, float]],
     det_ctx: Any = None,
     *,
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
     feature_snap: Optional[dict[Any, dict]] = None,
+    bad_votes: Any = None,
+    beta: Optional[float] = None,
 ) -> tuple[list[dict], float]:
     """Apply the Stage-2 re-rank when the active dataset is structural.
 
@@ -453,13 +440,25 @@ def maybe_structural_rerank(
     structural dataset - gated on ``local_features`` being present, exactly as
     the patch path gates on ``patch_grid`` - so existing datasets pay zero
     cost and see no behaviour change.  For a structural dataset it builds the
-    RegionYes templates, trains (or cold-starts) the verification classifier,
-    re-ranks the shortlist, and returns the classifier's decision boundary as
-    the threshold.  The trained classifier is carried on *det_ctx* (in-memory,
-    re-derived every retrain) alongside the retrieval MLP.
+    RegionYes templates, re-ranks the shortlist by the inlier gate, and returns
+    the gate's boundary as the threshold.
 
-    *feature_snap* is the source of the template / classifier-candidate
-    ``local_features`` (keyed the same way as *good_votes* / *bad_votes*),
+    On a tiled dataset with Bad votes (*bad_votes*), the returned threshold is
+    the Bad ceiling instead: a page must fit better than every Bad did
+    (:func:`_bad_ceiling_threshold`, #4367). Bads still never enter the ranking
+    (#4169).
+
+    **On a tiled dataset** (``sift_vlad_doc``, pages carrying ``tile_vectors``)
+    Stage 1 is replaced too.  The caller's *results* (the detector head's
+    page-VLAD ranking, near chance on documents) give way to the tiled Stage 1:
+    max over the Good boxes' queries x each page's tiles.  The shortlist grows to
+    :func:`~vtscore.training.structural_stage1.tiled_top_k`, and fits are kept on
+    *det_ctx* across retrains (#3928).  Bad votes do not enter Stage 2: the
+    match-statistic MLP that learned from them ranked worse than the gate
+    (#4169).
+
+    *feature_snap* is the source of the template ``local_features`` (keyed the
+    same way as *good_votes*),
     defaulting to *snap*.  The vote-driven path leaves it ``None`` because the
     voted media live in the active dataset; the **labelset** path passes a
     synthetic snapshot of re-derived cross-dataset features so a saved
@@ -477,11 +476,9 @@ def maybe_structural_rerank(
     if not templates:
         return results, threshold
 
-    classifier = train_verification_classifier(templates, good_votes, bad_votes, feat_snap, matcher)
     if det_ctx is not None:
         try:
-            det_ctx.verification_classifier = classifier
-            # The threshold returned below is the classifier's boundary, not a
+            # The threshold returned below is the gate's boundary, not a
             # cut on the retrieval MLP's scale, so the MLP-scale estimators the
             # Stage-1 pass cached no longer describe it.  Left in place, the next
             # re-cut (a floor or Inclusion change, the acquisition cut) would
@@ -489,22 +486,345 @@ def maybe_structural_rerank(
             # apply it to verification scores.
             det_ctx.anchored_cut_cache = None
             det_ctx.calibration_cache = None
-            det_ctx.precision_floor_cache = None
             det_ctx.line_ranking = None
         except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
             pass
 
-    scorer = VerificationScorer(model=classifier)
-    reranked = structural_rerank(
+    template_keys = None
+    cache = None
+    parents: dict[Any, tuple[Any, StructuralFeatures]] = {}
+    if snapshot_has_tiles(snap):
+        cache = _verification_cache(det_ctx)
+        prune_tags: dict[Any, Any] = {}
+        unpruned = dict(templates)
+        if STOPLIST_POLICY != "off" and bad_votes:
+            templates, prune_tags = _stoplist(templates, bad_votes, feat_snap, matcher, cache, region_boxes)
+        boxed = {cid: tpl for cid, tpl in templates if region_boxes.get(cid) is not None}
+        queries = vote_queries(good_votes, feat_snap, region_boxes, boxed)
+        if queries is not None:
+            results = tiled_stage1(snap, queries, score_key)
+            top_k = tiled_top_k(len(results))
+            template_keys = [
+                (cid, region_boxes.get(cid), id(feat_snap[cid].get("local_features")), prune_tags.get(cid))
+                for cid, _ in templates
+            ]
+            parents = {
+                key: ((cid, region_boxes.get(cid), key[2], None), unpruned[cid])
+                for key, (cid, _tpl) in zip(template_keys, templates)
+                if key[3] is not None
+            }
+        else:
+            cache = None
+
+    threshold_out = STRUCTURAL_DECISION_THRESHOLD
+    if template_keys is not None and cache is not None and bad_votes:
+        threshold_out = _bad_ceiling_threshold(
+            list(zip(template_keys, [tpl for _, tpl in templates])), bad_votes, feat_snap, matcher, cache
+        )
+    threshold_out, recall_floor = _recall_line(
+        threshold_out, beta, template_keys, [tpl for _, tpl in templates], good_votes, feat_snap, matcher, cache
+    )
+    threshold_out = _precision_line(
+        threshold_out,
+        beta,
+        template_keys,
+        [tpl for _, tpl in templates],
+        good_votes,
+        bad_votes,
+        feat_snap,
+        matcher,
+        cache,
+    )
+    scorer = _line_scorer(template_keys is not None, bad_votes, feat_snap, loose_ok_from=recall_floor)
+    reranked = _rerank_growing(
         results,
         snap,
         [tpl for _, tpl in templates],
-        scorer,
         matcher,
         top_k=top_k,
         score_key=score_key,
+        template_keys=template_keys,
+        cache=cache,
+        tiled=template_keys is not None,
+        scorer=scorer,
+        parents=parents,
     )
-    return reranked, STRUCTURAL_DECISION_THRESHOLD
+    _record_gate(det_ctx, reranked, threshold_out, score_key)
+    return reranked, threshold_out
+
+
+def _record_gate(det_ctx: Any, reranked: list[dict], threshold: float, score_key: str) -> None:
+    """Leave the pages the gate passes on *det_ctx*: what the balance counts on this line (#4505).
+
+    A set, never a ranking, since a check has no ranking to walk here.
+    """
+    if det_ctx is None:
+        return
+    try:
+        det_ctx.gate_passed = frozenset(r["id"] for r in reranked if float(r.get(score_key) or 0.0) >= threshold)
+    except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
+        pass
+
+
+#: Stop-list from Bad votes (#4170 / #4180, pre-registered arms): ``"off"`` (shipped),
+#: ``"all"`` prunes each Good template against every Bad, ``"gated"`` only against the
+#: Bads that clear the gate for that template.
+STOPLIST_POLICY = "off"
+#: The Lowe ratio the stop-list's matches use (#4162's arm 6).
+_STOPLIST_RATIO = 0.75
+
+
+def _stoplist(
+    templates: list[tuple[Any, StructuralFeatures]],
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: Optional[VerificationCache],
+    region_boxes: dict[Any, tuple[float, float, float, float]],
+) -> tuple[list[tuple[Any, StructuralFeatures]], dict[Any, Any]]:
+    """Each Good template without the descriptors a Bad page also matches; ``(templates, prune tags)``.
+
+    A descriptor that passes the ratio test against a Bad vote's page is part of
+    what lets that Bad match (a letterhead rule, a font's glyphs), so it is not
+    the mark. #4180's guard keeps one that also passes against another Good's
+    page. A tag per pruned template (the dropped indices) keys the verification
+    cache, so a template that changes is re-verified and one that does not keeps
+    its fits.
+    """
+    from vtscore.media.structural import ratio_test_matches  # noqa: PLC0415
+
+    bads = {b: f for b in bad_votes if (f := _local_features(feature_snap.get(b))) is not None and f.count > 0}
+    if not bads:
+        return templates, {}
+    goods = {cid: _local_features(feature_snap.get(cid)) for cid, _ in templates}
+    out: list[tuple[Any, StructuralFeatures]] = []
+    tags: dict[Any, Any] = {}
+    for cid, tpl in templates:
+        use = list(bads.values())
+        if STOPLIST_POLICY == "gated" and cache is not None:
+            key = (cid, region_boxes.get(cid), id(goods[cid]), None)
+            fits = cache.best_many([(key, tpl)], list(bads.items()), matcher)
+            use = [f for (b, f), s in zip(bads.items(), fits) if s.model_ok and s.inlier_count >= DEFAULT_MIN_INLIERS]
+        desc = tpl.descriptors_f32()
+        if not use or desc.shape[0] < 2:
+            out.append((cid, tpl))
+            continue
+        drop = np.zeros(desc.shape[0], dtype=bool)
+        for t_idx, _c in ratio_test_matches(desc, [f.descriptors_f32() for f in use], ratio=_STOPLIST_RATIO):
+            drop[t_idx] = True
+        others = [g for o, g in goods.items() if o != cid and g is not None and g.count > 0]
+        if others and drop.any():
+            confirmed = np.zeros(desc.shape[0], dtype=bool)
+            for t_idx, _c in ratio_test_matches(desc, [g.descriptors_f32() for g in others], ratio=_STOPLIST_RATIO):
+                confirmed[t_idx] = True
+            drop &= ~confirmed
+        if not drop.any() or drop.all():
+            out.append((cid, tpl))
+            continue
+        keep = ~drop
+        out.append((cid, StructuralFeatures(keypoints=tpl.keypoints_f32()[keep], descriptors=desc[keep])))
+        tags[cid] = hash(np.flatnonzero(drop).tobytes())
+    return out, tags
+
+
+def _line_scorer(
+    tiled: bool, bad_votes: Any, feature_snap: dict[Any, dict], *, loose_ok_from: Optional[int] = None
+) -> VerificationScorer:
+    """The scorer behind the returned set: geometry cuts on a tiled dataset with no Bad vote yet (#4440).
+
+    Until a Bad exists the Bad ceiling is only the 8-inlier gate, so a verified page
+    must also fit tightly (:data:`GEOMETRY_RATIO_MIN`, :data:`GEOMETRY_REPROJ_MAX`).
+    At the recall end of the balance a fit with *loose_ok_from* inliers passes loose (#4458).
+    """
+    if tiled and not any(_local_features(feature_snap.get(b)) for b in (bad_votes or ())):
+        return VerificationScorer(
+            ratio_min=GEOMETRY_RATIO_MIN, reproj_max=GEOMETRY_REPROJ_MAX, loose_ok_from=loose_ok_from
+        )
+    return VerificationScorer()
+
+
+def _recall_line(
+    threshold: float,
+    beta: Optional[float],
+    template_keys: Optional[Sequence[Any]],
+    template_features: list[StructuralFeatures],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: Optional[VerificationCache],
+) -> tuple[float, Optional[int]]:
+    """``(line, floor)`` for the balance (#4458): at the recall end the beta-1 *threshold* or the floor's.
+
+    Below :data:`RECALL_BETA`, or off a tiled dataset, it is *threshold* unchanged and no floor.
+    """
+    if template_keys is None or cache is None or beta is None or beta < RECALL_BETA:
+        return threshold, None
+    floor = _recall_floor(list(zip(template_keys, template_features)), good_votes, feature_snap, matcher, cache)
+    return min(threshold, round(VerificationScorer().threshold_for(floor), SCORE_DECIMALS)), floor
+
+
+def _recall_floor(
+    templates: list[tuple[Any, StructuralFeatures]],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> int:
+    """The recall end's inlier floor (#4458): max(10, ceil(0.25 x the Goods' median leave-one-out inliers)).
+
+    A Good's leave-one-out fit is its best fit to the other Goods' templates, so the floor follows how
+    well this detector's own marks match each other: a faint mark's floor stays at 10.
+    """
+    median = _goods_loo_median(templates, good_votes, feature_snap, matcher, cache)
+    if median is None:
+        return RECALL_MIN_INLIERS
+    return max(RECALL_MIN_INLIERS, math.ceil(RECALL_GOOD_FRACTION * median))
+
+
+def _goods_loo_median(
+    templates: list[tuple[Any, StructuralFeatures]],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> Optional[float]:
+    """The median of each Good's best fit to the other Goods' templates; ``None`` with < 2 Goods."""
+    loo: list[int] = []
+    for g in good_votes:
+        feats = _local_features(feature_snap.get(g))
+        others = [(k, t) for k, t in templates if k[0] != g]
+        if feats is None or feats.count == 0 or not others:
+            continue
+        (stats,) = cache.best_many(others, [(g, feats)], matcher)
+        loo.append(stats.inlier_count if stats.model_ok else 0)
+    return float(np.median(loo)) if len(loo) >= 2 else None
+
+
+def _precision_line(
+    threshold: float,
+    beta: Optional[float],
+    template_keys: Optional[Sequence[Any]],
+    template_features: list[StructuralFeatures],
+    good_votes: Any,
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: Optional[VerificationCache],
+) -> float:
+    """The line at the precision end of the balance (#4479): *threshold*, or the floor's, whichever is higher.
+
+    Below :data:`PRECISION_BETA` the floor is max(16, ceil(0.5 x the Goods' median leave-one-out
+    inliers), the Bad ceiling + 5). Above it, or off a tiled dataset, *threshold* is unchanged.
+    """
+    if template_keys is None or cache is None or beta is None or beta > PRECISION_BETA:
+        return threshold
+    templates = list(zip(template_keys, template_features))
+    floor = PRECISION_MIN_INLIERS
+    median = _goods_loo_median(templates, good_votes, feature_snap, matcher, cache)
+    if median is not None:
+        floor = max(floor, math.ceil(PRECISION_GOOD_FRACTION * median))
+    ceiling = _bad_ceiling(templates, bad_votes, feature_snap, matcher, cache)
+    if ceiling is not None:
+        floor = max(floor, ceiling + PRECISION_CEILING_MARGIN + 1)
+    return max(threshold, round(VerificationScorer().threshold_for(floor), SCORE_DECIMALS))
+
+
+def _bad_ceiling_threshold(
+    templates: list[tuple[Any, StructuralFeatures]],
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> float:
+    """The returned set's line on a tiled dataset: above the best fit any Bad vote reached (#4367).
+
+    The fixed 8-inlier gate passes hard negatives on a document page at 8,192
+    keypoints. A Bad vote tells us how well a page that is not the mark can fit
+    these templates, so a page is accepted only if it fits better than every Bad.
+    That took the returned set's F1 from 0.43 to 0.85 at 25 clicks on FullMarks
+    (#4367's pre-registered R1). With no Bads, or none that fit, it is the gate.
+    """
+    ceiling = _bad_ceiling(templates, bad_votes, feature_snap, matcher, cache)
+    if ceiling is None:
+        return STRUCTURAL_DECISION_THRESHOLD
+    scorer = VerificationScorer()
+    return round(scorer.threshold_for(max(scorer.min_inliers, ceiling + 1)), SCORE_DECIMALS)
+
+
+def _bad_ceiling(
+    templates: list[tuple[Any, StructuralFeatures]],
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> Optional[int]:
+    """The most inliers any Bad vote's page reached against *templates*; ``None`` without a usable Bad."""
+    bads = [(b, f) for b in bad_votes or () if (f := _local_features(feature_snap.get(b))) is not None and f.count > 0]
+    if not bads:
+        return None
+    fits = cache.best_many(templates, bads, matcher)
+    return max((s.inlier_count if s.model_ok else 0) for s in fits)
+
+
+def _rerank_growing(
+    results: list[dict],
+    snap: dict[Any, dict],
+    templates: list[StructuralFeatures],
+    matcher: StructuralMatcher,
+    *,
+    top_k: int,
+    score_key: str,
+    template_keys: Optional[Sequence[Any]],
+    cache: Optional[VerificationCache],
+    tiled: bool,
+    scorer: Optional[VerificationScorer] = None,
+    parents: Optional[dict[Any, tuple[Any, StructuralFeatures]]] = None,
+) -> list[dict]:
+    """:func:`structural_rerank`, then, on a tiled dataset, more blocks while the shortlist's tail still verifies.
+
+    Growth follows :data:`~vtscore.training.structural_stage1.K_POLICY` (#4391).
+    Under the shipped ``"fixed"`` policy this is exactly one re-rank.
+    """
+    from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
+
+    scorer = scorer or VerificationScorer()
+    stage1_ids = [e.get("id") for e in results]
+    if tiled and cache is None:
+        # No detector to keep fits on (a one-off sort): still never verify a page twice while growing.
+        cache = VerificationCache()
+    while True:
+        reranked = structural_rerank(
+            results,
+            snap,
+            templates,
+            scorer,
+            matcher,
+            top_k=top_k,
+            score_key=score_key,
+            template_keys=template_keys,
+            cache=cache,
+            parents=parents,
+        )
+        verified = {e["id"]: float(e.get(score_key, 0.0) or 0.0) for e in reranked[:top_k]}
+        if not (tiled and s1.should_extend(stage1_ids, verified, top_k)):
+            break
+        top_k = min(len(results), top_k + s1.EXTEND_STEP, s1.TILED_K_CAP)
+    s1.LAST_TOP_K = top_k
+    return reranked
+
+
+def _verification_cache(det_ctx: Any) -> Optional[VerificationCache]:
+    """The detector's verification cache, created on first use; ``None`` without a context."""
+    if det_ctx is None:
+        return None
+    try:
+        cache = getattr(det_ctx, "structural_verification_cache", None)
+        if cache is None:
+            cache = VerificationCache()
+            det_ctx.structural_verification_cache = cache
+        return cache
+    except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
+        return None
 
 
 def maybe_structural_rerank_example(
@@ -515,6 +835,7 @@ def maybe_structural_rerank_example(
     *,
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
+    beta: Optional[float] = None,
 ) -> tuple[list[dict], float]:
     """Stage-2 re-rank for the example-sort (seed-by-example) path.
 
@@ -530,10 +851,8 @@ def maybe_structural_rerank_example(
     (Stage 1 already folds the examples into a centroid; the geometry does
     not, because a VLAD centroid of two logos matches neither).
 
-    There are no votes, so there is no match-statistic classifier to train -
-    the cold-start inlier gate (:class:`VerificationScorer` with no model)
-    scores the fits, with its boundary at :data:`STRUCTURAL_DECISION_THRESHOLD`
-    like every other regime.
+    The inlier gate (:class:`VerificationScorer`) scores the fits, with its
+    boundary at :data:`STRUCTURAL_DECISION_THRESHOLD`, as on the vote path.
 
     A no-op for non-structural datasets and when no example yielded features
     (an empty template can never verify anything, so the Stage-1 cosine order
@@ -551,7 +870,15 @@ def maybe_structural_rerank_example(
     matcher = _resolve_matcher(snap)
     if matcher is None:
         return results, threshold
-    scorer = VerificationScorer()  # cold-start: example-sort carries no votes
+    if snapshot_has_tiles(snap) and (queries := example_queries(templates)) is not None:
+        # Tiled dataset: the crops' VLADs against every page's tiles replace the
+        # page-VLAD cosine, and the shortlist grows (#3928).
+        results = tiled_stage1(snap, queries, score_key)
+        top_k = tiled_top_k(len(results))
+        from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
+
+        s1.LAST_TOP_K = top_k
+    scorer = VerificationScorer()
     reranked = structural_rerank(
         results,
         snap,
@@ -561,4 +888,11 @@ def maybe_structural_rerank_example(
         top_k=top_k,
         score_key=score_key,
     )
-    return reranked, STRUCTURAL_DECISION_THRESHOLD
+    return reranked, _example_line(snap, beta)
+
+
+def _example_line(snap: dict[Any, dict], beta: Optional[float]) -> float:
+    """The example sort's line: the 8-inlier gate, or at the precision end on a tiled dataset 16 (#4479)."""
+    if beta is not None and beta <= PRECISION_BETA and snapshot_has_tiles(snap):
+        return round(VerificationScorer().threshold_for(PRECISION_MIN_INLIERS), SCORE_DECIMALS)
+    return STRUCTURAL_DECISION_THRESHOLD

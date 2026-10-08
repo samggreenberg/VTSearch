@@ -11,6 +11,11 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  // Hold the scrollbar's width whether or not the list overflows, so the grid
+  // is as wide empty as full: the label view snaps the panel to its columns
+  // before the ranking fills it, and a scrollbar arriving after the snap would
+  // push the last column out (#4347).
+  scrollbar-gutter: stable;
 
   &.grid-layout {
     display: grid;

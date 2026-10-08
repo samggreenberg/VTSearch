@@ -1,4 +1,5 @@
 import os
+import platform
 import warnings
 
 # Native math libraries read these env vars during *their* import, which happens
@@ -23,6 +24,16 @@ os.environ["MKL_NUM_THREADS"] = _torch_threads
 # therefore ``torch.set_num_threads`` -- agrees with the OMP/MKL vars above.
 # Without this the two disagree and torch silently wins with 1.
 os.environ[_THREADS_ENV] = _torch_threads
+
+# One set of OpenBLAS kernels on every x86 node (#4481). OpenBLAS picks kernels by
+# CPU: AVX-512 ("SkylakeX") on the GRID's AMD EPYC nodes, AVX2 ("Haswell") on its
+# Xeons. Their float32 rounding differs in the last bits, which moved the VLAD
+# and tile vectors a document ranking is built from, so the same detector ranked
+# documents differently depending on the node the app landed on. Haswell kernels
+# run on both, and were no slower for tiling on the EPYC nodes. Set before numpy
+# loads OpenBLAS; an explicit value wins.
+if platform.machine() in ("x86_64", "AMD64"):
+    os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")
 
 # Configure structured logging: JSON lines by default with per-record
 # request_id / dataset_id / detector_id / user fields. Override via:
@@ -123,6 +134,7 @@ from vtsearch.routes import (  # noqa: E402
     sessions_bp,
     settings_bp,
     settings_io_bp,
+    line_test_bp,
     precision_check_bp,
     sorting_bp,
     sync_sources_bp,
@@ -213,7 +225,7 @@ api.spec.to_dict = _to_dict_with_operation_ids
 # module exposes a ``register_*`` function that wires its handlers on in the
 # original order.
 
-from vtsearch import admin_overrides  # noqa: E402
+from vtsearch import admin_overrides, import_hooks  # noqa: E402
 from vtsearch.errors import register_error_handlers  # noqa: E402
 from vtsearch.hooks import register_hooks  # noqa: E402
 
@@ -244,6 +256,7 @@ api.register_blueprint(main_bp)
 api.register_blueprint(medias_bp)
 api.register_blueprint(sorting_bp)
 api.register_blueprint(precision_check_bp)
+api.register_blueprint(line_test_bp)
 api.register_blueprint(sessions_bp)
 api.register_blueprint(processors_crud_bp)
 api.register_blueprint(processors_scoring_bp)
@@ -278,6 +291,13 @@ app.register_blueprint(hf_auth_bp)
 # ---------------------------------------------------------------------------
 # Server startup
 # ---------------------------------------------------------------------------
+
+
+def _report_import_hooks() -> None:
+    """Print the ``--on-dataset-imported`` functions in force, if any."""
+    hooks = import_hooks.describe()
+    if hooks:
+        print(f"\U0001f4e8 Dataset-import hooks: {hooks}", flush=True)
 
 
 def _report_admin_overrides() -> None:
@@ -386,7 +406,9 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     # Deployment-level overrides the gunicorn-launched images can only reach
     # through the environment (they never parse argv). An explicit flag wins.
     admin_overrides.apply_env_overrides()
+    import_hooks.configure_from_env()
     _report_admin_overrides()
+    _report_import_hooks()
     _report_docs_links()
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat

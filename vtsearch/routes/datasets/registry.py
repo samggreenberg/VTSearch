@@ -52,6 +52,7 @@ from vtscore.datasets.registry import (
     update_dataset as _reg_update,
 )
 from vtsearch.schemas.datasets import (
+    DatasetAutofindRequestSchema,
     DatasetDomainShiftResponseSchema,
     DatasetRegistryDuplicatesResponseSchema,
     DatasetRegistryLoadResponseSchema,
@@ -214,9 +215,11 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     # dominant slice keeps a rebuild advancing the bar across its whole span
     # instead of the old equal split, where the instant dedup drove step 2
     # to ~100% and the bar then sat frozen there through the entire rebuild.
-    # That reasoning is the *fallback*; an admin ``VTSEARCH_TIMING_PROFILE``
-    # replaces it with the split this host's disk and clustering backend
-    # actually produce at this dataset's size.
+    # That reasoning is the *fallback*, and it is per media type: an audio
+    # pickle's read runs 3.5-16 s, so audio's fallback gives step 1 0.40 of
+    # the bar where image's gives it 0.15 (#4105). An admin
+    # ``VTSEARCH_TIMING_PROFILE`` replaces either with the split this host's
+    # disk and clustering backend actually produce at this dataset's size.
     #
     # Which of those two the atlas step will be is worth up to the whole bar
     # (#3521 measured a restore and a rebuild of the same 2954-item dataset at
@@ -644,28 +647,39 @@ def dataset_domain_shift(dataset_id: str):
     return {"reference_dataset_id": dataset_id, **report}
 
 
-@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/autorun", methods=["POST"])
+@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/autofind", methods=["POST"])
+@datasets_registry_bp.arguments(DatasetAutofindRequestSchema, required=False)
 @datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
 @datasets_registry_bp.alt_response(
     400,
-    description="None of the caller's AutoRun detectors applies to this dataset (its media or embedder types).",
+    description=(
+        "None of the detectors to run applies to this dataset (its media or embedder types), "
+        "or ``detector_ids`` is empty."
+    ),
 )
 @datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
-@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+@datasets_registry_bp.alt_response(
+    404, description="Dataset not found, or a ``detector_ids`` entry names no detector the caller can access."
+)
 @datasets_registry_bp.alt_response(409, description="Dataset is not currently loaded.")
-def run_dataset_autorun(dataset_id: str):
-    """Run the caller's AutoRun detectors on a loaded dataset, in the background.
+def run_dataset_autofind(body: dict, dataset_id: str):
+    """Run AutoFind on a loaded dataset, in the background.
 
-    The Dashboard's dataset ⋯ **Run AutoRun**.  Scores the dataset with every
-    detector on the caller's AutoRun list that applies to it, sends the results
-    to their Auto-Find exporter when one is set, and keeps them for the AutoRun
-    Results dialog (``GET /api/autorun/runs/<task_id>``).  Progress is reported
-    on the ``loading-tasks`` channel of ``GET /api/events`` under the returned
-    ``task_id``, on a task keyed to this dataset; its ``autorun`` block carries
+    The Dashboard's dataset ⋯ **Run AutoFind** sends no body, and the run scores
+    the dataset with every detector on the caller's AutoFind list that applies
+    to it.  The Dashboard's big **Find** button sends ``detector_ids``, the
+    ticked detectors, and the run scores with those instead: drafts run as they
+    are, without being moved to the AutoFind list.
+
+    Either way the run sends the results to the caller's AutoFind exporter
+    when one is set, and keeps them for the Find Results dialog
+    (``GET /api/autofind/runs/<task_id>``).  Progress is reported on the
+    ``loading-tasks`` channel of ``GET /api/events`` under the returned
+    ``task_id``, on a task keyed to this dataset; its ``autofind`` block carries
     the summary once it finishes.  Cancellable like any loading task.
     """
     from vtsearch.auth import get_current_user
-    from vtsearch.autorun_detectors import AutoRunUnavailable, start_autorun_task
+    from vtsearch.autofind import AutoFindUnavailable, start_autofind_task
     from vtsearch.state import get_context
 
     if _reg_get(dataset_id) is None:
@@ -674,13 +688,16 @@ def run_dataset_autorun(dataset_id: str):
         abort(403, message="Access denied")
     ctx = get_context(dataset_id) if _reg_is_loaded(dataset_id) else None
     if ctx is None:
-        abort(409, message="Load the dataset before running AutoRun on it")
+        abort(409, message="Load the dataset before running AutoFind on it")
 
+    detector_ids = (body or {}).get("detector_ids")
     try:
-        task_id = start_autorun_task(ctx, trigger="manual")
-    except AutoRunUnavailable as exc:
+        task_id = start_autofind_task(
+            ctx, trigger="manual" if detector_ids is None else "find", detector_ids=detector_ids
+        )
+    except AutoFindUnavailable as exc:
         abort(exc.status, message=exc.message)
-    return {"ok": True, "message": "AutoRun started", "task_id": task_id}
+    return {"ok": True, "message": "AutoFind started", "task_id": task_id}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])

@@ -39,6 +39,7 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/cost_trend.py`            | The Smart indicator's arithmetic (shared with the eval harness)     |
 | `vtscore/detectors/stability.py`             | The Stable indicator's arithmetic (shared with the eval harness)    |
 | `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
+| `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
 
 **Labels: resolving, syncing, restoring**
 
@@ -102,7 +103,7 @@ type's embedder, and the resulting `(X_list, y_list)` is fed into
 labelset changes. Changing the labels does not drop the head.
 Instead, every writer of `.model` stamps `.model_labels_sig` with
 `model_loading.labelset_signature` of the labels it trained from, and
-`resolve_or_train_detector` (Find, Auto-Find, the portable export)
+`resolve_or_train_detector` (Find, AutoFind, the portable export)
 reuses the head only while `model_loading.cached_head_is_current` says
 the saved labelset still has that signature (sorted `(label,
 stable_element_id, region_box)` triples). No weights are ever persisted -
@@ -190,6 +191,45 @@ a content hash appended so long names can't collide) and appends `.json`.
 `os.fsync` + `os.replace`. Despite the leading underscores these are the
 path-level API the rest of the package (and `vtscore.cli`) calls.
 
+### Kept test verdicts
+
+`vtscore/detectors/line_verdicts.py` (#4526) keeps a finished Test mode
+verdict ([`LineTest`](training.md#the-test-sample-linetest-linebudgets-line_phase-found_words))
+in the detector JSON under `TEST_VERDICTS_KEY` (`"test_verdicts"`), a list
+newest first, one entry per tested dataset:
+
+```python
+from vtscore.detectors.line_verdicts import LineTestVerdict, labels_digest, put_verdict, read_verdicts
+
+verdict = LineTestVerdict.from_test(test, dataset_id=ds_id, dataset_name="drawings-new",
+                                    labels_digest=labels_digest(labelset))
+put_verdict(data, verdict)              # replaces any earlier verdict for ds_id
+read_verdicts(data)                     # newest first; malformed entries skipped
+```
+
+An entry holds the dataset's id and name, `tested_at`, the balance, the line's
+count and the corpus's size, each pick as `{"id", "label", "band"}`, and the
+precision, recall and F-beta ranges: ids, labels and numbers, never a score or
+a weight. Two digests make it checkable without either:
+
+- `labels_digest(labelset)` digests `labelset_signature`, the identity
+  `cached_head_is_current` reuses a head by. `verdict.stale(current)` is true
+  once the detector's labels no longer match, which is what any retrain is; a
+  verdict whose `labels_digest` is `None` (finished after the test set was
+  folded in) is stale from the start. Staleness is derived on read, so no
+  writer of the labelset has to remember to mark it.
+- `ranking_digest(ids, line_count)` frames the ranking the picks came from;
+  `verdict.kept_labels(ids, line_count)` returns the picks only on that
+  ranking and line, for `LineTest.start(labels=...)` to resume from.
+
+`keep_verdict(det_ctx, test, dataset_id=, dataset_name=)`,
+`kept_verdict(det_ctx, dataset_id)` and `forget_verdict(det_ctx, dataset_id)`
+read and write the active detector's file under `label_sync_write_lock` and
+re-point its cached labelset afterwards, so the write does not rehydrate a live
+Find session. `verdict_summaries(data, latest_only=False)` is what a reader
+shows: the ranges, the *found* words and the stale mark against the labelset
+in the same file, the picks left on disk.
+
 ---
 
 ## Training
@@ -214,30 +254,33 @@ bags and a scoring population that differs from *snap*):
    provided (the haystack the mixture is fitted on).  Without one, the
    cross-calibration cut ships alone.
 
-Returns `(model, threshold)`. The function reads `get_min_precision`,
-`get_calibrate_count`, and `get_calibration_fraction` from `vtscore.state`;
-those getters resolve through `CoreConfig`, so library consumers running
-outside an app must register a `register_core_config_builder` provider.
+Returns `(model, threshold)`. The function reads `line_knobs` (the active
+detector's balance, `get_beta`), `get_calibrate_count`, and
+`get_calibration_fraction` from `vtscore.state`; those getters resolve
+through `CoreConfig`, so library consumers running outside an app must
+register a `register_core_config_builder` provider.
 Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
-the ranking the line keeps a set of (`line_ranking`, #4272) and the #4220
-estimate the Find Stats curve reads (`precision_floor_cache`). Under a floor
-the threshold keeps a set - the top *count* unvoted items of the haystack, the
-set the detector's last spot check ended on or the floor's starting candidate
-- and with no floor it is the Inclusion 0 cut. Pass `calibrating_groups` (the
-bags whose vote the learned sort chose) to keep every other vote out of the
-estimate's evidence.
+the ranking the line keeps a set of (`line_ranking`, #4272). It no longer
+builds the #4220 estimate (#4362), so `precision_floor_cache` stays `None`.
+Under a balance the threshold keeps a set - the top *count* unvoted items of
+the haystack, the set the detector's last spot check ended on (where the
+check's shape lets it move the line) or the mixture's F-beta argmax under the
+balance's cap - and with no balance it is the Inclusion 0 cut.
+`calibrating_groups` is deprecated and ignored (#4362): it chose the votes
+that estimate could use as evidence. Leave it unset; passing it emits a
+`DeprecationWarning`.
 
 ### `train_and_score(...)`
 
 `vtscore/detectors/training.py`:
 `train_and_score(clips_dict, good_votes, bad_votes, inclusion_value=None,
 calibrate_count=2, calibration_fraction=None, vote_region_boxes=None,
-det_ctx=None, min_precision=None)`. Vote-aware online trainer; returns
-`(results, threshold, model)`. *min_precision* is the precision floor to cut
-at (`None`: the Inclusion 0 cut). *inclusion_value* is **deprecated**
-(#4269): leave it unset; `0` is accepted with a `DeprecationWarning` and any
-other value raises `ValueError`.
+det_ctx=None, beta=None)`. Vote-aware online trainer; returns
+`(results, threshold, model)`. *beta* is the balance to cut at, F-beta's beta
+in `[0.25, 4]` (`None`: no balance, the Inclusion 0 cut). *inclusion_value*
+is **deprecated** (#4269): leave it unset; `0` is accepted with a
+`DeprecationWarning` and any other value raises `ValueError`.
 
 - `results` - list of `{"id": cid, "score": rounded_float, "best_region": [...]?}`
   dicts, sorted by raw score descending.
@@ -452,20 +495,45 @@ and return `(X_list, y_list, groups, score_rows)` - the same shape
 ### `train_from_labelset(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None)`
 
 `vtscore/detectors/labelset_training.py`. Populate the cache,
-build `(X, y)`, run `train_and_threshold`, store the result on
-`det_ctx.model` / `det_ctx.threshold`, and stamp
-`det_ctx.model_labels_sig` with the labelset's signature. Returns `True` on success,
-`False` when fewer than 2 cached vectors exist or one class is
-missing. `haystack_for(embedder_name)` may return a `Haystack` to
-calibrate the threshold on a different population than *snap* (the CLI
-uses it for converted / re-clipped scoring sets).
+build `(X, y)`, store a detector on `det_ctx.model` / `det_ctx.threshold`,
+and stamp `det_ctx.model_labels_sig` with the labelset's signature.
+Which detector follows the **label quota** (#4643, below): with no Good
+that resolved it returns `False`; under `GOOD_QUOTA` Goods or
+`BAD_QUOTA` Bads it stores the Goods' centroid head
+(`install_centroid_head`); with both met it runs `train_and_threshold`.
+`haystack_for(embedder_name)` may return a `Haystack` to
+fit the line's corpus side on a different population than *snap* (the
+CLI uses it for converted / re-clipped scoring sets); the class model the
+line is cut from comes from the labels either way (#4452), and the
+centroid's midpoint is cut on that population.
 
-### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, min_precision=None)`
+### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, beta=None, label_quota=False)`
 
 `vtscore/detectors/labelset_training.py`. Like `train_and_score`
 but trains on the full labelset (cross-dataset labels) and scores only
 the active `clips_dict`. Returns the same `(results, threshold, model)`
-tuple. *inclusion_value* is deprecated the same way.
+tuple. *inclusion_value* is deprecated the same way. `label_quota=True`
+applies the label quota as `train_from_labelset` does - a cold Find
+passes it; the Train view's learned sort, the sort the user labels on,
+does not, so it defaults to `False`.
+
+### The label quota and the Goods' centroid (#4643)
+
+`vtscore/detectors/label_quota.py` and `vtscore/detectors/centroid_head.py`.
+A labelset gives a detector by its counts alone: `TIER_NONE` with no Good,
+`TIER_CENTROID` under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads -
+Autopilot's own quorum - and `TIER_TRAINED` once both are met.
+`label_quota(n_good, n_bad)` and `labelset_quota(labelset)` return a
+`LabelQuota` (`tier`, `goods_owed`, `bads_owed`, `as_dict()`);
+`served_quota(model, labelset)` is what the app's responses report.
+
+The centroid is `fit_centroid_head(goods, score)`: the unit mean of the
+L2-normalised Good vectors, as a `Linear(D, 1)` scoring
+`CENTROID_LOGIT_SCALE * (cosine - cut)`, where the cut is the
+two-Gaussian midpoint of the max-pooled cosines on the corpus `score`
+scores - the line `cosine_sort_active` draws for several uploaded
+examples. The threshold is `CENTROID_THRESHOLD` (0.5) and does not take
+the balance. `is_centroid_head(model)` tells it from a trained head.
 
 ---
 
@@ -594,7 +662,7 @@ indicators. It is unrelated to `vtscore.concurrency.progress`
 
 All cache state lives in `_ProgressCache` instances held in `_caches`, an
 LRU-bounded map keyed by `(dataset_id, detector_id)`. Each cache carries
-`inclusion` (rebuild trigger; the app always passes 0), `steps` (one entry per label-history step with
+`steps` (one entry per label-history step with
 `model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
 `good_ids` / `bad_ids` (running label sets), `prev_predictions` (stability
 baseline), `coverage_atlas` (the per-step replay of coverage evidence),
@@ -619,7 +687,7 @@ Every entry point resolves its cache through the active
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
 | `inject_live_model(good, bad, model, threshold, *, smart_threshold=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`) |
-| `recreate_model_at_time(clips_dict, label_history, time_index, inclusion_value=0)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
+| `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR + FNR on current votes, at each model's Smart cut          |
 | `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
 | `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |
@@ -638,7 +706,7 @@ Every entry point resolves its cache through the active
   average but noisy between retrains). The arithmetic lives in
   `vtscore.detectors.cost_trend`, which the eval harness calls too. Every cost
   is priced at `SMART_INCLUSION` (0: FPR + FNR), at the model's own cut for
-  that inclusion (`smart_cut`), whatever line the floor draws, so one
+  that inclusion (`smart_cut`), whatever line the balance draws, so one
   window never mixes models cut under different rules (issue #4243).
 - **Stable** - prediction flips between successive detectors, counted over
   the still-unlabeled pool with the *whole* pool as denominator. Only
@@ -694,7 +762,9 @@ training clipper without reading the detector JSON.
 
 - **Labelset is the only persisted form.** Detector JSON files store
   `LabeledElement` lists; never weights, never embeddings, never
-  scores. Every load re-derives the head from origins.
+  scores. Every load re-derives the head from origins. A kept test
+  verdict sits beside the labelset as ids, labels and range numbers, and
+  is checked against the labels by digest, not by any stored vector.
 - **Origins are stable across datasets.** `stable_element_id` is
   computed from origin / md5 fields, so the same training label
   identifies the same source file no matter which dataset is loaded.

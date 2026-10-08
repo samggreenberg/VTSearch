@@ -403,6 +403,68 @@ class TestAutopilotFlow:
         assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "done"
 
 
+def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:
+    return next_phase(
+        good,
+        bad,
+        remaining_unlabeled=remaining,
+        smart=lights,
+        stable=lights,
+        span=lights,
+        dry_run_stop=True,
+        ran_dry=ran_dry,
+    )
+
+
+class TestDocumentStop:
+    """#4488: a document dataset stops on the walk's dry run, not the lights."""
+
+    def test_the_opening_is_unchanged(self):
+        assert _doc_phase(GOOD_TARGET - 1, 0) == "good"
+        assert _doc_phase(GOOD_TARGET, BAD_TARGET - 1) == "bad"
+
+    def test_the_walk_has_no_good_target(self):
+        assert _doc_phase(MORE_TARGET + 50, BAD_TARGET) == "more"
+
+    def test_running_dry_is_done(self):
+        assert _doc_phase(GOOD_TARGET, BAD_TARGET + MORE_DRY_RUN, ran_dry=True) == "done"
+
+    def test_green_lights_do_not_end_the_walk(self):
+        assert _doc_phase(9, 9, lights="green") == "more"
+
+    def test_exhausted_when_nothing_is_left_before_running_dry(self):
+        assert _doc_phase(9, 9, remaining=0) == "exhausted"
+
+    def _in_walk(self) -> AutopilotFlow:
+        flow = AutopilotFlow(dry_run_stop=True)
+        flow.update(GOOD_TARGET, 0, 500, None)
+        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "more"
+        return flow
+
+    def test_the_flow_runs_dry_into_done(self):
+        flow = self._in_walk()
+        bad = BAD_TARGET
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            assert flow.update(GOOD_TARGET, bad, 500, None) == "more"
+        assert flow.update(GOOD_TARGET, bad + 1, 500, None) == "done"
+
+    def test_the_flow_walks_past_the_good_target(self):
+        flow = self._in_walk()
+        assert flow.update(MORE_TARGET + 5, BAD_TARGET, 500, None) == "more"
+
+    def test_the_walk_counts_after_more_done_latched(self):
+        """Retrain mode latches ``more_done``; on documents the walk still runs, and still stops."""
+        flow = self._in_walk()
+        flow.more_done = True
+        bad = BAD_TARGET
+        phases = []
+        for _ in range(MORE_DRY_RUN):
+            bad += 1
+            phases.append(flow.update(GOOD_TARGET, bad, 500, None))
+        assert phases == ["more"] * (MORE_DRY_RUN - 1) + ["done"]
+
+
 class TestSelectorPhaseParity:
     """The selector's picks must match the app's Sort + Select pairing."""
 
@@ -524,6 +586,9 @@ class TestHarnessIntegration:
             atlas_min_node_size=5,
             seed_scores=seed_scores,
             autopilot_fidelity=False,
+            # The subject is when the Train side first trains; under the label
+            # quota (#4643) a row also exists at the first Good, with no Bad.
+            label_quota=False,
         )
         assert rows[0]["app_trained"] == 1
         assert min(rows[0]["n_good"], rows[0]["n_bad"]) == 1

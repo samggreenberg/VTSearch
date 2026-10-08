@@ -10,6 +10,301 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The eval harness can walk Autopilot's More on the detector's top** (issue #4637). `simulate_voting_iterations`
+  takes `more_walk` (`"seed"`, the default and the app: the top of the typed query's sort; or `"detector"`: the More
+  walk takes the top of the step's detector ranking, and its steps record `app_trained = 1`), and
+  `vtscore.eval.autopilot_flow.app_has_detector` takes `more_shown`. An experiment arm; the app is unchanged.
+
+- **Under the label quota a labelset gives the Goods' centroid, not a trained head** (issue #4643).
+  `vtscore.detectors.labelset_training.train_from_labelset` - the app's Test, AutoFind,
+  detector load and CLI - now follows the new `vtscore.detectors.label_quota`: with no Good that
+  resolved it returns `False`; under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads (Autopilot's
+  quorum) it stores the Goods' centroid head and returns `True`, **one Good and no Bad
+  included**; with both met it trains as before. Behaviour change for a library caller: at 1-2
+  Goods or 1-3 Bads the stored model is a centroid head, not the SVM, and there is no switch
+  back: a head fitted to that few labels is what the rule exists to stop. The centroid is the new
+  `vtscore.detectors.centroid_head`: `fit_centroid_head(goods, score)` returns a `Linear(D, 1)`
+  ranking by cosine to the unit mean of the Goods, cut at the two-Gaussian midpoint of those
+  cosines on the scored corpus (threshold `CENTROID_THRESHOLD`, 0.5, balance-blind), so every
+  scoring path and a portable weight export take it as they take the linear SVM;
+  `is_centroid_head` tells them apart. `labelset_train_and_score` takes `label_quota`
+  (default `False`, the Train view's learned sort; a cold Find passes `True`), and
+  `model_loading.cached_head_is_current` refuses a trained head while its labelset is under the
+  quota. `install_centroid_head` drops the trained head's re-cut caches, so a balance change
+  leaves the centroid's line where it is. The eval harness's default arm follows
+  (`simulate_voting_iterations(label_quota=None)`): a row from the first Good, the centroid's
+  test metrics under the quota, and a `detector_tier` column; `label_quota=False` is the
+  pre-#4643 arm.
+
+- **The eval harness can hold Autopilot's Smart light yellow** (issue #4359). `simulate_voting_iterations`
+  and `vtscore.eval.autopilot_flow.AutopilotFlow` take `smart_gate` (`"app"`, the default and the app,
+  or `"never"`: the phase decision reads Smart as yellow, so a session stays in `hard`). A bound
+  for re-keying Smart; the app is unchanged.
+
+- **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
+  now returns the score where the labels line's corpus posterior falls below the new
+  `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new
+  `target_precision_threshold(line, p)` read off `ctx.labels_line`; the line - 4 re-cut
+  (`ACQUISITION_INCLUSION_OFFSET`, unchanged) is its fallback with no labels line. Set the
+  constant to `None` to restore the re-cut. The eval harness's default arm follows
+  (`resolve_acquisition_target`); `simulate_voting_iterations` takes `acq_target_p` (`None` = the app,
+  `"off"` = the offset cut, a number pins it) and `acq_origin` (`"line"`, or `"inclusion"`: the old
+  Inclusion-knob origin for the offset). Priced in `docs/experiments/2026-10-07-acquisition-cut-3546/`.
+
+- **A typed-query sort's display line takes the balance** (issue #4603).
+  `text_sort_cuts(scores, rule=None, beta=None)` and `text_sort_threshold(..., beta=None)`:
+  at `beta <= TEXT_SORT_COUNT_MAX_BETA` (1) the guarded rule draws the line by count
+  (branch `"count"`). It keeps the top `round(beta ** TEXT_SORT_COUNT_EXPONENT * n_hat)`, where
+  `n_hat` is the excess over a Gaussian bulk (median, 1.4826 x MAD) above
+  `median + TEXT_SORT_COUNT_Z * sigma` (z = 4) and the exponent puts c at 3/8 for beta 1/4.
+  `beta=None`, beta above 1, a sort under `TEXT_SORT_COUNT_MIN_SCORES` (50), or one with no
+  spread keeps the guarded line. `acq_threshold` never moves with beta.
+  `query_sort.text_sort_active(query_vec, snap=None, beta=None)` reads the active balance
+  (`vtscore.state.get_beta`) when `beta` is `None`.
+
+- **The CLI calls the settings' detector list AutoFind** (issue #4615). The
+  app renamed its AutoRun (and the Settings' *Auto-Find*) to AutoFind, so
+  `vtscore.cli`'s plan heading reads `AutoFind detectors (N):` and its two
+  no-detector messages say *AutoFind*. Only printed text changed: the
+  `autofind_detectors` settings key and every function name are as before.
+
+- **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
+  `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen
+  `TextSortCuts(threshold, acq_threshold, branch)` from one mixture fit: `threshold` is the
+  display line under `TEXT_SORT_CUT_RULE`, and `acq_threshold` is the shipped midpoint
+  (`calculate_gmm_threshold`) under every rule, which `text_sort_acquisition_threshold(scores)`
+  also returns on its own. `TEXT_SORT_CUT_DEFAULT` is `"guarded_tail"`: `text_sort_threshold`
+  now draws #3826's guarded line unless `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint`; it was
+  `"gmm_midpoint"` while the line was also Autopilot's sampling position. The eval harness's
+  Bad phase (`al_strategies._sort_threshold`) and the `@mid` schedule cut read the acquisition
+  cut, so an opening's picks no longer move with the display rule.
+  `vtscore.training.query_sort.text_sort_active(query_vec, snap=None)` returns `(results, cuts)`
+  for the text route; `cosine_sort_active` is unchanged in signature and returns the display
+  line for `role="text"`.
+
+- **A test's walk below the line runs to its budget when there is a class model** (issue #4542).
+  With `posteriors` given, `LineTest.misses_walk()` no longer stops at a dry band and
+  `line_phase` no longer ends the misses phase on `LineBudgets.misses_width`: the walk goes
+  one band deeper a round until `misses_picks` is spent or the bands run out. #4523 priced it:
+  the recall range held the truth in 13-38% of sessions at the old stops and 75-94% walking
+  to the budget, for about 30 more picks. `dry_run_share` and `misses_width` now govern only
+  a test with no class model (`posteriors=None`), whose walk keeps its dry-run stop.
+  `LineBudgets`' defaults are unchanged and are now the priced values. `LineTest.as_dict()`
+  gains `class_model`.
+
+- **A test's draws are read at any count** (issue #4524). `LineTest.estimate_at(count,
+  beta=None)` returns the `EdgeEstimate` the line would ship if it kept the top *count*,
+  from the same joint draws as `estimates()`: exact at a band edge, a band's positives
+  split in proportion inside one. The draws are cached until the next label. The app's
+  Test verdict reads it for the line each balance preset would draw.
+
+- **The CPU Stage 1 keeps a float32 tile matrix** (issue #4514). `_float32_matrix` converts the
+  fp16 matrix once per page set (torch's vectorised conversion), `_cpu_page_max` multiplies it
+  directly, and `exact_page_scores` reads it when present. numpy's per-call conversion was 95%
+  of a CPU click at 50,000 pages. The copy doubles the matrix's memory, on the CPU path only.
+
+- **Tiled Stage 1 orders on an exact score** (issue #4481). The page scorers return each
+  page's best (query, tile) pair (`PageMax`, `page_max_from_tiles`, `_gpu_page_max`,
+  `_cpu_page_max`), and `tiled_stage1` orders on that pair recomputed in float64
+  (`exact_page_scores`), then snapshot order. `_gpu_page_scores` is gone. With OpenBLAS
+  pinned, V100 and L40S nodes give the same Stage-1 and verified-head order in 24 of 24
+  diagnostic steps (12 of 24 before).
+
+- **A spot check is due when the labels separate weakly** (issue #4496).
+  `LabelsLine.separation` is the labels' d' in the spread the line was cut
+  with; `weak_check_due(separation, n_votes, votes_at_last_check)` is the rule
+  the app and the eval harness share (`WEAK_SEPARATION_D` 1.5,
+  `WEAK_CHECK_MIN_VOTES` 10, `WEAK_CHECK_COOLDOWN` 25).
+  `detector_balance_state` adds `separation` and `check_due`, counted from the
+  new `DetectorContext.check_ended_votes`. The harness's default arm is now
+  `spot_check="weak"` (`weak_phase="learned"`: only past Autopilot's
+  opening): a prompted check's picks are clicks inside the voting budget, and
+  frames record on them. Runs that never prompt are unchanged.
+
+- **The document stop** (issue #4488). `labeling_progress.dry_run_status`
+  counts the standing non-Good votes cast since the last Good (green at
+  `DRY_RUN_TARGET = 16`), and `document_labeling_status` is a tiled
+  dataset's labeling status: `stop_rule: "dry_run"`, the readout, and Smart /
+  Stable / Span `off`. The Autopilot port follows the app:
+  `next_phase(dry_run_stop=, ran_dry=)` and `AutopilotFlow(dry_run_stop=)` walk
+  with no Good target, in retrain mode too, and running dry is `done`.
+
+- **The labels line's spread floor follows the corpus** (issue #4492).
+  `class_score_model` keeps the raw pooled spread (`ClassScoreModel.sigma_raw`,
+  `floored()`); once a corpus is known, the class model and the corpus's
+  negative bulk are floored at `RELATIVE_SIGMA_FLOOR` (0.5) × that corpus's
+  robust logit spread (`corpus_sigma_floor`) rather than an absolute 0.25.
+  `fit_corpus` and `corpus_posteriors` take the floor as `floor=`. The
+  parametric fallback, with no corpus, keeps `MIN_LOGIT_SIGMA`.
+- **When the labels' Bads are a random sample, the labels line models the negatives with
+  their own scores** (issue #4490). `class_score_model` keeps the Bads' sorted held-out
+  logit scores on the model (`ClassScoreModel.neg_logits`, compared and summarised by
+  neither `==` nor `as_dict`) when there are at least `RANDOM_BADS_MIN` (100), never from
+  the in-sample fallback. `_line_on` reads them: when they are at most
+  `RANDOM_BADS_MAX_ENRICHMENT` (2) times over-represented in the corpus's top
+  `RANDOM_BADS_TOP_SHARE` (5%), each item's chance comes from the labels' Good normal
+  against a kernel density of the Bads, the positives' share fitted by EM, and the line
+  is the same `corpus_cut` over them; `LabelsLine.bads_shape` says which. Otherwise the
+  line is unchanged. A labelset from an exhaustively labelled dataset gains +0.155 /
+  +0.085 / +0.039 F-beta at 1/4, 1, 4 on the review's full-label ceiling; no session
+  within 150 clicks changes. `line_test_arm.row_from_snapshot` restores the Bads' scores
+  from a snapshot's folds, so its replay still matches the run.
+- **Withheld-half snapshots carry the calibration folds and the images' ids, and the
+  ceiling leaves one** (issue #4490). Every `test_score_sink` entry gains `fold_scores`,
+  `fold_labels` and `fold_index` (the step's held-out scores of its votes, from which
+  `class_score_model` is rebuilt exactly) and `ids` (the withheld images, in score order).
+  `_skyline_arm_rows(test_score_sink=...)` appends a `phase="ceiling"` entry for the
+  full-label model: the withheld half's scores and labels, its Find line's class model and
+  its folds. A line rule that changes the class model can be priced post hoc on a session
+  or on the ceiling without re-training either.
+- **The full-label ceiling's rank frame records Find's labels line** (issue
+  #4486). `_skyline_arm_rows` draws the labels line from the skyline's own
+  calibration folds (`_skyline_fit_and_score(details_sink=...)`), fits its
+  corpus side on the withheld half, and records what it keeps at each preset
+  (`test_line_k_b025/b1/b4`); it was -1. The skyline row itself is unchanged:
+  still the oracle's cut on the test labels.
+- **The rank frames record the app's line at the app's presets** (issue
+  #4471). `RANK_FRAME_BETAS` is `(0.25, 1.0, 4.0)` (was `(0.5, 1.0, 2.0)`),
+  with columns `test_line_k_b025` / `_b1` / `_b4`. Under the default arm the
+  count is what the labels line (#4452) keeps on the test half, from the same
+  fit the headline row cuts at the run's beta (so the two agree exactly), or
+  what the retrain's fallback cut keeps when no class model exists; it can be
+  0. A forced `walk_shape` arm still records the count line.
+- **`BALANCE_PRESETS` is `(0.25, 1.0, 4.0)`** (issue #4448; was
+  `(0.5, 1.0, 2.0)`): the presets' ends are `BETA_MIN` and `BETA_MAX`. The
+  spot check's start (`balance_schedule`) is unchanged: 32 at beta <= 1, 128
+  above.
+- **The balance's line from the labels alone** (issue #4452). New
+  `vtscore.training.thresholds.labels_line`: `ClassScoreModel` /
+  `class_score_model` (the calibration folds' held-out Good and Bad scores as
+  two normals of one spread on the logit scale; the head's in-sample scores
+  stand in with one Good), `estimate_positives`, `corpus_fit` and
+  `corpus_prevalence` (a 2-part fit of a corpus's unvoted scores, the labels'
+  Good component fixed and the bulk of negatives fitted as `CorpusNegatives`,
+  guarded by a counted bound), `corpus_posteriors` (each unvoted item's chance
+  of being a positive, from a 3-part fit with the labels' Bad component),
+  `corpus_cut` (the cut maximising expected F-beta with TP the running sum of
+  those chances, the total from the 2-part fit and the returned size counted;
+  between items), `labels_line_threshold` (the parametric cut at a prevalence,
+  for a line with no corpus scores), `LabelsLine` (`threshold(beta)`,
+  `on_corpus(...)` to re-fit the corpus side on another corpus) and
+  `fit_labels_line`. Every retrain fits it
+  and parks it on `DetectorContext.labels_line`; under a balance it is the
+  line (no count, no cap), the re-cut moves it with beta, and a Find over a
+  new dataset re-fits only the corpus side. `balance_state(...,
+  threshold=)` counts what a threshold keeps of the ranking; `check_shape`
+  is `advisory` at every beta. The eval harness's default arm draws the same
+  line on the sim set and cuts the withheld half at Find's threshold; its base
+  calibration rows gain `train_threshold`, `train_prevalence` and
+  `find_prevalence`, and a forced `walk_shape` runs the count line as an arm.
+  `simulate_voting_iterations` gains `sim_size` (train on a seeded subsample
+  of the sim set) and `test_score_sink` (the withheld half's scores and
+  labels, for Find scenarios drawn after the run).
+- **A balance walk's effect on the line follows the preset** (issue #4427).
+  `check_shape(beta)` is `advisory` at beta <= 1 and `trim` above:
+  `balance_count` / `balance_line` ignore a finished walk under `advisory`
+  (the line keeps the unchecked rule's count) and take its end under `trim`;
+  `SpotCheck.start_balance` defaults `shallow_only` to the shape (the walk
+  may only step shallower under `trim`); `BalanceState` gains `shape` and
+  `audited`. The eval harness's `walk_shape` (`None` the app's, `"walk"` the
+  full walk whose end moves the line, `"advisory"`, `"trim"`) replaces the
+  day-old `walk_advisory` / `walk_shallow_only` knobs, and its rows gain
+  `check_audited`.
+- **Reverted the day after (issue #4427): `ACQUISITION_ARGMAX_FACTOR` is
+  `None`**, so the balance keeps the line − 4 re-cut; `acquisition_count` /
+  `acquisition_threshold` return `None` with no factor and the harness's
+  default arm follows (`resolve_acquisition_factor(None, beta)` is `None`);
+  a number still runs the rank-cut arm.
+- **The acquisition cut under a balance is half the F-beta argmax's depth**
+  (issue #4409; `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
+  `acquisition_count` / `acquisition_threshold` give the rank and the score
+  at `ACQUISITION_ARGMAX_FACTOR` (0.5) of the mixture's F-beta argmax over
+  the unvoted ranking; `detector_acquisition_threshold` takes the detector's
+  `beta` and returns it, falling through to the line − 4 re-cut with no
+  mixture estimate. The eval harness's default arm follows
+  (`resolve_acquisition_factor`, the `acquisition.balance_cut` mirror of the
+  sync gate): `acq_p_crossing=None` under a balance is the shipped factor,
+  `"off"` (`CALIB_ACQ_P_CROSSING=off`) the offset cut, a number the arm.
+- **A collapsed mixture fit is no estimate, and a balance check always
+  starts** (issue #4419). On a tiny ranking the vote-anchored mixture can
+  land its high component on the top two scores alone (a standard deviation
+  under 1% of the score range, `MIXTURE_MIN_STD_SHARE`); its posterior then
+  puts no mass on anything else, and both the floor's and the balance's
+  unchecked line kept one item. `mixture_posterior` now treats such a fit as
+  none, so the unchecked line keeps the schedule's cap as #4389 intended. The
+  balance walk's recall denominator comes from the new `walk_positives`: the
+  mixture's count when it has one, else the balance's cap lowered to the
+  unvoted count, so `POST /api/precision-check/start` no longer refuses with
+  "No score model to read recall against" and the harness's end-of-run check
+  runs in the same cases.
+- **The line's default preference is the balance** (issue #4413).
+  `DEFAULT_LINE_PREFERENCE` is `"balance"`: `vtscore.state.line_knobs()` hands
+  every retrain and re-cut the detector's beta (`DEFAULT_BETA`, 1.0, until
+  set) and the floor only under `line_preference="floor"`, which is
+  deprecated with `min_precision` and goes next release. The eval harness's
+  default arm follows: `simulate_voting_iterations(min_precision=None,
+  beta=None)` now draws the line at the balance (the new
+  `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
+  of `line_knobs` and the `thresholds.line_preference_default` mirror of
+  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
+  `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
+  under a balance as it was under a floor. `aim_words(state)` says which
+  preference an unchecked set was exported at ("aiming at 25% right" / "at
+  F1") for the CLI's and AutoRun's log lines, whose results now carry
+  `balance` beside `floor`.
+- **The unchecked line is the smaller of the schedule's count and the
+  mixture's** (issue #4389, the owner's ruling on #4383). Before any spot
+  check - AutoRun, the CLI, a cold Find and every session before its first
+  check - `floor_count` / `floor_line` / `floor_state` take a `proposal`,
+  the count the new `mixture_count(ranking, min_precision, labels,
+  also_voted)` reads off a 2-component mixture fitted on the ranking's
+  scores and anchored on the votes (`anchored_gmm_fit`): the deepest top
+  *k* whose mean high-component posterior meets the floor. The count is
+  `min(schedule candidate, proposal)`, never more than before. The fit is
+  memoised on the `LineRanking` (`mixture`), one per ranking, on the first
+  caller's anchors: the retrain's training labels (`train_and_score`,
+  `train_and_threshold`, `_train_and_score_xy` and `_fused_threshold` take
+  `labels=`), or the human votes for a ranking a cold Find built
+  (`vtscore.state.core.detector_line_labels` / `detector_line_proposal`).
+  The eval default arm does the same (`_safe_threshold_for_step(labels=)`).
+  `labeled_media_labels` joins `labeled_media_ids` in `labelset_training`.
+
+- **The precision floor's spot check walks the ranking in bands** (issue
+  #4388, the owner's ruling on #4383). `SpotCheck.start` now takes the whole
+  unvoted ranking (ids in rank order) rather than a fixed candidate, cuts it
+  into bands (the top 8, the next 8, 16, 32, ...), audits each band with 5
+  uniform picks, and walks: one band deeper while the band-weighted share of
+  right picks meets the floor, one shallower while it does not, stopping on
+  the first reversal. The line keeps the deepest set that met the floor
+  (`confirmed`, a band edge) or the first band (`short`, 8 items) instead of a
+  halving candidate that bottomed out at 32. New: `BAND_BASE`, `band_edges`,
+  `bands_for`, `WALK_START` / `WALK_DEEPER` / `WALK_SHALLOWER`,
+  `SpotCheck.estimate`, `SpotCheck.band_counts`, `SpotCheck.band_ids`, the
+  `start_count=` keyword, and `bands`, `band`, `direction` and `estimate` in
+  `SpotCheck.as_dict`. Changed: `check_schedule(P).rounds` is the bands the
+  walk audits before its first verdict (5 at 10%, 4 at 25%, 3 at 50% and
+  above) and `.picks` is 5 at every floor below 1; `rounds_for` counts bands;
+  `range_tail` is the tail each band's interval gets over the set's bands;
+  `SpotCheck.range` is the size-weighted mean of the bands' intervals;
+  `SpotCheck.candidate_ids` is `ranking_ids`. The eval default arm runs the
+  same walk (`spot_check="end"`), one row per band.
+
+- **Python 3.11 or later is now required** (issue #4385). `requires-python`
+  moves from `>=3.10` to `>=3.11`, since Python 3.10 reaches end of life in
+  October 2026. No API changes.
+
+- **The eval harness refuses a non-zero `inclusion` under a precision floor**
+  (issue #4361). A set floor wins over the knob, so under one `inclusion`
+  only re-weighted the `cost` column and never moved the line.
+  `simulate_voting_iterations`, `run_voting_iterations_eval`,
+  `run_voting_iterations_eval_from_pickles` and `run_al_benchmark` now raise
+  `ValueError` for `inclusion != 0` unless `min_precision="off"` (the
+  Inclusion arm); the grid drivers raise before their first cell. `inclusion=0`
+  and the Inclusion arm are unchanged. `run_al_benchmark` gains
+  `min_precision` (additive, default `None`: the app's own floor), and
+  `python -m vtscore.eval.al_benchmark` gains `--min-precision` (a floor in
+  `(0, 1]`, or `off`), without which `--inclusion` other than 0 is refused.
+
 - **The precision floor's line is a set the spot check measures** (issue
   #4272). Under a floor, `train_and_threshold` / `train_and_score` /
   `labelset_train_and_score` / `run_learned_sort` and
@@ -42,6 +337,109 @@ instead, since every commit on `dev` is effectively a new app release.)
     `_safe_threshold_for_step` takes `check=`.
 
 ### Added
+
+- **The calibration frame carries the objective's oracle** (issue #4654).
+  `vtscore.eval.calibration_metrics.oracle_fbeta_cut(scores, labels, beta)`
+  returns `(threshold, fbeta, fpr, fnr)` for the cut with the best F-beta at
+  `beta` (`oracle_cut`'s sweep and tie rule; NaN with no positives or no
+  beta), and `oracle_fbeta_metrics` the row's columns from one sort.
+  `CALIBRATION_COLUMNS` gains `ORACLE_FBETA_COLUMNS` (`oracle_fbeta`,
+  `oracle_fbeta_b025` / `_b1` / `_b4`: the best F-beta any cut reaches, at
+  the row's beta and each preset) and `FBETA_ORACLE_CUT_COLUMNS`
+  (`fbeta_oracle_threshold` / `_fpr` / `_fnr`: the cut that reaches
+  `oracle_fbeta`). The existing `oracle_*` columns are the cost objective's
+  cut and are unchanged; on a rare class that cut runs deep and is no ceiling
+  on F-beta. Additive: no existing column or signature changed.
+
+- **`DETECTION_METRICS` names the two outer presets** (issue #4636).
+  `vtscore.eval.calibration_metrics.DETECTION_METRICS` gains `fbeta_b025`
+  ("F1/4") and `fbeta_b4` ("F4"), the returned set scored at the precision- and
+  recall-leaning presets, which every row already carried (`FBETA_COLUMNS`), so
+  a metric picker built on the table offers them beside F1. Ordered by beta
+  around `f1`; `fbeta_b1` stays off the table, since it is `f1` exactly.
+  Additive: no existing entry changed.
+
+- **`DatasetImported`, how a dataset import ended** (issue #4616).
+  `vtscore.datasets.import_event` adds a frozen `DatasetImported(outcome,
+  dataset_id, name, user, media_type, n_media, origin, error)` with the
+  `SUCCEEDED` / `FAILED` outcome constants and their `ImportOutcome` type. The load pipeline hands one to its
+  new `on_finished` callback after a load that succeeded or failed (never after
+  a cancel); the app passes it to the admin's `--on-dataset-imported` hooks.
+  Additive: no existing signature changed meaning.
+
+- **Every eval row carries the objective** (issue #4584). The voting-iterations
+  and calibration frames (`VOTING_COLUMNS`, `CALIBRATION_COLUMNS`) gain
+  `FBETA_COLUMNS`: `fbeta`, F-beta of the withheld half above the row's
+  threshold at the row's own `beta` (NaN where no balance drew the line), and
+  `fbeta_b025` / `fbeta_b1` / `fbeta_b4` at each preset. One definition,
+  `vtscore.eval.calibration_metrics.fbeta_metrics`, computed from the counts
+  through the app's `fbeta_score`; `fbeta_from_rates` is the same number read
+  back off a frame's `precision` and `recall`, for frames written before the
+  columns. `DETECTION_METRICS` gains `fbeta`. `row_metrics.operating_metrics`
+  takes an optional `beta` (default `None`, so existing callers keep working
+  and emit a NaN `fbeta`); `cost` stays on every row as a diagnostic.
+  `RANK_FRAME_BETAS` and `beta_tag` moved up `voting_columns.py`, unchanged.
+
+- **A finished test's verdict is kept on the detector** (issue #4526).
+  `vtscore.detectors.line_verdicts`: `LineTestVerdict.from_test` is what a
+  finished `LineTest` leaves (the dataset's id and name, the date, the balance,
+  the line's count and the corpus's size, each pick's id, label and band, and
+  the precision, recall and F-beta ranges; ids, labels and numbers only), kept
+  in the detector JSON under `TEST_VERDICTS_KEY` (`test_verdicts`), one per
+  tested dataset (`put_verdict`, `read_verdicts`, `verdict_for`,
+  `drop_verdict`). `labels_digest(labelset)` is a digest of
+  `labelset_signature`, and a verdict is `stale(current)` once the detector's
+  labels no longer match it; `ranking_digest(ids, line_count)` frames the
+  ranking its picks came from, and `kept_labels(ids, line_count)` gives them
+  back only on that ranking and line. `keep_verdict(det_ctx, test, ...)` /
+  `kept_verdict(det_ctx, dataset_id)` / `forget_verdict(det_ctx, dataset_id)`
+  read and write the active detector's file under `label_sync_write_lock`
+  (`forget_verdict` is a reset; nothing in the app's flow needs it);
+  `verdict_summaries(data)` is the readers' shape, with the stale mark.
+  `LineTest` gains `kept_at`, when a resumed test's picks were taken
+  (`None` for a fresh test), in `as_dict()` too.
+
+- **The test sample** (issue #4527; the first slice of Test mode, #4520,
+  documented in `vtscore/docs/packages/training.md`). `vtscore.training.thresholds.line_test`: `LineTest`
+  freezes a ranking and its line, cuts both sides into the spot check's doubling
+  bands, deals uniform rounds (`draw` / `record` / `unrecord`) and records each
+  pick's band; `estimates()` is the line's precision, recall and F-beta as
+  joint Monte Carlo ranges from per-band Beta posteriors under the Jeffreys
+  prior, re-estimated at every band edge (`at_edges`), with the positives below
+  the line model-assisted by the labels line's posteriors and the unreached
+  tail taken from the model and flagged; `next_band()` is the allocation rule
+  (every band above the line once from the line upward, then the greatest
+  expected shrink of the F-beta range; below the line a walk with a dry-run
+  stop); `line_phase` the phase machine and stop rule (width, budget,
+  exhaustion, dry run; `nothing` under one round), parameterised by
+  `LineBudgets`, whose defaults are the plan's proposals. `found_words` is the
+  spot check's recall phrase. `vote_provenance.FLOWS` gains `test`
+  (`TEST_PROVENANCE`): a test vote never trains.
+
+- **The balance's `gate` state** (issue #4505), additive: `BALANCE_GATE`
+  (`"gate"`) joins `BALANCE_STATES`, and `gate_balance_state(beta, passed,
+  also_voted=())` builds it - a structural detector's line, the verification
+  gate's boundary, whose `count` is the *passed* items not in *also_voted*,
+  with no ranges and `checkable` `False`. `maybe_structural_rerank` records
+  the passed set on the detector context (`DetectorContext.gate_passed`,
+  ids only, cleared wherever `line_ranking` is written or dropped), and
+  `vtscore.state.core.detector_balance_state` reports `gate` when the
+  context has that set and no ranking. A consumer that switches on a
+  balance's `status` should expect the third value.
+- **`BalanceState.checkable`** (issue #4489), additive (default `True`):
+  whether a spot check has anything to walk, an unvoted item in the ranking.
+  `balance_state` sets it `False` with no ranking (a structural detector,
+  whose line is the verification gate's boundary, or one not trained on the
+  corpus yet) or with every item voted, and `as_dict()` carries it.
+- **Per-media shipped timing defaults** (issue #4105), additive:
+  `vtscore.timing.TaskSpec.media_default_terms` (a `{media_type: terms}`
+  override of `default_terms`, default empty) and `TaskSpec.defaults_for(media_type)`,
+  which `step_terms` / `step_weights` now read their no-profile fallback
+  through. `dataset_open` is the one task that uses it: with no timing profile,
+  an audio open now paces `(0.40, 0.60)` (measured rebuild share 0.52-0.63)
+  instead of the task-wide `(0.15, 0.85)`, which every other media type keeps.
+  `TaskSpec` stays hashable (the new field is excluded from its hash), and the
+  profile JSON format is unchanged.
 
 - **A seed for the Browse projection** (issue #4296), all additive:
   `vtscore.config.PROJECTION_SEED` (from `VTSEARCH_PROJECTION_SEED`, default
@@ -806,6 +1204,51 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Deprecated
 
+- **A retrain no longer builds the #4220 precision estimate, and its
+  calibration filter is retired** (issue #4362). `train_and_threshold`,
+  `train_and_score`, `labelset_train_and_score` and `run_learned_sort` stopped
+  building a `PrecisionFloorEstimate` on every run and parking it on the
+  detector context. Its last reader, the Find Stats curve, went in #4360. The
+  public names stay importable, and those that still answer do so by the same
+  rule as before. Each emits a `DeprecationWarning`:
+  - `DetectorContext.precision_floor_cache` stays on the context and is always
+    `None`.
+  - `vtscore.state.core.detector_precision_floor(ctx, min_precision)` always
+    returns `insufficient_evidence` with zero calibration positives, since
+    nothing parks an estimate for it to read.
+  - The #4245 evidence filter answers as it did, but nothing reads the answer:
+    `vtscore.datasets.vote_provenance.calibrates_precision`,
+    `vtscore.training.thresholds.eligible_fold_orderings`,
+    `vtscore.detectors.training.vote_calibrating_groups` and
+    `calibration_rows_for`,
+    `vtscore.detectors.labelset_training.labelset_calibrating_groups`, and
+    `vtscore.eval.autopilot_flow.pick_provenance`.
+    `PRECISION_CALIBRATION_FLOWS` and `PRECISION_CALIBRATION_SELECT_MODES` are
+    unchanged.
+  - `train_and_threshold(calibrating_groups=...)` is ignored.
+
+  The estimator itself is unchanged library API: `precision_floor_cut`,
+  `precision_lower_bound_curve`, `fit_precision_floor_curve`,
+  `PrecisionFloorEstimate` and `reporting_line`. The `holdout_sink=` parameter
+  of `compute_fold_orderings`, `calibration_folds` and
+  `calibration_folds_cached` is unchanged too. Eval: `simulate_voting_iterations`
+  no longer builds the estimate or records each click's provenance, and the
+  step trainers' `details` drop `row_votes`. `fold_holdout_rows` stays, since
+  the precision frames read it. **What changes for a caller that never read
+  the estimate:** nothing. The line, the spot check and every threshold are
+  unchanged. The names above will be removed in a future release.
+
+- **The labeling-progress functions' `inclusion_value` is ignored** (issue
+  #4361). `recreate_model_at_time`, `calculate_error_cost_over_time`,
+  `calculate_prediction_stability_over_time`, `calculate_diversity_level_over_time`,
+  `compute_labeling_status`, `cached_indicator_history`, `is_status_cache_fresh`
+  and `analyze_labeling_progress` still accept it, but it no longer keys the
+  progress cache. Since #4243 that key changed no number: every Smart cost is
+  priced at `SMART_INCLUSION`, and the models, lines and Stable entries are the
+  ones the app served. Any value now gives the same answer and emits a
+  `DeprecationWarning`; the default is `None` (was `0`). Passing a new value no
+  longer rebuilds the cache, a rebuild that had also dropped its live models.
+
 - **Inclusion is retired as a user preference, and pinned to 0** (issue
   #4269). The precision floor (`min_precision`, #4245) is the operating point,
   and the app no longer sets or stores an Inclusion. Inclusion stays the unit
@@ -878,6 +1321,49 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Removed
 
+- **The precision floor** (issue #4421). The balance (#4413) is the only
+  preference a detector's line is drawn at. None of these was in a release
+  (all arrived after 0.1.0), so they go without a deprecation window:
+  - `vtscore.state`: `get_min_precision`, `set_min_precision`,
+    `get_line_preference`, `set_line_preference`; `line_knobs()` returns
+    `{"beta": b}`, and `min_precision` / `line_preference` are no longer
+    `KNOWN_SETTING_KEYS` (registering a persister for either raises
+    `ValueError`). `CoreConfig.beta` may be `None` - no balance, the
+    Inclusion 0 cut - for a library caller, as `min_precision=None` was;
+    `get_beta()` returns `float | None` accordingly.
+  - `vtscore.state.core`: `detector_floor_state`, `detector_line_proposal`,
+    `user_min_precision` (`user_beta()` replaces it) and
+    `DetectorContext.min_precision`; `recut_detector_threshold`,
+    `recompute_detector_thresholds` and `detector_line_inclusion` take the
+    beta alone. `detector_balance_state(ctx, None)` is `None`.
+  - `vtscore.config`: `CoreConfig.min_precision`, `CoreConfig.line_preference`,
+    `DEFAULT_MIN_PRECISION`, `DEFAULT_LINE_PREFERENCE`, `LINE_PREFERENCES`.
+  - `vtscore.training.thresholds`: the floor walk (`SpotCheck.start`; a walk
+    starts with `start_balance`, and `SpotCheck.min_precision` and the
+    check's `min_precision` key are gone), `FLOOR_CONFIRMED`, `FLOOR_SHORT`,
+    `FLOOR_STATES`, `FLOOR_UNCHECKED` (`BALANCE_UNCHECKED`), `FloorState`,
+    `applicable_result`, `floor_count`, `floor_line`, `floor_state`,
+    `mixture_count`, `check_schedule`, `DEFAULT_MIN_PRECISION`,
+    `resolve_min_precision` and `NO_PRECISION_FLOOR`. The band schedule
+    survives as `balance_schedule(beta)`: the top 32 at beta <= 1, 128 above
+    (`CHECK_BASE_CANDIDATE`, the new `CHECK_RECALL_CANDIDATE`). The #4220
+    estimator (`precision_floor_cut`, `PrecisionFloorEstimate`,
+    `reporting_line`) stays.
+  - The trainers (`train_and_score`, `labelset_train_and_score`,
+    `run_learned_sort`, `build_learned_sort_signature`) lose their
+    `min_precision` keyword; pass `beta`. The CLI's results and the exporters'
+    results dicts carry `balance` and no `floor`, and the `detector_unchecked`
+    event no `min_precision`.
+  - The eval harness's floor arm: `simulate_voting_iterations` and the
+    `run_voting_iterations_eval*` wrappers lose `min_precision`.
+    `resolve_line_knobs(beta)` takes the beta alone - `None` the app's
+    default, `"off"` (`NO_BALANCE`) the Inclusion arm, a number the balance
+    arm - so the Inclusion arm is `beta="off"`, and a non-zero `inclusion`
+    needs it. `python -m vtscore.eval.al_benchmark --min-precision` is
+    `--beta`. The rows lose the `min_precision` column (the `floor_*`
+    columns keep their names and report the balance's line) and the rank
+    frame its `test_line_k_p10/p50/p90` columns.
+
 - **The global dataset-progress system: `dataset_progress`, `get_progress()`
   and `check_dataset_cancelled()`** (issue #3376). Dataset and import progress
   now lives entirely in the per-task `loading_tasks` registry, one
@@ -912,6 +1398,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **A balance walk on a small ranking no longer keeps all of it whatever
+  its audits say** (issue #4424). `SpotCheck` started a balance walk on the
+  band holding the cap and stepped shallower only after a deeper step fell,
+  so a walk that started on the ranking's last band (every walk on a
+  ranking no larger than the cap) finished there at its first verdict. It
+  now steps shallower at once, as its reference `rule_fb_walk` does; a tie
+  still keeps the smaller set. `walk_positives` also falls back to the cap
+  when the mixture counts fewer than one positive, not only none: a sound
+  fit whose positives were all voted Good counts a few hundredths, and the
+  walk's recall over that count read as everything found.
 - **`vtscore.concurrency.stalls`: the stall watchdog no longer arms a dump
   that can segfault the process it watches** (issue #4345).
   `start_stall_diagnostics_from_env` used to re-arm

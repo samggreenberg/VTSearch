@@ -375,7 +375,7 @@ def _rank_stage(stage: int) -> plt.Figure:
         # In quotes because it is a word we made up: the detector's score, named
         # for the concept it is a score *of*. The next slide carries the same
         # label in the same place.
-        "“bookness”, low to high",
+        "“Bookness”, low to high",
         ha="center",
         va="bottom",
         fontsize=21,

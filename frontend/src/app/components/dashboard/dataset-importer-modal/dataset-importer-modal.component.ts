@@ -87,15 +87,15 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``buildProjection``. */
   mergeNearDuplicates = false;
 
-  /** "Run AutoRun" checkbox: run the user's AutoRun detectors on the dataset
-   *  once it is saved.  Starts from the ``autorun_on_import`` setting, which
+  /** "Run AutoFind" checkbox: run the user's AutoFind detectors on the dataset
+   *  once it is saved.  Starts from the ``autofind_on_import`` setting, which
    *  the server rewrites from each import that sends the box, so it comes up
    *  the way the user left it at their last import.  Shared across flows like
    *  the two toggles above. */
-  readonly runAutorun = signal(true);
+  readonly runAutofind = signal(true);
   /** Whether the user has touched the box, after which a late settings load
    *  must not overwrite their choice. */
-  private runAutorunTouched = false;
+  private runAutofindTouched = false;
 
   readonly mediaTypes = signal<MediaTypeInfo[]>([]);
   /** Bare (media_type-agnostic) embedder list, fetched once.  Kept for
@@ -123,26 +123,26 @@ export class DatasetImporterModalComponent implements OnInit {
 
   constructor() {
     effect(() => {
-      const remembered = this.settingsState.settingsSignal()?.autorun_on_import;
-      if (remembered !== undefined && !this.runAutorunTouched) this.runAutorun.set(remembered);
+      const remembered = this.settingsState.settingsSignal()?.autofind_on_import;
+      if (remembered !== undefined && !this.runAutofindTouched) this.runAutofind.set(remembered);
     });
   }
 
-  /** How many detectors are on the user's AutoRun tab.  With none there is
+  /** How many detectors are on the user's AutoFind tab.  With none there is
    *  nothing for the checkbox to decide, so it is hidden. */
-  get autorunDetectorCount(): number {
+  get autofindDetectorCount(): number {
     return this.datasetState.detectors.filter((d) => d.autofind).length;
   }
 
-  /** The value every flow sends as ``autorun``: the checkbox while it is
+  /** The value every flow sends as ``autofind``: the checkbox while it is
    *  shown, else ``null`` (send nothing; the remembered setting decides). */
-  get autorunFlag(): boolean | null {
-    return this.autorunDetectorCount > 0 ? this.runAutorun() : null;
+  get autofindFlag(): boolean | null {
+    return this.autofindDetectorCount > 0 ? this.runAutofind() : null;
   }
 
-  onRunAutorunChange(value: boolean): void {
-    this.runAutorunTouched = true;
-    this.runAutorun.set(value);
+  onRunAutofindChange(value: boolean): void {
+    this.runAutofindTouched = true;
+    this.runAutofind.set(value);
   }
 
   ngOnInit(): void {
@@ -177,8 +177,8 @@ export class DatasetImporterModalComponent implements OnInit {
     // Settings carry the per-media-type "last embedder" memory + solo-mode
     // locks the pickers read via ImportDefaultsService.
     this.settingsState.load();
-    // The detector registry says whether the user has AutoRun detectors (and so
-    // whether to offer the Run AutoRun box). The dialog also opens from views
+    // The detector registry says whether the user has AutoFind detectors (and so
+    // whether to offer the Run AutoFind box). The dialog also opens from views
     // that never listed the registry, so fetch it if nobody has yet.
     if (!this.datasetState.loaded) this.datasetState.refresh();
   }

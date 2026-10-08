@@ -62,6 +62,11 @@ class ImageSiftVladDocEmbedder(_StructuralImageBase):
     def max_features(self) -> int:
         return DOCUMENT_MAX_FEATURES
 
+    @property
+    def supports_tiled_stage1(self) -> bool:
+        # Page VLAD is at chance on a document page; tiles are the Stage 1 (#3928).
+        return True
+
     def _make_matcher(self) -> StructuralMatcher:
         # No `max_detect_pixels` override: the cap stays the shared, env-tunable
         # `MAX_STRUCTURAL_DETECT_PIXELS`, whose 2 MP default is the measured

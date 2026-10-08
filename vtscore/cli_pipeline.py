@@ -369,7 +369,7 @@ def _dispatch(config: dict[str, Any]) -> None:
         _import_labels(config["import_labels"], spec)
 
     # As with ``--import-labels-into``, a label import names the detector the
-    # run scores with, in place of the settings' Auto-Find list - unless the
+    # run scores with, in place of the settings' AutoFind list - unless the
     # file lists ``detectors:`` explicitly, which always wins (#4235).
     detectors = config["detectors"]
     if detectors is None and config["import_labels"] is not None:

@@ -102,11 +102,9 @@ def _make_voting_iterations_df(n_seeds=2, n_steps=10, strategy="random") -> pd.D
                     "elapsed_seconds": elapsed,
                 }
             )
-    # pandas' Python-3.10 _typing.py doesn't mark Axes as TypeAlias,
-    # so pyright can't see list[str] satisfies the Axes alias.
     return pd.DataFrame(
         rows,
-        columns=["seed", "dataset", "category", "strategy", "t", "cost", "fpr", "fnr", "elapsed_seconds"],  # pyright: ignore[reportArgumentType]
+        columns=pd.Index(["seed", "dataset", "category", "strategy", "t", "cost", "fpr", "fnr", "elapsed_seconds"]),
     )
 
 

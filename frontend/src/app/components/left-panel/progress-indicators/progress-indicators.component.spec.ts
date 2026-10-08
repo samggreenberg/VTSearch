@@ -58,18 +58,6 @@ describe('ProgressIndicatorsComponent', () => {
     expect(component.indicatorClick.emit).toHaveBeenCalledWith('span');
   });
 
-  it('should show smart subtext with cost', () => {
-    fixture.componentRef.setInput('labelingStatus', {
-      good_count: 0,
-      bad_count: 0,
-      total_count: 0,
-      smart: { status: 'yellow', cost: 0.123 },
-      stable: { status: '' },
-      span: { status: '' },
-    });
-    expect(component.smartSubtext).toBe('Cost: 0.123');
-  });
-
   it('should show stable subtext with flips', () => {
     fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
@@ -129,17 +117,23 @@ describe('ProgressIndicatorsComponent', () => {
     expect(component.spanTooltip).toContain('Diverse: your votes cover the dataset broadly.');
   });
 
-  it('should include live subtext in smart tooltip when available', () => {
+  it('builds the smart tooltip from what the backend sends, with no cost line (#4361)', () => {
+    // The Smart sub-object carries a status, a reason and the trend's slope; it never carries a cost.
     fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
-      smart: { status: 'yellow', cost: 0.456 },
+      smart: {
+        status: 'yellow',
+        reason: 'Error cost is still declining. Keep labeling.',
+        slope: -0.05,
+        slope_t: -3.1,
+        drift_within_noise: false,
+      },
       stable: { status: '' },
       span: { status: '' },
     });
-    expect(component.smartTooltip).toContain('Cost: 0.456');
-    expect(component.smartTooltip).toContain('Smart: the model fits your votes consistently.');
+    expect(component.smartTooltip).toBe('Smart: the model fits your votes consistently.');
   });
 
   it('should include live subtext in stable tooltip when available', () => {
@@ -161,13 +155,12 @@ describe('ProgressIndicatorsComponent', () => {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
-      smart: { status: 'green', cost: 0.42, drift_within_noise: true },
+      smart: { status: 'green', slope: -0.02, slope_t: -1.2, drift_within_noise: true },
       stable: { status: '' },
       span: { status: '' },
     });
     expect(component.smartDriftWithinNoise).toBe(true);
     expect(component.smartTooltip).toContain('noise rather than progress');
-    expect(component.smartTooltip).toContain('Cost: 0.420');
   });
 
   it('should not claim noise when smart is plainly green', () => {
@@ -175,7 +168,7 @@ describe('ProgressIndicatorsComponent', () => {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
-      smart: { status: 'green', cost: 0.42 },
+      smart: { status: 'green', slope: 0.001, slope_t: 0.1, drift_within_noise: false },
       stable: { status: '' },
       span: { status: '' },
     });
@@ -218,5 +211,36 @@ describe('ProgressIndicatorsComponent', () => {
     expect(buttons[0].getAttribute('data-status')).toBe('green');
     expect(buttons[1].getAttribute('data-status')).toBe('yellow');
     expect(buttons[2].getAttribute('data-status')).toBe('red');
+  });
+
+  describe('on a document dataset (#4488)', () => {
+    const off = { status: 'off' };
+
+    beforeEach(async () => {
+      fixture.componentRef.setInput('labelingStatus', {
+        good_count: 3,
+        bad_count: 13,
+        total_count: 16,
+        smart: off,
+        stable: off,
+        span: off,
+        stop_rule: 'dry_run',
+        dry_run: { status: 'yellow', run: 9, target: 16 },
+      });
+      await settleZoneless(fixture);
+    });
+
+    it('shows one dry-run readout in place of the three lights', () => {
+      const indicators = fixture.nativeElement.querySelectorAll('.labeling-indicator');
+      expect(indicators.length).toBe(1);
+      expect(indicators[0].textContent).toContain('Dry run 9/16');
+      expect(indicators[0].getAttribute('data-status')).toBe('yellow');
+      expect(fixture.nativeElement.querySelector('button.labeling-indicator')).toBeNull();
+    });
+
+    it('says what the count means', () => {
+      expect(component.dryRunTooltip).toContain('since the last good one');
+      expect(component.dryRunTooltip).toContain('At 16');
+    });
   });
 });

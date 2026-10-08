@@ -1,28 +1,30 @@
-@if (visible) {
-  @if (oversized()) {
-    <div
-      class="stripe-overview stripe-overview--disabled"
-      role="img"
-      aria-label="Minimap unavailable for large sorts"
-      title="Minimap unavailable for large sorts — the overview only draws for smaller rankings."
-    ></div>
-  } @else {
-    <div class="stripe-overview" role="img" aria-label="Media minimap" [title]="stripeTitle()" (click)="onStripeClick($event)" tabindex="0" (keydown.enter)="onStripeKeyboard()" (keydown.space)="onStripeKeyboard()">
-      <div class="stripe-container">
-        @for (dot of cachedDots(); track $index) {
-          <div
-            class="stripe-dot"
-            [class.good]="dot.type === 'good'"
-            [class.bad]="dot.type === 'bad'"
-            [class.selected]="dot.type === 'selected'"
-            [style.top.%]="dot.top"
-          ></div>
-        }
+@if (!visible) {
+  <!-- Nothing ranked yet: an empty track holds the strip's place, so the grid
+       beside it is as wide now as it will be once a ranking lands (#4347). -->
+  <div class="stripe-overview stripe-overview--empty" aria-hidden="true"></div>
+} @else if (oversized()) {
+  <div
+    class="stripe-overview stripe-overview--disabled"
+    role="img"
+    aria-label="Minimap unavailable for large sorts"
+    title="Minimap unavailable for large sorts — the overview only draws for smaller rankings."
+  ></div>
+} @else {
+  <div class="stripe-overview" role="img" aria-label="Media minimap" [title]="stripeTitle()" (click)="onStripeClick($event)" tabindex="0" (keydown.enter)="onStripeKeyboard()" (keydown.space)="onStripeKeyboard()">
+    <div class="stripe-container">
+      @for (dot of cachedDots(); track $index) {
+        <div
+          class="stripe-dot"
+          [class.good]="dot.type === 'good'"
+          [class.bad]="dot.type === 'bad'"
+          [class.selected]="dot.type === 'selected'"
+          [style.top.%]="dot.top"
+        ></div>
+      }
 
-        @if (cachedThresholdPosition() !== null) {
-          <div class="stripe-threshold" [style.top.%]="cachedThresholdPosition()"></div>
-        }
-      </div>
+      @if (cachedThresholdPosition() !== null) {
+        <div class="stripe-threshold" [style.top.%]="cachedThresholdPosition()"></div>
+      }
     </div>
-  }
+  </div>
 }

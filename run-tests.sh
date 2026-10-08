@@ -790,9 +790,12 @@ _lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
 # names only `@angular/build:*` builders -- so it was swapped for a direct
 # `@angular/build` devDependency (#3439), taking ~400 packages and every
 # unfixable advisory with it. Keep the gate wide: if a dev-only advisory ever
-# has genuinely no fix, pin it in `overrides` or carve it out here explicitly,
-# rather than re-blinding the audit to the entire dev tree.
-_lane_npm_audit() { (cd frontend && npm audit); }
+# has genuinely no fix, pin it in `overrides`, or -- only when no published
+# version is patched -- waive that one advisory in `WAIVERS` in
+# scripts/npm-audit-gate.py, rather than re-blinding the audit to the entire dev
+# tree. Each waiver is pinned to the advisory's vulnerable range, so it lapses
+# (and fails the gate) the moment upstream ships a fix (#4447).
+_lane_npm_audit() { python scripts/npm-audit-gate.py; }
 # `npm run test:ci` regenerates the API client (pretest:ci) then runs
 # `ng test --no-watch`, which exits non-zero on any spec failure.
 _lane_frontend_unit() { (cd frontend && npm run test:ci); }

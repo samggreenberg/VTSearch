@@ -122,7 +122,16 @@ MIRRORS: list[Mirror] = [
             "add, remove or reorder a phase, or change what gates one, port the same change. "
             "The 'more' walk (#4282) keeps history the counts cannot: its run of misses, read "
             "off which vote count rose. The app keeps it in checkPhaseTransition; the harness "
-            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done."
+            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done. A document "
+            "dataset (stop_rule 'dry_run', #4488) takes its own branch after the opening - the "
+            "walk with no Good target, its dry run as done - ported as next_phase(dry_run_stop=, "
+            "ran_dry=) and AutopilotFlow(dry_run_stop=)."
+        ),
+        divergence=(
+            "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
+            "panel keeps its Done step checked while the phase falls back to hard or new. It is "
+            "computed from nextPhase and never feeds it, so the phase sequence - all next_phase "
+            "reproduces - is unchanged and the harness, which draws no panel, has nothing to port."
         ),
     ),
     Mirror(
@@ -156,7 +165,13 @@ MIRRORS: list[Mirror] = [
             "onAutopilotStop applies the mapping when the user stops Autopilot; the live "
             "mapping is the phase subscription in the same component, which additionally "
             "kicks off the sort request. This anchor is the one place the whole table is "
-            "written out in one block, so it is what the digest watches."
+            "written out in one block, so it is what the digest watches. On a document dataset "
+            "(stop_rule 'dry_run', #4488) 'more' and 'done' draw off learned+top; the harness "
+            "does not model that row, because vtscore.eval simulates photo datasets. Documents are "
+            "simulated by scripts/experiments/fullmarks/sota_documents.py, which clicks the top of "
+            "the retrained structural ranking at every step. The harness's more_walk='detector' (#4637) "
+            "is an experiment arm that walks a photo dataset's 'more' on the detector's top; the "
+            "default, 'seed', is the app's row."
         ),
     ),
     Mirror(
@@ -194,65 +209,47 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
-        id="autopilot.pick_provenance",
-        app=f"ts:{LABEL_VIEW_TS}::subscribe(([prev, curr]) =>",
-        harness="vtscore/eval/autopilot_flow.py::_PHASE_PICKS,pick_provenance",
+        id="check.schedule",
+        app="py:vtscore.training.thresholds.spot_check.balance_schedule",
+        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::floor_schedule,kept_count,band_edges,BASE_FINE,M_PICKS",
         kind="ported",
         note=(
-            "Which ranking each Autopilot phase draws off, and how: the label view sets the sort "
-            "and select mode on every phase change (good: seed sort, top; bad: seed sort, hard; "
-            "more: seed sort, top; "
-            "hard: learned, hard; new: learned, new) and VoteProvenanceService records them with "
-            "each vote. The precision floor calibrates only on votes calibrates_precision accepts "
-            "- learned-sort draws off the ranking itself (#4245) - and the harness decides that "
-            "from pick_provenance's record of each simulated click. If a phase starts drawing off "
-            "a different sort or select mode, the harness's evidence filter has to follow or its "
-            "default arm calibrates the promise on votes the app would not."
+            "Where the band walk starts and what a band costs (#4388, the owner's ruling on "
+            "#4383; the balance's cap since #4413): the starting candidate is the precision "
+            "floor's schedule count for the preset the balance leans toward - K(P) = "
+            "32 * 2**max(0, floor(log2(0.5 / P))) (the #4267 ruling) at P = 50% for beta <= 1 "
+            "(32) and at P = 10% above it (128) - over the bands 8 / 16 / 32 / 64 / ... "
+            "(band_edges at BASE_FINE), with 5 picks a band (M_PICKS). The owner priced the "
+            "walk from these counts (grow-fine on the #4220 precision frames, "
+            "docs/experiments/2026-09-30-line-estimate-4383/REPORT.md; the F-beta stop in "
+            "docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md, which reads the cap through "
+            "kept_count); tests_lib/sorting/test_spot_check.py pins (32, 3, 5) and (128, 5, 5) "
+            "literally. The eval harness itself delegates to the library (voting_iterations "
+            "calls balance_schedule through SpotCheck and balance_count), so the pair pinned "
+            "here is library vs. the priced reference."
         ),
         divergence=(
-            "INTENTIONAL: the app's retrain mode (a detector that already had labels) draws good "
-            "and bad off the learned sort too; the harness always starts from an untrained "
-            "detector, so it has no retrain mode to port. The harness's seed sort is a text sort "
-            "or an example sort and is recorded as 'text' either way - calibrates_precision reads "
-            "only whether the sort was the learned one."
+            "INTENTIONAL: the reference is keyed by the floor P it was priced at (floor_schedule, "
+            "which also censuses each band at P >= 1); the library keys the same two counts by "
+            "beta and validates beta in [0.25, 4]."
         ),
     ),
     Mirror(
-        id="floor.check_schedule",
-        app="py:vtscore.training.thresholds.spot_check.check_schedule",
-        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::schedule_for",
-        kind="ported",
-        note=(
-            "The spot check's schedule (#4272): the starting candidate K(X) = 32 * 2**max(0, "
-            "floor(log2(0.5 / X))), the rounds R = log2(K / 32) + 1, and the picks a round "
-            "m = max(5, ceil(ln(alpha / R) / ln X)). The owner priced this exact rule on the "
-            "#4224 rank frames (docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md); the "
-            "library's check_schedule is a port of the analysis script's schedule_for, and the "
-            "presets must keep resolving to (128, 3, 5), (64, 2, 5), (32, 1, 5), (32, 1, 11) and "
-            "(32, 1, 29) - tests_lib/sorting/test_spot_check.py pins them literally. The eval "
-            "harness itself delegates to the library (voting_iterations calls check_schedule / "
-            "SpotCheck), so the pair pinned here is library vs. the priced reference."
-        ),
-        divergence=(
-            "INTENTIONAL: the library validates X in (0, 1] and, at X >= 1, makes the picks the "
-            "candidate itself (no finite sample bounds a proportion at 1; only a census reaches "
-            "it) where the reference would divide by ln 1 = 0. The reference reads EPS and "
-            "BASE off its sibling module; the library spells them as its own constants."
-        ),
-    ),
-    Mirror(
-        id="floor.likely_range",
+        id="check.likely_range",
         app="py:vtscore.training.thresholds.spot_check.likely_range",
         harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::range_tail,likely_range",
         kind="ported",
         note=(
-            "The likely range a checked set carries (#4272): a Clopper-Pearson interval from "
-            "the check's labels inside the set, each tail at alpha / R (range_tail - the level "
-            "every round is tested at, so the lower end IS the bound the check tested and a "
-            "check confirms X iff lo >= X), exact (s / K) once the labels cover the set. The "
-            "reference's coverage numbers (99% of sessions) hold only for this tail; a plain "
-            "90% range showed above the truth 11% of the time after a first-round pass. If "
-            "the tail or the census rule moves on either side, move the other."
+            "The interval one band of a checked set carries (#4272, #4388): Clopper-Pearson "
+            "from the picks inside the band, each tail at alpha / bands (range_tail, split "
+            "over the bands in the set so the set's size-weighted range holds by the union "
+            "bound), exact (s / K) once the picks cover the band. The walk decides on the "
+            "band-weighted point estimate, not on this range, which says how close the "
+            "estimate is; a balance reports it for the set's precision and, over the walk's "
+            "count of positives, its recall (#4413). The reference's coverage numbers "
+            "(99% of sessions) hold only for this tail; a plain 90% range showed above the "
+            "truth 11% of the time after a first pass. If the tail or the census rule moves on "
+            "either side, move the other."
         ),
         divergence=(
             "INTENTIONAL: the reference is vectorised over frames (numpy arrays, a cached bound "
@@ -263,47 +260,72 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
-        id="floor.check_rounds",
+        id="check.bands",
         app="py:vtscore.training.thresholds.spot_check.SpotCheck",
-        harness="scripts/experiments/calibration/analyze_random_verification.py::simulate_rounds",
+        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::draw_audits,Audits",
         kind="ported",
         note=(
-            "The check's rounds (#4257's rule b, ruled in #4267 and #4272): m fresh picks drawn "
-            "uniformly from the current candidate, the labels already seen inside it kept, a "
-            "round confirming iff the one-sided bound at alpha / R clears X, a failed round "
-            "halving the candidate down to 32, no redraw on the same candidate, and a census "
-            "decided exactly. SpotCheck is the app's live state machine over one fixed candidate; "
-            "simulate_rounds is the vectorised simulation the rule was priced with. If either "
-            "changes what is kept across a halving, how many picks a round draws, or the level "
-            "a round is tested at, the other has to follow or the pricing no longer describes "
-            "the shipped check."
+            "What the band walk audits (#4388, the owner's ruling on #4383): 5 picks drawn "
+            "uniformly from each band, never twice from one band; the set under test is the top "
+            "b bands and its share right is band-stratified (each band's share weighted by its "
+            "size, Audits.union_estimate). SpotCheck is the app's live state machine over one "
+            "fixed unvoted ranking; draw_audits / Audits are what the rule was priced with. If "
+            "either changes the bands, the picks a band or the estimate, the other has to follow "
+            "or the pricing no longer describes the shipped check. Where the walk stops is the "
+            "check.walk mirror's."
         ),
         divergence=(
             "INTENTIONAL: the app's check can end 'cancelled' (the user closed the step), "
-            "carries a fingerprint for the stale flag, and reports its state to a client; the "
-            "simulation has none of that, and draws hypergeometrically from planted positive "
-            "ranks rather than asking a user. A candidate smaller than the schedule's K (a "
-            "small corpus) gets the halvings it really has (rounds_for) on the app side; the "
-            "simulation always starts at the rule's K."
+            "carries a fingerprint for the stale flag, reports its state to a client, and draws "
+            "one band at a time as the walk reaches it; the reference draws every band's picks "
+            "up front from planted labels (the same picks the walk would touch) and asks no user."
         ),
     ),
     Mirror(
-        id="thresholds.min_precision_default",
-        app="py:vtscore.state.__init__.get_min_precision",
-        harness="vtscore/training/thresholds/precision_floor.py::resolve_min_precision",
-        kind="default",
+        id="check.walk",
+        app="py:vtscore.training.thresholds.spot_check.SpotCheck",
+        harness="scripts/experiments/calibration/analyze_fbeta_line_4411.py::rule_fb_walk,_edge_tp",
+        kind="ported",
         note=(
-            "What floor a detector cuts at when nobody set one (#4245): the app seeds each "
-            "detector from the user's setting, whose unset value is DEFAULT_MIN_PRECISION, and "
-            "the harness's min_precision=None resolves to that same constant. The value cannot "
-            "drift - both read one constant, and tests/sorting/test_min_precision_route.py "
-            "pins UserSettings' default against the resolver - so this digest watches the "
-            "*resolution*: if the app's floor starts depending on something else (the dataset, "
-            "the embedder, a per-detector default), that has to reach the harness too."
+            "Where the band walk stops (#4413, priced in #4411): the F-beta estimate of the top "
+            "b bands - their audited positives (_edge_tp) over the mixture's count of the "
+            "ranking's positives - and the walk deeper while it rises, shallower from a start "
+            "whose first deeper step does not, ties to the smaller set; a walk that starts on "
+            "the ranking's last band steps shallower at once (#4424). If either side changes "
+            "the stop, the other has to follow or the pricing no longer describes the shipped "
+            "check."
         ),
         divergence=(
-            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned floor where "
-            "the app has a per-user setting; the DEFAULT arm passes None and resolves here."
+            "INTENTIONAL: the app's walk carries #4427's arms (picks, tol, fine, guard and the "
+            "shallower-only walk), all off by default save the shallower-only walk that "
+            "check_shape turns on above beta 1, and its shape decides whether the walk's end "
+            "moves the line (balance_count). Where the mixture gives no count of at least one "
+            "positive, the app's walk reads recall against the balance's cap lowered to the "
+            "unvoted count (walk_positives, #4419), where rule_fb_walk falls back to the "
+            "audits' own tp for no fit (which leaves its F-beta a function of precision alone) "
+            "and keeps a count below one as it is."
+        ),
+    ),
+    Mirror(
+        id="thresholds.balance_default",
+        app="py:vtscore.state.__init__.line_knobs",
+        harness="vtscore/training/thresholds/spot_check.py::resolve_line_knobs",
+        kind="default",
+        note=(
+            "What balance a detector's line is drawn at when nobody pinned one (#4413): the app's "
+            "line_knobs hands the trainer the detector's beta, seeded from the user's setting "
+            "(DEFAULT_BETA when unset); the harness's resolve_line_knobs resolves beta=None to the "
+            "same constant. The values cannot drift - both sides read the same constants, and "
+            "tests/sorting/test_balance_routes.py pins UserSettings' defaults against the wire - so "
+            "this digest watches the *resolution*: if the app's preference starts depending on "
+            "something else (the dataset, the embedder, a per-detector default), that has to reach "
+            "the harness too."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned beta where the "
+            "app has per-user settings; the DEFAULT arm passes None and resolves here. The app's own "
+            "'no balance' is a library caller's CoreConfig(beta=None), which line_knobs hands on as "
+            "beta None - the harness's 'off'; the app itself always sets a balance."
         ),
     ),
     Mirror(
@@ -321,6 +343,36 @@ MIRRORS: list[Mirror] = [
             "tests_lib/detectors/test_startup_schedule.py pins it two ways: literally against "
             "GOOD_TARGET/BAD_TARGET, and behaviourally by requiring it to reproduce a "
             "default-arm run click for click."
+        ),
+    ),
+    Mirror(
+        id="thresholds.text_sort_acquisition",
+        app="py:vtscore.training.thresholds.gmm.text_sort_cuts",
+        harness="vtscore/eval/al_strategies.py::_sort_threshold",
+        kind="default",
+        note=(
+            "Which of a typed-query sort's two lines the opening samples against (#4136). The app's "
+            "text route returns text_sort_cuts: the display line as `threshold` (the guarded rule "
+            "by default, #3826) and the mixture midpoint as `acq_threshold`, and the Hard select "
+            "reads `acq_threshold ?? threshold`. The harness's _sort_threshold reads "
+            "text_sort_acquisition_threshold for a typed query, and startup_schedule's `@mid` cut "
+            "does the same, so the Bad phase and the `b4@mid` round sample at the midpoint whatever "
+            "VTSEARCH_TEXT_SORT_CUT paints green. That split is the whole point: with the guarded "
+            "line as the sampling position the #3826 A/B put the Bad phase at the 2.5th percentile "
+            "of the ranking and the first detectors were worse at every beta. If text_sort_cuts "
+            "starts putting anything but the midpoint in acq_threshold, or _sort_threshold starts "
+            "reading the display line, the other side has to move with it. "
+            "tests_lib/sorting/test_text_sort_threshold.py pins the identity bit for bit and runs "
+            "the harness's opening under both rules to show the picks do not move. Since #4603 the "
+            "display line also takes the balance (by count at beta <= 1); the acquisition cut does "
+            "not, so the harness's opening is unaffected, and text_baseline.py scores each preset's "
+            "display line for the review's click 0."
+        ),
+        divergence=(
+            "The app side is the library function the route calls, not the route: "
+            "vtsearch/routes/sorting.py only forwards the pair into windowed_sort_response, and "
+            "the frontend's `acq_threshold ?? threshold` fallback is pinned by the "
+            "autopilot.auto_select_next mirror's TypeScript side."
         ),
     ),
     Mirror(
@@ -369,16 +421,18 @@ MIRRORS: list[Mirror] = [
             "What a cost is priced at is shared too (issue #4243): both sides price at "
             "`cost_trend.SMART_INCLUSION` and score each model at `cost_trend.smart_cut` of "
             "its reporting line, not at the arm's or the user's inclusion - and the line's "
-            "own inclusion is the operating point's (none when a promised precision floor "
-            "drew it, #4245), so both sides hand smart_cut the reporting line's inclusion "
+            "own inclusion is the operating point's (none when the balance kept a "
+            "set, #4272, #4413), so both sides hand smart_cut the reporting line's inclusion "
             "rather than the knob's. Only the re-cut "
             "each side hands `smart_cut` differs. The app passes `recut_detector_threshold`, "
             "which falls back to the conformal rule over the fold orderings when there is no "
             "fold-anchored fit; the harness passes its step's fold-anchored fit or nothing "
             "(`voting_iterations._no_recut`), keeping the reporting line. That matters only "
-            "on an arm reporting at another inclusion with no fold-anchored fit. The default "
-            "arm reports at `SMART_INCLUSION`, so `smart_cut` returns its reporting line "
-            "exactly and never re-cuts."
+            "on a step whose folds split but yielded no fold-anchored fit, served at an "
+            "inclusion other than `SMART_INCLUSION` or at none. The default arm's "
+            "balance serves every kept set at no inclusion, so `smart_cut` re-cuts on every "
+            "default-arm step and the difference reaches the default arm, though only on such "
+            "a step: a fold-anchored fit fails only when no fold yields a mixture."
         ),
     ),
     Mirror(
@@ -467,7 +521,51 @@ MIRRORS: list[Mirror] = [
             "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
             "the app reads no stored Inclusion: its conformal cut is at "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
-            "whose default, 0, is that cut."
+            "whose default, 0, is that cut. Since #4413 the app draws the line at the balance "
+            "`line_knobs` names and hands its beta to _fused_threshold; the harness's default arm is the "
+            "balance's at DEFAULT_BETA (resolve_line_knobs, the thresholds.balance_default mirror)."
+        ),
+    ),
+    Mirror(
+        id="acquisition.balance_cut",
+        app="py:vtscore.state.core.detector_acquisition_threshold",
+        harness="vtscore/eval/voting_iterations.py::resolve_acquisition_factor",
+        kind="default",
+        note=(
+            "Where Autopilot's Hard / New picks sample under a balance (#4409, shipped from the pricing in "
+            "docs/experiments/2026-10-01-acquisition-fbeta-4409): the app's detector_acquisition_threshold "
+            "takes the beta and returns the library's acquisition_threshold - the score at "
+            "ACQUISITION_ARGMAX_FACTOR of the F-beta argmax's depth over the unvoted ranking - falling "
+            "through to the line - 4 re-cut with no mixture estimate. The harness's resolve_acquisition_factor "
+            "turns acq_p_crossing=None into that same constant under a balance (and None, the offset cut, "
+            "otherwise), and its step reads the same library function. The factor cannot drift - both read "
+            "one constant - so this digest watches the resolution: a second input to the app's choice (the "
+            "corpus size, the fit's confidence) has to reach the harness too."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts 'off' (the offset cut under a balance, the pricing's control) "
+            "and a pinned factor where the app has the constant; the DEFAULT arm passes None and resolves here."
+        ),
+    ),
+    Mirror(
+        id="acquisition.target_precision",
+        app="py:vtscore.state.core.detector_acquisition_threshold",
+        harness="vtscore/eval/voting_iterations.py::resolve_acquisition_target",
+        kind="default",
+        note=(
+            "Where Autopilot's Hard / New picks sample under a balance since #3546 "
+            "(docs/experiments/2026-10-07-acquisition-cut-3546): the app's detector_acquisition_threshold "
+            "reads the library's target_precision_threshold off ctx.labels_line at "
+            "ACQUISITION_TARGET_PRECISION - the score where the line's corpus posterior falls below 0.5 - "
+            "and falls through to the line - 4 re-cut with no labels line. The harness's "
+            "resolve_acquisition_target turns acq_target_p=None into that same constant under a balance "
+            "(and None, the offset cut, otherwise), and its step reads the same library function on the "
+            "step's labels line (details['find_line']), with the offset cut as the same fallback. The "
+            "target cannot drift - both read one constant - so this digest watches the resolution."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts 'off' (the offset cut under a balance, the #3546 control and every "
+            "offset arm) and a pinned target where the app has the constant; the DEFAULT arm passes None."
         ),
     ),
     Mirror(
@@ -479,20 +577,24 @@ MIRRORS: list[Mirror] = [
             "How the cross-calibration cut and the population estimate are fused into the "
             "shipped threshold. The harness's reported operating point is only comparable to "
             "the app's if this rule matches. Since #4272 this is where the line is drawn under "
-            "a floor: the set the floor keeps, through the shared floor_line over a LineRanking "
-            "built from the final model's scores with the voted items marked - delegated, so "
-            "which line a floor draws cannot drift; what this digest watches is the ranking's "
-            "inputs (every scored item, unscorable ones dropped, the trainer's voted set), which "
-            "the harness has to build the same way, and the order of the fallbacks under it "
-            "(the fold-anchored cut at PRECISION_FLOOR_FALLBACK_INCLUSION with no floor, the "
-            "schedule blend with no fitted cut). Since #4245 this is also where the #4220 "
-            "estimate is built (the unvoted remainder as corpus, the WHOLE haystack - votes "
-            "included - as the reference pool, each fold's held-out votes cut down by "
-            "eligible_fold_orderings, each fold's own excluded haystack); it no longer draws "
-            "the line on either side and feeds only the Find Stats curve, but the harness still "
-            "builds it the same way. Since #4269 the app hands reporting_line "
+            "a preference: the set the balance keeps, through the shared balance_line over a "
+            "LineRanking built from the final model's scores with the voted items marked - "
+            "delegated, so which line a balance draws cannot drift; what this digest watches is the "
+            "ranking's inputs (every scored item, unscorable ones dropped, the trainer's voted set), "
+            "which the harness has to build the same way, the mixture's proposal for the unchecked "
+            "line (#4389, #4413: fbeta_count on that ranking, anchored on the labels the step "
+            "trained on, handed to balance_line and balance_state as `proposal`, which the harness "
+            "has to hand the same way), and the order of the fallbacks under it "
+            "(the fold-anchored cut at PRECISION_FLOOR_FALLBACK_INCLUSION with no balance, the "
+            "schedule blend with no fitted cut). Neither side builds the #4220 precision estimate "
+            "any more (#4362): it stopped drawing the line in #4272 and lost its last reader, "
+            "the Find Stats curve, in #4360. Since #4269 the app hands reporting_line "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
-            "hands it the arm's `inclusion`, whose default is that 0."
+            "hands it the arm's `inclusion`, whose default is that 0. Since #4452 the line under a balance "
+            "is the labels' line (_labels_line over fit_labels_line, cut at `beta`) when the retrain fitted "
+            "a class model, and the fallbacks otherwise; the harness's default arm passes DEFAULT_BETA and "
+            "draws the same line in _preference_line_for_step. The count line (balance_line over "
+            "fbeta_count's proposal) survives only in the harness, as the forced-check-shape arm."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
@@ -645,6 +747,70 @@ MIRRORS: list[Mirror] = [
             "comparable is what keeps fallback_rate aggregates joinable across them."
         ),
     ),
+    Mirror(
+        id="detectors.label_quota_default",
+        app="py:vtscore.detectors.labelset_training.train_from_labelset",
+        harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
+        kind="default",
+        note=(
+            "The label quota (#4643): train_from_labelset - Test, AutoFind, a load and the CLI - "
+            "gives the Goods' centroid from the first Good until the resolved labels hold "
+            "GOOD_QUOTA Goods and BAD_QUOTA Bads (label_quota.quota_from_groups), the trained head "
+            "from there, and nothing with no Good. The harness's default arm (label_quota=None on "
+            "the app trainer) scores the withheld half the same way: a row from the first Good, "
+            "the centroid's metrics under the quota (label_quota.label_quota, delegated), the "
+            "head's from it. If the app's tiers move - a new tier, a quota read from somewhere "
+            "other than the counts, a tier that needs a Bad - the harness's rows have to move "
+            "with them, and so do the notes that describe them (curves.py, viewer.py and its "
+            "reading note, the state-of-the-app and grid-experiments skills)."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness counts votes, not resolved labels - every simulated vote "
+            "resolves - and keeps the Train side (acquisition, lights, spot check) on the trained "
+            "head wherever there is a Good and a Bad, as the Train view's learned sort does "
+            "(labelset_train_and_score with label_quota=False)."
+        ),
+        no_harness_pin=(
+            "simulate_voting_iterations is the whole voting loop; the quota's own rows are "
+            "_centroid_test and step_trainers._centroid_step, pinned by "
+            "detectors.label_quota_centroid."
+        ),
+    ),
+    Mirror(
+        id="detectors.label_quota_centroid",
+        app="py:vtscore.detectors.labelset_training.install_centroid_head",
+        harness="vtscore/eval/step_trainers.py::_centroid_step",
+        kind="ported",
+        note=(
+            "The Goods' centroid under the label quota (#4643). Both sides call "
+            "centroid_head.fit_centroid_head, so the head and its cut are delegated; what is "
+            "ported is what they are handed. The app hands it the resolved Good rows of "
+            "build_xy_from_labelset (a boxed Good's patch, else its image-level vector) and the "
+            "haystack it scores (scoring_rows_for_snap's rows: the active dataset in Test, the "
+            "searched one in a cold Find); the harness hands it each Good vote's training "
+            "vector (the style's good_vec, else good_training_vec - the vectors its trained "
+            "head fits on) and the withheld half's scorer (_centroid_test). If the app changes "
+            "which vectors average, or which corpus the midpoint is cut on, or gives the line a "
+            "balance, change the harness to match."
+        ),
+    ),
+    Mirror(
+        id="line_test.budgets_default",
+        app="py:vtscore.training.thresholds.line_test.LineBudgets",
+        harness="vtscore/eval/line_test_arm.py::line_test_row,simulate_line_test",
+        kind="default",
+        note=(
+            "Test mode's targets and budgets (#4523, #4527): the Test arm runs the app's phase "
+            "machine (LineTest.draw / record / line_phase, delegated) at LineBudgets' defaults "
+            "when a run names none, so a changed default - the width a phase stops at, a pick "
+            "budget, the dry-run share, the model's weight - silently changes what the arm's "
+            "default rows measure. When LineBudgets moves, re-read the arm's inputs "
+            "(line_test_inputs: Find's labels line on the withheld half, the posteriors "
+            "aligned with the ranking) and the verdict rule (read_verdict: LEAN_GAIN, "
+            "RETRAIN_BAR), which the app does not implement yet (#4524 takes it from the "
+            "study) and the study's report prices."
+        ),
+    ),
 ]
 
 
@@ -681,7 +847,7 @@ def _collapse_fstrings(tokens: list[tokenize.TokenInfo], lines: list[str]) -> li
     emitting `FSTRING_START` / `FSTRING_MIDDLE` / `FSTRING_END` around the real
     tokens of each replacement field.  That is a pure tokenizer change - the
     code means the same thing - but it changes the token *text*, so a digest
-    taken on 3.12+ disagreed with one taken on 3.10/3.11 for any mirrored
+    taken on 3.12+ disagreed with one taken on 3.11 for any mirrored
     function containing an f-string, and `--update` just moved the failure to
     the other half of the supported range instead of converging (issue #3117).
 
@@ -724,7 +890,7 @@ def _normalize_python(source: str) -> str:
     """Source text stripped of comments, docstrings and formatting.
 
     Token-based rather than AST-based on purpose: `ast.unparse` output is not
-    guaranteed stable across the Python versions this repo supports (>=3.10),
+    guaranteed stable across the Python versions this repo supports (>=3.11),
     which would make the pins fail for whoever is not on the pinning machine's
     interpreter.  Token text is *nearly* stable - see `_collapse_fstrings` for
     the one place it isn't, and how that is normalized away.

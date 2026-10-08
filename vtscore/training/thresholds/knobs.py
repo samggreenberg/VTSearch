@@ -48,6 +48,15 @@ INCLUSION_SEARCH_SPAN = 32.0
 #:   embedder's capability rather than the voting mode: the same row-wise
 #:   calibrator wants opposite splits on ``siglip/whole`` vs ``dinov3/whole``,
 #:   while both ``dinov3`` styles agree on 0.5.
+#:
+#: Both were read on the cost of the *mixture* line.  #4583 re-measured them
+#: above the labels line (#4452), on the objective (#4427) at each preset
+#: (``docs/experiments/2026-10-07-calsplit-4583/REPORT.md``): on SigLIP 0.5
+#: against 0.3 is within ±0.004 of the objective at beta 1/4, 1 and 4 (it
+#: costs 0.004 ± 0.0016 after the check at beta 1) and returns more (+14 items
+#: at beta 1, +92 at beta 4); on the patch space 0.3 against 0.5 is a null on
+#: the objective (−0.006 ± 0.006) and returns 44 fewer.  Neither moves AP.  So
+#: both values stand: no preset is better served by the other split.
 PRODUCTION_SPLIT_BY_SPACE: dict[str, float] = {
     "single_vector": 0.3,
     "patch": 0.5,
@@ -268,6 +277,35 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 #: before it), ``REPORT.md`` (COCO), and ``REPORT_SECOND_ENVIRONMENT.md`` /
 #: ``REPORT_REGION_VOTING.md`` for the two superseded readings.
 ACQUISITION_INCLUSION_OFFSET = -4
+
+#: Under the balance (#4413) Autopilot's acquisition cut CAN be a **rank**, a
+#: share of the depth of the mixture's F-beta argmax over the unvoted ranking
+#: (#4409).  ``None``, the shipped value, keeps the line - 4 re-cut above:
+#: 0.5 was shipped on 2026-10-01 and reverted the next day (#4427), because
+#: it was priced on the rank-count reading of the line, which re-draws the
+#: balance's rule on the fresh ranking; on the owner's objective - the
+#: withheld images above the threshold the app holds - its harvest thins the
+#: user's unvoted top, the kept set's edge score climbs, and few fresh images
+#: clear it (F1 0.218 vs 0.504 unchecked and 0.385 vs 0.470 after the check at
+#: beta 1; worse at every preset).  The harness arm (``acq_p_crossing``) keeps
+#: the factor as a knob for the re-pricing (#4428).
+ACQUISITION_ARGMAX_FACTOR: float | None = None
+
+#: Under the balance, Autopilot's ``hard`` / ``new`` picks sample where the
+#: labels line's corpus posterior falls below this share (#3546,
+#: :func:`~vtscore.training.thresholds.labels_line.target_precision_threshold`):
+#: the items the line's own model thinks are even odds.  It replaces the line -
+#: 4 re-cut, which under the balance had become a rank pin nobody chose (near
+#: the 98.5th pool percentile at every preset, flat from vote 50 to 150).
+#: Priced on today's app, coco_better, 1% pool, 3 seeds, against line - 4
+#: (``docs/experiments/2026-10-07-acquisition-cut-3546/REPORT.md``): Goods by
+#: vote 150 +3.0 / +3.0 / +3.8 at beta 1/4 / 1 / 4, Hard picks Good 38% at every
+#: preset (was 19-24%), AP +0.012 to +0.016, the objective at vote 150 +0.012 to
+#: +0.019 and after the check +0.000 / +0.003 / +0.008; never resolvably worse.
+#: 0.25 was close but behind on every read; sampling at the line itself lost 3.7
+#: Goods at beta 4.  ``None`` restores the line - 4 re-cut, which stays the
+#: fallback for a detector with no labels line.
+ACQUISITION_TARGET_PRECISION: float | None = 0.5
 
 
 def acquisition_inclusion(inclusion_value: float, offset: float = ACQUISITION_INCLUSION_OFFSET) -> float:

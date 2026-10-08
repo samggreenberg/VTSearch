@@ -2,7 +2,7 @@
 
 :func:`operating_metrics` is the shared tail of every arm the harness emits:
 given held-out scores, labels and a threshold it produces the cost / FPR / FNR /
-oracle / regret block that each row carries, so the shipped row and a dozen
+F-beta / oracle / regret block that each row carries, so the shipped row and a dozen
 experiment arms are always priced by the same code.  The rest of the module is
 what that computation leans on - the 6-dp rounding every emitted float goes
 through, the fold-count reader for a provenance string, and a small memo in
@@ -104,6 +104,7 @@ def operating_metrics(
     pool_variant: str,
     provenance: str,
     n_pool_rows: float,
+    beta: float | None = None,
 ) -> dict[str, Any]:
     """Full per-step calibration metrics for one pooling (issue #2781).
 
@@ -115,6 +116,21 @@ def operating_metrics(
     on calibration vs. best cut on test).  ``cal_scores``/``cal_labels`` are the
     pooled calibration fold orderings under the same pooling; ``None`` skips the
     decomposition (leaves those columns NaN).
+
+    *beta* is the balance that drew the step's line (``details["beta"]``), and
+    prices the objective, ``fbeta``, beside the preset columns
+    (:func:`~vtscore.eval.calibration_metrics.fbeta_metrics`, #4584); ``None``
+    where no balance drew one, which is also the default so a caller written
+    before the column keeps working.  Every harness call site passes it
+    explicitly (``tests_lib/meta/test_analyzer_objective.py`` checks), since a
+    forgotten one would emit a NaN objective on a balance row.  ``cost`` is priced at *inclusion* whatever *beta* is: it is the diagnostic
+    column now, not the decision metric.
+
+    The objective has its own oracle (#4654): ``oracle_fbeta`` (at *beta*) and
+    its preset siblings, the best F-beta any cut of the test ranking reaches,
+    with the cut that reaches it (``fbeta_oracle_*``).  Everything below about
+    ``oracle_cost`` is about the cost objective's cut, which on a rare class
+    runs deep and is no ceiling on F-beta.
 
     **Two reference points, because the naive one is optimistic** (#3116, #3248).
     ``oracle_cost`` is the minimum of the empirical cost over the very test
@@ -157,10 +173,12 @@ def operating_metrics(
 
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
         detection_metrics,
+        fbeta_metrics,
         inclusion_weights,
         is_degenerate,
         operating_cost,
         oracle_cut,
+        oracle_fbeta_metrics,
         threshold_percentile,
     )
     from vtscore.eval.label_curve import _auroc, _average_precision  # noqa: PLC0415
@@ -207,6 +225,11 @@ def operating_metrics(
         "gmm_variant": "",
         "schedule": "",
         "xcal_threshold": round6(float(threshold)),
+        # #4452: the base row carries Train's threshold beside its own (Find's,
+        # on the withheld half) and the two prevalence estimates; NaN elsewhere.
+        "train_threshold": nan,
+        "train_prevalence": nan,
+        "find_prevalence": nan,
         "gmm_cut": nan,
         "blend_weight": nan,
         "shipped_provenance": "",
@@ -251,12 +274,17 @@ def operating_metrics(
         "fpr": round6(fpr),
         "fnr": round6(fnr),
         **{k: round6(v) for k, v in detection_metrics(scores, labels, threshold).items()},
+        **{k: round6(v) for k, v in fbeta_metrics(scores, labels, threshold, beta).items()},
         "auroc": round6(float(_auroc(scores, labels))),
         "average_precision": round6(float(_average_precision(scores, labels))),
         "oracle_threshold": round6(float(o_thr)),
         "oracle_cost": round6(o_cost),
         "oracle_fpr": round6(o_fpr),
         "oracle_fnr": round6(o_fnr),
+        # The objective's oracle beside the cost's (#4654): the best F-beta any
+        # cut reaches, at the row's beta and at each preset, and the cut that
+        # reaches it.  The cost cut above is no ceiling on F-beta.
+        **{k: round6(v) for k, v in oracle_fbeta_metrics(scores, labels, beta).items()},
         "regret": round6(regret),
         # The cross-fitted reference and the two terms it re-bases (#3116).
         # Bracket, not replacement: `oracle_cost` bounds the population optimum

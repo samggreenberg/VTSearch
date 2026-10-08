@@ -201,7 +201,7 @@ validators by hand keeps working; it is simply doing no additional work.
 | HTTP, `{"..._name", "field_values"}` body | `validate_exporter_field_values()` (same module) |
 | CLI | `PluginBase.validate_cli_field_values()` |
 | Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a copy before dispatching to `_do_load` / `_do_save` / `_do_peek_version` ([`vtscore/sync/__init__.py`](../../sync/__init__.py)) |
-| Saved settings | The app's Auto-Find results exporter runs with a persisted `field_values` map and no schema in the loop, so this pass is the only one it gets |
+| Saved settings | The app's AutoFind results exporter runs with a persisted `field_values` map and no schema in the loop, so this pass is the only one it gets |
 
 **Two families are outside it.** Media converter `params` and media
 clipper `parameters` ride in as pass-through payloads, not plugin form

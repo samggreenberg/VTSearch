@@ -72,19 +72,19 @@ describe('SortingApiService', () => {
     req.flush({ ok: true });
   });
 
-  it('getMinPrecision should GET', () => {
-    service.getMinPrecision().subscribe(data => expect(data.min_precision).toBe(0.75));
-    const req = httpMock.expectOne('/api/min-precision');
+  it('getBalance should GET the balance (#4413)', () => {
+    service.getBalance().subscribe(data => expect(data.beta).toBe(0.5));
+    const req = httpMock.expectOne('/api/balance');
     expect(req.request.method).toBe('GET');
-    req.flush({ min_precision: 0.75 });
+    req.flush({ beta: 0.5, status: 'unchecked', count: 32, precision: null, recall: null, fbeta: null, schedule: { candidate: 32, rounds: 1, picks: 5 }, shape: 'advisory', audited: null, checkable: true, threshold: null, n_returned: null });
   });
 
-  it('setMinPrecision should POST the floor as a fraction', () => {
-    service.setMinPrecision(0.25).subscribe();
-    const req = httpMock.expectOne('/api/min-precision');
+  it('setBalance should POST the beta', () => {
+    service.setBalance(2).subscribe();
+    const req = httpMock.expectOne('/api/balance');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ min_precision: 0.25 });
-    req.flush({ min_precision: 0.25 });
+    expect(req.request.body).toEqual({ beta: 2 });
+    req.flush({ beta: 2 });
   });
 
   it('exportLabels should GET', () => {

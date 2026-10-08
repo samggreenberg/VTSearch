@@ -449,13 +449,55 @@ def _app_train_and_calibrate(
         # is NO_GOOD_THRESHOLD whenever this is set, as production's does
         # (see :func:`_blend_xcal_input`).
         "fold_fallback": folds.fallback,
-        # Which vote each fold held out, as training rows, and the vote behind
-        # each row: the precision floor calibrates only on the votes the
-        # learned sort chose (#4245), exactly as the app filters them.
+        # Which vote each fold held out, as training rows: the precision
+        # frames name each held-out vote's phase from it.
         "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts),
-        "row_votes": [*good_votes, *bad_votes],
     }
     return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, details
+
+
+def _centroid_step(
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    score: Any,
+    *,
+    region_voting: bool,
+    style_obj: Any = None,
+) -> StepModel:
+    """The Goods' centroid the app gives under the label quota (#4643), as a step.
+
+    The Good vectors are the ones the trainers above fit on - the style's
+    ``good_vec`` (given the ground-truth box under *region_voting*) on a style
+    run, :func:`good_training_vec` on a single-vector one - and the head is
+    :func:`vtscore.detectors.centroid_head.fit_centroid_head`'s, the function the
+    app itself calls, so the only thing ported here is which vectors it is
+    handed.  *score* maps a step to its scores on the corpus the line is cut
+    on, in the run's own test geometry: the harness cuts it on the withheld
+    half, the corpus a Test there searches.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.detectors.centroid_head import fit_centroid_head  # noqa: PLC0415
+
+    goods: list[np.ndarray] = []
+    for vid in good_votes:
+        if style_obj is not None:
+            box = region_box_for_category(clips_dict[vid], target_category) if region_voting else None
+            goods.append(np.asarray(style_obj.good_vec(clips_dict[vid], box), dtype=np.float32))
+        else:
+            goods.append(np.asarray(good_training_vec(clips_dict[vid], target_category, region_voting)))
+
+    def _as_step(head: Any) -> StepModel:
+        def predict(X_test: Any) -> np.ndarray:
+            with torch.no_grad():
+                t = torch.tensor(np.asarray(X_test), dtype=torch.float32)
+                return torch.sigmoid(head(t)).squeeze(1).cpu().numpy()
+
+        return StepModel(predict=predict, torch_model=head, backend="centroid", device="cpu")
+
+    head, _threshold = fit_centroid_head(goods, lambda h: score(_as_step(h)))
+    return _as_step(head)
 
 
 def _style_train_and_calibrate(
@@ -568,9 +610,6 @@ def _style_train_and_calibrate(
             "fold_fallback": folds.fallback,
             "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts),
         }
-    # The vote behind each training row, for the precision floor's evidence
-    # filter (see ``_app_train_and_calibrate``).
-    details["row_votes"] = [vid for _kind, vid in groups]
     xcal_seconds = time.monotonic() - t_xcal
     # Under the #2897 screen this step trained Kmax folds, not ``calibrate_count``
     # of them.  Bill the reported wall clock for the live count only, so the
@@ -931,7 +970,6 @@ def _gp_train_and_calibrate(
             cal_fraction=calibration_fraction,
         )
         details = {"threshold_rule": "xcal_rank"}
-    details["row_votes"] = [*good_votes, *bad_votes]
     xcal_seconds = time.monotonic() - t_xcal
 
     def predict(X_test: Any) -> "np.ndarray":

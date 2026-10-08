@@ -202,15 +202,6 @@ validate_panel_pct_left  # noqa: F821
 validate_panel_pct_right  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# ``verification_classifier`` is a declared ``DetectorContext`` slot (listed
-# in the context's ``__slots__`` table in ``vtscore/state/core.py``) that the
-# structural-similarity trainer writes. It is an in-memory head cache, so
-# the write is the point and no reader lives in this repo; the slot is part
-# of the context's shape either way.
-# ---------------------------------------------------------------------------
-verification_classifier  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # Third-party protocol members: the framework calls or reads these by name,
 # so the definition here is the whole contract and there is no in-repo
 # caller to find.
@@ -265,6 +256,7 @@ degenerate_gmm  # noqa: F821 - forces the GMM to degenerate
 restore_resolvers  # noqa: F821 - re-binds the resolver globals via monkeypatch so teardown restores them
 clean_paths  # noqa: F821 - saves/restores sys.path and sys.meta_path around setup_env
 restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via monkeypatch for the test
+schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
@@ -336,3 +328,21 @@ stable_flip_rate  # noqa: F821
 stable_max_confident_flip_rate  # noqa: F821
 stable_flip_rate_early  # noqa: F821
 stable_flip_rate_late  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Module-level hooks in ``tests/core/test_import_hooks.py`` are named only
+# inside ``"module:function"`` spec strings, which ``vtsearch.import_hooks``
+# resolves with ``getattr`` - exactly how an admin's real hooks are found.
+# ``NOT_A_FUNCTION`` is resolved the same way, to prove a non-callable is
+# rejected. (``first_hook`` is also passed directly, so needs no entry.)
+# ---------------------------------------------------------------------------
+second_hook  # noqa: F821
+raising_hook  # noqa: F821
+NOT_A_FUNCTION  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``tests_lib/meta/test_preflight_knobs.py`` assigns ``__signature__`` on a
+# stand-in function; ``inspect.signature`` reads it reflectively when the
+# preflight knob check inspects the patched harness default.
+# ---------------------------------------------------------------------------
+__signature__  # noqa: F821

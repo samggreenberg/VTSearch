@@ -12,8 +12,42 @@ studies that the review points at.
 
 ## The owner's standing decisions (#4159, 2026-09-23)
 
+- **The objective (owner, 2026-10-01, #4427):** the F-beta, at the session's beta, of the set the line keeps,
+  scored on the WITHHELD test half. Found positives (Goods), the user's own unvoted corpus ("positives in
+  hand", the `Diagnostic` section, `pools.csv` / `pool_steps.csv` / `in_hand.png`) and the share of the best
+  cut explain a line's position; they are never the goal, and a ship decision cites the withheld F-beta at the
+  line first.
+
 Keep these unless the owner changes them, and record any change here in the
 same edit.
+
+- **The eval's horizon is not the user's (owner, 2026-10-04, #4482):** the
+  review runs 150 clicks as a computational compromise. Users stop when they
+  are bored or the app stops them, before 150 or after it. Never frame a
+  finding or an A/B as "the last N clicks" or "stop at click N"; read the
+  app as curves over the click a user has reached, and aim at getting the
+  most users to the best detector wherever they stop. Arms that ask about
+  late-session behaviour should run past 150 (to 200) rather than treat 150
+  as an end.
+- **Apples to apples (owner, 2026-10-04, #4474):** a comparison between the
+  text sort and the detector uses ONE thresholding rule on both sides. Never
+  let "text sort" mean "text sort at a fixed count" while "detector" means
+  "detector at its line". The analyzer's balance tables carry a `rule`:
+  `app line` (what each sort's own line in the app returns: the text sort's
+  blind GMM cut, the detector's labels line, and for the full-label ceiling
+  Find's labels line drawn from its full labels, #4486; the skyline's own row
+  is still cut at the retired oracle on the test labels, which no Find could
+  draw, so a ceiling frame from before #4486 reads blank; from #4490's build
+  that line models the negatives with the full labels' own Bads, so a ceiling
+  line from an earlier review ran deep and is not comparable), the primary
+  reading; and `top-K` (set-constant at the old cap,
+  32 at beta <= 1 and 128 above, on every sort), a secondary view shown for
+  both sorts or neither. The owner is skeptical a set-constant line will ever
+  ship (it does not scale with the Find corpus), so the report leads with the
+  app lines. The text sort's blind cut returns most of the corpus (F1 0.02 on
+  COCO Better); its top 32 happens to be a near-oracle count on this bench
+  (about 50 positives a cell), which is why the count line looked good early
+  and why #4452 found it fails on other corpus sizes.
 
 - **Bench:** `coco_better`, every class at every size: all 144 cells
   (`CALIB_CATEGORY_MODE=all`). The data is the bench, not the subject. Classes
@@ -23,6 +57,26 @@ same edit.
   - **SigLIP binary:** `siglip`, `whole_image`.
   - **DINOv3 region:** `siglip+dinov3_patch`, `max_patch`, opened on SigLIP's
     text sort.
+- **The preference is a balance, beta, and a review runs one set of sessions
+  per beta (owner, 2026-10-01 03:42, #4413, after #4411's pricing).** The
+  headline is, per beta at the app's presets (1/4 precision-leaning, 1
+  balanced, 4 recall-leaning: the owner's pick of 2026-10-03 on #4448; they
+  were 0.5 / 1 / 2) over clicks, the returned set's **F-beta as a share of
+  the best F-beta any cut of the same ranking reaches** (`returned_at_beta.png`,
+  the "returned set at each balance" table), with its precision and recall
+  beside it, and the share of runs whose line keeps nothing (`empty`).
+  Sessions run at `SOTA_BETA=0.25|1|4` (the eval's `CALIB_BETA` arm): this is
+  the standing recipe. The analyzer's betas follow the app's presets
+  (`_rank_metrics.BETAS` is the harness's `RANK_FRAME_BETAS`, which a test
+  pins to `BALANCE_PRESETS`, #4471). The harness's default arm (no
+  `SOTA_BETA`) is the app's default, the balance at beta 1. "The quality of
+  our RETURNS matters more than the quality of our RANK" (owner, 2026-10-01
+  02:20, #4408): AP stays as the ranking's measure.
+- **The floor-era control is history (#4408, #4421).** It ran one set of
+  sessions per precision floor P (`SOTA_FLOOR`, P = 10 / 50 / 90%) and scored
+  each returned set at its own P. `SOTA_FLOOR` went with the floor (#4421) and
+  the launcher now refuses it, so the control cannot be re-run; `perp.py`
+  (its default `--kind floor`) still reads the floor-era runs already on disk.
 - **A review runs Binary Photo only by default (owner, 2026-09-26).** Region
   Photo is so slow (~5 h a seed) that it runs only when the owner asks for it
   explicitly: "We'll do that explicitly at some point when we need it." Never
@@ -32,6 +86,39 @@ same edit.
   report follows the same shape. Each goes in its own directory,
   `docs/experiments/<date>-state-of-the-app-<path>-<modality>/`, and is written
   when ITS runs finish; one path does not wait for the other.
+- **Each page names its path, and the Region report sets the two side by side
+  (owner, 2026-10-08, #4655).** A reader took the Region viewer for a
+  SigLIP-vs-DINOv3 comparison. Its subtitle named both paths (`analyze.sh` put
+  one subtitle on every page), and its one panel showed the composite key
+  `siglip+dinov3_patch`. That key is ONE path: SigLIP ranks the typed query,
+  since DINOv3 has no text side, and DINOv3 patches carry the clicks.
+  - `analyze.sh` keeps only `SOTA_PATH`'s path on the page and names it in the
+    subtitle (`viewer.py --embedders`, #4654).
+  - Every SotA viewer names its panels by path: `--embedder-label`, `SigLIP
+    binary` and `DINOv3 region`, as in `analyze.py`'s `ARMS`.
+  - The comparison a reader wants is the two paths. So a Region Photo report
+    carries `compare_paths.py`'s figures (`vs_binary_objective.png`,
+    `vs_binary_path.png`) and its table, against the newest Binary Photo review
+    of the same app. It reads the two reports' committed `objective_by_click.csv`
+    and `precision_recall_path.csv`, so it needs nothing from the GRID.
+  - The report names that binary review and its seeds, and says the two are not
+    paired by seed. It is still two paths as they ship, not an A/B.
+- **Stable links that follow `dev` (owner, 2026-10-06):** the newest report
+  of each kind, and its `viewer.html`, have fixed URLs on GitHub Pages that
+  move as soon as a report merges to `dev` (first set to follow releases to
+  `main`, then switched the same day). A report commits its viewer so the link
+  has one. See
+  [Where the owner reads it](#where-the-owner-reads-it-the-stable-links).
+- **The viewer carries every balance (owner, 2026-10-07, #4636):** the
+  committed viewer holds all three session sets, a chip per beta the sessions
+  ran at, and offers F1/4 and F4 beside F1 on the metric menu. The two are
+  different questions: the chip is how the app at that beta trained, checked
+  and drew its line; the metric is the beta its returned set is scored at.
+  The objective (`fbeta`) is the diagonal, each set at its own beta. With the
+  Target size filter, a reader can ask "how do we do on large targets at
+  beta 4" without a re-run. `viewer_betas.sh` builds it (below); each set's
+  click 0 is the text sort's own line at that set's beta (#4603), so the
+  notch and the curve are one rule (#4474).
 - **Seeds per path, sized by cost:** Binary Photo is cheap (~7 min and ~1 GB a
   run, ~10-15 min per seed for all 144 cells), so it takes **as many seeds as
   a night allows** (owner, 2026-09-24: per-image claims need repeat clicks, and
@@ -56,29 +143,202 @@ same edit.
   the clicks, then the **full-label ceiling** (`skyline_train_full`) on the
   right. The region path's ceiling is supervised with each positive's
   ground-truth box (owner ruling on #3321).
-- **Metrics:** F1 and cost, the standard `viewer.html`.
-- **Per-image influence:** each scored step's change in the held-out test
-  score is split **equally among the clicks since the previous scored step**.
-  The first scored step is measured from the text-only score and split among
-  the opening clicks. Then roll the credit up per image, per image × detector,
-  and early (≤30 clicks) vs late (>90). One click's credit includes refit
-  noise, so an image claim needs repeat observations (`n_obs`).
+- **Metrics (owner, 2026-09-30, #4357): no FPR + FNR anywhere.** #4223
+  retired that objective, and since #4272 the default arm's line is a kept
+  set (the floor's until #4413; then the balance's count line, the mixture's
+  F-beta argmax capped at 32; since #4452 the balance's labels line), so a
+  review scored in cost reads the change
+  of objective as a regression. Cost is gone from the
+  headline, the tables and the figures, not moved to an appendix.
+  **The precision floor is written *P*, not *X*** (owner, 2026-09-30).
+  The set, as `analyze.py` reports it:
+  - **Ranking:** AP (threshold-free), and Goods found per checkpoint (harvest).
+  - **The returned set's F1, over clicks** (owner, 2026-09-30: "Showing AP is
+    nice, but it's entirely about the ranking. Using the returned-set
+    threshold, show F1 over time, too."). It is the F1 of the set the line
+    keeps on the test half at the default P = 50% (and at 10%), from the rank
+    frames, never the harness rows' `f1`. It sits next to the best F1 any cut
+    of the same ranking reaches (`f1_over_clicks.png`, `line_steps.csv`).
+  - **The line on a fresh corpus** (the test half, which is what Find and a
+    headless run return), at each floor the app offered until #4421 (10 / 50 / 90%): the
+    precision of the kept set (the top K, the floor's unchecked candidate);
+    the shortfall, max(0, P − precision); the share of sessions meeting P;
+    recall next to the oracle's recall at precision ≥ P (the best cut of the
+    same ranking); and the kept set's F1.
+  - **The Train-time spot check:** confirm rate, the range, and whether the
+    range covered the truth (the share right of the check's candidate). What
+    the check *should* certify is #4358; report whatever that ruling becomes.
+  - **Ceiling:** the full-label model's AP, and its line, F1 and oracle recall at P.
+  - **Click 0:** the text sort's AP and its top K at P.
+  - **Where the app said stop (#3560):** `summary.md`'s stopping block, with
+    `stops.csv` / `margins.csv`: the share of sessions the stopping rules ever
+    fired in, the click they fired at, the objective there against the budget
+    and the run's own best, which light held the rest, and how close each gate
+    came. Not yet a report section: the first review to read it decides
+    whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
+- **The opening is the text sort (#4605).** The app stays on the text sort
+  through Autopilot's opening (Good, Bad, More) and shows a detector only from
+  the Hard phase on, a median ~40 clicks in. The harness scores the detector
+  Test would give during the opening anyway (from the first Good: the Goods'
+  centroid under the label quota, then the trained head; #4643,
+  `detector_tier`) and flags the steps the app would show as
+  `app_trained == 1`. Every number the report reads off the session before a
+  run's first such step (AP, the line at P, the balance, the objective,
+  `curves.csv`, `by_click.py`) is the text sort's, at its own line. Never read
+  the opening's detectors as what the session shows. (A document dataset's
+  dry-run walk is on the learned sort in the app, but the harness flags it 0;
+  the document reviews use their own analyzer.)
+- **Every attempted run is in every average (owner, 2026-10-07, #4631).** A
+  run that never trains a detector (150 clicks and no Good; 37 of 1,440 per
+  preset on the 2026-10-05 Binary review, chair@small in all 10 seeds) writes
+  no metric row. A mean over the runs with a value drops exactly the sessions
+  the app failed. Such a run scores **what its session shows: the typed
+  query's own set**, at every click, at the end and after the check. That is
+  the opening rule above for a run that never leaves the opening. Its AP is
+  the text sort's, and its check's effect is 0.
+  - **Why not the viewer's empty set.** The owner picked this over #4629's
+    empty set (objective 0, AP at chance). The viewer reads the harness's
+    detectors and has no opening rule. The two differ in the 4th decimal
+    (typed-query F-beta 0.006 to 0.03 on those runs), and a report says in
+    one line why it differs from its viewer.
+  - **An empty returned set scores precision 0,** never an undefined value
+    that leaves a precision mean. That covers a line that keeps nothing and a
+    detector that flags nothing (`curves.EMPTY_SET`).
+  - **A starved run's beta is the study's** (it has no rows to read one off).
+  - **The same holds after the check for a run that never leaves the opening
+    (#4653).** Such a run may hold a Good or two, and it still runs the
+    end-of-session check. That check is on a detector the app does not show
+    (its rows carry `app_trained == 0`); since #4643 it is the Goods'
+    centroid cut at its midpoint, about half the corpus. Such a run keeps its
+    typed query's set after the check, and the check's effect is 0. The check
+    row's own `app_trained` decides. In #4651's draft, 24 of 288 runs per
+    preset were like this.
+  - **Every per-click mean fills each run first.** `by_click.py` uses
+    `cells.csv`'s `shown_from`. The share curves and the early-dip table use
+    `analyze.session_balance_steps`, never `balance_steps.csv`'s rows as they
+    stand, which hold only the runs with a frame at that click.
+  - Never filter on `never_trained` before a mean. It is for listing the runs,
+    as `summary.md`'s first table does.
+- **The viewer draws what the saved labels give, opening included (owner,
+  2026-10-07, #4640).** What decides it is what the Train interface lets a
+  user take away. Had the app refused to save a detector until it was real,
+  the opening's detectors could be left out; since it lets the user export,
+  the page shows what an import gives. And it never refuses: every vote is
+  written to the detector as it is cast, Export labels and Test have no phase
+  gate, and Test or an import builds a detector from the labelset. So
+  `viewer.py` and `curves.py` read neither `app_trained` nor `detector_tier`.
+  Before a run's first Good they draw the empty set (Test is refused, #4629),
+  and from there on the harness's detector, which is what Test gives: since
+  #4643 the app no longer hands out a head fitted to too few labels, so under
+  the label quota (3 Goods and 4 Bads, Autopilot's own quorum) that is the
+  Goods' centroid, cut at its midpoint on the withheld half, and from the
+  quota the trained head, whose line is Find's there. The report is the
+  session, the viewer is the export, so the two still differ through the
+  opening; the click-4 dip the head on 3 Goods and 1 Bad drew (#4640) went
+  with the app, not with a viewer rule. A review run before #4643 starts its
+  rows at the first Good and Bad and draws that head; the committed pages
+  change only at the next review's run. The page says so in its reading
+  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (A typed-query
+  tier was dropped: a labelset does not carry the query.)
+- **The viewer's dotted line is the best cut (owner, 2026-10-08, #4654).** On
+  an F metric it is the best that F any cut of the same ranking reaches, the
+  report's "best cut", so it never sits below the line; precision, recall and
+  the rates read the cut the session's own F-beta would have drawn; click 0
+  carries the text sort's. The harness records it from #4654 on
+  (`oracle_fbeta*`, `fbeta_oracle_*`; `text_baseline.py`'s
+  `text_oracle_{precision,recall,fpr}_b*`). A page built from earlier runs
+  can only draw the cost cut those runs carried, which on a rare class cuts
+  deep (recall about 0.85, precision about 0.1) and sat under F1 on the
+  2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
+  reskin cannot add the best cut: the next review's run draws it.
+- **The end-of-run spot check is not a click; a prompted one is (#4496).**
+  The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
+  line once the voting steps are spent, so every run ends with
+  `phase == "check"` rows past `max_steps`. "Final" is the last ordinary step;
+  the end check's rows and picks feed only the check's own columns, never a
+  curve, a checkpoint or an image's credit. Mid-session, Autopilot also runs
+  the check when the labels separate weakly (`weak_check_due`, past its
+  text-sort opening): those rows carry `phase == "prompt"`, count in `t` and
+  the 150-vote budget, and read as ordinary clicks in every curve and credit.
+- **Rank frames:** the line at every P is read off where the positives sit in
+  each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
+  checkpoints (`CALIB_RANK_FRAME_STEPS`). For an F1 curve, record them densely:
+  the 2026-09-30 review used every click to 10 and every 5 after, which is
+  ~36 frames and ~10 KB per run at no measurable extra run time. A run from before #4357 has none: its
+  AP, harvest and check columns are complete, but its line is known only at
+  click 0.
+- **Per-image influence:** each scored step's change in held-out **AP** is
+  split **equally among the clicks since the previous scored step**, check
+  rows and check picks excluded. The first scored step is measured from the
+  text-only AP and split among the opening clicks. Then roll the credit up per
+  image, per image × detector, and early (≤30 clicks) vs late (>90). One
+  click's credit includes refit noise, so an image claim needs repeat
+  observations (`n_obs`).
 - **An image's own effect:** judge images on `resid_z`, never the raw mean. The
   raw mean mostly says *when* (early positives hurt) and *where* (hard classes)
   an image was clicked. `resid` nets out the cell, label and phase. Report the
   |z| > 3 count **next to the shuffled-image null** that `summary.md` prints.
   At 3 seeds nothing cleared it; at 7 seeds (2026-09-24) the harmful side did.
 
+## Document Logo (the structural path): standing decisions (owner, 2026-10-01, #4392)
+
+The document path (`sift_vlad_doc`, the tiled Stage 1 from #3928 / #4391)
+differs from the photo paths, and the owner settled how its review works:
+
+- **Harness:** `scripts/experiments/fullmarks/app_replay_tiled.py`, which calls
+  the app's own `maybe_structural_rerank(_example)`. `vtscore.eval` has no
+  structural path, and porting one is not a precondition for the review.
+- **Bench:** FullMarks (current frozen version), its roster classes and
+  #4162's `own_verified` pools. The opening (click 0) is example sort with the
+  class's query crop. There is no text opening, because the embedder has no
+  text side.
+- **The line:**
+  - report the set the app returns, which is the inlier gate (score ≥ 0.5,
+    i.e. ≥ 8 inliers);
+  - next to it, floor-style cuts at P = 10 / 50 / 90%;
+  - the structural path has no precision-floor estimator, so a P-cut is the
+    best cut of the same ranking with precision ≥ P (an oracle). Say so
+    wherever it appears.
+- **Repeats:** two closed-loop runs per class (owner, 2026-10-03, #4457; was one):
+  the second with `--swap-halves`, which clicks in the first run's test half and
+  scores on its click half. The path is deterministic given the crop and the
+  halves, so each replicate is one observation per class; per-image claims are
+  labelled single-observation.
+- **The balance (owner, 2026-10-03, #4457; presets 1/4, 1, 4 since #4472):**
+  the review scores the returned set at beta 1/4, 1 and 4: its F-beta as a
+  share of the best cut's (`returned_at_beta.png`, the "returned set at each
+  balance" table), at the photo headline's presets. Since #4458 the structural
+  line follows beta from beta 2 up (the recall end adds pages above a
+  per-detector floor) and reorders a few loose fits before the first Bad, so
+  a beta-4 session can differ from a beta-1 session. Run two session sets:
+  - the default run serves beta 1/4 and 1, whose line is the same;
+  - `sota_documents.py --beta 4` serves beta 4.
+
+  Read each beta's row from its own run.
+- **Hardware:** run on the app's GPU type (a V100 today), and report retrain
+  time from it (`retrain.png`). One comparison (#4457, different nodes) put
+  an L40S at about half the V100's p90.
+- **No ceiling** ("full-label" notch) in structural mode for now. The Headroom
+  section is omitted, and the curves end at the last click.
+- **No spot check:** the structural path has none, so that section is omitted.
+- Everything else (two significant digits, a figure per claim, literal
+  examples, the "app as it is now" framing) is as for the photo reports.
+
 ## How to run it
 
 ```bash
 cd scripts/experiments/state_of_app
-srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # its checks are too heavy for the login node
-bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band, both paths
-bash launch.sh cells                                  # login node: the full array; SOTA_SEEDS=N for more seeds
+srun --ntasks=1 -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # checks too heavy for the login node; --ntasks=1 or it submits twice
+CALIB_MEM=12G bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band; Binary only unless SOTA_PATH=region|all
+bash launch.sh cells                                  # login node: the full array, BOTH paths; a Binary-only review uses redo ranges (below)
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
+# per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
+python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
+python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until the app shows a run's detector (the opening's end, #4605): the slides' left panel reads it
+srun -p cpu --mem=16G -c 2 -t 60 bash viewer_betas.sh <date>   # the committed viewer: every session set on one page, a chip per beta (#4636) -> <date>-betas/viewer.html
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
+python compare_paths.py --binary <binary report dir> --region <region report dir> --out <region report dir>/figures   # the two paths side by side (#4655): two figures, the table on stdout; reads committed CSVs, runs anywhere
 ```
 
 - **Output:** everything lands in `/expscratch/$USER/state-of-the-app/<date>/`,
@@ -103,6 +363,37 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   so every cell would have run in duplicate and raced its twin on the same
   output files. Only the `prepare` checks need a compute node. After any
   submission, count the jobs.
+- **A Binary-only review never goes through `cells`,** which queues both paths
+  and sizes every task for region (80 GB). Use `SOTA_PATH`-filtered `subset`
+  for a few classes, and `redo` over each seed's SigLIP block (`s*288` to
+  `s*288+143`) for the full run, with `CALIB_MEM=4G`-`12G`. The 2026-09-26
+  `overnight.sh` does this with a deadline. Measured 2026-09-30 on the floor-era
+  default arm (rank frames plus the end-of-run check): a Binary run takes
+  7.5–12 min and ~1.1 GB at 2 CPUs.
+- **The line on a fresh corpus is the shipped one** (#4402): the rank frames
+  record how many the unchecked line keeps on the test half.
+  `test_line_k_b025/b1/b4` (#4471) is the labels line (#4452) at each
+  preset, its corpus side fitted on the test half as Find fits it; at the
+  sessions' own beta it is the objective's returned set exactly. It can be 0,
+  which the analyzer reads as an empty set (F-beta 0), not as a missing
+  count. A floor-era run also carries `test_line_k_p10/p50/p90`, the floor's
+  count (#4389), which #4421 stopped recording.
+  `_rank_metrics.frame_beta_k` / `frame_k` read them. A run from before
+  c5f55732c has no such column, and one from before #4471 recorded the
+  retired count line at 0.5 / 1 / 2; the analyzer then reads the balance's
+  cap, which is not the app's line any more: **re-run it, don't re-analyze
+  it.** Recording it is a pure read; the 2026-09-30 re-run was
+  identical to the run without it, click for click.
+- **Smoke the analyzer in a scratch directory.** `analyze.sh` writes
+  `text_baseline.csv` into the run directory and reuses it when it has the
+  current columns, and the baseline is per seed: a smoke analysis on seed 0
+  there leaves a one-seed baseline the full analysis then reads. Make a
+  directory whose `results/` symlinks the run's `cells/`, `prepare_info.json`
+  and `crops/`, write its own `grid_shape.json` with the seeds it holds, and
+  analyze that (2026-09-30: `<run dir>-smoke`).
+- **Measured 2026-09-30 on the band-walk app:** a Binary run takes a median
+  6 min (p90 7.3) at 1 CPU; 10 seeds (1,440 runs) took ~90 min at ~210 wide,
+  and `analyze.sh` ~16 min for 10 seeds at 8 CPUs.
 - **`analyze.sh` needs `results/grid_shape.json`, and only `launch.sh cells`
   writes it.** A run built from `subset` or `redo` (a smoke run, or seeds
   widened by index) has none, and `analyze.sh` then dies inside
@@ -125,25 +416,106 @@ and say what the app gets wrong.
 Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/REPORT.md`
 (e.g. `2026-09-27-state-of-the-app-binary-photo`) and carries these sections, in this order:
 
-1. **Headline:** mean text-only cost, then cost at 25 and 50 clicks,
-   then the final cost against the ceiling. Do the same for F1.
-2. **Where the app does well and where it does poorly,** by class and by band.
-   Name the classes, with numbers.
-3. **Headroom:** final cost minus the ceiling. This is what better clicking
-   could still buy; a large gap marks the loop, not the class.
-4. **What the clicks bought:** text-only cost minus final cost. A class where
+1. **Headline: the returned set at each balance, from its own sessions**
+   (#4413): per beta at the app's presets (1/4 / 1 / 4, #4448) over clicks, the returned set's F-beta as
+   a share of the best F-beta any cut of the same ranking reaches
+   (`returned_at_beta.png`, the "returned set at each balance" table), with
+   its precision and recall beside it, text → 25 → 50 → final → ceiling. A
+   report from before #4421 also carried the floor-era control (#4408): precision against P and recall
+   against the oracle's recall at P (`perp.py`: `returned_at_own_p.png`,
+   `perp_summary.md`; per run, `returned_at_p.png`), with the share of
+   sessions meeting P. The returned set's **path through the session** (#4519): per preset,
+   its precision against its recall at 25, 50, 100 and 150 clicks and
+   after the check (`perp.py --kind balance`: `precision_recall_path.png`,
+   `precision_recall_path.csv`, and the "returned set through the session"
+   table), which the deck's Photo Finish panel draws. Then the ranking: mean text-only AP, AP at 25 and 50
+   clicks, the final AP against the ceiling's, with Goods found at the same
+   points. F1 at the line (`f1_over_clicks.png`) is secondary: it cannot see
+   the balance. A Region Photo report adds **Against the binary path**
+   (`compare_paths.py`, #4655): both paths' objective over clicks and returned
+   set per preset, and the band table's binary columns.
+2. **The spot check:** where the F-beta walk ends (the kept set's F-beta
+   against the best cut's), its precision and recall ranges, and how often
+   the precision range held the truth (a floor-era report also said how often
+   it confirmed).
+3. **Where the app does well and where it does poorly,** by class and by band,
+   on final AP and on the final line at 50%. Name the classes, with numbers.
+4. **Headroom:** the ceiling's AP minus the final AP. This is what better
+   clicking could still buy; a large gap marks the loop, not the class.
+5. **What the clicks bought:** final AP minus text-only AP. A class where
    clicking barely beats typing is a finding.
-5. **Images:**
-   - the most helpful and most harmful images, with thumbnails;
+6. **Images:**
+   - the most helpful and most harmful images (credit on AP), with thumbnails;
    - images that help many detectors;
    - images whose sign flips between early and late clicks.
-6. **Known regimes to flag, not to fix:** runs that exhaust the positives
+7. **Known regimes to flag, not to fix:** runs that exhaust the positives
    before 150 clicks (#4121, where the fused threshold drifts). The
    preflight warns about this at launch.
-7. **What to A/B next,** filed as issues, per the follow-ups rule.
+8. **What to A/B next,** filed as issues, per the follow-ups rule.
 
 Follow the standing report rules: two significant digits, a figure per claim,
 and literal examples. Every `#N` in a message to the owner is a link.
+
+## Where the owner reads it: the stable links
+
+The owner reads the newest review of each kind from a fixed URL rather than
+browsing to it (owner, 2026-10-06):
+
+```
+https://samggreenberg.github.io/VTSearch/sota/                          every kind, with earlier reports
+https://samggreenberg.github.io/VTSearch/sota/binary-photo/             -> the newest REPORT.md on GitHub
+https://samggreenberg.github.io/VTSearch/sota/binary-photo/viewer.html  its interactive viewer
+```
+
+and likewise `region-photo/` and `document-logo/`. `.github/workflows/publish-sota.yml`
+rebuilds them with `scripts/publish-sota-site.py` on each **push to `dev`**
+that touches a report, so a report has its link as soon as it merges. Three
+things keep a report on its link:
+
+- **The title.** `REPORT.md`'s first line is `# State of the App: <Kind> — <date>`.
+  The kind is what follows the colon, up to the first ` — `, `,` or ` (`; the
+  `<date>-` prefix of the directory name decides which report is newest. A
+  directory named `*-state-of-the-app-*` whose title names no kind fails
+  `tests_lib/meta/test_publish_sota_site.py` unless that test lists it as a
+  deliberate side-report (the per-floor control is the one today).
+- **The viewer.** Commit `viewer.html` beside `REPORT.md`. For the per-preset
+  sessions it is `viewer_betas.sh <date>`'s page (#4636): one chip per session
+  set, beside F1/4 and F4 on the metric menu. It thins the per-seed lines to
+  fit the repo's 4,000 KB cap (`SOTA_RUNS_BUDGET_MB`, default 1) and says when
+  a page is still over it. With many seeds the three sets stay over the cap
+  even at the coarsest grid (24 seeds: 4.67 MB). Build with
+  `SOTA_RUNS_BUDGET_MB=0` then: the page keeps the average over every seed and
+  drops the per-seed lines. Never split the seeds across pages; the average is
+  the point (owner, 2026-10-08, #4651). If a page must split, split it by
+  preset. A review with one session set commits
+  `analyze.sh`'s `analysis-<path>/viewer.html`, which holds that path's panels
+  only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
+  offer cost (#4576); a page built before that gets both from
+  `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
+  Its averaged line carries a run's last scored value through a spot check's
+  rounds (#4624): a run inside a prompted check is scored once per round of
+  picks, and a mean over "the runs with a row at this click" skipped it between
+  rounds, which skipped exactly the weak sessions and drew a dip at the end of
+  every session as the checks ran out of budget. A page built before that gets
+  the carry from its own per-seed lines with `viewer.py --reskin <page>
+  --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
+  it). `analyze.py`'s curves and `by_click.py` already carried. A click where
+  a run has no detector (before its first Good, or every click of a run that
+  never got one; before its first Good and Bad in a review run before #4643)
+  is scored as the empty returned set, the nothing Test gives that labelset,
+  so the runs that never trained are in its mean as losses
+  (`curves.score_empty_sets`); from the first Good on, Autopilot's opening
+  included, it draws the harness's detector, the Goods' centroid under the
+  label quota (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
+  undefined; a page built before that is rebuilt with `analyze.sh`, since a
+  reskin has no prevalence to put AP at.
+  The report's own tables score a run with no detector at the typed query its
+  session shows instead (owner, 2026-10-07, #4631; see the standing decisions):
+  the viewer has no opening rule, and the report says so in one line.
+  Without a committed viewer, the `viewer.html` link serves a page saying the
+  newest report has none (it never falls back to an older report's viewer).
+- **A new kind** (a future modality) needs nothing here: its first report
+  creates `sota/<kind>/`.
 
 ## Changing this recipe
 

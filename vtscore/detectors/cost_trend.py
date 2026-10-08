@@ -94,15 +94,15 @@ SMART_SLOPE_T = 2.0
 #: (issue #4243).
 #:
 #: Smart asks whether the *detector* is still improving, and the reporting line
-#: is not the detector.  Under a precision floor (#4224) the served line
-#: switches rule by itself: the Inclusion 0 fallback until the floor's evidence
-#: gate opens, the floor's cut after it, and back whenever the bound sits near
-#: the floor.  Nothing clears the progress cache when that happens, so a window
-#: scored at the served lines would mix models cut two ways.  Moving off the
-#: Inclusion 0 cut raises FPR + FNR, and a rising cost reads green, so the mix
-#: could end Autopilot's ``hard`` phase early.  One weight and one cut rule for
-#: every model keep the window's points comparable; the floor only moves the
-#: line.  Issue #4253 measures this rule against the alternatives.
+#: is not the detector.  Under a precision floor (#4224) the served line is no
+#: inclusion's cut: it keeps a set (#4272), the floor's starting candidate
+#: until a spot check ends and the set the check ended on after it, so it moves
+#: with the floor and with every check.  Nothing clears the progress cache when
+#: that happens, so a window scored at the served lines would mix models cut
+#: different ways.  Moving off the Inclusion 0 cut raises FPR + FNR, and a
+#: rising cost reads green, so the mix could end Autopilot's ``hard`` phase
+#: early.  One weight and one cut rule for every model keep the window's points
+#: comparable; the floor only moves the line.
 SMART_INCLUSION = 0
 
 

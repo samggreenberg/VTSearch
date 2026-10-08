@@ -10,7 +10,7 @@
  *
  * Shared rather than re-filtered per component because nine different forms
  * render plugin fields (export, settings import/export, label import,
- * Auto-Find, autodetect results, the dataset-importer pickers, new-detector).
+ * AutoFind, autodetect results, the dataset-importer pickers, new-detector).
  * A `hidden` honoured by eight of them is the failure this single-sources
  * away: the author sees a value they fixed still offered for editing on
  * whichever surface was missed.

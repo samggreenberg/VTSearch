@@ -23,9 +23,9 @@
 // would push the buttons off-centre from the Advanced toggle beside them.
 .form-actions { display: flex; justify-content: flex-end; gap: var(--space-md); }
 
-// The Run AutoRun box sits under whichever picker is showing; indent it like
+// The Run AutoFind box sits under whichever picker is showing; indent it like
 // the importer forms (`.importer-form`) so it lines up with their controls
 // rather than with the tab bars.
-.autorun-toggle {
+.autofind-toggle {
   padding-left: var(--space-2xl);
 }

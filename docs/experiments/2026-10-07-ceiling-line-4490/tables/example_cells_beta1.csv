@@ -1,0 +1,523 @@
+cell,rank,image,positive,kept_by,labelled objects
+traffic light@medium,1,000000568115.jpg,1,both,traffic light@medium
+traffic light@medium,2,000000264456.jpg,1,both,traffic light@medium
+traffic light@medium,3,000000284445.jpg,1,both,bus@small; traffic light@medium
+traffic light@medium,4,000000503841.jpg,1,both,traffic light@medium
+traffic light@medium,5,000000480661.jpg,1,both,traffic light@medium
+traffic light@medium,6,000000423005.jpg,1,both,traffic light@medium
+traffic light@medium,7,000000484881.jpg,1,both,traffic light@medium
+traffic light@medium,8,000000057919.jpg,1,both,traffic light@medium
+traffic light@medium,9,000000149376.jpg,1,both,traffic light@medium
+traffic light@medium,10,000000060387.jpg,0,both,parking meter@medium
+traffic light@medium,11,000000325220.jpg,1,both,bag or luggage@small; enclosed road vehicle@medium; traffic light@medium
+traffic light@medium,12,000000052256.jpg,1,both,traffic light@medium
+traffic light@medium,13,000000415771.jpg,1,both,bird@small; traffic light@medium
+traffic light@medium,14,000000482505.jpg,1,both,motorcycle@small; traffic light@medium
+traffic light@medium,15,000000432273.jpg,1,both,traffic light@medium
+traffic light@medium,16,000000557345.jpg,1,both,traffic light@medium
+traffic light@medium,17,000000188165.jpg,0,both,bicycle@small
+traffic light@medium,18,000000433483.jpg,1,both,traffic light@medium
+traffic light@medium,19,000000084529.jpg,1,both,traffic light@medium
+traffic light@medium,20,000000081903.jpg,0,both,bicycle@small; tie@small
+traffic light@medium,21,000000529824.jpg,1,both,traffic light@medium
+traffic light@medium,22,000000234755.jpg,1,both,traffic light@medium
+traffic light@medium,23,000000346445.jpg,1,both,traffic light@medium
+traffic light@medium,24,000000110282.jpg,1,both,traffic light@medium
+traffic light@medium,25,000000133183.jpg,0,both,fire hydrant@small
+traffic light@medium,26,000000344067.jpg,0,both,stop sign@small
+traffic light@medium,27,000000146389.jpg,1,both,motorcycle@small; traffic light@medium
+traffic light@medium,28,000000182349.jpg,1,both,traffic light@medium
+traffic light@medium,29,000000447688.jpg,0,both,parking meter@medium
+traffic light@medium,30,000000352861.jpg,1,both,traffic light@medium
+traffic light@medium,31,000000243825.jpg,1,both,traffic light@medium
+traffic light@medium,32,000000423349.jpg,0,both,clock@medium
+traffic light@medium,33,000000317283.jpg,0,both,(none)
+traffic light@medium,34,000000051563.jpg,0,both,enclosed road vehicle@large
+traffic light@medium,35,000000292997.jpg,1,both,traffic light@medium
+traffic light@medium,36,000000350889.jpg,1,both,traffic light@medium
+traffic light@medium,37,000000499267.jpg,1,both,traffic light@medium
+traffic light@medium,38,000000328836.jpg,0,both,fire hydrant@small
+traffic light@medium,39,000000475529.jpg,0,both,bench@small
+traffic light@medium,40,000000252292.jpg,1,both,bag or luggage@small; traffic light@medium
+traffic light@medium,41,000000381828.jpg,0,both,cell phone@small; parking meter@small
+traffic light@medium,42,000000049091.jpg,0,both,(none)
+traffic light@medium,43,000000359276.jpg,0,both,(none)
+traffic light@medium,44,000000041568.jpg,1,both,traffic light@medium
+traffic light@medium,45,000000084550.jpg,0,both,enclosed road vehicle@large
+traffic light@medium,46,000000556666.jpg,0,both,fire hydrant@small
+traffic light@medium,47,000000347042.jpg,1,both,enclosed road vehicle@small; traffic light@medium
+traffic light@medium,48,000000105246.jpg,0,both,(none)
+traffic light@medium,49,000000041128.jpg,0,both,motorcycle@large
+traffic light@medium,50,000000382104.jpg,1,shipped only,traffic light@medium
+traffic light@medium,51,000000165347.jpg,1,shipped only,traffic light@medium
+traffic light@medium,52,000000222383.jpg,0,shipped only,(none)
+traffic light@medium,53,000000081084.jpg,0,shipped only,chair@small; clock@medium; dining table@small
+traffic light@medium,54,000000130654.jpg,0,shipped only,(none)
+traffic light@medium,55,000000004576.jpg,0,shipped only,bag or luggage@large
+traffic light@medium,56,000000171766.jpg,1,shipped only,traffic light@medium
+traffic light@medium,57,000000435709.jpg,0,shipped only,fire hydrant@small
+traffic light@medium,58,000000453286.jpg,0,shipped only,(none)
+traffic light@medium,59,000000200152.jpg,0,shipped only,(none)
+traffic light@medium,60,000000450500.jpg,1,shipped only,traffic light@medium
+traffic light@medium,61,000000576809.jpg,1,shipped only,traffic light@medium
+traffic light@medium,62,000000140946.jpg,1,shipped only,traffic light@medium
+traffic light@medium,63,000000254884.jpg,0,shipped only,parking meter@small
+traffic light@medium,64,000000349575.jpg,0,shipped only,fire hydrant@medium
+traffic light@medium,65,000000013198.jpg,0,shipped only,enclosed road vehicle@medium
+traffic light@medium,66,000000559484.jpg,0,shipped only,fire hydrant@small
+traffic light@medium,67,000000465424.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,68,000000063782.jpg,0,shipped only,motorcycle@large
+traffic light@medium,69,000000087912.jpg,0,shipped only,bus@large
+traffic light@medium,70,000000409890.jpg,0,shipped only,(none)
+traffic light@medium,71,000000386592.jpg,0,shipped only,enclosed road vehicle@medium
+traffic light@medium,72,000000081593.jpg,1,shipped only,traffic light@medium
+traffic light@medium,73,000000282220.jpg,0,shipped only,parking meter@medium
+traffic light@medium,74,000000304530.jpg,0,shipped only,motorcycle@small
+traffic light@medium,75,000000503860.jpg,0,shipped only,(none)
+traffic light@medium,76,000000244885.jpg,0,shipped only,(none)
+traffic light@medium,77,000000203458.jpg,0,shipped only,bus@medium
+traffic light@medium,78,000000495053.jpg,0,shipped only,(none)
+traffic light@medium,79,000000538977.jpg,0,shipped only,skis@medium
+traffic light@medium,80,000000405800.jpg,0,shipped only,bus@medium
+traffic light@medium,81,000000458613.jpg,0,shipped only,stop sign@small
+traffic light@medium,82,000000457725.jpg,0,shipped only,dining table@small
+traffic light@medium,83,000000181035.jpg,0,shipped only,(none)
+traffic light@medium,84,000000072052.jpg,0,shipped only,stop sign@medium
+traffic light@medium,85,000000369618.jpg,0,shipped only,(none)
+traffic light@medium,86,000000417248.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,87,000000562960.jpg,0,shipped only,umbrella@medium
+traffic light@medium,88,000000038180.jpg,0,shipped only,bus@medium
+traffic light@medium,89,000000371226.jpg,1,shipped only,traffic light@medium
+traffic light@medium,90,000000496362.jpg,0,shipped only,bus@large; person@medium
+traffic light@medium,91,000000086393.jpg,0,shipped only,fire hydrant@small
+traffic light@medium,92,000000022098.jpg,0,shipped only,(none)
+traffic light@medium,93,000000476491.jpg,0,shipped only,(none)
+traffic light@medium,94,000000448648.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,95,000000484666.jpg,0,shipped only,parking meter@small
+traffic light@medium,96,000000565957.jpg,0,shipped only,cell phone@small
+traffic light@medium,97,000000335336.jpg,0,shipped only,motorcycle@small
+traffic light@medium,98,000000019451.jpg,0,shipped only,motorcycle@large
+traffic light@medium,99,000000310216.jpg,0,shipped only,bus@small
+traffic light@medium,100,000000086901.jpg,0,shipped only,parking meter@medium
+traffic light@medium,101,000000133697.jpg,0,shipped only,bicycle@small
+traffic light@medium,102,000000478621.jpg,0,shipped only,umbrella@medium
+traffic light@medium,103,000000195848.jpg,0,shipped only,skateboard@small
+traffic light@medium,104,000000233119.jpg,1,shipped only,traffic light@medium
+traffic light@medium,105,000000187882.jpg,0,shipped only,(none)
+traffic light@medium,106,000000136979.jpg,0,shipped only,bicycle@medium
+traffic light@medium,107,000000008339.jpg,1,shipped only,traffic light@medium
+traffic light@medium,108,000000019624.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,109,000000079357.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,110,000000527012.jpg,0,shipped only,stop sign@medium
+traffic light@medium,111,000000340532.jpg,0,shipped only,enclosed road vehicle@medium
+traffic light@medium,112,000000201409.jpg,0,shipped only,parking meter@medium
+traffic light@medium,113,000000023648.jpg,0,shipped only,(none)
+traffic light@medium,114,000000455350.jpg,0,shipped only,person@large
+traffic light@medium,115,000000558011.jpg,0,shipped only,umbrella@medium
+traffic light@medium,116,000000160233.jpg,0,shipped only,bus@medium
+traffic light@medium,117,000000559995.jpg,0,shipped only,chair@small
+traffic light@medium,118,000000033888.jpg,0,shipped only,enclosed road vehicle@small
+traffic light@medium,119,000000554215.jpg,0,shipped only,parking meter@large
+traffic light@medium,120,000000560594.jpg,0,shipped only,stop sign@medium
+traffic light@medium,121,000000540404.jpg,0,shipped only,enclosed road vehicle@large
+traffic light@medium,122,000000352444.jpg,0,shipped only,fire hydrant@medium
+traffic light@medium,123,000000194461.jpg,1,shipped only,traffic light@medium
+traffic light@medium,124,000000307757.jpg,0,shipped only,bag or luggage@medium
+traffic light@medium,125,000000167819.jpg,0,shipped only,(none)
+traffic light@medium,126,000000372603.jpg,0,shipped only,fire hydrant@medium
+traffic light@medium,127,000000570207.jpg,0,shipped only,(none)
+traffic light@medium,128,000000479263.jpg,0,shipped only,(none)
+traffic light@medium,129,000000485123.jpg,0,shipped only,parking meter@medium
+traffic light@medium,130,000000451594.jpg,0,shipped only,bus@medium; chair@small
+traffic light@medium,131,000000317911.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,132,000000228934.jpg,0,shipped only,stop sign@medium
+traffic light@medium,133,000000457161.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,134,000000408263.jpg,0,shipped only,stop sign@large
+traffic light@medium,135,000000037563.jpg,0,shipped only,bench@small
+traffic light@medium,136,000000162596.jpg,0,shipped only,parking meter@large
+traffic light@medium,137,000000049741.jpg,0,shipped only,(none)
+traffic light@medium,138,000000453087.jpg,0,shipped only,(none)
+traffic light@medium,139,000000016069.jpg,0,shipped only,boat@small
+traffic light@medium,140,000000543393.jpg,0,shipped only,stop sign@medium
+traffic light@medium,141,000000315696.jpg,0,shipped only,fire hydrant@small; vase or potted plant@small
+traffic light@medium,142,000000315601.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,143,000000142324.jpg,0,shipped only,bicycle@medium; enclosed road vehicle@small
+traffic light@medium,144,000000146751.jpg,0,shipped only,airplane@small
+traffic light@medium,145,000000369812.jpg,0,shipped only,bus@medium
+traffic light@medium,146,000000352980.jpg,0,shipped only,bus@medium
+traffic light@medium,147,000000253332.jpg,1,shipped only,traffic light@medium
+traffic light@medium,148,000000378179.jpg,0,shipped only,cell phone@small
+traffic light@medium,149,000000545006.jpg,0,shipped only,(none)
+traffic light@medium,150,000000218840.jpg,0,shipped only,parking meter@medium
+traffic light@medium,151,000000454776.jpg,0,shipped only,stop sign@medium
+traffic light@medium,152,000000203865.jpg,0,shipped only,enclosed road vehicle@medium
+traffic light@medium,153,000000434829.jpg,0,shipped only,clock@medium
+traffic light@medium,154,000000089614.jpg,1,shipped only,traffic light@medium
+traffic light@medium,155,000000083246.jpg,0,shipped only,(none)
+traffic light@medium,156,000000020640.jpg,0,shipped only,bag or luggage@small
+traffic light@medium,157,000000506751.jpg,0,shipped only,dog@small
+traffic light@medium,158,000000537280.jpg,0,shipped only,umbrella@large
+traffic light@medium,159,000000472551.jpg,1,shipped only,traffic light@medium
+traffic light@medium,160,000000286671.jpg,0,shipped only,clock@small
+traffic light@medium,161,000000421673.jpg,0,shipped only,(none)
+traffic light@medium,162,000000511002.jpg,0,shipped only,stop sign@large
+traffic light@medium,163,000000483781.jpg,0,shipped only,bus@small
+traffic light@medium,164,000000328111.jpg,0,shipped only,enclosed road vehicle@medium; motorcycle@small
+traffic light@medium,165,000000301875.jpg,0,shipped only,stop sign@large
+traffic light@medium,166,000000267680.jpg,0,shipped only,(none)
+traffic light@medium,167,000000395801.jpg,0,shipped only,dog@small
+traffic light@medium,168,000000135206.jpg,0,shipped only,stop sign@medium
+traffic light@medium,169,000000037169.jpg,0,shipped only,bus@medium
+traffic light@medium,170,000000143217.jpg,0,shipped only,stop sign@small
+traffic light@medium,171,000000280825.jpg,0,shipped only,(none)
+traffic light@medium,172,000000380993.jpg,0,shipped only,umbrella@medium
+traffic light@medium,173,000000383053.jpg,0,shipped only,bag or luggage@medium; enclosed road vehicle@small
+traffic light@medium,174,000000447487.jpg,0,shipped only,parking meter@large
+traffic light@medium,175,000000171962.jpg,0,shipped only,bicycle@large
+traffic light@medium,176,000000389016.jpg,0,shipped only,bicycle@small
+traffic light@medium,177,000000563731.jpg,0,shipped only,clock@medium
+traffic light@medium,178,000000207978.jpg,0,shipped only,vase or potted plant@medium
+traffic light@medium,179,000000549532.jpg,0,shipped only,bicycle@medium
+traffic light@medium,180,000000307032.jpg,0,shipped only,parking meter@medium
+traffic light@medium,181,000000564187.jpg,0,shipped only,umbrella@medium
+traffic light@medium,182,000000121153.jpg,0,shipped only,(none)
+traffic light@medium,183,000000368750.jpg,0,shipped only,(none)
+traffic light@medium,184,000000228415.jpg,0,shipped only,(none)
+traffic light@medium,185,000000053604.jpg,0,shipped only,sink@medium
+traffic light@medium,186,000000207503.jpg,1,shipped only,traffic light@medium
+traffic light@medium,187,000000489107.jpg,0,shipped only,dining table@small
+traffic light@medium,188,000000420290.jpg,0,shipped only,stop sign@medium
+traffic light@medium,189,000000001722.jpg,0,shipped only,umbrella@medium
+traffic light@medium,190,000000017474.jpg,0,shipped only,bird@small
+traffic light@medium,191,000000283961.jpg,0,shipped only,enclosed road vehicle@large
+traffic light@medium,192,000000232906.jpg,0,shipped only,stop sign@large
+traffic light@medium,193,000000291149.jpg,0,shipped only,(none)
+traffic light@medium,194,000000018614.jpg,0,shipped only,fire hydrant@medium
+traffic light@medium,195,000000306451.jpg,0,shipped only,bus@medium
+traffic light@medium,196,000000103817.jpg,0,shipped only,bicycle@large
+traffic light@medium,197,000000415672.jpg,0,shipped only,bench@medium
+traffic light@medium,198,000000580166.jpg,0,shipped only,(none)
+traffic light@medium,199,000000279097.jpg,0,shipped only,dog@small
+traffic light@medium,200,000000017183.jpg,0,shipped only,fire hydrant@medium
+traffic light@medium,201,000000420673.jpg,0,shipped only,fire hydrant@medium
+traffic light@medium,202,000000372833.jpg,0,shipped only,bag or luggage@medium
+traffic light@medium,203,000000374727.jpg,0,shipped only,(none)
+traffic light@medium,204,000000465266.jpg,0,shipped only,stop sign@medium
+traffic light@medium,205,000000173722.jpg,0,shipped only,enclosed road vehicle@small
+traffic light@medium,206,000000291702.jpg,0,shipped only,(none)
+traffic light@medium,207,000000267229.jpg,0,shipped only,(none)
+traffic light@medium,208,000000567976.jpg,0,shipped only,enclosed road vehicle@large
+traffic light@medium,209,000000114459.jpg,0,shipped only,bus@large
+traffic light@medium,210,000000260050.jpg,0,shipped only,kite@small
+traffic light@medium,211,000000579247.jpg,0,shipped only,(none)
+traffic light@medium,212,000000426209.jpg,0,shipped only,bus@large
+traffic light@medium,213,000000291056.jpg,0,shipped only,(none)
+traffic light@medium,214,000000167033.jpg,0,shipped only,stop sign@small
+traffic light@medium,215,000000535737.jpg,0,shipped only,bicycle@small
+traffic light@medium,216,000000098431.jpg,0,shipped only,bag or luggage@small
+traffic light@medium,217,000000504958.jpg,0,shipped only,bicycle@small
+traffic light@medium,218,000000427094.jpg,0,shipped only,(none)
+traffic light@medium,219,000000465047.jpg,0,shipped only,bicycle@large
+traffic light@medium,220,000000265211.jpg,0,shipped only,stop sign@medium
+traffic light@medium,221,000000075898.jpg,0,shipped only,airplane@large
+traffic light@medium,222,000000395865.jpg,0,shipped only,clock@small; vase or potted plant@small
+traffic light@medium,223,000000179151.jpg,0,shipped only,umbrella@small
+traffic light@medium,224,000000339192.jpg,0,shipped only,(none)
+traffic light@medium,225,000000052974.jpg,0,shipped only,(none)
+traffic light@medium,226,000000559619.jpg,0,shipped only,motorcycle@small
+traffic light@medium,227,000000218379.jpg,0,shipped only,bench@medium; fire hydrant@medium
+traffic light@medium,228,000000014257.jpg,0,shipped only,umbrella@small
+traffic light@medium,229,000000455315.jpg,0,shipped only,bag or luggage@small
+traffic light@medium,230,000000024629.jpg,0,shipped only,fire hydrant@small
+traffic light@medium,231,000000577748.jpg,0,shipped only,(none)
+traffic light@medium,232,000000124798.jpg,0,shipped only,umbrella@small
+traffic light@medium,233,000000558365.jpg,0,shipped only,boat@large; person@small
+traffic light@medium,234,000000069977.jpg,0,shipped only,stop sign@medium
+traffic light@medium,235,000000464149.jpg,0,shipped only,clock@small
+traffic light@medium,236,000000158485.jpg,0,shipped only,enclosed road vehicle@small
+traffic light@medium,237,000000012993.jpg,0,shipped only,bicycle@medium
+traffic light@medium,238,000000076082.jpg,0,shipped only,motorcycle@medium
+traffic light@medium,239,000000098046.jpg,0,shipped only,person@small
+traffic light@medium,240,000000370511.jpg,0,shipped only,kite@small
+traffic light@medium,241,000000019874.jpg,0,shipped only,parking meter@large
+traffic light@medium,242,000000186906.jpg,0,shipped only,bus@large
+tv@large,1,000000302349.jpg,1,both,dog@large; tv@large
+tv@large,2,000000406215.jpg,1,both,tv@large
+tv@large,3,000000216507.jpg,1,both,tv@large
+tv@large,4,000000471955.jpg,1,both,tv@large
+tv@large,5,000000308444.jpg,1,both,tv@large
+tv@large,6,000000367003.jpg,1,both,tv@large
+tv@large,7,000000033596.jpg,1,both,tv@large
+tv@large,8,000000169076.jpg,1,both,tv@large
+tv@large,9,000000036267.jpg,1,both,tv@large
+tv@large,10,000000339684.jpg,1,both,tv@large
+tv@large,11,000000550767.jpg,1,both,tv@large
+tv@large,12,000000077396.jpg,1,both,tv@large
+tv@large,13,000000136917.jpg,1,both,tv@large
+tv@large,14,000000573482.jpg,1,both,tv@large
+tv@large,15,000000464447.jpg,1,both,tv@large
+tv@large,16,000000465825.jpg,1,both,tv@large
+tv@large,17,000000099937.jpg,1,both,tv@large
+tv@large,18,000000146098.jpg,1,both,tv@large
+tv@large,19,000000427117.jpg,1,both,tv@large
+tv@large,20,000000429959.jpg,1,both,tv@large
+tv@large,21,000000364297.jpg,1,both,tv@large
+tv@large,22,000000200638.jpg,0,both,chair@large
+tv@large,23,000000356528.jpg,1,both,tv@large
+tv@large,24,000000371117.jpg,1,both,tv@large
+tv@large,25,000000065716.jpg,1,both,tv@large
+tv@large,26,000000516668.jpg,0,both,mouse@medium
+tv@large,27,000000101479.jpg,1,both,tv@large
+tv@large,28,000000197169.jpg,1,both,microwave@small; tv@large
+tv@large,29,000000336901.jpg,1,both,tv@large
+tv@large,30,000000416006.jpg,0,both,laptop@large
+tv@large,31,000000248957.jpg,0,both,mouse@medium
+tv@large,32,000000082273.jpg,0,both,laptop@large
+tv@large,33,000000483205.jpg,0,both,toothbrush@medium
+tv@large,34,000000477136.jpg,1,both,tv@large
+tv@large,35,000000193720.jpg,1,both,tv@large
+tv@large,36,000000154431.jpg,1,both,tv@large
+tv@large,37,000000443545.jpg,0,both,mouse@small
+tv@large,38,000000364205.jpg,1,both,tv@large
+tv@large,39,000000355918.jpg,0,both,keyboard@medium; scissors@small
+tv@large,40,000000269392.jpg,1,both,tv@large
+tv@large,41,000000064310.jpg,1,both,tv@large
+tv@large,42,000000453620.jpg,1,both,tv@large
+tv@large,43,000000371132.jpg,0,both,keyboard@medium
+tv@large,44,000000572732.jpg,0,both,laptop@medium
+tv@large,45,000000155591.jpg,0,both,cell phone@medium
+tv@large,46,000000390073.jpg,0,both,scissors@small
+tv@large,47,000000106229.jpg,0,both,bag or luggage@large
+tv@large,48,000000101862.jpg,0,both,remote@large
+tv@large,49,000000256706.jpg,1,both,tv@large
+tv@large,50,000000036942.jpg,0,both,keyboard@large
+tv@large,51,000000492774.jpg,0,both,mouse@large
+tv@large,52,000000528157.jpg,1,both,tv@large
+tv@large,53,000000001347.jpg,1,both,tv@large
+tv@large,54,000000476170.jpg,0,both,mouse@medium
+tv@large,55,000000261707.jpg,0,both,keyboard@medium; laptop@large; spoon@medium
+tv@large,56,000000116126.jpg,0,shipped only,book@large; scissors@medium
+tv@large,57,000000003244.jpg,1,shipped only,tv@large
+tv@large,58,000000078079.jpg,0,shipped only,mouse@large
+tv@large,59,000000085320.jpg,0,shipped only,keyboard@medium
+tv@large,60,000000037502.jpg,0,shipped only,book@small
+tv@large,61,000000330524.jpg,0,shipped only,remote@large
+tv@large,62,000000334568.jpg,0,shipped only,keyboard@large
+tv@large,63,000000198936.jpg,0,shipped only,person@large
+tv@large,64,000000150691.jpg,0,shipped only,remote@large
+tv@large,65,000000408185.jpg,0,shipped only,laptop@large
+tv@large,66,000000445404.jpg,0,shipped only,single serving drinking vessel@medium
+tv@large,67,000000357870.jpg,0,shipped only,mouse@small
+tv@large,68,000000158107.jpg,0,shipped only,chair@large
+tv@large,69,000000206833.jpg,0,shipped only,laptop@large
+tv@large,70,000000384235.jpg,1,shipped only,tv@large
+tv@large,71,000000333150.jpg,0,shipped only,laptop@large
+tv@large,72,000000489235.jpg,0,shipped only,remote@medium
+tv@large,73,000000242665.jpg,0,shipped only,remote@large
+tv@large,74,000000166037.jpg,0,shipped only,(none)
+tv@large,75,000000412929.jpg,0,shipped only,remote@large
+tv@large,76,000000464675.jpg,0,shipped only,clock@small
+tv@large,77,000000096757.jpg,0,shipped only,laptop@large; mouse@medium
+tv@large,78,000000372669.jpg,0,shipped only,remote@medium
+tv@large,79,000000031345.jpg,0,shipped only,remote@medium
+tv@large,80,000000143123.jpg,0,shipped only,keyboard@small
+tv@large,81,000000463290.jpg,0,shipped only,chair@medium; vase or potted plant@small
+tv@large,82,000000383420.jpg,0,shipped only,remote@large
+tv@large,83,000000400080.jpg,0,shipped only,microwave@small
+tv@large,84,000000000599.jpg,0,shipped only,vase or potted plant@large
+tv@large,85,000000441493.jpg,0,shipped only,microwave@small
+tv@large,86,000000509579.jpg,0,shipped only,bird@large
+tv@large,87,000000295263.jpg,0,shipped only,cell phone@small; microwave@small
+tv@large,88,000000073226.jpg,0,shipped only,person@small
+tv@large,89,000000474446.jpg,0,shipped only,keyboard@large
+tv@large,90,000000100926.jpg,0,shipped only,remote@medium
+tv@large,91,000000063644.jpg,0,shipped only,enclosed road vehicle@large
+tv@large,92,000000413896.jpg,0,shipped only,laptop@large
+tv@large,93,000000304930.jpg,0,shipped only,cell phone@large
+tv@large,94,000000404754.jpg,0,shipped only,remote@medium
+tv@large,95,000000051296.jpg,0,shipped only,(none)
+tv@large,96,000000188824.jpg,0,shipped only,remote@medium
+tv@large,97,000000267176.jpg,0,shipped only,bowl@small
+tv@large,98,000000464725.jpg,0,shipped only,cell phone@small
+tv@large,99,000000032068.jpg,0,shipped only,microwave@small
+tv@large,100,000000220607.jpg,0,shipped only,clock@small
+tv@large,101,000000118544.jpg,1,shipped only,tv@large
+tv@large,102,000000230190.jpg,0,shipped only,mouse@medium
+tv@large,103,000000250108.jpg,0,shipped only,mouse@small
+tv@large,104,000000313220.jpg,0,shipped only,laptop@large
+tv@large,105,000000408235.jpg,0,shipped only,laptop@large
+tv@large,106,000000184555.jpg,0,shipped only,sink@large
+tv@large,107,000000166853.jpg,0,shipped only,orange@medium
+tv@large,108,000000250543.jpg,0,shipped only,laptop@large
+tv@large,109,000000572462.jpg,0,shipped only,tie@small
+tv@large,110,000000519432.jpg,0,shipped only,laptop@medium
+tv@large,111,000000258765.jpg,0,shipped only,remote@large
+tv@large,112,000000571728.jpg,0,shipped only,remote@large
+tv@large,113,000000420366.jpg,0,shipped only,remote@large
+tv@large,114,000000201632.jpg,0,shipped only,(none)
+tv@large,115,000000232121.jpg,0,shipped only,laptop@large
+tv@large,116,000000120846.jpg,0,shipped only,dog@large
+tv@large,117,000000263098.jpg,0,shipped only,fire hydrant@medium
+tv@large,118,000000201738.jpg,0,shipped only,scissors@small
+tv@large,119,000000560011.jpg,0,shipped only,bowl@large; mouse@large
+tv@large,120,000000431923.jpg,0,shipped only,mouse@large
+tv@large,121,000000146561.jpg,0,shipped only,mouse@medium
+tv@large,122,000000481028.jpg,0,shipped only,mouse@medium
+tv@large,123,000000104265.jpg,0,shipped only,mouse@small
+tv@large,124,000000315663.jpg,0,shipped only,mouse@large
+tv@large,125,000000386778.jpg,0,shipped only,dog@large
+tv@large,126,000000067798.jpg,0,shipped only,apple@medium
+tv@large,127,000000506945.jpg,1,shipped only,tv@large
+tv@large,128,000000229787.jpg,0,shipped only,chair@large; microwave@large
+tv@large,129,000000564572.jpg,0,shipped only,laptop@large
+tv@large,130,000000315441.jpg,0,shipped only,(none)
+tv@large,131,000000396578.jpg,0,shipped only,remote@large
+tv@large,132,000000271728.jpg,0,shipped only,laptop@medium
+tv@large,133,000000053058.jpg,0,shipped only,cell phone@small
+tie@large,1,000000450107.jpg,1,both,tie@large
+tie@large,2,000000134924.jpg,1,both,tie@large
+tie@large,3,000000476415.jpg,1,both,tie@large
+tie@large,4,000000435065.jpg,1,both,tie@large
+tie@large,5,000000513242.jpg,1,both,tie@large
+tie@large,6,000000099410.jpg,1,both,tie@large
+tie@large,7,000000498651.jpg,1,both,tie@large
+tie@large,8,000000515391.jpg,1,both,dining table@small; tie@large
+tie@large,9,000000455666.jpg,1,both,tie@large
+tie@large,10,000000512190.jpg,1,both,tie@large
+tie@large,11,000000480469.jpg,1,both,tie@large
+tie@large,12,000000462011.jpg,1,both,tie@large
+tie@large,13,000000449536.jpg,1,both,tie@large
+tie@large,14,000000479597.jpg,1,both,tie@large
+tie@large,15,000000464593.jpg,1,both,tie@large
+tie@large,16,000000249792.jpg,1,both,tie@large
+tie@large,17,000000041311.jpg,1,both,tie@large
+tie@large,18,000000415647.jpg,1,both,tie@large
+tie@large,19,000000313582.jpg,1,both,tie@large
+tie@large,20,000000128599.jpg,1,both,tie@large
+tie@large,21,000000160317.jpg,1,both,tie@large
+tie@large,22,000000254926.jpg,1,both,tie@large
+tie@large,23,000000173239.jpg,1,both,tie@large
+tie@large,24,000000088871.jpg,1,both,tie@large
+tie@large,25,000000195098.jpg,1,both,tie@large
+tie@large,26,000000538281.jpg,1,both,tie@large
+tie@large,27,000000312338.jpg,1,both,tie@large
+tie@large,28,000000029541.jpg,1,both,tie@large
+tie@large,29,000000510527.jpg,1,both,tie@large
+tie@large,30,000000421478.jpg,1,both,tie@large
+tie@large,31,000000223857.jpg,1,both,tie@large
+tie@large,32,000000404783.jpg,1,both,tie@large
+tie@large,33,000000191053.jpg,1,both,tie@large
+tie@large,34,000000257657.jpg,1,both,tie@large
+tie@large,35,000000212715.jpg,1,both,tie@large
+tie@large,36,000000197785.jpg,1,both,tie@large
+tie@large,37,000000095944.jpg,1,both,tie@large
+tie@large,38,000000298112.jpg,1,both,tie@large
+tie@large,39,000000021276.jpg,0,both,remote@medium
+tie@large,40,000000256087.jpg,1,both,tie@large
+tie@large,41,000000560087.jpg,1,both,tie@large
+tie@large,42,000000321666.jpg,0,both,umbrella@large
+tie@large,43,000000271907.jpg,1,both,tie@large
+tie@large,44,000000211631.jpg,1,both,tie@large
+tie@large,45,000000309817.jpg,1,shipped only,tie@large
+tie@large,46,000000310705.jpg,1,shipped only,tie@large
+tie@large,47,000000162398.jpg,1,shipped only,tie@large
+tie@large,48,000000281112.jpg,1,shipped only,tie@large
+tie@large,49,000000163600.jpg,0,shipped only,toothbrush@large
+tie@large,50,000000357383.jpg,1,shipped only,tie@large
+tie@large,51,000000505700.jpg,1,shipped only,tie@large
+tie@large,52,000000121420.jpg,1,shipped only,tie@large
+airplane@small,1,000000512421.jpg,1,both,airplane@small
+airplane@small,2,000000347037.jpg,1,both,airplane@small
+airplane@small,3,000000551650.jpg,1,both,airplane@small
+airplane@small,4,000000474215.jpg,1,both,airplane@small
+airplane@small,5,000000160626.jpg,1,both,airplane@small
+airplane@small,6,000000187929.jpg,1,both,airplane@small
+airplane@small,7,000000506371.jpg,1,both,airplane@small
+airplane@small,8,000000060054.jpg,1,both,airplane@small
+airplane@small,9,000000527526.jpg,1,both,airplane@small
+airplane@small,10,000000581218.jpg,1,both,airplane@small
+airplane@small,11,000000141587.jpg,1,both,airplane@small
+airplane@small,12,000000185957.jpg,1,both,airplane@small
+airplane@small,13,000000252581.jpg,1,both,airplane@small
+airplane@small,14,000000173561.jpg,1,both,airplane@small
+airplane@small,15,000000433968.jpg,1,both,airplane@small
+airplane@small,16,000000188130.jpg,0,both,kite@small
+airplane@small,17,000000487770.jpg,1,both,airplane@small
+airplane@small,18,000000196681.jpg,1,both,airplane@small
+airplane@small,19,000000504488.jpg,1,both,airplane@small
+airplane@small,20,000000436318.jpg,1,both,airplane@small
+airplane@small,21,000000127747.jpg,1,both,airplane@small
+airplane@small,22,000000566051.jpg,1,both,airplane@small
+airplane@small,23,000000405327.jpg,1,both,airplane@small
+airplane@small,24,000000164569.jpg,1,both,airplane@small
+airplane@small,25,000000467475.jpg,1,both,airplane@small
+airplane@small,26,000000278760.jpg,1,both,airplane@small
+airplane@small,27,000000160585.jpg,1,both,airplane@small
+airplane@small,28,000000232379.jpg,1,both,airplane@small
+airplane@small,29,000000573922.jpg,1,both,airplane@small
+airplane@small,30,000000108069.jpg,1,both,airplane@small
+airplane@small,31,000000266070.jpg,1,both,airplane@small
+airplane@small,32,000000284247.jpg,1,both,airplane@small
+airplane@small,33,000000366812.jpg,1,both,airplane@small
+airplane@small,34,000000254732.jpg,1,both,airplane@small
+airplane@small,35,000000485876.jpg,1,both,airplane@small
+airplane@small,36,000000238290.jpg,1,both,airplane@small
+airplane@small,37,000000136218.jpg,1,both,airplane@small
+airplane@small,38,000000007685.jpg,0,both,kite@small
+airplane@small,39,000000345541.jpg,1,both,airplane@small
+airplane@small,40,000000502347.jpg,1,both,airplane@small
+airplane@small,41,000000377619.jpg,1,both,airplane@small
+airplane@small,42,000000241790.jpg,1,both,airplane@small
+airplane@small,43,000000170129.jpg,1,both,airplane@small
+airplane@small,44,000000389184.jpg,0,both,kite@small
+airplane@small,45,000000491397.jpg,0,both,bus@medium
+airplane@small,46,000000334110.jpg,0,both,kite@medium
+airplane@small,47,000000101431.jpg,1,both,airplane@small
+airplane@small,48,000000131742.jpg,0,both,kite@small
+airplane@small,49,000000182257.jpg,1,both,airplane@small
+airplane@small,50,000000253223.jpg,1,both,airplane@small
+airplane@small,51,000000491881.jpg,0,both,bus@medium
+airplane@small,52,000000524681.jpg,0,both,kite@medium
+airplane@small,53,000000481553.jpg,0,both,enclosed road vehicle@medium
+airplane@small,54,000000375440.jpg,0,both,boat@small
+airplane@small,55,000000430684.jpg,0,both,bird@small
+airplane@small,56,000000524788.jpg,0,both,(none)
+airplane@small,57,000000191017.jpg,0,both,person@small
+airplane@small,58,000000208220.jpg,0,both,enclosed road vehicle@medium
+airplane@small,59,000000246728.jpg,0,both,umbrella@small
+airplane@small,60,000000446628.jpg,0,both,surfboard@large
+airplane@small,61,000000304036.jpg,0,both,(none)
+airplane@small,62,000000523718.jpg,0,both,kite@small
+airplane@small,63,000000153279.jpg,0,both,kite@small
+airplane@small,64,000000244674.jpg,0,both,(none)
+airplane@small,65,000000001111.jpg,0,both,(none)
+airplane@small,66,000000519899.jpg,0,both,bird@small
+airplane@small,67,000000188482.jpg,0,both,motorcycle@medium
+airplane@small,68,000000138810.jpg,0,both,kite@medium
+airplane@small,69,000000557843.jpg,0,both,bus@large
+airplane@small,70,000000156624.jpg,1,both,airplane@small
+airplane@small,71,000000185519.jpg,0,shipped only,kite@medium
+airplane@small,72,000000239263.jpg,0,shipped only,surfboard@large
+airplane@small,73,000000171208.jpg,1,shipped only,airplane@small
+airplane@small,74,000000472054.jpg,0,shipped only,dog@small
+airplane@small,75,000000040244.jpg,0,shipped only,dog@medium
+airplane@small,76,000000524927.jpg,0,shipped only,(none)
+airplane@small,77,000000288114.jpg,0,shipped only,person@small
+airplane@small,78,000000063075.jpg,0,shipped only,kite@small
+airplane@small,79,000000370511.jpg,0,shipped only,kite@small
+airplane@small,80,000000466395.jpg,0,shipped only,enclosed road vehicle@medium
+airplane@small,81,000000319398.jpg,0,shipped only,kite@large
+airplane@small,82,000000529083.jpg,0,shipped only,boat@small
+airplane@small,83,000000122314.jpg,0,shipped only,bicycle@small
+airplane@small,84,000000026670.jpg,0,shipped only,kite@medium
+airplane@small,85,000000203744.jpg,0,shipped only,bird@large
+airplane@small,86,000000238816.jpg,0,shipped only,boat@small; surfboard@medium
+airplane@small,87,000000234211.jpg,0,shipped only,bird@small
+airplane@small,88,000000347042.jpg,0,shipped only,enclosed road vehicle@small; traffic light@medium
+airplane@small,89,000000158913.jpg,0,shipped only,kite@medium
+airplane@small,90,000000139426.jpg,0,shipped only,fire hydrant@large
+airplane@small,91,000000167126.jpg,0,shipped only,parking meter@small
+airplane@small,92,000000298836.jpg,0,shipped only,(none)
+airplane@small,93,000000364608.jpg,0,shipped only,surfboard@large
+airplane@small,94,000000233848.jpg,0,shipped only,kite@medium
+airplane@small,95,000000523834.jpg,0,shipped only,bench@large

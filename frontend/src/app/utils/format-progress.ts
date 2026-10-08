@@ -211,10 +211,11 @@ export interface ProgressHeader {
   eta: string;
 }
 
-/** Which flow this progress event belongs to. ``autorun`` is a background
- *  AutoRun of the user's AutoRun detectors on a dataset (#4252), which reports
- *  on the dataset channel but is not a load. */
-export type ProgressKind = 'dataset' | 'detector' | 'projection' | 'autorun';
+/** Which flow this progress event belongs to. ``autofind`` is a background
+ *  AutoFind of the user's AutoFind detectors on a dataset (#4252), and ``find``
+ *  the same run with the detectors picked for the Dashboard's Find button
+ *  (#4615); both report on the dataset channel but are not loads. */
+export type ProgressKind = 'dataset' | 'detector' | 'projection' | 'autofind' | 'find';
 
 /**
  * Strip a leading action verb (a gerund like "Embedding"/"Converting"/"Loading",
@@ -254,14 +255,17 @@ export function formatProgressHeader(
       ? 'Loading detector'
       : kind === 'projection'
         ? 'Building the map'
-        : kind === 'autorun'
-          ? 'Running AutoRun'
-          : 'Loading dataset';
+        : kind === 'autofind'
+          ? 'Running AutoFind'
+          : kind === 'find'
+            ? 'Running Find'
+            : 'Loading dataset';
 
   let phase = '';
   let subtitle = '';
 
-  if (kind === 'autorun') {
+  if (kind === 'autofind' || kind === 'find') {
+    const detectors = kind === 'find' ? 'detector' : 'AutoFind detector';
     // The slow part of a run is each detector's cold train, which narrates
     // itself (see ``resolve_or_train_detector``); the rest is scoring.
     if (/label origins/i.test(message)) {
@@ -272,10 +276,10 @@ export function formatProgressHeader(
       subtitle = 'Choosing where each detector draws its line between a match and not.';
     } else if (/training/i.test(message)) {
       phase = 'training detectors';
-      subtitle = 'Training each AutoRun detector from its labels.';
+      subtitle = `Training each ${detectors} from its labels.`;
     } else {
       phase = 'scoring';
-      subtitle = 'Scoring every item with your AutoRun detectors.';
+      subtitle = `Scoring every item with your ${detectors}s.`;
     }
   } else if (kind === 'projection') {
     if (/pyramid|tiling|binning/i.test(message)) {
@@ -365,8 +369,8 @@ export function formatProgressHeader(
   const total = prog.total;
   const counts =
     current != null && total != null && total > 0 ? formatProgressFraction(current, total) : '';
-  // An AutoRun's counts are detectors, and its message is already the phase.
-  const item = kind === 'autorun' ? (counts ? 'detectors done' : '') : stripActionVerb(message);
+  // A run's counts are detectors, and its message is already the phase.
+  const item = kind === 'autofind' || kind === 'find' ? (counts ? 'detectors done' : '') : stripActionVerb(message);
   const detail = [counts, item].filter(Boolean).join(' ');
   const eta = formatEta(prog.eta_seconds);
   return { header, subtitle, detail, eta };

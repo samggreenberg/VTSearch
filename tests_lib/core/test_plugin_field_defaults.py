@@ -8,7 +8,7 @@ before this was pinned only the first of them worked:
   ``""``.  Marshmallow's ``load_default`` fires on a *missing* key only, so a
   blank arrived as a blank: a required field 422'd and an optional one
   reached ``run()`` as ``""``.
-* **Saved settings** - the Auto-Find results exporter is handed a persisted
+* **Saved settings** - the AutoFind results exporter is handed a persisted
   ``field_values`` map with no schema in the loop at all, so
   :func:`~vtscore.plugins.normalize.normalize_field_values` is the only pass
   that can fill anything in.
@@ -44,7 +44,7 @@ def _email_plugin(default: str = "ops@example.com") -> _FakePlugin:
                 label="Email Address",
                 field_type="email",
                 default=default,
-                description="Email Address for Autorun Results.",
+                description="Email Address for AutoFind Results.",
             )
         ]
     )
@@ -119,7 +119,7 @@ class TestNormalizeAppliesDefaultToBlank:
 
     def test_a_declared_default_satisfies_required(self):
         # Before this, a saved settings map that never carried the key raised
-        # "Email Address is required." from the Auto-Find export path.
+        # "Email Address is required." from the AutoFind export path.
         normalize_field_values(_email_plugin(), {})
 
     def test_required_field_without_a_default_still_raises(self):

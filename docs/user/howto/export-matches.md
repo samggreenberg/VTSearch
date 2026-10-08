@@ -1,12 +1,12 @@
 # Send your matches somewhere
 
-Once Find has marked the matches, you will usually want them somewhere else:
+Once Test has marked the matches, you will usually want them somewhere else:
 pasted into a spreadsheet, saved as a file, opened in another tool, or kept
 as a dataset of their own. This page walks through each.
 
 It picks up where [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search)
 ends: the `Yellow Smileys` detector, trained on `drawings`, has just been run
-over `drawings-new` with **Find**. The red numbers in each screenshot show
+over `drawings-new` with **Test**. The red numbers in each screenshot show
 where to click, in order.
 
 ## What gets sent
@@ -18,10 +18,15 @@ pictures is optional; if the line moves with the **Threshold**
 with it.
 
 Three small buttons at the top of the **Verified Good** pile act on the good
-set: **To Dataset** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-to-dataset.dark.webp" /><img src="../assets/icon-to-dataset.light.webp" alt="The To Dataset button in the Find view" height="24" /></picture>, **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-export.dark.webp" /><img src="../assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> and **Browse** (the eye). The
+set: **To Dataset** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-to-dataset.dark.webp" /><img src="../assets/icon-to-dataset.light.webp" alt="The To Dataset button in the Test view" height="24" /></picture>, **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-export.dark.webp" /><img src="../assets/icon-export.light.webp" alt="The Export button in the Test view" height="24" /></picture> and **Browse** (the eye). The
 **Export** button at the top of **Verified Bad** does the same for the
-pictures that did not match, and the three buttons next to the precision
-floor on the left act on only the matches you haven't checked yet.
+pictures that did not match, and the three buttons next to the **Threshold**
+on the left act on only the matches you haven't checked yet. What they send
+is whatever the line keeps at that moment: the unchecked starting set, or
+the set a spot check ended on. An AutoFind of the same detector has nobody to
+check it, so it sends the unchecked starting set and says so, with a
+`balance` entry beside the threshold in the formats that write out the full
+results.
 
 ## Step 1: Choose what to send
 
@@ -81,7 +86,7 @@ server.
 
 ## Or: keep the matches as a dataset
 
-1. Click **To Dataset** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-to-dataset.dark.webp" /><img src="../assets/icon-to-dataset.light.webp" alt="The To Dataset button in the Find view" height="24" /></picture> at the top of the **Verified Good** pile.
+1. Click **To Dataset** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-to-dataset.dark.webp" /><img src="../assets/icon-to-dataset.light.webp" alt="The To Dataset button in the Test view" height="24" /></picture> at the top of the **Verified Good** pile.
 2. Name the new dataset. It starts as `drawings-new Yellow Smileys Results`.
 3. Click **OK**.
 
@@ -90,7 +95,7 @@ server.
   <img src="../assets/export-to-dataset.light.webp" alt="Keep the matches as a dataset: (1) To Dataset, (2) the new dataset's name, (3) OK" width="720" />
 </picture>
 
-The new dataset is made in the background while you carry on in Find, and a
+The new dataset is made in the background while you carry on in Test, and a
 message says when it is on the **Datasets** card. It holds only the matches,
 so you can search inside them with a second detector: find the yellow smileys
 first, say, then just the winking ones among them.

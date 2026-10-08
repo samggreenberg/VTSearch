@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 from vtscore.concurrency.progress import noop_progress
 from vtscore.embedding.binding import expected_dim_for_embedder
@@ -425,6 +425,67 @@ def _run_backfill_pass(
         attach(media, out)
 
 
+class _SideChannel(NamedTuple):
+    """One per-media side channel an embedder attaches beside its vector, and how to back-fill it."""
+
+    needs: Callable[[dict[str, Any]], bool]
+    forward: Callable[[list[dict[str, Any]]], list]
+    attach: Callable[[dict[str, Any], Any], None]
+    fail_message: str
+
+
+def _side_channel_passes(emb) -> list[_SideChannel]:
+    """The side channels *emb* attaches, in the order they must be derived.
+
+    Every one is an in-memory artifact, re-derived at load for any media this
+    embedder produced but that lacks it (e.g. a pickle reload), consistent with
+    the no-persisted-vectors rule:
+
+    * **patch grid** (``patch_grid``): patch-capable embedders (DINOv2/v3/EUPE).
+      Without it the best-match highlight, region voting and patch-aware scoring
+      have no patch data, which is what an already-embedded dataset that never
+      ran the patch pass would otherwise get;
+    * **local features** (``local_features``): structural embedders (SIFT/VLAD),
+      the keypoints Stage 2 verifies, stored compact (fp16/uint8);
+    * **tile vectors** (``tile_vectors``): document structural embedders, the
+      tiled Stage 1 (#3928), derived from the local features and so after them.
+      A key of their own, not ``patch_grid``: the tiles overlap, where
+      ``patch_grid`` is a regular grid of the dataset's one patch embedder, and
+      reusing it would switch on the patch-space training path.
+    """
+    passes: list[_SideChannel] = []
+    if getattr(emb, "supports_patch_regions", False) is True:
+        passes.append(
+            _SideChannel(
+                needs=lambda m: _needs_side_channel(m, emb.name, "patch_grid"),
+                forward=emb.patch_forward_bulk,
+                attach=_attach_patch_grid_to_media,
+                fail_message="Bulk patch-forward failed for media_type=%s (%d items)",
+            )
+        )
+    if getattr(emb, "supports_geometric_verification", False) is True:
+        passes.append(
+            _SideChannel(
+                needs=lambda m: _needs_side_channel(m, emb.name, "local_features"),
+                forward=emb.local_features_forward_bulk,
+                attach=lambda media, feats: media.__setitem__("local_features", feats.compact()),
+                fail_message="Bulk local-feature detection failed for media_type=%s (%d items)",
+            )
+        )
+        if getattr(emb, "supports_tiled_stage1", False) is True:
+            passes.append(
+                _SideChannel(
+                    needs=lambda m: (
+                        m.get("local_features") is not None and _needs_side_channel(m, emb.name, "tile_vectors")
+                    ),
+                    forward=emb.tile_vectors_forward_bulk,
+                    attach=lambda media, tiles: media.__setitem__("tile_vectors", tiles),
+                    fail_message="Tile-vector derivation failed for media_type=%s (%d items)",
+                )
+            )
+    return passes
+
+
 def embed_missing(
     medias: dict[int, dict[str, Any]],
     embedder_name: str = "",
@@ -481,35 +542,8 @@ def embed_missing(
     # Which items still need *this* embedder's vector.
     missing = _missing_for_embedder(medias, emb, embedder_name)
 
-    # Patch-capable embedders attach the raw per-image patch grid alongside
-    # the CLS ``embedding``.  That side-channel must exist for any image *this*
-    # embedder produced but that lacks ``patch_grid`` - not only the images we
-    # embed in this call.  Without it the best-match highlight, region voting,
-    # and patch-aware scoring have no patch data, which is exactly what happens
-    # to an already-embedded dataset (pickle / content-vector importer) that
-    # never ran the patch pass: the Highlight toggle shows (the embedder reports
-    # the capability) but draws nothing.  Re-deriving from the source file at
-    # load keeps ``patch_grid`` an in-memory artifact, consistent with the
-    # no-persisted-vectors rule.
-    patch_capable = getattr(emb, "supports_patch_regions", False) is True
-
-    def _needs_patch(m: dict[str, Any]) -> bool:
-        return _needs_side_channel(m, emb.name, "patch_grid")
-
-    # Structural embedders (SIFT/VLAD) attach a per-image keypoint+descriptor set
-    # alongside the VLAD ``embedding``, on the same back-fill terms as patch
-    # regions: any image this embedder produced that lacks ``local_features``
-    # (e.g. a pre-embedded pickle reload) is re-derived from its source file at
-    # load, keeping local features an in-memory artifact.
-    structural_capable = getattr(emb, "supports_geometric_verification", False) is True
-
-    def _needs_local_features(m: dict[str, Any]) -> bool:
-        return _needs_side_channel(m, emb.name, "local_features")
-
-    has_patch_backfill = patch_capable and any(_needs_patch(m) for m in medias.values())
-    has_structural_backfill = structural_capable and any(_needs_local_features(m) for m in medias.values())
-
-    if not missing and not has_patch_backfill and not has_structural_backfill:
+    passes = _side_channel_passes(emb)
+    if not missing and not any(p.needs(m) for p in passes for m in medias.values()):
         return
 
     if on_progress is None:
@@ -519,34 +553,20 @@ def embed_missing(
 
     _run_embed_pass(emb, medias, media_type, missing, on_progress, failures)
 
-    # Patch-grid pass for embedders that support it (DINOv2/v3/EUPE).  Runs
-    # over every patch-capable image still lacking a grid, including ones that
-    # arrived already-embedded - not just the items embedded above.
-    if patch_capable:
+    # Each side channel back-fills every media still missing it, including ones
+    # that arrived already-embedded - not just the items embedded above.  In
+    # order: a later pass may read an earlier one's output (tiles read local
+    # features).
+    for p in passes:
         _run_backfill_pass(
             emb,
             medias,
             media_type,
             on_progress,
-            needs=_needs_patch,
-            forward=emb.patch_forward_bulk,
-            attach=_attach_patch_grid_to_media,
-            fail_message="Bulk patch-forward failed for media_type=%s (%d items)",
-        )
-
-    # Local-features pass for structural embedders (SIFT/VLAD).  Same back-fill
-    # shape as the patch pass: detect+describe every structural image still
-    # missing ``local_features`` and store the compact (fp16/uint8) form.
-    if structural_capable:
-        _run_backfill_pass(
-            emb,
-            medias,
-            media_type,
-            on_progress,
-            needs=_needs_local_features,
-            forward=emb.local_features_forward_bulk,
-            attach=lambda media, feats: media.__setitem__("local_features", feats.compact()),
-            fail_message="Bulk local-feature detection failed for media_type=%s (%d items)",
+            needs=p.needs,
+            forward=p.forward,
+            attach=p.attach,
+            fail_message=p.fail_message,
         )
 
     # Re-key any legacy single-vector media into the dict-keyed representation

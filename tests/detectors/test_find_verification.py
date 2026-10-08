@@ -4,16 +4,14 @@ Covers:
 - mark-verified on find-mode votes (and un-verify on un-vote)
 - the ``verified`` array on ``GET /api/votes``
 - ``label_filter=unverified`` / ``verified`` export partitioning
-- ``GET /api/find/stats`` (2x2 confusion, the floor's verdict, precision curve)
+- ``GET /api/find/stats`` (2x2 confusion, the balance's state, precision curve)
 - verified votes surviving a re-score (issue #2928)
 - a live Find session surviving a detector-file write (issue #2786)
 """
 
 from __future__ import annotations
 
-import numpy as np
-
-from tests.helpers import planted_precision_floor_estimate, setup_trainable_model_in_registry
+from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -163,15 +161,15 @@ class TestRethresholdUnverified:
         # No re-split: the initial 0.5 assignment stands.
         assert 2 in good_votes
 
-    def test_floor_post_returns_threshold(self, client):
-        resp = client.post("/api/min-precision", json={"min_precision": 0.5})
+    def test_balance_post_returns_threshold(self, client):
+        resp = client.post("/api/balance", json={"beta": 0.5})
         assert resp.status_code == 200
         assert "threshold" in resp.get_json()
 
 
 class TestFindStats:
     """``GET /api/find/stats`` over the ADOPTED label set (all items, with
-    unverified flood-filled), the floor's verdict on the line (#4246), and the
+    unverified flood-filled), the balance's state on the line (#4246, #4413), and the
     precision curve against the number returned (#4242)."""
 
     def _setup(self):
@@ -219,18 +217,27 @@ class TestFindStats:
         assert data["verified_called_good"] == 2
         assert data["verified_precision"] == 0.5
 
-    def test_floor_rides_with_the_line(self, client):
-        """The chart marks the floor and says whether the line keeps it (#4246, #4272)."""
+    def test_balance_rides_with_the_line(self, client):
+        """The stats carry the balance the line was cut at and what its check found (#4246, #4272, #4413)."""
         self._setup()
-        client.post("/api/min-precision", json={"min_precision": 0.75})
+        client.post("/api/balance", json={"beta": 0.5})
         data = client.get("/api/find/stats").get_json()
-        assert data["floor"] == {
-            "min_precision": 0.75,
+        assert data["balance"] == {
+            "beta": 0.5,
             "status": "unchecked",
             "count": 32,
-            "range": None,
-            "schedule": {"candidate": 32, "rounds": 1, "picks": 11},
+            "precision": None,
+            "recall": None,
+            "fbeta": None,
+            "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
+            "shape": "advisory",
+            "audited": None,
+            # No ranking behind this fixture's line, so nothing a check could walk (#4489, #4496).
+            "checkable": False,
+            "separation": None,
+            "check_due": False,
         }
+        assert "floor" not in data
         # The sweep went with the Inclusion stepper.
         assert "sweep" not in data
         assert "inclusion" not in data
@@ -251,7 +258,6 @@ class TestFindStats:
     def test_precision_curve_over_the_ranking(self, client):
         """Each point is the top k by score, with verified precision over what was checked in it."""
         self._setup()
-        get_active_detector_context().precision_floor_cache = None
         data = client.get("/api/find/stats").get_json()
         assert data["n_scored"] == 4
         assert data["n_returned"] == 2  # 0.9 and 0.8 clear 0.5
@@ -262,45 +268,20 @@ class TestFindStats:
         assert [(p["checked"], p["checked_good"]) for p in curve] == [(1, 1), (2, 1), (2, 1), (3, 2)]
         assert [p["verified_precision"] for p in curve] == [1.0, 0.5, 0.5, 0.6667]
 
-    def test_no_estimate_without_calibration_folds(self, client):
-        self._setup()
-        get_active_detector_context().precision_floor_cache = None
-        data = client.get("/api/find/stats").get_json()
-        assert data["estimate_status"] == "unavailable"
-        assert data["calibration_positives"] == 0
-        assert data["min_calibration_positives"] == 10
-        assert all(p["estimated_precision"] is None for p in data["precision_curve"])
+    def test_the_curve_carries_no_estimate(self, client):
+        """No model-based estimate reaches the chart (#4360).
 
-    def test_estimate_is_gated_like_the_floor(self, client):
-        """Below the floor's calibration-positive gate the estimate is withheld, and the count says why."""
+        The #4220 estimator breaks most of its "at least" promises once its
+        reference pool is consistent (#4256), so the curve is verified
+        precision alone and the only range is the spot check's.
+        """
         self._setup()
-        get_active_detector_context().precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=3)
         data = client.get("/api/find/stats").get_json()
-        assert data["estimate_status"] == "insufficient_evidence"
-        assert data["calibration_positives"] == 6
-        assert all(p["estimated_precision"] is None for p in data["precision_curve"])
-
-    def test_estimate_drawn_from_the_detectors_folds(self, client):
-        ctx = get_active_detector_context()
-        ctx.find_mode = True
-        ctx.threshold = 0.5
-        rng = np.random.default_rng(42)
-        ids = sorted(medias)
-        scores = {cid: float(s) for cid, s in zip(ids, rng.beta(1.0, 4.0, len(ids)), strict=False)}
-        scores[ids[0]] = 0.99
-        set_find_scores(scores)
-        set_find_initial_labels({cid: "good" if s >= 0.5 else "bad" for cid, s in scores.items()})
-        ctx.verified_ids.clear()
-        ctx.precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=8)
-        data = client.get("/api/find/stats").get_json()
-        assert data["estimate_status"] == "estimated"
-        assert data["calibration_positives"] == 16
-        estimates = [p["estimated_precision"] for p in data["precision_curve"]]
-        assert all(e is not None and 0.0 <= e <= 1.0 for e in estimates)
-        # The top of the ranking is estimated at least as right as the whole corpus.
-        assert estimates[0] >= estimates[-1]
-        # Nothing checked, so no verified precision anywhere.
-        assert all(p["verified_precision"] is None for p in data["precision_curve"])
+        assert not {"estimate_status", "calibration_positives", "min_calibration_positives"} & data.keys()
+        assert all(
+            set(p) == {"n_returned", "threshold", "checked", "checked_good", "verified_precision"}
+            for p in data["precision_curve"]
+        )
 
 
 class TestCorrectionsToDetector:
@@ -472,7 +453,7 @@ class TestReScoreKeepsVerifiedVotes:
     bulk apply used to reassign *every* vote from the new threshold split while
     nothing cleared ``verified_ids``, so an item the human had ruled on came
     back carrying the machine's opposite label - excluded from the work queue,
-    counted in ``verified_count``, and pinned there by the floor's
+    counted in ``verified_count``, and pinned there by the line's
     re-threshold - i.e. the human's decision silently inverted while still
     presented as human-verified.
     """

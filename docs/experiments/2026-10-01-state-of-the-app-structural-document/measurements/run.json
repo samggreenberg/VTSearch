@@ -1,0 +1,8 @@
+{
+  "tier": "m",
+  "corpus_version": "v5.0",
+  "max_v": 50,
+  "tiled_top_k": 2000,
+  "classes": "",
+  "started": "2026-10-01T03:23:58"
+}

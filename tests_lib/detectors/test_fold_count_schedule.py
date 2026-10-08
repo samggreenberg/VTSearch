@@ -50,6 +50,9 @@ def _run(*, schedule=None, calibrate_count=2, seed=0, max_steps=10, fold_counts=
     return simulate_voting_iterations(
         medias,
         target_category="cat0",
+        # The trained head's cut is the subject: under the label quota (#4643)
+        # the early rows are the Goods' centroid's, which carries none of it.
+        label_quota=False,
         seed=seed,
         dataset_name="planted",
         inclusion=0,
@@ -61,8 +64,8 @@ def _run(*, schedule=None, calibrate_count=2, seed=0, max_steps=10, fold_counts=
         emit_calibration_metrics=True,
         fold_count_schedule=schedule,
         # The Inclusion arm: the live cut compared here is the estimator's at
-        # `inclusion`, which a floor's set would replace (#4272).
-        min_precision="off",
+        # `inclusion`, which a balance's set would replace (#4272).
+        beta="off",
         fold_count_variants=fold_counts,
     )
 

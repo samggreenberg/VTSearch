@@ -1,0 +1,48 @@
+{
+  "k": 1000,
+  "budget": 8192,
+  "cpus": 8,
+  "cuda": true,
+  "gpu": "NVIDIA L40S",
+  "extract_s": 101.1,
+  "median_candidate_keypoints": 5904,
+  "templates": [
+    {
+      "name": "crop",
+      "keypoints": 1209,
+      "seconds": 1.28
+    },
+    {
+      "name": "box0",
+      "keypoints": 485,
+      "seconds": 1.13
+    },
+    {
+      "name": "box1",
+      "keypoints": 138,
+      "seconds": 0.76
+    },
+    {
+      "name": "box2",
+      "keypoints": 422,
+      "seconds": 1.01
+    },
+    {
+      "name": "box3",
+      "keypoints": 258,
+      "seconds": 0.85
+    },
+    {
+      "name": "box4",
+      "keypoints": 162,
+      "seconds": 0.85
+    },
+    {
+      "name": "box5",
+      "keypoints": 161,
+      "seconds": 0.83
+    }
+  ],
+  "median_s_per_template": 0.85,
+  "crop_ratio_test_s": 1.05
+}

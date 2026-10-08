@@ -71,7 +71,7 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
   // (dashboard dataset cards, the Find right-panel goods actions, etc.).
   eye:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>',
-  // Auto-Find glyph: a small magnifying glass (the Find icon) sitting inside a
+  // AutoFind glyph: a small magnifying glass (the Find icon) sitting inside a
   // ring built from three arrows chasing each other clockwise — the "keep
   // searching automatically" idea. Three ~90 deg arcs (r=8.5 about the centre)
   // with 30 deg gaps, each capped by an arrowhead pointing clockwise.

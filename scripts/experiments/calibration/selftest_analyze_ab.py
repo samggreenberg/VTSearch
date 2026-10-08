@@ -121,6 +121,23 @@ def main() -> int:
         summary = (on_dir / "summary_ab.json").read_text()
         assert '"force_on_for_all_users": true' in summary, summary
 
+        # Every Δ carries its floor (#4111): 2·sd/√n over the paired cells,
+        # recomputed here from the per-cell frame rather than trusted.
+        cells = pd.read_csv(on_dir / "agg" / "ab_paired_cells.csv")
+        ramp = cells[(cells["scope"] == "app_visible") & (cells["window"] == "ramp_6_20")]
+        d = (ramp["cost_on"] - ramp["cost_off"]).to_numpy(float)
+        want_se = d.std(ddof=1) / np.sqrt(d.size)
+        assert abs(cost.loc["ramp_6_20", "se"] - want_se) < 1e-12, (cost.loc["ramp_6_20", "se"], want_se)
+        assert abs(cost.loc["ramp_6_20", "resolvable_delta_2se"] - 2 * want_se) < 1e-12
+        # One arm, so the pooled line is that arm's line, over the same cells.
+        pooled = pd.read_csv(on_dir / "agg" / "ab_window_pooled.csv")
+        pr = pooled[(pooled["scope"] == "app_visible") & (pooled["metric"] == "cost")].set_index("window")
+        assert int(pr.loc["ramp_6_20", "n_cells"]) == len(CATEGORIES) * len(SEEDS)
+        assert abs(pr.loc["ramp_6_20", "delta_on_minus_off"] - cost.loc["ramp_6_20", "delta_on_minus_off"]) < 1e-12
+        # The headline is the all_steps line, and it is printed with its floor.
+        assert '"pooled": "pooled \\u0394cost (app_visible, all_steps)' in summary, summary
+        assert "resolvable \\u03b4 at 2 SE" in summary, summary
+
         # Sign check: flip the planted effect and the verdict must flip too.
         harmful = tmpdir / "on2" / "results"
         _fabricate(harmful, safe_on=True, rng=np.random.default_rng(1), ramp_effect=-RAMP_EFFECT)

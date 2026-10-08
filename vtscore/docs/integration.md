@@ -46,8 +46,8 @@ The library only requires explicit setup when you want to:
 
 - Read **configuration** (`CoreConfig.from_settings()`)
 - Resolve the **active context** from a request
-- **Persist** detector settings (`set_min_precision`, `set_calibrate_count`,
-  etc.) back to your settings store
+- **Persist** detector settings (`set_beta`, `set_calibrate_count`, etc.)
+  back to your settings store
 - Register **app-side plugins** alongside the library's built-ins
 
 Each of these has a hook. Install only the ones you need.
@@ -135,24 +135,24 @@ save-and-restore context-manager forms, `thread_dataset_context()` /
 ### Hook 3: `register_setting_persister`
 
 The `vtscore.state` package exposes setter functions like
-`set_min_precision(value)` and `set_calibrate_count(value)`. By default,
+`set_beta(value)` and `set_calibrate_count(value)`. By default,
 those update only the in-memory cache. If you want them to persist to
 your settings store, install a persister per key:
 
 ```python
 from vtscore.state import register_setting_persister
 
-def _persist_min_precision(value: float | None) -> None:
-    my_settings_store["min_precision"] = value
+def _persist_beta(value: float) -> None:
+    my_settings_store["beta"] = value
 
 def _persist_calibrate_count(value: int) -> None:
     my_settings_store["calibrate_count"] = value
 
-register_setting_persister("min_precision", _persist_min_precision)
+register_setting_persister("beta", _persist_beta)
 register_setting_persister("calibrate_count", _persist_calibrate_count)
 ```
 
-The recognised keys are `min_precision`, `calibrate_count`, and
+The recognised keys are `beta`, `calibrate_count`, and
 `calibration_fraction` (`vtscore.state.KNOWN_SETTING_KEYS`); any other key
 raises `ValueError`. Only the setters listed above ever fire a persister, so
 an unrecognised key could only be a typo in your wiring - one that would
@@ -161,7 +161,7 @@ retired as a user preference (#4269): registering it warns and the persister
 never fires.
 
 If you don't install persisters, library code can still call
-`set_min_precision(0.75)` - the value just won't survive a process restart.
+`set_beta(2.0)` - the value just won't survive a process restart.
 That's a fine choice for many apps.
 
 ### Putting the seams back in tests
@@ -276,7 +276,7 @@ register_detector_context_resolver(
 
 
 # Hook 3: per-key persisters
-register_setting_persister("min_precision", lambda v: settings.update("min_precision", v))
+register_setting_persister("beta", lambda v: settings.update("beta", v))
 register_setting_persister("calibrate_count", lambda v: settings.update("calibrate_count", v))
 
 

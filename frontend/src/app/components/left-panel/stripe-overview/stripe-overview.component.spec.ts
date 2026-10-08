@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { StripeOverviewComponent, STRIPE_MAX_ITEMS } from './stripe-overview.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
-import { FLOOR_STATES, lineFloor } from '../../../testing/line-floor';
+import { BALANCE_STATES, lineBalance } from '../../../testing/line-balance';
 
 describe('StripeOverviewComponent', () => {
   let component: StripeOverviewComponent;
@@ -25,6 +25,22 @@ describe('StripeOverviewComponent', () => {
 
   it('should not be visible when no sort order', () => {
     expect(component.visible).toBe(false);
+  });
+
+  it('holds its place as an empty, inert track before anything is ranked (#4347)', async () => {
+    // The label view snaps the left panel to its grid before the first ranking
+    // lands; a strip that only appeared then would narrow the grid by a column.
+    const el = fixture.nativeElement as HTMLElement;
+    const track = el.querySelector('.stripe-overview');
+    expect(track).not.toBeNull();
+    expect(track!.classList).toContain('stripe-overview--empty');
+    expect(track!.getAttribute('aria-hidden')).toBe('true');
+    expect(el.querySelector('.stripe-container')).toBeNull();
+
+    fixture.componentRef.setInput('sortOrder', [{ id: 1, score: 0.9 }]);
+    await settleZoneless(fixture);
+    expect(el.querySelector('.stripe-overview--empty')).toBeNull();
+    expect(el.querySelector('.stripe-container')).not.toBeNull();
   });
 
   it('should be visible when sort order exists', () => {
@@ -127,20 +143,20 @@ describe('StripeOverviewComponent', () => {
     expect(emitted).toBe(false);
   });
 
-  describe('the line marker in every floor state (#4272, #4273)', () => {
-    async function drawWith(floor: ReturnType<typeof lineFloor> | null): Promise<HTMLElement> {
+  describe('the line marker in every balance state (#4272, #4273, #4413)', () => {
+    async function drawWith(balance: ReturnType<typeof lineBalance> | null): Promise<HTMLElement> {
       fixture.componentRef.setInput('sortOrder', [
         { id: 1, score: 0.9 },
         { id: 2, score: 0.3 },
       ]);
       fixture.componentRef.setInput('threshold', 0.5);
-      fixture.componentRef.setInput('floor', floor);
+      fixture.componentRef.setInput('balance', balance);
       await settleZoneless(fixture);
       return fixture.nativeElement as HTMLElement;
     }
 
-    it.each(FLOOR_STATES)('draws the same plain marker when %s, and names the state in the strip tooltip', async (status) => {
-      const el = await drawWith(lineFloor(status));
+    it.each(BALANCE_STATES)('draws the same plain marker when %s, and names the state in the strip tooltip', async (status) => {
+      const el = await drawWith(lineBalance(status));
       const marker = el.querySelector('.stripe-threshold');
       expect(marker).not.toBeNull();
       expect(marker!.className).toBe('stripe-threshold');

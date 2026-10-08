@@ -807,13 +807,13 @@ class DatasetLoadDemoRequestSchema(Schema):
         load_default="false",
         metadata={"description": "When 'true', collapse near-duplicate media into dupe sets at ingest."},
     )
-    autorun = fields.String(
+    autofind = fields.String(
         load_default=None,
         allow_none=True,
         metadata={
             "description": (
-                "'true' / 'false': whether to run the caller's AutoRun detectors on the dataset once it "
-                "is saved, remembered as their `autorun_on_import` setting. Omitted, that setting decides."
+                "'true' / 'false': whether to run the caller's AutoFind detectors on the dataset once it "
+                "is saved, remembered as their `autofind_on_import` setting. Omitted, that setting decides."
             )
         },
     )
@@ -1143,6 +1143,30 @@ class DatasetRegistryLoadResponseSchema(Schema):
     task_id = fields.String(load_default="")
 
 
+class DatasetAutofindRequestSchema(Schema):
+    """Body for ``POST /api/datasets/registry/<id>/autofind``.
+
+    The body is optional.  Without ``detector_ids`` the run scores with the
+    caller's AutoFind detectors (the dataset ⋯ **Run AutoFind**); with it, with
+    exactly the detectors those registry ids name, drafts included (the
+    Dashboard's big **Find** button).  Declared as ``fields.Raw`` with
+    :func:`list_of_strings` so a non-string id is a 422 rather than coerced.
+    """
+
+    detector_ids = fields.Raw(
+        load_default=None,
+        validate=list_of_strings,
+        metadata={
+            "description": (
+                "Registry ids of the detectors to run, in place of the caller's AutoFind list. "
+                "Omit to run the AutoFind list."
+            ),
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    )
+
+
 class DatasetRegistryOkResponseSchema(Schema):
     """Bare ``{"ok": true}`` response (unload, delete)."""
 
@@ -1300,6 +1324,7 @@ __all__ = [
     "DashboardDiskUsageResponseSchema",
     "DashboardRamUsageResponseSchema",
     "DatasetAllImportersListResponseSchema",
+    "DatasetAutofindRequestSchema",
     "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",
     "DatasetCombineRequestSchema",

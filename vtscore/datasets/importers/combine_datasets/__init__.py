@@ -80,6 +80,7 @@ def _apply_keep_embedders(
         media.pop("patch_grid", None)
     if orig_structural != kept_structural:
         media.pop("local_features", None)
+        media.pop("tile_vectors", None)
 
     # Re-point the primary at the routed score marker (structural ▸ patch ▸
     # text); a slot-less single-vector keep set has no role slots, so fall back

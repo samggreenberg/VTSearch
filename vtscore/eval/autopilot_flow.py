@@ -53,6 +53,7 @@ The phase ordering the app implements, and the harness therefore reproduces:
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any, Literal, Optional
 
 from vtscore.detectors.cost_trend import (
@@ -218,6 +219,10 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
     return "red"
 
 
+#: The Smart gate's arms (#4359): ``"app"`` reads the light; ``"never"`` holds it yellow.
+SMART_GATES = ("app", "never")
+
+
 def next_phase(
     good_count: int,
     bad_count: int,
@@ -230,6 +235,8 @@ def next_phase(
     bad_target: int = BAD_TARGET,
     more_target: int = MORE_TARGET,
     more_done: bool = False,
+    dry_run_stop: bool = False,
+    ran_dry: bool = False,
 ) -> Phase:
     """Port of ``AutopilotStateService.checkPhaseTransition``.
 
@@ -242,6 +249,11 @@ def next_phase(
     phase, exactly as it does in the app.  The one exception is the ``more``
     walk: whether it has run dry is history, not a count, so the caller holds
     it and passes *more_done* (see :class:`AutopilotFlow`).
+
+    *dry_run_stop* is a document dataset (the labeling status's
+    ``stop_rule == "dry_run"``, #4488): the walk has no Good target, runs in
+    retrain mode too, and *ran_dry* (its run of misses complete) is ``done``.
+    The indicators are not read.
     """
     # Cap each target at the most votes of that class the collection could still
     # yield, so a tiny dataset can still advance past the initial phases instead
@@ -253,6 +265,12 @@ def next_phase(
         return "good"
     if bad_count < eff_bad_target:
         return "bad"
+    if dry_run_stop:
+        if ran_dry:
+            return "done"
+        if remaining_unlabeled == 0:
+            return "exhausted"
+        return "more"
     if not more_done and good_count < min(more_target, good_count + remaining_unlabeled):
         return "more"
     if smart == "green" and stable == "green" and span == "green":
@@ -290,7 +308,8 @@ STOPPING_PHASE: str = "done"
 #: learned sort on screen.  The harness has no retrain mode, where the app draws
 #: ``good`` / ``bad`` off the learned sort instead, and its seed sort is a text
 #: sort or an example sort; both are ``text`` here, which is all a reader of the
-#: record distinguishes (learned or not).
+#: record distinguishes (learned or not).  Read only by the deprecated
+#: :func:`pick_provenance`, and no longer checked against the app (#4362).
 _PHASE_PICKS: dict[str, tuple[str, str]] = {
     "good": ("text", "top"),
     "bad": ("text", "hard"),
@@ -301,13 +320,23 @@ _PHASE_PICKS: dict[str, tuple[str, str]] = {
 
 
 def pick_provenance(phase: Optional[str]) -> Optional[dict[str, str]]:
-    """The surfacing provenance the app would record for a vote Autopilot surfaced in *phase*.
+    """Deprecated (#4362): the surfacing provenance the app would record for a vote Autopilot surfaced in *phase*.
 
-    The shape :mod:`vtscore.datasets.vote_provenance` stores, so the harness
-    decides which votes may calibrate a precision-floor promise with the app's
-    own :func:`~vtscore.datasets.vote_provenance.calibrates_precision` rather
-    than a copy of it (#4245).  ``None`` outside the labelling phases.
+    The harness recorded it on every simulated click so it could filter the
+    #4220 estimate's evidence with the app's own
+    :func:`~vtscore.datasets.vote_provenance.calibrates_precision` (#4245).
+    Neither side builds that estimate any more, so no step records it, and
+    ``scripts/check-eval-app-sync.py`` no longer checks :data:`_PHASE_PICKS`
+    against the label view.  It still answers from that table, with a
+    ``DeprecationWarning``, until the name is removed.  ``None`` outside the
+    labelling phases.
     """
+    warnings.warn(
+        "pick_provenance() is deprecated: the harness no longer records vote provenance, since neither it nor "
+        "the app builds the #4220 precision estimate any more (#4362). It will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if phase not in _PHASE_PICKS:
         return None
     sort_kind, select_mode = _PHASE_PICKS[phase]
@@ -338,18 +367,24 @@ def _num(v: Any) -> float:
     return float("nan") if v is None else float(v)
 
 
-def app_has_detector(phase: str) -> bool:
+def app_has_detector(phase: str, *, more_shown: bool = False) -> bool:
     """Whether the app would have a trained detector on screen in *phase*.
 
     The harness records this per step as ``app_trained``: a threshold computed
     at a step where this is false is a number no user ever sees, and studies
     about threshold quality (issue #2788) must filter on it rather than
     counting every simulated step.
+
+    *more_shown* is #4637's arm, not the app: the ``more`` walk draws off the
+    detector's ranking, so the detector is on screen from the end of the Bad
+    phase (#4604).
     """
     if is_startup_phase(phase):
         # A schedule's rounds are on the seed sort by construction, so the app
         # would have no detector on screen however many votes have been cast.
         return False
+    if more_shown and phase == "more":
+        return True
     return phase in TRAINED_PHASES
 
 
@@ -384,11 +419,22 @@ class AutopilotFlow:
         more_dry_run: int = MORE_DRY_RUN,
         span_green: int | None = None,
         startup: Optional[StartupState] = None,
+        dry_run_stop: bool = False,
+        smart_gate: str = "app",
     ):
         self.good_target = good_target
         self.bad_target = bad_target
         self.more_target = more_target
         self.more_dry_run = more_dry_run
+        #: A document dataset (#4488): the walk is the rest of the run and its
+        #: dry run is ``done`` (see :func:`next_phase`).
+        self.dry_run_stop = dry_run_stop
+        #: #4359's bound: ``"never"`` holds Smart yellow for the phase decision
+        #: (the light is still computed and reported), so a session stays in
+        #: ``hard`` until the run ends.  ``"app"`` is the app.
+        if smart_gate not in SMART_GATES:
+            raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
+        self.smart_gate = smart_gate
         #: The ``more`` walk's history, as the app keeps it: consecutive walk
         #: picks without a positive, and whether the walk has ended (met its
         #: target or ran dry).  A vote's outcome is read the way the app reads
@@ -551,13 +597,15 @@ class AutopilotFlow:
             good_count,
             bad_count,
             remaining_unlabeled=remaining_unlabeled,
-            smart=smart,
+            smart="yellow" if self.smart_gate == "never" else smart,
             stable=stable,
             span=sp,
             good_target=0 if self.startup is not None else self.good_target,
             bad_target=0 if self.startup is not None else self.bad_target,
             more_target=0 if self.startup is not None else self.more_target,
             more_done=self.more_done,
+            dry_run_stop=self.dry_run_stop,
+            ran_dry=self.more_misses >= self.more_dry_run,
         )
         if self.phase not in ("good", "bad", "more"):
             # The walk ends once the machine has moved past it - its target met
@@ -571,11 +619,12 @@ class AutopilotFlow:
 
         The app's phase check sees only vote counts, so it reads the outcome off
         them: a rise in the Good count is a hit, a rise in the Bad count alone is
-        a miss.  Only votes cast *in* the walk count.
+        a miss.  Only votes cast *in* the walk count; on a document dataset the
+        walk counts even once ``more_done`` has latched, since there it is the stop.
         """
         prev_good, prev_bad = self._counts
         self._counts = (good_count, bad_count)
-        if self.phase != "more" or self.more_done:
+        if self.phase != "more" or (self.more_done and not self.dry_run_stop):
             return
         if good_count > prev_good:
             self.more_misses = 0

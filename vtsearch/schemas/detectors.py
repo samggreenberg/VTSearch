@@ -72,8 +72,9 @@ from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.labels import LabeledElementSchema
+from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
-from vtsearch.schemas.sorting import FloorStateSchema
+from vtsearch.schemas.sorting import BalanceStateSchema
 
 #: Upper bound on user-supplied detector names.  A name this long is already
 #: past any reasonable display use, and capping it here keeps the derived
@@ -313,6 +314,10 @@ class DetectorRegistryEntrySchema(Schema):
     # type-based detector/dataset compatibility gate.  See patch-embedder.md →
     # "Per-detector embedder type".
     embedder_type = fields.String()
+    # The newest test verdict the detector keeps (#4526), which the AutoFind
+    # tab shows beside it: present on AutoFind detectors only, ``null`` for
+    # one never tested.
+    test_verdict = fields.Nested(LineTestVerdictSchema, allow_none=True)
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row
@@ -505,6 +510,9 @@ class DetectorRegistryStatsResponseSchema(Schema):
     created_by = fields.String(required=True)
     readers = fields.List(fields.String(), required=True)
     autofind = fields.Boolean(required=True)
+    # Every test verdict the detector keeps, one per tested dataset, newest
+    # first (#4526): the *Tested on* section.
+    test_verdicts = fields.List(fields.Nested(LineTestVerdictSchema), required=True)
 
 
 class DetectorBrowsePositivesResponseSchema(Schema):
@@ -567,17 +575,47 @@ class FindLabelRequestSchema(Schema):
     detector_id = fields.String(required=True, validate=validate.Length(min=1))
 
 
+class LabelQuotaSchema(Schema):
+    """Which detector a labelset gave, and the labels it still owes (#4643).
+
+    Built by :func:`vtscore.detectors.label_quota.served_quota`.  Under the
+    label quota (``good_quota`` Goods and ``bad_quota`` Bads) a labelset gives
+    the Goods' centroid, not a trained head; ``goods_owed`` / ``bads_owed`` are
+    what it takes to get one.
+    """
+
+    tier = fields.String(
+        required=True,
+        validate=validate.OneOf(["none", "centroid", "trained"]),
+        metadata={
+            "description": (
+                "``centroid``: the Goods' centroid cut with a GMM, given under the quota; "
+                "``trained``: the trained head; ``none``: no Good to sort toward."
+            )
+        },
+    )
+    n_good = fields.Integer(required=True)
+    n_bad = fields.Integer(required=True)
+    goods_owed = fields.Integer(required=True)
+    bads_owed = fields.Integer(required=True)
+    good_quota = fields.Integer(required=True)
+    bad_quota = fields.Integer(required=True)
+
+
 class FindLabelResponseSchema(Schema):
     """Response for ``POST /api/find-label`` (success path)."""
 
     ok = fields.Boolean(required=True)
     results = fields.List(fields.Nested(_FindLabelResultSchema), required=True)
     threshold = fields.Float(required=True)
-    # What the precision floor says about ``threshold`` (#4247, #4272).
-    floor = fields.Nested(FloorStateSchema, required=True)
+    # What the balance says about ``threshold`` (#4247, #4272, #4413).
+    balance = fields.Nested(BalanceStateSchema, required=True)
     good_count = fields.Integer(required=True)
     bad_count = fields.Integer(required=True)
     detector_name = fields.String(required=True)
+    # Which detector the labels gave: the trained head, or under the quota the
+    # Goods' centroid, with the labels still owed (#4643).
+    label_quota = fields.Nested(LabelQuotaSchema, required=True)
 
 
 class FindQueueIdsQuerySchema(Schema):
@@ -671,18 +709,21 @@ class _AutoDetectResultSchema(Schema):
 
     detector_name = fields.String(required=True)
     threshold = fields.Float(required=True)
-    # Whether ``threshold`` is a promise, or the unpromised Inclusion 0 cut
-    # (#4247); ``null`` for a detector with no trained context to ask.
-    floor = fields.Nested(FloorStateSchema, allow_none=True)
+    # What the balance says about ``threshold`` (#4272, #4413); ``null`` for a
+    # detector with no trained context to ask.
+    balance = fields.Nested(BalanceStateSchema, allow_none=True)
+    # Which detector the labels gave (#4643): under the quota, the Goods'
+    # centroid; ``null`` from a caller that does not report it.
+    label_quota = fields.Nested(LabelQuotaSchema, allow_none=True)
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)
 
 
 class _AutoFindExportStatusSchema(PluginExtrasSchema):
-    """Outcome of auto-exporting an Auto-Find run's results.
+    """Outcome of auto-exporting an AutoFind run's results.
 
-    Built by ``vtsearch.autorun_detectors.run_autofind_export``: a fixed ``{exporter, success}`` base
+    Built by ``vtsearch.autofind.run_autofind_export``: a fixed ``{exporter, success}`` base
     plus ``message`` on success / ``error`` on failure, and then whatever extra
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
@@ -708,10 +749,10 @@ class _AutoFindExportStatusSchema(PluginExtrasSchema):
 class AutoDetectRequestSchema(Schema):
     """Body for ``POST /api/auto-detect``.
 
-    The body is optional; omitting ``detector_name`` runs every Auto-Find
+    The body is optional; omitting ``detector_name`` runs every AutoFind
     detector for the active dataset's media type. Passing a name restricts
     the run to that one detector (which must already be flagged for
-    Auto-Find; otherwise the handler returns 404).
+    AutoFind; otherwise the handler returns 404).
     """
 
     detector_name = fields.String(load_default="")
@@ -736,13 +777,13 @@ class AutoDetectResponseSchema(Schema):
     # reference from another user's deletion). Reported so a scheduled run
     # never silently drops a detector the user thinks is still active.
     missing_detectors = fields.List(fields.String(), required=True)
-    # Present only when an Auto-Find results exporter is configured: the
+    # Present only when an AutoFind results exporter is configured: the
     # outcome of auto-exporting these results.
     auto_export = fields.Nested(_AutoFindExportStatusSchema)
 
 
-class AutoRunRunResponseSchema(AutoDetectResponseSchema):
-    """Response for ``GET /api/autorun/runs/<run_id>``: one background AutoRun's results.
+class AutoFindRunResponseSchema(AutoDetectResponseSchema):
+    """Response for ``GET /api/autofind/runs/<run_id>``: one background AutoFind's results.
 
     The ``POST /api/auto-detect`` body for the run, plus which dataset it
     scored and what started it.  Served only to the user who started the run,
@@ -754,11 +795,12 @@ class AutoRunRunResponseSchema(AutoDetectResponseSchema):
     dataset_name = fields.String(required=True)
     trigger = fields.String(
         required=True,
-        validate=validate.OneOf(["import", "manual"]),
+        validate=validate.OneOf(["import", "manual", "find"]),
         metadata={
             "description": (
                 "``import`` when a finished web import started the run, ``manual`` when "
-                "the dataset's Run AutoRun action did."
+                "the dataset's Run AutoFind action did, ``find`` when the Dashboard's "
+                "Find button did, with its picked detectors."
             )
         },
     )
@@ -964,10 +1006,6 @@ class FindStatsPrecisionPointSchema(Schema):
     checked_good = fields.Integer(required=True)
     # checked_good / checked; null when nothing in the top n was checked.
     verified_precision = fields.Float(required=True, allow_none=True)
-    # Lower-bound estimate from the detector's calibration folds; null unless
-    # ``estimate_status`` is ``"estimated"`` (and for a count too small to read
-    # off a sampled corpus).
-    estimated_precision = fields.Float(required=True, allow_none=True)
 
 
 class FindStatsResponseSchema(Schema):
@@ -995,10 +1033,10 @@ class FindStatsResponseSchema(Schema):
     verified_precision = fields.Float(required=True, allow_none=True)
     verified_called_good = fields.Integer(required=True)
     verified_kept_good = fields.Integer(required=True)
-    # Run context: the line, and what the precision floor says about it - the
-    # floor it was cut at, its state and the spot check's likely range (#4272).
+    # Run context: the line, and what the balance says about it - the beta it
+    # was cut at, its state and the spot check's likely ranges (#4272, #4413).
     threshold = fields.Float(required=True)
-    floor = fields.Nested(FloorStateSchema, required=True)
+    balance = fields.Nested(BalanceStateSchema, required=True)
     # How many items the Find run scored, and how many clear the current cut.
     n_scored = fields.Integer(required=True)
     n_returned = fields.Integer(required=True)
@@ -1007,17 +1045,8 @@ class FindStatsResponseSchema(Schema):
     # previous detector version.  Drives the "out of date" note in the UI.
     stale = fields.Boolean(required=True)
     # Precision against the number returned, at log-spaced counts plus the
-    # current cut's.
+    # current cut's: verified precision only, no model-based estimate (#4360).
     precision_curve = fields.List(fields.Nested(FindStatsPrecisionPointSchema), required=True)
-    # Whether the curve carries an estimate: ``"estimated"``;
-    # ``"insufficient_evidence"`` (fewer than ``min_calibration_positives``
-    # Good votes among the calibration folds' held-out votes, the precision
-    # floor's own gate); or ``"unavailable"`` (no calibration folds at all).
-    estimate_status = fields.String(
-        required=True, validate=validate.OneOf(["estimated", "insufficient_evidence", "unavailable"])
-    )
-    calibration_positives = fields.Integer(required=True)
-    min_calibration_positives = fields.Integer(required=True)
 
 
 class FindEvidenceCoverageResponseSchema(Schema):
@@ -1075,7 +1104,7 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
-    "AutoRunRunResponseSchema",
+    "AutoFindRunResponseSchema",
     "DetectorBrowsePositivesReleaseResponseSchema",
     "DetectorBrowsePositivesResponseSchema",
     "DetectorCancelResponseSchema",

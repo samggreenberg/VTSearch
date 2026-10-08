@@ -13,6 +13,15 @@ a CPU-only box without the model stack.  It provides:
 * :func:`detection_metrics` — ``precision`` / ``recall`` / ``f1`` at the same
   cut, plus the counts behind them.  One definition, shared by both metric-row
   builders, so every study emits them whether or not it thought to ask.
+* :func:`fbeta_metrics` — the objective (#4427, #4584): F-beta of the set above
+  the cut, at the row's balance and at each preset, through the app's own
+  :func:`vtscore.training.thresholds.fbeta_score`.  :func:`fbeta_from_rates` is
+  the same number read back off a frame's ``precision`` and ``recall``, for
+  frames written before the columns existed.
+* :func:`oracle_fbeta_cut` / :func:`oracle_fbeta_metrics` — the objective's
+  oracle (#4654): the best F-beta any cut of the ranking reaches, and the cut
+  that reaches it.  :func:`oracle_cut` is the *cost* objective's, whose deep cut
+  is a poor F-beta on a rare class.
 * :func:`threshold_percentile` / :func:`is_degenerate` — where the trained
   threshold sits in a score distribution, and the ``degenerate`` flag (a cut
   above every score or below every score) that is the #2781 runaway-threshold
@@ -32,7 +41,12 @@ indicator now score through the same
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike
 
 
 def inclusion_weights(inclusion: float) -> tuple[float, float]:
@@ -70,17 +84,25 @@ def operating_cost(
     return weighted_error_cost(scores, labels, threshold, fpr_weight, fnr_weight)
 
 
-#: Every metric :func:`detection_metrics` returns, and how a reader should read
-#: it.  Kept beside the function because a viewer or a report that offers a
+#: Every metric :func:`detection_metrics` returns, the objective
+#: :func:`fbeta_metrics` adds beside it, and how a reader should read each.  Kept beside the function because a viewer or a report that offers a
 #: metric picker needs the direction and the range, and deriving those from the
 #: name is how "lower is better" gets attached to recall.
+#:
+#: The F-beta family is ordered by beta: the returned set at the precision-
+#: leaning preset, F1 (the balanced one, which ``fbeta_b1`` would only repeat),
+#: the recall-leaning preset, then the objective at whichever beta drew the
+#: row's line (#4636).
 #:
 #: ``(label, lower_is_better, domain)``.
 DETECTION_METRICS: dict[str, tuple[str, bool, tuple[float, float]]] = {
     "cost": ("Cost (weighted FPR+FNR)", True, (0.0, 2.0)),
     "precision": ("Precision", False, (0.0, 1.0)),
     "recall": ("Recall (= 1 - FNR)", False, (0.0, 1.0)),
+    "fbeta_b025": ("F1/4 (precision-leaning)", False, (0.0, 1.0)),
     "f1": ("F1", False, (0.0, 1.0)),
+    "fbeta_b4": ("F4 (recall-leaning)", False, (0.0, 1.0)),
+    "fbeta": ("F-beta at the run's balance (the objective)", False, (0.0, 1.0)),
     "fpr": ("False-positive rate", True, (0.0, 1.0)),
     "fnr": ("False-negative rate", True, (0.0, 1.0)),
     "average_precision": ("Average precision (ranking)", False, (0.0, 1.0)),
@@ -139,6 +161,66 @@ def detection_metrics(scores: np.ndarray, labels: np.ndarray, threshold: float) 
     }
 
 
+def _fbeta_or_nan(tp: float, flagged: float, n_pos: float, beta: float | None) -> float:
+    """The app's F-beta of a set, or NaN where it has no value: no balance, or no positives to find."""
+    import math  # noqa: PLC0415
+
+    from vtscore.training.thresholds import fbeta_score  # noqa: PLC0415
+
+    if beta is None or not math.isfinite(beta) or n_pos <= 0:
+        return float("nan")
+    return fbeta_score(tp, flagged, n_pos, beta)
+
+
+def fbeta_metrics(scores: np.ndarray, labels: np.ndarray, threshold: float, beta: float | None) -> dict[str, float]:
+    """The objective at *threshold* (#4427, #4584): ``fbeta`` at *beta*, and ``fbeta_b025`` / ``_b1`` / ``_b4``.
+
+    F-beta of the set the cut returns, ``(1 + b²)·TP / (b²·P + K)``, computed by
+    the app's :func:`~vtscore.training.thresholds.fbeta_score` from the counts,
+    so a measured row and the line the app drew cannot disagree about it.
+    *beta* is the balance that drew the row's line; ``None`` (the Inclusion
+    arm, a skyline) leaves ``fbeta`` NaN, and the preset columns are filled
+    either way.
+
+    The conventions match every analyzer that derived it before (#4452,
+    #4519, #4582): a cut that returns nothing scores 0, not NaN - it found
+    none of the positives, and a NaN would drop the cell and flatter whichever
+    arm returned nothing most often - and a sample with no positives is NaN,
+    where recall is undefined.
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
+
+    scores = np.asarray(scores, dtype=np.float64)
+    labels = np.asarray(labels, dtype=np.float64)
+    predicted = scores >= threshold
+    pos = labels == 1.0
+    tp = float(np.count_nonzero(predicted & pos))
+    flagged = float(np.count_nonzero(predicted))
+    n_pos = float(np.count_nonzero(pos))
+    return {
+        "fbeta": _fbeta_or_nan(tp, flagged, n_pos, beta),
+        **{f"fbeta_{beta_tag(b)}": _fbeta_or_nan(tp, flagged, n_pos, b) for b in RANK_FRAME_BETAS},
+    }
+
+
+def fbeta_from_rates(precision: "ArrayLike", recall: "ArrayLike", beta: "ArrayLike") -> np.ndarray:
+    """:func:`fbeta_metrics`' number read back off a frame's ``precision`` and ``recall``, elementwise.
+
+    For frames written before the ``fbeta`` columns (#4584), so an analyzer
+    reading a balance-era cell scores it exactly as a new row would carry it.
+    A NaN precision is a cut that returned nothing, so it scores 0 (its recall
+    is 0); a NaN recall (no positives) or a NaN *beta* (no balance) is NaN.
+    Equal to the count form up to the 6-dp rounding the rates were written at.
+    """
+    p = np.nan_to_num(np.asarray(precision, dtype=np.float64), nan=0.0)
+    r = np.asarray(recall, dtype=np.float64)
+    b2 = np.square(np.asarray(beta, dtype=np.float64))
+    den = b2 * p + r
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(den > 0, (1.0 + b2) * p * r / den, 0.0)
+    return np.where(np.isnan(r) | np.isnan(b2), np.nan, out)
+
+
 def oracle_cut(
     scores: np.ndarray,
     labels: np.ndarray,
@@ -190,6 +272,98 @@ def oracle_cut(
             # threshold = k-th highest score -> predicts every score >= s[j].
             best = (float(s[j]), float(cost[j]), float(fpr[j]), float(fnr[j]))
     return best
+
+
+def _cut_sweep(scores: np.ndarray, labels: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
+    """Every achievable cut of *scores*, as :func:`oracle_cut` sweeps them: ``(threshold, tp, k, n_pos, n_neg)``.
+
+    One entry per boundary that does not split a tie, highest threshold first,
+    each predicting every score ``>=`` its threshold; ``tp`` and ``k`` are what
+    that set holds and returns.  "Predict nothing" is not among them.
+    """
+    scores = np.asarray(scores, dtype=np.float64)
+    labels = np.asarray(labels, dtype=np.float64)
+    n = scores.size
+    n_pos = float(np.count_nonzero(labels == 1.0))
+    order = np.argsort(-scores, kind="mergesort")  # descending, stable
+    s = scores[order]
+    tp = np.cumsum(labels[order] == 1.0, dtype=np.float64)
+    k = np.arange(1, n + 1, dtype=np.float64)
+    valid = np.ones(n, dtype=bool)
+    valid[:-1] = s[:-1] != s[1:]
+    return s[valid], tp[valid], k[valid], n_pos, float(n - n_pos)
+
+
+def _best_fbeta_on(
+    sweep: tuple[np.ndarray, np.ndarray, np.ndarray, float, float], beta: float | None
+) -> tuple[float, float, float, float]:
+    """:func:`oracle_fbeta_cut` on a :func:`_cut_sweep` already taken, so several betas share one sort."""
+    import math  # noqa: PLC0415
+
+    nan = float("nan")
+    s, tp, k, n_pos, n_neg = sweep
+    if beta is None or not math.isfinite(beta) or n_pos <= 0 or s.size == 0:
+        return (nan, nan, nan, nan)
+    b2 = beta * beta
+    # The app's fbeta_score, elementwise: (1 + b²)·TP / (b²·P + K).
+    fb = (1.0 + b2) * tp / (b2 * n_pos + k)
+    j = int(np.argmax(fb))  # the first maximum: ties go to the higher threshold, the smaller set
+    fpr = (k[j] - tp[j]) / n_neg if n_neg > 0 else 0.0
+    return (float(s[j]), float(fb[j]), float(fpr), float((n_pos - tp[j]) / n_pos))
+
+
+def oracle_fbeta_cut(scores: np.ndarray, labels: np.ndarray, beta: float | None) -> tuple[float, float, float, float]:
+    """The F-beta-maximising cut over *scores*: ``(threshold, fbeta, fpr, fnr)`` (#4654).
+
+    :func:`oracle_cut`'s twin for the objective that replaced cost (#4427): the
+    best F-beta at *beta* that any cut of this ranking reaches, read off the
+    labels of the very set it is scored on.  The same sweep (every achievable
+    boundary, ``>=``, never splitting a tie) and the same caveat: it reads the
+    labels, so it is a ceiling on what a line can return here, not a rule.  It
+    is the State of the App's "best cut", the denominator of its share
+    (``_rank_metrics.oracle_fbeta``), which reads it off a strict ranking; the
+    two differ only where a tie straddles the peak.
+
+    Not :func:`oracle_cut` at another weight.  Cost prices the two error
+    *rates*, so the prevalence divides out, and on a rare class one miss
+    outweighs dozens of false alarms: its cut runs deep (recall about 0.85 at
+    precision about 0.1 on COCO Better), the best cost and a poor F-beta, which
+    is how a viewer drawing it as "the oracle" put the oracle below the line it
+    was meant to bound (#4654).
+
+    Ties in F-beta break toward the higher threshold (the smaller set), as
+    :func:`oracle_cut`'s do.  Returning nothing scores 0, so with any positive
+    the cut that returns everything beats it, and the threshold is always an
+    observed score.  No positives, no scores or no *beta* is NaN throughout.
+    """
+    return _best_fbeta_on(_cut_sweep(scores, labels), beta)
+
+
+def oracle_fbeta_metrics(scores: np.ndarray, labels: np.ndarray, beta: float | None) -> dict[str, float]:
+    """A metric row's best-cut columns (#4654), :func:`fbeta_metrics`' ceiling on the same scores.
+
+    * ``oracle_fbeta`` at *beta* and ``oracle_fbeta_b025`` / ``_b1`` / ``_b4``
+      at each preset: the best F-beta any cut reaches, so each is at least the
+      matching ``fbeta`` column wherever both are defined.
+    * ``fbeta_oracle_threshold`` / ``_fpr`` / ``_fnr``: the cut that reaches
+      ``oracle_fbeta``, the cut the row's own objective would have drawn knowing
+      the labels.  Its rates and the row's ``n_test_pos`` / ``n_test_neg`` are a
+      confusion matrix, so a reader gets that cut's precision and recall too.
+
+    NaN where :func:`oracle_fbeta_cut` is; *beta* ``None`` (the Inclusion arm, a
+    skyline) leaves the ``oracle_fbeta`` and cut columns NaN and fills the presets.
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
+
+    sweep = _cut_sweep(scores, labels)
+    thr, best, fpr, fnr = _best_fbeta_on(sweep, beta)
+    return {
+        "oracle_fbeta": best,
+        **{f"oracle_fbeta_{beta_tag(b)}": _best_fbeta_on(sweep, b)[1] for b in RANK_FRAME_BETAS},
+        "fbeta_oracle_threshold": thr,
+        "fbeta_oracle_fpr": fpr,
+        "fbeta_oracle_fnr": fnr,
+    }
 
 
 def threshold_percentile(scores: np.ndarray, threshold: float) -> float:

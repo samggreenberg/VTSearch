@@ -205,10 +205,18 @@ class TestHaystackOverride:
             per_source[src] = max(per_source.get(src, -np.inf), float(score))
         scored = np.array(sorted(per_source.values()))
 
-        assert ctx_b.threshold > ctx_a.threshold
-        # The old cut sits lower in the population it is applied to than the
-        # new one - which is over-inclusion, measured as hits.
-        assert int((scored >= ctx_a.threshold).sum()) > int((scored >= ctx_b.threshold).sum())
+        # Since #4452 the line is the labels' class model - identical here, one
+        # head - with the prevalence estimated on the corpus being decided: the
+        # routed haystack, not the native snapshot.
+        assert ctx_a.labels_line is not None and ctx_b.labels_line is not None
+        assert ctx_b.labels_line.model == ctx_a.labels_line.model
+        from vtscore.training.thresholds import corpus_prevalence
+
+        expected = corpus_prevalence(ctx_b.labels_line.model, _scores(ctx_b.model, clips), sorted(clips))
+        assert expected is not None
+        assert ctx_b.labels_line.prevalence == pytest.approx(expected, rel=0.05)
+        assert ctx_b.threshold == pytest.approx(ctx_b.labels_line.threshold(1.0), abs=1e-9)
+        assert scored.size > 0
 
 
 class TestVoteExclusionFollowsTheHaystack:
@@ -220,7 +228,7 @@ class TestVoteExclusionFollowsTheHaystack:
 
         # Two loaded medias carry labels.
         voted_sources = {ID_BASE, ID_BASE + 1}
-        monkeypatch.setattr(lt, "labeled_media_ids", lambda _ls, _snap: set(voted_sources))
+        monkeypatch.setattr(lt, "labeled_media_labels", lambda _ls, _snap: dict.fromkeys(voted_sources, True))
 
         seen: dict = {}
         import vtscore.detectors.training as training_mod

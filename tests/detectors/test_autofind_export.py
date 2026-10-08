@@ -1,6 +1,6 @@
-"""Tests for the Auto-Find server-side results auto-export.
+"""Tests for the AutoFind server-side results auto-export.
 
-Covers :func:`vtsearch.autorun_detectors.run_autofind_export`, which
+Covers :func:`vtsearch.autofind.run_autofind_export`, which
 hands an autodetect run's results to the exporter configured under
 ``autofind_exporter``.
 """
@@ -11,7 +11,7 @@ import json
 from unittest.mock import patch
 
 from vtsearch import settings
-from vtsearch.autorun_detectors import run_autofind_export
+from vtsearch.autofind import run_autofind_export
 
 _SAMPLE_RESULTS = {
     "media_type": "audio",
@@ -69,7 +69,7 @@ class TestAutofindExportOpenUrl:
         assert status["open_url"] == "https://example.com/r?ids=abc"
 
     def test_an_exporter_that_cannot_read_a_scored_run_is_reported(self, isolated_settings):
-        """A saved Auto-Find choice can outlive what the exporter accepts.
+        """A saved AutoFind choice can outlive what the exporter accepts.
 
         Reported through the status block rather than raised: the scored
         results are valuable on their own, so a misconfigured export must not

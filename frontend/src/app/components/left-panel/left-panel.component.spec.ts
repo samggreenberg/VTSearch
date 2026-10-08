@@ -6,7 +6,7 @@ import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
-import { FLOOR_STATES, lineFloor } from '../../testing/line-floor';
+import { BALANCE_STATES, lineBalance } from '../../testing/line-balance';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -307,7 +307,7 @@ describe('LeftPanelComponent', () => {
    * every state, and the line draws the same in each (#4273). A null cut used
    * to disable them silently (#4247).
    */
-  describe('in every floor state (#4272)', () => {
+  describe('in every balance state (#4272, #4413)', () => {
     const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
     const ranking = [
       { id: 1, score: 0.9 },
@@ -315,35 +315,37 @@ describe('LeftPanelComponent', () => {
       { id: 3, score: 0.4 },
     ];
 
-    function show(panelMode: 'label' | 'find', floor: ReturnType<typeof lineFloor>): HTMLElement {
+    function show(panelMode: 'label' | 'find', balance: ReturnType<typeof lineBalance>): HTMLElement {
       fixture.componentRef.setInput('panelMode', panelMode);
+      // Today's Find lives on the Review tab (#4524); Autopilot shows no list.
+      fixture.componentRef.setInput('findTab', 'review');
       fixture.componentRef.setInput('medias', ranking.map(({ id }) => stub(id)));
       fixture.componentRef.setInput('sortOrder', ranking);
       fixture.componentRef.setInput('threshold', 0.5);
-      fixture.componentRef.setInput('floor', floor);
+      fixture.componentRef.setInput('balance', balance);
       if (panelMode === 'label') component.setTab('manual');
       TestBed.tick();
       return fixture.nativeElement as HTMLElement;
     }
 
-    it.each(FLOOR_STATES)('counts the unverified positives above the line when %s', (status) => {
-      show('find', lineFloor(status));
+    it.each(BALANCE_STATES)('counts the unverified positives above the line when %s', (status) => {
+      show('find', lineBalance(status));
       expect(component.unverifiedGoodCount).toBe(2);
     });
 
-    it.each(FLOOR_STATES)('draws the plain line in Find and Label when %s', (status) => {
+    it.each(BALANCE_STATES)('draws the plain line in Find and Label when %s', (status) => {
       for (const mode of ['find', 'label'] as const) {
-        const line = show(mode, lineFloor(status)).querySelector('.media-threshold-line')!;
+        const line = show(mode, lineBalance(status)).querySelector('.media-threshold-line')!;
         expect(line.className).toBe('media-threshold-line');
         expect(line.textContent!.trim().toLowerCase()).toBe('threshold');
       }
     });
 
-    it.each(FLOOR_STATES)('offers the check in Train and never in Find (#4317) when %s', (status) => {
-      const emitted = vi.spyOn(component.floorCheck, 'emit');
+    it.each(BALANCE_STATES)('offers the check in Train and never in Find (#4317) when %s', (status) => {
+      const emitted = vi.spyOn(component.check, 'emit');
       // Find tests the threshold Train set: labelling more to set one is too late there.
-      expect(show('find', lineFloor(status)).querySelector('.floor-check-btn')).toBeNull();
-      const btn = show('label', lineFloor(status)).querySelector('.floor-check-btn') as HTMLButtonElement;
+      expect(show('find', lineBalance(status)).querySelector('.balance-check-btn')).toBeNull();
+      const btn = show('label', lineBalance(status)).querySelector('.balance-check-btn') as HTMLButtonElement;
       expect(btn.textContent!.trim()).toBe('Check 5 picks');
       btn.click();
       expect(emitted).toHaveBeenCalledOnce();
@@ -351,13 +353,13 @@ describe('LeftPanelComponent', () => {
 
     it('holds the check while a sort is running', () => {
       fixture.componentRef.setInput('sortBusy', true);
-      const btn = show('label', lineFloor('unchecked')).querySelector('.floor-check-btn') as HTMLButtonElement;
+      const btn = show('label', lineBalance('unchecked')).querySelector('.balance-check-btn') as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
     });
   });
 
   /**
-   * The Find row (#4246): the precision floor beside the unverified-positives
+   * The Find row (#4246, #4413): the balance beside the unverified-positives
    * work-queue actions. The actions scope over the unverified items above the
    * line, so they gate on `unverifiedGoodCount`, which counts exactly those.
    */
@@ -367,6 +369,7 @@ describe('LeftPanelComponent', () => {
 
     function find(sortOrder: { id: number; score: number }[] | null, threshold: number | null): HTMLElement {
       fixture.componentRef.setInput('panelMode', 'find');
+      fixture.componentRef.setInput('findTab', 'review');
       fixture.componentRef.setInput('medias', (sortOrder ?? []).map(({ id }) => stub(id)));
       fixture.componentRef.setInput('sortOrder', sortOrder);
       fixture.componentRef.setInput('threshold', threshold);
@@ -375,7 +378,7 @@ describe('LeftPanelComponent', () => {
     }
 
     const button = (el: HTMLElement, label: string) =>
-      el.querySelector(`.find-floor-row button[aria-label="${label}"]`) as HTMLButtonElement;
+      el.querySelector(`.find-balance-row button[aria-label="${label}"]`) as HTMLButtonElement;
 
     describe('unverifiedGoodCount', () => {
       it('counts the items at or above the line', () => {
@@ -396,9 +399,9 @@ describe('LeftPanelComponent', () => {
       });
     });
 
-    it('mounts the floor control, not the Inclusion stepper', () => {
+    it('mounts the balance control, not the Inclusion stepper', () => {
       const el = find([{ id: 1, score: 0.9 }], 0.5);
-      expect(el.querySelector('.find-floor-row vt-precision-floor')).not.toBeNull();
+      expect(el.querySelector('.find-balance-row vt-balance')).not.toBeNull();
       expect(el.querySelector('#inclusion-input')).toBeNull();
     });
 
@@ -426,28 +429,30 @@ describe('LeftPanelComponent', () => {
       expect(exported).toHaveBeenCalledOnce();
     });
 
-    it('shows the floor, its state and the count the line returns', () => {
-      fixture.componentRef.setInput('minPrecision', 0.9);
-      fixture.componentRef.setInput('floor', lineFloor('confirmed', { minPrecision: 0.9 }));
+    it('shows the balance, its state and the count the line returns', () => {
+      fixture.componentRef.setInput('beta', 0.25);
+      fixture.componentRef.setInput('balance', lineBalance('checked', { beta: 0.25 }));
       fixture.componentRef.setInput('returned', 212);
       const el = find([{ id: 1, score: 0.9 }], 0.5);
-      const checked = el.querySelector('.find-floor-row input[type="radio"]:checked') as HTMLInputElement;
-      expect(checked.value).toBe('0.9');
-      expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('Confirmed · likely 55–100% right (checked 5) · 32 kept');
+      const checked = el.querySelector('.find-balance-row input[type="radio"]:checked') as HTMLInputElement;
+      expect(checked.value).toBe('0.25');
+      expect(el.querySelector('.find-balance-row .balance-state')!.textContent).toContain(
+        'Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept',
+      );
     });
 
-    it('forwards a picked floor as minPrecisionChange', () => {
+    it('forwards a picked balance as betaChange', () => {
       const el = find([{ id: 1, score: 0.9 }], 0.5);
-      const emitted = vi.spyOn(component.minPrecisionChange, 'emit');
-      (el.querySelector('.find-floor-row input[type="radio"][value="0.9"]') as HTMLInputElement).click();
-      expect(emitted).toHaveBeenCalledWith(0.9);
+      const emitted = vi.spyOn(component.betaChange, 'emit');
+      (el.querySelector('.find-balance-row input[type="radio"][value="0.25"]') as HTMLInputElement).click();
+      expect(emitted).toHaveBeenCalledWith(0.25);
     });
   });
 
-  it('mounts the floor control in the Manual tab', () => {
+  it('mounts the balance control in the Manual tab', () => {
     component.setTab('manual');
     TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.tab-panel-manual vt-precision-floor')).not.toBeNull();
+    expect(el.querySelector('.tab-panel-manual vt-balance')).not.toBeNull();
   });
 });

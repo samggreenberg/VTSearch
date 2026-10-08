@@ -7,7 +7,7 @@ import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
-import { FLOOR_STATES, lineFloor } from '../../../testing/line-floor';
+import { BALANCE_STATES, CHECKED_PRECISION, lineBalance } from '../../../testing/line-balance';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
@@ -202,21 +202,21 @@ describe('MediaListComponent', () => {
     expect(ids).toEqual([1, 2, 3]);
   });
 
-  describe('the line in every floor state (#4272, #4273)', () => {
-    function drawWith(floor: ReturnType<typeof lineFloor> | null): HTMLElement {
+  describe('the line in every balance state (#4272, #4273, #4413)', () => {
+    function drawWith(balance: ReturnType<typeof lineBalance> | null): HTMLElement {
       fixture.componentRef.setInput('sortOrder', [
         { id: 1, score: 0.8 },
         { id: 2, score: 0.6 },
         { id: 3, score: 0.3 },
       ]);
       fixture.componentRef.setInput('threshold', 0.5);
-      fixture.componentRef.setInput('floor', floor);
+      fixture.componentRef.setInput('balance', balance);
       TestBed.tick();
       return fixture.nativeElement.querySelector('.media-threshold-line') as HTMLElement;
     }
 
-    it.each(FLOOR_STATES)('draws the same plain line where the cut puts it when %s', (status) => {
-      const line = drawWith(lineFloor(status));
+    it.each(BALANCE_STATES)('draws the same plain line where the cut puts it when %s', (status) => {
+      const line = drawWith(lineBalance(status));
       expect(line).not.toBeNull();
       // A working line: it sits between the last match and the first non-match.
       expect(component.cachedOrderedItems.find((i) => i.showThreshold)?.media.id).toBe(3);
@@ -225,16 +225,20 @@ describe('MediaListComponent', () => {
       expect(line.getAttribute('aria-label')).toBe('Good/Bad threshold');
     });
 
-    it('names the floor\'s state in the tooltip only', () => {
-      expect(drawWith(lineFloor('unchecked')).getAttribute('title')).toContain('Unchecked: the line keeps the top 32');
-      expect(drawWith(lineFloor('short')).getAttribute('title')).toContain('short of the threshold');
-      expect(drawWith(lineFloor('confirmed')).getAttribute('title')).toContain('enough for the threshold');
+    it('names the balance\'s state in the tooltip only', () => {
+      expect(drawWith(lineBalance('unchecked')).getAttribute('title')).toContain('Unchecked: the line keeps the top 32');
+      // Beta 1 is advisory (#4427): the ranges describe the audited set, the line keeps its own count.
+      const checked = drawWith(lineBalance('checked')).getAttribute('title')!;
+      expect(checked).toContain('likely 55–100% of them are, with likely 30–70% of all the matches among them. The line keeps its 32');
+      expect(checked).not.toMatch(/short|enough|confirmed/i);
+      const trimmed = drawWith(lineBalance('checked', { beta: 2 })).getAttribute('title')!;
+      expect(trimmed).toContain("likely 55–100% of them are, with likely 30–70% of all the matches among them: the set where the check's balance peaked");
     });
 
     it('says a stale range is stale in the tooltip, and nowhere else', () => {
-      const fresh = drawWith(lineFloor('short'));
+      const fresh = drawWith(lineBalance('checked'));
       const freshHtml = fresh.outerHTML.replace(/title="[^"]*"/, '');
-      const stale = drawWith(lineFloor('short', { range: { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: true } }));
+      const stale = drawWith(lineBalance('checked', { precision: { ...CHECKED_PRECISION, stale: true } }));
       expect(stale.getAttribute('title')).toContain('Measured before your later votes');
       expect(stale.outerHTML.replace(/title="[^"]*"/, '')).toBe(freshHtml);
     });

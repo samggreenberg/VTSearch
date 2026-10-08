@@ -69,7 +69,7 @@ def _settings_file_with_detector_and_exporter(
     exporter_name: str,
     exporter_field_values: dict,
 ) -> Path:
-    """Like ``_settings_file_with_detector`` but also configures the Auto-Find exporter.
+    """Like ``_settings_file_with_detector`` but also configures the AutoFind exporter.
 
     Used to exercise the settings-based exporter fallback: a streaming run that
     passes no ``--exporter`` must pick up this exporter (and its field values)
@@ -180,25 +180,27 @@ class TestStreamingNdjsonExport:
         # The atomic temp file must not be left behind.
         assert not out.with_name(out.name + ".tmp").exists()
 
-    def test_the_header_carries_each_detectors_floor_verdict(self, client, tmp_path, monkeypatch, _stub_split_training):
-        """Each detector's floor state reaches the NDJSON ``_meta``; its hits still stream (#4247, #4272)."""
+    def test_the_header_carries_each_detectors_balance_state(self, client, tmp_path, monkeypatch, _stub_split_training):
+        """Each detector's balance state reaches the NDJSON ``_meta``; its hits still stream (#4247, #4272, #4413)."""
         import vtscore.cli as cli_mod
 
         stub = cli_mod._load_and_train_detectors
-        floor = {
-            "min_precision": 0.5,
+        balance = {
+            "beta": 1.0,
             "status": "unchecked",
             "count": 32,
-            "range": None,
-            "schedule": {"candidate": 32, "rounds": 1, "picks": 5},
+            "precision": None,
+            "recall": None,
+            "fbeta": None,
+            "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
         }
         monkeypatch.setattr(
             cli_mod,
             "_load_and_train_detectors",
-            lambda *a, **k: {name: {**info, "floor": floor} for name, info in stub(*a, **k).items()},
+            lambda *a, **k: {name: {**info, "balance": balance} for name, info in stub(*a, **k).items()},
         )
-        _write_pretrained_detector("stream-floor")
-        settings_path = _settings_file_with_detector(tmp_path, "stream-floor")
+        _write_pretrained_detector("stream-balance")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-balance")
         ds_path = tmp_path / "ds.pkl"
         _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
         out = tmp_path / "hits.ndjson"
@@ -215,7 +217,7 @@ class TestStreamingNdjsonExport:
         )
 
         meta, hits = _read_ndjson(out)
-        assert meta["detectors"] == [{"detector_name": "stream-floor", "threshold": 0.5, "floor": floor}]
+        assert meta["detectors"] == [{"detector_name": "stream-balance", "threshold": 0.5, "balance": balance}]
         assert sorted(h["id"] for h in hits) == [1, 2, 3]
 
     def test_keep_negatives_streams_both(self, client, tmp_path, _stub_split_training):

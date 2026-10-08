@@ -22,7 +22,7 @@ from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
-    AutoRunRunResponseSchema,
+    AutoFindRunResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
     FindEvidenceCoverageResponseSchema,
     FindLabelRequestSchema,
@@ -37,13 +37,13 @@ detector_scoring_bp = Blueprint(
     "detector_scoring",
     __name__,
     description="Run a detector against the active dataset (find-label) "
-    "or run every AutoRun detector at once (auto-detect).",
+    "or run every AutoFind detector at once (auto-detect).",
 )
 
 
 def _detector_type(det_data: dict | None) -> str:
     """The locked embedder type of a detector JSON (legacy-migrated)."""
-    from vtsearch.autorun_detectors import detector_type  # noqa: PLC0415
+    from vtsearch.autofind import detector_type  # noqa: PLC0415
 
     return detector_type(det_data)
 
@@ -51,9 +51,9 @@ def _detector_type(det_data: dict | None) -> str:
 def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
     """Whether the active snap binds an embedder of the detector's locked type.
 
-    See :func:`vtsearch.autorun_detectors.dataset_supplies_detector_type`.
+    See :func:`vtsearch.autofind.dataset_supplies_detector_type`.
     """
-    from vtsearch.autorun_detectors import dataset_supplies_detector_type  # noqa: PLC0415
+    from vtsearch.autofind import dataset_supplies_detector_type  # noqa: PLC0415
 
     return dataset_supplies_detector_type(det_data, snap)
 
@@ -78,38 +78,58 @@ def _abort_if_find_cancelled() -> None:
     """
     if find_progress.is_cancelled:
         find_idle()
-        abort(409, message="Find cancelled")
+        abort(409, message="Test cancelled")
 
 
 def _keep_line_ranking(results: list[dict], threshold: float) -> float:
-    """Give a Find pass that reused a cached head the ranking its line keeps a set of (#4272, #4273).
+    """Give a Find pass that reused a cached head the ranking its line is read against (#4272, #4273).
 
     Training stores the ranking the line is drawn over (``line_ranking``).  A
     head reused as it was (:func:`~vtscore.detectors.model_loading.cached_head_is_current`)
     brings none when the last one was dropped - by a dataset switch, or by
-    ending a Find session - and then the pass drew the stored score cut rather
-    than the set the floor keeps, and a spot check had nothing to draw from.
-    So a pass with no ranking builds one from the scores it just computed, with
-    the votes a person had cast before it marked voted, as training marks the
-    labelset's items, and draws the line at the set the floor keeps.  A
+    ending a Find session - and then the balance's state had nothing to count
+    and a spot check had nothing to draw from.  So a pass with no ranking
+    builds one from the scores it just computed, with the votes a person had
+    cast before it marked voted, as training marks the labelset's items.  A
     ranking training has just stored is left alone.  Returns the threshold to
-    use: *threshold* unchanged when there was a ranking already, or no set to
-    keep.
+    use: *threshold* unchanged when there was a ranking already, no balance,
+    or no class model behind the head.
+
+    Under the balance (#4452) nothing is counted on this corpus: the line is
+    the labels' class model with the prevalence re-estimated on these scores,
+    which is what a cold Find over the same corpus computes; the ranking only
+    reports how many the line keeps here.
     """
-    from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
-    from vtscore.training.thresholds import LineRanking, floor_line  # noqa: PLC0415
-    from vtsearch.state import get_min_precision  # noqa: PLC0415
+    from vtscore.state.core import (  # noqa: PLC0415
+        get_active_detector_context,
+        human_voted_ids,
+    )
+    from vtscore.training.thresholds import LineRanking  # noqa: PLC0415
+    from vtsearch.state import line_knobs  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     if det_ctx.line_ranking is not None or not results:
         return threshold
     voted = human_voted_ids(det_ctx)
     det_ctx.line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], voted)
-    floor = get_min_precision()
-    if floor is None:
-        return threshold
-    kept = floor_line(det_ctx.line_ranking, floor, det_ctx.precision_check, voted)
-    return threshold if kept is None else kept
+    det_ctx.gate_passed = None  # a structural re-rank after this pass sets it afresh (#4505)
+    beta = line_knobs()["beta"]
+    if beta is not None and det_ctx.labels_line is not None:
+        # The labels' line (#4452): the class model the labels gave the head,
+        # with the prevalence re-estimated on this corpus as a cold Find would
+        # (the same EM over its scores) - never a count drawn on it.  The
+        # ranking stays for the line's state: how many it keeps here.
+        det_ctx.labels_line = det_ctx.labels_line.on_corpus(
+            [r["score"] for r in results],
+            [r["id"] for r in results],
+            {cid: True for cid in det_ctx.good_votes if cid in voted}
+            | {cid: False for cid in det_ctx.bad_votes if cid in voted},
+        )
+        return float(det_ctx.labels_line.threshold(beta))
+    # No balance, or no class model behind this head (too few votes, one
+    # class): the threshold the retrain stored stands - no count on this
+    # corpus (#4452).
+    return threshold
 
 
 @detector_scoring_bp.route("/api/find-label", methods=["POST"])
@@ -214,6 +234,16 @@ def find_label(body: dict):
         )
         if mlp is None:
             find_idle()
+            if diagnostic is not None and not diagnostic["has_good"] and not diagnostic["failed_resolution"]:
+                # Every label resolved and none is a Good: there is nothing to
+                # sort toward (#4643).  One Good is enough - below the label
+                # quota the Goods' centroid answers - so name that, not a
+                # resolution failure.
+                abort(
+                    400,
+                    message=f"Detector '{d['name']}' needs at least one Good label before it can be tested.",
+                    resolution_diagnostic=diagnostic,
+                )
             if diagnostic is not None:
                 error_msg = (
                     f"Detector '{d['name']}' could not be trained: "
@@ -294,15 +324,15 @@ def find_label(body: dict):
         from vtscore.state.core import get_active_detector_context
 
         labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
-        # The floor's set is drawn on the Stage-1 scores.  A structural re-rank
+        # The balance's set is drawn on the Stage-1 scores.  A structural re-rank
         # then replaces both the ranking and the cut with its classifier's
-        # boundary, as it does on every other path: it has no floor line.
+        # boundary, as it does on every other path: it has no balance line.
         threshold = _keep_line_ranking(results, threshold)
         results, threshold = maybe_labelset_structural_rerank(
             get_active_detector_context(), labelset, results, threshold, snap
         )
         # Store the final (post-rerank) cutoff on the context so server-side reads of
-        # the Find cutoff — the work-queue / boundary-walk endpoints, floor
+        # the Find cutoff — the work-queue / boundary-walk endpoints, balance
         # re-thresholding — agree with the labels this pass just applied. A no-op for
         # the non-structural path (threshold unchanged), authoritative for the
         # structural one.
@@ -333,7 +363,7 @@ def find_label(body: dict):
         # verified item the retrained detector now disagrees with reads as a
         # correction rather than vanishing.
         set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
-        # Freeze the single-pass scores so the line (the precision floor's)
+        # Freeze the single-pass scores so the line (the balance's)
         # re-thresholds without re-scoring, and the Stats precision curve can
         # read them.
         set_find_scores({entry["id"]: entry["score"] for entry in results})
@@ -346,6 +376,8 @@ def find_label(body: dict):
         # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
         # a prior corrections-to-detector fold no longer applies.
         det_ctx.find_eval_stale = False
+        # A test of the line was over the previous pass's scores (#4524).
+        det_ctx.line_test = None
         # The counts the client shows are the labels this pass *adopted*, which is
         # the threshold split everywhere except the verified items that held their
         # human vote.  ``replace_all`` left exactly this label set behind, so the
@@ -377,18 +409,22 @@ def find_label(body: dict):
         # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
         # frontend onto them + windowing this response is the remaining slice (see
         # docs/plans/scalability.md S3/S17/S19).
-        from vtscore.state.core import detector_floor_state  # noqa: PLC0415
-        from vtsearch.state import get_min_precision  # noqa: PLC0415
+        from vtscore.state.core import detector_balance_state  # noqa: PLC0415
+        from vtsearch.state import get_beta  # noqa: PLC0415
+
+        from vtscore.detectors.label_quota import served_quota  # noqa: PLC0415
 
         return {
             "ok": True,
             "results": results,
             "threshold": round(threshold, 4),
-            # Whether the line is a promise, or the unpromised Inclusion 0 cut (#4247).
-            "floor": detector_floor_state(det_ctx, get_min_precision()),
+            # What the balance says about the line (#4272, #4413).
+            "balance": detector_balance_state(det_ctx, get_beta()),
             "good_count": good_count,
             "bad_count": bad_count,
             "detector_name": d.get("name", ""),
+            # Which detector the labels gave, and what is still owed (#4643).
+            "label_quota": served_quota(mlp, labelset),
         }
 
 
@@ -404,24 +440,21 @@ def find_stats():
     that's the price of not verifying every item - but it reports the real
     counts.  Crosses each item's adopted label against the detector's original
     call (``find_initial_labels``) for a 2x2 confusion, and reports what the
-    precision floor says about the current line (``floor``), so the chart can
-    mark the floor and say whether the line keeps it.
+    balance says about the current line (``balance``): the beta it was cut at
+    and what a spot check found.
 
     The **Kept rate** (``verified_precision``) is the exception to "treat
     unverified as verified": it counts only the items the user checked, since
     counting every unchecked match as right would read 99% whatever the checks
     found.  The **precision curve** charts how right the returned set is against
-    how much is returned - verified precision on the checked items and the
-    precision floor's lower-bound estimate - at log-spaced return counts (see
-    :mod:`vtsearch.routes.detectors._find_precision`).
+    how much is returned - verified precision on the checked items - at
+    log-spaced return counts (see :mod:`vtsearch.routes.detectors._find_precision`).
+    It carries no model-based estimate (#4360).
     Pure read; no new state.
     """
-    import numpy as np
-
-    from vtscore.state.core import detector_floor_state, get_active_detector_context
-    from vtscore.training.thresholds import MIN_CALIBRATION_POSITIVES
-    from vtsearch.routes.detectors._find_precision import curve_counts, estimated_precision_at, verified_precision_at
-    from vtsearch.state import get_min_precision
+    from vtscore.state.core import detector_balance_state, get_active_detector_context
+    from vtsearch.routes.detectors._find_precision import curve_counts, verified_precision_at
+    from vtsearch.state import get_beta
 
     det_ctx = get_active_detector_context()
     good = det_ctx.good_votes
@@ -458,7 +491,6 @@ def find_stats():
     counts = curve_counts(len(ranked), extra=n_returned or None)
     checked_good = {cid: cid in good for cid in verified if cid in scores}
     verified_points = verified_precision_at(ranked_ids, checked_good, counts)
-    estimate = estimated_precision_at(det_ctx, np.fromiter((s for _cid, s in ranked), dtype=np.float64), counts)
     precision_curve = [
         {
             "n_returned": k,
@@ -466,9 +498,8 @@ def find_stats():
             "checked": n_checked,
             "checked_good": n_good,
             "verified_precision": None if v_prec is None else round(v_prec, 4),
-            "estimated_precision": None if e_prec is None else round(e_prec, 4),
         }
-        for k, (n_checked, n_good, v_prec), e_prec in zip(counts, verified_points, estimate.values, strict=True)
+        for k, (n_checked, n_good, v_prec) in zip(counts, verified_points, strict=True)
     ]
 
     return {
@@ -486,15 +517,12 @@ def find_stats():
         "verified_called_good": len(verified_called_good),
         "verified_kept_good": verified_kept,
         "threshold": round(det_ctx.threshold, 4),
-        # The floor the line was cut at, and whether it keeps it (#4246).
-        "floor": detector_floor_state(det_ctx, get_min_precision()),
+        # The balance the line was cut at, and what its check found (#4246, #4413).
+        "balance": detector_balance_state(det_ctx, get_beta()),
         "n_scored": len(ranked),
         "n_returned": n_returned,
         "stale": getattr(det_ctx, "find_eval_stale", False),
         "precision_curve": precision_curve,
-        "estimate_status": estimate.status,
-        "calibration_positives": estimate.calibration_positives,
-        "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
     }
 
 
@@ -660,7 +688,7 @@ def find_corrections_to_detector():
 
         initial = det_ctx.find_initial_labels
         if not initial:
-            abort(400, message="No Find run to take corrections from. Score the dataset first.")
+            abort(400, message="No Test run to take corrections from. Score the dataset first.")
 
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 
@@ -747,27 +775,27 @@ def find_corrections_to_detector():
 @detector_scoring_bp.response(200, AutoDetectResponseSchema)
 @detector_scoring_bp.alt_response(
     400,
-    description="No medias loaded, or no AutoRun detectors match the active media type.",
+    description="No medias loaded, or no AutoFind detectors match the active media type.",
 )
-@detector_scoring_bp.alt_response(404, description="Named detector is not on the caller's AutoRun list.")
+@detector_scoring_bp.alt_response(404, description="Named detector is not on the caller's AutoFind list.")
 @detector_scoring_bp.alt_response(409, description="Find was cancelled via /api/find/cancel.")
 def auto_detect(body: dict):
-    """Score the active dataset with every detector on the caller's AutoRun list.
+    """Score the active dataset with every detector on the caller's AutoFind list.
 
     Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each
     one's MLP on demand from its on-disk labelset.  Returns one result column
-    per detector. Pass ``detector_name`` to run a single AutoRun detector.
+    per detector. Pass ``detector_name`` to run a single AutoFind detector.
 
-    The synchronous, scripted sibling of the Dashboard's background AutoRun
-    (``POST /api/datasets/registry/<dataset_id>/autorun``); both run through
-    :mod:`vtsearch.autorun_detectors`.  This one reports on the shared Find
+    The synchronous, scripted sibling of the Dashboard's background AutoFind
+    (``POST /api/datasets/registry/<dataset_id>/autofind``); both run through
+    :mod:`vtsearch.autofind`.  This one reports on the shared Find
     tracker and is cancelled by ``/api/find/cancel``.
     """
-    from vtsearch.autorun_detectors import (  # noqa: PLC0415
-        AutoRunUnavailable,
-        plan_autorun,
+    from vtsearch.autofind import (  # noqa: PLC0415
+        AutoFindUnavailable,
+        plan_autofind,
         run_autofind_export,
-        score_autorun,
+        score_autofind,
     )
 
     snap = snapshot_medias()
@@ -776,8 +804,8 @@ def auto_detect(body: dict):
     find_progress.reset_cancel()
 
     try:
-        plan = plan_autorun(snap, detector_name=body.get("detector_name") or "")
-    except AutoRunUnavailable as exc:
+        plan = plan_autofind(snap, detector_name=body.get("detector_name") or "")
+    except AutoFindUnavailable as exc:
         abort(exc.status, message=exc.message)
 
     # A cold detector's train writes "running" to the shared tracker from inside
@@ -786,7 +814,7 @@ def auto_detect(body: dict):
     # exits below.
     with find_idle_on_crash():
         try:
-            response = score_autorun(plan, snap)
+            response = score_autofind(plan, snap)
         except CancelledError:
             find_idle()
             abort(409, message="Find cancelled")
@@ -798,24 +826,24 @@ def auto_detect(body: dict):
     return response
 
 
-@detector_scoring_bp.route("/api/autorun/runs/<run_id>", methods=["GET"])
-@detector_scoring_bp.response(200, AutoRunRunResponseSchema)
+@detector_scoring_bp.route("/api/autofind/runs/<run_id>", methods=["GET"])
+@detector_scoring_bp.response(200, AutoFindRunResponseSchema)
 @detector_scoring_bp.alt_response(
     404,
     description="No such run for the caller: unknown, another user's, or aged out of the kept window.",
 )
-def get_autorun_run(run_id: str):
-    """Results of a finished background AutoRun, for the user who started it.
+def get_autofind_run(run_id: str):
+    """Results of a finished background AutoFind, for the user who started it.
 
-    ``run_id`` is the ``task_id`` of the AutoRun task (``autorun.run_id`` on
+    ``run_id`` is the ``task_id`` of the AutoFind task (``autofind.run_id`` on
     its ``loading-tasks`` row).  Runs are kept in memory only, and only the
     most recent few, so an old or pre-restart run answers 404 like one that
     never existed.
     """
     from vtsearch.auth import get_current_user  # noqa: PLC0415
-    from vtsearch.autorun_detectors import get_autorun_run as _get_run  # noqa: PLC0415
+    from vtsearch.autofind import get_autofind_run as _get_run  # noqa: PLC0415
 
     record = _get_run(run_id, get_current_user())
     if record is None:
-        abort(404, message="AutoRun results not found")
+        abort(404, message="AutoFind results not found")
     return record

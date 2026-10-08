@@ -201,23 +201,32 @@ function capitalizeFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-describe('formatProgressHeader for a background AutoRun', () => {
+describe('formatProgressHeader for a background AutoFind', () => {
   it('names the run, not a load, and counts detectors', () => {
     const { header, subtitle, detail } = formatProgressHeader(
       { status: 'loading', message: 'Resolving 27 label origins…', current: 0, total: 2 },
-      'autorun',
+      'autofind',
     );
-    expect(header).toBe('Running AutoRun · Resolving labels');
+    expect(header).toBe('Running AutoFind · Resolving labels');
     expect(subtitle).toContain('labeled examples');
     expect(detail).toBe('0/2 detectors done');
   });
 
   it('falls back to scoring between trains', () => {
     const { header } = formatProgressHeader(
-      { status: 'loading', message: 'Scored 1 of 2 AutoRun detectors…', current: 1, total: 2 },
-      'autorun',
+      { status: 'loading', message: 'Scored 1 of 2 AutoFind detectors…', current: 1, total: 2 },
+      'autofind',
     );
-    expect(header).toBe('Running AutoRun · Scoring');
+    expect(header).toBe('Running AutoFind · Scoring');
+  });
+
+  it("calls the Find button's run a Find (#4615)", () => {
+    const { header, subtitle } = formatProgressHeader(
+      { status: 'loading', message: 'Scored 1 of 2 detectors…', current: 1, total: 2 },
+      'find',
+    );
+    expect(header).toBe('Running Find · Scoring');
+    expect(subtitle).toBe('Scoring every item with your detectors.');
   });
 });
 

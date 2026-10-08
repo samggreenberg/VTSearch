@@ -70,6 +70,10 @@
   justify-content: flex-end;
 }
 
+.centroid-note {
+  margin: var(--space-sm) 0;
+}
+
 .auto-export-status {
   margin: var(--space-sm) 0;
   padding: var(--space-sm) var(--space-md);
@@ -89,4 +93,29 @@
 .auto-export-open {
   margin-left: var(--space-sm);
   vertical-align: baseline;
+}
+
+// Browse building its map, in place of the table it is mapping.
+.browse-wait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  height: 100%;
+  margin: 0 auto;
+  width: min(380px, 80%);
+}
+
+.browse-wait-message {
+  color: var(--text-secondary);
+}
+
+// Count / ETA and the phase line: each reserves its line so the bar above
+// never shifts as they come and go.
+.browse-wait-line {
+  min-height: 1.4em;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }

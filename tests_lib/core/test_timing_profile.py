@@ -13,13 +13,14 @@ Three things have to hold for the profile to be worth having:
 """
 
 import json
+import math
 
 import pytest
 
 from vtscore import timing
 from vtscore.timing import profile as timing_profile
 from vtscore.timing.profile import EMPTY_PROFILE, StepCoeffs, parse_profile
-from vtscore.timing.tasks import TASKS
+from vtscore.timing.tasks import TASKS, TaskSpec
 
 
 @pytest.fixture(autouse=True)
@@ -89,6 +90,82 @@ class TestShippedDefaults:
         # the measured affine table in _load_cost_model, which is n-aware.
         assert TASKS["dataset_load"].default_terms == ()
         assert timing.step_terms("dataset_load", device="cpu", n=100) is None
+
+
+class TestPerMediaDefaults:
+    """A task's no-profile fallback may differ by media type (#4105)."""
+
+    def test_audio_open_gives_the_read_a_larger_slice(self):
+        # #3595 measured a rebuilding audio open spending 0.52-0.63 of its time
+        # in the coverage step, against 0.81-0.94 for image: an audio pickle's
+        # read is a much larger part of the open.
+        assert _weights("dataset_open", device="cpu", media_type="audio") == pytest.approx([0.40, 0.60])
+        assert _weights("dataset_open", device="cpu", media_type="image") == pytest.approx([0.15, 0.85])
+
+    @pytest.mark.parametrize("media_type", ["", "video", "text", "not_a_media_type"])
+    def test_a_media_type_without_an_override_keeps_the_task_wide_vector(self, media_type):
+        assert _weights("dataset_open", device="cpu", media_type=media_type) == pytest.approx([0.15, 0.85])
+
+    def test_an_unnamed_step_falls_back_to_its_media_types_default(self, tmp_path):
+        # A partial cell fills its missing step from the override, not from the
+        # task-wide vector — the same rule as test_unnamed_steps_keep_their_
+        # shipped_default, with the media type deciding which default applies.
+        path = _write(tmp_path, _profile({"dataset_open": {"cells": {"cpu|audio|": {"steps": {"items": 5.0}}}}}))
+        timing.reload_profile(path)
+        terms = _terms("dataset_open", device="cpu", media_type="audio", embedder="clap_general")
+        assert terms == pytest.approx({"items": 5.0, "coverage": 0.60})
+
+    def test_a_measured_cell_still_wins_over_the_override(self, tmp_path):
+        path = _write(
+            tmp_path,
+            _profile({"dataset_open": {"cells": {"cpu|audio|": {"steps": {"items": 1.0, "coverage": 3.0}}}}}),
+        )
+        timing.reload_profile(path)
+        assert _weights("dataset_open", device="cpu", media_type="audio") == pytest.approx([0.25, 0.75])
+
+    def test_overrides_name_registered_media_types(self):
+        # A misspelt key ("audios") would never match a lookup and would leave
+        # that media type silently on the task-wide vector.
+        from vtscore import media
+
+        known = set(media.all_type_ids())
+        for spec in TASKS.values():
+            assert set(spec.media_default_terms) <= known, spec.name
+
+    def test_defaults_for_resolves_override_then_task_wide(self):
+        spec = TASKS["dataset_open"]
+        assert spec.defaults_for("audio") == (0.40, 0.60)
+        assert spec.defaults_for("image") == spec.default_terms
+        assert spec.defaults_for() == spec.default_terms
+
+    def test_an_override_must_be_parallel_to_steps(self):
+        with pytest.raises(ValueError, match="parallel to steps"):
+            TaskSpec(
+                name="t",
+                steps=("a", "b"),
+                step_index=(1, 2),
+                tracker_steps=2,
+                scale="n",
+                default_terms=(1.0, 1.0),
+                media_default_terms={"audio": (1.0,)},
+            )
+
+    def test_an_override_needs_a_task_wide_vector_to_override(self):
+        # A task with no flat default has its own richer model (dataset_load);
+        # a per-media vector must not quietly replace it for one media type.
+        with pytest.raises(ValueError, match="requires default_terms"):
+            TaskSpec(
+                name="t",
+                steps=("a",),
+                step_index=(1,),
+                tracker_steps=1,
+                scale="n",
+                media_default_terms={"audio": (1.0,)},
+            )
+
+    def test_specs_stay_hashable(self):
+        # TaskSpec was hashable before the mapping field existed; keep it so.
+        assert len({spec for spec in TASKS.values()}) == len(TASKS)
 
 
 class TestCellLookup:
@@ -349,7 +426,13 @@ class TestMalformedProfilesAreHarmless:
         assert timing.step_weights("find", device="cpu", fallback=[1.0, 1.0, 1.0]) == [1.0, 1.0, 1.0]
 
     def test_bare_number_is_shorthand_for_a_fixed_cost(self):
-        assert StepCoeffs.from_json(4) == StepCoeffs(a=4.0)
+        # Field by field: r2 defaults to NaN, and since Python 3.13 a dataclass
+        # __eq__ compares fields with ``==``, so two unfitted StepCoeffs never
+        # compare equal as wholes.
+        coeffs = StepCoeffs.from_json(4)
+        assert coeffs is not None
+        assert (coeffs.a, coeffs.b, coeffs.per_mb) == (4.0, 0.0, 0.0)
+        assert math.isnan(coeffs.r2)
         assert StepCoeffs.from_json("nope") is None
         assert StepCoeffs.from_json({"a": "nope"}) is None
         assert StepCoeffs.from_json(True) is None

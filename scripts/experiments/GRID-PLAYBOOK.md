@@ -90,6 +90,7 @@ common self-inflicted wound here.
 - **`/exp` is a small quota** and the venv alone is ~13 G of it. Write no study
   output there at all — an ENOSPC kills the whole array mid-run.
 - **`/expscratch` is where data lives**, and it is fast (~85 MB/s rsync, flash).
+  It has no snapshots: record every delete in [`scratch-deletions.md`](scratch-deletions.md).
   Treat it as **purgeable**: keep the rebuild path in the repo so anything there
   can be regenerated from staged sources.
 - **`HF_HOME` leak:** the grid shell points `HF_HOME` at `/exp`; one model

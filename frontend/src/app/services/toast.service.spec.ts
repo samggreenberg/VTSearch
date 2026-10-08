@@ -131,11 +131,11 @@ describe('ToastService', () => {
     expect(service.toasts[0].detail).toBe('MyData: disk full');
   });
 
-  it('names a failed background AutoRun as such, not as a dataset load', () => {
-    const autorun = { run_id: 'ar', owner: 'u', trigger: 'import' as const, dataset_id: 'd', dataset_name: 'MyData' };
-    loadingTasks$.next([task({ task_id: 'ar', status: 'idle', error: 'boom', name: 'AutoRun: MyData', autorun })]);
-    expect(service.toasts[0].message).toBe('AutoRun failed');
-    expect(service.toasts[0].detail).toBe('AutoRun: MyData: boom');
+  it('names a failed background AutoFind as such, not as a dataset load', () => {
+    const autofind = { run_id: 'ar', owner: 'u', trigger: 'import' as const, dataset_id: 'd', dataset_name: 'MyData' };
+    loadingTasks$.next([task({ task_id: 'ar', status: 'idle', error: 'boom', name: 'AutoFind: MyData', autofind })]);
+    expect(service.toasts[0].message).toBe('AutoFind failed');
+    expect(service.toasts[0].detail).toBe('AutoFind: MyData: boom');
   });
 
   it('routes an SSE detector-load failure with the detector wording', () => {

@@ -3,7 +3,7 @@ import { Subscription } from 'rxjs';
 import { ProgressEventsService } from './progress-events.service';
 import { formatProgressMessage } from '../utils/format-progress';
 import type { ProgressEvent } from '../models/api.models';
-import { DEFAULT_MIN_PRECISION, type LineFloor } from '../utils/line-floor';
+import { DEFAULT_BETA, type LineBalance } from '../utils/line-balance';
 
 export type SortMode = 'text' | 'learned' | 'load';
 export type SelectMode = 'top' | 'hard' | 'new';
@@ -65,11 +65,12 @@ export class SortStateService {
   // carries one; every other sort leaves it null and the picks fall back to
   // `_threshold`, which is what they always used.
   private readonly _acqThreshold = signal<number | null>(null);
-  // What the precision floor says about `_threshold` (#4247, #4272). Set with
-  // the threshold, from the same response, so the two never disagree. The
-  // line always keeps a set - unchecked, confirmed or short of the floor - and
-  // every consumer keeps using it; this only lets the line say which.
-  private readonly _floor = signal<LineFloor | null>(null);
+  // What the balance says about `_threshold` (#4413; the line is #4247's and
+  // #4272's). Set with the threshold, from the same response, so the two never
+  // disagree. The line always keeps a set - unchecked, or checked by a spot
+  // check that ended on it - and every consumer keeps using it; this only
+  // lets the line say which.
+  private readonly _balance = signal<LineBalance | null>(null);
   private readonly _sortBusy = signal(false);
   private readonly _sortStatus = signal('');
   private readonly _sortProgress = signal(0);
@@ -84,11 +85,12 @@ export class SortStateService {
   // pair bounds the pulsing zone. See ProgressEvent.overall_step_end.
   private readonly _sortStepEnd = signal<number | null>(null);
   private readonly _sortEtaSeconds = signal<number | null>(null);
-  // The active detector's precision floor (#4246), the value the floor control
-  // shows. Seeded per detector from `GET /api/min-precision` on a pair switch;
-  // every detector has one (#4269). Distinct from `_floor`, which is the
-  // verdict on the line the list is drawing and arrives with that line.
-  private readonly _minPrecision = signal<number>(DEFAULT_MIN_PRECISION);
+  // The active detector's balance (#4413), F-beta's beta: the value the
+  // balance control shows. Seeded per detector from `GET /api/balance` on a
+  // pair switch; every detector has one (#4269). Distinct from `_balance`,
+  // which is the state of the line the list is drawing and arrives with that
+  // line.
+  private readonly _beta = signal<number>(DEFAULT_BETA);
   private readonly _loadSortLabel = signal('');
   private readonly _loadSortSource = signal<LoadSortSource | null>(null);
   private readonly _textQuery = signal('');
@@ -129,9 +131,9 @@ export class SortStateService {
     return this._acqThreshold() ?? this._threshold();
   }
 
-  /** The floor's verdict on `threshold`; null when the sort has no detector behind it. */
-  get floor(): LineFloor | null {
-    return this._floor();
+  /** The balance's state on `threshold`; null when the sort has no detector behind it. */
+  get balance(): LineBalance | null {
+    return this._balance();
   }
 
   get sortBusy(): boolean {
@@ -162,9 +164,9 @@ export class SortStateService {
     return this._sortEtaSeconds();
   }
 
-  /** The active detector's precision floor. */
-  get minPrecision(): number {
-    return this._minPrecision();
+  /** The active detector's balance, F-beta's beta. */
+  get beta(): number {
+    return this._beta();
   }
 
   get loadSortLabel(): string {
@@ -208,10 +210,10 @@ export class SortStateService {
     this._selectMode.set(mode);
   }
 
-  setSortResults(order: SortedItem[], threshold: number, floor: LineFloor | null = null): void {
+  setSortResults(order: SortedItem[], threshold: number, balance: LineBalance | null = null): void {
     this._sortOrder.set(order);
     this._threshold.set(threshold);
-    this._floor.set(floor);
+    this._balance.set(balance);
     // No acquisition cut on this path (load-sort restore, tests): the getter
     // falls back to the reporting threshold.
     this._acqThreshold.set(null);
@@ -234,7 +236,7 @@ export class SortStateService {
     items: SortedItem[];
     threshold: number;
     acqThreshold?: number | null;
-    floor?: LineFloor | null;
+    balance?: LineBalance | null;
     total: number;
     hasMore: boolean;
     token: string | null;
@@ -243,7 +245,7 @@ export class SortStateService {
     this._sortOrder.set(win.items);
     this._threshold.set(win.threshold);
     this._acqThreshold.set(win.acqThreshold ?? null);
-    this._floor.set(win.floor ?? null);
+    this._balance.set(win.balance ?? null);
     this._sortTotal.set(win.total);
     this._sortHasMore.set(win.hasMore);
     this._sortToken.set(win.token);
@@ -330,30 +332,30 @@ export class SortStateService {
     this.findProgressSub = null;
   }
 
-  setMinPrecision(value: number): void {
-    this._minPrecision.set(value);
+  setBeta(value: number): void {
+    this._beta.set(value);
   }
 
   /**
-   * Replace the floor's verdict without moving the line: for a floor change
-   * that leaves the line where it was, because both floors keep the same
-   * count of items (#4246, #4272).
+   * Replace the balance's state without moving the line: for a beta change
+   * that leaves the line where it was, because both balances keep the same
+   * count of items (#4413, #4272).
    */
-  setFloor(floor: LineFloor | null): void {
-    this._floor.set(floor);
+  setBalance(balance: LineBalance | null): void {
+    this._balance.set(balance);
   }
 
   /**
-   * Move the line over the ranking already on screen, with the floor's new
-   * verdict: after a spot check ends (#4273), the server keeps the set it
-   * ended on, which is a new count over the same ranking. `aboveThreshold` is
-   * the server's count over the whole ranking when it sent one, since a
-   * windowed ranking holds only its head here.
+   * Move the line over the ranking already on screen, with the balance's new
+   * state: after a spot check ends (#4273), the server keeps the set where
+   * the check's balance peaked, which is a new count over the same ranking.
+   * `aboveThreshold` is the server's count over the whole ranking when it
+   * sent one, since a windowed ranking holds only its head here.
    */
-  setLine(threshold: number, floor: LineFloor | null, aboveThreshold: number | null = null): void {
+  setLine(threshold: number, balance: LineBalance | null, aboveThreshold: number | null = null): void {
     const order = this._sortOrder() ?? [];
     this._threshold.set(threshold);
-    this._floor.set(floor);
+    this._balance.set(balance);
     this._aboveThreshold.set(aboveThreshold ?? order.filter((i) => i.score >= threshold).length);
   }
 
@@ -375,7 +377,7 @@ export class SortStateService {
     this._sortOrder.set(null);
     this._threshold.set(null);
     this._acqThreshold.set(null);
-    this._floor.set(null);
+    this._balance.set(null);
     this._sortBusy.set(false);
     this._sortStatus.set('');
     this._sortProgress.set(0);
@@ -383,7 +385,7 @@ export class SortStateService {
     this._sortOverall.set(null);
     this._sortStepEnd.set(null);
     this._sortEtaSeconds.set(null);
-    this._minPrecision.set(DEFAULT_MIN_PRECISION);
+    this._beta.set(DEFAULT_BETA);
     this._loadSortLabel.set('');
     this._loadSortSource.set(null);
     this._textQuery.set('');

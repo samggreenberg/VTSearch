@@ -12,7 +12,7 @@ How the test suite is organised and gated, and how to write tests that stay isol
 
 ## What `run-tests.sh` gates
 
-No CI runs tests — the repo's one workflow only publishes slide decks — so a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
+No CI runs tests — the repo's two workflows only publish (slide decks, and the State of the App links) — so a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
 
 Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s = 30 min**, `0` opts out for a deliberately long run) and `.claude/hooks/ensure-test-deps.sh` (minutes on a cold container, near-instant after).
 
@@ -44,7 +44,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 |------|-----------------|------|-------|
 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Full run only | Scope is `pyrightconfig.json`. |
 | Known CVEs | `pip-audit` | Full run only | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix, and ones in the Ubuntu base image's apt packages that the requirements cannot upgrade; re-audit and remove an entry once a patched release exists. |
-| Frontend audit | `cd frontend && npm audit` | Full run, `core`, `frontend` | Whole tree, dev deps included. |
+| Frontend audit | `scripts/npm-audit-gate.py` (wraps `npm audit --json` in `frontend/`) | Full run, `core`, `frontend` | Whole tree, dev deps included. Fails on any advisory not in the script's `WAIVERS`, which holds only advisories with no patched release anywhere, each pinned to its vulnerable range so it lapses (and fails the gate) once upstream ships a fix; a waiver that suppresses nothing fails as stale. Prefer a lockfile refresh or an `overrides` pin whenever a fixed version exists. |
 | Vulture whitelist | `scripts/vulture-audit.py --check-whitelist` | Full run only | Whitelist hygiene, **not** the dead-code audit: fails when an entry in `.vulture-whitelist.py` suppresses no finding. The findings themselves stay a manual pre-release chore, because a hit on a public `vtscore` name is not evidence of anything. Whole-repo scan, ~5s. |
 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or `frontend` **only** — deliberately off the fast `core` path | Headless Vitest. |
 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Every run except a `frontend`-only group | |

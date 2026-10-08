@@ -52,6 +52,9 @@ def _run_safe_uncached(style, seed=0, max_steps=16, diag_sink=None, **kw):
     return simulate_voting_iterations(
         medias,
         target_category="cat0",
+        # The trained head's cut is the subject: under the label quota (#4643)
+        # the early rows are the Goods' centroid's, which carries none of it.
+        label_quota=False,
         seed=seed,
         dataset_name="planted",
         inclusion=0,
@@ -62,8 +65,8 @@ def _run_safe_uncached(style, seed=0, max_steps=16, diag_sink=None, **kw):
         emit_calibration_metrics=True,
         cut_diag_sink=diag_sink,
         # The Inclusion arm: the production arm reproduces the estimator's cut
-        # at `inclusion`, which a floor's set would replace (#4272).
-        min_precision=kw.pop("min_precision", "off"),
+        # at `inclusion`, which a balance's set would replace (#4272).
+        beta=kw.pop("beta", "off"),
         **kw,
     )
 
@@ -201,6 +204,9 @@ class TestSafeGmmVariantRows:
         rows = simulate_voting_iterations(
             medias,
             target_category="cat0",
+            # The trained head's cut is the subject: under the label quota (#4643)
+            # the early rows are the Goods' centroid's, which carries none of it.
+            label_quota=False,
             seed=0,
             dataset_name="planted",
             inclusion=0,
@@ -316,3 +322,49 @@ class TestCutDiagnosticFrame:
     def test_no_diagnostic_rows_without_a_sink(self):
         rows = _run_safe("max_patch")
         assert rows  # the run still works with cut_diag_sink=None
+
+
+class TestTheDefaultArmDrawsTheLabelsLine:
+    """#4452: under the app's default balance the shipped arm draws the labels' line and the test side models Find.
+
+    The first pricing run of the labels line drew the old count line on every
+    cell: the harness's fold scores are float32, and the class model's
+    ``isinstance(float)`` filter dropped every one of them, so no model was ever
+    fitted.  This runs the shipped fused configuration at the default balance.
+    """
+
+    def test_base_rows_carry_both_prevalences_and_find_cuts_the_withheld_half(self):
+        rows = _run_safe_uncached("max_patch", beta=None)
+        base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
+        assert base, "no base rows"
+        drawn = [r for r in base if np.isfinite(r["train_prevalence"])]
+        assert drawn, "the default arm never drew the labels' line"
+        assert all(np.isfinite(r["find_prevalence"]) and 0.0 < r["find_prevalence"] <= 0.5 for r in drawn)
+        assert all(np.isfinite(r["train_threshold"]) for r in drawn)
+
+
+class TestTheWiderWorldKnobs:
+    """#4452: the withheld half's scores are kept for post-hoc Find scenarios, and the Train pool can shrink."""
+
+    def test_the_test_score_sink_carries_the_withheld_half_and_the_labels_model(self):
+        sink: list = []
+        rows = _run_safe_uncached("max_patch", beta=None, test_score_sink=sink)
+        assert rows and sink
+        last = sink[-1]
+        assert last["scores"].dtype == np.float64 and last["scores"].shape == last["labels"].shape
+        assert last["labels"].sum() > 0 and np.isfinite(last["train_threshold"])
+        drawn = [s for s in sink if s["model"] is not None]
+        assert drawn and {"mu_pos", "mu_neg", "sigma"} <= set(drawn[-1]["model"])
+        # #4490: each snapshot carries the step's calibration folds, so a line rule can be replayed on it.
+        snap = drawn[-1]
+        assert snap["fold_scores"].dtype == np.float64
+        assert snap["fold_scores"].shape == snap["fold_labels"].shape == snap["fold_index"].shape
+        assert snap["fold_scores"].size > 0 and snap["fold_labels"].sum() > 0
+        assert snap["ids"].shape == snap["scores"].shape and len(set(snap["ids"].tolist())) == snap["ids"].size
+
+    def test_a_smaller_train_pool_keeps_the_withheld_half_whole(self):
+        full = _run_safe_uncached("max_patch", beta=None, max_steps=6)
+        small = _run_safe_uncached("max_patch", beta=None, max_steps=6, sim_size=30)
+        assert {r["prevalence_arm"] for r in small} == {"sim_30"}
+        base = lambda rows: [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]  # noqa: E731
+        assert base(full)[0]["n_test_pos"] == base(small)[0]["n_test_pos"], "the Find side is untouched"

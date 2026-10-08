@@ -35,8 +35,10 @@ slide. This file is the mechanics; that one is the choices.
 
 ## Build
 
-Needs node and python3. Nothing to install — `npx` fetches Marp on first run
-(~1 min, once). Run from this directory:
+Needs node, python3 and PyMuPDF. Nothing else to install — `npx` fetches Marp
+on first run (~1 min, once), and PyMuPDF, which writes a PDF's bookmarks and
+page labels (see **Navigation** below), is already in the project's `agpl`
+extra (else `pip install pymupdf`). Run from this directory:
 
 ```bash
 ./render.sh hold-the-line           # -> _out/hold-the-line.pdf
@@ -196,6 +198,13 @@ miniature of the real rendered slide (pixel-identical — it *is* a PNG of the
 audience deck, rendered in a first pass) with that slide's notes beside it.
 Same fragments, same manifest — the notes are authored once, as comments.
 
+The one difference is the page number. The miniatures come from the deck's
+unnumbered cut, because a 20px number shrunk into a thumbnail is too small to
+read and repeats on every frame of the contact sheet. The speaker page prints
+the slide's number once instead, large, in its own bottom-right corner — the
+same number the room sees, plus this showing's letters for a slide the deck
+shows more than once (the outline before section 3 reads `1d`).
+
 **Never put a bare `---` in a fragment**: Marp reads it as a slide break and
 would silently split one slide into two. `build.py` errors on it. Use `***`
 for a horizontal rule.
@@ -212,7 +221,7 @@ the reveals go:
 
 ![bg fit](figs/calib-xcal-flow.png)
 
-## Grading Your<br>Own Homework
+## Grade My Own<br>Homework
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 
@@ -293,7 +302,7 @@ rules about *fragments*, which Marpit cannot see:
   2. Marpit's own counter would number it and hide the number.
 - **A fragment used more than once is one slide, shown several ways.** All its
   pages share a number and take consecutive letters — the outline reads
-  `1a … 1j` however far apart its ten pages fall — which is the same rule a
+  `1a … 1l` however far apart its twelve pages fall — which is the same rule a
   build already follows, applied to the other way a slide can have pages.
   Marpit can hold the previous page's number, which is no help when the pages
   are eighty slides apart.
@@ -301,8 +310,8 @@ rules about *fragments*, which Marpit cannot see:
 A numbering group's presenter notes are written per letter, as for a build,
 and the speaker build then gives each showing only the notes naming *its*
 letters (plus, on the first showing, any note naming none). That is what
-keeps a slide the room sees ten times from printing the same four paragraphs
-into the speaker's hand ten times.
+keeps a slide the room sees twelve times from printing the same four paragraphs
+into the speaker's hand twelve times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with the final stage large beside the notes and every page of the group under
@@ -316,7 +325,7 @@ against `NOTES_LINES` conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
 one `**c** —` per reveal, though one note may cover several. That counts the
-group across the whole deck, so a fragment shown ten times owes ten lettered
+group across the whole deck, so a fragment shown twelve times owes twelve lettered
 notes even though it carries no build markers. A frame nobody wrote a line for
 is invisible until you are standing in front of a room.
 
@@ -351,6 +360,85 @@ section with a different line marked; near-identical fragments are copies to
 keep in step, and one fragment used five ways cannot drift. Because
 it is one fragment, it is also one *slide*: see **Numbering** above.
 
+## Navigation (links, bookmarks, page labels)
+
+A rendered PDF is navigable five ways besides turning its pages, and none of
+them changes a pixel of any slide:
+
+- **Click the slide for the next one.** The middle of every page — inset a
+  tenth of the page from each edge, so 80% by 80% of it — is a link to the next
+  page, so a PDF viewer with no slideshow mode is one anyway (#4563). On the
+  outline it is carved around the section numerals, which are links of their
+  own, so clicking anywhere else on an outline moves on like any other slide
+  (#4618). The last page is left out, having nowhere to go. The area stops
+  short of the corner, so the page number's own link still works.
+
+- **The outline's numerals are clickable.** Every line's Roman numeral links
+  to the page its section starts on — the showing of the outline marked `+atN`
+  for that line, or `+end` for the closing one. Only the numeral: the rest of
+  the slide advances, so a presenter clicking through the deck is never thrown
+  into a section by an outline in the way (#4618). The links are invisible (an
+  empty anchor laid over the numeral, `section.outline ol li > a:empty`), so the
+  room sees the slide it always saw and only a click finds them. That makes the
+  outline the deck's contents page when a question sends you back to section
+  III.
+- **The page number is the way back.** On every slide inside a section, the
+  number in the corner (and its letter) links to the outline showing that
+  opened the section — the "you are here" list, from which any other section
+  is one more click. Outline pages, and the slides before the first section,
+  print a plain number. The handover cut prints none, so it has no way back.
+- **Bookmarks.** The PDF opens with an outline in the reader's sidebar
+  (Acrobat and Preview honour that; Chrome's viewer keeps it a click away): the slides
+  before the first section at the top level, then each section, with its slides
+  one level under it. One entry per slide, never per reveal: a build's entry
+  lands on its first page. Each entry leads with the address the deck uses for
+  it — a section its Roman numeral, `III. Inclination`, and a slide its page
+  number, `17. The Cutting Room` — followed by the section's line or the
+  slide's headline, with the line break taken out.
+- **Page labels.** The viewer's page box reads the address the page prints —
+  `17c`, not `95` — so a reader told to look at 17c can type exactly that. The
+  title slide reads `title`. The handover cut (`--no-pageno`) carries them too,
+  for the reason it keeps the numbering: an address is the same whether or not
+  it is printed.
+
+The speaker deck gets the last four, aimed at *its* pages: a bookmark lands on the
+slide's one speaker page, a label is the number the page prints in its corner,
+that number links back to the speaker page of the section's outline, and the
+outline's numerals are clickable on the miniature, jumping to the speaker page
+where that section starts.
+
+**How.** The links are markdown links that `build.py` writes at the start of
+the outline's lines, with no text because the numeral is the theme's counter,
+
+```markdown
+1. [](#3)Mission
+```
+
+and they work because Marpit gives every slide its page number as its `id`,
+and Chromium prints a link to an `id` as a link to that page; the page numbers'
+links are the same thing in HTML. They work in the HTML export too. Bookmarks, labels and
+the click-to-advance areas Chromium cannot write, so `build.py` leaves them in
+`_build/<deck>.nav.json` (the last as the list of pages that get one,
+`advance_pages`) and `pdf_nav.py`, which `render.sh` runs after every PDF
+render, writes them in. `pdf_nav.py` carves a page's click-to-advance area
+around any link of its own that reaches into it, rather than let the two
+overlap and leave the viewer to pick which one a click means. On a speaker page
+the outline is a picture, so its links have to be measured: `render.sh` renders
+the outline's showings alone (`_build/<deck>.probe.md`, a few seconds), and
+`pdf_nav.py` scales each link Chromium drew there onto the miniature.
+
+**A headline that repeats needs a bookmark of its own.** Bookmarks exist to
+tell pages apart, so `build.py --check` fails a deck where two different
+fragments would get the same entry — the four "Data, Set" cards, say. Name each
+with a line of its own, which renders nothing:
+
+```markdown
+<!-- bookmark: Data, Set: COCO Better -->
+```
+
+`--check` also fails a `+atN` or `+end` that names a line the outline does not
+have, since the section would have nowhere to start.
+
 ## Figures
 
 Commit them. That is deliberate: a re-rendered figure costs one ~150 KB blob,
@@ -379,6 +467,19 @@ plot can be regenerated when the underlying numbers move —
 (see [`STYLE.md`](STYLE.md)) and refuses to write a figure whose labels would
 be unreadable in its slot.
 
+**Regenerate with matplotlib's stock defaults.** The figures were drawn with
+none of a machine's own matplotlib settings, and a Claude Code on the web
+container has some: its `/etc/matplotlib/matplotlibrc` sets the Inter face and
+turns hinting off, so a generator that does not name its own face draws in a
+different typeface from the committed figures, and every figure comes out a
+pixel off the one it replaces. Point `MATPLOTLIBRC` at an empty file and the
+regenerated figures match the committed ones wherever nothing was changed:
+
+```bash
+touch /tmp/empty-matplotlibrc
+MATPLOTLIBRC=/tmp/empty-matplotlibrc python slides/figs/src/make-data-cards.py --only coco
+```
+
 **Screenshots of the app are generated too.** `figs/ui-make-detector*.webp`,
 `figs/ui-train-loop*.webp`, `figs/ui-find*.webp`, `figs/ui-steps-*.webp` and
 `figs/ui-region-voting.webp` come from `figs/src/shoot-ui-figs.mjs`, which builds a corpus of real
@@ -399,7 +500,7 @@ composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
 
 The intro groups are **one session**, shot in the order a user works, from an
-app with nothing in it: import `photos` through the Add Dataset dialog, create
+app with nothing in it: import `photos-train` through the Add Dataset dialog, create
 the detector through the modal, answer what autopilot serves until the Good and
 Bad piles have something in them, import `photos-prod` the same way, then run
 the trained head over it — a second COCO corpus that shares no frame with the
@@ -409,7 +510,7 @@ caption. Nothing is staged through the API that a slide says was done by hand:
 the button `train-loop` clicks is chosen from the served item's own file name,
 so the piles are a real session's.
 
-The **Step-By-Step** figures (`figs/ui-steps-*.webp`, section 8) are that same
+The **Instruction** figures (`figs/ui-steps-*.webp`, section X) are that same
 session photographed a second time at the moments a user has to click, with a
 red numbered disc on each control (`scripts/screenshots/callouts.mjs`, shared
 with the user guide's screenshots). Where a moment is also an intro frame, the

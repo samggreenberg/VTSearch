@@ -3,23 +3,74 @@
     <div class="dataset-name" [title]="datasetName()">{{ datasetName() }}</div>
   }
   @if (panelMode() === 'find') {
-    <!-- Find mode: simplified view (Threshold, media list header, media items, and stripe). -->
-    <div class="tab-panel-manual" role="region" aria-label="Find results">
+    <!-- Test mode (#4524; `find` in code, #4525): the Test autopilot on one
+         tab, Review (the ranked list in full) on the other, the Train view's
+         Autopilot / Manual split applied to Test. The host owns the tab,
+         since the centre and right panes switch with it. -->
+    <div class="left-tabs" role="tablist" aria-label="Test mode">
+      <button
+        class="left-tab"
+        role="tab"
+        [class.active]="findTab() === 'autopilot'"
+        [attr.aria-selected]="findTab() === 'autopilot'"
+        (click)="findTabChange.emit('autopilot')"
+        title="Autopilot tests the line: it picks items at random from both sides of it, you vote each one, and the picks say how much of what the line keeps is right and how many of the real matches it found."
+      ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
+      <button
+        class="left-tab"
+        role="tab"
+        [class.active]="findTab() === 'review'"
+        [attr.aria-selected]="findTab() === 'review'"
+        (click)="findTabChange.emit('review')"
+        title="Review the ranked list under the line yourself: walk the boundary, verify items into the Good and Bad piles, and send the matches on."
+      >Review</button>
+    </div>
+    @if (findDetectorNote()) {
+      <!-- Under the label quota the detector is the Goods' centroid (#4643):
+           said on both tabs, since both read its line. -->
+      <p class="info-text find-detector-note" role="note">{{ findDetectorNote() }}</p>
+    }
+
+    @if (findTab() === 'autopilot') {
+      <div class="tab-panel-autopilot" role="tabpanel" aria-label="Test autopilot">
+        <!-- The balance, live between phases and frozen within one: the host
+             says which. Its state line is this corpus's test result, or
+             untested, never Train's check range. No spot check here (#4317). -->
+        <div class="find-balance-row">
+          <vt-balance
+            [value]="beta()"
+            [balance]="balance()"
+            [returned]="returned()"
+            [busy]="sortBusy()"
+            [offerCheck]="false"
+            [locked]="balanceLocked()"
+            [lineState]="balanceLineState()"
+            (valueChange)="betaChange.emit($event)"
+          />
+        </div>
+        <!-- The ranked list is not shown while a test runs: a pick is drawn
+             from a band, and the list would show its rank (#4267). -->
+        <ng-content select="[findAutopilot]" />
+      </div>
+    } @else {
+    <div class="tab-panel-manual" role="tabpanel" aria-label="Review">
       <!-- The Threshold plus the unverified-positives work-queue actions
            (Browse / To Dataset / Export). All three scope over the unverified
            items above the line — the above-threshold items the human hasn't
-           acted on yet. Find tests the threshold Train set, so it offers no
+           acted on yet. Test tests the threshold Train set, so it offers no
            spot check (#4317). -->
-      <div class="find-floor-row">
-        <vt-precision-floor
-          [value]="minPrecision()"
-          [floor]="floor()"
+      <div class="find-balance-row">
+        <vt-balance
+          [value]="beta()"
+          [balance]="balance()"
           [returned]="returned()"
           [busy]="sortBusy()"
           [offerCheck]="false"
-          (valueChange)="minPrecisionChange.emit($event)"
+          [locked]="balanceLocked()"
+          [lineState]="balanceLineState()"
+          (valueChange)="betaChange.emit($event)"
         >
-          <div class="goods-actions find-queue-actions" floorActions>
+          <div class="goods-actions find-queue-actions" balanceActions>
             <button
               class="card-icon-btn"
               [disabled]="disabled() || unverifiedGoodCount === 0"
@@ -48,7 +99,7 @@
               <vt-icon type="export" [size]="14"></vt-icon>
             </button>
           </div>
-        </vt-precision-floor>
+        </vt-balance>
       </div>
 
       <div class="images-header">
@@ -81,7 +132,7 @@
           [medias]="medias()"
           [sortOrder]="sortOrder()"
           [threshold]="threshold()"
-          [floor]="floor()"
+          [balance]="balance()"
           [selectedId]="selectedId()"
           [goodVotes]="goodVotes()"
           [badVotes]="badVotes()"
@@ -98,7 +149,7 @@
         <vt-stripe-overview
           [sortOrder]="sortOrder()"
           [threshold]="threshold()"
-          [floor]="floor()"
+          [balance]="balance()"
           [selectedId]="selectedId()"
           [goodVotes]="goodVotes()"
           [badVotes]="badVotes()"
@@ -107,6 +158,7 @@
         />
       </div>
     </div>
+    }
   } @else {
     <!-- Label mode: full labeling UI with tabs -->
     @if (!(activeTab() === 'autopilot' && autopilotCollapsed())) {
@@ -167,14 +219,14 @@
           (cancel)="sortCancel.emit()"
         />
 
-        <vt-precision-floor
-          [value]="minPrecision()"
-          [floor]="floor()"
+        <vt-balance
+          [value]="beta()"
+          [balance]="balance()"
           [returned]="returned()"
           [busy]="sortBusy()"
           [checkable]="!disabled() && !sortBusy()"
-          (valueChange)="minPrecisionChange.emit($event)"
-          (check)="floorCheck.emit()"
+          (valueChange)="betaChange.emit($event)"
+          (check)="check.emit()"
         />
 
         <div class="label-divider"></div>
@@ -202,7 +254,7 @@
             [medias]="medias()"
             [sortOrder]="sortOrder()"
             [threshold]="threshold()"
-            [floor]="floor()"
+            [balance]="balance()"
             [selectedId]="selectedId()"
             [goodVotes]="goodVotes()"
             [badVotes]="badVotes()"
@@ -220,7 +272,7 @@
           <vt-stripe-overview
             [sortOrder]="sortOrder()"
             [threshold]="threshold()"
-            [floor]="floor()"
+            [balance]="balance()"
             [selectedId]="selectedId()"
             [goodVotes]="goodVotes()"
             [badVotes]="badVotes()"

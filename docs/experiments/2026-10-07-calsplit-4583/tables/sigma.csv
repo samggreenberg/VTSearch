@@ -1,0 +1,67 @@
+beta,contrast,read,n,sd_paired
+0.25,split,"objective, votes 1-30",720,0.01408
+0.25,split,"objective, votes 31-100",720,0.03988
+0.25,split,"objective, votes 101-150",720,0.06044
+0.25,split,"objective, votes 1-150",720,0.03159
+0.25,split,"objective, vote 150",720,0.08858
+0.25,split,"objective, after the check",720,0.08008
+0.25,count,"objective, votes 1-30",720,0.01241
+0.25,count,"objective, votes 31-100",720,0.04308
+0.25,count,"objective, votes 101-150",720,0.05795
+0.25,count,"objective, votes 1-150",720,0.03263
+0.25,count,"objective, vote 150",720,0.09879
+0.25,count,"objective, after the check",720,0.08493
+0.25,both,"objective, votes 1-30",720,0.01455
+0.25,both,"objective, votes 31-100",720,0.0407
+0.25,both,"objective, votes 101-150",720,0.06451
+0.25,both,"objective, votes 1-150",720,0.03355
+0.25,both,"objective, vote 150",720,0.08981
+0.25,both,"objective, after the check",720,0.07691
+0.25,one fold,"objective, votes 1-30",720,0.01271
+0.25,one fold,"objective, votes 31-100",720,0.04575
+0.25,one fold,"objective, votes 101-150",720,0.06703
+0.25,one fold,"objective, votes 1-150",720,0.03538
+0.25,one fold,"objective, vote 150",720,0.09414
+0.25,one fold,"objective, after the check",720,0.08783
+1,split,"objective, votes 1-30",720,0.01096
+1,split,"objective, votes 31-100",720,0.03232
+1,split,"objective, votes 101-150",720,0.03584
+1,split,"objective, votes 1-150",720,0.02197
+1,split,"objective, vote 150",720,0.05136
+1,split,"objective, after the check",720,0.04475
+1,count,"objective, votes 1-30",720,0.009651
+1,count,"objective, votes 31-100",720,0.03054
+1,count,"objective, votes 101-150",720,0.03155
+1,count,"objective, votes 1-150",720,0.01996
+1,count,"objective, vote 150",720,0.04622
+1,count,"objective, after the check",720,0.04126
+1,both,"objective, votes 1-30",720,0.01158
+1,both,"objective, votes 31-100",720,0.0301
+1,both,"objective, votes 101-150",720,0.03606
+1,both,"objective, votes 1-150",720,0.02157
+1,both,"objective, vote 150",720,0.0498
+1,both,"objective, after the check",720,0.04501
+1,one fold,"objective, votes 1-30",720,0.01002
+1,one fold,"objective, votes 31-100",720,0.03321
+1,one fold,"objective, votes 101-150",720,0.03801
+1,one fold,"objective, votes 1-150",720,0.02302
+1,one fold,"objective, vote 150",720,0.05353
+1,one fold,"objective, after the check",720,0.0511
+4,split,"objective, votes 1-30",720,0.008364
+4,split,"objective, votes 31-100",720,0.03046
+4,split,"objective, votes 101-150",720,0.04483
+4,split,"objective, votes 1-150",720,0.02453
+4,split,"objective, vote 150",720,0.05733
+4,split,"objective, after the check",720,0.05582
+4,count,"objective, votes 1-30",720,0.006822
+4,count,"objective, votes 31-100",720,0.02739
+4,count,"objective, votes 101-150",720,0.03967
+4,count,"objective, votes 1-150",720,0.02134
+4,count,"objective, vote 150",720,0.05684
+4,count,"objective, after the check",720,0.05588
+4,both,"objective, votes 1-30",720,0.008087
+4,both,"objective, votes 31-100",720,0.02989
+4,both,"objective, votes 101-150",720,0.04404
+4,both,"objective, votes 1-150",720,0.02434
+4,both,"objective, vote 150",720,0.06033
+4,both,"objective, after the check",720,0.05165

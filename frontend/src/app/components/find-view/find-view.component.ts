@@ -1,4 +1,5 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -9,11 +10,15 @@ import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
-import { FindStatsModalComponent } from '../modals/find-stats-modal/find-stats-modal.component';
+import { LineTestPanelComponent } from './line-test-panel/line-test-panel.component';
+import { LineTestResultComponent } from './line-test-result/line-test-result.component';
+import { LineTestStageComponent } from './line-test-stage/line-test-stage.component';
 import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
+import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
+import { LineTestSessionService } from '../../services/line-test-session.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
@@ -43,7 +48,10 @@ import {
   progressBarState,
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
-import { lineFloorFrom } from '../../utils/line-floor';
+import { lineBalanceFrom } from '../../utils/line-balance';
+import { testLineState } from '../../utils/line-test';
+import { centroidNote } from '../../utils/label-quota';
+import type { LabelQuota } from '../../generated/api-client/models/label-quota';
 import {
   coerceFocusMode,
   coerceNonEmptyString,
@@ -52,13 +60,12 @@ import {
 } from '../../utils/settings-coerce';
 
 /**
- * How long the precision-floor picker has to settle before its
- * `POST /api/min-precision` goes out.  Short enough to feel immediate, long
- * enough that arrowing through the floors (a focused `<select>` emits a
- * `change` per key) coalesces into a single round trip instead of a burst of
- * racing ones.
+ * How long the balance picker has to settle before its `POST /api/balance`
+ * goes out.  Short enough to feel immediate, long enough that arrowing
+ * through the balances (a focused radio group emits a `change` per key)
+ * coalesces into a single round trip instead of a burst of racing ones.
  */
-const FLOOR_POST_DEBOUNCE_MS = 150;
+const BALANCE_POST_DEBOUNCE_MS = 150;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,16 +78,20 @@ const FLOOR_POST_DEBOUNCE_MS = 150;
     RightPanelComponent,
     ProgressBarComponent,
     ExportModalComponent,
-    FindStatsModalComponent,
+    LineTestPanelComponent,
+    LineTestStageComponent,
+    LineTestResultComponent,
   ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
-  providers: [PairScopeService],
+  providers: [PairScopeService, LineTestSessionService],
 })
-export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
+export class FindViewComponent implements OnInit, OnDestroy {
   private mediasApi = inject(MediasApiService);
   private detectorsFindApi = inject(DetectorsFindApiService);
   private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private router = inject(Router);
   private loadingTasksSvc = inject(DashboardLoadingTasksService);
   private toast = inject(ToastService);
   private dialog = inject(VtDialogService);
@@ -98,6 +109,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   browsePrep = inject(BrowseSubsetPrepService);
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
   readonly pairScope = inject(PairScopeService);
+  /**
+   * Component-provided: the Test autopilot's session (#4524), the test of the
+   * line over this pair's Find pass. The three panes read it; the view starts
+   * it once the pass lands and the Autopilot tab is up.
+   */
+  readonly lineTest = inject(LineTestSessionService);
   private readonly mediaPrefetch = inject(MediaPrefetchService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
@@ -187,8 +204,31 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Export modal visibility + the label filter it opens on. */
   showExport = false;
   exportFilter: LabelFilter = 'good';
-  /** Detector-evaluation Stats modal visibility. */
-  showStats = false;
+  /**
+   * The Find view's tab (#4524): **Autopilot**, the Test autopilot (the phase
+   * panel on the left, the current pick in the centre, the result on the
+   * right), or **Review**, today's Find in full (the ranked work queue, the
+   * boundary walk, the two piles). Train's Autopilot / Manual split applied to
+   * Test: the guided flow is the default, the open one a tab away.
+   */
+  readonly findTab = signal<'autopilot' | 'review'>('autopilot');
+  /**
+   * The balance control's state line (the owner's choice): this corpus's test
+   * result, or *untested*, never Train's check range. The kept count is the
+   * line's over the ranking on screen.
+   */
+  readonly balanceLineState = computed(() =>
+    testLineState(this.lineTest.response(), this.sortState.sortOrder ? this.sortState.aboveThreshold : null),
+  );
+  /**
+   * Which detector the last scoring pass was given (#4643): under the label
+   * quota the Goods' centroid, which the left panel says, with the labels it
+   * still owes. Null before a pass, or while one runs.
+   */
+  readonly labelQuota = signal<LabelQuota | null>(null);
+  readonly detectorNote = computed(() => centroidNote(this.labelQuota()));
+  /** Bumped when the session's checks changed under a finished test, so the result pane re-reads them. */
+  readonly resultRefresh = signal(0);
 
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
@@ -196,23 +236,23 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private readonly destroyRef = inject(DestroyRef);
   /**
-   * Precision floors awaiting their `POST /api/min-precision`, funnelled
+   * Balances (betas) awaiting their `POST /api/balance` (#4413), funnelled
    * through a single debounced `switchMap` pipeline (wired in the constructor).
    *
-   * The picker emits on every `change`, so a quick walk through the floors
+   * The picker emits on every `change`, so a quick walk through the balances
    * would put several POSTs in flight at once, each installing its own
-   * threshold on arrival: a slow response for a floor the user had already
+   * threshold on arrival: a slow response for a balance the user had already
    * moved past landed *last* and overwrote the newer threshold, snapping the
-   * green/red line (and the left/right vote split) back to a floor that was no
-   * longer selected — and leaving it there, since nothing re-reconciles until
-   * the next pick.  This is the same out-of-order hazard
+   * green/red line (and the left/right vote split) back to a balance that was
+   * no longer selected — and leaving it there, since nothing re-reconciles
+   * until the next pick.  This is the same out-of-order hazard
    * `VoteStateService.votesSeq` closes for `/api/votes`.  Debouncing means only
-   * the floor the user settled on is sent, and `switchMap` cancels any request
-   * they moved past, so the newest POST is both the last one the server sees
-   * (keeping the persisted per-detector floor in step with the picker) and the
-   * only response that can install a threshold.
+   * the balance the user settled on is sent, and `switchMap` cancels any
+   * request they moved past, so the newest POST is both the last one the
+   * server sees (keeping the persisted per-detector balance in step with the
+   * picker) and the only response that can install a threshold.
    */
-  private readonly minPrecisionRequests$ = new Subject<number>();
+  private readonly betaRequests$ = new Subject<number>();
   private dragging = false;
   private draggingRight = false;
   private boundMouseMove = this.onMouseMove.bind(this);
@@ -221,9 +261,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
   constructor() {
-    // The one place `POST /api/min-precision` is issued from — see
-    // {@link minPrecisionRequests$} for why the picker is funnelled through it.
-    this.minPrecisionRequests$
+    // The one place `POST /api/balance` is issued from — see
+    // {@link betaRequests$} for why the picker is funnelled through it.
+    this.betaRequests$
       .pipe(
         // `timer` + `switchMap` rather than `debounceTime`: it debounces the
         // same way (a newer value restarts the wait and cancels the request the
@@ -232,8 +272,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         // away by a dataset/detector switch cannot fire its POST into the new
         // pair's context.
         switchMap((value) =>
-          timer(FLOOR_POST_DEBOUNCE_MS).pipe(
-            switchMap(() => this.sortingApi.setMinPrecision(value)),
+          timer(BALANCE_POST_DEBOUNCE_MS).pipe(
+            switchMap(() => this.sortingApi.setBalance(value)),
             // Pair-scoped like every other threshold write: a response landing
             // after a switch must not install the old pair's cutoff into the
             // new context (see `PairScopeService`).
@@ -247,14 +287,16 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((resp) => {
-        // The response is the floor's verdict and the line it draws, in one:
-        // the line always keeps a set, checked or not (#4272).
+        // The response is the balance's state and the line it draws, in one:
+        // the line always keeps a set, checked or not (#4272, #4413).
         if (resp.threshold != null && this.sortState.sortOrder) {
-          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold, lineFloorFrom(resp));
+          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold, lineBalanceFrom(resp));
         }
         // The server re-thresholded the unverified items over the frozen
         // scores; pull the new good/bad split back for the left/right panes.
         this.voteState.loadVotes();
+        // A finished test measured the line as it was: the server now reports it moved.
+        if (this.lineTest.test()) this.lineTest.load();
       });
 
     // The icon size and the two focus modes are `computed`s now, so nothing has
@@ -267,6 +309,20 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const right = this.panelPxPref.right.value();
       if (left == null && right == null) return;
       this.applyPanelPx();
+    });
+
+    // The centre panel lives on the Review tab only (#4524), so every switch
+    // to Review makes a new one, and each needs its `init`: its settings, the
+    // shortcuts, its keyboard subscription. Only the one the view opened with
+    // used to get it, and Test opens on Autopilot, where there is none
+    // (#4555). A tick later, as the view-init call this replaces did, and only
+    // if a switch back has not torn it down by then.
+    effect(() => {
+      const panel = this.centerPanel();
+      if (!panel) return;
+      setTimeout(() => {
+        if (this.centerPanel() === panel) panel.init();
+      });
     });
 
     effect(() => {
@@ -283,7 +339,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // waiting on it.
     //
     // Tracks the ranking, the cutoff and the verified set as well as the
-    // selection, so a re-score, a floor change or a vote reconciling with
+    // selection, so a re-score, a balance change or a vote reconciling with
     // the same item on screen retargets the warm instead of leaving it on a
     // stale prediction. `nextFindSide` is a plain field; it only ever changes
     // in the same step that changes the selection, so reading it here is
@@ -328,6 +384,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const returningFromBrowse = this.browseSubset.consumeReturningToFind();
     if (!returningFromBrowse) {
       this.pairScope.clearPairState();
+      this.lineTest.clear();
+    } else {
+      // The test the server holds survives the trip to the Browser, as the
+      // ranking and the verifications do.
+      this.lineTest.load();
     }
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
@@ -345,14 +406,14 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Good/Bad), and the loadVotes() above refreshes them; re-running find here
     // would re-score with the unchanged model and could re-promote those items,
     // undoing the verification. Keep the verifications instead.
-    this.pairScope.seedMinPrecision();
+    this.pairScope.seedBeta();
 
     if (!returningFromBrowse) {
       this.runFindLabel();
     }
 
     // Reload + rescore when the active pair changes via the top-bar
-    // switcher or a route-param swap (`/find/:ds/:det` → `/find/:ds2/:det2`).
+    // switcher or a route-param swap (`/test/:ds/:det` → `/test/:ds2/:det2`).
     // Skip the first emission (ngOnInit already triggered the initial
     // loads + runFindLabel call above).
     let firstPair = true;
@@ -373,18 +434,15 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // scoring subscription carries a `finalize` that resets the busy flag and
     // the progress poll as part of the teardown above.
     this.pairScope.resetForNewPair();
+    this.lineTest.clear();
     this.voteState.loadVotes();
     this.runFindLabel();
-  }
-
-  ngAfterViewInit(): void {
-    setTimeout(() => this.centerPanel()?.init());
   }
 
   ngOnDestroy(): void {
     this.sortState.stopFindProgressTracking();
     // `pairScope` is component-provided, so Angular fires its scope on destroy.
-    this.minPrecisionRequests$.complete();
+    this.betaRequests$.complete();
     this.voteState.setFindMode(false);
     this.voteState.stopPolling();
     // Stop waiting on a map build if the user left Find some other way (the
@@ -432,6 +490,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Scoring with detector…');
     this.sortState.setSortProgress(0, 0);
+    this.labelQuota.set(null);
 
     // Start polling for progress concurrently
     this.sortState.startFindProgressTracking();
@@ -453,9 +512,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score, bestRegion: r.best_region }));
           const threshold = response.threshold;
           // Set sort results for stripe display. The threshold is the last item
-          // of the set the precision floor keeps, and the floor's state rides
-          // with it (#4272).
-          this.sortState.setSortResults(sorted, threshold, lineFloorFrom(response.floor));
+          // of the set the balance keeps, and the balance's state rides with
+          // it (#4272, #4413).
+          this.sortState.setSortResults(sorted, threshold, lineBalanceFrom(response.balance));
+          this.labelQuota.set(response.label_quota ?? null);
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);
@@ -467,6 +527,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.advanceToBoundary();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
+          // Score is done: the Test autopilot takes over on its tab. The pass
+          // is no longer busy, but `finalize` only says so after this handler
+          // returns, and the start refuses a busy pass, so say it here first
+          // (#4555).
+          this.sortState.setSortBusy(false);
+          this.startTestIfDue();
         },
         error: (err: any) => {
           // Extract the server error message so the user sees why scoring failed
@@ -602,22 +668,25 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Precision-floor change in Find: a pure cutoff move, **no retrain**. The
-   * model and every item's frozen score are floor-independent, so the floor
-   * only moves the green/red line over the cached scores. POST
-   * /api/min-precision moves the line to the set the new floor keeps and
+   * Balance change in Find (#4413): a pure cutoff move, **no retrain**. The
+   * model and every item's frozen score are balance-independent, so the
+   * balance only moves the green/red line over the cached scores. POST
+   * /api/balance moves the line to the set the new balance keeps and
    * re-splits the *unverified* items server-side (verified items hold). We
-   * reconcile the new line and its verdict, and the re-split votes, on the
+   * reconcile the new line and its state, and the re-split votes, on the
    * cheap response — there is no scoring spinner.
    *
    * The picker moves at once; the round trip is deferred to the debounced
-   * {@link minPrecisionRequests$} pipeline, which is what keeps a superseded
+   * {@link betaRequests$} pipeline, which is what keeps a superseded
    * response from installing a threshold the user has already moved past.
    */
-  onMinPrecisionChange(value: number): void {
+  onBetaChange(value: number): void {
     if (this.sortState.sortBusy) return;
-    this.sortState.setMinPrecision(value);
-    this.minPrecisionRequests$.next(value);
+    // Frozen within a test phase (#4524): moving the line would move the bands
+    // under the picks. Live between phases: before a test, and after Done.
+    if (this.lineTest.locked()) return;
+    this.sortState.setBeta(value);
+    this.betaRequests$.next(value);
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
@@ -684,7 +753,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.queueEmptyNotified = true;
       this.toast.success({
         message: 'All items reviewed',
-        detail: 'Every item on both sides of the cutoff has been verified. Check Stats or Export your results.',
+        detail: 'Every item on both sides of the cutoff has been verified. Read the test result on the Autopilot tab, or Export your results.',
         dedupKey: 'find-queue-empty',
       });
     }
@@ -739,17 +808,66 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return !order.some((item) => !verified.has(item.id));
   });
 
-  /** Open the detector-evaluation Stats modal. */
-  onStats(): void {
-    this.showStats = true;
+  // --- The Test autopilot (#4524) ---
+
+  /** The user picked a Find tab. Entering Autopilot with no test yet starts one, once the pass has landed. */
+  onFindTabChange(tab: 'autopilot' | 'review'): void {
+    this.findTab.set(tab);
+    this.startTestIfDue();
+  }
+
+  /** Start the test of the line when the Autopilot tab is up, the pass has landed, and no test exists. */
+  private startTestIfDue(): void {
+    if (this.findTab() !== 'autopilot' || this.sortState.sortBusy) return;
+    if (this.sortState.threshold == null || !this.sortState.sortOrder) return;
+    if (this.lineTest.test() || this.lineTest.busy()) return;
+    this.lineTest.start();
+  }
+
+  /** Test the line as it stands now: the balance moved it since the last test. */
+  onTestAgain(): void {
+    if (this.sortState.sortBusy) return;
+    this.lineTest.start();
+  }
+
+  /**
+   * The verdict's reason to exist: put the detector on the AutoFind list, so
+   * every dataset it runs over ships its matches unchecked at this balance,
+   * and head to the Dashboard, where the AutoFind tab reads the result.
+   */
+  onMoveToAutoFind(): void {
+    const modelId = this.activeContext.modelId;
+    if (!modelId) return;
+    const name = this.activeDetector.detectorName() || 'The detector';
+    this.detectorsRegistryApi
+      .setAutofind(modelId, true)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.toast.success({
+            message: `${name} is on AutoFind`,
+            detail: 'It runs over every dataset you import or run it on, and ships its matches at this balance.',
+            dedupKey: 'find-move-to-autofind',
+          });
+          void this.router.navigate(['/dashboard']);
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.toast.error({ message: err?.error?.message || 'Could not move the detector to AutoFind', dedupKey: 'find-move-to-autofind-error' });
+        },
+      });
+  }
+
+  /** Lean the Threshold to a preset the verdict priced: the same balance pick the control makes. */
+  onLean(beta: number): void {
+    this.onBetaChange(beta);
   }
 
   /**
    * Fold the corrections (items whose adopted label differs from the detector's
    * original call) into the active detector's labelset for future use. The
-   * current Find session stays frozen — its scores, queue, votes, and Stats keep
+   * current Find session stays frozen — its scores, queue, votes, and test result keep
    * showing the detector version that produced them — so the only visible effect
-   * is the Stats being flagged out of date. The retrained detector applies the
+   * is the test result being flagged out of date. The retrained detector applies the
    * next time the dataset is scored.
    */
   onAddCorrections(): void {
@@ -757,8 +875,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dialog
       .confirmDestructive(
         'Add your corrections to this detector?',
-        "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score. " +
-          'Your current results and evaluation stay as they are — the Stats will be marked out of date — and nothing is re-scored now.',
+        "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score.\n" +
+          'Your current results and the test result stay as they are — the result will be marked out of date — and nothing is re-scored now.',
         'Add Corrections',
       )
       .then((ok) => {
@@ -778,9 +896,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
               }
               this.toast.success({
                 message: `Added ${resp.corrections_added} correction${resp.corrections_added === 1 ? '' : 's'} to the detector`,
-                detail: `The detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'} and will use them next time you score. Your current results stay put; Stats are now marked out of date.`,
+                detail: `The detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'} and will use them next time you score. Your current results stay put; the test result is now marked out of date.`,
                 dedupKey: 'find-corrections-added',
               });
+              // The detector has now seen the test set: the result reads stale.
+              this.resultRefresh.update((n) => n + 1);
+              if (this.lineTest.test()) this.lineTest.load();
             },
             error: (err: { error?: { message?: string; error?: string } }) => {
               const body = err?.error;
@@ -805,10 +926,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *
    * Derived from the *frozen scores + current cutoff* (`sortOrder` + `threshold`)
    * rather than the `goodVotes` signal, because those two move **synchronously**
-   * when the precision floor does ({@link minPrecisionRequests$} sets them on the
+   * when the balance does ({@link betaRequests$} sets them on the
    * POST response), whereas `goodVotes` only catches up on the follow-up
    * `loadVotes()` GET. Reading `goodVotes` here let a Browse fired right after a
-   * floor change pick up the *previous* cutoff's positives (the stale-superset bug);
+   * balance change pick up the *previous* cutoff's positives (the stale-superset bug);
    * scoring against the live cutoff keeps Browse in lock-step with the green
    * line the user sees. Falls back to `goodVotes` only when scores are absent
    * (no scoring pass yet).
@@ -829,7 +950,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * The full positive set of this Find run: every verified-good item (pinned by
    * the human, wherever its score lands) plus the unverified positives (above
    * the live cutoff). The unverified half rides {@link unverifiedGoodIds}, so it
-   * tracks the cutoff synchronously and never lags a floor change; the verified half is
+   * tracks the cutoff synchronously and never lags a balance change; the verified half is
    * cutoff-independent and read straight off the votes.
    */
   private goodIds(): number[] {

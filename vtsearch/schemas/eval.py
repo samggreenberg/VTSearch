@@ -158,6 +158,12 @@ class LabelingStatusResponseSchema(Schema):
     # on the first poll after the refresh lands. Optional so existing clients /
     # mocks that omit it stay valid. See issue #2397.
     stale = fields.Boolean()
+    # What ends labeling (#4488): ``lights`` (Smart, Stable and Span) or, on a
+    # document (tiled structural) dataset, ``dry_run``, where ``dry_run`` carries
+    # the readout (``run`` votes in a row without a Good, green at ``target``)
+    # and the three lights are ``off``. Optional for the same reason as ``stale``.
+    stop_rule = fields.String(validate=validate.OneOf(["lights", "dry_run"]))
+    dry_run = fields.Nested(StatusIndicatorSchema)
 
 
 # ---------------------------------------------------------------------------

@@ -3,9 +3,12 @@
 This is the procedure the **Dev2Main** Routine follows to promote `dev` to `main`. It lives in the repo (not in Claude settings) so it's versioned, PR-reviewable, and run by reference: the Routine prompt is a thin pointer at this file.
 
 > **Override for this procedure only:** the final release PR's `base` is
-> **`main`**, not `dev`. This is the one sanctioned exception to CLAUDE.md's
-> "never open a PR to `main`" rule — it applies solely to the release PR
-> opened in step 5, and only when running this runbook.
+> **`main`**, not `dev`, and this runbook merges it. This is the one sanctioned
+> exception to CLAUDE.md's "never open or merge a PR into `main`" rule — it
+> applies solely to the release PR opened in step 5 and merged in step 8, and
+> only when running this runbook. The Dev2Main Routine's prompt predates step 8
+> and names only the opening. That prompt says to follow this runbook, and
+> this runbook sanctions the merge too (owner, 2026-10-06).
 
 Work through the steps in order.
 
@@ -73,6 +76,11 @@ A harness that won't run at all doesn't block the release: stale screenshots are
 - **Title:** `Release: dev → main (YYYY-MM-DD)` using today's date.
 - **Base:** `main`. **Head:** `dev`.
 - **Body:** the step-3 summary, verbatim.
+
+If a `dev` → `main` PR is already open, a previous run's that never merged,
+update its title and body to this run's instead of opening another. GitHub
+allows one open PR per head and base, and its head is `dev`, so it already
+carries everything this run covers.
 
 ## 6. Close the issues shipped in this release
 
@@ -161,11 +169,24 @@ If the run ends with a `note:` line saying no issue carried a `body`, the `exper
 
 Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output (whose `notes` key carries that same warning). The `note:` line deliberately does **not** trip `--check`: it reports that a check could not run, not that an issue needs changing.
 
+## 6c. Sweep the experiment queue for questions answered sideways
+
+Step 6 closes what a PR names. An `experiment` issue is often answered by something that never names it: a sibling study, an owner ruling, or a shipped change that removes the thing it was tuning. Such issues fall through all three of step 6's buckets and stay in `label:experiment` indefinitely. On 2026-09-30, 10 of 41 open experiment issues were already answered or moot; the #4267 ruling alone had mooted five. The `grid-experiments` skill asks each study to close the siblings its result settles ("Close what the study answered"); this step catches what that missed.
+
+1. List the open issues labelled `experiment`, and keep the ones with **no activity in the last 14 days**. A fresh issue is being worked on; answers go unnoticed in the stale ones.
+2. For each one, read its body and comments, then look at what has landed since its last update that bears on it: newer directories in `docs/experiments/` on the same knob or study, `git log origin/main..origin/dev --grep '#<n>'` and the same for the numbers its body names, and the plan file that points at it.
+3. Act only on an answer you can name:
+   - **Answered** by a report, PR or shipped change: comment naming it, then close `completed`, passing `labels` (every label it keeps, minus `solved`) and `assignees: []` as in step 6.
+   - **Moot**, because a ruling or shipped change removed what it was tuning, or a result contradicted its premise: comment naming what mooted it, and close `not_planned`.
+   - **Anything short of that stays open.** Add it to a section of the release PR body headed `Experiment issues that may be stale`, one line each saying what you suspect, so the owner can decide in one read.
+4. List in that same section every open experiment issue whose newest comment asks the owner to decide ("whether it still earns GRID time is the owner's call"). Those issues are waiting on a person, and an issue comment is not where the owner looks for decisions.
+5. Carry every issue this step closes into step 7's plan-pointer prune.
+
 ## 7. Prune plan pointers for the closed issues
 
 Per CLAUDE.md's "Issues vs `docs/plans/`: one item, one home" invariant, plan files reference shipped issues by a one-line checkbox pointer (`- [ ] #N — title`) rather than duplicating their bodies. When an issue closes, its pointer is stale and should go.
 
-For **every** issue closed in step 6, grep `docs/plans/` for its number:
+For **every** issue closed in step 6 or 6c, grep `docs/plans/` for its number:
 
 ```
 grep -rn '#<number>' docs/plans/
@@ -182,3 +203,36 @@ grep -rl 'docs/plans/<deleted-name>\.md' --include="*.py" --include="*.ts" --inc
 ```
 
 Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule; issue #2982 is the incident that motivated it — 94 source files had gone dangling this way across 13 deleted plans before anyone grepped for them.
+
+## 8. Merge the release PR
+
+The release merges itself (owner, 2026-10-06). It used to wait for a human, and
+the wait was easy to forget: the 2026-10-05 release PR (#4501) was still open a
+day later, so nothing in it had reached `main` while step 6 had already closed
+its issues as shipped. Merging here makes "closed" mean "on `main`".
+
+1. **Land everything first.** This step comes last so that every commit this run
+   made reaches `dev` before the merge: step 2's triage, step 4's punch card,
+   step 4b's screenshots and step 7's prunes, each through a PR into `dev`. A
+   commit left on a branch misses this release.
+2. **Gate the tip.** `git fetch origin --prune`, check out `origin/dev`'s tip and run a
+   full `./run-tests.sh` on it, unless this run already ran one on exactly that
+   SHA. A red run does not merge. Fix it on `dev` (a PR, per CLAUDE.md's "Fix
+   All Errors") and gate again. If it cannot be fixed in this run, leave the
+   release PR open, comment on it naming the failing gates, and file an issue.
+3. **Check the window did not move.** Re-run `python scripts/release-prs.py`. A
+   PR it lists that step 6 never saw landed on `dev` during this run, and this
+   merge would ship it with its issue still open, after which no release window
+   would ever contain it again. Take any such PR through steps 4, 6 and 7, then
+   repeat this step.
+4. **Merge it** with `merge_pull_request`, `merge_method: "merge"`, and
+   `expectedHeadSha` set to the SHA you gated. **Never squash or rebase.** `dev`'s commits
+   must stay ancestors of `main`, or the next release's `origin/main..origin/dev`
+   window would show everything again. If the merge is refused because `dev`
+   moved, go back to substep 2.
+5. **If it is refused for any other reason** (a review the owner's account
+   cannot supply, a conflict), do not work around it: no admin bypass, no other
+   merge method. Leave the PR open, comment on it with the refusal verbatim, and
+   lead the run's final message with it, since the release has not shipped.
+
+End the run by naming the merge commit on `main`.

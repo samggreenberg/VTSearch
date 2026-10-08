@@ -1,0 +1,1415 @@
+study,arm,vs,stratum,window,metric,n,delta,se,resolved,cost_winner
+3287,0.30,0.50,all,early 1-25,cost,288,-0.014393,0.002839,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,early 1-25,cost,48,-0.011466,0.0050782,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,early 1-25,cost,48,-0.021123,0.0055455,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,early 1-25,cost,48,-0.011904,0.006969,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,early 1-25,cost,48,-0.0062304,0.0087379,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,early 1-25,cost,48,-0.017861,0.0072282,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,early 1-25,cost,48,-0.017772,0.0069516,True,0.30
+3287,0.30,0.50,all,mid 26-60,cost,288,-0.00669,0.0033187,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,mid 26-60,cost,48,-0.013705,0.0072975,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,mid 26-60,cost,48,-0.014851,0.0065735,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,-0.0051494,0.0056687,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,0.018767,0.011387,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,mid 26-60,cost,48,-0.0071833,0.0066526,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,mid 26-60,cost,48,-0.018018,0.0093501,False,0.30
+3287,0.30,0.50,all,late 61-100,cost,288,-0.0049838,0.002891,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,late 61-100,cost,48,-0.013008,0.0081912,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,late 61-100,cost,48,-0.013095,0.0065519,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,late 61-100,cost,48,-0.0031781,0.0040155,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,late 61-100,cost,48,0.019136,0.0086945,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,late 61-100,cost,48,-0.0091458,0.0064742,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,late 61-100,cost,48,-0.010611,0.0068719,False,0.30
+3287,0.30,0.50,all,deep 101-150,cost,288,-0.0023301,0.0026586,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,deep 101-150,cost,48,-0.0082842,0.0062716,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,deep 101-150,cost,48,-0.014371,0.0061691,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,0.0034554,0.0040014,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,0.02766,0.0084288,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,deep 101-150,cost,48,-0.013453,0.0060535,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,deep 101-150,cost,48,-0.0089871,0.0050329,False,0.30
+3287,0.40,0.50,all,early 1-25,cost,288,-0.011977,0.0024322,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,early 1-25,cost,48,-0.010089,0.0044942,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,early 1-25,cost,48,-0.014282,0.0048674,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,early 1-25,cost,48,-0.0094007,0.0079757,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,early 1-25,cost,48,-0.01036,0.0067228,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,early 1-25,cost,48,-0.018124,0.0056443,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,early 1-25,cost,48,-0.0096069,0.0047373,True,0.30
+3287,0.40,0.50,all,mid 26-60,cost,288,-0.0076679,0.0031312,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,mid 26-60,cost,48,-0.0041827,0.0072969,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,mid 26-60,cost,48,-0.0093488,0.0089466,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,-0.0041327,0.0053104,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,-0.0022601,0.0098932,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,mid 26-60,cost,48,-0.012911,0.0071092,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,mid 26-60,cost,48,-0.013171,0.0084563,False,0.30
+3287,0.40,0.50,all,late 61-100,cost,288,-0.0066484,0.00293,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,late 61-100,cost,48,-0.010858,0.0082938,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,late 61-100,cost,48,-0.011633,0.0070123,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,late 61-100,cost,48,-0.001562,0.0038093,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,late 61-100,cost,48,-0.0034786,0.0091387,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,late 61-100,cost,48,-0.010968,0.0057902,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,late 61-100,cost,48,-0.0013911,0.0063582,False,0.30
+3287,0.40,0.50,all,deep 101-150,cost,288,-0.0036488,0.0023771,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,deep 101-150,cost,48,-0.0081638,0.0065615,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,deep 101-150,cost,48,-0.016687,0.0060139,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,0.0023696,0.0030455,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,0.0099775,0.0070065,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,deep 101-150,cost,48,-0.0088662,0.0062385,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,deep 101-150,cost,48,-0.00052333,0.004423,False,0.30
+3287,0.60,0.50,all,early 1-25,cost,288,0.004946,0.0027073,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,early 1-25,cost,48,0.011274,0.0056571,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,early 1-25,cost,48,0.010267,0.0052054,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,early 1-25,cost,48,-0.0070886,0.0070163,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,early 1-25,cost,48,0.0042631,0.008312,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,early 1-25,cost,48,0.0061702,0.0051601,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,early 1-25,cost,48,0.0047907,0.0062985,False,0.30
+3287,0.60,0.50,all,mid 26-60,cost,288,0.0042907,0.0034813,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,mid 26-60,cost,48,0.0036018,0.0085837,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,mid 26-60,cost,48,0.00095179,0.0087429,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,0.0062173,0.0062478,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,0.010407,0.012106,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,mid 26-60,cost,48,0.010514,0.0074562,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,mid 26-60,cost,48,-0.0059476,0.0060208,False,0.30
+3287,0.60,0.50,all,late 61-100,cost,288,0.0020067,0.0029262,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,late 61-100,cost,48,0.0034312,0.0086364,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,late 61-100,cost,48,0.0027208,0.0081501,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,late 61-100,cost,48,-0.002974,0.0046084,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,late 61-100,cost,48,0.0016214,0.0099206,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,late 61-100,cost,48,0.00062969,0.0052983,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,late 61-100,cost,48,0.0066109,0.0045334,False,0.30
+3287,0.60,0.50,all,deep 101-150,cost,288,0.0034987,0.0025717,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,deep 101-150,cost,48,0.0033654,0.0066191,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,deep 101-150,cost,48,0.0028871,0.0069981,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,0.00058917,0.0048467,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,0.0038271,0.0085995,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,deep 101-150,cost,48,-0.002885,0.0052904,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,deep 101-150,cost,48,0.013209,0.004524,True,0.30
+3287,0.70,0.50,all,early 1-25,cost,288,0.019494,0.0027537,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,early 1-25,cost,48,0.013888,0.0045028,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,early 1-25,cost,48,0.032655,0.0070518,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,early 1-25,cost,48,0.00036771,0.0071823,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,early 1-25,cost,48,0.030939,0.0083468,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,early 1-25,cost,48,0.020196,0.0055911,True,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,early 1-25,cost,48,0.018916,0.0057858,True,0.30
+3287,0.70,0.50,all,mid 26-60,cost,288,0.009552,0.0038869,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,mid 26-60,cost,48,0.00063333,0.0080459,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,mid 26-60,cost,48,0.021974,0.010609,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,0.008006,0.0058014,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,0.025926,0.012224,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,mid 26-60,cost,48,0.011368,0.0087563,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,mid 26-60,cost,48,-0.010596,0.0077572,False,0.30
+3287,0.70,0.50,all,late 61-100,cost,288,0.0077619,0.0032133,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,late 61-100,cost,48,0.005349,0.0094208,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,late 61-100,cost,48,0.012286,0.0096381,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,late 61-100,cost,48,0.010181,0.0048723,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,late 61-100,cost,48,0.018666,0.0097063,False,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,late 61-100,cost,48,0.0010906,0.0060699,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,late 61-100,cost,48,-0.0010016,0.0062012,False,0.30
+3287,0.70,0.50,all,deep 101-150,cost,288,0.0078601,0.0026439,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,deep 101-150,cost,48,0.0096417,0.0071654,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,deep 101-150,cost,48,0.01075,0.0074549,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,0.010154,0.00437,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,0.011201,0.0074945,False,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,deep 101-150,cost,48,-0.0022508,0.0065109,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,deep 101-150,cost,48,0.007665,0.0050175,False,0.30
+3287,0.30,0.50,all,early 1-25,f025,288,0.036564,0.0043237,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,early 1-25,f025,48,0.019923,0.0058494,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,early 1-25,f025,48,0.029695,0.0079877,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,early 1-25,f025,48,0.041829,0.016139,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,early 1-25,f025,48,0.073307,0.013286,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,early 1-25,f025,48,0.02442,0.0064664,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,early 1-25,f025,48,0.030213,0.0089869,True,0.30
+3287,0.30,0.50,all,mid 26-60,f025,288,0.029439,0.0048295,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,mid 26-60,f025,48,0.023483,0.0080517,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,mid 26-60,f025,48,0.038089,0.013517,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,0.023382,0.014054,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,0.025494,0.013985,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,mid 26-60,f025,48,0.02655,0.01031,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,mid 26-60,f025,48,0.039636,0.010993,True,0.30
+3287,0.30,0.50,all,late 61-100,f025,288,0.026739,0.0053452,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,late 61-100,f025,48,0.025935,0.011545,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,late 61-100,f025,48,0.027659,0.014598,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,late 61-100,f025,48,0.0043581,0.012672,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,late 61-100,f025,48,0.033739,0.012848,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,late 61-100,f025,48,0.030936,0.0098397,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,late 61-100,f025,48,0.037804,0.015024,True,0.30
+3287,0.30,0.50,all,deep 101-150,f025,288,0.038566,0.0061576,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,deep 101-150,f025,48,0.032107,0.012523,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,deep 101-150,f025,48,0.041129,0.017026,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,0.0044729,0.011239,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,0.052748,0.013113,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,deep 101-150,f025,48,0.050058,0.012568,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,deep 101-150,f025,48,0.050883,0.019388,True,0.30
+3287,0.40,0.50,all,early 1-25,f025,288,0.021869,0.0029191,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,early 1-25,f025,48,0.0092576,0.0038199,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,early 1-25,f025,48,0.018914,0.0067252,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,early 1-25,f025,48,0.016748,0.0096183,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,early 1-25,f025,48,0.042256,0.0095544,True,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,early 1-25,f025,48,0.017533,0.0042261,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,early 1-25,f025,48,0.026506,0.0067259,True,0.30
+3287,0.40,0.50,all,mid 26-60,f025,288,0.019931,0.0042907,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,mid 26-60,f025,48,0.015253,0.0071209,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,mid 26-60,f025,48,0.02753,0.0086062,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,0.006518,0.016102,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,0.010662,0.0097981,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,mid 26-60,f025,48,0.033472,0.008672,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,mid 26-60,f025,48,0.026151,0.0092556,True,0.30
+3287,0.40,0.50,all,late 61-100,f025,288,0.020072,0.0042021,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,late 61-100,f025,48,0.012687,0.0065308,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,late 61-100,f025,48,0.020391,0.0080042,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,late 61-100,f025,48,0.0090682,0.014378,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,late 61-100,f025,48,0.018057,0.010233,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,late 61-100,f025,48,0.043196,0.010468,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,late 61-100,f025,48,0.017035,0.0084599,True,0.30
+3287,0.40,0.50,all,deep 101-150,f025,288,0.026636,0.004726,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,deep 101-150,f025,48,0.018686,0.0083678,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,deep 101-150,f025,48,0.03067,0.010897,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,0.01324,0.013574,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,0.031757,0.010247,True,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,deep 101-150,f025,48,0.049841,0.013371,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,deep 101-150,f025,48,0.01562,0.011121,False,0.30
+3287,0.60,0.50,all,early 1-25,f025,288,-0.010484,0.0029475,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,early 1-25,f025,48,-0.0093723,0.0037562,True,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,early 1-25,f025,48,-0.0097738,0.0036119,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,early 1-25,f025,48,0.0088598,0.013269,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,early 1-25,f025,48,-0.023659,0.00821,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,early 1-25,f025,48,-0.012976,0.0038095,True,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,early 1-25,f025,48,-0.015982,0.0056423,True,0.30
+3287,0.60,0.50,all,mid 26-60,f025,288,-0.011555,0.0043197,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,mid 26-60,f025,48,-0.0083132,0.0055119,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,mid 26-60,f025,48,-0.00080796,0.0055974,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,-0.008551,0.017375,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,-0.033296,0.011839,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,mid 26-60,f025,48,-0.0075705,0.0071373,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,mid 26-60,f025,48,-0.01079,0.0094846,False,0.30
+3287,0.60,0.50,all,late 61-100,f025,288,-0.014368,0.0038416,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,late 61-100,f025,48,-0.011895,0.004998,True,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,late 61-100,f025,48,-0.02139,0.0068087,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,late 61-100,f025,48,-0.0044187,0.015532,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,late 61-100,f025,48,-0.025353,0.010491,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,late 61-100,f025,48,-0.002087,0.0051288,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,late 61-100,f025,48,-0.021066,0.0076947,True,0.30
+3287,0.60,0.50,all,deep 101-150,f025,288,-0.014367,0.0035338,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,deep 101-150,f025,48,-0.0069014,0.0045406,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,deep 101-150,f025,48,-0.02565,0.007249,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,-0.0012262,0.013768,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,-0.026293,0.0093086,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,deep 101-150,f025,48,-0.0029919,0.0061691,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,deep 101-150,f025,48,-0.023142,0.0068812,True,0.30
+3287,0.70,0.50,all,early 1-25,f025,288,-0.025122,0.0032016,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,early 1-25,f025,48,-0.014377,0.0035921,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,early 1-25,f025,48,-0.027031,0.0048358,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,early 1-25,f025,48,0.0059952,0.012926,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,early 1-25,f025,48,-0.065844,0.0085361,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,early 1-25,f025,48,-0.020848,0.0031557,True,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,early 1-25,f025,48,-0.028629,0.0060536,True,0.30
+3287,0.70,0.50,all,mid 26-60,f025,288,-0.017226,0.0042308,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,mid 26-60,f025,48,-0.0035702,0.0052252,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,mid 26-60,f025,48,-0.0072781,0.005213,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,-0.0095668,0.016667,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,-0.062489,0.012414,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,mid 26-60,f025,48,-0.0041159,0.0049273,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,mid 26-60,f025,48,-0.016335,0.0097433,False,0.30
+3287,0.70,0.50,all,late 61-100,f025,288,-0.02334,0.0049682,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,late 61-100,f025,48,-0.014863,0.0059947,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,late 61-100,f025,48,-0.019156,0.0065435,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,late 61-100,f025,48,-0.022581,0.020516,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,late 61-100,f025,48,-0.049037,0.014017,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,late 61-100,f025,48,-0.0026224,0.0058594,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,late 61-100,f025,48,-0.031782,0.0087094,True,0.30
+3287,0.70,0.50,all,deep 101-150,f025,288,-0.024608,0.0049027,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,deep 101-150,f025,48,-0.012612,0.004672,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,deep 101-150,f025,48,-0.022314,0.0087514,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,-0.027375,0.019171,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,-0.04478,0.015224,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,deep 101-150,f025,48,-0.010503,0.0077634,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,deep 101-150,f025,48,-0.030065,0.0079498,True,0.30
+3287,0.30,0.50,all,early 1-25,f1,288,0.030706,0.0032861,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,early 1-25,f1,48,0.02084,0.0056605,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,early 1-25,f1,48,0.029674,0.0071963,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.032028,0.0096994,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,early 1-25,f1,48,0.049161,0.010099,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,early 1-25,f1,48,0.025077,0.0057632,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,early 1-25,f1,48,0.027452,0.0069886,True,0.30
+3287,0.30,0.50,all,mid 26-60,f1,288,0.02303,0.0038536,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,mid 26-60,f1,48,0.021836,0.0076507,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,mid 26-60,f1,48,0.032529,0.011377,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,0.019089,0.010651,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,0.0067738,0.009406,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,mid 26-60,f1,48,0.022348,0.0083962,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,mid 26-60,f1,48,0.035604,0.0092755,True,0.30
+3287,0.30,0.50,all,late 61-100,f1,288,0.018734,0.0039348,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,late 61-100,f1,48,0.021797,0.0092891,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,late 61-100,f1,48,0.020057,0.01085,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,late 61-100,f1,48,0.0032485,0.0085048,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,late 61-100,f1,48,0.012159,0.0083547,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,late 61-100,f1,48,0.025655,0.0079114,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,late 61-100,f1,48,0.02949,0.011012,True,0.30
+3287,0.30,0.50,all,deep 101-150,f1,288,0.025912,0.004345,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,deep 101-150,f1,48,0.026249,0.0095571,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,deep 101-150,f1,48,0.030997,0.012632,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,0.0010214,0.0082132,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,0.01833,0.0080537,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,deep 101-150,f1,48,0.042098,0.0099879,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,deep 101-150,f1,48,0.036773,0.013526,True,0.30
+3287,0.40,0.50,all,early 1-25,f1,288,0.01982,0.0023166,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,early 1-25,f1,48,0.010306,0.0037584,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,early 1-25,f1,48,0.018699,0.0057012,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.016848,0.0068091,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,early 1-25,f1,48,0.031782,0.0073144,True,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,early 1-25,f1,48,0.018571,0.0040228,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,early 1-25,f1,48,0.022712,0.0052512,True,0.30
+3287,0.40,0.50,all,mid 26-60,f1,288,0.018552,0.0034891,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,mid 26-60,f1,48,0.01292,0.0071214,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,mid 26-60,f1,48,0.025572,0.0086222,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,0.010081,0.01072,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,0.008705,0.0067071,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,mid 26-60,f1,48,0.031161,0.007847,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,mid 26-60,f1,48,0.022871,0.0080841,True,0.30
+3287,0.40,0.50,all,late 61-100,f1,288,0.016255,0.0032168,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,late 61-100,f1,48,0.011878,0.0061827,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,late 61-100,f1,48,0.017751,0.0071217,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,late 61-100,f1,48,0.0064106,0.0096641,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,late 61-100,f1,48,0.011514,0.0071599,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,late 61-100,f1,48,0.036745,0.0085022,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,late 61-100,f1,48,0.013234,0.0075919,False,0.30
+3287,0.40,0.50,all,deep 101-150,f1,288,0.019209,0.0036304,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,deep 101-150,f1,48,0.015658,0.006413,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,deep 101-150,f1,48,0.027477,0.0093587,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,0.0077719,0.0095762,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,0.012606,0.0064365,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,deep 101-150,f1,48,0.040475,0.010279,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,deep 101-150,f1,48,0.011264,0.0085747,False,0.30
+3287,0.60,0.50,all,early 1-25,f1,288,-0.010131,0.0023819,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,early 1-25,f1,48,-0.010584,0.004118,True,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,early 1-25,f1,48,-0.01119,0.0033038,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.0081693,0.0087733,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,early 1-25,f1,48,-0.019886,0.0067892,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,early 1-25,f1,48,-0.012709,0.0040718,True,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,early 1-25,f1,48,-0.01459,0.005034,True,0.30
+3287,0.60,0.50,all,mid 26-60,f1,288,-0.0094128,0.0033967,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,mid 26-60,f1,48,-0.0090222,0.0060409,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,mid 26-60,f1,48,-0.0013107,0.0060882,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,-0.0084018,0.012325,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,-0.023483,0.0075009,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,mid 26-60,f1,48,-0.0080314,0.0074194,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,mid 26-60,f1,48,-0.0062285,0.0077593,False,0.30
+3287,0.60,0.50,all,late 61-100,f1,288,-0.011702,0.0029343,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,late 61-100,f1,48,-0.01207,0.0053774,True,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,late 61-100,f1,48,-0.020712,0.00662,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,late 61-100,f1,48,-0.00089283,0.010815,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,late 61-100,f1,48,-0.015864,0.0070982,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,late 61-100,f1,48,-0.0019142,0.0053487,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,late 61-100,f1,48,-0.01876,0.0062309,True,0.30
+3287,0.60,0.50,all,deep 101-150,f1,288,-0.012169,0.0030152,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,deep 101-150,f1,48,-0.0075431,0.0050344,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,deep 101-150,f1,48,-0.023217,0.0063275,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,0.00080439,0.010707,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,-0.018799,0.0068631,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,deep 101-150,f1,48,-0.0013988,0.0059186,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,deep 101-150,f1,48,-0.022859,0.0060172,True,0.30
+3287,0.70,0.50,all,early 1-25,f1,288,-0.025053,0.0026206,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,early 1-25,f1,48,-0.01645,0.0037575,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,early 1-25,f1,48,-0.030666,0.0049267,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.0064571,0.0084315,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,early 1-25,f1,48,-0.056977,0.0073152,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,early 1-25,f1,48,-0.022965,0.0034874,True,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,early 1-25,f1,48,-0.02972,0.0054473,True,0.30
+3287,0.70,0.50,all,mid 26-60,f1,288,-0.013939,0.0032756,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,mid 26-60,f1,48,-0.0043587,0.0056426,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,mid 26-60,f1,48,-0.010335,0.0055958,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,-0.0054389,0.010682,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,-0.048643,0.0080379,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,mid 26-60,f1,48,-0.0051583,0.0051622,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,mid 26-60,f1,48,-0.0097029,0.0085531,False,0.30
+3287,0.70,0.50,all,late 61-100,f1,288,-0.019624,0.0035892,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,late 61-100,f1,48,-0.015338,0.0064546,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,late 61-100,f1,48,-0.019332,0.0063705,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,late 61-100,f1,48,-0.01953,0.01459,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,late 61-100,f1,48,-0.03562,0.0095548,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,late 61-100,f1,48,-0.0022346,0.0057924,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,late 61-100,f1,48,-0.025691,0.0074618,True,0.30
+3287,0.70,0.50,all,deep 101-150,f1,288,-0.020139,0.0037006,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,deep 101-150,f1,48,-0.013718,0.0052982,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,deep 101-150,f1,48,-0.020617,0.0082805,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,-0.021777,0.014375,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,-0.030911,0.0094899,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,deep 101-150,f1,48,-0.0076186,0.0070951,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,deep 101-150,f1,48,-0.026194,0.007141,True,0.30
+3287,0.30,0.50,all,early 1-25,f4,288,-0.0018346,0.0028105,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,early 1-25,f4,48,-0.0028227,0.0047778,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,early 1-25,f4,48,0.00682,0.0052154,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,early 1-25,f4,48,0.0032489,0.007367,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,early 1-25,f4,48,-0.027648,0.0079011,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,early 1-25,f4,48,0.0036206,0.006355,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,early 1-25,f4,48,0.0057735,0.0065836,False,0.30
+3287,0.30,0.50,all,mid 26-60,f4,288,0.0014033,0.0030323,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,mid 26-60,f4,48,0.0080051,0.0063313,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,mid 26-60,f4,48,0.0088977,0.0057934,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,0.0013141,0.0052834,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,-0.020168,0.011798,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,mid 26-60,f4,48,0.0027961,0.0052596,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,mid 26-60,f4,48,0.0075748,0.0079578,False,0.30
+3287,0.30,0.50,all,late 61-100,f4,288,0.0017595,0.0025303,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,late 61-100,f4,48,0.0095806,0.0069994,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,late 61-100,f4,48,0.013254,0.0064652,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,late 61-100,f4,48,0.0036901,0.0037157,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,late 61-100,f4,48,-0.022,0.0080362,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,late 61-100,f4,48,0.0018376,0.0048498,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,late 61-100,f4,48,0.0041946,0.0061341,False,0.30
+3287,0.30,0.50,all,deep 101-150,f4,288,-0.0023742,0.0022552,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,deep 101-150,f4,48,0.0045567,0.0049649,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,deep 101-150,f4,48,0.010947,0.0051146,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,-0.0012585,0.0032172,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,-0.032646,0.007844,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,deep 101-150,f4,48,0.0029056,0.0046298,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,deep 101-150,f4,48,0.0012505,0.0042212,False,0.30
+3287,0.40,0.50,all,early 1-25,f4,288,0.0026488,0.0022717,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,early 1-25,f4,48,0.0024979,0.004624,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,early 1-25,f4,48,0.0097898,0.0040778,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,early 1-25,f4,48,0.0032896,0.0080772,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,early 1-25,f4,48,-0.010312,0.006377,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,early 1-25,f4,48,0.0093555,0.005364,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,early 1-25,f4,48,0.0012721,0.004184,False,0.30
+3287,0.40,0.50,all,mid 26-60,f4,288,0.0029792,0.0029904,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,mid 26-60,f4,48,0.00155,0.0068689,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,mid 26-60,f4,48,0.0039833,0.007597,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,0.0011178,0.0054041,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,0.0015748,0.0099836,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,mid 26-60,f4,48,0.0024171,0.0066068,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,mid 26-60,f4,48,0.0072321,0.0069777,False,0.30
+3287,0.40,0.50,all,late 61-100,f4,288,0.0037167,0.0027908,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,late 61-100,f4,48,0.0084354,0.0076765,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,late 61-100,f4,48,0.010324,0.0071253,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,late 61-100,f4,48,0.0014956,0.0033551,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,late 61-100,f4,48,0.0026233,0.0092236,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,late 61-100,f4,48,0.00035442,0.005137,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,late 61-100,f4,48,-0.00093258,0.0060644,False,0.30
+3287,0.40,0.50,all,deep 101-150,f4,288,0.00056874,0.0022173,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,deep 101-150,f4,48,0.0058687,0.0058631,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,deep 101-150,f4,48,0.012667,0.0054951,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,-0.0010753,0.0028738,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,-0.012116,0.0067582,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,deep 101-150,f4,48,-0.00065264,0.0049026,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,deep 101-150,f4,48,-0.0012794,0.0041673,False,0.30
+3287,0.60,0.50,all,early 1-25,f4,288,0.0048547,0.0022782,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,early 1-25,f4,48,0.00087109,0.0037447,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,early 1-25,f4,48,0.00084041,0.0053532,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,early 1-25,f4,48,0.005617,0.0068335,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,early 1-25,f4,48,0.014839,0.0070762,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,early 1-25,f4,48,0.0021187,0.0034472,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,early 1-25,f4,48,0.0048425,0.0055398,False,0.30
+3287,0.60,0.50,all,mid 26-60,f4,288,-0.0018361,0.0031019,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,mid 26-60,f4,48,0.0011003,0.0070154,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,mid 26-60,f4,48,0.0016123,0.0079844,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,-0.0048295,0.0054996,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,-0.0058722,0.012209,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,mid 26-60,f4,48,-0.0092105,0.0054962,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,mid 26-60,f4,48,0.006183,0.0054761,False,0.30
+3287,0.60,0.50,all,late 61-100,f4,288,0.0012571,0.0026919,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,late 61-100,f4,48,0.00092653,0.0076972,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,late 61-100,f4,48,0.0064786,0.0075698,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,late 61-100,f4,48,0.0019947,0.0039974,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,late 61-100,f4,48,0.0018907,0.0096398,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,late 61-100,f4,48,-0.0020739,0.0038679,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,late 61-100,f4,48,-0.0016741,0.0047115,False,0.30
+3287,0.60,0.50,all,deep 101-150,f4,288,-0.0001398,0.0022552,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,deep 101-150,f4,48,0.00021589,0.005707,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,deep 101-150,f4,48,0.0045696,0.0066532,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,-0.00058487,0.0036074,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,2.5335e-05,0.0077803,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,deep 101-150,f4,48,0.0014211,0.0039925,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,deep 101-150,f4,48,-0.0064858,0.0036986,False,0.30
+3287,0.70,0.50,all,early 1-25,f4,288,0.0023902,0.0023813,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,early 1-25,f4,48,0.0026713,0.0035031,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,early 1-25,f4,48,-0.005136,0.0056816,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,early 1-25,f4,48,-0.0031116,0.0067263,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,early 1-25,f4,48,0.017308,0.0069119,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,early 1-25,f4,48,-1.4039e-05,0.0043817,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,early 1-25,f4,48,0.0026231,0.0057509,False,0.30
+3287,0.70,0.50,all,mid 26-60,f4,288,-0.0066599,0.0035551,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,mid 26-60,f4,48,0.00079179,0.007172,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,mid 26-60,f4,48,-0.018984,0.0098415,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,-0.0092714,0.0059441,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,-0.013409,0.012157,False,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,mid 26-60,f4,48,-0.009804,0.0075115,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,mid 26-60,f4,48,0.010716,0.0064841,False,0.30
+3287,0.70,0.50,all,late 61-100,f4,288,-0.0037541,0.0029836,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,late 61-100,f4,48,-0.0014003,0.0084595,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,late 61-100,f4,48,-0.0058143,0.0089429,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,late 61-100,f4,48,-0.0060945,0.0041244,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,late 61-100,f4,48,-0.013053,0.0091489,False,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,late 61-100,f4,48,-0.0029244,0.0050408,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,late 61-100,f4,48,0.006762,0.0054808,False,0.30
+3287,0.70,0.50,all,deep 101-150,f4,288,-0.0035842,0.0022651,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,deep 101-150,f4,48,-0.0045239,0.0060969,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,deep 101-150,f4,48,-0.0048638,0.0064227,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,-0.0063035,0.0034777,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,-0.006291,0.0073463,False,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,deep 101-150,f4,48,0.0016092,0.0049518,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,deep 101-150,f4,48,-0.001132,0.0041809,False,0.30
+3287,0.30,0.50,all,early 1-25,average_precision,288,0.002724,0.0025572,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,early 1-25,average_precision,48,-0.00033106,0.006507,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,early 1-25,average_precision,48,0.0057533,0.0051021,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0.0073831,0.0064231,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,-0.00221,0.0051173,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,early 1-25,average_precision,48,0.0012373,0.0062707,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,early 1-25,average_precision,48,0.0045114,0.0073874,False,0.30
+3287,0.30,0.50,all,mid 26-60,average_precision,288,0.0028075,0.0043601,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,mid 26-60,average_precision,48,0.0041232,0.012925,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,mid 26-60,average_precision,48,-0.0030685,0.0098096,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0.0077988,0.0054667,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,-0.0090988,0.0083845,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,mid 26-60,average_precision,48,-0.0022458,0.011438,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,mid 26-60,average_precision,48,0.019336,0.011458,False,0.30
+3287,0.30,0.50,all,late 61-100,average_precision,288,0.0036263,0.0039897,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,late 61-100,average_precision,48,0.012164,0.013299,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,late 61-100,average_precision,48,-0.00020156,0.0097589,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0.00075052,0.005715,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,-0.00057708,0.0084154,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,late 61-100,average_precision,48,0.0036089,0.01126,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,late 61-100,average_precision,48,0.006013,0.01027,False,0.30
+3287,0.30,0.50,all,deep 101-150,average_precision,288,0.0024752,0.0038001,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,deep 101-150,average_precision,48,0.0085425,0.010911,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,deep 101-150,average_precision,48,-0.00084125,0.011078,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,-0.0039775,0.0067151,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,0.0024767,0.0071126,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,deep 101-150,average_precision,48,0.0067479,0.0096651,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,deep 101-150,average_precision,48,0.0019029,0.0096492,False,0.30
+3287,0.40,0.50,all,early 1-25,average_precision,288,0.0039559,0.0023946,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,early 1-25,average_precision,48,-0.0053101,0.0063329,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,early 1-25,average_precision,48,0.0071817,0.0042157,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0.007177,0.0070514,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,0.0046732,0.0043681,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,early 1-25,average_precision,48,0.0082222,0.0050661,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,early 1-25,average_precision,48,0.0017916,0.0070066,False,0.30
+3287,0.40,0.50,all,mid 26-60,average_precision,288,0.0058517,0.0045523,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,mid 26-60,average_precision,48,-0.0077208,0.011317,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,mid 26-60,average_precision,48,0.0077042,0.011958,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0.0051738,0.005587,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,0.0023482,0.0086017,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,mid 26-60,average_precision,48,0.02579,0.011833,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,mid 26-60,average_precision,48,0.0018143,0.012854,False,0.30
+3287,0.40,0.50,all,late 61-100,average_precision,288,0.0077876,0.0039646,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,late 61-100,average_precision,48,-0.0011833,0.012603,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,late 61-100,average_precision,48,0.011833,0.0087755,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0.0045849,0.005904,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,0.0014776,0.0086164,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,late 61-100,average_precision,48,0.025061,0.009319,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,late 61-100,average_precision,48,0.0049516,0.010821,False,0.30
+3287,0.40,0.50,all,deep 101-150,average_precision,288,0.002707,0.0035732,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,deep 101-150,average_precision,48,-0.0040533,0.010736,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,deep 101-150,average_precision,48,0.010605,0.0082931,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,-0.0013508,0.0066228,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,-0.00072375,0.0074627,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,deep 101-150,average_precision,48,0.011248,0.0090159,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,deep 101-150,average_precision,48,0.00051667,0.0097826,False,0.30
+3287,0.60,0.50,all,early 1-25,average_precision,288,0.0057833,0.0023636,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,early 1-25,average_precision,48,0.00069507,0.0062558,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,early 1-25,average_precision,48,0.0057506,0.0051456,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0.015629,0.0063461,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,0.00077987,0.0053234,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,early 1-25,average_precision,48,0.0027498,0.0040081,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,early 1-25,average_precision,48,0.0090953,0.0070598,False,0.30
+3287,0.60,0.50,all,mid 26-60,average_precision,288,0.0023094,0.0041902,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,mid 26-60,average_precision,48,-0.0055339,0.010813,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,mid 26-60,average_precision,48,-0.0013667,0.01102,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0.0061458,0.0059036,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,-0.015994,0.009235,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,mid 26-60,average_precision,48,0.0057405,0.01121,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,mid 26-60,average_precision,48,0.024865,0.010186,True,0.30
+3287,0.60,0.50,all,late 61-100,average_precision,288,0.0025501,0.003865,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,late 61-100,average_precision,48,-0.0080438,0.011601,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,late 61-100,average_precision,48,-0.0021802,0.01086,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0.0066104,0.0051733,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,-0.0019568,0.0084619,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,late 61-100,average_precision,48,0.017812,0.0092092,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,late 61-100,average_precision,48,0.0030589,0.0093333,False,0.30
+3287,0.60,0.50,all,deep 101-150,average_precision,288,-0.0033638,0.003803,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,deep 101-150,average_precision,48,-0.014464,0.011485,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,deep 101-150,average_precision,48,-0.011686,0.0092196,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,0.0015992,0.0059447,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,-0.0036204,0.0069074,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,deep 101-150,average_precision,48,0.017051,0.010465,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,deep 101-150,average_precision,48,-0.0090625,0.0092699,False,0.30
+3287,0.70,0.50,all,early 1-25,average_precision,288,0.0039652,0.0023703,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,early 1-25,average_precision,48,0.0046604,0.0051135,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,early 1-25,average_precision,48,-0.00025047,0.0051602,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0.0086671,0.0074236,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,-0.0060881,0.0046092,False,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,early 1-25,average_precision,48,0.0046274,0.004983,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,early 1-25,average_precision,48,0.012175,0.0077579,False,0.30
+3287,0.70,0.50,all,mid 26-60,average_precision,288,0.0033615,0.0041612,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,mid 26-60,average_precision,48,0.0044881,0.011584,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,mid 26-60,average_precision,48,-0.0053089,0.010381,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0.0047554,0.005796,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,-0.027837,0.0092108,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,mid 26-60,average_precision,48,0.016523,0.0099256,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,mid 26-60,average_precision,48,0.027549,0.011661,True,0.30
+3287,0.70,0.50,all,late 61-100,average_precision,288,0.0042502,0.0040562,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,late 61-100,average_precision,48,-1.0417e-05,0.011255,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,late 61-100,average_precision,48,0.001738,0.011402,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0.006263,0.0058164,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,-0.020508,0.0092687,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,late 61-100,average_precision,48,0.026107,0.0078105,True,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,late 61-100,average_precision,48,0.011911,0.011492,False,0.30
+3287,0.70,0.50,all,deep 101-150,average_precision,288,-0.0015631,0.0037249,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,deep 101-150,average_precision,48,-0.0045183,0.0095134,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,deep 101-150,average_precision,48,-0.005165,0.010307,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,0.0041008,0.0062063,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,-0.01803,0.0074938,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,deep 101-150,average_precision,48,0.016159,0.008683,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,deep 101-150,average_precision,48,-0.0019246,0.011037,False,0.30
+3287,0.30,0.50,all,pooled,average_precision,288,0.0028539,0.0017211,False,0.30
+3287,0.30,0.50,all,pooled,cost,288,-0.0069729,0.0014494,True,0.30
+3287,0.30,0.50,all,pooled,f025,288,0.032782,0.0025178,True,0.30
+3287,0.30,0.50,all,pooled,f1,288,0.025142,0.0018983,True,0.30
+3287,0.30,0.50,all,pooled,f4,288,-0.00046186,0.0013039,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,pooled,average_precision,48,0.0036052,0.004786,False,0.30
+3287,0.30,0.50,geometry=clip/whole_image,pooled,cost,48,-0.011304,0.0031963,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,pooled,f025,48,0.022959,0.0041334,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,pooled,f1,48,0.022073,0.0037574,True,0.30
+3287,0.30,0.50,geometry=clip/whole_image,pooled,f4,48,0.0035184,0.0027763,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,pooled,average_precision,48,0.0026707,0.0038503,False,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,pooled,cost,48,-0.016281,0.0030827,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,pooled,f025,48,0.032284,0.0058431,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,pooled,f1,48,0.028446,0.0048912,True,0.30
+3287,0.30,0.50,geometry=clip_l/whole_image,pooled,f4,48,0.0097224,0.0027874,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0.003391,0.0030084,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,pooled,cost,48,-0.0021945,0.0023824,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,pooled,f025,48,0.014819,0.0065872,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,pooled,f1,48,0.011826,0.0045599,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/max_patch,pooled,f4,48,0.0011314,0.0021162,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,pooled,average_precision,48,-0.0020048,0.0034041,False,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,pooled,cost,48,0.014665,0.0045589,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,pooled,f025,48,0.046654,0.0066443,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,pooled,f1,48,0.019968,0.0044345,True,0.30
+3287,0.30,0.50,geometry=dinov3_patch/whole_image,pooled,f4,48,-0.026557,0.0042663,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,pooled,average_precision,48,0.0022257,0.0043994,False,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,pooled,cost,48,-0.01173,0.0032812,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,pooled,f025,48,0.029415,0.004473,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,pooled,f1,48,0.027085,0.0037717,True,0.30
+3287,0.30,0.50,geometry=siglip/whole_image,pooled,f4,48,0.0026946,0.0025813,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,pooled,average_precision,48,0.006659,0.0046543,False,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,pooled,cost,48,-0.01243,0.0032829,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,pooled,f025,48,0.036217,0.0060033,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,pooled,f1,48,0.031,0.0046722,True,0.30
+3287,0.30,0.50,geometry=siglip2_l/whole_image,pooled,f4,48,0.0035742,0.0028682,False,0.30
+3287,0.40,0.50,all,pooled,average_precision,288,0.0046072,0.0016562,True,0.30
+3287,0.40,0.50,all,pooled,cost,288,-0.007488,0.001331,True,0.30
+3287,0.40,0.50,all,pooled,f025,288,0.021892,0.0019136,True,0.30
+3287,0.40,0.50,all,pooled,f1,288,0.018697,0.0015059,True,0.30
+3287,0.40,0.50,all,pooled,f4,288,0.0022581,0.0012526,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,pooled,average_precision,48,-0.0049316,0.0045781,False,0.30
+3287,0.40,0.50,geometry=clip/whole_image,pooled,cost,48,-0.0087269,0.0030707,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,pooled,f025,48,0.011903,0.0028174,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,pooled,f1,48,0.011886,0.0026632,True,0.30
+3287,0.40,0.50,geometry=clip/whole_image,pooled,f4,48,0.0040653,0.0029614,False,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,pooled,average_precision,48,0.0084356,0.0033189,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,pooled,cost,48,-0.013805,0.0031206,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,pooled,f025,48,0.022911,0.0040947,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,pooled,f1,48,0.021008,0.003643,True,0.30
+3287,0.40,0.50,geometry=clip_l/whole_image,pooled,f4,48,0.0098298,0.0027705,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0.0039641,0.0031063,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,pooled,cost,48,-0.00064273,0.0020947,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,pooled,f025,48,0.012912,0.0063333,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,pooled,f1,48,0.011651,0.0043903,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/max_patch,pooled,f4,48,0.00035213,0.0019631,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,pooled,average_precision,48,0.0029128,0.003205,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,pooled,cost,48,-0.0014024,0.0039318,False,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,pooled,f025,48,0.025933,0.0049724,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,pooled,f1,48,0.015567,0.0034388,True,0.30
+3287,0.40,0.50,geometry=dinov3_patch/whole_image,pooled,f4,48,-0.0069168,0.0038272,False,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,pooled,average_precision,48,0.013322,0.0037817,True,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,pooled,cost,48,-0.012927,0.0030614,True,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,pooled,f025,48,0.024995,0.0034502,True,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,pooled,f1,48,0.025116,0.0031414,True,0.30
+3287,0.40,0.50,geometry=siglip/whole_image,pooled,f4,48,0.0026742,0.0027001,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,pooled,average_precision,48,0.0020956,0.0046926,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,pooled,cost,48,-0.0050108,0.0027277,False,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,pooled,f025,48,0.022486,0.004232,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,pooled,f1,48,0.018861,0.0034812,True,0.30
+3287,0.40,0.50,geometry=siglip2_l/whole_image,pooled,f4,48,0.00075213,0.0024812,False,0.30
+3287,0.60,0.50,all,pooled,average_precision,288,0.0029698,0.0016395,False,0.30
+3287,0.60,0.50,all,pooled,cost,288,0.0036806,0.0014331,True,0.30
+3287,0.60,0.50,all,pooled,f025,288,-0.012479,0.0017774,True,0.30
+3287,0.60,0.50,all,pooled,f1,288,-0.010835,0.0014299,True,0.30
+3287,0.60,0.50,all,pooled,f4,288,0.0014108,0.0012587,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,pooled,average_precision,48,-0.0040515,0.0045121,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,pooled,cost,48,0.0064647,0.0035125,False,0.30
+3287,0.60,0.50,geometry=clip/whole_image,pooled,f025,48,-0.009093,0.0022802,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,pooled,f1,48,-0.0098897,0.0024968,True,0.30
+3287,0.60,0.50,geometry=clip/whole_image,pooled,f4,48,0.00076676,0.0026801,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,pooled,average_precision,48,0.00075424,0.0038853,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,pooled,cost,48,0.0057484,0.0034207,False,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,pooled,f025,48,-0.011561,0.0025891,True,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,pooled,f1,48,-0.012699,0.0024515,True,0.30
+3287,0.60,0.50,geometry=clip_l/whole_image,pooled,f4,48,0.0029894,0.0033218,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0.0071878,0.0028966,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,pooled,cost,48,-0.00073512,0.0027158,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,pooled,f025,48,-0.0001515,0.0073696,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,pooled,f1,48,0.0013628,0.0052095,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/max_patch,pooled,f4,48,0.00020887,0.0022709,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,pooled,average_precision,48,-0.0032125,0.0034935,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,pooled,cost,48,0.0044673,0.0047151,False,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,pooled,f025,48,-0.026348,0.0048452,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,pooled,f1,48,-0.019402,0.0035235,True,0.30
+3287,0.60,0.50,geometry=dinov3_patch/whole_image,pooled,f4,48,0.0051467,0.0043049,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,pooled,average_precision,48,0.0063928,0.0033127,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,pooled,cost,48,0.0026809,0.0028072,False,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,pooled,f025,48,-0.0078564,0.002558,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,pooled,f1,48,-0.0071788,0.0026539,True,0.30
+3287,0.60,0.50,geometry=siglip/whole_image,pooled,f4,48,-0.00071332,0.0020128,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,pooled,average_precision,48,0.00666,0.0043512,False,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,pooled,cost,48,0.0061455,0.0025793,True,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,pooled,f025,48,-0.018209,0.0035237,True,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,pooled,f1,48,-0.016389,0.0030227,True,0.30
+3287,0.60,0.50,geometry=siglip2_l/whole_image,pooled,f4,48,-0.001008,0.0023308,False,0.30
+3287,0.70,0.50,all,pooled,average_precision,288,0.0028366,0.0016471,False,0.30
+3287,0.70,0.50,all,pooled,cost,288,0.011597,0.001511,True,0.30
+3287,0.70,0.50,all,pooled,f025,288,-0.022852,0.0020605,True,0.30
+3287,0.70,0.50,all,pooled,f1,288,-0.02039,0.0016024,True,0.30
+3287,0.70,0.50,all,pooled,f4,288,-0.0021782,0.0013331,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,pooled,average_precision,48,0.0025012,0.0039332,False,0.30
+3287,0.70,0.50,geometry=clip/whole_image,pooled,cost,48,0.0098712,0.0032357,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,pooled,f025,48,-0.01191,0.0023078,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,pooled,f1,48,-0.013338,0.0024856,True,0.30
+3287,0.70,0.50,geometry=clip/whole_image,pooled,f4,48,0.00064744,0.0026555,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,pooled,average_precision,48,-0.0014689,0.0039547,False,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,pooled,cost,48,0.020391,0.0041611,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,pooled,f025,48,-0.018646,0.0029364,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,pooled,f1,48,-0.021097,0.0029833,True,0.30
+3287,0.70,0.50,geometry=clip_l/whole_image,pooled,f4,48,-0.006992,0.0035795,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0.0057082,0.0031093,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,pooled,cost,48,0.0083962,0.002639,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,pooled,f025,48,-0.0086291,0.008253,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,pooled,f1,48,-0.0047566,0.0055584,False,0.30
+3287,0.70,0.50,geometry=dinov3_patch/max_patch,pooled,f4,48,-0.0063095,0.0022829,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,pooled,average_precision,48,-0.0133,0.0033652,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,pooled,cost,48,0.020523,0.0044963,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,pooled,f025,48,-0.059152,0.0058106,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,pooled,f1,48,-0.045374,0.0042174,True,0.30
+3287,0.70,0.50,geometry=dinov3_patch/whole_image,pooled,f4,48,-1.6365e-05,0.004146,False,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,pooled,average_precision,48,0.012442,0.0035338,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,pooled,cost,48,0.0080494,0.0032315,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,pooled,f025,48,-0.013419,0.0023105,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,pooled,f1,48,-0.013574,0.0024295,True,0.30
+3287,0.70,0.50,geometry=siglip/whole_image,pooled,f4,48,-0.0014936,0.0025825,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,pooled,average_precision,48,0.012058,0.0050156,True,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,pooled,cost,48,0.0059474,0.0029852,False,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,pooled,f025,48,-0.027653,0.0038683,True,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,pooled,f1,48,-0.024833,0.0034312,True,0.30
+3287,0.70,0.50,geometry=siglip2_l/whole_image,pooled,f4,48,0.003422,0.0026305,False,0.30
+3314,K=1,K=2,all,early 1-25,cost,144,0.006461,0.00088122,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,early 1-25,cost,48,0.0082669,0.0014795,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,early 1-25,cost,48,0.0073938,0.0020041,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,early 1-25,cost,48,0.0037222,0.00096082,True,K=2
+3314,K=1,K=2,all,mid 26-60,cost,144,0.0037976,0.00090756,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,0.0050143,0.0022398,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,0.0048792,0.0012942,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,mid 26-60,cost,48,0.0014994,0.0008237,False,K=2
+3314,K=1,K=2,all,late 61-100,cost,144,0.0050373,0.000893,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,late 61-100,cost,48,0.0075927,0.0021614,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,late 61-100,cost,48,0.0054078,0.0013986,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,late 61-100,cost,48,0.0021115,0.00088897,True,K=2
+3314,K=1,K=2,all,deep 101-150,cost,144,0.0016482,0.00077677,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,0.0016858,0.0014489,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,0.00372,0.001504,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,deep 101-150,cost,48,-0.00046125,0.00090136,False,K=2
+3314,K=3,K=2,all,early 1-25,cost,144,-0.0019679,0.00040034,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,early 1-25,cost,48,-0.0024603,0.0006329,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,early 1-25,cost,48,-0.0028849,0.00086644,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,early 1-25,cost,48,-0.00055853,0.00045246,False,K=2
+3314,K=3,K=2,all,mid 26-60,cost,144,-0.0018254,0.00038295,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,-0.0022232,0.00090507,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,-0.0026381,0.00053095,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,mid 26-60,cost,48,-0.00061488,0.00045427,False,K=2
+3314,K=3,K=2,all,late 61-100,cost,144,-0.0011238,0.00033739,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,late 61-100,cost,48,-0.0012427,0.00068999,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,late 61-100,cost,48,-0.0021016,0.00053585,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,late 61-100,cost,48,-2.7083e-05,0.00041259,False,K=2
+3314,K=3,K=2,all,deep 101-150,cost,144,-0.0010161,0.00031791,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,-0.0013908,0.0006772,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,-0.000915,0.00044923,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,deep 101-150,cost,48,-0.0007425,0.00050292,False,K=2
+3314,K=4,K=2,all,early 1-25,cost,144,-0.0029921,0.00061326,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,early 1-25,cost,48,-0.0039484,0.00095623,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,early 1-25,cost,48,-0.0042262,0.0012641,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,early 1-25,cost,48,-0.00080159,0.00079319,False,K=2
+3314,K=4,K=2,all,mid 26-60,cost,144,-0.0029204,0.00049827,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,-0.004278,0.0011321,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,-0.0028405,0.00071522,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,mid 26-60,cost,48,-0.0016429,0.00059688,True,K=2
+3314,K=4,K=2,all,late 61-100,cost,144,-0.0013519,0.00044533,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,late 61-100,cost,48,-0.00094635,0.00090658,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,late 61-100,cost,48,-0.003124,0.00077111,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,late 61-100,cost,48,1.4583e-05,0.0005436,False,K=2
+3314,K=4,K=2,all,deep 101-150,cost,144,-0.0014231,0.00037587,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,-0.0018929,0.0008099,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,-0.0013558,0.00051736,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,deep 101-150,cost,48,-0.0010204,0.00061313,False,K=2
+3314,K=6,K=2,all,early 1-25,cost,144,-0.0042854,0.00078283,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,early 1-25,cost,48,-0.005747,0.0012442,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,early 1-25,cost,48,-0.0055536,0.0015814,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,early 1-25,cost,48,-0.0015556,0.0010606,False,K=2
+3314,K=6,K=2,all,mid 26-60,cost,144,-0.0036119,0.00067484,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,-0.0051411,0.0016494,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,-0.0037619,0.00087661,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,mid 26-60,cost,48,-0.0019327,0.00072347,True,K=2
+3314,K=6,K=2,all,late 61-100,cost,144,-0.0015227,0.00054297,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,late 61-100,cost,48,-0.00083542,0.0011575,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,late 61-100,cost,48,-0.0040911,0.000881,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,late 61-100,cost,48,0.00035833,0.00072073,False,K=2
+3314,K=6,K=2,all,deep 101-150,cost,144,-0.0017619,0.00050108,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,-0.0027942,0.0010462,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,-0.0013183,0.00070815,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,deep 101-150,cost,48,-0.0011733,0.00074383,False,K=2
+3314,K=8,K=2,all,early 1-25,cost,144,-0.0046032,0.00083907,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,early 1-25,cost,48,-0.0065992,0.001402,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,early 1-25,cost,48,-0.0056637,0.0016761,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,early 1-25,cost,48,-0.0015466,0.00093273,False,K=2
+3314,K=8,K=2,all,mid 26-60,cost,144,-0.0039109,0.00077874,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,mid 26-60,cost,48,-0.0054006,0.0018814,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,mid 26-60,cost,48,-0.0044845,0.0011059,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,mid 26-60,cost,48,-0.0018476,0.00081019,True,K=2
+3314,K=8,K=2,all,late 61-100,cost,144,-0.0019569,0.00059438,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,late 61-100,cost,48,-0.0016865,0.0012024,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,late 61-100,cost,48,-0.0046208,0.0009227,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,late 61-100,cost,48,0.00043646,0.00072829,False,K=2
+3314,K=8,K=2,all,deep 101-150,cost,144,-0.0020164,0.00056713,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,deep 101-150,cost,48,-0.0032896,0.0012294,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,deep 101-150,cost,48,-0.0015475,0.00085031,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,deep 101-150,cost,48,-0.0012121,0.00084536,False,K=2
+3314,K=1,K=2,all,early 1-25,f025,144,0.0060092,0.002114,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,early 1-25,f025,48,0.0030343,0.0044859,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,early 1-25,f025,48,0.01337,0.004045,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,early 1-25,f025,48,0.0016228,0.0018482,False,K=2
+3314,K=1,K=2,all,mid 26-60,f025,144,0.012839,0.0024349,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,0.0183,0.0051811,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,0.012571,0.0040972,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,mid 26-60,f025,48,0.0076447,0.0024807,True,K=2
+3314,K=1,K=2,all,late 61-100,f025,144,0.0042541,0.0024243,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,late 61-100,f025,48,0.010448,0.0060297,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,late 61-100,f025,48,0.0052986,0.0035087,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,late 61-100,f025,48,-0.0029847,0.0024855,False,K=2
+3314,K=1,K=2,all,deep 101-150,f025,144,0.010798,0.0021112,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,0.01878,0.005227,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,0.0085562,0.0022974,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,deep 101-150,f025,48,0.005057,0.0021891,True,K=2
+3314,K=3,K=2,all,early 1-25,f025,144,-0.0018392,0.00114,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,early 1-25,f025,48,-0.00015318,0.0024683,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,early 1-25,f025,48,-0.0025962,0.0019685,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,early 1-25,f025,48,-0.0027683,0.001437,False,K=2
+3314,K=3,K=2,all,mid 26-60,f025,144,-0.00069631,0.0011762,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,-0.0024959,0.002789,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,0.000852,0.001839,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,mid 26-60,f025,48,-0.00044508,0.0010278,False,K=2
+3314,K=3,K=2,all,late 61-100,f025,144,-0.0049029,0.0010541,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,late 61-100,f025,48,-0.0086575,0.0024703,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,late 61-100,f025,48,-0.00443,0.0015481,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,late 61-100,f025,48,-0.0016213,0.0011185,False,K=2
+3314,K=3,K=2,all,deep 101-150,f025,144,-0.0037564,0.00091859,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,-0.0056313,0.0022689,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,-0.0047053,0.001215,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,deep 101-150,f025,48,-0.00093257,0.0010493,False,K=2
+3314,K=4,K=2,all,early 1-25,f025,144,-0.0039932,0.0016719,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,early 1-25,f025,48,-0.001679,0.0034908,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,early 1-25,f025,48,-0.0051924,0.0031137,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,early 1-25,f025,48,-0.005108,0.002218,True,K=2
+3314,K=4,K=2,all,mid 26-60,f025,144,0.00049716,0.0014549,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,0.0011436,0.0033,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,0.00099507,0.0025516,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,mid 26-60,f025,48,-0.00064723,0.001181,False,K=2
+3314,K=4,K=2,all,late 61-100,f025,144,-0.010647,0.0015834,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,late 61-100,f025,48,-0.018713,0.0036038,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,late 61-100,f025,48,-0.010494,0.0022279,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,late 61-100,f025,48,-0.0027324,0.0014789,False,K=2
+3314,K=4,K=2,all,deep 101-150,f025,144,-0.0062547,0.0012732,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,-0.010677,0.0028512,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,-0.0071078,0.001656,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,deep 101-150,f025,48,-0.00097969,0.0013591,False,K=2
+3314,K=6,K=2,all,early 1-25,f025,144,-0.0050737,0.002099,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,early 1-25,f025,48,-0.0017542,0.0041344,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,early 1-25,f025,48,-0.0078964,0.0040188,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,early 1-25,f025,48,-0.0055705,0.0022487,True,K=2
+3314,K=6,K=2,all,mid 26-60,f025,144,-0.0034386,0.0018343,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,-0.0047752,0.0042037,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,-0.0034291,0.0029642,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,mid 26-60,f025,48,-0.0021115,0.0016011,False,K=2
+3314,K=6,K=2,all,late 61-100,f025,144,-0.015034,0.0019685,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,late 61-100,f025,48,-0.025432,0.0043051,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,late 61-100,f025,48,-0.015621,0.0030006,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,late 61-100,f025,48,-0.0040492,0.0020445,False,K=2
+3314,K=6,K=2,all,deep 101-150,f025,144,-0.0080963,0.0015745,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,-0.013513,0.0038957,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,-0.0088326,0.0019523,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,deep 101-150,f025,48,-0.0019427,0.0017655,False,K=2
+3314,K=8,K=2,all,early 1-25,f025,144,-0.0056939,0.0022567,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,early 1-25,f025,48,-0.0016229,0.0042171,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,early 1-25,f025,48,-0.009281,0.0046033,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,early 1-25,f025,48,-0.0061779,0.0023897,True,K=2
+3314,K=8,K=2,all,mid 26-60,f025,144,-0.0068669,0.002274,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f025,48,-0.0077112,0.0049118,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f025,48,-0.010094,0.0042229,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,mid 26-60,f025,48,-0.0027957,0.0019298,False,K=2
+3314,K=8,K=2,all,late 61-100,f025,144,-0.015966,0.0021259,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,late 61-100,f025,48,-0.027126,0.0046368,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,late 61-100,f025,48,-0.016089,0.0031588,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,late 61-100,f025,48,-0.0046833,0.0020864,True,K=2
+3314,K=8,K=2,all,deep 101-150,f025,144,-0.0088112,0.0018641,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f025,48,-0.015164,0.0046552,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f025,48,-0.0091876,0.0020319,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,deep 101-150,f025,48,-0.0020819,0.001793,False,K=2
+3314,K=1,K=2,all,early 1-25,f1,144,-0.00053279,0.001457,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,early 1-25,f1,48,-0.0048382,0.0029518,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,early 1-25,f1,48,0.0032834,0.0025046,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,early 1-25,f1,48,-4.3538e-05,0.0015347,False,K=2
+3314,K=1,K=2,all,mid 26-60,f1,144,0.0055566,0.0015423,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,0.0077432,0.0036285,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,0.0037202,0.0019439,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,mid 26-60,f1,48,0.0052064,0.0021321,True,K=2
+3314,K=1,K=2,all,late 61-100,f1,144,-0.00035796,0.0017777,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,late 61-100,f1,48,0.00060385,0.0043387,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,late 61-100,f1,48,0.0012132,0.0023606,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,late 61-100,f1,48,-0.0028909,0.0022252,False,K=2
+3314,K=1,K=2,all,deep 101-150,f1,144,0.0064337,0.0016412,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,0.011077,0.0039147,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,0.0040584,0.0018753,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,deep 101-150,f1,48,0.0041653,0.0017958,True,K=2
+3314,K=3,K=2,all,early 1-25,f1,144,0.00013577,0.00073137,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.0023298,0.0014179,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,early 1-25,f1,48,-0.00017274,0.0013317,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,early 1-25,f1,48,-0.0017497,0.0010203,False,K=2
+3314,K=3,K=2,all,mid 26-60,f1,144,0.00099579,0.00085498,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,0.00063322,0.0019742,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,0.0025296,0.0012069,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,mid 26-60,f1,48,-0.00017546,0.00089846,False,K=2
+3314,K=3,K=2,all,late 61-100,f1,144,-0.0027073,0.00074215,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,late 61-100,f1,48,-0.0048653,0.0017812,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,late 61-100,f1,48,-0.0020606,0.001113,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,late 61-100,f1,48,-0.001196,0.00095456,False,K=2
+3314,K=3,K=2,all,deep 101-150,f1,144,-0.0020395,0.00074581,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,-0.0031629,0.0017848,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,-0.0025087,0.00086456,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,deep 101-150,f1,48,-0.00044704,0.00096894,False,K=2
+3314,K=4,K=2,all,early 1-25,f1,144,-0.0005656,0.0011572,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.0030453,0.0021596,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,early 1-25,f1,48,-0.0014173,0.0018514,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,early 1-25,f1,48,-0.0033249,0.0016698,False,K=2
+3314,K=4,K=2,all,mid 26-60,f1,144,0.002803,0.0010551,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,0.0048617,0.0024668,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,0.0034862,0.0015625,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,mid 26-60,f1,48,6.1201e-05,0.0011227,False,K=2
+3314,K=4,K=2,all,late 61-100,f1,144,-0.0066124,0.0011326,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,late 61-100,f1,48,-0.011932,0.0025573,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,late 61-100,f1,48,-0.005626,0.0015895,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,late 61-100,f1,48,-0.0022788,0.0012535,False,K=2
+3314,K=4,K=2,all,deep 101-150,f1,144,-0.0035401,0.00096387,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,-0.0061581,0.0022979,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,-0.0042247,0.0011863,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,deep 101-150,f1,48,-0.0002377,0.0012161,False,K=2
+3314,K=6,K=2,all,early 1-25,f1,144,-0.00050149,0.0013971,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.0043471,0.0026616,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,early 1-25,f1,48,-0.0023019,0.0025731,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,early 1-25,f1,48,-0.0035497,0.0018059,False,K=2
+3314,K=6,K=2,all,mid 26-60,f1,144,0.00068506,0.0013766,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,0.0016351,0.003352,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,0.0015338,0.0020037,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,mid 26-60,f1,48,-0.0011137,0.001482,False,K=2
+3314,K=6,K=2,all,late 61-100,f1,144,-0.0096453,0.0014063,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,late 61-100,f1,48,-0.016454,0.0029868,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,late 61-100,f1,48,-0.008906,0.0020336,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,late 61-100,f1,48,-0.0035762,0.0017475,True,K=2
+3314,K=6,K=2,all,deep 101-150,f1,144,-0.0045697,0.0012325,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,-0.0073442,0.002967,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,-0.0055952,0.0013407,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,deep 101-150,f1,48,-0.00076987,0.001524,False,K=2
+3314,K=8,K=2,all,early 1-25,f1,144,-0.0004839,0.0014697,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,early 1-25,f1,48,0.0055293,0.0026226,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,early 1-25,f1,48,-0.0030411,0.002748,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,early 1-25,f1,48,-0.00394,0.0018577,True,K=2
+3314,K=8,K=2,all,mid 26-60,f1,144,-0.0010977,0.001599,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f1,48,4.9378e-05,0.0038906,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f1,48,-0.001606,0.0022124,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,mid 26-60,f1,48,-0.0017366,0.0017774,False,K=2
+3314,K=8,K=2,all,late 61-100,f1,144,-0.010146,0.00143,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,late 61-100,f1,48,-0.017141,0.0031147,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,late 61-100,f1,48,-0.0092215,0.0022625,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,late 61-100,f1,48,-0.0040742,0.0017712,True,K=2
+3314,K=8,K=2,all,deep 101-150,f1,144,-0.0049768,0.0013967,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f1,48,-0.0081381,0.0035095,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f1,48,-0.0058475,0.0015346,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,deep 101-150,f1,48,-0.00094472,0.001631,False,K=2
+3314,K=1,K=2,all,early 1-25,f4,144,-0.0040136,0.00084043,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,early 1-25,f4,48,-0.0047309,0.0014077,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,early 1-25,f4,48,-0.0056616,0.0019458,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,early 1-25,f4,48,-0.0016483,0.00059513,True,K=2
+3314,K=1,K=2,all,mid 26-60,f4,144,-0.0039617,0.00079782,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,-0.0046188,0.0014915,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,-0.0051753,0.0016883,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,mid 26-60,f4,48,-0.0020911,0.00070359,True,K=2
+3314,K=1,K=2,all,late 61-100,f4,144,-0.0041399,0.00093238,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,late 61-100,f4,48,-0.0051247,0.0015691,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,late 61-100,f4,48,-0.0060487,0.0021064,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,late 61-100,f4,48,-0.0012464,0.00062425,False,K=2
+3314,K=1,K=2,all,deep 101-150,f4,144,-0.002858,0.0007223,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,-0.0020116,0.00090411,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,-0.0055432,0.0017673,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,deep 101-150,f4,48,-0.0010192,0.00058012,False,K=2
+3314,K=3,K=2,all,early 1-25,f4,144,0.0013044,0.00034643,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,early 1-25,f4,48,0.0011599,0.00059861,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,early 1-25,f4,48,0.0020349,0.00071414,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,early 1-25,f4,48,0.0007183,0.00035387,True,K=2
+3314,K=3,K=2,all,mid 26-60,f4,144,0.0011981,0.00035766,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,0.0014096,0.00066803,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,0.0016242,0.00078,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,mid 26-60,f4,48,0.00056059,0.00026958,True,K=2
+3314,K=3,K=2,all,late 61-100,f4,144,0.0015125,0.00032489,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,late 61-100,f4,48,0.001562,0.00056284,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,late 61-100,f4,48,0.0028163,0.00066282,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,late 61-100,f4,48,0.00015919,0.0002566,False,K=2
+3314,K=3,K=2,all,deep 101-150,f4,144,0.0012109,0.00024663,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,0.0012438,0.00044643,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,0.0017445,0.00054008,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,deep 101-150,f4,48,0.00064436,0.00021756,True,K=2
+3314,K=4,K=2,all,early 1-25,f4,144,0.0018238,0.0004632,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,early 1-25,f4,48,0.0020043,0.00092685,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,early 1-25,f4,48,0.0021335,0.00096653,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,early 1-25,f4,48,0.0013335,0.00042459,True,K=2
+3314,K=4,K=2,all,mid 26-60,f4,144,0.0013095,0.00042992,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,0.0018876,0.00072424,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,0.00089601,0.00098027,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,mid 26-60,f4,48,0.001145,0.0003606,True,K=2
+3314,K=4,K=2,all,late 61-100,f4,144,0.0026271,0.00047582,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,late 61-100,f4,48,0.0025859,0.00079301,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,late 61-100,f4,48,0.0047089,0.0010126,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,late 61-100,f4,48,0.00058661,0.00033468,False,K=2
+3314,K=4,K=2,all,deep 101-150,f4,144,0.0018877,0.00031212,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,0.0020295,0.00052214,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,0.002911,0.00065228,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,deep 101-150,f4,48,0.00072265,0.00027146,True,K=2
+3314,K=6,K=2,all,early 1-25,f4,144,0.0028805,0.00062305,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,early 1-25,f4,48,0.003092,0.0011984,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,early 1-25,f4,48,0.0037832,0.0012568,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,early 1-25,f4,48,0.0017664,0.00052293,True,K=2
+3314,K=6,K=2,all,mid 26-60,f4,144,0.0022745,0.000604,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,0.003018,0.0011264,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,0.0020679,0.0012591,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,mid 26-60,f4,48,0.0017377,0.0004552,True,K=2
+3314,K=6,K=2,all,late 61-100,f4,144,0.0035718,0.0005995,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,late 61-100,f4,48,0.0032226,0.0010093,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,late 61-100,f4,48,0.0066951,0.0012219,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,late 61-100,f4,48,0.00079771,0.00043121,False,K=2
+3314,K=6,K=2,all,deep 101-150,f4,144,0.0023433,0.00041583,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,0.0028115,0.00068019,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,0.0033862,0.00096699,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,deep 101-150,f4,48,0.00083224,0.00031253,True,K=2
+3314,K=8,K=2,all,early 1-25,f4,144,0.0033725,0.00065226,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,early 1-25,f4,48,0.0033006,0.0013074,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,early 1-25,f4,48,0.0047485,0.001376,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,early 1-25,f4,48,0.0020684,0.00051925,True,K=2
+3314,K=8,K=2,all,mid 26-60,f4,144,0.0028608,0.00069102,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,mid 26-60,f4,48,0.0033475,0.0012763,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,mid 26-60,f4,48,0.0033286,0.001622,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,mid 26-60,f4,48,0.0019063,0.00053232,True,K=2
+3314,K=8,K=2,all,late 61-100,f4,144,0.0040557,0.00063665,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,late 61-100,f4,48,0.0038975,0.0010403,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,late 61-100,f4,48,0.0074356,0.0013605,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,late 61-100,f4,48,0.00083408,0.00045862,False,K=2
+3314,K=8,K=2,all,deep 101-150,f4,144,0.0026278,0.00049292,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,deep 101-150,f4,48,0.0031682,0.00074652,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,deep 101-150,f4,48,0.0037435,0.0011801,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,deep 101-150,f4,48,0.00097181,0.00035621,True,K=2
+3314,K=1,K=2,all,early 1-25,average_precision,144,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,all,mid 26-60,average_precision,144,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,all,late 61-100,average_precision,144,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,all,deep 101-150,average_precision,144,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,all,early 1-25,average_precision,144,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,all,mid 26-60,average_precision,144,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,all,late 61-100,average_precision,144,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,all,deep 101-150,average_precision,144,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,all,early 1-25,average_precision,144,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,all,mid 26-60,average_precision,144,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,all,late 61-100,average_precision,144,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,all,deep 101-150,average_precision,144,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,all,early 1-25,average_precision,144,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,all,mid 26-60,average_precision,144,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,all,late 61-100,average_precision,144,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,all,deep 101-150,average_precision,144,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,all,early 1-25,average_precision,144,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,early 1-25,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,all,mid 26-60,average_precision,144,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,mid 26-60,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,all,late 61-100,average_precision,144,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,late 61-100,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,all,deep 101-150,average_precision,144,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,deep 101-150,average_precision,48,0,0,False,K=2
+3314,K=1,K=2,all,pooled,average_precision,144,0,5e-10,False,K=2
+3314,K=1,K=2,all,pooled,cost,144,0.0040603,0.00042981,True,K=2
+3314,K=1,K=2,all,pooled,f025,144,0.0084588,0.0011273,True,K=2
+3314,K=1,K=2,all,pooled,f1,144,0.0027611,0.00079577,True,K=2
+3314,K=1,K=2,all,pooled,f4,144,-0.0036583,0.00040643,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,pooled,cost,48,0.0053502,0.00086174,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,pooled,f025,48,0.011964,0.002573,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,pooled,f1,48,0.0025485,0.0017987,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/max_patch,pooled,f4,48,-0.0034857,0.00062213,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,pooled,cost,48,0.0050925,0.00074549,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,pooled,f025,48,0.009243,0.0015985,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,pooled,f1,48,0.0032434,0.0010613,True,K=2
+3314,K=1,K=2,geometry=dinov3_patch/whole_image,pooled,f4,48,-0.0055571,0.00092827,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,pooled,cost,48,0.0016516,0.00044485,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,pooled,f025,48,0.0027724,0.0011004,True,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,pooled,f1,48,0.0015863,0.00092985,False,K=2
+3314,K=1,K=2,geometry=siglip/whole_image,pooled,f4,48,-0.0014551,0.00031037,True,K=2
+3314,K=3,K=2,all,pooled,average_precision,144,0,5e-10,False,K=2
+3314,K=3,K=2,all,pooled,cost,144,-0.0014069,0.00017751,True,K=2
+3314,K=3,K=2,all,pooled,f025,144,-0.0030142,0.00052872,True,K=2
+3314,K=3,K=2,all,pooled,f1,144,-0.0010168,0.00038206,True,K=2
+3314,K=3,K=2,all,pooled,f4,144,0.001295,0.00015418,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,pooled,cost,48,-0.0018128,0.00035359,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,pooled,f025,48,-0.0043924,0.0012396,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,pooled,f1,48,-0.00087135,0.00085031,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/max_patch,pooled,f4,48,0.0013302,0.00027518,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,pooled,cost,48,-0.0018813,0.00027403,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,pooled,f025,48,-0.0033086,0.00077888,True,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,pooled,f1,48,-0.00099558,0.00054269,False,K=2
+3314,K=3,K=2,geometry=dinov3_patch/whole_image,pooled,f4,48,0.0020465,0.00032776,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,pooled,cost,48,-0.00045006,0.00022611,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,pooled,f025,48,-0.0012442,0.00056447,True,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,pooled,f1,48,-0.00084522,0.0004788,False,K=2
+3314,K=3,K=2,geometry=siglip/whole_image,pooled,f4,48,0.00050776,0.00013124,True,K=2
+3314,K=4,K=2,all,pooled,average_precision,144,0,5e-10,False,K=2
+3314,K=4,K=2,all,pooled,cost,144,-0.0019465,0.00023059,True,K=2
+3314,K=4,K=2,all,pooled,f025,144,-0.0050374,0.00073603,True,K=2
+3314,K=4,K=2,all,pooled,f1,144,-0.0019621,0.00053445,True,K=2
+3314,K=4,K=2,all,pooled,f4,144,0.0018812,0.000201,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,pooled,cost,48,-0.0025337,0.00046549,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,pooled,f025,48,-0.0074539,0.0016354,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,pooled,f1,48,-0.0021343,0.0011777,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/max_patch,pooled,f4,48,0.0020997,0.00034651,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,pooled,cost,48,-0.002315,0.00035359,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,pooled,f025,48,-0.0061843,0.0011024,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,pooled,f1,48,-0.0023313,0.00074375,True,K=2
+3314,K=4,K=2,geometry=dinov3_patch/whole_image,pooled,f4,48,0.0026947,0.00042888,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,pooled,cost,48,-0.00081897,0.00030948,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,pooled,f025,48,-0.0017104,0.00072192,True,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,pooled,f1,48,-0.0011178,0.00063696,False,K=2
+3314,K=4,K=2,geometry=siglip/whole_image,pooled,f4,48,0.00087437,0.00016728,True,K=2
+3314,K=6,K=2,all,pooled,average_precision,144,0,5e-10,False,K=2
+3314,K=6,K=2,all,pooled,cost,144,-0.0024197,0.00029877,True,K=2
+3314,K=6,K=2,all,pooled,f025,144,-0.0078602,0.0009184,True,K=2
+3314,K=6,K=2,all,pooled,f1,144,-0.0035303,0.00067358,True,K=2
+3314,K=6,K=2,all,pooled,f4,144,0.0026756,0.00026839,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,pooled,cost,48,-0.0032834,0.00061158,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,pooled,f025,48,-0.011218,0.0020631,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,pooled,f1,48,-0.0042108,0.0014811,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/max_patch,pooled,f4,48,0.0029761,0.00046486,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,pooled,cost,48,-0.003013,0.00044794,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,pooled,f025,48,-0.0089802,0.0013494,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,pooled,f1,48,-0.0043664,0.00091352,True,K=2
+3314,K=6,K=2,geometry=dinov3_patch/whole_image,pooled,f4,48,0.0039309,0.00057705,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,pooled,cost,48,-0.00099607,0.00039127,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,pooled,f025,48,-0.0030641,0.00093336,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,pooled,f1,48,-0.0020382,0.00081112,True,K=2
+3314,K=6,K=2,geometry=siglip/whole_image,pooled,f4,48,0.0011476,0.00020371,True,K=2
+3314,K=8,K=2,all,pooled,average_precision,144,0,5e-10,False,K=2
+3314,K=8,K=2,all,pooled,cost,144,-0.0027523,0.00033317,True,K=2
+3314,K=8,K=2,all,pooled,f025,144,-0.0094732,0.0010548,True,K=2
+3314,K=8,K=2,all,pooled,f1,144,-0.0044005,0.00073408,True,K=2
+3314,K=8,K=2,all,pooled,f4,144,0.0031502,0.00030113,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,pooled,cost,48,-0.0038358,0.00068288,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,pooled,f025,48,-0.012464,0.0022921,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,pooled,f1,48,-0.004095,0.0015897,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/max_patch,pooled,f4,48,0.0033881,0.00050525,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,pooled,cost,48,-0.0035512,0.0005177,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,pooled,f025,48,-0.010863,0.0014979,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,pooled,f1,48,-0.0052423,0.0010224,True,K=2
+3314,K=8,K=2,geometry=dinov3_patch/whole_image,pooled,f4,48,0.0048363,0.00067937,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,pooled,average_precision,48,0,5e-10,False,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,pooled,cost,48,-0.00091744,0.0004097,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,pooled,f025,48,-0.0036123,0.0010079,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,pooled,f1,48,-0.0025713,0.00087672,True,K=2
+3314,K=8,K=2,geometry=siglip/whole_image,pooled,f4,48,0.0013094,0.00022432,True,K=2
+4114,linear,svm,all,clicks 1-150,cost,702,0.026144,0.0032197,True,lrconv
+4114,linear,svm,band=large,clicks 1-150,cost,245,0.016206,0.0043491,True,lrconv
+4114,linear,svm,band=medium,clicks 1-150,cost,245,0.028026,0.0033839,True,lrconv
+4114,linear,svm,band=small,clicks 1-150,cost,212,0.035453,0.0080474,True,lrconv
+4114,lrconv,svm,all,clicks 1-150,cost,702,-0.0097793,0.0027364,True,lrconv
+4114,lrconv,svm,band=large,clicks 1-150,cost,245,0.0037412,0.0026163,False,lrconv
+4114,lrconv,svm,band=medium,clicks 1-150,cost,245,-0.0024358,0.0027234,False,lrconv
+4114,lrconv,svm,band=small,clicks 1-150,cost,212,-0.033891,0.0065379,True,lrconv
+4114,linear,svm,all,clicks 1-150,f025,702,0.0019017,0.0021202,False,lrconv
+4114,linear,svm,band=large,clicks 1-150,f025,245,0.0065423,0.0061125,False,lrconv
+4114,linear,svm,band=medium,clicks 1-150,f025,245,-0.00059153,0.00035831,False,lrconv
+4114,linear,svm,band=small,clicks 1-150,f025,212,-0.00057983,0.00085154,False,lrconv
+4114,lrconv,svm,all,clicks 1-150,f025,702,0.0011978,0.0010993,False,lrconv
+4114,lrconv,svm,band=large,clicks 1-150,f025,245,0.0022273,0.0031509,False,lrconv
+4114,lrconv,svm,band=medium,clicks 1-150,f025,245,-0.00011396,0.00028811,False,lrconv
+4114,lrconv,svm,band=small,clicks 1-150,f025,212,0.001524,0.00065619,True,lrconv
+4114,linear,svm,all,clicks 1-150,f1,702,0.0014838,0.0021111,False,lrconv
+4114,linear,svm,band=large,clicks 1-150,f1,245,0.0062252,0.0060501,False,lrconv
+4114,linear,svm,band=medium,clicks 1-150,f1,245,-0.0014272,0.00056704,True,lrconv
+4114,linear,svm,band=small,clicks 1-150,f1,212,-0.00063147,0.00097895,False,lrconv
+4114,lrconv,svm,all,clicks 1-150,f1,702,0.0013768,0.0011024,False,lrconv
+4114,lrconv,svm,band=large,clicks 1-150,f1,245,0.0013353,0.0030667,False,lrconv
+4114,lrconv,svm,band=medium,clicks 1-150,f1,245,-0.00026227,0.0005261,False,lrconv
+4114,lrconv,svm,band=small,clicks 1-150,f1,212,0.0033191,0.00089702,True,lrconv
+4114,linear,svm,all,clicks 1-150,f4,702,-0.0065794,0.0022421,True,lrconv
+4114,linear,svm,band=large,clicks 1-150,f4,245,-0.0018991,0.0056752,False,lrconv
+4114,linear,svm,band=medium,clicks 1-150,f4,245,-0.011176,0.0020224,True,lrconv
+4114,linear,svm,band=small,clicks 1-150,f4,212,-0.0066757,0.0027138,True,lrconv
+4114,lrconv,svm,all,clicks 1-150,f4,702,0.0028559,0.0019229,False,lrconv
+4114,lrconv,svm,band=large,clicks 1-150,f4,245,-0.0044404,0.0040078,False,lrconv
+4114,lrconv,svm,band=medium,clicks 1-150,f4,245,-0.00059726,0.0021148,False,lrconv
+4114,lrconv,svm,band=small,clicks 1-150,f4,212,0.015279,0.0028862,True,lrconv
+4114,linear,svm,all,clicks 1-150,average_precision,702,-0.0012253,0.0019276,False,lrconv
+4114,linear,svm,band=large,clicks 1-150,average_precision,245,-8.602e-05,0.0039503,False,lrconv
+4114,linear,svm,band=medium,clicks 1-150,average_precision,245,-0.00022403,0.0032167,False,lrconv
+4114,linear,svm,band=small,clicks 1-150,average_precision,212,-0.003699,0.002664,False,lrconv
+4114,lrconv,svm,all,clicks 1-150,average_precision,702,-0.0047668,0.0019643,True,lrconv
+4114,lrconv,svm,band=large,clicks 1-150,average_precision,245,-0.011694,0.0043164,True,lrconv
+4114,lrconv,svm,band=medium,clicks 1-150,average_precision,245,-0.005918,0.0029082,True,lrconv
+4114,lrconv,svm,band=small,clicks 1-150,average_precision,212,0.0045697,0.0020665,True,lrconv
+4219,lrconv,svm,all,clicks 1-150,cost,702,-0.0098577,0.0027556,True,svm
+4219,lrconv,svm,band=large,clicks 1-150,cost,245,0.0037229,0.0027641,False,svm
+4219,lrconv,svm,band=medium,clicks 1-150,cost,245,-0.0027973,0.0027672,False,svm
+4219,lrconv,svm,band=small,clicks 1-150,cost,212,-0.033712,0.0065503,True,svm
+4219,svmc01,svm,all,clicks 1-150,cost,702,0.0056869,0.0025927,True,svm
+4219,svmc01,svm,band=large,clicks 1-150,cost,245,0.019906,0.0026413,True,svm
+4219,svmc01,svm,band=medium,clicks 1-150,cost,245,0.009059,0.002952,True,svm
+4219,svmc01,svm,band=small,clicks 1-150,cost,212,-0.014642,0.0060075,True,svm
+4219,lrconv,svm,all,clicks 1-150,f025,702,0.0011541,0.0010974,False,svm
+4219,lrconv,svm,band=large,clicks 1-150,f025,245,0.0021837,0.0031514,False,svm
+4219,lrconv,svm,band=medium,clicks 1-150,f025,245,-9.4333e-05,0.00028754,False,svm
+4219,lrconv,svm,band=small,clicks 1-150,f025,212,0.001407,0.00062275,True,svm
+4219,svmc01,svm,all,clicks 1-150,f025,702,-0.001396,0.00083167,False,svm
+4219,svmc01,svm,band=large,clicks 1-150,f025,245,-0.0011035,0.0022703,False,svm
+4219,svmc01,svm,band=medium,clicks 1-150,f025,245,-0.0018329,0.00051714,True,svm
+4219,svmc01,svm,band=small,clicks 1-150,f025,212,-0.0012291,0.00080361,False,svm
+4219,lrconv,svm,all,clicks 1-150,f1,702,0.0013049,0.0010971,False,svm
+4219,lrconv,svm,band=large,clicks 1-150,f1,245,0.0012577,0.003067,False,svm
+4219,lrconv,svm,band=medium,clicks 1-150,f1,245,-0.00022616,0.00052547,False,svm
+4219,lrconv,svm,band=small,clicks 1-150,f1,212,0.003129,0.00083772,True,svm
+4219,svmc01,svm,all,clicks 1-150,f1,702,-0.0028462,0.0009013,True,svm
+4219,svmc01,svm,band=large,clicks 1-150,f1,245,-0.0038407,0.0022919,False,svm
+4219,svmc01,svm,band=medium,clicks 1-150,f1,245,-0.0032837,0.00086743,True,svm
+4219,svmc01,svm,band=small,clicks 1-150,f1,212,-0.0011914,0.0010515,False,svm
+4219,lrconv,svm,all,clicks 1-150,f4,702,0.0026893,0.0019122,False,svm
+4219,lrconv,svm,band=large,clicks 1-150,f4,245,-0.0047511,0.0039996,False,svm
+4219,lrconv,svm,band=medium,clicks 1-150,f4,245,-0.00039677,0.0021158,False,svm
+4219,lrconv,svm,band=small,clicks 1-150,f4,212,0.014854,0.0028498,True,svm
+4219,svmc01,svm,all,clicks 1-150,f4,702,-0.013039,0.0020063,True,svm
+4219,svmc01,svm,band=large,clicks 1-150,f4,245,-0.023257,0.0038732,True,svm
+4219,svmc01,svm,band=medium,clicks 1-150,f4,245,-0.013649,0.0027143,True,svm
+4219,svmc01,svm,band=small,clicks 1-150,f4,212,-0.00052694,0.0029112,False,svm
+4219,lrconv,svm,all,clicks 1-150,average_precision,702,-0.0044082,0.0018916,True,svm
+4219,lrconv,svm,band=large,clicks 1-150,average_precision,245,-0.011472,0.0041144,True,svm
+4219,lrconv,svm,band=medium,clicks 1-150,average_precision,245,-0.0051787,0.0027989,False,svm
+4219,lrconv,svm,band=small,clicks 1-150,average_precision,212,0.0046462,0.0020605,True,svm
+4219,svmc01,svm,all,clicks 1-150,average_precision,702,-0.0040826,0.0017434,True,svm
+4219,svmc01,svm,band=large,clicks 1-150,average_precision,245,-0.0092512,0.0028881,True,svm
+4219,svmc01,svm,band=medium,clicks 1-150,average_precision,245,-0.0032086,0.0035487,False,svm
+4219,svmc01,svm,band=small,clicks 1-150,average_precision,212,0.00088063,0.0022509,False,svm
+4219r,lrconv,svm,all,clicks 1-150,cost,138,-0.0010197,0.0039481,False,svm
+4219r,lrconv,svm,all,clicks 1-150,f025,138,-0.0041241,0.0023784,False,svm
+4219r,lrconv,svm,all,clicks 1-150,f1,138,-0.0059116,0.0030318,False,svm
+4219r,lrconv,svm,all,clicks 1-150,f4,138,-0.011961,0.005285,True,svm
+4219r,lrconv,svm,all,clicks 1-150,average_precision,138,-0.012189,0.0041101,True,svm
+4184,r2_gmm,r1_xcal,all,clicks 1-150,cost,720,-0.02452,0.0051458,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,click 150,cost,720,-0.0055287,0.0059987,False,r4_rawmean
+4184,r3_blend,r1_xcal,all,clicks 1-150,cost,720,-0.049382,0.0050954,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,click 150,cost,720,-0.034169,0.0056378,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,clicks 1-150,cost,720,-0.089906,0.0040015,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,click 150,cost,720,-0.06448,0.0049844,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,clicks 1-150,cost,720,-0.0069069,0.004979,False,r4_rawmean
+4184,r5_anchored,r1_xcal,all,click 150,cost,720,0.0083275,0.0062277,False,r4_rawmean
+4184,r6_split70,r1_xcal,all,clicks 1-150,cost,720,-0.0090586,0.0050676,False,r4_rawmean
+4184,r6_split70,r1_xcal,all,click 150,cost,720,0.0075077,0.0060476,False,r4_rawmean
+4184,r7_acq4,r1_xcal,all,clicks 1-150,cost,720,-0.04962,0.0042397,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,click 150,cost,720,-0.039256,0.0052117,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,clicks 1-150,f025,720,-0.35603,0.012003,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,click 150,f025,720,-0.37658,0.012801,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,clicks 1-150,f025,720,-0.34643,0.011812,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,click 150,f025,720,-0.36085,0.011903,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,clicks 1-150,f025,720,-0.30764,0.01032,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,click 150,f025,720,-0.32972,0.011311,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,clicks 1-150,f025,720,-0.35975,0.012142,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,click 150,f025,720,-0.38204,0.012641,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,clicks 1-150,f025,720,-0.35883,0.011825,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,click 150,f025,720,-0.38096,0.012744,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,clicks 1-150,f025,720,-0.35344,0.011902,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,click 150,f025,720,-0.37492,0.012345,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,clicks 1-150,f1,720,-0.35668,0.011129,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,click 150,f1,720,-0.39883,0.011987,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,clicks 1-150,f1,720,-0.34254,0.01103,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,click 150,f1,720,-0.37798,0.01205,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,clicks 1-150,f1,720,-0.28767,0.0090311,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,click 150,f1,720,-0.33556,0.010614,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,clicks 1-150,f1,720,-0.36294,0.011595,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,click 150,f1,720,-0.40769,0.012183,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,clicks 1-150,f1,720,-0.36138,0.011237,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,click 150,f1,720,-0.40598,0.011814,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,clicks 1-150,f1,720,-0.35189,0.011085,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,click 150,f1,720,-0.39504,0.011746,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,clicks 1-150,f4,720,-0.28098,0.0090096,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,click 150,f4,720,-0.32985,0.0093749,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,clicks 1-150,f4,720,-0.24536,0.0082999,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,click 150,f4,720,-0.28618,0.0091425,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,clicks 1-150,f4,720,-0.1398,0.0055054,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,click 150,f4,720,-0.2105,0.0071253,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,clicks 1-150,f4,720,-0.30122,0.0089155,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,click 150,f4,720,-0.35339,0.0093826,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,clicks 1-150,f4,720,-0.29637,0.0088502,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,click 150,f4,720,-0.34959,0.0094987,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,clicks 1-150,f4,720,-0.25617,0.0075618,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,click 150,f4,720,-0.30048,0.00777,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,clicks 1-150,average_precision,720,-0.094826,0.0042007,True,r4_rawmean
+4184,r2_gmm,r1_xcal,all,click 150,average_precision,720,-0.12324,0.0051226,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,clicks 1-150,average_precision,720,-0.090178,0.0040399,True,r4_rawmean
+4184,r3_blend,r1_xcal,all,click 150,average_precision,720,-0.11642,0.0049816,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,clicks 1-150,average_precision,720,-0.072055,0.003663,True,r4_rawmean
+4184,r4_rawmean,r1_xcal,all,click 150,average_precision,720,-0.099696,0.0047482,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,clicks 1-150,average_precision,720,-0.095119,0.0042522,True,r4_rawmean
+4184,r5_anchored,r1_xcal,all,click 150,average_precision,720,-0.12428,0.0051547,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,clicks 1-150,average_precision,720,-0.096818,0.0042666,True,r4_rawmean
+4184,r6_split70,r1_xcal,all,click 150,average_precision,720,-0.12736,0.0053019,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,clicks 1-150,average_precision,720,-0.060649,0.0030891,True,r4_rawmean
+4184,r7_acq4,r1_xcal,all,click 150,average_precision,720,-0.077292,0.0041237,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,clicks 1-150,cost,720,-0.024862,0.0012452,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,click 150,cost,720,-0.028641,0.0018447,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,clicks 1-150,f025,720,0.0096049,0.0011252,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,click 150,f025,720,0.015732,0.0028649,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,clicks 1-150,f1,720,0.014139,0.0013696,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,click 150,f1,720,0.02085,0.0029782,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,clicks 1-150,f4,720,0.035628,0.0017562,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,click 150,f4,720,0.043674,0.0025854,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,clicks 1-150,average_precision,720,0.0046476,0.001042,True,r4_rawmean
+4184,r3_blend,r2_gmm,all,click 150,average_precision,720,0.0068152,0.0016824,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,clicks 1-150,cost,720,-0.040524,0.0025717,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,click 150,cost,720,-0.030311,0.0028858,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,clicks 1-150,f025,720,0.038791,0.0033699,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,click 150,f025,720,0.031133,0.0041676,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,clicks 1-150,f1,720,0.054867,0.0040545,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,click 150,f1,720,0.042428,0.0048183,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,clicks 1-150,f4,720,0.10556,0.0056568,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,click 150,f4,720,0.075678,0.0057905,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,clicks 1-150,average_precision,720,0.018124,0.0017369,True,r4_rawmean
+4184,r4_rawmean,r3_blend,all,click 150,average_precision,720,0.016726,0.0023895,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,clicks 1-150,cost,720,0.082999,0.0030654,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,click 150,cost,720,0.072808,0.0031966,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,clicks 1-150,f025,720,-0.052117,0.0037752,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,click 150,f025,720,-0.05232,0.0050566,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,clicks 1-150,f1,720,-0.075265,0.0046834,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,click 150,f1,720,-0.072137,0.0057017,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,clicks 1-150,f4,720,-0.16142,0.0061413,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,click 150,f4,720,-0.14288,0.0061971,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,clicks 1-150,average_precision,720,-0.023064,0.0018127,True,r4_rawmean
+4184,r5_anchored,r4_rawmean,all,click 150,average_precision,720,-0.024587,0.0024033,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,clicks 1-150,cost,720,-0.0021517,0.0015314,False,r4_rawmean
+4184,r6_split70,r5_anchored,all,click 150,cost,720,-0.00081979,0.0020667,False,r4_rawmean
+4184,r6_split70,r5_anchored,all,clicks 1-150,f025,720,0.00092423,0.00030013,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,click 150,f025,720,0.0010784,0.00047509,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,clicks 1-150,f1,720,0.0015624,0.00048679,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,click 150,f1,720,0.0017151,0.00073333,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,clicks 1-150,f4,720,0.0048461,0.0013552,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,click 150,f4,720,0.0037978,0.0018476,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,clicks 1-150,average_precision,720,-0.0016994,0.00080866,True,r4_rawmean
+4184,r6_split70,r5_anchored,all,click 150,average_precision,720,-0.003073,0.0011309,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,clicks 1-150,cost,720,-0.040561,0.0023138,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,click 150,cost,720,-0.046764,0.0029001,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,clicks 1-150,f025,720,0.0053869,0.00048519,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,click 150,f025,720,0.0060445,0.00074514,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,clicks 1-150,f1,720,0.0094861,0.00079172,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,click 150,f1,720,0.010937,0.0012659,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,clicks 1-150,f4,720,0.040199,0.0023444,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,click 150,f4,720,0.049109,0.0035342,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,clicks 1-150,average_precision,720,0.036169,0.0022332,True,r4_rawmean
+4184,r7_acq4,r6_split70,all,click 150,average_precision,720,0.050064,0.0030741,True,r4_rawmean
+3826ab,guarded_tail,gmm_midpoint,all,all steps,cost,84,0.016339,0.0048414,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 6-20,cost,82,0.070915,0.012723,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 21+,cost,84,0.0095277,0.0044519,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,all steps,f025,84,-0.03692,0.016133,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 6-20,f025,82,-0.018527,0.0097568,False,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 21+,f025,84,-0.041061,0.017543,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,all steps,f1,84,-0.031038,0.013548,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 6-20,f1,82,-0.024214,0.009936,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 21+,f1,84,-0.033553,0.014894,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,all steps,f4,84,-0.01493,0.0056214,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 6-20,f4,82,-0.042595,0.0086519,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 21+,f4,84,-0.011941,0.0056018,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,all steps,average_precision,84,-0.0033166,0.0051205,False,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 6-20,average_precision,82,-0.037963,0.008462,True,gmm_midpoint
+3826ab,guarded_tail,gmm_midpoint,all,votes 21+,average_precision,84,0.00051015,0.0054692,False,gmm_midpoint
+3826,gmm_guarded_z3,gmm_shipped,all,one sort,cost,1120,0.05283,0.011429,True,gmm_shipped
+3826,gmm_guarded_z3,gmm_shipped,all,one sort,f025,1120,0.29356,0.013906,True,gmm_shipped
+3826,gmm_guarded_z3,gmm_shipped,all,one sort,f1,1120,0.22212,0.01621,True,gmm_shipped
+3826,gmm_guarded_z3,gmm_shipped,all,one sort,f4,1120,0.00010183,0.019881,False,gmm_shipped

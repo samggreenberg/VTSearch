@@ -1,14 +1,14 @@
-"""Tests for the Stage-2 geometric re-rank + verification classifier.
+"""Tests for the Stage-2 geometric re-rank by the inlier gate.
 
 Exercises ``vtscore.training.structural_similarity``: RegionYes-as-template
-filtering, max-over-templates verification, the match-statistic classifier
-(plus its cold-start fallback), and the Stage-1->Stage-2 re-rank chokepoint
+filtering, max-over-templates verification, the inlier gate, and the
+Stage-1->Stage-2 re-rank chokepoint
 (the "two-stage flow" the design doc calls for - an item the VLAD coarse stage
 ranks mid-pack but that geometrically verifies is promoted above a high-VLAD
 item with no geometric support).
 
 No model weights are downloaded - SIFT (via ``SiftMatcher``) is all that's
-needed; the verification classifier trains on tiny synthetic match-stat vectors.
+needed.
 """
 
 from __future__ import annotations
@@ -34,7 +34,6 @@ from vtscore.training.structural_similarity import (
     maybe_structural_rerank_example,
     snapshot_is_structural,
     structural_rerank,
-    train_verification_classifier,
 )
 
 
@@ -169,69 +168,68 @@ class TestBestMatchStats:
 
 
 # --------------------------------------------------------------------------
-# Verification scorer (cold-start + classifier)
+# Verification scorer (the inlier gate)
 # --------------------------------------------------------------------------
 
 
 class TestVerificationScorerColdStart:
     def test_model_not_ok_scores_zero(self):
-        scorer = VerificationScorer(model=None)
+        scorer = VerificationScorer()
         assert scorer.score(MatchStats(inlier_count=50, model_ok=False)) == 0.0
 
     def test_threshold_crossing_at_min_inliers(self):
-        scorer = VerificationScorer(model=None, min_inliers=DEFAULT_MIN_INLIERS)
+        scorer = VerificationScorer(min_inliers=DEFAULT_MIN_INLIERS)
         at_gate = scorer.score(MatchStats(inlier_count=DEFAULT_MIN_INLIERS, model_ok=True))
         assert at_gate == pytest.approx(0.5)
         # Below the gate is below threshold; well above saturates at 1.0.
         assert scorer.score(MatchStats(inlier_count=2, model_ok=True)) < STRUCTURAL_DECISION_THRESHOLD
-        assert scorer.score(MatchStats(inlier_count=100, model_ok=True)) == 1.0
+        # Monotone and never saturating (#4367): more inliers always scores higher.
+        hi, higher = (scorer.score(MatchStats(inlier_count=n, model_ok=True)) for n in (100, 200))
+        assert 0.9 < hi < higher < 1.0
+        assert scorer.threshold_for(DEFAULT_MIN_INLIERS) == pytest.approx(0.5)
 
 
-class TestVerificationClassifier:
-    def _shared_instance_snapshot(self):
-        """Good votes are warps of one base image (a shared instance);
-        bad votes are unrelated images."""
-        m = SiftMatcher()
-        base = _textured_image(101)
-        snap = {
-            1: {"local_features": _feats(base, matcher=m)},
-            2: {"local_features": _feats(_warp(base, 12.0, 1.1, 8.0, -5.0), matcher=m)},
-            3: {"local_features": _feats(_warp(base, -8.0, 0.9, -6.0, 4.0), matcher=m)},
-            4: {"local_features": _feats(_textured_image(202), matcher=m)},
-            5: {"local_features": _feats(_textured_image(303), matcher=m)},
-        }
-        good = {1: None, 2: None, 3: None}
-        bad = {4: None, 5: None}
-        return m, snap, good, bad
+class _StubMatcher:
+    """Returns canned :class:`MatchStats` per candidate, keyed by the candidate object."""
 
-    def test_cold_start_below_min_votes_returns_none(self):
-        m = SiftMatcher()
-        snap = {
-            1: {"local_features": _feats(_textured_image(1), matcher=m)},
-            2: {"local_features": _feats(_textured_image(2), matcher=m)},
-        }
-        templates = build_templates({1: None}, snap, {})
-        # Only 2 votes total (< MIN_VERIFICATION_VOTES) -> cold-start.
-        clf = train_verification_classifier(templates, {1: None}, {2: None}, snap, m)
-        assert clf is None
+    def __init__(self, stats_by_candidate: dict[int, MatchStats]):
+        self._stats = stats_by_candidate
 
-    def test_classifier_separates_match_from_non_match(self):
-        m, snap, good, bad = self._shared_instance_snapshot()
-        templates = build_templates(good, snap, {})
-        clf = train_verification_classifier(templates, good, bad, snap, m)
-        assert clf is not None
+    def detect_and_describe(self, image_gray: np.ndarray, *, max_features: int = 0) -> StructuralFeatures:
+        raise NotImplementedError
 
-        scorer = VerificationScorer(model=clf)
-        tpl_feats = [tpl for _, tpl in templates]
+    def verify(self, template: StructuralFeatures, candidate: StructuralFeatures) -> MatchStats:
+        del template
+        return self._stats[id(candidate)]
 
-        # A held-out warp of the shared instance should score higher than an
-        # unrelated image.
-        base = _textured_image(101)
-        held_out = _feats(_warp(base, 5.0, 1.05, 3.0, 2.0), matcher=m)
-        unrelated = _feats(_textured_image(909), matcher=m)
-        match_score = scorer.score(best_match_stats(tpl_feats, held_out, m))
-        non_match_score = scorer.score(best_match_stats(tpl_feats, unrelated, m))
-        assert match_score > non_match_score
+
+def _dummy_features(seed: int) -> StructuralFeatures:
+    rng = np.random.default_rng(seed)
+    return StructuralFeatures(
+        keypoints=rng.random((4, 4)).astype(np.float32),
+        descriptors=rng.random((4, SIFT_DESCRIPTOR_DIM)).astype(np.float32),
+    )
+
+
+class TestInlierOrderPastSaturation:
+    """#4169: more inliers ranks first (and, since #4367, also scores higher), then Stage 1."""
+
+    def test_saturated_fits_are_ordered_by_inliers_then_stage1(self):
+        feats = {i: _dummy_features(i) for i in (1, 2, 3, 4)}
+        matcher = _StubMatcher(
+            {
+                id(feats[1]): MatchStats(inlier_count=20, model_ok=True),  # saturated
+                id(feats[2]): MatchStats(inlier_count=60, model_ok=True),  # saturated, strongest
+                id(feats[3]): MatchStats(inlier_count=20, model_ok=True),  # ties id 1 on inliers
+                id(feats[4]): MatchStats(inlier_count=90, model_ok=False),  # no sane model
+            }
+        )
+        snap = {i: {"local_features": f} for i, f in feats.items()}
+        results = [{"id": 4, "score": 0.9}, {"id": 1, "score": 0.8}, {"id": 3, "score": 0.7}, {"id": 2, "score": 0.1}]
+        out = structural_rerank(results, snap, [_dummy_features(9)], VerificationScorer(), matcher, top_k=50)
+        assert [e["id"] for e in out] == [2, 1, 3, 4]
+        # The reported score stays the gate's, so order and score agree.
+        assert [e["score"] for e in out] == [0.882353, 0.714286, 0.714286, 0.0]  # n / (n + 8), rounded
 
 
 # --------------------------------------------------------------------------
@@ -258,7 +256,7 @@ class TestStructuralRerank:
             {"id": 10, "score": 0.91},
             {"id": 20, "score": 0.42},
         ]
-        scorer = VerificationScorer(model=None)
+        scorer = VerificationScorer()
         out = structural_rerank(results, snap, [template], scorer, m, top_k=50)
 
         assert out[0]["id"] == 20, "geometrically-verified item must be promoted"
@@ -285,7 +283,7 @@ class TestStructuralRerank:
             {"id": 2, "score": 0.8},
             {"id": 3, "score": 0.7},
         ]
-        scorer = VerificationScorer(model=None)
+        scorer = VerificationScorer()
         # top_k=1 -> only id 1 is verified; ids 2,3 are the tail.
         out = structural_rerank(results, snap, [template], scorer, m, top_k=1)
         tail = out[1:]
@@ -308,7 +306,7 @@ class TestMaybeStructuralRerank:
     def test_noop_for_non_structural_snapshot(self):
         snap = {1: {"embedding": np.zeros(8, dtype=np.float32)}}  # no local_features
         results = [{"id": 1, "score": 0.7}]
-        out, thresh = maybe_structural_rerank(results, 0.33, snap, {1: None}, {}, {})
+        out, thresh = maybe_structural_rerank(results, 0.33, snap, {1: None}, {})
         assert out == results
         assert thresh == 0.33
         assert snapshot_is_structural(snap) is False
@@ -332,20 +330,19 @@ class TestMaybeStructuralRerank:
             {"id": 2, "score": 0.40},  # warp of the good-vote instance
             {"id": 1, "score": 0.30},  # the good-vote instance itself
         ]
-        good = {1: None}
-        bad = {3: None}
-        out, thresh = maybe_structural_rerank(results, 0.77, snap, good, bad, {})
+        out, thresh = maybe_structural_rerank(results, 0.77, snap, {1: None}, {})
         assert thresh == STRUCTURAL_DECISION_THRESHOLD
-        # id 2 (warp of the template) is geometrically verified and leads.
-        assert out[0]["id"] == 2
-        assert out[0]["score"] >= STRUCTURAL_DECISION_THRESHOLD
+        # The template's own page (the most inliers) and its warp both verify and
+        # lead the unrelated high-VLAD item.
+        assert [e["id"] for e in out] == [1, 2, 3]
+        assert out[1]["score"] >= STRUCTURAL_DECISION_THRESHOLD > out[2]["score"]
 
     def test_it_drops_the_mlp_scale_estimators_from_the_detector(self, monkeypatch):
         """The boundary it returns is not on the retrieval MLP's scale, so nothing may re-cut it.
 
         Stage 1 parks the MLP's fold-anchored estimator and calibration folds on
         the detector.  Left there, the next re-cut - a floor or Inclusion change,
-        the acquisition cut - replaced the classifier's boundary
+        the acquisition cut - replaced the gate's boundary
         with an MLP-scale threshold and applied it to verification scores.
         """
         from vtscore.state.core import DetectorContext, recut_detector_threshold
@@ -363,7 +360,7 @@ class TestMaybeStructuralRerank:
         det_ctx.calibration_cache = ("key", object())
 
         results = [{"id": 3, "score": 0.95}, {"id": 2, "score": 0.40}, {"id": 1, "score": 0.30}]
-        _out, thresh = maybe_structural_rerank(results, 0.77, snap, {1: None}, {3: None}, {}, det_ctx)
+        _out, thresh = maybe_structural_rerank(results, 0.77, snap, {1: None}, {}, det_ctx)
 
         assert thresh == STRUCTURAL_DECISION_THRESHOLD
         assert det_ctx.anchored_cut_cache is None
@@ -371,7 +368,7 @@ class TestMaybeStructuralRerank:
         assert recut_detector_threshold(det_ctx, 4) is None, "nothing left that could re-cut the boundary"
 
     def test_feature_snap_sources_templates_from_a_separate_snapshot(self, monkeypatch):
-        """The labelset path supplies templates/classifier features from a
+        """The labelset path supplies template features from a
         synthetic ``feature_snap`` (re-derived cross-dataset features) while the
         re-rank runs over the active dataset's own ``snap``."""
         m = SiftMatcher()
@@ -392,9 +389,7 @@ class TestMaybeStructuralRerank:
             {"id": 10, "score": 0.93},  # high VLAD, unrelated
             {"id": 20, "score": 0.31},  # warp of the cross-dataset template
         ]
-        out, thresh = maybe_structural_rerank(
-            results, 0.5, snap, {"good-elem": None}, {}, {}, feature_snap=feature_snap
-        )
+        out, thresh = maybe_structural_rerank(results, 0.5, snap, {"good-elem": None}, {}, feature_snap=feature_snap)
         assert thresh == STRUCTURAL_DECISION_THRESHOLD
         assert out[0]["id"] == 20, "the item matching the cross-dataset template must lead"
         assert out[0]["score"] >= STRUCTURAL_DECISION_THRESHOLD

@@ -31,6 +31,14 @@ reading the ranked haystack is *free* and is what clicking has to beat.  Pass
 for nothing, the far right is what the clicking got, and the distance between
 them is the whole value of the loop.
 
+A metric about the returned set (precision, recall, F1, F1/4, F4, the
+objective) is anchored at **the set the text sort's own line returns**, at the
+balance the curve's line was drawn at (:func:`text_line_values`): the line the
+app draws on the typed query at that preset since #4603, else its beta-blind
+cut.  One rule on both sides of the gap (#4474), so a session set at beta 4
+starts from the long list the app shows at beta 4, not from the same notch as
+one at beta 1/4.
+
 The anchor is **each series' own leftmost point**, not a rule across the panel.
 A horizontal reference line dominated the figure to make a point the leftmost
 marker already makes, and it implied a level that holds at every click when it
@@ -42,15 +50,23 @@ Three things it refuses to do quietly, because each one turns a failing arm
 into a good-looking curve:
 
 1. **Average over a shrinking denominator.**  The main metric frame starts at
-   the first *trainable* step — before one Good and one Bad vote coexist there
-   is no model, no threshold and no row.  So a starved cell simply is not in
-   the average, and an arm that starves on a third of its cells gets its mean
-   computed over the two thirds that worked.  Every mean is therefore dashed
-   wherever coverage — the fraction of that arm's cells measured at that click
-   — is below :data:`SOLID_COVERAGE`.  A dashed line means "this level
-   describes a subset".  The stretch between ``t=0`` and the first trainable
-   click is dashed by the same rule and for the same reason: nothing was
-   measured in there.
+   a run's first Good (#4643; at its first Good *and* Bad in a frame written
+   before it) — before that there is no detector, no threshold and no row.
+   Left that way, a starved cell is not in the average, and an arm that
+   starves on a third of its cells gets its mean computed over the two thirds
+   that worked.  But a user at that click has a labelset Test refuses, and
+   Find on it returns nothing, so such a click is scored as the empty returned set
+   (:func:`score_empty_sets`, :data:`EMPTY_SET`), as is a trained detector
+   that flags nothing, whose undefined precision counts as 0: every attempted
+   run is in the mean at every click, the failing ones at a loss.  Any mean still
+   computed over fewer cells is dashed wherever coverage — the fraction of
+   that arm's cells measured at that click — is below
+   :data:`SOLID_COVERAGE`; a dashed line means "this level describes a
+   subset".  A click a run has no row for *inside* its span is a
+   different thing: a spot check answers several picks at once and is scored
+   once per round, and the user has the run's last trained detector all the
+   while, so that row stands in for the clicks between (:func:`fill_gaps`,
+   #4624) and a check never drops a run from the mean.
 
    A **coverage strip** under the panel draws that fraction outright, but only
    when it is not already told by the dashing (:func:`_strip_worth_drawing`):
@@ -63,11 +79,30 @@ into a good-looking curve:
    row per ``(arm, *keys)`` cell the run *attempted* — and coverage is measured
    against the cells that exist rather than against the cells that produced
    rows.  Without it the two are the same number by construction and the
-   coverage strip reads 100% for an arm that starved everywhere.
+   coverage strip reads 100% for an arm that starved everywhere, and the
+   cells that never trained are not scored at all.  A caller with no cell
+   list but a text-sort baseline gets one from :func:`attempted_cells`,
+   which is what the standalone CLI and ``viewer.py`` do.
 3. **Silently subsample the per-run panel.**  ``max_runs`` defaults to 0 (draw
    them all).  A caller that sets it gets the cap written into the panel title,
    because a hairball with a third of its lines removed looks like a tighter
    arm, not a truncated figure.
+
+**Autopilot's opening is drawn as the detector** (owner, 2026-10-07, #4640).
+The app shows the text sort until the Hard phase (``app_trained``), but the
+user can export the labels or run Test at any click, and either retrains from
+them, so a row is what the user can take away at that click.  Since #4643 that
+is what the label quota gives: from the first Good the Goods' centroid, until
+the labels hold 3 Goods and 4 Bads, and the trained head from there - the
+harness writes the row as that detector and says which in ``detector_tier``.
+Nothing here reads ``app_trained`` or ``detector_tier``: a row is drawn the
+same whichever detector made it, and an analyzer about the session filters on
+``app_trained`` itself.
+
+**The spot check is not a click.**  A floor-era run ends on its spot check
+(#4272), whose rows sit past ``max_steps`` and come from a model retrained on
+the check's own picks.  ``_cells_io.load_arm`` sets them apart (#4364), so a
+curve ends at the last click.
 
 The per-run lines are coloured by category **prevalence** when a prevalence
 table is supplied, which is what turns the hairball into an explanation: the
@@ -97,6 +132,7 @@ import common
 common.setup_env()
 
 import numpy as np  # noqa: E402
+import objective  # noqa: E402
 import pandas as pd  # noqa: E402
 
 #: Below this fraction of an arm's cells carrying a detector, the mean is drawn
@@ -125,7 +161,13 @@ BASELINE_LABEL = os.environ.get("CURVE_BASELINE_LABEL", "text sort, 0 clicks")
 
 #: Where to look for a metric's zero-click value in a ``text_baseline.py`` frame.
 #: Tried in order; the metric's own name is the last resort so a caller can hand
-#: over a frame that simply uses the same column name.
+#: over a frame that simply uses the same column name.  A cut metric is read off
+#: the text sort's own line first (:func:`text_line_values`); its columns here
+#: are the beta-blind cut, the same line that falls back to, for a baseline
+#: that carries only them.  The baseline's ``text_fbeta_b*`` columns are not
+#: here: they score the text sort's top 32 / 128 (the retired count cap), and an
+#: anchor drawn at a fixed count beside a curve drawn at the app's line compares
+#: two rules (owner, 2026-10-04, #4474).
 BASELINE_COLUMNS: dict[str, tuple[str, ...]] = {
     "cost": ("text_cost",),
     "oracle_cost": ("text_oracle_cost",),
@@ -137,6 +179,99 @@ BASELINE_COLUMNS: dict[str, tuple[str, ...]] = {
     "fpr": ("text_fpr",),
     "fnr": ("text_fnr",),
 }
+
+#: The metrics that are a statement about one returned set, and so are read at
+#: click 0 off the one set the text sort's line returns (:func:`text_line_values`).
+LINE_METRICS: frozenset[str] = frozenset(
+    {"precision", "recall", "f1", "fpr", "fnr", objective.OBJECTIVE, "fbeta_b025", "fbeta_b1", "fbeta_b4"}
+)
+
+
+def resolve_metric(
+    main: pd.DataFrame, metric: str | None, lower_is_better: bool | None, baseline_col: str | None
+) -> tuple[pd.DataFrame, str, bool, str | None]:
+    """``(frame, metric, lower_is_better, baseline_col)`` with every default filled (#4584).
+
+    No *metric* is the decision metric (:func:`objective.primary_metric`): the
+    objective, ``fbeta``, on a frame that carries a beta, else ``cost``.  An
+    objective column the frame predates is filled from its rates, and the
+    direction comes from the one table the viewer reads.  *baseline_col* is
+    passed through: with none named, :func:`baseline_map` reads a cut metric's
+    zero-click anchor off the text sort's line at the frame's own beta
+    (:func:`objective.frame_beta`).
+    """
+    if metric is None:
+        metric = objective.primary_metric(main)
+    if metric.startswith(objective.OBJECTIVE):
+        main = objective.with_objective(main)
+    if lower_is_better is None:
+        lower_is_better = objective.lower_is_better(metric)
+    return main, metric, lower_is_better, baseline_col
+
+
+def text_line_rates(baseline: pd.DataFrame, beta: float | None) -> pd.DataFrame | None:
+    """``precision`` / ``recall`` / ``fpr`` of the set the text sort's own line returns, per baseline row.
+
+    The line is the one the app draws on the typed query (#4474: the anchor and
+    the curve beside it must be one rule).  At *beta* where the baseline
+    recorded it (``text_line_precision_<tag>`` / ``_recall_`` / ``_fpr_``):
+    since #4603 the app draws a different line at each preset.  Otherwise, row
+    by row, the beta-blind cut every baseline carries (``text_precision`` /
+    ``text_recall`` / ``text_fpr``), which is the line the app drew before
+    #4603 and the one a frame with no balance opened on; ``analyze.py``'s
+    ``_text_app_line`` reads it the same way.  An empty set's undefined
+    precision counts as 0, as a detector's does (:func:`zero_empty_precision`).
+    ``None`` when the baseline carries neither line.
+    """
+    from vtscore.eval.voting_columns import beta_tag  # noqa: PLC0415
+
+    blind = ("text_precision", "text_recall", "text_fpr")
+    if not set(blind[:2]) <= set(baseline.columns):
+        return None
+
+    def col(name: str) -> pd.Series:
+        if name not in baseline.columns:
+            return pd.Series(np.nan, index=baseline.index)
+        return pd.to_numeric(baseline[name], errors="coerce")
+
+    rates = pd.DataFrame({"precision": col(blind[0]), "recall": col(blind[1]), "fpr": col(blind[2])})
+    if beta is not None and np.isfinite(beta):
+        tag = beta_tag(float(beta))
+        own = pd.DataFrame(
+            {m: col(f"text_line_{m}_{tag}") for m in ("precision", "recall", "fpr")}, index=baseline.index
+        )
+        rates = own.where(own["recall"].notna(), rates, axis=0)
+    return zero_empty_precision(rates)
+
+
+def text_line_values(baseline: pd.DataFrame, metric: str, beta: float | None) -> pd.Series | None:
+    """*metric* of the set the text sort's line returns (:func:`text_line_rates`), per baseline row.
+
+    Every cut metric is scored on that one set, through the same
+    :func:`~vtscore.eval.calibration_metrics.fbeta_from_rates` the analyzers
+    fill a row's objective with, so F1, F1/4 and F4 at click 0 and the curve
+    they anchor read the same rule.  ``fbeta`` is at *beta*, the balance the
+    frame's line was drawn at; with none there is no objective and so no
+    anchor.  ``None`` for a metric that is not a statement about one set, or
+    a baseline with no line to read.
+    """
+    from vtscore.eval.calibration_metrics import fbeta_from_rates  # noqa: PLC0415
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
+
+    if metric not in LINE_METRICS:
+        return None
+    if metric == objective.OBJECTIVE and (beta is None or not np.isfinite(beta)):
+        return None
+    rates = text_line_rates(baseline, beta)
+    if rates is None:
+        return None
+    if metric in ("precision", "recall", "fpr"):
+        return rates[metric]
+    if metric == "fnr":
+        return 1.0 - rates["recall"]
+    scored_at = {"f1": 1.0, objective.OBJECTIVE: beta, **{f"fbeta_{beta_tag(b)}": b for b in RANK_FRAME_BETAS}}
+    f = fbeta_from_rates(rates["precision"].to_numpy(), rates["recall"].to_numpy(), float(scored_at[metric]))
+    return pd.Series(f, index=baseline.index)
 
 
 def _keys(df: pd.DataFrame, keys: Sequence[str] = KEYS) -> list[str]:
@@ -161,6 +296,7 @@ def baseline_map(
     metric: str,
     keys: list[str],
     baseline_col: str | None = None,
+    beta: float | None = None,
 ) -> dict[tuple, float]:
     """``cell key -> the metric's zero-click value``, or ``{}``.
 
@@ -169,9 +305,20 @@ def baseline_map(
     metric frame keyed the same way.  A baseline lacking the metric entirely
     yields ``{}`` — the figure then simply has no anchor, rather than an anchor
     invented from the wrong column.
+
+    With no *baseline_col* named, a cut metric is read off the set the text
+    sort's own line returns at *beta*, the balance the curve's line was drawn
+    at (:func:`text_line_values`), so the notch and the curve are one rule.
     """
     if baseline is None or baseline.empty:
         return {}
+    kk = [k for k in keys if k in baseline.columns]
+    if not kk:
+        return {}
+    if baseline_col is None:
+        line = text_line_values(baseline, metric, beta)
+        if line is not None:
+            return _cell_means(baseline, kk, line)
     col = baseline_col
     if col is None:
         for cand in (*BASELINE_COLUMNS.get(metric, ()), metric):
@@ -180,10 +327,11 @@ def baseline_map(
                 break
     if col is None or col not in baseline.columns:
         return {}
-    kk = [k for k in keys if k in baseline.columns]
-    if not kk:
-        return {}
-    g = baseline.groupby(kk, dropna=False)[col].mean()
+    return _cell_means(baseline, kk, baseline[col])
+
+
+def _cell_means(baseline: pd.DataFrame, kk: list[str], values: pd.Series) -> dict[tuple, float]:
+    g = pd.to_numeric(values, errors="coerce").groupby([baseline[k] for k in kk], dropna=False).mean()
     return {(k if isinstance(k, tuple) else (k,)): float(v) for k, v in g.items() if np.isfinite(v)}
 
 
@@ -192,6 +340,61 @@ def _cell_columns(cells: Sequence[tuple], keys: list[str]) -> pd.Index:
     if len(keys) > 1:
         return pd.MultiIndex.from_tuples(list(cells), names=keys)
     return pd.Index([c[0] for c in cells], name=keys[0])
+
+
+#: Marks the rows :func:`fill_gaps` adds: 1 on a carried row, 0 on a scored one.
+CARRIED = "__carried"
+
+
+def fill_gaps(frame: pd.DataFrame, keys: Sequence[str]) -> pd.DataFrame:
+    """Carry each run's last scored row through the clicks it has none for (#4624).
+
+    A spot check answers its picks in rounds (#4496), so a run inside a
+    prompted check is scored once per round of about five votes and has no
+    row at the clicks between.  A mean over "the runs with a row at this
+    click" then skips exactly those runs, and Autopilot prompts the check
+    where the labels separate weakly, so what it skips is the weak sessions:
+    on the 2026-10-05 Binary Photo review the viewer's AP line read 0.58 at
+    click 133 over 1,195 runs and 0.53 at click 150 over all 1,403, a dip
+    the runs present at both clicks did not have.  Between two of its scored
+    rows the user has the run's last trained detector, so that row stands in
+    for every click up to the next one.
+
+    Rows are added only **inside** a run's span: never before its first
+    scored click (there is no detector there, and the gap from the text-sort
+    anchor to the first scored click is the honest drawing) and never after
+    its last (the run is over).  A metric that is NaN on a scored row (an
+    undefined precision) stays NaN and is what gets carried: only clicks
+    with no row at all are filled.  An added row copies the scored row it
+    stands in for, with ``t`` set to the click it fills and :data:`CARRIED`
+    set to 1; every original row gets :data:`CARRIED` 0.  *keys* identify a
+    run (the cell keys plus ``arm``); those absent from *frame* are ignored.
+    """
+    if frame.empty or "t" not in frame.columns:
+        return frame
+    kk = [k for k in keys if k in frame.columns]
+    scored = frame.assign(t=pd.to_numeric(frame["t"], errors="coerce")).dropna(subset=["t"])
+    carried: list[pd.DataFrame] = []
+    groups = scored.groupby(kk, dropna=False, sort=False) if kk else [((), scored)]
+    for _, g in groups:
+        have = np.unique(g["t"].to_numpy(dtype=float)).astype(int)
+        if len(have) < 2:
+            continue
+        missing = np.setdiff1d(np.arange(have[0], have[-1] + 1), have)
+        if not missing.size:
+            continue
+        last = g.sort_values("t", kind="stable").drop_duplicates("t", keep="last")
+        last = last.set_index(last["t"].astype(int)).drop(columns="t")
+        src = last.reindex(missing, method="ffill")
+        src.index.name = "t"
+        carried.append(src.reset_index())
+    out = frame.copy()
+    out[CARRIED] = 0
+    if not carried:
+        return out
+    extra = pd.concat(carried, ignore_index=True)
+    extra[CARRIED] = 1
+    return pd.concat([out, extra], ignore_index=True)
 
 
 def _wide(
@@ -310,6 +513,283 @@ def _fully_measured_from(covs: Sequence[np.ndarray], t_index: np.ndarray) -> int
     return max(firsts) if firsts else None
 
 
+def attempted_cells(main: pd.DataFrame, baseline: pd.DataFrame | None, keys: Sequence[str] = KEYS) -> pd.DataFrame:
+    """One row per ``(arm, *keys)`` cell the run attempted: a ``denominator`` for a caller with no cell list.
+
+    *main* holds rows only for the cells that trained, so a seed that never
+    found a positive is in no row of it, and a denominator read off it counts
+    the survivors (the 2026-10-05 Binary Photo review's viewer counted 1,403
+    of its 1,430 runs, and called knife@small fully measured on 3 of its 10).
+    The text-sort *baseline* scores every cell of the prepared grid, trained
+    or not, so it is the cell list a standalone build has.  Its seeds are
+    added to the cells *main* already holds, under two guards that keep a
+    run the baseline outlived (a subset or smoke run over a full grid's
+    baseline) from reading as starvation: a seed counts only where that arm
+    trained at least one run of the same group (*keys* minus ``seed``), and
+    only if it trained somewhere in the study.  The cost of the guards is
+    that a group where no seed ever trained stays invisible, as it was.
+
+    Joined on the group keys the two frames share, as :func:`baseline_map`
+    reads the anchor.  Without a *baseline*, or one with no ``seed`` column,
+    this is the cells of *main* alone.
+    """
+    kk = [k for k in keys if k in main.columns]
+    if "arm" not in main.columns or "seed" not in kk:
+        return pd.DataFrame(columns=["arm", *kk])
+    trained = main.loc[:, ["arm", *kk]].drop_duplicates()
+    shared = [k for k in kk if k != "seed" and baseline is not None and k in baseline.columns]
+    if baseline is None or baseline.empty or "seed" not in baseline.columns or not shared:
+        return trained.reset_index(drop=True)
+    ran = set(pd.to_numeric(trained["seed"], errors="coerce").dropna().astype(int))
+    b = baseline.loc[:, [*shared, "seed"]].copy()
+    b["seed"] = pd.to_numeric(b["seed"], errors="coerce")
+    b = b.dropna(subset=["seed"])
+    b = b[b["seed"].astype(int).isin(ran)].drop_duplicates()
+    # Matched as text, then written back in *main*'s own dtypes, so the cells
+    # line up with the columns `_wide` pivots *main* into.
+    tmp = [f"__k{i}" for i in range(len(shared))]
+    groups = trained.drop(columns="seed").drop_duplicates()
+    left = groups.assign(**{t: groups[c].astype(str) for t, c in zip(tmp, shared, strict=True)})
+    right = b.assign(**{t: b[c].astype(str) for t, c in zip(tmp, shared, strict=True)}).loc[:, [*tmp, "seed"]]
+    right["seed"] = right["seed"].astype(int).astype(trained["seed"].dtype)
+    extra = left.merge(right, on=tmp).loc[:, ["arm", *kk]]
+    return pd.concat([trained, extra], ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+
+#: Marks the rows :func:`score_empty_sets` adds: 1 at a click the run had no
+#: trained detector at, 0 on every row the run itself wrote.
+NO_DETECTOR = "__no_detector"
+
+#: What a click with **no detector** scores: the empty returned set.
+#: (A detector that flags nothing returns the same set, and its own row's
+#: undefined precision is counted as this 0 too: :func:`zero_empty_precision`.)
+#: The harness writes no row until a run has a Good vote, and the app gives a
+#: user at that point nothing either: with no Good there is nothing to sort
+#: toward, and Test on it is refused (a 400 and a toast,
+#: ``vtsearch/routes/detectors/scoring.py``).  One Good is enough since #4643 -
+#: under the label quota Test gives the Goods' centroid - so in a frame written
+#: since then these are the clicks before the first Good.  A frame written
+#: before it starts at the first Good *and* Bad, when Test refused a labelset
+#: of one class too, so its earlier clicks are scored the same way: each frame
+#: is read as the app that wrote it behaved.  The rule is the same either way -
+#: every click before a run's first row - so nothing here tells the two apart.
+#: So the click counts as a loss rather than leaving the average (owner,
+#: 2026-10-07).  Precision is counted
+#: as 0, not left undefined as :func:`~vtscore.eval.calibration_metrics.detection_metrics`
+#: leaves it for a detector that flags nothing, because here the undefined
+#: value would drop exactly the failing sessions from the mean.  The ranking
+#: metrics get chance, since there is no ranking: AUROC 0.5 here, and AP the
+#: test split's prevalence, which is per run (:func:`_run_prevalence`).  The
+#: objective (``fbeta`` and its presets) is 0, and cost is the miss weight
+#: alone (:func:`_miss_weights`).
+EMPTY_SET: dict[str, float] = {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.0,
+    "fnr": 1.0,
+    "auroc": 0.5,
+}
+
+
+def _as_text(df: pd.DataFrame) -> pd.DataFrame:
+    """*df*'s key columns as text, ``seed`` as a whole number, for matching frames written with other dtypes."""
+    out = df.astype(str)
+    if "seed" in df.columns:
+        out["seed"] = pd.to_numeric(df["seed"], errors="coerce").astype("Int64").astype(str)
+    return out
+
+
+def _miss_weights(frame: pd.DataFrame) -> dict[str, float]:
+    """``arm -> fnr_weight``: what an empty set costs, read off the arm's own rows.
+
+    A row's cost is ``fpr_weight * FPR + fnr_weight * FNR`` at the run's
+    inclusion, and the rows do not carry the inclusion, so the two weights are
+    solved for from the rows themselves.  An arm whose rows do not fit one pair
+    (a sweep over inclusion inside one arm) or cannot pin both gets none, and
+    its empty-set cost stays undefined rather than guessed.
+    """
+    out: dict[str, float] = {}
+    if not {"arm", "cost", "fpr", "fnr"} <= set(frame.columns):
+        return out
+    for arm, g in frame.groupby("arm"):
+        c, f, n = (pd.to_numeric(g[k], errors="coerce").to_numpy(dtype=float) for k in ("cost", "fpr", "fnr"))
+        ok = np.isfinite(c) & np.isfinite(f) & np.isfinite(n)
+        a = np.column_stack([f[ok], n[ok]])
+        if ok.sum() < 2 or np.linalg.matrix_rank(a) < 2:
+            continue
+        w, *_ = np.linalg.lstsq(a, c[ok], rcond=None)
+        if float(np.max(np.abs(a @ w - c[ok]))) <= 1e-3:
+            out[str(arm)] = float(w[1])
+    return out
+
+
+def _run_prevalence(
+    frame: pd.DataFrame, cells: pd.DataFrame, baseline: pd.DataFrame | None, kk: list[str]
+) -> np.ndarray:
+    """The test split's prevalence for each row of *cells*: chance level for AP.
+
+    From the text-sort baseline when it has one (it scores every run, the
+    starved ones included), else the run's own rows' ``n_test_pos`` /
+    ``n_test_neg``, else the mean over its group's runs, else NaN.
+    """
+    n = len(cells)
+    out = np.full(n, np.nan)
+    group = [k for k in kk if k != "seed"]
+
+    def _fill(src: pd.DataFrame, on: list[str], vals: pd.Series) -> None:
+        if not on:
+            return
+        lookup = pd.Series(vals.to_numpy(dtype=float), index=pd.MultiIndex.from_frame(_as_text(src[on])))
+        lookup = lookup[np.isfinite(lookup.to_numpy())].groupby(level=list(range(len(on)))).mean()
+        at = lookup.reindex(pd.MultiIndex.from_frame(_as_text(cells[on]))).to_numpy(dtype=float)
+        hole = ~np.isfinite(out)
+        out[hole] = at[hole]
+
+    if baseline is not None and not baseline.empty and "seed" in baseline.columns:
+        on = [k for k in kk if k in baseline.columns]
+        if "prevalence" in baseline.columns:
+            _fill(baseline, on, pd.to_numeric(baseline["prevalence"], errors="coerce"))
+        elif {"n_test_pos", "n_test"} <= set(baseline.columns):
+            pos = pd.to_numeric(baseline["n_test_pos"], errors="coerce")
+            _fill(baseline, on, pos / pd.to_numeric(baseline["n_test"], errors="coerce"))
+    if {"n_test_pos", "n_test_neg"} <= set(frame.columns):
+        pos = pd.to_numeric(frame["n_test_pos"], errors="coerce")
+        tot = pos + pd.to_numeric(frame["n_test_neg"], errors="coerce")
+        prev = pos / tot.where(tot > 0)
+        _fill(frame, ["arm", *kk], prev)
+        _fill(frame, ["arm", *group], prev)
+    return out
+
+
+def zero_empty_precision(
+    frame: pd.DataFrame, precision: str = "precision", recall: str = "recall", fpr: str = "fpr"
+) -> pd.DataFrame:
+    """*frame* with the precision of every **empty returned set** counted as 0, not left undefined.
+
+    :func:`~vtscore.eval.calibration_metrics.detection_metrics` leaves the
+    precision of a detector that flags nothing undefined, which drops that run
+    out of a precision mean: the sessions whose detector returned nothing are
+    exactly the ones the mean then never sees.  A user who ran Find and got
+    nothing back got a loss, so it counts as 0, the value an empty set scores
+    under :data:`EMPTY_SET` (owner, 2026-10-07).  A row is an empty set when its
+    precision is undefined, its recall is 0 and its FPR (when the frame has
+    one) is 0; a precision undefined for any other reason (a row with no
+    positives to recall, a column the study never emitted) is left alone.
+    The column names are parameters so the viewer's oracle companion goes
+    through the same rule.
+    """
+    if precision not in frame.columns or recall not in frame.columns:
+        return frame
+    p = pd.to_numeric(frame[precision], errors="coerce")
+    empty = p.isna() & (pd.to_numeric(frame[recall], errors="coerce") == 0)
+    if fpr in frame.columns:
+        empty &= pd.to_numeric(frame[fpr], errors="coerce") == 0
+    if not empty.any():
+        return frame
+    out = frame.copy()
+    out.loc[empty, precision] = 0.0
+    return out
+
+
+def score_empty_sets(
+    frame: pd.DataFrame,
+    cells: pd.DataFrame | None,
+    baseline: pd.DataFrame | None = None,
+    keys: Sequence[str] = KEYS,
+) -> pd.DataFrame:
+    """Score every empty returned set as one, so no failing run leaves the mean.
+
+    Two kinds, both what a user who ran Find got back: nothing.  A row whose
+    detector flags nothing has its undefined precision counted as 0
+    (:func:`zero_empty_precision`), and a click with no trained detector at
+    all, which has no row, gets one.
+
+    The rows a run writes start at its first click with a Good vote (#4643:
+    from there Test gives the Goods' centroid; in a frame written before it,
+    at its first Good and Bad), so before that, and at every click of a run
+    that never got one, the mean
+    had no value and simply left the run out: the sessions failing hardest
+    were the ones missing from the average.  This adds a row for each of those
+    clicks, from click 1 to the run's first row (to the last click of the
+    study, for a run that never trained), scored as :data:`EMPTY_SET` says,
+    and marked :data:`NO_DETECTOR` 1; every row the run wrote gets 0.
+
+    *cells* is one row per attempted ``(arm, *keys)`` cell (a ``denominator``,
+    or :func:`attempted_cells`); without one, only the runs in *frame* are
+    scored, which covers the clicks before each first detector and misses the
+    runs that never had one.  A key column *cells* lacks is filled with
+    *frame*'s value when that is the same on every row (an embedder written as
+    ``""``), and otherwise the cells of *frame* are used.  Click 0, the
+    text-sort anchor, is never added: every run has a text sort.  Nothing is
+    added after a run's last row, since the run is over there.
+    """
+    if frame.empty:
+        return frame
+    frame = zero_empty_precision(frame)
+    if not {"t", "arm"} <= set(frame.columns):
+        return frame
+    kk = [k for k in keys if k in frame.columns]
+    if "seed" not in kk:
+        return frame
+    ids = ["arm", *kk]
+    if cells is None or cells.empty or "arm" not in cells.columns or "seed" not in cells.columns:
+        cells = frame.loc[:, ids]
+    cells = cells.copy()
+    for k in kk:
+        if k not in cells.columns:
+            vals = frame[k].dropna().unique()
+            if len(vals) != 1:
+                cells = frame.loc[:, ids].copy()
+                break
+            cells[k] = vals[0]
+    cells = cells.loc[:, ids].drop_duplicates().reset_index(drop=True)
+
+    t = pd.to_numeric(frame["t"], errors="coerce")
+    horizon = int(t.max())
+    # Matched as text, as `attempted_cells` matches, so a cell list written
+    # with other dtypes than the frame still finds its runs.
+    scored = _as_text(frame.loc[t >= 1, ids]).assign(t=t[t >= 1])
+    first = scored.groupby(ids, dropna=False)["t"].min()
+    first_at = first.reindex(pd.MultiIndex.from_frame(_as_text(cells))).to_numpy(dtype=float)
+    first_at = np.where(np.isfinite(first_at), first_at, horizon + 1).astype(int)
+    n_add = np.clip(first_at - 1, 0, None)
+    out = frame.copy()
+    out[NO_DETECTOR] = 0
+    if not n_add.any():
+        return out
+
+    rep = np.repeat(np.arange(len(cells)), n_add)
+    extra = cells.iloc[rep].reset_index(drop=True)
+    extra["t"] = np.concatenate([np.arange(1, k + 1) for k in n_add if k > 0])
+    # Only a metric the study measured: filling one it never emitted (an
+    # objective with no balance, an AUROC nobody computed) would put it on
+    # the menu as a column of nothing but losses.
+    measured = {c for c in frame.columns if pd.to_numeric(frame[c], errors="coerce").notna().any()}
+    for col, value in EMPTY_SET.items():
+        if col in measured:
+            extra[col] = value
+    for col in measured:
+        if col == objective.OBJECTIVE or col.startswith(objective.OBJECTIVE + "_"):
+            extra[col] = 0.0
+    if "average_precision" in measured:
+        extra["average_precision"] = _run_prevalence(frame, cells, baseline, kk)[rep]
+    if "cost" in measured:
+        weights = _miss_weights(frame)
+        extra["cost"] = extra["arm"].astype(str).map(weights).astype(float)
+    extra[NO_DETECTOR] = 1
+    return pd.concat([out, extra], ignore_index=True)
+
+
+def _attempted(
+    main: pd.DataFrame, kk: list[str], denominator: pd.DataFrame | None, baseline: pd.DataFrame | None
+) -> pd.DataFrame:
+    """The caller's cell list when it gave one, else :func:`attempted_cells`."""
+    if denominator is not None and not denominator.empty:
+        return denominator
+    return attempted_cells(main, baseline, kk)
+
+
 def _cell_index(
     main: pd.DataFrame,
     keys: list[str],
@@ -389,14 +869,14 @@ def mean_figure(  # noqa: C901
     outdir: Path,
     *,
     arms: Sequence[str],
-    metric: str = "cost",
+    metric: str | None = None,
     keys: Sequence[str] = KEYS,
     denominator: pd.DataFrame | None = None,
     baseline: pd.DataFrame | None = None,
     baseline_col: str | None = None,
     baseline_label: str = BASELINE_LABEL,
     stat: str = STAT,
-    lower_is_better: bool = True,
+    lower_is_better: bool | None = None,
     stops: pd.DataFrame | None = None,
     dpi: int = FIG_DPI,
 ) -> tuple[str | None, pd.DataFrame]:
@@ -420,6 +900,7 @@ def mean_figure(  # noqa: C901
     Returns ``(filename, curves)``; ``curves`` is the plotted numbers, long
     format, one row per ``(arm, dataset, t)``, and always carries ``coverage``.
     """
+    main, metric, lower_is_better, baseline_col = resolve_metric(main, metric, lower_is_better, baseline_col)
     import matplotlib
 
     matplotlib.use("Agg")
@@ -428,12 +909,16 @@ def mean_figure(  # noqa: C901
     kk = _keys(main, keys)
     if main.empty or metric not in main.columns or "dataset" not in main.columns:
         return None, pd.DataFrame()
+    # A run inside a spot check keeps its last scored level between rounds (#4624),
+    # and an empty returned set (no detector yet, or one that flags nothing) is a loss.
+    main = fill_gaps(main, ("arm", *kk))
+    main = score_empty_sets(main, _attempted(main, kk, denominator, baseline), baseline, kk)
     datasets = sorted(str(d) for d in main["dataset"].dropna().unique())
     arms_present = [a for a in arms if (main["arm"] == a).any()]
     if not datasets or not arms_present:
         return None, pd.DataFrame()
 
-    base = baseline_map(baseline, metric, kk, baseline_col)
+    base = baseline_map(baseline, metric, kk, baseline_col, objective.frame_beta(main))
     t_index = np.arange(0 if base else 1, int(main["t"].max()) + 1)
     index = _cell_index(main, kk, denominator)
     rows: list[dict] = []
@@ -591,17 +1076,18 @@ def per_run_figures(  # noqa: C901
     outdir: Path,
     *,
     arms: Sequence[str],
-    metric: str = "cost",
+    metric: str | None = None,
     keys: Sequence[str] = KEYS,
     denominator: pd.DataFrame | None = None,
     baseline: pd.DataFrame | None = None,
     baseline_col: str | None = None,
     prevalence: dict[tuple[str, str], float] | None = None,
     max_runs: int = 0,
-    lower_is_better: bool = True,
+    lower_is_better: bool | None = None,
     dpi: int = FIG_DPI,
 ) -> list[str]:
     """One file per dataset: a panel per arm holding **every** seed's own curve."""
+    main, metric, lower_is_better, baseline_col = resolve_metric(main, metric, lower_is_better, baseline_col)
     import matplotlib
 
     matplotlib.use("Agg")
@@ -613,11 +1099,15 @@ def per_run_figures(  # noqa: C901
     arms_present = [a for a in arms if (main["arm"] == a).any()]
     if not arms_present:
         return []
+    # A run inside a spot check keeps its last scored level between rounds (#4624),
+    # and an empty returned set (no detector yet, or one that flags nothing) is a loss.
+    main = fill_gaps(main, ("arm", *kk))
+    main = score_empty_sets(main, _attempted(main, kk, denominator, baseline), baseline, kk)
 
     norm = _prevalence_norm(prevalence)
     cmap = plt.get_cmap("viridis_r")
     index = _cell_index(main, kk, denominator)
-    base = baseline_map(baseline, metric, kk, baseline_col)
+    base = baseline_map(baseline, metric, kk, baseline_col, objective.frame_beta(main))
     t_max = int(main["t"].max())
     written: list[str] = []
     outdir.mkdir(parents=True, exist_ok=True)
@@ -724,7 +1214,7 @@ def quality_vs_clicks(
     outdir: Path,
     *,
     arms: Sequence[str],
-    metric: str = "cost",
+    metric: str | None = None,
     keys: Sequence[str] = KEYS,
     denominator: pd.DataFrame | None = None,
     baseline: pd.DataFrame | None = None,
@@ -733,7 +1223,7 @@ def quality_vs_clicks(
     prevalence: dict[tuple[str, str], float] | None = None,
     stat: str = STAT,
     max_runs: int = 0,
-    lower_is_better: bool = True,
+    lower_is_better: bool | None = None,
     stops: pd.DataFrame | None = None,
     dpi: int = FIG_DPI,
 ) -> list[str]:
@@ -741,10 +1231,13 @@ def quality_vs_clicks(
 
     The one call an analyzer needs: pass the main metric frame tagged with
     ``arm``, the cell list as *denominator*, and the text-sort *baseline*.
+    Without a *metric* it draws the decision metric: the objective on a frame
+    that carries a beta, cost otherwise (:func:`resolve_metric`, #4584).
     Pass *stops* (from ``stopping.stopping_points``) to mark where the app's
     stopping rules fired on the averaged panel — the click past which every
     further click on the axis was one the app had already said was optional.
     """
+    main, metric, lower_is_better, baseline_col = resolve_metric(main, metric, lower_is_better, baseline_col)
     written: list[str] = []
     name, _curves = mean_figure(
         main,
@@ -821,12 +1314,18 @@ def _load(results: Path, arms: Sequence[str]) -> pd.DataFrame:
     import _cells_io
 
     parts = []
+    n_check = 0
     for arm in arms:
-        df, _prov = _cells_io.load_arm(results / arm)
+        # `load_arm` sets a floor-era run's spot check apart (#4364): its rows
+        # sit past `max_steps` and are not clicks, so no curve is drawn to them.
+        df, prov = _cells_io.load_arm(results / arm)
+        n_check += prov["check_rows"]
         if not df.empty:
             df = df.copy()
             df["arm"] = arm
             parts.append(df)
+    if n_check:
+        print(f"NOTE: {n_check:,} spot-check rows set apart; the curves end at the last click, not the check.")
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
@@ -849,7 +1348,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--results", default=str(common.RESULTS), help="results root holding one dir per arm")
     ap.add_argument("--arms", required=True, help="comma-separated arm directories, in report order")
     ap.add_argument("--out", default=None, help="figure directory (default: <results>/../analysis/figures)")
-    ap.add_argument("--metric", default="cost", help="metric column to curve (default: cost)")
+    ap.add_argument(
+        "--metric",
+        default=None,
+        help="metric column to curve (default: the objective, fbeta, when the frame carries a beta; else cost)",
+    )
     ap.add_argument("--stat", default=STAT, choices=("mean", "median"))
     ap.add_argument("--max-runs", type=int, default=0, help="cap per-run lines per panel (0 = draw all)")
     ap.add_argument("--prevalence", default=None, help="prepare_info.json, to colour runs by category prevalence")
@@ -866,13 +1369,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     prevalence = prevalence_from(args.prevalence) if args.prevalence else None
     baseline = text_sort_baseline(args.baseline) if args.baseline else None
-    lower_is_better = args.metric not in ("average_precision", "auroc")
+    frame, metric, lower_is_better, _ = resolve_metric(frame, args.metric, None, None)
 
     written = quality_vs_clicks(
         frame,
         outdir,
         arms=arms,
-        metric=args.metric,
+        metric=metric,
         prevalence=prevalence,
         baseline=baseline,
         stat=args.stat,
@@ -882,7 +1385,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"wrote {len(written)} figure(s) to {outdir}:")
     for name in written:
         print(f"  {name}")
-    curve_csv = outdir / f"{args.metric}_vs_clicks.csv"
+    curve_csv = outdir / f"{metric}_vs_clicks.csv"
     if curve_csv.exists():
         x = crossover(pd.read_csv(curve_csv), stat=args.stat, lower_is_better=lower_is_better)
         if not x.empty:
@@ -891,11 +1394,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not args.baseline:
         print("\nNOTE: no --baseline, so the curves start at the first trainable click and there is")
         print("      nothing to compare the far right against. Run text_baseline.py and pass its CSV.")
-    print(
-        "\nNOTE: run standalone, coverage is measured against the cells that PRODUCED rows, "
-        "so a starved cell is invisible.\n      analyze_startup.py passes its own cell list as the "
-        "denominator and is the reading that counts starvation."
-    )
+        print(
+            "\nNOTE: and without one, a run that never trained is in no row and so in no mean: "
+            "only the clicks before\n      each trained run's first detector are scored as an empty set. "
+            "With --baseline every run it lists is."
+        )
     return 0
 
 

@@ -21,11 +21,12 @@ this package is the underlying ML core.
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the production head's fit) |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
-| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank + match-statistic verification classifier |
+| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank: the inlier gate, and the returned-set line on documents (#4367, #4440) |
+| `vtscore/training/structural_stage1.py`                               | The tiled Stage 1 for document pages (best tile per page), the shortlist size and the verification cache |
 | `vtscore/training/query_sort.py`                                      | External-query sorts of the active dataset (example media, label files): `cosine_sort_active`, `example_sort_from_paths`, `train_and_score_active`, … |
 
 The package `__init__.py` re-exports the head-building names and the eight
-threshold functions below; everything else (`text_sort_threshold`, the SVM,
+threshold functions below; everything else (`text_sort_cuts`, the SVM,
 region and structural helpers) is imported from its submodule.
 
 ```python
@@ -36,7 +37,7 @@ from vtscore.training import (
     calibration_folds, calibration_folds_cached, threshold_from_folds,
     fold_anchored_gmm_threshold,
 )
-from vtscore.training.thresholds import text_sort_threshold
+from vtscore.training.thresholds import text_sort_cuts, text_sort_threshold
 from vtscore.training.svm import SVMClassifier, train_svm
 from vtscore.training.region_similarity import (
     score_against_query, cosine_sort_with_boxes,
@@ -245,37 +246,51 @@ are summarised in
 | Function                                  | When it fires                                                 |
 |-------------------------------------------|---------------------------------------------------------------|
 | `calculate_gmm_threshold`                 | All-media score distribution - used by the safe blend         |
-| `text_sort_threshold`                     | A cosine/text sort's line - the midpoint, or the guarded rule behind `VTSEARCH_TEXT_SORT_CUT` |
+| `text_sort_cuts`                          | A typed-query sort's two lines from one fit: the guarded display line (`text_sort_threshold`) and the midpoint it samples at (`text_sort_acquisition_threshold`) |
 | `conformal_threshold`                     | Conformal inclusion rule on one (scores, labels) set          |
 | `calculate_cross_calibration_threshold`   | k-fold cross-calibration, in one call                         |
 | `calibration_folds` / `calibration_folds_cached` | The inclusion-*independent* half: fit the folds       |
 | `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
-| `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, read by the Find Stats curve |
-| `reporting_line`                          | The estimator's own line at an operating point; the app hands it no estimate any more (see `floor_line`) |
-| `check_schedule` / `SpotCheck` / `likely_range` | The precision floor's spot check (#4272): the candidate, rounds and picks a floor costs, the check itself, and the likely range a checked set carries |
-| `LineRanking` / `floor_line` / `floor_state` | The ranking a detector's line keeps a set of, the line the floor draws over it, and the state every response carries |
+| `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, and off the Find Stats chart since #4360 |
+| `reporting_line`                          | The estimator's own line at an operating point; the app hands it no estimate any more (see `balance_line`) |
+| `balance_schedule` / `SpotCheck` / `likely_range` | The balance's spot check (#4272, #4413): the cap, bands and picks a walk costs, the walk itself, and the likely ranges a checked set carries |
+| `LineRanking` / `balance_line` / `balance_state` | The ranking a detector's line keeps a set of, the line the balance draws over it, and the state every response carries |
 
-### `text_sort_threshold(scores, rule=None)`
+### `text_sort_cuts(scores, rule=None)`
 
 `vtscore/training/thresholds/gmm.py` (import from `vtscore.training.thresholds`).
-The line a **typed-query** sort draws - called by
-`vtscore/training/query_sort.py::cosine_sort_active` for `role="text"` and by
-the eval harness's Autopilot opening. Example and label-file sorts keep
-`calculate_gmm_threshold`. The rule comes from `rule=`, else
-`TEXT_SORT_CUT_RULE` (env `VTSEARCH_TEXT_SORT_CUT`):
+The two lines a **typed-query** sort carries (issue #4136), as a frozen
+`TextSortCuts(threshold, acq_threshold, branch)`, drawn from one mixture fit.
+Called by `vtscore/training/query_sort.py::text_sort_active`, which the
+app's text route uses to fill the response's `threshold` / `acq_threshold`.
+Example and label-file sorts keep `calculate_gmm_threshold`.
 
-- `gmm_midpoint` (the default): exactly `calculate_gmm_threshold`.
-- `guarded_tail`: `guarded_text_sort_threshold`. If the shipped fit's two
-  components are separated (Ashman's D >= `TEXT_SORT_SEPARATION_D` = 2), it
-  continues that fit to convergence (`converge_score_gmm`) and cuts at the
-  midpoint. Otherwise it cuts at median + `TEXT_SORT_TAIL_K` (3) x the
-  lower-half-MAD sigma (`bulk_location_scale`).
+- `threshold` is the **display** line: what is painted green, what the
+  above-threshold count and Find read. Its rule comes from `rule=`, else
+  `TEXT_SORT_CUT_RULE` (env `VTSEARCH_TEXT_SORT_CUT`; `TEXT_SORT_CUT_DEFAULT`
+  when unset or unrecognised):
+  - `guarded_tail` (the default since #4136): `guarded_text_sort_threshold`.
+    If the shipped fit's two components are separated (Ashman's D >=
+    `TEXT_SORT_SEPARATION_D` = 2), it continues that fit to convergence
+    (`converge_score_gmm`) and cuts at the midpoint (`branch == "gmm"`).
+    Otherwise it cuts at median + `TEXT_SORT_TAIL_K` (3) x the
+    lower-half-MAD sigma (`bulk_location_scale`; `branch == "tail"`). On a
+    typical one-mode text sort it admits roughly the matches where the
+    midpoint admits a median 43% of the haystack.
+  - `gmm_midpoint`: exactly `calculate_gmm_threshold` (`branch ==
+    "midpoint"`), the pre-#3826 line, kept as the opt-out.
+- `acq_threshold` is the **acquisition** cut Autopilot's Bad phase samples
+  around: the shipped midpoint, `calculate_gmm_threshold`, under *every*
+  rule. The guarded line made that opening worse in an A/B
+  (`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`), so it moves
+  only the display line.
 
-`guarded_tail` admits far fewer non-matches on a typical one-mode text sort,
-but is off by default because it made Autopilot's opening worse in an A/B
-(`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`).
+`text_sort_threshold(scores, rule=None)` returns the display line alone;
+`text_sort_acquisition_threshold(scores)` the acquisition cut alone (the
+eval harness's opening calls it). Both are thin wrappers, and the latter is
+bit-identical to `calculate_gmm_threshold`.
 
 ### `calculate_gmm_threshold(scores)`
 
@@ -397,8 +412,7 @@ threshold = threshold_from_folds(folds, inclusion_value=0)   # cheap: a quantile
 
 `CalibrationFolds` is a `NamedTuple` of `(orderings, fallback, models)`. Pass
 `holdout_sink=[]` to either call to also receive, per fold, the training row
-behind each held-out score, so a caller can tell which votes a fold held out
-(the precision floor calibrates only on the learned sort's own draws).
+behind each held-out score, so a caller can tell which votes a fold held out.
 `calibration_folds_cached` memoises it on `det_ctx.calibration_cache` under a
 deterministic key built from `X_list`, `y_list`, the calibrate settings,
 `hidden_dim`, and any `score_rows_by_group` - so a re-cut at another
@@ -446,9 +460,8 @@ back entirely to the GMM threshold.
 
 ### `precision_floor_cut(floor, corpus_scores, pool_scores, fold_orderings, fold_haystacks, ...)`
 
-`vtscore/training/thresholds/precision_floor.py`. The cut a detector draws when
-its precision floor is set (#4245; the control is #4224), ported from the
-estimator #4220 measured
+`vtscore/training/thresholds/precision_floor.py`. The #4220 estimator's cut
+(#4245), ported from the estimator #4220 measured
 ([`docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md)).
 It returns the largest top-*k* of the corpus whose **lower-bound** estimated
 precision is at least `floor`:
@@ -472,19 +485,20 @@ parameters because #4221 is still pricing them.
 One call is `fit_precision_floor_curve(...)` (the costly half: the bootstrap
 refits) followed by `PrecisionFloorCurve.cut(floor)` (a scan), so a caller
 cutting one corpus at several floors keeps the curve.
-`PrecisionFloorEstimate(corpus_scores, fold_orderings, fold_haystacks)` is what
-a detector keeps between retrains: it fits the curve the first time a floor is
-asked for, reads it off a seeded sample above 50k scores, and counts
-`n_returned` on the whole corpus.
+`PrecisionFloorEstimate(corpus_scores, fold_orderings, fold_haystacks)` holds one
+detector's inputs: it fits the curve the first time a floor is asked for,
+reads it off a seeded sample above 50k scores, and counts `n_returned` on the
+whole corpus. The app no longer builds one (#4362); the estimator is library
+API for a caller that wants its reading.
 
-**What may serve as evidence.** Pass `holdout_sink=[]` to the calibration
-(`compute_fold_orderings`, `calibration_folds`, `calibration_folds_cached`) to
-learn which training row backs each held-out score, then
-`eligible_fold_orderings(orderings, holdout_rows, eligible_rows)` keeps only the
-votes that may calibrate a promise. The app keeps the ones
-`vtscore.datasets.vote_provenance.calibrates_precision` accepts: votes drawn off
-the learned sort's own ranking, because the posterior is unbiased only under
-score-only selection.
+**Which row backs each held-out score.** Pass `holdout_sink=[]` to the
+calibration (`compute_fold_orderings`, `calibration_folds`,
+`calibration_folds_cached`) to learn which training row backs each held-out
+score; the sink is read-only. `eligible_fold_orderings(orderings, holdout_rows,
+eligible_rows)`, which cut the app's evidence down to the votes
+`vtscore.datasets.vote_provenance.calibrates_precision` accepted (#4245), is
+deprecated with that filter (#4362): it still answers, with a
+`DeprecationWarning`.
 
 ### `reporting_line(cut, estimate, *, inclusion_value, min_precision)`
 
@@ -494,27 +508,37 @@ internal unit, not a user preference (#4269) - the app passes
 `PRECISION_FLOOR_FALLBACK_INCLUSION`, and a re-cut passes the acquisition or
 Smart inclusion. With a floor it says what the #4220 estimate says: a floor
 that is `promised` draws the estimate's own threshold, one that promises
-nothing draws the `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut. **The app no
-longer draws its line here under a floor** (#4272): it hands `reporting_line`
-no estimate, and draws the floor's line with `floor_line` below. The returned
+nothing draws the `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut. **The app
+does not draw its line here** (#4272, #4413): it passes `min_precision=None`
+and no estimate, and draws the balance's line with `balance_line` below,
+coming here only when there is no balance or no ranking to keep a set of. The
+returned
 `ReportingLine` carries the verdict, and `line_inclusion` gives the inclusion
 Autopilot's acquisition offset starts from - derived from the line itself when
 no inclusion drew it.
 
-### The spot check: `check_schedule`, `SpotCheck`, `likely_range`, `LineRanking`, `floor_line`, `floor_state`
+### The spot check: `balance_schedule`, `SpotCheck`, `likely_range`, `LineRanking`, `balance_line`, `balance_state`
 
-`vtscore/training/thresholds/spot_check.py` (#4272; the #4267 ruling, priced in
-[`docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md`](../../../docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md)).
-Under a precision floor *X* the line keeps a **set**, and a spot check of
-uniform random picks from it measures how much of it is right; the check's
+`vtscore/training/thresholds/spot_check.py` (#4272; the band walk of #4388,
+stopped at the F-beta peak by #4413 and priced in
+[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)).
+The line's preference is a **balance**: F-beta's *beta*, with the presets
+`BALANCE_PRESETS` (0.5, 1, 2; `DEFAULT_BETA` 1) and any value in
+`[BETA_MIN, BETA_MAX]` = `[0.25, 4]` accepted. Under a balance the line keeps
+a **set**, and a spot check of uniform random picks from it estimates how much
+of it is right and how much of the corpus's positives it found; the precision
 range comes only from those picks, never from a model.
 
-- `check_schedule(X)` is what a check costs: the starting candidate
-  `K = 32 * 2**max(0, floor(log2(0.5 / X)))` (128 at 10%, 64 at 25%, 32 at
-  50% and above), the rounds `R = log2(K / 32) + 1`, and the picks a round
-  `m = max(5, ceil(ln(alpha / R) / ln X))` (5 at 10-50%, 11 at 75%, 29 at
-  90%) at `CHECK_ALPHA = 0.05`. `rounds_for(k)` sizes the rounds to a
-  candidate a small corpus truncated.
+- `balance_schedule(beta)` is the cap and what a walk from it costs: the
+  starting candidate `K` (`CHECK_BASE_CANDIDATE`, the top 32, at beta <= 1;
+  `CHECK_RECALL_CANDIDATE`, the top 128, above it), the bands that hold it
+  (`rounds_for(K)`: 3 for 32, 5 for 128), and the picks a band
+  (`CHECK_MIN_PICKS`, 5). `check_shape(beta)` is how a check treats the line
+  (#4427): `CHECK_ADVISORY` at beta <= 1 (the walk informs the line and never
+  moves it), `CHECK_TRIM` above (the walk may only step shallower, and the
+  line takes its end). `resolve_line_knobs(beta)` resolves an eval arm's knob:
+  `None` is `DEFAULT_BETA`, `NO_BALANCE` (`"off"`) is no balance (the
+  Inclusion arm), and a number is validated.
 - `LineRanking.from_scores(ids, scores, voted)` is the ranking the line is
   drawn over: sorted, unscorable items dropped, the trainer's voted items
   marked. `candidate(count, also_voted)` is the top *count* unvoted ids,
@@ -523,27 +547,151 @@ range comes only from those picks, never from a model.
   so the item clears its own line however it is compared), `above(threshold)`
   the count at or above it, and `fingerprint(count, also_voted)` the set's
   identity for the `stale` flag.
-- `SpotCheck.start(candidate_ids, X)` fixes the candidate and deals round one
-  (`draw`); `record({id: right})` takes a round's labels and, once the round is
-  complete, confirms the floor (`FLOOR_CONFIRMED`), halves the candidate into
-  the next round keeping the labels inside it, or ends `FLOOR_SHORT` at 32.
-  `range()` is the current candidate's likely range; `as_dict()` the state a
-  client sees; `is_stale(ranking, also_voted)` whether the set moved since the
-  check. `CHECK_PROVENANCE` is the provenance its votes are recorded with.
+- `mixture_positives(ranking, labels, also_voted)` is the vote-anchored
+  mixture's count of positives among the unvoted items (`mixture_posterior`,
+  fitted once per ranking and memoised on it), `walk_positives(...)` the
+  count a walk reads recall against (the mixture's, else the cap lowered to
+  what is unvoted, #4419), and `fbeta_count(ranking, beta, labels,
+  also_voted)` the count at which the mixture's F-beta peaks: the unchecked
+  line's proposal.
+- `SpotCheck.start_balance(ranking_ids, beta, n_pos, *, seed=None,
+  start_count=None)` fixes the unvoted ranking and *n_pos*, cuts the ranking
+  into bands (`band_edges`: the top 8, the next 8, 16, 32, ...), starts at the
+  bands holding the cap, and deals the first band's picks (`draw`);
+  `record({id: right})` takes a band's labels and, once the band is audited,
+  deals the next band the set under test owes or decides it. The set's F-beta
+  estimate (`fbeta_estimate()`) is its band-stratified positives - each
+  band's share of right picks (`estimate()` is the set's) times the band's
+  size - over *n_pos*. The walk goes one band deeper while the estimate rises
+  and ends on the peak the first time it falls; from a start whose first
+  deeper step falls, it goes one band shallower while the estimate does not
+  fall. Under `trim` it only steps shallower from the start. It ends
+  `BALANCE_CHECKED` on the peak's band edge, a tie keeping the smaller set.
+  `range()` and `recall_range()` are the set's likely precision and recall
+  ranges, its bands' intervals weighted by size (recall over *n_pos*);
+  `as_dict()` the state a client sees (the band pending, the set's `bands`,
+  the walk's `direction`, the `estimate`, `fbeta`, `recall`);
+  `is_stale(ranking, also_voted)` whether the set moved since the check. The
+  other keywords (`picks`, `tol`, `fine`, `guard`, `shallow_only`) are
+  #4427's harness arms, all off in the app. `CHECK_PROVENANCE` is the
+  provenance its votes are recorded with.
 - `likely_range(right, labelled, candidate, tail)` is a Clopper-Pearson
-  interval with each tail at `range_tail(rounds)` = alpha / R, exact once the
-  labels cover the candidate; `clopper_pearson_lower` / `_upper` are the
-  bounds.
-- `floor_count(X, result)`, `floor_line(ranking, X, result, also_voted)` and
-  `floor_state(X, result, ranking, also_voted)` are the rule the app's retrain,
-  re-cut and the eval harness's default arm share: the set the finished check
-  ended on (`applicable_result`: a result belongs to the floor it was run at),
-  else the starting candidate, and the `FloorState` every response carries
-  (`status` in `FLOOR_STATES`: `unchecked` / `confirmed` / `short`, `count`,
-  `range`, `stale`, `schedule`).
+  interval with each tail at `range_tail(bands)` = alpha / bands (split over
+  the set's bands, so their size-weighted mean holds by the union bound),
+  exact once the labels cover the band; `clopper_pearson_lower` / `_upper` are
+  the bounds.
+- `balance_count(beta, result, proposal, shape)`, `balance_line(ranking,
+  beta, result, also_voted, proposal, shape)` and `balance_state(beta,
+  result, ranking, also_voted, proposal, shape)` are the rule the app's
+  retrain, re-cut and the eval harness's default arm share: the set the
+  finished walk ended on where the check's shape lets it move the line
+  (`applicable_balance`: a result belongs to the beta it was run at), else the
+  unchecked count - the cap, lowered to the *proposal* (`fbeta_count`) - and
+  the `BalanceState` every response carries (`status` in `BALANCE_STATES`:
+  `unchecked` / `checked`, `count`, `precision`, `recall`, `fbeta`, `stale`,
+  `schedule`, `shape`, `audited`). `aim_words(state)` names the balance in a
+  message (`at F1`).
 
-`scripts/check-eval-app-sync.py` pins `check_schedule`, `likely_range` and
+`scripts/check-eval-app-sync.py` pins the band schedule, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
+
+### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`
+
+`vtscore/training/thresholds/line_test.py` (#4527; the first slice of Test
+mode, #4520). Test mode asks of a detector on a corpus it
+never trained on what share of what its line ships would be right and what
+share of the real matches it would ship, as likely ranges from uniform picks
+within rank bands; this module is the sample, its estimators, the allocation
+rule and the phase machine, pure statistics over ids, ranks and labels that
+the app's routes and the eval harness both call.
+
+**Why it is shaped this way.** AutoFind ships the set above the line unchecked,
+and nobody downstream can tell a wrong match from a missed one, so a test
+reports both halves, the line's precision and recall on the corpus at the
+user's balance, with F-beta at that balance as the headline, all from one set
+of draws. The corpus stands in for the future datasets AutoFind will see; the
+app's two trust checks (training-domain overlap, evidence coverage) are the
+caveat on that extrapolation. The verdict is a reading of the ranges, never a
+threshold the app enforces (#4267: *do your best, and say how close we got*).
+Two rules make the numbers mean anything:
+
+- **A test vote never trains the detector.** The point of a test set is that
+  the detector never saw it. The app keeps test votes out of the labelset and
+  records them with their own provenance flow; **Add Corrections** is the
+  failed-the-test exit, and the moment it is used the result is stale.
+- **Every number comes from uniform picks within rank bands**, never from the
+  top of the ranking or the boundary walk, which is biased toward the line by
+  design (#4256: model-chosen votes broke 83% of the #4220 estimator's
+  promises). The ranking is frozen for the whole test, which is what makes
+  the band design valid, and the app hides the ranked list while a test runs,
+  since a pick's place in it would show its rank.
+
+The intervals are Beta posteriors drawn jointly, so optional stopping does not
+change what a posterior means; the frequentist coverage of the stop is a
+question for the eval, priced by #4523
+([`REPORT.md`](../../../docs/experiments/2026-10-05-line-test-4523/REPORT.md)).
+
+- `LineTest.start(ranking_ids, line_count, beta, posteriors=None, budgets=,
+  seed=None, labels=None)` freezes the ranking and the line (the top
+  `line_count`), cuts both sides into bands (`line_bands`: the spot check's
+  `band_edges` from the top for the matches, the same doubling from the line
+  downward for the misses) and takes `posteriors`, the labels line's chance
+  per item, as the auxiliary below the line. `labels` restores picks already
+  taken on the same ranking (a resumed test, #4526, which sets `kept_at` to
+  when they were taken). `draw()` deals a round (`budgets.picks_per_round`,
+  5) from the band `next_band()` names, uniformly without replacement (a
+  census of a band no larger than a round); `record({id: match})` takes the
+  labels; `unrecord(id)` takes one back; `pick_band` records which band each
+  pick came from.
+- `estimates()` is every number from one set of joint Monte Carlo draws
+  (`LineEstimates`): per band, a Beta posterior on the share right under the
+  Jeffreys prior (`JEFFREYS`, 1/2) with the unlabelled items drawn binomially
+  at it, so a censused band is exact; `precision`, `recall` and `fbeta` of the
+  line as a point and a central `1 - alpha` range (`TEST_ALPHA`, 95%;
+  `Estimate.point` / `lo` / `hi` / `width` / `holds`); `at_edges`, the same
+  three at every band edge on both sides, which *Lean the Threshold* reads;
+  `positives_below`, model-assisted (each reached band's model mass corrected
+  by its picks, the difference estimator under the band design) with the
+  unreached tail taken from the model as a point and flagged
+  `tail_from_model`; and `found`, the recall range in the spot check's words
+  (`found_words`, cut at 15 / 37.5 / 62.5 / 87.5 percent). `estimate_at(count,
+  beta=None)` reads the same draws at any count (#4524): exact at a band edge,
+  a band's positives split in proportion inside one, which is how the verdict
+  reports the line each balance preset would ship.
+- `next_band()` is the allocation rule. Above the line, every band once from
+  the band holding the line upward, then the band whose next round would
+  shrink the F-beta range most in expectation (`expected_shrink`, a
+  pre-posterior over the round's outcomes on the same draws: the greedy face
+  of Neyman allocation). Below the line, `misses_walk()`: the first band
+  under the line, then one band deeper a round. With a class model
+  (`posteriors` given) the walk runs to `budgets.misses_picks` or the
+  corpus's end: a walk that stops early leaves the tail to the model's
+  point, and #4523 found its recall range then held the truth in 13-38% of
+  sessions, against 75-94% walking to the budget. Without one it goes on only
+  while the band just audited turned up a match or holds a posterior mass
+  that is not negligible against the positives found above
+  (`budgets.dry_run_share` of them, and with no model every band's mass is
+  zero); a dry band is a dry run that ends the walk, since a deeper band
+  would be read on the Jeffreys prior alone. `as_dict()` says which with
+  `class_model`.
+- `line_phase(test)` / `test.phase()` derives the phase from state
+  (`PhaseReport`): `nothing` when the line keeps fewer items than a round;
+  `matches` until, once every band above the line has had a round (#4539,
+  #4560), the precision range is at or under `budgets.matches_width` or
+  `budgets.matches_picks` is spent, or until the bands above are exhausted.
+  A band above the line takes its prior from the picks in its neighbouring
+  bands (`POOL_RADIUS`, #4560); `misses` until the walk ends (`exhausted`, or `dry_run` with no
+  class model), the recall range is under `budgets.misses_width` (with no
+  class model only), or `budgets.misses_picks` is spent; then `done`. The
+  stop reasons are `STOP_REASONS`, the phases `PHASES`. `LineBudgets`'
+  defaults are the values #4523 and #4540 priced
+  (`docs/experiments/2026-10-05-line-test-4523/REPORT.md`,
+  `docs/experiments/2026-10-06-test-budget-presets-4540/REPORT.md`): a 0.20
+  precision width, 20 picks above the line and 40 below it.
+- `TEST_PROVENANCE` is the provenance a test's vote is recorded with
+  (`flow: test`); a test vote never trains the detector.
+- A finished test's verdict is kept on the detector by
+  [`vtscore.detectors.line_verdicts`](detectors.md#kept-test-verdicts).
 
 ---
 

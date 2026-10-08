@@ -33,8 +33,8 @@ one.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -42,12 +42,12 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
-    from vtscore.training.thresholds import FoldAnchoredCut
+    from vtscore.training.thresholds import FoldAnchoredCut, LineBudgets
 
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, is_autopilot_strategy, select_next
-from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector, pick_provenance
+from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -62,6 +62,9 @@ from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_co
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
+from vtscore.detectors.centroid_head import CENTROID_THRESHOLD
+from vtscore.detectors.label_quota import TIER_CENTROID
+from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
     APP_TRAINER,
@@ -73,6 +76,7 @@ from vtscore.eval.step_model import (
 )
 from vtscore.eval.step_trainers import (
     _build_eval_atlas,
+    _centroid_step,
     _labelset_error_costs,
     _score_pool,
     _train_and_calibrate,
@@ -81,28 +85,43 @@ from vtscore.eval import scale_bands
 from vtscore.eval.labels import evaluable_pool, media_is_positive
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.voting_columns import (
+    FBETA_COLUMNS,
     FIT_QUALITY_STRIDE_DEFAULT,
     STOPPING_MARGIN_COLUMNS,
     VOTING_COLUMNS,
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
-    CHECK_PROVENANCE,
+    WEAK_CHECK_COOLDOWN,
+    WEAK_CHECK_MIN_VOTES,
+    WEAK_SEPARATION_D,
     LineRanking,
     SpotCheck,
-    check_schedule,
-    floor_line,
-    floor_state,
+    balance_line,
+    balance_schedule,
+    balance_state,
+    check_shape,
+    fbeta_count,
+    fit_labels_line,
+    weak_check_due,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
     FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
+    NO_BALANCE,
+    ACQUISITION_ARGMAX_FACTOR,
+    ACQUISITION_TARGET_PRECISION,
+    CHECK_SHAPES,
+    CHECK_TRIM,
     acquisition_inclusion,
+    acquisition_threshold,
     calculate_safe_threshold,
     line_inclusion,
-    resolve_min_precision,
+    resolve_line_knobs,
+    target_precision_threshold,
     threshold_from_fold_orderings,
+    walk_positives,
 )
 
 
@@ -280,12 +299,13 @@ def _no_recut(_inclusion: float) -> None:
     """The re-cut of a step with no fold-anchored fit: there is none to re-derive.
 
     Handed to :func:`~vtscore.detectors.cost_trend.smart_cut`, which then keeps
-    the step's reporting line: the schedule blend, a retired rung's cut, or the
-    conformal cut of an arm with safe thresholds off.  Only an arm reporting at
-    an inclusion other than :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION`
-    ever asks, and for the conformal case the app's seam
-    (``recut_detector_threshold``) would re-cut the fold orderings instead - a
-    difference ``progress.smart_status`` declares, off the default arm.
+    the step's reporting line: the balance's kept set, the schedule blend, a
+    retired rung's cut, or the conformal cut of an arm with safe thresholds off.
+    Any line no inclusion drew asks, and on the default arm that is every line
+    the balance keeps (#4272, #4413).  Where the step's folds split but none yielded a
+    fold-anchored fit, the app's seam (``recut_detector_threshold``) would
+    re-cut the fold orderings instead - a difference ``progress.smart_status``
+    declares, which reaches the default arm only on such a step.
     """
     return None
 
@@ -351,40 +371,21 @@ def _blend_xcal_input(threshold: float, details: dict[str, Any]) -> float:
     return NO_GOOD_THRESHOLD if details.get("fold_fallback") is not None else threshold
 
 
-def _calibration_rows(details: dict[str, Any], vote_provenance: "dict[int, Any] | None") -> "list[bool] | None":
-    """Per training row, whether its vote may calibrate a precision-floor promise, decided as the app decides it.
+def _line_columns(details: dict[str, Any]) -> dict[str, Any]:
+    """The balance columns of a step's row: the beta, the set its line keeps, and the check's ranges.
 
-    *vote_provenance* is what the app would have recorded for each simulated
-    click (:func:`~vtscore.eval.autopilot_flow.pick_provenance`), and the
-    verdict is the app's own
-    :func:`~vtscore.datasets.vote_provenance.calibrates_precision`.  ``None``
-    keeps every vote: a run with no phase machine has no app counterpart to
-    take provenance from.  A trainer that reported no ``row_votes`` cannot map
-    a held-out row back to its vote, so none calibrates.
-    """
-    from vtscore.datasets.vote_provenance import calibrates_precision  # noqa: PLC0415
-
-    if vote_provenance is None:
-        return None
-    row_votes = details.get("row_votes")
-    if row_votes is None:
-        return []
-    return [calibrates_precision(vote_provenance.get(v)) for v in row_votes]
-
-
-def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, Any]:
-    """The precision-floor columns of a step's row: the floor, the set its line keeps, and the check's range.
-
-    The state is the app's own (:func:`~vtscore.training.thresholds.floor_state`,
-    #4272), built by :func:`_safe_threshold_for_step`.  ``floor_status`` is
-    empty and every count -1 / range NaN on a step with no floor line - the
-    Inclusion arm, safe thresholds off, or nothing scored yet.
+    The state is the app's own (:func:`~vtscore.training.thresholds.balance_state`,
+    #4413), built by :func:`_safe_threshold_for_step`.  ``floor_status`` is
+    empty and every count -1 / range NaN on a step with no balance line - the
+    Inclusion arm, safe thresholds off, or nothing scored yet.  (The
+    ``floor_*`` names predate the balance; they report the balance's state.)
     """
     nan = float("nan")
-    state = details.get("floor_state")
-    if floor is None or state is None:
+    state = details.get("line_state")
+    beta = details.get("beta")
+    if beta is None or state is None:
         return {
-            "min_precision": floor if floor is not None else nan,
+            "beta": beta if beta is not None else nan,
             "floor_status": "",
             "floor_count": -1,
             "range_lo": nan,
@@ -392,10 +393,12 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
             "check_labelled": -1,
             "check_right": -1,
             "check_stale": -1,
+            "check_audited": -1,
         }
-    rng = state.range
+    # The kept set's precision range: what the range columns have always read.
+    rng = state.precision
     return {
-        "min_precision": floor,
+        "beta": beta,
         "floor_status": state.status,
         "floor_count": state.count,
         "range_lo": round6(rng.lo) if rng is not None else nan,
@@ -403,7 +406,66 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
         "check_labelled": rng.labelled if rng is not None else -1,
         "check_right": rng.right if rng is not None else -1,
         "check_stale": (1 if state.stale else 0) if rng is not None else -1,
+        # The set the walk audited (#4427): under the advisory shape not the
+        # set the line keeps, which ``floor_count`` reports.
+        "check_audited": state.audited if rng is not None else -1,
     }
+
+
+#: Autopilot's opening (#4496): the phases on the text or example sort, where the
+#: app trains no detector, so a weak-separation check under ``weak_phase="learned"``
+#: waits for the flow to leave them.
+_OPENING_PHASES = frozenset({"good", "bad", "more"})
+
+#: Where Autopilot's ``more`` walk can draw (#4637): ``"seed"`` is the app, the
+#: top of the text sort; ``"detector"`` the top of the step's detector ranking.
+MORE_WALKS = ("seed", "detector")
+
+
+def _preference_line_for_step(
+    ranking: LineRanking,
+    details: dict[str, Any],
+    beta: float | None,
+    check: "SpotCheck | None",
+    labels: "Mapping[int, bool] | None",
+    line_shape: "str | None" = None,
+) -> tuple[float | None, str]:
+    """The line the arm's balance draws over the step's ranking, and its provenance; ``(None, "")`` with none.
+
+    The app's own rule: the labels' line (#4452), the class model the step's
+    fold orderings imply cut at the prevalence it estimates on this ranking,
+    where the arm forces no check shape.  A forced shape (``walk_shape``)
+    keeps the count line the app drew before #4452 (#4413): the finished
+    F-beta walk's set where the shape lets it move the line, else the
+    mixture's F-beta argmax under the balance's cap.  Leaves the state the
+    row's line columns read in ``details["line_state"]`` and the beta in
+    ``details["beta"]``.
+    """
+    if beta is None:
+        return None, ""
+    details["beta"] = beta
+    if line_shape is None:
+        # The app's line (#4452): the labels' class model (the step's fold
+        # orderings) cut at the prevalence it estimates on this ranking - the
+        # Train side.  ``details["find_line"]`` carries it to the test side,
+        # which re-estimates the prevalence on the withheld half the way a
+        # Find on a new corpus does.
+        labels_line = fit_labels_line(
+            details.get("fold_orderings") or None, ranking.scores, ranking.ids.tolist(), labels or {}
+        )
+        details["find_line"] = labels_line
+        if labels_line is not None:
+            kept = labels_line.threshold(beta)
+            details["line_state"] = balance_state(beta, check, ranking, threshold=kept)
+            details["train_prevalence"] = labels_line.prevalence
+            return kept, "balance"
+        details["line_state"] = balance_state(beta, check, ranking)
+        return None, ""
+    # A forced check shape (``walk_shape``): the count line the app drew
+    # before #4452, kept as a measurement arm.
+    proposal = fbeta_count(ranking, beta, labels or {})
+    details["line_state"] = balance_state(beta, check, ranking, proposal=proposal, shape=line_shape)
+    return balance_line(ranking, beta, check, proposal=proposal, shape=line_shape), "balance"
 
 
 def _safe_threshold_for_step(
@@ -421,9 +483,10 @@ def _safe_threshold_for_step(
     voted_ids: "set[int] | None" = None,
     exclusion_min_remainder: float | None = None,
     cut_rule: str | None = None,
-    min_precision: float | None = None,
-    calibration_rows: "list[bool] | None" = None,
     check: "SpotCheck | None" = None,
+    labels: "Mapping[int, bool] | None" = None,
+    beta: float | None = None,
+    line_shape: "str | None" = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -479,36 +542,27 @@ def _safe_threshold_for_step(
     resolves to the app's :data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`
     inside this function, so the default arm is production by construction.
 
-    **The line is drawn where the app draws it.**  *min_precision* is the
-    resolved floor (``None`` for the Inclusion arm).  Under a floor the line
-    keeps a set (#4272): the top *count* unvoted items of the sim set this
+    **The line is drawn where the app draws it.**  *beta* is the resolved
+    balance (``None`` for the Inclusion arm).  Under a balance the line keeps
+    a set (#4272, #4413): the top *count* unvoted items of the sim set this
     final model scored, where *count* is the set *check* - the run's spot
-    check, finished or not - ended on, or the floor's unchecked starting
-    candidate; :func:`~vtscore.training.thresholds.floor_line` is the app's
-    own rule, called, not copied, and its ranking rides out in
-    ``details["line_ranking"]`` for the check to draw its candidate from, with
-    the floor's state in ``details["floor_state"]`` for the row.  With no
-    floor the line is the fold-anchored cut at *inclusion* through the shared
+    check - ended on where the check's shape lets it move the line, or else
+    the mixture's F-beta argmax under the balance's cap;
+    :func:`~vtscore.training.thresholds.balance_line` is the app's own rule,
+    called, not copied, and its ranking rides out in
+    ``details["line_ranking"]`` for the check to draw its bands from, with the
+    balance's state in ``details["line_state"]`` for the row.  With no
+    balance the line is the fold-anchored cut at *inclusion* through the shared
     :func:`~vtscore.training.thresholds.reporting_line`.  Either way the line
     rides out in ``details["reporting_line"]`` so the acquisition cut can take
     its origin from it.
-
-    The #4220 estimate is still built, from this step's own populations,
-    exactly as :func:`vtscore.detectors.training._fused_threshold` builds it -
-    the remainder as the corpus, the whole sim set (votes included) as the
-    reference pool, the excluded fold haystacks as the evidence's scale, and
-    *calibration_rows* marking the training rows whose vote may serve - because
-    the app keeps building it for the Find Stats curve; it no longer draws the
-    line on either side.
     """
     import numpy as np  # noqa: PLC0415
 
     from vtscore.training.thresholds import (  # noqa: PLC0415
         FOLD_ANCHOR_CUT_RULE,
-        PrecisionFloorEstimate,
         ReportingLine,
         drop_voted,
-        eligible_fold_orderings,
         fit_fold_anchored_cut,
         reporting_line,
     )
@@ -602,30 +656,15 @@ def _safe_threshold_for_step(
         if fold_haystacks
         else None
     )
-    estimate = (
-        PrecisionFloorEstimate(
-            fit_final,
-            eligible_fold_orderings(fold_orderings[:n_folds], details.get("fold_holdout_rows") or (), calibration_rows),
-            fold_haystacks,
-            # The whole sim set, voted items included, as the app ranks it
-            # (see ``vtscore.detectors.training._fused_threshold``).
-            pool_scores=all_scores,
-        )
-        if fold_haystacks
-        else None
-    )
-    details["precision_floor_estimate"] = estimate
     # The ranking the line keeps a set of: every scored sim item, the voted
     # ones marked, as ``_fused_threshold`` parks it on the detector context.
     ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
     details["line_ranking"] = ranking
-    if min_precision is not None:
-        details["floor_state"] = floor_state(min_precision, check, ranking)
-        kept = floor_line(ranking, min_precision, check)
-        if kept is not None:
-            # No inclusion drew this line: acquisition derives its origin from it.
-            details["reporting_line"] = ReportingLine(kept, None, None)
-            return kept, all_scores, ids, fold_haystacks, "floor", cut
+    kept, provenance = _preference_line_for_step(ranking, details, beta, check, labels, line_shape)
+    if kept is not None:
+        # No inclusion drew this line: acquisition derives its origin from it.
+        details["reporting_line"] = ReportingLine(kept, None, None)
+        return kept, all_scores, ids, fold_haystacks, provenance, cut
     line = reporting_line(cut, None, inclusion_value=inclusion, min_precision=None)
     details["reporting_line"] = line
     if cut is not None and line.threshold is not None:
@@ -929,6 +968,118 @@ def _precision_frame(
     return frame
 
 
+def _fresh_corpus_line(test: "LineRanking", pool: "LineRanking", vote_labels: "dict[int, bool]") -> dict[float, int]:
+    """What the shipped unchecked line keeps on the test half at each preset balance (#4389, #4413).
+
+    A cold Find over a corpus holding the session's votes: the test half plus
+    the voted items at the final model's scores (read off *pool*, the
+    session's ranking), the votes marked voted and anchoring the mixture, and
+    the line at :func:`~vtscore.training.thresholds.balance_count` with the
+    mixture's F-beta argmax as its proposal - the smaller of the cap and the
+    argmax.  Capped at the test half's size.  Pure read.
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS  # noqa: PLC0415
+    from vtscore.training.thresholds import balance_count, fbeta_count  # noqa: PLC0415
+
+    in_test = set(test.ids.tolist())
+    keep, scores = [], []
+    for v in vote_labels:
+        if int(v) in in_test:
+            continue
+        try:
+            scores.append(pool.score_of(int(v)))
+        except KeyError:  # an unscorable vote is out of the ranking, as it is out of the app's
+            continue
+        keep.append(int(v))
+    corpus = LineRanking.from_scores([*test.ids.tolist(), *keep], [*test.scores.tolist(), *scores], keep)
+    labels = {v: bool(vote_labels[v]) for v in keep}
+    return {b: int(min(balance_count(b, None, fbeta_count(corpus, b, labels)), test.size)) for b in RANK_FRAME_BETAS}
+
+
+def _labels_line_counts(test_scores: Any, find_on_test: Any, fallback_threshold: float | None) -> dict[float, int]:
+    """What the app's labels line keeps on the test half at each preset beta (#4452, #4471).
+
+    *find_on_test* is the labels line with its corpus side fitted on the test
+    half - Find's own fit, the one the headline row cuts at the run's beta -
+    so the count at the run's beta is the headline's returned set exactly.
+    With no class model this step the retrain's *fallback_threshold* draws
+    the line, the same set at every beta.  A count can be 0: the line may
+    keep nothing.  -1 with neither.  ``score >= threshold``, as the headline
+    reads it.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS  # noqa: PLC0415
+
+    s = np.asarray(test_scores, dtype=np.float64)
+    out: dict[float, int] = {}
+    for b in RANK_FRAME_BETAS:
+        thr = float(find_on_test.threshold(b)) if find_on_test is not None else fallback_threshold
+        out[b] = int(np.count_nonzero(s >= thr)) if thr is not None and np.isfinite(thr) else -1
+    return out
+
+
+def _rank_frame(
+    kind: str,
+    t: int,
+    test_ids: Sequence[int],
+    test_scores: Any,
+    test_labels: Any,
+    pool_ranking: "LineRanking | None" = None,
+    voted: "Iterable[int]" = (),
+    pool_labels: "dict[int, float] | None" = None,
+    vote_labels: "dict[int, bool] | None" = None,
+    find_on_test: Any = None,
+    fallback_threshold: float | None = None,
+) -> dict[str, Any]:
+    """Where the positives sit in the test half's ranking and in the session's unvoted pool (#4357).
+
+    Both rankings are :class:`~vtscore.training.thresholds.LineRanking` orders
+    (score descending, ties by id, unscorable media left out), so the test
+    half's top *K* is the set a balance's line keeps on a fresh corpus, and the
+    pool's top *K* unvoted is the candidate the spot check samples.  With the
+    session's votes (*vote_labels*, ``True`` = Good) it also records how many
+    the shipped unchecked line keeps on the test half at each preset balance
+    (:func:`_fresh_corpus_line`, #4389); -1 without them.  At each preset
+    beta it records the arm's balance line: under the app's labels line
+    (*find_on_test* or *fallback_threshold*, #4452) what that line keeps
+    (:func:`_labels_line_counts`), else the count line a forced check shape
+    draws.  A full-label skyline passes its own labels line as
+    *find_on_test* (#4486).  Pure read.
+    See :data:`~vtscore.eval.voting_columns.RANK_FRAME_COLUMNS`.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
+
+    def _ranks(ids: Any, label_of: Any) -> tuple[int, int, str]:
+        pos = np.flatnonzero(np.fromiter((label_of(int(i)) >= 0.5 for i in ids), dtype=bool, count=len(ids)))
+        return len(ids), int(pos.size), " ".join(str(int(r)) for r in pos)
+
+    labels = dict(zip((int(i) for i in test_ids), (float(v) for v in test_labels), strict=True))
+    test = LineRanking.from_scores(list(test_ids), test_scores)
+    n_test, n_test_pos, test_ranks = _ranks(test.ids, labels.__getitem__)
+    n_pool, n_pool_pos, pool_ranks = -1, -1, ""
+    if pool_ranking is not None and pool_labels is not None:
+        n_pool, n_pool_pos, pool_ranks = _ranks(pool_ranking.unvoted_ids(voted), pool_labels.__getitem__)
+    line_k: dict[float, int] = dict.fromkeys(RANK_FRAME_BETAS, -1)
+    if pool_ranking is not None and vote_labels:
+        line_k = _fresh_corpus_line(test, pool_ranking, vote_labels)
+    if find_on_test is not None or fallback_threshold is not None:
+        line_k.update(_labels_line_counts(test_scores, find_on_test, fallback_threshold))
+    return {
+        "kind": kind,
+        "t": int(t),
+        "n_test": n_test,
+        "n_test_pos": n_test_pos,
+        "test_pos_ranks": test_ranks,
+        "n_pool": n_pool,
+        "n_pool_pos": n_pool_pos,
+        "pool_pos_ranks": pool_ranks,
+        **{f"test_line_k_{beta_tag(b)}": line_k[b] for b in RANK_FRAME_BETAS},
+    }
+
+
 def _evaluate_on_test(
     step: StepModel,
     threshold: float,
@@ -939,12 +1090,21 @@ def _evaluate_on_test(
     region_aware: bool = False,
     style_obj: Any = None,
     scored_sink: "list[Any] | None" = None,
+    find_line: Any = None,
+    beta: float | None = None,
+    out: "dict[str, Any] | None" = None,
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
 
-    Returns the operating-point metrics the user cares about — inclusion-weighted
-    ``cost``, ``fpr``, ``fnr``, ``precision``, ``recall`` and ``f1`` (all
-    computed at *threshold*, the last three via
+    With *find_line* (the app's labels line, #4452) the threshold is the one a
+    Find on the withheld half would draw: the same class model, the prevalence
+    re-estimated on these scores.
+
+    Returns the operating-point metrics the user cares about — the objective
+    ``fbeta`` at *beta* with its preset columns
+    (:func:`~vtscore.eval.calibration_metrics.fbeta_metrics`, #4584),
+    inclusion-weighted ``cost``, ``fpr``, ``fnr``, ``precision``, ``recall`` and
+    ``f1`` (all computed at *threshold*, the last three via
     :func:`~vtscore.eval.calibration_metrics.detection_metrics`) — plus the
     threshold-independent ranking metrics ``auroc`` and ``average_precision``,
     which isolate "how good is the ranking" from "how good is the threshold".
@@ -971,6 +1131,7 @@ def _evaluate_on_test(
             "precision": nan,
             "recall": nan,
             "f1": nan,
+            **dict.fromkeys(FBETA_COLUMNS, nan),
             "n_test_pos": nan,
             "n_test_neg": nan,
             "n_flagged": nan,
@@ -986,8 +1147,13 @@ def _evaluate_on_test(
 
     scores_arr = np.asarray(scores, dtype=np.float64)
     labels_arr = np.asarray(true_labels, dtype=np.float64)
+    if find_line is not None and beta is not None:
+        threshold = float(find_line.on_corpus(scores_arr).threshold(float(beta)))
+        if out is not None:
+            out["find_threshold"] = threshold
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
         detection_metrics,
+        fbeta_metrics,
         inclusion_weights,
         operating_cost,
     )
@@ -1002,6 +1168,7 @@ def _evaluate_on_test(
         "fpr": round(fpr, 6),
         "fnr": round(fnr, 6),
         **{k: round6(v) for k, v in det.items()},
+        **{k: round6(v) for k, v in fbeta_metrics(scores_arr, labels_arr, threshold, beta).items()},
         "auroc": round(_auroc(scores_arr, labels_arr), 6),
         "average_precision": round(_average_precision(scores_arr, labels_arr), 6),
     }
@@ -1038,6 +1205,7 @@ def _standalone_calibration_row(
         pool_variant="max",
         provenance=str(details.get("provenance") or details.get("threshold_rule") or "standalone"),
         n_pool_rows=1.0,
+        beta=details.get("beta"),
     )
     if "xcal_threshold" in details:
         row["xcal_threshold"] = round6(float(details["xcal_threshold"]))
@@ -1057,7 +1225,7 @@ def _calibration_metric_rows(
     style_obj: Any,
     repool_variants: list[str],
     topk: int,
-) -> tuple[list[dict[str, Any]], "np.ndarray", "np.ndarray"]:
+) -> tuple[list[dict[str, Any]], "np.ndarray", "np.ndarray", list[int]]:
     """Per-step metric rows for the base pooling plus each remedial re-pool.
 
     Scores the test set's per-node sigmoids once through *style_obj*, then pools
@@ -1065,7 +1233,8 @@ def _calibration_metric_rows(
     ``fold_node_data`` — ``topk`` / ``pnorm``.  Each remedial variant recalibrates
     its own threshold by re-pooling the same fold models' held-out node scores,
     so every arm has a genuine *trained* cost and an *oracle* cost.  Returns one
-    row dict per pooling, each tagged with ``pool_variant``.
+    row dict per pooling, each tagged with ``pool_variant``, then the base
+    pooling's test scores, their labels and the media ids they belong to.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1087,6 +1256,20 @@ def _calibration_metric_rows(
 
     # --- Base pooling (max): the arm's real operating point. ---
     base_scores = cm.segment_max_pool(flat, seg)
+    # The test side models Find (#4452): a Find on a new corpus applies the
+    # labels' class model with the prevalence re-estimated on that corpus, so
+    # the withheld half is cut at the threshold Find would draw there, not at
+    # the Train side's.
+    train_threshold = threshold
+    find_line = details.get("find_line")
+    find_prevalence = float("nan")
+    if find_line is not None and details.get("beta") is not None:
+        on_test = find_line.on_corpus(base_scores)
+        find_prevalence = on_test.prevalence
+        threshold = float(on_test.threshold(float(details["beta"])))
+        details["find_threshold"] = threshold
+        # The same fit, for the rank frames' count at every preset beta (#4471).
+        details["find_on_test"] = on_test
     # dump: calibration path -- `ids` is aligned with base_scores and labels.
     maybe_dump_predictions(clips_dict, list(ids), base_scores, list(labels), threshold, target_category)
     base_cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
@@ -1101,11 +1284,16 @@ def _calibration_metric_rows(
         pool_variant="max",
         provenance=provenance,
         n_pool_rows=n_pool_rows,
+        beta=details.get("beta"),
     )
     if "xcal_threshold" in details:
         # Under safe_thresholds the base row's threshold is the blended one;
         # record the pre-blend conformal cut alongside it (issue #2799).
         base["xcal_threshold"] = round6(float(details["xcal_threshold"]))
+    # Train's threshold and the two prevalence estimates behind the Find one (#4452).
+    base["train_threshold"] = round6(float(train_threshold))
+    base["train_prevalence"] = round6(float(details.get("train_prevalence", float("nan"))))
+    base["find_prevalence"] = round6(find_prevalence)
     # How many held-out scores the conformal quantile was actually taken over,
     # on the SHIPPED row rather than only on the fold-count variant rows (issue
     # #3287).  It was declared in `CALIBRATION_COLUMNS` and filled only by the
@@ -1159,10 +1347,73 @@ def _calibration_metric_rows(
                     pool_variant=variant,
                     provenance="conformal",
                     n_pool_rows=n_pool_rows,
+                    beta=details.get("beta"),
                 )
             )
 
-    return rows, base_scores, labels
+    return rows, base_scores, labels, [int(i) for i in ids]
+
+
+def _centroid_test(
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+    beta: float | None,
+    calibration_rows: bool,
+) -> tuple[StepModel, list[dict[str, Any]], "tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None"]:
+    """What a Test on the withheld half gives under the label quota (#4643): the Goods' centroid.
+
+    The centroid is cut where Test cuts it, on the corpus it searches - here
+    the withheld half - so the step is built (:func:`_centroid_step`) with that
+    half's scorer, in the run's own geometry, and scored on it at
+    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  Its line
+    does not take the balance, so there is no Find line to re-draw: *beta*
+    only weights the F-beta columns.
+
+    Returns the step, its metric rows (one, from :func:`_calibration_metric_rows`
+    when *calibration_rows*, else :func:`_evaluate_on_test`'s), and the
+    calibration path's ``(rows, scores, labels, ids)`` or ``None``.
+    """
+    from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
+
+    def _score(step: StepModel) -> list[float]:
+        return _score_media_ids(step, clips_dict, list(test_ids), region_aware=region_aware, style_obj=style_obj)
+
+    step = _centroid_step(
+        good_votes, clips_dict, target_category, _score, region_voting=region_voting, style_obj=style_obj
+    )
+    if calibration_rows:
+        calibration = _calibration_metric_rows(
+            step,
+            CENTROID_THRESHOLD,
+            {"provenance": "centroid", "beta": beta},
+            clips_dict,
+            test_ids,
+            target_category,
+            inclusion,
+            style_obj,
+            [],
+            0,
+        )
+        return step, calibration[0], calibration
+    metrics = _evaluate_on_test(
+        step,
+        CENTROID_THRESHOLD,
+        clips_dict,
+        test_ids,
+        target_category,
+        inclusion,
+        region_aware=region_aware,
+        style_obj=style_obj,
+        beta=beta,
+    )
+    return step, [metrics], None
 
 
 # ------------------------------------------------------------------
@@ -1185,6 +1436,7 @@ def _skyline_fit_and_score(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
+    details_sink: dict[str, Any] | None = None,
 ) -> tuple[dict[int, float], StepModel, dict[str, float], float]:
     """Train one fully-supervised head and score *score_ids* with it.
 
@@ -1203,11 +1455,15 @@ def _skyline_fit_and_score(
     point into the trainer that only the skyline uses, which is exactly the kind
     of near-copy this module keeps out.
 
+    *details_sink*, when given, receives the trainer's details: its calibration
+    folds' held-out orderings, from which the full-label model's labels line is
+    drawn (#4486).
+
     Returns ``({media_id: score}, step, timings, test_score_seconds)``.
     """
     from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
 
-    step, _threshold, _n_labels, timings, _details = _train_and_calibrate(
+    step, _threshold, _n_labels, timings, details = _train_and_calibrate(
         trainer,
         dict.fromkeys(good_ids),
         dict.fromkeys(bad_ids),
@@ -1222,12 +1478,85 @@ def _skyline_fit_and_score(
         style_obj=style_obj,
         emit_calibration_metrics=False,
     )
+    if details_sink is not None:
+        details_sink.update(details)
     assert step.torch_model is not None  # v1 runs the styled torch path only
     t_score = time.monotonic()
     ids, flat, seg = style_obj.node_scores(step.torch_model, {cid: clips_dict[cid] for cid in score_ids})
     pooled = cm.segment_max_pool(flat, seg)
     score_seconds = time.monotonic() - t_score
     return ({cid: float(v) for cid, v in zip(ids, pooled, strict=True)}, step, timings, score_seconds)
+
+
+def _model_meta(model: Any) -> dict[str, Any]:
+    """The class model's scalars at full precision, for a snapshot's JSON; its Bads' scores travel in the folds."""
+    return {k: v for k, v in asdict(model).items() if k != "neg_logits"}
+
+
+def _fold_arrays(orderings: Any) -> dict[str, Any]:
+    """The calibration folds' held-out scores and labels as flat arrays, for a test-score snapshot (#4490).
+
+    ``fold_index`` says which fold each score was held out in, so a replay can rebuild
+    :func:`~vtscore.training.thresholds.labels_line.class_score_model`'s input exactly.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    parts = [
+        (np.asarray(s, dtype=np.float64).ravel(), np.asarray(y, dtype=np.float64).ravel()) for s, y in orderings or []
+    ]
+    parts = [(s[: min(s.size, y.size)], y[: min(s.size, y.size)]) for s, y in parts]
+    return {
+        "fold_scores": np.concatenate([s for s, _ in parts]) if parts else np.empty(0, dtype=np.float64),
+        "fold_labels": (np.concatenate([y for _, y in parts]) if parts else np.empty(0)).astype(np.int8),
+        "fold_index": np.concatenate([np.full(s.size, i, dtype=np.int16) for i, (s, _) in enumerate(parts)])
+        if parts
+        else np.empty(0, dtype=np.int16),
+    }
+
+
+def _ceiling_find_line(details: dict[str, Any], score_map: dict[int, float], ordered_test: list[int]) -> Any:
+    """The ceiling's Find line (#4486): what a Find on the withheld half returns with every training label known.
+
+    The labels line from the full-label model's own calibration folds (*details*, the trainer's), its corpus
+    side fitted on the withheld half, which holds no votes: the same rule the session rows are read under.
+    The skyline row itself stays at the oracle's cut on the test labels, which other studies read; only the
+    rank frame carries this line.  ``None`` when the folds support no class model.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    test_scores = np.array([score_map[cid] for cid in ordered_test], dtype=np.float64)
+    return fit_labels_line(details.get("fold_orderings") or None, test_scores, ordered_test, {})
+
+
+def _ceiling_line(
+    details: dict[str, Any],
+    score_map: dict[int, float],
+    ordered_test: list[int],
+    test_labels: Any,
+    want_frame: bool,
+    test_score_sink: Optional[list[dict[str, Any]]],
+) -> Any:
+    """The ceiling's Find line when a frame or a snapshot wants it; leaves the snapshot in *test_score_sink* (#4490)."""
+    import numpy as np  # noqa: PLC0415
+
+    if not want_frame and test_score_sink is None:
+        return None
+    find_line = _ceiling_find_line(details, score_map, ordered_test)
+    if test_score_sink is not None:
+        test_score_sink.append(
+            {
+                "t": 0,
+                "phase": "ceiling",
+                "scores": np.array([score_map[cid] for cid in ordered_test], dtype=np.float64),
+                "labels": np.asarray(test_labels).astype(np.int8),
+                "ids": np.asarray(ordered_test, dtype=np.int64),
+                "train_threshold": float("nan"),
+                "beta": float("nan"),
+                "model": None if find_line is None else _model_meta(find_line.model),
+                **_fold_arrays(details.get("fold_orderings")),
+            }
+        )
+    return find_line
 
 
 def _skyline_arm_rows(
@@ -1246,6 +1575,9 @@ def _skyline_arm_rows(
     calibrate_count: int,
     calibration_fraction: float,
     seed: int,
+    rank_frame_sink: Optional[list[dict[str, Any]]] = None,
+    rank_ident: Optional[dict[str, Any]] = None,
+    test_score_sink: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """One metric row per requested skyline arm (issue #3322), or ``[]``.
 
@@ -1273,7 +1605,12 @@ def _skyline_arm_rows(
       of the cross-fitted *model*.
 
     Returns each row already carrying its ``gmm_variant`` tag and its own timing
-    / backend columns; the caller supplies the identifying columns.
+    / backend columns; the caller supplies the identifying columns.  With a
+    *rank_frame_sink*, each arm also appends its test ranking there as a rank
+    frame of that arm's kind (#4357), under *rank_ident*.  With a
+    *test_score_sink*, the full-label arm also leaves a ``phase="ceiling"``
+    snapshot there (#4490): the withheld half's scores and labels, the class
+    model its Find line used, and the calibration folds it was drawn from.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1288,11 +1625,25 @@ def _skyline_arm_rows(
     )
     wf, wn = cm.inclusion_weights(inclusion)
 
-    def _row(name: str, score_map: dict[int, float], step: StepModel, timings: dict[str, float], secs: float):
+    def _row(
+        name: str,
+        score_map: dict[int, float],
+        step: StepModel,
+        timings: dict[str, float],
+        secs: float,
+        find_on_test: Any = None,
+    ):
         scores = np.array([score_map[cid] for cid in ordered_test], dtype=np.float64)
         o_thr, _o_cost, _o_fpr, _o_fnr = cm.oracle_cut(scores, test_labels, wf, wn)
         if not np.isfinite(o_thr):
             return None
+        if rank_frame_sink is not None:
+            rank_frame_sink.append(
+                {
+                    **(rank_ident or {}),
+                    **_rank_frame(name, 0, ordered_test, scores, test_labels, find_on_test=find_on_test),
+                }
+            )
         row = operating_metrics(
             scores,
             test_labels,
@@ -1303,6 +1654,8 @@ def _skyline_arm_rows(
             pool_variant="max",
             provenance=SKYLINE_PROVENANCE,
             n_pool_rows=1.0,
+            # A skyline belongs to no step, so no balance drew a line on it.
+            beta=None,
         )
         row["gmm_variant"] = name
         row["schedule"] = ""
@@ -1327,6 +1680,7 @@ def _skyline_arm_rows(
         sim_pos = [cid for cid in sorted(sim_ids) if media_is_positive(clips_dict[cid], target_category)]
         sim_neg = [cid for cid in sorted(sim_ids) if not media_is_positive(clips_dict[cid], target_category)]
         if sim_pos and sim_neg:
+            sky_details: dict[str, Any] = {}
             score_map, step, timings, secs = _skyline_fit_and_score(
                 sim_pos,
                 sim_neg,
@@ -1341,8 +1695,12 @@ def _skyline_arm_rows(
                 inclusion=inclusion,
                 calibrate_count=calibrate_count,
                 calibration_fraction=calibration_fraction,
+                details_sink=sky_details,
             )
-            row = _row(SKYLINE_TRAIN_FULL, score_map, step, timings, secs)
+            find_line = _ceiling_line(
+                sky_details, score_map, ordered_test, test_labels, rank_frame_sink is not None, test_score_sink
+            )
+            row = _row(SKYLINE_TRAIN_FULL, score_map, step, timings, secs, find_on_test=find_line)
             if row is not None:
                 rows.append(row)
 
@@ -1575,6 +1933,127 @@ def _parse_opening_diversity(spec: Optional[str]) -> Optional[tuple[float, int]]
     return tau, k
 
 
+def _check_acquisition_3546(
+    acq_inclusion_offset: float,
+    acq_rank_percentile: Optional[float],
+    acq_p_crossing: "float | str | None",
+    acq_origin: str,
+    acq_target_p: "float | str | None",
+) -> None:
+    """#3546's knobs: the offset's origin, and a target pick precision (the offset is its fallback)."""
+    if acq_origin not in ACQ_ORIGINS:
+        raise ValueError(f"acq_origin must be one of {ACQ_ORIGINS}, got {acq_origin!r}")
+    if acq_origin != "line" and acq_inclusion_offset == 0:
+        raise ValueError("acq_origin only moves the offset cut; it needs a nonzero acq_inclusion_offset")
+    if acq_target_p is None or acq_target_p == ACQ_TARGET_OFF:
+        return
+    if isinstance(acq_target_p, str) or not 0.0 < float(acq_target_p) < 1.0:
+        raise ValueError(f"acq_target_p must lie in (0, 1) or be {ACQ_TARGET_OFF!r}, got {acq_target_p!r}")
+    if acq_rank_percentile is not None or acq_p_crossing not in (None, ACQ_P_CROSSING_OFF):
+        raise ValueError(
+            "acq_target_p names the acquisition cut: pass no acq_rank_percentile and no acq_p_crossing "
+            "to run the target-precision arm"
+        )
+
+
+def _check_acquisition_arm(
+    acq_inclusion_offset: float,
+    acq_rank_percentile: Optional[float],
+    acq_p_crossing: "float | str | None",
+    acq_origin: str = "line",
+    acq_target_p: "float | str | None" = None,
+) -> None:
+    """The acquisition cut's knobs name one cut: the shipped offset, a rank pin, the P-aware crossing (#4409),
+    or a target pick precision (#3546); *acq_origin* says where the offset counts from."""
+    _check_acquisition_3546(acq_inclusion_offset, acq_rank_percentile, acq_p_crossing, acq_origin, acq_target_p)
+    if acq_rank_percentile is not None:
+        if acq_inclusion_offset != 0:
+            raise ValueError(
+                "acq_inclusion_offset and acq_rank_percentile are mutually exclusive; "
+                "pass acq_inclusion_offset=0 to run the rank-pinned arm "
+                f"(the default is {ACQUISITION_INCLUSION_OFFSET}, the shipped acquisition cut)"
+            )
+        if not 0.0 <= acq_rank_percentile <= 1.0:
+            raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
+    if acq_p_crossing is not None and acq_p_crossing != ACQ_P_CROSSING_OFF:
+        if acq_inclusion_offset != 0 or acq_rank_percentile is not None:
+            raise ValueError(
+                "acq_p_crossing replaces the acquisition cut: pass acq_inclusion_offset=0 and no "
+                "acq_rank_percentile to run the P-aware arm"
+            )
+        if isinstance(acq_p_crossing, str) or not acq_p_crossing > 0:
+            raise ValueError(
+                f"acq_p_crossing must be > 0 (a multiple of the argmax's depth) or {ACQ_P_CROSSING_OFF!r}, "
+                f"got {acq_p_crossing!r}"
+            )
+
+
+#: ``acq_p_crossing="off"``: the line - 4 offset even under a balance, whose
+#: default is otherwise the shipped argmax factor (#4409).
+ACQ_P_CROSSING_OFF = "off"
+
+#: Where the acquisition offset counts its Inclusion steps from (#3546):
+#: ``"line"`` is the app (the inclusion the reporting line sits at, recovered
+#: through the fold-anchored scale); ``"inclusion"`` is the old origin, the
+#: run's Inclusion knob (0 by default) whatever line the balance drew - the
+#: floor-off arm #4333 proposed.
+ACQ_ORIGINS = ("line", "inclusion")
+
+#: ``acq_target_p="off"``: the offset cut even under a balance (the #3546
+#: pricing's control, and every offset arm).
+ACQ_TARGET_OFF = "off"
+
+
+def resolve_acquisition_target(acq_target_p: "float | str | None", beta: Optional[float]) -> Optional[float]:
+    """The target pick precision an arm samples at, or ``None`` for the offset cut (#3546).
+
+    ``None`` is the app's rule: under a balance the shipped
+    :data:`~vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION`, on the
+    Inclusion arm the offset cut.  ``"off"`` forces the offset cut; a number
+    pins the target.
+    """
+    if acq_target_p == ACQ_TARGET_OFF:
+        return None
+    if acq_target_p is None:
+        return ACQUISITION_TARGET_PRECISION if beta is not None else None
+    return float(acq_target_p)
+
+
+#: The harness's name for the full balance walk whose end moves the line (what the app shipped before #4427's pricing).
+WALK_SHAPE_FULL = "walk"
+
+
+def resolve_walk_shape(walk_shape: Optional[str], beta: Optional[float]) -> Optional[str]:
+    """The end-of-run check's shape for an arm: the app's (:func:`check_shape`) when none is named; ``None`` with no balance.
+
+    ``"walk"`` is the full walk, ``"advisory"`` and ``"trim"`` force a shape (#4427).  Validated here, so a malformed
+    arm fails before anything expensive runs.
+    """
+    if walk_shape is not None and walk_shape not in (WALK_SHAPE_FULL, *CHECK_SHAPES):
+        raise ValueError(f"walk_shape must be one of {(WALK_SHAPE_FULL, *CHECK_SHAPES)}, got {walk_shape!r}")
+    if beta is None:
+        return None
+    return check_shape(beta) if walk_shape is None else walk_shape
+
+
+def resolve_acquisition_factor(acq_p_crossing: "float | str | None", beta: Optional[float]) -> Optional[float]:
+    """The share of the F-beta argmax's depth the acquisition cut sits at, or ``None`` for the offset cut.
+
+    The harness's counterpart of what :func:`vtscore.state.core.detector_acquisition_threshold`
+    does with its *beta*: ``None`` is the app's default - under a balance the
+    shipped :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`
+    (``None`` since the #4427 revert: the line - 4 offset), on the Inclusion
+    arm the offset (``acq_inclusion_offset``);
+    :data:`ACQ_P_CROSSING_OFF` forces the offset under a balance whatever the
+    constant says; a number is the arm (#4409).
+    """
+    if acq_p_crossing == ACQ_P_CROSSING_OFF:
+        return None
+    if acq_p_crossing is None:
+        return ACQUISITION_ARGMAX_FACTOR if beta is not None else None
+    return float(acq_p_crossing)
+
+
 def _resolve_run_knobs(
     *,
     fold_count_schedule: str | None,
@@ -1588,6 +2067,9 @@ def _resolve_run_knobs(
     acq_inclusion_offset: float,
     acq_rank_percentile: Optional[float],
     head: Optional[str],
+    acq_p_crossing: "float | str | None" = None,
+    acq_origin: str = "line",
+    acq_target_p: "float | str | None" = None,
     trainer: str,
     style: Optional[str],
     calibration_seed: Optional[int],
@@ -1633,15 +2115,7 @@ def _resolve_run_knobs(
                 "frame does not carry"
             )
 
-    if acq_rank_percentile is not None:
-        if acq_inclusion_offset != 0:
-            raise ValueError(
-                "acq_inclusion_offset and acq_rank_percentile are mutually exclusive; "
-                "pass acq_inclusion_offset=0 to run the rank-pinned arm "
-                f"(the default is {ACQUISITION_INCLUSION_OFFSET}, the shipped acquisition cut)"
-            )
-        if not 0.0 <= acq_rank_percentile <= 1.0:
-            raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
+    _check_acquisition_arm(acq_inclusion_offset, acq_rank_percentile, acq_p_crossing, acq_origin, acq_target_p)
 
     trainer = resolve_trainer_name(trainer)
     head = _resolve_head(head, trainer)
@@ -1730,6 +2204,22 @@ def _resolve_production_defaults(
     return blend_schedule, calibration_fraction
 
 
+def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
+    """Refuse a non-zero *inclusion* under a balance (#4361, #4413).
+
+    A set preference wins over the knob: the line is the set the balance
+    keeps, so *inclusion* would only re-weight the ``cost`` column and never
+    move the line - an arm that looks swept and measures one line.  Only the
+    Inclusion arm (``beta="off"``) draws its line at *inclusion*.
+    """
+    if beta is None or inclusion == 0:
+        return
+    raise ValueError(
+        f"inclusion={inclusion!r} draws the line only on the Inclusion arm (beta={NO_BALANCE!r}); under a "
+        f"balance (beta {beta:g}) it would only re-weight cost. Pass beta={NO_BALANCE!r} to sweep it."
+    )
+
+
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -1774,11 +2264,22 @@ def simulate_voting_iterations(  # noqa: C901
     cut_inclusion_qtilt_steps: Optional[list[float]] = None,
     acq_inclusion_offset: float = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
+    acq_p_crossing: "float | str | None" = None,
+    acq_origin: str = "line",
+    acq_target_p: "float | str | None" = None,
+    smart_gate: str = "app",
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
+    more_walk: str = "seed",
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_steps: Optional[Sequence[int]] = None,
+    rank_frame_sink: Optional[list[dict[str, Any]]] = None,
+    rank_frame_steps: Optional[Sequence[int]] = None,
+    test_score_sink: Optional[list[dict[str, Any]]] = None,
+    line_test_sink: Optional[list[dict[str, Any]]] = None,
+    line_test_budgets: Optional["LineBudgets"] = None,
+    sim_size: Optional[int] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
     live_threshold: Optional[str] = None,
@@ -1788,8 +2289,18 @@ def simulate_voting_iterations(  # noqa: C901
     test_bands: Optional[list[str] | str] = None,
     train_mix: "Optional[str | dict[str, float]]" = None,
     test_band_auroc: bool = False,
-    min_precision: "Optional[float | str]" = None,
-    spot_check: str = "end",
+    beta: "Optional[float | str]" = None,
+    walk_picks: Optional[int] = None,
+    walk_tol: float = 0.0,
+    walk_fine: bool = False,
+    walk_guard: Optional[float] = None,
+    walk_shape: Optional[str] = None,
+    spot_check: str = "weak",
+    weak_separation: float = WEAK_SEPARATION_D,
+    weak_min_t: int = WEAK_CHECK_MIN_VOTES,
+    weak_repeat: int = WEAK_CHECK_COOLDOWN,
+    weak_phase: str = "learned",
+    label_quota: Optional[bool] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1798,7 +2309,9 @@ def simulate_voting_iterations(  # noqa: C901
         target_category: Category treated as the positive class.
         seed: Random seed for splitting and vote ordering.
         dataset_name: Label included in result rows.
-        inclusion: Inclusion setting in ``[-10, 10]``.
+        inclusion: The Inclusion arm's line, in ``[-10, 10]``.  A set balance
+            wins over it, so a non-zero value needs ``beta="off"`` and is
+            refused under a balance (#4361).
         trainer: Which **pipeline** runs at each step.  ``"app"``
             (:data:`APP_TRAINER`, the default) is VTSearch's own — the app's
             ``train_model`` fit plus production fold calibration — and *which
@@ -1957,17 +2470,69 @@ def simulate_voting_iterations(  # noqa: C901
             evidence and truth a precision-floor estimator is priced on (#4220).
             Only the calibration-metrics path fills it.  ``None`` (default) = off.
         precision_frame_steps: The steps (``t``) to record; ignored without a sink.
+        rank_frame_sink: List the
+            :data:`~vtscore.eval.voting_columns.RANK_FRAME_COLUMNS` rows are appended
+            to (#4357): where the positives sit in the test half's ranking and
+            in the session's unvoted pool.  One ``step`` row at each step in
+            *rank_frame_steps*, one ``last`` row for the last ordinary step (the
+            ranking the end-of-run spot check draws from, before its votes),
+            and one row per skyline arm.  Only the calibration-metrics path
+            fills it.  ``None`` (default) = off.
+        rank_frame_steps: The ordinary steps (``t``) to record ``step`` rows
+            at; ignored without a sink.
+        line_test_sink: List the
+            :data:`~vtscore.eval.voting_columns.LINE_TEST_COLUMNS` row is
+            appended to (#4523): Test mode's autopilot run on the withheld half
+            as it stood at the last ordinary click, every pick answered from
+            the truth (:func:`vtscore.eval.line_test_arm.line_test_row`).
+            Runs after the loop, so it cannot perturb the trajectory, and
+            only under a balance (*beta*): the Test is the balance line's.
+            Only the calibration-metrics path fills it.  ``None`` (default) = off.
+        line_test_budgets: The Test's targets and budgets; ``None`` (default)
+            is the app's :data:`~vtscore.training.thresholds.DEFAULT_BUDGETS`.
         opening_diversity: ``"<tau>/<k>"`` - an experiment knob (issue #4197),
             not app behaviour.  While the opening walks the top of the seed sort
             (``good`` / ``more``), pass over candidates with cosine >= *tau* to at
             least *k* Bads voted so far (the text query's sibling cluster).
             ``None`` - the default - is the app.  See
             :func:`vtscore.eval.al_strategies._diverse_top`.
+        more_walk: Where Autopilot's ``more`` walk draws (issue #4637), an
+            experiment knob.  ``"seed"`` - the default - is the app: the top of
+            the text sort.  ``"detector"`` takes the top of the step's detector
+            ranking instead, and records the walk's steps as shown
+            (``app_trained``): the app showing the opening's detector from the
+            end of the Bad phase (#4604).  Needs the app's own opening (no
+            *startup_schedule*, no *opening_diversity*) and the phase machine.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
             intent, one fewer indirection.  Requires
             ``acq_inclusion_offset=0``, since the two name the same cut.
+        acq_p_crossing: The **balance-aware** acquisition cut (#4409, #4413):
+            place it at this multiple of the depth of the mixture's F-beta
+            argmax over the step's unvoted line ranking (no cap), read as a
+            rank: ``1.0`` samples at the argmax, ``0.5`` halfway up to the top.
+            So a precision-leaning balance samples high, a recall-leaning one
+            deep.  A number requires ``acq_inclusion_offset=0`` and a balance.
+            ``None`` (the default) is the app's rule: under a balance the
+            shipped :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`
+            (the ``acq_inclusion_offset`` cut is then the fallback for a step
+            with no mixture estimate), on the Inclusion arm the offset cut;
+            ``"off"`` forces the offset cut under a balance (the pricing's
+            control, ``docs/experiments/2026-10-01-acquisition-fbeta-4409``).
+        acq_origin: Where the offset counts from (#3546): ``"line"`` (the
+            default, the app) or ``"inclusion"``, the run's Inclusion knob
+            whatever line the balance drew - the old origin.
+        acq_target_p: The **target pick precision** (#3546): sample at the
+            score where the labels line's corpus posterior falls below this
+            share (:func:`~vtscore.training.thresholds.target_precision_threshold`),
+            falling back to the offset cut on a step with no labels line.
+            ``None`` (the default) is the app's rule: under a balance the
+            shipped ``ACQUISITION_TARGET_PRECISION``, on the Inclusion arm the
+            offset cut.  ``"off"`` forces the offset cut under a balance.
+        smart_gate: #4359's bound on the Smart light: ``"app"`` (the default)
+            reads it; ``"never"`` holds it yellow for the phase decision, so
+            Autopilot stays in ``hard`` to the end of the run.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -2101,38 +2666,92 @@ def simulate_voting_iterations(  # noqa: C901
         test_band_auroc: Under ``test_bands``, also rank each band's cohort
             against the held-out negatives (``auroc_<band>``, #4160).  Off by
             default because it scores the negatives a second time each step.
-        min_precision: The precision floor the reporting line is drawn at
-            (#4245), resolved by
-            :func:`~vtscore.training.thresholds.resolve_min_precision`.
-            ``None`` (the default) is the app's own default floor, so the
-            default arm reports the line a live detector draws: the set the
-            floor keeps (#4272) - the top *count* unvoted items of the sim set,
-            where *count* is the floor's starting candidate until the run's
-            spot check ends, then the set the check ended on.  ``"off"`` is the
+        beta: The balance the reporting line is drawn at (#4413), resolved by
+            :func:`~vtscore.training.thresholds.resolve_line_knobs`.  A number
+            pins the **balance arm**: the set the balance keeps - the top
+            *count* unvoted items of the sim set, the mixture's F-beta argmax
+            under the balance's cap until the run's spot check ends, then
+            what the check's shape makes of the walk's end.  ``"off"``
+            (:data:`~vtscore.training.thresholds.NO_BALANCE`) is the
             **Inclusion arm** - the line at *inclusion* - which is what every
-            study before #4245 measured; an arm that sweeps *inclusion* has to
-            pass it, because a set floor wins over the knob.  A number pins a
-            floor.  The #4220 estimate the Find Stats curve reads is still
-            built each step, its evidence filtered as the app filters it: under
-            the phase machine only the votes Autopilot drew off the learned sort
-            (``hard`` picks) serve; without one every vote does.
-        spot_check: When the simulated user runs the floor's **spot check**
-            (#4272).  ``"end"`` (the default): once the voting steps are spent
-            - *max_steps* reached, or the pool exhausted - the user checks the
-            line the way the app's check step does: the candidate is fixed off
-            the current ranking (the floor's schedule: the top 128 unvoted at
-            10%, 64 at 25%, 32 at 50% and above), each round's picks are
-            answered from ground truth **and cast as votes** (provenance
-            ``check``), the model retrains on them and one row is emitted per
-            round with ``phase == "check"`` and ``t`` still counting every
-            vote cast, so the check's rows sit past *max_steps*.  A failed
-            round halves the candidate down to 32; the check ends
-            ``confirmed`` or ``short``, and the last row's line keeps the set it
-            ended on, its range flagged ``check_stale`` where the retrain moved
-            the set.  Until then every row reports the ``unchecked`` starting
-            candidate, which is exactly what a headless run exports.  ``"off"``
-            never checks: the whole run is the unchecked line.  Ignored on the
-            Inclusion arm, and when nothing is left unvoted to check.
+            study before #4245 measured; an arm that sweeps *inclusion* has
+            to pass it, because a set preference wins over the knob.  ``None``
+            (the default) is the app's own default balance, ``DEFAULT_BETA``,
+            so the default arm reports the line a live detector draws.
+        walk_picks: The balance walk's picks a band (#4427's arms; the
+            schedule's 5 when ``None``), *walk_tol* its tolerance (a deeper
+            step within it of the best is flat and the walk looks one band
+            further; 0, the app's, is the strict rise), *walk_fine* whether
+            every band past the start is split in two, *walk_guard* the
+            precision guard (a deeper band whose audited share right is below
+            it times the start set's ends the walk at the best set so far)
+            and *walk_shape* how the check treats the line: ``None``, the
+            app's, follows :func:`~vtscore.training.thresholds.check_shape`
+            (``advisory`` at beta <= 1: the votes train, the line keeps the
+            unchecked rule's count; ``trim`` above: the walk may only step
+            shallower and the line takes its end); ``"walk"`` is the full
+            walk whose end moves the line, what the app shipped before
+            #4427's pricing; ``"advisory"`` and ``"trim"`` force a shape.
+            All apply to the end-of-run balance walk only.
+        spot_check: When the simulated user runs the balance's **spot check**
+            (#4272, the band walk of #4388 with #4413's F-beta stop).
+            ``"end"``: once the voting steps are spent - *max_steps* reached,
+            or the pool exhausted - the user checks the line the way the app's
+            check step does: the unvoted ranking is fixed off the current one
+            and cut into bands (the top 8, the next 8, 16, 32, ...), the walk
+            starts at the bands holding the balance's cap (the top 32 at
+            beta <= 1, 128 above it), each band's picks are answered from
+            ground truth **and cast as votes** (provenance ``check``), the
+            model retrains on them and one row is emitted per band with
+            ``phase == "check"`` and ``t`` still counting every vote cast, so
+            the check's rows sit past *max_steps*.  The walk stops at the
+            F-beta peak, and the last row's line is what the check's shape
+            makes of it, its ranges flagged ``check_stale`` where the retrain
+            moved them.  Until then every row reports the ``unchecked`` line,
+            which is exactly what a headless run exports.  ``"off"`` never
+            checks: the whole run is the unchecked line.  ``"weak"`` (#4496,
+            the default since the owner's ruling of 2026-10-05: the app's
+            Autopilot checks where
+            :func:`~vtscore.training.thresholds.weak_check_due` says) is
+            ``"end"`` plus the check the app runs mid-session: at the first
+            ordinary step from *weak_min_t* votes on whose labels line
+            separates weakly
+            (:attr:`~vtscore.training.thresholds.LabelsLine.separation` below
+            *weak_separation*), the user checks then and there.  Its picks are
+            clicks: they count in ``t`` and the voting budget, and their rows
+            carry ``phase == "prompt"``, so they read as ordinary clicks (frames
+            record on them, at each requested click a round reaches).  It starts
+            only when its opening bands fit the voting budget left, and a deeper
+            band that would overrun the budget ends it there, as a user closing
+            the step does, so a run's clicks still end at *max_steps*.  With
+            *weak_repeat* > 0 the prompt returns once that many votes have
+            been cast since the last prompted check ended, while the labels
+            still separate weakly; 0 prompts once.  Ignored on the Inclusion
+            arm, and when nothing is left unvoted to check.
+        weak_separation: The d' below which ``spot_check="weak"`` prompts (the app's ``WEAK_SEPARATION_D``).
+        weak_min_t: The fewest votes before ``spot_check="weak"`` prompts (``WEAK_CHECK_MIN_VOTES``).
+        weak_repeat: Votes after a prompted check before it may prompt again
+            (``WEAK_CHECK_COOLDOWN``); 0 prompts once, the priced alternative.
+        weak_phase: Where in Autopilot's flow ``spot_check="weak"`` may prompt.
+            ``"learned"`` (the default, the app's) or ``"any"`` (the arm #4496
+            priced first): ``"learned"`` prompts only once the flow has left
+            its opening (``good``/``bad``/``more``, on the text or
+            example sort), where the app trains no detector and so has neither
+            a separation to read nor a ranking to check.  Without a flow
+            (a non-Autopilot strategy) both prompt anywhere.
+        label_quota: Whether the withheld half is scored as Test scores it
+            under the app's label quota (#4643,
+            :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
+            the app: on the ``"app"`` trainer, from the first Good vote until
+            the votes meet the quota, a row's test metrics are the Goods'
+            centroid's (:func:`_centroid_test`), cut on the withheld half, and
+            ``detector_tier`` says ``centroid``; from the quota on they are the
+            trained head's, as before.  The Train side - acquisition, the
+            lights, the spot check - still runs on the trained head wherever
+            there is a Good and a Bad, because the Train view's learned sort
+            does.  ``False`` is the pre-#4643 arm: no row before the first Good
+            and Bad, the head from there.  The standalone trainers are not the
+            app and default to ``False``.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -2141,7 +2760,9 @@ def simulate_voting_iterations(  # noqa: C901
         xcal_seconds, pool_score_seconds, test_score_seconds, backend, device,
         elapsed_seconds``.  ``n_good``/``n_bad`` report the vote counts behind
         each row so callers can tell apart metrics learned from a 1-vs-1 model
-        and a many-vs-many one.  ``app_trained`` is 1 exactly when the app would
+        and a many-vs-many one.  Under the label quota the rows start at the
+        first Good vote, and ``detector_tier`` (``centroid`` / ``trained``)
+        says which detector a Test there gives.  ``app_trained`` is 1 exactly when the app would
         have had a trained detector on screen at that step: a threshold recorded
         where it is 0 is one no user would ever see, which is what issue #2788's
         cold-start degenerates turned out to be.  Under ``test_bands`` each row
@@ -2183,6 +2804,12 @@ def simulate_voting_iterations(  # noqa: C901
     start_time = time.monotonic()
 
     diversity = _parse_opening_diversity(opening_diversity)
+    if more_walk not in MORE_WALKS:
+        raise ValueError(f"more_walk must be one of {MORE_WALKS}; got {more_walk!r}")
+    if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
+        raise ValueError(
+            "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
+        )
     knobs = _resolve_run_knobs(
         fold_count_schedule=fold_count_schedule,
         calibrate_count=calibrate_count,
@@ -2195,6 +2822,9 @@ def simulate_voting_iterations(  # noqa: C901
         acq_inclusion_offset=acq_inclusion_offset,
         acq_rank_percentile=acq_rank_percentile,
         head=head,
+        acq_p_crossing=acq_p_crossing,
+        acq_origin=acq_origin,
+        acq_target_p=acq_target_p,
         trainer=trainer,
         style=style,
         calibration_seed=calibration_seed,
@@ -2209,11 +2839,25 @@ def simulate_voting_iterations(  # noqa: C901
     # Normalised once, at the top: the retired ``"mlp"`` spelling never reaches
     # the dispatch, the guards, or the result rows (issue #3764).
     trainer = knobs.trainer
-    # The precision floor the reporting line is drawn at: ``None`` resolves to
-    # the app's default floor, so the default arm cuts where a live detector
-    # does (#4245); ``"off"`` is the Inclusion arm.  Resolved - and so
-    # validated - before anything expensive runs.
-    floor = resolve_min_precision(min_precision)
+    # The balance the reporting line is drawn at (#4413): unpinned is the app's
+    # default (DEFAULT_BETA), so the default arm cuts where a live detector
+    # does; ``"off"`` is the Inclusion arm and a number the balance arm.
+    # Resolved - and so validated - before anything expensive runs.
+    beta = resolve_line_knobs(beta)
+    walk_shape_resolved = resolve_walk_shape(walk_shape, beta)
+    # What the line reads a finished walk as: the app's shape when the arm names none; the full walk's end moves the line.
+    line_shape = None if walk_shape is None else (CHECK_TRIM if walk_shape == WALK_SHAPE_FULL else walk_shape)
+    # The arm draws the app's labels line (#4452): a balance with no forced check shape.
+    labels_arm = beta is not None and line_shape is None
+    _check_inclusion_arm(inclusion, beta)
+    # Test's label quota (#4643): the app's rule on the app's trainer unless the
+    # arm says otherwise.  A standalone trainer is not the app.
+    quota_on = (trainer == APP_TRAINER) if label_quota is None else bool(label_quota)
+    # The acquisition cut's rule (#4409): the shipped argmax factor under a
+    # balance unless the arm says otherwise, the offset everywhere else.
+    acq_factor = resolve_acquisition_factor(acq_p_crossing, beta)
+    if acq_factor is not None and beta is None:
+        raise ValueError("acq_p_crossing needs a balance: it places the acquisition cut at its F-beta argmax (#4413)")
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
     if target_prevalence is not None:
@@ -2242,6 +2886,18 @@ def simulate_voting_iterations(  # noqa: C901
         sim_ids, test_ids, all_cohorts = mix_split
         wanted = None if test_bands in (None, "auto") else set(test_bands)
         band_cohorts = {b: ids for b, ids in all_cohorts.items() if wanted is None or b in wanted}
+
+    # A smaller Train pool (#4452's wider world): a seeded subsample of the
+    # simulation half, after the split so the withheld half - the Find side -
+    # is the full one whatever the pool's size.
+    if sim_size is not None and len(sim_ids) > int(sim_size):
+        sub_rng = np.random.RandomState(int(seed) + 7919)
+        keep = sub_rng.choice(len(sim_ids), size=int(sim_size), replace=False)
+        sim_ids = [sim_ids[int(i)] for i in sorted(keep)]
+        prevalence_arm = f"sim_{int(sim_size)}"
+        realized_prevalence = round(
+            sum(1 for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)) / len(sim_ids), 6
+        )
 
     # After the split and the cohorts, so neither moves (#4184).
     if haystack_prevalence is not None:
@@ -2429,10 +3085,6 @@ def simulate_voting_iterations(  # noqa: C901
     bad_votes: dict[int, None] = {}
     labeled: dict[int, float] = {}
     rows: list[dict[str, Any]] = []
-    # Per vote, the surfacing provenance the app would have recorded (see
-    # ``pick_provenance``).  Only read under the phase machine: a run without
-    # one has no app counterpart to take provenance from.
-    vote_provenance: dict[int, dict[str, str] | None] = {}
 
     # Voting proceeds one item at a time: the autopilot selector picks the next
     # pool item using the *current* detector (trained at the previous step), the
@@ -2464,7 +3116,11 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
-        flow = AutopilotFlow(startup=startup_state)
+        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate)
+    elif more_walk != "seed":
+        raise ValueError(
+            "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
+        )
     # Each schedule round's cut on the seed sort, resolved once: the app fits a
     # cosine sort's GMM over the whole sort and never refits it as votes come
     # in, so these are constants of the run rather than per-step state.
@@ -2484,11 +3140,10 @@ def simulate_voting_iterations(  # noqa: C901
     # app's ``_eval_cached_models`` does over its per-step cache.
     recent_steps: list[tuple[Any, float]] = []
 
-    def _cast(cid: int, phase_name: str | None, provenance: dict[str, str] | None) -> bool:
-        """Reveal *cid*'s ground truth as a vote, recorded as the app records one; whether it was positive."""
+    def _cast(cid: int, phase_name: str | None) -> bool:
+        """Reveal *cid*'s ground truth as a vote; whether it was positive."""
         pool.remove(cid)
         vote_phase[cid] = phase_name or ""
-        vote_provenance[cid] = provenance
         is_positive = media_is_positive(clips_dict[cid], target_category)
         if is_positive:
             good_votes[cid] = None
@@ -2540,51 +3195,210 @@ def simulate_voting_iterations(  # noqa: C901
             }
         )
 
-    if spot_check not in ("end", "off"):
-        raise ValueError(f"spot_check must be 'end' or 'off', got {spot_check!r}")
-    # The floor's spot check (#4272), run once the voting steps are spent: the
-    # simulated user checks the line as the app's check step does, its picks
-    # answered from ground truth and cast as votes.  ``line_ranking`` is the
-    # ranking the last step's line was drawn over, which the candidate is
-    # fixed off and a finished result is fingerprinted against.
+    if spot_check not in ("end", "off", "weak"):
+        raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
+    if weak_phase not in ("any", "learned"):
+        raise ValueError(f"weak_phase must be 'any' or 'learned', got {weak_phase!r}")
+    # The balance's spot check (#4272, #4413), run once the voting steps are
+    # spent: the simulated user checks the line as the app's check step does,
+    # its picks answered from ground truth and cast as votes.  ``line_ranking``
+    # is the ranking the last step's line was drawn over, which the walk's
+    # bands are cut from and a finished result is fingerprinted against.
     check: SpotCheck | None = None
     line_ranking: LineRanking | None = None
+    # The rank frame's identity, and the inputs of the last ordinary step's
+    # frame (#4357), which is emitted once the loop ends.
+    rank_ident = {
+        "seed": seed,
+        "dataset": dataset_name,
+        "category": target_category,
+        "calibration_seed": calibration_seed,
+        "style": style or "",
+    }
+    last_ordinary: dict[str, Any] | None = None
     # ``t`` counts every vote cast, the check's included: one per ordinary
     # step, a round's worth per check round.
+    # #4496: under ``spot_check="weak"`` the app prompts a check when the labels
+    # separate weakly.  ``check_phase`` stamps the running check's rows and
+    # picks: ``"prompt"`` for a prompted check (clicks), ``"check"`` for the
+    # end-of-run one.
+    check_phase = "check"
+    end_checked = False
+    weak_due = False
+    last_weak_check: int | None = None
+
+    def _start_check() -> "SpotCheck | None":
+        """The app's check over the line's unvoted ranking; ``None`` with nothing unvoted in it."""
+        assert line_ranking is not None and beta is not None
+        # The whole unvoted ranking, in rank order: the walk's bands are cut
+        # from it (#4388), and it starts at the balance's cap.
+        candidate = tuple(int(i) for i in line_ranking.unvoted_ids(set(good_votes) | set(bad_votes)))
+        if not candidate:
+            return None
+        # Seeded off the run's own RNG, after every trajectory draw, so a run
+        # without the check is byte-identical up to here.  Recall is read
+        # against the mixture's count of the unvoted ranking's positives, or
+        # the balance's cap when the mixture has no estimate (#4419), as the
+        # app does.
+        n_pos = walk_positives(
+            line_ranking,
+            beta,
+            {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+            set(good_votes) | set(bad_votes),
+        )
+        return SpotCheck.start_balance(
+            candidate,
+            beta,
+            n_pos,
+            seed=int(rng.randint(2**31 - 1)),
+            picks=walk_picks,
+            tol=walk_tol,
+            fine=walk_fine,
+            guard=walk_guard,
+            shallow_only=walk_shape_resolved == CHECK_TRIM,
+        )
+
+    # The last finished check: what a prompted check the budget cut short leaves in place.
+    finished_check: SpotCheck | None = None
+
+    def _check_start_cost() -> int:
+        """The most a check's opening bands cost: what a prompted one needs left in the voting budget."""
+        if beta is None:
+            return 0
+        schedule = balance_schedule(beta)
+        return schedule.rounds * (walk_picks or schedule.picks)
+
     t = 0
+
+    def _ident_row(
+        t: int,
+        row_phase: str,
+        acq_threshold: float,
+        threshold: float,
+        pool_scores: dict[int, float],
+        details: dict[str, Any],
+        tier: str,
+    ) -> dict[str, Any]:
+        """The identifying columns shared by every row a step emits.
+
+        Read off the run's live state (the votes, the pool, the phase machine)
+        as it stands when called, plus what the step computed.  A step with no
+        trained head yet (a Good and no Bad, under the label quota) passes NaN
+        lines, no pool scores and no details beyond the balance.
+        """
+        return {
+            "seed": seed,
+            "dataset": dataset_name,
+            "category": target_category,
+            "strategy": strategy,
+            "trainer": trainer,
+            # Blank on the standalone SVM trainers: they fit no head, so
+            # naming one here would attribute the row to a head never trained.
+            "head": head if trainer == APP_TRAINER else "",
+            "style": style or "",
+            "prevalence_arm": prevalence_arm,
+            "realized_prevalence": realized_prevalence,
+            "t": t,
+            "n_good": len(good_votes),
+            "n_bad": len(bad_votes),
+            # The haystack the threshold was fitted on, and what is left of it
+            # after this step's votes.  `n_remainder` is *exactly* the quantity
+            # the #3308 exclusion floor is compared against
+            # (`apply_vote_exclusion` counts the unvoted scores), and `pool` has
+            # already had this step's vote removed by the time this row is
+            # built - so an analyzer can reconstruct, per step, whether the
+            # exclusion fired, without the harness having to report it (#3312).
+            # Their ratio is the axis the mechanism runs on: the effect is
+            # bounded by the votes' share of the haystack.
+            "n_haystack": len(sim_ids),
+            "n_remainder": len(pool),
+            "phase": row_phase,
+            # The three lights behind that phase (#3560).  Already computed by
+            # `flow.update` above and previously discarded; the phase alone
+            # cannot say whether Smart or Stable is what holds a run in `hard`.
+            "smart": flow.smart if flow is not None else "",
+            "stable": flow.stable if flow is not None else "",
+            "span": flow.span if flow is not None else "",
+            "span_level": flow.span_level if flow is not None else -1,
+            "span_depth": flow.span_depth if flow is not None else -1,
+            "span_target": flow.span_target if flow is not None else -1,
+            # How close each rule came to firing, beside whether it did (#3560).
+            # Read off the dicts the phase machine already built this step, so a
+            # margin cannot disagree with the light above it; NaN where no phase
+            # machine ran, or where the rule itself declined to fit one.
+            **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
+            "app_trained": 1
+            if (flow is None or app_has_detector(flow.phase, more_shown=more_walk == "detector"))
+            else 0,
+            "startup_schedule": startup_schedule or "",
+            "calibration_seed": calibration_seed,
+            "acq_threshold": round(float(acq_threshold), 6),
+            # Measured against the pool the selector ranks, not the test set, so
+            # the pair answers "how much did the sampling position move".
+            "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
+            "report_pool_percentile": _pool_percentile(pool_scores, threshold),
+            **_line_columns(details),
+            # Which detector a Test at this click gives (#4643): the Goods'
+            # centroid under the label quota, else the trained head.
+            "detector_tier": tier,
+        }
+
     while True:
         picks: list[int] | None = None
+        # The vote count before this step's votes: a frame is due at every
+        # requested click this step reaches, which a check round can jump past.
+        t_before = t
         if check is not None and check.running:
-            picks = list(check.pending)
-        elif t >= n_steps or not pool:
-            # The voting steps are spent.  Check the line once, if the run
-            # checks at all and there is a ranking with something unvoted in it.
-            if spot_check != "end" or check is not None or floor is None or line_ranking is None:
-                break
-            candidate = line_ranking.candidate(check_schedule(floor).candidate, set(good_votes) | set(bad_votes))
-            if not candidate:
-                break
-            # Seeded off the run's own RNG, after every trajectory draw, so a
-            # run without the check is byte-identical up to here.
-            check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))
-            picks = list(check.pending)
-            if not picks:
-                break
+            if check_phase == "prompt" and t + len(check.pending) > n_steps:
+                # The budget is spent mid-check: the user stops there, as closing
+                # the step does, and the end-of-run check takes over (#4496).
+                check.cancel()
+                check = finished_check
+                last_weak_check = t
+            else:
+                picks = list(check.pending)
+        if picks is None and not (check is not None and check.running):
+            if weak_due and t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                # The labels separate weakly (#4496): the user checks now, and
+                # the check's picks are clicks, so its opening bands must fit
+                # the budget left.
+                weak_due = False
+                last_weak_check = t
+                started = _start_check()
+                if started is not None and started.pending:
+                    check, check_phase = started, "prompt"
+                    picks = list(check.pending)
+            if picks is None and (t >= n_steps or not pool):
+                # The voting steps are spent.  Check the line once, if the run
+                # checks at all and there is a ranking with something unvoted in it.
+                if spot_check == "off" or end_checked or beta is None or line_ranking is None:
+                    break
+                end_checked = True
+                started = _start_check()
+                if started is None:
+                    break
+                check, check_phase = started, "check"
+                picks = list(check.pending)
+                if not picks:
+                    break
 
         if picks is not None:
             # A check round: every pick is answered at once.  The candidate was
             # fixed at the start, so the retrain each round triggers cannot
             # move what the next round samples.
-            phase = "check"
+            phase = check_phase
             startup_round, startup_cut = -1, None
-            round_votes = {cid: _cast(cid, phase, dict(CHECK_PROVENANCE)) for cid in picks}
+            round_votes = {cid: _cast(cid, phase) for cid in picks}
             t = len(good_votes) + len(bad_votes)
             for cid in picks:
                 _log_pick(cid, round_votes[cid], phase, startup_round, startup_cut)
             is_positive = round_votes[picks[-1]]
             assert check is not None and line_ranking is not None
             check.record(round_votes)
+            if check.finished and check_phase == "prompt":
+                last_weak_check = t
             if check.finished:
+                finished_check = check
                 # The set the line keeps from here on, as it stands with the
                 # check's own votes cast: what the retrains below are
                 # compared against for ``check_stale``.
@@ -2610,10 +3424,10 @@ def simulate_voting_iterations(  # noqa: C901
                 startup_cut=startup_cut,
                 uncertainty=pool_uncertainty,
                 opening_diversity=diversity,
+                more_walk=more_walk,
             )
             cid = select_next(strategy, ctx)
-            # What the app would record for this click (#4245).
-            is_positive = _cast(cid, phase, pick_provenance(phase))
+            is_positive = _cast(cid, phase)
             t = len(good_votes) + len(bad_votes)
             _log_pick(cid, is_positive, phase, startup_round, startup_cut)
 
@@ -2633,6 +3447,59 @@ def simulate_voting_iterations(  # noqa: C901
                     span=atlas.span_info() if atlas is not None else None,
                     last_vote_good=is_positive,
                 )
+            if quota_on and good_votes:
+                # No head without a Bad, but Test gives the Goods' centroid
+                # from the first Good (#4643), so this click has a row.  The
+                # Train side has nothing to record: no line, no pool scores.
+                # The row's balance is the one a trained step records, which
+                # only the safe-threshold path draws a line at.
+                row_beta = beta if safe_thresholds else None
+                t_test = time.monotonic()
+                c_step, c_rows, _c_cal = _centroid_test(
+                    good_votes,
+                    clips_dict,
+                    test_ids,
+                    target_category,
+                    inclusion,
+                    region_voting=region_voting,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                    beta=row_beta,
+                    calibration_rows=emit_calibration_metrics and style_obj is not None,
+                )
+                c_seconds = time.monotonic() - t_test
+                c_bands = _band_metrics(
+                    c_step,
+                    CENTROID_THRESHOLD,
+                    unfiltered,
+                    band_cohorts if test_bands else None,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                    neg_ids=band_neg_ids,
+                    target_category=target_category,
+                )
+                c_ident = _ident_row(
+                    t,
+                    flow.phase if flow is not None else "",
+                    float("nan"),
+                    float("nan"),
+                    {},
+                    {"beta": row_beta},
+                    "centroid",
+                )
+                c_timing = {
+                    "calibrate_count": 0,
+                    "train_seconds": float("nan"),
+                    "final_score_seconds": float("nan"),
+                    "xcal_seconds": float("nan"),
+                    "pool_score_seconds": float("nan"),
+                    "test_score_seconds": round(c_seconds, 6),
+                    "backend": c_step.backend,
+                    "device": c_step.device,
+                    "elapsed_seconds": round(time.monotonic() - start_time, 3),
+                }
+                for mr in c_rows:
+                    rows.append({**c_ident, **mr, **c_bands, **c_timing})
             continue
 
         # The live fold count for THIS step.  Constant unless #3314's schedule
@@ -2695,12 +3562,29 @@ def simulate_voting_iterations(  # noqa: C901
                     voted_ids=set(good_votes) | set(bad_votes),
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
-                    min_precision=floor,
-                    calibration_rows=_calibration_rows(details, vote_provenance if flow is not None else None),
                     check=check,
+                    labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                    beta=beta,
+                    line_shape=line_shape,
                 )
             )
             line_ranking = details.get("line_ranking")
+            if (
+                spot_check == "weak"
+                and picks is None
+                and (weak_phase == "any" or flow is None or flow.phase not in _OPENING_PHASES)
+            ):
+                weak_line = details.get("find_line")
+                # The app's rule (#4496): Autopilot checks where this says.
+                if weak_line is not None and weak_check_due(
+                    weak_line.separation,
+                    t,
+                    last_weak_check,
+                    threshold=weak_separation,
+                    min_votes=weak_min_t,
+                    cooldown=weak_repeat if weak_repeat > 0 else None,
+                ):
+                    weak_due = True
             if live_threshold is not None:
                 # A retired rung replaces the shipped cut, and the fit it
                 # replaced is dropped with it so acquisition cannot re-cut an
@@ -2734,36 +3618,93 @@ def simulate_voting_iterations(  # noqa: C901
         # the last step's cut.
         acq_threshold = threshold
         if safe_thresholds:
-            if acq_rank_percentile is not None:
-                if sim_pooled_scores:
-                    acq_threshold = float(
-                        np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile)
-                    )
-            elif acq_inclusion_offset != 0 and safe_cut is not None:
-                # Re-cut the *same* fold-anchored fit.  O(1) - the mixture was
-                # fitted above; ``threshold_at`` is monotone by construction, so
-                # the arms are nested and offset 0 reproduces the reporting cut
-                # exactly.  ``safe_cut is None`` is the schedule-blend fallback
-                # (~5% of steps, concentrated in the cold start): the blend has
-                # no inclusion-aware form, so there is nothing honest to re-cut.
-                # The offset's origin is the inclusion the line sits at: the
-                # knob's under the Inclusion arm, and under a floor the
-                # fallback's or the one a promised line derives to (#4245).
-                line = details.get("reporting_line")
+            # The offset cut: re-cut the *same* fold-anchored fit.  O(1) - the
+            # mixture was fitted above; ``threshold_at`` is monotone by
+            # construction, so the arms are nested and offset 0 reproduces the
+            # reporting cut exactly.  ``safe_cut is None`` is the schedule-blend
+            # fallback (~5% of steps, concentrated in the cold start): the blend
+            # has no inclusion-aware form, so there is nothing honest to re-cut.
+            # The offset's origin is the inclusion the line sits at: the knob's
+            # under the Inclusion arm, and under a preference the fallback's or
+            # the one a promised line derives to (#4245).  It is the cut of the
+            # offset arm, and what the argmax arm falls back to with no mixture
+            # estimate, as the app does (#4409).
+            offset_cut: float | None = None
+            # The target precision names the cut unless an explicit factor or rank pin does.
+            acq_target = (
+                resolve_acquisition_target(acq_target_p, beta)
+                if acq_factor is None and acq_rank_percentile is None
+                else None
+            )
+            if acq_inclusion_offset != 0 and safe_cut is not None:
+                line = details.get("reporting_line") if acq_origin == "line" else None
                 origin = line_inclusion(line, safe_cut) if line is not None else inclusion
                 cand = safe_cut.threshold_at(
                     acquisition_inclusion(origin if origin is not None else inclusion, acq_inclusion_offset)
                 )
                 if np.isfinite(cand):
+                    offset_cut = float(cand)
+            if acq_factor is not None:
+                # #4409: sample at a share of the depth of the mixture's F-beta
+                # argmax over the unvoted ranking (no cap), read as a rank,
+                # through the library's acquisition_threshold, as the app does
+                # (#4413).  The mixture is the one the line's proposal already
+                # fitted on this ranking (memoised on it), so this costs a
+                # posterior read.
+                ranking_now = details.get("line_ranking")
+                cand = None
+                if ranking_now is not None and beta is not None:
+                    voted_now = set(good_votes) | set(bad_votes)
+                    labels_now = {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)}
+                    cand = acquisition_threshold(ranking_now, beta, labels_now, voted_now, factor=acq_factor)
+                if cand is not None and np.isfinite(cand):
                     acq_threshold = float(cand)
+                elif offset_cut is not None:
+                    acq_threshold = offset_cut
+            elif acq_target is not None:
+                # #3546: sample where the labels line's corpus posterior falls below the
+                # target share, as the app does; the offset cut is the fallback.
+                cand = target_precision_threshold(details.get("find_line"), acq_target)
+                if cand is not None and np.isfinite(cand):
+                    acq_threshold = float(cand)
+                elif offset_cut is not None:
+                    acq_threshold = offset_cut
+            elif acq_rank_percentile is not None:
+                if sim_pooled_scores:
+                    acq_threshold = float(
+                        np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile)
+                    )
+            elif offset_cut is not None:
+                acq_threshold = offset_cut
 
+        details.pop("find_threshold", None)
+        details.pop("find_on_test", None)
+        # Under the label quota a Test here gives the Goods' centroid, not this
+        # head (#4643): the withheld half is scored as that.
+        centroid = quota_on and label_quota_tier(len(good_votes), len(bad_votes)).tier == TIER_CENTROID
+        centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
         # metrics row, but both paths score the same test set here.
-        calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray] | None = None
+        calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None = None
         metrics: dict[str, float] = {}
         t_test = time.monotonic()
-        if emit_calibration_metrics and style_obj is not None:
+        if centroid:
+            centroid_step, c_rows, calibration = _centroid_test(
+                good_votes,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                region_voting=region_voting,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                beta=details.get("beta"),
+                calibration_rows=emit_calibration_metrics and style_obj is not None,
+            )
+            if calibration is None:
+                metrics = c_rows[0]
+        elif emit_calibration_metrics and style_obj is not None:
             calibration = _calibration_metric_rows(
                 step,
                 threshold,
@@ -2776,6 +3717,27 @@ def simulate_voting_iterations(  # noqa: C901
                 repool_variants or [],
                 repool_topk,
             )
+            if test_score_sink is not None:
+                # The withheld half as Find sees it (#4452's Find scenarios):
+                # its scores and labels, Train's threshold and the labels' class
+                # model, so any Find corpus drawn from it is priced post hoc.
+                find_line = details.get("find_line")
+                test_score_sink.append(
+                    {
+                        "t": int(t),
+                        "phase": check_phase if picks is not None else (flow.phase if flow is not None else ""),
+                        # Full precision (#4523): the Test arm replays this snapshot, and a
+                        # float32 score or a rounded model moves its line and its tail.
+                        "scores": np.asarray(calibration[1], dtype=np.float64),
+                        "labels": np.asarray(calibration[2], dtype=np.int8),
+                        # Which image each score is (#4490): a report can name the wrong images a line keeps.
+                        "ids": np.asarray(calibration[3], dtype=np.int64),
+                        "train_threshold": float(threshold),
+                        "beta": float(details["beta"]) if details.get("beta") is not None else float("nan"),
+                        "model": None if find_line is None else _model_meta(find_line.model),
+                        **_fold_arrays(details.get("fold_orderings")),
+                    }
+                )
         else:
             scored: list[Any] = []
             metrics = _evaluate_on_test(
@@ -2788,6 +3750,9 @@ def simulate_voting_iterations(  # noqa: C901
                 region_aware=region_aware,
                 style_obj=style_obj,
                 scored_sink=scored,
+                find_line=details.get("find_line"),
+                beta=details.get("beta"),
+                out=details,
             )
             if emit_calibration_metrics and trainer != APP_TRAINER and scored:
                 # A standalone trainer has no style, so it never reaches the
@@ -2804,8 +3769,10 @@ def simulate_voting_iterations(  # noqa: C901
         # per-pooling rows, whose own thresholds re-cut the headline columns and
         # not this one.
         band_metrics = _band_metrics(
-            step,
-            threshold,
+            centroid_step if centroid_step is not None else step,
+            # The size bands are cohorts of the withheld half, so they are cut
+            # where Find cuts it (#4452); the Train side's threshold otherwise.
+            CENTROID_THRESHOLD if centroid_step is not None else details.get("find_threshold", threshold),
             unfiltered,
             band_cohorts if test_bands else None,
             region_aware=region_aware,
@@ -2841,7 +3808,7 @@ def simulate_voting_iterations(  # noqa: C901
             # (issue #4243).  A step with no fitted cut to re-derive keeps its
             # reporting line, which is then inclusion-blind.
             # The line was served at the operating point's inclusion - none at
-            # all when a precision floor promised its own cut (#4245).
+            # all when a balance kept a set (#4272, #4413).
             _line = details.get("reporting_line")
             _served = _line.inclusion if _line is not None else inclusion
             recent_steps.append(
@@ -2875,57 +3842,15 @@ def simulate_voting_iterations(  # noqa: C901
             )
 
         # Identifying columns shared by every row this step emits.
-        base_row = {
-            "seed": seed,
-            "dataset": dataset_name,
-            "category": target_category,
-            "strategy": strategy,
-            "trainer": trainer,
-            # Blank on the standalone SVM trainers: they fit no head, so
-            # naming one here would attribute the row to a head never trained.
-            "head": head if trainer == APP_TRAINER else "",
-            "style": style or "",
-            "prevalence_arm": prevalence_arm,
-            "realized_prevalence": realized_prevalence,
-            "t": t,
-            "n_good": len(good_votes),
-            "n_bad": len(bad_votes),
-            # The haystack the threshold was fitted on, and what is left of it
-            # after this step's votes.  `n_remainder` is *exactly* the quantity
-            # the #3308 exclusion floor is compared against
-            # (`apply_vote_exclusion` counts the unvoted scores), and `pool` has
-            # already had this step's vote removed by the time this row is
-            # built - so an analyzer can reconstruct, per step, whether the
-            # exclusion fired, without the harness having to report it (#3312).
-            # Their ratio is the axis the mechanism runs on: the effect is
-            # bounded by the votes' share of the haystack.
-            "n_haystack": len(sim_ids),
-            "n_remainder": len(pool),
-            "phase": "check" if picks is not None else (flow.phase if flow is not None else ""),
-            # The three lights behind that phase (#3560).  Already computed by
-            # `flow.update` above and previously discarded; the phase alone
-            # cannot say whether Smart or Stable is what holds a run in `hard`.
-            "smart": flow.smart if flow is not None else "",
-            "stable": flow.stable if flow is not None else "",
-            "span": flow.span if flow is not None else "",
-            "span_level": flow.span_level if flow is not None else -1,
-            "span_depth": flow.span_depth if flow is not None else -1,
-            "span_target": flow.span_target if flow is not None else -1,
-            # How close each rule came to firing, beside whether it did (#3560).
-            # Read off the dicts the phase machine already built this step, so a
-            # margin cannot disagree with the light above it; NaN where no phase
-            # machine ran, or where the rule itself declined to fit one.
-            **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
-            "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
-            "startup_schedule": startup_schedule or "",
-            "calibration_seed": calibration_seed,
-            "acq_threshold": round(float(acq_threshold), 6),
-            # Measured against the pool the selector ranks, not the test set, so
-            # the pair answers "how much did the sampling position move".
-            "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
-            "report_pool_percentile": _pool_percentile(pool_scores, threshold),
-            **_floor_columns(floor, details),
-        }
+        base_row = _ident_row(
+            t,
+            check_phase if picks is not None else (flow.phase if flow is not None else ""),
+            acq_threshold,
+            threshold,
+            pool_scores,
+            details,
+            "centroid" if centroid else "trained",
+        )
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
             # but #3314's scheduled arm - and recorded regardless, because a
@@ -2947,9 +3872,68 @@ def simulate_voting_iterations(  # noqa: C901
             "elapsed_seconds": round(time.monotonic() - start_time, 3),
         }
 
-        if calibration is not None:
-            metric_rows, base_scores, base_labels = calibration
-            if precision_frame_sink is not None and precision_frame_steps and t in precision_frame_steps:
+        if calibration is not None and centroid:
+            # The Goods' centroid's row (#4643).  The study extras below all
+            # vary the trained head's cut, which no Test gives at this click.
+            # The Test arm still starts from here if this is the last click:
+            # the centroid's line keeps the same set at every balance.
+            metric_rows, base_scores, base_labels, base_ids = calibration
+            if (rank_frame_sink is not None or line_test_sink is not None) and (
+                picks is None or check_phase == "prompt"
+            ):
+                last_ordinary = {
+                    "t": t,
+                    "test_ids": base_ids,
+                    "test_scores": base_scores,
+                    "test_labels": base_labels,
+                    "pool_ranking": line_ranking,
+                    "voted": frozenset(good_votes) | frozenset(bad_votes),
+                    "pool_labels": pool_labels,
+                    "vote_labels": {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                    "find_on_test": None,
+                    "fallback_threshold": CENTROID_THRESHOLD,
+                }
+            for mr in metric_rows:
+                rows.append({**base_row, **mr, **band_metrics, **timing_cols})
+        elif calibration is not None:
+            metric_rows, base_scores, base_labels, base_ids = calibration
+            # A prompted check's rounds are clicks (#4496); the end-of-run check's are not.
+            is_click = picks is None or check_phase == "prompt"
+            if (rank_frame_sink is not None or line_test_sink is not None) and is_click:
+                # Kept by reference and turned into the ``last`` frame after the
+                # loop: nothing here is mutated later, and the voted set is a
+                # snapshot, so it is this step's ranking whatever runs after it.
+                last_ordinary = {
+                    "t": t,
+                    "test_ids": base_ids,
+                    "test_scores": base_scores,
+                    "test_labels": base_labels,
+                    "pool_ranking": line_ranking,
+                    "voted": frozenset(good_votes) | frozenset(bad_votes),
+                    "pool_labels": pool_labels,
+                    "vote_labels": {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                    # The labels line's arm (#4452): Find's fit on the withheld
+                    # half, or with no class model this step the retrain's
+                    # fallback cut, which keeps the same set at every beta.
+                    "find_on_test": details.get("find_on_test") if labels_arm else None,
+                    "fallback_threshold": (
+                        float(threshold)
+                        if labels_arm and details.get("find_on_test") is None and threshold is not None
+                        else None
+                    ),
+                }
+                if (
+                    rank_frame_sink is not None
+                    and rank_frame_steps
+                    and any(t_before < s <= t for s in rank_frame_steps)
+                ):
+                    rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})
+            if (
+                precision_frame_sink is not None
+                and precision_frame_steps
+                and is_click
+                and any(t_before < s <= t for s in precision_frame_steps)
+            ):
                 # The trainer builds its rows Goods first, then Bads, in vote order.
                 vote_order = list(good_votes) + list(bad_votes)
                 cal_votes = [
@@ -3121,6 +4105,38 @@ def simulate_voting_iterations(  # noqa: C901
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
 
+    if rank_frame_sink is not None and last_ordinary is not None:
+        rank_frame_sink.append({**rank_ident, **_rank_frame("last", **last_ordinary)})
+
+    # --- The Test arm (#4523), once per run. ---
+    #
+    # Test mode's autopilot on the withheld half as the last ordinary click
+    # left it: Find's labels line drawn there at the run's balance, uniform
+    # picks within rank bands answered from the truth, to Done.  Test votes
+    # never train, and the arm runs after the loop, so the trajectory above is
+    # exactly what it is without the arm.  Seeded off the run's seed, so a
+    # replay of the saved snapshot (`line_test_arm.row_from_snapshot`) can
+    # reproduce this row.
+    if line_test_sink is not None and last_ordinary is not None and beta is not None:
+        from vtscore.eval.line_test_arm import line_test_row  # noqa: PLC0415
+        from vtscore.training.thresholds import DEFAULT_BUDGETS  # noqa: PLC0415
+
+        line_test_sink.append(
+            {
+                **rank_ident,
+                **line_test_row(
+                    last_ordinary["t"],
+                    last_ordinary["test_scores"],
+                    last_ordinary["test_labels"],
+                    float(beta),
+                    find_on_test=last_ordinary["find_on_test"],
+                    fallback_threshold=last_ordinary["fallback_threshold"],
+                    budgets=line_test_budgets if line_test_budgets is not None else DEFAULT_BUDGETS,
+                    seed=seed,
+                ),
+            }
+        )
+
     # --- The supervised skyline (issue #3322), once per run. ---
     #
     # Deliberately **after** the loop rather than before it: every fit here draws
@@ -3144,6 +4160,9 @@ def simulate_voting_iterations(  # noqa: C901
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             seed=seed,
+            rank_frame_sink=rank_frame_sink,
+            rank_ident=rank_ident,
+            test_score_sink=test_score_sink,
         )
         _apply_skyline_decomposition(rows, skyline_rows)
         # `t=0` and `app_trained=0`: the skyline belongs to no step, so it is
@@ -3186,8 +4205,10 @@ def simulate_voting_iterations(  # noqa: C901
             "acq_threshold": float("nan"),
             "acq_pool_percentile": float("nan"),
             "report_pool_percentile": float("nan"),
-            # The run's floor; a skyline belongs to no step, so none was cut on it.
-            **_floor_columns(floor, {}),
+            # No line state: a skyline belongs to no step, so no line was cut on it.
+            **_line_columns({}),
+            # The skyline is fitted to every label; no Test gives it (#4643).
+            "detector_tier": "",
         }
         rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 
@@ -3220,7 +4241,7 @@ def run_voting_iterations_eval(
     startup_schedule: Optional[str] = None,
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
-    min_precision: "Optional[float | str]" = None,
+    beta: "Optional[float | str]" = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -3234,9 +4255,10 @@ def run_voting_iterations_eval(
             categories.  If ``None`` or a dataset is missing from the dict,
             all unique categories in that dataset are used.
         inclusion: The Inclusion arm's line, in ``[-10, 10]``.  It draws the
-            line only on the Inclusion arm (``min_precision="off"``): a set
-            floor wins.  The app has no such setting (#4269); the default 0 is
-            the cut its unpromised line falls back to.
+            line only on the Inclusion arm (``beta="off"``), and a non-zero
+            value under a balance is refused (#4361): a set balance wins, so it
+            would only re-weight ``cost``.  The app has no such setting
+            (#4269); 0 is the cut it draws with no balance.
         sim_fraction: Fraction of medias reserved for simulated voting.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
@@ -3298,6 +4320,8 @@ def run_voting_iterations_eval(
     """
     import pandas as pd  # noqa: PLC0415
 
+    # Refused here as well as per cell, so a misconfigured grid fails before its first cell runs.
+    _check_inclusion_arm(inclusion, resolve_line_knobs(beta))
     strategy_list = strategies if strategies is not None else ["autopilot"]
     trainer_list = trainers if trainers is not None else [APP_TRAINER]
     arm_list = prevalence_arms if prevalence_arms is not None else [None]
@@ -3346,7 +4370,7 @@ def run_voting_iterations_eval(
                                     startup_schedule=startup_schedule,
                                     calibration_seed=calibration_seed,
                                     standalone_cut=standalone_cut,
-                                    min_precision=min_precision,
+                                    beta=beta,
                                 )
                                 all_rows.extend(rows)
 
@@ -3372,7 +4396,7 @@ def run_voting_iterations_eval_from_pickles(
     styles: Optional[list[Optional[str]]] = None,
     autopilot_fidelity: bool = True,
     startup_schedule: Optional[str] = None,
-    min_precision: "Optional[float | str]" = None,
+    beta: "Optional[float | str]" = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -3380,7 +4404,8 @@ def run_voting_iterations_eval_from_pickles(
         dataset_paths: Mapping of dataset name to pickle file path.
         seeds: List of random seeds.
         categories: Optional category filter (see :func:`run_voting_iterations_eval`).
-        inclusion: Inclusion setting in ``[-10, 10]``.
+        inclusion: The Inclusion arm's line, in ``[-10, 10]``; a non-zero value
+            needs ``beta="off"`` (see :func:`run_voting_iterations_eval`).
         sim_fraction: Fraction of medias for simulation.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
@@ -3401,8 +4426,9 @@ def run_voting_iterations_eval_from_pickles(
         seed_scores: Optional text-sort rankings keyed
             ``{dataset: {category: {media_id: similarity}}}`` (see
             :func:`run_voting_iterations_eval`).
-        min_precision: The precision floor the line is drawn at (see
-            :func:`simulate_voting_iterations`); ``"off"`` for the Inclusion arm.
+        beta: The balance the line is drawn at (see
+            :func:`simulate_voting_iterations`): ``None`` is the app's default
+            balance, ``"off"`` the Inclusion arm.
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
@@ -3411,6 +4437,7 @@ def run_voting_iterations_eval_from_pickles(
     """
     from vtscore.datasets.loader import load_dataset_from_pickle
 
+    _check_inclusion_arm(inclusion, resolve_line_knobs(beta))
     dataset_clips: dict[str, dict[int, dict[str, Any]]] = {}
     for name, path in dataset_paths.items():
         medias: dict[int, dict[str, Any]] = {}
@@ -3436,5 +4463,5 @@ def run_voting_iterations_eval_from_pickles(
         styles=styles,
         autopilot_fidelity=autopilot_fidelity,
         startup_schedule=startup_schedule,
-        min_precision=min_precision,
+        beta=beta,
     )

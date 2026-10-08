@@ -21,6 +21,14 @@ export interface AutopilotState {
   moreMisses: number;
   /** The walk has ended (target met, ran dry, or skipped) and never resumes. */
   moreDone: boolean;
+  /**
+   * The dataset's labeling stops on the dry run, not the lights (#4488): a
+   * document (tiled structural) dataset, whose labeling status says
+   * ``stop_rule: 'dry_run'``. There the walk draws off the detector's own
+   * ranking, has no Good target, and its run of ``moreDryRun`` misses is the
+   * stop: Good, Bad, More, then Done, with no Boundary or Diversity step.
+   */
+  dryRunStop: boolean;
   smartStatus: string;
   stableStatus: string;
   /**
@@ -48,7 +56,21 @@ export interface AutopilotState {
    * falling back to text/example sort.
    */
   retrainMode: boolean;
+  /**
+   * This run has reached Done (#4621). The phase keeps following the
+   * indicators after that, because it decides what autopilot picks: a vote
+   * that knocks Stable off green sends it back to ``hard`` for boundary items.
+   * But the user was told the detector is trained, so the panel reads this
+   * instead of the phase, keeping Done checked and showing further votes as
+   * an open-ended seventh step rather than bouncing back to step 4. Display
+   * only: it never feeds the phase. Cleared only by falling back into the
+   * opening (votes un-done below its targets) or by a new run.
+   */
+  doneReached: boolean;
 }
+
+/** The phases before the first learned sort: no trained detector yet. */
+const OPENING_PHASES: readonly AutopilotPhase[] = ['good', 'bad', 'more'];
 
 const INITIAL_STATE: AutopilotState = {
   phase: 'idle',
@@ -58,6 +80,7 @@ const INITIAL_STATE: AutopilotState = {
   moreDryRun: 16,
   moreMisses: 0,
   moreDone: false,
+  dryRunStop: false,
   smartStatus: '',
   stableStatus: '',
   stablePlateau: false,
@@ -65,6 +88,7 @@ const INITIAL_STATE: AutopilotState = {
   fracDiversity: 0,
   spanTarget: 0,
   retrainMode: false,
+  doneReached: false,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -197,6 +221,7 @@ export class AutopilotStateService {
       fracDiversity: 0,
       spanTarget: 0,
       retrainMode,
+      doneReached: false,
     });
   }
 
@@ -208,6 +233,7 @@ export class AutopilotStateService {
     const current = this.stateSubject.value;
     this.stateSubject.next({
       ...current,
+      dryRunStop: status.stop_rule === 'dry_run',
       smartStatus: status.smart.status || '',
       stableStatus: status.stable.status || '',
       stablePlateau: status.stable['plateau'] === true,
@@ -246,7 +272,7 @@ export class AutopilotStateService {
     // in Bads alone is a miss. Repeated checks with unchanged counts are no-ops.
     const prev = this.lastCounts;
     this.lastCounts = { good: goodCount, bad: badCount };
-    if (prev && st.phase === 'more' && !st.moreDone) {
+    if (prev && st.phase === 'more' && (st.dryRunStop || !st.moreDone)) {
       if (goodCount > prev.good) {
         st = { ...st, moreMisses: 0 };
       } else if (badCount > prev.bad) {
@@ -280,6 +306,14 @@ export class AutopilotStateService {
       nextPhase = 'good';
     } else if (badCount < effBadTarget) {
       nextPhase = 'bad';
+    } else if (st.dryRunStop) {
+      // A document dataset (#4488): the walk is the rest of the run, with no
+      // Good target, and running dry is Done. It walks in retrain mode too,
+      // where the latched ``moreDone`` would otherwise skip it: the run of
+      // misses is the stop, so it is the only history that counts here.
+      if (st.moreMisses >= st.moreDryRun) nextPhase = 'done';
+      else if (remainingUnlabeled === 0) nextPhase = 'exhausted';
+      else nextPhase = 'more';
     } else if (!st.moreDone && goodCount < effMoreTarget) {
       nextPhase = 'more';
     } else if (st.smartStatus === 'green' && st.stableStatus === 'green' && st.spanStatus === 'green') {
@@ -298,9 +332,18 @@ export class AutopilotStateService {
 
     // Once the machine has moved past the walk it is spent, as a schedule
     // round is in the harness: un-voting a positive later does not resume it.
-    const moreDone = st.moreDone || !['good', 'bad', 'more'].includes(nextPhase);
-    if (nextPhase !== st.phase || st !== this.stateSubject.value || moreDone !== st.moreDone) {
-      this.stateSubject.next({ ...st, phase: nextPhase, moreDone });
+    const opening = OPENING_PHASES.includes(nextPhase);
+    const moreDone = st.moreDone || !opening;
+    // Display only (#4621): never read above, so the phase is the same with or
+    // without it.
+    const doneReached = nextPhase === 'done' || (st.doneReached && !opening);
+    if (
+      nextPhase !== st.phase
+      || st !== this.stateSubject.value
+      || moreDone !== st.moreDone
+      || doneReached !== st.doneReached
+    ) {
+      this.stateSubject.next({ ...st, phase: nextPhase, moreDone, doneReached });
     }
   }
 

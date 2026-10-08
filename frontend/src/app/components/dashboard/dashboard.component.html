@@ -130,7 +130,7 @@
                 [dimmed]="isContextSwitching && !isDatasetSelected(dataset.id)"
                 [loadingTask]="browsePrep.displayTask(dataset.id) ?? loadingTasksSvc.getInlineTask(dataset.id)"
                 [taskKind]="browsePrep.taskKind(dataset.id)"
-                [autorunDetectorCount]="autorunDetectorCountFor(dataset)"
+                [autofindDetectorCount]="autofindDetectorCountFor(dataset)"
                 [deleting]="deletingDatasetId() === dataset.id"
                 (rowClick)="!isContextSwitching && toggleDatasetSelection(dataset.id, $event)"
                 (checkboxToggle)="!isContextSwitching && toggleDatasetCheckbox(dataset.id)"
@@ -139,7 +139,7 @@
                 (delete)="deleteDataset(dataset)"
                 (load)="loadDataset(dataset)"
                 (browse)="browseDataset(dataset)"
-                (autorun)="runAutorun(dataset)"
+                (autofind)="runAutofind(dataset)"
                 (security)="editDatasetSecurity(dataset)"
                 (cancelTask)="onCancelDatasetTask($event)"
                 (dismissTask)="onDismissDatasetTask($event)"
@@ -157,7 +157,7 @@
   <div class="dashboard-section">
     <div class="dashboard-section-header">
       <h2 class="dashboard-section-title" title="Trained detectors for scoring and finding media"><vt-icon type="robot" [size]="18"></vt-icon> Detectors</h2>
-      <!-- The Drafts/AutoRun strip lives INSIDE the header, in the gap between
+      <!-- The Drafts/AutoFind strip lives INSIDE the header, in the gap between
            the title and the action buttons, so it costs the section no vertical
            space at all — every pixel it would have taken as its own row goes to
            the detector grid instead. Its height matches the action buttons', so
@@ -176,16 +176,16 @@
         <button
           class="tab"
           role="tab"
-          [class.active]="detectorTab() === 'autorun'"
-          [attr.aria-selected]="detectorTab() === 'autorun'"
+          [class.active]="detectorTab() === 'autofind'"
+          [attr.aria-selected]="detectorTab() === 'autofind'"
           [disabled]="noDetectors"
-          (click)="setDetectorTab('autorun')"
+          (click)="setDetectorTab('autofind')"
           [title]="noDetectors ? noDetectorsTabHint : 'Finalized detectors, frozen against edits, that run automatically on every dataset you import'">
-          AutoRun ({{ autorunDetectors.length }})
+          AutoFind ({{ autofindDetectors.length }})
         </button>
       </div>
       <div class="dashboard-section-actions">
-        <!-- Editing actions only exist on the Drafts tab: AutoRun detectors
+        <!-- Editing actions only exist on the Drafts tab: AutoFind detectors
              are frozen (move one back to Drafts to combine or delete it). -->
         @if (detectorTab() === 'drafts') {
         <button class="side-action-btn" (click)="openCombineDetectorsModal()" [disabled]="isContextSwitching || !combineSelectedDetectorsEnabled" [title]="combineSelectedDetectorsHint" aria-label="Combine selected detectors">
@@ -227,7 +227,7 @@
         </div>
         <vt-pointer-arrow [from]="detectorEmptyMsg" [to]="detectorAddBtn" />
       } @else {
-        <p class="empty-state empty-state--fill">No AutoRun detectors yet. Open a draft detector's ⋯ menu and pick "Move to AutoRun" to run it automatically on every dataset you import.</p>
+        <p class="empty-state empty-state--fill">No AutoFind detectors yet. Open a draft detector's ⋯ menu and pick "Move to AutoFind" to run it automatically on every dataset you import.</p>
       }
     } @else {
       <div class="dashboard-grid">
@@ -291,7 +291,7 @@
                 (stats)="showDetectorStats(detector)"
                 (export)="openExportModal(detector)"
                 (addLabels)="openAddLabelsModal(detector)"
-                (setAutorun)="setDetectorAutorun(detector, $event)"
+                (setAutofind)="setDetectorAutofind(detector, $event)"
                 (security)="editDetectorSecurity(detector)"
                 (cancelTask)="loadingTasksSvc.cancelDetectorLoadingTask($event)"
                 (dismissTask)="loadingTasksSvc.dismissDetectorLoadingTask($event)"
@@ -311,7 +311,7 @@
   </div>
 
   <!-- Action Buttons: STABLE POSITIONING (read before changing!)
-       Label/Find buttons must stay in the EXACT same position whether their hint is
+       Train/Test/Find buttons must stay in the EXACT same position whether their hint is
        visible or not, and regardless of hint text length. Three rules enforce this:
 
        1. Each .action-btn-group has a FIXED WIDTH in SCSS; do NOT remove it.
@@ -329,7 +329,7 @@
         class="btn btn--primary"
         [class.loading-active]="trainLoading()"
         [disabled]="!labelEnabled || isNavBusy"
-        [title]="labelHint || 'Open the labeling view to vote on items and train the selected detector on the selected dataset'"
+        [title]="labelHint"
         (click)="onLabel()"
       >
         <svg aria-hidden="true" [class.icon-waggle]="trainLoading()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10l-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/><line x1="22" y1="10" x2="22" y2="16"/></svg>
@@ -337,18 +337,39 @@
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!labelEnabled && labelHint) ? 'visible' : 'hidden'">{{ labelHint || '&nbsp;' }}</span>
     </div>
+    <!-- Test opens the view whose code is still called find (`onFind`, the
+         find-view component; #4525), as Train opens the one called label. -->
     <div class="action-btn-group">
       <button
         class="btn btn--primary"
         [class.loading-active]="findLoading()"
         [disabled]="!findEnabled || isNavBusy"
-        [title]="findHint || 'Score every item in the selected dataset using the selected detector and show ranked results'"
+        [title]="findHint"
         (click)="onFind()"
       >
-        <svg aria-hidden="true" [class.icon-waggle]="findLoading()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15.2" y2="15.2"/></svg>
-        Find
+        <!-- A flask: Test measures the detector (#4525). -->
+        <svg aria-hidden="true" [class.icon-waggle]="findLoading()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 10a1.5 1.5 0 0 0 1.3 2h13.4a1.5 1.5 0 0 0 1.3-2l-5-10V3"/><line x1="7.5" y1="3" x2="16.5" y2="3"/><line x1="6.5" y1="14" x2="17.5" y2="14"/></svg>
+        Test
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
+    </div>
+    <!-- Find. Not a view: one background AutoFind per ticked dataset with the
+         ticked detectors, shown inline on the dataset rows (#4529; labelled
+         AutoRun until #4525 renamed the old Find to Test). Gated on the
+         context switch like the other independent actions, not on browse-prep
+         (`isNavBusy`), since it navigates nowhere. -->
+    <div class="action-btn-group">
+      <button
+        class="btn btn--primary"
+        [disabled]="!autofindEnabled || isContextSwitching"
+        [title]="autofindHint"
+        (click)="onAutofind()"
+      >
+        <!-- A magnifier: Find searches new datasets with the detectors. -->
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15.2" y2="15.2"/></svg>
+        Find
+      </button>
+      <span class="btn-disabled-reason" [style.visibility]="(!autofindEnabled && autofindHint) ? 'visible' : 'hidden'">{{ autofindHint || '&nbsp;' }}</span>
     </div>
     @if (showUsageBar(ramUsage())) {
       <vt-usage-bar [usage]="ramUsage()" label="RAM" side="left" titlePrefix="System RAM" />

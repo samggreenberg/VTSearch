@@ -1,0 +1,328 @@
+// The Stats modal's content, live, in place of the two piles. `.section-title`
+// and `.error-text` are shared (`_components.scss`); `.stats-table` is the
+// `.data-table` primitive (`_data-table.scss`). The lights are the Autopilot
+// panel's (`.ap-light`), so the two guided flows read as one.
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.line-test-result {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--font-sm);
+}
+
+.result-note,
+.domain-note,
+.loading-text {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+.loading-text {
+  font-style: italic;
+}
+
+.stale-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--text-warning);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-warning);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+.result-headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  margin-bottom: var(--space-sm);
+}
+
+.headline-label {
+  font-size: var(--font-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.headline-value {
+  font-size: var(--font-xl);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ranges {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  margin: 0;
+}
+
+.range-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+
+  dt {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 5em;
+    color: var(--text-secondary);
+    cursor: help;
+  }
+
+  dd {
+    margin: 0;
+    font-weight: var(--weight-medium);
+    color: var(--text-primary);
+  }
+}
+
+.ap-light {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  color: var(--status-red-dot);
+  background: currentColor;
+  box-shadow: 0 0 4px currentColor;
+
+  &[data-color="yellow"] {
+    color: var(--status-yellow-dot);
+  }
+
+  &[data-color="green"] {
+    color: var(--status-green-dot);
+  }
+}
+
+.verdict {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.exits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.exit-btn {
+  width: 100%;
+}
+
+.presets .current td {
+  color: var(--text-primary);
+}
+
+.preset-btn.active {
+  cursor: default;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bands tr[data-side="below"] td:first-child {
+  color: var(--text-secondary);
+}
+
+.confusion {
+  .row-head {
+    font-weight: var(--weight-medium);
+    color: var(--text-secondary);
+    text-align: left;
+  }
+
+  .cell {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .agree {
+    color: var(--text-primary);
+  }
+
+  .correct {
+    color: var(--accent, var(--text-primary));
+    font-weight: var(--weight-semibold);
+  }
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+// --- Training-domain overlap and evidence coverage (the Stats modal's) -----
+
+.domain-overlap {
+  margin-bottom: var(--space-md);
+}
+
+.domain-ref {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.domain-ref-label {
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.domain-ref-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.domain-chip {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--color-good);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+
+  &.shifted {
+    border-left-color: var(--text-warning);
+  }
+}
+
+.domain-chip-pct {
+  font-size: var(--font-lg);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.domain-chip-text {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+
+  strong {
+    color: var(--text-primary);
+    font-weight: var(--weight-semibold);
+  }
+}
+
+.domain-detail {
+  margin: var(--space-xs) 0 0;
+  line-height: 1.4;
+}
+
+// --- The band-resolution precision curve ------------------------------------
+
+.chart-wrap {
+  margin-top: var(--space-sm);
+}
+
+.precision-chart {
+  width: 100%;
+  height: 150px;
+  cursor: crosshair;
+
+  .axis,
+  .grid {
+    stroke: var(--border-subtle);
+    stroke-width: 1;
+  }
+
+  .tick,
+  .axis-caption {
+    fill: var(--text-muted);
+    font-size: var(--font-xs);
+  }
+
+  .current {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+  }
+
+  // Each band edge's likely range, in the colour of what the user checked:
+  // the ranges come from their picks alone.
+  .range-bar {
+    fill: var(--chart-verified);
+    opacity: var(--opacity-dim);
+  }
+
+  .likely-range.hovered .range-bar {
+    opacity: 1;
+  }
+
+  .line-verified {
+    fill: none;
+    stroke: var(--chart-verified);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .dot-verified {
+    fill: var(--chart-verified);
+    stroke: var(--bg-surface);
+    stroke-width: 2;
+  }
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-top: var(--space-xs);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.swatch {
+  width: 12px;
+  height: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.swatch-verified {
+  background: var(--chart-verified);
+}
+
+.swatch-current {
+  background: var(--text-muted);
+}
+
+.chart-readout {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+}

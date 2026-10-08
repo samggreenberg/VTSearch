@@ -15,13 +15,13 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 |---------|-------------|
 | [Authentication & UI](api/auth.md) | Auth status, login/logout, HuggingFace OAuth, SPA routes, static assets, health probes, version |
 | [Medias & Sorting](api/medias.md) | Media listing/streaming, text/learned/example sort, votes & labels, pile upload, example-media files, seed and datasource importers |
-| [Labeling & Diversity](api/labeling.md) | Precision floor, labeling status/progress, indicator history, train-and-score, coverage atlas |
-| [Detectors](api/detectors.md) | Detector CRUD, saved-label review, detector registry, Auto-Find toggle, loading, labelset-file moves |
+| [Labeling & Diversity](api/labeling.md) | The balance and its spot check, labeling status/progress, indicator history, train-and-score, coverage atlas |
+| [Detectors](api/detectors.md) | Detector CRUD, saved-label review, detector registry, AutoFind toggle, loading, labelset-file moves |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, cleaners, converters, media-file browsing, VTSBrowse projection |
 | [Import & Export](api/io.md) | Result exporters, label importers, pregen processors, autorun extractors/localizers and running them, settings importers/exporters |
 | [Settings](api/settings.md) | App settings, settings sources, labelset sources |
 | [Dashboard](api/dashboard.md) | Dashboard disk/RAM usage probes |
-| [Find, Auto-Detect & Scoring](api/find.md) | Multi-dataset find (+ cancel/check-labels), Find Label, Auto-Detect, find stats/corrections/queues/evidence coverage |
+| [Find, Auto-Detect & Scoring](api/find.md) | Multi-dataset find (+ cancel/check-labels), Find Label, Auto-Detect, the test of the line, find stats/corrections/queues/evidence coverage |
 | [File Browser](api/file-browser.md) | Server filesystem browsing |
 | [Progress events (SSE)](api/events.md) | `GET /api/events`: the single Server-Sent Events stream carrying progress for every long-running operation |
 

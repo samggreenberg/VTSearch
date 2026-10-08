@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
-import type { AutoRunRunResponse } from '../generated/api-client/models/auto-run-run-response';
+import type { AutoFindRunResponse } from '../generated/api-client/models/auto-find-run-response';
 import type { FindCancelResponse } from '../generated/api-client/models/find-cancel-response';
 import type { FindEndSessionResponse } from '../generated/api-client/models/find-end-session-response';
 import type { FindLabelRequest } from '../generated/api-client/models/find-label-request';
@@ -18,10 +18,10 @@ import { findLabel } from '../generated/api-client/fn/detector-scoring/find-labe
 import { findStats } from '../generated/api-client/fn/detector-scoring/find-stats';
 import { findEvidenceCoverage } from '../generated/api-client/fn/detector-scoring/find-evidence-coverage';
 import { findCorrectionsToDetector } from '../generated/api-client/fn/detector-scoring/find-corrections-to-detector';
-import { getAutorunRun } from '../generated/api-client/fn/detector-scoring/get-autorun-run';
+import { getAutofindRun } from '../generated/api-client/fn/detector-scoring/get-autofind-run';
 
 /** Single-label Find, its session / stats / evidence reads, Find
- *  cancellation, and the results of a background AutoRun. */
+ *  cancellation, and the results of a background AutoFind. */
 @Injectable({ providedIn: 'root' })
 export class DetectorsFindApiService {
   private http = inject(HttpClient);
@@ -70,10 +70,10 @@ export class DetectorsFindApiService {
     return findCorrectionsToDetector(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Results of a finished background AutoRun, for the user who started it.
+  /** Results of a finished background AutoFind, for the user who started it.
    *  ``runId`` is the run's ``task_id``. 404 once it has aged out of the
    *  server's small in-memory window. */
-  getAutorunRun(runId: string, context?: HttpContext): Observable<AutoRunRunResponse> {
-    return getAutorunRun(this.http, this.config.rootUrl, { run_id: runId }, context).pipe(map((r) => r.body));
+  getAutofindRun(runId: string, context?: HttpContext): Observable<AutoFindRunResponse> {
+    return getAutofindRun(this.http, this.config.rootUrl, { run_id: runId }, context).pipe(map((r) => r.body));
   }
 }

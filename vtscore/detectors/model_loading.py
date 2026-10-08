@@ -73,8 +73,20 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet") -> 
     consumer reuses the head only while *labelset* (the one it just read from
     the detector file) still has that signature.  This also rejects the head a
     background learned sort stores after newer votes have already landed.
+
+    A trained head is also refused while *labelset* is under the label quota
+    (#4643).  The Train view's learned sort trains one from any Good and Bad and
+    stamps it with the same signature, and that head is the sort the user labels
+    on, not a detector to hand out: a Find there trains the Goods' centroid
+    instead.  The centroid itself is current whenever its signature is, so a
+    label whose origin cannot be resolved does not retrain it on every pass.
     """
-    return det_ctx.model is not None and det_ctx.model_labels_sig == labelset_signature(labelset)
+    from vtscore.detectors.centroid_head import is_centroid_head
+    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota
+
+    if det_ctx.model is None or det_ctx.model_labels_sig != labelset_signature(labelset):
+        return False
+    return is_centroid_head(det_ctx.model) or labelset_quota(labelset).tier == TIER_TRAINED
 
 
 def resolve_or_train_detector(
@@ -111,18 +123,18 @@ def resolve_or_train_detector(
     embedder produces no patch grid every bag holds one row and the whole path
     collapses to the historical single-vector behaviour.
 
-    The precision floor is a pure cutoff knob: a change does **not** retrain or
+    The balance is a pure cutoff knob: a change does **not** retrain or
     drop the MLP, it re-derives the threshold from the cached estimators.
     ``train_from_labelset`` passes the detector context down to
     :func:`~vtscore.detectors.training.train_and_threshold`, which caches them
-    on it — without that cache a later floor change can't move the cutoff (it
+    on it — without that cache a later balance change can't move the cutoff (it
     would silently no-op).
 
     *on_progress* receives the training progress (the
     :func:`~vtscore.concurrency.progress.update_find_progress` signature:
     ``status, message, current=, total=, step=, total_steps=``); ``None`` keeps
     the historical sink, the shared Find tracker.  A caller scoring off to the
-    side of Find - the app's background AutoRun - passes its own task's sink so
+    side of Find - the app's background AutoFind - passes its own task's sink so
     a cold train does not paint the Find bar, or leave it "running", behind a
     user who never asked for a Find.
 
@@ -135,9 +147,8 @@ def resolve_or_train_detector(
 
     *ctx_sink*, when given, receives the detector context whose head and
     threshold are returned - the loaded one, or the throwaway a never-loaded
-    detector trains on - so a caller can ask what the precision floor says
-    about that threshold (:func:`vtscore.state.core.detector_floor_state`,
-    #4247).  Nothing is appended when no head is returned.
+    detector trains on - so a caller can ask what the balance says about that
+    threshold (:func:`vtscore.state.core.detector_balance_state`, #4247).  Nothing is appended when no head is returned.
     """
     report = on_progress if on_progress is not None else update_find_progress
     from vtscore.datasets.labelset import LabelSet
@@ -148,7 +159,7 @@ def resolve_or_train_detector(
 
     det_ctx = get_detector_context(detector_id) if use_loaded_context else None
     if det_ctx is not None:
-        # Defense against H5: scoring Auto-Find detectors iterates contexts
+        # Defense against H5: scoring AutoFind detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
         # have invalidated their stale MLPs.  Drop them here so the next
         # branch trains fresh against the detector's primary.  The keying
@@ -179,7 +190,7 @@ def resolve_or_train_detector(
         total_steps=progress_total_steps,
     )
 
-    # A never-loaded detector (the Auto-Find and portable-export cases) has no
+    # A never-loaded detector (the AutoFind and portable-export cases) has no
     # context to train against, so it gets a throwaway one.  ``detector_id`` is
     # deliberately left empty on it: ``populate_label_embeddings`` ends by
     # calling ``record_detector_embedder`` to persist the space it embedded in,

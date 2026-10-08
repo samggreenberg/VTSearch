@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { take } from 'rxjs/operators';
-import { BrowseSubsetService } from './browse-subset.service';
+import { BrowseSubsetOrigin, BrowseSubsetService, subsetBrowseQueryParams } from './browse-subset.service';
 import { ProjectionApiService } from './projection-api.service';
 import { pollUntil, type PollHandle, type PollStep } from './poll-until';
 import { ToastService } from './toast.service';
@@ -10,10 +10,10 @@ import type { ProgressEvent } from '../models/api.models';
 import type { ProjectionMeta } from '../models/projection.models';
 
 /**
- * Orchestrates the Find view's **Browse** buttons: build the ephemeral subset
- * projection (a UMAP fit over just this run's positives) *while the user is
- * still in Find*, showing progress there, and navigate to the browse view only
- * once the map is ready.
+ * Orchestrates the Test view's **Browse** buttons, and the Find Results
+ * dialog's (#4615): build the ephemeral subset projection (a UMAP fit over just
+ * those items) *while the user is still where they clicked*, showing progress
+ * there, and navigate to the browse view only once the map is ready.
  *
  * This exists because a Find-positives browse can take minutes to fit, and the
  * browse view has nothing to render until it lands — navigating first stranded
@@ -76,16 +76,26 @@ export class BrowseSubsetPrepService {
   private poll: PollHandle | null = null;
   private datasetId = '';
   private ids: number[] = [];
+  private origin: BrowseSubsetOrigin = { kind: 'test' };
+  private onReady: (() => void) | null = null;
 
   /**
-   * Build the subset projection over *ids* and, when it's ready, hand off to
-   * `/browse/:datasetId?subset=1`. No-ops on an empty selection or while a
-   * previous preparation is still running.
+   * Build the subset projection over *ids* (of the active dataset, which must
+   * be *datasetId*) and, when it's ready, run *onReady* and hand off to
+   * `/browse/:datasetId?subset=1`, whose Back returns to *origin*. No-ops on
+   * an empty selection or while a previous preparation is still running.
    */
-  start(datasetId: string, ids: number[]): void {
+  start(
+    datasetId: string,
+    ids: number[],
+    origin: BrowseSubsetOrigin = { kind: 'test' },
+    onReady?: () => void,
+  ): void {
     if (this.preparing() || !datasetId || ids.length === 0) return;
     this.datasetId = datasetId;
     this.ids = ids;
+    this.origin = origin;
+    this.onReady = onReady ?? null;
     this.preparing.set(true);
     this.progress.set({ message: 'Arranging the items…' });
 
@@ -158,11 +168,14 @@ export class BrowseSubsetPrepService {
   private finish(): void {
     const datasetId = this.datasetId;
     const ids = this.ids;
+    const origin = this.origin;
+    const onReady = this.onReady;
     this.clear();
     // Set the handoff only now, so a cancelled preparation never leaves a
     // stale pending subset behind for the next browse to pick up.
     this.browseSubset.set({ datasetId, ids });
-    this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
+    onReady?.();
+    this.router.navigate(['/browse', datasetId], { queryParams: subsetBrowseQueryParams(origin) });
   }
 
   private fail(message: string): void {
@@ -172,6 +185,7 @@ export class BrowseSubsetPrepService {
 
   private clear(): void {
     this.stopPoll();
+    this.onReady = null;
     this.preparing.set(false);
     this.progress.set(null);
   }

@@ -180,12 +180,69 @@ def test_tree_arm_emits_base_plus_remedial_rows():
     assert saw_full, "no step reached a conformal cut with remedial re-pools"
 
 
+def test_every_calibration_row_carries_its_own_objective():
+    """#4584: the base row and every re-pool price F-beta at the step's beta, from their own cut."""
+    from vtscore.eval.calibration_metrics import fbeta_from_rates  # noqa: PLC0415
+
+    rows, _sweep = _run_emit("max_patch_pca_hac")
+    scored = [r for r in rows if np.isfinite(r["recall"])]
+    assert {r["pool_variant"] for r in scored} == {"max", "topk", "pnorm"}
+    for r in scored:
+        assert np.isfinite(r["fbeta_b1"])
+        if np.isfinite(r["beta"]):
+            assert r["fbeta"] == pytest.approx(
+                float(fbeta_from_rates(r["precision"], r["recall"], r["beta"])), abs=2e-5
+            )
+        else:
+            assert np.isnan(r["fbeta"])
+
+
+def test_every_calibration_row_carries_the_objectives_oracle():
+    """#4654: the best cut bounds the row's F-beta from above, at its beta and at each preset.
+
+    The shipped arm (fused threshold, the default balance), so the rows carry a
+    beta and the objective's own cut is exercised, not only the presets.
+    """
+    medias, _ = _planted_dataset(n_per_cat=40, seed=0)
+    rows = simulate_voting_iterations(
+        medias,
+        target_category="cat0",
+        seed=0,
+        dataset_name="planted",
+        max_steps=10,
+        style="max_patch",
+        region_voting=True,
+        emit_calibration_metrics=True,
+    )
+    scored = [r for r in rows if np.isfinite(r["recall"])]
+    assert any(np.isfinite(r["beta"]) for r in scored), "no row drew a balance line"
+    for r in scored:
+        for col in ("fbeta_b025", "fbeta_b1", "fbeta_b4"):
+            assert r[col] <= r[f"oracle_{col}"] + 1e-6
+        if np.isfinite(r["beta"]):
+            assert r["fbeta"] <= r["oracle_fbeta"] + 1e-6
+            # The cut's rates are a confusion matrix: its F-beta reads back off them.
+            tp = r["n_test_pos"] * (1.0 - r["fbeta_oracle_fnr"])
+            k = tp + r["n_test_neg"] * r["fbeta_oracle_fpr"]
+            b2 = r["beta"] ** 2
+            assert (1 + b2) * tp / (b2 * r["n_test_pos"] + k) == pytest.approx(r["oracle_fbeta"], abs=1e-5)
+        else:
+            assert np.isnan(r["oracle_fbeta"]) and np.isnan(r["fbeta_oracle_threshold"])
+
+
 def test_calibration_columns_and_invariants():
     rows, sweep = _run_emit("max_patch_pca_hac")
     for r in rows:
         # every declared column present
         assert set(CALIBRATION_COLUMNS).issubset(r.keys())
-        assert r["threshold_provenance"] in {"conformal", "no_good_sentinel", "too_few_default", "gmm_blend"}
+        # ``centroid``: under the label quota the row is the Goods' centroid's (#4643).
+        assert r["threshold_provenance"] in {
+            "conformal",
+            "no_good_sentinel",
+            "too_few_default",
+            "gmm_blend",
+            "centroid",
+        }
         assert r["degenerate"] in (0, 1)
         # the oracle can never cost more than the trained cut -> regret >= 0
         if np.isfinite(r["regret"]):

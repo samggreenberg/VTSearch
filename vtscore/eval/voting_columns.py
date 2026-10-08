@@ -173,6 +173,15 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: did (issue #3560).  Declared just above.
     *STOPPING_MARGIN_COLUMNS,
     "app_trained",
+    #: Which detector a Test at this click gives (#4643): ``centroid`` - the
+    #: Goods' centroid, under the label quota (from the first Good until the
+    #: votes hold :data:`~vtscore.detectors.label_quota.GOOD_QUOTA` Goods and
+    #: :data:`~vtscore.detectors.label_quota.BAD_QUOTA` Bads) - or ``trained``.
+    #: The row's test metrics are that detector's.  Unlike ``app_trained`` it is
+    #: about the labels, not the session: Autopilot's opening shows the text
+    #: sort, but its labels are a click away from Test.  Absent from frames
+    #: written before #4643, whose rows all came from a trained head.
+    "detector_tier",
     #: The parameterised opening this run took (issue #3267), verbatim - so a
     #: pooled frame says which arm each row came from without depending on the
     #: directory it was read out of.  Empty on every run that took the app's
@@ -200,18 +209,18 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: them a sign error in the acquisition cut is invisible.
     "acq_pool_percentile",
     "report_pool_percentile",
-    # --- The precision floor (#4245, #4272).
-    #: The floor the reporting line was drawn at; NaN on the Inclusion arm
-    #: (``min_precision="off"``), where ``threshold`` is the knob's cut.
-    "min_precision",
-    #: The floor's state this step - ``unchecked`` (the line keeps the floor's
-    #: starting candidate), ``confirmed`` or ``short`` (the set the run's spot
-    #: check ended on) - and so what ``threshold`` is.  Empty where no floor
-    #: line was drawn.
+    # --- The balance's line (#4272, #4413).  The ``floor_*`` names predate the
+    # balance (the precision floor it replaced); they report the balance's line.
+    #: The balance the reporting line was drawn at; NaN on the Inclusion arm
+    #: (``beta="off"``), where ``threshold`` is the knob's cut.
+    "beta",
+    #: The line's state this step - ``unchecked`` (the mixture's F-beta argmax
+    #: under the cap) or ``checked`` (after the run's spot check) - and so what
+    #: ``threshold`` is.  Empty where no balance line was drawn.
     "floor_status",
-    #: How many unvoted items the line keeps: 128 / 64 / 32 at 10% / 25% / 50%
-    #: and above until a check ends, then the check's set.  -1 with no floor
-    #: line.
+    #: How many unvoted items the line keeps: at most 32 at beta <= 1 and 128
+    #: above until a check ends, then what the check's shape makes of the
+    #: walk's end.  -1 with no balance line.
     "floor_count",
     #: The check's likely range for the kept set's precision (Clopper-Pearson,
     #: each tail at alpha / rounds; exact for a census), and the labels behind
@@ -225,6 +234,7 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: retrained the model, so the range describes the list as it was), 0
     #: while it holds, -1 with no finished check.
     "check_stale",
+    "check_audited",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
@@ -293,6 +303,40 @@ BAND_COLUMNS: tuple[str, ...] = (
 )
 
 
+#: The balances the rank frame records the shipped line's count at: the app's
+#: presets, ``vtscore.training.thresholds.BALANCE_PRESETS`` (#4448, #4471; a
+#: test pins the two together, so the analysis follows the app).
+RANK_FRAME_BETAS: tuple[float, ...] = (0.25, 1.0, 4.0)
+
+
+def beta_tag(beta: float) -> str:
+    """``b025`` / ``b1`` / ``b4``: the column suffix a balance's metrics carry."""
+    return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
+
+
+#: The objective (#4427, #4584): F-beta of the withheld half above the row's
+#: threshold.  ``fbeta`` is at the row's own ``beta``, the balance that drew the
+#: line, and is NaN where none did (``beta="off"``, a skyline row); the preset
+#: columns score the same returned set at each of :data:`RANK_FRAME_BETAS`, so a
+#: frame from one preset can be read at the others without going back to the
+#: cells.  One definition, :func:`vtscore.eval.calibration_metrics.fbeta_metrics`,
+#: so no analyzer re-derives it from ``precision`` and ``recall``.  ``cost``
+#: stays beside them as a diagnostic: it is priced at the run's Inclusion
+#: whatever beta drew the line.
+FBETA_COLUMNS: tuple[str, ...] = ("fbeta", *(f"fbeta_{beta_tag(b)}" for b in RANK_FRAME_BETAS))
+
+#: The objective's oracle (#4654), on the calibration frame beside the cost
+#: oracle (``oracle_threshold`` / ``oracle_cost`` / ``oracle_fpr`` / ``oracle_fnr``).
+#: ``oracle_<col>`` is the best F-beta any cut of the row's test ranking reaches
+#: at that ``FBETA_COLUMNS`` entry's beta, so it bounds the entry from above;
+#: ``fbeta_oracle_*`` is the cut that reaches ``oracle_fbeta``, at the row's own
+#: beta.  The cost oracle is no ceiling on F-beta: it prices the error rates,
+#: and on a rare class it cuts deep.  One definition,
+#: :func:`vtscore.eval.calibration_metrics.oracle_fbeta_metrics`.
+ORACLE_FBETA_COLUMNS: tuple[str, ...] = tuple(f"oracle_{c}" for c in FBETA_COLUMNS)
+FBETA_ORACLE_CUT_COLUMNS: tuple[str, ...] = ("fbeta_oracle_threshold", "fbeta_oracle_fpr", "fbeta_oracle_fnr")
+
+
 VOTING_COLUMNS: tuple[str, ...] = (
     *IDENT_COLUMNS,
     "cost",
@@ -305,6 +349,7 @@ VOTING_COLUMNS: tuple[str, ...] = (
     "precision",
     "recall",
     "f1",
+    *FBETA_COLUMNS,
     #: The counts behind them, so a rate can be re-derived, weighted or pooled
     #: without going back to the cells.
     "n_test_pos",
@@ -398,6 +443,171 @@ PICK_COLUMNS: tuple[str, ...] = (
     "n_pool",
 )
 
+#: Column order for the **rank frame** (issue #4357): where the positives sit in
+#: a ranking, emitted only when the caller passes a ``rank_frame_sink``.
+#:
+#: A balance's line keeps a *set* - the top *K* of a ranking (#4272) -
+#: so how good the line is at any balance, and how good the best cut on the same
+#: ranking could have been, is a function of the positives' ranks and nothing
+#: else.  That is a few dozen integers a frame, where the #4220 precision frame
+#: carries every score; it is cheap enough to record on every cell of a review.
+#:
+#: Two rankings per frame.  ``test_*`` is the untouched test half sorted by the
+#: model's score: a fresh corpus, which is what Find and a headless run return.
+#: ``pool_*`` is the session's own haystack, **unvoted items only**, in the
+#: order the line and the spot check draw from
+#: (:class:`~vtscore.training.thresholds.LineRanking`): the check's candidate is
+#: the top *K* of exactly this list, so the truth its range describes is too.
+RANK_FRAME_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "calibration_seed",
+    "style",
+    #: ``step`` - an ordinary step the caller asked for; ``last`` - the last
+    #: ordinary step, which is the ranking the end-of-run spot check draws its
+    #: candidate from and the session's line without the check's votes; or the
+    #: skyline arm's name (e.g. ``skyline_train_full``), whose model saw every
+    #: label and so has no pool.
+    "kind",
+    "t",
+    "n_test",
+    "n_test_pos",
+    #: Space-separated 0-based ranks of the positives, best first.
+    "test_pos_ranks",
+    #: -1 / blank where there is no pool ranking (a skyline, or safe thresholds off).
+    "n_pool",
+    "n_pool_pos",
+    "pool_pos_ranks",
+    #: How many items the shipped unchecked line keeps on the test half at each
+    #: preset beta in :data:`RANK_FRAME_BETAS` (#4389, #4413, #4471).  Under the
+    #: app's labels line (#4452) what it keeps on the test half, its corpus side
+    #: fitted there as Find fits it - the count at the run's own beta is the
+    #: headline's returned set - or, with no class model that step, what the
+    #: retrain's fallback cut keeps; 0 when the line keeps nothing.  Under a
+    #: forced check shape (``walk_shape``) the count line's: the mixture's F-beta
+    #: argmax under the cap on the test half plus the session's votes (#4413).
+    #: The full-label skyline records Find's labels line from its own labels
+    #: (#4486).  -1 with no line: no session drew one, or no pool ranking.  Runs
+    #: before #4471 recorded the count line at 0.5 / 1 / 2.
+    "test_line_k_b025",
+    "test_line_k_b1",
+    "test_line_k_b4",
+)
+
+#: The Test arm's frame (#4523): one row per session, Test mode's autopilot run
+#: on the withheld half after the last ordinary click, every pick answered from
+#: the truth (:func:`vtscore.eval.line_test_arm.line_test_row`).  Emitted only
+#: with a ``line_test_sink`` and a balance (the Test is the balance line's).
+LINE_TEST_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "calibration_seed",
+    "style",
+    #: The last ordinary click: the ranking the Test ran on.
+    "t",
+    "beta",
+    #: ``labels`` - Find's labels line fitted on the withheld half; ``fallback``
+    #: - the retrain's cut, no class model that step; ``none`` - no line (then
+    #: *Nothing to test*).  ``has_model`` says whether the recall estimator
+    #: had the model's item posteriors below the line.
+    "line_source",
+    "has_model",
+    #: The budgets the Test ran under (:class:`~vtscore.training.thresholds.LineBudgets`).
+    "matches_width",
+    "misses_width",
+    "matches_picks",
+    "misses_picks",
+    "picks_per_round",
+    "dry_run_share",
+    "model_weight",
+    #: The seed the Test's own picks were drawn at.
+    "test_seed",
+    #: ``done`` or ``nothing``; the line's count and the corpus behind it.
+    "phase",
+    "line_count",
+    "n_test",
+    "n_test_pos",
+    #: The cost: rounds, picks per phase, and why each phase ended (one of
+    #: ``STOP_REASONS``; blank for a phase that never ran).
+    "rounds",
+    "picks_above",
+    "picks_below",
+    "picks_total",
+    "matches_stop",
+    "misses_stop",
+    #: The truth at the line, and the best any cut of the ranking reaches.
+    "precision_true",
+    "recall_true",
+    "fbeta_true",
+    "found_true",
+    "fbeta_best_cut_true",
+    "best_cut_true",
+    #: The most another band edge's true F-beta beats the line's by.
+    "edge_gain_true",
+    "n_edges",
+    "bands_below",
+    "bands_below_reached",
+    #: The ranges at Done (point, lo, hi) and whether each held the truth
+    #: (1 / 0; -1 with nothing to test).
+    "precision_point",
+    "precision_lo",
+    "precision_hi",
+    "precision_held",
+    "recall_point",
+    "recall_lo",
+    "recall_hi",
+    "recall_held",
+    "fbeta_point",
+    "fbeta_lo",
+    "fbeta_hi",
+    "fbeta_held",
+    #: The *found* words the verdict shows, against the truth's words.
+    "found",
+    "found_match",
+    #: The counts behind recall: above the line, and the model-assisted count
+    #: below it, each beside the truth; the model's count in the bands the
+    #: walk never reached beside the positives really there.
+    "positives_above_point",
+    "positives_above_lo",
+    "positives_above_hi",
+    "positives_above_true",
+    "positives_below_point",
+    "positives_below_lo",
+    "positives_below_hi",
+    "positives_below_true",
+    "tail_positives_model",
+    "tail_positives_true",
+    "tail_from_model",
+    #: *Lean the Threshold*: the best other edge by the estimate, how much it
+    #: reads above the line, and the truth at that edge.
+    "edge_gain_est",
+    "best_edge_est",
+    "fbeta_at_best_edge_est_true",
+    #: How many of the ``n_edges`` re-estimated ranges held the truth.
+    "edges_precision_held",
+    "edges_recall_held",
+    "edges_fbeta_held",
+    #: The verdict's reading against the oracle's under the same rule
+    #: (:func:`vtscore.eval.line_test_arm.read_verdict`).
+    "verdict",
+    "oracle_verdict",
+    "verdict_match",
+    #: What *Lean the Threshold* shows (#4540): per balance preset, its line
+    #: count on the withheld half and, at its own beta, the range's point, the
+    #: truth and whether the range held it.  -1 / NaN with no class model.
+    *(
+        f"preset_{tag}_{col}"
+        for tag in ("b025", "b1", "b4")
+        for col in (
+            "count",
+            *(f"{m}_{k}" for m in ("precision", "recall", "fbeta") for k in ("point", "true", "held")),
+        )
+    ),
+)
+
+
 #: Column order for the calibration study's main per-step frame (issue #2781),
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;
 #: under ``safe_thresholds`` additionally one row per safe-threshold GMM variant
@@ -417,6 +627,10 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "degenerate",
     "threshold_percentile",
     "xcal_threshold",
+    # #4452: Train's threshold beside the row's (Find's, on the withheld half), and the two prevalence estimates.
+    "train_threshold",
+    "train_prevalence",
+    "find_prevalence",
     "gmm_cut",
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base
@@ -437,6 +651,7 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "precision",
     "recall",
     "f1",
+    *FBETA_COLUMNS,
     "n_test_pos",
     "n_test_neg",
     "n_flagged",
@@ -447,6 +662,8 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "oracle_cost",
     "oracle_fpr",
     "oracle_fnr",
+    *ORACLE_FBETA_COLUMNS,
+    *FBETA_ORACLE_CUT_COLUMNS,
     "regret",
     "oracle_threshold_honest",
     "oracle_cost_honest",

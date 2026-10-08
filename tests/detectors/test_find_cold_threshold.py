@@ -65,7 +65,8 @@ def _media(cid: int, vec: np.ndarray, grid: np.ndarray | None = None) -> dict:
 def _cold_corpus(n: int = 60) -> dict[int, dict]:
     """A plain (grid-less) corpus with a broad spread of scores.
 
-    Ids 1-6 sit at the two poles and carry the detector's labels; the rest fill
+    Ids 1-7 sit at the two poles and carry the detector's labels - three Goods
+    and four Bads, the label quota (#4643), so they train a head; the rest fill
     the space between them, so the population the threshold is fitted on is
     genuinely a distribution rather than two spikes.
     """
@@ -73,9 +74,9 @@ def _cold_corpus(n: int = 60) -> dict[int, dict]:
     corpus: dict[int, dict] = {}
     for cid in range(1, 4):
         corpus[cid] = _media(cid, _basis(1))
-    for cid in range(4, 7):
+    for cid in range(4, 8):
         corpus[cid] = _media(cid, _basis(0))
-    for cid in range(7, n + 1):
+    for cid in range(8, n + 1):
         # A cloud tilted towards the Good pole, which is what makes the two cuts
         # land in different places (a symmetric cloud puts them both mid-gap).
         vec = _basis(1) * rng.uniform(0.2, 1.0) + _basis(0) * rng.uniform(0.0, 0.8)
@@ -99,6 +100,7 @@ def _cold_config() -> dict:
                     {"md5": "m4", "label": "bad"},
                     {"md5": "m5", "label": "bad"},
                     {"md5": "m6", "label": "bad"},
+                    {"md5": "m7", "label": "bad"},
                 ]
             },
         },
@@ -144,36 +146,26 @@ class TestColdFindCutsOnTheCorpusItDecides:
             "the estimator was fitted without the haystack Find already holds (issue #3516)"
         )
         assert set(call["final_ids"]) == set(corpus)
-        assert call["voted_ids"] == {1, 2, 3, 4, 5, 6}, (
+        assert call["voted_ids"] == {1, 2, 3, 4, 5, 6, 7}, (
             "the labelled media must be named so the estimator can drop them from the haystack it fits on (issue #3308)"
         )
 
-    def test_the_two_cuts_move_verdicts(self, monkeypatch):
-        """Guard the guard: on this corpus the substitution is user-visible.
+    def test_the_corpus_prevalence_moves_verdicts(self, monkeypatch):
+        """#4452: the line is the labels' class model at the prevalence estimated on the Find corpus.
 
-        Without this the assertion above could pass on a fixture where the two
-        cuts differ in the sixth decimal and nothing a user sees changes.  The
-        counterfactual is the pre-fusion number - ``_fused_threshold``'s own
-        ``xcal_threshold`` argument, which is exactly what used to ship - and
-        the comparison is paired, since the head is identical either way
-        (training is deterministic) and only the line moves.
+        Guard the guard: pin the corpus's estimate to a common target and the
+        same labels admit more of the same corpus - so handing the estimator
+        this corpus (the assertion above) is what sets the verdicts.
         """
-        import vtscore.detectors.training as training_mod
+        import vtscore.training.thresholds.labels_line as labels_line_mod
 
         corpus = _cold_corpus()
-        anchored, _neg = _run_find(corpus, _cold_config(), monkeypatch)
-
-        monkeypatch.setattr(
-            training_mod,
-            "_fused_threshold",
-            lambda xcal, *args, **kwargs: xcal,
-        )
-        pooled, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
-
-        assert len(pooled) > len(anchored), (
-            f"the pooled cut admitted {len(pooled)} of {len(corpus)} and the anchored cut "
-            f"{len(anchored)}; on this fixture the two rules must separate, or the "
-            "assertion above is checking a difference nobody can see"
+        shipped, _neg = _run_find(corpus, _cold_config(), monkeypatch)
+        # Every image a sure positive: the counted cut keeps the whole corpus.
+        monkeypatch.setattr(labels_line_mod, "corpus_posteriors", lambda _m, u, **_k: np.ones(np.asarray(u).size))
+        common, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
+        assert len(common) > len(shipped), (
+            f"the shipped line admitted {len(shipped)} of {len(corpus)} and the common-target line {len(common)}"
         )
 
 
@@ -267,8 +259,8 @@ class TestColdFindIsTheAppsLabelsetTraining:
             for name in ("ds-a", "ds-b"):
                 find_mod._score_dataset({"name": name, "pkl_path": "ignored"}, [dc], 0, 0)
 
-        assert len(resolved) == 6, (
-            f"{len(resolved)} origin resolutions for 6 labels over 2 datasets: the cold "
+        assert len(resolved) == 7, (
+            f"{len(resolved)} origin resolutions for 7 labels over 2 datasets: the cold "
             "context is being rebuilt per dataset instead of held for the run"
         )
 
@@ -443,11 +435,11 @@ class TestEveryMediaGetsAVerdict:
 
 
 class TestColdFindTrainsUnderTheUsersSettings:
-    def test_it_cuts_at_the_users_floor_and_calibration(self, monkeypatch):
+    def test_it_cuts_at_the_users_balance_and_calibration(self, monkeypatch):
         """A cold detector is trained the way the load and learned-sort paths train it.
 
         The cold path called ``labelset_train_and_score`` with its defaults, so
-        every cold Find was cut with no floor over two calibration splits,
+        every cold Find was cut with no balance over two calibration splits,
         whatever the user had set - while the *live* path over the same detector
         used the user's line.  One labelset should mean one detector either way.
         No Inclusion reaches it: that is no longer a user preference (#4269).
@@ -461,7 +453,7 @@ class TestColdFindTrainsUnderTheUsersSettings:
 
         def _from_settings(cls, settings_path=None):
             return dataclasses.replace(
-                real_from_settings(settings_path), min_precision=0.75, calibrate_count=3, calibration_fraction=0.4
+                real_from_settings(settings_path), beta=2.0, calibrate_count=3, calibration_fraction=0.4
             )
 
         monkeypatch.setattr(config_mod.CoreConfig, "from_settings", classmethod(_from_settings))
@@ -477,6 +469,6 @@ class TestColdFindTrainsUnderTheUsersSettings:
 
         assert seen, "the cold path never trained"
         assert "inclusion_value" not in seen[0]
-        assert seen[0]["min_precision"] == 0.75
+        assert seen[0]["beta"] == 2.0 and "min_precision" not in seen[0]
         assert seen[0]["calibrate_count"] == 3
         assert seen[0]["calibration_fraction"] == 0.4

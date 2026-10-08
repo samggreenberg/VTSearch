@@ -6,8 +6,8 @@
 Two questions per class, answered from the runs themselves:
 
 * **Could it be learned?** The full-label ceiling says whether the head can
-  separate the class at all with every label. A low ceiling and a high final
-  cost is the LOOP's failure (it never collected the labels); a high ceiling is
+  separate the class at all with every label. A high ceiling AP and a low final
+  AP is the LOOP's failure (it never collected the labels); a low ceiling is
   the embedding's.
 * **What did the user get shown instead?** Every Bad click is an image the
   detector ranked highly that was not the class. Pooled over seeds, the most
@@ -82,17 +82,15 @@ def main() -> int:
     ap.add_argument("--exp", type=Path, required=True)
     ap.add_argument("--analysis", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--classes", default="", help="default: the ten worst classes by final cost")
+    ap.add_argument("--classes", default="", help="default: the ten worst classes by final AP")
     ap.add_argument("--sheet", type=int, default=12, help="confusers per contact sheet")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
     cells = pd.read_csv(args.analysis / "cells.csv")
     cells = cells[cells["arm"].str.contains("SigLIP")]
-    per = cells.groupby("class")[["text_cost", "final_cost", "ceiling_cost", "positives_found"]].mean()
-    classes = [c.strip() for c in args.classes.split(",") if c.strip()] or list(
-        per.sort_values("final_cost").index[-10:][::-1]
-    )
+    per = cells.groupby("class")[["text_ap", "final_ap", "ceiling_ap", "positives_found"]].mean()
+    classes = [c.strip() for c in args.classes.split(",") if c.strip()] or list(per.sort_values("final_ap").index[:10])
     dom = _dominant(pc.COCO_ANCHOR_DIR)
     n_img = 123_287
     base = collections.Counter(dom.values())

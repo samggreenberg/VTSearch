@@ -39,6 +39,29 @@ def _categories_by_dataset(prepare_info: dict) -> dict[str, dict[str, list[str]]
     return out
 
 
+def ab_pair_keys(cells: list[dict]) -> set[tuple]:
+    """The units ``analyze_ab.py`` pairs a trajectory A/B on, over *cells*.
+
+    ``analyze_ab`` joins two grids on ``(arm, category, seed)`` with ``arm =
+    dataset/embedder/style``.  So every style a task runs is its own paired
+    cell: a patch embedder on a boxed dataset running ``whole_image,max_patch``
+    gives two per ``(category, seed)``.  #3796's calibration-seed draws of one
+    ``(category, seed)`` share a key and are averaged into one.  ``--print-cells``
+    counts array tasks, which is neither.  It sizes the array; this sizes the
+    A/B (preflight ``--resolve-delta``, #4111).
+    """
+    return {
+        (c["dataset"], c["embedder"], style, c["category"], c["seed"])
+        for c in cells
+        for style in cfg.cell_styles(c["dataset"], c["embedder"])
+    }
+
+
+def paired_cell_count(prepare_info: dict) -> int:
+    """How many paired cells an A/B of this grid against a same-shaped one holds."""
+    return len(ab_pair_keys(cfg.array_cells(_categories_by_dataset(prepare_info))))
+
+
 def _seed_query_text(ds: str, cat: str) -> str:
     """The text a user would type to find *cat* in *ds*, or "" if none is known.
 
@@ -239,6 +262,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--index", type=int, default=None, help="Cell index; defaults to $SLURM_ARRAY_TASK_ID.")
     parser.add_argument("--outdir", default=str(common.RESULTS / "cells"))
     parser.add_argument("--print-cells", action="store_true", help="Print the total cell count and exit.")
+    parser.add_argument(
+        "--print-paired-cells",
+        action="store_true",
+        help="Print how many cells analyze_ab.py pairs this grid on (each style its own cell) and exit.",
+    )
     args = parser.parse_args(argv)
 
     prepare_info = json.loads((common.RESULTS / "prepare_info.json").read_text())
@@ -246,6 +274,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.print_cells:
         print(len(cells))
+        return 0
+    if args.print_paired_cells:
+        print(len(ab_pair_keys(cells)))
         return 0
 
     # CALIB_INDEX_OFFSET lets a second array reach cells past SLURM's MaxArraySize
@@ -266,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
     cal_seed = cell.get("calibration_seed")
     # A standalone trainer (#3959) has no head for a detection style to drive,
     # so it runs style-less: the whole-image path, which is the only one it has.
-    styles = cfg.styles_for(ds, emb) if cfg.TRAINER == "app" else [None]
+    styles = cfg.cell_styles(ds, emb)
     region_voting = cfg.region_voting_for(ds, emb)
     common.log(
         f"{cell_progress(idx, len(cells))}: dataset={ds} embedder={emb} "
@@ -282,8 +313,9 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -295,7 +327,9 @@ def main(argv: list[str] | None = None) -> int:
         CUT_INCLUSION_COLUMNS,
         FIT_QUALITY_ROW_COLUMNS,
         INCLUSION_SWEEP_COLUMNS,
+        LINE_TEST_COLUMNS,
         PICK_COLUMNS,
+        RANK_FRAME_COLUMNS,
     )
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
@@ -336,6 +370,9 @@ def main(argv: list[str] | None = None) -> int:
     all_fitq: list[dict] = []
     all_picks: list[dict] = []
     all_pframes: list[dict] = []
+    all_rankframes: list[dict] = []
+    all_linetests: list[dict] = []
+    all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
         sweep_local: list[dict] = []
@@ -344,6 +381,9 @@ def main(argv: list[str] | None = None) -> int:
         fitq_local: list[dict] = [] if cfg.FIT_QUALITY else None
         picks_local: list[dict] | None = [] if cfg.EMIT_PICKS else None
         pframes_local: list[dict] | None = [] if cfg.PFRAME_STEPS else None
+        rankframes_local: list[dict] | None = [] if cfg.RANK_FRAME_STEPS else None
+        testscores_local: list[dict] | None = [] if cfg.SAVE_TEST_SCORES else None
+        linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -355,7 +395,7 @@ def main(argv: list[str] | None = None) -> int:
             calibrate_count=cfg.CALIBRATE_COUNT,
             calibration_fraction=cfg.CALIBRATION_FRACTION,
             exclusion_min_remainder=cfg.EXCLUSION_MIN_REMAINDER,
-            min_precision=cfg.MIN_PRECISION,
+            beta=cfg.BETA,
             live_cut_rule=cfg.LIVE_CUT_RULE,
             live_threshold=cfg.LIVE_THRESHOLD,
             region_voting=region_voting,
@@ -394,11 +434,32 @@ def main(argv: list[str] | None = None) -> int:
             cut_inclusion_qtilt_steps=cfg.CUT_INCLUSION_QTILT_STEPS or None,
             acq_inclusion_offset=cfg.ACQ_INCLUSION_OFFSET,
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
+            acq_p_crossing=cfg.ACQ_P_CROSSING,
+            acq_origin=cfg.ACQ_ORIGIN,
+            acq_target_p=cfg.ACQ_TARGET_P,
+            smart_gate=cfg.SMART_GATE,
+            label_quota=cfg.LABEL_QUOTA,
+            walk_picks=cfg.WALK_PICKS,
+            walk_tol=cfg.WALK_TOL,
+            walk_fine=cfg.WALK_FINE,
+            walk_guard=cfg.WALK_GUARD,
+            walk_shape=cfg.WALK_SHAPE,
+            **({"spot_check": cfg.SPOT_CHECK} if cfg.SPOT_CHECK is not None else {}),
+            **({"weak_separation": cfg.WEAK_D} if cfg.WEAK_D is not None else {}),
+            **({"weak_min_t": cfg.WEAK_MIN_T} if cfg.WEAK_MIN_T is not None else {}),
+            **({"weak_repeat": cfg.WEAK_REPEAT} if cfg.WEAK_REPEAT is not None else {}),
+            **({"weak_phase": cfg.WEAK_PHASE} if cfg.WEAK_PHASE is not None else {}),
             startup_schedule=cfg.STARTUP_SCHEDULE,
             opening_diversity=cfg.OPENING_DIVERSITY,
+            more_walk=cfg.MORE_WALK,
             pick_sink=picks_local,
             precision_frame_sink=pframes_local,
             precision_frame_steps=cfg.PFRAME_STEPS or None,
+            rank_frame_sink=rankframes_local,
+            test_score_sink=testscores_local,
+            line_test_sink=linetest_local,
+            sim_size=cfg.SIM_SIZE,
+            rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
             calibration_seed=cal_seed,
         )
         # The recorded fraction is the one the run actually used: an explicit
@@ -454,6 +515,8 @@ def main(argv: list[str] | None = None) -> int:
             pr["embedder"] = emb
         for fr in fitq_local or []:
             fr["embedder"] = emb
+        for rf in rankframes_local or []:
+            rf["embedder"] = emb
         all_rows.extend(rows)
         all_sweep.extend(sweep_local)
         all_cutdiag.extend(cutdiag_local)
@@ -461,6 +524,27 @@ def main(argv: list[str] | None = None) -> int:
         all_picks.extend(picks_local or [])
         all_pframes.extend({**f, "style": np.array(style or "")} for f in pframes_local or [])
         all_fitq.extend(fitq_local or [])
+        all_rankframes.extend(rankframes_local or [])
+        for lt in linetest_local or []:
+            lt["embedder"] = emb
+        all_linetests.extend(linetest_local or [])
+        if testscores_local:
+            # The last ordinary step and the last row (after the check): what Train left and what Find applies.
+            # The full-label ceiling's snapshot (#4490) is kept apart, never read as a session's step; and
+            # CALIB_SAVE_TEST_SCORES_AT keeps the first ordinary step at or past each listed click (``t<N>``).
+            ceiling = [f for f in testscores_local if f["phase"] == "ceiling"]
+            session = [f for f in testscores_local if f["phase"] != "ceiling"]
+            ordinary = [f for f in session if f["phase"] != "check"]
+            keep = {}
+            if session:
+                keep = {"last": ordinary[-1] if ordinary else session[-1], "final": session[-1]}
+            for at in cfg.SAVE_TEST_SCORES_AT:
+                hit = next((f for f in ordinary if int(f["t"]) >= at), None)
+                if hit is not None:
+                    keep[f"t{at}"] = hit
+            if ceiling:
+                keep["ceiling"] = ceiling[-1]
+            all_testscores.update({f"{emb}/{style}/{k}": v for k, v in keep.items()})
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
             f"{len(cutdiag_local)} cut-diagnostic rows, {len(cutincl_local)} cut-inclusion rows, "
@@ -518,10 +602,32 @@ def main(argv: list[str] | None = None) -> int:
     fitq_cols = [*FIT_QUALITY_ROW_COLUMNS, "embedder"]
     fitq_out = cell_file(outdir / f"task_{idx:04d}__fitq.csv")
     pd.DataFrame(all_fitq, columns=pd.Index(fitq_cols)).to_csv(fitq_out, index=False)
+    # The #4357 rank frames: where the positives sit in each ranking.  Same
+    # unconditional-write rule as every CSV frame above.
+    rankframes_cols = [*RANK_FRAME_COLUMNS, "embedder"]
+    rankframes_out = cell_file(outdir / f"task_{idx:04d}__rankframes.csv")
+    pd.DataFrame(all_rankframes, columns=pd.Index(rankframes_cols)).to_csv(rankframes_out, index=False)
+    # The #4523 Test arm: one row per session.  Same unconditional-write rule:
+    # an empty file with the header says the arm was off, not that the cell failed.
+    linetest_cols = [*LINE_TEST_COLUMNS, "embedder"]
+    linetest_out = cell_file(outdir / f"task_{idx:04d}__linetest.csv")
+    pd.DataFrame(all_linetests, columns=pd.Index(linetest_cols)).to_csv(linetest_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means
     # "off", because nothing reads it by default.
+    if cfg.SAVE_TEST_SCORES and all_testscores:
+        # #4452's Find scenarios: per kept snapshot its scores, labels and a JSON of the rest.
+        ts_out = outdir / f"task_{idx:04d}__testscores.npz"
+        packed_ts: dict[str, object] = {}
+        for key, snap in all_testscores.items():
+            arrays = {k: v for k, v in snap.items() if isinstance(v, np.ndarray)}
+            for name, arr in arrays.items():
+                packed_ts[f"{key}/{name}"] = arr
+            meta = {k: v for k, v in snap.items() if k not in arrays}
+            packed_ts[f"{key}/meta"] = np.array(json.dumps(meta))
+        np.savez_compressed(ts_out, **packed_ts)
+        common.log(f"wrote {len(all_testscores)} test-score snapshots to {ts_out}")
     if cfg.PFRAME_STEPS:
         pframes_out = outdir / f"task_{idx:04d}__pframes.npz"
         packed = {f"t{int(f['t'])}/{k}": v for f in all_pframes for k, v in f.items()}
@@ -532,7 +638,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}, "
         f"{len(all_cutincl)} cut-inclusion rows to {cutincl_out}, "
         f"{len(all_picks)} pick rows to {picks_out}, "
-        f"and {len(all_fitq)} fit-quality rows to {fitq_out}"
+        f"{len(all_fitq)} fit-quality rows to {fitq_out}, "
+        f"and {len(all_rankframes)} rank frames to {rankframes_out}"
     )
     return 0
 

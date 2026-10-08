@@ -23,7 +23,7 @@ GET /api/settings
 {
   "volume": 1.0,
   "theme": "system",
-  "min_precision": 0.5,
+  "beta": 1.0,
   "calibrate_count": 2,
   "calibration_fraction": null,
   "show_animations": "show",
@@ -46,9 +46,9 @@ Keys fall into these groups:
 | Group | Keys | Notes |
 |-------|------|-------|
 | Appearance & playback | `theme`, `show_animations`, `show_usage_bars`, `volume`, `audio_playing`, `show_metadata`, `label_hint_dismissed`, `enable_achievements` | `theme`: `dark` / `light` / `highviz` / `system` (default `system`, which follows the OS `prefers-color-scheme`). `show_animations`: `show` (default) / `hide` / `os`. `show_usage_bars` (the Dashboard's RAM / Disk bars): `default` (each shown only while its probe reports free space `low`; see [Dashboard › Headroom](dashboard.md#headroom)) / `hide` / `view`. `volume` 0–1. Turning `enable_achievements` off wipes the stored achievement counters. |
-| Training | `min_precision`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions` | `min_precision` is the precision floor, clamped to 0.01..1 (same value as `POST /api/min-precision`); `0.5` by default. It is never `null`: a `null` in a `PUT` is a 422, and one left in an older settings file reads as `0.5`. The retired `inclusion` key is dropped like any unknown key. `calibration_fraction` `null` = no explicit split; the per-embedder default applies (0.3 single-vector, 0.5 patch). Changing these drops stale thresholds/heads on every loaded detector. |
+| Training | `beta`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions` | `beta` is the **balance** the line is drawn at (F-beta's beta; #4413), clamped to 0.25..4 (same value as `POST /api/balance`); `1` by default, with `4` the recall-leaning preset and `0.25` the precision-leaning one (#4448; they were `2` and `0.5`). It seeds each detector's balance on first read. It is never `null`: a `null` in a `PUT` is a 422, and one left in an older settings file reads as the default. The retired `inclusion`, `min_precision` and `line_preference` keys are dropped like any unknown key. `calibration_fraction` `null` = no explicit split; the per-embedder default applies (0.3 single-vector, 0.5 patch). Changing these drops stale thresholds/heads on every loaded detector. |
 | Autopilot | `autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_resort_interval`, `autopilot_goal_diversity` | Clamped to ≥ 1. |
-| Auto-Find | `autofind_detectors`, `autofind_exporter`, `autofind_exporter_field_values`, `autorun_on_import` | `autofind_exporter` must name a pickable exporter (`""` = none); field values are `{exporter: {key: value}}`. `autorun_on_import` (default `true`) is whether a web import runs the AutoRun detectors on the new dataset: the Add Dataset dialog's **Run AutoRun** checkbox starts from it, and an import that sends `autorun` writes it back. See [below](#detector-auto-find-flag). |
+| AutoFind | `autofind_detectors`, `autofind_exporter`, `autofind_exporter_field_values`, `autofind_on_import` | `autofind_exporter` must name a pickable exporter (`""` = none); field values are `{exporter: {key: value}}`. `autofind_on_import` (default `true`) is whether a web import runs the AutoFind detectors on the new dataset: the Add Dataset dialog's **Run AutoFind** checkbox starts from it, and an import that sends `autofind` writes it back. See [below](#detector-autofind-flag). |
 | Per-media-type UI state | `focus_mode_{left,right}`, `grid_icon_size_{left,right,popup}`, `panel_pct_{left,right}`, `popup_metadata_shown`, `popup_preview_size`, `bin_details_docked`, `import_defaults_by_media_type`, `browse_colormap`, `browse_icon_size`, `browse_thumbnail_border`, `browse_mouse_zooms_per_level`, `browse_signposts`, `browse_signpost_captioner` | Dicts keyed by media type id, e.g. `{"audio": "M"}`; a missing entry means "use the frontend default". |
 | Browse panel sizes | `browse_graphics`, `browse_panel_width`, `browse_details_panel_width`, `browse_details_metadata_width` | `browse_graphics`: `auto` / `full` / `reduced`. Widths are clamped CSS px. |
 | Embedders | `solo_embedder_per_media_type`, `last_embedder_per_media_type` | `solo_embedder_per_media_type` locks a media type to one embedder (`""` opts that type out of a CLI-set lock); invalid type/embedder pairs are a 400. `last_embedder_per_media_type` is written by the load pipeline — accepted by `PUT` but ignored. |
@@ -76,7 +76,7 @@ PUT /api/settings
   `errors` envelope; **400** for a setter-level failure (unknown media type,
   embedder, or exporter; an empty or escaping directory path).
 - **Numeric ranges clamp** rather than fail: `{"volume": 5}` stores `1.0`,
-  `{"min_precision": 0}` stores `0.01`.
+  `{"beta": 10}` stores `4.0`.
 - **Unknown and read-only keys are silently dropped.**
 
 ### Get default settings
@@ -89,7 +89,7 @@ GET /api/settings/defaults
 `autofind_detectors`, `saved_datasets_dir`, `detectors_dir`, and
 `settings_source` are absent).
 
-### Detector Auto-Find flag
+### Detector AutoFind flag
 
 `autofind_detectors` is a flat list of registered detector names that
 should run during `/api/auto-detect` and the CLI's `--autodetect` flow.

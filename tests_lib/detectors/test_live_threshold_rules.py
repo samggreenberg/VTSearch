@@ -228,6 +228,9 @@ def _run(live=None):
         simulate_voting_iterations(
             medias,
             target_category="cat0",
+            # The trained head's cut is the subject: under the label quota (#4643)
+            # the early rows are the Goods' centroid's, which carries none of it.
+            label_quota=False,
             seed=3,
             dataset_name="synthetic",
             max_steps=30,
@@ -236,8 +239,8 @@ def _run(live=None):
             emit_calibration_metrics=True,
             live_threshold=live,
             # The Inclusion arm: the shipped baseline here is the estimator's
-            # cut, which a floor's set would replace (#4272).
-            min_precision="off",
+            # cut, which a balance's set would replace (#4272).
+            beta="off",
         )
     )
 

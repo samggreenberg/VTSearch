@@ -181,19 +181,16 @@ reorders what was previously planned here.
 
 - **The 30th-vote transient (a bug the study caught; now narrower).** The detector
   head has since moved to the linear SVM (`LINEAR_SVM_HEAD`, no hidden layer), so
-  the retrieval side no longer has it. What remains is the structural
-  verification classifier (`vtscore/training/structural_similarity.py`), which
-  still calls `train_model` with the auto-sized width `max(8, n_train // 3)`
-  (`vtscore/training/mlp.py::_auto_hidden_dim`) and always initialises from `seed=42`,
-  so the architecture steps 9→10 neurons at exactly 30 labels and every dataset
-  draws the same unlucky width-10 init until the width steps again at 33. The study
-  saw a sharp, synchronized quality dip at exactly t=30 (25 of 175 queries lose
+  the retrieval side no longer has it, and the structural verification
+  classifier that kept the auto-sized `train_model` width was removed by #4169, so
+  nothing on the structural path has it now. For the record: the width
+  `max(8, n_train // 3)` stepped 9→10 neurons at exactly 30 labels from a fixed
+  `seed=42` init. The study saw a sharp, synchronized quality dip at exactly t=30 (25 of 175 queries lose
   >0.3 P@10 at t=30, none at t=28 or 29; recovery by t=33). It is deterministic and
   user-visible: a user's 30th–32nd vote can transiently make results worse. Cheap
-  fixes: average 2–3 seeds at width-change boundaries, derive the init seed from
-  the vote set, or add hysteresis to the width step. The study measured the dip
-  on the old MLP retrieval head over 8,192-d VLAD inputs; whether it still bites
-  the small match-stat classifier is unmeasured.
+  fixes, for any head that still auto-sizes: average 2–3 seeds at width-change
+  boundaries, derive the init seed from the vote set, or add hysteresis to the
+  width step.
 
 <!-- item-sep -->
 
@@ -222,10 +219,10 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **Cold-start with <3 votes — measured, and it holds.** The verification
-  classifier has nothing to train on until there are both yes and no votes; the
-  shipped fallback is a default inlier-count gate (`DEFAULT_MIN_INLIERS`, crossing
-  0.5 at `MIN_VERIFICATION_VOTES = 3`). OpenLogo found the *trained* classifier
+- **The inlier gate is the scorer; the verification classifier is gone (#4169).**
+  Stage 2 scores every fit with the inlier gate (`DEFAULT_MIN_INLIERS` maps to
+  0.5) and orders fits past its saturation by raw inliers. A match-statistic MLP
+  used to replace the gate from 3 votes on. OpenLogo found the *trained* classifier
   statistically indistinguishable from that cold gate (0.090 vs 0.071 AP at t=40),
   so for structural detectors labels are calibration rather than learning — ~3–5
   votes capture essentially all the benefit, and structural search stays honest
@@ -242,7 +239,16 @@ reorders what was previously planned here.
     null (−0.03).
   - Max over templates is the rule that learns (+0.13 AP over the exemplar
     after 10 votes).
-  - #4169 decides whether the MLP stays in the re-rank.
+  - **#4169 removed it**
+    ([report](../experiments/2026-09-30-structural-rerank-mlp-4169/REPORT.md)).
+    Replayed on FullMarks tiers `s`/`m` and on BelgaLogos (10k press photos,
+    18 logos, the shipped 1,024-keypoint photo budget; OpenLogo is no longer on
+    the GRID), the MLP ranks worse than max-over-templates inliers at 10 votes
+    (AP −0.18 / −0.18 / −0.07) and its accept decision is worse than the gate's
+    (F1 −0.07 / −0.03 / −0.13). On the app's own path (VLAD top 50) the gate is
+    +0.03 AP and +0.15 F1 on FullMarks and neutral on BelgaLogos. Votes now
+    add templates and nothing else; a rule that learns from Bads (#4180)
+    has to beat the gate the same way.
 
 <!-- item-sep -->
 
@@ -296,7 +302,11 @@ shortlist. It is a re-rank layered *after* sorting, never a replacement:
 whole-haystack RANSAC would be O(N·match·RANSAC), so restricting to the shortlist
 is both elegant and necessary for the scalability budget.
 
-### The "MLP equivalent" — a classifier over *match statistics*
+### The "MLP equivalent" — a classifier over *match statistics* (removed, #4169)
+
+> The verification classifier below shipped and was removed by #4169: it ranked
+> worse than the inlier gate on documents and photos. The section is kept as
+> the original design.
 
 You don't learn in raw SIFT-descriptor space; you learn in two derived fixed-D
 metric spaces that both reuse `train_model` verbatim:
@@ -351,9 +361,8 @@ per-dataset artifact — so no new persisted state and no per-dataset fit pass.
 - **Loader hook:** flag-gated sibling pass in the loader storing `local_features`.
 - **Re-rank chokepoint:** `vtscore/training/structural_similarity.py` — the one
   place that knows the Stage-1→Stage-2 rule.
-- **Verification classifier:** trains via `train_model` on match-stat vectors next
-  to the detector MLP; the detector carries two learned objects (both in-memory,
-  both re-derived from votes).
+- **Verification:** the inlier gate scores every fit (the match-stat classifier
+  that once trained next to the detector MLP was removed by #4169).
 - **Frontend:** text input greys via the `supports_text=false` path; the matched
   region reuses patch's `best_region`/highlight machinery; v2 Shift-drag box-draw
   reused with structural copy. No new region-vote affordance.

@@ -229,23 +229,25 @@ class TestSimulateVotingIterations:
             assert row["prevalence_arm"] == "natural"
 
     def test_vote_counts_reported(self):
-        """Each row carries the good/bad vote counts the model was trained on.
+        """Each row carries the good/bad vote counts its detector was built from.
 
-        The first scored row is the earliest trainable step (≥1 good and ≥1
-        bad), and the counts never exceed the votes seen so far (t).  Autopilot
-        seeds goods before bads, so that first step carries its initial bad
-        (``n_bad == 1``) alongside however many goods have been seeded.
+        The first scored row is the first Good (#4643): Test gives the Goods'
+        centroid from there, so a click with a Good and no Bad has a row too.
+        The counts never exceed the votes seen so far (t).  Autopilot seeds
+        goods before bads, so the first row has no Bad at all, and the label
+        quota decides which detector each row is.
         """
+        from vtscore.detectors.label_quota import label_quota
+
         medias = _make_separable_clips(n_per_cat=6)
         rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert rows  # at least one scored step
         first = rows[0]
-        assert first["n_good"] >= 1
-        assert first["n_bad"] == 1  # goods are seeded first, so the first bad triggers training
+        assert (first["n_good"], first["n_bad"]) == (1, 0)
         for row in rows:
             assert row["n_good"] + row["n_bad"] == row["t"]
             assert row["n_good"] >= 1
-            assert row["n_bad"] >= 1
+            assert row["detector_tier"] == label_quota(row["n_good"], row["n_bad"]).tier
 
     def test_seed_determinism(self):
         medias = _make_separable_clips(n_per_cat=6)
@@ -321,8 +323,8 @@ class TestSimulateVotingIterations:
         rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         t_vals = [r["t"] for r in rows]
         assert t_vals == sorted(t_vals)
-        # t starts >=2 because we need at least 1 good + 1 bad
-        assert all(t >= 2 for t in t_vals)
+        # One row a click from the first Good on (#4643), with no gaps.
+        assert t_vals == list(range(t_vals[0], t_vals[0] + len(t_vals)))
 
     def test_cost_decreases_over_time_for_overlapping_data(self):
         """With overlapping data, cost should generally decrease as more votes come in.
@@ -365,14 +367,34 @@ class TestSimulateVotingIterations:
         assert isinstance(rows, list)
 
     def test_inclusion_affects_cost(self):
-        """With overlapping data, different inclusion values produce different costs."""
+        """On the Inclusion arm, different inclusion values produce different costs."""
         medias = _make_overlapping_clips(n_per_cat=20)
-        rows_inc0 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=0)
-        rows_inc5 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=5)
+        rows_inc0 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=0, beta="off")
+        rows_inc5 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=5, beta="off")
         # Same splits but different inclusion -> costs should differ
         costs0 = [r["cost"] for r in rows_inc0]
         costs5 = [r["cost"] for r in rows_inc5]
         assert costs0 != costs5
+
+    @pytest.mark.parametrize("beta", [None, 2.0])
+    def test_nonzero_inclusion_is_refused_under_a_balance(self, beta):
+        """A set balance wins over the knob, so a non-zero inclusion would only re-weight cost (#4361)."""
+        medias = _make_separable_clips(n_per_cat=6)
+        with pytest.raises(ValueError, match="Inclusion arm"):
+            simulate_voting_iterations(medias, "alpha", seed=42, inclusion=3, beta=beta)
+
+    def test_zero_inclusion_under_a_balance_and_any_on_the_inclusion_arm_run(self):
+        medias = _make_separable_clips(n_per_cat=6)
+        assert simulate_voting_iterations(medias, "alpha", seed=42, inclusion=0, calibrate_count=1, max_steps=4)
+        assert simulate_voting_iterations(
+            medias, "alpha", seed=42, inclusion=-3, calibrate_count=1, max_steps=4, beta="off"
+        )
+
+    @pytest.mark.parametrize("beta", ["0.5", "on", True, 0.1, 5.0])
+    def test_a_malformed_balance_arm_fails_before_anything_runs(self, beta):
+        """``resolve_line_knobs``: ``None``, ``"off"`` or a beta in [0.25, 4]; a removed floor's number is refused."""
+        with pytest.raises(ValueError, match="beta"):
+            simulate_voting_iterations(_make_separable_clips(n_per_cat=6), "alpha", seed=42, beta=beta)
 
     def test_elapsed_seconds_non_negative_and_increasing(self):
         """elapsed_seconds should be non-negative and non-decreasing over rows."""
@@ -508,6 +530,17 @@ class TestRunVotingIterationsEval:
 
         assert isinstance(df, pd.DataFrame)
         assert list(df.columns) == list(VOTING_COLUMNS)
+
+    def test_nonzero_inclusion_under_a_balance_is_refused_before_any_cell(self, monkeypatch):
+        """The grid refuses the inert knob up front, not on its first cell (#4361)."""
+        import vtscore.eval.voting_iterations as vi
+
+        def _no_cell(*_args, **_kwargs):
+            raise AssertionError("a cell ran")
+
+        monkeypatch.setattr(vi, "simulate_voting_iterations", _no_cell)
+        with pytest.raises(ValueError, match="Inclusion arm"):
+            run_voting_iterations_eval({"ds1": _make_separable_clips(n_per_cat=6)}, seeds=[42], inclusion=2)
 
     def test_multiple_seeds(self):
         medias = _make_separable_clips(n_per_cat=6)
@@ -740,20 +773,20 @@ class TestAutopilotStrategy:
 
     def test_seeds_the_initial_goods_before_bads(self):
         # No text sort: autopilot hands the tool known-good examples first, so
-        # the first trainable step already carries the full 3-good seed and its
-        # first bad (a 3-vs-1 model), never a 1-vs-1 warm-up.
+        # the first step with a Bad already carries the full 3-good seed and
+        # its first bad (a 3-vs-1 model), never a 1-vs-1 warm-up.  The rows
+        # before it are the Goods' centroid's (#4643).
         medias = _make_separable_clips(n_per_cat=12)
         rows = simulate_voting_iterations(medias, "alpha", seed=0, calibrate_count=1)
         assert rows
-        assert rows[0]["n_good"] == 3
-        assert rows[0]["n_bad"] == 1
+        assert [(r["n_good"], r["n_bad"]) for r in rows[:4]] == [(1, 0), (2, 0), (3, 0), (3, 1)]
 
     def test_max_steps_caps_votes(self):
         medias = _make_separable_clips(n_per_cat=20)
         rows = simulate_voting_iterations(medias, "alpha", seed=1, calibrate_count=1, max_steps=6)
         assert rows
         # No voting step can reflect more than max_steps votes cast.  The
-        # floor's spot check (#4272) runs once those steps are spent, and its
+        # balance's spot check (#4272) runs once those steps are spent, and its
         # rounds are the only rows past the cap.
         assert max(r["t"] for r in rows if r["phase"] != "check") <= 6
         assert all(r["t"] > 6 for r in rows if r["phase"] == "check")

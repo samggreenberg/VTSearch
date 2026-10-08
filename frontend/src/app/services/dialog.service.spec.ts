@@ -46,6 +46,22 @@ describe('VtDialogService', () => {
     expect(result).toBeNull();
   });
 
+  // #4380: the question and its detail used to be joined with a space, so a
+  // destructive confirmation read as one run-on line.
+  it('confirmDestructive puts the detail on its own line', async () => {
+    const promise = service.confirmDestructive("Delete detector 'cats'?", '(Media is unaffected.)');
+    expect(service.dialogMessage()).toBe("Delete detector 'cats'?\n(Media is unaffected.)");
+    service.cancel();
+    expect(await promise).toBe(false);
+  });
+
+  it('confirmDestructiveWithEscape puts the detail on its own line', async () => {
+    const promise = service.confirmDestructiveWithEscape('Reset?', 'Cannot be undone.', 'Reset', 'Export first…');
+    expect(service.dialogMessage()).toBe('Reset?\nCannot be undone.');
+    service.cancel();
+    expect(await promise).toBe('cancel');
+  });
+
   it('confirmDestructiveWithEscape exposes Cancel, escape, and action buttons', async () => {
     const promise = service.confirmDestructiveWithEscape('Reset?', 'Cannot be undone.', 'Reset', 'Export first…');
     const labels = service.dialogButtons().map((b) => b.label);

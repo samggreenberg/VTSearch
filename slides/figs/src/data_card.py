@@ -73,13 +73,16 @@ DATA_SET_NOTCH_PX = (_nx, _ny, _nw, 80.0)
 #: of the deck's sans stack — at the card's 100 dpi a pixel is 0.72pt, and
 #: matplotlib has no 600, so bold is the nearest it can draw. The first face of
 #: the stack that is installed is the one used, as a browser would. The
-#: baseline is where the cap height lands just under `DATA_SET_NOTCH_PX`.
+#: baseline is 20px lower than the one that put the cap height just under
+#: `DATA_SET_NOTCH_PX` (#4443): set flush under the headline in the same face,
+#: the name read as the headline's second line — "Data, Set Caltech-101" —
+#: rather than as the line under it that names which set this is.
 NAME_FAMILY = next(
     (face for face in ("Helvetica Neue", "Helvetica", "Arial", "Liberation Sans") if _installed(face)),
     "DejaVu Sans",
 )
 NAME_PT = 40 * 0.72
-NAME_BASELINE = 1.0 - 156 / 720
+NAME_BASELINE = 1.0 - 176 / 720
 NAME_LEADING = 44.8 / 720
 #: Where the counts start, whatever the name does above them: the column below
 #: the subtitle is the card's own, and it stays put between datasets.
@@ -325,6 +328,18 @@ def interleave(
 #: and the names.
 ZOOM_X1 = 0.985
 ZOOM_COL_GAP = 0.025
+#: The zoom's box stroke, in points.
+ZOOM_BOX_LW = 2.2
+
+
+def _inset(
+    box: tuple[float, float, float, float], half: float, width: float, height: float
+) -> tuple[float, float, float, float]:
+    """*box* (x, y, w, h, image pixels) clamped so a stroke *half* wide stays inside the image."""
+    x, y, w, h = box
+    x0, y0 = max(x, half), max(y, half)
+    x1, y1 = min(x + w, width - half), min(y + h, height - half)
+    return x0, y0, x1 - x0, y1 - y0
 
 
 def zoom(
@@ -357,10 +372,16 @@ def zoom(
     pic_w = min(ZOOM_X1 - AREA_X0 - ZOOM_COL_GAP - col_w, (AREA_Y1 - AREA_Y0) * aspect * FIG_H / FIG_W)
     pic_h = pic_w / aspect * FIG_W / FIG_H
     rect = [AREA_X0, AREA_Y0 + (AREA_Y1 - AREA_Y0 - pic_h) / 2, pic_w, pic_h]
-    shown = Tile(tile.image, [b for _, boxes in categories for b in boxes])
-    _draw_tile(fig, rect, shown, lw=2.2)
-
     width, height = tile.image.size
+    # A box that runs to the picture's edge — COCO boxes often do — would have
+    # half its stroke clipped off by the axes, and an umbrella boxed edge to
+    # edge came out as two loose lines (#4443). So every box is pulled inside
+    # the picture by half the stroke, which is a pixel or two on the photo and
+    # the whole stroke on the slide.
+    half = ZOOM_BOX_LW / 2 / 72 * width / (rect[2] * FIG_W)
+    categories = [(name, [_inset(box, half, width, height) for box in boxes]) for name, boxes in categories]
+    shown = Tile(tile.image, [b for _, boxes in categories for b in boxes])
+    _draw_tile(fig, rect, shown, lw=ZOOM_BOX_LW)
 
     def to_fig(x: float, y: float) -> tuple[float, float]:
         return rect[0] + x / width * rect[2], rect[1] + (1 - y / height) * rect[3]

@@ -109,18 +109,18 @@ describe('DashboardSelectionService', () => {
     service.selectOnly('detector', ['m1']);
     service.setDetectorTab('drafts');
     expect([...service.ids('detector')]).toEqual(['m1']);
-    service.setDetectorTab('autorun');
-    expect(service.detectorTab()).toBe('autorun');
+    service.setDetectorTab('autofind');
+    expect(service.detectorTab()).toBe('autofind');
     expect([...service.ids('detector')]).toEqual([]);
   });
 
   describe('only rows on the visible detector tab can be selected (#4228)', () => {
-    /** m1 is a draft, m2 is on AutoRun. */
-    function setMixedDetectors(autorunIds: string[] = ['m2']): void {
+    /** m1 is a draft, m2 is on AutoFind. */
+    function setMixedDetectors(autofindIds: string[] = ['m2']): void {
       const ds = datasetState as unknown as { _detectors: { set: (v: unknown) => void } };
       ds._detectors.set(
         ['m1', 'm2'].map(
-          (id) => ({ id, name: id, autofind: autorunIds.includes(id) }) as DetectorRegistryEntry,
+          (id) => ({ id, name: id, autofind: autofindIds.includes(id) }) as DetectorRegistryEntry,
         ),
       );
     }
@@ -153,7 +153,7 @@ describe('DashboardSelectionService', () => {
       setMixedDetectors();
       service.selectOnly('detector', ['m1']);
       service.toggle('detector', 'm2', false);
-      expect(service.detectorTab()).toBe('autorun');
+      expect(service.detectorTab()).toBe('autofind');
       expect([...service.ids('detector')]).toEqual(['m2']);
     });
   });
@@ -202,11 +202,11 @@ describe('DashboardSelectionService', () => {
   it('keeps the selection when the Dashboard unmounts, so a round trip restores it', () => {
     service.setDashboardVisible(true);
     service.selectOnly('dataset', ['d2']);
-    service.setDetectorTab('autorun');
+    service.setDetectorTab('autofind');
     service.setDashboardVisible(false);
     expect([...service.ids('dataset')]).toEqual(['d2']);
     service.setDashboardVisible(true);
     expect([...service.ids('dataset')]).toEqual(['d2']);
-    expect(service.detectorTab()).toBe('autorun');
+    expect(service.detectorTab()).toBe('autofind');
   });
 });

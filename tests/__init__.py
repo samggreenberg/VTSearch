@@ -32,8 +32,8 @@ def wait_for_loading_task(task_id, timeout=30.0):
 
     The ``loading-tasks`` twin of :func:`wait_for_detector_task`, for work that
     reports on the dataset channel (loads, coverage-atlas builds, background
-    AutoRun runs).  The returned snapshot carries the task's terminal ``error``
-    and any task-specific block (``autorun``, ``staging_result``).
+    AutoFind runs).  The returned snapshot carries the task's terminal ``error``
+    and any task-specific block (``autofind``, ``staging_result``).
     """
     import time
 

@@ -18,6 +18,17 @@ sees identical SIFT matching and differs only in its learning rule.  Arms
 ``a5_mlp``          the match-statistic MLP (``train_verification_classifier``'s recipe)
                     over a1's best-template statistics, from 3 votes; a1 before
 
+Added by #4169 (should the structural re-rank score by the MLP or by inliers?):
+
+``a3s_cold``        a3s with the cold gate always, ``min(1, inliers / 16)``: every page
+                    past 16 inliers ties and Stage 1 breaks the tie
+``a3s_inliers``     a3s re-ranked by the best Good template's raw inliers (tentative
+                    matches, then Stage 1, breaking ties)
+
+The shared readout also scores each arm's accept decision on the remainder (``f1``):
+the cold gate's ``inliers >= 8``, or the MLP's ``p >= 0.5`` once it trains.  Arms that
+make no accept decision (the SVM arms, a2) report ``nan``.
+
 One vote per step: the top unlabelled page of the ranking, labelled from ground
 truth.  Two readouts:
 
@@ -54,7 +65,9 @@ MIN_MLP_VOTES = 3
 MIN_INLIERS = 8
 
 #: Arms that read the page VLAD / SigLIP vectors rather than the template matrix alone.
-VECTOR_ARMS = {"a3_vlad_svm", "a3s_production", "a4_siglip_svm", "a4r_siglip_sift"}
+VECTOR_ARMS = {"a3_vlad_svm", "a3s_production", "a3s_cold", "a3s_inliers", "a4_siglip_svm", "a4r_siglip_sift"}
+#: Arms that also read the SigLIP cell (BelgaLogos has none).
+SIGLIP_ARMS = {"a4_siglip_svm", "a4r_siglip_sift"}
 
 ARMS = (
     "a0_exemplar",
@@ -66,6 +79,8 @@ ARMS = (
     "a4_siglip_svm",
     "a4r_siglip_sift",
     "a5_mlp",
+    "a3s_cold",
+    "a3s_inliers",
 )
 
 
@@ -207,24 +222,31 @@ def _mlp_scores(model: Any, stats: np.ndarray) -> np.ndarray:
 
 def rank(arm: str, cd: ClassData, goods: list[int], bads: list[int]) -> np.ndarray:
     """Pool indices, best first, for *arm* given the votes so far (labelled pages included)."""
+    return rank_and_decide(arm, cd, goods, bads)[0]
+
+
+def rank_and_decide(
+    arm: str, cd: ClassData, goods: list[int], bads: list[int]
+) -> tuple[np.ndarray, Optional[np.ndarray]]:
+    """*arm*'s ranking and, where it makes one, its accept decision per page (else ``None``)."""
     good_t = cd.templates_for(goods)
     if arm == "a0_exemplar":
-        return order_by(cd.inliers[0], cd.tentative[0])
+        return order_by(cd.inliers[0], cd.tentative[0]), cd.inliers[0] >= MIN_INLIERS
     if arm in ("a1_max", "a5_mlp", "a4r_siglip_sift"):
         inl, tent, arg = cd.best([0, *good_t])
         if arm == "a1_max":
-            return order_by(inl, tent)
+            return order_by(inl, tent), inl >= MIN_INLIERS
         if arm == "a4r_siglip_sift":
             stage1 = order_by(_svm_scores(cd.siglip, cd.qsiglip, goods, bads))
-            return shortlist(stage1, SIGLIP_TOP_K, inl, tent)
+            return shortlist(stage1, SIGLIP_TOP_K, inl, tent), None
         model = _mlp(cd, [0, *good_t], goods, bads)
         if model is None:
-            return order_by(inl, tent)
-        best_stats = cd.stats[arg, np.arange(cd.n)]
-        return order_by(_mlp_scores(model, best_stats), inl, tent)
+            return order_by(inl, tent), inl >= MIN_INLIERS
+        prob = _mlp_scores(model, cd.stats[arg, np.arange(cd.n)])
+        return order_by(prob, inl, tent), prob >= 0.5
     if arm == "a1p_goods_only":
         inl, tent, _ = cd.best(good_t or [0])
-        return order_by(inl, tent)
+        return order_by(inl, tent), inl >= MIN_INLIERS
     if arm == "a2_repick":
         pick = 0
         if len(good_t) >= 2:
@@ -234,22 +256,33 @@ def rank(arm: str, cd: ClassData, goods: list[int], bads: list[int]) -> np.ndarr
                 med = float(np.median(cd.inliers[t, others]))
                 if med > best_med:
                     best_med, pick = med, t
-        return order_by(cd.inliers[pick], cd.tentative[pick])
+        return order_by(cd.inliers[pick], cd.tentative[pick]), None
     if arm == "a4_siglip_svm":
-        return order_by(_svm_scores(cd.siglip, cd.qsiglip, goods, bads))
-    if arm in ("a3_vlad_svm", "a3s_production"):
+        return order_by(_svm_scores(cd.siglip, cd.qsiglip, goods, bads)), None
+    if arm in ("a3_vlad_svm", "a3s_production", "a3s_cold", "a3s_inliers"):
         stage1 = order_by(_svm_scores(cd.vlad, cd.qvlad, goods, bads))
         if arm == "a3_vlad_svm" or not good_t:
             # No Good template yet: ``maybe_structural_rerank`` returns Stage 1 unchanged.
-            return stage1
+            return stage1, None
         inl, tent, arg = cd.best(good_t)
-        model = _mlp(cd, good_t, goods, bads)
-        if model is None:
-            gate = np.minimum(1.0, inl / (2.0 * MIN_INLIERS))
-        else:
-            gate = _mlp_scores(model, cd.stats[arg, np.arange(cd.n)])
-        return shortlist(stage1, PRODUCTION_TOP_K, np.round(gate, 4))
+        in_head = np.zeros(cd.n, dtype=bool)
+        in_head[stage1[:PRODUCTION_TOP_K]] = True
+        cold = np.minimum(1.0, inl / (2.0 * MIN_INLIERS))
+        if arm == "a3s_inliers":
+            return shortlist(stage1, PRODUCTION_TOP_K, inl, tent), in_head & (inl >= MIN_INLIERS)
+        model = _mlp(cd, good_t, goods, bads) if arm == "a3s_production" else None
+        gate = cold if model is None else _mlp_scores(model, cd.stats[arg, np.arange(cd.n)])
+        return shortlist(stage1, PRODUCTION_TOP_K, np.round(gate, 4)), in_head & (gate >= 0.5)
     raise KeyError(arm)
+
+
+def decision_f1(accept: Optional[np.ndarray], positive: np.ndarray, rest: np.ndarray) -> float:
+    """F1 of *accept* on the unlabelled remainder *rest*; ``nan`` without a decision."""
+    if accept is None or not positive[rest].any():
+        return float("nan")
+    a, p = accept[rest], positive[rest]
+    tp = int((a & p).sum())
+    return 2.0 * tp / (int(a.sum()) + int(p.sum()))
 
 
 def remainder(order: np.ndarray, labelled: set[int]) -> np.ndarray:
@@ -276,9 +309,20 @@ def run_class(
             seq = [int(i) for i in a0[:v]]
             goods = [i for i in seq if cd.positive[i]]
             bads = [i for i in seq if not cd.positive[i]]
-            ap, p10, left = residual(rank(arm, cd, goods, bads), set(seq))
+            order, accept = rank_and_decide(arm, cd, goods, bads)
+            ap, p10, left = residual(order, set(seq))
+            f1 = decision_f1(accept, cd.positive, remainder(order, set(seq)))
             rows.append(
-                {"readout": "shared", "arm": arm, "v": v, "found": len(goods), "ap": ap, "p10": p10, "left": left}
+                {
+                    "readout": "shared",
+                    "arm": arm,
+                    "v": v,
+                    "found": len(goods),
+                    "ap": ap,
+                    "p10": p10,
+                    "f1": f1,
+                    "left": left,
+                }
             )
 
     # Closed loop: each arm chooses its next vote from its own current ranking.
@@ -309,7 +353,7 @@ def run_class(
 
 
 def load_vectors(
-    matrix: Path, tier: str
+    matrix: Path, tier: str, with_siglip: bool = True
 ) -> tuple[dict[str, int], np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Page VLADs (identical in every shard), the SigLIP cell, and each class's query vectors."""
     import embed_corpus  # noqa: PLC0415
@@ -330,6 +374,8 @@ def load_vectors(
                 qsiglip[k[len("qsiglip__") :]] = z[k]
     assert page_vlad is not None, f"no vectors-*.npz under {matrix}"
     row = {p: i for i, p in enumerate(ids)}
+    if not with_siglip:
+        return row, page_vlad, np.zeros((len(ids), 1), dtype=np.float32), qvlad, {}
     sig_ids, sig = ev.read_vectors(embed_corpus.cell_path(tier, "siglip"), "siglip")
     sig_by = {p: i for i, p in enumerate(sig_ids)}
     siglip = np.zeros((len(ids), sig.shape[1]), dtype=np.float32)
@@ -344,6 +390,17 @@ def load_vectors(
 # --------------------------------------------------------------------------
 
 CONTROL = "a1_max"
+#: #4169's second control: the app's structural path as shipped, for the arms that vary it.
+PRODUCTION_CONTROL = "a3s_production"
+PRODUCTION_ARMS = {"a3s_cold", "a3s_inliers", "a3_vlad_svm"}
+PAIRED_POINTS = (
+    ("shared", "ap", 10),
+    ("shared", "ap", 20),
+    ("shared", "f1", 10),
+    ("shared", "f1", 20),
+    ("closed", "found", 10),
+    ("closed", "found", 40),
+)
 #: The pre-registered verdict point: shared-sequence AP at 10 votes, paired over classes.
 VERDICT_V = 10
 BOOTSTRAP = 10000
@@ -355,6 +412,11 @@ def classes_of_version(version: str) -> set[str]:
         (Path(__file__).resolve().parent / "versions" / f"{version}.json").read_text(encoding="utf-8")
     )
     return {k.split(":", 1)[1] for k in manifest["files"] if k.startswith("query_crop:")}
+
+
+def _num(x: Any) -> float:
+    """A CSV cell as a float; an empty cell (a readout the row does not carry) is ``nan``."""
+    return float("nan") if x in (None, "") else float(x)
 
 
 def paired_ci(diffs: np.ndarray, seed: int = 0) -> tuple[float, float, float]:
@@ -377,7 +439,7 @@ def summarise(rows: list[dict[str, Any]], subset: Optional[set[str]] = None) -> 
         # A class-step with nothing left to find has no remainder to score (AP is nan, P@10 a
         # meaningless 0), and vote_stoplist.py writes no row for it at all.
         xs = [
-            float(val[(readout, arm, v, c)][key])
+            _num(val[(readout, arm, v, c)].get(key))
             for c in classes
             if (readout, arm, v, c) in val and (readout == "closed" or int(val[(readout, arm, v, c)]["left"]) > 0)
         ]
@@ -389,6 +451,7 @@ def summarise(rows: list[dict[str, Any]], subset: Optional[set[str]] = None) -> 
         ("closed", "found", "Closed loop: positives found after v votes (mean over classes)"),
         ("shared", "ap", "Shared sequence: AP on the unlabelled remainder"),
         ("shared", "p10", "Shared sequence: P@10 on the unlabelled remainder"),
+        ("shared", "f1", "Shared sequence: F1 of the accept decision on the unlabelled remainder"),
     ):
         if not any(r["readout"] == readout for r in rows):
             continue
@@ -396,38 +459,39 @@ def summarise(rows: list[dict[str, Any]], subset: Optional[set[str]] = None) -> 
         for arm in arms:
             if not any(r["arm"] == arm and r["readout"] == readout for r in rows):
                 continue
+            if key == "f1" and all(np.isnan(mean(readout, arm, v, key)[0]) for v in vs):
+                continue
             cells = []
             for v in vs:
                 m, n = mean(readout, arm, v, key)
                 cells.append(f"{m:.2f}" + (f" ({n})" if readout == "shared" and n < len(classes) else ""))
             out.append(f"| {arm} | " + " | ".join(cells) + " |")
         out.append("")
-    out += [
-        f"### Paired against `{CONTROL}` (mean difference, bootstrap 95% interval over classes)",
-        "",
-        "| arm | readout | v | classes | mean diff | 95% interval |",
-        "|---|---|---:|---:|---:|---|",
-    ]
-    for arm in arms:
-        if arm == CONTROL:
+    for control, members in ((CONTROL, None), (PRODUCTION_CONTROL, PRODUCTION_ARMS)):
+        if control not in arms:
             continue
-        for readout, key, v in (
-            ("shared", "ap", VERDICT_V),
-            ("shared", "ap", 20),
-            ("closed", "found", 10),
-            ("closed", "found", 40),
-        ):
-            pairs = [
-                (float(val[(readout, arm, v, c)][key]), float(val[(readout, CONTROL, v, c)][key]))
-                for c in classes
-                if (readout, arm, v, c) in val and (readout, CONTROL, v, c) in val
-            ]
-            pairs = [(a, b) for a, b in pairs if not (np.isnan(a) or np.isnan(b))]
-            if not pairs:
+        out += [
+            f"### Paired against `{control}` (mean difference, bootstrap 95% interval over classes)",
+            "",
+            "| arm | readout | v | classes | mean diff | 95% interval |",
+            "|---|---|---:|---:|---:|---|",
+        ]
+        for arm in arms:
+            if arm == control or (members is not None and arm not in members):
                 continue
-            d = np.array([a - b for a, b in pairs])
-            m, lo, hi = paired_ci(d)
-            out.append(f"| {arm} | {readout} {key} | {v} | {len(d)} | {m:+.3f} | [{lo:+.3f}, {hi:+.3f}] |")
+            for readout, key, v in PAIRED_POINTS:
+                pairs = [
+                    (_num(val[(readout, arm, v, c)].get(key)), _num(val[(readout, control, v, c)].get(key)))
+                    for c in classes
+                    if (readout, arm, v, c) in val and (readout, control, v, c) in val
+                ]
+                pairs = [(a, b) for a, b in pairs if not (np.isnan(a) or np.isnan(b))]
+                if not pairs:
+                    continue
+                d = np.array([a - b for a, b in pairs])
+                m, lo, hi = paired_ci(d)
+                out.append(f"| {arm} | {readout} {key} | {v} | {len(d)} | {m:+.3f} | [{lo:+.3f}, {hi:+.3f}] |")
+        out.append("")
     return "\n".join(out) + "\n"
 
 
@@ -439,6 +503,11 @@ def write_summary(out: Path) -> None:
             rows.extend(csv.DictReader(fh))
     text = "## All classes\n\n" + summarise(rows)
     old = classes_of_version("v4.3")
+    if not old & {r["class_id"] for r in rows}:
+        # Not a FullMarks matrix (#4169 replays BelgaLogos through the same arms).
+        (out / "summary.md").write_text(text, encoding="utf-8")
+        print(text)
+        return
     text += "\n## The 27 classes v4.3 had (the nine v5.0 added are easy for SIFT)\n\n" + summarise(rows, old)
     (out / "summary.md").write_text(text, encoding="utf-8")
     print(text)
@@ -469,7 +538,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     readouts = [r for r in args.readouts.split(",") if r]
     checkpoints = tuple(v for v in CHECKPOINTS if v <= args.max_v)
     if any(a in VECTOR_ARMS for a in arms):
-        row, page_vlad, siglip, qvlad, qsiglip = load_vectors(args.matrix, args.tier)
+        row, page_vlad, siglip, qvlad, qsiglip = load_vectors(
+            args.matrix, args.tier, with_siglip=any(a in SIGLIP_ARMS for a in arms)
+        )
     else:
         row, page_vlad, siglip, qvlad, qsiglip = None, None, None, {}, {}
     wanted = {c.replace("/", "__") for c in args.classes.split(",") if c}
@@ -485,7 +556,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             cd = ClassData(f, none, none, np.zeros(1, np.float32), np.zeros(1, np.float32))
         else:
             idx = [row[str(p)] for p in z["pool_ids"]]
-            cd = ClassData(f, page_vlad[idx], siglip[idx], qvlad[slug], qsiglip[slug])
+            cd = ClassData(f, page_vlad[idx], siglip[idx], qvlad[slug], qsiglip.get(slug, np.zeros(1, np.float32)))
         if not cd.positive.any():
             print(f"  {slug}: no positive in the pool, skipped", flush=True)
             continue
@@ -502,7 +573,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # Rewrite after every class so a partial run is still readable.
         with (args.out / "rows.csv").open("w", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(
-                fh, fieldnames=["class_id", "readout", "arm", "v", "found", "ap", "p10", "left", "n_positive"]
+                fh,
+                fieldnames=["class_id", "readout", "arm", "v", "found", "ap", "p10", "f1", "left", "n_positive"],
+                restval="",
             )
             w.writeheader()
             w.writerows(all_rows)

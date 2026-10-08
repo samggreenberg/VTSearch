@@ -23,7 +23,7 @@ import pytest
 
 import vtscore.training.thresholds as thresholds_mod
 from vtscore.datasets.labelset import LabeledElement, LabelSet
-from vtscore.detectors.labelset_training import labeled_media_ids
+from vtscore.detectors.labelset_training import labeled_media_ids, labeled_media_labels
 from vtscore.detectors.training import train_and_score, train_and_threshold
 
 DIM = 32
@@ -73,13 +73,13 @@ def _spy_fit_sizes(monkeypatch) -> list[tuple[int, ...]]:
     return captured
 
 
-@pytest.mark.usefixtures("no_precision_floor")
+@pytest.mark.usefixtures("no_balance")
 class TestExclusionEqualsRemoval:
     """``voted_ids`` over the full snap == the same snap without those media.
 
-    A property of the fold-anchored cut, so it is pinned with no precision
-    floor.  Under a floor it deliberately does not hold: the floor ranks its
-    corpus against the whole haystack, voted items included (#4245, #4221).
+    A property of the fold-anchored cut, so it is pinned with no balance.
+    Under one it deliberately does not hold: the balance keeps a set of the
+    ranking, which marks the voted items rather than dropping them (#4272).
     """
 
     def test_threshold_matches_a_snap_without_the_votes(self):
@@ -173,6 +173,9 @@ class TestLabeledMediaIds:
 
         assert labeled_media_ids(labelset, snap) == {2, 7}
         assert labeled_media_ids(labelset, None) == set()
+        # The same resolution with each label, the anchors of the line's mixture (#4389).
+        assert labeled_media_labels(labelset, snap) == {2: True, 7: False}
+        assert labeled_media_labels(labelset, None) == {}
 
 
 class TestSharedExclusionPolicy:
@@ -277,17 +280,24 @@ class TestArmSemanticsEndToEnd:
     def _run(floor):
         from vtscore.eval.voting_iterations import simulate_voting_iterations
 
+        # The floor acts on the fold-anchored estimator.  Since #3546 the
+        # acquisition cut under a balance is the labels line's target pick
+        # precision, which never reads that estimator, so these arms are run
+        # on the offset cut (`acq_target_p="off"`), where the floor still lands.
         return simulate_voting_iterations(
             TestArmSemanticsEndToEnd._medias(),
             "alpha",
             seed=42,
             sim_fraction=0.5,
             exclusion_min_remainder=floor,
+            acq_target_p="off",
         )
 
     @staticmethod
     def _cuts(rows) -> list[float]:
-        return [round(r["acq_threshold"], 9) for r in rows]
+        # The floor acts on the Train side: a row with no Bad yet (the Goods'
+        # centroid's, #4643) has no head and so no acquisition cut.
+        return [round(r["acq_threshold"], 9) for r in rows if r["n_bad"] > 0]
 
     def test_default_arm_is_the_shipped_floor(self):
         """The load-bearing one: `None` must be byte-identical to the app's floor.

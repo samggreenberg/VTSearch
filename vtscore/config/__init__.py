@@ -117,7 +117,7 @@ from vtscore.config.processor_backend import (
 from vtscore.config.runtime import (
     DEFAULT_CALIBRATE_COUNT,
     DEFAULT_DECODE_WORKER_CAP,
-    DEFAULT_MIN_PRECISION,
+    DEFAULT_BETA,
     MAX_DECODE_PIXELS,
     MAX_STRUCTURAL_DETECT_PIXELS,
     MAX_UPLOAD_MB,
@@ -202,7 +202,7 @@ __all__ = [
     "verify_image_processor_backend",
     "DEFAULT_CALIBRATE_COUNT",
     "DEFAULT_DECODE_WORKER_CAP",
-    "DEFAULT_MIN_PRECISION",
+    "DEFAULT_BETA",
     "MAX_DECODE_PIXELS",
     "MAX_STRUCTURAL_DETECT_PIXELS",
     "MAX_UPLOAD_MB",

@@ -54,10 +54,10 @@ class TestInvalidRequestBodies:
         # ``null`` is not a valid object for the MediaVoteRequest schema.
         assert resp.status_code == 422
 
-    def test_min_precision_with_empty_json(self, client):
-        # Marshmallow-validated route: missing required ``min_precision`` →
-        # 422 with the standard ``errors`` envelope.
-        resp = client.post("/api/min-precision", json={})
+    def test_balance_with_empty_json(self, client):
+        # Marshmallow-validated route: missing required ``beta`` → 422 with
+        # the standard ``errors`` envelope.
+        resp = client.post("/api/balance", json={})
         assert resp.status_code == 422
 
     def test_labels_import_with_null_body(self, client):
@@ -195,15 +195,15 @@ class TestMissingRequiredFields:
 class TestTypeMismatches:
     """Routes should reject wrong-typed values."""
 
-    def test_min_precision_string_value(self, client):
-        # The schema's numeric check rejects strings as 422.
-        resp = client.post("/api/min-precision", json={"min_precision": "half"})
+    def test_balance_string_value(self, client):
+        # The schema's ``Float`` rejects a non-numeric string as 422.
+        resp = client.post("/api/balance", json={"beta": "half"})
         assert resp.status_code == 422
 
-    def test_min_precision_boolean_value(self, client):
+    def test_balance_boolean_value(self, client):
         # ... and booleans too: ``bool`` is a subclass of ``int`` in Python,
-        # but ``true`` is not a floor.
-        resp = client.post("/api/min-precision", json={"min_precision": True})
+        # but ``true`` is not a balance.
+        resp = client.post("/api/balance", json={"beta": True})
         assert resp.status_code == 422
 
     def test_settings_volume_string(self, client):
@@ -448,15 +448,15 @@ class TestMediaTypeMismatch:
 class TestBoundaryValues:
     """Edge case values for numeric inputs."""
 
-    def test_min_precision_clamped_to_max(self, client):
-        resp = client.post("/api/min-precision", json={"min_precision": 100})
+    def test_balance_clamped_to_max(self, client):
+        resp = client.post("/api/balance", json={"beta": 100})
         assert resp.status_code == 200
-        assert resp.get_json()["min_precision"] == 1.0
+        assert resp.get_json()["beta"] == 4.0
 
-    def test_min_precision_clamped_to_min(self, client):
-        resp = client.post("/api/min-precision", json={"min_precision": -100})
+    def test_balance_clamped_to_min(self, client):
+        resp = client.post("/api/balance", json={"beta": -100})
         assert resp.status_code == 200
-        assert resp.get_json()["min_precision"] == 0.01
+        assert resp.get_json()["beta"] == 0.25
 
     def test_volume_zero(self, client):
         resp = client.put("/api/settings", json={"volume": 0})

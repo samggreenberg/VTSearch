@@ -13,7 +13,7 @@ than move the frame (`slides/STYLE.md`).
 
 The slide it serves used to be the verification screen with the results shoved
 into a left-hand panel, which is a picture of a person checking their answers.
-Not looking at your results in the tool is a *feature* — an autorun detector
+Not looking at your results in the tool is a *feature* — an AutoFind detector
 mails you a list of references — so what the room should see is the pictures,
 with no chrome anywhere near them (#3779).
 
@@ -28,7 +28,7 @@ whole second half, and are not this page's argument to make.
 Named rather than sampled because in *this* corpus the two are very different
 pictures, and the reason is worth writing down. COCO files a frame under `book`
 when its largest annotated box happens to be one, and `photos-prod` is
-deliberately disjoint from `photos` (`coco_fixture.DISJOINT_FROM`), so the
+deliberately disjoint from `photos-train` (`coco_fixture.DISJOINT_FROM`), so the
 training pile has already taken the forty-four frames where a book fills the
 picture and what is left is mostly living rooms with a shelf somewhere in them.
 Twelve at random came out as two people playing Wii, a man with a sandwich and a

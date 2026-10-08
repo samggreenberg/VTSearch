@@ -537,13 +537,13 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return this.settings().solo_media_type || null;
   }
 
-  /** Configured Auto-Find results-exporter name (''=none), read from the
-   *  settings object for the Auto-Find tab's child component. */
+  /** Configured AutoFind results-exporter name (''=none), read from the
+   *  settings object for the AutoFind tab's child component. */
   get autofindExporter(): string {
     return ((this.settings() as Record<string, unknown>)['autofind_exporter'] as string) || '';
   }
 
-  /** Per-exporter saved field values for the Auto-Find tab's child component. */
+  /** Per-exporter saved field values for the AutoFind tab's child component. */
   get autofindExporterFieldValues(): Record<string, Record<string, string>> {
     return (
       ((this.settings() as Record<string, unknown>)['autofind_exporter_field_values'] as Record<
@@ -553,7 +553,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Persist the user's Auto-Find results-exporter choice + field values. */
+  /** Persist the user's AutoFind results-exporter choice + field values. */
   onAutofindExporterChange(change: AutoFindExporterChange): void {
     this.settings.update((s) => ({
       ...(s as Record<string, unknown>),

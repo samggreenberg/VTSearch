@@ -6,6 +6,7 @@ import pytest
 
 from vtscore.eval.al_benchmark import (
     _final_cost_summary,
+    main,
     precomputed_source,
     precomputed_source_from_npz,
     run_al_benchmark,
@@ -151,3 +152,40 @@ class TestRunAlBenchmark:
         )
         summary = _final_cost_summary(empty)
         assert summary.empty
+
+
+class TestInclusionUnderABalance:
+    """``--inclusion`` moves the line only on the Inclusion arm (#4361)."""
+
+    def test_run_refuses_a_nonzero_inclusion_under_the_default_balance(self):
+        clips = synthetic_source(n_per_cat=6, dim=8, seed=0)
+        with pytest.raises(ValueError, match="Inclusion arm"):
+            run_al_benchmark(clips, strategies=["autopilot"], seeds=[0], inclusion=3)
+
+    def test_run_takes_a_nonzero_inclusion_on_the_inclusion_arm(self):
+        clips = synthetic_source(n_per_cat=10, dim=8, seed=0)
+        df = run_al_benchmark(
+            clips,
+            strategies=["autopilot"],
+            seeds=[0],
+            inclusion=3,
+            beta="off",
+            calibrate_count=1,
+            max_steps=6,
+            atlas_min_node_size=3,
+        )
+        assert not df.empty
+        assert bool(df["beta"].isna().all())
+
+    def test_cli_refuses_inclusion_without_beta_off(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            main(["--inclusion", "3"])
+        assert exc.value.code == 2
+        assert "--beta off" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("bad", ["0", "4.5", "loose"])
+    def test_cli_rejects_a_beta_out_of_range(self, bad, capsys):
+        with pytest.raises(SystemExit) as exc:
+            main(["--beta", bad])
+        assert exc.value.code == 2
+        assert "--beta" in capsys.readouterr().err

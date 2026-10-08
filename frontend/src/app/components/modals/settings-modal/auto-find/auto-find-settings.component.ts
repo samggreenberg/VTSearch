@@ -19,17 +19,17 @@ export interface AutoFindExporterChange {
 }
 
 /**
- * Settings tab body for "Auto-Find".
+ * Settings tab body for "AutoFind".
  *
  * Configures the **Results Exporter** - a tab strip with one tab per pickable
  * exporter (plus "None"). The active tab is the exporter that runs
- * automatically after an Auto-Find; its tab body renders that exporter's own
+ * automatically after an AutoFind; its tab body renders that exporter's own
  * fields. Field values are kept per-exporter so switching tabs keeps each
  * exporter's config. Edits are emitted to the parent, which saves them as
  * `autofind_exporter` / `autofind_exporter_field_values`.
  *
  * *Which* detectors auto-run is not chosen here: that's the Dashboard's
- * Drafts/AutoRun detector tabs (each detector's ⋯ menu moves it between
+ * Drafts/AutoFind detector tabs (each detector's ⋯ menu moves it between
  * them, driving `PUT /api/detectors/registry/<id>/autofind` and the caller's
  * per-user `autofind_detectors` list).
  */
@@ -110,7 +110,7 @@ export class AutoFindSettingsComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (list) => {
-          // Auto-Find runs its export on a scored run, so only exporters that
+          // AutoFind runs its export on a scored run, so only exporters that
         // implement that payload belong in this picker.
         this.exporters.set(
           (list || []).filter(

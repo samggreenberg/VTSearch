@@ -273,7 +273,10 @@ GET /api/detectors/registry
 
 Entries also carry `examples`, `media_example`, `embedder`, `embedder_type`,
 `created_at`, `created_by`, `readers`, and `is_owner`; see the
-`DetectorRegistryListResponse` schema in the spec.
+`DetectorRegistryListResponse` schema in the spec. An AutoFind detector
+(`autofind: true`) also carries `test_verdict`: the newest test verdict it
+keeps, in the shape of the [stats](#detector-statistics)' `test_verdicts`
+entries, or `null` when it was never tested. Drafts leave it out.
 
 `name` is what the on-disk labelset file is looked up by; the file itself is
 `data/detectors/<slug-of-name>.json`. The head is trained on demand from the
@@ -385,7 +388,7 @@ haven't landed yet. The task's terminal frame carries
 `"ingest_result": {"ingested": 12}`; cancel it with
 `POST /api/detectors/cancel/{task_id}`.
 
-### Toggle Auto-Find flag
+### Toggle AutoFind flag
 
 ```
 PUT /api/detectors/registry/{detector_id}/autofind
@@ -396,8 +399,8 @@ PUT /api/detectors/registry/{detector_id}/autofind
 → `{"ok": true, "autofind": true}` (writes the detector's name into
 `autofind_detectors` so `/api/auto-detect` and the CLI
 `--autodetect` flow pick it up). In the GUI this is the Dashboard's
-Drafts ↔ AutoRun detector-tab move: `autofind: true` detectors sit on
-the frozen AutoRun tab, everything else on Drafts.
+Drafts ↔ AutoFind detector-tab move: `autofind: true` detectors sit on
+the frozen AutoFind tab, everything else on Drafts.
 
 ### Load / unload detector
 
@@ -457,7 +460,7 @@ labelset-media ingest, or a positives-browse build.
 DELETE /api/detectors/registry/{detector_id}
 ```
 
-Also cleans up the on-disk labelset file and clears the Auto-Find flag.
+Also cleans up the on-disk labelset file and clears the AutoFind flag.
 
 → `{"ok": true}`
 
@@ -502,7 +505,12 @@ Returns labelset composition and provenance for a registered detector.
 Counts and metadata only — never embeddings or model weights.
 `num_positive_resolved` / `active_dataset_name` report how many of the
 detector's positive labels currently resolve into the loaded dataset (the
-set the dashboard's Browse button projects).
+set the dashboard's Browse button projects). `test_verdicts` is every test
+verdict the detector keeps, one per tested dataset, newest first: what a test
+measured its line to ship there, as ranges, with `stale` once the
+detector has been retrained since (see
+[the kept verdict](find.md#the-kept-verdict)). The Stats dialog's *Tested on*
+section reads it.
 
 →
 ```json
@@ -523,7 +531,18 @@ set the dashboard's Browse button projects).
   "last_trained_at": 1743419700.0,
   "created_by": "default",
   "readers": [],
-  "autofind": false
+  "autofind": false,
+  "test_verdicts": [
+    {
+      "dataset_id": "4f2c…", "dataset_name": "esc50-new", "tested_at": 1790000000.0,
+      "beta": 1.0, "line_count": 64, "size": 1200, "labelled": 34,
+      "precision": {"point": 0.78, "lo": 0.70, "hi": 0.85},
+      "recall": {"point": 0.52, "lo": 0.38, "hi": 0.66},
+      "fbeta": {"point": 0.62, "lo": 0.51, "hi": 0.72},
+      "found": "about half of them found",
+      "stale": false
+    }
+  ]
 }
 ```
 

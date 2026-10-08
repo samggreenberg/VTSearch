@@ -17,6 +17,303 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
+  AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
+  with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
+  opening quorum), they now give the Goods' centroid: everything ranked by how close it is to the
+  average of the Goods, cut where the scores split, with no Bad needed. One Good is enough to test
+  a detector, and the Test view and AutoFind results say when the centroid was used and how many
+  more Goods and Bads a trained detector needs. The Threshold control does not move the centroid's
+  line. Labels still save on every vote, and Export labels is not gated: whatever imports the labels
+  gets the same rule. The Train view's own sort is unchanged.
+- **Autopilot's Hard and New picks go where the detector is least sure** (issue #3546). They now
+  sample where the detector's own model puts even odds on an image being a match, instead of a fixed
+  depth below the line that had stopped following the detector. In simulation that finds about 3 more
+  matches per 150 votes at every balance setting; 38% of Hard picks are matches (was 19-24%), and the
+  final detector is as good or better. The `hard` phase's help text now says what it does.
+- **Autopilot stays Done once it gets there** (issue #4621). Labeling on after **Done!** used to
+  drop the phase panel back to **Refine Boundary** whenever a vote knocked an indicator off green,
+  then jump it forward to Done again when the indicator recovered. Done now stays checked, and a
+  seventh step, **Keep Improving.**, takes over: its light shows the lowest of Smart, Stable and
+  Span, and its line says whether Autopilot is offering boundary items or diverse ones, or that all
+  indicators are green. What Autopilot picks is unchanged.
+
+### Added
+
+- **AutoRun is now AutoFind; its ⋯ run opens no dialog, and Find Results
+  gains Browse** (issue #4615). The Dashboard's **AutoRun** tab, the detector
+  ⋯ menu's **Move to AutoRun**, the dataset ⋯ menu's **Run AutoRun** and the
+  Add Dataset dialog's checkbox all say **AutoFind**, as the Settings tab
+  (formerly *Auto-Find*) and its exporter do. AutoFind is the unattended path,
+  the app's twin of the command line's run: a dataset's ⋯ **Run AutoFind** now
+  ends with the same notice an import's run gives (*AutoFind finished on
+  "Birds": 12 hits*, with **View results**) instead of opening the results
+  dialog. The big **Find** button still opens its results as they land, and
+  its runs are called Find on the dataset row and in their notices. The
+  dialog, now **Find Results**, gains a **Browse** button that lays the listed
+  items (Good, Bad or Both) out in Browse as a map of their own; **← Back to
+  Find Results** returns to the Dashboard with them open again. The API
+  follows the name: `POST /api/datasets/registry/<id>/autofind`,
+  `GET /api/autofind/runs/<run_id>`, the import form's `autofind` flag, the
+  `autofind` block on a run's `loading-tasks` row (whose `trigger` is now
+  also `find` for the Find button's runs) and the `autofind_on_import`
+  setting, which starts back at its default (on) for anyone who had turned
+  `autorun_on_import` off. The autorun *processors* (`/api/autorun-extractors`,
+  `/api/autorun-localizers`) are a different thing and keep their names.
+
+- **Run your own function when an import finishes** (issue #4616). A server
+  admin can name functions with `--on-dataset-imported module:function` (or
+  `VTSEARCH_ON_DATASET_IMPORTED`, comma-separated), and each is called with a
+  `DatasetImported` event whenever a user's import from the web app succeeds or
+  fails, for example to email them. The code lives outside this repository; the
+  module only has to be importable on the server. A bad spec stops the server at
+  startup (the env form warns instead), and there is no settings-file key for it.
+  See [EXTENDING.md § Dataset-Import Hooks](docs/EXTENDING.md#dataset-import-hooks).
+
+- **A finished test's verdict is kept on the detector** (issue #4526). Reaching
+  Done in Find's Test autopilot saves the verdict with the detector, one per
+  collection it was tested on: the share right and the share found as ranges,
+  the balance, the date and the picks, never a score. The detector's **Stats**
+  gain a *Tested on* section listing them, and the Dashboard's **AutoRun** tab
+  shows each detector's latest under its name (or *Untested*). A retrain marks
+  a verdict *out of date*; it stays. Opening Find again on a tested collection,
+  with the detector and its ranking unchanged, resumes the test from the kept
+  picks (back in the Review tab's piles). New route `POST /api/line-test/forget`
+  resets a kept verdict, for the screenshot harness.
+
+- **Find opens on a Test autopilot** (issue #4524). The Find view's left panel
+  now carries two tabs, the Train view's Autopilot / Manual split applied to
+  testing. **Autopilot** measures the detector's line on the collection in
+  front of you with random picks from rank bands on either side of it, five a
+  round, through the phases Score, Check the matches, Check the misses and
+  Done, each with a light; the right pane shows the result as it forms (the
+  balance's F-beta, the likely share right as a number, the share of all the
+  matches found in words, a precision-by-count chart at band resolution, the
+  picks by band) and at Done a verdict with three exits: **Move to AutoRun**,
+  **Lean the Threshold** (what each balance would ship, from the same picks)
+  and **Add Corrections and retrain**. **Review** is Find as it was: the ranked
+  list under the line, the boundary walk, the Verified Good / Verified Bad
+  piles, To Dataset, Export and Browse, with the test's picks already in the
+  piles. The Threshold is frozen while a test phase runs, and its note reads
+  this collection's result (or *untested*), never the check Train ran. Test
+  votes never train the detector; **Add Corrections** marks the result out of
+  date. New routes under `/api/line-test`.
+
+### Removed
+
+- **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
+  and Evidence coverage chips, its 2×2 of your checks and its precision chart
+  now live in the Autopilot tab's result pane; the chart draws the test's
+  ranges at every band edge instead of the *Checked by you* curve, which
+  counted only what the boundary walk happened to serve.
+
+### Changed
+
+- **A text sort's green region follows the balance** (issue #4603). At a
+  balance of beta 1 or below, a typed query's line now keeps about as many
+  images as the sort has matches, times 3/8 at the 1/4 preset and 1 at the
+  balanced one. The count is estimated from the scores alone: what stands
+  above the bulk's median + 4 robust sigmas beyond a Gaussian bulk's share.
+  The guarded line kept about the same set at every balance, about four times
+  the matches at COCO Better's prevalence. Priced on 144 classes at 0.1%,
+  0.44% and 2% prevalence, the typed query's set gains +0.13 to +0.30 F-beta
+  at beta 1/4 and +0.01 to +0.13 at beta 1. At beta 4 and above 1 the guarded
+  line stays. That set is what a user sees through Autopilot's whole opening,
+  a median ~40 clicks (#4605). Autopilot's sampling cut (`acq_threshold`) does
+  not move, so a session's picks are the same at any balance.
+
+- **A text sort's green region ends at the guarded line, and Autopilot still
+  samples at the midpoint** (issue #4136; the rule is #3826's). A typed query's
+  cosine sort is usually one broad mode with the matches as a thin shoulder, so
+  the two-Gaussian midpoint every text sort used to draw split the mode and
+  painted a median 43% of the list green, 12–54× the true matches. The line is
+  now the guarded rule: the mixture's midpoint only when its two components are
+  separated, otherwise the bulk's median + 3 robust sigmas, which paints about
+  the matches (F1 0.17 → 0.39 on 1,120 labelled sorts; better at the 1/4 and 1
+  balances and a tie at 4). On a query that matches most of a collection and
+  that the embedder does not separate ("a person" on a photo set), the line
+  admits only the top of the matches; that trade is documented, not fixed. The
+  sort response now carries `acq_threshold`, the midpoint, beside `threshold`,
+  and Autopilot's Bad phase reads it, so the opening's picks are exactly what
+  they were before this change (the guarded line as the *sampling* position
+  made the first detectors worse in an A/B). `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint`
+  restores the plain midpoint for display.
+
+- **Test takes exactly one dataset and one detector** (the Dashboard's action bar).
+  With two datasets or two detectors ticked, Test used to stay enabled and quietly open on
+  the first ticked pair; it is now greyed out with *Select exactly 1 dataset* (or
+  *detector*), as Train is. Find still takes any number. The reasons shown under the
+  Train / Test / Find buttons were also reworded to fit under them: two had been cut off
+  with an ellipsis (*Detector has no training labels*, and Train's *Frozen: move to Drafts
+  to retrain* for an AutoRun detector), and the tooltips now name the Train and Test views.
+
+- **Testing a detector checks deeper below the line** (issue #4542). When the detector
+  has a class model, the Test autopilot's *Check the misses* step now keeps drawing picks
+  from deeper bands until it has spent its 40, instead of stopping at the first band that
+  turns up nothing: the share of all the matches found was usually overstated before, and
+  is now right three times in four or better, for about 30 more picks. A detector with no
+  class model (a structural or document one) still stops at the first empty band, and its
+  result now gives the share found in words only and says it is unmeasured below the
+  bands checked.
+
+- **Find is now Test, and the AutoRun button is now Find** (issue #4525, the
+  last slice of #4520). The Dashboard's big button that scores a dataset and
+  tests a detector's line on it reads **Test**, and its view lives at
+  `/test/<dataset>/<detector>`; an old `/find/...` link lands on the
+  Dashboard. The third big button, which runs every ticked detector on every
+  ticked dataset as AutoRun does, reads **Find**. Test carries a new flask
+  icon, and Find the magnifier Test used to carry. The keyboard help's *Train /
+  Find* tab is *Train / Test*, and the Browser's way back is **← Back to
+  Test**. In the user guide, *Find: testing and reviewing* is now *Testing a
+  detector*, and the step-by-step's Step 4 tests the detector. The API keeps
+  its names (`/api/find-label`, `find_mode`, the `find` SSE channel).
+
+- **Document search without a GPU is ~9x faster per click at 50,000 pages** (issue #4514).
+  A vote on a document collection served from a CPU took about 2 minutes at 50,000 pages:
+  each click converted the whole tile matrix to float32. The conversion now happens once
+  when the collection's pages are first scored, so a Good takes ~14 s and a Bad ~3 s
+  (8 cores; ~10 s and 0.1 s at 5,000 pages). That first search is ~30 s slower at 50,000
+  pages, and the CPU server holds twice the tile matrix in memory. Rankings are unchanged.
+
+- **A document ranking no longer depends on the machine the server runs on** (issue #4481).
+  The same detector used to order near-equal pages differently on the GRID's AMD and Intel
+  nodes, because their math libraries rounded the page vectors differently. The server now
+  uses one set of OpenBLAS kernels on every x86 machine (`OPENBLAS_CORETYPE`, see
+  DEPLOYMENT.md), and orders Stage 1 on an exactly recomputed score. Which pages are returned
+  did not change; only the order among near-ties did.
+
+- **Autopilot checks the line when your labels still overlap** (issue #4496).
+  When the detector scores your Good and Bad answers close together (the
+  labels line's separation below 1.5, from 10 votes on), Autopilot opens the
+  spot check itself, once it has started learning, with a line saying why, and
+  asks again 25 votes after the last check if they still overlap. In Manual,
+  the **Check 5 picks** button turns primary with a note. Priced at equal
+  clicks, prompted sessions returned far fewer wrong images and found more
+  right ones (`docs/experiments/2026-10-05-weak-check-4496/REPORT.md`). The
+  balance payload carries `separation` and `check_due`.
+
+- **Document collections stop on a dry run** (issue #4488). On a collection
+  of document pages (`sift_vlad_doc`), Autopilot runs four phases: after the
+  initial goods and bads it offers the detector's own best matches, re-ranked
+  after every vote and with no 20-good target, until 16 in a row are not good;
+  then it is **Done!** and says **Detector Trained**. There is no Refine Boundary
+  or Explore Diversity phase there. On the Manual tab the Smart, Stable and
+  Diverse indicators give way to one readout, **Dry run n/16**. Those
+  indicators scored a page-vector model the document ranking does not use, at
+  the structural detector's threshold. `GET /api/labeling-status` gains
+  `stop_rule` and `dry_run`.
+
+- **Find returns a real set from the first clicks** (issue #4492). Early in a
+  session the Threshold's line used to keep a single image for about 15 clicks,
+  because the model of your labels was held to a fixed minimum width that an
+  early detector's scores are narrower than. The minimum now follows the
+  collection's own spread, so after a handful of votes the line keeps a set of
+  sensible size: at balanced, around 30 to 45 images where it kept 1.
+- **The Threshold's outer radios lean further** (issue #4448). The False
+  Positives radio is now F-beta at 4 (was 2) and the False Negatives radio
+  F-beta at 1/4 (was 1/2); the middle stays balanced. On the same detector the
+  three now keep about 81, 47 and 26 images where they kept 58, 47 and 38, so
+  the choice makes a visible difference. A detector saved on an old outer
+  radio shows on the new one on the same side.
+- **The Threshold's line comes from your labels alone, in Train and in Find**
+  (issue #4452). The line under a balance is no longer a count of the top of
+  the ranking: VTSearch learns from your votes' held-out scores how high a
+  match and a non-match tend to score, estimates how common matches are in the
+  collection being searched, and draws the line where the balance your radio
+  asks for is best for a collection like that. It keeps every item above the
+  line, possibly none - Find on 200 images with nothing like the target used
+  to return the top 26-128 of them, all wrong, and now returns next to nothing.
+  Nothing is stored but the labels, so an exported labelset draws the same
+  line on another collection or with another embedder. The spot check never
+  moves the line any more (it is advisory at every radio): it measures, and
+  its picks train the detector like any vote. The balance state's `count` is
+  what the line keeps of the ranking scored last, and `shape` is always
+  `advisory`.
+- **The spot check's effect on the line follows the balance** (issue #4427).
+  At the precision-leaning and balanced presets (beta 1 and below) the check
+  is advisory: the walk runs as an audit and reports its ranges, its votes
+  stay ordinary votes, and the line keeps the balance's own count instead of
+  moving to the walk's end. At the recall-leaning preset (beta 2) the walk
+  may only trim the line - it audits the bands holding it and steps shallower,
+  never deeper - and the line keeps the set it ends on. Priced on the withheld
+  images above the threshold the app holds: the old walk lost 0.06 / 0.03 of
+  F-beta at beta 0.5 / 1 by buying recall with bands that were mostly wrong;
+  advisory gains 0.09 / 0.04 over it there, and trimming is never worse and the
+  best at beta 2. The balance state and `GET /api/balance` carry `shape`
+  (`advisory` or `trim`) and `audited` (the set the walk ended on); the check
+  modal and the balance control say which set the ranges describe.
+
+- **Reverted the day after: Autopilot's picks sample at the line − 4 re-cut
+  again under the balance** (issue #4427). The half-argmax cut below was priced
+  on the rank-count reading of the line; on the objective (the withheld images
+  above the threshold the app holds) it was worse at every preset, because its
+  harvest thins the unvoted top and the kept set's edge score climbs.
+- **Autopilot's picks sample higher under the balance** (issue #4409, the
+  pricing in `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
+  The acquisition cut the Hard / New picks sample around is now the score at
+  half the depth of the mixture's F-beta argmax over the unvoted ranking
+  (`ACQUISITION_ARGMAX_FACTOR`), carried on the learned sort's
+  `acq_threshold` as before; it can sit below the line. On the bench that
+  finds about nine more positives per 150 clicks than the old cut four
+  inclusion steps above the line, with the returned set's F-beta up and AP up
+  0.02–0.03 at every preset. With no mixture estimate, and under the
+  deprecated floor, the old cut stands.
+- **The Threshold control is a balance, not a precision floor** (issue #4413,
+  the owner's ruling of 2026-10-01 after #4411 priced it). The three radios
+  under the False Positives … False Negatives spectrum now pick how to weigh
+  precision against recall - F-beta's beta 2 (lean to recall), 1 (balanced,
+  the default) or 0.5 (lean to precision) - and the line keeps the set with
+  the best estimated F-beta: before any spot check the vote-anchored
+  mixture's F-beta argmax, capped at the top 128 (beta 2) or 32 (beta 1 and
+  0.5); after one, the band where the check's F-beta estimate peaked. The
+  check walks the ranking in bands as before but ends at the peak instead of
+  at a floor, and reports the kept set's likely precision *and* recall
+  ("Checked · likely 55–80% right, about half of them found (checked 15) ·
+  48 kept"); nothing is "confirmed" or "short" any more. The Find Stats chart
+  no longer draws a floor line. Wire: `GET|POST /api/balance` (`beta`,
+  `status` unchecked | checked, `count`, `precision`, `recall`, `fbeta`,
+  `schedule`, `threshold`, `n_returned`, `line_preference`); every response
+  that carries a detector's line carries `balance` beside `floor`; a
+  `/api/precision-check` under the balance finishes `checked` and carries
+  `beta`, `fbeta` and `recall`. Settings: `beta` (0.25–4, default 1) and
+  `line_preference` (`balance`, the default, or `floor`). **Deprecated:** the
+  `min_precision` setting, `GET|POST /api/min-precision` and the floor's
+  `confirmed` / `short` states draw the line only under
+  `line_preference: "floor"`; they stay for one release and then go. Headless
+  runs (the CLI and AutoRun) export the balance's unchecked set and say so
+  ("exports its top 32 unchecked (at F1)"), with `beta` on the
+  `detector_unchecked` event and `balance` beside `floor` in their results.
+- **The GPU stack moves to CUDA 12.9, RAPIDS 26.8 and pandas 3** (issue
+  #4390). `pyproject.toml` now pins `pandas>=3` (it was `<3`, #4381), and the
+  GPU install moves with it, because cudf, which cuML depends on, only takes
+  pandas 3 from RAPIDS 26.8, and RAPIDS 26.x needs the CUDA 12.9 libraries
+  that only torch's `cu129` wheel pins. `scripts/install.sh` now picks `cu129`
+  on Turing-or-newer cards with a driver at CUDA 12.9 or later, and installs
+  `cuml-cu12>=26.8` on that tag only; on `cu118`..`cu128` the cuML step skips
+  itself with a message and the app runs UMAP / k-means on the CPU. A Volta
+  card (V100) keeps `cu124` torch and loses GPU UMAP / k-means; a venv built
+  before this change keeps working as it is, but its next `install.sh` run
+  needs a driver at CUDA 12.9 to keep cuML. The two CUDA Docker images move to
+  `nvidia/cuda:12.9.1-runtime-ubuntu24.04` with `cu129` torch, which raises
+  their host-driver floor to CUDA 12.9 (575+) or the R535..R570 branches and
+  drops Volta hosts (see [Choosing an image](docs/DEPLOYMENT.md#choosing-an-image)).
+  pandas 3 turns on copy-on-write and the string dtype by default.
+- **Python 3.11 or later is now required** (issue #4385). Python 3.10 reaches
+  end of life in October 2026, so `scripts/install.sh` now refuses it, and pip
+  will not install VTSearch on it. A 3.10 venv needs rebuilding on 3.11+
+  before its next install. The Docker images move with it: the CPU images run
+  on `python:3.12-slim`, and the two CUDA images on
+  `nvidia/cuda:12.5.1-runtime-ubuntu24.04` with Python 3.12, which starts only on
+  a host driver new enough for CUDA 12.5 (555+) or from the R535 or R550
+  branches (see [Choosing an image](docs/DEPLOYMENT.md#choosing-an-image)).
+- **The Find Stats chart no longer claims an "at least"** (issue #4360). Its
+  **Estimated (at least)** curve is gone, with its legend entry, its dot and
+  the *No estimate yet* notes: the estimate behind it could not back the bound
+  it was labelled with. The chart now draws only what you checked by hand, the
+  Threshold, the line, and the spot check's likely range for the set the line
+  keeps. `GET /api/find/stats` drops `estimated_precision` from each curve
+  point and `estimate_status`, `calibration_positives` and
+  `min_calibration_positives` from the response.
 - **The Dashboard's RAM / Disk bars appear only when they matter.** On the
   **Default** setting each bar now stays hidden until its free space is
   running low *for your datasets*: when it would hold fewer than three more
@@ -110,6 +407,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **An AutoRun button on the Dashboard runs the selected detectors on the selected datasets**
+  (issue #4529). A third big button beside **Train** and **Find**, enabled on Find's rule (a
+  dataset and a detector ticked, one media type, every detector trained), starts a background
+  AutoRun on every ticked dataset with every ticked detector, loading a dataset first if
+  needed. Drafts run as they are, without moving to the AutoRun tab. The first run to finish
+  opens the AutoRun Results dialog and later ones offer **View results**. The API route behind
+  it, `POST /api/datasets/registry/<id>/autorun`, takes an optional `detector_ids` list; without
+  it, the dataset ⋯ **Run AutoRun** still runs the AutoRun tab.
+
 - **A deployment can list its own docs in the Help modal** (issue #4310). An
   operator who adds plugins or extensions points users at the docs for them
   with a new `docs_links` key in `data/settings.json`: an ordered list of
@@ -146,8 +452,7 @@ not list every commit. Use `git log` for the full history.
   move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
   or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
   on-screen control that replaces the stepper arrives in #4246. New endpoint:
-  `GET|POST /api/min-precision`; see
-  [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
+  `GET|POST /api/min-precision` (removed with the floor, #4421).
 
 - **An unpromised line says so** (issue #4247). When a detector can't yet
   promise its precision floor - too little evidence, or no cut on the
@@ -160,8 +465,7 @@ not list every commit. Use `git log` for the full history.
   record that it was unpromised, in the log and as a `floor` entry beside
   each detector's `threshold`. Every response that carries a detector's
   line (the learned sort, `/api/find-label`, `/api/auto-detect`) now
-  carries that `floor` too; see
-  [the floor state](docs/api/labeling.md#the-floor-state).
+  carries that `floor` too (replaced by `balance`, #4413, #4421).
 
 - **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
   pages under `docs/user/howto/` each walk through one task click by click,
@@ -199,8 +503,57 @@ not list every commit. Use `git log` for the full history.
   Pipeline files take `import_labels.create: true` and
   `import_labels.media_type`.
 
+### Removed
+
+- **The precision floor** (issue #4421). The precision/recall balance
+  (#4413) is the only preference the line is drawn at, so the floor it
+  replaced goes now rather than a release later. Removed: the `min_precision`
+  and `line_preference` settings (a saved settings file that still holds them
+  loads as before and the keys are ignored), `GET|POST /api/min-precision`,
+  and the `floor` object every response that carries a detector's line sent
+  beside `balance` - the learned sort's result, `/api/find-label`,
+  `/api/find/stats`, the auto-detect, AutoRun and command-line results, and
+  every `/api/precision-check` verb. Those carry `balance` alone, and the spot
+  check runs only the balance's walk (its `check` object has no
+  `min_precision`, and its status is `running`, `checked` or `cancelled`).
+  `GET|POST /api/balance` no longer reports `line_preference`, and the
+  OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
+
 ### Fixed
 
+- **A structural detector's Threshold line says how many pass its gate**
+  (issue #4505). On a `sift_vlad` / `sift_vlad_doc` collection the line is
+  the verification gate's boundary, but the state under the Threshold control
+  read "Top 32 kept, unchecked" with a yellow dot however many items the gate
+  kept. It now reads "N pass the verification gate", with no dot, since no
+  spot check applies there; Find's stats chart says the same. The balance
+  state every response carries reports `status: "gate"` with that count.
+- **A structural detector no longer offers a spot check it cannot run**
+  (issue #4489). On a `sift_vlad` / `sift_vlad_doc` collection the line is
+  the verification gate's boundary, not a cut on a ranking, so there is
+  nothing for a check to walk: **Check 5 picks** used to show in Train and
+  fail every time ("No ranking to check"). The Threshold control now leaves
+  it out wherever a check cannot start, and the balance state every response
+  carries gains `checkable`.
+- **On a small dataset, a spot check under the precision/recall balance no
+  longer keeps every unvoted item whatever your picks said** (issue #4424).
+  When the unvoted items numbered no more than the check's starting count
+  (32, or 128 when leaning toward recall), the check ended on all of them at
+  its first verdict. It now compares that set with the smaller one it has
+  already audited and keeps whichever scores better. The smaller set wins
+  a tie. Its recall is also no longer reported as everything found when
+  the score model counts no match left among the unvoted items.
+- **The media list no longer leaves a gap beside its last column of
+  thumbnails** (issue #4347). Train fits the left panel to its thumbnail grid
+  as it opens, but it measured the grid before the minimap strip beside it
+  appeared. The strip then took its width from the grid, so the panel often
+  showed one column fewer than it had room for, with empty space where the
+  missing column should be. Dragging the divider fixed it only until your
+  next visit to Train. The minimap now holds its place, as an empty strip,
+  until there is a ranking to draw, and the list keeps room for its
+  scrollbar before it needs one. Separately, the first time you open Manual
+  in a new install (Train starts on Autopilot, which has no grid), the panel
+  is now fitted to the grid as soon as Manual shows it.
 - **The stall watchdog can no longer crash the app** (issue #4345). When the
   heartbeat missed its 1 s threshold, `faulthandler` dumped every thread's
   frames from a thread that holds no GIL, while those threads kept running.

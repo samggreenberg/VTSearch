@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vtsearch"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
 # Apache-2.0 covers this repository's source only. Embedding-model weights are
 # downloaded at runtime under their publishers' own terms (some noncommercial),
@@ -22,7 +22,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Multimedia",
@@ -48,9 +47,9 @@ dependencies = [
     # requests' own transport layer, imported directly by
     # vtscore.security.url_validation to subclass the connection/pool classes
     # its SSRF-guarded session mounts (the peer-address recheck that closes the
-    # DNS-rebinding window). The floor is also a CVE pin (CVE-2026-44431,
-    # CVE-2026-44432).
-    "urllib3>=2.7.0",
+    # DNS-rebinding window). The floor is also a CVE pin (CVE-2026-44431 and
+    # CVE-2026-44432 at 2.7.0; CVE-2026-97687..97689 at 2.8.0).
+    "urllib3>=2.8.0",
     "tqdm",
     "scikit-learn",
     # Imported directly by vtscore.embedding.loader for the startup
@@ -61,7 +60,18 @@ dependencies = [
     # Imported directly by vtscore.media.embedder for the Hub metadata
     # preflight (also a transformers dependency).
     "huggingface_hub",
-    "pandas",
+    # Held on one major everywhere (#4381). The majors differ in their inline
+    # annotations, which pyright reads (`useLibraryCodeForTypes`), so lines clean
+    # on one were red on the other (#4377). They also differ at runtime: pandas 3
+    # turns on copy-on-write and the string dtype. The major is 3 since #4390,
+    # which moved the GPU stack with it: every GPU install adds cuml-cu12>=26.8,
+    # whose cudf-cu12 is the first to take pandas 3 (it pins pandas>=3,<3.0.4),
+    # and RAPIDS 26.x needs the CUDA 12.9 libraries only the cu129 torch wheel
+    # pins (scripts/install.sh, docker/Dockerfile.gpu). A later pandas minor is
+    # held by cudf the same way, so move the two together. Change the matching
+    # pins in requirements/labbench.txt and requirements/image-embedders.txt in
+    # the same commit (tests_lib/meta/test_requirements.py checks they agree).
+    "pandas>=3",
     # Read HuggingFace-hosted parquet demo datasets (RICO-Screen2Words, RVL-CDIP)
     # whose screenshots/document-images are stored as an Image-feature column
     # inside parquet shards. Used by vtscore.datasets.downloader._hf_parquet to
@@ -171,7 +181,7 @@ include = ["vtsearch*", "vtscore*"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Default rules (E4, E7, E9, F) + flake8-bandit (S) security checks +
@@ -269,7 +279,9 @@ known_first_party = [
 "scikit-learn" = "sklearn"
 "umap-learn" = "umap"
 "opencv-python-headless" = "cv2"
-"PyMuPDF" = "fitz"
+# Both spellings: the repo imports the historical `fitz`, and slides/pdf_nav.py
+# the `pymupdf` alias PyMuPDF now prefers (`import fitz` warns on 1.28+).
+"PyMuPDF" = ["fitz", "pymupdf"]
 "Pillow" = "PIL"
 "pyyaml" = "yaml"
 "dnspython" = "dns"

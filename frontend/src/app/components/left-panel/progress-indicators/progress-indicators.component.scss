@@ -19,6 +19,15 @@
   min-width: 0;
 }
 
+// A readout, not a button: nothing opens on a click (#4488).
+.labeling-indicator.dry-run-indicator {
+  cursor: default;
+
+  &:hover {
+    background: var(--bg-panel);
+  }
+}
+
 .labeling-indicator {
   flex: 1;
   display: flex;

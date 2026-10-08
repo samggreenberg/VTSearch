@@ -1,0 +1,296 @@
+"""The calibration analyzers default to the objective on a frame that carries a beta (#4584).
+
+The app draws its line at an F-beta balance and every review reads the objective,
+F-beta of the withheld half above the threshold the app holds (#4427).  The
+shared analyzers under ``scripts/experiments/calibration/`` defaulted to
+``cost``, priced at Inclusion 0 whatever beta drew the line, so a study that
+named no metric read a preference the app no longer holds.  Pinned here:
+
+* ``objective.py``'s rule: the objective on a frame with a balance, cost on one
+  without, and the columns filled from the rates on a frame that predates them;
+* ``curves``, ``stopping`` and ``viewer`` follow it when no metric is named, and
+  still honour one that is.
+
+Meta-group: the subject is repo tooling under ``scripts/``, loaded by path with
+``common`` stubbed inert, as ``test_ab_resolution_gate.py`` loads ``analyze_ab``.
+"""
+
+from __future__ import annotations
+
+import ast
+import importlib.util
+import json
+import re
+import sys
+import types
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import pytest
+
+_CALIB = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "calibration"
+
+
+def _load(name: str):
+    """Import one calibration script by path, ``common`` stubbed and its directory importable while it loads."""
+    stub: Any = types.ModuleType("common")
+    stub.setup_env = lambda: None
+    stub.log = lambda _msg: None
+    stub.RESULTS = Path(".")
+    saved = sys.modules.get("common")
+    sys.modules["common"] = stub
+    sys.path.insert(0, str(_CALIB))
+    try:
+        spec = importlib.util.spec_from_file_location(f"_objective_test_{name}", _CALIB / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(_CALIB))
+        if saved is None:
+            sys.modules.pop("common", None)
+        else:
+            sys.modules["common"] = saved
+
+
+@pytest.fixture(scope="module")
+def objective():
+    return _load("objective")
+
+
+@pytest.fixture(scope="module")
+def curves():
+    return _load("curves")
+
+
+@pytest.fixture(scope="module")
+def stopping():
+    return _load("stopping")
+
+
+def _frame(beta: float | None, *, n_seeds: int = 3, t_max: int = 6) -> pd.DataFrame:
+    """A run's main frame as a balance-era runner wrote it: rates and a beta, no ``fbeta`` column."""
+    rng = np.random.default_rng(42)
+    rows = []
+    for seed in range(n_seeds):
+        for t in range(1, t_max + 1):
+            rows.append(
+                {
+                    "arm": "prod",
+                    "dataset": "coco_better",
+                    "embedder": "siglip",
+                    "category": "cat",
+                    "seed": seed,
+                    "t": t,
+                    "beta": np.nan if beta is None else beta,
+                    "precision": 0.3 + 0.05 * t,
+                    "recall": 0.2 + 0.05 * t,
+                    "f1": 0.0,
+                    "cost": 0.6 - 0.05 * t + 0.01 * rng.standard_normal(),
+                    "average_precision": 0.5,
+                    "phase": "done" if t >= 4 else "hard",
+                    "n_good": t,
+                    "n_bad": t,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+class TestTheRule:
+    def test_a_frame_with_a_balance_is_decided_on_the_objective(self, objective):
+        assert objective.primary_metric(_frame(1.0)) == "fbeta"
+        assert objective.primary_metric(_frame(None)) == "cost"
+        assert objective.primary_metric(_frame(1.0).drop(columns="beta")) == "cost"
+
+    def test_each_metric_points_its_own_way(self, objective):
+        assert objective.lower_is_better("cost") and objective.lower_is_better("regret")
+        assert not objective.lower_is_better("fbeta") and not objective.lower_is_better("fbeta_b025")
+        assert not objective.lower_is_better("average_precision")
+
+    def test_a_frame_that_predates_the_columns_is_filled_from_its_rates(self, objective):
+        out = objective.with_objective(_frame(0.25))
+        assert set(objective.preset_columns()) | {"fbeta"} <= set(out.columns)
+        p, r = out["precision"].to_numpy(), out["recall"].to_numpy()
+        want = 1.0625 * p * r / (0.0625 * p + r)
+        np.testing.assert_allclose(out["fbeta"], want)
+        np.testing.assert_allclose(out["fbeta_b025"], want)
+        np.testing.assert_allclose(out["fbeta_b1"], 2 * p * r / (p + r))
+
+    def test_a_column_the_runner_wrote_is_left_as_written(self, objective):
+        df = _frame(1.0).assign(fbeta=0.123, fbeta_b025=0.1, fbeta_b1=0.2, fbeta_b4=0.3)
+        assert objective.with_objective(df) is df
+
+    def test_rows_written_before_the_columns_are_filled_in_a_mixed_frame(self, objective):
+        # One cell written after the columns existed, one before: concatenated,
+        # the older rows carry the column empty.  They are filled from their
+        # rates; the newer rows keep what the runner wrote.
+        new = _frame(1.0, n_seeds=1).assign(fbeta=0.123, fbeta_b025=0.1, fbeta_b1=0.2, fbeta_b4=0.3)
+        old = _frame(1.0, n_seeds=1).assign(seed=9)
+        out = objective.with_objective(pd.concat([new, old], ignore_index=True))
+        is_old = out["seed"] == 9
+        assert (out.loc[~is_old, "fbeta"] == 0.123).all() and (out.loc[~is_old, "fbeta_b4"] == 0.3).all()
+        p, r = out.loc[is_old, "precision"].to_numpy(), out.loc[is_old, "recall"].to_numpy()
+        np.testing.assert_allclose(out.loc[is_old, "fbeta"], 2 * p * r / (p + r))
+        np.testing.assert_allclose(out.loc[is_old, "fbeta_b1"], 2 * p * r / (p + r))
+
+    def test_no_balance_is_no_objective_but_the_presets_are_still_read(self, objective):
+        out = objective.with_objective(_frame(None))
+        assert out["fbeta"].isna().all() and out["fbeta_b1"].notna().all()
+
+    def test_a_csv_row_reads_the_same_number(self, objective):
+        row = {k: str(v) for k, v in _frame(1.0).iloc[0].items()}
+        p, r = float(row["precision"]), float(row["recall"])
+        assert objective.row_objective(row) == pytest.approx(2 * p * r / (p + r))
+        assert objective.row_objective({**row, "fbeta": "0.42"}) == pytest.approx(0.42)
+        assert objective.rows_carry_beta([row]) and not objective.rows_carry_beta([{**row, "beta": "nan"}])
+
+
+def _fb(p: float, r: float, beta: float) -> float:
+    b2 = beta * beta
+    return (1 + b2) * p * r / (b2 * p + r)
+
+
+def _baseline(*, lines: bool = True) -> pd.DataFrame:
+    """A text baseline: the beta-blind cut, the app's own line at beta 1 and 4 (#4603), and the top-K reading."""
+    row = {
+        "dataset": "coco_better",
+        "embedder": "siglip",
+        "category": "cat",
+        "seed": 0,
+        "text_precision": 0.4,
+        "text_recall": 0.3,
+        "text_fpr": 0.05,
+        # The top 32 / 128 (`balance_metrics` at the retired cap): never an anchor (#4474).
+        "text_fbeta_b1": 0.99,
+        "text_fbeta_b4": 0.99,
+    }
+    if lines:
+        row |= {"text_line_precision_b1": 0.5, "text_line_recall_b1": 0.4, "text_line_fpr_b1": 0.02}
+        row |= {"text_line_precision_b4": 0.2, "text_line_recall_b4": 0.9, "text_line_fpr_b4": 0.3}
+    return pd.DataFrame([row])
+
+
+_KEYS = ["dataset", "embedder", "category", "seed"]
+_CELL = ("coco_better", "siglip", "cat", 0)
+
+
+class TestCurves:
+    def test_no_metric_named_draws_the_objective_and_anchors_it_at_the_runs_line(self, curves, objective):
+        main, metric, lower, col = curves.resolve_metric(_frame(1.0), None, None, None)
+        assert (metric, lower, col) == ("fbeta", False, None)
+        assert main["fbeta"].notna().all()
+        anchor = curves.baseline_map(_baseline(), metric, _KEYS, col, objective.frame_beta(main))
+        assert anchor[_CELL] == pytest.approx(_fb(0.5, 0.4, 1.0))
+
+    def test_a_frame_without_a_balance_still_draws_cost(self, curves):
+        _main, metric, lower, col = curves.resolve_metric(_frame(None), None, None, None)
+        assert (metric, lower, col) == ("cost", True, None)
+
+    def test_a_named_metric_is_honoured(self, curves):
+        _main, metric, lower, _col = curves.resolve_metric(_frame(1.0), "cost", None, None)
+        assert (metric, lower) == ("cost", True)
+
+    def test_every_cut_metric_reads_the_one_set_the_line_at_the_frames_beta_returns(self, curves):
+        # At beta 4 the app's text line keeps a long list (#4603); F1 and F1/4
+        # score that same set, never the top-K reading the baseline also carries.
+        at = {m: curves.baseline_map(_baseline(), m, _KEYS, beta=4.0)[_CELL] for m in curves.LINE_METRICS}
+        assert (at["precision"], at["recall"], at["fpr"]) == pytest.approx((0.2, 0.9, 0.3))
+        assert at["fnr"] == pytest.approx(0.1)
+        assert at["fbeta"] == pytest.approx(_fb(0.2, 0.9, 4.0)) == pytest.approx(at["fbeta_b4"])
+        assert at["f1"] == pytest.approx(_fb(0.2, 0.9, 1.0)) == pytest.approx(at["fbeta_b1"])
+        assert at["fbeta_b025"] == pytest.approx(_fb(0.2, 0.9, 0.25))
+
+    def test_a_beta_the_baseline_has_no_line_for_reads_the_blind_cut(self, curves):
+        # Beta 0.5 (a preset before #4471), a baseline from before #4603, and
+        # a frame with no balance all read the line the app drew then.
+        for baseline, beta in ((_baseline(), 0.5), (_baseline(lines=False), 1.0), (_baseline(), None)):
+            assert curves.baseline_map(baseline, "precision", _KEYS, beta=beta)[_CELL] == pytest.approx(0.4)
+            assert curves.baseline_map(baseline, "fbeta_b4", _KEYS, beta=beta)[_CELL] == pytest.approx(
+                _fb(0.4, 0.3, 4.0)
+            )
+        assert curves.baseline_map(_baseline(), "fbeta", _KEYS, beta=0.5)[_CELL] == pytest.approx(_fb(0.4, 0.3, 0.5))
+        assert curves.baseline_map(_baseline(), "fbeta", _KEYS, beta=None) == {}
+
+    def test_a_line_that_keeps_nothing_anchors_precision_at_zero(self, curves):
+        empty = _baseline().assign(text_line_precision_b4=np.nan, text_line_recall_b4=0.0, text_line_fpr_b4=0.0)
+        assert curves.baseline_map(empty, "precision", _KEYS, beta=4.0)[_CELL] == 0.0
+        assert curves.baseline_map(empty, "fbeta", _KEYS, beta=4.0)[_CELL] == 0.0
+
+    def test_the_ranking_metrics_keep_their_own_columns(self, curves):
+        base = _baseline().assign(text_AP=0.6)
+        assert curves.baseline_map(base, "average_precision", _KEYS, beta=4.0)[_CELL] == pytest.approx(0.6)
+
+
+class TestStopping:
+    def test_the_stopping_point_carries_the_objective_beside_cost(self, stopping):
+        stops = stopping.stopping_points(_frame(1.0), keys=("arm", "dataset", "embedder", "category", "seed"))
+        assert {"fbeta_at_stop", "cost_at_stop"} <= set(stops.columns)
+        assert stops["fbeta_at_stop"].notna().all()
+        table = stopping.stopping_table(stopping.summarise(stops))
+        assert "fbeta at stop" in table and "cost at stop" not in table
+
+    def test_a_run_without_a_balance_reports_cost(self, stopping):
+        stops = stopping.stopping_points(_frame(None), keys=("arm", "dataset", "embedder", "category", "seed"))
+        assert "fbeta_at_stop" not in stops.columns
+        assert "cost at stop" in stopping.stopping_table(stopping.summarise(stops))
+
+
+def _payload(path: Path) -> dict:
+    m = re.search(r'type="application/json">(.*?)</script>', path.read_text(encoding="utf-8"), re.S)
+    assert m, "no payload script tag"
+    return json.loads(m.group(1))
+
+
+@pytest.mark.parametrize("beta", [1.0, None], ids=("balance", "no-balance"))
+def test_the_viewer_leaves_a_run_with_f1_to_the_page_default(tmp_path, beta):
+    """The page itself opens on F1 (#4635), so the payload names no metric."""
+    viewer = _load("viewer")
+    out = viewer.build_viewer(_frame(beta), tmp_path / "viewer.html", arms=["prod"])
+    payload = _payload(out)
+    assert "metric" not in payload.get("view", {})
+    keys = [m["key"] for m in payload["metrics"]]
+    assert viewer.DEFAULT_METRIC in keys
+    assert ("fbeta" in keys) is (beta is not None)
+
+
+@pytest.mark.parametrize(("beta", "opens_on"), [(1.0, "fbeta"), (None, None)], ids=("balance", "no-balance"))
+def test_the_viewer_opens_on_the_objective_on_a_balance_run_without_f1(tmp_path, beta, opens_on):
+    viewer = _load("viewer")
+    out = viewer.build_viewer(_frame(beta), tmp_path / "viewer.html", arms=["prod"], hide_metrics=["f1"])
+    assert _payload(out).get("view", {}).get("metric") == opens_on
+
+
+def test_the_viewer_still_opens_where_the_study_says(tmp_path):
+    viewer = _load("viewer")
+    out = viewer.build_viewer(_frame(1.0), tmp_path / "viewer.html", arms=["prod"], default_metric="cost")
+    assert _payload(out)["view"]["metric"] == "cost"
+
+
+# --- Every harness row is priced at its step's beta ------------------------------
+
+
+_EVAL = Path(__file__).resolve().parents[2] / "vtscore" / "eval"
+
+
+def _operating_metrics_calls() -> list[tuple[str, int, ast.Call]]:
+    calls = []
+    for path in sorted(_EVAL.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "operating_metrics":
+                calls.append((path.name, node.lineno, node))
+    return calls
+
+
+def test_every_harness_call_site_names_the_rows_beta():
+    """``operating_metrics``' ``beta`` defaults to ``None`` for out-of-tree callers (#4584).
+
+    In the harness a call that left it out would emit a NaN objective on every
+    row of a balance run, silently, so each one must say what beta it prices.
+    """
+    calls = _operating_metrics_calls()
+    assert len(calls) >= 8, "the scan found fewer operating_metrics call sites than the harness has"
+    missing = [f"{name}:{line}" for name, line, call in calls if not any(k.arg == "beta" for k in call.keywords)]
+    assert not missing, f"operating_metrics called without beta= at {', '.join(missing)}"

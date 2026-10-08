@@ -124,33 +124,33 @@ doesn't matter at the operating point.
   *bags* (an image's row set) rather than per-row-then-max only; the
   linear+max control must be re-expressible inside the same abstraction so
   the comparison is apples-to-apples. Regression-prone (the train/score
-  parity and calibration-geometry invariants live here). (Opus 4.8)
+  parity and calibration-geometry invariants live here). (Opus)
 
 <!-- item-sep -->
 
 - **Attention-MIL engine** — gated attention pooling head + bag-aware BCE
   training, deterministic/seeded per the flaky-test rules; unit tests at
   `tests_lib/detectors/` tier mirroring the existing style parity tests.
-  (Opus 4.8)
+  (Opus)
 
 <!-- item-sep -->
 
 - **ROI-align anchor style** — anchor set, `roi_align` featurization over
   `patch_grid` (derived on the fly; nothing persisted, per the
   no-persisted-vectors rule), snap-to-anchor vote resolution, parity tests.
-  (Opus 4.8)
+  (Opus)
 
 <!-- item-sep -->
 
 - **Stability + regret metrics in the harness** — add oracle/regret and the
   wobble statistic to the per-step metrics records and the analyzer, fixed
-  before any run. (Sonnet 5)
+  before any run. (Sonnet)
 
 <!-- item-sep -->
 
 - **Run + report** — SLURM sweep on the max-patch grid setup, REPORT.md under
   `docs/experiments/set-scorer/`, decision per the pre-registered rule.
-  (Fable 5 for analysis/writing; the run itself follows
+  (Fable for analysis/writing; the run itself follows
   `scripts/experiments/` conventions.)
 
 <!-- item-sep -->

@@ -39,6 +39,7 @@ import numpy as np
 from vtscore.eval.al_strategies import available_strategies
 from vtscore.eval.visualize import plot_voting_iterations
 from vtscore.eval.voting_iterations import run_voting_iterations_eval
+from vtscore.training.thresholds import NO_BALANCE, resolve_line_knobs
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -191,6 +192,7 @@ def run_al_benchmark(
     calibrate_count: int = 2,
     atlas_min_node_size: int = _DEFAULT_ATLAS_MIN_NODE_SIZE,
     plot_dir: Optional[str | Path] = None,
+    beta: Optional[float | str] = None,
 ) -> "pd.DataFrame":
     """Run *strategies* over *dataset_clips* and return the results frame.
 
@@ -199,6 +201,11 @@ def run_al_benchmark(
     the benchmark's lower coverage-atlas floor and (when *plot_dir* is given)
     renders the charts.  The returned :class:`~pandas.DataFrame` carries the usual
     voting-iterations columns plus ``strategy`` (always ``autopilot``).
+
+    *beta* is the balance the line is drawn at: ``None`` (the default) is the
+    app's own balance, ``"off"`` the Inclusion arm, a number a pinned
+    balance.  *inclusion* draws the line only on the Inclusion arm; a
+    non-zero value under a balance is refused (#4361).
     """
     df = run_voting_iterations_eval(
         dataset_clips,
@@ -210,6 +217,7 @@ def run_al_benchmark(
         strategies=strategies,
         max_steps=max_steps,
         atlas_min_node_size=atlas_min_node_size,
+        beta=beta,
     )
     if plot_dir is not None:
         plot_voting_iterations(df, output_dir=plot_dir)
@@ -228,7 +236,7 @@ def _final_cost_summary(df: "pd.DataFrame") -> "pd.DataFrame":
         return pd.DataFrame(columns=pd.Index(["strategy", "final_cost"]))
     last = df.sort_values("t").groupby(["strategy", "seed", "dataset", "category"]).tail(1)
     records = [
-        {"strategy": strategy, "final_cost": float(group["cost"].mean())}
+        {"strategy": strategy, "final_cost": float(np.mean(group["cost"].to_numpy()))}
         for strategy, group in last.groupby("strategy")
     ]
     summary = pd.DataFrame(records, columns=pd.Index(["strategy", "final_cost"]))
@@ -267,6 +275,19 @@ def _build_source(args: argparse.Namespace) -> DatasetClips:
     raise SystemExit(f"Unknown source {args.source!r}")
 
 
+def _beta_arg(value: str) -> float | str:
+    """``--beta``: ``off`` for the Inclusion arm, or a balance in ``[0.25, 4]``."""
+    text = value.strip().lower()
+    if text == NO_BALANCE:
+        return NO_BALANCE
+    try:
+        beta = float(text)
+        resolve_line_knobs(beta)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected {NO_BALANCE!r} or a beta in [0.25, 4], got {value!r}") from None
+    return beta
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(
         prog="python -m vtscore.eval.al_benchmark",
@@ -299,7 +320,21 @@ def main(argv: Optional[list[str]] = None) -> None:
         help="Vote-order strategies to run, or 'all' (default: autopilot, the only strategy).",
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2], help="Simulation seeds (default: 0 1 2).")
-    parser.add_argument("--inclusion", type=int, default=0, help="Inclusion setting in [-10, 10] (default: 0).")
+    parser.add_argument(
+        "--inclusion",
+        type=int,
+        default=0,
+        help="The Inclusion arm's line in [-10, 10] (default: 0). Needs --beta off: "
+        "under a balance it would only re-weight cost, so a non-zero value is refused.",
+    )
+    parser.add_argument(
+        "--beta",
+        type=_beta_arg,
+        default=None,
+        metavar="B",
+        help="Balance (F-beta's beta) the line is drawn at, in [0.25, 4], or 'off' for the Inclusion arm "
+        "(default: the app's own balance).",
+    )
     parser.add_argument(
         "--sim-fraction", type=float, default=0.5, help="Fraction of items used for simulated voting (default: 0.5)."
     )
@@ -324,6 +359,10 @@ def main(argv: Optional[list[str]] = None) -> None:
     )
 
     args = parser.parse_args(argv)
+    if args.inclusion != 0 and args.beta != NO_BALANCE:
+        parser.error(
+            "--inclusion draws the line only with --beta off; under a balance it would only re-weight cost (#4361)"
+        )
     strategies = _resolve_strategies(args.strategies)
     dataset_clips = _build_source(args)
 
@@ -337,6 +376,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         calibrate_count=args.calibrate_count,
         atlas_min_node_size=args.atlas_min_node_size,
         plot_dir=args.plot_dir,
+        beta=args.beta,
     )
 
     print(f"\n{'=' * 60}")

@@ -85,7 +85,7 @@ Canonical roles:
 - **Status:** `--color-good` (success/green), `--color-bad` (error/red), `--text-warning`, `--badge-embedding`
 - **Status surfaces:** `--good-bg`, `--bad-bg`, `--warning-bg` / `--warning-border` (amber chips: license notices, type-mismatch rows)
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
-- **Chart series:** `--chart-estimate` (the app's estimate), `--chart-verified` (what the user checked by hand). A categorical pair, validated per theme for colorblind separation and 3:1 on `--bg-surface`; not status colors, so never reuse `--color-good` / `--color-bad` for a series that isn't Good/Bad.
+- **Chart series:** `--chart-verified` (what the user checked by hand). Validated per theme for 3:1 on `--bg-surface`; a new series gets its own token, validated against it for colorblind separation. Not a status color, so never reuse `--color-good` / `--color-bad` for a series that isn't Good/Bad.
 - **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text`, `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on a saturated status badge). These flip per theme - never hardcode `#fff` on a fill.
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
@@ -397,7 +397,7 @@ Subclasses extend the base via SCSS `@extend`, so they inherit every rule and ad
 
 **Vertical rail - `.side-tab-bar` / `.side-tab`** (`_components.scss`). A fixed-width (140px) column of tabs down the left edge of a modal, with a 3px left-border active indicator instead of an underline. The Settings modal's rail is its only consumer today; it's the extract-and-fold target for any other vertical rail. Active class: `.side-tab--active`.
 
-**Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). A tab strip whose active tab visually flows into the inset content region below it: the active tab's background matches `.view-tab-content` so the border between them disappears, leaving only the accent underline. Use when the tabs sit *inside* a panel and own a bordered content box (the Auto-Find and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
+**Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). A tab strip whose active tab visually flows into the inset content region below it: the active tab's background matches `.view-tab-content` so the border between them disappears, leaving only the accent underline. Use when the tabs sit *inside* a panel and own a bordered content box (the AutoFind and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
 
 Note the state-class inconsistency: `.tab` takes `.active`, while `.side-tab` and `.view-tab` take `--active` modifiers. Match the primitive you're using.
 
@@ -461,7 +461,7 @@ The dashboard's dataset/detector rows (`vt-dataset-card`, `vt-detector-card`) re
 
 ### 2.12 Pane divider
 
-`.pane-divider` is the draggable rule between resizable layout panes (Find, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
+`.pane-divider` is the draggable rule between resizable layout panes (Test, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
 
 ### 2.13 Motion and misc utilities
 
@@ -471,7 +471,7 @@ Global classes that any component can apply. All animations here are silenced by
 |-------|------------|
 | `.drawer-enter-left` / `.drawer-leave-left` / `.drawer-enter-right` / `.drawer-leave-right` | Slide-from-edge transitions for side panels, bound via Angular's `animate.enter` / `animate.leave`. |
 | `.swipe-left` / `.swipe-right` | The vote fling that throws the current media off-screen (bad / good). |
-| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Find/Train buttons, in-flight import/export submits). |
+| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Train/Test buttons, in-flight import/export submits). |
 | `.waveform-mask` | Paints `--accent` through an audio waveform's alpha mask so thumbnails tint per theme. The `mask-image` URL is set per instance via a style binding. |
 | `.sr-only` | Visually hidden, screen-reader-visible text. |
 
@@ -632,12 +632,15 @@ CSS classes) are exempt - this rule is about *visible* strings only.
 |---------|----------------|-------------|
 | The trained ranker (the product's core object) | **detector** | model |
 | Making a detector by voting good/bad | **Train** (verb) / **Learned** (the sort mode) | — |
-| Running a detector across a dataset to score items | **Find** (the action) / **Auto-Find** (the automatic/CLI variant) | — |
+| Measuring a detector's line on a dataset it never trained on | **Test** (the Dashboard button and its view) | — |
+| Running detectors across datasets to collect their matches | **Find** (the Dashboard button) / **AutoFind** (the detector tab, and the runs it starts on every import and from the CLI) / **AutoFind** (the settings tab for where those results go) | — |
 | The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
 
-`Train` and `Find` are the two flow verbs surfaced to users; keep them stable.
-Meaning-bearing distinctions are *not* drift and stay as-is: `Verified Good`
-vs. `Good` (a real Find-mode state), and `Positives`/`Negatives` inside the
+`Train`, `Test` and `Find` are the three flow verbs surfaced to users; keep
+them stable. The Test view's code is still named `find` (#4525), as the Train
+view's is `label`; that is an internal identifier and exempt. Meaning-bearing
+distinctions are *not* drift and stay as-is: `Verified Good` vs. `Good` (a
+real Test-view state), and `Positives`/`Negatives` inside the
 detector-stats table (standard ML terminology in that context).
 
 ---

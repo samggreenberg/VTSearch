@@ -366,10 +366,13 @@ def _repoint_labelset_cache(det_ctx, path) -> None:
 
 
 def _drop_line_ranking(det_ctx) -> None:
-    """Forget the ranking the line kept and any spot check over it: media ids are per dataset (#4272)."""
+    """Forget the line's ranking or gate set, and any spot check over it: media ids are per dataset (#4272, #4505)."""
     det_ctx.line_ranking = None
+    det_ctx.gate_passed = None
     det_ctx.precision_check = None
     det_ctx.precision_check_run = None
+    det_ctx.check_ended_votes = None
+    det_ctx.line_test = None
 
 
 def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:
@@ -382,8 +385,8 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
     the dataset about to be scored uses a different embedder than the one
     the cached MLP was trained on, clear the embedder-tagged scoring
     caches (``model``, ``threshold``, ``last_learned_scores``,
-    ``training_medias``, and the three threshold estimators -
-    ``calibration_cache``, ``anchored_cut_cache``, ``precision_floor_cache``)
+    ``training_medias``, and the two threshold estimators -
+    ``calibration_cache``, ``anchored_cut_cache``)
     so the next scoring / learned-sort call rebuilds against *new_embedder*.
 
     Deliberately leaves ``label_embeddings`` and ``embedder`` alone:
@@ -428,12 +431,14 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
         # a re-cut (a floor change, the acquisition cut) must not read them.
         det_ctx.calibration_cache = None
         det_ctx.anchored_cut_cache = None
-        det_ctx.precision_floor_cache = None
-        # The ranking the line kept, and any check over its ids, went with
-        # the old space's scores.
+        # The ranking the line kept (or the gate's passed set), and any check
+        # over its ids, went with the old space's scores.
         det_ctx.line_ranking = None
+        det_ctx.gate_passed = None
         det_ctx.precision_check = None
         det_ctx.precision_check_run = None
+        det_ctx.check_ended_votes = None
+        det_ctx.line_test = None
     return True
 
 
@@ -470,7 +475,7 @@ def ensure_detector_model_matches_active_embedder() -> None:
     The scoring fast-paths
     (:func:`vtscore.detectors.model_loading.resolve_or_train_detector`
     and the find dispatcher) defensively repeat the check per-detector,
-    since Auto-Find / multi-dataset Find iterate detectors that aren't the
+    since AutoFind / multi-dataset Find iterate detectors that aren't the
     active one.
     """
     from vtscore.state.core import get_active_detector_context

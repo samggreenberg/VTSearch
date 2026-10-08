@@ -45,7 +45,8 @@ from vtscore.datasets.registry import (
     register_dataset as _reg_register,
 )
 from vtsearch.auth import get_current_user
-from vtsearch.autorun_detectors import import_post_load
+from vtsearch.autofind import import_post_load
+from vtsearch.import_hooks import fire_dataset_imported
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
@@ -674,7 +675,7 @@ def importer_suggested_name(body: dict, importer_name: str):
 # :func:`validate_plugin_args` enforces the per-plugin field types at
 # request time; pass-through keys (``source_specs``, ``clipper``,
 # ``cleaners``, ``embedder``, ``embedders``, ``clipper_params``,
-# ``dataset_name``, ``autorun``) ride along on the body and are preserved via
+# ``dataset_name``, ``autofind``) ride along on the body and are preserved via
 # ``Meta.unknown = "include"``.
 # ---------------------------------------------------------------------------
 
@@ -706,13 +707,13 @@ def import_dataset(importer_name: str):
             "dataset_name",
             "build_projection",
             "merge_near_duplicates",
-            "autorun",
+            "autofind",
         ),
     )
-    # Not an importer field: the choice to run AutoRun once the dataset is
+    # Not an importer field: the choice to run AutoFind once the dataset is
     # saved.  Resolved (and remembered) only once the request has passed every
     # check below, so a refused import leaves the setting alone.
-    autorun_flag = field_values.pop("autorun", None)
+    autofind_flag = field_values.pop("autofind", None)
 
     # A Semantic-locked instance never offers a patch/structural embedder in a
     # picker, so an import that names one is stale or hand-rolled: reject it
@@ -729,5 +730,10 @@ def import_dataset(importer_name: str):
     if clipper_params is not None:
         field_values["clipper_params"] = clipper_params
 
-    task_id = _run_importer_in_background(importer, field_values, post_load=import_post_load(autorun_flag))
+    task_id = _run_importer_in_background(
+        importer,
+        field_values,
+        post_load=import_post_load(autofind_flag),
+        on_finished=fire_dataset_imported,
+    )
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})

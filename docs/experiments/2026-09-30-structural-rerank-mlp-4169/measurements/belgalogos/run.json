@@ -1,0 +1,25 @@
+{
+  "matrix": "/expscratch/sgreenberg/structural-rerank-4169/matrix-belga",
+  "tier": "s",
+  "arms": [
+    "a0_exemplar",
+    "a1_max",
+    "a5_mlp",
+    "a3_vlad_svm",
+    "a3s_production",
+    "a3s_cold",
+    "a3s_inliers"
+  ],
+  "checkpoints": [
+    0,
+    3,
+    5,
+    10,
+    20,
+    40
+  ],
+  "readouts": [
+    "shared",
+    "closed"
+  ]
+}

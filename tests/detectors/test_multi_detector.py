@@ -593,7 +593,7 @@ class TestProgressCacheKeyedByDetector:
         for mid in a_bad:
             apply_label(mid, "bad")
         with _progress_lock:
-            cache_a = _ensure_cache(medias, label_history, 0)
+            cache_a = _ensure_cache(medias, label_history)
             assert len(cache_a.steps) == 10
 
         # --- Detector B: 4 votes.  Its shorter history must not be read as
@@ -604,7 +604,7 @@ class TestProgressCacheKeyedByDetector:
         for mid in b_bad:
             apply_label(mid, "bad")
         with _progress_lock:
-            cache_b = _ensure_cache(medias, label_history, 0)
+            cache_b = _ensure_cache(medias, label_history)
             assert cache_b is not cache_a, "B must get its own cache, not A's"
             assert len(cache_b.steps) == 4
             assert cache_b.good_ids == set(b_good)
@@ -614,7 +614,7 @@ class TestProgressCacheKeyedByDetector:
         # the appended steps on a merged A+B labelset. ---
         self._activate("det_key_a")
         with _progress_lock:
-            back_to_a = _ensure_cache(medias, label_history, 0)
+            back_to_a = _ensure_cache(medias, label_history)
             assert back_to_a is cache_a, "A's cache must survive the round trip, not be rebuilt"
             assert len(back_to_a.steps) == 10
             assert back_to_a.good_ids == set(a_good), "A's cache must not carry B's good votes"
@@ -640,15 +640,15 @@ class TestProgressCacheKeyedByDetector:
         for mid in [16, 17, 18, 19, 20]:
             apply_label(mid, "bad")
         with _progress_lock:
-            _ensure_cache(medias, label_history, 0)
-        assert is_status_cache_fresh(label_history, 0)
+            _ensure_cache(medias, label_history)
+        assert is_status_cache_fresh(label_history)
 
         # B has a strictly shorter history, so a length-only gate would call
         # A's 10-step cache "fresh" for B and serve A's models as B's status.
         self._activate("det_fresh_b")
         apply_label(6, "good")
         apply_label(15, "bad")
-        assert not is_status_cache_fresh(label_history, 0)
+        assert not is_status_cache_fresh(label_history)
 
     def test_status_snapshot_not_served_across_detectors(self, client):
         """``stale_labeling_status`` must not hand B the Smart / Stable
@@ -662,7 +662,7 @@ class TestProgressCacheKeyedByDetector:
             apply_label(mid, "good")
         for mid in [16, 17, 18, 19, 20]:
             apply_label(mid, "bad")
-        status_a = compute_labeling_status(medias, label_history, good_votes, bad_votes, 0)
+        status_a = compute_labeling_status(medias, label_history, good_votes, bad_votes)
         assert status_a["smart"]["status"] != "red", "A should have a real (non-placeholder) Smart status"
 
         # B has no votes at all: its stale poll must fall back to the transient

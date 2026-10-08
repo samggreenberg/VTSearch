@@ -3,6 +3,7 @@ import { DetectorCardComponent } from './detector-card.component';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { wireVerdict } from '../../../testing/line-test';
 
 describe('DetectorCardComponent', () => {
   let component: DetectorCardComponent;
@@ -160,20 +161,20 @@ describe('DetectorCardComponent', () => {
     expect(items.some((b) => /onnx|export model/i.test(b.textContent ?? ''))).toBe(false);
   });
 
-  it('should offer "Move to AutoRun" on a draft detector and emit setAutorun(true)', async () => {
-    vi.spyOn(component.setAutorun, 'emit');
+  it('should offer "Move to AutoFind" on a draft detector and emit setAutofind(true)', async () => {
+    vi.spyOn(component.setAutofind, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
     const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
-    const move = items.find((b) => b.textContent?.includes('Move to AutoRun'));
+    const move = items.find((b) => b.textContent?.includes('Move to AutoFind'));
     expect(move).toBeTruthy();
     expect(items.some((b) => b.textContent?.includes('Move to Drafts'))).toBe(false);
     move!.click();
-    expect(component.setAutorun.emit).toHaveBeenCalledWith(true);
+    expect(component.setAutofind.emit).toHaveBeenCalledWith(true);
   });
 
-  describe('frozen (AutoRun) detector', () => {
+  describe('frozen (AutoFind) detector', () => {
     beforeEach(async () => {
       fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true });
       await settleZoneless(fixture);
@@ -199,18 +200,43 @@ describe('DetectorCardComponent', () => {
       expect(full).toContain('Export labels');
     });
 
-    it('offers "Move to Drafts" and emits setAutorun(false)', async () => {
-      vi.spyOn(component.setAutorun, 'emit');
+    it('offers "Move to Drafts" and emits setAutofind(false)', async () => {
+      vi.spyOn(component.setAutofind, 'emit');
       const el = fixture.nativeElement as HTMLElement;
       (el.querySelector('.overflow-btn') as HTMLElement).click();
       await settleZoneless(fixture);
       const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
       const move = items.find((b) => b.textContent?.includes('Move to Drafts'));
       expect(move).toBeTruthy();
-      expect(items.some((b) => b.textContent?.includes('Move to AutoRun'))).toBe(false);
+      expect(items.some((b) => b.textContent?.includes('Move to AutoFind'))).toBe(false);
       move!.click();
-      expect(component.setAutorun.emit).toHaveBeenCalledWith(false);
+      expect(component.setAutofind.emit).toHaveBeenCalledWith(false);
     });
+
+    it('reads Untested under the name when it keeps no verdict', () => {
+      const line = (fixture.nativeElement as HTMLElement).querySelector('.verdict-line') as HTMLElement;
+      expect(line.textContent?.trim()).toBe('Untested');
+      expect(line.classList).toContain('verdict-line--untested');
+    });
+
+    it('shows the latest verdict under the name, and marks a stale one (#4526)', async () => {
+      fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true, test_verdict: wireVerdict() });
+      await settleZoneless(fixture);
+      let line = (fixture.nativeElement as HTMLElement).querySelector('.verdict-line') as HTMLElement;
+      expect(line.textContent?.trim()).toBe('Tested on drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+      expect(line.title).toContain('34 random picks');
+
+      fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true, test_verdict: wireVerdict({ stale: true }) });
+      await settleZoneless(fixture);
+      line = (fixture.nativeElement as HTMLElement).querySelector('.verdict-line') as HTMLElement;
+      expect(line.textContent?.trim()).toMatch(/^⚠ Out of date · Tested on drawings-new/);
+      expect(line.classList).toContain('verdict-line--stale');
+      expect(line.title).toContain('retrained since');
+    });
+  });
+
+  it('shows no verdict line on a draft', () => {
+    expect((fixture.nativeElement as HTMLElement).querySelector('.verdict-line')).toBeNull();
   });
 
   it('should format dates', () => {

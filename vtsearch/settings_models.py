@@ -30,7 +30,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from vtscore.config import (
     DATA_DIR,
     DEFAULT_CALIBRATE_COUNT,
-    DEFAULT_MIN_PRECISION,
+    DEFAULT_BETA,
     PROJECTION_MIN_DIST,
     PROJECTION_N_NEIGHBORS,
 )
@@ -394,15 +394,11 @@ class UserSettings(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
-    # The precision floor (#4245): the fraction of what a detector's cut
-    # returns that should be right.  Each detector keeps its own, seeded from
-    # this value the first time it reads one.  One that can promise nothing
-    # falls back to the Inclusion 0 cut.  Every detector has a floor (#4269):
-    # ``None`` is not a value, so a ``null`` left in an older settings file
-    # fails validation and reads as the default.  Clamped to ``[0.01, 1]``: a
-    # floor of zero promises nothing and would read as a floor that is always
-    # met.
-    min_precision: Annotated[float, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
+    # The balance (#4413): F-beta's beta, the preference every detector's line
+    # is drawn at.  Each detector keeps its own, seeded from this value the
+    # first time it reads one.  Clamped to ``[0.25, 4]`` (the presets are 1/4
+    # precision-leaning, 1 balanced, 4 recall-leaning, #4448).
+    beta: Annotated[float, _clamp(0.25, 4.0)] = DEFAULT_BETA
     # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
     # (dark or light) at render time on the frontend. Users can pick a
     # concrete theme to opt out and return to "system" to opt back in.
@@ -448,7 +444,7 @@ class UserSettings(BaseModel):
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10
     autopilot_goal_diversity: Annotated[int, _clamp_min(1)] = 40
 
-    # Auto-Find: each user's own list of detectors that auto-run against a newly
+    # AutoFind: each user's own list of detectors that auto-run against a newly
     # imported dataset, plus what to do with the results. Per-user (everyone
     # curates their own favorites from the shared detector pool). For the
     # built-in "default" user, reads fall back to the server settings file when
@@ -456,9 +452,9 @@ class UserSettings(BaseModel):
     # deployments keep working (see ``_DEFAULT_USER_FALLBACK_KEYS`` and the
     # read-through in ``vtsearch.settings._read_value``).
     #
-    # - ``autofind_detectors``: detector names flagged for Auto-Find (each maps
+    # - ``autofind_detectors``: detector names flagged for AutoFind (each maps
     #   to a JSON file under ``data/detectors/``).
-    # - ``autofind_exporter``: results-exporter name run after an Auto-Find
+    # - ``autofind_exporter``: results-exporter name run after an AutoFind
     #   (``""`` = no auto-export; CLI then falls back to the ``gui`` exporter).
     # - ``autofind_exporter_field_values``: per-exporter field values
     #   (``{exporter_name: {field_key: value}}``) so switching the picker
@@ -466,13 +462,13 @@ class UserSettings(BaseModel):
     autofind_detectors: list[str] = Field(default_factory=list)
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
-    # Whether a web import runs the user's AutoRun detectors on the new dataset
+    # Whether a web import runs the user's AutoFind detectors on the new dataset
     # once it is saved. Not a Settings-modal widget: the Add Dataset dialog's
-    # "Run AutoRun" checkbox starts from it and each import that sends the
+    # "Run AutoFind" checkbox starts from it and each import that sends the
     # checkbox writes the choice back, so the box comes up the way the user
-    # left it last time. Defaults on - moving a detector to AutoRun is the
+    # left it last time. Defaults on - moving a detector to AutoFind is the
     # user saying they want it run on what they import.
-    autorun_on_import: bool = True
+    autofind_on_import: bool = True
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

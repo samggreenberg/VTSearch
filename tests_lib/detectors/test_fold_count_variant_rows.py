@@ -72,6 +72,9 @@ def _run_uncached(
     return simulate_voting_iterations(
         medias,
         target_category="cat0",
+        # The trained head's cut is the subject: under the label quota (#4643)
+        # the early rows are the Goods' centroid's, which carries none of it.
+        label_quota=False,
         seed=seed,
         dataset_name="planted",
         inclusion=0,
@@ -83,8 +86,8 @@ def _run_uncached(
         emit_calibration_metrics=True,
         fold_count_variants=fold_counts,
         # The Inclusion arm: the shipped threshold the arms reproduce is the
-        # estimator's cut at `inclusion`, which a floor's set would replace (#4272).
-        min_precision="off",
+        # estimator's cut at `inclusion`, which a balance's set would replace (#4272).
+        beta="off",
     )
 
 

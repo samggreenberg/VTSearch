@@ -15,6 +15,8 @@
 # -> _out/<deck>[.unnumbered]-pngs*.zip, for dropping the slides into somebody
 # else's template as pictures. PNG_SCALE sets the resolution (default 2, i.e.
 # 2560x1440); PNG_MAX_MB caps one zip. See pack_pngs.py.
+# Every PDF it writes then gets its bookmarks and page labels from pdf_nav.py,
+# which needs PyMuPDF (the project's `agpl` extra, or `pip install pymupdf`).
 #
 # This is the single Marp wrapper: slides/Makefile delegates every target here
 # rather than invoking Marp itself, so the --no-stdin and PIPESTATUS fixes below
@@ -77,6 +79,12 @@ mkdir -p _out
 # the room cannot resolve.
 PNG_SCALE=${PNG_SCALE:-2}
 PNG_MAX_MB=${PNG_MAX_MB:-25}
+# Seconds Marp may spend on one browser operation. Its own default, 30, is about
+# what printing hold-the-line's ~280 full-bleed pages to one PDF takes, so the
+# audience render failed on a cold container with "Timed out after waiting
+# 30000ms" as soon as the deck grew a page (#4598). The ceiling only matters
+# when something is slow; a render that is not finishes as fast as before.
+MARP_BROWSER_TIMEOUT=${MARP_BROWSER_TIMEOUT:-180}
 
 # Marp warns but exits 0 when a figure path doesn't resolve, producing a deck
 # with holes where the figures should be. Treat that warning as fatal.
@@ -86,7 +94,8 @@ run_marp() {
     # --no-stdin: without it Marp waits for EOF on stdin before converting, so
     # a render started from anything that does not close stdin (a script, a CI
     # step, an agent shell) hangs forever with no output rather than failing.
-    "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files --no-stdin 2>&1 | tee "$log"
+    "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files --no-stdin \
+        --browser-timeout "$MARP_BROWSER_TIMEOUT" 2>&1 | tee "$log"
     # `set -e` does not see a failure on the left of a pipe, and this script has
     # no `pipefail`, so without this the whole render reports success after Marp
     # has died — which is how a run that could not find a browser at all still
@@ -103,6 +112,16 @@ run_marp() {
         return 1
     fi
     rm -f "$log"
+}
+
+# Bookmarks and page labels: Chromium writes neither, so build.py leaves them in
+# _build/<stem>.nav.json and pdf_nav.py writes them into the PDF. A failure here
+# removes the PDF like any other: the published deck would otherwise quietly
+# lose its navigation the day PyMuPDF went missing from the runner.
+apply_nav() {
+    local pdf=$1
+    shift
+    ./pdf_nav.py "$pdf" "$@" || { rm -f "$pdf"; echo "ERROR: could not write navigation; deck removed." >&2; return 1; }
 }
 
 # Which assembled deck this render is of. build.py writes the unnumbered cut to
@@ -131,14 +150,30 @@ if [[ -n $watch ]]; then
 fi
 
 if [[ -n $speaker ]]; then
+    # The miniatures come from the unnumbered cut: a page number shrunk into a
+    # thumbnail is too small to read, so the speaker page prints the number
+    # itself, large, in its own corner (build.py `speaker_label`).
+    ./build.py --no-pageno "$deck"
     mkdir -p _build/imgs
     rm -f "_build/imgs/$deck".*.png
-    run_marp "_build/$deck.md" --images png -o "_build/imgs/$deck.png" \
+    run_marp "_build/$deck.unnumbered.md" --images png -o "_build/imgs/$deck.png" \
         || { echo "ERROR: slide-image pass failed." >&2; exit 1; }
     ./build.py --speaker "$deck"
     out="_out/$deck.speaker.$fmt"
     run_marp "_build/$deck.speaker.md" -o "$out" \
         || { rm -f "$out"; echo "ERROR: speaker deck removed." >&2; exit 1; }
+    if [[ $fmt == pdf ]]; then
+        # The outline on a speaker page is a picture, so its links are measured
+        # on a PDF of the outline slides alone and laid over the miniature
+        # (build.py `probe_bodies`). A few text-only pages, so a few seconds.
+        probe=()
+        if [[ -f "_build/$deck.probe.md" ]]; then
+            run_marp "_build/$deck.probe.md" -o "_build/$deck.probe.pdf" \
+                || { rm -f "$out"; echo "ERROR: outline probe failed; speaker deck removed." >&2; exit 1; }
+            probe=(--probe "_build/$deck.probe.pdf")
+        fi
+        apply_nav "$out" "_build/$deck.speaker.nav.json" ${probe[@]+"${probe[@]}"} || exit 1
+    fi
 elif [[ $fmt == png ]]; then
     # One PNG per page into a directory of its own, then packed. Marp numbers
     # the files itself (`<stem>.001.png`), which is the order they have to be
@@ -154,5 +189,8 @@ else
     out="_out/$stem.$fmt"
     run_marp "_build/$stem.md" ${marp_args[@]+"${marp_args[@]}"} -o "$out" \
         || { rm -f "$out"; echo "ERROR: deck removed." >&2; exit 1; }
+    if [[ $fmt == pdf ]]; then
+        apply_nav "$out" "_build/$stem.nav.json" || exit 1
+    fi
 fi
 echo "-> $out"

@@ -52,6 +52,11 @@ Helvetica headline looks like it was pasted in from a different document.
 An underscore is fine inside a backticked identifier — `rule_inefficiency` is
 the literal name of a column, not a subscript, and code type says so.
 
+**Except the F-scores: F1, Fβ, F4, F¼, never subscripted** (owner, 2026-10-07:
+"we don't write F_1; we write F1"). The same goes for slide text, figure labels and
+notes. ¼ keeps its fraction glyph. The notes may still spell it "F-beta" where a
+speaker says it aloud.
+
 <!-- item-sep -->
 
 ## Colour means something; emphasis does not use colour
@@ -372,6 +377,21 @@ fudged:
 
 <!-- item-sep -->
 
+## A line is labelled at its end, never on a leader
+
+On a chart of lines, a thin line from a label to the curve it names reads as one
+more curve (owner, 2026-10-05, #4519): a leader is the one mark the room cannot
+tell from data. So a line's label sits level with the line's end, just past it,
+and position alone binds them. `slide_figure.spread_labels` keeps every label on
+its own end where there is room, and fans a crowd of ends out around the crowd's
+own centre, in their order, so no label wanders further from its line than the
+type needs. A build stage that adds a line adds its label with it, so the room
+meets each pair together. A point that is not a line's end, such as a notch or a
+start, is named on the axis (a tick label) or beside the point, never on a
+leader.
+
+<!-- item-sep -->
+
 ## Every deck opens with an outline, and comes back to it
 
 After the title slide, before the first argument: one slide naming the sections
@@ -384,6 +404,12 @@ anyway: the room reads this slide at a glance or not at all, and a line they
 have to study is a line that has stopped being an outline. Make each name match
 the section it points at closely enough that the audience can place a slide
 without being told.
+
+**The theme numbers the sections in Roman numerals** — I, II, III — whatever
+the markdown list says. The pages are numbered in Arabic, so a section is a
+different kind of address from a slide, and "section III" can never be heard
+as "slide 3". The PDF's bookmarks follow suit (`III. Inclination`, then
+`17. The Cutting Room` for a slide in it).
 
 **Then show it again before every section**, with that section's line marked.
 Use the same fragment, and let the manifest do the marking:
@@ -399,35 +425,46 @@ is anchored in the argument, and a topic change gets an unmistakable signal to
 wake up for.
 
 **The opening list is unmarked, and the marked first section follows it.** The
-room reads `1 … 8` all one weight — every section still ahead of them — and
-only then does section 1 go bold and the rest go quiet. Those two pages are not
+room reads `I … X` all one weight — every section still ahead of them — and
+only then does section I go bold and the rest go quiet. Those two pages are not
 a stutter: the first is the shape of the talk and the second is the entry into
 it, and running them together (opening straight on `+at1`) means the whole list
 is never once shown as a list. So a deck's outline appears *N* + 2 times for
 *N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on, and
 then once more to close the deck (below).
 
-**All of those pages are one slide**, numbered `1a … 1j` in `hold-the-line` —
+**All of those pages are one slide**, numbered `1a … 1l` in `hold-the-line` —
 see *Numbering* in [`README.md`](README.md). The room is being shown the same
 thing again with a different line marked, and the deck should say so rather than
-spending ten numbers on it.
+spending twelve numbers on it.
 
-**The outline's last showing is the last slide, and it says `The End`.** A deck
+**The outline's last showing is the last slide, and it says `Conclusion`.** A deck
 does not need a separate "Questions" page: the room is already looking at the
 list of everything it just heard, with a final line marked, which is a better
-thing to take questions against than the word *Questions*. But `The End` is not
+thing to take questions against than the word *Questions*. But `Conclusion` is not
 a section anybody is walked through, so it is not on the list the room sees on
 the way: write it as the fragment's last line wrapped in
 `<span class="closing">`, and the theme hides it on every showing but the one
 the manifest marks `+end`. It is hidden rather than removed, so the list does
 not re-centre when it appears.
 
+**It scales with the talk.** A talk cut from the master deck keeps the sections
+it needs, so its outline may be three lines or fifteen, and the theme sizes the
+list to its length rather than to any one deck: every line gets an equal share
+of the slot, so a short outline sits large and well spaced (36px, 80px apart)
+and a long one tightens toward the type floor (22px at sixteen lines). Sixteen
+lines, the closing one included, is the ceiling: past it `build.py --check`
+fails the fragment, because the first and last sections are the ones that would
+run off the slide. A line never wraps, which is one more reason a section's
+line is a bare name. Cutting a talk means deleting lines from its own outline
+fragment and renumbering its `+atN` marks; nothing in the theme changes.
+
 **It is laid out like the deck's other slides**, not as its own kind of page:
 the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that
 slide's figure — it is the one thing the room is asked to look at — so it gets
 the slot the deck gives figures, and the title does not move on the one slide
-that comes back ten times.
+that comes back twelve times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
@@ -484,3 +521,34 @@ saying what a picture already says.
 **Notes are budgeted, not paginated.** A wordy slide is an edit, not a
 continuation: `build.py --check` fails notes that overflow their one speaker
 page (see *One slide, one speaker page* in [`README.md`](README.md)).
+
+<!-- item-sep -->
+
+## A results slide carries its date
+
+The deck does not age evenly. A slide about a mechanism (what the mixture is,
+how the line is drawn) stays true until the app changes, and that is rare. A
+chart of measured numbers from a run of the app's own path is true of the app
+**on the day it ran**, and the app moves every week. Leave that date in the
+presenter notes and the room cannot tell a fresh number from a stale one, and
+nor can the presenter, scanning the deck for charts that are due a re-run.
+
+So a slide that charts an experiment says when it ran, on its face:
+
+```markdown
+## Photo<br>Finish
+
+<div class="asof">Measured 2026-10-04</div>
+```
+
+The theme sets it in the top-right corner, in the page number's type, because
+it is the same kind of thing (an address, not an argument) and because that is
+the corner every chart leaves empty: the bottom-left one holds an axis label on
+some of them. Use the
+date in the report's directory name, and give both dates when the chart joins
+runs from two days (`Measured 2026-10-03 and 10-04`). Re-running the
+experiment means changing the date along with the figure and the notes.
+
+A schematic drawn to make a point, or one computed live from the shipped
+constants (`logo-balance`), carries no date: it changes when the code does,
+and the code has no date on it either.

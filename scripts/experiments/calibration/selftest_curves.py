@@ -10,9 +10,15 @@ subset and said nothing".  Every check here is one of those:
 * the mean where coverage is low must fall under the dashed rule, not be drawn
   as though it described the grid;
 * the mean must be computed over the cells that trained (a missing cell is NaN,
-  never a zero, and never a forward-filled level);
+  never a zero, and never a forward-filled level), while a cell inside a spot
+  check round keeps its last scored level rather than dropping out (#4624);
 * ``t=0`` must be the **zero-click text sort**, not the first trainable click,
   so the far left of the figure is what typing got for free;
+* a click in **Autopilot's opening** (``app_trained == 0``) must be the
+  harness's detector, what an export of the labels gives there, so a frame
+  carrying the flag draws the curve one without it does (#4640); and under the
+  label quota that detector is the Goods' centroid (``detector_tier``, #4643),
+  a row drawn like any other, so a frame naming the tier draws the same curve;
 * an arm that never beats that anchor must report **no crossover**, not the last
   click it happened to be measured at;
 * the coverage strip must be drawn only when coverage says something the
@@ -55,6 +61,9 @@ TEXT_COST = 0.30
 #: the zero-click anchor exists for: it improves with clicks and still never
 #: beats simply typing the query, which is invisible without the anchor.
 PLANT = {"clean": (0.14, 0.0), "starver": (0.10, 2 / 3), "worse": (0.40, 0.0)}
+#: A spot check round (#4624): this run has no row at clicks 21..24.
+GAP_RUN = ("clean", "dsA", "cat0", 0)
+GAP_LO, GAP_HI = 21, 24
 
 
 def _cost(level: float, t: int) -> float:
@@ -71,6 +80,8 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                     if seed < round(starve * N_SEED):
                         continue  # never trained: no main row at all
                     for t in range(FIRST_T, N_STEP + 1):
+                        if (arm, ds, f"cat{cat}", seed) == GAP_RUN and GAP_LO <= t <= GAP_HI:
+                            continue  # inside a spot check round: no row (#4624)
                         rows.append(
                             {
                                 "arm": arm,
@@ -143,6 +154,110 @@ def main() -> int:  # noqa: C901
             bool(np.allclose(curve["baseline"].dropna(), TEXT_COST)),
         )
 
+        # --- the denominator with no cell list -------------------------------
+        # The standalone CLI has the baseline but no cell list; the baseline
+        # scores every cell, so it is what counts the starver's lost two thirds.
+        cols = ["arm", "dataset", "category", "seed"]
+
+        def _set(df: pd.DataFrame) -> set[tuple]:
+            return {tuple(r) for r in df.loc[:, cols].itertuples(index=False, name=None)}
+
+        ok &= _check(
+            "with no cell list, the baseline supplies the cells that never trained",
+            _set(C.attempted_cells(main_df, base)) == _set(cells),
+            f"{len(_set(C.attempted_cells(main_df, base)))} vs {len(_set(cells))}",
+        )
+        ok &= _check(
+            "...and without one it is the cells that trained, as before",
+            _set(C.attempted_cells(main_df, None)) == _set(main_df),
+        )
+
+        # --- a click with no trained detector -------------------------------
+        # The app returns nothing there, so the click is the empty set: a loss
+        # in the mean, not a gap that leaves the failing runs out of it.  Cost
+        # is the miss weight alone, solved for from the arm's own rows.
+        wf, wn = 0.5, 2.0
+        tiny_rows = []
+        for seed, first in ((0, 3), (1, 1)):
+            for t in range(first, 6):
+                fpr, fnr = 0.01 * t, 0.5 / t
+                tiny_rows.append(
+                    {"arm": "a", "dataset": "d", "category": "c", "seed": seed, "t": t, "fpr": fpr, "fnr": fnr,
+                     "cost": wf * fpr + wn * fnr, "f1": 0.5, "n_test_pos": 10.0, "n_test_neg": 90.0,
+                     "auroc": np.nan}
+                )  # fmt: skip
+        tiny = pd.DataFrame(tiny_rows)
+        tiny_cells = pd.DataFrame([{"arm": "a", "dataset": "d", "category": "c", "seed": s} for s in (0, 1, 2)])
+        tiny_base = pd.DataFrame([{"dataset": "d", "category": "c", "seed": s, "prevalence": 0.1} for s in (0, 1, 2)])
+        ok &= _check("the miss weight is read off the rows", abs(C._miss_weights(tiny)["a"] - wn) < 1e-9)
+        scored = C.score_empty_sets(tiny, tiny_cells, tiny_base)
+        added = scored[scored[C.NO_DETECTOR] == 1]
+        never = added[added["seed"] == 2]
+        ok &= _check(
+            "a run is scored from click 1 to its first row, a run that never trained at every click",
+            sorted(added.loc[added["seed"] == 0, "t"]) == [1, 2]
+            and sorted(never["t"]) == [1, 2, 3, 4, 5]
+            and not (added["seed"] == 1).any(),
+            str(sorted(zip(added["seed"], added["t"], strict=True))),
+        )
+        ok &= _check(
+            "...as the empty set: FPR 0, FNR 1, F1 0, cost the miss weight",
+            bool((added["fpr"] == 0).all() and (added["fnr"] == 1).all() and (added["f1"] == 0).all())
+            and bool(np.allclose(added["cost"], wn)),
+        )
+        ok &= _check(
+            "...a metric the study never measured is left unmeasured",
+            "precision" not in added.columns and bool(added["auroc"].isna().all()),
+        )
+        ok &= _check(
+            "...and every row the runs wrote is marked as theirs",
+            int((scored[C.NO_DETECTOR] == 0).sum()) == len(tiny) and len(scored) == len(tiny) + len(added),
+        )
+
+        # A trained detector that flags nothing: the harness leaves precision
+        # undefined, and the returned set is just as empty, so it counts as 0.
+        # Only that signature (recall 0, FPR 0) qualifies: a precision
+        # undefined because the split had no positives stays undefined.
+        nil = pd.DataFrame(
+            {
+                "precision": [np.nan, np.nan, np.nan, 0.4],
+                "recall": [0.0, np.nan, 0.0, 0.5],
+                "fpr": [0.0, 0.0, 0.2, 0.1],
+            }
+        )
+        zeroed = C.zero_empty_precision(nil)["precision"].tolist()
+        ok &= _check(
+            "an empty returned set's precision counts as 0, and nothing else's moves",
+            zeroed[0] == 0.0 and np.isnan(zeroed[1]) and np.isnan(zeroed[2]) and zeroed[3] == 0.4,
+            str(zeroed),
+        )
+        ok &= _check(
+            "...and score_empty_sets applies it to the rows a run wrote",
+            C.score_empty_sets(nil.assign(arm="a", t=1, seed=0), None)["precision"].tolist()[0] == 0.0,
+        )
+
+        # --- Autopilot's opening (#4640) ------------------------------------
+        # The session shows the text sort until the Hard phase (`app_trained`),
+        # but the user can export the labels or run Test at any click, so a
+        # row is what they can take away there (owner, 2026-10-07): the flag
+        # is not read, and the curve is the one a frame without it draws.
+        flagged = main_df.assign(app_trained=(main_df["t"] >= FIRST_T + 10).astype(int))
+        C.quality_vs_clicks(flagged, tmp / "flagged", arms=arms, denominator=cells, baseline=base)
+        ok &= _check(
+            "a frame that flags the opening (app_trained 0) draws the same curve as one without the flag",
+            pd.read_csv(tmp / "flagged" / "cost_vs_clicks.csv").equals(curve),
+        )
+        # Under the label quota (#4643) a run's early rows are the Goods'
+        # centroid's: what Test gives there, drawn as the row it is.
+        tiered = main_df.assign(
+            detector_tier=np.where(main_df["t"] < FIRST_T + 5, "centroid", "trained"),
+        )
+        C.quality_vs_clicks(tiered, tmp / "tiered", arms=arms, denominator=cells, baseline=base)
+        ok &= _check(
+            "a frame that names the Goods' centroid's rows (detector_tier) draws the same curve as one without",
+            pd.read_csv(tmp / "tiered" / "cost_vs_clicks.csv").equals(curve),
+        )
+
         # --- crossover: how many clicks before beating the typed query ------
         x = C.crossover(curve).set_index(["arm", "dataset"])
         ok &= _check(
@@ -190,6 +305,21 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "the healthy arm's warm curve does not",
             bool((clean.loc[clean["t"] >= FIRST_T, "coverage"] >= C.SOLID_COVERAGE).all()),
+        )
+        # A run inside a spot check round is another matter (#4624): it has a
+        # detector, its last scored one, so it is carried rather than dropped.
+        at = clean[(clean["dataset"] == GAP_RUN[1]) & (clean["t"] == GAP_LO + 1)].iloc[0]
+        ok &= _check(
+            "a run inside a spot check round is still covered between rounds",
+            np.isclose(float(at["coverage"]), 1.0),
+            f"coverage {at['coverage']:.3f}",
+        )
+        n_clean = N_CAT * N_SEED
+        want = ((n_clean - 1) * _cost(PLANT["clean"][0], GAP_LO + 1) + _cost(PLANT["clean"][0], GAP_LO - 1)) / n_clean
+        ok &= _check(
+            "...at its last scored level, not dropped from the mean",
+            np.isclose(float(at["mean"]), want),
+            f"{at['mean']} vs {want}",
         )
         # The gap between the anchor and the first trainable click is dashed for
         # the same reason: nothing was measured in there.
