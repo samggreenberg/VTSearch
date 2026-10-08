@@ -122,6 +122,12 @@ export class LeftPanelComponent implements OnInit {
   readonly balanceLocked = input(false);
   /** Find: the balance control's state line, this corpus's test result or untested (#4524). */
   readonly balanceLineState = input<TestLineState | null>(null);
+  /**
+   * Find: what to say about the detector the pass was given, on both tabs
+   * (#4643): under the label quota it is the Goods' centroid, not a trained
+   * detector. Empty for a trained one.
+   */
+  readonly findDetectorNote = input('');
   /** Disable all interaction (used during Find scoring). */
   readonly disabled = input(false);
   /** Display name of the current dataset. */

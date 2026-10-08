@@ -12,7 +12,7 @@
     "harness": "e9bc83e67824b3998c984178f84e2a4d0ee679dbf99483b9a0d20cf6ef44254b"
   },
   "autopilot.phase_machine": {
-    "app": "946fde8789eb55d969da5c329c8a32a0dc5ed5be6cb02805a9852abefa38981c",
+    "app": "0ba2f4d624443dbd0fbab3aaf8ea5f7ee61201803726ec2469106688ea5eb96a",
     "harness": "8a2ee776a1d1727538534a12b3d66e6f1534e0679d0ffd6fa62e74c942849a40"
   },
   "autopilot.phase_sort_select": {
@@ -20,11 +20,11 @@
     "harness": "9a6c8d9456b40ccbe3de906dda642af7e6fd6869db958601b7635d9978bd0be6"
   },
   "autopilot.startup_default": {
-    "app": "061f132f6c46ae5877353081ac1ccaf55e79a2ff92599319bb5be79590990116",
+    "app": "4c4d5479cbcbbb29317f8696a23f277aa5f15950486cf28c37834a5c978183d3",
     "harness": "1e2f0e59ddd85cb3504335ac5259eb202a623ea1d5f939a61ebd2a1ff5d58dc8"
   },
   "autopilot.vote_targets": {
-    "app": "061f132f6c46ae5877353081ac1ccaf55e79a2ff92599319bb5be79590990116",
+    "app": "4c4d5479cbcbbb29317f8696a23f277aa5f15950486cf28c37834a5c978183d3",
     "harness": "c73eed9f2e65df07b0851b2550aaea6a33079b6002674b772387647cbfc177da"
   },
   "check.bands": {
@@ -42,6 +42,13 @@
   "check.walk": {
     "app": "fd583ae911acc83d83c31dc74d821c189e778401b2baed42a2f2148d2425df96",
     "harness": "841d7ec31d00d8827250dae11129fd7ff71bd42c83883414a595a7f73c2dc5b1"
+  },
+  "detectors.label_quota_centroid": {
+    "app": "b03bf4cca2c22ba76b72940268718ba54141021c861d1e5678e07ea0ffca49e3",
+    "harness": "39c747b2268d92b035fb457840c4c405b28f0686d423c435000a762d6d1fb0ea"
+  },
+  "detectors.label_quota_default": {
+    "app": "4962bc3c927f1aaf6b51792ed211cbc0cd43b389fa710d4e62acbb78730bf6b1"
   },
   "line_test.budgets_default": {
     "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",

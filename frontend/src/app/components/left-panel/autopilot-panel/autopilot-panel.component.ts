@@ -22,6 +22,14 @@ import { AutopilotCompleteModalComponent } from '../../modals/autopilot-complete
 export type { AutopilotPhase, AutopilotState };
 
 /**
+ * A row of the panel: one per phase, plus ``improve``, the open-ended step
+ * that follows Done once a run has reached it (#4621). ``improve`` is not a
+ * phase: underneath it the phase keeps moving between ``hard``, ``new`` and
+ * ``done`` as the indicators do, and that still decides what autopilot picks.
+ */
+export type AutopilotStep = AutopilotPhase | 'improve';
+
+/**
  * A step's one light (#4319). It climbs red -> yellow -> green as the step
  * nears its end, and the step hands over to the next one at green. Red and
  * yellow render as a circle, green as the check a finished step keeps.
@@ -61,7 +69,7 @@ function countTitle(target: number, kind: 'good' | 'bad'): string {
 }
 
 export interface StepDisplay {
-  phase: AutopilotPhase;
+  phase: AutopilotStep;
   label: string;
   shortLabel: string;
   stepNumber: number;
@@ -258,13 +266,30 @@ export class AutopilotPanelComponent implements OnInit {
     return Math.min(this.state.moreToStart, this.goodVotes().size + this.remainingUnlabeled);
   }
 
+  /**
+   * The run has reached Done and is still past the opening (#4621): every
+   * phase step reads as finished and the Keep Improving step is the active
+   * one, whatever the phase underneath. Without it, a vote that knocks Stable
+   * off green after Done drops the panel back to Refine Boundary, and the next
+   * one that restores it jumps it forward again.
+   *
+   * Not on a document dataset: its Done is the walk running dry, which no
+   * later vote undoes, so its step list never bounces.
+   */
+  get improving(): boolean {
+    const st = this.state;
+    return st.doneReached && !st.dryRunStop
+      && (st.phase === 'hard' || st.phase === 'new' || st.phase === 'done');
+  }
+
   get steps(): StepDisplay[] {
     // A document dataset stops on the walk's dry run (#4488): no Boundary or
     // Diversity step.
-    const phases: AutopilotPhase[] = this.state.dryRunStop
+    const phases: AutopilotStep[] = this.state.dryRunStop
       ? ['good', 'bad', 'more', 'done']
       : ['good', 'bad', 'more', 'hard', 'new', 'done'];
-    const phaseIndex = phases.indexOf(this.state.phase);
+    if (this.improving) phases.push('improve');
+    const phaseIndex = phases.indexOf(this.improving ? 'improve' : this.state.phase);
 
     return phases.map((phase, i) => {
       let stateStr: 'done' | 'active' | 'future';
@@ -351,7 +376,7 @@ export class AutopilotPanelComponent implements OnInit {
     this.stopped.emit();
   }
 
-  private phaseLabel(phase: AutopilotPhase): string {
+  private phaseLabel(phase: AutopilotStep): string {
     switch (phase) {
       case 'good': return 'Find Initial Goods.';
       case 'bad': return 'Find Initial Bads.';
@@ -359,11 +384,12 @@ export class AutopilotPanelComponent implements OnInit {
       case 'hard': return 'Refine Boundary.';
       case 'new': return 'Explore Diversity.';
       case 'done': return 'Done!';
+      case 'improve': return 'Keep Improving.';
       default: return '';
     }
   }
 
-  private phaseShortLabel(phase: AutopilotPhase): string {
+  private phaseShortLabel(phase: AutopilotStep): string {
     switch (phase) {
       case 'good': return 'Good';
       case 'bad': return 'Bad';
@@ -371,6 +397,7 @@ export class AutopilotPanelComponent implements OnInit {
       case 'hard': return 'Boundary';
       case 'new': return 'Diversity';
       case 'done': return 'Done';
+      case 'improve': return 'Improve';
       default: return '';
     }
   }
@@ -393,7 +420,7 @@ export class AutopilotPanelComponent implements OnInit {
    *   one: the plain halfway split already tracks votes, and a jump only ever
    *   lands closer to green. Green itself is the indicator's own call.
    */
-  private phaseLight(phase: AutopilotPhase): StepLight {
+  private phaseLight(phase: AutopilotStep): StepLight {
     const st = this.state;
     const light = (color: LightColor, title: string): StepLight => ({
       color,
@@ -460,12 +487,26 @@ export class AutopilotPanelComponent implements OnInit {
       }
       case 'done':
         return light('green', st.dryRunStop ? dryRunNote(st.moreDryRun) : 'All quality indicators are green.');
+      case 'improve': {
+        // The lowest of the three: it is green exactly when the phase
+        // underneath is Done.
+        const smart = indicatorLight(st.smartStatus);
+        const stable = indicatorLight(st.stableStatus);
+        const span = indicatorLight(st.spanStatus);
+        const color = [smart, stable, span].reduce((lo, c) => (LIGHT_RANK[c] < LIGHT_RANK[lo] ? c : lo));
+        return light(
+          color,
+          'Optional: the detector is trained, and more votes keep improving it. '
+          + `Shows the lowest of the three quality indicators: Smart (${smart}), Stable (${stable}), Span (${span}). `
+          + 'A vote can move one off green for a while as the detector takes it in; Done stays done.',
+        );
+      }
       default:
         return light('red', '');
     }
   }
 
-  private phaseHelpText(phase: AutopilotPhase): string {
+  private phaseHelpText(phase: AutopilotStep): string {
     switch (phase) {
       case 'good': return 'Label a few examples of what you are looking for so the system can learn what "good" looks like.';
       case 'bad': return 'Label examples that are not what you want, helping the system learn the good/bad cutoff.';
@@ -478,6 +519,8 @@ export class AutopilotPanelComponent implements OnInit {
       case 'done':
         if (this.state.dryRunStop) return `${dryRunNote(this.state.moreDryRun)} You can continue labeling or export your results.`;
         return this.state.stablePlateau ? DONE_PLATEAU_HELP : DONE_HELP;
+      case 'improve':
+        return 'Optional. The detector is trained: keep labeling to improve it further, or export your results. Autopilot keeps offering the items that help most.';
       default: return '';
     }
   }
@@ -488,7 +531,7 @@ export class AutopilotPanelComponent implements OnInit {
    * tooltip on the expanded step label. Format: "Phase N: Short name.
    * What the user is doing and why."
    */
-  private phaseIntent(phase: AutopilotPhase, stepNumber: number): string {
+  private phaseIntent(phase: AutopilotStep, stepNumber: number): string {
     switch (phase) {
       case 'good':
         return `Phase ${stepNumber}: Find initial goods. Label a few positives so the detector knows what "good" looks like.`;
@@ -508,13 +551,16 @@ export class AutopilotPanelComponent implements OnInit {
         }
         return this.state.stablePlateau
           ? `Done. ${PLATEAU_NOTE} Keep labeling if you want, but more votes are unlikely to change the result; or export your results.`
-          : 'Done. All quality indicators are green. Keep labeling for more accuracy, or export your results.';
+          : 'Done. All quality indicators went green: the detector is trained. Keep labeling for more accuracy, or export your results.';
+      case 'improve':
+        return `Phase ${stepNumber}: Keep improving. Optional: the detector is trained, and Done stays done. `
+          + 'Further votes go where they help most: items near the cutoff while the detector settles, then a broad mix.';
       default:
         return '';
     }
   }
 
-  private phaseDetail(phase: AutopilotPhase): string {
+  private phaseDetail(phase: AutopilotStep): string {
     const st = this.state;
     switch (phase) {
       case 'good':
@@ -539,6 +585,11 @@ export class AutopilotPanelComponent implements OnInit {
           : `Diversity: ${Math.round(st.fracDiversity)}`;
       case 'done':
         return st.dryRunStop ? 'Best matches ran dry' : 'All indicators green';
+      case 'improve':
+        // What autopilot is offering now, which follows the phase underneath.
+        if (st.phase === 'hard') return 'Showing boundary items';
+        if (st.phase === 'new') return 'Showing diverse items';
+        return 'All indicators green';
       default:
         return '';
     }
@@ -549,7 +600,7 @@ export class AutopilotPanelComponent implements OnInit {
    * copy that would overflow the panel if rendered inline — currently just
    * the "boundary" phase's end condition, which is otherwise invisible.
    */
-  private phaseDetailTitle(phase: AutopilotPhase): string {
+  private phaseDetailTitle(phase: AutopilotStep): string {
     switch (phase) {
       case 'more':
         return this.state.dryRunStop
@@ -559,6 +610,14 @@ export class AutopilotPanelComponent implements OnInit {
         return 'Ends when both indicators turn green.';
       case 'new':
         return 'Ends when the diversity indicator turns green.';
+      case 'improve':
+        if (this.state.phase === 'hard') {
+          return 'A vote moved Smart or Stable off green, so autopilot is offering items near the cutoff until the detector settles again.';
+        }
+        if (this.state.phase === 'new') {
+          return 'Smart and Stable are green; autopilot is offering items from parts of the collection your votes do not cover yet, until Span is green again.';
+        }
+        return this.state.stablePlateau ? PLATEAU_NOTE : 'All quality indicators are green. More votes can still refine the detector.';
       default:
         return '';
     }

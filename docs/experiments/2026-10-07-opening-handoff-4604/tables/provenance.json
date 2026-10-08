@@ -1,5 +1,5 @@
 {
- "pricing_dir": "/expscratch/sgreenberg/handoff-4604/final",
+ "pricing_dir": "/expscratch/sgreenberg/empty-sets-4631/handoff",
  "baselines": {
   "binary": "/expscratch/sgreenberg/notch-4599/text_baseline-guarded-binary10.csv",
   "region": "/expscratch/sgreenberg/state-of-the-app/2026-10-06-b1/text_baseline-2seeds-post4136.csv"

@@ -1,0 +1,29 @@
+{
+  "arms": {
+    "app_b025": {
+      "load": "430/432 cells with data, 54,141 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "app_b1": {
+      "load": "430/432 cells with data, 53,996 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "app_b4": {
+      "load": "430/432 cells with data, 53,424 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "never_b025": {
+      "load": "430/432 cells with data, 51,691 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "never_b1": {
+      "load": "430/432 cells with data, 51,603 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    },
+    "never_b4": {
+      "load": "430/432 cells with data, 50,424 rows, 2 starved (header-only; not data loss)",
+      "complete": true
+    }
+  },
+  "problems": []
+}

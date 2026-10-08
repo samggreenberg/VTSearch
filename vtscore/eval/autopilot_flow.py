@@ -219,6 +219,10 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
     return "red"
 
 
+#: The Smart gate's arms (#4359): ``"app"`` reads the light; ``"never"`` holds it yellow.
+SMART_GATES = ("app", "never")
+
+
 def next_phase(
     good_count: int,
     bad_count: int,
@@ -416,6 +420,7 @@ class AutopilotFlow:
         span_green: int | None = None,
         startup: Optional[StartupState] = None,
         dry_run_stop: bool = False,
+        smart_gate: str = "app",
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -424,6 +429,12 @@ class AutopilotFlow:
         #: A document dataset (#4488): the walk is the rest of the run and its
         #: dry run is ``done`` (see :func:`next_phase`).
         self.dry_run_stop = dry_run_stop
+        #: #4359's bound: ``"never"`` holds Smart yellow for the phase decision
+        #: (the light is still computed and reported), so a session stays in
+        #: ``hard`` until the run ends.  ``"app"`` is the app.
+        if smart_gate not in SMART_GATES:
+            raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
+        self.smart_gate = smart_gate
         #: The ``more`` walk's history, as the app keeps it: consecutive walk
         #: picks without a positive, and whether the walk has ended (met its
         #: target or ran dry).  A vote's outcome is read the way the app reads
@@ -586,7 +597,7 @@ class AutopilotFlow:
             good_count,
             bad_count,
             remaining_unlabeled=remaining_unlabeled,
-            smart=smart,
+            smart="yellow" if self.smart_gate == "never" else smart,
             stable=stable,
             span=sp,
             good_target=0 if self.startup is not None else self.good_target,

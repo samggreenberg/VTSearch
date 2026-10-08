@@ -136,6 +136,7 @@ def figure_balance(runs: dict[float, Path], out: Path) -> None:
 
     Click 0 is the text sort. Solid: each sort's own line in the app (the text sort's blind GMM cut, the
     detector's labels line); dashed: set-constant top-K on both. One rule per comparison (owner, 2026-10-04).
+    Every run at every recorded click, as its session shows it (:func:`_by_rule`, #4631).
     """
     betas = sorted(runs)
     fig, axes = plt.subplots(1, len(betas), figsize=(4.4 * len(betas), 3.9), facecolor=SURFACE, sharey=True)
@@ -159,7 +160,14 @@ def figure_balance(runs: dict[float, Path], out: Path) -> None:
 
 
 def _by_rule(d: Path, beta: float) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """``(balances at the text point, balance_steps)`` for *beta*, each with a ``rule`` column."""
+    """``(balances at the text point, every run at every recorded click)`` for *beta*, each with a ``rule`` column.
+
+    The clicks are read as each session shows them (``analyze.session_balance_steps``, #4631): a run's frame
+    once the app shows its detector, the typed query's set before that and throughout a run that never trained,
+    so a mean at a click is over every run, not the ones with a frame there.
+    """
+    from analyze import session_balance_steps  # noqa: PLC0415
+
     steps = pd.read_csv(d / "balance_steps.csv")
     bal = pd.read_csv(d / "balances.csv", dtype={"point": str})
     if "rule" not in steps:  # an analysis from before the rule column: the app's line only
@@ -167,12 +175,13 @@ def _by_rule(d: Path, beta: float) -> tuple[pd.DataFrame, pd.DataFrame]:
         bal = bal.assign(rule="app line")
     steps = steps[steps["beta"].round(4) == round(beta, 4)]
     bal = bal[(bal["beta"].round(4) == round(beta, 4)) & (bal["point"] == "text")]
-    return bal, steps
+    return bal, session_balance_steps(steps, bal)
 
 
-def _share_by_rule(d: Path, beta: float) -> dict[str, pd.Series]:
-    """Per rule: the returned set's share of the best cut over clicks, the text sort at click 0."""
-    bal, steps = _by_rule(d, beta)
+def _share_by_rule(d: Path, beta: float, read: tuple[pd.DataFrame, pd.DataFrame] | None = None) -> dict[str, pd.Series]:
+    """Per rule: the returned set's share of the best cut over clicks, the text sort at click 0, every run at every
+    click (*read* is :func:`_by_rule`'s output when the caller has it)."""
+    bal, steps = read if read is not None else _by_rule(d, beta)
     out = {}
     for rule in ("app line", "top-K"):
         s = steps[steps["rule"] == rule]
@@ -190,13 +199,12 @@ def figure_objective(runs: dict[float, Path], out: Path) -> None:
     axes = [axes] if len(betas) == 1 else list(axes)
     for ax, beta in zip(axes, betas, strict=True):
         c = pd.read_csv(runs[beta] / "curves.csv")
-        cells = pd.read_csv(runs[beta] / "cells.csv")
-        trained = cells[~cells["never_trained"].astype(bool)]
+        cells = pd.read_csv(runs[beta] / "cells.csv")  # every run, the never-trained at the typed query (#4631)
         if "thr_fbeta" in c:
             m = c.groupby("t")["thr_fbeta"].mean().dropna()
             ax.plot(m.index, m.to_numpy(), color="#2a6fdb", lw=2, label="unchecked, at each click")
-            if "thr_fbeta_final" in trained and len(m):
-                ax.scatter([m.index.max() + 6], [trained["thr_fbeta_final"].mean()], color="#d9480f", zorder=3,
+            if "thr_fbeta_final" in cells and len(m):
+                ax.scatter([m.index.max() + 6], [cells["thr_fbeta_final"].mean()], color="#d9480f", zorder=3,
                            label="after the check")  # fmt: skip
         ax.set_title(f"beta = {beta:g}: the objective", color=INK, fontsize=10, loc="left")
         _axes(ax)
@@ -209,11 +217,14 @@ def figure_objective(runs: dict[float, Path], out: Path) -> None:
 
 
 def _objective_rows(runs: dict[float, Path]) -> pd.DataFrame:
-    """Per beta, off its own sessions: the objective before and after the check, and what the line returned."""
+    """Per beta, off its own sessions: the objective before and after the check, and what the line returned.
+
+    Over every run (#4631): one that never trained scores its typed query's set at every point, and its check's
+    effect is 0, so the effect is the difference of the two columns beside it.
+    """
     rows = []
     for beta, d in sorted(runs.items()):
         c = pd.read_csv(d / "cells.csv")
-        c = c[~c["never_trained"].astype(bool)]
         if "thr_fbeta_final" not in c:
             continue
         effect = c["thr_fbeta_final"] - c["thr_fbeta_unchecked"]
@@ -245,17 +256,17 @@ def _path_rows(runs: dict[float, Path]) -> pd.DataFrame:
     """Per beta, off its own sessions: the returned set's precision, recall and F-beta at each click of
     :data:`PATH_CLICKS` and after the check (#4519, the owner's precision-recall curves).
 
-    Means over the trained runs that had a line by that click; ``returned`` is the median size.  A run
-    analyzed before #4519 has no per-click precision or recall, and its rows read NaN.
+    Means over every run (#4631): a session still in the opening, or one that never trained, at the typed
+    query's set; an empty set at precision 0.  ``returned`` is the median size.  A run analyzed before #4519
+    has no per-click precision or recall, and its rows read NaN.
 
     The path starts at the typed query (owner, 2026-10-06: Photo Finish's notch at click 0): the text sort
-    cut at its own blind GMM line, the set a user gets before voting, read off ``balances.csv`` (the
-    ``app line`` rule at the ``text`` point) over the same trained runs.
+    cut at its own line in the app, the set a user gets before voting, read off ``balances.csv`` (the
+    ``app line`` rule at the ``text`` point) over the same runs.
     """
     rows = []
     for beta, d in sorted(runs.items()):
         c = pd.read_csv(d / "cells.csv")
-        c = c[~c["never_trained"].astype(bool)]
         rows.append(_typed_query_row(d, beta))
         points = [(str(t), f"_{t}") for t in PATH_CLICKS] + [("after the check", "_final")]
         for point, suffix in points:
@@ -274,10 +285,12 @@ def _path_rows(runs: dict[float, Path]) -> pd.DataFrame:
 
 
 def _typed_query_row(d: Path, beta: float) -> dict:
-    """The typed query's own returned set at *beta*: the text sort under its blind GMM cut, trained runs."""
+    """The typed query's own returned set at *beta*: the text sort at its own line in the app, every run."""
     row = {"beta": f"{beta:g}", "point": TYPED_QUERY}
-    bal, _ = _by_rule(d, beta)
-    bal = bal[(bal["rule"] == "app line") & ~bal["never_trained"].astype(bool)]
+    bal = pd.read_csv(d / "balances.csv", dtype={"point": str})
+    if "rule" not in bal:  # an analysis from before the rule column: the app's line only
+        bal = bal.assign(rule="app line")
+    bal = bal[(bal["beta"].round(4) == round(beta, 4)) & (bal["point"] == "text") & (bal["rule"] == "app line")]
     if bal.empty:
         return {**row, "precision": np.nan, "recall": np.nan, "fbeta": np.nan, "returned, median": np.nan, "runs": 0}
     return {
@@ -319,12 +332,34 @@ def figure_path(runs: dict[float, Path], out: Path) -> None:
     plt.close(fig)
 
 
+#: The clicks the early-dip table reads the session at: past the earliest hand-over (click 23, #4605).
+DIP_CLICKS = (25, 50, 100)
+#: The early-dip table's word for a series that never falls below the text sort's level.
+NEVER_BELOW = "never below"
+
+
+def _back_by(series: pd.Series, level: float) -> int | str:
+    """The click by which *series* is back at *level* after its lowest point past click 0 (:data:`NEVER_BELOW`
+    when it never falls below it)."""
+    past = series.loc[1:]
+    if past.empty or past.min() >= level - 1e-9:
+        return NEVER_BELOW
+    low = past.idxmin()
+    back = series.loc[low:][series.loc[low:] >= level - 1e-9]
+    return int(back.index[0]) if len(back) else "not by the end"
+
+
 def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
-    """Per beta and rule: the text sort's set at click 0 against the detector's over clicks, the same rule on both."""
+    """Per beta and rule: the text sort's set at click 0 against the session's over clicks, the same rule on both.
+
+    Every run at every click as its session shows it (#4605, #4631): the typed query's set until the app shows the
+    run's detector, and throughout a run that never trained. So the dip is the one a user meets at the hand-over,
+    not the opening's own detectors, which no screen shows.
+    """
     rows = []
     for beta, d in sorted(runs.items()):
-        bal, steps = _by_rule(d, beta)
-        for rule, m in _share_by_rule(d, beta).items():
+        bal, steps = read = _by_rule(d, beta)
+        for rule, m in _share_by_rule(d, beta, read).items():
             s = steps[steps["rule"] == rule]
             t_rows = bal[bal["rule"] == rule]
             f = s.groupby("t")["fbeta"].mean()
@@ -332,16 +367,15 @@ def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
             text_f = float(t_rows["fbeta"].mean()) if len(t_rows) else float("nan")
             text_k = float(t_rows["k"].median()) if len(t_rows) else float("nan")
             low_t = int(m.loc[1:].idxmin()) if len(m) > 1 else 0
-            back = m.loc[low_t:][m.loc[low_t:] >= m.loc[0]]
-            back_f = f[f >= text_f]
+            at = " / ".join(str(t) for t in DIP_CLICKS)
             rows.append({
                 "beta": f"{beta:g}", "rule": rule,
                 "text sort: F": text_f, "text sort: returned": text_k, "text sort: share of best": m.loc[0],
-                "detector: F at 5 / 10 / 25": " / ".join(f"{f.get(t, float('nan')):.2f}" for t in (5, 10, 25)),
-                "detector: returned at 5 / 10 / 25": " / ".join(f"{k.get(t, float('nan')):.0f}" for t in (5, 10, 25)),
-                "detector F >= text sort's by click": int(back_f.index[0]) if len(back_f) else "not by the end",
+                f"session: F at {at}": " / ".join(f"{f.get(t, float('nan')):.2f}" for t in DIP_CLICKS),
+                f"session: returned at {at}": " / ".join(f"{k.get(t, float('nan')):.0f}" for t in DIP_CLICKS),
+                "session F >= text sort's again by click": _back_by(f, text_f),
                 "lowest share": m.loc[low_t], "at click": low_t,
-                "share >= text sort's by click": int(back.index[0]) if len(back) else "not by the end",
+                "share >= text sort's again by click": _back_by(m, float(m.loc[0])),
             })  # fmt: skip
     return pd.DataFrame(rows)
 
@@ -384,8 +418,9 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
         "Per beta, the precision and recall of the same withheld set from the typed query (the text sort at "
         "its own blind GMM cut, before any vote), through 25, 50, 100 and 150 clicks, to after the check (#4519): "
         "the path a preset's returned set takes as the user clicks "
-        "(`precision_recall_path.png`, `precision_recall_path.csv`). Means over the trained runs with a line "
-        "by that click; `returned` is the median size.",
+        "(`precision_recall_path.png`, `precision_recall_path.csv`). Means over every run, a session still in "
+        "the opening or one that never trained at the typed query's set (#4605, #4631); `returned` is the "
+        "median size.",
         "",
         _md(path.round(3), index=False),
         "",
@@ -412,10 +447,12 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
     md += [
         "## The early dip",
         "",
-        "The detector's returned set against the text sort's, the same rule on both sides (#4384): under "
-        "`app line` the text sort's blind GMM cut against the detector's labels line; under `top-K` the old cap "
-        "on both. F-beta, what each returned, and the click by which the detector's F-beta reaches the text "
-        "sort's; then the share of the best cut, which rises with the clicks.",
+        "The session's returned set against the text sort's, the same rule on both sides (#4384): under "
+        "`app line` the text sort's own line in the app against the detector's labels line; under `top-K` the "
+        "old cap on both. Every run at every click as its session shows it: the typed query's set until the app "
+        "shows the run's detector (#4605), and throughout a run that never trained (#4631). F-beta, what each "
+        "returned, and the click by which the session's F-beta is back at the text sort's after its lowest "
+        "point; then the share of the best cut, which rises with the clicks.",
         "",
         _md(_dip_rows(runs).round(3), index=False),
         "",

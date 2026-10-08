@@ -793,6 +793,16 @@ run it over another dataset. Nothing happens on its own, and the
 dialog only appears for the run that trained the detector - coming
 back later to refine it further will not raise it again.
 
+Once **Done!** is reached it stays checked, and a seventh step, **Keep
+Improving.**, takes over for as long as you keep labeling. It is
+optional. Its light shows whichever of the smart, stable and span
+indicators is furthest behind, and its line says what Autopilot is
+offering now. A new vote can knock an indicator off green for a while
+as the detector takes it in; Autopilot then goes back to borderline
+items (**Showing boundary items**) or a broad mix (**Showing diverse
+items**) until it recovers, but the panel does not drop back to Refine
+Boundary.
+
 ### Document collections stop on a dry run
 
 On a collection of document pages, where a detector finds logos and
@@ -817,7 +827,7 @@ dry run there means the detector has found what it can.
 ### The collapsed bar
 
 You can collapse Autopilot to a thin strip that just shows the
-five phase indicators, with the current phase's light above its name.
+phase indicators, with the current phase's light above its name.
 Click any active phase to re-pick the
 current recommendation (useful if you voted the wrong way and
 want a fresh suggestion). Collapsed mode is handy once you're
@@ -1143,6 +1153,14 @@ Test is where you decide whether to trust a detector. To run detectors you
 already trust and collect what they match, with no view to work through, use
 the Dashboard's **Find** button instead (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
+
+**A detector with too few labels is tested as the Goods' centroid.** Until it
+has 3 Goods and 4 Bads, VTSearch does not train a detector from its labels:
+Test, Find and AutoFind rank everything by how close it is to the average of
+its Goods instead, and draw the line where those scores split. One Good is
+enough to test it. The Test view says so under its tabs, with how many more
+Goods and Bads a trained detector needs, and the Threshold does not move that
+line. A detector with no Good at all can't be tested.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
@@ -1705,8 +1723,8 @@ it loads - so exporting the labels and making a detector from them there
 Opened this way the modal's **Categories** filter starts on **All**,
 which is what you want: the negatives are half of what the ranker learns
 from, and a good-only or bad-only file can't rebuild the detector at the
-other end (training needs both classes and refuses a one-sided
-labelset). Narrowing to **Good** or **Bad** is still available - it's a
+other end (a good-only one gives only the Goods' centroid, below, and a
+bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
 

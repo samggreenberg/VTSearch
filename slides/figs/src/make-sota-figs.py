@@ -114,14 +114,14 @@ DOC_PR_CLICKS = (0, 10, 50)
 
 #: What the presenter notes quote, rounded as the notes say them.
 EXPECT = {
-    ("photos", 0.25, "after"): 0.64,
-    ("photos", 1.0, "after"): 0.53,
-    ("photos", 4.0, "after"): 0.60,
-    ("photos", 0.25, "kept"): 21,
-    ("photos", 1.0, "kept"): 44,
-    ("photos", 4.0, "kept"): 80,
-    ("photos", 0.25, "precision"): 0.73,
-    ("photos", 4.0, "recall"): 0.68,
+    ("photos", 0.25, "after"): 0.62,
+    ("photos", 1.0, "after"): 0.51,
+    ("photos", 4.0, "after"): 0.59,
+    ("photos", 0.25, "kept"): 20,
+    ("photos", 1.0, "kept"): 43,
+    ("photos", 4.0, "kept"): 83,
+    ("photos", 0.25, "precision"): 0.71,
+    ("photos", 4.0, "recall"): 0.66,
     ("documents", 0.25, "precision"): 0.98,
     ("documents", 1.0, "precision"): 0.93,
     ("documents", 4.0, "recall"): 0.95,
@@ -129,25 +129,25 @@ EXPECT = {
     ("documents", 1.0, "kept"): 14,
     ("documents", 4.0, "kept"): 25,
     ("documents", 1.0, "f50"): 0.87,
-    ("photos", 0.25, "text"): 0.48,
-    ("photos", 1.0, "text"): 0.37,
-    ("photos", 4.0, "text"): 0.48,
-    ("photos", 0.25, "at50"): 0.51,
-    ("photos", 1.0, "at50"): 0.42,
-    ("photos", 4.0, "at50"): 0.50,
-    ("regions", 0.25, "at50"): 0.54,
-    ("regions", 1.0, "at50"): 0.47,
-    ("regions", 4.0, "at50"): 0.57,
-    ("regions", 0.25, "text"): 0.48,
-    ("regions", 4.0, "text"): 0.48,
-    ("regions", 0.25, "after"): 0.73,
-    ("regions", 1.0, "after"): 0.63,
-    ("regions", 4.0, "after"): 0.72,
-    ("regions", 0.25, "kept"): 30,
-    ("regions", 1.0, "kept"): 48,
-    ("regions", 4.0, "kept"): 92,
-    ("regions", 0.25, "precision"): 0.81,
-    ("regions", 4.0, "recall"): 0.82,
+    ("photos", 0.25, "text"): 0.47,
+    ("photos", 1.0, "text"): 0.36,
+    ("photos", 4.0, "text"): 0.47,
+    ("photos", 0.25, "at50"): 0.50,
+    ("photos", 1.0, "at50"): 0.41,
+    ("photos", 4.0, "at50"): 0.48,
+    ("regions", 0.25, "at50"): 0.53,
+    ("regions", 1.0, "at50"): 0.45,
+    ("regions", 4.0, "at50"): 0.55,
+    ("regions", 0.25, "text"): 0.47,
+    ("regions", 4.0, "text"): 0.47,
+    ("regions", 0.25, "after"): 0.71,
+    ("regions", 1.0, "after"): 0.61,
+    ("regions", 4.0, "after"): 0.70,
+    ("regions", 0.25, "kept"): 29,
+    ("regions", 1.0, "kept"): 47,
+    ("regions", 4.0, "kept"): 94,
+    ("regions", 0.25, "precision"): 0.79,
+    ("regions", 4.0, "recall"): 0.80,
 }
 
 plt.rcParams.update(
@@ -197,8 +197,9 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
     """Per radio: F-beta at `PHOTO_CLICKS` and after the check, the set after the check, and the path.
 
     All of it is a review's committed `precision_recall_path.csv` (#4519): means over
-    the trained runs with a line by that click, the returned size a median. The
-    binary review's by default; the region review's (#4534) has the same shape.
+    every run, one that never trained at its typed query's set (#4631), the returned
+    size a median. The binary review's by default; the region review's (#4534) has
+    the same shape.
     """
     by_click: dict[float, list[tuple[int, float]]] = {}
     pr_click: dict[float, list[tuple[float, float]]] = {}

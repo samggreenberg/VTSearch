@@ -73,8 +73,20 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet") -> 
     consumer reuses the head only while *labelset* (the one it just read from
     the detector file) still has that signature.  This also rejects the head a
     background learned sort stores after newer votes have already landed.
+
+    A trained head is also refused while *labelset* is under the label quota
+    (#4643).  The Train view's learned sort trains one from any Good and Bad and
+    stamps it with the same signature, and that head is the sort the user labels
+    on, not a detector to hand out: a Find there trains the Goods' centroid
+    instead.  The centroid itself is current whenever its signature is, so a
+    label whose origin cannot be resolved does not retrain it on every pass.
     """
-    return det_ctx.model is not None and det_ctx.model_labels_sig == labelset_signature(labelset)
+    from vtscore.detectors.centroid_head import is_centroid_head
+    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota
+
+    if det_ctx.model is None or det_ctx.model_labels_sig != labelset_signature(labelset):
+        return False
+    return is_centroid_head(det_ctx.model) or labelset_quota(labelset).tier == TIER_TRAINED
 
 
 def resolve_or_train_detector(

@@ -586,6 +586,9 @@ class TestHarnessIntegration:
             atlas_min_node_size=5,
             seed_scores=seed_scores,
             autopilot_fidelity=False,
+            # The subject is when the Train side first trains; under the label
+            # quota (#4643) a row also exists at the first Good, with no Bad.
+            label_quota=False,
         )
         assert rows[0]["app_trained"] == 1
         assert min(rows[0]["n_good"], rows[0]["n_bad"]) == 1

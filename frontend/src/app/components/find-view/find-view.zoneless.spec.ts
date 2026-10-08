@@ -293,6 +293,27 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     httpMock.expectOne('/api/line-test/start');
   });
 
+  // #4643: under the label quota the pass is the Goods' centroid, and the left
+  // panel says so on both tabs, with the labels still owed.
+  it("says when the pass was the Goods' centroid", async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+
+    httpMock.expectOne('/api/find-label').flush({
+      results: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      label_quota: {
+        tier: 'centroid', n_good: 1, n_bad: 0, goods_owed: 2, bads_owed: 4, good_quota: 3, bad_quota: 4,
+      },
+    });
+    httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));
+    await settleZoneless(fixture);
+
+    expect(fixture.componentInstance.detectorNote()).toContain('2 more Goods and 4 more Bads');
+    const note = fixture.nativeElement.querySelector('.find-detector-note');
+    expect(note?.textContent).toContain("Goods' centroid");
+  });
+
   // The balance POST is deferred until the picker settles (issue #2973), and
   // that settle window is inside the pair scope too: a pick the user abandons
   // by switching pair must never be written into the pair they switched *to*,

@@ -7,7 +7,8 @@ h (the detector the harness trained at that click, carried over clicks with no r
 ``app_trained`` step. A rule only moves h EARLIER than that unless named ``exact``.
 
 Scored on each run's withheld half: F-beta of the set above the line at the run's own beta (``thr_fbeta``), the
-typed query's from the text baseline (``_text_app_line``). Trained runs only, as ``by_click.py``.
+typed query's from the text baseline (``_text_app_line``). Every run, as ``by_click.py`` (#4631): a run that never
+trained has no detector to hand off to, so it scores its typed query under every rule.
 
     python handoff_price_4604.py --steps steps_binary_b1.csv.gz --picks picks_binary_b1.csv.gz \\
         --cells <analysis-binary-4605>/cells.csv --baseline <text_baseline.csv> --beta 1 --tag binary_b1 --out <dir>
@@ -53,12 +54,11 @@ def load(a: argparse.Namespace):
     steps = pd.read_csv(a.steps)
     picks = pd.read_csv(a.picks)
     if a.cells:
-        cells = pd.read_csv(a.cells)
-        cells = cells[~cells["never_trained"].astype(bool)][["category", "class", "band", "seed", "shown_from"]]
+        cells = pd.read_csv(a.cells)[["category", "class", "band", "seed", "shown_from"]]
     else:
-        # A run with no State of the App analysis (#4583's arms): a trained run is one with steps, and its class
-        # and band come off the category; shown_from is recomputed below either way.
-        cells = steps[RUN].drop_duplicates().copy()
+        # A run with no State of the App analysis (#4583's arms): every run clicked, so the picks list them all,
+        # the never-trained included (#4631); class and band come off the category, shown_from is recomputed below.
+        cells = pd.concat([steps[RUN], picks[RUN]]).drop_duplicates().copy()
         cells["class"] = cells["category"].str.split("@").str[0]
         cells["band"] = cells["category"].str.split("@").str[1]
         on = steps.loc[steps["app_trained"] == 1].groupby(RUN)["t"].min().rename("shown_from")
@@ -193,14 +193,15 @@ def rules(runs, tq, det, shown, kept, lab, tside, dside, beta):
 
 
 def summarize(name, fam, param, F, today, runs) -> dict:
-    trained = np.isfinite(F).all(axis=1)
-    m = F[trained].mean(axis=0)
-    gain = (F[trained, 1:] - today[trained, 1:]).mean(axis=1)
-    gain50 = (F[trained, 1:51] - today[trained, 1:51]).mean(axis=1)
-    cls = runs["class"].to_numpy()[trained]
+    # Every run with a typed query: one that never trained scores it at every click (#4631).
+    scored = np.isfinite(F).all(axis=1)
+    m = F[scored].mean(axis=0)
+    gain = (F[scored, 1:] - today[scored, 1:]).mean(axis=1)
+    gain50 = (F[scored, 1:51] - today[scored, 1:51]).mean(axis=1)
+    cls = runs["class"].to_numpy()[scored]
     by_cls = pd.Series(gain).groupby(cls).mean()
     row = {
-        "rule": name, "family": fam, "param": str(param), "runs": int(trained.sum()),
+        "rule": name, "family": fam, "param": str(param), "runs": int(scored.sum()),
         "auc150": m[1:].mean(), "auc50": m[1:51].mean(),
         **{f"at_{t}": m[t] for t in (5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150)},
         "gain150": gain.mean(), "gain150_se": by_cls.std(ddof=1) / np.sqrt(len(by_cls)),

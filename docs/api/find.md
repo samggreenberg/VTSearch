@@ -142,9 +142,14 @@ POST /api/find-label
 
 Scores every loaded media with the given detector and applies Good/Bad labels
 to **all** elements by threshold, freezing scores and initial labels for the
-Find verification workflow. If no trained head is cached in the detector
-context, it trains on the fly from the detector's labelset (resolving label
-origins as needed).
+Find verification workflow. If no current head is cached in the detector
+context, it builds one on the fly from the detector's labelset (resolving label
+origins as needed). Which one follows the **label quota** (#4643): under 3
+Goods or 4 Bads the detector is the Goods' centroid (every item ranked by its
+cosine to the average of the Goods, cut at the midpoint of a two-Gaussian fit
+to those cosines on this dataset), and from there the trained head. One Good is
+enough; a labelset with no Good is a **400** that says so. `label_quota` says
+which detector the pass got and what it still owes.
 
 Items the human has **verified** (see `verified` on [`GET
 /api/votes`](medias.md)) keep their existing vote and click-time: re-scoring is
@@ -163,9 +168,17 @@ everywhere except those held votes.
   "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
   "good_count": 42,
   "bad_count": 458,
-  "detector_name": "Dog Barks"
+  "detector_name": "Dog Barks",
+  "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4}
 }
 ```
+
+`label_quota.tier` is `centroid` for the Goods' centroid, `trained` for the
+trained head; `n_good` / `n_bad` are the detector's labels and `goods_owed` /
+`bads_owed` what a trained head still needs. The centroid's line is its own
+midpoint (its `threshold` is always 0.5 on its own scale) and does not take
+the balance: `balance` then counts what that line keeps, and a balance change
+leaves it where it is.
 
 `balance` is the [line state](labeling.md#the-line-state) of `threshold`:
 the set the Good/Bad split keeps, and what a spot check found on it. The
@@ -176,9 +189,9 @@ would draw. Nothing is counted on the scored corpus, so a dataset with
 nothing like the target can come back with no Good split at all. A fresh pass
 is `unchecked` until a check runs. On
 patch-region-aware datasets each result additionally carries `best_region`.
-Errors: **400** (no medias loaded, or detector has no labels), **404**
-(detector not found), **409** (active dataset can't supply the detector's
-embedder type, or the run was cancelled).
+Errors: **400** (no medias loaded, the detector has no labels, or none of
+them is a Good), **404** (detector not found), **409** (active dataset can't
+supply the detector's embedder type, or the run was cancelled).
 
 ### Auto-Detect
 
@@ -202,6 +215,7 @@ demand, and returns one result column per detector.
       "detector_name": "Dog Barks",
       "threshold": 0.5,
       "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
+      "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -210,6 +224,11 @@ demand, and returns one result column per detector.
   "missing_detectors": []
 }
 ```
+
+Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
+under the label quota runs as the Goods' centroid, and its hits are the
+centroid's. A detector with no Good is left out of `results`, as one that
+cannot be scored always was.
 
 Each detector's `balance` is the [line state](labeling.md#the-line-state) of
 its `threshold` (`null` only when there was no trained context to ask).

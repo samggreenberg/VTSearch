@@ -15,6 +15,32 @@ instead, since every commit on `dev` is effectively a new app release.)
   walk takes the top of the step's detector ranking, and its steps record `app_trained = 1`), and
   `vtscore.eval.autopilot_flow.app_has_detector` takes `more_shown`. An experiment arm; the app is unchanged.
 
+- **Under the label quota a labelset gives the Goods' centroid, not a trained head** (issue #4643).
+  `vtscore.detectors.labelset_training.train_from_labelset` - the app's Test, AutoFind,
+  detector load and CLI - now follows the new `vtscore.detectors.label_quota`: with no Good that
+  resolved it returns `False`; under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads (Autopilot's
+  quorum) it stores the Goods' centroid head and returns `True`, **one Good and no Bad
+  included**; with both met it trains as before. Behaviour change for a library caller: at 1-2
+  Goods or 1-3 Bads the stored model is a centroid head, not the SVM, and there is no switch
+  back: a head fitted to that few labels is what the rule exists to stop. The centroid is the new
+  `vtscore.detectors.centroid_head`: `fit_centroid_head(goods, score)` returns a `Linear(D, 1)`
+  ranking by cosine to the unit mean of the Goods, cut at the two-Gaussian midpoint of those
+  cosines on the scored corpus (threshold `CENTROID_THRESHOLD`, 0.5, balance-blind), so every
+  scoring path and a portable weight export take it as they take the linear SVM;
+  `is_centroid_head` tells them apart. `labelset_train_and_score` takes `label_quota`
+  (default `False`, the Train view's learned sort; a cold Find passes `True`), and
+  `model_loading.cached_head_is_current` refuses a trained head while its labelset is under the
+  quota. `install_centroid_head` drops the trained head's re-cut caches, so a balance change
+  leaves the centroid's line where it is. The eval harness's default arm follows
+  (`simulate_voting_iterations(label_quota=None)`): a row from the first Good, the centroid's
+  test metrics under the quota, and a `detector_tier` column; `label_quota=False` is the
+  pre-#4643 arm.
+
+- **The eval harness can hold Autopilot's Smart light yellow** (issue #4359). `simulate_voting_iterations`
+  and `vtscore.eval.autopilot_flow.AutopilotFlow` take `smart_gate` (`"app"`, the default and the app,
+  or `"never"`: the phase decision reads Smart as yellow, so a session stays in `hard`). A bound
+  for re-keying Smart; the app is unchanged.
+
 - **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
   now returns the score where the labels line's corpus posterior falls below the new
   `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new
@@ -311,6 +337,14 @@ instead, since every commit on `dev` is effectively a new app release.)
     `_safe_threshold_for_step` takes `check=`.
 
 ### Added
+
+- **`DETECTION_METRICS` names the two outer presets** (issue #4636).
+  `vtscore.eval.calibration_metrics.DETECTION_METRICS` gains `fbeta_b025`
+  ("F1/4") and `fbeta_b4` ("F4"), the returned set scored at the precision- and
+  recall-leaning presets, which every row already carried (`FBETA_COLUMNS`), so
+  a metric picker built on the table offers them beside F1. Ordered by beta
+  around `f1`; `fbeta_b1` stays off the table, since it is `f1` exactly.
+  Additive: no existing entry changed.
 
 - **`DatasetImported`, how a dataset import ended** (issue #4616).
   `vtscore.datasets.import_event` adds a frozen `DatasetImported(outcome,

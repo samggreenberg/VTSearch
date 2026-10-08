@@ -44,6 +44,9 @@ def _run(sink, *, stride=5, max_steps=12):
     return simulate_voting_iterations(
         _blob_dataset(),
         target_category="cat0",
+        # The trained head's cut is the subject: under the label quota (#4643)
+        # the early rows are the Goods' centroid's, which carries none of it.
+        label_quota=False,
         seed=0,
         dataset_name="synthetic",
         inclusion=0,
@@ -118,6 +121,9 @@ class TestFitQualitySink:
         rows = simulate_voting_iterations(
             _blob_dataset(),
             target_category="cat0",
+            # The trained head's cut is the subject: under the label quota (#4643)
+            # the early rows are the Goods' centroid's, which carries none of it.
+            label_quota=False,
             seed=0,
             dataset_name="synthetic",
             inclusion=0,

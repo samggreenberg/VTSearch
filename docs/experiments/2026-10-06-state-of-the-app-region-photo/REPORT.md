@@ -47,6 +47,18 @@ every ceiling number here is seed 0's (#4552).
   by count, a multiple of the matches it estimates from the scores; at 4 the guarded line stays. The typed query
   moves from 0.18/0.25/0.48 to 0.48/0.38/0.48, and the objective at 25 clicks from 0.30/0.33/0.50 to
   0.44/0.37/0.50.
+- **Re-scored 2026-10-07 (#4631): every run is in every average.** The 9 runs per preset that never train a
+  detector (no Good in 150 clicks, all at small, [below](#where-it-does-well-and-where-it-does-poorly)) were in
+  the AP columns but not in the objective's. They now score what their session shows, the typed query's own
+  set, at every click and at the end (the owner's ruling). Three more holes are closed:
+  - an empty returned set scores precision 0;
+  - a run inside a spot check at 25, 50 or 100 clicks carries the detector on screen (30 runs were blank at 100);
+  - a trained run that never leaves the opening reads the text sort's line, not a blank.
+
+  The objective after the check moves from 0.73/0.63/0.72 to 0.71/0.61/0.70, and the typed query from
+  0.48/0.38/0.48 to 0.47/0.36/0.47. The class and band tables now count every run too, which moves the classes
+  whose small band never trains (bowl, chair). AP over all runs does not move. The viewer (#4629) scores a
+  click with no detector as the empty set instead: it reads the harness's detectors and has no opening rule.
 
 A **review**, not an experiment: the app as it ships on the region path, the way a user meets it.
 - **The session.** The user types a query and sees the text sort, then votes for 150 clicks while Autopilot picks
@@ -58,37 +70,38 @@ A **review**, not an experiment: the app as it ships on the region path, the way
 
 ## Headline
 
-**The objective, each preset off its own sessions** (279 trained runs each; 9 runs never trained a detector,
-see [below](#where-it-does-well-and-where-it-does-poorly)):
+**The objective, each preset off its own sessions** (all 288 runs each; the 9 that never train a detector,
+[below](#where-it-does-well-and-where-it-does-poorly), at their typed query's set):
 
 | preset | 25 clicks | 50 clicks | 150 clicks, unchecked | **after the check** | the check's effect | returned, median (unchecked / after) | returned > 200 (unchecked / after) |
 |---:|---:|---:|---:|---:|---|---:|---:|
-| 1/4 | 0.44 | 0.54 | 0.69 | **0.73** | +0.048 ± 0.007 | 35 / 30 | 0% / 1% |
-| 1 | 0.37 | 0.47 | 0.60 | **0.63** | +0.035 ± 0.005 | 49 / 48 | 4% / 3% |
-| 4 | 0.50 | 0.57 | 0.68 | **0.72** | +0.046 ± 0.006 | 91 / 92 | 27% / 25% |
+| 1/4 | 0.42 | 0.53 | 0.67 | **0.71** | +0.046 ± 0.007 | 34 / 29 | 0% / 1% |
+| 1 | 0.36 | 0.45 | 0.58 | **0.61** | +0.034 ± 0.005 | 49 / 47 | 4% / 2% |
+| 4 | 0.49 | 0.55 | 0.66 | **0.70** | +0.044 ± 0.006 | 92 / 94 | 27% / 26% |
 
 ![The objective over clicks, per preset](figures/objective_at_own_beta.png)
 
 1. **The presets return what they promise.** After the check:
-   - the 1/4 preset returns a median of 30 images at precision 0.81 and recall 0.48;
-   - the balanced preset returns 48 at 0.67 and 0.65;
-   - the recall preset returns 92 at 0.45 and 0.82.
+   - the 1/4 preset returns a median of 29 images at precision 0.79 and recall 0.46;
+   - the balanced preset returns 47 at 0.65 and 0.63;
+   - the recall preset returns 94 at 0.44 and 0.80.
 2. **The region path is ahead of the binary path at every preset from 50 clicks on.**
-   - Binary Photo, 2026-10-05 (#4510, the same app at 10 seeds): 0.64/0.53/0.60 after the check, against
-     0.73/0.63/0.72 here. At 50 clicks: 0.51/0.42/0.50, against 0.54/0.47/0.57.
-   - At 25 clicks the two are within 0.03 (0.46/0.37/0.47 binary): the app is still on the typed query in about
+   - Binary Photo, 2026-10-05 (#4510, the same app at 10 seeds): 0.62/0.51/0.59 after the check, against
+     0.71/0.61/0.70 here. At 50 clicks: 0.50/0.41/0.48, against 0.53/0.45/0.55.
+   - At 25 clicks the two are within 0.03 (0.45/0.36/0.46 binary): the app is still on the typed query in about
      70% of sessions on both paths, since both open on the same text sort and hand over at the same clicks
-     (31% by click 25, half by 40, #4605). At the hand-over the region line does not dip at 4 and barely at 1
-     (0.38 to 0.37), but dips at 1/4 (0.48 to 0.43 at click 26, back by click 31), where the count line's typed
-     query is a strong start.
+     (29% of binary and 30% of region sessions by click 25, half by 40, #4605). At the hand-over the region line
+     does not dip at 4 and barely at 1 (by 0.004), but dips at 1/4 (0.47 to 0.42 at click 26, back by click 31),
+     where the count line's typed query is a strong start.
    - Seed 1 moved no number in this table by more than 0.02, and the objective after the check by less than
-     0.005: seed 0 alone read 0.74/0.63/0.72.
+     0.005: seed 0 alone read 0.74/0.63/0.72 (over its trained runs, before #4631).
    - This is a description of the two paths as they ship, not an A/B: the paths differ in embedding, votes and
      scoring.
-3. **The check pays more than on the binary path:** +0.035 to +0.048, against +0.022 to +0.032. Part of it is
-   the 9% of sessions that never leave the opening in 150 clicks: the check is where they first see a detector.
-   At 1 it cuts the share of runs returning more than 200 images from 4% to 3%; at 1/4 almost none return that
-   many either way (0% and 1%); at 4 it barely moves (27% to 25%).
+3. **The check pays more than on the binary path:** +0.034 to +0.046 per session, against +0.022 to +0.031
+   (a run that never trains has no check and adds 0). Part of it is the 8% of sessions that train a detector but
+   never leave the opening in 150 clicks: the check is where they first see one. At 1 it cuts the share of runs
+   returning more than 200 images from 4% to 2%; at 1/4 almost none return that many either way (0% and 1%); at
+   4 it barely moves (27% to 26%).
 4. **The ceiling's own line goes too deep here too (#4490).** With every label known (seed 0), Find's line
    scores 0.44/0.47/0.70 at the three presets, against the 150-click session's 0.67/0.58/0.66. It returns a mean
    of 181, 319 and 605 images at precision 0.43, 0.37 and 0.31. As on the binary path, only beta 4, which rewards
@@ -97,51 +110,52 @@ see [below](#where-it-does-well-and-where-it-does-poorly)):
 ### The returned set through the session
 
 Per preset, the returned set's precision against its recall from the typed query, through 25, 50, 100 and 150
-clicks, to after the check. These are means over the trained runs, a session still in the opening counted at the
-typed query's set (#4605); the returned size is a median.
+clicks, to after the check. These are means over all 288 runs, a session still in the opening or one that never
+trained counted at the typed query's set (#4605, #4631); the returned size is a median.
 
 ![Precision against recall through the session, per preset](figures/precision_recall_path.png)
 
 | preset | point | precision | recall | F-beta | returned, median | runs |
 |---:|---|---:|---:|---:|---:|---:|
-| 1/4 | typed query | 0.54 | 0.26 | 0.48 | 18 | 279 |
-| 1/4 | 25 | 0.48 | 0.37 | 0.44 | 22 | 279 |
-| 1/4 | 50 | 0.58 | 0.42 | 0.54 | 30 | 279 |
-| 1/4 | 100 | 0.71 | 0.47 | 0.65 | 32 | 279 |
-| 1/4 | 150 | 0.75 | 0.49 | 0.69 | 35 | 279 |
-| 1/4 | after the check | 0.81 | 0.48 | 0.73 | 30 | 279 |
-| 1 | typed query | 0.38 | 0.45 | 0.38 | 51 | 279 |
-| 1 | 25 | 0.37 | 0.47 | 0.37 | 50 | 279 |
-| 1 | 50 | 0.48 | 0.51 | 0.47 | 47 | 279 |
-| 1 | 100 | 0.61 | 0.60 | 0.57 | 47 | 279 |
-| 1 | 150 | 0.62 | 0.63 | 0.60 | 49 | 279 |
-| 1 | after the check | 0.67 | 0.65 | 0.63 | 48 | 279 |
-| 4 | typed query | 0.17 | 0.60 | 0.48 | 204 | 279 |
-| 4 | 25 | 0.24 | 0.60 | 0.50 | 186 | 279 |
-| 4 | 50 | 0.35 | 0.64 | 0.57 | 109 | 279 |
-| 4 | 100 | 0.43 | 0.74 | 0.65 | 93 | 279 |
-| 4 | 150 | 0.44 | 0.78 | 0.68 | 91 | 279 |
-| 4 | after the check | 0.45 | 0.82 | 0.72 | 92 | 279 |
+| 1/4 | typed query | 0.52 | 0.25 | 0.47 | 18 | 288 |
+| 1/4 | 25 | 0.46 | 0.35 | 0.42 | 21 | 288 |
+| 1/4 | 50 | 0.56 | 0.41 | 0.53 | 29 | 288 |
+| 1/4 | 100 | 0.69 | 0.45 | 0.63 | 31 | 288 |
+| 1/4 | 150 | 0.73 | 0.47 | 0.67 | 34 | 288 |
+| 1/4 | after the check | 0.79 | 0.46 | 0.71 | 29 | 288 |
+| 1 | typed query | 0.37 | 0.44 | 0.36 | 50 | 288 |
+| 1 | 25 | 0.36 | 0.45 | 0.36 | 49 | 288 |
+| 1 | 50 | 0.46 | 0.50 | 0.45 | 47 | 288 |
+| 1 | 100 | 0.59 | 0.58 | 0.55 | 46 | 288 |
+| 1 | 150 | 0.61 | 0.61 | 0.58 | 49 | 288 |
+| 1 | after the check | 0.65 | 0.63 | 0.61 | 47 | 288 |
+| 4 | typed query | 0.17 | 0.58 | 0.47 | 204 | 288 |
+| 4 | 25 | 0.23 | 0.59 | 0.49 | 186 | 288 |
+| 4 | 50 | 0.34 | 0.62 | 0.55 | 109 | 288 |
+| 4 | 100 | 0.42 | 0.72 | 0.63 | 93 | 288 |
+| 4 | 150 | 0.43 | 0.76 | 0.66 | 92 | 288 |
+| 4 | after the check | 0.44 | 0.80 | 0.70 | 94 | 288 |
 
 **As on the binary path, the clicks mostly buy precision.**
 - At 25 most sessions still show the typed query, so the 25s sit near it.
-- From click 50 to 100, precision rises 0.08 to 0.14 at every preset (0.58 → 0.72, 0.48 → 0.61, 0.35 → 0.43),
+- From click 50 to 100, precision rises 0.08 to 0.13 at every preset (0.56 → 0.69, 0.46 → 0.59, 0.34 → 0.42),
   recall 0.04 to 0.10.
 - From 100 to 150 the objective still rises 0.03 to 0.04 at every preset. (Earlier versions read a flat stretch
   there: sessions joined the table only once they had a frame, and the late joiners were weak. Every session now
-  counts at every click, #4605.)
-- The check then adds precision at 1/4 and 1 (+0.05 and +0.04). At 4, precision and recall each move only +0.01.
+  counts at every click, #4605, #4631.)
+- The check then adds precision at 1/4 and 1 (+0.06 and +0.05). At 4, precision moves +0.01 and recall +0.04.
 
 ### The returned set, one rule per row
 
 The detector's own line (the labels line) against a set-constant top-K, at the preset's beta. Compare within a
-rule, never across.
+rule, never across. Every run is in every column (#4631): one inside a spot check at 25 or 50 clicks carries the
+detector on screen, and one that never trains reads the typed query's.
 
 | preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks | full labels (seed 0) |
 |---:|---|---:|---:|---:|---:|---:|
 | 1/4 | app line | 0.47 | 0.42 | 0.53 | **0.67** | 0.44 |
 | 1/4 | top 32 | 0.47 | 0.47 | 0.55 | **0.68** | 0.74 |
-| 1 | app line | 0.36 | 0.36 | 0.46 | **0.58** | 0.47 |
+| 1 | app line | 0.36 | 0.36 | 0.45 | **0.58** | 0.47 |
 | 1 | top 32 | 0.38 | 0.38 | 0.44 | **0.55** | 0.59 |
 | 4 | app line | 0.47 | 0.49 | 0.55 | **0.66** | 0.70 |
 | 4 | top 128 | 0.49 | 0.48 | 0.54 | **0.66** | 0.74 |
@@ -176,7 +190,7 @@ The ranking barely depends on the preset (shown: the beta 1 sessions):
 
 The check walks bands of the unvoted ranking, about 5 picks a band. It never moves the line; its picks are votes
 the next retrain learns from.
-- **At the end of the session,** every trained run checks once.
+- **At the end of the session,** every run with a detector checks once (279 of 288).
   - That is about 21 votes at 1/4 and 1, and 30 at 4.
   - The precision range is 0.63 to 0.70 wide, and it held the truth in every run (279 of 279 per preset).
 - **Mid-session,** Autopilot runs the check when the labels separate weakly (#4496).
@@ -191,29 +205,30 @@ the next retrain learns from.
 
 ## Where it does well and where it does poorly
 
-**By size band** (beta 1; trained runs; the objective after the check, and the ranking's AP):
+**By size band** (beta 1, every run; the objective after the check, and the ranking's AP):
 
 | band (runs) | objective | returned, median | text AP | AP at 150 | full-label AP (seed 0) | Goods found |
 |---|---:|---:|---:|---:|---:|---:|
 | large (98) | 0.81 | 50 | 0.70 | 0.88 | 0.89 | 36 |
 | medium (98) | 0.66 | 47 | 0.38 | 0.70 | 0.71 | 26 |
-| small (92; 83 trained) | 0.39 | 46 | 0.18 | 0.35 | 0.44 | 14 |
+| small (92; 9 never train) | 0.35 | 44 | 0.16 | 0.31 | 0.43 | 13 |
 
-Against the binary path (0.77/0.49/0.29 by band), the gain is in **medium and small**: +0.17 and +0.10, against
+Against the binary path (0.77/0.49/0.26 by band), the gain is in **medium and small**: +0.17 and +0.09, against
 +0.04 for large.
 
 **The binary path's hardest classes are where regions help most:**
 
 | class | binary objective (10 seeds) | region objective (2 seeds) | region AP at 150 |
 |---|---:|---:|---:|
-| chair | 0.07 | 0.37 | 0.35 |
-| enclosed road vehicle | 0.22 | 0.63 | 0.67 |
-| book | 0.28 | 0.54 | 0.50 |
-| bottle | 0.27 | 0.50 | 0.54 |
-| knife | 0.20 | 0.41 | 0.39 |
+| chair | 0.04 | 0.24 | 0.24 |
+| enclosed road vehicle | 0.21 | 0.53 | 0.56 |
+| book | 0.28 | 0.45 | 0.42 |
+| bottle | 0.26 | 0.43 | 0.46 |
+| knife | 0.16 | 0.34 | 0.32 |
 
-**Poorly, still:** tableware and the dining table.
-- Bowl 0.20 (bowl@small never trains, in either seed), spoon 0.29, dining table 0.32.
+**Poorly, still:** tableware, chair and the dining table.
+- Bowl 0.13 and chair 0.24: bowl@small and chair@small never train, in either seed, and count at their typed
+  query's set (#4631). Then spoon 0.29, dining table 0.32 and knife 0.34.
 - No confuser sheets were made for the region path, so this report does not say why.
 
 **Well:** tennis racket 0.98, airplane 0.91, baseball bat and orange 0.89, and apple, banana, kite and surfboard
@@ -223,23 +238,25 @@ Against the binary path (0.77/0.49/0.29 by band), the gain is in **medium and sm
 - in both seeds: bowl and chair;
 - in one: book, bottle, enclosed road vehicle, knife and person.
 
-On the binary path, chair@small never trains in any of 10 seeds.
+They count in every table at their typed query's set (#4631). On the binary path, chair@small never trains in
+any of 10 seeds.
 
 ![Every class x band](figures/per_cell.png)
 
 ## Headroom (full labels minus 150 clicks)
 
-Seed 0's 139 trained runs (beta 1), where the ceiling ran.
-- **The mean is 0.04 AP** (0.65 at 150 clicks against 0.70 with every label). The clicks had already bought
-  +0.22 over the typed query (0.44 → 0.65), so 150 clicks close about five sixths of the gap to full labels,
+Seed 0's 144 runs (beta 1), where the ceiling ran; the 5 that never train a detector are at the text sort's AP
+(#4631).
+- **The mean is 0.05 AP** (0.63 at 150 clicks against 0.68 with every label). The clicks had already bought
+  +0.21 over the typed query (0.42 → 0.63), so 150 clicks close about four fifths of the gap to full labels,
   against about three quarters on the binary path.
-- **It is nearly all small objects:** +0.11 at small (0.34 → 0.44), against +0.02 at large and +0.01 at medium.
-- **By class,** the most is in chair (+0.20; 0.36 → 0.56), bowl (+0.19; 0.17 → 0.35), sink and knife (+0.17),
-  keyboard (+0.15), laptop and motorcycle (+0.13) and tv (+0.11). Bowl's ceiling is low as well: the embedding
-  is part of its problem, as on the binary path. Chair's ceiling is 0.56: the clicks leave the most on the
-  table there.
-- **Nine classes end at or above their ceiling:** cell phone (−0.04), book (−0.04), umbrella and tie (−0.03),
-  clock, airplane, bird, apple and baseball bat. As on the binary path, a head trained on 150 chosen labels can
+- **It is nearly all small objects:** +0.13 at small (0.30 → 0.43), against +0.02 at large and +0.01 at medium.
+- **By class,** the most is in bowl (+0.23; 0.12 → 0.34), chair (+0.20; 0.24 → 0.44), sink and knife (+0.17),
+  keyboard (+0.15), laptop and motorcycle (+0.13) and person (+0.13). Bowl and chair are the classes whose
+  small band never trains, so a session there ends on the typed query; their ceilings are low as well (0.34
+  and 0.44), so the embedding is part of their problem, as on the binary path.
+- **Eight classes end at or above their ceiling:** cell phone (−0.04), umbrella and tie (−0.03), clock,
+  airplane, bird, apple and baseball bat. As on the binary path, a head trained on 150 chosen labels can
   match one trained on every label when the extra labels are noisy.
 
 <a id="not-covered"></a>
@@ -262,11 +279,15 @@ Seed 0's 139 trained runs (beta 1), where the ceiling ran.
 - `figures/`: the objective, the returned set and its path per preset; AP and Goods over clicks; every cell.
 - `viewer.html`: the beta-1 sessions, both seeds.
 - **Runs and analyses** are in `/expscratch/sgreenberg/state-of-the-app/2026-10-06-b025|b1|b4/`:
-  - `analysis-region-4603/`: **this version's**, both seeds, the opening scored as the text sort (#4605), on a
-    baseline with each preset's own line (#4603, `/expscratch/sgreenberg/notch-4599/text_baseline-count-region2.csv`),
-    with seed 0's ceiling (`-b1/ceiling`, symlinked into `-b025` and `-b4`); `perp.py` and `by_click.py` over them
-    are in `2026-10-07-perp-4603-region/`, and `/expscratch/sgreenberg/notch-4599/opening/analyze_dev.sh` reruns
-    one (`TAG=4603`);
+  - `analysis-region-4631/`: **this version's**, both seeds, every run counted (#4631), the opening scored as
+    the text sort (#4605), on a baseline with each preset's own line (#4603,
+    `/expscratch/sgreenberg/notch-4599/text_baseline-count-region2.csv`), with seed 0's ceiling (`-b1/ceiling`,
+    symlinked into `-b025` and `-b4`); `perp.py` and `by_click.py` over them are in
+    `2026-10-07-perp-4631-region/`, and `/expscratch/sgreenberg/notch-4599/opening/analyze_dev.sh` reruns one
+    (`TAG=4631`, `WT=` a checkout with #4631). The headroom is
+    `/expscratch/sgreenberg/empty-sets-4631/headroom_4631.py 4631` (every seed-0 run), and the band and class
+    tables `/expscratch/sgreenberg/empty-sets-4631/report_md_4631.py`;
+  - `analysis-region-4603/`: the same before #4631, over the trained runs (`2026-10-07-perp-4603-region/`);
   - `analysis-region-4552/`: the same on the guarded baseline (before #4603). Off it,
     `/expscratch/sgreenberg/notch-4599/opening/headroom_4552.py` reads the headroom (the line does not enter it);
   - `analysis-region-4605/`: the same without the ceiling;

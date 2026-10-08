@@ -24,6 +24,7 @@ import type { ExporterEntry } from '../../../generated/api-client/models/exporte
 import { IconComponent } from '../../icon/icon.component';
 import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import { visibleFields } from '../../../utils/plugin-fields';
+import { labelsOwed } from '../../../utils/label-quota';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 
@@ -115,6 +116,22 @@ export class AutoDetectResultsModalComponent implements OnInit {
   /** Open the auto-export's URL in a new tab (the click is the user gesture). */
   openExternal(url: string): void {
     openExternalUrl(url);
+  }
+
+  /**
+   * The detectors that ran as the Goods' centroid (#4643): too few labels for
+   * a trained detector, so their hits are the centroid's. One line each, with
+   * the labels still owed.
+   */
+  get centroidDetectors(): string[] {
+    const lines: string[] = [];
+    for (const [name, result] of Object.entries(this.data().results || {})) {
+      const quota = result.label_quota;
+      if (quota?.tier !== 'centroid') continue;
+      const owed = labelsOwed(quota);
+      lines.push(owed ? `${result.detector_name || name} (${owed})` : result.detector_name || name);
+    }
+    return lines;
   }
 
   get allHits(): AutoDetectHit[] {

@@ -426,12 +426,14 @@ class TestProductionScheduleIsTheDefault:
 
 class TestPickLog:
     def test_records_every_click_including_the_untrainable_opening(self):
-        """The main frame starts at the first trainable step, so the opening -
-        the whole subject of #3267 - is exactly what it does not record."""
+        """The main frame starts at the first Good, the first click Test gives a
+        detector at (#4643), so the clicks before it - inside the opening, the
+        whole subject of #3267 - are exactly what it does not record."""
         rows, picks = _run("n6@q0.02,n8@q0.25")
         assert len(picks) == 24
-        assert len(rows) < len(picks)
         assert [p["t"] for p in picks] == list(range(1, 25))
+        first_good = min(p["t"] for p in picks if p["picked_label"] == 1)
+        assert [r["t"] for r in rows] == list(range(first_good, 25))
 
     def test_every_declared_column_is_present(self):
         _, picks = _run("n6@q0.02,n8@q0.25")

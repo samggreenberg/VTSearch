@@ -85,12 +85,19 @@ def operating_cost(
 #: metric picker needs the direction and the range, and deriving those from the
 #: name is how "lower is better" gets attached to recall.
 #:
+#: The F-beta family is ordered by beta: the returned set at the precision-
+#: leaning preset, F1 (the balanced one, which ``fbeta_b1`` would only repeat),
+#: the recall-leaning preset, then the objective at whichever beta drew the
+#: row's line (#4636).
+#:
 #: ``(label, lower_is_better, domain)``.
 DETECTION_METRICS: dict[str, tuple[str, bool, tuple[float, float]]] = {
     "cost": ("Cost (weighted FPR+FNR)", True, (0.0, 2.0)),
     "precision": ("Precision", False, (0.0, 1.0)),
     "recall": ("Recall (= 1 - FNR)", False, (0.0, 1.0)),
+    "fbeta_b025": ("F1/4 (precision-leaning)", False, (0.0, 1.0)),
     "f1": ("F1", False, (0.0, 1.0)),
+    "fbeta_b4": ("F4 (recall-leaning)", False, (0.0, 1.0)),
     "fbeta": ("F-beta at the run's balance (the objective)", False, (0.0, 1.0)),
     "fpr": ("False-positive rate", True, (0.0, 1.0)),
     "fnr": ("False-negative rate", True, (0.0, 1.0)),

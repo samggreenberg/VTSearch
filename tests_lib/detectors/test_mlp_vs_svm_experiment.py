@@ -253,6 +253,9 @@ class TestPrecisionFrames:
             emit_calibration_metrics=True,
             precision_frame_sink=sink,
             precision_frame_steps=steps,
+            # The frames read the trained head's cut: under the label quota
+            # (#4643) its early steps are the Goods' centroid's, with no frame.
+            label_quota=False,
         )
 
     def test_one_frame_per_requested_step_with_consistent_shapes(self):
@@ -322,6 +325,9 @@ class TestRankFrames:
             rank_frame_steps=steps,
             precision_frame_sink=pframes,
             precision_frame_steps=steps if pframes is not None else None,
+            # The frames read the trained head's ranking: under the label quota
+            # (#4643) its early steps are the Goods' centroid's, with no frame.
+            label_quota=False,
             **knobs,
         )
 

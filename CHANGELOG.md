@@ -17,11 +17,26 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
+  AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
+  with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
+  opening quorum), they now give the Goods' centroid: everything ranked by how close it is to the
+  average of the Goods, cut where the scores split, with no Bad needed. One Good is enough to test
+  a detector, and the Test view and AutoFind results say when the centroid was used and how many
+  more Goods and Bads a trained detector needs. The Threshold control does not move the centroid's
+  line. Labels still save on every vote, and Export labels is not gated: whatever imports the labels
+  gets the same rule. The Train view's own sort is unchanged.
 - **Autopilot's Hard and New picks go where the detector is least sure** (issue #3546). They now
   sample where the detector's own model puts even odds on an image being a match, instead of a fixed
   depth below the line that had stopped following the detector. In simulation that finds about 3 more
   matches per 150 votes at every balance setting; 38% of Hard picks are matches (was 19-24%), and the
   final detector is as good or better. The `hard` phase's help text now says what it does.
+- **Autopilot stays Done once it gets there** (issue #4621). Labeling on after **Done!** used to
+  drop the phase panel back to **Refine Boundary** whenever a vote knocked an indicator off green,
+  then jump it forward to Done again when the indicator recovered. Done now stays checked, and a
+  seventh step, **Keep Improving.**, takes over: its light shows the lowest of Smart, Stable and
+  Span, and its line says whether Autopilot is offering boundary items or diverse ones, or that all
+  indicators are green. What Autopilot picks is unchanged.
 
 ### Added
 

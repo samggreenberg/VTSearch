@@ -351,8 +351,8 @@ def _load_and_train_detectors(
             cached = len(det_ctx.label_embeddings)
             total = len(labelset.elements)
             raise ValueError(
-                f"Detector '{det_name}': could not train MLP "
-                f"(resolved {cached} of {total} label origins, need ≥1 good and ≥1 bad). "
+                f"Detector '{det_name}': could not build a detector "
+                f"(resolved {cached} of {total} label origins, need ≥1 good). "
                 "The original media may not be reachable from the CLI - for example, "
                 "labels collected through the local_folder importer have no resolve_file() path."
             )
@@ -362,6 +362,7 @@ def _load_and_train_detectors(
         # type, and the labelset good/bad tallies.
         from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
 
+        _report_centroid(det_name, det_ctx, labelset)
         # The balance's state on that threshold - unchecked, headless (#4272,
         # #4413); it rides into every result the detector produces.
         balance = _record_line_state(det_name, det_ctx)
@@ -380,6 +381,36 @@ def _load_and_train_detectors(
             "clipper_params": reclip_params,
         }
     return out
+
+
+def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
+    """Say so when *det_name*'s labels are under the quota and it scores as the Goods' centroid (#4643).
+
+    The run still scores and exports: the centroid is the detector those labels
+    give, here as in Test and AutoFind.  The ``detector_centroid`` event is the
+    record that it was not a trained head, and what the labelset still owes.
+    """
+    from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
+    from vtscore.detectors.label_quota import labelset_quota, served_quota  # noqa: PLC0415
+
+    if not is_centroid_head(det_ctx.model):
+        return
+    quota = labelset_quota(labelset)
+    owed = [
+        f"{n} more {kind}{'' if n == 1 else 's'}"
+        for n, kind in ((quota.goods_owed, "Good"), (quota.bads_owed, "Bad"))
+        if n
+    ]
+    cli_progress.emit(
+        "detector_centroid",
+        text=(
+            f"Detector '{det_name}' has {quota.n_good} Good and {quota.n_bad} Bad labels, under the quota, so it "
+            f"scores as the Goods' centroid, not a trained detector"
+            + (f" ({' and '.join(owed)} for one)." if owed else ".")
+        ),
+        detector=det_name,
+        **served_quota(det_ctx.model, labelset),
+    )
 
 
 def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:

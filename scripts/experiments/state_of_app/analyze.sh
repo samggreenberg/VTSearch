@@ -54,7 +54,7 @@ fi
 python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" \
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
   --subtitle "coco_better, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)" \
-  --default-metric average_precision --hide-metrics cost
+  --hide-metrics cost
 python "$HERE/analyze.py" --exp "$EXP" --baseline "$BASELINE" --out "$OUT" --path "$SOTA_PATH" --seeds "${SOTA_ANALYZE_SEEDS:-0}"
 python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"
 python "$HERE/thumbs.py" --analysis "$OUT" --out "$OUT/images" --n 12

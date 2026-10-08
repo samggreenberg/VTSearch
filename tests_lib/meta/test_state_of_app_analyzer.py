@@ -21,6 +21,9 @@ re-run cannot show by looking at it:
   its line at click 0 only, never a neighbour's value.
 * **The opening is the text sort** (#4605): until the app shows a detector
   (``app_trained``), every user-facing number is the text sort's.
+* **Every attempted run is in every average** (#4631): a run that never
+  trained scores its typed query's set at every click and at the end (the
+  owner's pick, 2026-10-07), and an empty returned set scores precision 0.
 * **Where the app said stop** (#3560) is read off the ordinary clicks, scores
   the same objective as the analyzer's own, and keeps the run that never
   trained as one the rules never stopped.
@@ -477,7 +480,10 @@ def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:
             want = f1(float(precision), float(recall))
             assert steps.loc[int(t), "thr_fbeta"] == pytest.approx(want)
             assert c.loc[int(t), "thr_fbeta"] == pytest.approx(want)
-        assert np.isnan(c.loc[0, "thr_fbeta"]), "no threshold before the first trained click"
+        first = int(np.asarray(ordinary["t"]).min())
+        assert np.allclose(c.loc[0 : first - 1, "thr_fbeta"], cells.loc[cat, "text_thr_fbeta"]), (
+            "the typed query's set until the first trained click (#4631)"
+        )
         fin = thr[(thr["category"] == cat) & (thr["point"] == "final")].iloc[0]
         assert fin["thr_fbeta"] == pytest.approx(want_final) and fin["beta"] == 1.0
     s = run["summary"]
@@ -550,7 +556,7 @@ def test_a_line_that_keeps_nothing_is_read_as_empty_not_as_the_cap(rm) -> None:
     assert rm.frame_beta_k({}, 1.0) is None
     m = rm.balance_metrics(ranks, 2000, 5, 1.0, 0)
     assert (m["k"], m["recall"], m["fbeta"], m["fb_share"]) == (0, 0.0, 0.0, 0.0)
-    assert np.isnan(m["precision"]), "no returned set, no precision"
+    assert m["precision"] == 0.0, "an empty set scores precision 0, not undefined (#4631)"
     assert m["oracle_fbeta"] == pytest.approx(rm.oracle_fbeta(ranks, 5, 1.0))
     assert np.isnan(rm.balance_metrics(np.array([], dtype=int), 2000, 0, 1.0, 0)["fbeta"]), "no positives: undefined"
 
@@ -624,14 +630,14 @@ def test_the_returned_sets_path_is_read_at_each_click_and_after_the_check(run, t
     )  # fmt: skip
     path = pd.read_csv(out / "precision_recall_path.csv")
     assert path["point"].astype(str).tolist() == ["typed query", "25", "50", "100", "150", "after the check"]
-    trained = cells[~cells["never_trained"].astype(bool)]
+    assert (path["runs"] == len(cells)).all(), "every run, the never-trained included (#4631)"
     end = path[path["point"] == "after the check"].iloc[0]
-    assert end["precision"] == pytest.approx(trained["thr_precision_final"].mean())
-    assert end["recall"] == pytest.approx(trained["thr_recall_final"].mean())
-    # The path starts at the typed query: the text sort under its own blind GMM cut (the app-line rule at the
-    # text point), over the same trained runs (owner, 2026-10-06: Photo Finish's notch at click 0).
+    assert end["precision"] == pytest.approx(cells["thr_precision_final"].mean())
+    assert end["recall"] == pytest.approx(cells["thr_recall_final"].mean())
+    # The path starts at the typed query: the text sort under its own line in the app (the app-line rule at the
+    # text point), over the same runs (owner, 2026-10-06: Photo Finish's notch at click 0).
     bal = pd.read_csv(a / "balances.csv", dtype={"point": str})
-    text = bal[(bal["point"] == "text") & (bal["beta"].round(4) == 1.0) & ~bal["never_trained"].astype(bool)]
+    text = bal[(bal["point"] == "text") & (bal["beta"].round(4) == 1.0)]
     if "rule" in text:
         text = text[text["rule"] == "app line"]
     start = path[path["point"] == "typed query"].iloc[0]
@@ -760,8 +766,8 @@ def test_the_summary_carries_the_stopping_block(run) -> None:
 
 
 def test_by_click_fills_the_typed_query_until_a_detector_and_carries_gaps() -> None:
-    """#4599: each run scores its typed query until its first objective, then carries its last value over
-    gaps; never-trained runs stay out, and the mean is over the trained runs only."""
+    """#4599: each run scores its typed query until the app shows its detector, then carries its last value
+    over gaps; #4631: a run that never trained stays in, at its typed query at every click."""
     filled_curve = _load("_by_click", _SOTA / "by_click.py").filled_curve
 
     nan = float("nan")
@@ -771,14 +777,22 @@ def test_by_click_fills_the_typed_query_until_a_detector_and_carries_gaps() -> N
     rows.append({"category": "b@large", "seed": 0, "t": 4, "thr_fbeta": nan})  # a check step after the detector
     rows.append({"category": "a@large", "seed": 0, "t": 4, "thr_fbeta": 0.7})
     curves = pd.DataFrame(rows)
-    trained = pd.DataFrame({"category": ["a@large", "b@large"], "seed": [0, 0]})
     text = pd.Series({("a@large", 0): 0.1, ("b@large", 0): 0.3, ("c@small", 0): 0.9})
-    got = filled_curve(curves, trained, text).set_index("t")
-    assert got["runs"].tolist() == [2] * 5, "the never-trained run stays out"
-    assert got.loc[0, "fbeta"] == pytest.approx((0.1 + 0.3) / 2), "click 0 is the typed query"
-    assert got.loc[2, "fbeta"] == pytest.approx((0.4 + 0.3) / 2), "b still has only its typed query"
-    assert got.loc[4, "fbeta"] == pytest.approx((0.7 + 0.8) / 2), "b's gap carries its last value"
-    assert got["with_detector"].tolist() == [0, 0, 1, 2, 2]
+    cells = pd.DataFrame({"category": ["a@large", "b@large", "c@small"], "seed": [0, 0, 0]})
+    shown = cells.assign(shown_from=[2.0, 3.0, np.inf])
+    # With cells.csv's hand-over click, and without it (an analysis from before #4631): the same curve.
+    for runs in (shown, cells):
+        got = filled_curve(curves, runs, text).set_index("t")
+        assert got["runs"].tolist() == [3] * 5, "the never-trained run stays in"
+        assert got.loc[0, "fbeta"] == pytest.approx((0.1 + 0.3 + 0.9) / 3), "click 0 is the typed query"
+        assert got.loc[2, "fbeta"] == pytest.approx((0.4 + 0.3 + 0.9) / 3), "b still has only its typed query"
+        assert got.loc[4, "fbeta"] == pytest.approx((0.7 + 0.8 + 0.9) / 3), "b's gap carries its last value"
+        assert got["with_detector"].tolist() == [0, 0, 1, 2, 2]
+    # A curve that already carries the typed query before the hand-over (#4631's curves.csv) reads the same.
+    pre = curves.assign(thr_fbeta=curves["thr_fbeta"].where(curves["category"] != "c@small", 0.9))
+    got = filled_curve(pre, shown, text).set_index("t")
+    assert got.loc[2, "fbeta"] == pytest.approx((0.4 + 0.3 + 0.9) / 3)
+    assert got["with_detector"].tolist() == [0, 0, 1, 2, 2], "the hand-over is cells.csv's, not the first value"
 
 
 def test_the_opening_is_scored_as_the_text_sort_the_app_shows(run, tmp_path) -> None:
@@ -808,7 +822,9 @@ def test_the_opening_is_scored_as_the_text_sort_the_app_shows(run, tmp_path) -> 
         assert row[col] == pytest.approx(before[col]), f"{col}: past the opening nothing moves"
 
     curve = curves[curves["category"] == "cat0@small"].set_index("t")
-    assert curve.loc[1 : shown - 1, "thr_fbeta"].isna().all(), "no detector's objective before the switch"
+    assert np.allclose(curve.loc[0 : shown - 1, "thr_fbeta"], row["text_thr_fbeta"]), (
+        "the typed query's objective until the switch (#4631)"
+    )
     assert np.allclose(curve.loc[1 : shown - 1, "ap"], text["text_AP"]), "the text sort's AP until the switch"
     old = run["curves"][run["curves"]["category"] == "cat0@small"].set_index("t")
     assert curve.loc[shown:, "thr_fbeta"].to_numpy() == pytest.approx(old.loc[shown:, "thr_fbeta"].to_numpy())
@@ -841,3 +857,161 @@ def test_the_typed_query_is_read_at_each_presets_own_line_when_the_baseline_has_
     assert (blind["precision"], blind["recall"]) == (0.2, 0.6)
     assert (own["precision"], own["recall"]) == (0.6, 0.3)
     assert analyze._text_app_line(new, 1.0)["precision"] == 0.2, "a preset the baseline lacks reads the blind line"
+
+
+# ------------------------------------------------- every attempted run (#4631)
+
+
+def _typed_query_f(text: dict, beta: float) -> float:
+    """The fixture baseline's typed query at *beta*: its single (beta-blind) line, scored at *beta*."""
+    p, r = text["text_precision"], text["text_recall"]
+    return (1 + beta**2) * p * r / (beta**2 * p + r)
+
+
+def test_a_run_that_never_trained_scores_its_typed_query_in_every_average(run, tmp_path) -> None:
+    """#4631 (owner, 2026-10-07): the run that never trained is in every average, at what its session shows:
+    the typed query's own set at every checkpoint, at the end and after the check, and at every click of the
+    curve; the summary's objective table and perp's tables count it."""
+    cells, curves, thr = run["cells"], run["curves"], run["thresholds"]
+    row, text = cells.loc["cat9@small"], run["text"]["cat9@small"]
+    want = _typed_query_f(text, 1.0)
+    assert row["text_thr_fbeta"] == pytest.approx(want)
+    assert row["text_thr_precision"] == pytest.approx(text["text_precision"])
+    for col in ("thr_fbeta_10", "thr_fbeta_25", "thr_fbeta_150", "thr_fbeta_unchecked", "thr_fbeta_final"):
+        assert row[col] == pytest.approx(want), col
+    assert row["thr_precision_final"] == pytest.approx(text["text_precision"])
+    assert row["thr_walk_effect"] == 0.0, "no check ran: its effect is 0, not a gap"
+    c = curves[curves["category"] == "cat9@small"]
+    assert np.allclose(c["thr_fbeta"], want), "the typed query at every click, click 0 included"
+    ends = thr[(thr["category"] == "cat9@small")].set_index("point")
+    assert ends.loc["unchecked", "thr_fbeta"] == ends.loc["final", "thr_fbeta"] == pytest.approx(want)
+    assert "| SigLIP binary | 3 |" in run["summary"], "the objective table counts all three runs"
+
+    perp = _load("_perp", _SOTA / "perp.py")
+    a = run["exp"] / "analysis"
+    obj = perp._objective_rows({1.0: a}).iloc[0]
+    assert obj["runs"] == 3
+    assert obj["F after the check"] == pytest.approx(cells["thr_fbeta_final"].mean())
+    dip = perp._dip_rows({1.0: a})
+    assert {"session: F at 25 / 50 / 100", "session F >= text sort's again by click"} <= set(dip.columns)
+    back = pd.Series({0: 0.5, 1: 0.5, 2: 0.3, 3: 0.4, 4: 0.5, 5: 0.6})
+    assert perp._back_by(back, 0.5) == 4, "back at the level after its own lowest point"
+    assert perp._back_by(pd.Series({0: 0.5, 1: 0.5, 2: 0.6}), 0.5) == perp.NEVER_BELOW
+    assert perp._back_by(pd.Series({0: 0.5, 1: 0.2, 2: 0.3}), 0.5) == "not by the end"
+
+
+def test_a_checkpoint_inside_a_spot_check_carries_the_last_detector_on_screen(run, tmp_path) -> None:
+    """#4631: a spot check scores a run once per round of picks, so a run inside one can have no rank frame at a
+    checkpoint. The user has its last detector all the while (#4624); a blank there dropped exactly the weak
+    sessions the check prompts in from the checkpoint's mean (157 of 1,440 at click 50 on the 2026-10-05 review)."""
+    exp = tmp_path / "mid-check"
+    shutil.copytree(run["exp"] / "results", exp / "results")
+    f = exp / "results" / "cells" / "task_0001__rankframes.csv"  # cat1@large
+    frames = pd.read_csv(f, dtype={"test_pos_ranks": str, "pool_pos_ranks": str})
+    at10 = frames["kind"].eq("step") & frames["t"].eq(10)
+    assert bool(at10.any())
+    earlier = frames[at10].assign(t=8)  # the same detector, last on screen at click 8; no frame at 10
+    pd.concat([frames[~at10], earlier]).to_csv(f, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    bal = pd.read_csv(out / "balances.csv", dtype={"point": str})
+    lines = pd.read_csv(out / "lines.csv", dtype={"point": str})
+    for table, before in ((bal, run["balances"]), (lines, run["lines"])):
+        new = table[(table["category"] == "cat1@large") & (table["point"] == "10")]
+        old = before[(before["category"] == "cat1@large") & (before["point"].astype(str) == "10")]
+        # Plain arrays: pyright types a frame indexed by a mask as an ndarray here.
+        got = np.asarray(new["precision"], dtype=float)
+        assert bool(np.isfinite(got).all()), "carried, not blank"
+        assert np.allclose(got, np.asarray(old["precision"], dtype=float), equal_nan=True)
+
+    # Handed over inside a check round with no frame on screen yet: the next frame, at most a round ahead.
+    later = frames[at10].assign(t=12)
+    pd.concat([frames[~at10], later]).to_csv(f, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    ahead = pd.read_csv(out / "balances.csv", dtype={"point": str})
+    new = ahead[(ahead["category"] == "cat1@large") & (ahead["point"] == "10")]
+    old = run["balances"][
+        (run["balances"]["category"] == "cat1@large") & (run["balances"]["point"].astype(str) == "10")
+    ]
+    assert np.allclose(np.asarray(new["fbeta"], dtype=float), np.asarray(old["fbeta"], dtype=float), equal_nan=True), (
+        "read a round ahead"
+    )
+
+
+def test_the_check_round_is_the_harness_picks_a_band() -> None:
+    """#4631: how far ahead a checkpoint may read is one spot-check round, the harness's picks a band."""
+    from vtscore.training.thresholds.spot_check import CHECK_MIN_PICKS
+
+    assert _load("_sota_analyze_round", _SOTA / "analyze.py").CHECK_ROUND == CHECK_MIN_PICKS
+
+
+def test_a_never_trained_run_takes_the_studys_beta(run, rm, tmp_path) -> None:
+    """#4631: a run with no rows has no beta of its own; a review runs one beta, so it takes the others'.
+    Read at beta 1, a beta-4 review's starved runs would score the typed query at the wrong preset."""
+    exp = tmp_path / "beta4"
+    shutil.copytree(run["exp"] / "results", exp / "results")
+    for idx in range(len(CATS)):
+        f = exp / "results" / "cells" / f"task_{idx:04d}.csv"
+        df = pd.read_csv(f)
+        df["beta"] = 4.0
+        df.to_csv(f, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    row = pd.read_csv(out / "cells.csv").set_index("category").loc["cat9@small"]
+    assert row["session_beta"] == 4.0
+    assert row["thr_fbeta_final"] == pytest.approx(_typed_query_f(run["text"]["cat9@small"], 4.0))
+
+
+def test_a_run_that_never_hands_over_reads_the_text_sort_not_a_gap(run, tmp_path) -> None:
+    """#4631: a trained run whose every frame falls in the opening (the app never showed its detector) is on
+    the text sort for the whole session: its curves carry the text sort's line, not a blank that drops it."""
+    exp = tmp_path / "never-shown"
+    shutil.copytree(run["exp"] / "results", exp / "results")
+    main = exp / "results" / "cells" / "task_0000.csv"  # cat0@small
+    df = pd.read_csv(main)
+    df["app_trained"] = 0
+    df.to_csv(main, index=False)
+    out = _analyze(exp, run["exp"] / "text_baseline.csv")
+    row = pd.read_csv(out / "cells.csv").set_index("category").loc["cat0@small"]
+    curve = pd.read_csv(out / "curves.csv").set_index("category").loc["cat0@small"].set_index("t")
+    text = run["text"]["cat0@small"]
+    assert np.isinf(row["shown_from"])
+    assert row["thr_fbeta_unchecked"] == pytest.approx(row["text_thr_fbeta"])
+    assert np.allclose(curve["thr_fbeta"], row["text_thr_fbeta"])
+    assert np.allclose(curve["f1"], text["text_f1_p50"]), "the text sort's line at every click, never a gap"
+    assert np.allclose(curve["fbeta_b1"], curve.loc[0, "fbeta_b1"])
+
+
+def test_an_empty_returned_set_scores_precision_0() -> None:
+    """#4631: a detector that flags nothing (precision undefined, recall 0, FPR 0) and a line that keeps nothing
+    score precision 0, not an undefined value that leaves the mean; undefined for any other reason stays so."""
+    analyze = _load("_sota_analyze_empty", _SOTA / "analyze.py")
+    empty = pd.Series({"precision": np.nan, "recall": 0.0, "fpr": 0.0, "n_test_pos": 10, "n_test_neg": 990})
+    got = analyze._threshold_at(empty, 1.0)
+    assert (got["thr_precision"], got["thr_recall"], got["thr_fbeta"], got["thr_returned"]) == (0.0, 0.0, 0.0, 0.0)
+    negatives = empty.copy()
+    negatives["fpr"] = 0.01
+    assert np.isnan(analyze._threshold_at(negatives, 1.0)["thr_precision"]), "not an empty set: left alone"
+    line = analyze._pr_balance(np.nan, 0.0, 0.0, 10.0, 990.0, 1.0, 0.5)
+    assert (line["k"], line["precision"], line["fbeta"]) == (0.0, 0.0, 0.0)
+
+
+def test_the_session_reads_every_run_at_every_recorded_click() -> None:
+    """#4631: a mean over balance_steps.csv at a click is over the runs with a frame there. The session view
+    reads every run at every click: its frame once on screen, carried; the typed query's row before that and
+    throughout a run that never trained; the opening's hidden frames never."""
+    analyze = _load("_sota_analyze_session", _SOTA / "analyze.py")
+    ident = {"arm": "SigLIP binary", "seed": 0, "beta": 1.0, "rule": "app line"}
+    metrics = {"k": 10.0, "precision": 0.5, "recall": 0.5, "oracle_fbeta": 0.8}
+
+    def r(cat, t, f, shown=True):
+        return {**ident, "category": cat, "t": t, "shown": shown, **metrics, "fbeta": f, "fb_share": f / 0.8}
+
+    steps = pd.DataFrame([r("a@large", 1, 0.1, False), r("a@large", 2, 0.6), r("a@large", 4, 0.7)])
+    text = pd.DataFrame(
+        [{**ident, "category": c, "point": "text", **metrics, "fbeta": f, "fb_share": f / 0.8}
+         for c, f in (("a@large", 0.4), ("b@small", 0.05))]
+    )  # fmt: skip
+    got = analyze.session_balance_steps(steps, text).set_index(["category", "t"])["fbeta"]
+    assert got.loc[("a@large", 1)] == 0.4, "the opening's own detector is on no screen"
+    assert got.loc[("a@large", 2)] == 0.6 and got.loc[("a@large", 4)] == 0.7
+    assert all(got.loc[("b@small", t)] == 0.05 for t in (1, 2, 4)), "the never-trained run: its typed query"
+    assert sorted({t for _, t in got.index}) == [1, 2, 4], "the clicks any run recorded"

@@ -11,6 +11,8 @@ slice, so a reader can ask their own question instead of asking for a re-run.
 What the page lets a reader pick:
 
 * **dataset** — one, or all of them averaged together;
+* **target size** — on a study whose categories are ``<class>@<band>``: one
+  size, all of them averaged, or each as its own line (#4635);
 * **category** — one within that dataset, or all averaged;
 * **embedder** — any non-empty subset, drawn as **one panel each**.  Embedders
   are never averaged with one another: two embedders are two different
@@ -21,14 +23,18 @@ What the page lets a reader pick:
   subset is: an empty selection has no honest rendering, since the page either
   goes blank or falls back to "all" and a reader who misses that takes a chart
   of everything for a chart of nothing.  The page locks the last remaining chip
-  rather than snapping it silently back on;
+  rather than snapping it silently back on.  On a page built from a review's
+  session sets (``--beta-run``, #4636) the arms are the **beta the sessions ran
+  at**, one chip per preset, and the control says so;
 * **seeds** — averaged, or every seed as its own line;
-* **metric** — cost, precision, recall, F1, the objective (F-beta at the run's
-  balance), FPR, FNR, average precision, AUROC: whatever the run emitted, from
+* **metric** — cost, precision, recall, F1/4, F1, F4 (the returned set at
+  each preset balance), the objective (F-beta at the run's own balance), FPR,
+  FNR, average precision, AUROC: whatever the run emitted, from
   one shared definition
   (:data:`vtscore.eval.calibration_metrics.DETECTION_METRICS`).  The page opens
-  on the objective when the run drew its line at a balance (#4584), else on the
-  first of them, unless the study says otherwise: ``--default-metric``
+  on F1 (:data:`DEFAULT_METRIC`, #4635); a run that emitted no F1 opens on the
+  objective when it drew its line at a balance (#4584), else on the first
+  metric.  A study can say otherwise: ``--default-metric``
   picks the one it opens on and ``--hide-metrics`` takes some off the menu, for
   a study whose report has retired one (the State of the App dropped cost,
   #4576).  Both live in the payload's ``view`` block, so a later ``--reskin``
@@ -62,7 +68,11 @@ about not letting a point be read as a line:
     rival system; it is the ceiling this system's *threshold rule* left on the
     table, so it shares the colour and differs only in style.
 ``text sort`` (a point, notched in the **left** margin)
-    What typing the query got for free, at zero clicks.
+    What typing the query got for free, at zero clicks.  A metric about the
+    returned set is read off the set the text sort's own line returns, at the
+    balance the arm's line was drawn at (:func:`curves.text_line_values`), so
+    the notch and the curve are one rule (#4474) and each session set starts
+    from the line the app shows at its beta.
 ``skyline`` (a point, notched in the **right** margin)
     The same head, through the same trainer, with every training label handed
     to it (issue #3322) — the learnability floor of this embedding space.
@@ -83,6 +93,22 @@ same reason: each is a level that holds at *one* x, and a horizontal rule across
 the chart asserts it holds at every x.  The skyline is the sharper case — drawn
 as a rule it would read as "the floor was reachable at click 3", which is the
 one reading the number exists to prevent.
+
+**Through Autopilot's opening the line is the detector, not the session**
+(owner, 2026-10-07, #4640).  The app stays on the text sort until the Hard
+phase (``app_trained``, #4605), but every vote is saved as it is cast, and
+Export labels and Test have no phase gate: a user can take the labels away at
+any click, and an import or a Test builds a detector from them.  So from a
+run's first Good the page draws the harness's detector, which is what that
+gives: since #4643, the Goods' centroid until the labels hold 3 Goods and 4
+Bads (the label quota), the trained head from there.  The harness writes each
+row as that detector (``detector_tier`` names which); nothing here reads
+``detector_tier`` or ``app_trained``.  Before the first Good, Test is refused
+and the click is the empty set (:func:`curves.score_empty_sets`).  A page built
+from results written before #4643 starts its rows at the first Good and Bad and
+draws a trained head there, the app as it was.  A report that scores the
+session (``state_of_app/analyze.py``) differs from the page through the opening
+on purpose.
 
 Payload
 -------
@@ -154,6 +180,13 @@ says what the arm IS rather than where it sits::
     python viewer.py --results "$CALIB_EXP" --arms results=prod \\
         --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
 
+A review that ran one set of sessions per preset (``SOTA_BETA``, #4413) puts
+them on one page, a chip per beta, each run directory read from its
+``results/`` and refused if its rows were drawn at another beta (#4636)::
+
+    python viewer.py --beta-run 0.25=<b025> --beta-run 1=<b1> --beta-run 4=<b4> \\
+        --baseline <b1>/text_baseline.csv --out "$OUT/viewer.html"
+
 A study whose report has retired a metric opens on another and hides it, and
 the same two flags set that on a page that is already built::
 
@@ -171,8 +204,10 @@ import gzip
 import json
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from fractions import Fraction
 from pathlib import Path
+from typing import Any
 
 import common
 
@@ -209,6 +244,11 @@ RUNS_SCALE = int(os.environ.get("VIEWER_RUNS_SCALE", "1000"))
 RUNS_BUDGET_MB = float(os.environ.get("VIEWER_RUNS_BUDGET_MB", "2.0"))
 
 TEMPLATE = Path(__file__).with_name("viewer_template.html")
+
+#: The metric a page opens on when its study names none (#4635).  The template
+#: makes the choice (its ``OPEN_ON``), so a committed page picks it up on a plain
+#: reskin; the builder only needs it to know when the template cannot.
+DEFAULT_METRIC = "f1"
 
 #: The one placeholder the template carries; see the note in its header comment.
 TOKEN = "__VIEWER" + "_PAYLOAD__"
@@ -482,7 +522,7 @@ def _agg_arrays(  # noqa: C901
     main: pd.DataFrame,
     shape: _Shape,
     t_full: np.ndarray,
-    base: dict[str, dict[tuple, float]],
+    base: dict[str, dict[str, dict[tuple, float]]],
     cells: dict[tuple[str, str], int],
 ) -> dict[str, np.ndarray]:
     """``mean`` / ``sd`` / ``n`` / ``cells`` over ``(group, arm, metric, click)``.
@@ -553,21 +593,21 @@ def _agg_arrays(  # noqa: C901
 
     # Click 0 is the zero-click text sort: every attempted cell has one, whether
     # or not it ever trained a detector.  Written here rather than left to the
-    # page so the anchor obeys the same pooling as everything else.
+    # page so the anchor obeys the same pooling as everything else.  Each arm
+    # reads its own anchor: a cut metric's is the text sort's line at the beta
+    # that arm's line was drawn at (`_baselines`).
     if 0 in t_pos:
         z = t_pos[0]
-        for mi, spec in enumerate(shape.metrics):
-            bm = base.get(spec["key"]) or {}
-            if not bm:
-                continue
-            for (ds, emb, cat), gi in shape.gi.items():
-                vals = [v for (d, e, c, _s), v in bm.items() if (d, e, c) == (ds, emb, cat)]
-                if not vals:
-                    continue
-                arr = np.asarray(vals, dtype=float)
-                for ai in range(nA):
-                    if ncells[gi, ai] <= 0:
+        for arm, ai in shape.ai.items():
+            for mi, spec in enumerate(shape.metrics):
+                by_group: dict[tuple[str, str, str], list[float]] = {}
+                for (d, e, c, _s), v in (base.get(arm, {}).get(spec["key"]) or {}).items():
+                    by_group.setdefault((d, e, c), []).append(v)
+                for group, vals in by_group.items():
+                    gi = shape.gi.get(group)
+                    if gi is None or ncells[gi, ai] <= 0:
                         continue
+                    arr = np.asarray(vals, dtype=float)
                     mean[gi, ai, mi, z] = float(arr.mean())
                     sd[gi, ai, mi, z] = float(arr.std())
                     n[gi, ai, mi, z] = float(ncells[gi, ai])
@@ -578,7 +618,7 @@ def _runs_arrays(
     main: pd.DataFrame,
     shape: _Shape,
     t_grid: np.ndarray,
-    base: dict[str, dict[tuple, float]],
+    base: dict[str, dict[str, dict[tuple, float]]],
 ) -> tuple[np.ndarray, list[list[int]]]:
     """``values[(run, metric, click)]`` plus the ``(group, arm, seed)`` index.
 
@@ -617,13 +657,13 @@ def _runs_arrays(
     # looks like, and dropping it would render that run as simply absent.
     if 0 in t_pos:
         z = t_pos[0]
-        for mi, spec in enumerate(shape.metrics):
-            for (ds, emb, cat, seed), val in (base.get(spec["key"]) or {}).items():
-                gi = shape.gi.get((ds, emb, cat))
-                si = shape.si.get(int(seed))
-                if gi is None or si is None or not np.isfinite(val):
-                    continue
-                for ai in range(len(shape.arms)):
+        for arm, ai in shape.ai.items():
+            for mi, spec in enumerate(shape.metrics):
+                for (ds, emb, cat, seed), val in (base.get(arm, {}).get(spec["key"]) or {}).items():
+                    gi = shape.gi.get((ds, emb, cat))
+                    si = shape.si.get(int(seed))
+                    if gi is None or si is None or not np.isfinite(val):
+                        continue
                     blocks[_slot(gi, ai, si)][mi, z] = val
     return (np.stack(blocks) if blocks else np.zeros((0, nM, nT))), index
 
@@ -684,6 +724,74 @@ def load_skyline(results: Path, dirs: Sequence[str], arms: Sequence[str]) -> pd.
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
+#: What the arms control says on a page whose arms are a review's session sets,
+#: one per balance (#4636): the reader is choosing the beta the sessions ran
+#: at, which is a different thing from the beta a metric scores at.  A short
+#: title (the page sets control titles in capitals) and the hint beside it.
+BETA_ARMS_CONTROL = {
+    "title": "Sessions' beta",
+    "hint": "one or more; the balance each set of sessions ran at, which F1/4, F1 and F4 then score",
+}
+
+
+def beta_label(beta: float) -> str:
+    """``β 1/4``, ``β 1``, ``β 4``: a session set's chip, in the fraction the app's presets are named by."""
+    return f"β {Fraction(beta).limit_denominator(64)}"
+
+
+def parse_beta_runs(specs: Sequence[str]) -> list[tuple[float, Path]]:
+    """``BETA=DIR`` pairs, sorted by beta; refuses a malformed pair and a beta named twice."""
+    runs: list[tuple[float, Path]] = []
+    for spec in specs:
+        beta_s, sep, d = spec.partition("=")
+        try:
+            beta = float(beta_s)
+        except ValueError:
+            beta = float("nan")
+        if not sep or not d or not (np.isfinite(beta) and beta > 0):
+            raise SystemExit(f"viewer: --beta-run wants BETA=DIR with a positive beta, got {spec!r}")
+        runs.append((beta, Path(d)))
+    betas = [b for b, _ in runs]
+    if len(set(betas)) != len(betas):
+        raise SystemExit(f"viewer: a beta is named twice in --beta-run: {', '.join(f'{b:g}' for b in betas)}")
+    return sorted(runs)
+
+
+def load_beta_runs(
+    runs: Sequence[tuple[float, Path]], *, skyline: bool = True
+) -> tuple[pd.DataFrame, pd.DataFrame | None, list[str]]:
+    """``(frame, skyline, arms)``: one arm per session set, each chip named for the beta it ran at (#4636).
+
+    A review runs one set of sessions per preset (``SOTA_BETA``, #4413), each
+    in its own run directory, and the app at each beta trains, checks and
+    draws its line differently, so the sets are three configurations of the
+    app rather than three readings of one.  Each *runs* entry is ``(beta,
+    run directory)``, read from the directory's ``results/`` as ``analyze.sh``
+    reads it.  A set whose rows were drawn at another beta, at several, or at
+    none is refused: a swapped pair would put the beta-4 sessions under the
+    ``β 1/4`` chip, which nothing on screen would show and which inverts every
+    comparison the page exists for.
+    """
+    parts, skies, arms = [], [], []
+    for beta, run_dir in runs:
+        label = beta_label(beta)
+        frame = curves._load(run_dir, ["results"])
+        if frame.empty:
+            raise SystemExit(f"viewer: no rows under {run_dir / 'results'} for the beta {beta:g} sessions")
+        found = objective.frame_betas(frame)
+        if len(found) != 1 or abs(found[0] - beta) > 1e-9:
+            raise SystemExit(
+                f"viewer: {run_dir} was named as the beta {beta:g} sessions, but its rows were drawn at "
+                f"{', '.join(f'{b:g}' for b in found) or 'no balance'}"
+            )
+        parts.append(frame.assign(arm=label))
+        arms.append(label)
+        if skyline:
+            skies.append(load_skyline(run_dir, ["results"], [label]))
+    sky = pd.concat([s for s in skies if not s.empty], ignore_index=True) if any(not s.empty for s in skies) else None
+    return pd.concat(parts, ignore_index=True), sky, arms
+
+
 def _skyline_arrays(skyline: pd.DataFrame | None, shape: _Shape) -> tuple[np.ndarray, np.ndarray, str]:
     """``(mean, n, arm_name)`` over ``(group, arm, metric)`` — one number, not a line.
 
@@ -728,36 +836,44 @@ def _skyline_arrays(skyline: pd.DataFrame | None, shape: _Shape) -> tuple[np.nda
 
 
 def _baselines(
-    baseline: pd.DataFrame | None, shape: _Shape, objective_col: str | None = None
-) -> dict[str, dict[tuple, float]]:
-    """``metric -> {(dataset, embedder, category, seed): value}``.
+    baseline: pd.DataFrame | None, shape: _Shape, arm_betas: Mapping[str, float | None]
+) -> dict[str, dict[str, dict[tuple, float]]]:
+    """``arm -> metric -> {(dataset, embedder, category, seed): value}``.
 
-    Uses :func:`curves.baseline_map` for the column lookup, so the page's click-0
-    anchor and the PNG's click-0 anchor read the same column of the same file.
-    *objective_col* is the objective's (:func:`curves.objective_anchor_column`).
+    Uses :func:`curves.baseline_map` for the lookup, so the page's click-0
+    anchor and the PNG's click-0 anchor read the same columns of the same file.
+    Per arm, because a cut metric's anchor is the set the text sort's line
+    returns at the balance that arm's line was drawn at (*arm_betas*, from
+    :func:`objective.frame_beta`): a page whose arms are a review's session
+    sets at beta 1/4, 1 and 4 (#4636) starts each from the line the app shows
+    at that beta.  Arms at one beta share one set of maps.
     """
     if baseline is None or baseline.empty:
         return {}
     keys = [k for k in ("dataset", "embedder", "category", "seed") if k in baseline.columns]
-    out: dict[str, dict[tuple, float]] = {}
-    for spec in shape.metrics:
-        col = objective_col if spec["key"] == objective.OBJECTIVE else None
-        m = curves.baseline_map(baseline, spec["key"], keys, col)
-        if not m:
-            continue
-        fixed: dict[tuple, float] = {}
-        for k, v in m.items():
-            rec = dict(zip(keys, k, strict=False))
-            fixed[
-                (
-                    str(rec.get("dataset", "")),
-                    str(rec.get("embedder", "")),
-                    str(rec.get("category", "")),
-                    int(rec.get("seed", 0)),
-                )
-            ] = v
-        out[spec["key"]] = fixed
+    by_beta: dict[float | None, dict[str, dict[tuple, float]]] = {}
+    out: dict[str, dict[str, dict[tuple, float]]] = {}
+    for arm in shape.arms:
+        beta = arm_betas.get(arm)
+        if beta not in by_beta:
+            maps: dict[str, dict[tuple, float]] = {}
+            for spec in shape.metrics:
+                m = curves.baseline_map(baseline, spec["key"], keys, beta=beta)
+                if m:
+                    maps[spec["key"]] = {_anchor_key(dict(zip(keys, k, strict=False))): v for k, v in m.items()}
+            by_beta[beta] = maps
+        if by_beta[beta]:
+            out[arm] = by_beta[beta]
     return out
+
+
+def _anchor_key(rec: Mapping[str, Any]) -> tuple[str, str, str, int]:
+    return (
+        str(rec.get("dataset", "")),
+        str(rec.get("embedder", "")),
+        str(rec.get("category", "")),
+        int(rec.get("seed", 0)),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -783,13 +899,21 @@ def build_viewer(  # noqa: C901
     hide_metrics: Sequence[str] = (),
     fill_gaps: bool = True,
     score_empty_sets: bool = True,
+    arms_control: Mapping[str, str] | None = None,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*.
 
+    *arms_control* (``title`` and ``hint``) relabels the arms control when the
+    arms are not a study's configurations: a review's session sets, one per
+    preset, are a balance the reader picks (:data:`BETA_ARMS_CONTROL`,
+    :func:`load_beta_runs`, #4636).
+
     *default_metric* and *hide_metrics* set the page's opening ``view``; see
-    :func:`opening_view`.  Without a *default_metric*, a frame that carries a
-    beta opens on the objective (#4584), its columns filled from the rates
-    where the cells predate them; any other frame opens on the first metric.
+    :func:`opening_view`.  Without a *default_metric* the page opens on
+    :data:`DEFAULT_METRIC`, F1 (#4635), and the ``view`` says nothing about it.
+    A frame that offers no F1 but carries a beta opens on the objective (#4584),
+    its columns filled from the rates where the cells predate them; any other
+    frame opens on the first metric.
 
     *fill_gaps* carries each run's last scored row through the clicks it has
     no row for (:func:`curves.fill_gaps`, #4624): a run inside a prompted
@@ -839,8 +963,9 @@ def build_viewer(  # noqa: C901
     if not shape.metrics:
         raise SystemExit("viewer: the frame carries none of the known metric columns")
     offered = [m["key"] for m in shape.metrics]
-    if default_metric is None and objective.carries_beta(main) and objective.OBJECTIVE in offered:
-        if objective.OBJECTIVE not in set(hide_metrics):
+    shown = [k for k in offered if k not in set(hide_metrics)]
+    if default_metric is None and DEFAULT_METRIC not in shown and objective.carries_beta(main):
+        if objective.OBJECTIVE in shown:
             default_metric = objective.OBJECTIVE
     # Checked before the expensive part, so a misspelt flag fails in a second.
     view = opening_view(offered, metric=default_metric, hide=hide_metrics)
@@ -855,7 +980,8 @@ def build_viewer(  # noqa: C901
         for (arm, gk), d in den.groupby(["arm", "__group"])
     }
 
-    base = _baselines(baseline, shape, curves.objective_anchor_column(main))
+    arm_betas = {a: objective.frame_beta(main[main["arm"] == a]) for a in shape.arms}
+    base = _baselines(baseline, shape, arm_betas)
     has_anchor = bool(base)
     t_full = np.arange(0 if has_anchor else 1, int(main["t"].max()) + 1)
 
@@ -938,6 +1064,10 @@ def build_viewer(  # noqa: C901
         "embedders": shape.embedders,
         "categories": shape.categories,
         "arms": shape.arms,
+        # What the arm chips choose between, when it is not a configuration:
+        # a review's session sets, one per balance (#4636).  Absent otherwise,
+        # and the page then calls them arms.
+        **({"arms_control": dict(arms_control)} if arms_control else {}),
         "seeds": shape.seeds,
         "metrics": shape.metrics,
         "groups": [list(g) for g in shape.groups],
@@ -1137,6 +1267,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--arms",
         help="comma-separated arm directories, in report order; `dir=label` renames one on the page",
     )
+    ap.add_argument(
+        "--beta-run",
+        action="append",
+        metavar="BETA=DIR",
+        help="a review's sessions at one balance (#4636): DIR is the run directory whose results/ holds the "
+        "sessions run at BETA (SOTA_BETA). Repeat it per preset; each set becomes a chip named for its beta, "
+        "the arms control reads as the sessions' beta, and a set whose rows carry another beta is refused. "
+        "In place of --results / --arms.",
+    )
     ap.add_argument("--out", help="path to write the HTML to")
     ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
     ap.add_argument("--title", default="Quality over clicks")
@@ -1144,8 +1283,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument(
         "--default-metric",
         metavar="KEY",
-        help="the metric the page opens on (default: the objective, fbeta, on a run with a balance, else the "
-        "first it offers); with --reskin, '' reverts to the first it offers",
+        help=f"the metric the page opens on (default: {DEFAULT_METRIC}; without it, the objective, fbeta, on a "
+        "run with a balance, else the first it offers); with --reskin, '' drops the page's own choice",
     )
     ap.add_argument(
         "--hide-metrics",
@@ -1183,8 +1322,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.fill_gaps:
         ap.error("--fill-gaps goes with --reskin; a build carries the gaps by itself")
-    if not args.arms or not args.out:
-        ap.error("--arms and --out are required unless --reskin is given")
+    if args.beta_run and args.arms:
+        ap.error("--beta-run names the arms itself; give it or --arms, not both")
+    if not (args.arms or args.beta_run) or not args.out:
+        ap.error("--arms (or --beta-run) and --out are required unless --reskin is given")
+    baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
+    common_kw = {
+        "baseline": baseline,
+        "title": args.title,
+        "subtitle": args.subtitle,
+        "runs_budget_mb": args.runs_budget_mb,
+        "default_metric": args.default_metric or None,
+        "hide_metrics": hide or (),
+    }
+    if args.beta_run:
+        if args.skyline_results:
+            ap.error("--skyline-results goes with --results; each --beta-run directory carries its own skyline")
+        runs = parse_beta_runs(args.beta_run)
+        frame, skyline, arms = load_beta_runs(runs, skyline=not args.no_skyline)
+        out = build_viewer(
+            frame,
+            Path(args.out),
+            arms=arms,
+            skyline=skyline,
+            arms_control=BETA_ARMS_CONTROL,
+            build={
+                "beta_runs": [f"{b:g}={d.resolve()}" for b, d in runs],
+                "baseline": str(Path(args.baseline).resolve()) if args.baseline else None,
+                "built": _now(),
+            },
+            **common_kw,
+        )
+        _report(out, args, skyline, "each --beta-run directory's results/")
+        return 0
 
     # `dir=label` exists for the single-arm studies. A study that sweeps a knob
     # has one results directory per arm and the directory name IS the arm name,
@@ -1202,7 +1372,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if arms != dirs:
         frame["arm"] = frame["arm"].map(dict(zip(dirs, arms, strict=True)))
-    baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
     # The skyline may live in its own results root -- see `load_skyline`'s note
     # on why a floor is allowed to arrive later than the curve it sits beside.
     sky_root = Path(args.skyline_results or args.results)
@@ -1213,7 +1382,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         frame,
         Path(args.out),
         arms=arms,
-        baseline=baseline,
         skyline=skyline,
         build={
             "results": str(Path(args.results).resolve()),
@@ -1222,25 +1390,38 @@ def main(argv: Sequence[str] | None = None) -> int:
             "skyline_results": str(sky_root.resolve()) if args.skyline_results else None,
             "built": _now(),
         },
-        title=args.title,
-        subtitle=args.subtitle,
-        runs_budget_mb=args.runs_budget_mb,
-        default_metric=args.default_metric or None,
-        hide_metrics=hide or (),
+        **common_kw,
     )
-    print(f"wrote {out}  ({out.stat().st_size / 1e6:.2f} MB)")
+    _report(out, args, skyline, "--skyline-results" if args.skyline_results else "--results")
+    return 0
+
+
+#: The repo's large-file cap (``check-added-large-files --maxkb=4000`` in
+#: ``.pre-commit-config.yaml``), which a committed page has to fit under.
+COMMIT_CAP_KB = 4000
+
+
+def _report(out: Path, args: argparse.Namespace, skyline: pd.DataFrame | None, sky_from: str) -> None:
+    """The build's closing lines: the page's size, and what it lacks and why."""
+    size = out.stat().st_size
+    print(f"wrote {out}  ({size / 1e6:.2f} MB)")
+    # The hook's own arithmetic: KiB, rounded up.
+    if -(-size // 1024) > COMMIT_CAP_KB:
+        print(
+            f"NOTE: the page is over the repo's {COMMIT_CAP_KB} KB large-file cap, so it cannot be "
+            "committed as is. Rebuild with a smaller --runs-budget-mb: the per-seed lines thin to fit, and the "
+            "averaged view keeps every click."
+        )
     if not args.baseline:
         print("NOTE: no --baseline, so the page has no click-0 anchor and nothing to compare the far right against.")
     if args.no_skyline:
         print("NOTE: --no-skyline, so the cell CSVs were not read for a learnability floor and the page has none.")
     elif skyline is None or skyline.empty:
         print(
-            "NOTE: no supervised-skyline rows under "
-            f"{'--skyline-results' if args.skyline_results else '--results'}, so the page has no "
+            f"NOTE: no supervised-skyline rows under {sky_from}, so the page has no "
             "learnability floor. Re-run with CALIB_SKYLINE_ARMS=skyline_train_full to get one, over "
             "these cells or over a subset of them passed as --skyline-results (issue #3322)."
         )
-    return 0
 
 
 if __name__ == "__main__":

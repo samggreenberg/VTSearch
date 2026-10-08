@@ -25,11 +25,17 @@ screen, so both are checked against values that are known by construction:
   its last scored value, with nothing carried before its first row or after
   its last, and a reskin must get the same carry from the per-seed lines
   (#4624);
-* a click with **no trained detector** (before a run's first Good and Bad, or
-  any click of a run that never got both) must be in the mean as the empty
+* a click with **no detector** (before a run's first row: its first Good since
+  #4643, its first Good and Bad before; or any click of a run that never got
+  one) must be in the mean as the empty
   returned set the app gives there, a loss and not a gap, with the runs read
   off the text-sort baseline when there is no cell list, never a group or a
-  seed the run never ran.
+  seed the run never ran;
+* a click in **Autopilot's opening** (``app_trained == 0``) must be drawn at the
+  harness's detector, what an export of the labels gives there, not at the
+  text sort the session shows: the page does not read the flag (#4640).  Under
+  the label quota that detector is the Goods' centroid (``detector_tier``,
+  #4643): its rows are drawn like any other, and the reading note says so.
 
 Run: ``python selftest_viewer.py``
 """
@@ -91,6 +97,9 @@ GAP_PRECISION = 0.55
 #: row or after its last.
 SHORT_RUN = ("alt", "dsB", "embB", "rich", 7)
 SHORT_LO, SHORT_HI = 10, 30
+#: The first click the app would show a detector at, in the frame that flags
+#: Autopilot's opening (``app_trained``, #4605): the page must not read it (#4640).
+OPENING_END = 15
 
 
 def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -228,7 +237,7 @@ def main() -> int:  # noqa: C901
         keys = [m["key"] for m in P["metrics"]]
         ok &= _check(
             "every emitted metric is offered, and only those",
-            keys == ["cost", "precision", "recall", "f1", "average_precision"],
+            keys == ["cost", "precision", "recall", "fbeta_b025", "f1", "fbeta_b4", "average_precision"],
             str(keys),
         )
         # A viewer that decided direction for itself would eventually attach
@@ -443,6 +452,66 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "...which a build that opts out leaves undefined",
             abs(_decode(PNo["agg"]["n"])[g_nil, a_nil, m_p, ti] - (CATS["rich"] - 1)) < 0.5,
+        )
+
+        # --- Autopilot's opening (#4640) -------------------------------------
+        # The session stays on the text sort until the Hard phase, which the
+        # harness flags as `app_trained`, but the user can export the labels
+        # and run Test at any click, and either retrains from them.  So the
+        # page draws the opening's detector, what an export there gives
+        # (owner, 2026-10-07): the flag is not read, and a frame carrying it
+        # builds the same page as one without it.
+        flagged = main_df.assign(app_trained=(main_df["t"] >= OPENING_END).astype(int))
+        PF = _payload(
+            V.build_viewer(
+                flagged, tmp / "flagged.html", arms=ARMS, denominator=cells, baseline=base, skyline=sky,
+                runs_budget_mb=0.25,
+            )
+        )  # fmt: skip
+        ok &= _check(
+            "a frame that flags the opening (app_trained 0) builds the same page as one without the flag",
+            all(
+                np.array_equal(_decode(PF["agg"][k]), _decode(P["agg"][k]), equal_nan=True)
+                for k in ("mean", "sd", "n", "omean", "on")
+            )
+            and PF["runs"] is not None
+            and PF["runs"]["t"] == P["runs"]["t"]
+            and np.array_equal(_decode(PF["runs"]["values"]), _decode(P["runs"]["values"]), equal_nan=True),
+        )
+        p_open = _decode(PF["agg"]["mean"])[g_rich, ai["ctl"], keys.index("precision"), P["t"].index(OPENING_END - 5)]
+        ok &= _check(
+            "...so a click in the opening is the detector's precision, not the text sort's",
+            abs(p_open - 0.7) <= step,
+            f"{p_open} vs 0.7 (text sort 0.4)",
+        )
+        page_text = re.sub(r'<script id="payload".*?</script>', "", out.read_text(), flags=re.S)
+        ok &= _check(
+            "...and the page's reading note says the opening is drawn as the detector",
+            "through Autopilot's opening" in page_text,
+        )
+
+        # --- the label quota (#4643) ------------------------------------------
+        # Under the quota Test gives the Goods' centroid, and the harness writes
+        # those rows as that detector, naming it in `detector_tier`.  The page
+        # draws what Test gives whichever detector it is: the column is not
+        # read, and the reading note names the centroid and the quota.
+        tiered = main_df.assign(detector_tier=np.where(main_df["t"] < OPENING_END, "centroid", "trained"))
+        PT = _payload(
+            V.build_viewer(
+                tiered, tmp / "tiered.html", arms=ARMS, denominator=cells, baseline=base, skyline=sky,
+                runs_budget_mb=0.25,
+            )
+        )  # fmt: skip
+        ok &= _check(
+            "a frame that names the Goods' centroid's rows (detector_tier) builds the same page as one without",
+            all(
+                np.array_equal(_decode(PT["agg"][k]), _decode(P["agg"][k]), equal_nan=True)
+                for k in ("mean", "sd", "n", "omean", "on")
+            ),
+        )
+        ok &= _check(
+            "...and the reading note names the Goods' centroid and the quota",
+            "the Goods' " in page_text and "3 Goods and 4 Bads" in page_text and "before its first Good," in page_text,
         )
 
         # --- a spot check's rounds (#4624) -----------------------------------
@@ -814,6 +883,14 @@ def main() -> int:  # noqa: C901
             "...and says when the gaps were carried",
             "P.gaps_filled" in re.sub(r'<script id="payload".*?</script>', "", html, flags=re.S),
         )
+        # The page's own default (#4635) lives in the template, where a plain
+        # reskin carries it to every committed page; the builder leans on it to
+        # leave the view empty, so the two must name the same metric.
+        shell = re.sub(r'<script id="payload".*?</script>', "", html, flags=re.S)
+        ok &= _check(
+            "the template opens on the builder's DEFAULT_METRIC when the view names none",
+            f'const OPEN_ON = "{V.DEFAULT_METRIC}";' in shell and "metric" not in P.get("view", {}),
+        )
 
         def refuses(label: str, **kw) -> bool:
             try:
@@ -827,17 +904,195 @@ def main() -> int:  # noqa: C901
         ok &= refuses("opening on a metric it also hides", default_metric="cost", hide_metrics=["cost"])
         ok &= refuses(
             "hiding every metric the page carries",
-            hide_metrics=["cost", "precision", "recall", "f1", "average_precision"],
+            hide_metrics=["cost", "precision", "recall", "fbeta_b025", "f1", "fbeta_b4", "average_precision"],
         )
         ok &= _check(
             "...but hiding a known metric the run never emitted is allowed",
             V.opening_view(["cost", "precision"], hide=["auroc"]) == {"hide": ["auroc"]},
         )
 
+        ok &= _beta_checks(tmp)
+
         print("\n" + ("SELFTEST PASSED" if ok else "SELFTEST FAILED"))
         return 0 if ok else 1
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+#: A review's two session sets (#4636), each with its own returned set at
+#: every click, and the text sort's own line at each beta (#4603), all chosen
+#: so that no two of the numbers checked below coincide.
+SESSION = {0.25: (0.75, 0.35), 4.0: (0.30, 0.80)}
+TEXT_LINE = {0.25: (0.80, 0.20, 0.01), 4.0: (0.20, 0.90, 0.40)}
+TEXT_BLIND = (0.40, 0.30, 0.05)
+B_SEEDS, B_T = 3, 10
+
+
+def _fb(p: float, r: float, beta: float) -> float:
+    b2 = beta * beta
+    return (1 + b2) * p * r / (b2 * p + r)
+
+
+def _beta_checks(tmp: Path) -> bool:  # noqa: C901
+    """F1/4 and F4 on the menu, and a review's session sets as chips, each anchored at its own line (#4636)."""
+    print("a review's session sets (#4636):")
+    ok = True
+    dirs = {}
+    for beta, (p, r) in SESSION.items():
+        rows = [
+            {"dataset": "dsA", "embedder": "embA", "category": cat, "seed": seed, "t": t, "beta": beta,
+             "precision": p, "recall": r, "f1": _fb(p, r, 1.0), "average_precision": 0.8}
+            for cat in ("cat@large", "cat@small") for seed in range(B_SEEDS) for t in range(1, B_T + 1)
+        ]  # fmt: skip
+        d = tmp / f"sessions-{beta:g}"
+        (d / "results" / "cells").mkdir(parents=True)
+        pd.DataFrame(rows).to_csv(d / "results" / "cells" / "task_0000.csv", index=False)
+        dirs[beta] = d
+    line_cols = {
+        f"text_line_{m}_{tag}": v
+        for beta, tag in ((0.25, "b025"), (4.0, "b4"))
+        for m, v in zip(("precision", "recall", "fpr"), TEXT_LINE[beta], strict=True)
+    }
+    blind = dict(zip(("text_precision", "text_recall", "text_fpr"), TEXT_BLIND, strict=True))
+    base = pd.DataFrame(
+        [
+            {
+                "dataset": "dsA",
+                "embedder": "embA",
+                "category": cat,
+                "seed": seed,
+                "supports_text": 1,
+                **blind,
+                **line_cols,
+                "text_AP": 0.5,
+                "text_fbeta_b025": 0.99,
+                "text_fbeta_b4": 0.99,
+            }
+            for cat in ("cat@large", "cat@small")
+            for seed in range(B_SEEDS)
+        ]  # fmt: skip
+    )
+    base_csv = tmp / "text_baseline.csv"
+    base.to_csv(base_csv, index=False)
+
+    # --- naming the sets ------------------------------------------------------
+    ok &= _check(
+        "--beta-run pairs are sorted by beta",
+        [b for b, _ in V.parse_beta_runs([f"4={dirs[4.0]}", f"0.25={dirs[0.25]}"])] == [0.25, 4.0],
+    )
+    for bad in ([f"1={dirs[0.25]}", f"1={dirs[4.0]}"], ["x=somewhere"], ["1"], ["-1=somewhere"]):
+        try:
+            V.parse_beta_runs(bad)
+            ok &= _check(f"refuses --beta-run {bad}", False, "parsed anyway")
+        except SystemExit as exc:
+            ok &= _check(f"refuses --beta-run {bad}", True, str(exc))
+    # A swapped pair is invisible on screen and inverts every comparison the
+    # page exists for, so a set whose rows carry another beta is refused.
+    try:
+        V.load_beta_runs([(4.0, dirs[0.25])], skyline=False)
+        ok &= _check("refuses a set named for a beta its rows were not drawn at", False, "loaded anyway")
+    except SystemExit as exc:
+        ok &= _check("refuses a set named for a beta its rows were not drawn at", "0.25" in str(exc), str(exc))
+    ok &= _check(
+        "a chip reads as the preset's fraction", [V.beta_label(b) for b in (0.25, 1.0, 4.0)] == ["β 1/4", "β 1", "β 4"]
+    )
+
+    # --- the page, through the CLI -------------------------------------------
+    page = tmp / "betas.html"
+    rc = V.main(
+        ["--beta-run", f"4={dirs[4.0]}", "--beta-run", f"0.25={dirs[0.25]}", "--baseline", str(base_csv),
+         "--out", str(page), "--runs-budget-mb", "0.25", "--no-skyline"]
+    )  # fmt: skip
+    P = _payload(page)
+    ok &= _check("the CLI builds a page from the session sets", rc == 0)
+    ok &= _check("one chip per set, in beta order", P["arms"] == ["β 1/4", "β 4"], str(P["arms"]))
+    ok &= _check(
+        "the arms control says it chooses the sessions' beta",
+        P.get("arms_control", {}).get("title") == "Sessions' beta"
+        and "P.arms_control" in re.sub(r'<script id="payload".*?</script>', "", page.read_text(), flags=re.S),
+        str(P.get("arms_control")),
+    )
+    ok &= _check(
+        "the build records which directory carried which beta",
+        [s.split("=")[0] for s in P.get("build", {}).get("beta_runs", [])] == ["0.25", "4"],
+        str(P.get("build")),
+    )
+    labels = {m["key"]: m["label"] for m in P["metrics"]}
+    ok &= _check(
+        "F1/4 and F4 are offered beside F1, higher is better",
+        labels.get("fbeta_b025", "").startswith("F1/4")
+        and labels.get("fbeta_b4", "").startswith("F4")
+        and not any(m["lower"] for m in P["metrics"] if m["key"].startswith("fbeta")),
+        str(labels),
+    )
+
+    # --- what each set returned, at each beta ---------------------------------
+    keys = [m["key"] for m in P["metrics"]]
+    mean = _decode(P["agg"]["mean"])
+    gi = {tuple(g): i for i, g in enumerate(P["groups"])}
+    g, ai = gi[("dsA", "embA", "cat@large")], {a: i for i, a in enumerate(P["arms"])}
+    lo, hi = ai["β 1/4"], ai["β 4"]
+    t_end, t0 = P["t"].index(B_T), P["t"].index(0)
+    step = 2.0 / P["agg"]["mean"]["scale"]
+
+    def at(arm: int, key: str, t: int) -> float:
+        return float(mean[g, arm, keys.index(key), t])
+
+    want_end = {
+        (lo, "fbeta_b025"): _fb(*SESSION[0.25], 0.25),
+        (lo, "fbeta_b4"): _fb(*SESSION[0.25], 4.0),
+        (hi, "fbeta_b4"): _fb(*SESSION[4.0], 4.0),
+        (hi, "fbeta"): _fb(*SESSION[4.0], 4.0),
+        (lo, "fbeta"): _fb(*SESSION[0.25], 0.25),
+    }
+    ok &= _check(
+        "each set's returned set is scored at every preset, and the objective at its own beta",
+        all(abs(at(a, k, t_end) - v) <= step for (a, k), v in want_end.items()),
+        str({(P["arms"][a], k): (round(at(a, k, t_end), 4), round(v, 4)) for (a, k), v in want_end.items()}),
+    )
+
+    # --- click 0: each set from the line the app shows at its beta -------------
+    # Not one shared notch (the beta-blind cut), and never the top-K reading the
+    # baseline also carries (0.99 here): one rule on both sides (#4474).
+    want0 = {
+        (lo, "precision"): TEXT_LINE[0.25][0],
+        (hi, "precision"): TEXT_LINE[4.0][0],
+        (hi, "recall"): TEXT_LINE[4.0][1],
+        (lo, "fbeta"): _fb(*TEXT_LINE[0.25][:2], 0.25),
+        (hi, "fbeta"): _fb(*TEXT_LINE[4.0][:2], 4.0),
+        (lo, "fbeta_b4"): _fb(*TEXT_LINE[0.25][:2], 4.0),
+        (hi, "f1"): _fb(*TEXT_LINE[4.0][:2], 1.0),
+    }
+    ok &= _check(
+        "click 0 is the text sort's own line at each set's beta, every cut metric off that one set",
+        all(abs(at(a, k, t0) - v) <= step for (a, k), v in want0.items()),
+        str({(P["arms"][a], k): (round(at(a, k, t0), 4), round(v, 4)) for (a, k), v in want0.items()}),
+    )
+    ok &= _check(
+        "...the ranking metric keeps its own column, the same on both",
+        abs(at(lo, "average_precision", t0) - 0.5) <= step and abs(at(hi, "average_precision", t0) - 0.5) <= step,
+    )
+    runs = _decode(P["runs"]["values"])
+    r_hi = P["runs"]["index"].index([g, hi, P["seeds"].index(0)])
+    ok &= _check(
+        "...and the per-seed line starts on the same notch",
+        abs(runs[r_hi, keys.index("precision"), P["runs"]["t"].index(0)] - TEXT_LINE[4.0][0]) <= 1.0 / V.RUNS_SCALE,
+    )
+
+    # A baseline from before the per-beta line (#4603) anchors every set at the
+    # line the app drew then: one notch, scored at each set's beta.
+    old = base.drop(columns=list(line_cols))
+    frame, _sky, arms = V.load_beta_runs(V.parse_beta_runs([f"0.25={dirs[0.25]}", f"4={dirs[4.0]}"]), skyline=False)
+    PO = _payload(V.build_viewer(frame, tmp / "old.html", arms=arms, baseline=old, runs_budget_mb=0.25))
+    mo = _decode(PO["agg"]["mean"])
+    ko = [m["key"] for m in PO["metrics"]]
+    ok &= _check(
+        "an older baseline anchors both sets at its beta-blind cut, each scored at its own beta",
+        abs(mo[g, lo, ko.index("precision"), t0] - TEXT_BLIND[0]) <= step
+        and abs(mo[g, hi, ko.index("precision"), t0] - TEXT_BLIND[0]) <= step
+        and abs(mo[g, hi, ko.index("fbeta"), t0] - _fb(*TEXT_BLIND[:2], 4.0)) <= step,
+    )
+    return ok
 
 
 if __name__ == "__main__":
