@@ -191,8 +191,7 @@ slides:
   # the order a page is checked: keypoints, then matching and RANSAC. Then the
   # three things the documents changed: the keypoint budget, the shortlist and
   # why a page vector cannot build one, and the votes. Tiles shipped after
-  # these slides were drawn (#4378, #4415): the notes say so, and the tiles
-  # figure still draws the old single-layer pick until #4455 pins the app's own.
+  # these slides were drawn (#4378, #4415), and the notes say so.
   outline-hold-the-line +at9
   logo-grid
   logo-keypoints
