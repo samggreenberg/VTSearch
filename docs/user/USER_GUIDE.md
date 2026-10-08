@@ -788,13 +788,16 @@ shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal. Hover the light for
 the details.
 
-When all five phases are done, Autopilot shows **Done!** and a
-**Detector Trained** dialog offers you the choice: **Continue
-Training** stays put so you can keep labeling (the detector continues
-to improve), and **Head to Dashboard** takes you out to export it or
-run it over another dataset. Nothing happens on its own, and the
-dialog only appears for the run that trained the detector - coming
-back later to refine it further will not raise it again.
+When all five phases are done, Autopilot shows **Done!** and Toasty
+appears under the top bar's **Dashboard** button to say the detector is
+trained: keep voting and it keeps improving (your next vote sends Toasty
+away), or click **Dashboard** to export it or run it over another dataset.
+Nothing happens on its own, and the hint only appears for the run that
+trained the detector - coming back later to refine it further will not
+raise it again. If you label every item before then, Toasty says so instead
+and points you back to the Dashboard. When you open the Train view on a
+detector with no labels yet, Toasty also stands over the **Good** / **Bad**
+buttons until your first vote. See [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays checked, and a seventh step, **Keep
 Improving.**, takes over for as long as you keep labeling. It is
@@ -1248,7 +1251,7 @@ The right pane shows the result as it forms, and the verdict at Done:
 - **Picks by band** - where the picks came from and what each band said.
 
 At **Done!** the verdict reads the ranges in a sentence, and offers three
-ways out, as the **Detector Trained** dialog does in Train:
+ways out, as Toasty does when Autopilot finishes in Train:
 
 - **Move to AutoFind** - the reason the test exists. The detector joins your
   AutoFind list, and you land on the Dashboard. It is offered whatever the
@@ -1527,15 +1530,32 @@ work on whichever rows you currently have selected.
 
 ### Toasty's hints
 
-While you're getting started, King Toasty (the toast in the logo) stands
-beside the next thing to click, with a speech bubble that says what it does:
-the **Datasets** card's **+** while you have no datasets, the **Detectors**
-card's **+** once a dataset is in, and **Train** once a new detector with no
-labels is selected. Each hint goes away as soon as you take its step, and only
-one shows at a time. Tick **Hide this hint** in a bubble to stop seeing that
-one, or **Hide all hints** to stop seeing any; **Settings → Appearance →
-Toasty's hints** has **Hide All** and **Show All**, which brings back every
-hint, including ones you hid one at a time.
+King Toasty (the toast with the magnifying glass in the logo) stands beside
+the next thing to click, with a speech bubble that says what to do and why.
+On the Dashboard he shows one step at a time:
+
+- the **Datasets** card's **+** while you have no datasets, or a nudge to
+  select one when you have some but none is selected;
+- a warning (he looks surprised) when the selected datasets hold different
+  kinds of media;
+- the **Detectors** card's **+** once a dataset is in, or a nudge to select a
+  detector when you have some but none is selected;
+- a warning when the selected dataset and detector are for different kinds of
+  media;
+- **Train** once a new detector with no labels is selected beside a matching
+  dataset, and **Test** or **Find** once the selected detector is trained.
+
+In the Train view he asks for your first vote over **Good** / **Bad** while
+Autopilot runs on a detector with no labels, and when Autopilot finishes he
+stands under the top bar's **Dashboard** button (see [Autopilot: the guided
+workflow](#autopilot-the-guided-workflow)).
+
+Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
+bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
+**Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**,
+which brings back every hint, including ones you hid one at a time. Toasty
+also turns up on the notifications at the top of the screen: happy on good
+news, surprised on a warning, sad on an error.
 
 ### Combining datasets and detectors
 

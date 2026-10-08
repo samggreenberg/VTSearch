@@ -17,14 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
-- **King Toasty gives the first-run hints** (issue #4680). The Dashboard's long dotted arrows are
-  gone. In their place Toasty stands beside the next thing to click, with a speech bubble saying
-  what to do and why: the Datasets **+** while there are no datasets, the Detectors **+** once a
-  dataset is in or importing, and **Train** once a new detector with no labels is selected. Only
-  one shows at a time, and each goes away as soon as you take its step (opening Add Dataset or
-  New Detector counts). Every bubble has **Hide this hint** and **Hide all hints** boxes, saved in
-  your settings (`hidden_hints`, `hide_all_hints`), and **Settings → Appearance → Toasty's hints**
-  has **Hide All** and **Show All**.
+- **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
+  King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
+  click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
+  arrows. On the Dashboard, one step at a time: **+** to add a dataset, select a dataset, a warning
+  when the selected datasets mix kinds of media, **+** to make a detector, select a detector, a
+  warning when the dataset and detector are for different media, **Train** for a new detector,
+  and **Test** or **Find** for a trained one. In the Train view he asks for your first vote while
+  Autopilot runs on a detector with no labels (replacing the faint "Use ← / →" line), and the
+  **Detector Trained** and **Nothing Left to Label** dialogs are now his hints under the top bar's
+  **Dashboard** button; any further vote sends him away. Each hint goes when its step is taken,
+  and has **Hide this hint** and **Hide all hints** boxes kept in your settings (`hidden_hints`,
+  `hide_all_hints`); **Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**.
+  Notifications show his face too: happy, surprised on warnings, sad on errors. The
+  `label_hint_dismissed` setting is gone, and `/favicon-smile.ico` (the plain favicon smiles
+  already) now 404s.
 - **Choose a detector's Threshold when you create it, and Autopilot follows it** (issue #4665).
   The New Detector form (Blank and Trained) now has the Threshold control, the same three radios
   from False Positives to False Negatives as the Manual tab. The choice is saved with the detector,

@@ -382,13 +382,13 @@
   @switch (dashboardHint) {
     @case ('add-dataset') {
       <vt-toasty-hint hintId="add-dataset" [anchor]="datasetAddBtn">
-        Start here! Click <strong>+</strong> to add a dataset: the images, sounds or other media you
-        want to search through.
+        Start here! Click <strong>+</strong> to add a dataset: the {{ addDatasetMedia }} you want to
+        train or search on.
       </vt-toasty-hint>
     }
     @case ('select-dataset') {
       <vt-toasty-hint hintId="select-dataset" [anchor]="datasetAddBtn">
-        Click a dataset to select it, or click <strong>+</strong> to add another one.
+        Select a dataset or click <strong>+</strong> to add a new one.
       </vt-toasty-hint>
     }
     @case ('mixed-datasets') {

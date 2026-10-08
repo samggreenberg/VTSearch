@@ -57,6 +57,16 @@ import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { HintId } from '../../services/hints.service';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
+/** What a dataset of each media type holds, for Toasty's "add a dataset" hint. */
+const MEDIA_PLURALS: Readonly<Record<string, string>> = {
+  image: 'images',
+  audio: 'audio clips',
+  text: 'text paragraphs',
+  video: 'videos',
+  document: 'documents',
+  face: 'faces',
+};
+
 /** Toasty's Dashboard hints, in the order {@link DashboardComponent.dashboardHint} tries them. */
 type DashboardHintId = Extract<
   HintId,
@@ -1313,6 +1323,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.showTrainHint) return 'train';
     if (this.autofindEnabled) return 'test-or-find';
     return null;
+  }
+
+  /** What Toasty's "add a dataset" hint says a dataset holds: the server's one
+   *  media type when it is locked to one (`solo_media_type`), else a mix. */
+  get addDatasetMedia(): string {
+    const solo = this.settingsState.settingsSignal()?.solo_media_type;
+    if (!solo) return 'images, sounds or other media';
+    return MEDIA_PLURALS[solo] ?? `${solo} files`;
   }
 
   /** Whether Toasty points at Train (#4227, #4680): exactly one detector is

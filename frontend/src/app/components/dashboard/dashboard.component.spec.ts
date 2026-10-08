@@ -1076,9 +1076,17 @@ describe('DashboardComponent', () => {
       await loadSettings({});
       expect(component.dashboardHint).toBe('add-dataset');
       expect(hintTexts(el)).toEqual([
-        'Start here! Click + to add a dataset: the images, sounds or other media you want to search through.',
+        'Start here! Click + to add a dataset: the images, sounds or other media you want to train or search on.',
       ]);
       expect(el.querySelector('vt-toasty-hint')?.classList).not.toContain('toasty-hint--off');
+    });
+
+    it('names the one media type a locked server takes (#4680)', async () => {
+      const el = renderWith();
+      await loadSettings({ solo_media_type: 'image' });
+      expect(hintTexts(el)).toEqual([
+        'Start here! Click + to add a dataset: the images you want to train or search on.',
+      ]);
     });
 
     it('keeps Toasty to the dataset step until a dataset exists (#4680)', () => {
@@ -1116,7 +1124,7 @@ describe('DashboardComponent', () => {
         { id: 'd2', name: 'B', media_type: 'image' },
       ]);
       expect(component.dashboardHint).toBe('select-dataset');
-      expect(hintTexts(el)).toEqual(['Click a dataset to select it, or click + to add another one.']);
+      expect(hintTexts(el)).toEqual(['Select a dataset or click + to add a new one.']);
     });
 
     it('asks for one kind of media when the selected datasets mix kinds (#4680)', () => {
