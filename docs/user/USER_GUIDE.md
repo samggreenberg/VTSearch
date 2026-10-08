@@ -115,7 +115,10 @@ leans toward. You set it at the top of the left panel, on a spectrum from
 **False Positives** to **False Negatives** with three radio buttons under
 it (see [Threshold](#3-threshold)). Toward False Positives the line returns
 the most, with more wrong ones in it; toward False Negatives it returns only
-the surest, and misses more. Every detector starts on the middle radio. Each
+the surest, and misses more. You pick it when you create the detector (the
+New Detector form starts on your last pick, the middle radio until you have
+one), and Autopilot, which has no Threshold of its own, draws the line there.
+Moving it later in Manual or Test changes it for that detector only. Each
 radio is a **balance** of precision and recall - how many wrong items you
 will take in the results against how many right ones you will accept
 missing - and the line is drawn where that balance is best: the middle radio
@@ -924,7 +927,8 @@ radio (the default) weighs the two mistakes equally. The radios carry no
 numbers because what the line keeps is measured, not promised: a check says
 how close it got. Hover a radio for what it does. Changing the Threshold
 moves the line over the scores the detector already has; the ranking itself
-does not change.
+does not change. The detector keeps the change: it is the Threshold Autopilot
+uses from then on, and the one the next New Detector form starts on.
 
 Once the list is ranked by the detector (a **Learned** sort, or Test), the
 note under the spectrum says what the Threshold is doing to the line, in one
@@ -1113,6 +1117,10 @@ It has two tabs:
   That choice fixes what the detector is compatible with later. If the
   dataset's embedder can't search by text, you'll see a note that you can
   still create the detector but must label a few examples to train it.
+- **Threshold** (both tabs) - which mistake this detector leans toward, the
+  same three radios as the [Threshold](#3-threshold) in Manual mode. The
+  detector keeps it, and Autopilot draws its line there. It starts on your
+  last pick; you can change it later in Manual or Test.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server

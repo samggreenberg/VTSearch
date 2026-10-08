@@ -40,6 +40,7 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/stability.py`             | The Stable indicator's arithmetic (shared with the eval harness)    |
 | `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
 | `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
+| `vtscore/detectors/balance.py`               | The detector's balance (beta), kept on the detector JSON            |
 
 **Labels: resolving, syncing, restoring**
 
@@ -230,6 +231,28 @@ Find session. `verdict_summaries(data, latest_only=False)` is what a reader
 shows: the ranges, the *found* words and the stale mark against the labelset
 in the same file, the picks left on disk.
 
+### The kept balance
+
+`vtscore/detectors/balance.py` (#4665) keeps the detector's **balance**,
+F-beta's beta, as a top-level `BETA_KEY` (`"beta"`) in its JSON. The app asks
+for it when the detector is created, and the Threshold control moves it, so
+Autopilot (which has no control of its own) runs at the balance the user
+chose.
+
+```python
+from vtscore.detectors.balance import keep_beta, stored_beta, valid_beta
+
+stored_beta(data)          # the kept balance, or None (none kept, or outside [0.25, 4])
+valid_beta("4")            # 4.0; None for a non-number, a bool, NaN or out of range
+keep_beta(det_ctx, 0.25)   # write it into the active detector's file; True when it changed
+```
+
+`keep_beta` writes under `label_sync_write_lock` and re-points the cached
+labelset afterwards, as `keep_verdict` does; never call it holding
+`vtscore.state.core._state_lock`. `detector_stored_beta(detector_id)` reads a
+registered detector's. A detector that keeps none takes the user's balance;
+see `vtscore.state.detector_beta` ([state.md](state.md)).
+
 ---
 
 ## Training
@@ -254,8 +277,9 @@ bags and a scoring population that differs from *snap*):
    provided (the haystack the mixture is fitted on).  Without one, the
    cross-calibration cut ships alone.
 
-Returns `(model, threshold)`. The function reads `line_knobs` (the active
-detector's balance, `get_beta`), `get_calibrate_count`, and
+Returns `(model, threshold)`. The function reads the balance of `det_ctx`
+(`detector_beta(det_ctx)`, the detector's own, #4665; `line_knobs`, the
+active detector's, with no `det_ctx`), `get_calibrate_count`, and
 `get_calibration_fraction` from `vtscore.state`; those getters resolve
 through `CoreConfig`, so library consumers running outside an app must
 register a `register_core_config_builder` provider.

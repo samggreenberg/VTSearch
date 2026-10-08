@@ -896,8 +896,10 @@ protected by `_state_lock` (a `threading.RLock`):
 | `textsort_suggestions` | `list[str]` | `DetectorContext` | Text queries that received a Good vote (most recent last) |
 
 Other per-context values are reached through accessor functions rather than
-proxies: `get_beta()` / `set_beta()` (per detector, seeded from the `beta`
-setting; the balance that draws the line, #4413), `line_knobs()`
+proxies: `get_beta()` / `set_beta()` (per detector, the balance that draws
+the line, #4413; kept on the detector JSON and asked for at creation, #4665,
+else seeded from the `beta` setting; `detector_beta(ctx)` reads any context's
+own), `line_knobs()`
 (`{"beta": b}`, what every retrain and re-cut passes on),
 `get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
 only truly global (cross-dataset) state is `autorun_extractors` /

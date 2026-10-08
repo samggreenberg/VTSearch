@@ -7,6 +7,7 @@ import { ProgressEventsService } from '../../../services/progress-events.service
 import type { LoadingTask } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { SettingsStateService } from '../../../services/settings-state.service';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -814,6 +815,53 @@ describe('NewDetectorModalComponent', () => {
     expect(spy).not.toHaveBeenCalled();
     httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
     expect(component.created.emit).toHaveBeenCalledWith('d0');
+  });
+
+  // --- The detector's balance, asked for here (#4665) ---
+
+  function submitBlank(): void {
+    component.name.set('Dog Barks');
+    component.mediaType.set('audio');
+    component.pendingText.set('dog barking sounds');
+    component.submit();
+  }
+
+  it('shows the Threshold control on the form', () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('vt-balance')).not.toBeNull();
+  });
+
+  it('sends the balance the form starts on: the balanced default with no setting', () => {
+    expect(component.beta()).toBe(1);
+    submitBlank();
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.beta).toBe(1);
+    req.flush({ ok: true, detector: { id: '123' } });
+  });
+
+  it('sends the balance the user picked', () => {
+    component.pickBeta(4);
+    submitBlank();
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.beta).toBe(4);
+    req.flush({ ok: true, detector: { id: '123' } });
+  });
+
+  it("starts on the user's last pick, as the preset the control shows it on", () => {
+    const settingsState = TestBed.inject(SettingsStateService);
+    settingsState.update({ beta: 0.5 }).subscribe();
+    httpMock.expectOne('/api/settings').flush({ beta: 0.5 });
+    // 0.5 sits halfway between 1/4 and 1 in log space: the tie keeps its lean.
+    expect(component.beta()).toBe(0.25);
+  });
+
+  it('sends the balance with a Trained import', () => {
+    component.pickBeta(0.25);
+    submitTrained();
+    const req = httpMock.expectOne('/api/detectors/registry/from-labelset/server_json_file');
+    expect(req.request.body.beta).toBe(0.25);
+    req.flush({ ok: true, detector: { id: 'd2' }, ingest_task_id: '' });
+    httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
   });
 
   // --- Double-submit guards (#2941) ---
