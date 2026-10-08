@@ -1,8 +1,10 @@
 # State of the App: Binary Photo — 2026-10-05
 
 **Issue:** #4510. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
-**Interactive viewer:** [`viewer.html`](viewer.html), the beta-1 run's sessions (`2026-10-05-b1`, the app's default preset),
-re-encoded with #4624's carry (a run inside a spot check keeps its last value between rounds).
+**Interactive viewer:** [`viewer.html`](viewer.html), all three session sets (`2026-10-05-b025`, `-b1`, `-b4`) on one
+page, a chip per beta, with F1/4 and F4 on the metric menu (#4636). Rebuilt for #4630: every attempted run is in the
+mean, a click with no detector scores as an empty set (AP at chance), and #4624's carry holds a run's last value
+through a spot check.
 **App:** `dev` at 19ed74aaa. The line comes from the labels (#4452), and its spread floor follows the corpus
 (#4492). Autopilot runs the spot check itself when the labels separate weakly (#4496, PR #4503). The presets are
 beta 1/4, 1 and 4.
