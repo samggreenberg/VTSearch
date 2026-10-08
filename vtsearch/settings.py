@@ -23,7 +23,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 from collections.abc import Container, Iterable
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -142,6 +142,8 @@ if TYPE_CHECKING:
     def set_autofind_exporter_field_values(value: dict[str, dict[str, str]]) -> None: ...
     def get_autofind_on_import() -> bool: ...
     def set_autofind_on_import(value: bool) -> None: ...
+    def get_autofind_cli_delete_dataset() -> bool: ...
+    def set_autofind_cli_delete_dataset(value: bool) -> None: ...
 
     # Client-only view prefs: the backend stores and echoes these, but no
     # Python code reads them - the VTSBrowse bin-details panel and bin popup
@@ -280,7 +282,12 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 #: (validating them against ``UserSettings``, which owns them) and drops only
 #: the reverse direction: a server key stranded in a per-user file.
 _DEFAULT_USER_FALLBACK_KEYS: frozenset[str] = frozenset(
-    {"autofind_detectors", "autofind_exporter", "autofind_exporter_field_values"}
+    {
+        "autofind_detectors",
+        "autofind_exporter",
+        "autofind_exporter_field_values",
+        "autofind_cli_delete_dataset",
+    }
 )
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
@@ -622,6 +629,7 @@ def get_all() -> dict[str, Any]:
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()
+    result["autofind_cli_delete_dataset"] = get_autofind_cli_delete_dataset()
     # The raw file value can hold entries the normalizer drops (a blank label,
     # a ``javascript:`` URL); read through the accessor so only usable links
     # ever reach the Help modal.
@@ -670,7 +678,10 @@ def _build_field_adapter(model: type, key: str) -> TypeAdapter[Any] | None:
         # + ``metadata=[meta...]``; re-wrap so the ``BeforeValidator``
         # clamps and case-folds still run under the adapter.
         annotation = Annotated[tuple([annotation, *field_info.metadata])]
-    return TypeAdapter(annotation)
+    # pydantic >= 2.14 types the argument as ``TypeForm[T]``, which an
+    # ``Annotated`` built at runtime cannot satisfy statically; the value is a
+    # valid type form, so tell the checker so.
+    return TypeAdapter(cast(Any, annotation))
 
 
 def _validate_field(model: type, key: str, value: Any) -> Any:

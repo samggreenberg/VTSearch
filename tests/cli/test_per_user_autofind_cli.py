@@ -39,3 +39,27 @@ class TestCliPerUserAutofind:
         # No thread user -> "default".
         cfg = CoreConfig.from_settings()
         assert list(cfg.autofind_detectors) == ["from-settings-file"]
+
+    def test_named_user_cli_delete_setting_isolated(self, isolated_settings):
+        """``autofind_cli_delete_dataset`` (#4674) is each user's own choice."""
+        with thread_user("alice"):
+            settings.set_autofind_cli_delete_dataset(True)
+        with thread_user("bob"):
+            assert CoreConfig.from_settings().autofind_cli_delete_dataset is False
+        with thread_user("alice"):
+            assert CoreConfig.from_settings().autofind_cli_delete_dataset is True
+        # Off for everyone who never turned it on, the default user included.
+        assert CoreConfig.from_settings().autofind_cli_delete_dataset is False
+
+    def test_default_user_reads_cli_delete_setting_from_settings_file(self, isolated_settings):
+        """A ``--settings`` flat file can turn it on for a CLI run without ``--user``."""
+        import json
+
+        isolated_settings._server.write_text(json.dumps({"autofind_cli_delete_dataset": True}))
+        settings.reset()
+        assert CoreConfig.from_settings().autofind_cli_delete_dataset is True
+        assert settings.get_all()["autofind_cli_delete_dataset"] is True
+        # The read-through is the default user's alone: a named user keeps the default.
+        with thread_user("alice"):
+            assert CoreConfig.from_settings().autofind_cli_delete_dataset is False
+            assert settings.get_all()["autofind_cli_delete_dataset"] is False

@@ -926,8 +926,10 @@ field lists — this document names the tiers and the shape, not every key.
   `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
   `settings_source`, `achievement_state`, and the
   **AutoFind** keys `autofind_detectors`, `autofind_exporter`,
-  `autofind_exporter_field_values`, and `autofind_on_import` (whether a web
-  import runs the AutoFind detectors; the Add Dataset checkbox's memory).
+  `autofind_exporter_field_values`, `autofind_on_import` (whether a web
+  import runs the AutoFind detectors; the Add Dataset checkbox's memory), and
+  `autofind_cli_delete_dataset` (whether a CLI `--autodetect` run deletes the
+  dataset it imported once its detectors have run).
 
 Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,

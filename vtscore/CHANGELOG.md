@@ -360,6 +360,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A saving CLI run can delete what it imported once AutoFind has run** (issue #4674).
+  `CoreConfig` gains `autofind_cli_delete_dataset` (`bool`, default `False`; the app fills
+  it from the per-user setting of the same name). With it on, a `save_dataset=True` run of
+  the `vtscore.cli.autodetect_*_main` entry points (and a pipeline file without
+  `tempimport: true`) unregisters the dataset it imported, pickle and sidecars included,
+  after its detectors have scored it and the exporter has run, and emits a new
+  `cli_progress` event, `dataset_deleted` (`dataset_id`, `name`). A run that detected
+  nothing, failed, or scored a pickle that already was a registered dataset deletes nothing.
+  The dry-run plan's `source` carries `delete_after_detection: true` when it would. Additive:
+  a `CoreConfig(...)` built without the field keeps every dataset it saves.
+
 - **The calibration frame carries the objective's oracle** (issue #4654).
   `vtscore.eval.calibration_metrics.oracle_fbeta_cut(scores, labels, beta)`
   returns `(threshold, fbeta, fpr, fnr)` for the cut with the best F-beta at

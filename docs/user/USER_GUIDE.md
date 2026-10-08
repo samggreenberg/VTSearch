@@ -1412,8 +1412,10 @@ eight tabs:
   largest; **View** and **Hide** show them always or never), the metadata
   panel, the **Enable achievements** toggle, and per-media-type Scroll
   Style (focus mode and thumbnail size).
-- **AutoFind** - what exporter to send AutoFind results to. (Which
-  detectors run is chosen on the Dashboard's **AutoFind** tab; see
+- **AutoFind** - what exporter to send AutoFind results to, and whether
+  a command-line run deletes the dataset it imported once AutoFind has run
+  (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
+  (Which detectors run is chosen on the Dashboard's **AutoFind** tab; see
   [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).

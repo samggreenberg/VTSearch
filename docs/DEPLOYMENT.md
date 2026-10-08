@@ -599,8 +599,9 @@ the next start. VTSearch does not migrate old settings shapes forward.
 **If you are changing a user preference, edit `user_settings.json`, not
 `settings.json`.** A `theme` or `autopilot_enabled` key placed in
 `data/settings.json` is simply ignored. The one deliberate exception is the
-AutoFind trio (`autofind_detectors`, `autofind_exporter`,
-`autofind_exporter_field_values`): for the built-in `default` user only, a read
+CLI-facing AutoFind keys (`autofind_detectors`, `autofind_exporter`,
+`autofind_exporter_field_values`, `autofind_cli_delete_dataset`): for the
+built-in `default` user only, a read
 that misses in `user_settings.json` falls through to `data/settings.json`, which
 is what lets the CLI's `--settings` flat file and single-user deployments keep
 working.
@@ -747,6 +748,7 @@ An abridged example; the full field list is `UserSettings` in
   "autofind_exporter": "",
   "autofind_exporter_field_values": {},
   "autofind_on_import": true,
+  "autofind_cli_delete_dataset": false,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -771,8 +773,11 @@ An abridged example; the full field list is `UserSettings` in
   (`PUT /api/detectors/registry/<id>/autofind`). `autofind_exporter` names the
   results exporter run afterwards (`""` = no auto-export; the CLI then falls
   back to the `gui` exporter), and `autofind_exporter_field_values` keeps each
-  exporter's configuration around when the picker switches between them. This is
-  the trio that reads through to `data/settings.json` for the `default` user.
+  exporter's configuration around when the picker switches between them.
+  `autofind_cli_delete_dataset` (default `false`) makes a CLI `--autodetect`
+  run delete the dataset it imported once its detectors have run (see
+  [`docs/CLI.md`](CLI.md#saving-the-dataset-to-the-dashboard---tempimport)).
+  These four read through to `data/settings.json` for the `default` user.
   `autofind_on_import` (default `true`) is whether a web import runs them: the
   Add Dataset dialog's **Run AutoFind** checkbox starts from it and each import
   writes it back.
