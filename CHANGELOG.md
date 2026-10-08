@@ -69,6 +69,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Find Results get their Browse map ready while you read them** (issue #4683). While the Find
+  Results dialog is open, the server lays out the map its **Browse** button opens for the Good
+  results, but only when nothing else is running: no dataset or detector load, no other Find, map
+  build, sort or evaluation. Pressing Browse then opens the map at once, or picks up the build
+  where it has got to, instead of starting it. If the server is busy when the dialog opens, the
+  map is started once the other work is done, as long as the dialog is still open. A map of
+  selected items from the same dataset that you are already looking at is left alone.
 - **The command line can delete what it imports once AutoFind has run** (issue #4674).
   Settings › **AutoFind** gains **Delete the dataset after AutoFind**, under **Command Line**,
   off by default. With it on, `python app.py --autodetect` (or `--pipeline`) deletes the dataset it
@@ -77,7 +84,6 @@ not list every commit. Use `git log` for the full history.
   dataset already on the dashboard keep it, and AutoFind started inside the app never deletes. The
   setting is per user (`autofind_cli_delete_dataset`; a `--settings` file can set it for a run
   without `--user`), and a deleting run reports a `dataset_deleted` progress event.
-
 - **Autopilot-only servers** (issue #4666). An operator can set `--autopilot-only`,
   `VTSEARCH_AUTOPILOT_ONLY=1` or `"autopilot_only": true` in the server settings file to keep
   Train and Test on their Autopilot tabs. Train's Manual tab and Test's Review tab are removed,

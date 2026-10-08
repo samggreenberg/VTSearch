@@ -623,7 +623,9 @@ instead, so none of them is lost. The dialog's **Browse** button opens
 the listed items - the Good ones, or whichever side you switched to - in
 [Browse](#browse-exploring-a-dataset-spatially), laid out as a map of their own;
 **&larr; Back** there brings you back to the Dashboard with the results
-open again. Like every AutoFind, the runs also go to your Settings
+open again. While the dialog is open, the server starts building the map
+of the Good results whenever it has nothing else to do, so Browse often
+opens straight away. Like every AutoFind, the runs also go to your Settings
 **AutoFind** exporter when you have picked one.
 
 ### Pre-computed embeddings (.npz)

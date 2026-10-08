@@ -49,6 +49,11 @@ from vtscore.concurrency.progress import (
     PROGRESS_COMMON_EXTRAS,
     CancelledError,
     ProgressTracker,
+    detector_loading_tasks,
+    eval_progress,
+    find_progress,
+    loading_tasks,
+    sort_progress,
 )
 
 
@@ -668,6 +673,34 @@ def list_active_pairs() -> list[dict[str, Any]]:
         {"dataset_id": ds, "detector_id": det, "job_types": sorted(set(job_types))}
         for (ds, det), job_types in pair_jobs.items()
     ]
+
+
+def busy_reason() -> str | None:
+    """Name the user-initiated work in flight anywhere in the process, or ``None``.
+
+    The gate for *speculative* background work - a build started on the
+    chance the user will want it next - which should only ever take a server
+    that has nothing better to do.  Busy means any of: a ``loading-tasks`` row
+    still working (a dataset load, staging, ingest, or a background
+    AutoFind/Find run), a detector load, a running or pending job on a
+    user-visible :class:`JobManager` (a projection build, a learned sort, an
+    eval), or one of the shared sort / eval / find bars mid-run.
+
+    The ``user_visible=False`` managers do not count: they are warm-ups and
+    refreshes of the same speculative kind, and one of them (the archive
+    thumbnail sweep) can run for as long as a big archive takes to read.
+    """
+    if loading_tasks.has_active_tasks():
+        return "a dataset task is running"
+    if detector_loading_tasks.has_active_tasks():
+        return "a detector is loading"
+    for job_type, mgr in JOB_MANAGERS.items():
+        if mgr.user_visible and mgr.active_jobs():
+            return f"a {job_type} job is running"
+    for what, tracker in (("sort", sort_progress), ("evaluation", eval_progress), ("Find", find_progress)):
+        if tracker.get()["status"] != "idle":
+            return f"a {what} is running"
+    return None
 
 
 def reset_all_async_jobs_for_tests() -> None:

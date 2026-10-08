@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { AutoFindBrowsePrepResponse } from '../generated/api-client/models/auto-find-browse-prep-response';
 import type { AutoFindRunResponse } from '../generated/api-client/models/auto-find-run-response';
 import type { FindCancelResponse } from '../generated/api-client/models/find-cancel-response';
 import type { FindEndSessionResponse } from '../generated/api-client/models/find-end-session-response';
@@ -19,6 +20,7 @@ import { findStats } from '../generated/api-client/fn/detector-scoring/find-stat
 import { findEvidenceCoverage } from '../generated/api-client/fn/detector-scoring/find-evidence-coverage';
 import { findCorrectionsToDetector } from '../generated/api-client/fn/detector-scoring/find-corrections-to-detector';
 import { getAutofindRun } from '../generated/api-client/fn/detector-scoring/get-autofind-run';
+import { prepAutofindRunBrowse } from '../generated/api-client/fn/detector-scoring/prep-autofind-run-browse';
 
 /** Single-label Find, its session / stats / evidence reads, Find
  *  cancellation, and the results of a background AutoFind. */
@@ -75,5 +77,12 @@ export class DetectorsFindApiService {
    *  server's small in-memory window. */
   getAutofindRun(runId: string, context?: HttpContext): Observable<AutoFindRunResponse> {
     return getAutofindRun(this.http, this.config.rootUrl, { run_id: runId }, context).pipe(map((r) => r.body));
+  }
+
+  /** Ask the server to start laying out a finished run's Good results for
+   *  Browse while the Find Results dialog is open (#4683). Starts nothing while
+   *  other work is in flight: `busy` means ask again later. */
+  prepAutofindRunBrowse(runId: string, context?: HttpContext): Observable<AutoFindBrowsePrepResponse> {
+    return prepAutofindRunBrowse(this.http, this.config.rootUrl, { run_id: runId }, context).pipe(map((r) => r.body));
   }
 }
