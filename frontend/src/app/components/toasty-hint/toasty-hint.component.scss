@@ -1,11 +1,9 @@
-// The component sets `left` / `top` to the point Toasty stands on (centred
-// on the control, just past its edge); the translate then slides the hint so
-// Toasty is centred on that point and the bubble reaches away from it.
-// Reaching left (the default) puts Toasty at the right end of the row.
+// The component measures the hint and sets `left` / `top` so Toasty stands
+// centred on the control, just past its edge, with the bubble reaching away
+// (see `toastyHintPlacement`). Reaching left puts Toasty at the right end of
+// the row.
 :host {
   --toasty-size: 64px;
-  --toasty-hint-dx: calc(var(--toasty-size) / 2 - 100%);
-  --toasty-hint-dy: 0%;
   position: absolute;
   z-index: var(--z-elevated);
   // An absolute box shrinks to the room between `left` and the container's
@@ -16,7 +14,6 @@
   flex-direction: row-reverse;
   align-items: flex-start;
   gap: var(--space-xs);
-  transform: translate(var(--toasty-hint-dx), var(--toasty-hint-dy));
   // Toasty himself never takes a click meant for what's under him; the
   // bubble opts back in for its checkboxes.
   pointer-events: none;
@@ -24,12 +21,10 @@
 }
 
 :host(.toasty-hint--reach-right) {
-  --toasty-hint-dx: calc(var(--toasty-size) / -2);
   flex-direction: row;
 }
 
 :host(.toasty-hint--above) {
-  --toasty-hint-dy: -100%;
   align-items: flex-end;
 }
 

@@ -333,6 +333,7 @@
          find-view component; #4525), as Train opens the one called label. -->
     <div class="action-btn-group">
       <button
+        #testBtn
         class="btn btn--primary"
         [class.loading-active]="findLoading()"
         [disabled]="!findEnabled || isNavBusy"
@@ -352,6 +353,7 @@
          (`isNavBusy`), since it navigates nowhere. -->
     <div class="action-btn-group">
       <button
+        #findBtn
         class="btn btn--primary"
         [disabled]="!autofindEnabled || isContextSwitching"
         [title]="autofindHint"
@@ -372,26 +374,67 @@
 
   </div>
 
-  <!-- Toasty's hints (#4680): King Toasty stands beside the control a new user
-       should click next. Each goes away the moment its step is taken, at most
-       one shows at a time, and the user can hide them (see HintsService). They
-       sit here, outside the panels, so they position against .dashboard-view
-       and paint over the tables. -->
-  @if (showAddDatasetHint) {
-    <vt-toasty-hint hintId="add-dataset" [anchor]="datasetAddBtn">
-      Start here! Click <strong>+</strong> to add a dataset: the images, sounds or other media you
-      want to search through.
-    </vt-toasty-hint>
-  } @else if (showAddDetectorHint) {
-    <vt-toasty-hint hintId="add-detector" [anchor]="detectorAddBtn">
-      Next, click <strong>+</strong> to make a detector. Tell it what you're looking for, and it
-      learns to find it in your datasets.
-    </vt-toasty-hint>
-  } @else if (showTrainHint) {
-    <vt-toasty-hint hintId="train" [anchor]="trainBtn" side="above" reach="right">
-      Click <strong>Train</strong> to teach your new detector. You mark examples Good or Bad, and
-      it learns from every one.
-    </vt-toasty-hint>
+  <!-- Toasty's hints (#4680): King Toasty stands beside the control to click
+       next and says why. At most one shows (see `dashboardHint`), each goes
+       away the moment its step is taken, and the user can hide them (see
+       HintsService). They sit here, outside the panels, so they position
+       against .dashboard-view and paint over the tables. -->
+  @switch (dashboardHint) {
+    @case ('add-dataset') {
+      <vt-toasty-hint hintId="add-dataset" [anchor]="datasetAddBtn">
+        Start here! Click <strong>+</strong> to add a dataset: the images, sounds or other media you
+        want to search through.
+      </vt-toasty-hint>
+    }
+    @case ('select-dataset') {
+      <vt-toasty-hint hintId="select-dataset" [anchor]="datasetAddBtn">
+        Click a dataset to select it, or click <strong>+</strong> to add another one.
+      </vt-toasty-hint>
+    }
+    @case ('mixed-datasets') {
+      <vt-toasty-hint hintId="mixed-datasets" [anchor]="datasetAddBtn">
+        These datasets hold different kinds of media, so they can't be searched together. Select
+        datasets of one kind.
+      </vt-toasty-hint>
+    }
+    @case ('add-detector') {
+      <vt-toasty-hint hintId="add-detector" [anchor]="detectorAddBtn">
+        Next, click <strong>+</strong> to make a detector. Tell it what you're looking for, and it
+        learns to find it in your datasets.
+      </vt-toasty-hint>
+    }
+    @case ('select-detector') {
+      <vt-toasty-hint hintId="select-detector" [anchor]="detectorAddBtn">
+        Now click a detector to select it, or click <strong>+</strong> to make a new one.
+      </vt-toasty-hint>
+    }
+    @case ('mismatch') {
+      <vt-toasty-hint hintId="mismatch" [anchor]="detectorAddBtn">
+        This detector is for a different kind of media than your dataset, so they can't work
+        together. Select ones that match, or click <strong>+</strong> to make a detector for this
+        dataset.
+      </vt-toasty-hint>
+    }
+    @case ('train') {
+      <vt-toasty-hint hintId="train" [anchor]="trainBtn" side="above" reach="right">
+        Click <strong>Train</strong> to teach your new detector. You mark examples Good or Bad, and
+        it learns from every one.
+      </vt-toasty-hint>
+    }
+    @case ('test-or-find') {
+      <!-- Test takes one dataset and one detector; Find takes any number. -->
+      @if (findEnabled) {
+        <vt-toasty-hint hintId="test-or-find" [anchor]="testBtn" side="above" reach="right">
+          Your detector is trained! Click <strong>Test</strong> to see how well it does on this
+          dataset, or <strong>Find</strong> to collect its matches.
+        </vt-toasty-hint>
+      } @else {
+        <vt-toasty-hint hintId="test-or-find" [anchor]="findBtn" side="above" reach="left">
+          Your detectors are trained! Click <strong>Find</strong> to run them over the selected
+          datasets and collect their matches.
+        </vt-toasty-hint>
+      }
+    }
   }
 </div>
 

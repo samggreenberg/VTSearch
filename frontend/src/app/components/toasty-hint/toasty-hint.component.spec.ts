@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 
-import { RectLike, ToastyHintComponent, toastyHintPoint } from './toasty-hint.component';
+import { RectLike, ToastyHintComponent, toastyHintPlacement } from './toasty-hint.component';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -12,25 +12,50 @@ function rect(left: number, top: number, width: number, height: number): RectLik
   return { left, top, width, height, right: left + width, bottom: top + height };
 }
 
-describe('toastyHintPoint', () => {
+describe('toastyHintPlacement', () => {
   const origin = { left: 0, top: 0 };
+  const bounds = { width: 1000 };
+  const hint = { width: 300, height: 100 };
 
-  it('stands Toasty just below the middle of the control', () => {
-    // A panel's + button, top right.
-    expect(toastyHintPoint(rect(900, 20, 30, 30), origin, 'below')).toEqual({ x: 915, y: 54 });
+  it('stands Toasty under the control, the bubble reaching left', () => {
+    // A panel's + button, top right: Toasty (64px) centred on x=915.
+    expect(toastyHintPlacement(rect(900, 20, 30, 30), origin, bounds, hint, 64, 'below', 'left')).toEqual({
+      left: 915 + 32 - 300,
+      top: 54,
+      reach: 'left',
+    });
   });
 
-  it('stands Toasty just above the control', () => {
-    // The Train button, under the panels.
-    expect(toastyHintPoint(rect(380, 600, 120, 40), origin, 'above')).toEqual({ x: 440, y: 596 });
+  it('sits above the control when asked, the bubble reaching right', () => {
+    // The Train button: the hint's bottom edge 4px over the button's top.
+    expect(toastyHintPlacement(rect(380, 600, 120, 40), origin, bounds, hint, 64, 'above', 'right')).toEqual({
+      left: 440 - 32,
+      top: 596 - 100,
+      reach: 'right',
+    });
+  });
+
+  it('reaches the other way when the preferred way runs off the edge', () => {
+    // Near the left edge, reaching left would start at x < 0.
+    expect(toastyHintPlacement(rect(40, 20, 30, 30), origin, bounds, hint, 64, 'below', 'left')).toEqual({
+      left: 55 - 32,
+      top: 54,
+      reach: 'right',
+    });
+  });
+
+  it('pushes the hint back inside when neither way fits', () => {
+    const p = toastyHintPlacement(rect(190, 20, 20, 20), origin, { width: 350 }, hint, 64, 'below', 'right');
+    expect(p).toEqual({ left: 50, top: 44, reach: 'right' });
   });
 
   it('translates into the containing block', () => {
-    expect(toastyHintPoint(rect(900, 20, 30, 30), { left: 100, top: 10 }, 'below')).toEqual({ x: 815, y: 44 });
+    const p = toastyHintPlacement(rect(900, 20, 30, 30), { left: 100, top: 10 }, bounds, hint, 0, 'below', 'left');
+    expect(p).toEqual({ left: 815 - 300, top: 44, reach: 'left' });
   });
 
   it('places nothing for an unrendered control', () => {
-    expect(toastyHintPoint(rect(0, 0, 0, 0), origin, 'below')).toBeNull();
+    expect(toastyHintPlacement(rect(0, 0, 0, 0), origin, bounds, hint, 64, 'below', 'left')).toBeNull();
   });
 });
 

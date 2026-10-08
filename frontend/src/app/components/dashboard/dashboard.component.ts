@@ -54,7 +54,21 @@ import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/datase
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
+import { HintId } from '../../services/hints.service';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
+
+/** Toasty's Dashboard hints, in the order {@link DashboardComponent.dashboardHint} tries them. */
+type DashboardHintId = Extract<
+  HintId,
+  | 'add-dataset'
+  | 'select-dataset'
+  | 'mixed-datasets'
+  | 'add-detector'
+  | 'select-detector'
+  | 'mismatch'
+  | 'train'
+  | 'test-or-find'
+>;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -1275,25 +1289,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.isContextSwitching || this.browsePrep.preparing;
   }
 
-  /** Whether Toasty points at the Datasets panel's + (#4680): the panel is
-   *  showing its empty state and the Add Dataset dialog is not open. */
-  get showAddDatasetHint(): boolean {
-    return (
-      this.registryLoaded &&
-      this.datasets.length === 0 &&
-      this.loadingTasksSvc.orphanLoadingTasks.length === 0 &&
-      !this.loading &&
-      !this.importerFlow().open
-    );
-  }
-
-  /** Whether Toasty points at the Detectors panel's + (#4680): there are no
-   *  detectors, the New Detector dialog is not open, and a dataset exists or
-   *  is importing. Waiting for the dataset keeps Toasty to one step at a time,
-   *  in the order a new user takes them. */
-  get showAddDetectorHint(): boolean {
-    const hasDataset = this.datasets.length > 0 || this.loadingTasksSvc.orphanLoadingTasks.length > 0;
-    return this.noDetectors && hasDataset && !this.newDetectorFlow().open;
+  /**
+   * Which of Toasty's hints the Dashboard shows (#4680), or `null`. At most one
+   * at a time: the first step, in the order a new user takes them, that the
+   * current state is waiting on. Each goes away the moment that step is taken
+   * (and while Add Dataset or New Detector is open, since opening one is
+   * taking it).
+   */
+  get dashboardHint(): DashboardHintId | null {
+    if (!this.registryLoaded || this.isNavBusy) return null;
+    if (this.importerFlow().open || this.newDetectorFlow().open) return null;
+    const pickedDatasets = this.resolvedSelectedDatasets;
+    const pickedDetectors = this.resolvedSelectedModels;
+    const importing = this.loadingTasksSvc.orphanLoadingTasks.length > 0;
+    if (this.datasets.length === 0 && !importing) return this.loading ? null : 'add-dataset';
+    if (this.datasets.length > 0 && pickedDatasets.length === 0) return 'select-dataset';
+    if (new Set(pickedDatasets.map((d) => d.media_type)).size > 1) return 'mixed-datasets';
+    if (this.detectors.length === 0) return 'add-detector';
+    if (pickedDetectors.length === 0) return this.visibleDetectors.length > 0 ? 'select-detector' : null;
+    // Only an import under way, no dataset row to pair with yet.
+    if (pickedDatasets.length === 0) return null;
+    if (!this.findMediaTypesMatch()) return 'mismatch';
+    if (this.showTrainHint) return 'train';
+    if (this.autofindEnabled) return 'test-or-find';
+    return null;
   }
 
   /** Whether Toasty points at Train (#4227, #4680): exactly one detector is

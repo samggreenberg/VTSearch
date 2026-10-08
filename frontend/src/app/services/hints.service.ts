@@ -5,7 +5,21 @@ import { SettingsStateService } from './settings-state.service';
  * Every hint Toasty gives (#4680), by the id the `hidden_hints` setting stores.
  * A new hint adds its id here; the server keeps whatever ids it is sent.
  */
-export const HINT_IDS = ['add-dataset', 'add-detector', 'train'] as const;
+export const HINT_IDS = [
+  // Dashboard, in the order a new user meets them.
+  'add-dataset',
+  'select-dataset',
+  'mixed-datasets',
+  'add-detector',
+  'select-detector',
+  'mismatch',
+  'train',
+  'test-or-find',
+  // Train view.
+  'start-voting',
+  'autopilot-done',
+  'all-labeled',
+] as const;
 export type HintId = (typeof HINT_IDS)[number];
 
 /**

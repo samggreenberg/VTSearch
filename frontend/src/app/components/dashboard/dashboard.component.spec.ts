@@ -1074,7 +1074,7 @@ describe('DashboardComponent', () => {
     it('has Toasty point at the dataset + while there are no datasets (#4680)', async () => {
       const el = renderWith();
       await loadSettings({});
-      expect(component.showAddDatasetHint).toBe(true);
+      expect(component.dashboardHint).toBe('add-dataset');
       expect(hintTexts(el)).toEqual([
         'Start here! Click + to add a dataset: the images, sounds or other media you want to search through.',
       ]);
@@ -1082,9 +1082,9 @@ describe('DashboardComponent', () => {
     });
 
     it('keeps Toasty to the dataset step until a dataset exists (#4680)', () => {
-      renderWith();
-      expect(component.showAddDatasetHint).toBe(true);
-      expect(component.showAddDetectorHint).toBe(false);
+      const el = renderWith();
+      expect(component.dashboardHint).toBe('add-dataset');
+      expect(el.querySelectorAll('vt-toasty-hint').length).toBe(1);
     });
 
     it('drops the dataset hint while Add Dataset is open, and brings it back if cancelled (#4680)', () => {
@@ -1092,12 +1092,12 @@ describe('DashboardComponent', () => {
       const flows = TestBed.inject(NewThingFlowsService);
       flows.openImporter();
       TestBed.tick();
-      expect(component.showAddDatasetHint).toBe(false);
+      expect(component.dashboardHint).toBeNull();
       expect(el.querySelector('vt-toasty-hint')).toBeNull();
 
       flows.closeImporter();
       TestBed.tick();
-      expect(component.showAddDatasetHint).toBe(true);
+      expect(component.dashboardHint).toBe('add-dataset');
       expect(el.querySelector('vt-toasty-hint')).toBeTruthy();
     });
 
@@ -1106,9 +1106,73 @@ describe('DashboardComponent', () => {
       vi.spyOn(component.loadingTasksSvc, 'orphanLoadingTasks', 'get').mockReturnValue([
         { task_id: 't1', name: 'Pile', status: 'loading' } as LoadingTask,
       ]);
-      expect(component.showAddDatasetHint).toBe(false);
       // A dataset is on its way, so the next step is a detector.
-      expect(component.showAddDetectorHint).toBe(true);
+      expect(component.dashboardHint).toBe('add-detector');
+    });
+
+    it('asks for a dataset to be picked when there are datasets but none is selected (#4680)', () => {
+      const el = renderWith([
+        { id: 'd1', name: 'A', media_type: 'image' },
+        { id: 'd2', name: 'B', media_type: 'image' },
+      ]);
+      expect(component.dashboardHint).toBe('select-dataset');
+      expect(hintTexts(el)).toEqual(['Click a dataset to select it, or click + to add another one.']);
+    });
+
+    it('asks for one kind of media when the selected datasets mix kinds (#4680)', () => {
+      renderWith([
+        { id: 'd1', name: 'A', media_type: 'image' },
+        { id: 'd2', name: 'B', media_type: 'audio' },
+      ]);
+      selection.selectOnly('dataset', ['d1', 'd2']);
+      expect(component.dashboardHint).toBe('mixed-datasets');
+    });
+
+    it('asks for a detector to be picked when there are detectors but none is selected (#4680)', () => {
+      renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [
+          { id: 'm1', name: 'M1', media_type: 'image' },
+          { id: 'm2', name: 'M2', media_type: 'image' },
+        ],
+      );
+      expect(component.dashboardHint).toBe('select-detector');
+    });
+
+    it('points out a dataset and detector for different kinds of media (#4680)', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'audio' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
+      );
+      expect(component.dashboardHint).toBe('mismatch');
+      expect(hintTexts(el)[0]).toContain("This detector is for a different kind of media than your dataset");
+    });
+
+    it('suggests Test or Find once a trained detector and its dataset are selected (#4680)', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
+      );
+      expect(component.dashboardHint).toBe('test-or-find');
+      expect(hintTexts(el)).toEqual([
+        'Your detector is trained! Click Test to see how well it does on this dataset, or Find to collect its matches.',
+      ]);
+    });
+
+    it('suggests only Find when several datasets are selected (#4680)', () => {
+      const el = renderWith(
+        [
+          { id: 'd1', name: 'A', media_type: 'image' },
+          { id: 'd2', name: 'B', media_type: 'image' },
+        ],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
+      );
+      selection.selectOnly('dataset', ['d1', 'd2']);
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      expect(component.dashboardHint).toBe('test-or-find');
+      expect(component.findEnabled).toBe(false);
+      expect(hintTexts(el)[0]).toContain('Click Find to run them over the selected datasets');
     });
 
     it('has Toasty point at the detector + once a dataset exists (#4680)', async () => {
@@ -1170,7 +1234,9 @@ describe('DashboardComponent', () => {
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
       );
       expect(component.showTrainHint).toBe(false);
-      expect(el.querySelector('vt-toasty-hint')).toBeNull();
+      // A trained detector moves Toasty on to Test or Find.
+      expect(component.dashboardHint).toBe('test-or-find');
+      expect(el.querySelectorAll('vt-toasty-hint').length).toBe(1);
     });
 
     it('does not point at Train when Train is disabled (media type mismatch)', () => {
