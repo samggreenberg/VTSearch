@@ -174,6 +174,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     ap.add_argument("--presets", default=",".join(PRESETS))
     ap.add_argument("--seeds", help="comma-separated seeds to read (an interim read of the first seeds); default all")
     ap.add_argument("--no-figures", action="store_true")
+    ap.add_argument("--no-viewer", action="store_true")
     args = ap.parse_args(argv)
     base = Path(args.base)
     out = Path(args.out)
@@ -362,6 +363,20 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             denominator=denominator,
             baseline=bl["today"],
             lower_is_better=False,
+        )
+    if not args.no_viewer and frames:
+        import viewer  # noqa: PLC0415
+
+        main_frame = pd.concat([f.assign(arm=a) for a, f in frames.items()], ignore_index=True)
+        denominator = pd.concat([grid.assign(arm=a) for a in frames], ignore_index=True)
+        viewer.build_viewer(
+            main_frame,
+            out / "viewer.html",
+            arms=list(frames),
+            denominator=denominator,
+            baseline=bl["today"],
+            title="COCO Better: the F-beta era, built up",
+            subtitle="Binary voting, SigLIP, 144 cells x 5 seeds, the user's pool at 1%; one arm per rung and preset (#4668)",
         )
     return 1 if failures else 0
 
