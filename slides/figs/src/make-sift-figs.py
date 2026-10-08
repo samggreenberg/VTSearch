@@ -813,10 +813,7 @@ def tiles_fig() -> None:
         tile_px = (round(tx0 * pw), round(ty0 * ph), round((tx1 - tx0) * pw), round((ty1 - ty0) * ph))
         draw_box(ax, right, tile_px, color=GREEN, lw=2.6)
         text(ax, 7.0, 0.7, "one vector per tile", size=COUNT_PT, fontweight="bold")
-        if n_crest == n_tile:
-            text(ax, 7.0, 0.28, f"the crest: all {n_tile} of its tile's keypoints")
-        else:
-            text(ax, 7.0, 0.28, f"the crest: {n_crest} of its tile's {n_tile}, {n_crest / n_tile:.0%}")
+        text(ax, 7.0, 0.28, f"the crest: {n_crest} of its tile's {n_tile}, {n_crest / n_tile:.0%}")
 
     build("logo-tiles", draw, 2)
 
