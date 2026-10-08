@@ -45,7 +45,10 @@ COLOR = {"a0": "#8a8985", "a8": "#2a78d6", "a4": "#1baf7a", "a2": "#eb6834"}
 CLICKS = (25, 50, 75, 100, 125, 150, 175, 200)
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 OPENING = ("good", "bad", "more")
-STEP_COLS = ["category", "seed", "embedder", "t", "phase", "app_trained", "precision", "recall", "average_precision"]
+STEP_COLS = [
+    "category", "seed", "embedder", "t", "phase", "app_trained", "precision", "recall", "average_precision",
+    "gmm_variant", "schedule", "pool_variant",
+]  # fmt: skip
 PICK_COLS = ["category", "seed", "embedder", "t", "phase", "picked_label"]
 
 
@@ -64,6 +67,13 @@ def read_cell(path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     head = pd.read_csv(path, nrows=0).columns
     m = pd.read_csv(path, usecols=[c for c in STEP_COLS if c in head], low_memory=False)
     m = m[m["embedder"] == "siglip"]
+    # The headline row only: every step also carries ~30 diagnostic cut variants (``gmm_variant``), which are
+    # not the line the app shows (``handoff_extract_4604.py`` keeps the same rows).
+    for col in ("gmm_variant", "schedule"):
+        if col in m.columns:
+            m = m[m[col].isna() | m[col].astype(str).str.strip().isin(("", "nan", "None"))]
+    if "pool_variant" in m.columns:
+        m = m[m["pool_variant"].fillna("").astype(str).str.strip().isin(("", "max"))]
     stem = path[: -len(".csv")]
     pk = (
         pd.read_csv(f"{stem}__picks.csv", usecols=lambda c: c in PICK_COLS)
