@@ -332,6 +332,12 @@
             },
             "type": "object"
           },
+          "hidden_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "hidden_plugins": {
             "additionalProperties": {
               "items": {
@@ -341,6 +347,9 @@
             },
             "readOnly": true,
             "type": "object"
+          },
+          "hide_all_hints": {
+            "type": "boolean"
           },
           "hide_autopilot": {
             "type": "boolean"
@@ -6905,6 +6914,15 @@
           "grid_icon_size_left": {},
           "grid_icon_size_popup": {},
           "grid_icon_size_right": {},
+          "hidden_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hide_all_hints": {
+            "type": "boolean"
+          },
           "hide_autopilot": {
             "type": "boolean"
           },

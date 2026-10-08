@@ -369,6 +369,32 @@ class TestSettingsAPI:
         res2 = client.get("/api/settings")
         assert res2.get_json()["label_hint_dismissed"] is True
 
+    def test_toasty_hints_start_shown(self, client):
+        """No hint is hidden until the user hides it (#4680)."""
+        data = client.get("/api/settings").get_json()
+        assert data["hide_all_hints"] is False
+        assert data["hidden_hints"] == []
+
+    def test_hide_one_hint_then_show_all(self, client):
+        res = client.put("/api/settings", json={"hidden_hints": ["add-dataset"]})
+        assert res.status_code == 200
+        assert res.get_json()["hidden_hints"] == ["add-dataset"]
+
+        res = client.put("/api/settings", json={"hide_all_hints": True})
+        assert res.get_json()["hide_all_hints"] is True
+        assert res.get_json()["hidden_hints"] == ["add-dataset"]
+
+        # Settings' Show All clears both in one write.
+        res = client.put("/api/settings", json={"hide_all_hints": False, "hidden_hints": []})
+        assert res.status_code == 200
+        data = client.get("/api/settings").get_json()
+        assert data["hide_all_hints"] is False
+        assert data["hidden_hints"] == []
+
+    def test_hidden_hints_must_be_a_list_of_strings(self, client):
+        res = client.put("/api/settings", json={"hidden_hints": "add-dataset"})
+        assert res.status_code == 422
+
     def test_update_grid_icon_size_left_per_type(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_left": {"audio": "XS", "image": "XL"}})
         assert res.status_code == 200

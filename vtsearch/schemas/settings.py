@@ -89,6 +89,8 @@ class AppSettingsSchema(Schema):
     show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
+    hide_all_hints = fields.Boolean()
+    hidden_hints = fields.List(fields.String())
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()
     autopilot_top_greens = fields.Integer()
@@ -277,6 +279,8 @@ class SettingsUpdateSchema(Schema):
     show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
+    hide_all_hints = fields.Boolean()
+    hidden_hints = fields.List(fields.String())
 
     grid_icon_size_left = fields.Raw()
     grid_icon_size_right = fields.Raw()

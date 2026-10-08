@@ -914,9 +914,11 @@ bundle's *static* imports from `main.js` and fails if the package reappears.
 `components/icon/` maps names (and backend-supplied emoji) to sanitised inline
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
 `skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` are the small
-shared widgets. `pointer-arrow/` draws a measured "look here" arrow from one
-element to another (the Dashboard's first-run hints); drop it under any
-positioned container that encloses both ends. `directives/no-focus-steal.directive.ts` stops toolbar buttons
+shared widgets. `toasty-hint/` is one of King Toasty's hints: Toasty and a
+speech bubble beside the control a new user should click next (the
+Dashboard's first-run hints, #4680), with "Hide this hint" / "Hide all hints"
+boxes that `HintsService` keeps in the user's settings; drop it under any
+positioned container that encloses its anchor. `directives/no-focus-steal.directive.ts` stops toolbar buttons
 next to the Browse canvas from swallowing keyboard focus on mousedown.
 
 Services are root-provided by default; provide one on a component only when

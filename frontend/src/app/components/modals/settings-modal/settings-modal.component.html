@@ -122,6 +122,13 @@
             <input type="checkbox" [ngModel]="settings().enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
             Enable achievements
           </label>
+          <div class="form-group" role="group" aria-labelledby="setting-hints-label">
+            <span id="setting-hints-label" class="form-label" title="King Toasty's hints beside the next thing to click">Toasty's hints<vt-field-hint-icon hint="While you're getting started, King Toasty stands beside the next thing to click and says what it does. Each hint has its own “Hide this hint” and “Hide all hints” boxes. Show All brings back every hint, including ones you hid one at a time."></vt-field-hint-icon></span>
+            <div class="hint-buttons">
+              <button class="btn btn--secondary btn--sm" (click)="onHideAllHints()" [disabled]="allHintsHidden()" title="Hide every one of Toasty's hints">Hide All</button>
+              <button class="btn btn--secondary btn--sm" (click)="onShowAllHints()" [disabled]="noHintsHidden()" title="Show all of Toasty's hints again, including ones you hid one at a time">Show All</button>
+            </div>
+          </div>
 
           @if (mediaTypes().length > 0) {
             <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>

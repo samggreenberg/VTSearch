@@ -1033,27 +1033,100 @@ describe('DashboardComponent', () => {
       TestBed.tick();
     }
 
-    it('puts a working + in the dataset empty state, with an arrow to the header button', () => {
+    /** Load the user's settings, then repaint. */
+    async function loadSettings(body: object): Promise<void> {
+      TestBed.inject(SettingsStateService).load();
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush(body);
+      await settleResource();
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+    }
+
+    /** The text of each of Toasty's hints on the page, whitespace collapsed. */
+    function hintTexts(el: HTMLElement): string[] {
+      return [...el.querySelectorAll('vt-toasty-hint')].map((h) =>
+        (h.querySelector('.toasty-hint__text')?.textContent || '').replace(/\s+/g, ' ').trim(),
+      );
+    }
+
+    it('puts a working + in the dataset empty state', () => {
       const el = renderWith();
       const section = el.querySelectorAll('.dashboard-section')[0];
       const inlineAdd = section.querySelector('.empty-state .inline-add-btn') as HTMLButtonElement;
       expect(inlineAdd).toBeTruthy();
       expect(inlineAdd.textContent?.trim()).toBe('+');
-      expect(section.querySelector('vt-pointer-arrow')).toBeTruthy();
 
       inlineAdd.click();
       expect(component.importerModalOpen).toBe(true);
     });
 
-    it('puts a working + in the draft-detector empty state, with an arrow to the header button', () => {
+    it('puts a working + in the draft-detector empty state', () => {
       const el = renderWith([{ id: 'd1', name: 'DS', media_type: 'image' }]);
       const section = el.querySelectorAll('.dashboard-section')[1];
       const empty = section.querySelector('.empty-state');
       expect((empty?.textContent || '').replace(/\s+/g, ' ')).toContain('No draft detectors. Click + to add one.');
-      expect(section.querySelector('vt-pointer-arrow')).toBeTruthy();
 
       (section.querySelector('.empty-state .inline-add-btn') as HTMLButtonElement).click();
       expect(component.newDetectorModalOpen).toBe(true);
+    });
+
+    it('has Toasty point at the dataset + while there are no datasets (#4680)', async () => {
+      const el = renderWith();
+      await loadSettings({});
+      expect(component.showAddDatasetHint).toBe(true);
+      expect(hintTexts(el)).toEqual([
+        'Start here! Click + to add a dataset: the images, sounds or other media you want to search through.',
+      ]);
+      expect(el.querySelector('vt-toasty-hint')?.classList).not.toContain('toasty-hint--off');
+    });
+
+    it('keeps Toasty to the dataset step until a dataset exists (#4680)', () => {
+      renderWith();
+      expect(component.showAddDatasetHint).toBe(true);
+      expect(component.showAddDetectorHint).toBe(false);
+    });
+
+    it('drops the dataset hint while Add Dataset is open, and brings it back if cancelled (#4680)', () => {
+      const el = renderWith();
+      const flows = TestBed.inject(NewThingFlowsService);
+      flows.openImporter();
+      TestBed.tick();
+      expect(component.showAddDatasetHint).toBe(false);
+      expect(el.querySelector('vt-toasty-hint')).toBeNull();
+
+      flows.closeImporter();
+      TestBed.tick();
+      expect(component.showAddDatasetHint).toBe(true);
+      expect(el.querySelector('vt-toasty-hint')).toBeTruthy();
+    });
+
+    it('drops the dataset hint once an import is under way (#4680)', () => {
+      renderWith();
+      vi.spyOn(component.loadingTasksSvc, 'orphanLoadingTasks', 'get').mockReturnValue([
+        { task_id: 't1', name: 'Pile', status: 'loading' } as LoadingTask,
+      ]);
+      expect(component.showAddDatasetHint).toBe(false);
+      // A dataset is on its way, so the next step is a detector.
+      expect(component.showAddDetectorHint).toBe(true);
+    });
+
+    it('has Toasty point at the detector + once a dataset exists (#4680)', async () => {
+      const el = renderWith([{ id: 'd1', name: 'DS', media_type: 'image' }]);
+      await loadSettings({});
+      expect(hintTexts(el)).toEqual([
+        "Next, click + to make a detector. Tell it what you're looking for, and it learns to find it in your datasets.",
+      ]);
+
+      TestBed.inject(NewThingFlowsService).openNewDetector();
+      TestBed.tick();
+      expect(el.querySelector('vt-toasty-hint')).toBeNull();
+    });
+
+    it('renders a hint the user hid as nothing (#4680)', async () => {
+      const el = renderWith();
+      await loadSettings({ hidden_hints: ['add-dataset'] });
+      expect(el.querySelector('vt-toasty-hint')?.classList).toContain('toasty-hint--off');
     });
 
     it('disables both detector tabs while there are no detectors', () => {
@@ -1086,11 +1159,9 @@ describe('DashboardComponent', () => {
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 0 }],
       );
       expect(component.showTrainHint).toBe(true);
-      const section = el.querySelectorAll('.dashboard-section')[1];
-      expect(section.querySelector('.intro-hint')?.textContent?.trim()).toBe(
-        'Click Train to teach your new detector.',
-      );
-      expect(section.querySelector('vt-pointer-arrow')).toBeTruthy();
+      expect(hintTexts(el)).toEqual([
+        'Click Train to teach your new detector. You mark examples Good or Bad, and it learns from every one.',
+      ]);
     });
 
     it('drops the Train hint once the detector has labels', () => {
@@ -1099,7 +1170,7 @@ describe('DashboardComponent', () => {
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
       );
       expect(component.showTrainHint).toBe(false);
-      expect(el.querySelector('.intro-hint')).toBeNull();
+      expect(el.querySelector('vt-toasty-hint')).toBeNull();
     });
 
     it('does not point at Train when Train is disabled (media type mismatch)', () => {

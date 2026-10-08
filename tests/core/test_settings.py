@@ -233,6 +233,26 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_label_hint_dismissed() is True
 
+    def test_toasty_hints_default_to_shown(self):
+        """Every one of Toasty's hints shows until the user hides it (#4680)."""
+        assert settings_mod.get_hide_all_hints() is False
+        assert settings_mod.get_hidden_hints() == []
+
+    def test_toasty_hints_persist_across_reset(self, isolated_settings):
+        settings_mod.set_hide_all_hints(True)
+        settings_mod.set_hidden_hints(["add-dataset"])
+        settings_mod.reset()
+        assert settings_mod.get_hide_all_hints() is True
+        assert settings_mod.get_hidden_hints() == ["add-dataset"]
+
+    def test_hidden_hints_drops_blank_and_repeated_ids(self, isolated_settings):
+        settings_mod.set_hidden_hints(["train", "", "add-dataset", "train", "  "])
+        assert settings_mod.get_hidden_hints() == ["train", "add-dataset"]
+
+    def test_hidden_hints_rejects_a_non_string_id(self, isolated_settings):
+        with pytest.raises(ValueError):
+            settings_mod.set_hidden_hints(["train", 3])
+
     def test_get_grid_icon_size_left_default(self):
         result = settings_mod.get_grid_icon_size_left()
         assert isinstance(result, dict)

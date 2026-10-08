@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, timer } from 'rxjs';
@@ -53,7 +53,7 @@ import { LabelImporterModalComponent } from '../modals/label-importer-modal/labe
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
-import { PointerArrowComponent } from '../pointer-arrow/pointer-arrow.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 @Component({
@@ -71,7 +71,7 @@ import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-b
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
     IconComponent,
-    PointerArrowComponent,
+    ToastyHintComponent,
     UsageBarComponent,
     SkeletonComponent
 ],
@@ -94,6 +94,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private hfAuth = inject(HuggingFaceAuthService);
   private dashSelection = inject(DashboardSelectionService);
   private newThingFlows = inject(NewThingFlowsService);
+  /** The two "add" flows' state as signals, so Toasty's hints go away the
+   *  moment either dialog opens, from the Dashboard's + or anywhere else. */
+  private readonly importerFlow = toSignal(this.newThingFlows.importer$, { requireSync: true });
+  private readonly newDetectorFlow = toSignal(this.newThingFlows.newDetector$, { requireSync: true });
   modals = inject(DashboardModalsService);
   loadingTasksSvc = inject(DashboardLoadingTasksService);
   browsePrep = inject(BrowsePrepService);
@@ -1259,10 +1263,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.isContextSwitching || this.browsePrep.preparing;
   }
 
-  /** Whether to show the "Click Train to teach your new detector." hint and
-   *  its arrow (#4227): exactly one detector is selected, it has no training
-   *  labels yet (its #Training cell reads "Empty"), and Train is clickable
-   *  because a compatible dataset is selected too. */
+  /** Whether Toasty points at the Datasets panel's + (#4680): the panel is
+   *  showing its empty state and the Add Dataset dialog is not open. */
+  get showAddDatasetHint(): boolean {
+    return (
+      this.registryLoaded &&
+      this.datasets.length === 0 &&
+      this.loadingTasksSvc.orphanLoadingTasks.length === 0 &&
+      !this.loading &&
+      !this.importerFlow().open
+    );
+  }
+
+  /** Whether Toasty points at the Detectors panel's + (#4680): there are no
+   *  detectors, the New Detector dialog is not open, and a dataset exists or
+   *  is importing. Waiting for the dataset keeps Toasty to one step at a time,
+   *  in the order a new user takes them. */
+  get showAddDetectorHint(): boolean {
+    const hasDataset = this.datasets.length > 0 || this.loadingTasksSvc.orphanLoadingTasks.length > 0;
+    return this.noDetectors && hasDataset && !this.newDetectorFlow().open;
+  }
+
+  /** Whether Toasty points at Train (#4227, #4680): exactly one detector is
+   *  selected, it has no training labels yet (its #Training cell reads
+   *  "Empty"), and Train is clickable because a compatible dataset is
+   *  selected too. */
   get showTrainHint(): boolean {
     if (!this.labelEnabled || this.isNavBusy) return false;
     const models = this.resolvedSelectedModels;

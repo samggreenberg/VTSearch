@@ -1,0 +1,14 @@
+<img class="toasty-hint__toasty" [src]="image()" alt="" />
+<div class="toasty-hint__bubble">
+  <p class="toasty-hint__text"><ng-content /></p>
+  <div class="toasty-hint__options">
+    <label class="toasty-hint__option" title="Don't show this hint again">
+      <input type="checkbox" (change)="hideThis()" />
+      Hide this hint
+    </label>
+    <label class="toasty-hint__option" title="Don't show any of Toasty's hints. Settings › Appearance brings them back.">
+      <input type="checkbox" (change)="hideAll()" />
+      Hide all hints
+    </label>
+  </div>
+</div>
