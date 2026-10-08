@@ -2,7 +2,8 @@
 // `_components.scss`; this indents the form content inward from the
 // category / importer tabs above (rendered by `<vt-source-picker>` in
 // the parent) so the hierarchy reads top-down: category tabs →
-// importer tabs → controls.
+// importer tabs → controls. With no tabs above (`--importer-indent: 0`,
+// set by the Add Dataset modal) there is nothing to indent from.
 .importer-form {
-  padding-left: var(--space-2xl);
+  padding-left: var(--importer-indent, var(--space-2xl));
 }
