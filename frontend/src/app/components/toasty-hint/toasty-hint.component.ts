@@ -93,8 +93,9 @@ export class ToastyHintComponent {
   readonly anchor = input.required<HTMLElement>();
   readonly side = input<ToastyHintSide>('below');
   readonly reach = input<ToastyHintReach>('left');
-  /** Toasty's picture. One pose for now; others can come in through here. */
-  readonly image = input('logo.png');
+  /** Toasty's picture: searching, magnifier in hand, unless a hint asks for
+   *  another pose. */
+  readonly image = input('toasty-search.png');
 
   private readonly hints = inject(HintsService);
   readonly shown = computed(() => this.hints.isShown(this.hintId()));
