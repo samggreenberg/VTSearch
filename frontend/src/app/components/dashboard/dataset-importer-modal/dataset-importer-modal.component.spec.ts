@@ -370,6 +370,52 @@ describe('DatasetImporterModalComponent', () => {
       expect(names).toContain('synthetic');
       expect(component.visibleImporterTabs.map((t) => t.id)).toEqual(['local', 'synth']);
     });
+
+    it('hides the tab bar when the lock leaves a single tab (#4669)', async () => {
+      await initSolo('audio');
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      // The lone "Local" tab is pre-selected, so it is no choice at all; its
+      // two importers still render as sub-tabs.
+      expect(component.activeImporterTab()).toBe('local');
+      expect(el.querySelector('.tab-bar')).toBeNull();
+      expect(el.querySelectorAll('.importer-subtab').length).toBe(2);
+    });
+
+    it('keeps the tab bar when more than one tab is left', async () => {
+      await initSolo(null);
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelectorAll('.tab-bar .tab').length).toBe(2);
+    });
+  });
+
+  it('should open straight onto the form when one tab holds one importer (#4669)', async () => {
+    // A rollout that hides every importer but one extension service.
+    const service: ImporterInfo = {
+      name: 'acme_service',
+      display_name: 'Acme',
+      picker_view: 'form',
+      category: 'services',
+      fields: [],
+    };
+    TestBed.tick();
+    httpMock.expectOne('/api/dataset/all-importers').flush({
+      importers: [service],
+      tabs: [{ id: 'services', label: 'Services', icon: 'lightning', order: 10 }],
+    });
+    flushInitRequests();
+    await settleZoneless(fixture);
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(component.selectedImporter()).toBe(service);
+    expect(el.querySelector('.tab-bar')).toBeNull();
+    expect(el.querySelector('.importer-subtab-bar')).toBeNull();
+    // No tab rows, so the source picker reports itself chromeless and the
+    // form below drops the indent it would take from them.
+    expect(el.querySelector('vt-source-picker')!.classList.contains('chromeless')).toBe(true);
+    const formPicker = el.querySelector('vt-generic-form-picker') as HTMLElement & { hidden: boolean };
+    expect(formPicker.hidden).toBe(false);
   });
 
   it('should render inner importer sub-tabs for the active category', async () => {
