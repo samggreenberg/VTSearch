@@ -523,7 +523,6 @@ def _score_with_cold_detector(
     """
     from vtscore.config import CoreConfig  # noqa: PLC0415
     from vtscore.detectors.labelset_training import labelset_train_and_score  # noqa: PLC0415
-
     from vtscore.state import seed_detector_beta  # noqa: PLC0415
 
     det_ctx = _cold_detector_context(dc)

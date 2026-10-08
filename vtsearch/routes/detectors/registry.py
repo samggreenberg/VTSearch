@@ -116,13 +116,16 @@ def _creation_beta(raw) -> float | None:
 
     Validated by the same ``settings.validate_beta`` the Threshold control's
     ``POST /api/balance`` uses, so the two cannot disagree about the range;
-    an unparseable value is a 400.  A form-encoded create (a label importer
-    with a file field) sends it as a string, and an empty one means none.
+    an unparseable value is a 400, a boolean included, as there.  A
+    form-encoded create (a label importer with a file field) sends it as a
+    string, and an empty one means none.
     """
     from vtsearch import settings  # noqa: PLC0415
 
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return None
+    if isinstance(raw, bool):
+        abort(400, message="beta: must be a number")
     try:
         return float(settings.validate_beta(raw))
     except (TypeError, ValueError) as exc:

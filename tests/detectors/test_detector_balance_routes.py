@@ -115,10 +115,11 @@ class TestImportingADetector:
         assert res.status_code == 201, res.get_json()
         assert BETA_KEY not in _file("imported-plain")
 
-    def test_a_non_number_is_refused_before_the_import_runs(self, client, tmp_path):
+    @pytest.mark.parametrize("bad", ["lean", True])
+    def test_a_non_number_is_refused_before_the_import_runs(self, client, tmp_path, bad):
         res = client.post(
             "/api/detectors/registry/from-labelset/server_json_file",
-            json={"name": "imported-bad", "filepath": self._labels(tmp_path), "beta": "lean"},
+            json={"name": "imported-bad", "filepath": self._labels(tmp_path), "beta": bad},
         )
         assert res.status_code == 400
         assert _read_detector(_detector_path("imported-bad")) is None

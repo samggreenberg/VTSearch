@@ -2057,9 +2057,10 @@ def _get_beta(ctx: DetectorContext | None = None) -> tuple[bool, float | None]:
 def _set_beta(value: float | None, ctx: DetectorContext | None = None) -> None:
     if ctx is None:
         ctx = get_active_detector_context()
-    # The balance is cached per-detector for fast reads, but its canonical
-    # persisted home is the per-user settings store (written by the caller's
-    # ``_persist_setting`` hook).  When a Flask request identifies no detector
+    # The balance is cached per-detector for fast reads; it persists on the
+    # detector's JSON (``vtscore.detectors.balance.keep_beta``, #4665) and as
+    # the user's last pick (the caller's ``_persist_setting`` hook), both
+    # written by ``set_beta``, not here.  When a Flask request identifies no detector
     # (e.g. the VTSBrowser, which has a dataset but no loaded detector), the
     # active context is the frozen request-missing sentinel; there is no
     # detector to cache the value on, so skip the cache write rather than
