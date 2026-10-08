@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **King Toasty gives the first-run hints** (issue #4680). The Dashboard's long dotted arrows are
+  gone. In their place Toasty stands beside the next thing to click, with a speech bubble saying
+  what to do and why: the Datasets **+** while there are no datasets, the Detectors **+** once a
+  dataset is in or importing, and **Train** once a new detector with no labels is selected. Only
+  one shows at a time, and each goes away as soon as you take its step (opening Add Dataset or
+  New Detector counts). Every bubble has **Hide this hint** and **Hide all hints** boxes, saved in
+  your settings (`hidden_hints`, `hide_all_hints`), and **Settings → Appearance → Toasty's hints**
+  has **Hide All** and **Show All**.
 - **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
   hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
   show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer

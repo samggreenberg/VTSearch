@@ -1395,8 +1395,9 @@ eight tabs:
   bars** (**Default** shows each one only when its free space is getting
   low, meaning it would hold fewer than three more datasets the size of your
   largest; **View** and **Hide** show them always or never), the metadata
-  panel, the **Enable achievements** toggle, and per-media-type Scroll
-  Style (focus mode and thumbnail size).
+  panel, the **Enable achievements** toggle, **Hide All** / **Show All** for
+  [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
+  mode and thumbnail size).
 - **AutoFind** - what exporter to send AutoFind results to. (Which
   detectors run is chosen on the Dashboard's **AutoFind** tab; see
   [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
@@ -1487,8 +1488,8 @@ several at once. See
 [Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
-row to select them (a detector you just made, with no labels yet, gets a
-"Click Train to teach your new detector." hint), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
+row to select them (a detector you just made, with no labels yet, gets one
+of [Toasty's hints](#toastys-hints) pointing at **Train**), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
@@ -1506,6 +1507,18 @@ selected detector, shown on its row, and the results open in the
 You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Test / Find buttons
 work on whichever rows you currently have selected.
+
+### Toasty's hints
+
+While you're getting started, King Toasty (the toast in the logo) stands
+beside the next thing to click, with a speech bubble that says what it does:
+the **Datasets** card's **+** while you have no datasets, the **Detectors**
+card's **+** once a dataset is in, and **Train** once a new detector with no
+labels is selected. Each hint goes away as soon as you take its step, and only
+one shows at a time. Tick **Hide this hint** in a bubble to stop seeing that
+one, or **Hide all hints** to stop seeing any; **Settings → Appearance →
+Toasty's hints** has **Hide All** and **Show All**, which brings back every
+hint, including ones you hid one at a time.
 
 ### Combining datasets and detectors
 

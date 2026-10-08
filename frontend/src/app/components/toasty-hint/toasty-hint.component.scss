@@ -8,6 +8,10 @@
   --toasty-hint-dy: 0%;
   position: absolute;
   z-index: var(--z-elevated);
+  // An absolute box shrinks to the room between `left` and the container's
+  // right edge, which by a right-hand + button is next to none; size to the
+  // content instead (the bubble's max-width wraps the text).
+  width: max-content;
   display: flex;
   flex-direction: row-reverse;
   align-items: flex-start;
