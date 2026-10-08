@@ -91,10 +91,15 @@ function ramFreeMB(): number {
  * (`ProgressBarComponent.fillColor`, `'high-bad'`), rather than in
  * `maskVolatile`, because the usage poll re-binds the inline width and colour
  * after any DOM write; an `!important` rule outranks both, whenever they land.
+ *
+ * Toasty's hints (#4680) are off in every shot: the guide around a screenshot
+ * already says what to click, and a speech bubble saying it again inside the
+ * picture is a hat on a hat. They float over the page, so hiding one moves
+ * nothing else, and it leaves the app's own hint settings alone.
  */
 const STILL_CSS =
   `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +
-  `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot{display:none!important}` +
+  `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot,vt-toasty-hint{display:none!important}` +
   `.settings-saved{opacity:0!important}` +
   `vt-usage-bar .progress-fill{width:50%!important;background:var(--text-warning)!important}`;
 
