@@ -1027,7 +1027,7 @@ def train_from_labelset(
         on_progress=on_progress,
     )
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
-    from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED, quota_from_groups
+    from vtscore.detectors.label_quota import TIER_CENTROID, TIER_NONE, TIER_TRAINED, quota_from_groups
 
     quota = quota_from_groups(groups)
     tier = quota.tier
