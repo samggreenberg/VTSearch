@@ -19,12 +19,19 @@ def _pool(n: int = 100) -> tuple[list[int], dict[int, float]]:
     return ids[::-1], {i: 1.0 - i / n for i in ids}
 
 
+def _pick(ids: list[int], scores: dict[int, float], candidate: int, k: int, rng: np.random.Generator) -> int:
+    """:func:`band_pick` on a pool it can always draw from."""
+    got = band_pick(ids, scores, candidate, k, rng)
+    assert got is not None
+    return got
+
+
 class TestBandPick:
     def test_cycles_through_the_bands_that_hold_the_cap(self):
         """At the top-32 cap the bands are ranks [0, 8), [8, 16), [16, 32); the picks visit them in turn."""
         ids, scores = _pool()
         rng = np.random.default_rng(0)
-        got = [band_pick(ids, scores, 32, k, rng) for k in range(6)]
+        got = [_pick(ids, scores, 32, k, rng) for k in range(6)]
         assert [0 <= got[0] < 8, 8 <= got[1] < 16, 16 <= got[2] < 32] == [True] * 3
         assert [0 <= got[3] < 8, 8 <= got[4] < 16, 16 <= got[5] < 32] == [True] * 3
 
@@ -32,14 +39,14 @@ class TestBandPick:
         ids, scores = _pool(300)
         rng = np.random.default_rng(1)
         edges = band_edges(300)
-        got = [band_pick(ids, scores, 128, k, rng) for k in range(5)]
+        got = [_pick(ids, scores, 128, k, rng) for k in range(5)]
         for k, g in enumerate(got):
             assert edges[k] <= g < edges[k + 1]
 
     def test_uniform_within_the_band(self):
         ids, scores = _pool()
         rng = np.random.default_rng(2)
-        draws = [band_pick(ids, scores, 32, 2, rng) for _ in range(3000)]
+        draws = [_pick(ids, scores, 32, 2, rng) for _ in range(3000)]
         counts = np.bincount(draws, minlength=32)[16:32]
         assert counts.min() > 0.6 * counts.mean()
 
