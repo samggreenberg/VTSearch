@@ -906,9 +906,9 @@ def slide_numbers(showings: list[Showing], texts: dict[str, str]) -> dict[str, i
 # - Bookmarks: the sections, and the slides in each (`bookmarks`).
 # - Page labels: the viewer's page box reads `5c`, the address printed on the
 #   page, rather than the page's position in the file (`audience_labels`).
-# - Click to advance: the middle of every page is a link to the next page, so
-#   a viewer with no slideshow mode is one anyway (`advance_pages`); on the
-#   outline it is carved around the numerals' links.
+# - Click to advance: the middle of every page, audience or speaker, is a link
+#   to the next page, so a viewer with no slideshow mode is one anyway
+#   (`advance_pages`); on the outline it is carved around the numerals' links.
 #
 # Chromium writes none of the last three, so `assemble` puts them in
 # `_build/<deck>[...].nav.json` beside the markdown and pdf_nav.py writes them
@@ -1071,19 +1071,20 @@ def bookmarks(showings: list[Showing], texts: dict[str, str], firsts: list[int])
     return toc
 
 
-def advance_pages(showings: list[Showing]) -> list[int]:
-    """The audience pages whose middle is a link to the next page (#4563).
+def advance_pages(count: int) -> list[int]:
+    """The pages, of a deck *count* pages long, whose middle is a link to the next page (#4563).
 
     Every page but the last, which has nowhere to go. It is what makes a PDF
     viewer with no slideshow mode into one: click the slide, get the next.
-    The outline is no exception (#4618): its numerals are links of their own,
-    each to its section, and pdf_nav.py carves the area around them, so the
-    rest of the page advances like any other. The rectangle itself is
-    pdf_nav.py's (`ADVANCE_INSET`), since it is a fact about the page's size
-    rather than about fragments.
+    The speaker deck is no exception (#4634): a presenter rehearsing from it
+    turns its pages the same way, and its next page is the next slide's. Nor
+    is the outline (#4618): its numerals are links of their own, each to its
+    section — on a speaker page, laid over the miniature — and pdf_nav.py
+    carves the area around them, so the rest of the page advances like any
+    other. The rectangle itself is pdf_nav.py's (`ADVANCE_INSET`), since it is
+    a fact about the page's size rather than about fragments.
     """
-    last = sum(len(pages) for *_, pages in showings)
-    return list(range(1, last))
+    return list(range(1, count))
 
 
 def page_address(number: int | None, page: int, group: list[int]) -> tuple[str, str]:
@@ -1286,7 +1287,7 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
         "toc": bookmarks(showings, texts, firsts),
         "labels": labels,
         "probe": probe_pages,
-        "advance": [] if speaker else advance_pages(showings),
+        "advance": advance_pages(len(labels)),
     }
 
     if problems or not write:

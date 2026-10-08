@@ -401,11 +401,12 @@ them changes a pixel of any slide:
   for the reason it keeps the numbering: an address is the same whether or not
   it is printed.
 
-The speaker deck gets the last four, aimed at *its* pages: a bookmark lands on the
-slide's one speaker page, a label is the number the page prints in its corner,
-that number links back to the speaker page of the section's outline, and the
-outline's numerals are clickable on the miniature, jumping to the speaker page
-where that section starts.
+The speaker deck gets all five, aimed at *its* pages: clicking the middle of a
+speaker page turns to the next slide's speaker page (#4634), the outline's
+numerals are clickable on the miniature, jumping to the speaker page where that
+section starts, the number the page prints in its corner links back to the
+speaker page of the section's outline, a bookmark lands on the slide's one
+speaker page, and a label is that printed number.
 
 **How.** The links are markdown links that `build.py` writes at the start of
 the outline's lines, with no text because the numeral is the theme's counter,
@@ -425,7 +426,9 @@ around any link of its own that reaches into it, rather than let the two
 overlap and leave the viewer to pick which one a click means. On a speaker page
 the outline is a picture, so its links have to be measured: `render.sh` renders
 the outline's showings alone (`_build/<deck>.probe.md`, a few seconds), and
-`pdf_nav.py` scales each link Chromium drew there onto the miniature.
+`pdf_nav.py` scales each link Chromium drew there onto the miniature — before
+it lays the click-to-advance area, which is then carved around them exactly as
+on the audience page.
 
 **A headline that repeats needs a bookmark of its own.** Bookmarks exist to
 tell pages apart, so `build.py --check` fails a deck where two different
