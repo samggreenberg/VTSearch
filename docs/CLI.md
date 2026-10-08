@@ -277,8 +277,10 @@ fix. The first chunk is prepared once and handed to both passes, so the
 correction costs no extra conversion or embedding work.
 
 **The exported set is unchecked, and the run says so.** Each detector's line
-is its labels' line at its balance (the `beta` setting, F-beta's beta: 1
-unless you change it; 2 leans toward recall, 0.5 toward precision): the class
+is its labels' line at its balance (F-beta's beta, the one the detector
+keeps, chosen when it was created in the app, #4665; a detector that keeps
+none takes the `beta` setting, 1 unless you change it; 4 leans toward
+recall, 1/4 toward precision): the class
 model the labels imply, cut where the expected F-beta peaks at the prevalence
 estimated on the scored corpus (#4452). It keeps every item above the cut,
 possibly none - there is no fixed count and no cap. In the app a spot check

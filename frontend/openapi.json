@@ -2820,6 +2820,11 @@
       "DetectorRegistryCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "beta": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
           "embedder_type": {
             "default": "",
             "type": "string"

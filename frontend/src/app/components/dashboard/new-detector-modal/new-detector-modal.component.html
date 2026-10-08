@@ -349,6 +349,13 @@
         />
       </div>
 
+      <!-- The detector's balance (#4665), asked for here because Autopilot has
+           no Threshold control of its own: it is kept on the detector and
+           Autopilot runs at it. Manual and Test can move it later. -->
+      <div class="form-group">
+        <vt-balance [value]="beta()" (valueChange)="pickBeta($event)" />
+      </div>
+
       <!-- Opened from the footer's "Advanced" toggle (#4305), so the options
            land at the foot of the form, just above the toggle. -->
       @if (showAdvancedToggle && advancedOpen()) {

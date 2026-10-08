@@ -227,6 +227,11 @@ place. A folded right panel is unmounted, which is why the views, not
 **The Threshold** (`vt-balance`, the balance, in the Manual tab and Test's
 top row; #4413) is the one knob on the detector's line. The balance is
 F-beta's beta: which way to lean between false positives and false negatives.
+It is the detector's own, kept on the detector (#4665): the New Detector modal
+mounts the same control (with no line, so no state line) and sends the pick
+as `beta` on the create POST, starting on the user's `beta` setting, their last
+pick. That is the only way Train's Autopilot tab, which has no Threshold of its
+own, gets a balance the user chose.
 The line is the set with the best estimated F-beta, and a spot check just says
 what it estimated. Two values back the control, and they travel separately:
 `SortStateService.beta` is the balance the radios show, seeded per pair by
