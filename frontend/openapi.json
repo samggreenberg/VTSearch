@@ -342,7 +342,10 @@
             "readOnly": true,
             "type": "object"
           },
-          "hide_autopilot": {
+          "hide_left_panel": {
+            "type": "boolean"
+          },
+          "hide_right_panel": {
             "type": "boolean"
           },
           "import_defaults_by_media_type": {
@@ -6905,7 +6908,10 @@
           "grid_icon_size_left": {},
           "grid_icon_size_popup": {},
           "grid_icon_size_right": {},
-          "hide_autopilot": {
+          "hide_left_panel": {
+            "type": "boolean"
+          },
+          "hide_right_panel": {
             "type": "boolean"
           },
           "import_defaults_by_media_type": {},

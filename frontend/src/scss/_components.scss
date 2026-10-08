@@ -796,6 +796,26 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   padding: var(--space-xs) var(--space-md);
 }
 
+// The small ◀ / ▶ that folds a side panel of Train or Test to its strip and
+// opens it again (#4673): `vt-autopilot-panel`'s on the Autopilot tab, and
+// `vt-side-panel-toggle`'s everywhere else.
+.collapse-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  line-height: 1;
+  transition: color var(--transition-base), border-color var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+  }
+}
+
 // Body-text utility classes used on `<p>`/`<span>` elements inside modals
 // and panels. We explicitly zero the UA `<p>` margin: surrounding layouts
 // rely on the parent's flex `gap` to space stacked elements, and default

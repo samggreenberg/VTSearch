@@ -613,6 +613,17 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["autopilot_enabled"] is True
 
+    def test_side_panel_hides_round_trip(self, client):
+        defaults = client.get("/api/settings/defaults").get_json()
+        assert defaults["hide_left_panel"] is True
+        assert defaults["hide_right_panel"] is True
+
+        res = client.put("/api/settings", json={"hide_left_panel": False})
+        assert res.status_code == 200
+        data = client.get("/api/settings").get_json()
+        assert data["hide_left_panel"] is False
+        assert data["hide_right_panel"] is True
+
     def test_update_autopilot_goal_diversity(self, client):
         res = client.put("/api/settings", json={"autopilot_goal_diversity": 60})
         assert res.status_code == 200

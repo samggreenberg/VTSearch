@@ -103,6 +103,11 @@
 
 .left-panel.collapsed-autopilot {
   align-items: center;
+
+  // Test's strip is one button the height and width of the pane.
+  vt-side-panel-toggle {
+    align-self: stretch;
+  }
 }
 
 .tab-panel-manual,

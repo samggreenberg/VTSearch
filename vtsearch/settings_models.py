@@ -418,7 +418,14 @@ class UserSettings(BaseModel):
     # time the same user starts a new session.
     label_hint_dismissed: bool = False
     autopilot_enabled: bool = True
-    hide_autopilot: bool = False
+    # Whether Train and Test open with each side panel folded to a thin
+    # strip (#4673). The left folds only on the Autopilot tab, where the
+    # centre already serves every pick; Manual and Review keep their list.
+    # The right folds on every tab. Both default to hidden, leaving the
+    # item in the middle; each strip's arrow opens its side and writes the
+    # choice back here.
+    hide_left_panel: bool = True
+    hide_right_panel: bool = True
     # When False, the Achievements tab/button and unlock pop-ups are
     # hidden, every ``record_*`` hook is a no-op, and ``get_full_state``
     # returns zeroed counters with no pending announcements. Flipping it

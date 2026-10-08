@@ -1,8 +1,24 @@
 .layout {
+  // A folded side takes its strip's 48px (`COLLAPSED_WIDTH`) in place of its
+  // width, which the component keeps in `--*-width` for when it opens (#4673).
+  --left-col: var(--left-width, 300px);
+  --right-col: var(--right-width, 300px);
   display: grid;
-  grid-template-columns: var(--left-width, 300px) 8px 1fr 8px var(--right-width, 300px);
+  grid-template-columns: var(--left-col) 8px 1fr 8px var(--right-col);
   height: 100%;
   overflow: hidden;
+
+  &.layout--left-collapsed {
+    --left-col: 48px;
+  }
+
+  &.layout--right-collapsed {
+    --right-col: 48px;
+
+    .panel-right {
+      min-width: 0;
+    }
+  }
 }
 
 .panel-left {
@@ -32,6 +48,15 @@
   background: var(--bg-panel);
   min-width: 150px;
   padding: 0;
+  // The fold control's row, then the pane below it.
+  display: flex;
+  flex-direction: column;
+
+  vt-right-panel,
+  vt-line-test-result {
+    flex: 1;
+    min-height: 0;
+  }
 }
 
 // "Please wait" overlay shown in Find mode while detector scoring is running

@@ -21,22 +21,7 @@
   justify-content: flex-end;
 }
 
-.collapse-toggle {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--font-2xs);
-  padding: var(--space-2xs) var(--space-sm);
-  line-height: 1;
-  transition: color var(--transition-base), border-color var(--transition-base);
-
-  &:hover {
-    color: var(--text-primary);
-    border-color: var(--text-secondary);
-  }
-}
+// `.collapse-toggle` (the ◀ / ▶) is shared: `scss/_components.scss`.
 
 .autopilot-steps {
   display: flex;

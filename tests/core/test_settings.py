@@ -561,6 +561,21 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_autopilot_enabled() is False
 
+    def test_side_panels_default_hidden(self):
+        # Train and Test open with both side panels folded (#4673).
+        assert settings_mod.get_hide_left_panel() is True
+        assert settings_mod.get_hide_right_panel() is True
+
+    def test_side_panel_hides_set_independently(self, isolated_settings):
+        settings_mod.set_hide_right_panel(False)
+        assert settings_mod.get_hide_right_panel() is False
+        assert settings_mod.get_hide_left_panel() is True
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["hide_right_panel"] is False
+        settings_mod.reset()
+        assert settings_mod.get_hide_right_panel() is False
+
     def test_get_set_autopilot_goal_diversity(self, isolated_settings):
         settings_mod.set_autopilot_goal_diversity(60)
         assert settings_mod.get_autopilot_goal_diversity() == 60

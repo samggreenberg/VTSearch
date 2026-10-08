@@ -149,7 +149,8 @@ with_detector_context  # noqa: F821
 # connect it to the dynamic definition or the runtime callers.
 # ---------------------------------------------------------------------------
 get_audio_playing  # noqa: F821
-get_hide_autopilot  # noqa: F821
+get_hide_left_panel  # noqa: F821
+get_hide_right_panel  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
 get_browse_panel_width  # noqa: F821
 get_browse_colormap  # noqa: F821
@@ -158,7 +159,8 @@ get_browse_thumbnail_border  # noqa: F821
 set_audio_playing  # noqa: F821
 set_show_animations  # noqa: F821
 set_show_usage_bars  # noqa: F821
-set_hide_autopilot  # noqa: F821
+set_hide_left_panel  # noqa: F821
+set_hide_right_panel  # noqa: F821
 set_browse_panel_width  # noqa: F821
 set_browse_colormap  # noqa: F821
 set_browse_icon_size  # noqa: F821
