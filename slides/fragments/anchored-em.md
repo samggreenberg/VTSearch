@@ -10,8 +10,9 @@
 
 <!-- build: figs/calib-em-anchored.build3.png -->
 
-<!-- The same four pictures as the EM aside with one difference, and that
-     difference is the whole iteration: the only new ink is the row of checks
+<!-- Appendix, with Above Average: how its fused fit reads the votes. The
+     same four pictures as Great Expectations with one difference, and that
+     difference is the whole fusion: the only new ink is the row of checks
      and crosses on each baseline. -->
 
 <!-- **a** — Same terrible guess. What is new is that a handful of the scores
