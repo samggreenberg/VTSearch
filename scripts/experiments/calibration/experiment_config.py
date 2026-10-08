@@ -1108,6 +1108,13 @@ OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or Non
 #: default, ``seed``) is the app: the top of the text sort.
 MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
 
+#: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
+#: drawn uniformly within a band of the unvoted ranking, the way the spot check
+#: draws.  Unset (the default) is the app.  A value that is not a positive
+#: integer is kept as given, for preflight to refuse.
+_BAND_SHARE = os.environ.get("CALIB_BAND_SHARE", "").strip()
+BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else (_BAND_SHARE or None)
+
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
 #: only frame that records the **opening**, which emits no main row because no

@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The eval harness can draw a share of Autopilot's picks the way the spot check does** (issue #4482).
+  `simulate_voting_iterations` takes `band_share` (`None`, the default and the app; or N: one in N of the
+  picks past the opening is drawn uniformly within one band of the unvoted ranking, cycling through the bands
+  a check starts from, and logged with phase `"band"`), with the pick rule in
+  `vtscore.eval.al_strategies.band_pick`. An experiment arm; the app is unchanged.
+
 - **The eval harness can walk Autopilot's More on the detector's top** (issue #4637). `simulate_voting_iterations`
   takes `more_walk` (`"seed"`, the default and the app: the top of the typed query's sort; or `"detector"`: the More
   walk takes the top of the step's detector ranking, and its steps record `app_trained = 1`), and
