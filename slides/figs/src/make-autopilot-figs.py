@@ -28,9 +28,11 @@ Schematic inputs, real code, as in `make-test-figs.py`:
   (`autopilot-panel.component.ts`).
 
 The last figure, `autopilot-stop`, is the only measurement: where the stop
-fired in #3945's 400-click sessions, and what clicking on bought, re-plotted from
-that report's committed CSVs (`docs/experiments/2026-09-25-overtrain-3945/`).
-`EXPECT` pins the numbers the notes quote.
+fired in today's app, at each radio's beta, and what clicking on bought. It is
+re-plotted from the 2026-10-08 Binary Photo review's committed tables
+(`docs/experiments/2026-10-08-state-of-the-app-binary-photo/`:
+`stopping_by_preset.csv` and `objective_by_click.csv`). `EXPECT` pins the numbers the
+notes quote.
 
 Every canvas is the whole 1280x720 slide at 100 px to the inch, saved at its
 declared bounds, so every stage of a build shares one framing by construction
@@ -87,7 +89,8 @@ from vtscore.eval.autopilot_flow import (  # noqa: E402
 )
 
 OUT = Path(__file__).resolve().parent.parent
-REPORT_3945 = _REPO_ROOT / "docs" / "experiments" / "2026-09-25-overtrain-3945"
+#: The State of the App review the measured slide reads: Binary Photo on COCO Better, one session set per radio.
+REPORT_SOTA = _REPO_ROOT / "docs" / "experiments" / "2026-10-08-state-of-the-app-binary-photo"
 
 # The deck's palette (`make-calib-figs.py`, `themes/vtsearch.css`): blue is the
 # line, red the losing arm and a Bad, green a Good. The lights borrow red and
@@ -794,113 +797,121 @@ def _done_stage(stage: int) -> Figure:
 # ── Past the Exit: where the stop fired, measured ────────────────────────────
 
 STOP_STAGES = 2
-#: The two collections drawn, as the report's per-dataset rows name them, and
-#: what the slide calls each. Caltech is left off the chart: it is saturated
-#: (its oracle cost is zero) and its cut's late drift is #4121, not the stop.
-STOP_DATASETS = (("coco", "coco_val", "COCO"), ("vg", "visual_genome_m", "Visual Genome"))
+#: The three radios, as the review's `beta` column names them, and what the slide calls each
+#: (`make-sota-figs.RADIOS`).
+STOP_RADIOS = ((0.25, "β = ¼"), (1.0, "β = 1"), (4.0, "β = 4"))
+#: The review's click budget: where its sessions end, not where a user must.
+STOP_BUDGET = 150
 
-#: The numbers the notes quote, pinned: `main` fails if the report's CSVs say
-#: anything else, so a re-run of #3945 is a re-run of this script and then a
-#: look at the notes.
+#: The numbers the notes quote, pinned per radio as (fire rate, KM median stop, mean Fβ gain after the stop,
+#: its SE, share ending 0.02 or more worse, share ending 0.02 or more better): `main` fails if the review's
+#: committed table says anything else, so a new State of the App review is a re-run of this script and then
+#: a look at the notes.
 EXPECT = {
-    "sessions": 480,
-    "stopped": 464,
-    "median_t_stop": 64.0,
-    "cost_final_minus_stop": -0.020,
-    "cost_se": 0.007,
-    "share_worse": 0.29,
-    "coco_stop": 71.5,
-    "vg_stop": 63.0,
+    0.25: (0.83, 81, 0.075, 0.005, 0.15, 0.60),
+    1.0: (0.82, 83, 0.076, 0.005, 0.09, 0.69),
+    4.0: (0.79, 93, 0.046, 0.003, 0.10, 0.58),
 }
 
 
-def _stop_rows() -> dict[str, dict[str, str]]:
-    path = REPORT_3945 / "D_stop.csv"
+def _stop_rows() -> dict[float, dict[str, str]]:
+    """The review's stopping table over every session, per radio (`stops_by_preset.py`)."""
+    path = REPORT_SOTA / "stopping_by_preset.csv"
     if not path.exists():
-        raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is #3945's stopping table")
+        raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is the review's stopping table")
     with path.open() as handle:
-        return {row["scope"]: row for row in csv.DictReader(handle) if row["arm"] == "svm"}
+        return {float(row["beta"]): row for row in csv.DictReader(handle) if row["scope"] == "all"}
 
 
-def _stop_curves() -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    path = REPORT_3945 / "D_curve.csv"
+def _stop_curves() -> dict[float, tuple[np.ndarray, np.ndarray]]:
+    """The objective a user has in hand at every click, mean over every session, per radio (`by_click.py`)."""
+    path = REPORT_SOTA / "objective_by_click.csv"
     if not path.exists():
-        raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is #3945's per-click curve")
-    curves: dict[str, list[tuple[float, float]]] = {}
+        raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is the review's per-click objective")
+    curves: dict[float, list[tuple[float, float]]] = {}
     with path.open() as handle:
         for row in csv.DictReader(handle):
-            if row["arm"] == "svm":
-                curves.setdefault(row["ds"], []).append((float(row["t"]), float(row["cost"])))
-    return {ds: (np.array([t for t, _ in pts]), np.array([c for _, c in pts])) for ds, pts in curves.items()}
+            curves.setdefault(float(row["beta"]), []).append((float(row["t"]), float(row["fbeta"])))
+    return {beta: (np.array([t for t, _ in pts]), np.array([f for _, f in pts])) for beta, pts in curves.items()}
 
 
 def stop_fig() -> None:
-    """Where #3945's sessions were told they could stop, and what clicking on to 400 did.
+    """Where today's app told its sessions they could stop, and what clicking on did.
 
-    Two stages: the cost along a session on each collection, with the stop's
-    median click; then what the 400-click sessions did after it.
+    Two stages: the objective along a session at each radio, with each radio's median stop; then what
+    the sessions that were told to stop gained by clicking on to the review's budget.
     """
     rows, curves = _stop_rows(), _stop_curves()
-    every = rows["all"]
     got = {
-        "sessions": int(every["sessions"]),
-        "stopped": int(every["stopped"]),
-        "median_t_stop": float(every["median_t_stop"]),
-        "cost_final_minus_stop": round(float(every["cost_final_minus_stop"]), 3),
-        "cost_se": round(float(every["cost_se"]), 3),
-        "share_worse": round(float(every["cost_share_worse_0.02"]), 2),
-        "coco_stop": float(rows["coco_val"]["median_t_stop"]),
-        "vg_stop": float(rows["visual_genome_m"]["median_t_stop"]),
+        beta: (
+            round(float(r["fire_rate"]), 2),
+            round(float(r["km_t_stop"])),
+            round(float(r["mean_delta"]), 3),
+            round(float(r["se_delta"]), 3),
+            round(float(r["share_worse"]), 2),
+            round(float(r["share_better"]), 2),
+        )
+        for beta, r in rows.items()
     }
     assert got == EXPECT, got
     _save(STOP_STAGES, lambda stage: _stop_stage(stage, rows, curves), "autopilot-stop")
 
 
+def _span(values: list[float], fmt: str) -> str:
+    """A range over the radios, or one number when they agree at the precision shown."""
+    lo, hi = fmt.format(min(values)), fmt.format(max(values))
+    return lo if lo == hi else f"{lo} to {hi}"
+
+
 def _stop_stage(stage: int, rows: dict, curves: dict) -> Figure:
     fig = plt.figure(figsize=(W, H))
     ax = fig.add_axes((0.40, 0.14, 0.43, 0.68))
-    ax.set_xlim(0, 400)
-    ax.set_ylim(0.0, 0.9)
-    ax.set_xticks([0, 100, 200, 300, 400])
-    ax.set_yticks([0.0, 0.2, 0.4, 0.6, 0.8])
+    ax.set_xlim(0, STOP_BUDGET)
+    ax.set_ylim(0.3, 0.7)
+    ax.set_xticks([0, 50, 100, 150])
+    ax.set_yticks([0.3, 0.4, 0.5, 0.6, 0.7])
     ax.set_xlabel("click")
-    ax.set_ylabel("mistakes at the line, FPR + FNR")
-    every = rows["all"]
-    stop = float(every["median_t_stop"])
+    ax.set_ylabel("Fβ at that β")
+    stops = {beta: float(rows[beta]["km_t_stop"]) for beta, _ in STOP_RADIOS}
     ends = []
-    for ds, scope, words in STOP_DATASETS:
-        t, cost = curves[ds]
-        ax.plot(t, cost, color=INK, linewidth=2.2, zorder=4)
-        at = float(rows[scope]["median_t_stop"])
-        ax.plot(at, float(np.interp(at, t, cost)), marker="o", markersize=12, markerfacecolor="white",
-                markeredgecolor=INK, markeredgewidth=2.2, zorder=6, linestyle="none")  # fmt: skip
-        ends.append((float(cost[-1]), words))
-    heights = spread_labels([c for c, _ in ends], gap=0.06)
+    for beta, words in STOP_RADIOS:
+        t, f = curves[beta]
+        ax.plot(t, f, color=INK, linewidth=2.2, zorder=4)
+        ax.plot(stops[beta], float(np.interp(stops[beta], t, f)), marker="o", markersize=12,
+                markerfacecolor="white", markeredgecolor=INK, markeredgewidth=2.2, zorder=6,
+                linestyle="none")  # fmt: skip
+        ends.append((float(f[-1]), words))
+    heights = spread_labels([f for f, _ in ends], gap=0.03)
     for (_, words), y in zip(ends, heights, strict=True):
-        ax.text(408, y, words, ha="left", va="center", fontsize=16, clip_on=False)
-    ax.axvline(stop, color=SOFT, linewidth=1.6, linestyle=(0, (4, 3)), zorder=2)
-    ax.text(stop, 0.92, f"the stop, median click {stop:.0f}", ha="left", va="bottom", fontsize=15, color=SOFT,
-            clip_on=False)  # fmt: skip
+        ax.text(STOP_BUDGET + 3, y, words, ha="left", va="center", fontsize=16, clip_on=False)
+    ax.text(min(stops.values()), 0.705, "○ the stop, median click", ha="left", va="bottom", fontsize=15,
+            color=SOFT, clip_on=False)  # fmt: skip
+    fired = [100 * float(rows[beta]["fire_rate"]) for beta, _ in STOP_RADIOS]
     _side_block(
         fig,
         [
             ("The stop fired", "head", 0.0),
-            (f"in {int(every['stopped'])} of {int(every['sessions'])} sessions", "body", 0.055),
-            (f"at median click {stop:.0f}", "body", 0.05),
+            (f"in {_span(fired, '{:.0f}')}% of sessions,", "body", 0.055),
+            (f"at median click {_span(list(stops.values()), '{:.0f}')}", "body", 0.05),
         ],
     )
     if stage >= 2:
-        ax.add_patch(Rectangle((stop, 0.0), 400 - stop, 0.9, facecolor="#eef1f5", edgecolor="none", zorder=1))
-        diff, se = float(every["cost_final_minus_stop"]), float(every["cost_se"])
-        share = float(every["cost_share_worse_0.02"])
+        first = min(stops.values())
+        ax.add_patch(Rectangle((first, 0.3), STOP_BUDGET - first, 0.4, facecolor="#eef1f5", edgecolor="none",
+                               zorder=1))  # fmt: skip
+        gain = [float(rows[beta]["mean_delta"]) for beta, _ in STOP_RADIOS]
+        se = max(float(rows[beta]["se_delta"]) for beta, _ in STOP_RADIOS)
+        better = [100 * float(rows[beta]["share_better"]) for beta, _ in STOP_RADIOS]
+        worse = [100 * float(rows[beta]["share_worse"]) for beta, _ in STOP_RADIOS]
         _side_block(
             fig,
             [
-                ("Clicking on to 400", "head", 0.0),
-                (f"mistakes {-diff:.3f} lower", "body", 0.055),
-                (f"on average (± {se:.3f}), but", "body", 0.05),
-                (f"{100 * share:.0f}% of sessions end", "body", 0.05),
-                ("0.02 or more worse", "body", 0.05),
+                (f"Clicking on to {STOP_BUDGET}", "head", 0.0),
+                (f"Fβ {_span(gain, '{:+.2f}')} on average", "body", 0.055),
+                (f"(± {se:.3f} at most);", "body", 0.05),
+                (f"{_span(better, '{:.0f}')}% of sessions end", "body", 0.05),
+                ("0.02 or more better,", "body", 0.05),
+                (f"{_span(worse, '{:.0f}')}% that much worse", "body", 0.05),
             ],
             top=SIDE_TOP - 0.25,
         )
