@@ -52,7 +52,10 @@ if _stale_baseline; then
   CALIB_COCO_BETTER_EMBEDDERS=siglip python text_baseline.py --results "$EXP/results" --out "$BASELINE"
 fi
 # The page names the path it holds, and holds only that path's panels (#4654:
-# a Binary page used to say "SigLIP binary and DINOv3 region").
+# a Binary page used to say "SigLIP binary and DINOv3 region"). Each panel is
+# named by its path, not its embedder key (#4655): the region path's key, the
+# composite `siglip+dinov3_patch`, read bare as SigLIP and DINOv3 compared. The
+# names are analyze.py's ARMS; viewer_betas.sh passes the same two.
 case "$SOTA_PATH" in
   binary) VIEW_EMB=siglip; VIEW_PATH="SigLIP binary" ;;
   region) VIEW_EMB=siglip+dinov3_patch; VIEW_PATH="DINOv3 region, opened on SigLIP's text sort" ;;
@@ -61,6 +64,7 @@ esac
 python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" --embedders "$VIEW_EMB" \
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
   --subtitle "coco_better, every class at every size; $VIEW_PATH, shipped defaults (#4159)" \
+  --embedder-label "siglip=SigLIP binary" --embedder-label "siglip+dinov3_patch=DINOv3 region" \
   --hide-metrics cost
 python "$HERE/analyze.py" --exp "$EXP" --baseline "$BASELINE" --out "$OUT" --path "$SOTA_PATH" --seeds "${SOTA_ANALYZE_SEEDS:-0}"
 python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"

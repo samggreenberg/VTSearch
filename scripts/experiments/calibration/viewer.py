@@ -18,7 +18,10 @@ What the page lets a reader pick:
   are never averaged with one another: two embedders are two different
   representations of the haystack, and their mean is a number describing no
   system anyone could run.  Faceting makes that structural rather than a rule
-  someone has to remember;
+  someone has to remember.  An embedder is named by its key unless the study
+  gives it a label (``--embedder-label``): the State of the App's region path
+  is the composite key ``siglip+dinov3_patch``, which read bare looks like two
+  embedders compared (#4655);
 * **arms** — any non-empty subset.  Non-empty for the same reason the embedder
   subset is: an empty selection has no honest rendering, since the page either
   goes blank or falls back to "all" and a reader who misses that takes a chart
@@ -200,6 +203,13 @@ the same two flags set that on a page that is already built::
     python viewer.py ... --default-metric average_precision --hide-metrics cost
     python viewer.py --reskin path/to/viewer.html \\
         --default-metric average_precision --hide-metrics cost
+
+A page names an embedder by a label rather than its key, and a reskin can
+re-label a committed page (#4655)::
+
+    python viewer.py ... --embedder-label "siglip+dinov3_patch=DINOv3 region"
+    python viewer.py --reskin path/to/viewer.html \\
+        --embedder-label "siglip+dinov3_patch=DINOv3 region"
 """
 
 from __future__ import annotations
@@ -805,6 +815,48 @@ BETA_ARMS_CONTROL = {
 }
 
 
+def parse_embedder_labels(specs: Sequence[str]) -> dict[str, str]:
+    """``KEY=LABEL`` pairs; refuses a malformed pair and a key named twice.
+
+    Split at the first ``=``: an embedder key never holds one, a label may.
+    """
+    labels: dict[str, str] = {}
+    for spec in specs:
+        key, sep, label = spec.partition("=")
+        key, label = key.strip(), label.strip()
+        if not sep or not key or not label:
+            raise SystemExit(f"--embedder-label wants KEY=LABEL, got {spec!r}")
+        if key in labels:
+            raise SystemExit(f"--embedder-label names {key!r} twice")
+        labels[key] = label
+    return labels
+
+
+def page_embedder_labels(embedders: Sequence[str], labels: Mapping[str, str] | None) -> dict[str, str]:
+    """The labels for the embedders a page carries, in the page's order.
+
+    A label for an embedder the page does not carry is dropped, so one set of
+    labels serves every page of a study: the State of the App names both paths
+    and each path's page keeps its own (#4655).
+    """
+    return {e: labels[e] for e in embedders if labels and e in labels}
+
+
+def _with_embedder_labels(payload: dict, labels: Mapping[str, str]) -> dict:
+    """*payload* with its ``embedder_labels`` block replaced, in place.
+
+    The block sits right after ``embedders``, where a build puts it, so a
+    built and a relabelled page agree key for key; an empty mapping drops it.
+    """
+    items = [(k, v) for k, v in payload.items() if k != "embedder_labels"]
+    if labels:
+        at = next(i for i, (k, _v) in enumerate(items) if k == "embedders") + 1
+        items.insert(at, ("embedder_labels", dict(labels)))
+    payload.clear()
+    payload.update(items)
+    return payload
+
+
 def beta_label(beta: float) -> str:
     """``β 1/4``, ``β 1``, ``β 4``: a session set's chip, in the fraction the app's presets are named by."""
     return f"β {Fraction(beta).limit_denominator(64)}"
@@ -1033,6 +1085,7 @@ def build_viewer(  # noqa: C901
     fill_gaps: bool = True,
     score_empty_sets: bool = True,
     arms_control: Mapping[str, str] | None = None,
+    embedder_labels: Mapping[str, str] | None = None,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*.
 
@@ -1040,6 +1093,10 @@ def build_viewer(  # noqa: C901
     arms are not a study's configurations: a review's session sets, one per
     preset, are a balance the reader picks (:data:`BETA_ARMS_CONTROL`,
     :func:`load_beta_runs`, #4636).
+
+    *embedder_labels* names an embedder on the page by what it is rather than
+    by its key (:func:`page_embedder_labels`, #4655); an embedder without one
+    shows its key.
 
     *default_metric* and *hide_metrics* set the page's opening ``view``; see
     :func:`opening_view`.  Without a *default_metric* the page opens on
@@ -1096,6 +1153,7 @@ def build_viewer(  # noqa: C901
     shape = _Shape(main, arms, denominator, oracle_keys)
     if not shape.metrics:
         raise SystemExit("viewer: the frame carries none of the known metric columns")
+    emb_labels = page_embedder_labels(shape.embedders, embedder_labels)
     offered = [m["key"] for m in shape.metrics]
     shown = [k for k in offered if k not in set(hide_metrics)]
     if default_metric is None and DEFAULT_METRIC not in shown and objective.carries_beta(main):
@@ -1197,6 +1255,9 @@ def build_viewer(  # noqa: C901
         "solid_coverage": curves.SOLID_COVERAGE,
         "datasets": shape.datasets,
         "embedders": shape.embedders,
+        # What the page calls each embedder, where its key would mislead
+        # (#4655).  Absent otherwise, and the page then shows the keys.
+        **({"embedder_labels": emb_labels} if emb_labels else {}),
         "categories": shape.categories,
         "arms": shape.arms,
         # What the arm chips choose between, when it is not a configuration:
@@ -1345,6 +1406,7 @@ def reskin(
     fill_gaps: bool = False,
     title: str | None = None,
     subtitle: str | None = None,
+    embedder_labels: Mapping[str, str] | None = None,
 ) -> Path:
     """Re-substitute *page*'s own payload into the current template, in place.
 
@@ -1365,9 +1427,12 @@ def reskin(
     half.  *fill_gaps* carries the per-seed lines through their gaps and
     re-averages them (:func:`fill_payload_gaps`, #4624).  *title* and
     *subtitle* replace the page's own, for a heading that named the wrong thing
-    (#4654: a Binary page said "SigLIP binary and DINOv3 region").  With none of
-    these, the payload is copied byte for byte, ``view`` included, so a
-    template push never undoes a study's choice.
+    (#4654: a Binary page said "SigLIP binary and DINOv3 region").
+    *embedder_labels* replaces its ``embedder_labels`` block
+    (:func:`page_embedder_labels`; an empty mapping drops it), for a panel
+    that showed a key where it should name a path (#4655).  Each only when
+    given.  With none of these, the payload is copied byte for byte, ``view``
+    included, so a template push never undoes a study's choice.
     """
     page = Path(page)
     html = page.read_text(encoding="utf-8")
@@ -1375,7 +1440,8 @@ def reskin(
     if not m:
         raise SystemExit(f"{page}: no payload script tag - not a viewer page")
     blob = m.group(1)
-    if default_metric is not None or hide_metrics is not None or fill_gaps or title is not None or subtitle is not None:
+    relabel = title is not None or subtitle is not None or embedder_labels is not None
+    if default_metric is not None or hide_metrics is not None or fill_gaps or relabel:
         payload = json.loads(blob)
         if title is not None:
             payload["title"] = title
@@ -1383,6 +1449,8 @@ def reskin(
             payload["subtitle"] = subtitle
         if fill_gaps:
             fill_payload_gaps(payload)
+        if embedder_labels is not None:
+            _with_embedder_labels(payload, page_embedder_labels(payload["embedders"], embedder_labels))
         if default_metric is not None or hide_metrics is not None:
             was = payload.pop("view", None) or {}
             view = opening_view(
@@ -1435,6 +1503,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--title", default=None, help="the page's heading (default: Quality over clicks)")
     ap.add_argument("--subtitle", default=None, help="the line under it; with --reskin, each replaces the page's own")
     ap.add_argument(
+        "--embedder-label",
+        action="append",
+        metavar="KEY=LABEL",
+        help="what the page calls the embedder KEY (#4655); repeat it per embedder. A label for an embedder the "
+        "page does not carry is dropped, so one set serves every page of a study. With --reskin, replaces the "
+        "page's labels",
+    )
+    ap.add_argument(
         "--default-metric",
         metavar="KEY",
         help=f"the metric the page opens on (default: {DEFAULT_METRIC}; without it, the objective, fbeta, on a "
@@ -1476,6 +1552,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = ap.parse_args(list(argv) if argv is not None else None)
     hide = None if args.hide_metrics is None else [k for k in args.hide_metrics.replace(",", " ").split() if k]
 
+    labels = None if args.embedder_label is None else parse_embedder_labels(args.embedder_label)
     if args.reskin:
         for page in args.reskin:
             out = reskin(
@@ -1485,6 +1562,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 fill_gaps=args.fill_gaps,
                 title=args.title,
                 subtitle=args.subtitle,
+                embedder_labels=labels,
             )
             print(f"reskinned {out}  ({out.stat().st_size / 1e6:.2f} MB)")
         return 0
@@ -1500,6 +1578,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "title": args.title if args.title is not None else "Quality over clicks",
         "subtitle": args.subtitle or "",
         "runs_budget_mb": args.runs_budget_mb,
+        "embedder_labels": labels,
         "default_metric": args.default_metric or None,
         "hide_metrics": hide or (),
     }
