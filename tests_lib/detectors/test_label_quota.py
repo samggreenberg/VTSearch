@@ -65,9 +65,10 @@ class TestTheQuotaIsAutopilotsQuorum:
         """Read off the TypeScript itself: the quota is Autopilot's own quorum."""
         ts = (REPO / "frontend/src/app/services/autopilot-state.service.ts").read_text()
         initial = ts[ts.index("const INITIAL_STATE") :]
-        good = int(re.search(r"goodToStart:\s*(\d+)", initial).group(1))
-        bad = int(re.search(r"badToStart:\s*(\d+)", initial).group(1))
-        assert (GOOD_QUOTA, BAD_QUOTA) == (good, bad)
+        good = re.search(r"goodToStart:\s*(\d+)", initial)
+        bad = re.search(r"badToStart:\s*(\d+)", initial)
+        assert good is not None and bad is not None, "Autopilot's INITIAL_STATE no longer names its quorum"
+        assert (GOOD_QUOTA, BAD_QUOTA) == (int(good.group(1)), int(bad.group(1)))
 
 
 class TestTheTiers:
