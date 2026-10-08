@@ -2,11 +2,10 @@
 
 An *admin override* is a server-wide restriction an operator sets at startup:
 it applies to every user, is fixed for the lifetime of the process, and is not
-editable through ``PUT /api/settings``. Eight exist today -- the solo
+editable through ``PUT /api/settings``. Seven exist today -- the solo
 mediaType lock, the per-mediaType solo-embedder locks, the plugin hide list,
 the dataset retention window, the support-email address, the Semantic-only
-embedder lock, the switch that hides ingest progress-bar ETAs, and the
-Autopilot-only lock on Train and Test.
+embedder lock, and the Autopilot-only lock on Train and Test.
 
 Each one used to be spelled out four times: a ``set_cli_X`` / ``get_cli_X`` /
 ``get_effective_X`` triad in :mod:`vtsearch.settings`, an ``_apply_X`` argparse
@@ -474,25 +473,6 @@ _REGISTRY: tuple[AdminOverride, ...] = (
             "is not editable via the settings API. There is no "
             "--no-semantic-only: the flag can only enable the lock, never "
             "loosen one the persisted semantic_only setting asked for."
-        ),
-    ),
-    AdminOverride(
-        name="hide_ingest_eta",
-        flag="--hide-ingest-eta",
-        env="VTSEARCH_HIDE_INGEST_ETA",
-        kind="switch",
-        persisted_getter="get_hide_ingest_eta",
-        effective_key="hide_ingest_eta",
-        resolve=_resolve_switch,
-        help=(
-            "Hide the remaining-time estimate on ingest progress bars (dataset "
-            "imports, staging imports, and a labelset's missing-media fetch) "
-            "for deployments where those jobs are too erratic to predict. The "
-            "bars still fill and show their counts; other progress bars keep "
-            "their ETA. Applies to all users for the lifetime of the process "
-            "and is not editable via the settings API. There is no "
-            "--no-hide-ingest-eta: the flag can only hide, never re-show ETAs "
-            "the persisted hide_ingest_eta setting hid."
         ),
     ),
     AdminOverride(

@@ -1210,6 +1210,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Deprecated
 
+- **The per-environment timing profile and the ingest-ETA switch are no-ops** (issue #4667).
+  Dataset imports, staging imports and labelset missing-media fetches now build their trackers
+  with `publish_eta=False` unconditionally, so `vtscore.concurrency.progress.ingest_eta_hidden()`
+  always returns `True` and `CoreConfig.hide_ingest_eta` is accepted and ignored. In
+  `vtscore.timing`, the profile layer is gone and its names answer "no profile":
+  `active_profile()`, `reload_profile()` and `parse_profile()` return `EMPTY_PROFILE`,
+  `profile_covers()` is `False`, `slot_shares()` is `None`, and `VTSEARCH_TIMING_PROFILE` is not
+  read. The recorder is a no-op: `record_task()` returns a `TaskTimingRecorder` whose methods do
+  nothing, `recording_enabled()` is `False`, `note_branch()` / `note_no_encoder_load()` do
+  nothing, and `VTSEARCH_TIMING_RECORD` is not read. `step_weights()` / `step_terms()` keep their
+  signatures but price from the shipped defaults only, so `device`, `embedder`, `n`, `size_mb` and
+  `branch` are ignored; `media_type` and `skip_steps` work as before. `TimingProfile`,
+  `StepCoeffs`, `CHEAP_BRANCHES`, `DEAR_BRANCHES` and the `PROFILE_ENV_VAR` / `SCHEMA_*` /
+  `RECORD_ENV_VAR` constants are kept unchanged. See `packages/timing.md`.
+
 - **A retrain no longer builds the #4220 precision estimate, and its
   calibration filter is retired** (issue #4362). `train_and_threshold`,
   `train_and_score`, `labelset_train_and_score` and `run_learned_sort` stopped
@@ -1326,6 +1341,12 @@ instead, since every commit on `dev` is effectively a new app release.)
   own lock, which is state by any reading.
 
 ### Removed
+
+- **`vtscore.timing.fit`** (issue #4667). The module that fitted recorded timing rows into a
+  profile document (`load_rows`, `normalize_row`, `affine_fit`, `fit_step`, `fit_branches`,
+  `fit_profile`, `coverage_report`, …) is deleted, along with the recorder it read and the
+  profile it wrote (see the Deprecated entry above). It had no caller outside the repo's
+  tuning script, which went with it.
 
 - **The precision floor** (issue #4421). The balance (#4413) is the only
   preference a detector's line is drawn at. None of these was in a release

@@ -28,7 +28,6 @@ from vtscore.concurrency.gate import ConcurrencyGate
 from vtscore.concurrency.progress import (
     CancelledError,
     clear_thread_progress,
-    ingest_eta_hidden,
     loading_tasks,
     set_thread_progress,
 )
@@ -48,7 +47,7 @@ from vtscore.datasets.stages._common import (
     load_cost_terms,
     load_step_weights,
 )
-from vtscore.datasets.stages._load_profiler import resolve_download_size_mb, start_profiler
+from vtscore.datasets.stages._load_profiler import start_profiler
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
@@ -60,7 +59,7 @@ from vtscore.datasets.stages.finalize import (
 from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
 from vtscore.datasets.stages.registry import _register_and_migrate
 from vtscore.datasets.thumbnail_warm import start_archive_thumbnail_warm
-from vtscore.timing import record_task, step_weights
+from vtscore.timing import step_weights
 
 
 # Two independent gates control how many dataset loads can run concurrently
@@ -145,8 +144,8 @@ def _recorded_embedder_name(media_dict: dict, requested: str) -> str:
     *used* an encoder — the media type's default, resolved deep inside the embed
     stage and stamped onto every media — and recording the blank instead files
     the run under the media rollup, so the exact ``(device, media, embedder)``
-    cell the profile is keyed on can never be populated by an import that did
-    not name one (#3345). Reads the name off the medias rather than resolving an
+    cell the load cost model is keyed on can never be populated by an import
+    that did not name one (#3345). Reads the name off the medias rather than resolving an
     embedder object, because by this point they carry it and the object is not
     needed.
     """
@@ -252,9 +251,8 @@ class _ImportTask:
     """Everything :func:`_start_import_task` sets up before the worker runs.
 
     ``tracker`` is the per-task :class:`~vtscore.concurrency.progress.ProgressTracker`
-    (registered under ``task_id`` on ``loading_tasks``), ``recorder`` is the
-    already-started :mod:`vtscore.timing` recorder, and ``request_user`` is the
-    caller identity the worker replays so per-user settings writes land in the
+    (registered under ``task_id`` on ``loading_tasks``), and ``request_user`` is
+    the caller identity the worker replays so per-user settings writes land in the
     right file.  ``total_steps`` is the flow's step structure, carried here so
     everything downstream (notably :class:`_LoadGateController`) reports the
     same shape the tracker was built with.
@@ -262,7 +260,6 @@ class _ImportTask:
 
     task_id: str
     tracker: Any
-    recorder: Any
     request_user: str
     total_steps: int
 
@@ -270,26 +267,26 @@ class _ImportTask:
 def _start_import_task(
     *,
     prefix: str,
-    family: str,
     display_name: str,
     total_steps: int,
     media_type: str = "",
     embedder: str = "",
     weights: list[float] | None = None,
     extra_fields: dict[str, Any] | None = None,
-    status_phases: dict[str, str] | None = None,
     created_by: str = "",
 ) -> _ImportTask:
-    """Register a background import on ``loading_tasks`` and arm its recorder.
+    """Register a background import on ``loading_tasks``.
 
     The two import pipelines below — a full dataset load and a combine-flow
     staging import — open identically: mint a task id, create the per-task
-    tracker (so two concurrent imports never interleave one channel, and with
-    no ETA when the deployment hides ingest ETAs — see
-    :func:`~vtscore.concurrency.progress.ingest_eta_hidden`), start the timing
-    recorder that labels each measured phase, and snapshot the user who asked
-    for the work.  Only the family name, the step structure, and the tracker's
-    extra fields differ, so they are parameters here.
+    tracker (so two concurrent imports never interleave one channel), and
+    snapshot the user who asked for the work.  Only the step structure and the
+    tracker's extra fields differ, so they are parameters here.
+
+    The tracker publishes no remaining-time estimate (``publish_eta=False``).
+    An import's cost is set by the network, the source's disks and the files
+    themselves, and its estimate swung too wildly to be worth showing (#4667);
+    the bar itself still fills.
 
     The caller writes its own first ``tracker.update`` (rather than this
     function writing a generic one) because the load flow subscribes its
@@ -306,20 +303,11 @@ def _start_import_task(
         embedder=embedder,
         extra_fields=extra_fields,
         step_weights=weights,
-        publish_eta=not ingest_eta_hidden(),
+        publish_eta=False,
     )
-    recorder = record_task(
-        tracker,
-        family,
-        media_type=media_type,
-        embedder=embedder,
-        status_phases=status_phases,
-    )
-    recorder.start()
     return _ImportTask(
         task_id=task_id,
         tracker=tracker,
-        recorder=recorder,
         request_user=created_by or get_current_user(),
         total_steps=total_steps,
     )
@@ -632,8 +620,8 @@ def _run_origin_load_in_background(
     failure or a cancel).  It runs on the worker thread, with that context
     pinned as the thread's dataset context and the requesting user replayed,
     but only once the load's own tracker has parked terminal and its timing
-    recorders have finished - so the dataset row is already live, and nothing
-    the hook does is billed to the load's cost model.  An exception it raises
+    profiler has finished - so the dataset row is already live, and nothing
+    the hook does is billed to the load's measured phases.  An exception it raises
     is logged and swallowed: the dataset is saved either way.  The app uses it
     to start the importing user's AutoFind detectors on the new dataset.
 
@@ -658,34 +646,25 @@ def _run_origin_load_in_background(
             pass
 
     ingest_started_at = time.time()
-    # ``_start_import_task`` mints the id, creates the per-task tracker, arms
-    # the generic cross-task recorder (VTSEARCH_TIMING_RECORD, which every other
-    # long-running family also feeds — without it an admin who armed only the
-    # documented env var got rows for every task *except* the imports, #2845),
-    # and snapshots the user that triggered the load so background per-user
-    # state (settings writes, settings_source sync) resolves correctly.
-    # ``status_phases`` splits step 1 into its two byte-scaled phases, which
-    # only the status string tells apart.
+    # ``_start_import_task`` mints the id, creates the per-task tracker, and
+    # snapshots the user that triggered the load so background per-user state
+    # (settings writes, settings_source sync) resolves correctly.
     task = _start_import_task(
         prefix="_loading_",
-        family="dataset_load",
         display_name=name or _origin_to_str(origin),
         total_steps=_TOTAL_LOAD_STEPS,
         media_type=media_type,
         embedder=embedder,
         weights=load_step_weights(media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder),
-        status_phases={"extracting": "extract"},
         created_by=created_by,
     )
-    task_id, tracker, timing_recorder = task.task_id, task.tracker, task.recorder
+    task_id, tracker = task.task_id, task.tracker
     # Env-gated per-phase timing recorder (VTSEARCH_PROFILE_LOAD); a no-op
-    # stand-in and zero-cost when off. It runs alongside the generic recorder
-    # above rather than replacing it: the two answer different questions (that
-    # one fits the shared timing profile; this one additionally splits
-    # cold/warm model loads and finalize sub-slots), they write to separate
-    # files, and each is independently armed. Subscribed before the first phase
-    # fires — hence before the step-1 update below, not inside
-    # ``_start_import_task``. See scripts/profiling/README.md.
+    # stand-in and zero-cost when off. It feeds the developer-side refit of the
+    # shipped load cost model, splitting cold/warm model loads and finalize
+    # sub-slots. Subscribed before the first phase fires — hence before the
+    # step-1 update below, not inside ``_start_import_task``. See
+    # scripts/profiling/README.md.
     profiler = start_profiler(tracker, media_type, embedder)
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
@@ -719,10 +698,6 @@ def _run_origin_load_in_background(
         pacer = AdaptiveLoadPacer(tracker, cost_terms, calibrated=terms_calibrated)
         stepped = _make_stepped_progress(controller, pacer)
         profiler.bind_thread()  # so FinalizeProgress.begin stamps land here (no-op when off)
-        # Same reason, for the generic recorder: the stage that decides whether
-        # this import embeds or reads a cached pkl is many frames below here,
-        # and binds the fact to the thread rather than to an argument (#3521).
-        timing_recorder.bind_thread()
 
         try:
             with thread_dataset_context(ctx):
@@ -827,24 +802,10 @@ def _run_origin_load_in_background(
             # rows carry it and can resolve the archive size via
             # ``download_size_mb_for`` — otherwise app-recorded rows land with
             # ``dataset_id: ""`` and can't feed fit_load_weights.py (see #2614).
-            # Both recorders learn the resolved embedder here rather than at
+            # The profiler learns the resolved embedder here rather than at
             # construction: it is only known once the medias exist (#3345).
-            recorded_embedder = _recorded_embedder_name(ctx.medias, embedder)
-            # writes JSONL + unbinds (no-op when off)
-            profiler.finish(len(ctx.medias), dataset_id, embedder=recorded_embedder)
-            # A load that failed measured an abort, not a cost: ``ok=False`` tells
-            # the fitter to drop the run rather than fit a slope to it. The
-            # tracker is authoritative here because every failure path funnels
-            # through ``_handle_load_failure``, which stamps the error on it.
-            size_mb = download_size_mb_hint
-            if size_mb is None:
-                size_mb = resolve_download_size_mb(dataset_id)
-            timing_recorder.finish(
-                n=len(ctx.medias),
-                size_mb=size_mb,
-                ok=not tracker.get().get("error"),
-                embedder=recorded_embedder,
-            )
+            # Writes JSONL + unbinds (no-op when off).
+            profiler.finish(len(ctx.medias), dataset_id, embedder=_recorded_embedder_name(ctx.medias, embedder))
             _park_load_terminal(tracker, len(ctx.medias))
 
         # Outside the ``finally``: a load that raised past it never reaches
@@ -1134,8 +1095,8 @@ def _make_staging_progress(controller: _LoadGateController, tracker):
     """Build the importer-side progress callback for a staging run.
 
     Mirrors :func:`_make_stepped_progress`: it stamps the step each status
-    belongs to — so the timing recorder labels a duration with the phase that
-    actually ran — and swaps the download gate for the embed gate on the first
+    belongs to — so the bar paces against the phase that actually ran — and
+    swaps the download gate for the embed gate on the first
     ``"embedding"``, so a queued import can start fetching while this one holds
     only the embed slot. Staging used to swap only after ``run()`` returned,
     which meant a demo staging did its embedding under the *download* gate.
@@ -1185,8 +1146,8 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     keyed by the returned ``task_id``, mirroring
     :func:`_run_origin_load_in_background`, so two concurrent stagings never
     interleave one channel and their terminal ``staging_result``s cannot
-    collide.  The shared setup/teardown around the body — tracker, timing
-    recorder, user replay, worker registration — is
+    collide.  The shared setup/teardown around the body — tracker, user
+    replay, worker registration — is
     :func:`_start_import_task` / :func:`_spawn_import_worker`, the same harness
     the load pipeline runs on.
 
@@ -1208,8 +1169,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     staged_media_type = _normalize_media_type(field_values.get("media_type", ""))
     staged_embedder = field_values.get("embedder", "") or ""
     # Staging reports the same step structure every other long-running family
-    # does, which is what earns it a whole-job bar and an ETA — and what lets the
-    # timing recorder label each measured duration with the phase it belongs to.
+    # does, which is what earns it a whole-job bar.
     # The boundaries stamped below mark the steps this function drives; the
     # importer's own progress calls are mapped onto the same three steps by
     # ``_make_staging_progress``, because an importer that embeds inside
@@ -1217,7 +1177,6 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     # (#3593).
     task = _start_import_task(
         prefix="_staging_",
-        family=_STAGE_TASK,
         display_name=label or importer.resolve_display_name(field_values),
         total_steps=_TOTAL_STAGE_STEPS,
         media_type=staged_media_type,
@@ -1225,7 +1184,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
         weights=step_weights(_STAGE_TASK, media_type=staged_media_type, embedder=staged_embedder),
         extra_fields={"staging_result": None},
     )
-    tracker, timing_recorder = task.tracker, task.recorder
+    tracker = task.tracker
     tracker.update("loading", "Preparing dataset…", 0, 0, step=1, total_steps=_TOTAL_STAGE_STEPS)
 
     def stage_task():
@@ -1234,10 +1193,6 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
         # into this task's tracker instead of the global singleton, mapped onto
         # this task's steps on the way.
         set_thread_progress(_make_staging_progress(controller, tracker))
-        # A staging import of a demo reads the same embeddings pkl a full import
-        # writes, so it forks on the same cache and must record which branch it
-        # took.
-        timing_recorder.bind_thread()
         try:
             controller.acquire_download()
             temp_medias: dict = {}
@@ -1262,12 +1217,6 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             first = next(iter(temp_medias.values()))
             media_type = first.get("media_type", "audio")
             count = len(temp_medias)
-            # Same late resolution as the import path: staging that named no
-            # embedder still ran the media type's default (#3345).
-            timing_recorder.set_scale(
-                n=count,
-                embedder=_recorded_embedder_name(temp_medias, staged_embedder),
-            )
             name = label or importer.resolve_display_name(field_values)
 
             tracker.update("loading", "Writing staged file…", 0, 0, step=3, total_steps=_TOTAL_STAGE_STEPS)
@@ -1295,9 +1244,5 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             tracker.update("idle", "", 0, 0, error=_failure_message(exc, "Unknown error during staging"))
         finally:
             controller.release()
-            # Every branch above parks the tracker at "idle", setting
-            # ``error`` when it failed — which is what says whether these
-            # phase timings describe a staging run worth fitting.
-            timing_recorder.finish(ok=not tracker.get().get("error"))
 
     return _spawn_import_worker(task, stage_task)

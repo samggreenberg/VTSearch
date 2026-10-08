@@ -23,20 +23,17 @@ the calibration harness (``scripts/profiling/calibrate_load_weights.py``); see
 procedure. Re-run that harness to refresh — do not hand-tune. Cells with no
 measured row fall back to the static per-device/media profiles in ``_common``.
 
-**These are the shipped defaults, not the last word.** They were measured on one
-GPU cluster; a deployment on different hardware, different storage, or a
-different network can be several times faster or slower. An admin who runs
-``scripts/profiling/tune_timing_profile.py`` on their own machines gets a
-``VTSEARCH_TIMING_PROFILE`` JSON whose ``dataset_load`` cells override the table
-below, per cell, without touching this file (see :mod:`vtscore.timing`). The
-lookups here consult that profile first and fall back to these constants.
+They were measured on one GPU cluster, and a deployment on different hardware,
+storage or network can be several times faster or slower. That only skews how
+the bar paces across phases: imports publish no remaining-time estimate
+(#4667), which is what a per-deployment override of this table (the retired
+``VTSEARCH_TIMING_PROFILE``) chiefly existed to steady.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from vtscore import timing
 from vtscore.timing.profile import cuml_active as _cuml_enabled
 from vtscore.timing.profile import normalize_device as _normalize_device
 
@@ -579,14 +576,11 @@ def finalize_slot_shares(device: str, media_type: str, embedder: str = "") -> Op
     cell, or ``None`` when nothing measured covers it (so the caller falls back
     to the static ``FinalizeProgress._SLOTS`` ballpark).
 
-    An admin ``VTSEARCH_TIMING_PROFILE`` wins over the checked-in table, since
-    it was measured on the hardware actually serving the app. ``device`` is
-    normalized to "cuda" / "cpu"; the shares are returned verbatim (raw
-    weights) — the consumer normalizes them into ordered sub-ranges.
+    ``device`` is normalized to "cuda" / "cpu"; the shares are returned
+    verbatim (raw weights) — the consumer normalizes them into ordered
+    sub-ranges. *embedder* is accepted for symmetry with the other lookups; the
+    table has no embedder axis.
     """
-    tuned = timing.slot_shares("dataset_load", "finalize", device=device, media_type=media_type, embedder=embedder)
-    if tuned:
-        return tuple(tuned.items())
     row = FINALIZE_SLOT_SHARES.get((normalize_device(device), media_type))
     if not row:
         return None
@@ -642,30 +636,7 @@ def cost_model_terms(
     ``download_size_mb`` of 0/``None`` collapses the download **and** extract
     terms — which is exactly right for local-folder imports and cache-backed
     re-adds, where no archive is fetched or unpacked.
-
-    An admin ``VTSEARCH_TIMING_PROFILE`` measured on this deployment's own
-    hardware takes precedence over the checked-in table; only cells the profile
-    does not cover fall through to the constants above.
     """
-    if n > 0:
-        tuned = timing.step_terms(
-            "dataset_load",
-            device=device,
-            media_type=media_type,
-            embedder=embedder,
-            n=n,
-            size_mb=download_size_mb or 0.0,
-        )
-        if tuned is not None:
-            if not download_size_mb:
-                # No archive to fetch or unpack (local folder, warm cache): zero
-                # the byte-scaled phases even if the profile carries a fixed
-                # intercept for them, so a cached re-add doesn't budget a
-                # download slice for work that will never run.
-                tuned = {**tuned, "download": 0.0, "extract": 0.0}
-            if sum(tuned.values()) > 0:
-                return tuned
-
     row = _lookup_row(device, media_type, embedder)
     if row is None or n <= 0:
         return None

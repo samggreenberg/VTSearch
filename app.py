@@ -339,7 +339,6 @@ _OVERRIDE_ICONS = {
     "dataset_max_age_days": "\U0001f5d3️",
     "support_email": "\U0001f4e7",
     "semantic_only": "\U0001f512",
-    "hide_ingest_eta": "\u23f3",
     "autopilot_only": "\U0001f9ed",
 }
 
@@ -350,7 +349,6 @@ _OVERRIDE_LABELS = {
     "dataset_max_age_days": "Dataset max age",
     "support_email": "Support email",
     "semantic_only": "Semantic embedders only",
-    "hide_ingest_eta": "Ingest ETAs hidden",
     "autopilot_only": "Autopilot only",
 }
 

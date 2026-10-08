@@ -265,9 +265,10 @@ neighbouring rung once the smoothed estimate overshoots the boundary by
 A tracker built with `publish_eta=False` never publishes one:
 `eta_seconds` stays `None` on every snapshot while `current`/`total` and
 `overall` update as usual. The ingest paths (dataset import, staging
-import, labelset missing-media fetch) build theirs that way when
-`ingest_eta_hidden()` is true, i.e. when `CoreConfig.hide_ingest_eta` is
-set; with no `CoreConfig` builder installed it reads `False`.
+import, labelset missing-media fetch) always build theirs that way: an
+import's rate is too erratic to estimate (#4667). `ingest_eta_hidden()`,
+which once read the `CoreConfig.hide_ingest_eta` switch, is deprecated and
+always returns `True`.
 
 **Subscribers:** `subscribe(cb)` registers a callback fired with a
 snapshot after every `update()`, synchronously on the producer thread
@@ -648,6 +649,6 @@ lines then locate.
 ## Cross-references
 
 - [`state.md`](state.md) - the contexts these jobs and trackers operate against.
-- [`timing.md`](timing.md) - the per-step duration model that turns a step index into an ETA.
+- [`timing.md`](timing.md) - the shipped per-step weights that pace the whole-job `overall` fraction.
 - [`datasets.md`](datasets.md#concurrency-gates) - the two `ConcurrencyGate`s that pace dataset loads.
 - [`cli.md`](cli.md) - `cli_progress.notification_subscriber`, the headless consumer of `notify()`.
