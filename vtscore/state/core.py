@@ -1962,19 +1962,29 @@ def recompute_detector_thresholds(beta: float | None) -> None:
     threshold at the new balance.
 
     **Each detector is re-cut at its own balance.**  The balance is per
-    detector (``DetectorContext.beta``, seeded from the user's setting on
-    first read; see #3416), and :func:`vtscore.state.set_beta` writes only
-    the active detector's.  *beta* is what a detector that has not read its
-    own balance yet takes - the user's setting, which is what that first read
-    will seed it with.  A detector already holding its own balance keeps its
-    cut.  With no balance at all (*beta* ``None`` and none seeded, a library
-    caller's choice) the line is the Inclusion 0 cut (#4269).
+    detector (``DetectorContext.beta``, seeded on first read from the balance
+    the detector keeps on its JSON, else the user's setting; see #3416,
+    #4665), and :func:`vtscore.state.set_beta` writes only the active
+    detector's.  A detector that has not read its own balance yet is cut at
+    the one it keeps, else at *beta* - the user's setting, which is what that
+    first read will seed it with.  A detector already holding its own balance
+    keeps its cut.  With no balance at all (*beta* ``None`` and none seeded
+    or kept, a library caller's choice) the line is the Inclusion 0 cut
+    (#4269).
     """
+    from vtscore.detectors.balance import detector_stored_beta
     from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
 
+    contexts = loaded_detector_contexts()
+    # Read outside the lock: what an unseeded detector keeps is a read of its JSON.
+    kept = {id(ctx): detector_stored_beta(ctx.detector_id) for ctx in contexts if not ctx.beta_seeded}
     with _state_lock:
-        for ctx in loaded_detector_contexts():
-            own = ctx.beta if ctx.beta_seeded else beta
+        for ctx in contexts:
+            if ctx.beta_seeded:
+                own = ctx.beta
+            else:
+                stored = kept.get(id(ctx))
+                own = beta if stored is None else stored
             threshold = recut_detector_threshold(ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, beta=own)
             if threshold is not None:
                 ctx.threshold = threshold
@@ -2037,17 +2047,20 @@ def _set_dataset_display_name(value: str | None) -> None:
     get_active_context().dataset_display_name = value
 
 
-def _get_beta() -> tuple[bool, float | None]:
-    """``(seeded, value)`` for the active detector's balance (#4413)."""
-    ctx = get_active_detector_context()
+def _get_beta(ctx: DetectorContext | None = None) -> tuple[bool, float | None]:
+    """``(seeded, value)`` for *ctx*'s balance (#4413), the active detector's by default."""
+    if ctx is None:
+        ctx = get_active_detector_context()
     return ctx.beta_seeded, ctx.beta
 
 
-def _set_beta(value: float | None) -> None:
-    ctx = get_active_detector_context()
-    # The balance is cached per-detector for fast reads, but its canonical
-    # persisted home is the per-user settings store (written by the caller's
-    # ``_persist_setting`` hook).  When a Flask request identifies no detector
+def _set_beta(value: float | None, ctx: DetectorContext | None = None) -> None:
+    if ctx is None:
+        ctx = get_active_detector_context()
+    # The balance is cached per-detector for fast reads; it persists on the
+    # detector's JSON (``vtscore.detectors.balance.keep_beta``, #4665) and as
+    # the user's last pick (the caller's ``_persist_setting`` hook), both
+    # written by ``set_beta``, not here.  When a Flask request identifies no detector
     # (e.g. the VTSBrowser, which has a dataset but no loaded detector), the
     # active context is the frozen request-missing sentinel; there is no
     # detector to cache the value on, so skip the cache write rather than

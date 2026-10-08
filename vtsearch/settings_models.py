@@ -335,6 +335,17 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
+    # Lock Train and Test to their **Autopilot** tabs (#4666).  An operator who
+    # wants users on the guided flow only can drop Train's Manual tab and
+    # Test's Review tab; the tab bars then do not render at all, so the left
+    # pane is just the Autopilot panel.  A UI simplification, not a permission
+    # boundary: the backend serves the same routes either way.  Set with the
+    # ``--autopilot-only`` CLI flag / ``VTSEARCH_AUTOPILOT_ONLY`` env var
+    # (process-wide, wins for the process lifetime) or by editing this key in
+    # the settings file.  See
+    # :func:`vtsearch.settings.get_effective_autopilot_only`.
+    autopilot_only: bool = False
+
     # Solo-mediaType streamlining. An admin-set restriction: when set, the
     # importer and new-detector flows hide their mediaType pickers and lock to
     # this type, the converter picker filters to converters whose output is
@@ -477,6 +488,13 @@ class UserSettings(BaseModel):
     # left it last time. Defaults on - moving a detector to AutoFind is the
     # user saying they want it run on what they import.
     autofind_on_import: bool = True
+    # Whether a command-line AutoFind (``--autodetect`` / ``--pipeline``)
+    # deletes the dataset it imported once its detectors have run (#4674).
+    # Off by default: the CLI keeps what it imports on the dashboard.  Only the
+    # CLI reads it - a run from the web app never deletes - and a run that
+    # detected nothing (no AutoFind detectors, or none for the media type)
+    # keeps its dataset, because there the import was the whole point.
+    autofind_cli_delete_dataset: bool = False
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

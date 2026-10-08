@@ -7,6 +7,7 @@ import { ProgressEventsService } from '../../../services/progress-events.service
 import type { LoadingTask } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { SettingsStateService } from '../../../services/settings-state.service';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -352,33 +353,65 @@ describe('NewDetectorModalComponent', () => {
     req.flush({ ok: true, detector: { id: '1', name: 'Large books detector' } });
   });
 
-  it('warns about no-text datasets only for a text-hint-only detector', () => {
-    // No warning before any text is entered.
-    fixture.componentRef.setInput('datasetEmbedder', 'dinov3');
-    component.pendingText.set('');
-    expect(component.showNoTextWarning).toBe(false);
+  // A text description can't start a detector on a dataset that can't search
+  // by text, so the form requires an example item there (#4666).
+  describe('on a dataset that cannot search by text', () => {
+    beforeEach(() => {
+      fixture.componentRef.setInput('datasetEmbedder', 'dinov3');
+      component.onNameInput('Red cars');
+    });
 
-    // Text entered against a no-text embedder → warn.
-    component.pendingText.set('a red car');
-    expect(component.showNoTextWarning).toBe(true);
+    it('does not accept a text description as the example', () => {
+      component.pendingText.set('a red car');
+      expect(component.datasetSearchesText).toBe(false);
+      expect(component.hasExample).toBe(false);
+      expect(component.canSubmitBlank).toBe(false);
+      expect(component.blankSubmitTitle).toContain("can't search by text");
+    });
 
-    // A media example seed (not text-only) → no warning even on a no-text dataset.
-    component.mediaExamples.set([
-      { value: 'file.jpg', display: 'file.jpg', mediaType: 'image', thumbFailed: false },
-    ]);
-    expect(component.showNoTextWarning).toBe(false);
+    it('refuses Enter in the text field, which bypasses the Create button', () => {
+      component.pendingText.set('a red car');
+      component.submit();
+      expect(component.error()).toContain("can't search by text");
+      httpMock.expectNone('/api/detectors/registry');
+    });
+
+    it('names the example it needs in the hint', async () => {
+      component.pendingText.set('a red car');
+      await fixture.whenStable();
+      const hint = (fixture.nativeElement as HTMLElement).querySelector('.example-empty-hint');
+      expect(hint?.textContent).toContain("This dataset can't search by text");
+    });
+
+    it('accepts a media example', () => {
+      component.mediaExamples.set([
+        { value: 'file.jpg', display: 'file.jpg', mediaType: 'image', thumbFailed: false },
+      ]);
+      expect(component.hasExample).toBe(true);
+      expect(component.canSubmitBlank).toBe(true);
+    });
+
+    it('accepts text when another bound embedder can search by text', () => {
+      fixture.componentRef.setInput('datasetEmbedders', ['dinov3', 'clap']);
+      component.pendingText.set('a red car');
+      expect(component.datasetSearchesText).toBe(true);
+      expect(component.canSubmitBlank).toBe(true);
+    });
   });
 
-  it('does not warn when the dataset embedder can search by text', () => {
+  it('accepts text when the dataset embedder can search by text', () => {
     fixture.componentRef.setInput('datasetEmbedder', 'clap');
+    component.onNameInput('Barks');
     component.pendingText.set('dog barking');
-    expect(component.showNoTextWarning).toBe(false);
+    expect(component.hasExample).toBe(true);
+    expect(component.canSubmitBlank).toBe(true);
   });
 
-  it('does not warn when the active dataset embedder is unknown', () => {
+  it('accepts text when the active dataset embedder is unknown', () => {
     fixture.componentRef.setInput('datasetEmbedder', '');
+    component.onNameInput('Barks');
     component.pendingText.set('dog barking');
-    expect(component.showNoTextWarning).toBe(false);
+    expect(component.hasExample).toBe(true);
   });
 
   it('stops mirroring once the user edits the name', () => {
@@ -814,6 +847,53 @@ describe('NewDetectorModalComponent', () => {
     expect(spy).not.toHaveBeenCalled();
     httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
     expect(component.created.emit).toHaveBeenCalledWith('d0');
+  });
+
+  // --- The detector's balance, asked for here (#4665) ---
+
+  function submitBlank(): void {
+    component.name.set('Dog Barks');
+    component.mediaType.set('audio');
+    component.pendingText.set('dog barking sounds');
+    component.submit();
+  }
+
+  it('shows the Threshold control on the form', () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('vt-balance')).not.toBeNull();
+  });
+
+  it('sends the balance the form starts on: the balanced default with no setting', () => {
+    expect(component.beta()).toBe(1);
+    submitBlank();
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.beta).toBe(1);
+    req.flush({ ok: true, detector: { id: '123' } });
+  });
+
+  it('sends the balance the user picked', () => {
+    component.pickBeta(4);
+    submitBlank();
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.beta).toBe(4);
+    req.flush({ ok: true, detector: { id: '123' } });
+  });
+
+  it("starts on the user's last pick, as the preset the control shows it on", () => {
+    const settingsState = TestBed.inject(SettingsStateService);
+    settingsState.update({ beta: 0.5 }).subscribe();
+    httpMock.expectOne('/api/settings').flush({ beta: 0.5 });
+    // 0.5 sits halfway between 1/4 and 1 in log space: the tie keeps its lean.
+    expect(component.beta()).toBe(0.25);
+  });
+
+  it('sends the balance with a Trained import', () => {
+    component.pickBeta(0.25);
+    submitTrained();
+    const req = httpMock.expectOne('/api/detectors/registry/from-labelset/server_json_file');
+    expect(req.request.body.beta).toBe(0.25);
+    req.flush({ ok: true, detector: { id: 'd2' }, ingest_task_id: '' });
+    httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
   });
 
   // --- Double-submit guards (#2941) ---

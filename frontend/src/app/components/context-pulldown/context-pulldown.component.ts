@@ -346,6 +346,7 @@ export class ContextPulldownComponent implements OnInit {
       this.newThingFlows.openNewDetector({
         defaultMediaType: other?.media_type || '',
         datasetEmbedder: other?.embedder || '',
+        datasetEmbedders: other?.bound_embedders ?? [],
       });
     }
   }

@@ -137,6 +137,12 @@ class CoreConfig:
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = field(default_factory=dict)
 
+    # Whether a saving CLI autodetect run deletes the dataset it imported once
+    # its detectors have run (#4674; per-user ``autofind_cli_delete_dataset``).
+    # A run that detected nothing keeps its dataset either way.  Defaulted off
+    # so library-only ``CoreConfig(...)`` constructions keep what they save.
+    autofind_cli_delete_dataset: bool = False
+
     # Operator overrides for the Browse projection's UMAP knobs (server-tier
     # ``projection_n_neighbors`` / ``projection_min_dist``).  Mirrored onto the
     # library tier because *both* fit paths — the on-demand route and the

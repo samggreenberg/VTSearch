@@ -95,7 +95,12 @@ Yellow Smileys,0.4891,face_0011.png,custom,0.6433,,face_0011.png
 
 The folder is also saved as a dataset, so it is on the **Datasets** card the
 next time you open VTSearch. Add `--tempimport` to score it without keeping
-it. The rest of the command's options are in `docs/CLI.md`.
+it. To have every run tidy up after itself instead, tick **Delete the dataset
+after AutoFind** under **Command Line** on the same **AutoFind** settings page
+as Step 2: the command then deletes the dataset once its detectors have run and
+the matches are saved. A run with no AutoFind detector to run keeps its
+dataset, and **Run AutoFind** inside VTSearch never deletes one. The rest of the
+command's options are in `docs/CLI.md`.
 
 ## Where next
 

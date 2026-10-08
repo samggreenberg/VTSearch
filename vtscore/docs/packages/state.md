@@ -609,11 +609,19 @@ from vtscore.state import register_setting_persister
 register_setting_persister("beta", my_settings.save_beta)
 ```
 
-`get_beta()` seeds its first read from `CoreConfig.from_settings()`
-(see [config.md](config.md)), per detector: the **balance**, F-beta's beta in
-`[0.25, 4]` (#4413). `user_beta()` is the value a detector that has not read
-its own yet will be seeded with, `None` when no settings builder is
-registered. The line is the labels' cut at that beta (#4452; the retrain
+`get_beta()` is the active detector's **balance**, F-beta's beta in
+`[0.25, 4]` (#4413), and `detector_beta(ctx)` any context's. Each seeds its
+first read from the balance the detector keeps on its JSON (#4665;
+[`vtscore.detectors.balance`](detectors.md): `stored_beta(data)`, top-level
+`beta`), else from `CoreConfig.from_settings()` (see [config.md](config.md)),
+the user's balance. A context the registry cannot name (a throwaway that
+trains a cold detector, the CLI's name-keyed one) is seeded by its caller
+from the JSON it holds, `seed_detector_beta(ctx, data)`, and
+`train_and_threshold(det_ctx=...)` cuts at that context's own balance, not the
+active detector's. `user_beta()` is the user's balance, `None` when no
+settings builder is registered. `set_beta` writes the active detector's
+balance into its JSON (`keep_beta`) as well as persisting the `"beta"`
+setting. The line is the labels' cut at that beta (#4452; the retrain
 parks it as `DetectorContext.labels_line`), and `set_beta` moves the active
 detector's line there with no retrain (`recut_detector_threshold(ctx, beta=...)`, through
 `recompute_detector_thresholds(beta)`) and, in Find mode, re-splits the

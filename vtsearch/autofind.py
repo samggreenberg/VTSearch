@@ -336,20 +336,20 @@ def score_detector(
 def _line_state(name: str, det_ctx: Any) -> dict | None:
     """What the balance says about *name*'s cut in an AutoFind: unchecked, because nobody can vote.
 
-    Rides with the cut (``balance``), read at the beta of the thread that
-    trained it (#4413).  A headless run cannot spot-check its line (#4272), so
+    Rides with the cut (``balance``), read at the balance it was cut at: the
+    detector's own (#4413, #4665).  A headless run cannot spot-check its line (#4272), so
     the cut exported is the balance's unchecked set, and the log line is the
     record that it was never checked.  ``None`` for a detector with no trained
     context to ask, or with no balance (a library caller's choice; the app
     always sets one).
     """
+    from vtscore.state import detector_beta  # noqa: PLC0415
     from vtscore.state.core import detector_balance_state  # noqa: PLC0415
     from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
-    from vtsearch.state import get_beta  # noqa: PLC0415
 
     if det_ctx is None:
         return None
-    balance = detector_balance_state(det_ctx, get_beta())
+    balance = detector_balance_state(det_ctx, detector_beta(det_ctx))
     if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         logger.info(
             "Auto-detect: detector %s exports its top %d unchecked (%s); nobody is here to check it",

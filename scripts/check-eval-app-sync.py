@@ -319,7 +319,10 @@ MIRRORS: list[Mirror] = [
             "tests/sorting/test_balance_routes.py pins UserSettings' defaults against the wire - so "
             "this digest watches the *resolution*: if the app's preference starts depending on "
             "something else (the dataset, the embedder, a per-detector default), that has to reach "
-            "the harness too."
+            "the harness too. The per-detector balance of #4665 is not such a default: it is the "
+            "user's own pick, asked for when the detector is created, and the form starts on the "
+            "user's setting - DEFAULT_BETA when unset - so a detector nobody chose a balance for "
+            "still resolves to the harness's default."
         ),
         divergence=(
             "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned beta where the "
@@ -521,9 +524,12 @@ MIRRORS: list[Mirror] = [
             "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
             "the app reads no stored Inclusion: its conformal cut is at "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
-            "whose default, 0, is that cut. Since #4413 the app draws the line at the balance "
-            "`line_knobs` names and hands its beta to _fused_threshold; the harness's default arm is the "
-            "balance's at DEFAULT_BETA (resolve_line_knobs, the thresholds.balance_default mirror)."
+            "whose default, 0, is that cut. Since #4413 the app draws the line at the detector's "
+            "balance and hands its beta to _fused_threshold - since #4665 *det_ctx*'s own "
+            "(vtscore.state.detector_beta: the balance the detector keeps, else the user's), "
+            "`line_knobs` only with no context; the harness's default arm is the "
+            "balance's at DEFAULT_BETA (resolve_line_knobs, the thresholds.balance_default mirror). "
+            "The harness trainer takes no beta, so where the app reads it is not a stage it copies."
         ),
     ),
     Mirror(

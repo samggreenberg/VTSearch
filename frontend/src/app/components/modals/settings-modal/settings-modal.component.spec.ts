@@ -206,6 +206,26 @@ describe('SettingsModalComponent', () => {
     expect(select.value).toBe('default');
   });
 
+  it('should save the AutoFind tab\'s command-line delete checkbox (#4674)', async () => {
+    await flushInit();
+    component.activeSettingsTab.set('autofind');
+    await settleZoneless(fixture);
+    // The tab's exporter picker loads its list on init.
+    httpMock.expectOne('/api/exporters').flush([]);
+    await settleZoneless(fixture);
+    const box = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.checkbox-row')]
+      .find((row) => row.textContent?.includes('Delete the dataset after AutoFind'))
+      ?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    // Off by default: the CLI keeps what it imports unless the user opts in.
+    expect(box.checked).toBe(false);
+    box.click();
+    await settleZoneless(fixture);
+    expect(component.settings().autofind_cli_delete_dataset).toBe(true);
+    const req = httpMock.expectOne('/api/settings');
+    expect(req.request.body.autofind_cli_delete_dataset).toBe(true);
+    req.flush(mockSettings);
+  });
+
   it('should default the Graphics pulldown to auto when the setting is unset', async () => {
     await flushInit();
     expect(component.browseGraphics).toBe('auto');

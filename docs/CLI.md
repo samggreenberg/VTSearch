@@ -82,6 +82,29 @@ when the dataset is deleted, so it never adopts your file). Pointing
 `--dataset` at a pickle the dashboard already holds (one under
 `data/saved_datasets/`) imports nothing new; the run just scores it.
 
+**Deleting the dataset once AutoFind has run.** A scheduled run that imports a
+new batch every night fills the dashboard with datasets nobody opens. Turn on
+**Delete the dataset after AutoFind** (Settings › **AutoFind**, under
+**Command Line**), or put `"autofind_cli_delete_dataset": true` in the
+`--settings` file for a run without `--user`, and a saving run deletes the
+dataset it imported once its detectors have run and the results are exported,
+pickle included, as the dashboard's **Delete** would. It is off by default, and
+it is per user, so a `--user` run follows that user's choice. It deletes only
+after real detection — the AutoFind list's detectors, or the ones
+`--import-labels-into` or a pipeline file's `detectors:` names in their place —
+so the dataset is kept:
+
+- when there was nothing to detect with (the `Detection skipped` cases above:
+  the import was the whole point);
+- when the run fails, so the dataset can be searched again from the dashboard;
+- when the run did not import it (a `--dataset` pickle the dashboard already
+  held).
+
+AutoFind started from the dashboard (a dataset's **Run AutoFind**, the one an
+import starts, the **Find** button) never deletes anything. Unlike
+`--tempimport`, the dataset still goes through the dashboard's import pipeline,
+so the hits are the ones a dashboard import of the same source would give.
+
 **`--tempimport`** makes the run temporary instead — the behaviour
 `--autodetect` had before datasets were saved: the source is scored straight
 from the importer and nothing is kept. Having no applicable detector is then an
@@ -254,8 +277,10 @@ fix. The first chunk is prepared once and handed to both passes, so the
 correction costs no extra conversion or embedding work.
 
 **The exported set is unchecked, and the run says so.** Each detector's line
-is its labels' line at its balance (the `beta` setting, F-beta's beta: 1
-unless you change it; 2 leans toward recall, 0.5 toward precision): the class
+is its labels' line at its balance (F-beta's beta, the one the detector
+keeps, chosen when it was created in the app, #4665; a detector that keeps
+none takes the `beta` setting, 1 unless you change it; 4 leans toward
+recall, 1/4 toward precision): the class
 model the labels imply, cut where the expected F-beta peaks at the prevalence
 estimated on the scored corpus (#4452). It keeps every item above the cut,
 possibly none - there is no fixed count and no cap. In the app a spot check
@@ -353,6 +378,9 @@ When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
 under the source (noting whether negatives are dropped or included), so a
 streaming run can be sanity-checked before it starts. The `Save to dashboard`
 line says whether the run would keep the dataset; a dry run never saves it.
+With the `autofind_cli_delete_dataset` setting on, it reads `Save to dashboard:
+until detection has run (…)`, and the JSON `dry_run_plan` event's `source`
+carries `"delete_after_detection": true`.
 
 `--dry-run` validates importer and exporter names, checks that the
 dataset pickle (if given) exists, verifies required CLI fields are
@@ -488,8 +516,11 @@ A saving run (no `--tempimport`) reports the dataset it kept as a
 `dataset_saved` event carrying its registry `dataset_id`, `name`, `num_items`
 and `pkl_path` (`already_saved` is true when the pickle was already on the
 dashboard), and a run that had no detector to use as `detection_skipped` with a
-`reason`. While the import runs, its progress arrives as ordinary `progress`
-events:
+`reason`. A run that then deleted the dataset (the
+[`autofind_cli_delete_dataset`](#saving-the-dataset-to-the-dashboard---tempimport)
+setting) reports a `dataset_deleted` event with the same `dataset_id` and
+`name`, after `export_complete`. While the import runs, its progress arrives as
+ordinary `progress` events:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json \
@@ -824,6 +855,25 @@ can't have the restriction loosened by a stray flag. The same override is
 available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
 `true` / `yes` / `on`) for the gunicorn-launched Docker images; an
 explicit `--semantic-only` flag wins over it.
+
+**Autopilot only** (`--autopilot-only`): keep Train and Test on their
+Autopilot tabs, for a deployment whose users should only see the guided
+flow:
+
+```bash
+python app.py --autopilot-only
+```
+
+Train loses its Manual tab and Test its Review tab, and neither view
+renders a tab bar. Like `--semantic-only`, this is a **server-wide
+override** that can only turn the lock on: there is no
+`--no-autopilot-only`, the persisted `autopilot_only` setting can turn it
+on too, and neither is editable via the Settings dialog or the settings
+API (the Settings ▸ Server tab reports it). The env-var equivalent is
+`VTSEARCH_AUTOPILOT_ONLY`; an explicit flag wins over it. See
+[`autopilot_only`](DEPLOYMENT.md#server-tier--datasettingsjson) for what
+it means for Test's Review actions, and for a detector Autopilot can't
+start.
 
 **Run a function when an import finishes** (`--on-dataset-imported
 MODULE:FUNCTION`): call your own function each time a user's dataset
