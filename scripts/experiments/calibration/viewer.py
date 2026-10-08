@@ -339,25 +339,66 @@ OCOL = "__oracle__"
 RANKING_METRICS: frozenset[str] = frozenset({"average_precision", "auroc"})
 
 
+#: The metric each best-cut column bounds (#4654): ``oracle_<col>`` is the best
+#: ``<col>`` any cut of the row's test ranking reaches.  F1 reads the beta-1
+#: column, since ``f1`` is ``fbeta_b1`` exactly.
+BEST_CUT_COLUMNS: dict[str, str] = {
+    "fbeta": "oracle_fbeta",
+    "fbeta_b025": "oracle_fbeta_b025",
+    "f1": "oracle_fbeta_b1",
+    "fbeta_b4": "oracle_fbeta_b4",
+}
+
+#: What the dotted line is on a page, by what the run emitted (the payload's
+#: ``oracle_kind``).  ``best``: the objective's oracle (#4654), the best F-beta
+#: any cut reaches, with the rates at the cut that reaches it.  ``cost``: all a
+#: run from before #4654 emitted, the cut where weighted FPR + FNR is lowest.
+#: The two differ by a lot on a rare class, where the cost cut runs deep and
+#: sits *below* a good line on precision and F (#4654), so the page names
+#: which one it draws.
+ORACLE_BEST, ORACLE_COST = "best", "cost"
+
+
+def _num(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(np.nan, index=df.index, dtype=float)
+    return pd.to_numeric(df[col], errors="coerce")
+
+
+def oracle_kind(main: pd.DataFrame) -> str:
+    """:data:`ORACLE_BEST` when the rows carry the objective's oracle (#4654), else :data:`ORACLE_COST`."""
+    if any(_num(main, col).notna().any() for col in BEST_CUT_COLUMNS.values()):
+        return ORACLE_BEST
+    return ORACLE_COST
+
+
 def add_oracle_columns(main: pd.DataFrame) -> list[str]:
     """Fill ``__oracle__<metric>`` in place; return the metrics that got one.
 
-    The harness emits the oracle **cut** and the two rates it pays there
-    (``oracle_threshold`` / ``oracle_cost`` / ``oracle_fpr`` / ``oracle_fnr``)
-    but not the confusion-matrix metrics at that cut.  It does not need to: an
-    ``(FPR, FNR)`` pair plus the split's own class counts — ``n_test_pos`` and
-    ``n_test_neg``, on every row — is a full confusion matrix, so precision,
-    recall and F1 at the oracle cut are *reconstructed exactly* here rather than
-    left off the page.  Deriving them beats re-running the grid to emit four
-    more columns, and it beats offering the oracle on cost alone: "the cut cost
-    us 0.1" and "the cut cost us 11 points of recall" are the same fact in the
-    two units a reader actually thinks in.
+    The oracle is the same model's scores cut with the test labels in hand, and
+    which cut that is depends on the objective (:func:`oracle_kind`):
 
-    The conventions are :func:`~vtscore.eval.calibration_metrics.detection_metrics`'s,
-    because a derived precision that treated "flagged nothing" as 0 rather than
-    NaN would read as a catastrophically bad oracle where the truth is that the
-    oracle declined to flag anything — which on a rare class is often the
-    cost-minimising move.
+    * **The objective's oracle** (``best``, rows from #4654 on).  An F metric's
+      oracle is the best that F any cut reaches (``oracle_fbeta*``), so it is
+      never below the line, and the gap is what the line left on the table.
+      Precision, recall and the two rates are read at the cut the row's own
+      objective draws: the best F-beta at the row's ``beta``
+      (``fbeta_oracle_fpr`` / ``_fnr``), or, on a row no balance drew, the
+      lowest cost (``oracle_fpr`` / ``_fnr``), which is that row's objective.
+    * **The cost oracle** (``cost``, a run before #4654).  Every cut metric at
+      the cost-minimising cut, the only one such a run emitted.  On a rare class
+      that cut runs deep, so its precision and F1 can sit below the line: it is
+      the cost objective's ceiling, not F's (#4654), and the page says so.
+
+    ``cost`` is the cost cut's under both.  The harness emits a cut's two rates,
+    never the confusion-matrix metrics at it: an ``(FPR, FNR)`` pair plus the
+    split's own class counts (``n_test_pos`` / ``n_test_neg``, on every row) is
+    a full confusion matrix, so precision (and the cost cut's F1) is
+    *reconstructed exactly* here.  The conventions are
+    :func:`~vtscore.eval.calibration_metrics.detection_metrics`'s, because a
+    derived precision that treated "flagged nothing" as 0 rather than NaN would
+    read as a catastrophically bad oracle where the truth is that the oracle
+    declined to flag anything.
 
     Returns the metric keys that ended up with an oracle column, so
     :func:`_metric_list` can flag them and the page can hide the control where
@@ -366,28 +407,39 @@ def add_oracle_columns(main: pd.DataFrame) -> list[str]:
     have = set(main.columns)
     got: list[str] = []
     if "oracle_cost" in have:
-        main[OCOL + "cost"] = pd.to_numeric(main["oracle_cost"], errors="coerce")
+        main[OCOL + "cost"] = _num(main, "oracle_cost")
         got.append("cost")
-    if not {"oracle_fpr", "oracle_fnr"} <= have:
+    best = oracle_kind(main) == ORACLE_BEST
+    if best:
+        for key, col in BEST_CUT_COLUMNS.items():
+            if col in have:
+                main[OCOL + key] = _num(main, col)
+                got.append(key)
+        drawn = np.isfinite(_num(main, "beta"))
+        fpr = _num(main, "fbeta_oracle_fpr").where(drawn, _num(main, "oracle_fpr"))
+        fnr = _num(main, "fbeta_oracle_fnr").where(drawn, _num(main, "oracle_fnr"))
+    elif {"oracle_fpr", "oracle_fnr"} <= have:
+        fpr, fnr = _num(main, "oracle_fpr"), _num(main, "oracle_fnr")
+    else:
         return got
-    fpr = pd.to_numeric(main["oracle_fpr"], errors="coerce")
-    fnr = pd.to_numeric(main["oracle_fnr"], errors="coerce")
     main[OCOL + "fpr"] = fpr
     main[OCOL + "fnr"] = fnr
     main[OCOL + "recall"] = 1.0 - fnr
     got += ["fpr", "fnr", "recall"]
     if not {"n_test_pos", "n_test_neg"} <= have:
         return got
-    n_pos = pd.to_numeric(main["n_test_pos"], errors="coerce")
-    n_neg = pd.to_numeric(main["n_test_neg"], errors="coerce")
+    n_pos = _num(main, "n_test_pos")
+    n_neg = _num(main, "n_test_neg")
     tp = n_pos * (1.0 - fnr)
     fn = n_pos * fnr
     fp = n_neg * fpr
     flagged = tp + fp
-    f1_denom = 2.0 * tp + fp + fn
     main[OCOL + "precision"] = (tp / flagged).where(flagged > 0)
-    main[OCOL + "f1"] = (2.0 * tp / f1_denom).where(f1_denom > 0)
-    got += ["precision", "f1"]
+    got.append("precision")
+    if not best:
+        f1_denom = 2.0 * tp + fp + fn
+        main[OCOL + "f1"] = (2.0 * tp / f1_denom).where(f1_denom > 0)
+        got.append("f1")
     return [k for k in got if main[OCOL + k].notna().any()]
 
 
@@ -524,6 +576,7 @@ def _agg_arrays(  # noqa: C901
     t_full: np.ndarray,
     base: dict[str, dict[str, dict[tuple, float]]],
     cells: dict[tuple[str, str], int],
+    obase: dict[str, dict[str, dict[tuple, float]]] | None = None,
 ) -> dict[str, np.ndarray]:
     """``mean`` / ``sd`` / ``n`` / ``cells`` over ``(group, arm, metric, click)``.
 
@@ -539,7 +592,9 @@ def _agg_arrays(  # noqa: C901
     metric's, because the two genuinely differ: an oracle that declines to flag
     anything has an undefined precision at a click where the trained cut's
     precision is perfectly well defined, and pooling that cell in at weight 1
-    with a NaN would poison the whole average.
+    with a NaN would poison the whole average.  Its click 0 is the text sort's
+    own oracle (*obase*, :func:`_oracle_baselines`, #4654), weighted by the
+    cells that have one.
     """
     nG, nA, nM, nT = len(shape.groups), len(shape.arms), len(shape.metrics), len(t_full)
     mean = np.full((nG, nA, nM, nT), np.nan)
@@ -611,6 +666,15 @@ def _agg_arrays(  # noqa: C901
                     mean[gi, ai, mi, z] = float(arr.mean())
                     sd[gi, ai, mi, z] = float(arr.std())
                     n[gi, ai, mi, z] = float(ncells[gi, ai])
+                ocells: dict[tuple[str, str, str], list[float]] = {}
+                for (d, e, c, _s), v in ((obase or {}).get(arm, {}).get(spec["key"]) or {}).items():
+                    ocells.setdefault((d, e, c), []).append(v)
+                for group, vals in ocells.items():
+                    gi = shape.gi.get(group)
+                    if gi is None or ncells[gi, ai] <= 0:
+                        continue
+                    omean[gi, ai, mi, z] = float(np.mean(vals))
+                    on[gi, ai, mi, z] = float(len(vals))
     return {"mean": mean, "sd": sd, "n": n, "cells": ncells, "omean": omean, "on": on}
 
 
@@ -867,6 +931,68 @@ def _baselines(
     return out
 
 
+def text_oracle_values(baseline: pd.DataFrame, metric: str, beta: float | None, kind: str) -> pd.Series | None:
+    """*metric* at the text sort's oracle, per baseline row: where the dotted line starts (#4654).
+
+    The same oracle the rows carry (:func:`add_oracle_columns`), on the typed
+    query's ranking.  Under :data:`ORACLE_BEST` an F metric reads the best that
+    F any cut of the text sort reaches (``text_oracle_fbeta_<tag>``, the State
+    of the App's "best cut"; ``fbeta`` at *beta*, F1 at beta 1), and precision,
+    recall and the rates read the cut the best F-beta at *beta* draws
+    (``text_oracle_{precision,recall,fpr}_<tag>``); with no *beta* there is no
+    such cut.  ``cost`` is the cost cut's under either kind
+    (``text_oracle_cost``).  ``None`` where the baseline has no column for it,
+    as a baseline from before #4654 has none for the rates.
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
+
+    def col(name: str) -> pd.Series | None:
+        return pd.to_numeric(baseline[name], errors="coerce") if name in baseline.columns else None
+
+    if metric == "cost":
+        return col("text_oracle_cost")
+    if kind != ORACLE_BEST:
+        return None
+    presets = {"f1": 1.0, **{f"fbeta_{beta_tag(b)}": b for b in RANK_FRAME_BETAS}}
+    if metric in presets:
+        return col(f"text_oracle_fbeta_{beta_tag(presets[metric])}")
+    if beta is None or not np.isfinite(beta):
+        return None
+    tag = beta_tag(float(beta))
+    if metric == objective.OBJECTIVE:
+        return col(f"text_oracle_fbeta_{tag}")
+    if metric in ("precision", "recall", "fpr"):
+        return col(f"text_oracle_{metric}_{tag}")
+    if metric == "fnr":
+        recall = col(f"text_oracle_recall_{tag}")
+        return None if recall is None else 1.0 - recall
+    return None
+
+
+def _oracle_baselines(
+    baseline: pd.DataFrame | None, shape: _Shape, arm_betas: Mapping[str, float | None], kind: str
+) -> dict[str, dict[str, dict[tuple, float]]]:
+    """:func:`_baselines` for the dotted line: ``arm -> metric -> {cell: the text sort's oracle}`` (#4654)."""
+    if baseline is None or baseline.empty:
+        return {}
+    keys = [k for k in ("dataset", "embedder", "category", "seed") if k in baseline.columns]
+    out: dict[str, dict[str, dict[tuple, float]]] = {}
+    for arm in shape.arms:
+        maps: dict[str, dict[tuple, float]] = {}
+        for spec in shape.metrics:
+            if not spec.get("oracle"):
+                continue
+            vals = text_oracle_values(baseline, spec["key"], arm_betas.get(arm), kind)
+            if vals is None:
+                continue
+            m = curves._cell_means(baseline, keys, vals)  # noqa: SLF001
+            if m:
+                maps[spec["key"]] = {_anchor_key(dict(zip(keys, k, strict=False))): v for k, v in m.items()}
+        if maps:
+            out[arm] = maps
+    return out
+
+
 def _anchor_key(rec: Mapping[str, Any]) -> tuple[str, str, str, int]:
     return (
         str(rec.get("dataset", "")),
@@ -945,6 +1071,7 @@ def build_viewer(  # noqa: C901
     if "embedder" not in main.columns:
         main["embedder"] = ""
     main["__group"] = _group_key(main)
+    kind = oracle_kind(main)
     oracle_keys = add_oracle_columns(main)
     if fill_gaps:
         main = curves.fill_gaps(main, ("__group", "arm", "seed"))
@@ -984,8 +1111,9 @@ def build_viewer(  # noqa: C901
     base = _baselines(baseline, shape, arm_betas)
     has_anchor = bool(base)
     t_full = np.arange(0 if has_anchor else 1, int(main["t"].max()) + 1)
+    obase = _oracle_baselines(baseline, shape, arm_betas, kind) if has_anchor else {}
 
-    ag = _agg_arrays(main, shape, t_full, base, cells)
+    ag = _agg_arrays(main, shape, t_full, base, cells, obase)
     agg = {
         "mean": _encode(ag["mean"]),
         "sd": _encode(ag["sd"]),
@@ -1077,6 +1205,9 @@ def build_viewer(  # noqa: C901
         "runs_note": runs_note,
         "n_cells": int(sum(cells.values())),
         "oracle_metrics": [k for k in oracle_keys if k not in RANKING_METRICS],
+        # Which cut the dotted line is (#4654): the objective's best cut, or the
+        # cost cut a run before it emitted.  A page without the key is the latter.
+        "oracle_kind": kind,
         # How this page was built, when the builder knew (the CLI does; an
         # analyzer calling `build_viewer` is itself in the tree, so its
         # invocation is already recoverable and it passes nothing).
