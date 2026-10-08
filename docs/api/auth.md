@@ -206,7 +206,7 @@ Non-API paths are never auth-gated.
 | GET | `/label`, `/dashboard` | Named client-side routes; serve `index.html` so a deep link or reload lands in the SPA |
 | GET | `/{path}` | Catch-all: serves the file from `static/` when one exists at that path (the Angular bundle's `main.js`, `styles.css`, …), otherwise `index.html` so Angular Router handles the URL. Paths under `/api/` are excluded and 404 as JSON instead. |
 | GET | `/favicon.ico` | Site favicon (204 if missing) |
-| GET | `/favicon-{variant}.ico` | Favicon variant: `smile`, `frown`, or `surprised` (404 for unknown variant, 204 if file missing) |
+| GET | `/favicon-{variant}.ico` | Favicon variant: `frown` or `surprised` (404 for unknown variant, 204 if file missing). The plain favicon is the smiling one. |
 | GET | `/logo.svg` | Site logo (204 if missing) |
 
 The HuggingFace callback redirects back to `/?hf_auth=...`, which the

@@ -91,7 +91,7 @@ describe('ToastyHintComponent', () => {
     const host = await render({});
     expect(host.classList).not.toContain('toasty-hint--off');
     expect(host.querySelector('.toasty-hint__text')?.textContent?.trim()).toBe('Click + to add a dataset.');
-    expect(host.querySelector('img')?.getAttribute('src')).toBe('toasty-search.png');
+    expect(host.querySelector('img')?.getAttribute('src')).toBe('logo.png');
     // Under the button's middle, in the box's coordinates.
     expect(host.style.left).toBe('815px');
     expect(host.style.top).toBe('44px');

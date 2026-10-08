@@ -16034,13 +16034,14 @@
     },
     "/favicon-{variant}.ico": {
       "get": {
+        "description": "The plain favicon is Toasty's resting smile, so there is no separate\n``smile`` variant.",
         "operationId": "favicon_variant",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Serve a favicon variant (smile, frown, surprised) from the static directory.",
+        "summary": "Serve a favicon variant (frown, surprised) from the static directory.",
         "tags": [
           "main"
         ]

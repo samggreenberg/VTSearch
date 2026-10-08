@@ -127,9 +127,10 @@ class TestFavicon:
         resp = client.get("/favicon.ico")
         assert resp.status_code in (200, 204)
 
-    def test_favicon_smile(self, client):
+    def test_favicon_smile_is_the_plain_favicon(self, client):
+        # The plain favicon already smiles, so there is no smile variant (#4680).
         resp = client.get("/favicon-smile.ico")
-        assert resp.status_code in (200, 204)
+        assert resp.status_code == 404
 
     def test_favicon_frown(self, client):
         resp = client.get("/favicon-frown.ico")
