@@ -203,12 +203,17 @@ const GRID_ROWS = 3;
 // these are persisted per media type and the Label view reads the same keys: a
 // run that left them behind would shoot the next run's train loop in this
 // layout.
+// Both side panels open: Train and Test fold them to a strip by default
+// (#4673), and every slide is of what is in them.
+const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
 const FIND_LINE_LAYOUT = {
+  ...PANELS_OPEN,
   grid_icon_size_left: { image: 'L' },
   panel_pct_left: { image: 500 },
   panel_pct_right: { image: 225 },
 };
 const DEFAULT_LAYOUT = {
+  ...PANELS_OPEN,
   grid_icon_size_left: { image: 'M' },
   panel_pct_left: { image: 260 },
   panel_pct_right: { image: 300 },
