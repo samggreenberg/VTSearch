@@ -393,6 +393,11 @@
     overlay: false,
   };
 
+  // What the page calls an embedder, where the study named it (#4655): a key
+  // like `siglip+dinov3_patch` is one path, and read bare it looks like two
+  // embedders compared.  A page without labels shows the keys.
+  const EMB_LABEL = Object.assign(Object.create(null), P.embedder_labels || {});
+
   const gDataset = (g) => P.groups[g][0];
   const gEmb = (g) => P.groups[g][1];
   const gCat = (g) => P.groups[g][2];
@@ -469,7 +474,7 @@
   // Embedders: a non-empty subset, one panel each.  Hidden entirely when the
   // study ran a single embedder - a control with one option is furniture.
   if (P.embedders.length < 2) $("embWrap").style.display = "none";
-  chips($("emb"), P.embedders.map((e) => ({ id: e, label: e || "(unnamed)" })), state.embedders, render);
+  chips($("emb"), P.embedders.map((e) => ({ id: e, label: EMB_LABEL[e] || e || "(unnamed)" })), state.embedders, render);
   // A review's session sets are one arm per balance (#4636), and the page says
   // so: the chips choose the beta the sessions RAN at, which the metric menu's
   // F1/4, F1 and F4 then score the returned set at.
@@ -720,7 +725,7 @@
   const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "—");
   const shortLabel = (dim, v) =>
     v === null ? ({ band: "all sizes", category: "all categories" }[dim] || "all datasets")
-    : dim === "embedder" ? (String(v) || "(unnamed embedder)")
+    : dim === "embedder" ? (EMB_LABEL[v] || String(v) || "(unnamed embedder)")
     : dim === "band" ? `${v} targets`
     : String(v);
   // In overlay the name has to name the COMBINATION, because that is what the
@@ -871,7 +876,7 @@
     if (P.embedders.length > 1 && "embedder" in fk) bits.push(shortLabel("embedder", fk.embedder));
     for (const dim of pl.facetDims) if (dim !== "embedder" && dim in fk) bits.push(shortLabel(dim, fk[dim]));
     if (bits.length) return bits.join(" · ");
-    return (P.embedders.length === 1 ? P.embedders[0] : "") || P.title;
+    return (P.embedders.length === 1 ? EMB_LABEL[P.embedders[0]] || P.embedders[0] : "") || P.title;
   }
 
   function panelSub(pl, fk) {

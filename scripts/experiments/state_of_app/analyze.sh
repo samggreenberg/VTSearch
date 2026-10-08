@@ -51,9 +51,20 @@ if _stale_baseline; then
   # baseline serves both, and it avoids reading the 7.5 GB patch cell.
   CALIB_COCO_BETTER_EMBEDDERS=siglip python text_baseline.py --results "$EXP/results" --out "$BASELINE"
 fi
+# The page names the path it holds, never both (#4655): the subtitle used to name both on every
+# page, and the region page's one embedder key, the composite `siglip+dinov3_patch`, then read
+# as a SigLIP-vs-DINOv3 comparison. The viewer draws every cell in results/, so a run directory
+# that holds both paths (one `launch.sh cells` filled) still draws both, a labelled panel each.
+case "$SOTA_PATH" in
+  binary) PATH_NOTE="the SigLIP binary path only (siglip, whole-image votes); DINOv3 region is its own review" ;;
+  region) PATH_NOTE="the DINOv3 region path only (siglip+dinov3_patch: SigLIP ranks the typed query, DINOv3 patches carry the clicks); SigLIP binary is its own review" ;;
+  *) PATH_NOTE="both production paths, a panel each: SigLIP binary (siglip) and DINOv3 region (siglip+dinov3_patch: SigLIP ranks the typed query, DINOv3 patches carry the clicks)" ;;
+esac
+# The paths' names, as analyze.py's ARMS gives them; viewer_betas.sh passes the same two.
 python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" \
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
-  --subtitle "coco_better, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)" \
+  --subtitle "coco_better, every class at every size; $PATH_NOTE; shipped defaults (#4159)" \
+  --embedder-label "siglip=SigLIP binary" --embedder-label "siglip+dinov3_patch=DINOv3 region" \
   --hide-metrics cost
 python "$HERE/analyze.py" --exp "$EXP" --baseline "$BASELINE" --out "$OUT" --path "$SOTA_PATH" --seeds "${SOTA_ANALYZE_SEEDS:-0}"
 python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"

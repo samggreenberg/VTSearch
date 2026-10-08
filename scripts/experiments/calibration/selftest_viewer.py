@@ -892,6 +892,74 @@ def main() -> int:  # noqa: C901
             f'const OPEN_ON = "{V.DEFAULT_METRIC}";' in shell and "metric" not in P.get("view", {}),
         )
 
+        # --- what the page calls an embedder (#4655) --------------------------
+        # A composite key like `siglip+dinov3_patch` is one path, and read bare
+        # it looks like two embedders compared.  One set of labels serves every
+        # page of a study, so a label for an embedder the page lacks is dropped;
+        # and a committed page has to be relabelled without its results.
+        named = {"embB": "the B path", "embA": "the A path", "embZ": "never ran"}
+        ok &= _check("a page built without labels carries no block, so it shows the keys", "embedder_labels" not in P)
+        labelled = V.build_viewer(
+            main_df,
+            tmp / "labelled.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            skyline=sky,
+            runs_budget_mb=0.25,
+            embedder_labels=named,
+        )
+        PB = _payload(labelled)
+        ok &= _check(
+            "the build keeps the labels of the page's embedders, in the page's order",
+            list(PB.get("embedder_labels", {}).items()) == [("embA", "the A path"), ("embB", "the B path")],
+            str(PB.get("embedder_labels")),
+        )
+        ok &= _check(
+            "...right after the embedders they name",
+            list(PB).index("embedder_labels") == list(PB).index("embedders") + 1,
+            str(list(PB)[:8]),
+        )
+        relabelled = tmp / "relabelled.html"
+        shutil.copyfile(out, relabelled)
+        V.reskin(relabelled, embedder_labels=named)
+        PR = _payload(relabelled)
+        ok &= _check(
+            "a reskin puts the same block on a page built without one, key for key",
+            PR.get("embedder_labels") == PB["embedder_labels"] and list(PR) == list(PB),
+            f"{list(PR)[:8]}",
+        )
+        ok &= _check(
+            "...touching nothing else in the payload",
+            {k: v for k, v in PR.items() if k != "embedder_labels"} == P,
+        )
+        V.reskin(relabelled, subtitle="one path, not two")
+        ok &= _check(
+            "a reskin with a subtitle replaces it and keeps the labels",
+            _payload(relabelled)["subtitle"] == "one path, not two"
+            and _payload(relabelled).get("embedder_labels") == PB["embedder_labels"],
+        )
+        V.reskin(relabelled, subtitle=P["subtitle"], embedder_labels={})
+        ok &= _check(
+            "an empty mapping drops the block and restores the original payload", blob(relabelled) == blob(out)
+        )
+        ok &= _check("the template reads the block the builder writes", "P.embedder_labels" in shell)
+        for label, specs in (
+            ("a label with no key", ["=the A path"]),
+            ("a key with no label", ["embA="]),
+            ("a key named twice", ["embA=one", "embA=two"]),
+        ):
+            try:
+                V.parse_embedder_labels(specs)
+            except SystemExit as exc:
+                ok &= _check(f"--embedder-label refuses {label}", True, str(exc))
+            else:
+                ok &= _check(f"--embedder-label refuses {label}", False, "parsed anyway")
+        ok &= _check(
+            "...and splits at the first '=', so a label may hold one",
+            V.parse_embedder_labels(["embA=F=1"]) == {"embA": "F=1"},
+        )
+
         def refuses(label: str, **kw) -> bool:
             try:
                 V.build_viewer(main_df, tmp / "refused.html", arms=ARMS, runs_budget_mb=0.25, **kw)
