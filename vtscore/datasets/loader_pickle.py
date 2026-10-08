@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtscore.datasets.loader_common import ProgressCallback
+from vtscore.datasets.loader_common import GROUND_TRUTH_FIELDS, ProgressCallback
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.utils.hashing import content_md5
 
@@ -278,6 +278,20 @@ def _restore_clip_window(media_data: dict[str, Any], media_info: dict[str, Any])
             media_data[field] = value
 
 
+def _restore_ground_truth(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry pickled ground-truth labels (``GROUND_TRUTH_FIELDS``) onto the media.
+
+    Without this a warm demo cache is not the same dataset as a cold build:
+    Visual Genome's ``categories`` and ``regions`` are in the cache pickle, and
+    were dropped here on every reload (#4117).  ``is not None`` rather than
+    truthiness, because an empty ``categories`` list is a label.
+    """
+    for field in GROUND_TRUTH_FIELDS:
+        value = media_info.get(field)
+        if value is not None:
+            media_data[field] = value
+
+
 def _build_pickle_thin_media(
     new_id: int,
     media_info: dict[str, Any],
@@ -312,6 +326,7 @@ def _build_pickle_thin_media(
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
     _restore_clip_window(media_data, media_info)
+    _restore_ground_truth(media_data, media_info)
     return media_data
 
 
@@ -351,6 +366,7 @@ def _build_pickle_full_media(
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
     _restore_clip_window(media_data, media_info)
+    _restore_ground_truth(media_data, media_info)
     return media_data
 
 

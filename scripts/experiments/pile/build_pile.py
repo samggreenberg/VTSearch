@@ -55,7 +55,7 @@ import pile_config as pc
 
 pc.setup_env()
 
-from pilebuild.audit import list_cells, rebuildable, report_bands, verify  # noqa: E402
+from pilebuild.audit import label_problems, list_cells, rebuildable, report_bands, verify  # noqa: E402
 from pilebuild.boxscan import band_categories, load_box_scan_categories  # noqa: E402
 from pilebuild.env import assert_vtscore_is_this_checkout, cells_io, log  # noqa: E402
 from pilebuild.geometry import region_geometry_problems, scale_label_digest  # noqa: E402
@@ -80,6 +80,7 @@ __all__ = [
     "build_cell",
     "cell_fingerprint",
     "effective_embed_batch_size",
+    "label_problems",
     "list_cells",
     "load_box_scan_categories",
     "main",
@@ -145,6 +146,11 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     medias: dict[int, dict] = {}
     loader_for(dataset, kind).load(dataset, medias, embedder)
     log(f"  loaded {len(medias)} medias in {time.time() - t0:.0f}s")
+    # Before the embed pass and before `dump_medias` truncates the old cell: a
+    # load that lost its labels is refused while the previous cell is intact.
+    unlabelled = label_problems(dataset, medias)
+    if unlabelled:
+        raise SystemExit(f"{dataset} x {embedder}: labels lost at load ({'; '.join(unlabelled)}); nothing written")
 
     from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
 
