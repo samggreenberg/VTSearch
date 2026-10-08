@@ -126,6 +126,12 @@ def operating_metrics(
     forgotten one would emit a NaN objective on a balance row.  ``cost`` is priced at *inclusion* whatever *beta* is: it is the diagnostic
     column now, not the decision metric.
 
+    The objective has its own oracle (#4654): ``oracle_fbeta`` (at *beta*) and
+    its preset siblings, the best F-beta any cut of the test ranking reaches,
+    with the cut that reaches it (``fbeta_oracle_*``).  Everything below about
+    ``oracle_cost`` is about the cost objective's cut, which on a rare class
+    runs deep and is no ceiling on F-beta.
+
     **Two reference points, because the naive one is optimistic** (#3116, #3248).
     ``oracle_cost`` is the minimum of the empirical cost over the very test
     sample it is then scored on - :func:`~vtscore.eval.calibration_metrics.oracle_cut`'s
@@ -172,6 +178,7 @@ def operating_metrics(
         is_degenerate,
         operating_cost,
         oracle_cut,
+        oracle_fbeta_metrics,
         threshold_percentile,
     )
     from vtscore.eval.label_curve import _auroc, _average_precision  # noqa: PLC0415
@@ -274,6 +281,10 @@ def operating_metrics(
         "oracle_cost": round6(o_cost),
         "oracle_fpr": round6(o_fpr),
         "oracle_fnr": round6(o_fnr),
+        # The objective's oracle beside the cost's (#4654): the best F-beta any
+        # cut reaches, at the row's beta and at each preset, and the cut that
+        # reaches it.  The cost cut above is no ceiling on F-beta.
+        **{k: round6(v) for k, v in oracle_fbeta_metrics(scores, labels, beta).items()},
         "regret": round6(regret),
         # The cross-fitted reference and the two terms it re-bases (#3116).
         # Bracket, not replacement: `oracle_cost` bounds the population optimum

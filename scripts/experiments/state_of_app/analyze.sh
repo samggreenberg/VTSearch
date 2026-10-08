@@ -51,9 +51,16 @@ if _stale_baseline; then
   # baseline serves both, and it avoids reading the 7.5 GB patch cell.
   CALIB_COCO_BETTER_EMBEDDERS=siglip python text_baseline.py --results "$EXP/results" --out "$BASELINE"
 fi
-python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" \
+# The page names the path it holds, and holds only that path's panels (#4654:
+# a Binary page used to say "SigLIP binary and DINOv3 region").
+case "$SOTA_PATH" in
+  binary) VIEW_EMB=siglip; VIEW_PATH="SigLIP binary" ;;
+  region) VIEW_EMB=siglip+dinov3_patch; VIEW_PATH="DINOv3 region, opened on SigLIP's text sort" ;;
+  *) VIEW_EMB="$CALIB_COCO_BETTER_EMBEDDERS"; VIEW_PATH="SigLIP binary and DINOv3 region" ;;
+esac
+python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" --embedders "$VIEW_EMB" \
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
-  --subtitle "coco_better, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)" \
+  --subtitle "coco_better, every class at every size; $VIEW_PATH, shipped defaults (#4159)" \
   --hide-metrics cost
 python "$HERE/analyze.py" --exp "$EXP" --baseline "$BASELINE" --out "$OUT" --path "$SOTA_PATH" --seeds "${SOTA_ANALYZE_SEEDS:-0}"
 python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"

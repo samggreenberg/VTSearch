@@ -215,7 +215,7 @@
     <div class="ctl" id="drawWrap">
       <label class="h">Draw</label>
       <div class="checks" id="draw">
-        <label id="oracleLab"><input type="checkbox" id="oracleBox">oracle threshold, dotted</label>
+        <label id="oracleLab"><input type="checkbox" id="oracleBox">oracle, dotted</label>
         <label id="overlayLab"><input type="checkbox" id="overlayBox">overlay on one chart</label>
       </div>
     </div>
@@ -251,6 +251,13 @@
   const P = JSON.parse(document.getElementById("payload").textContent);
   const $ = (id) => document.getElementById(id);
   const NaNv = Number.NaN;
+  // Which cut the dotted line is (#4654).  "best": the best cut, the objective's
+  // oracle.  A page without the key was built from runs that emitted only the
+  // cost cut, and says so: on a rare class that cut runs deep, and its
+  // precision and F sit below a good line, which reads as a broken oracle.
+  const OBEST = P.oracle_kind === "best";
+  const ONAME = OBEST ? "best cut" : "cost-optimal cut";
+  const FMETRICS = new Set(["fbeta", "fbeta_b025", "f1", "fbeta_b4"]);
 
   // ---- decode -------------------------------------------------------------
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -500,6 +507,7 @@
   // nothing on AUROC, the box disables itself and says why - the same rule the
   // embedder chips follow when a study ran one embedder.
   const oracleBox = $("oracleBox"), overlayBox = $("overlayBox");
+  $("oracleLab").lastChild.textContent = `${ONAME}, dotted`;
   oracleBox.checked = state.oracle;
   overlayBox.checked = state.overlay;
   oracleBox.onchange = () => { state.oracle = oracleBox.checked; render(); };
@@ -510,7 +518,11 @@
     $("oracleLab").dataset.off = can ? "0" : "1";
     $("oracleLab").dataset.on = can && state.oracle ? "1" : "0";
     $("oracleLab").title = can
-      ? "Draw what the same model would have scored had its threshold been chosen with the test labels in hand."
+      ? (OBEST
+        ? "Draw the best the same ranking could have returned: on an F metric the best that F any cut reaches, " +
+          "elsewhere the cut the run's objective would have drawn with the test labels in hand."
+        : "Draw the same model cut where the test labels put the lowest weighted FPR + FNR: the cost objective's " +
+          "oracle, which is no ceiling on precision or F.")
       : (spec.ranking
         ? `${spec.label} integrates over every threshold, so the oracle CUT cannot move it — the two lines would be identical.`
         : `This run emitted no oracle cut for ${spec.label}.`);
@@ -963,6 +975,10 @@
       // table, and the gap between the two IS the calibration regret.
       if (showOracle) parts.push(
         `<path d="${path(ts, mask(q.agg.omean, q.agg.ocov).subarray(t0), x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1.4" stroke-dasharray="1 3" stroke-linecap="round" opacity="0.95"/>`);
+      // ...and its own notch, hard left and dotted like it: the text sort's
+      // oracle, the best its ranking could have returned for free (#4654).
+      if (showOracle && P.anchor.has && inRange(q.agg.omean[0])) parts.push(
+        `<line x1="${M.l.toFixed(1)}" x2="${(M.l + NOTCH).toFixed(1)}" y1="${y(q.agg.omean[0]).toFixed(1)}" y2="${y(q.agg.omean[0]).toFixed(1)}" stroke="${q.color}" stroke-width="2.5" stroke-dasharray="1 3" stroke-linecap="round"/>`);
       // Baseline notch, hard left: what typing the query got for free.
       if (P.anchor.has && inRange(q.agg.mean[0])) parts.push(
         `<line x1="${M.l.toFixed(1)}" x2="${(M.l + NOTCH).toFixed(1)}" y1="${y(q.agg.mean[0]).toFixed(1)}" y2="${y(q.agg.mean[0]).toFixed(1)}" stroke="${q.color}" stroke-width="3"/>`);
@@ -1031,7 +1047,7 @@
     const stroke = (extra) => `<svg viewBox="0 0 22 10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--ink-2)" ${extra}/></svg>`;
     key.push(`<span>${stroke('stroke-width="2"')}measured level</span>`);
     key.push(`<span>${stroke('stroke-width="1.1" stroke-dasharray="3 3"')}a subset of the cells</span>`);
-    if (opt.showOracle) key.push(`<span>${stroke('stroke-width="1.4" stroke-dasharray="1 3" stroke-linecap="round"')}oracle threshold</span>`);
+    if (opt.showOracle) key.push(`<span>${stroke('stroke-width="1.4" stroke-dasharray="1 3" stroke-linecap="round"')}${ONAME}</span>`);
     if (P.anchor.has) key.push(
       `<span><svg viewBox="0 0 22 10" aria-hidden="true"><line x1="0" y1="5" x2="9" y2="5" stroke="var(--ink-2)" stroke-width="3"/></svg>${esc(P.anchor.label)}</span>`);
     if (opt.showSky) key.push(
@@ -1153,7 +1169,7 @@
         (showCov ? `<td class="v" style="color:var(--muted);padding-left:10px">${(q.agg.cov[i] * 100).toFixed(0)}%</td>` : "") +
         `</tr>`).join("");
       const cols = ["value"]
-        .concat(opt.showOracle ? ["oracle"] : [], opt.showSky ? ["skyline"] : [], showCov ? ["% measured"] : []);
+        .concat(opt.showOracle ? [ONAME] : [], opt.showSky ? ["skyline"] : [], showCov ? ["% measured"] : []);
       tip.innerHTML =
         `<div class="hd">${P.t[i]} click${P.t[i] === 1 ? "" : "s"}${P.t[i] === 0 && P.anchor.has ? " — " + esc(P.anchor.label) : ""}</div>` +
         `<table>${rows}</table>` +
@@ -1207,12 +1223,25 @@
       `mark at the horizon and not a rule across the chart: it is the floor this loop is walking toward, not a level ` +
       `it reached early. The distance still left to it is what better <b>acquisition</b> could buy; the floor itself ` +
       `is what only a better <b>embedder</b> can move.`);
-    if (opt.showOracle) bits.push(
-      `<b>The dotted line is the oracle threshold</b> — the same model's scores, cut where the test labels say the ` +
-      `cut should have gone. The gap between it and the solid line is the <b>calibration regret</b>: quality the ` +
-      `ranking already had and the threshold rule gave away.` +
-      (spec.key === "cost" ? "" : ` For ${esc(spec.label)} it is reconstructed exactly from the oracle cut's own ` +
-        `FPR/FNR and the split's class counts — the same confusion matrix, read in a different unit.`));
+    if (opt.showOracle && OBEST) bits.push(
+      `<b>The dotted line is the best cut</b> — the same model's ranking, cut with the test labels in hand. ` +
+      (FMETRICS.has(spec.key)
+        ? `On ${esc(spec.label)} it is the best ${esc(spec.label)} any cut reaches, so it never sits below the solid ` +
+          `line, and the gap between them is what the line left on the table: quality the ranking already had and ` +
+          `the threshold rule gave away. The solid line over the dotted one is the line's <b>share of the best cut</b>.`
+        : spec.key === "cost"
+          ? `On cost it is the cost-minimising cut, the objective before F-beta.`
+          : `On ${esc(spec.label)} it is that cut's own: the cut the run's objective would have drawn (the best ` +
+            `F-beta at its balance; with no balance, the lowest cost), reconstructed exactly from its FPR/FNR and the ` +
+            `split's class counts. It can sit on either side of the solid line, and says which way the line missed.`) +
+      (P.anchor.has ? ` Its dotted notch in the left margin is the text sort's own best cut.` : ""));
+    else if (opt.showOracle) bits.push(
+      `<b>The dotted line is the cost-optimal cut</b> — the same model's scores, cut where the test labels put the ` +
+      `lowest weighted FPR + FNR, the objective before F-beta. On cost, the gap between it and the solid line is the ` +
+      `<b>calibration regret</b>.` +
+      (spec.key === "cost" ? "" : ` It is no ceiling on ${esc(spec.label)}: the cost prices the two error rates, so ` +
+        `on a rare class it cuts deep, and its ${esc(spec.label)} can sit below the solid line (#4654). It is ` +
+        `reconstructed exactly from the cut's own FPR/FNR and the split's class counts.`));
     else if (spec.ranking) bits.push(
       `<b>${esc(spec.label)} has no oracle line.</b> It integrates over every threshold, so moving the cut cannot ` +
       `move it — the oracle and the performance line would be the same line drawn twice.`);
@@ -1239,8 +1268,8 @@
           marks.map((t) => `<td>${fmt(q.agg.mean[P.t.indexOf(t)])}</td>`).join("") +
           (opt.showSky ? `<td>${fmt(q.sky)}</td>` : "") + `</tr>`;
         if (opt.showOracle) html +=
-          `<tr style="color:var(--muted)"><td style="padding-left:21px">↳ oracle threshold</td>` +
-          marks.map((t) => `<td>${t === 0 && P.anchor.has ? "—" : fmt(q.agg.omean[P.t.indexOf(t)])}</td>`).join("") +
+          `<tr style="color:var(--muted)"><td style="padding-left:21px">↳ ${ONAME}</td>` +
+          marks.map((t) => `<td>${fmt(q.agg.omean[P.t.indexOf(t)])}</td>`).join("") +
           (opt.showSky ? `<td>—</td>` : "") + `</tr>`;
       }
       html += `</tbody></table>`;

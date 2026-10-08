@@ -338,6 +338,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The calibration frame carries the objective's oracle** (issue #4654).
+  `vtscore.eval.calibration_metrics.oracle_fbeta_cut(scores, labels, beta)`
+  returns `(threshold, fbeta, fpr, fnr)` for the cut with the best F-beta at
+  `beta` (`oracle_cut`'s sweep and tie rule; NaN with no positives or no
+  beta), and `oracle_fbeta_metrics` the row's columns from one sort.
+  `CALIBRATION_COLUMNS` gains `ORACLE_FBETA_COLUMNS` (`oracle_fbeta`,
+  `oracle_fbeta_b025` / `_b1` / `_b4`: the best F-beta any cut reaches, at
+  the row's beta and each preset) and `FBETA_ORACLE_CUT_COLUMNS`
+  (`fbeta_oracle_threshold` / `_fpr` / `_fnr`: the cut that reaches
+  `oracle_fbeta`). The existing `oracle_*` columns are the cost objective's
+  cut and are unchanged; on a rare class that cut runs deep and is no ceiling
+  on F-beta. Additive: no existing column or signature changed.
+
 - **`DETECTION_METRICS` names the two outer presets** (issue #4636).
   `vtscore.eval.calibration_metrics.DETECTION_METRICS` gains `fbeta_b025`
   ("F1/4") and `fbeta_b4` ("F4"), the returned set scored at the precision- and
