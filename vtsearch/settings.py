@@ -23,7 +23,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 from collections.abc import Container, Iterable
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -668,7 +668,10 @@ def _build_field_adapter(model: type, key: str) -> TypeAdapter[Any] | None:
         # + ``metadata=[meta...]``; re-wrap so the ``BeforeValidator``
         # clamps and case-folds still run under the adapter.
         annotation = Annotated[tuple([annotation, *field_info.metadata])]
-    return TypeAdapter(annotation)
+    # pydantic >= 2.14 types the argument as ``TypeForm[T]``, which an
+    # ``Annotated`` built at runtime cannot satisfy statically; the value is a
+    # valid type form, so tell the checker so.
+    return TypeAdapter(cast(Any, annotation))
 
 
 def _validate_field(model: type, key: str, value: Any) -> Any:
