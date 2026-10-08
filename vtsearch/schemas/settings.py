@@ -188,13 +188,6 @@ class AppSettingsSchema(Schema):
     # picker and the Server settings tab can report the restriction. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     semantic_only = fields.Boolean(dump_only=True)
-    # Server-tier switch that withholds the ETA from ingest progress bars. Set
-    # via the ``--hide-ingest-eta`` CLI flag / ``VTSEARCH_HIDE_INGEST_ETA`` env
-    # var (process-wide, all users) or the persisted settings file; the
-    # backend enforces it by publishing ``eta_seconds=None``, and it is
-    # surfaced read-only here so the Server settings tab can report it. Not in
-    # ``SettingsUpdateSchema`` - not editable via PUT.
-    hide_ingest_eta = fields.Boolean(dump_only=True)
     # Server-tier solo-mediaType restriction. Set via the
     # ``--solo-media-type`` CLI flag (process-wide, all users) or the
     # persisted settings file; surfaced read-only here as the value actually

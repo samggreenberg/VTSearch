@@ -77,7 +77,7 @@ that bite:
   dataclass with defaults only for seven optional fields
   (`autofind_exporter`, `autofind_exporter_field_values`,
   `projection_n_neighbors`, `projection_min_dist`, `signpost_captioner`,
-  `signpost_vocab`, `hide_ingest_eta`) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
+  `signpost_vocab`, `hide_ingest_eta` (deprecated, ignored)) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
   means.
 
 ## 2. Load a folder of audio files

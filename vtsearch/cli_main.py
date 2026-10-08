@@ -305,8 +305,8 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     # The process-level admin overrides (--solo-media-type, --solo-embedder,
-    # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only,
-    # --hide-ingest-eta) are declared once in vtsearch.admin_overrides, which
+    # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only)
+    # are declared once in vtsearch.admin_overrides, which
     # owns their flag spellings, help text, env-var equivalents and validators
     # together.
     admin_overrides.register_override_flags(parser)

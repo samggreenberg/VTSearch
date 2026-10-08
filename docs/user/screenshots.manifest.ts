@@ -2186,7 +2186,8 @@ export const SHOTS: Shot[] = [
     //
     // Posed at one moment, or the frame is whatever the clock gives (#4299):
     // the recipe waits for the embedding step, the longest by far, then pins
-    // the count, the bar and the time left, which move every second.
+    // the count and the bar, which move every second. (An import publishes no
+    // time-left estimate, #4667, so there is no chip to pin.)
     async recipe(page, h) {
       await h.app.dropDatasets('drawings-more');
       await h.dashboard();
@@ -2210,7 +2211,6 @@ export const SHOTS: Shot[] = [
         const jp = document.querySelector('tr.loading-task-row vt-job-progress')!;
         const detail = jp.querySelector('.jp__detail')!;
         detail.textContent = (detail.textContent || '').replace(/^\d+\//, '60/');
-        jp.querySelector('.jp__eta')!.textContent = '';
       });
       await page.addStyleTag({ content: 'tr.loading-task-row vt-job-progress .progress-fill{width:45%!important}' });
       await h.wait(500);

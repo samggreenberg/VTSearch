@@ -475,25 +475,6 @@ _REGISTRY: tuple[AdminOverride, ...] = (
             "loosen one the persisted semantic_only setting asked for."
         ),
     ),
-    AdminOverride(
-        name="hide_ingest_eta",
-        flag="--hide-ingest-eta",
-        env="VTSEARCH_HIDE_INGEST_ETA",
-        kind="switch",
-        persisted_getter="get_hide_ingest_eta",
-        effective_key="hide_ingest_eta",
-        resolve=_resolve_switch,
-        help=(
-            "Hide the remaining-time estimate on ingest progress bars (dataset "
-            "imports, staging imports, and a labelset's missing-media fetch) "
-            "for deployments where those jobs are too erratic to predict. The "
-            "bars still fill and show their counts; other progress bars keep "
-            "their ETA. Applies to all users for the lifetime of the process "
-            "and is not editable via the settings API. There is no "
-            "--no-hide-ingest-eta: the flag can only hide, never re-show ETAs "
-            "the persisted hide_ingest_eta setting hid."
-        ),
-    ),
 )
 
 #: ``name -> AdminOverride``, in registration order. The order is the one the

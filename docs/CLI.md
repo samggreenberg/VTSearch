@@ -825,26 +825,6 @@ available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
 `true` / `yes` / `on`) for the gunicorn-launched Docker images; an
 explicit `--semantic-only` flag wins over it.
 
-**Hide ingest ETAs** (`--hide-ingest-eta`): drop the remaining-time
-estimate from ingest progress bars (dataset imports, staging imports,
-and a labelset's missing-media fetch), for a deployment where those jobs
-are too erratic for any timing profile to predict:
-
-```bash
-python app.py --hide-ingest-eta
-```
-
-The bars still fill and show their counts, so users can see an import
-is moving; they just don't show a remaining-time estimate. Every other
-progress bar keeps its ETA. Like `--semantic-only`, this is a
-**server-wide override** that can only switch the estimates off: there
-is no `--no-hide-ingest-eta`, the persisted `hide_ingest_eta` setting in
-the settings file can turn it on too, and neither is editable via the
-Settings dialog or the settings API (the Settings ▸ Server tab reports
-it). The env-var equivalent is `VTSEARCH_HIDE_INGEST_ETA`; an explicit
-flag wins over it. See
-[When ingest ETAs can't be trusted](DEPLOYMENT.md#when-ingest-etas-cant-be-trusted).
-
 **Run a function when an import finishes** (`--on-dataset-imported
 MODULE:FUNCTION`): call your own function each time a user's dataset
 import from the web app succeeds or fails, for example to email them:
