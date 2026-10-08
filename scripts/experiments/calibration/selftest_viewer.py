@@ -755,6 +755,28 @@ def main() -> int:  # noqa: C901
             ok &= _check("a page whose per-seed lines were thinned is refused", False, "filled anyway")
         except SystemExit as exc:
             ok &= _check("a page whose per-seed lines were thinned is refused", "thinned" in str(exc), str(exc))
+        # A budget of 0 keeps the averaged view only (#4651): a review whose per-seed lines bust the repo's
+        # cap even at the coarsest grid still commits its average over every seed.
+        none = V.build_viewer(
+            main_df,
+            tmp / "none.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            skyline=sky,
+            runs_budget_mb=0,
+            fill_gaps=False,
+        )
+        PN = _payload(none)
+        ok &= _check(
+            "a budget of 0 omits the per-seed lines and says so",
+            PN["runs"] is None and "omitted" in PN["runs_note"],
+            str(PN.get("runs_note")),
+        )
+        ok &= _check(
+            "...and leaves the averaged view as built",
+            all(np.array_equal(_decode(PN["agg"][k]), _decode(PR["agg"][k]), equal_nan=True) for k in ("mean", "n")),
+        )
 
         # --- the oracle companion -------------------------------------------
         # Reconstructed, not emitted: the harness ships an (FPR, FNR) pair and

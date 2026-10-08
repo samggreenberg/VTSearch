@@ -205,6 +205,14 @@ same edit.
     that leaves a precision mean. That covers a line that keeps nothing and a
     detector that flags nothing (`curves.EMPTY_SET`).
   - **A starved run's beta is the study's** (it has no rows to read one off).
+  - **The same holds after the check for a run that never leaves the opening
+    (#4653).** Such a run may hold a Good or two, and it still runs the
+    end-of-session check. That check is on a detector the app does not show
+    (its rows carry `app_trained == 0`); since #4643 it is the Goods'
+    centroid cut at its midpoint, about half the corpus. Such a run keeps its
+    typed query's set after the check, and the check's effect is 0. The check
+    row's own `app_trained` decides. In #4651's draft, 24 of 288 runs per
+    preset were like this.
   - **Every per-click mean fills each run first.** `by_click.py` uses
     `cells.csv`'s `shown_from`. The share curves and the early-dip table use
     `analyze.session_balance_steps`, never `balance_steps.csv`'s rows as they
@@ -474,7 +482,12 @@ things keep a report on its link:
   sessions it is `viewer_betas.sh <date>`'s page (#4636): one chip per session
   set, beside F1/4 and F4 on the metric menu. It thins the per-seed lines to
   fit the repo's 4,000 KB cap (`SOTA_RUNS_BUDGET_MB`, default 1) and says when
-  a page is still over it. A review with one session set commits
+  a page is still over it. With many seeds the three sets stay over the cap
+  even at the coarsest grid (24 seeds: 4.67 MB). Build with
+  `SOTA_RUNS_BUDGET_MB=0` then: the page keeps the average over every seed and
+  drops the per-seed lines. Never split the seeds across pages; the average is
+  the point (owner, 2026-10-08, #4651). If a page must split, split it by
+  preset. A review with one session set commits
   `analyze.sh`'s `analysis-<path>/viewer.html`, which holds that path's panels
   only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
   offer cost (#4576); a page built before that gets both from

@@ -555,6 +555,12 @@ def _shown_from(ordinary: pd.DataFrame) -> dict[tuple, float]:
     return out
 
 
+def _app_shows(row: pd.Series, default: bool) -> bool:
+    """Whether the app shows the detector of *row* (``app_trained == 1``); *default* for a row without the flag."""
+    flag = pd.to_numeric(pd.Series([row.get("app_trained")]), errors="coerce").iloc[0]
+    return default if pd.isna(flag) else bool(flag == 1)
+
+
 def _line_at(frame: dict | None, floor: float) -> dict[str, float]:
     if frame is None:
         return {m: np.nan for m in LINE_METRICS}
@@ -685,7 +691,11 @@ def run_tables(
         # opening, or one that never trained (#4631: in every average, at what its session shows).
         last_shown = last_ord is not None and int(last_ord["t"]) >= shown
         unchecked = _threshold_at(last_ord, own_beta) if last_shown else text_thr
-        after = _threshold_at(last_chk, own_beta) if last_chk is not None else unchecked
+        # The check moves the set only when the app shows the detector it checked. A run still in the opening
+        # checks one no screen shows - since #4643 the Goods' centroid cut at its midpoint, half the corpus - so
+        # it keeps the typed query's set after the check, and the check's effect is 0 (#4631, #4653).
+        chk_shown = last_chk is not None and _app_shows(last_chk, last_shown)
+        after = _threshold_at(last_chk, own_beta) if chk_shown else unchecked
         for c in CHECKPOINTS:
             at = ord_rows[(ord_rows["t"] <= c) & (ord_rows["t"] >= shown)] if ord_rows is not None else None
             point = _threshold_at(at.iloc[-1], own_beta) if at is not None and len(at) else text_thr

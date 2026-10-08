@@ -328,3 +328,21 @@ stable_flip_rate  # noqa: F821
 stable_max_confident_flip_rate  # noqa: F821
 stable_flip_rate_early  # noqa: F821
 stable_flip_rate_late  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Module-level hooks in ``tests/core/test_import_hooks.py`` are named only
+# inside ``"module:function"`` spec strings, which ``vtsearch.import_hooks``
+# resolves with ``getattr`` - exactly how an admin's real hooks are found.
+# ``NOT_A_FUNCTION`` is resolved the same way, to prove a non-callable is
+# rejected. (``first_hook`` is also passed directly, so needs no entry.)
+# ---------------------------------------------------------------------------
+second_hook  # noqa: F821
+raising_hook  # noqa: F821
+NOT_A_FUNCTION  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``tests_lib/meta/test_preflight_knobs.py`` assigns ``__signature__`` on a
+# stand-in function; ``inspect.signature`` reads it reflectively when the
+# preflight knob check inspects the patched harness default.
+# ---------------------------------------------------------------------------
+__signature__  # noqa: F821
