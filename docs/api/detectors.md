@@ -146,7 +146,9 @@ POST /api/detectors/combine
 Merges the labelsets of two or more detectors into a new detector. All
 sources must share a `media_type`. `conflict_policy="drop"` (the only
 supported policy) removes any element that appears with disagreeing
-labels across sources.
+labels across sources. The new detector keeps the sources' balance
+(`beta`, #4665) when they all keep the same one; otherwise it keeps none and
+takes the user's balance when it is loaded.
 
 → `{"success": true, "name": "A+B", "media_type": "audio", "num_labels": 73, "combined_from": ["A", "B"], "source_label_counts": [50, 30], "examples": [...]}` (201)
 
@@ -342,6 +344,16 @@ also accepted and classified). Empty lets the server pick the sole kind the
 dataset supplies. (The schema also accepts a `trainable` flag, which nothing
 reads.)
 
+Optional `beta` is the detector's **balance** (#4665): F-beta's beta, which
+way its line leans between false positives and false negatives, clamped to
+`[0.25, 4]` as [`POST /api/balance`](labeling.md#the-balance) clamps it. The New
+Detector form asks for it on its Threshold control, because Autopilot has no
+control of its own and runs at the detector's balance. It is kept on the
+detector JSON (top-level `beta`) and also becomes the user's `beta` setting,
+their last pick, which the next form starts on. Omitted or `null`, the
+detector keeps none and takes the user's balance when it is loaded. A
+non-number is a 400 (422 when the JSON body's type is wrong).
+
 → `{"ok": true, "detector": {...}}` (201) — `detector` is the new registry entry.
 
 409 if the name is already taken — by another registry entry, or by a
@@ -355,8 +367,10 @@ collide.
 POST /api/detectors/registry/from-labelset/{importer_name}
 ```
 
-**Form or Body:** `name`, optional `embedder_type`, plus the importer's own
-fields (plugin-dependent, so not described in `/api/openapi.json`).
+**Form or Body:** `name`, optional `embedder_type`, optional `beta` (the
+balance, as for `POST /api/detectors/registry` above; a form sends it as a
+string, and an empty one means none), plus the importer's own fields
+(plugin-dependent, so not described in `/api/openapi.json`).
 
 Runs the label importer and creates a detector seeded with the labels it
 returns. The media type is inferred from the labels' origins; labels spanning

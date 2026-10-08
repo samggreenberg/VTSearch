@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Choose a detector's Threshold when you create it, and Autopilot follows it** (issue #4665).
+  The New Detector form (Blank and Trained) now has the Threshold control, the same three radios
+  from False Positives to False Negatives as the Manual tab. The choice is saved with the detector,
+  and Autopilot, which has no Threshold control of its own, draws the line, picks and checks at it.
+  Moving the Threshold in Manual or Test saves the new choice on the detector too, so each detector
+  keeps its own instead of all of them sharing your last one. The form starts on your last pick. A
+  detector made before this change, or by AutoFind or the CLI, uses your last pick until you set
+  one. Combine keeps the sources' Threshold when they all agree. Find, AutoFind and
+  `--autodetect` draw each detector's line at the Threshold it keeps.
 - **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
   hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
   show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer

@@ -280,42 +280,95 @@ def line_knobs() -> dict[str, float | None]:
 
 
 def get_beta() -> float | None:
-    """The active detector's balance (#4413): F-beta's beta, seeded from the user's setting on first read.
+    """The active detector's balance (#4413): F-beta's beta, seeded on first read (:func:`detector_beta`).
 
     Draws the line: the labels' line cut at this beta (#4452).  ``None``
     means no balance: the line is the Inclusion 0 cut.  The app
     always sets a balance; ``None`` survives for library callers
     (``CoreConfig(beta=None)``).
     """
+    return detector_beta(get_active_detector_context())
+
+
+def detector_beta(ctx: DetectorContext) -> float | None:
+    """*ctx*'s balance: its own once read, seeded on the first read.
+
+    The seed is the balance the detector keeps on its JSON (#4665,
+    :mod:`vtscore.detectors.balance`: asked for when it was created, moved by
+    the Threshold control since), else the user's (the per-user setting, their
+    last pick), which is also what a detector made before #4665 takes.  A
+    context with no registered detector behind it (a throwaway that trains a
+    cold detector, the CLI's) is seeded by its caller from the JSON it holds,
+    through :func:`seed_detector_beta`.
+    """
     from vtscore.config import CoreConfig
+    from vtscore.detectors.balance import detector_stored_beta
 
     with _state_lock:
-        seeded, val = _core._get_beta()
-        if not seeded:
+        seeded, val = _core._get_beta(ctx)
+        if seeded:
+            return val
+    # Outside the lock: the detector's balance is a read of its JSON.
+    val = detector_stored_beta(getattr(ctx, "detector_id", "") or "")
+    if val is None:
+        raw = CoreConfig.from_settings().beta
+        val = None if raw is None else float(raw)
+    with _state_lock:
+        seeded, own = _core._get_beta(ctx)
+        if seeded:
+            return own
+        _core._set_beta(val, ctx)
+        return val
+
+
+def seed_detector_beta(ctx: DetectorContext, data: dict[str, Any] | None) -> float | None:
+    """Seed *ctx*'s balance from the detector JSON *data* (else the user's); returns it.
+
+    For a context the registry cannot name, which :func:`detector_beta` would
+    otherwise seed with the user's balance alone.  A context already seeded
+    keeps its own.
+    """
+    from vtscore.config import CoreConfig
+    from vtscore.detectors.balance import stored_beta
+
+    with _state_lock:
+        seeded, own = _core._get_beta(ctx)
+        if seeded:
+            return own
+        val = stored_beta(data)
+        if val is None:
             raw = CoreConfig.from_settings().beta
             val = None if raw is None else float(raw)
-            _core._set_beta(val)
+        _core._set_beta(val, ctx)
         return val
 
 
 def set_beta(value: float) -> None:
-    """Set the active detector's balance and persist it; the line re-cuts (no retrain).
+    """Set the active detector's balance and keep it; the line re-cuts (no retrain).
 
     A pure cutoff knob: the active detector re-cuts its cached ranking at the
     new balance, and in Find mode the unverified items re-split over the
-    frozen scores.  Other loaded detectors keep their own balance; one that
-    has not read its balance yet takes this one.
+    frozen scores.  The balance is kept on the detector's JSON (#4665), and
+    as the user's balance (the per-user setting): the default a new detector
+    is offered and what a detector that keeps none takes.  Other loaded
+    detectors keep their own balance.
     """
+    from vtscore.detectors.balance import keep_beta
     from vtscore.training.thresholds import BETA_MAX, BETA_MIN
 
     value = float(value)
     if not BETA_MIN <= value <= BETA_MAX:
         raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {value!r}")
     with _state_lock:
-        seeded, old = _core._get_beta()
+        ctx = get_active_detector_context()
+        seeded, old = _core._get_beta(ctx)
         changed = not seeded or value != old
-        _core._set_beta(value)
+        _core._set_beta(value, ctx)
         _persist_setting("beta", value)
+    # Outside ``_state_lock``: the detector-JSON write takes the label-sync
+    # lock, which the label sync holds while it takes ``_state_lock``.
+    if not _core.is_request_missing_detector_context(ctx):
+        keep_beta(ctx, value)
     if changed:
         _core.recompute_detector_thresholds(value)
         rethreshold_unverified_find_items()

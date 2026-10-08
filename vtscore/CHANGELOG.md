@@ -10,6 +10,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`
+  stores F-beta's beta as a top-level `"beta"` (`BETA_KEY`) beside the labelset: `stored_beta(data)`,
+  `valid_beta(raw)`, `detector_stored_beta(detector_id)` and `keep_beta(det_ctx, value)`.
+  `vtscore.state.get_beta()` now seeds the active detector's first read from the balance its
+  detector keeps, and only then from `CoreConfig.from_settings().beta`; the new
+  `vtscore.state.detector_beta(ctx)` does the same for any context, and
+  `seed_detector_beta(ctx, data)` seeds one the registry cannot name from the JSON its caller holds.
+  `set_beta` writes the active detector's file as well as persisting the `"beta"` setting.
+  Behaviour change for a library caller: `train_and_threshold(det_ctx=...)` cuts at `det_ctx`'s own
+  balance rather than the active detector's (they are the same context on every live path), and
+  `resolve_or_train_detector`'s throwaway context and the CLI's per-detector context are seeded
+  from the detector's JSON, so a cold train, an AutoFind and `--autodetect` draw each detector's line
+  at the balance it keeps. `recompute_detector_thresholds(beta)` cuts a detector that has not read
+  its balance yet at the one it keeps, `beta` only when it keeps none. A detector JSON with no
+  `"beta"` behaves exactly as before.
+
 - **The eval harness can draw a share of Autopilot's picks the way the spot check does** (issue #4482).
   `simulate_voting_iterations` takes `band_share` (`None`, the default and the app; or N: one in N of the
   picks past the opening is drawn uniformly within one band of the unvoted ranking, cycling through the bands

@@ -111,6 +111,43 @@ def _abort_if_name_taken(name: str, *, own_path: Path | None = None, exclude_id:
         abort(409, message=f"A detector named '{name}' already exists")
 
 
+def _creation_beta(raw) -> float | None:
+    """The balance a new detector is created at (#4665), or ``None`` when the request names none.
+
+    Validated by the same ``settings.validate_beta`` the Threshold control's
+    ``POST /api/balance`` uses, so the two cannot disagree about the range;
+    an unparseable value is a 400, a boolean included, as there.  A
+    form-encoded create (a label importer with a file field) sends it as a
+    string, and an empty one means none.
+    """
+    from vtsearch import settings  # noqa: PLC0415
+
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, bool):
+        abort(400, message="beta: must be a number")
+    try:
+        return float(settings.validate_beta(raw))
+    except (TypeError, ValueError) as exc:
+        abort(400, message=f"beta: {exc}")
+
+
+def _keep_creation_beta(detector_data: dict, beta: float | None) -> None:
+    """Keep *beta* on a new detector's JSON, and as the user's balance (their last pick, #4665).
+
+    The user's balance is what the next New Detector form starts on and what a
+    detector that keeps none takes.  With no *beta* the detector keeps none,
+    and takes the user's balance when it is loaded.
+    """
+    from vtscore.detectors.balance import BETA_KEY  # noqa: PLC0415
+    from vtsearch import settings  # noqa: PLC0415
+
+    if beta is None:
+        return
+    detector_data[BETA_KEY] = beta
+    settings.set_beta(beta)
+
+
 # ---------------------------------------------------------------------------
 # GET /api/detectors/registry
 # ---------------------------------------------------------------------------
@@ -216,6 +253,8 @@ def register_detector_route(body: dict):
     # the sibling create routes) rather than a reuse of the existing file.
     _abort_if_name_taken(name)
 
+    beta = _creation_beta(body.get("beta"))
+
     examples = body.get("examples") or []
     if not examples and text_query:
         examples = [{"type": "text", "value": text_query}]
@@ -245,6 +284,7 @@ def register_detector_route(body: dict):
         "embedder_type": embedder_type,
         "labelset": LabelSet(example_labels).to_dict(),
     }
+    _keep_creation_beta(detector_data, beta)
     _write_detector(_detector_path(name), detector_data)
 
     entry = register_detector(
@@ -354,14 +394,16 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = validate_plugin_args(importer, extra_keys=("name", "embedder_type"))
+    field_values = validate_plugin_args(importer, extra_keys=("name", "embedder_type", "beta"))
 
-    # ``name`` and ``embedder_type`` are pass-through keys (not declared plugin
-    # fields) but are owned by this route.  ``validate_plugin_args`` only keeps
-    # the keys we list in ``extra_keys``, so the route enforces presence.
+    # ``name``, ``embedder_type`` and ``beta`` are pass-through keys (not
+    # declared plugin fields) but are owned by this route.
+    # ``validate_plugin_args`` only keeps the keys we list in ``extra_keys``,
+    # so the route enforces presence.
     name = str(field_values.pop("name", "") or "").strip()
     if not name:
         abort(422, message="Validation error", errors={"json": {"name": ["Missing data for required field."]}})
+    beta = _creation_beta(field_values.pop("beta", None))
 
     from vtscore.detectors.embedder_type import resolve_detector_embedder_type
 
@@ -425,6 +467,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         "embedder_type": embedder_type_val,
         "labelset": labelset.to_dict(),
     }
+    _keep_creation_beta(detector_data, beta)
     _write_detector(det_path, detector_data)
 
     entry = register_detector(
