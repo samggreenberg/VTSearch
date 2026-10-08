@@ -159,6 +159,44 @@ describe('SettingsModalComponent', () => {
     req.flush(mockSettings);
   });
 
+  it("hides all of Toasty's hints, then shows them all again (#4680)", async () => {
+    await flushInit();
+    expect(component.noHintsHidden()).toBe(true);
+    expect(component.allHintsHidden()).toBe(false);
+
+    component.onHideAllHints();
+    let req = httpMock.expectOne('/api/settings');
+    expect(req.request.body.hide_all_hints).toBe(true);
+    req.flush(mockSettings);
+    expect(component.allHintsHidden()).toBe(true);
+
+    // Show All also brings back the hints hidden one at a time.
+    component.settings.update((s) => ({ ...s, hidden_hints: ['train'] }));
+    component.onShowAllHints();
+    req = httpMock.expectOne('/api/settings');
+    expect(req.request.body.hide_all_hints).toBe(false);
+    expect(req.request.body.hidden_hints).toEqual([]);
+    req.flush(mockSettings);
+    expect(component.noHintsHidden()).toBe(true);
+  });
+
+  it("disables Show All while no hint is hidden and Hide All once they all are (#4680)", async () => {
+    await flushInit();
+    component.activeSettingsTab.set('appearance');
+    await settleZoneless(fixture);
+    const buttons = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll('.hint-buttons button')] as HTMLButtonElement[];
+    expect(buttons().map((b) => [b.textContent?.trim(), b.disabled])).toEqual([
+      ['Hide All', false],
+      ['Show All', true],
+    ]);
+
+    buttons()[0].click();
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+    await settleZoneless(fixture);
+    expect(buttons().map((b) => b.disabled)).toEqual([true, false]);
+  });
+
   it('should show "Default" in the RAM / Disk bars pulldown when the setting is unset', async () => {
     await flushInit();
     component.activeSettingsTab.set('appearance');

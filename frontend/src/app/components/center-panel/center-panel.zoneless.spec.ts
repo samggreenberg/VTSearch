@@ -70,10 +70,8 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     component.init();
     await new Promise<void>((resolve) => setTimeout(resolve));
     TestBed.tick();
-    // label_hint_dismissed:true so the first vote's hint-dismissal does not fire
-    // a settings PUT we'd have to flush.
     for (const req of httpMock.match((r) => r.url.includes('settings'))) {
-      req.flush({ show_animations: 'hide', label_hint_dismissed: true });
+      req.flush({ show_animations: 'hide' });
     }
     for (const req of httpMock.match((r) => r.url.includes('embedders'))) {
       req.flush({ embedders: [] });

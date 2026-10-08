@@ -76,8 +76,12 @@ def favicon() -> tuple[str, int] | Response:
 
 @main_bp.route("/favicon-<variant>.ico")
 def favicon_variant(variant: str) -> tuple[str, int] | Response:
-    """Serve a favicon variant (smile, frown, surprised) from the static directory."""
-    allowed = {"smile", "frown", "surprised"}
+    """Serve a favicon variant (frown, surprised) from the static directory.
+
+    The plain favicon is Toasty's resting smile, so there is no separate
+    ``smile`` variant.
+    """
+    allowed = {"frown", "surprised"}
     if variant not in allowed:
         return "", 404
     static = _static_dir()

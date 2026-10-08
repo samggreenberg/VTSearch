@@ -339,6 +339,12 @@
             },
             "type": "object"
           },
+          "hidden_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "hidden_plugins": {
             "additionalProperties": {
               "items": {
@@ -349,6 +355,9 @@
             "readOnly": true,
             "type": "object"
           },
+          "hide_all_hints": {
+            "type": "boolean"
+          },
           "hide_left_panel": {
             "type": "boolean"
           },
@@ -358,9 +367,6 @@
           "import_defaults_by_media_type": {
             "additionalProperties": {},
             "type": "object"
-          },
-          "label_hint_dismissed": {
-            "type": "boolean"
           },
           "last_embedder_per_media_type": {
             "additionalProperties": {
@@ -6960,6 +6966,15 @@
           "grid_icon_size_left": {},
           "grid_icon_size_popup": {},
           "grid_icon_size_right": {},
+          "hidden_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hide_all_hints": {
+            "type": "boolean"
+          },
           "hide_left_panel": {
             "type": "boolean"
           },
@@ -6967,9 +6982,6 @@
             "type": "boolean"
           },
           "import_defaults_by_media_type": {},
-          "label_hint_dismissed": {
-            "type": "boolean"
-          },
           "last_embedder_per_media_type": {},
           "panel_pct_left": {},
           "panel_pct_right": {},
@@ -16098,13 +16110,14 @@
     },
     "/favicon-{variant}.ico": {
       "get": {
+        "description": "The plain favicon is Toasty's resting smile, so there is no separate\n``smile`` variant.",
         "operationId": "favicon_variant",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Serve a favicon variant (smile, frown, surprised) from the static directory.",
+        "summary": "Serve a favicon variant (frown, surprised) from the static directory.",
         "tags": [
           "main"
         ]

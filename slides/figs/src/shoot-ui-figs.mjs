@@ -327,10 +327,14 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * non-dismissing "this page is running an out-of-date build" banner across the
  * top of every frame. It is doing its job — see the note in `CLAUDE.md` — and
  * it has nothing to do with the application a slide is showing.
+ *
+ * Toasty's hints (#4680) are hidden too: the slide around a frame already says
+ * what to click, and a speech bubble saying it again is a hat on a hat. They
+ * float over the page, so hiding one moves nothing else.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
-  + 'vt-toast-container,.toast-stack{display:none!important}';
+  + 'vt-toast-container,.toast-stack,vt-toasty-hint{display:none!important}';
 
 async function enterLabelView(page, datasetName, detectorName) {
   await openDashboard(page);

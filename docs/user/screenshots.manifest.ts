@@ -1177,7 +1177,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'settings-appearance',
     embeddedIn: `${GUIDE}#solo-media-type-streamline-for-one-media-type`,
-    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
+    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, the Hide All / Show All buttons for Toasty\'s hints, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
     themes: BOTH,
     async recipe(_page, h) {
       await openAppearance(h);

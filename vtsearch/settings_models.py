@@ -197,6 +197,17 @@ def _normalize_signpost_vocab(v: Any) -> Any:
     return out
 
 
+def _dedupe_strings(v: Any) -> Any:
+    """Drop blank and repeated entries from a list of strings, keeping order.
+
+    Anything other than a list of strings is passed through untouched for
+    Pydantic to reject.
+    """
+    if not isinstance(v, list) or not all(isinstance(s, str) for s in v):
+        return v
+    return list(dict.fromkeys(s for s in v if s.strip()))
+
+
 def _docs_link_url_ok(url: str) -> bool:
     """True for an absolute ``http``/``https`` URL or a root-relative ``/path``.
 
@@ -423,11 +434,15 @@ class UserSettings(BaseModel):
     # "RAM / Disk bars" pulldown in the appearance settings.
     show_usage_bars: UsageBarsMode = "default"
     show_metadata: bool = False
-    # Set to True once the user dismisses the zero-votes "Use ← / → or click"
-    # hint that overlays the Good/Bad buttons when a fresh labeling session
-    # has no votes yet. Persisting it keeps the hint from re-appearing every
-    # time the same user starts a new session.
-    label_hint_dismissed: bool = False
+    # Toasty's hints (#4680): the speech bubbles King Toasty shows beside the
+    # control a new user should click next ("Click + to add a dataset", ...).
+    # ``hide_all_hints`` is the bubble's "Hide all hints" checkbox (and the
+    # Settings modal's Hide All); ``hidden_hints`` lists the ids of hints hidden
+    # one by one with "Hide this hint". The ids are owned by the frontend
+    # (``HINT_IDS`` in ``hints.service.ts``), so an id this list does not know
+    # is kept rather than rejected. Settings' Show All clears both.
+    hide_all_hints: bool = False
+    hidden_hints: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
     autopilot_enabled: bool = True
     # Whether Train and Test open with each side panel folded to a thin
     # strip (#4673). The left folds only on the Autopilot tab, where the

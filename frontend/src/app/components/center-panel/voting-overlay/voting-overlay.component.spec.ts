@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VotingOverlayComponent } from './voting-overlay.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('VotingOverlayComponent', () => {
   let component: VotingOverlayComponent;
@@ -10,6 +11,8 @@ describe('VotingOverlayComponent', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [VotingOverlayComponent],
+      // Toasty's hint reads the user's settings.
+      providers: [...provideHttpTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(VotingOverlayComponent);
     component = fixture.componentInstance;
@@ -72,16 +75,17 @@ describe('VotingOverlayComponent', () => {
     expect(document.activeElement).not.toBe(good);
   });
 
-  it('should hide the first-vote hint by default', () => {
-    expect(fixture.nativeElement.querySelector('.vote-hint')).toBeNull();
+  it("has no start-voting hint by default", () => {
+    expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
   });
 
-  it('should render the first-vote hint text when showHint is true', async () => {
+  it("puts Toasty's start-voting hint over the buttons when showHint is true (#4680)", async () => {
     fixture.componentRef.setInput('showHint', true);
     await settleZoneless(fixture);
-    const hint = fixture.nativeElement.querySelector('.vote-hint');
+    const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
     expect(hint).toBeTruthy();
-    expect(hint.textContent.trim()).toContain('Use');
+    expect(hint.classList).toContain('toasty-hint--above');
+    expect(hint.textContent).toContain('Click Bad / Good');
     expect(hint.textContent).toContain('Autopilot');
   });
 

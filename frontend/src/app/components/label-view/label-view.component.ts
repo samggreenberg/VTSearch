@@ -1,5 +1,5 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 
 import { Subscription, pairwise } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
@@ -166,6 +166,28 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     () => (this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted())
       && !this.viewingPick(),
   );
+
+  /** Autopilot's run state as a signal, for the hint below. */
+  private readonly autopilotRun = toSignal(this.autopilotStateService.state$, { requireSync: true });
+
+  /**
+   * Toasty's "start voting" hint over the Good / Bad buttons (#4680): Autopilot
+   * is running on a detector that had no labels, nothing has been voted yet,
+   * and there is an item on screen to vote on. The first vote ends it.
+   */
+  readonly startVotingHint = computed(() => {
+    if (this.autopilotRun().phase === 'idle') return false;
+    const votes = this.voteState;
+    return (
+      votes.votesLoaded &&
+      votes.labelsetGoodCount === 0 &&
+      votes.labelsetBadCount === 0 &&
+      votes.goodVotes.size === 0 &&
+      votes.badVotes.size === 0 &&
+      this.mediaState.selectedMedia !== null &&
+      !this.centreExhausted()
+    );
+  });
 
   /**
    * The item the user picked by hand while the "nothing left" pane was up, or

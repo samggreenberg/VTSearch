@@ -7,6 +7,8 @@
 }
 
 header {
+  // Positioning context for Toasty's hand-off hint under the Dashboard button.
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-lg);

@@ -17,6 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
+  King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
+  click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
+  arrows. On the Dashboard, one step at a time: **+** to add a dataset, select a dataset, a warning
+  when the selected datasets mix kinds of media, **+** to make a detector, select a detector, a
+  warning when the dataset and detector are for different media, **Train** for a new detector,
+  and **Test** or **Find** for a trained one. In the Train view he asks for your first vote while
+  Autopilot runs on a detector with no labels (replacing the faint "Use ← / →" line), and the
+  **Detector Trained** and **Nothing Left to Label** dialogs are now his hints under the top bar's
+  **Dashboard** button; any further vote sends him away. Each hint goes when its step is taken,
+  and has **Hide this hint** and **Hide all hints** boxes kept in your settings (`hidden_hints`,
+  `hide_all_hints`); **Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**.
+  Notifications show his face too: happy, surprised on warnings, sad on errors. The
+  `label_hint_dismissed` setting is gone, and `/favicon-smile.ico` (the plain favicon smiles
+  already) now 404s.
 - **Train and Test fold either side panel to a strip, and open with both folded** (issue #4673).
   The left panel's fold (Autopilot's collapse, Train only until now) comes to Test's Autopilot tab,
   and the right panel gains one in both views. Each side folds to a thin strip on its own: click

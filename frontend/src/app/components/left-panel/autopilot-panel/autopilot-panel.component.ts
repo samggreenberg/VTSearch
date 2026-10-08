@@ -6,18 +6,17 @@ import {
   input,
   OnInit,
   output,
-  signal,
+  untracked,
 } from '@angular/core';
-import { Router } from '@angular/router';
 
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 import {
+  AutopilotHandoff,
   AutopilotStateService,
   AutopilotPhase,
   AutopilotState,
 } from '../../../services/autopilot-state.service';
 import { IconComponent } from '../../icon/icon.component';
-import { AutopilotCompleteModalComponent } from '../../modals/autopilot-complete-modal/autopilot-complete-modal.component';
 
 export type { AutopilotPhase, AutopilotState };
 
@@ -83,17 +82,6 @@ export interface StepDisplay {
 }
 
 /** Copy for the completion modal, per terminal phase. */
-interface CompletionPrompt {
-  /** Dialog title: what just finished. */
-  heading: string;
-  /** Why autopilot stopped. */
-  detail: string;
-  /** What the user can do now, whichever button they pick. */
-  nextSteps: string;
-  /** Label for the "don't go anywhere" button. */
-  stayLabel: string;
-}
-
 /** What the Done step says when every indicator is green and the pool converged. */
 const DONE_HELP = 'All quality indicators are green. You can continue labeling or export your results.';
 
@@ -119,13 +107,12 @@ function dryRunNote(dryRun: number): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autopilot-panel',
   standalone: true,
-  imports: [IconComponent, AutopilotCompleteModalComponent],
+  imports: [IconComponent],
   templateUrl: './autopilot-panel.component.html',
   styleUrl: './autopilot-panel.component.scss',
 })
 export class AutopilotPanelComponent implements OnInit {
   autopilotState = inject(AutopilotStateService);
-  private router = inject(Router);
 
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
@@ -160,9 +147,6 @@ export class AutopilotPanelComponent implements OnInit {
   readonly toggleCollapse = output<void>();
   readonly refocus = output<void>();
 
-  /** Copy for the live completion modal, or ``null`` when none is open. */
-  readonly completionPrompt = signal<CompletionPrompt | null>(null);
-
   constructor() {
     // Signal inputs don't fire ``ngOnChanges``; this effect replaces the old
     // change hook. It re-runs whenever the vote sets, dataset size, or labeling
@@ -196,32 +180,25 @@ export class AutopilotPanelComponent implements OnInit {
         this.autopilotState.updateFromLabelingStatus(labelingStatus);
       }
 
+      // Toasty's hand-off goes with the first vote (or undo) after it went up:
+      // voting on is the "keep going" answer. Read untracked, since the effect
+      // writes it.
+      const votes = goodVotes.size + badVotes.size;
+      const handoff = untracked(() => this.autopilotState.handoff());
+      if (handoff && handoff.votes !== votes) this.autopilotState.handoff.set(null);
+
       const prevPhase = this.autopilotState.state.phase;
       this.autopilotState.checkPhaseTransition(goodVotes.size, badVotes.size, datasetSize);
       const phase = this.autopilotState.state.phase;
       if (prevPhase !== phase && this.autopilotState.shouldAnnounceCompletion) {
         if (phase === 'done') {
           this.announceCompletion({
-            heading: 'Detector Trained',
-            detail: this.state.dryRunStop
-              ? dryRunNote(this.state.moreDryRun)
-              : 'Every quality indicator is green: the detector\'s accuracy has settled, its calls '
-                + 'have stopped shifting between labeling steps, and your votes span a broad mix of '
-                + 'the collection.',
-            nextSteps:
-              'Nothing here expires. Keep labeling to refine the detector further, or head to the '
-              + 'Dashboard to export it, run it over another dataset, or start something new.',
-            stayLabel: 'Continue Training',
+            kind: 'done',
+            votes,
+            dryRun: this.state.dryRunStop ? this.state.moreDryRun : undefined,
           });
         } else if (phase === 'exhausted') {
-          this.announceCompletion({
-            heading: 'Nothing Left to Label',
-            detail: 'Autopilot has labeled every item in this dataset.',
-            nextSteps:
-              'Stay here to review your votes, or head to the Dashboard to export the detector or '
-              + 'run it over another dataset.',
-            stayLabel: 'Stay Here',
-          });
+          this.announceCompletion({ kind: 'all-labeled', votes });
         }
       }
     });
@@ -329,25 +306,15 @@ export class AutopilotPanelComponent implements OnInit {
    * this run started from an untrained detector, which is only ever true of the
    * run that actually did the training.
    */
-  private announceCompletion(prompt: CompletionPrompt): void {
+  /** Raise Toasty's hand-off: it shows under the top bar's Dashboard button
+   *  (see `AppComponent`), saying the user can vote on or head there. */
+  private announceCompletion(handoff: AutopilotHandoff): void {
     this.autopilotState.markCompletionAnnounced();
-    this.completionPrompt.set(prompt);
-  }
-
-  /** Dismiss the hand-off and stay in the Train window. */
-  onStay(): void {
-    this.completionPrompt.set(null);
-  }
-
-  /** Take the hand-off: close the modal and leave for the Dashboard. */
-  onGoToDashboard(): void {
-    this.completionPrompt.set(null);
-    void this.router.navigate(['/dashboard']);
+    this.autopilotState.handoff.set(handoff);
   }
 
   activate(): void {
     if (this.running) return;
-    this.completionPrompt.set(null);
     // Retrain mode: the detector already has good+bad labels (carried over
     // from a previous dataset), so learned sort is available immediately and
     // autopilot should skip the initial text-mode phase.
@@ -370,8 +337,8 @@ export class AutopilotPanelComponent implements OnInit {
   }
 
   deactivate(): void {
-    // Turning autopilot off answers the hand-off's question by itself.
-    this.completionPrompt.set(null);
+    // Turning autopilot off answers the hand-off's question by itself
+    // (`deactivate` drops it).
     this.autopilotState.deactivate();
     this.stopped.emit();
   }

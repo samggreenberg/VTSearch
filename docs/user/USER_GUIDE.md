@@ -803,13 +803,16 @@ shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal. Hover the light for
 the details.
 
-When all five phases are done, Autopilot shows **Done!** and a
-**Detector Trained** dialog offers you the choice: **Continue
-Training** stays put so you can keep labeling (the detector continues
-to improve), and **Head to Dashboard** takes you out to export it or
-run it over another dataset. Nothing happens on its own, and the
-dialog only appears for the run that trained the detector - coming
-back later to refine it further will not raise it again.
+When all five phases are done, Autopilot shows **Done!** and Toasty
+appears under the top bar's **Dashboard** button to say the detector is
+trained: keep voting and it keeps improving (your next vote sends Toasty
+away), or click **Dashboard** to export it or run it over another dataset.
+Nothing happens on its own, and the hint only appears for the run that
+trained the detector - coming back later to refine it further will not
+raise it again. If you label every item before then, Toasty says so instead
+and points you back to the Dashboard. When you open the Train view on a
+detector with no labels yet, Toasty also stands over the **Good** / **Bad**
+buttons until your first vote. See [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays checked, and a seventh step, **Keep
 Improving.**, takes over for as long as you keep labeling. It is
@@ -1262,7 +1265,7 @@ The right pane shows the result as it forms, and the verdict at Done:
 - **Picks by band** - where the picks came from and what each band said.
 
 At **Done!** the verdict reads the ranges in a sentence, and offers three
-ways out, as the **Detector Trained** dialog does in Train:
+ways out, as Toasty does when Autopilot finishes in Train:
 
 - **Move to AutoFind** - the reason the test exists. The detector joins your
   AutoFind list, and you land on the Dashboard. It is offered whatever the
@@ -1424,8 +1427,9 @@ eight tabs:
   bars** (**Default** shows each one only when its free space is getting
   low, meaning it would hold fewer than three more datasets the size of your
   largest; **View** and **Hide** show them always or never), the metadata
-  panel, the **Enable achievements** toggle, and per-media-type Scroll
-  Style (focus mode and thumbnail size).
+  panel, the **Enable achievements** toggle, **Hide All** / **Show All** for
+  [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
+  mode and thumbnail size).
 - **AutoFind** - what exporter to send AutoFind results to, and whether
   a command-line run deletes the dataset it imported once AutoFind has run
   (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
@@ -1518,8 +1522,8 @@ several at once. See
 [Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
-row to select them (a detector you just made, with no labels yet, gets a
-"Click Train to teach your new detector." hint), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
+row to select them (a detector you just made, with no labels yet, gets one
+of [Toasty's hints](#toastys-hints) pointing at **Train**), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
@@ -1537,6 +1541,35 @@ selected detector, shown on its row, and the results open in the
 You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Test / Find buttons
 work on whichever rows you currently have selected.
+
+### Toasty's hints
+
+King Toasty (the toast with the magnifying glass in the logo) stands beside
+the next thing to click, with a speech bubble that says what to do and why.
+On the Dashboard he shows one step at a time:
+
+- the **Datasets** card's **+** while you have no datasets, or a nudge to
+  select one when you have some but none is selected;
+- a warning (he looks surprised) when the selected datasets hold different
+  kinds of media;
+- the **Detectors** card's **+** once a dataset is in, or a nudge to select a
+  detector when you have some but none is selected;
+- a warning when the selected dataset and detector are for different kinds of
+  media;
+- **Train** once a new detector with no labels is selected beside a matching
+  dataset, and **Test** or **Find** once the selected detector is trained.
+
+In the Train view he asks for your first vote over **Good** / **Bad** while
+Autopilot runs on a detector with no labels, and when Autopilot finishes he
+stands under the top bar's **Dashboard** button (see [Autopilot: the guided
+workflow](#autopilot-the-guided-workflow)).
+
+Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
+bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
+**Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**,
+which brings back every hint, including ones you hid one at a time. Toasty
+also turns up on the notifications at the top of the screen: happy on good
+news, surprised on a warning, sad on an error.
 
 ### Combining datasets and detectors
 

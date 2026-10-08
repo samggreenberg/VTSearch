@@ -99,14 +99,3 @@
     </div>
   }
 </div>
-
-@if (completionPrompt(); as prompt) {
-  <vt-autopilot-complete-modal
-    [heading]="prompt.heading"
-    [detail]="prompt.detail"
-    [nextSteps]="prompt.nextSteps"
-    [stayLabel]="prompt.stayLabel"
-    (stay)="onStay()"
-    (goToDashboard)="onGoToDashboard()"
-  />
-}
