@@ -912,7 +912,7 @@ field lists — this document names the tiers and the shape, not every key.
   deployment-level knobs an operator sets — `saved_datasets_dir`,
   `detectors_dir`, `max_concurrent_*`, `hidden_plugins`,
   `dataset_max_age_days`, `support_email`, `docs_links`, `semantic_only`,
-  `solo_media_type`, `projection_n_neighbors`,
+  `autopilot_only`, `solo_media_type`, `projection_n_neighbors`,
   `projection_min_dist`,
   `browse_signpost_vocab`, `default_settings_source`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
@@ -924,12 +924,14 @@ field lists — this document names the tiers and the shape, not every key.
   `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
   `settings_source`, `achievement_state`, and the
   **AutoFind** keys `autofind_detectors`, `autofind_exporter`,
-  `autofind_exporter_field_values`, and `autofind_on_import` (whether a web
-  import runs the AutoFind detectors; the Add Dataset checkbox's memory).
+  `autofind_exporter_field_values`, `autofind_on_import` (whether a web
+  import runs the AutoFind detectors; the Add Dataset checkbox's memory), and
+  `autofind_cli_delete_dataset` (whether a CLI `--autodetect` run deletes the
+  dataset it imported once its detectors have run).
 
-Six settings double as **admin overrides**: an operator can pin the
+Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
-`support_email` and `semantic_only`, plus the per-user
+`support_email`, `semantic_only` and `autopilot_only`, plus the per-user
 `solo_embedder_per_media_type`, at startup, for every user and for the life
 of the process, without the settings file. Each is
 declared once in `vtsearch/admin_overrides.py` — a descriptor carrying its CLI

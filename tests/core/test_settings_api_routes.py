@@ -278,6 +278,14 @@ class TestSettingsAPI:
         data = res.get_json()
         assert data["autofind_exporter_field_values"]["server_json_file"]["filepath"] == "/tmp/out.json"
 
+    def test_autofind_cli_delete_dataset_round_trip(self, client):
+        """Off unless the user turns it on (#4674); a plain boolean PUT."""
+        assert client.get("/api/settings").get_json()["autofind_cli_delete_dataset"] is False
+        res = client.put("/api/settings", json={"autofind_cli_delete_dataset": True})
+        assert res.status_code == 200
+        assert res.get_json()["autofind_cli_delete_dataset"] is True
+        assert client.get("/api/settings").get_json()["autofind_cli_delete_dataset"] is True
+
     def test_autofind_exporter_excluded_from_defaults(self, client):
         res = client.get("/api/settings/defaults")
         assert res.status_code == 200

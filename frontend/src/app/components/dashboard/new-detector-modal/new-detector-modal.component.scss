@@ -52,14 +52,6 @@
 
 // `.form-group`, `.info-text`, `.error-text`, `.required` come from `_components.scss`.
 
-// Inline caution copy (no shared `--text-warning` utility class yet; mirrors
-// the local `.warn-text` in the combine-datasets modal).
-.warn-text {
-  margin: 0;
-  font-size: var(--font-md);
-  color: var(--text-warning);
-}
-
 // Text vs media example input, behind a nested tab. The two are mutually
 // exclusive, so only one panel shows at a time.
 .example-group {

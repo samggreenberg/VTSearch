@@ -189,6 +189,13 @@ class AppSettingsSchema(Schema):
     # picker and the Server settings tab can report the restriction. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     semantic_only = fields.Boolean(dump_only=True)
+    # Server-tier switch that locks Train and Test to their Autopilot tabs
+    # (#4666). Set via the ``--autopilot-only`` CLI flag /
+    # ``VTSEARCH_AUTOPILOT_ONLY`` env var (process-wide, all users) or the
+    # persisted settings file; surfaced read-only here so the SPA can drop the
+    # Manual and Review tabs and the Server settings tab can report it. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    autopilot_only = fields.Boolean(dump_only=True)
     # Server-tier solo-mediaType restriction. Set via the
     # ``--solo-media-type`` CLI flag (process-wide, all users) or the
     # persisted settings file; surfaced read-only here as the value actually
@@ -219,6 +226,9 @@ class AppSettingsSchema(Schema):
     # is saved; the Add Dataset dialog's "Run AutoFind" checkbox starts from it,
     # and each import that sends the box remembers its state here.
     autofind_on_import = fields.Boolean()
+    # Whether a command-line AutoFind deletes the dataset it imported once its
+    # detectors have run (#4674); the AutoFind settings tab's checkbox.
+    autofind_cli_delete_dataset = fields.Boolean()
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -325,6 +335,7 @@ class SettingsUpdateSchema(Schema):
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Raw()
     autofind_on_import = fields.Boolean()
+    autofind_cli_delete_dataset = fields.Boolean()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()

@@ -239,6 +239,12 @@
             [autofindExporterFieldValues]="autofindExporterFieldValues"
             (exporterChange)="onAutofindExporterChange($event)"
           ></vt-auto-find-settings>
+          <h4 class="subhead">Command Line</h4>
+          <label class="checkbox-row" title="Delete the dataset a command-line AutoFind imported, once its detectors have run">
+            <input type="checkbox" [ngModel]="settings().autofind_cli_delete_dataset" (ngModelChange)="onToggle('autofind_cli_delete_dataset', $event)" />
+            Delete the dataset after AutoFind
+            <vt-field-hint-icon hint="When on, an AutoFind run from the command line (python app.py --autodetect) deletes the dataset it imported once its AutoFind detectors have run and the results are exported. A run with no AutoFind detector to run keeps its dataset, and AutoFind run from the dashboard never deletes anything."></vt-field-hint-icon>
+          </label>
         }
 
         <!-- Autopilot & Actions -->
@@ -408,6 +414,10 @@
           <div class="form-group">
             <label class="form-label" title="When on, this server offers Semantic embedders only: the prototype Patch Semantic and Structural types are hidden from every picker and rejected by the API. Set with --semantic-only, VTSEARCH_SEMANTIC_ONLY, or the semantic_only setting.">Semantic embedders only</label>
             <div class="server-value">{{ settings().semantic_only ? 'On' : 'Off' }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" title="When on, Train and Test stay on their Autopilot tabs: Train has no Manual tab, Test has no Review tab, and neither shows a tab bar. Set with --autopilot-only, VTSEARCH_AUTOPILOT_ONLY, or the autopilot_only setting.">Autopilot only</label>
+            <div class="server-value">{{ settings().autopilot_only ? 'On' : 'Off' }}</div>
           </div>
           <div class="form-group">
             <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out. Set with --solo-media-type or the solo_media_type setting.">Solo media type</label>

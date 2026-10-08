@@ -131,6 +131,7 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
 | `VTSEARCH_ON_DATASET_IMPORTED` | unset | Comma-separated `module:function` specs to call when a user's dataset import from the web app succeeds or fails, e.g. to email them (see [EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)). Each module must be importable on the server. A spec that fails to load is reported on stdout and none of the variable's hooks are installed. Env-var equivalent of `--on-dataset-imported`, for the gunicorn images; an explicit flag wins. Deliberately not a setting: nothing in the settings file can name code to run. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock the deployment to **Semantic** embedders, hiding the prototype Patch Semantic and Structural types from every picker and rejecting them at the dataset-load / detector-create routes. Env-var equivalent of `--semantic-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `semantic_only` server setting. |
+| `VTSEARCH_AUTOPILOT_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock **Train** and **Test** to their Autopilot tabs: Train's Manual tab and Test's Review tab are removed, and neither view shows a tab bar. Env-var equivalent of `--autopilot-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `autopilot_only` server setting. |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Stamps every newly created dataset with an expiry this many days out. Positive integers only; anything else is ignored with a warning on stdout. Env-var equivalent of `--dataset-max-age-days`, for the gunicorn images; an explicit flag wins. |
 | `VTSEARCH_SOLO_MEDIA_TYPE` | unset | Lock the whole instance to one mediaType: the importer and new-detector flows hide their mediaType pickers, converter offerings are filtered to converters that output this type, and that type's default embedder is preloaded at startup. Must be a registered media-type id (`audio`, `image`, `video`, `text`, `document`). Env-var equivalent of `--solo-media-type`, for the gunicorn images; an explicit flag wins, and either beats the persisted `solo_media_type` server setting. |
 | `VTSEARCH_SOLO_EMBEDDERS` | unset | Comma-separated `TYPE=EMBEDDER` pairs (e.g. `image=siglip,audio=clap`) locking the embedder for those mediaTypes, so the importer modal hides its embedder picker for each. A per-process *fallback*: any user who picks their own embedder in the settings UI overrides it for themselves. Env-var equivalent of the repeatable `--solo-embedder`; an explicit flag wins. |
@@ -598,8 +599,9 @@ the next start. VTSearch does not migrate old settings shapes forward.
 **If you are changing a user preference, edit `user_settings.json`, not
 `settings.json`.** A `theme` or `autopilot_enabled` key placed in
 `data/settings.json` is simply ignored. The one deliberate exception is the
-AutoFind trio (`autofind_detectors`, `autofind_exporter`,
-`autofind_exporter_field_values`): for the built-in `default` user only, a read
+CLI-facing AutoFind keys (`autofind_detectors`, `autofind_exporter`,
+`autofind_exporter_field_values`, `autofind_cli_delete_dataset`): for the
+built-in `default` user only, a read
 that misses in `user_settings.json` falls through to `data/settings.json`, which
 is what lets the CLI's `--settings` flat file and single-user deployments keep
 working.
@@ -620,6 +622,7 @@ working.
     {"label": "Lab data policy", "url": "/wiki/data-policy"}
   ],
   "semantic_only": false,
+  "autopilot_only": false,
   "solo_media_type": null,
   "projection_n_neighbors": 15,
   "projection_min_dist": 0.1,
@@ -679,6 +682,17 @@ working.
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with
   `--semantic-only` / `VTSEARCH_SEMANTIC_ONLY`.
+- `autopilot_only`: keeps **Train** and **Test** on their Autopilot tabs. Train
+  loses its Manual tab and Test its Review tab, and neither view shows a tab
+  bar, so users only see the guided flow. Train starts in Autopilot whatever a
+  user's own `autopilot_enabled` preference says. With Test's Review tab gone,
+  its Browse / To Dataset / Export actions for unverified matches are gone too.
+  Autopilot needs a first sort to start from, and on a dataset that can't search by
+  text that has to be an example item, which the New Detector dialog
+  requires. A detector that reaches Train without one (opened on such a
+  dataset with only a text description and too few labels to train) shows a
+  note instead of the Autopilot panel. A UI simplification, not a permission
+  boundary. Also settable with `--autopilot-only` / `VTSEARCH_AUTOPILOT_ONLY`.
 - `solo_media_type`: narrows the whole instance to one media type. The importer
   and new-detector flows hide their media-type pickers and lock to it, the
   converter picker filters to converters that output it, and media-type steps
@@ -735,6 +749,7 @@ An abridged example; the full field list is `UserSettings` in
   "autofind_exporter": "",
   "autofind_exporter_field_values": {},
   "autofind_on_import": true,
+  "autofind_cli_delete_dataset": false,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -759,8 +774,11 @@ An abridged example; the full field list is `UserSettings` in
   (`PUT /api/detectors/registry/<id>/autofind`). `autofind_exporter` names the
   results exporter run afterwards (`""` = no auto-export; the CLI then falls
   back to the `gui` exporter), and `autofind_exporter_field_values` keeps each
-  exporter's configuration around when the picker switches between them. This is
-  the trio that reads through to `data/settings.json` for the `default` user.
+  exporter's configuration around when the picker switches between them.
+  `autofind_cli_delete_dataset` (default `false`) makes a CLI `--autodetect`
+  run delete the dataset it imported once its detectors have run (see
+  [`docs/CLI.md`](CLI.md#saving-the-dataset-to-the-dashboard---tempimport)).
+  These four read through to `data/settings.json` for the `default` user.
   `autofind_on_import` (default `true`) is whether a web import runs them: the
   Add Dataset dialog's **Run AutoFind** checkbox starts from it and each import
   writes it back.

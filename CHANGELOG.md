@@ -33,6 +33,10 @@ not list every commit. Use `git log` for the full history.
   show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
   sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
   form, which is no longer indented.
+- **A detector on a dataset that can't search by text needs an example item** (issue #4666). The
+  New Detector dialog used to let a text-only detector through with a warning that Autopilot
+  could not start until it was trained. **Create** now stays disabled until you add an example
+  item, so Autopilot always has a first sort.
 - **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
   AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
   with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
@@ -56,6 +60,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **The command line can delete what it imports once AutoFind has run** (issue #4674).
+  Settings › **AutoFind** gains **Delete the dataset after AutoFind**, under **Command Line**,
+  off by default. With it on, `python app.py --autodetect` (or `--pipeline`) deletes the dataset it
+  imported once its detectors have run and the results are exported, so a nightly run no longer
+  fills the dashboard. A run with no AutoFind detector to run, one that fails, and one pointed at a
+  dataset already on the dashboard keep it, and AutoFind started inside the app never deletes. The
+  setting is per user (`autofind_cli_delete_dataset`; a `--settings` file can set it for a run
+  without `--user`), and a deleting run reports a `dataset_deleted` progress event.
+
+- **Autopilot-only servers** (issue #4666). An operator can set `--autopilot-only`,
+  `VTSEARCH_AUTOPILOT_ONLY=1` or `"autopilot_only": true` in the server settings file to keep
+  Train and Test on their Autopilot tabs. Train's Manual tab and Test's Review tab are removed,
+  and neither view shows a tab bar. Settings ▸ Server reports the switch, and the startup banner
+  names it when on.
 - **AutoRun is now AutoFind; its ⋯ run opens no dialog, and Find Results
   gains Browse** (issue #4615). The Dashboard's **AutoRun** tab, the detector
   ⋯ menu's **Move to AutoRun**, the dataset ⋯ menu's **Run AutoRun** and the

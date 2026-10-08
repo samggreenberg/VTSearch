@@ -87,7 +87,13 @@ def _print_dry_run_source(source_description: dict[str, Any]) -> None:
     if source_description.get("stream_results"):
         neg = "included" if source_description.get("keep_negatives") else "dropped"
         print(f"  Streaming: yes (hits written to the exporter per chunk; negatives {neg})", flush=True)
-    if source_description.get("save_dataset"):
+    if source_description.get("delete_after_detection"):
+        print(
+            "  Save to dashboard: until detection has run (the autofind_cli_delete_dataset setting then deletes it;"
+            " a run that detects nothing keeps it)",
+            flush=True,
+        )
+    elif source_description.get("save_dataset"):
         print("  Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)", flush=True)
     else:
         print("  Save to dashboard: no (--tempimport: the dataset is discarded after detection)", flush=True)
@@ -1645,7 +1651,7 @@ def _run_pipeline(
     keep_negatives: bool = False,
     source_description: dict[str, Any] | None = None,
     skip_without_detectors: bool = False,
-) -> None:
+) -> bool:
     """Shared pipeline: read settings, iterate media chunks, score, export.
 
     All four CLI entry points (pickle / importer, whole / chunked) delegate
@@ -1666,6 +1672,10 @@ def _run_pipeline(
     there the import is the point and detection is the extra, so having no
     detector to run - none configured, or none for this media type - ends the
     run with a note instead of an error.
+
+    Returns whether detection ran: ``True`` once the detectors have scored the
+    source and the exporter has run, ``False`` for a dry run and for a saving
+    run that skipped detection.
     """
     from vtscore.config import CoreConfig
 
@@ -1686,6 +1696,8 @@ def _run_pipeline(
             exporter_field_values = dict(config.autofind_exporter_field_values.get(config.autofind_exporter, {}))
 
     if dry_run:
+        if source_description and source_description.get("save_dataset") and config.autofind_cli_delete_dataset:
+            source_description = {**source_description, "delete_after_detection": True}
         _run_dry_run(
             source_description,
             settings_path,
@@ -1694,13 +1706,13 @@ def _run_pipeline(
             exporter_field_values,
             override_detectors,
         )
-        return
+        return False
 
     if skip_without_detectors and not detector_names:
         # Checked before the source is opened: with nothing to score, reading
         # the whole dataset back in would be wasted work.
         _emit_detection_skipped("no AutoFind detectors are configured")
-        return
+        return False
 
     try:
         if stream_results:
@@ -1713,20 +1725,21 @@ def _run_pipeline(
                 keep_negatives=keep_negatives,
                 empty_error=empty_error,
             )
-            return
-
-        _run_live_pipeline(
-            media_source,
-            exporter_name=exporter_name,
-            exporter_field_values=exporter_field_values,
-            override_detectors=override_detectors,
-            autofind_detectors=autofind_detectors,
-            empty_error=empty_error,
-        )
+        else:
+            _run_live_pipeline(
+                media_source,
+                exporter_name=exporter_name,
+                exporter_field_values=exporter_field_values,
+                override_detectors=override_detectors,
+                autofind_detectors=autofind_detectors,
+                empty_error=empty_error,
+            )
     except _NoApplicableDetectorsError as exc:
         if not skip_without_detectors:
             raise
         _emit_detection_skipped(str(exc))
+        return False
+    return True
 
 
 def _emit_detection_skipped(reason: str) -> None:
@@ -1856,7 +1869,7 @@ def _release_imported_context(dataset_id: str) -> None:
     gc.collect()
 
 
-def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
+def _save_source_dataset(spec: _SourceSpec) -> tuple[dict[str, Any], bool]:
     """Import *spec*'s source exactly as the GUI would and register the result.
 
     Runs the dashboard's own load pipeline (clipping, embedding, duplicate
@@ -1867,7 +1880,8 @@ def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
     registry deletes a dataset's pickle when the dataset is deleted, so it must
     never adopt a file the user still owns.
 
-    Returns the new registry entry.
+    Returns the registry entry and whether this call imported it: ``False``
+    when the pickle already was a dashboard dataset, which is then used as is.
     """
     from vtscore.datasets.importers import get_importer  # noqa: PLC0415
     from vtscore.datasets.load_pipeline import _run_importer_in_background  # noqa: PLC0415
@@ -1888,7 +1902,7 @@ def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
                 pkl_path=existing.get("pkl_path", ""),
                 already_saved=True,
             )
-            return existing
+            return existing, False
         if not Path(spec.dataset_path).exists():
             raise FileNotFoundError(f"Dataset file not found: {spec.dataset_path}")
         importer_name, field_values = "pickle", {"file": spec.dataset_path}
@@ -1918,7 +1932,35 @@ def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
         pkl_path=entry.get("pkl_path", ""),
         already_saved=False,
     )
-    return entry
+    return entry, True
+
+
+def _delete_after_detection(entry: dict[str, Any], settings_path: str | None) -> None:
+    """Delete the dataset this run imported, if the user asked for that (#4674).
+
+    The per-user ``autofind_cli_delete_dataset`` setting makes a saving run
+    clean up after itself once its detectors have scored the dataset and the
+    results are exported.  The caller only gets here after such a run, and only
+    with a dataset the run imported itself: one that was already on the
+    dashboard stays, as does the dataset of a run that detected nothing (there
+    the import was the point) or failed (so it can be searched again from the
+    dashboard).
+    """
+    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.datasets.registry import unregister_dataset  # noqa: PLC0415
+
+    config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
+    if not config.autofind_cli_delete_dataset or not unregister_dataset(entry["id"]):
+        return
+    cli_progress.emit(
+        "dataset_deleted",
+        text=(
+            f"Deleted dataset {entry.get('name', '')!r} (id {entry['id']}) from the dashboard: "
+            "AutoFind has run, and the autofind_cli_delete_dataset setting is on."
+        ),
+        dataset_id=entry["id"],
+        name=entry.get("name", ""),
+    )
 
 
 #: Why a streaming run cannot save its dataset, shared by every entry point that refuses one.
@@ -1944,17 +1986,22 @@ def _run_source(
     set the source is imported and registered first, and detection then runs
     over the saved pickle - so its hits are the ones the user will find on that
     dashboard row.  A temporary run (the pre-#4226 behaviour) scores the source
-    straight from the importer and keeps nothing.
+    straight from the importer and keeps nothing.  A saving run whose user
+    turned on ``autofind_cli_delete_dataset`` deletes what it imported once
+    detection has run (:func:`_delete_after_detection`).
     """
     source_description = spec.describe(
         stream_results=stream_results, keep_negatives=keep_negatives, save_dataset=save_dataset
     )
+    imported: dict[str, Any] | None = None
     if save_dataset and not dry_run:
         if stream_results:
             raise ValueError(f"--stream-results: {_STREAM_CANNOT_SAVE}. Run it as a temporary import.")
-        entry = _save_source_dataset(spec)
+        entry, is_new = _save_source_dataset(spec)
+        if is_new:
+            imported = entry
         spec = _SourceSpec(kind="pickle", dataset_path=entry["pkl_path"], chunk_size=spec.chunk_size)
-    _run_pipeline(
+    detected = _run_pipeline(
         spec.load() if not dry_run else iter(()),
         settings_path=settings_path,
         exporter_name=exporter_name,
@@ -1967,6 +2014,8 @@ def _run_source(
         source_description=source_description,
         skip_without_detectors=save_dataset,
     )
+    if detected and imported is not None:
+        _delete_after_detection(imported, settings_path)
 
 
 def _autodetect(

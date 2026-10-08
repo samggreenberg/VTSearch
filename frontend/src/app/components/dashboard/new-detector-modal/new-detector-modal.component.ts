@@ -131,11 +131,14 @@ export class NewDetectorModalComponent implements OnInit {
   /** Media type of the currently active dataset, if any. */
   readonly defaultMediaType = input('');
 
-  /** Embedder of the active dataset, if one is in context. When it can't
-   *  search by text, a text-only detector won't be able to start in Autopilot
-   *  or use Text sort on that dataset; the form surfaces a warning. Empty when
-   *  unknown, which suppresses the warning. */
+  /** Primary embedder of the active dataset, if one is in context. Empty when
+   *  unknown. See {@link datasetSearchesText}. */
   readonly datasetEmbedder = input('');
+
+  /** Every embedder the active dataset binds (the registry's
+   *  ``bound_embedders``, or a media's ``embedders``), primary first. Empty
+   *  when unknown, which falls back to {@link datasetEmbedder}. */
+  readonly datasetEmbedders = input<string[]>([]);
 
   /** When set, the modal opens with this loaded-media id materialised into
    *  example_media/ as the seed example. The picker is bypassed and the
@@ -505,22 +508,25 @@ export class NewDetectorModalComponent implements OnInit {
     return 'New Detector';
   }
 
+  /**
+   * Whether the detector has something its first sort can start from. A text
+   * description only counts when the dataset can search by text (#4666): on
+   * one that can't, a text-only detector has nothing to start Autopilot with
+   * until it is trained, so the form requires an example item instead.
+   */
   get hasExample(): boolean {
-    return this.hasMediaExample || !!this.pendingText().trim();
+    return this.hasMediaExample || (this.hasPendingText && this.datasetSearchesText);
   }
 
   /**
-   * True when the active dataset's embedder can't search by text and the user
-   * is creating a text-hint-only detector (text entered, no media example).
-   * Such a detector still works — but only after labeling enough to train it —
-   * so we warn that Autopilot and Text sort won't be available up front.
+   * Whether the dataset in context binds an embedder that can search by text.
+   * The same test Train makes before it lets Autopilot start (any bound
+   * embedder will do), so the two never disagree. True when the dataset or the
+   * embedder registry is unknown, so missing metadata never blocks a create.
    */
-  get showNoTextWarning(): boolean {
-    return (
-      !this.embedderCaps.supportsText(this.datasetEmbedder()) &&
-      this.hasPendingText &&
-      !this.hasMediaExample
-    );
+  get datasetSearchesText(): boolean {
+    const names = this.datasetEmbedders().length > 0 ? this.datasetEmbedders() : [this.datasetEmbedder()];
+    return this.embedderCaps.supportsTextAny(names);
   }
 
   get hasMediaExample(): boolean {
@@ -715,6 +721,9 @@ export class NewDetectorModalComponent implements OnInit {
    *  than "create" because the example only seeds the detector; labeling is
    *  what builds it (#4227). Seed-importer tabs share the media wording. */
   get exampleHint(): string {
+    if (!this.datasetSearchesText) {
+      return `This dataset can't search by text, so provide an example ${this.exampleMediaNoun} to start the detector.`;
+    }
     if (this.exampleTab() === 'text') return 'Provide a text description to start the detector.';
     return `Provide an example ${this.exampleMediaNoun} to start the detector.`;
   }
@@ -1294,6 +1303,13 @@ export class NewDetectorModalComponent implements OnInit {
 
     if (mediaExamples.length === 0 && !pendingTrimmed) {
       this.error.set('An example (text or media) is required');
+      return;
+    }
+    // Enter in the text field reaches here past the disabled Create button: a
+    // description alone can't start a detector on a dataset that can't search
+    // by text (#4666).
+    if (!this.hasExample) {
+      this.error.set(this.exampleHint);
       return;
     }
 

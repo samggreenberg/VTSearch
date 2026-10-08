@@ -217,6 +217,8 @@ export class FindViewComponent implements OnInit, OnDestroy {
    * Test: the guided flow is the default, the open one a tab away.
    */
   readonly findTab = signal<'autopilot' | 'review'>('autopilot');
+  /** The server's Autopilot-only lock (#4666): Test shows no Review tab. */
+  readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
   /**
    * The balance control's state line (the owner's choice): this corpus's test
    * result, or *untested*, never Train's check range. The kept count is the
@@ -283,6 +285,14 @@ export class FindViewComponent implements OnInit, OnDestroy {
   private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
   constructor() {
+    // The Autopilot-only lock can land after the user reached Review (settings
+    // still loading on a deep link): the tab bar is gone, so bring them back.
+    effect(() => {
+      if (this.autopilotOnly() && untracked(this.findTab) === 'review') {
+        untracked(() => this.onFindTabChange('autopilot'));
+      }
+    });
+
     // The one place `POST /api/balance` is issued from — see
     // {@link betaRequests$} for why the picker is funnelled through it.
     this.betaRequests$

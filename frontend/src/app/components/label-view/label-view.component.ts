@@ -129,6 +129,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly leftExtent = computed(() => (this.leftCollapsed() ? this.COLLAPSED_WIDTH : this.leftWidth()));
   readonly rightExtent = computed(() => (this.rightCollapsed() ? this.COLLAPSED_WIDTH : this.rightWidth()));
   readonly autopilotEnabled = signal(true);
+  /** The server's Autopilot-only lock (#4666): Train shows no Manual tab. */
+  readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
   /** True when autopilot has reached its terminal "exhausted" state — every
    *  item in a tiny dataset is labeled but the indicators never went green.
    *  Drives the center-pane "nothing left to label" message so the pane is
@@ -1147,6 +1149,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.newThingFlows.openNewDetector({
       defaultMediaType: media?.media_type ?? '',
       datasetEmbedder: media?.embedder ?? '',
+      datasetEmbedders: media?.embedders ?? [],
       seedMediaId: mediaId,
       seedCropParams: cropParams,
     });

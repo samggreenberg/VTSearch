@@ -135,6 +135,7 @@
   <vt-new-detector-modal
     [defaultMediaType]="newDetectorFlow().defaultMediaType"
     [datasetEmbedder]="newDetectorFlow().datasetEmbedder"
+    [datasetEmbedders]="newDetectorFlow().datasetEmbedders ?? []"
     [seedMediaId]="newDetectorFlow().seedMediaId ?? null"
     [seedCropParams]="newDetectorFlow().seedCropParams ?? null"
     (closed)="onNewDetectorClosed()"

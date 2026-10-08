@@ -158,6 +158,9 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_cli_delete_dataset": {
+            "type": "boolean"
+          },
           "autofind_detectors": {
             "items": {
               "type": "string"
@@ -187,6 +190,10 @@
           },
           "autopilot_hard_reds": {
             "type": "integer"
+          },
+          "autopilot_only": {
+            "readOnly": true,
+            "type": "boolean"
           },
           "autopilot_resort_interval": {
             "type": "integer"
@@ -6830,6 +6837,9 @@
       "SettingsUpdate": {
         "properties": {
           "audio_playing": {
+            "type": "boolean"
+          },
+          "autofind_cli_delete_dataset": {
             "type": "boolean"
           },
           "autofind_detectors": {
