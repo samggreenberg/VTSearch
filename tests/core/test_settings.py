@@ -251,7 +251,7 @@ class TestSettingsModule:
 
     def test_hidden_hints_rejects_a_non_string_id(self, isolated_settings):
         with pytest.raises(ValueError):
-            settings_mod.set_hidden_hints(["train", 3])
+            settings_mod.set_hidden_hints(["train", 3])  # pyright: ignore[reportArgumentType]
 
     def test_get_grid_icon_size_left_default(self):
         result = settings_mod.get_grid_icon_size_left()
