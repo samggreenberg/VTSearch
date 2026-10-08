@@ -308,6 +308,8 @@ def probe(C: Any) -> list[str]:
     # #3546's arms: neither has an app counterpart yet.
     if C.SMART_GATE != "app":
         rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
+    if C.LABEL_QUOTA is not None:
+        rows.append(("label_quota", "off", "app (the Goods' centroid under 3 Goods and 4 Bads, #4643)"))
     if C.ACQ_ORIGIN != "line":
         rows.append(("acq_origin", C.ACQ_ORIGIN, "line (the app counts the offset from the line)"))
     from vtscore.eval.voting_iterations import resolve_acquisition_target  # noqa: PLC0415

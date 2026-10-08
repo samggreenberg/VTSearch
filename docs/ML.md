@@ -34,6 +34,46 @@ The move from there to the SVM keeps that same linear boundary and changes only 
 
 Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `head="mlp"`; see [`docs/EVAL.md`](EVAL.md)) and in unit tests; neither is reachable from the app. Structural search's Stage 2 (`vtscore/training/structural_similarity.py`) is a separate feature and trains no scorer: since #4169 it ranks a shortlisted page by the inliers its best template verifies.
 
+### Below the label quota: the Goods' centroid, not a head
+
+A head fitted to three Goods and one Bad is a detector in name only, and every
+vote is saved as it is cast, so Test, AutoFind, a load or an import of the
+labels could hand one out at any click. So what a labelset gives depends on its
+counts (#4643, `vtscore/detectors/label_quota.py`):
+
+| Labels | Detector |
+|---|---|
+| no Good | none: Test is refused, there is nothing to sort toward |
+| a Good, but under 3 Goods or 4 Bads | **the Goods' centroid** |
+| 3 Goods and 4 Bads | the trained head above |
+
+The quota is Autopilot's own quorum (`goodToStart` / `badToStart`), the counts
+its opening has always judged enough to train on; its "more" walk mines
+positives because the typed query is still paying, not because the head is
+unready, and a quota of its 20 Goods would leave a rare class with no head at
+all. The counts are of labels that resolved to a vector.
+
+The centroid (`vtscore/detectors/centroid_head.py`) is the example sort the app
+draws for several uploaded examples, built from the Goods: the unit mean of the
+L2-normalised Good vectors, every item ranked by its cosine to it (max-pooled
+over a patch item's rows), cut at the midpoint of a two-Gaussian fit to those
+cosines on the corpus being scored. It ships as a `Linear(D, 1)` whose weight is
+the centroid scaled by `CENTROID_LOGIT_SCALE` and whose bias puts the cut at
+logit 0, so its threshold is 0.5 and every scorer, the weight export and an
+ONNX consumer take it as they take the SVM. Its line does not take the balance:
+the typed query's balance-aware rules (#4603) were measured on typed queries
+only, and the labels' line needs held-out Bads it does not have. No typed-query
+tier sits below it, because a labelset does not carry the query: an exported, an
+imported and a CLI-made labelset have none.
+
+The rule is on the labels, wherever they came from: `train_from_labelset`
+(Test, AutoFind, a detector load, the CLI) and a cold Find
+(`labelset_train_and_score(label_quota=True)`) apply it, and a trained head the
+Train view's learned sort cached is not reused under it. The Train view's own
+learned sort is not a detector anyone takes away and still trains from the
+first Good and Bad. The eval harness's default arm scores the withheld half the
+same way (`detector_tier`, see [`EVAL.md`](EVAL.md)).
+
 ## Training Configuration
 
 | Setting | Value | Notes |

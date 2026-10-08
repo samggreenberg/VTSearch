@@ -16,7 +16,9 @@ subset and said nothing".  Every check here is one of those:
   so the far left of the figure is what typing got for free;
 * a click in **Autopilot's opening** (``app_trained == 0``) must be the
   harness's detector, what an export of the labels gives there, so a frame
-  carrying the flag draws the curve one without it does (#4640);
+  carrying the flag draws the curve one without it does (#4640); and under the
+  label quota that detector is the Goods' centroid (``detector_tier``, #4643),
+  a row drawn like any other, so a frame naming the tier draws the same curve;
 * an arm that never beats that anchor must report **no crossover**, not the last
   click it happened to be measured at;
 * the coverage strip must be drawn only when coverage says something the
@@ -244,6 +246,16 @@ def main() -> int:  # noqa: C901
         ok &= _check(
             "a frame that flags the opening (app_trained 0) draws the same curve as one without the flag",
             pd.read_csv(tmp / "flagged" / "cost_vs_clicks.csv").equals(curve),
+        )
+        # Under the label quota (#4643) a run's early rows are the Goods'
+        # centroid's: what Test gives there, drawn as the row it is.
+        tiered = main_df.assign(
+            detector_tier=np.where(main_df["t"] < FIRST_T + 5, "centroid", "trained"),
+        )
+        C.quality_vs_clicks(tiered, tmp / "tiered", arms=arms, denominator=cells, baseline=base)
+        ok &= _check(
+            "a frame that names the Goods' centroid's rows (detector_tier) draws the same curve as one without",
+            pd.read_csv(tmp / "tiered" / "cost_vs_clicks.csv").equals(curve),
         )
 
         # --- crossover: how many clicks before beating the typed query ------

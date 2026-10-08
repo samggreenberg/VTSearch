@@ -83,9 +83,20 @@ F-beta of 0.006 to 0.03).  An **empty returned set** (a line that keeps nothing,
 a detector that flags nothing) scores precision 0 beside its recall and F-beta
 of 0, never an undefined precision that leaves the mean (``curves.EMPTY_SET``).
 
+**The report is the session, not Test (#4643).**  The harness scores the test
+split as Test would at each click: from the first Good, the Goods' centroid
+until the labels hold 3 Goods and 4 Bads (the label quota), the trained head
+from there (``detector_tier``).  The session shows neither until the Hard phase
+(``app_trained``, #4605): Autopilot's opening is the text sort, so Test differs
+from the session through the whole opening - the centroid before the quota, the
+trained head between the quota and the Hard phase.  This report follows the
+session there (:func:`_shown_from`): every user-facing number before the hand-off
+is the typed query's set.  The viewer draws what Test gives instead
+(``calibration/viewer.py``), so the two differ through the opening on purpose.
+
 **How a click is credited (owner, 2026-09-23).** The harness scores the test
-split after every click once a Good and a Bad exist; before that there is no
-detector to score. So a scored step's change is split EQUALLY among every click
+split after every click once a Good exists (a Good and a Bad, in results run
+before #4643); before that there is no detector to score. So a scored step's change is split EQUALLY among every click
 since the previous scored step, and the first scored step's change is measured
 from the text-only score (click 0) and split among the opening clicks. That is
 exact when every click is scored and still honest when some are not. A click
@@ -530,8 +541,10 @@ def _shown_from(ordinary: pd.DataFrame) -> dict[tuple, float]:
 
     The app stays on the text sort through Autopilot's opening (Good, Bad, More) and sorts by the
     detector only from the Hard phase on. The harness marks the steps the app shows as
-    ``app_trained == 1`` (:func:`vtscore.eval.autopilot_flow.app_has_detector`): a detector it trains
-    earlier is one no user sees. So every user-facing number before this click is the text sort's.
+    ``app_trained == 1`` (:func:`vtscore.eval.autopilot_flow.app_has_detector`): a detector it scores
+    earlier - the Goods' centroid under the label quota, or a trained head inside the opening
+    (#4643) - is what Test would give there, but not what the session shows. So every user-facing
+    number before this click is the text sort's.
     Rows without the flag (recorded before it existed, or a fixture) are shown from the first row.
     """
     out: dict[tuple, float] = {}

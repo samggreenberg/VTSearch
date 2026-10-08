@@ -1154,6 +1154,14 @@ already trust and collect what they match, with no view to work through, use
 the Dashboard's **Find** button instead (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
+**A detector with too few labels is tested as the Goods' centroid.** Until it
+has 3 Goods and 4 Bads, VTSearch does not train a detector from its labels:
+Test, Find and AutoFind rank everything by how close it is to the average of
+its Goods instead, and draw the line where those scores split. One Good is
+enough to test it. The Test view says so under its tabs, with how many more
+Goods and Bads a trained detector needs, and the Threshold does not move that
+line. A detector with no Good at all can't be tested.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
   <img src="assets/find-view.light.webp" alt="The Test view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)" width="720" />
@@ -1715,8 +1723,8 @@ it loads - so exporting the labels and making a detector from them there
 Opened this way the modal's **Categories** filter starts on **All**,
 which is what you want: the negatives are half of what the ranker learns
 from, and a good-only or bad-only file can't rebuild the detector at the
-other end (training needs both classes and refuses a one-sided
-labelset). Narrowing to **Good** or **Bad** is still available - it's a
+other end (a good-only one gives only the Goods' centroid, below, and a
+bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
 
