@@ -10,6 +10,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The eval harness can walk Autopilot's More on the detector's top** (issue #4637). `simulate_voting_iterations`
+  takes `more_walk` (`"seed"`, the default and the app: the top of the typed query's sort; or `"detector"`: the More
+  walk takes the top of the step's detector ranking, and its steps record `app_trained = 1`), and
+  `vtscore.eval.autopilot_flow.app_has_detector` takes `more_shown`. An experiment arm; the app is unchanged.
+
 - **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
   now returns the score where the labels line's corpus posterior falls below the new
   `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new

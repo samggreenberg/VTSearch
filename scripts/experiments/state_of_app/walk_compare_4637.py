@@ -247,6 +247,15 @@ def compare(d: Path, tag: str) -> dict | None:
         for c in CLICKS:
             row[f"{arm}_ap_at_{c}"] = np.nanmean(ap[:, c])
     base = sets["T_today"]
+    band = t["band"][it][keep]
+    brows = []
+    for a, b, lab in pairs:
+        g = (sets[a][:, 1:] - sets[b][:, 1:]).mean(axis=1)
+        for bd in sorted(set(band)):
+            m = band == bd
+            brows.append({"tag": tag, "comparison": lab, "band": bd, "runs": int(m.sum()), "gain_1_150": g[m].mean(),
+                          "se_1_150": se_over_classes(g[m], cls[m]), "better": float(np.mean(g[m] > 1e-9)),
+                          "worse": float(np.mean(g[m] < -1e-9))})  # fmt: skip
     rrows = []
     for arm, F in rules.items():
         for k, f in F.items():
@@ -265,11 +274,17 @@ def compare(d: Path, tag: str) -> dict | None:
             ("D_text", "T_today", "walk_hidden"),
         )
     }
-    band = {}
+    ses = {}
     for lab, g in diff.items():
         by = pd.DataFrame(g).groupby(cls).mean()
-        band[lab] = (g.mean(axis=0), by.std(ddof=1).to_numpy() / np.sqrt(len(by)))
-    return {"row": row, "curves": {k: v.mean(axis=0) for k, v in sets.items()}, "band": band, "rules": rrows}
+        ses[lab] = (g.mean(axis=0), by.std(ddof=1).to_numpy() / np.sqrt(len(by)))
+    return {
+        "row": row,
+        "curves": {k: v.mean(axis=0) for k, v in sets.items()},
+        "band": ses,
+        "rules": rrows,
+        "bands": brows,
+    }
 
 
 def _axes_style(ax) -> None:
@@ -343,6 +358,7 @@ def main() -> int:
         o.mkdir(parents=True, exist_ok=True)
         summ.to_csv(o / "walk_summary.csv", index=False)
         pd.DataFrame([x for r in res.values() for x in r["rules"]]).to_csv(o / "walk_rules.csv", index=False)
+        pd.DataFrame([x for r in res.values() for x in r["bands"]]).to_csv(o / "walk_bands.csv", index=False)
         pd.DataFrame(
             {f"{tag}:{k}": v for tag, r in res.items() for k, v in r["curves"].items()} | {"t": GRID_T}
         ).to_csv(o / "walk_curves.csv", index=False)
