@@ -1,15 +1,8 @@
 """Canonical registry of long-running task families and their ordered steps.
 
 Every task that drives a progress bar with a ``step``/``total_steps`` structure
-registers here. The registry is the shared vocabulary between three parties that
-would otherwise drift apart:
-
-- the **task code**, which paces its bar with a weight vector one entry per
-  tracker step;
-- the **recorder** (:mod:`vtscore.timing.recorder`), which needs to label a
-  measured duration with the name of the step it belongs to;
-- the **tuning script**, which fits ``a + b · n`` per step and writes the
-  profile JSON keyed by these same names.
+registers here, and paces its bar with a weight vector, one entry per tracker
+step, built from the terms declared below.
 
 Adding a new long-running task means adding a :class:`TaskSpec` here, then
 calling :func:`vtscore.timing.step_weights` at the task's entry point instead of
@@ -23,12 +16,11 @@ archive bytes at a very different rate) — in which case several phases share o
 tracker step and :func:`vtscore.timing.step_weights` sums their terms back into
 that step's slot.
 
-**Default terms** reproduce the hand-tuned vectors these tasks shipped with
-before the profile existed, so an instance with no ``VTSEARCH_TIMING_PROFILE``
-paces exactly as it did. They are *pseudo-seconds*: only their ratios are
-meaningful, because nobody measured them. A profile replaces them with real
-seconds, which is what makes the ETA stop drifting. One vector is no longer a
-transcription — ``dataset_stage``'s was re-derived from measured rows once its
+**Default terms** reproduce the hand-tuned vectors these tasks shipped with.
+They are *pseudo-seconds*: only their ratios are meaningful. (An
+admin-measured per-environment profile could once replace them with real
+seconds; it was retired in #4667, so these are now the only terms.) One vector
+is no longer a transcription — ``dataset_stage``'s was re-derived from measured rows once its
 step boundary was corrected (#3593); its comment below says from which.
 
 **Per-media defaults.** A task whose split genuinely differs by media type may
@@ -51,39 +43,31 @@ class TaskSpec:
     """Declares one long-running task family's step structure.
 
     Attributes:
-        name: Stable identifier used as the profile JSON's task key, in recorded
-            JSONL rows, and in ``--tasks`` selections. Never rename one of these
-            without migrating the profiles admins have already generated.
+        name: Stable identifier, the key callers pass to
+            :func:`vtscore.timing.step_weights`.
         steps: Ordered cost-phase names. Profile coefficients are keyed by these.
         step_index: 1-based tracker step each phase reports against, parallel to
             ``steps``. Several phases may share one step (see module docstring).
         tracker_steps: How many step numbers the task reports — the length of
             the weight vector ``set_step_weights`` expects.
-        scale: Human description of what the ``n`` scale variable counts, for
-            the tuning script's ``--help`` and the profile's self-documentation.
+        scale: Human description of what the ``n`` scale variable counts.
         default_terms: Shipped fallback pseudo-seconds, parallel to ``steps``.
             Empty means "this task has its own richer default model" — only
             ``dataset_load``, whose calibrated table lives in
             :mod:`vtscore.datasets.stages._load_cost_model`.
         media_default_terms: Per-media-type overrides of ``default_terms``,
             keyed by media type id (``"audio"``, ``"image"``, …), each parallel
-            to ``steps``. Consulted only when no profile cell prices a step, and
-            only for the media types it names; every other media type keeps
+            to ``steps``, consulted only for the media types it names; every
+            other media type keeps
             ``default_terms``. Read it through :meth:`defaults_for`.
         byte_scaled: Steps whose cost tracks downloaded **bytes** rather than
-            item count. The tuning script fits these as a per-MB rate instead of
-            regressing them against ``n``, because a 2 GB archive of 500 videos
-            and a 20 MB archive of 500 texts take wildly different times to
-            fetch for reasons ``n`` cannot see.
+            item count. Descriptive only since the fitter that priced them as a
+            per-MB rate was retired (#4667).
         loads_encoder: Whether a run of this task can pay a **cold encoder
-            load** — the first time a process needs a given ``(media_type,
-            embedder)`` it downloads/instantiates the model, and every later run
-            finds it resident and pays nothing. Only tasks that declare this
-            participate in the recorder's residency ledger, because the ledger's
-            key is shared process-wide: a ``dataset_open`` that never touches an
-            encoder must not claim ``(image, siglip)`` and leave the genuinely
-            cold ``text_sort`` behind it stamped warm. Default ``False`` — the
-            safe direction, since an unmarked task simply fits as it does today.
+            load** (the first run in a process to need a given
+            ``(media_type, embedder)`` downloads and instantiates the model).
+            Descriptive only since the recorder that kept a residency ledger
+            on it was retired (#4667).
     """
 
     name: str
@@ -149,8 +133,8 @@ def _linear(
 #: Every registered task family, keyed by :attr:`TaskSpec.name`.
 #:
 #: The default terms below are transcribed from the literal vectors these tasks
-#: carried before the timing profile existed; each site's original reasoning is
-#: preserved in the comments here rather than in six scattered constants.
+#: carried before they were centralised here; each site's original reasoning
+#: is preserved in the comments here rather than in six scattered constants.
 TASKS: dict[str, TaskSpec] = {
     # Importing a dataset: acquire the source, read/convert it into medias,
     # embed every item, then dedup + coverage-atlas + registry save. Deliberately
@@ -190,8 +174,9 @@ TASKS: dict[str, TaskSpec] = {
     # CPU host sklearn's k-means should make the rebuild heavier while the
     # read, which no GPU was speeding up, stays about the same. Video and text
     # are unmeasured and keep the task-wide vector. On a restore the share is
-    # <= 0.01 for both media, and that branch is re-weighted by the route once
-    # known (#3594).
+    # <= 0.01 for both media; a flat default cannot tell the two apart, so a
+    # restoring open's bar jumps across the coverage slice when the atlas
+    # restores.
     "dataset_open": _linear(
         "dataset_open",
         ("items", "coverage"),
@@ -279,9 +264,9 @@ TASKS: dict[str, TaskSpec] = {
 
 
 #: Branch names meaning "this run took the step's **cheap** path" — a cached
-#: artefact stood in for work a first run has to do. They are recorded by
-#: :func:`vtscore.timing.note_branch` at the site that makes the decision, and
-#: read by the fitter, which will not price a step from cheap runs alone.
+#: artefact stood in for work a first run has to do. Deprecated (#4667): the
+#: recorder that stamped them and the fitter that read them are retired, and
+#: nothing in this repository consults either set.
 #:
 #: ``cached``    a demo import satisfied itself from the embeddings pkl, so it
 #:               downloaded nothing, embedded nothing, and loaded no encoder.
@@ -291,8 +276,8 @@ TASKS: dict[str, TaskSpec] = {
 #:               the atlas entirely, leaving it to the on-demand endpoint.
 CHEAP_BRANCHES = frozenset({"cached", "restored", "deferred"})
 
-#: Branch names meaning "this run did the work" — the branch somebody waits on,
-#: and the only population a step's coefficients may be fitted from.
+#: Branch names meaning "this run did the work" — the branch somebody waits on.
+#: Deprecated with :data:`CHEAP_BRANCHES` (#4667).
 #:
 #: ``fresh``     the import really downloaded, embedded, and finalised.
 #: ``rebuilt``   the coverage atlas was built from scratch.
@@ -303,6 +288,6 @@ def task_spec(task: str) -> TaskSpec | None:
     """Return the :class:`TaskSpec` for *task*, or ``None`` if unregistered.
 
     Unregistered is not an error: a caller that passes an unknown task simply
-    gets no profile-derived weights and keeps whatever fallback it supplied.
+    gets no weights and keeps whatever fallback it supplied.
     """
     return TASKS.get(task)

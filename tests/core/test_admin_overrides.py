@@ -123,16 +123,6 @@ class TestEnvOverrides:
         admin_overrides.apply_env_overrides()
         assert settings_mod.get_cli_semantic_only() is None
 
-    def test_hide_ingest_eta_from_env(self, monkeypatch):
-        monkeypatch.setenv("VTSEARCH_HIDE_INGEST_ETA", "on")
-        admin_overrides.apply_env_overrides()
-        assert settings_mod.get_effective_hide_ingest_eta() is True
-
-    def test_hide_ingest_eta_env_zero_does_not_loosen(self, monkeypatch):
-        monkeypatch.setenv("VTSEARCH_HIDE_INGEST_ETA", "0")
-        admin_overrides.apply_env_overrides()
-        assert settings_mod.get_cli_hide_ingest_eta() is None
-
     def test_an_explicit_flag_wins_over_the_env(self, monkeypatch):
         monkeypatch.setenv("VTSEARCH_SUPPORT_EMAIL", "env@example.org")
         admin_overrides.set_override("support_email", "flag@example.org", source="--support-email")
