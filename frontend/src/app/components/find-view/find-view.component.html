@@ -1,4 +1,4 @@
-<div class="layout" #layout>
+<div class="layout" #layout [class.layout--left-collapsed]="leftCollapsed()" [class.layout--right-collapsed]="rightCollapsed()">
   <div class="panel-left">
     <vt-left-panel
       [medias]="mediaState.mediasSignal()"
@@ -32,8 +32,9 @@
       [balanceLineState]="balanceLineState()"
       [findDetectorNote]="detectorNote()"
       [disabled]="waiting"
-      [autopilotCollapsed]="false"
+      [collapsed]="panelHide.left()"
       [autopilotEnabled]="false"
+      (toggleCollapse)="onTogglePanel('left')"
       (findTabChange)="onFindTabChange($event)"
       (mediaSelect)="onMediaSelect($event)"
       (mediaVote)="onHoverVote($event)"
@@ -133,31 +134,39 @@
     (mousedown)="onRightDividerMouseDown($event)"
   ></div>
   <div class="panel-right">
-    @if (findTab() === 'autopilot') {
-      <!-- The result as it forms, in place of the two piles: the Stats modal's
-           content, live, and the verdict with its exits. -->
-      <vt-line-test-result
-        [response]="lineTest.response()"
-        [scoring]="sortState.sortBusy"
-        [refresh]="resultRefresh()"
-        (moveToAutoFind)="onMoveToAutoFind()"
-        (lean)="onLean($event)"
-        (addCorrections)="onAddCorrections()"
-        (testAgain)="onTestAgain()"
-      />
-    } @else {
-      <vt-right-panel
-        [medias]="mediaState.mediasSignal()"
-        [focusMode]="focusModeRight()"
-        [disabled]="waiting"
-        mode="find"
-        (mediaSelected)="onMediaSelect($event)"
-        (mediaVoted)="onHoverVote($event)"
-        (browse)="onBrowse()"
-        (toDataset)="onToDataset()"
-        (exportLabels)="onExportRequest($event)"
-        (addCorrections)="onAddCorrections()"
-      />
+    <vt-side-panel-toggle
+      side="right"
+      [label]="findTab() === 'autopilot' ? 'Result' : 'Labels'"
+      [collapsed]="rightCollapsed()"
+      (toggle)="onTogglePanel('right')"
+    />
+    @if (!rightCollapsed()) {
+      @if (findTab() === 'autopilot') {
+        <!-- The result as it forms, in place of the two piles: the Stats modal's
+             content, live, and the verdict with its exits. -->
+        <vt-line-test-result
+          [response]="lineTest.response()"
+          [scoring]="sortState.sortBusy"
+          [refresh]="resultRefresh()"
+          (moveToAutoFind)="onMoveToAutoFind()"
+          (lean)="onLean($event)"
+          (addCorrections)="onAddCorrections()"
+          (testAgain)="onTestAgain()"
+        />
+      } @else {
+        <vt-right-panel
+          [medias]="mediaState.mediasSignal()"
+          [focusMode]="focusModeRight()"
+          [disabled]="waiting"
+          mode="find"
+          (mediaSelected)="onMediaSelect($event)"
+          (mediaVoted)="onHoverVote($event)"
+          (browse)="onBrowse()"
+          (toDataset)="onToDataset()"
+          (exportLabels)="onExportRequest($event)"
+          (addCorrections)="onAddCorrections()"
+        />
+      }
     }
   </div>
 </div>

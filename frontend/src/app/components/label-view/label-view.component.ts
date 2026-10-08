@@ -29,6 +29,7 @@ import { VoteHistoryService } from '../../services/vote-history.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { PanelHideStateService, type PanelSide } from '../../services/panel-hide-state.service';
 import { AutopilotStateService, type AutopilotPhase } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -39,6 +40,7 @@ import { SpotCheckModalComponent, type SpotCheckVoted } from '../modals/spot-che
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
+import { SidePanelToggleComponent } from '../side-panel-toggle/side-panel-toggle.component';
 import {
   MediaPrefetchService,
   PREFETCH_DEPTH,
@@ -71,8 +73,9 @@ const AUTOPILOT_CHECK_INTRO =
     SpotCheckModalComponent,
     ContextMenuComponent,
     MediaCropModalComponent,
-    PanelResizeDirective
-],
+    PanelResizeDirective,
+    SidePanelToggleComponent,
+  ],
   providers: [LabelViewPanelStateService, PairScopeService, SortRunnerService],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
@@ -88,6 +91,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private labelsetState = inject(LabelsetStateService);
   sortState = inject(SortStateService);
   private settingsState = inject(SettingsStateService);
+  /** Public: the template hands the left panel `panelHide.left()`. */
+  readonly panelHide = inject(PanelHideStateService);
   private autopilotStateService = inject(AutopilotStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private activeContext = inject(ActiveContextService);
@@ -111,9 +116,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  back to cid-based vote display. */
   readonly trainableModelName = signal<string | null>(null);
   readonly labelingStatus = signal<LabelingStatusResponse | null>(null);
+  /** Each side's open width: what the divider set, kept while the side is folded. */
   readonly leftWidth = signal(260);
   readonly rightWidth = signal(300);
-  readonly autopilotCollapsed = signal(false);
+  /**
+   * Folded to its strip (#4673). The left folds on the Autopilot tab only (the
+   * left panel decides, as it owns the tab); the right on every tab.
+   */
+  readonly leftCollapsed = computed(() => this.leftPanel()?.folded() ?? false);
+  readonly rightCollapsed = this.panelHide.right;
+  /** The width each side takes in the grid: its strip's while folded. */
+  readonly leftExtent = computed(() => (this.leftCollapsed() ? this.COLLAPSED_WIDTH : this.leftWidth()));
+  readonly rightExtent = computed(() => (this.rightCollapsed() ? this.COLLAPSED_WIDTH : this.rightWidth()));
   readonly autopilotEnabled = signal(true);
   /** The server's Autopilot-only lock (#4666): Train shows no Manual tab. */
   readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
@@ -261,8 +275,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return Math.round(this.resortNextThreshold * 1.5);
   }
 
+  /** A folded side's strip, in px; the `.layout--*-collapsed` rules in the SCSS match it. */
   readonly COLLAPSED_WIDTH = 48;
-  private savedLeftWidth = 260;
 
   // --- Auto-pop after an icon-size change ---
   // Resizing the divider pops the panel tight to the grid columns on release.
@@ -362,11 +376,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
       // Settings is the only intended dependency. The body reads and writes the
-      // panel-width / autopilot-collapsed signals (directly and via
-      // `applyPanelPx`/`setAutopilotCollapsed`); without `untracked` those reads
-      // would make the effect depend on signals it also writes — an infinite
-      // loop, plus spurious re-runs that revert a manual collapse toggle while
-      // the settings write is still in flight.
+      // panel-width signals (directly and via `applyPanelPx`); without
+      // `untracked` those reads would make the effect depend on signals it also
+      // writes — an infinite loop.
       untracked(() => {
         // `panelState` reads the settings signal directly (its prefs are
         // `computed`s), so there is nothing to hydrate here — this branch only
@@ -383,11 +395,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         if (settings.autopilot_enabled != null) {
           this.autopilotEnabled.set(settings.autopilot_enabled);
-        }
-        if (settings.hide_autopilot && !this.autopilotCollapsed()) {
-          this.setAutopilotCollapsed(true);
-        } else if (settings.hide_autopilot === false && this.autopilotCollapsed()) {
-          this.setAutopilotCollapsed(false);
         }
         if (settings.autopilot_resort_interval != null) {
           this.resortInterval = settings.autopilot_resort_interval;
@@ -446,6 +453,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (grid && this.leftSnapOwed && this.snapLoadFrames.left === null) {
           this.snapWhenGridReady('left');
         }
+      });
+    });
+
+    // Snap the right panel tight when it opens: folded, it had no grid for the
+    // on-load snap to measure (#4673).
+    let rightWasFolded = this.rightCollapsed();
+    effect(() => {
+      const folded = this.rightCollapsed();
+      untracked(() => {
+        if (rightWasFolded && !folded && this.snapLoadFrames.right === null) {
+          this.snapWhenGridReady('right');
+        }
+        rightWasFolded = folded;
       });
     });
 
@@ -522,6 +542,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pendingSnapOnLoad = true;
     this.mediaState.loadMedias();
     this.loadTrainingVotes();
+    // Stopped in `ngOnDestroy`. The view's, not the right panel's: that one
+    // unmounts while it is folded (#4673).
+    this.voteState.startPolling();
     this.loadSettings();
     this.startStatusPolling();
     this.pairScope.loadDatasetName();
@@ -742,39 +765,52 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Divider drag ---
 
-  /** Min width the left panel can shrink to right now (autopilot-collapsed
-   *  state lets the user drag down to a thin sliver). */
+  /** Min width the left divider can drag to: a folded side's starts at its strip. */
   get leftMin(): number {
-    return this.autopilotCollapsed() ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
+    return this.leftCollapsed() ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
+  }
+
+  get rightMin(): number {
+    return this.rightCollapsed() ? this.COLLAPSED_WIDTH : this.RIGHT_MIN;
   }
 
   onLeftWidthChange(width: number): void {
     // Grabbing the divider supersedes any pending icon-size auto-pop.
     this.cancelAutoPop('left');
-    if (this.autopilotCollapsed() && width >= this.LEFT_MIN) {
-      this.autopilotCollapsed.set(false);
-      this.settingsState.update({ hide_autopilot: false }).subscribe();
-    }
+    if (!this.dragOpens('left', width)) return;
     this.leftWidth.set(width);
     this.layoutRef().nativeElement.style.setProperty('--left-width', `${width}px`);
   }
 
   onLeftResizeEnd(width: number): void {
     this.cancelAutoPop('left');
+    if (this.leftCollapsed()) return;
     this.leftWidth.set(width);
     this.popPanelTight('left');
   }
 
   onRightWidthChange(width: number): void {
     this.cancelAutoPop('right');
+    if (!this.dragOpens('right', width)) return;
     this.rightWidth.set(width);
     this.layoutRef().nativeElement.style.setProperty('--right-width', `${width}px`);
   }
 
   onRightResizeEnd(width: number): void {
     this.cancelAutoPop('right');
+    if (this.rightCollapsed()) return;
     this.rightWidth.set(width);
     this.popPanelTight('right');
+  }
+
+  /** A folded side's divider does nothing until it is dragged out past the
+   *  panel's minimum, which opens the side there. False while it stays folded. */
+  private dragOpens(side: PanelSide, width: number): boolean {
+    const folded = side === 'left' ? this.leftCollapsed() : this.rightCollapsed();
+    if (!folded) return true;
+    if (width < (side === 'left' ? this.LEFT_MIN : this.RIGHT_MIN)) return false;
+    this.panelHide.set(side, false);
+    return true;
   }
 
   /** Snap one panel down to the minimum width that still shows its current grid
@@ -794,9 +830,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (side === 'left') this.leftSnapOwed = snapped === null;
     if (snapped !== null) {
       const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width;
-      const otherWidth = side === 'left' ? this.rightWidth() : this.leftWidth();
+      const otherWidth = side === 'left' ? this.rightExtent() : this.leftExtent();
       const max = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - otherWidth;
-      const min = side === 'left' ? this.leftMin : this.RIGHT_MIN;
+      const min = side === 'left' ? this.LEFT_MIN : this.RIGHT_MIN;
       const clamped = Math.max(min, Math.min(max, snapped));
       if (clamped !== currentWidth) {
         if (animate) this.animatePop();
@@ -822,7 +858,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  same snap at load so the user never sees the gap in the first place. */
   private snapPanelsOnLoad(): void {
     this.snapWhenGridReady('left');
-    this.snapWhenGridReady('right');
+    // A folded right has no grid to measure; it snaps when it opens instead.
+    if (!this.rightCollapsed()) this.snapWhenGridReady('right');
   }
 
   /** Snap `side` tight once its grid has laid out. ``snapPanelWidthToGridColumns``
@@ -1493,21 +1530,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortRunner.autoSelectNext();
   }
 
-  onAutopilotToggleCollapse(): void {
-    const newVal = !this.autopilotCollapsed();
-    this.setAutopilotCollapsed(newVal);
-    this.settingsState.update({ hide_autopilot: newVal }).subscribe();
-  }
-
-  private setAutopilotCollapsed(collapsed: boolean): void {
-    this.autopilotCollapsed.set(collapsed);
-    if (collapsed) {
-      this.savedLeftWidth = this.leftWidth();
-      this.leftWidth.set(this.COLLAPSED_WIDTH);
-    } else {
-      this.leftWidth.set(this.savedLeftWidth);
-    }
-    this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
+  /** Fold or open a side (#4673). The grid swaps the column between the
+   *  side's width and its strip, so the open width survives the fold. */
+  onTogglePanel(side: PanelSide): void {
+    this.animatePop();
+    this.panelHide.toggle(side);
   }
 
   onAutopilotEnabledChange(enabled: boolean): void {
@@ -1562,14 +1589,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private applyPanelPx(): void {
     const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width || 1200;
     const leftPx = this.panelState.getPanelPx('left');
-    if (leftPx != null && !this.autopilotCollapsed()) {
-      const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth();
+    if (leftPx != null) {
+      const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightExtent();
       this.leftWidth.set(Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx)));
       this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
     }
     const rightPx = this.panelState.getPanelPx('right');
     if (rightPx != null) {
-      const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth();
+      const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftExtent();
       this.rightWidth.set(Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx)));
       this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     }

@@ -311,8 +311,11 @@ time. For each one:
 
 1. Click **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> (or press `→`) if it is what you are looking for.
 2. Click **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or press `←`) if it is not.
-3. Your answers collect on the right. The detector retrains after every
-   one, and Autopilot picks the next picture from what it has just learned.
+3. Your answers collect in the right panel, which starts folded to a thin
+   strip: click the strip to open it (see
+   [The three-panel layout](#the-three-panel-layout)). The detector retrains
+   after every one, and Autopilot picks the next picture from what it has just
+   learned.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-vote.dark.webp" />
@@ -355,7 +358,8 @@ tab, which tests the detector's line: it shows you pictures picked at random
 from either side of the line, you answer each with **Good** or **Bad**, and
 the result on the right says how much of what the detector would ship is
 likely right and how many of the real matches it likely found. Click until
-**Done!**; a few dozen answers is usual. Then open the **Review** tab for the
+**Done!**; a few dozen answers is usual. The result panel opens on its own
+then, if you have not opened it already. Then open the **Review** tab for the
 results in full:
 
 1. The pictures, best match first. How many the detector calls a match (the
@@ -730,6 +734,15 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 The dividers between panels can be dragged to resize them. The app
 remembers your layout per media type.
 
+Train and Test open with both side panels **folded** to a thin strip, so the
+item in the middle has the room. The left one folds on the **Autopilot** tab
+only (Manual and Review are driven from its list); the right one folds on
+every tab. Click a strip, or drag its divider out, to open the panel, and the
+small ◀ / ▶ at the top of an open panel folds it again. Each side remembers
+your choice; **Hide left panel in Train and Test** and **Hide right panel in
+Train and Test**, in the Settings modal's Appearance tab, set it too. A test
+that reaches **Done!** opens its result panel on its own.
+
 ---
 
 ## Autopilot: the guided workflow
@@ -832,13 +845,13 @@ dry run there means the detector has found what it can.
 
 ### The collapsed bar
 
-You can collapse Autopilot to a thin strip that just shows the
-phase indicators, with the current phase's light above its name.
+Autopilot starts collapsed to a thin strip that just shows the
+phase indicators, with the current phase's light above its name
+(the left panel's fold; see [The three-panel layout](#the-three-panel-layout)).
 Click any active phase to re-pick the
 current recommendation (useful if you voted the wrong way and
-want a fresh suggestion). Collapsed mode is handy once you're
-comfortable with the flow and want more vertical room for the
-media list.
+want a fresh suggestion). The ▶ at the top of the strip opens the
+full phase list, and its ◀ collapses it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
@@ -859,8 +872,7 @@ modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="as
   before finishing (default 40).
 
 Raising these numbers trains a more thorough detector at the cost of
-more labelling effort. The same tab also has a **Hide autopilot panel**
-toggle.
+more labelling effort.
 
 ---
 

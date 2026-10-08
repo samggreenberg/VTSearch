@@ -358,7 +358,10 @@
           "hide_all_hints": {
             "type": "boolean"
           },
-          "hide_autopilot": {
+          "hide_left_panel": {
+            "type": "boolean"
+          },
+          "hide_right_panel": {
             "type": "boolean"
           },
           "import_defaults_by_media_type": {
@@ -6935,7 +6938,10 @@
           "hide_all_hints": {
             "type": "boolean"
           },
-          "hide_autopilot": {
+          "hide_left_panel": {
+            "type": "boolean"
+          },
+          "hide_right_panel": {
             "type": "boolean"
           },
           "import_defaults_by_media_type": {},

@@ -211,6 +211,19 @@ The three panels are shared with the Test view:
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
 
+**Folding the side panels** (#4673). Each side folds to a 48px strip
+(`vt-side-panel-toggle`), per the `hide_left_panel` / `hide_right_panel`
+settings, both on by default and shared by Train and Test.
+`PanelHideStateService` (root) reads them and holds a click until the PUT
+echoes it. The left folds on an Autopilot tab only (`LeftPanelComponent.folded`;
+Manual and Review are driven from the list), and in Train its strip is the
+Autopilot panel's own phase rail. The right folds on every tab, and Test opens
+it on its own while a verdict is up (`FindViewComponent.rightCollapsed`). A fold
+swaps the grid column, not the width: `--left-width` / `--right-width` keep the
+open width, and the `.layout--*-collapsed` classes put the strip's 48px in its
+place. A folded right panel is unmounted, which is why the views, not
+`vt-right-panel`, own the votes poll.
+
 **The Threshold** (`vt-balance`, the balance, in the Manual tab and Test's
 top row; #4413) is the one knob on the detector's line. The balance is
 F-beta's beta: which way to lean between false positives and false negatives.
