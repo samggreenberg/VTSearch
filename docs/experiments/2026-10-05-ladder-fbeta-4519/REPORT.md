@@ -23,6 +23,8 @@ ladder in cost at 5%.
 
 **Score:** the returned set's F1 on the withheld half, *filled*. Until a run shows a detector, it scores the
 typed query's own returned set (the text sort's blind cut), so every rung leaves the same dot.
+The presets below read the typed query at the line the app draws for each preset instead (#4625); the ladder's
+tables here were not re-scored, and the deck no longer draws them.
 
 ## Result
 
@@ -82,9 +84,24 @@ What the user gets at vote 150 (cross-calibration's line is the same set whateve
   balance (+0.03), and zero for the recall-minded.
 - Mean F1 at beta 1 hid it, because that is the preset closest to cross-calibration's one line.
 
+**The typed query at its own line (#4625).** Before a run shows a detector, the app draws the typed query's
+line per preset (#4603). Read there, the typed query scores F¼ 0.47, F1 0.37 and F4 0.47 on this pool, where
+the beta-blind cut scored 0.012, 0.023 and 0.16. The first detector then ranks worse than the typed query
+(#4384), so every line dips at vote 23-31 before it climbs:
+
+| preset | typed query | today: lowest, back above at | cross-calibration: lowest, back above at | today / cross-calibration at 150 |
+|---|---:|---|---|---:|
+| beta 1/4 | 0.47 | 0.44, vote 34 | 0.39, never for good | 0.61 / 0.45 |
+| beta 1 | 0.37 | 0.36, vote 28 | 0.35, vote 27 | 0.51 / 0.48 |
+| beta 4 | 0.47 | 0.46, vote 30 | 0.43, vote 40 | 0.60 / 0.60 |
+
+At beta 1/4, cross-calibration ends below the typed query it started from. The gaps at vote 150 do not move:
+5% of runs have still not shown a detector there, and those runs carry the same notch in both lines.
+
 **How these were made:**
 - `presets/progression_curve.csv` and `presets/paired.csv` are `analyze_progression_4184.py` run on the four
-  rungs together.
+  rungs together. Since #4625 the analyzer reads a baseline rebuilt on dev's `text_baseline.py`
+  (`<run>/text_baseline_4625.csv`, with `CALIB_HAYSTACK_PREVALENCE=0.01`), which records each preset's line.
 - The paired table at each preset's own beta was computed from the same cells, with a script kept beside the runs
   (`/expscratch/sgreenberg/slide32-4548/presets.py`).
 

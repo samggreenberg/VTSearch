@@ -8,6 +8,11 @@ Pool: `haystack_0.01` (prevalence arm).
 
 Grid: 720 cells (union of every rung's cells and the baseline's).
 
+Typed query before the hand-over, per F-beta curve:
+- `f025`: the preset's line (`text_line_*_b025`)
+- `f1`: the preset's line (`text_line_*_b1`)
+- `f4`: the preset's line (`text_line_*_b4`)
+
 | rung | cells | lost | of which missing | filled-only | coverage@10 | coverage@50 |
 |---|---|---|---|---|---|---|
 | r1_xcal | 720 | 0 | 0 | 3 | 0.00 | 0.63 |
@@ -19,10 +24,10 @@ Grid: 720 cells (union of every rung's cells and the baseline's).
 
 | rung | t=0 | t=10 | t=20 | t=30 | t=50 | t=100 | t=150 |
 |---|---|---|---|---|---|---|---|
-| r1_xcal | 0.46 | 0.46 | 0.46 | 0.44 | 0.41 | 0.36 | 0.33 |
-| r8_labels | 0.46 | 0.46 | 0.46 | 0.46 | 0.46 | 0.48 | 0.44 |
-| r8_labels_b025 | 0.46 | 0.46 | 0.46 | 0.52 | 0.54 | 0.61 | 0.59 |
-| r8_labels_b4 | 0.46 | 0.46 | 0.46 | 0.4 | 0.38 | 0.35 | 0.3 |
+| r1_xcal | 0.44 | 0.44 | 0.44 | 0.53 | 0.49 | 0.38 | 0.34 |
+| r8_labels | 0.44 | 0.44 | 0.44 | 0.55 | 0.53 | 0.5 | 0.45 |
+| r8_labels_b025 | 0.44 | 0.44 | 0.44 | 0.61 | 0.62 | 0.64 | 0.6 |
+| r8_labels_b4 | 0.44 | 0.44 | 0.44 | 0.49 | 0.46 | 0.37 | 0.31 |
 
 ## Each rung against the one before (Δcost = to − from; negative = the step helped)
 
@@ -56,10 +61,10 @@ Bold = more than 2 SE from zero.
 
 | rung | t=0 | t=10 | t=20 | t=30 | t=50 | t=100 | t=150 |
 |---|---|---|---|---|---|---|---|
-| r1_xcal | 0.023 | 0.023 | 0.023 | 0.33 | 0.41 | 0.47 | 0.48 |
-| r8_labels | 0.023 | 0.023 | 0.023 | 0.32 | 0.4 | 0.49 | 0.51 |
-| r8_labels_b025 | 0.023 | 0.023 | 0.023 | 0.28 | 0.35 | 0.42 | 0.47 |
-| r8_labels_b4 | 0.023 | 0.023 | 0.023 | 0.3 | 0.36 | 0.43 | 0.44 |
+| r1_xcal | 0.37 | 0.37 | 0.37 | 0.39 | 0.43 | 0.47 | 0.48 |
+| r8_labels | 0.37 | 0.37 | 0.37 | 0.38 | 0.42 | 0.49 | 0.51 |
+| r8_labels_b025 | 0.37 | 0.37 | 0.37 | 0.34 | 0.37 | 0.42 | 0.47 |
+| r8_labels_b4 | 0.37 | 0.37 | 0.37 | 0.36 | 0.39 | 0.43 | 0.43 |
 
 ## Each rung against the one before, in F1 (ΔF1 = to − from; positive = the step helped)
 
