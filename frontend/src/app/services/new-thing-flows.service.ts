@@ -12,11 +12,14 @@ export interface ImporterFlowState {
 export interface NewDetectorFlowState {
   open: boolean;
   defaultMediaType: string;
-  /** Embedder name of the active dataset, if one is in context. Lets the
-   *  modal warn when a text-only detector is being created against a dataset
-   *  whose embedder can't search by text (no Autopilot / Text sort). Empty
-   *  when unknown, which suppresses the warning. */
+  /** Primary embedder name of the active dataset, if one is in context.
+   *  Empty when unknown. */
   datasetEmbedder: string;
+  /** Every embedder the active dataset binds. With ``datasetEmbedder``, lets
+   *  the modal require an example item when none of them can search by text
+   *  (#4666): a text description alone could not start the detector. Empty
+   *  when unknown, which never blocks. */
+  datasetEmbedders?: string[];
   /** ID of a loaded media to use as the new detector's seed example.
    *  When set, the modal materialises this media to ``example_media/``
    *  on open and pre-fills the example field, skipping the picker. */
@@ -113,6 +116,7 @@ export class NewThingFlowsService {
       open: true,
       defaultMediaType: opts.defaultMediaType ?? '',
       datasetEmbedder: opts.datasetEmbedder ?? '',
+      datasetEmbedders: opts.datasetEmbedders ?? [],
       seedMediaId: opts.seedMediaId,
       seedCropParams: opts.seedCropParams,
     });
@@ -123,6 +127,7 @@ export class NewThingFlowsService {
       open: false,
       defaultMediaType: '',
       datasetEmbedder: '',
+      datasetEmbedders: [],
       seedMediaId: undefined,
       seedCropParams: undefined,
     });

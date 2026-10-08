@@ -31,6 +31,10 @@ not list every commit. Use `git log` for the full history.
   show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
   sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
   form, which is no longer indented.
+- **A detector on a dataset that can't search by text needs an example item** (issue #4666). The
+  New Detector dialog used to let a text-only detector through with a warning that Autopilot
+  could not start until it was trained. **Create** now stays disabled until you add an example
+  item, so Autopilot always has a first sort.
 - **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
   AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
   with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
@@ -54,6 +58,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Autopilot-only servers** (issue #4666). An operator can set `--autopilot-only`,
+  `VTSEARCH_AUTOPILOT_ONLY=1` or `"autopilot_only": true` in the server settings file to keep
+  Train and Test on their Autopilot tabs. Train's Manual tab and Test's Review tab are removed,
+  and neither view shows a tab bar. Settings ▸ Server reports the switch, and the startup banner
+  names it when on.
 - **AutoRun is now AutoFind; its ⋯ run opens no dialog, and Find Results
   gains Browse** (issue #4615). The Dashboard's **AutoRun** tab, the detector
   ⋯ menu's **Move to AutoRun**, the dataset ⋯ menu's **Run AutoRun** and the

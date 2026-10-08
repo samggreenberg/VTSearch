@@ -121,6 +121,8 @@ if TYPE_CHECKING:
     def set_docs_links(value: list[dict[str, str]]) -> None: ...
     def get_semantic_only() -> bool: ...
     def set_semantic_only(value: bool) -> None: ...
+    def get_autopilot_only() -> bool: ...
+    def set_autopilot_only(value: bool) -> None: ...
     def get_browse_signpost_vocab() -> dict[str, list[str]]: ...
     def set_browse_signpost_vocab(value: dict[str, list[str]]) -> None: ...
     def get_projection_n_neighbors() -> int: ...
@@ -1210,6 +1212,29 @@ def get_effective_semantic_only() -> bool:
     rejected by the dataset-load and detector-create routes.
     """
     return get_effective_override("semantic_only")
+
+
+def get_cli_autopilot_only() -> bool | None:
+    """Return the process-level CLI / env override (``None`` if unset)."""
+    return _admin.get_override("autopilot_only")
+
+
+def get_effective_autopilot_only() -> bool:
+    """Return whether Train and Test are locked to their Autopilot tabs.
+
+    Resolution order:
+
+    1. The process-level override (``--autopilot-only`` /
+       ``VTSEARCH_AUTOPILOT_ONLY``, stored by :mod:`vtsearch.admin_overrides`),
+       which applies to every user for the lifetime of the process.
+    2. The persisted server-tier setting (``data/settings.json``), which
+       defaults to ``False``.
+
+    When true, the SPA renders neither Train's Manual / Autopilot tabs nor
+    Test's Autopilot / Review tabs: both views stay on their Autopilot panel
+    (#4666).
+    """
+    return get_effective_override("autopilot_only")
 
 
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:
