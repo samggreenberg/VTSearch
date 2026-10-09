@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **No stall report for a slow import at startup.** On a cold page cache the scikit-learn import
+  (through pandas, pyarrow's shared library) held the GIL for just over a second, and the stall watchdog
+  wrote every thread's stack to the terminal of a routine `python app.py`. The watchdog's bar is now
+  `VTSEARCH_STALL_STARTUP_MS` (5 s) from the ML imports until **VTSearch is ready**, so a startup that
+  takes minutes is still reported and a routine import is not; the `diagnostics config` line reports it
+  as `watchdog_startup=`, and a `stall:` line from that window says `bar 5000ms`.
 - **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
   King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
   click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
