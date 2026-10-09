@@ -1418,6 +1418,8 @@ describe('LabelViewComponent', () => {
     expect(component.showResortPrompt()).toBe(true);
     expect(component.resortSortClicks).toBe(10);
     expect(component.resortSortPositives).toBe(1);
+    // The hint names Autopilot's Good target (#4721).
+    expect(component.resortPositivesNeeded).toBe(autopilot.state.goodToStart);
 
     // Keeping the sort keeps the tally: the next prompt reports the whole run.
     component.onResortKeep();

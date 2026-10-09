@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A plainer Update Sort Example? prompt** (issue #4721). Autopilot's resort prompt no longer
+  opens with a focus ring on its big Keep button (it took focus when you were voting with the
+  arrow keys, so it read as the recommended answer, and the next Space or Enter chose it); focus
+  goes to the dialog itself, and Tab still reaches every control. The paragraph at the top is now
+  one line of read-only fields, **Clicked**, **Positives** and **Sort**, and Toasty, below the
+  dialog, explains: how many positives Autopilot needs before it can move on, and that you can
+  keep going or try a different sort. The left side has a **Keep clicking:** heading over a
+  **Continue** button, which no longer names the sort or the number of labels before the next
+  prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
+  **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
 - **Tabs look like tabs, and form labels read alike** (issue #4718). Every horizontal tab strip
   (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
   Keyboard Shortcuts) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
