@@ -858,9 +858,23 @@ describe('NewDetectorModalComponent', () => {
     component.submit();
   }
 
-  it('shows the Threshold control on the form', () => {
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('vt-balance')).not.toBeNull();
+  it('keeps the Threshold control under Advanced (#4717)', async () => {
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('vt-balance')).toBeNull();
+
+    component.toggleAdvanced();
+    await fixture.whenStable();
+    expect(el.querySelector('#new-detector-advanced vt-balance')).not.toBeNull();
+  });
+
+  it('keeps an unset media type at the top of the form, not under Advanced (#4717)', async () => {
+    component.toggleAdvanced();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(component.mediaTypePreset).toBe(false);
+    expect(el.querySelector('.new-detector-form .media-type-row')).not.toBeNull();
+    expect(el.querySelector('#new-detector-advanced .media-type-row')).toBeNull();
   });
 
   it('sends the balance the form starts on: the balanced default with no setting', () => {
@@ -977,6 +991,25 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
     expect(component.mediaType()).toBe('image');
     expect(component.mediaTypeLocked).toBe(true);
   });
+
+  it('moves the preset media type under Advanced, and keeps it there once unlocked (#4717)', async () => {
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(component.mediaTypePreset).toBe(true);
+    expect(el.querySelector('.media-type-row')).toBeNull();
+    expect(component.advancedToggleTitle).toContain('the media type');
+
+    component.toggleAdvanced();
+    await fixture.whenStable();
+    expect(el.querySelector('#new-detector-advanced .media-type-row')).not.toBeNull();
+
+    (el.querySelector('#new-detector-advanced .lock-toggle') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(component.mediaTypeLocked).toBe(false);
+    expect(el.querySelectorAll('.media-type-row').length).toBe(1);
+    const trigger = el.querySelector('#new-detector-advanced .custom-select-trigger') as HTMLButtonElement;
+    expect(trigger.disabled).toBe(false);
+  });
 });
 
 describe('NewDetectorModalComponent (semantic_only server)', () => {
@@ -1010,22 +1043,24 @@ describe('NewDetectorModalComponent (semantic_only server)', () => {
     httpMock.verify();
   });
 
-  it('offers all three types and shows the Advanced toggle when unlocked', async () => {
+  it('offers all three types when unlocked', async () => {
     await setup(false);
     expect(component.embedderTypeOptions).toEqual(['semantic', 'patch_semantic', 'structural']);
     expect(component.showEmbedderTypePicker).toBe(true);
-    expect(component.showAdvancedToggle).toBe(true);
   });
 
-  it('drops the one-option type picker (and the Advanced toggle) when locked', async () => {
+  it('drops the one-option type picker when locked, but keeps Advanced for the Threshold', async () => {
     await setup(true);
     expect(component.embedderTypeOptions).toEqual(['semantic']);
     expect(component.showEmbedderTypePicker).toBe(false);
-    // Nothing else lives under Advanced for this dataset, so the toggle goes too.
     expect(component.primaryLicenseNotice).toBeNull();
-    expect(component.showAdvancedToggle).toBe(false);
+    expect(component.advancedToggleTitle).not.toContain('embedder');
     await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('.advanced-toggle')).toBeNull();
+    const el = fixture.nativeElement as HTMLElement;
+    (el.querySelector('.advanced-toggle') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(el.querySelector('#new-detector-advanced #detector-embedder-type')).toBeNull();
+    expect(el.querySelector('#new-detector-advanced vt-balance')).not.toBeNull();
   });
 
   it('puts the Advanced toggle on the Cancel / Create row, and opens the options in the form (#4305)', async () => {
