@@ -137,6 +137,8 @@ slides:
   data-coco-better-complement
   data-coco-problems
   data-set-coco-better
+  # Up and Up: what the F-beta era bought at beta 1/4, in two lifts (#4668).
+  up-and-up
   # Follow Suit, what the work since the first rule bought (#4548), is in the
   # appendix after Conclusion: only β ¼ pulls away from cross-calibration, so
   # in the run of the talk it read as "the work changed nothing" (#4563).

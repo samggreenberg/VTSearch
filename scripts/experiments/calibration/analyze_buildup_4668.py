@@ -61,8 +61,8 @@ STEPS: list[tuple[str, str, str, str, str]] = [
     ("b2", "the labels line at the preset", "b2_labels_{p}", "midpoint", "app"),
     ("b3", "+ the relative spread floor", "b3_floor_{p}", "midpoint", "app"),
     ("b4", "+ the weak-separation check", "b4_check_{p}", "midpoint", "app"),
-    ("b5", "+ even-odds asking (today's app)", "b5_app_{p}", "midpoint", "app"),
-    ("b6", "+ the typed query's per-preset line", "b5_app_{p}", "today", "app"),
+    ("b5", "+ even-odds asking (today's sessions)", "b5_app_{p}", "midpoint", "app"),
+    ("b6", "+ the typed query's per-preset line (today's app)", "b5_app_{p}", "today", "app"),
     ("b7", "+ the detector walk (not shipped)", "b7_walk_{p}", "today", "hard"),
 ]
 
