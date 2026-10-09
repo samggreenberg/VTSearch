@@ -13,6 +13,7 @@
 #
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it).
 # Env: GOODDRY_DATE (default 2026-10-09), SOTA_ROOT, and anything launch.sh reads (CALIB_MEM, CALIB_PARTITION).
+# GOODDRY_PACK=1 packs the arm into one job on a V100 node instead of an array (CALIB_PACK_PAR cells at a time).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
@@ -59,7 +60,14 @@ launch)
   export CALIB_MEM="${CALIB_MEM:-4G}"
   export SOTA_BETA=1 SOTA_DATE="$D-gooddry4731$ARM-b1" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS"
   export CALIB_JOB_NAME="gooddry4731$ARM-binary-b1"
-  exec bash "$HERE/launch.sh" redo "$(indices "$FIRST" "$LAST")"
+  idx="$(indices "$FIRST" "$LAST")"
+  if [[ "${GOODDRY_PACK:-0}" == 1 ]]; then
+    # The cpu cap is full: one multi-CPU job on a V100 node (launch_bands.sh pack, #4490).
+    export CALIB_PARTITION="${CALIB_PARTITION:-gpu}" CALIB_PACK_GRES="${CALIB_PACK_GRES:-gpu:v100:1}"
+    export CALIB_PACK_JOBS="${CALIB_PACK_JOBS:-1}" CALIB_PACK_PAR="${CALIB_PACK_PAR:-30}" CALIB_TIME="${CALIB_TIME:-8:00:00}"
+    exec bash "$HERE/launch.sh" pack "$(python3 -c "import sys; print(','.join(str(i) for r in sys.argv[1].split(',') for i in range(int(r.split('-')[0]), int(r.split('-')[1]) + 1)))" "$idx")"
+  fi
+  exec bash "$HERE/launch.sh" redo "$idx"
   ;;
 *)
   echo "usage: good_dry_4731.sh {dirs SEEDS | launch ARM SEEDS [FIRST [LAST]]}" >&2; exit 1 ;;
