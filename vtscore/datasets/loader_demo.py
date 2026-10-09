@@ -209,6 +209,7 @@ def load_demo_dataset(
     converter_name: str = "",
     clipper_name: str = "",
     clipper_params: dict[str, Any] | None = None,
+    use_cache: bool = True,
 ) -> None:
     """Load a named demo dataset into the medias dict, downloading and embedding as needed.
 
@@ -249,6 +250,12 @@ def load_demo_dataset(
             metadata so a later load with a different clipper re-derives.
         clipper_params: Optional parameter overrides for *clipper_name*
             (e.g. ``{"duration": 5.0}`` for a tiling clipper).
+        use_cache: When ``False``, neither read nor write the ``.pkl``
+            cache: always build from the source and embed now.  For a caller
+            that records *how* its vectors were made (the pile's provenance
+            sidecar): a cache hit hands back vectors embedded whenever the
+            cache was written, by whatever code and batch size did it, and the
+            caller has no way to tell (#4117).
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
@@ -268,7 +275,7 @@ def load_demo_dataset(
 
     # Check if already embedded
     pkl_file = EMBEDDINGS_DIR / f"{cache_key}.pkl"
-    if _try_load_cached(
+    if use_cache and _try_load_cached(
         pkl_file,
         dataset_name,
         media_type_id,
@@ -345,44 +352,57 @@ def load_demo_dataset(
     # clipper (a no-op).  Runs after any converter so it operates on the
     # final media type.
     if clipper_applied:
-        from vtscore.datasets.stages.clipper import _apply_clipper
-
-        def _clip_progress(current: int, total: int, phase: str) -> None:
-            if phase == "clipping":
-                msg = "Clipping media…"
-            elif phase == "converting":
-                msg = "Converting media…"
-            elif phase == "embedding":
-                msg = "Embedding clips…"
-            else:
-                # A loading/warmup message forwarded verbatim from the embedder.
-                msg = phase
-            on_progress("loading", msg, current, total)
-
-        _clip_progress(0, 0, "clipping")
-        _apply_clipper(
+        _clip_demo_medias(
             medias,
             _effective_clipper(clipper_name, media_type_id),
             clipper_params,
-            on_progress=_clip_progress,
             embedder=embedder,
+            on_progress=on_progress,
         )
 
-    _write_demo_cache(
-        pkl_file=pkl_file,
-        dataset_name=dataset_name,
-        media_type_id=media_type_id,
-        medias=medias,
-        mt=mt,
-        embedder=embedder,
-        external_dir=external_dir,
-        converter_name=converter_name,
-        clipper_name=clipper_name,
-        clipper_params=clipper_params,
-        clipper_applied=clipper_applied,
-    )
+    if use_cache:
+        _write_demo_cache(
+            pkl_file=pkl_file,
+            dataset_name=dataset_name,
+            media_type_id=media_type_id,
+            medias=medias,
+            mt=mt,
+            embedder=embedder,
+            external_dir=external_dir,
+            converter_name=converter_name,
+            clipper_name=clipper_name,
+            clipper_params=clipper_params,
+            clipper_applied=clipper_applied,
+        )
 
     on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
+
+
+def _clip_demo_medias(
+    medias: dict[int, dict[str, Any]],
+    clipper: str,
+    clipper_params: dict[str, Any] | None,
+    *,
+    embedder: Any,
+    on_progress: ProgressCallback,
+) -> None:
+    """Split every demo media with the real (non-default) *clipper*, re-embedding the clips."""
+    from vtscore.datasets.stages.clipper import _apply_clipper
+
+    def _clip_progress(current: int, total: int, phase: str) -> None:
+        if phase == "clipping":
+            msg = "Clipping media…"
+        elif phase == "converting":
+            msg = "Converting media…"
+        elif phase == "embedding":
+            msg = "Embedding clips…"
+        else:
+            # A loading/warmup message forwarded verbatim from the embedder.
+            msg = phase
+        on_progress("loading", msg, current, total)
+
+    _clip_progress(0, 0, "clipping")
+    _apply_clipper(medias, clipper, clipper_params, on_progress=_clip_progress, embedder=embedder)
 
 
 def _write_demo_cache(

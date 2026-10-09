@@ -29,6 +29,7 @@ import pickle
 from typing import Any, Callable
 
 from vtscore.datasets.loader_common import (  # noqa: F401  - re-exported for consumers
+    GROUND_TRUTH_FIELDS,
     ProgressCallback,
     _embedding_for_pickle,
     _embeddings_dict_for_pickle,
@@ -110,6 +111,20 @@ def _copy_clip_window(entry: dict[str, Any], media: dict[str, Any]) -> None:
     from vtscore.media.provenance import CLIP_WINDOW_FIELDS  # noqa: PLC0415
 
     for field in CLIP_WINDOW_FIELDS:
+        if media.get(field) is not None:
+            entry[field] = media[field]
+
+
+def _copy_ground_truth(entry: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy an item's eval ground truth (``GROUND_TRUTH_FIELDS``) into its pickle entry.
+
+    Visual Genome's multi-label ``categories`` and ``regions`` are what the
+    eval harness scores against; the pickle loader restores them, so the save
+    writes them, or a saved VG demo reopens as a single-label dataset (#4117).
+    Written only when present, so a single-label dataset keeps the same entry
+    shape.
+    """
+    for field in GROUND_TRUTH_FIELDS:
         if media.get(field) is not None:
             entry[field] = media[field]
 
@@ -209,6 +224,7 @@ def export_dataset_to_file(
             if media.get(field):
                 entry[field] = media[field]
         _copy_clip_window(entry, media)
+        _copy_ground_truth(entry, media)
         # Persist a precomputed grid/list thumbnail so reloads stream the bytes
         # instead of decoding the full-resolution original on every cold tile
         # fetch (the browse first-paint delay).  Image *demos* never generate
