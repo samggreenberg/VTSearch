@@ -203,12 +203,15 @@ export class NewDetectorModalComponent implements OnInit {
    *  (see {@link submittedEmbedderType}). Set only when the user changes the
    *  Advanced picker. */
   readonly embedderType = signal<EmbedderType | ''>('');
-  /** Whether the collapsible "Advanced" section (which holds the embedder-type
-   *  picker) is expanded. Collapsed by default — the common single-embedder
-   *  create needs no interaction; advanced users open it to lock a type. */
+  /** Whether the collapsible "Advanced" section is expanded. It holds what a
+   *  create rarely needs to touch: the embedder-type picker, the Threshold
+   *  (which starts on the user's last pick), and a media type the active
+   *  dataset already set (#4717). Collapsed by default. */
   readonly advancedOpen = signal(false);
   /** The options the footer's Advanced toggle reveals, at the foot of the form. */
   private readonly advancedFields = viewChild<ElementRef<HTMLElement>>('advancedFields');
+  /** The media-type dropdown's open list, wherever the field is rendered. */
+  private readonly mediaTypeOptions = viewChild<ElementRef<HTMLElement>>('mediaTypeOptions');
   private readonly injector = inject(Injector);
   mediaTypeDropdownOpen = false;
   /** True when the media-type field is locked to the active dataset's type.
@@ -216,6 +219,11 @@ export class NewDetectorModalComponent implements OnInit {
    *  user clicks the unlock button. The dropdown trigger is disabled while
    *  locked so the user can't accidentally change it. */
   mediaTypeLocked = false;
+  /** True when the form opened with the media type preset and locked to the
+   *  active dataset's type. The field then sits under Advanced rather than at
+   *  the top of the form (#4717), and stays there after an unlock so it doesn't
+   *  jump across the form while the user is changing it. */
+  mediaTypePreset = false;
 
   // Media examples (a vertical stack; mutually exclusive with the text
   // example). Each entry has its own Remove button; the Add button below
@@ -366,6 +374,7 @@ export class NewDetectorModalComponent implements OnInit {
       // can't change it without an explicit unlock click.
       this.mediaType.set(this.defaultMediaType());
       this.mediaTypeLocked = true;
+      this.mediaTypePreset = true;
     } else {
       this.datasetsRegistryApi.getRegistry().subscribe({
         next: (res) => {
@@ -555,6 +564,17 @@ export class NewDetectorModalComponent implements OnInit {
   toggleMediaTypeDropdown(): void {
     if (this.mediaTypeLocked) return;
     this.mediaTypeDropdownOpen = !this.mediaTypeDropdownOpen;
+    if (!this.mediaTypeDropdownOpen) return;
+    // Under Advanced the field sits at the foot of the form (#4717), where the
+    // list it opens runs past the dialog's scroll box: bring it in once it has
+    // rendered. At the top of the form it is already in view, so nothing moves.
+    afterNextRender(
+      () => {
+        const list = this.mediaTypeOptions()?.nativeElement;
+        if (list) revealInScrollParent(list);
+      },
+      { injector: this.injector },
+    );
   }
 
   get modalTitle(): string {
@@ -618,11 +638,20 @@ export class NewDetectorModalComponent implements OnInit {
     return this.embedderTypeOptions.length > 1;
   }
 
-  /** Whether the Advanced toggle is worth showing. Normally yes (it hosts the
-   *  type picker); on a `semantic_only` server only when there is a license
-   *  notice left to surface, so the block never opens onto nothing. */
-  get showAdvancedToggle(): boolean {
-    return this.showEmbedderTypePicker || !!this.primaryLicenseNotice;
+  /** Whether the media-type field renders at all: the Blank tab only, and
+   *  never on a solo-media-type server, where the type is not a choice. */
+  get showMediaTypeField(): boolean {
+    return this.tab === 'blank' && !this.effectiveSoloMediaType;
+  }
+
+  /** The Advanced toggle's tooltip, naming what is under it right now. */
+  get advancedToggleTitle(): string {
+    const parts: string[] = [];
+    if (this.showMediaTypeField && this.mediaTypePreset) parts.push('the media type');
+    if (this.showEmbedderTypePicker) parts.push('the kind of embedder');
+    parts.push('the Threshold');
+    const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+    return `Advanced options: ${list} for this detector.`;
   }
 
   /** The embedder *types* the active dataset supplies, or `[]` when no dataset

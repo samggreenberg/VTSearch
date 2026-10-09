@@ -17,12 +17,27 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Tabs look like tabs, and form labels read alike** (issue #4718). Every horizontal tab strip
+  (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
+  Keyboard Shortcuts) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
+  the active one open into the content below with an accent edge on top. New Detector's
+  **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
+  labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
+  **Threshold:** label matches them. The text boxes now carry their instructions (**Describe what
+  this detector should find**) in place of a faint example and a line under the box, and
+  **Detector name** can be left blank: the detector is named after its example (or, on the
+  Trained tab, the imported file), numbered past any detector that already has that name.
 - **No stall report for a slow import at startup.** On a cold page cache the scikit-learn import
   (through pandas, pyarrow's shared library) held the GIL for just over a second, and the stall watchdog
   wrote every thread's stack to the terminal of a routine `python app.py`. The watchdog's bar is now
   `VTSEARCH_STALL_STARTUP_MS` (5 s) from the ML imports until **VTSearch is ready**, so a startup that
   takes minutes is still reported and a routine import is not; the `diagnostics config` line reports it
   as `watchdog_startup=`, and a `stall:` line from that window says `bar 5000ms`.
+- **New Detector keeps a preset media type and the Threshold under Advanced** (issue #4717).
+  When a selected dataset has already set and locked the detector's **Media type**, the field
+  moves from the top of the Blank form to **Advanced ▾**, unlock button and all, and stays there
+  if you unlock it. The **Threshold** moves under **Advanced ▾** on both tabs; it still starts on
+  your last pick. A media type nothing has set stays at the top of the form.
 - **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
   King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
   click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
