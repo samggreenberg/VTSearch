@@ -88,8 +88,8 @@ the rung before it, so two adjacent rungs differ in exactly that change.
 
 ![Every rung's objective over votes, one panel per preset](figures/buildup_curves.png)
 
-*Each line is the mean of 720 runs at that preset's own beta. Read a step as the gap between a line and the one
-before it. b2–b5 lie within 0.04 of each other everywhere (widest at vote 150), so they overlap. b6 and b7 start at
+*Each line is the mean of all 720 runs at that preset's own beta, at every vote. Read a step as the gap between a line
+and the one before it. b2–b5 lie within 0.04 of each other everywhere (widest at vote 150), so they overlap. b6 and b7 start at
 today's typed-query line, and the rest start at the old midpoint.*
 
 The objective's mean over the session (votes 1–150) and over a short session (votes 1–50), with the point at vote 150
@@ -124,19 +124,45 @@ better or worse by more than 0.05, is `paired.csv`.
 *Blue: the mean over votes 1–150. Orange: the mean over votes 1–50. The orange jump at b6 is the typed query's line,
 and the blue jump at b2 (beta 1/4) is the labels line. Everything else moves by less than 0.01.*
 
-**What the user gets at vote 150** (the 685 runs per rung showing a detector by then; `returned.csv` also has votes 25
-and 50, but over the runs showing a detector at that vote, a subset that differs by rung, so the curves above are the
-early-vote read):
+**What the user gets, at every vote.** Every run counts at every vote, filled as the curves are (#4631). Until a
+detector shows, Find returns the typed query's own set, at the line of the rung's era. After, it returns the last
+line shown. `returned_curve.csv` has every vote, and `returned.csv` the session means.
 
-| | beta 1/4: precision / recall / returned, median / over 200 | beta 1 | beta 4 |
+![Precision, recall, the returned set's size and the share of runs returning more than 200, at every vote](figures/returned_curves.png)
+
+*Every run at every vote, at each preset's own beta. Until about vote 23 no run shows a detector. b1–b5 then return
+the typed query's set at the mixture midpoint, a median of about 4,000 images at precision 0.01. b6–b7 return it at
+today's per-preset line. The returned size is on a log axis.*
+
+The hand-over is the same in every rung up to b6, because it comes from the opening. A detector is on screen in 37%
+of runs by vote 25, in 63% by vote 50, and on 66% of all run-votes over the session. **So for a third of the session,
+what Find returns is the typed query's set.**
+
+Session means (votes 1–150), then the short session (votes 1–50). "Returned" is the median over runs of each run's
+mean returned size. "Over 200" is the share of run-votes:
+
+| votes 1–150 | beta 1/4: precision / recall / returned / over 200 | beta 1 | beta 4 |
 |---|---|---|---|
-| b1 cross-calibration | 0.48 / 0.69 / 69 / 25% | 0.48 / 0.69 / 69 / 25% | 0.48 / 0.69 / 69 / 25% |
-| b2 the labels line | 0.67 / 0.47 / 36 / 5% | 0.53 / 0.63 / 54 / 20% | 0.37 / 0.80 / 125 / 42% |
-| b6 today's app | 0.76 / 0.40 / 24 / 0% | 0.59 / 0.58 / 48 / 7% | 0.37 / 0.75 / 126 / 37% |
+| b1 cross-calibration | 0.38 / 0.74 / 1,104 / 47% | 0.38 / 0.74 / 1,104 / 47% | 0.38 / 0.74 / 1,104 / 47% |
+| b2 the labels line | 0.48 / 0.60 / 1,051 / 36% | 0.39 / 0.70 / 1,089 / 43% | 0.28 / 0.80 / 1,199 / 55% |
+| b5 today's sessions, old typed-query line | 0.53 / 0.54 / 1,042 / 35% | 0.44 / 0.66 / 1,076 / 38% | 0.28 / 0.79 / 1,190 / 53% |
+| **b6 today's app** | **0.64 / 0.29 / 25 / 1%** | **0.51 / 0.46 / 54 / 6%** | **0.31 / 0.63 / 177 / 36%** |
 
-Cross-calibration returns the same set whatever the user wants. Today's app returns a third as many at beta 1/4, at
-precision 0.76, and nearly twice as many at beta 4, at recall 0.75. The weak check is what shrank the beta 1 tail
-(over 200: 20% → 11%).
+| votes 1–50 | beta 1/4 | beta 1 | beta 4 |
+|---|---|---|---|
+| b1 cross-calibration | 0.21 / 0.83 / 2,967 / 74% | 0.21 / 0.83 / 2,967 / 74% | 0.21 / 0.83 / 2,967 / 74% |
+| b2 the labels line | 0.25 / 0.78 / 2,946 / 72% | 0.22 / 0.82 / 2,959 / 73% | 0.17 / 0.85 / 2,977 / 76% |
+| b5 today's sessions, old typed-query line | 0.25 / 0.76 / 2,946 / 73% | 0.22 / 0.81 / 2,962 / 73% | 0.15 / 0.86 / 2,988 / 77% |
+| **b6 today's app** | **0.56 / 0.24 / 20 / 1%** | **0.43 / 0.41 / 49 / 4%** | **0.24 / 0.56 / 173 / 40%** |
+
+- **Before #4603, a session's opening returned thousands of images.** Over votes 1–50 the median run averaged about
+  2,950 images back, and three run-votes in four returned more than 200. Every detector-side step (b2–b5) left that
+  untouched, because none of them acts before the hand-over.
+- **Today's app returns a short list from the first vote**: 20 / 49 / 173 images on average over votes 1–50. It
+  gives up recall for it, 0.24 against 0.76 at beta 1/4. That is the trade a beta 1/4 user asks for, and at beta 1
+  the objective still gains +0.19 over votes 1–50.
+- **After the hand-over, the labels line is what follows the preset.** Over the session at beta 1/4 it raises
+  precision from 0.38 to 0.48. At beta 4 it raises recall from 0.74 to 0.80, and it returns more.
 
 ## Readings
 
@@ -181,11 +207,14 @@ curve's session mean by 0.005 or less, which no line on the slide can show.
   detector, and AP.
 - `paired.csv`: each rung against the one before, and against b1, per preset: the session means over votes 1–25,
   1–50, 51–150 and 1–150, and the points.
-- `returned.csv`: precision, recall and the returned set's size at votes 25, 50 and 150.
+- `returned_curve.csv`: what every run returns at every vote, filled from the typed query's set until a detector
+  shows: precision, recall, the median returned size, the shares over 200 and returning nothing, and the share
+  showing a detector.
+- `returned.csv`: the same, as session means over votes 1–150 and 1–50.
 - `REPORT_buildup.md`: the analyzer's machine summary, including what each arm ran with, read back off its rows and
   its run logs.
 - `provenance.json`: the files read per arm.
-- `figures/`: the two figures above, and the mandatory AP-over-clicks figure (`average_precision_vs_clicks.png`).
+- `figures/`: the three figures above, and the mandatory AP-over-clicks figure (`average_precision_vs_clicks.png`).
 - The interactive viewer (14 MB) and the per-run AP figure (4 MB) are too large to commit. They stay at
   `/expscratch/sgreenberg/buildup-4668/analysis/`, as do the cells.
 
