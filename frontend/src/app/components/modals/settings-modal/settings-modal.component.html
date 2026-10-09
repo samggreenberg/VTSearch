@@ -118,10 +118,25 @@
             <input type="checkbox" [ngModel]="settings().show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
           </label>
+          <label class="checkbox-row" title="Open Train and Test with the left panel folded to a thin strip on the Autopilot tab; Manual and Review keep their list. The strip's arrow opens it.">
+            <input type="checkbox" [ngModel]="settings().hide_left_panel" (ngModelChange)="onToggle('hide_left_panel', $event)" />
+            Hide left panel in Train and Test
+          </label>
+          <label class="checkbox-row" title="Open Train and Test with the right panel folded to a thin strip. The strip's arrow opens it; a finished test opens its result on its own.">
+            <input type="checkbox" [ngModel]="settings().hide_right_panel" (ngModelChange)="onToggle('hide_right_panel', $event)" />
+            Hide right panel in Train and Test
+          </label>
           <label class="checkbox-row" title="Show the trophy button, unlock pop-ups, and the achievements panel, and track usage milestones. Turning this off zeros all achievement counters and keeps them at zero.">
             <input type="checkbox" [ngModel]="settings().enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
             Enable achievements
           </label>
+          <div class="form-group" role="group" aria-labelledby="setting-hints-label">
+            <span id="setting-hints-label" class="form-label" title="King Toasty's hints beside the next thing to click">Toasty's hints<vt-field-hint-icon hint="While you're getting started, King Toasty stands beside the next thing to click and says what it does. Each hint has its own “Hide this hint” and “Hide all hints” boxes. Show All brings back every hint, including ones you hid one at a time."></vt-field-hint-icon></span>
+            <div class="hint-buttons">
+              <button class="btn btn--secondary btn--sm" (click)="onHideAllHints()" [disabled]="allHintsHidden()" title="Hide every one of Toasty's hints">Hide All</button>
+              <button class="btn btn--secondary btn--sm" (click)="onShowAllHints()" [disabled]="noHintsHidden()" title="Show all of Toasty's hints again, including ones you hid one at a time">Show All</button>
+            </div>
+          </div>
 
           @if (mediaTypes().length > 0) {
             <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
@@ -231,15 +246,17 @@
             [autofindExporterFieldValues]="autofindExporterFieldValues"
             (exporterChange)="onAutofindExporterChange($event)"
           ></vt-auto-find-settings>
+          <h4 class="subhead">Command Line</h4>
+          <label class="checkbox-row" title="Delete the dataset a command-line AutoFind imported, once its detectors have run">
+            <input type="checkbox" [ngModel]="settings().autofind_cli_delete_dataset" (ngModelChange)="onToggle('autofind_cli_delete_dataset', $event)" />
+            Delete the dataset after AutoFind
+            <vt-field-hint-icon hint="When on, an AutoFind run from the command line (python app.py --autodetect) deletes the dataset it imported once its AutoFind detectors have run and the results are exported. A run with no AutoFind detector to run keeps its dataset, and AutoFind run from the dashboard never deletes anything."></vt-field-hint-icon>
+          </label>
         }
 
         <!-- Autopilot & Actions -->
         @if (activeSettingsTab() === 'autopilot') {
           <h3>Autopilot &amp; Actions</h3>
-          <label class="checkbox-row" title="Hide the Autopilot tab from the left panel in labeling mode">
-            <input type="checkbox" [ngModel]="settings().hide_autopilot" (ngModelChange)="onToggle('hide_autopilot', $event)" />
-            Hide autopilot panel
-          </label>
           <div class="form-group">
             <label class="form-label" for="setting-autopilot-greens" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start</label>
             <input id="setting-autopilot-greens" type="number" class="form-input" [ngModel]="settings().autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
@@ -406,8 +423,8 @@
             <div class="server-value">{{ settings().semantic_only ? 'On' : 'Off' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="When on, dataset imports and other ingest progress bars show their progress but no remaining-time estimate, for servers where those jobs are too erratic to predict. Other progress bars keep their estimate. Set with --hide-ingest-eta, VTSEARCH_HIDE_INGEST_ETA, or the hide_ingest_eta setting.">Hide ingest ETAs</label>
-            <div class="server-value">{{ settings().hide_ingest_eta ? 'On' : 'Off' }}</div>
+            <label class="form-label" title="When on, Train and Test stay on their Autopilot tabs: Train has no Manual tab, Test has no Review tab, and neither shows a tab bar. Set with --autopilot-only, VTSEARCH_AUTOPILOT_ONLY, or the autopilot_only setting.">Autopilot only</label>
+            <div class="server-value">{{ settings().autopilot_only ? 'On' : 'Off' }}</div>
           </div>
           <div class="form-group">
             <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out. Set with --solo-media-type or the solo_media_type setting.">Solo media type</label>

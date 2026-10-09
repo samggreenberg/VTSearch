@@ -158,6 +158,9 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_cli_delete_dataset": {
+            "type": "boolean"
+          },
           "autofind_detectors": {
             "items": {
               "type": "string"
@@ -187,6 +190,10 @@
           },
           "autopilot_hard_reds": {
             "type": "integer"
+          },
+          "autopilot_only": {
+            "readOnly": true,
+            "type": "boolean"
           },
           "autopilot_resort_interval": {
             "type": "integer"
@@ -332,6 +339,12 @@
             },
             "type": "object"
           },
+          "hidden_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "hidden_plugins": {
             "additionalProperties": {
               "items": {
@@ -342,19 +355,18 @@
             "readOnly": true,
             "type": "object"
           },
-          "hide_autopilot": {
+          "hide_all_hints": {
             "type": "boolean"
           },
-          "hide_ingest_eta": {
-            "readOnly": true,
+          "hide_left_panel": {
+            "type": "boolean"
+          },
+          "hide_right_panel": {
             "type": "boolean"
           },
           "import_defaults_by_media_type": {
             "additionalProperties": {},
             "type": "object"
-          },
-          "label_hint_dismissed": {
-            "type": "boolean"
           },
           "last_embedder_per_media_type": {
             "additionalProperties": {
@@ -540,6 +552,43 @@
           "extractors_run",
           "media_type",
           "results"
+        ],
+        "type": "object"
+      },
+      "AutoFindBrowsePrepResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "default": null,
+            "description": "The fit's projection job, while ``building``.",
+            "nullable": true,
+            "type": "string"
+          },
+          "projection_id": {
+            "default": null,
+            "description": "The built layout, when ``ready``.",
+            "nullable": true,
+            "type": "string"
+          },
+          "reason": {
+            "default": null,
+            "description": "What is in the way, when ``busy`` or ``skipped``.",
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "``ready`` when the map is built, ``building`` when its fit is under way, ``busy`` when other work is in flight and nothing was started (ask again later), ``skipped`` when there is nothing to prepare.",
+            "enum": [
+              "ready",
+              "building",
+              "busy",
+              "skipped"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },
@@ -2814,6 +2863,11 @@
       "DetectorRegistryCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "beta": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
           "embedder_type": {
             "default": "",
             "type": "string"
@@ -6833,6 +6887,9 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_cli_delete_dataset": {
+            "type": "boolean"
+          },
           "autofind_detectors": {
             "items": {
               "type": "string"
@@ -6909,13 +6966,22 @@
           "grid_icon_size_left": {},
           "grid_icon_size_popup": {},
           "grid_icon_size_right": {},
-          "hide_autopilot": {
+          "hidden_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hide_all_hints": {
+            "type": "boolean"
+          },
+          "hide_left_panel": {
+            "type": "boolean"
+          },
+          "hide_right_panel": {
             "type": "boolean"
           },
           "import_defaults_by_media_type": {},
-          "label_hint_dismissed": {
-            "type": "boolean"
-          },
           "last_embedder_per_media_type": {},
           "panel_pct_left": {},
           "panel_pct_right": {},
@@ -8638,6 +8704,45 @@
           }
         }
       ]
+    },
+    "/api/autofind/runs/{run_id}/browse-prep": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The Find Results dialog asks this while it is open (#4683), so its Browse\nbutton finds the map built, or part-way there, rather than starting a fit\nwhen pressed.  The map is the one that button builds: the run's Good\nresults on the run's own dataset, which need not be the caller's active one\n(no ``X-Dataset-Id`` is read).  Nothing is started while other work is in\nflight: ``busy`` says to ask again later.\n\n``@state_sync_exempt``: the dialog repeats the request while the server is\nbusy, which is exactly when ``_state_lock`` is most likely held, and the\nhandler reads no request proxy - it resolves the run's dataset by id.",
+        "operationId": "prep_autofind_run_browse",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoFindBrowsePrepResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Start laying out a finished run's Good results for Browse, if the server is idle.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
     },
     "/api/autorun-extractors": {
       "get": {
@@ -16005,13 +16110,14 @@
     },
     "/favicon-{variant}.ico": {
       "get": {
+        "description": "The plain favicon is Toasty's resting smile, so there is no separate\n``smile`` variant.",
         "operationId": "favicon_variant",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Serve a favicon variant (smile, frown, surprised) from the static directory.",
+        "summary": "Serve a favicon variant (frown, surprised) from the static directory.",
         "tags": [
           "main"
         ]

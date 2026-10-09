@@ -41,6 +41,8 @@ import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
 import { BuildSkewService } from './services/build-skew.service';
 import { AutoFindService } from './services/autofind.service';
+import { AutopilotStateService } from './services/autopilot-state.service';
+import { ToastyHintComponent } from './components/toasty-hint/toasty-hint.component';
 import {
   NewThingFlowsService,
   ImporterFlowState,
@@ -69,6 +71,7 @@ import { isPairCompatible } from './utils/context-compat';
     DatasetImporterModalComponent,
     NewDetectorModalComponent,
     AutoDetectResultsModalComponent,
+    ToastyHintComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
@@ -90,6 +93,10 @@ export class AppComponent {
   // Constructed here so it watches for finished AutoFind runs from app start,
   // whichever view the user is on; the template mounts its results dialog.
   autofind = inject(AutoFindService);
+  /** Toasty's hand-off when an Autopilot run that trained the detector ends
+   *  (#4680). Raised by the Train view's Autopilot panel; shown here, under
+   *  the Dashboard button it points at. */
+  readonly autopilotHandoff = inject(AutopilotStateService).handoff;
 
   title = 'VTSearch';
   menuOpen = false;

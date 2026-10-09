@@ -31,6 +31,10 @@ Event names emitted today:
 - ``detection_skipped`` - a saving run had no detector to score with; the
   dataset is still saved and the run exits 0
   fields: ``reason`` (str)
+- ``dataset_deleted`` - a saving run deleted the dataset it imported once its
+  detectors had run, because the user's ``autofind_cli_delete_dataset``
+  setting is on
+  fields: ``dataset_id`` (str), ``name`` (str)
 - ``notification``   - a non-fatal message a plugin wanted the user to see
   (see :mod:`vtscore.concurrency.notifications`; in the GUI these become
   toasts). The run continues either way, including at ``level="error"``.

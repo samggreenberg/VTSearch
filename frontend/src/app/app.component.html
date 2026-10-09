@@ -54,12 +54,37 @@
       <img src="logo.png" alt="VTSearch logo" class="header-logo">
     </button>
     <button
+      #dashboardBtn
       class="top-bar-btn"
       [class.disabled]="!isOnLabelView()"
       [disabled]="!isOnLabelView()"
       (click)="onDashboard()"
       [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
     >Dashboard</button>
+    <!-- Toasty's hand-off when Autopilot finishes training (#4680), under the
+         button it suggests. Any further vote drops it (AutopilotStateService). -->
+    @if (isOnLabelView()) {
+      @if (autopilotHandoff(); as handoff) {
+        @if (handoff.kind === 'done') {
+          <vt-toasty-hint hintId="autopilot-done" [anchor]="dashboardBtn" reach="right">
+            Your detector is trained!
+            @if (handoff.dryRun) {
+              {{ handoff.dryRun }} of its best matches in a row were not good, so it has likely
+              found what it can.
+            } @else {
+              Every quality light is green.
+            }
+            Keep voting to sharpen it, or click <strong>Dashboard</strong> to test it or put it to
+            work.
+          </vt-toasty-hint>
+        } @else {
+          <vt-toasty-hint hintId="all-labeled" [anchor]="dashboardBtn" reach="right">
+            You've labeled every item in this dataset! Click <strong>Dashboard</strong> to test or run
+            your detector on another dataset.
+          </vt-toasty-hint>
+        }
+      }
+    }
     <vt-context-pulldown kind="dataset" />
     <vt-context-pulldown kind="detector" />
     <span class="top-bar-spacer"></span>
@@ -135,6 +160,7 @@
   <vt-new-detector-modal
     [defaultMediaType]="newDetectorFlow().defaultMediaType"
     [datasetEmbedder]="newDetectorFlow().datasetEmbedder"
+    [datasetEmbedders]="newDetectorFlow().datasetEmbedders ?? []"
     [seedMediaId]="newDetectorFlow().seedMediaId ?? null"
     [seedCropParams]="newDetectorFlow().seedCropParams ?? null"
     (closed)="onNewDetectorClosed()"

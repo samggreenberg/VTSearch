@@ -53,13 +53,14 @@ from vtscore.training.thresholds import (
     FOLD_ANCHOR_WEIGHT,
     FoldAnchoredCut,
     GmmFit1D,
+    ACQUISITION_TARGET_PRECISION,
     _anchored_em,
-    acquisition_inclusion,
     conformal_threshold,
     fit_anchored_score_gmm,
     fit_score_gmm,
     gmm_cut_from_fit,
     inclusion_cost_weights,
+    target_precision_threshold,
 )
 from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine, corpus_sigma_floor, fit_labels_line
 from vtscore.training.structural_similarity import (
@@ -92,9 +93,6 @@ NEUTRAL_FILL = "#e8ebef"  # a wash *behind* other ink: a band, a shaded interval
 #: absence of hatching says "classes unknown", and neither is a claim that
 #: wants colour.
 UNLABELED_FILL = "#dae0e8"
-#: The zoom wedge on Second Cut: lighter than an unlabeled cell, so the strip it
-#: opens into still reads as the thing being looked at.
-ZOOM_WEDGE_FILL = "#eef1f5"
 BLUE = "#0b5fa5"  # production / the shipped thing
 RED = "#b91c1c"  # the Bad component / cross-calibration
 GREEN = "#0d8a5f"  # the Good component
@@ -2642,11 +2640,10 @@ INCL_KNOB = tuple(range(-10, 11))
 INCL_VOTES = XQUANT_ANCHORS[0]
 INCL_POPULATION = XQUANT_POPULATIONS[0]
 
-#: How many build stages each of the four reveal in.
+#: How many build stages each of the three reveal in.
 KNOB_FLOW_STAGES = 4
 WALK_FLOW_STAGES = 6
 TILT_FLOW_STAGES = 6
-ACQ_FLOW_STAGES = 4
 
 #: The gauge row's geometry: three bars across the panel's width.
 INCL_GAUGE_GAP = 0.8
@@ -3460,322 +3457,6 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             INCL_CANVAS_W / 2,
             free_y,
             "the fits are inclusion-independent: re-cutting is arithmetic, not a retrain",
-            ha="center",
-            va="center",
-            fontsize=17,
-            color=INK,
-        )
-
-    return fig
-
-
-#: Taller than the rest of the section, and the extra is spent at the bottom
-#: rather than on content. This is the only Part 2 figure whose last line runs
-#: along the foot of the canvas, and the theme prints the page number over a
-#: `bg` figure's bottom-right corner (see `PAGE_NUMBER_CLEAR`): fitted into a
-#: 70% slot this renders at ~52px per drawing unit, and the badge's ink reaches
-#: about 0.56 units up from the canvas's bottom edge, so the closing line has to
-#: sit clear of that. 13.26 units is the ceiling — past it the figure stops
-#: being width-limited in the slot and the type starts shrinking.
-ACQ_CANVAS_H = 13.46
-
-#: The acquisition figure's two halves, and they are deliberately *not*
-#: stacked on one x axis. The histogram is a score axis and the ranking bar is
-#: a rank axis — not the same scale, not even linearly related — and drawn
-#: flush under one another they read as one axis twice, with the cut on the
-#: bar looking as if it should sit under θ on the histogram. So the calibration
-#: half (the histogram) is slid left and the selection half (the ranking and
-#: its zoom) slid right, overlapping only in the middle.
-#:
-#: `M_0` stays where the top row needs it — the `train` arrow out of `D_0` has
-#: a minimum length (`arrow_len_for`), and `D_0` cannot move left into the
-#: title notch — so the score arrow lands on the histogram right of centre.
-ACQ_HIST_X0, ACQ_HIST_W, ACQ_PANEL_H = 7.4, 9.6, 2.0
-ACQ_M0_X = 14.14
-ACQ_RANK_X0, ACQ_RANK_W = 12.4, 10.3
-ACQ_GAUGE_H = 0.34
-
-#: The zoom strip is inset from the ranking it enlarges by this much at each
-#: end: an enlargement drawn exactly as wide as the thing it enlarges reads as
-#: a second copy of it rather than as a closer look at one part.
-ACQ_ZOOM_INSET = 0.8
-ACQ_ZOOM_H = 0.62
-
-#: How many items the zoom shows either side of the two cuts. The window is
-#: sized from the drawing's own numbers rather than for looks: it holds both
-#: cuts *and* the gap between them at their true separation, which at the
-#: shipped offset is some twenty-six items of six thousand, plus this margin.
-ACQ_ZOOM_MARGIN = 5
-
-#: How far the zoomed ranking hangs below the full one, leaving room for the
-#: callout lines that tie the two together and for the pick's own name.
-ACQ_ZOOM_DROP = 1.2
-
-#: Which cells of the zoom carry votes rather than unlabeled media, as
-#: `(index, is_good)`. Three of thirty-six: near the cut almost everything is
-#: unlabeled, which is the whole reason there is something to ask about.
-ACQ_ZOOM_VOTES = ((3, False), (14, True), (23, True))
-
-
-def acq_flow_fig() -> None:
-    """Schematic of the second cut, and the loop it closes — Part 2's last
-    figure (#2876, #3218).
-
-    The same fitted estimator yields **two** thresholds, because the two jobs
-    named at the top of the talk read a threshold differently. Reporting reads
-    it as a decision boundary: everything above it comes back. Autopilot's
-    ``hard`` pick reads it as a **rank position** — it ranks the corpus
-    descending, finds the first position at or below the cut, and takes the
-    unlabeled item nearest that position *by index*
-    (:func:`vtscore.eval.al_strategies._hard_pick_by_index`, mirroring the app's
-    ``autoSelectNext``). So the acquisition cut is taken
-    :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET` steps
-    below the reporting one — a *negative* offset, which prices false alarms
-    higher, **raises** the cut, moves it up the ranking, and returns more
-    positives to vote on.
-
-    The direction is the opposite of the intuition from the cost weights, so the
-    figure draws it at its true size rather than at a legible one: on this
-    corpus the shipped offset moves the cut some twenty-six items in six
-    thousand, which is why the ranking is zoomed rather than merely notched
-    twice. The gap is small and it compounds — every pick it changes changes a
-    vote, and every vote retrains the model, which is the arrow that closes the
-    loop back to D₀.
-
-    Measured record, and it is not a clean one: ``coco_val × siglip2`` found an
-    interior optimum at −3 (positives per 100 votes 4 → 18, average precision
-    0.696 → 0.817), ``visual_genome_m × siglip`` rejected −3 on labels that miss
-    a quarter of the true positives, and the verified-label pile (#3319) went
-    past −4 and shipped it. The history lives beside the constant, in
-    :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`.
-    """
-    folds, final = _xquant_populations()
-    last = _acq_flow_stage(ACQ_FLOW_STAGES, folds, final)
-    box = tight_box(last)
-    for stage in range(1, ACQ_FLOW_STAGES):
-        save(
-            _acq_flow_stage(stage, folds, final),
-            OUT,
-            f"calib-acq-flow.build{stage}.png",
-            column=FULL_BLEED,
-            box=box,
-        )
-    save(last, OUT, "calib-acq-flow.png", column=FULL_BLEED, box=box)
-
-
-def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
-    """One item of the zoomed ranking: unlabeled, or a vote already cast."""
-    if kind == "unlabeled":
-        ax.add_patch(Rectangle((x0, y0), w, h, facecolor=UNLABELED_FILL, edgecolor=INK, linewidth=lw, zorder=3))
-        return
-    color, hatch = (GREEN, "//////") if kind == "good" else (RED, "\\\\\\")
-    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=color, hatch=hatch, linewidth=0, zorder=3))
-    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=lw, zorder=4))
-
-
-def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
-    fig, ax = _incl_figure(ACQ_CANVAS_H)
-    hx0, hw = ACQ_HIST_X0, ACQ_HIST_W
-    x0, w = ACQ_RANK_X0, ACQ_RANK_W
-
-    cut = _xquant_cut(folds, final)
-    k_acq = acquisition_inclusion(0)
-    q_report, q_acq = cut.quantile_at(0), cut.quantile_at(k_acq)
-    theta_report = cut.threshold_at(0)
-
-    # ── layout ────────────────────────────────────────────────────────────────
-    # Two rows of evidence — the distribution the cut is a *number* in, and the
-    # ranking it is a *position* in — with the loop's return routed down the left
-    # margin past both. The row names go in that margin too: the zoom's callout
-    # lines need the space under the ranking bar, and a name hung there would be
-    # the thing they ran through.
-    block_w, block_h = 3.0, 1.05
-    block_x0 = 7.15
-    block_top = ACQ_CANVAS_H - LABEL_GAP - CAP_16
-    block_y0 = block_top - block_h
-    row_y = block_y0 + block_h / 2
-
-    m0x = ACQ_M0_X
-    score_len = arrow_len_for("score")
-    panel_top = row_y - MODEL_H / 2 - OBJECT_GAP - score_len - OBJECT_GAP - CAP_16 - LABEL_GAP
-    y_base = panel_top - ACQ_PANEL_H
-
-    # The bottom of the θ label, and it has to be derived from the drop
-    # `_theta_notch` actually applies. Spelling it out as the notch's own
-    # length was right when the label hung directly under the notch; once the
-    # label moved below the panel's row of vote glyphs (`VOTE_LABEL_DROP`,
-    # #3296) this estimate stayed half a unit too high, and everything placed
-    # under it crept up into the label — on slide 12 the gauges' cut stubs
-    # ended up touching the θ they are a re-reading of (#3301).
-    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
-    gauge_top = theta_bottom - OBJECT_GAP - GAUGE_STUB
-    gauge_y0 = gauge_top - ACQ_GAUGE_H
-
-    zoom_top = gauge_y0 - ACQ_ZOOM_DROP
-    zoom_y0 = zoom_top - ACQ_ZOOM_H
-    zx0, zw = x0 + ACQ_ZOOM_INSET, w - 2 * ACQ_ZOOM_INSET
-    # The window holds both cuts at their true distance, centred between them:
-    # drawing that gap wider or narrower than it is would be the one lie the
-    # figure could tell that actually matters.
-    gap_cells = (q_acq - q_report) * final.size
-    zoom_cells = int(np.ceil(gap_cells)) + 2 * ACQ_ZOOM_MARGIN
-    cell_w = zw / zoom_cells
-    report_cell = (zoom_cells - gap_cells) / 2
-    zoom_report_x = zx0 + report_cell * cell_w
-    zoom_acq_x = zoom_report_x + gap_cells * cell_w
-    # The app ranks descending and takes the first position at or below the cut,
-    # so the pick is the item the cut falls *into*, not the one above it.
-    pick_index = int(np.floor(report_cell + gap_cells))
-
-    cut_label_bottom = zoom_y0 - 0.32 - LABEL_GAP - CAP_16
-    rail_x = 6.60
-    ask_y = cut_label_bottom - OBJECT_GAP - CAP_16 - LABEL_GAP
-    conclusion_y = ask_y - OBJECT_GAP - 0.24
-
-    def row_name(x: float, y: float, text: str, size: float = 15.0) -> None:
-        ax.text(x - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
-
-    # ── stage 1: where the calibration talk left off, and job one ─────────────
-    # The cut read as a decision boundary arrives with the drawing rather than a
-    # page after it: on its own page the bracket was the only change, and the
-    # room read the two pages as one (#4517).
-    ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
-    _data_block(ax, block_x0, block_y0, block_w, block_h)
-    train_x = block_x0 + block_w + OBJECT_GAP
-    _labeled_arrow(ax, (train_x, row_y), (m0x - MODEL_W / 2 - OBJECT_GAP, row_y), "train")
-    _model_box(ax, m0x, row_y, "M_0")
-    _labeled_arrow(
-        ax,
-        (m0x, row_y - MODEL_H / 2 - OBJECT_GAP),
-        (m0x, panel_top + OBJECT_GAP + CAP_16 + LABEL_GAP),
-        "score",
-        z=2.1,
-    )
-    ax.text(hx0 + hw, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
-    _score_histogram(ax, hx0, y_base, hw, ACQ_PANEL_H, None, final, fill="plain", mu_labels=False)
-    _theta_notch(ax, hx0 + theta_report * hw, y_base, _sub(r"\theta_{report}"))
-    _quantile_gauge(ax, x0, gauge_y0, w, ACQ_GAUGE_H, q_report, "")
-    row_name(x0, gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
-
-    brace_x0, brace_x1 = x0 + q_report * w, x0 + w
-    brace_y = gauge_top + GAUGE_STUB + OBJECT_GAP
-    ax.plot(
-        [brace_x0, brace_x0, brace_x1, brace_x1],
-        [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12],
-        color=INK,
-        linewidth=1.6,
-        zorder=5,
-    )
-    ax.text(
-        (brace_x0 + brace_x1) / 2,
-        brace_y + LABEL_GAP,
-        "what you keep",
-        ha="center",
-        va="bottom",
-        fontsize=15,
-        color=INK,
-    )
-
-    # ── stage 2: job two reads the same number as a rank, so zoom in ─────────
-    if stage >= 2:
-        for i in range(zoom_cells):
-            kind = "unlabeled"
-            for idx, good in ACQ_ZOOM_VOTES:
-                if idx == i:
-                    kind = "good" if good else "bad"
-            _acq_cell(ax, zx0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
-        # The enlargement, drawn as a wedge from the one point on the ranking to
-        # the whole width of the zoom: shaded, with soft edges, so the thin cut
-        # visibly opens into the wide strip. Two hairlines in `RULE` used to say
-        # this, and at slide size they were invisible (#4517).
-        apex = (x0 + q_report * w, gauge_y0)
-        ax.add_patch(
-            Polygon(
-                [apex, (zx0, zoom_top), (zx0 + zw, zoom_top)],
-                closed=True,
-                facecolor=ZOOM_WEDGE_FILL,
-                edgecolor="none",
-                zorder=0,
-            )
-        )
-        for target in (zx0, zx0 + zw):
-            ax.plot([apex[0], target], [apex[1], zoom_top], color=SOFT, linewidth=1.4, zorder=1)
-        row_name(zx0, zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
-        # The two cuts' names sit *between* them, each against its own tick: the
-        # gap is wide enough to hold both, and a name hung outside the window
-        # would widen the figure and shrink everything in the slot.
-        ax.plot([zoom_report_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
-        ax.text(
-            zoom_report_x + LABEL_GAP,
-            zoom_y0 - 0.32 - LABEL_GAP,
-            _sub(r"\theta_{report}"),
-            ha="left",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-
-    # ── stage 3: the second cut, a few steps of the knob further up the ranking
-    if stage >= 3:
-        ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
-        ax.text(
-            zoom_acq_x - LABEL_GAP,
-            zoom_y0 - 0.32 - LABEL_GAP,
-            _sub(r"\theta_{acq}"),
-            ha="right",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-        _acq_cell(ax, zx0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
-        # Backed in white: it sits inside the zoom wedge, whose edge would
-        # otherwise run through the words.
-        ax.text(
-            zx0 + (pick_index + 0.5) * cell_w,
-            zoom_top + LABEL_GAP,
-            "ask about this one",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=INK,
-            bbox={"boxstyle": "square,pad=0.1", "facecolor": "white", "edgecolor": "none"},
-            zorder=3,
-        )
-
-    # ── stage 4: the vote goes back to D₀, and the loop closes ───────────────
-    # Routed down the left margin, as the loop schematic routes its own return:
-    # a straight diagonal would cross both rows of evidence, and what the last
-    # step has to say is that the threshold chooses what gets voted on, which a
-    # clean rectangular return says more plainly than a shortcut.
-    if stage >= 4:
-        pick_cx = zx0 + (pick_index + 0.5) * cell_w
-        ax.plot(
-            [pick_cx, pick_cx, rail_x, rail_x],
-            [cut_label_bottom - OBJECT_GAP, ask_y, ask_y, row_y],
-            color=INK,
-            linewidth=1.6,
-            solid_capstyle="round",
-            solid_joinstyle="round",
-            zorder=2,
-        )
-        _arrow(ax, (rail_x, row_y), (block_x0 - OBJECT_GAP, row_y))
-        ax.text(
-            (rail_x + pick_cx) / 2,
-            ask_y + LABEL_GAP,
-            "vote, and train again",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=INK,
-        )
-        # Centred on the *canvas*, not on the panel, and kept short: a line
-        # hung off centre or run out to the panel's right edge widens the saved
-        # figure past its canvas, and every label in the slot shrinks with it.
-        ax.text(
-            INCL_CANVAS_W / 2,
-            conclusion_y,
-            "the cut chooses the next question",
             ha="center",
             va="center",
             fontsize=17,
@@ -5795,6 +5476,160 @@ def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float,
     ax.text(
         (cut_x + right) / 2, bracket_y + LABEL_GAP, f"kept: {kept}", ha="center", va="bottom", fontsize=16, color=INK
     )
+
+
+# ── Second Cut: where Autopilot asks (#3546, #4632) ──────────────────────────
+
+#: How many build stages Second Cut's figure reveals in: What to Expect's votes,
+#: corpus and line, with each unvoted item's chance of being a match where that
+#: slide drew expected F-beta; the even-odds cut and the item it asks about; the
+#: other two radios' lines, which move while that cut does not; the answer
+#: going back into the votes.
+ACQ_FLOW_STAGES = 4
+#: The chance row stands where What to Expect drew expected F-beta, at that
+#: row's height, so the two figures read as one fit asked two questions.
+ACQ_CHANCE_Y, ACQ_CHANCE_H = LL_F_Y, LL_F_H
+#: How far under the chance row's baseline the radios' names hang.
+ACQ_NAME_DROP = 0.2
+#: The asked item's disc: its radius, and its gap over the corpus's bars.
+ACQ_PICK_R = 0.24
+ACQ_PICK_GAP = 0.12
+
+
+def acq_flow_fig() -> None:
+    """Second Cut: where Autopilot asks, read off the line's own fit (#3546, #4632).
+
+    What to Expect's votes, corpus and line, with that slide's expected-F-beta
+    row swapped for the other thing the same 3-part fit says about every
+    unvoted item: its chance of being a match (``LabelsLine.unvoted_posteriors``).
+    Autopilot's Hard and New picks sample where that chance first falls below
+    even odds, best first
+    (:func:`~vtscore.training.thresholds.target_precision_threshold` at
+    :data:`~vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION`), and that
+    score is what the figure drops to the corpus. The other two radios' lines
+    arrive after it, because the slide's point is that they move and the asking
+    cut does not: it is a fact about the fit, not about the user's preference.
+    Schematic inputs, real code, as on What to Expect.
+
+    It replaced a figure of the line − 4 Inclusion re-cut of the fused mixture,
+    which #3546 found had saturated into a rank pin under the balance.
+    """
+    final = _acq_flow_stage(ACQ_FLOW_STAGES)
+    box = tight_box(final)
+    for stage in range(1, ACQ_FLOW_STAGES):
+        save(_acq_flow_stage(stage), OUT, f"calib-acq-flow.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-acq-flow.png", column=FULL_BLEED, box=box)
+
+
+def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
+    """One item of the zoomed ranking: unlabeled, or a vote already cast."""
+    if kind == "unlabeled":
+        ax.add_patch(Rectangle((x0, y0), w, h, facecolor=UNLABELED_FILL, edgecolor=INK, linewidth=lw, zorder=3))
+        return
+    color, hatch = (GREEN, "//////") if kind == "good" else (RED, "\\\\\\")
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=color, hatch=hatch, linewidth=0, zorder=3))
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=lw, zorder=4))
+
+
+def _acq_chance(line: "LabelsLine", logit: float) -> float:
+    """The 3-part fit's chance of a match at a score in logit units, off the corpus's own posteriors."""
+    xs = _ll_logit(line.unvoted_scores)[::-1]
+    return float(np.interp(logit, xs, np.asarray(line.unvoted_posteriors, dtype=float)[::-1]))
+
+
+def _acq_cut(ax: plt.Axes, line: "LabelsLine", beta: float, name: str, **style) -> None:
+    """One radio's line: from the chance row's floor up through the corpus, its chance dotted, its name under it."""
+    logit = float(_ll_logit(line.threshold(beta)))
+    x = float(_ll_at(logit))
+    ax.plot([x] * 2, [ACQ_CHANCE_Y, LL_CORPUS_Y + LL_CORPUS_H + 0.15], zorder=5, **style)
+    ax.plot([x], [ACQ_CHANCE_Y + _acq_chance(line, logit) * ACQ_CHANCE_H], marker="o", markersize=8,
+            color=style.get("color", INK), zorder=6)  # fmt: skip
+    ax.text(x, ACQ_CHANCE_Y - ACQ_NAME_DROP, name, ha="center", va="top", fontsize=16, color=INK)
+
+
+def _acq_pick(ax: plt.Axes, corpus: np.ndarray, ask: float) -> tuple[float, float]:
+    """The item asked about: a ? disc standing on the corpus's bars at the even-odds score; returns its centre."""
+    lo, hi = LL_LOGIT
+    counts, _edges = np.histogram(corpus, bins=LL_BINS, range=LL_LOGIT)
+    sy = LL_CORPUS_H / float(counts.max())
+    at = int(np.clip((ask - lo) / (hi - lo) * LL_BINS, 0, LL_BINS - 1))
+    bars = float(counts[max(at - 1, 0) : at + 2].max()) * sy
+    centre = (float(_ll_at(ask)), LL_CORPUS_Y + bars + ACQ_PICK_GAP + ACQ_PICK_R)
+    ax.add_patch(Circle(centre, ACQ_PICK_R, facecolor="white", edgecolor=INK, linewidth=2.4, zorder=8))
+    ax.text(*centre, "?", ha="center", va="center", fontsize=18, fontweight="bold", color=INK, zorder=9)
+    return centre
+
+
+def _acq_flow_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Second Cut's figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+
+    corpus, line = _ll_data()
+    model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
+    lo, hi = LL_LOGIT
+    right = LL_X0 + LL_W
+    half = ACQ_CHANCE_Y + ACQ_CHANCE_H / 2
+
+    # ── stage 1: What to Expect's fit, asked the other thing it knows ─────────
+    _ll_votes_row(ax, model, 2)
+    _ll_corpus_row(ax, corpus, line, model)
+    _range_line(ax, LL_X0, right, ACQ_CHANCE_Y, z=3)
+    _ll_row_name(ax, ACQ_CHANCE_Y + ACQ_CHANCE_H / 2, "Chance of\na match")
+    # Even odds as a hairline across the row, named at its end: where the curve
+    # crosses it is a coin toss.
+    ax.plot([LL_X0, right], [half] * 2, color=SOFT, linewidth=1.2, linestyle=(0, (2, 3)), zorder=2)
+    ax.text(right + LABEL_GAP, half, "½", ha="left", va="center", fontsize=16, color=INK)
+    xs = _ll_logit(line.unvoted_scores)
+    chance = np.asarray(line.unvoted_posteriors, dtype=float)
+    inside = (xs >= lo) & (xs <= hi)
+    ax.plot(_ll_at(xs[inside]), ACQ_CHANCE_Y + chance[inside] * ACQ_CHANCE_H, color=INK, linewidth=2.4, zorder=4)
+    _acq_cut(ax, line, LL_PICKED, "β 1", color=BLUE, linewidth=2.6)
+
+    # ── stage 2: Autopilot asks where the chance falls to even odds ───────────
+    # Drawn as a reading of the curve rather than as a second line: from the
+    # crossing up to the item asked about. At the middle radio it sits close
+    # to the line, and two full-height lines that close read as one.
+    ask = float(_ll_logit(target_precision_threshold(line, ACQUISITION_TARGET_PRECISION)))
+    ask_x = float(_ll_at(ask))
+    pick = (ask_x, 0.0)
+    if stage >= 2:
+        pick = _acq_pick(ax, corpus, ask)
+        ax.plot([ask_x], [half], marker="o", markersize=8, color=INK, zorder=6)
+        ax.plot([ask_x] * 2, [half, pick[1] - ACQ_PICK_R], color=INK, linewidth=1.6, linestyle=(0, (1, 2)), zorder=7)
+
+    # ── stage 3: the other two radios move the line; even odds stays ──────────
+    if stage >= 3:
+        for beta, name in FBETA_ARMS:
+            if beta != LL_PICKED:
+                _acq_cut(ax, line, beta, f"β {name}", color=INK, linewidth=1.4, linestyle=(0, (4, 3)))
+
+    # ── stage 4: the answer goes back into the votes ─────────────────────────
+    if stage >= 4:
+        ax.annotate(
+            "",
+            xy=(ask_x, LL_VOTES_Y + 0.05),
+            xytext=(pick[0] + ACQ_PICK_R * 0.7, pick[1] + ACQ_PICK_R * 0.7),
+            arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.6, "connectionstyle": "arc3,rad=0.4"},
+            zorder=6,
+        )
+        # Right of the arc's bulge and clear of β ¼'s line, which runs between
+        # the two, and above the matches' count so the two labels stack.
+        quarter_x = float(_ll_at(float(_ll_logit(line.threshold(FBETA_ARMS[0][0])))))
+        ax.text(
+            quarter_x + OBJECT_GAP,
+            (pick[1] + LL_VOTES_Y) / 2,
+            "vote, and retrain",
+            ha="left",
+            va="center",
+            fontsize=16,
+            color=INK,
+        )
+
+    return fig
 
 
 # ── what travels from Train to Find (#4517) ──────────────────────────────────

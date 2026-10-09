@@ -197,6 +197,17 @@ def _normalize_signpost_vocab(v: Any) -> Any:
     return out
 
 
+def _dedupe_strings(v: Any) -> Any:
+    """Drop blank and repeated entries from a list of strings, keeping order.
+
+    Anything other than a list of strings is passed through untouched for
+    Pydantic to reject.
+    """
+    if not isinstance(v, list) or not all(isinstance(s, str) for s in v):
+        return v
+    return list(dict.fromkeys(s for s in v if s.strip()))
+
+
 def _docs_link_url_ok(url: str) -> bool:
     """True for an absolute ``http``/``https`` URL or a root-relative ``/path``.
 
@@ -324,17 +335,16 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
-    # Withhold the remaining-time estimate from **ingest** progress bars
-    # (dataset imports, staging imports, a labelset's missing-media fetch).
-    # On a deployment where those jobs are too erratic for any timing profile
-    # to predict, the ETA swings from seconds to most of an hour and misleads
-    # more than it helps (issue #4233); the bar and its counts still show.
-    # Other long-running bars (open, sort, Find, train) keep their ETA.  Set
-    # with the ``--hide-ingest-eta`` CLI flag / ``VTSEARCH_HIDE_INGEST_ETA``
-    # env var (process-wide, wins for the process lifetime) or by editing this
-    # key in the settings file.  See
-    # :func:`vtsearch.settings.get_effective_hide_ingest_eta`.
-    hide_ingest_eta: bool = False
+    # Lock Train and Test to their **Autopilot** tabs (#4666).  An operator who
+    # wants users on the guided flow only can drop Train's Manual tab and
+    # Test's Review tab; the tab bars then do not render at all, so the left
+    # pane is just the Autopilot panel.  A UI simplification, not a permission
+    # boundary: the backend serves the same routes either way.  Set with the
+    # ``--autopilot-only`` CLI flag / ``VTSEARCH_AUTOPILOT_ONLY`` env var
+    # (process-wide, wins for the process lifetime) or by editing this key in
+    # the settings file.  See
+    # :func:`vtsearch.settings.get_effective_autopilot_only`.
+    autopilot_only: bool = False
 
     # Solo-mediaType streamlining. An admin-set restriction: when set, the
     # importer and new-detector flows hide their mediaType pickers and lock to
@@ -424,13 +434,24 @@ class UserSettings(BaseModel):
     # "RAM / Disk bars" pulldown in the appearance settings.
     show_usage_bars: UsageBarsMode = "default"
     show_metadata: bool = False
-    # Set to True once the user dismisses the zero-votes "Use ← / → or click"
-    # hint that overlays the Good/Bad buttons when a fresh labeling session
-    # has no votes yet. Persisting it keeps the hint from re-appearing every
-    # time the same user starts a new session.
-    label_hint_dismissed: bool = False
+    # Toasty's hints (#4680): the speech bubbles King Toasty shows beside the
+    # control a new user should click next ("Click + to add a dataset", ...).
+    # ``hide_all_hints`` is the bubble's "Hide all hints" checkbox (and the
+    # Settings modal's Hide All); ``hidden_hints`` lists the ids of hints hidden
+    # one by one with "Hide this hint". The ids are owned by the frontend
+    # (``HINT_IDS`` in ``hints.service.ts``), so an id this list does not know
+    # is kept rather than rejected. Settings' Show All clears both.
+    hide_all_hints: bool = False
+    hidden_hints: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
     autopilot_enabled: bool = True
-    hide_autopilot: bool = False
+    # Whether Train and Test open with each side panel folded to a thin
+    # strip (#4673). The left folds only on the Autopilot tab, where the
+    # centre already serves every pick; Manual and Review keep their list.
+    # The right folds on every tab. Both default to hidden, leaving the
+    # item in the middle; each strip's arrow opens its side and writes the
+    # choice back here.
+    hide_left_panel: bool = True
+    hide_right_panel: bool = True
     # When False, the Achievements tab/button and unlock pop-ups are
     # hidden, every ``record_*`` hook is a no-op, and ``get_full_state``
     # returns zeroed counters with no pending announcements. Flipping it
@@ -469,6 +490,13 @@ class UserSettings(BaseModel):
     # left it last time. Defaults on - moving a detector to AutoFind is the
     # user saying they want it run on what they import.
     autofind_on_import: bool = True
+    # Whether a command-line AutoFind (``--autodetect`` / ``--pipeline``)
+    # deletes the dataset it imported once its detectors have run (#4674).
+    # Off by default: the CLI keeps what it imports on the dashboard.  Only the
+    # CLI reads it - a run from the web app never deletes - and a run that
+    # detected nothing (no AutoFind detectors, or none for the media type)
+    # keeps its dataset, because there the import was the whole point.
+    autofind_cli_delete_dataset: bool = False
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

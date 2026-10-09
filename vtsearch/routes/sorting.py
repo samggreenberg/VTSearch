@@ -87,10 +87,8 @@ sorting_bp = Blueprint(
 # the unified whole-job bar and an overall ETA, with the model load surfaced as
 # real sub-progress within step 1.
 _SORT_STEPS = 3
-#: Timing-profile task name; its step names and shipped fallback weights live in
-#: :data:`vtscore.timing.tasks.TASKS`. An admin ``VTSEARCH_TIMING_PROFILE``
-#: measured on this deployment replaces those weights with real seconds, which
-#: is what keeps the sort ETA from drifting on a cold model load.
+#: Timing task name; its step names and shipped weights live in
+#: :data:`vtscore.timing.tasks.TASKS`.
 _SORT_TASK = "text_sort"
 
 
@@ -203,9 +201,9 @@ def sort_clips(body: dict):
     # A warm sort never enters step 1: ``_load_embedder_with_progress`` returns
     # before reporting it when the encoder is already resident, which is 47 of
     # every 48 sorts in a served process. Budgeting the bar for a load that will
-    # not happen is what put 0.80-0.85 of this task's bar in the wrong step under
-    # every profile #3521 fitted and under the shipped defaults alike (#3596), so
-    # the residency the route can simply *look up* is passed to the pacing.
+    # not happen is what put 0.80-0.85 of this task's bar in the wrong step
+    # (#3596), so the residency the route can simply *look up* is passed to the
+    # pacing.
     #
     # Racy in one harmless direction only: models are never unloaded, so a warm
     # answer stays true, and a cold answer that another request warms first
@@ -219,13 +217,6 @@ def sort_clips(body: dict):
             skip_steps=() if _sort_will_load_model(snap) else ("load_model",),
         )
     )
-    # Every exit below — success and abort alike — parks the tracker at "idle"
-    # via ``sort_idle()``, which is what closes the recorder.
-    recorder = timing.record_task(
-        sort_progress, _SORT_TASK, media_type=media_type, embedder=embedder_name, auto_finish=True
-    )
-    recorder.start()
-    recorder.set_scale(n=len(snap))
     try:
         _load_embedder_with_progress(snap)
         update_sort_progress("sorting", "Embedding text query…", 0, 0, step=2, total_steps=_SORT_STEPS)
@@ -246,7 +237,6 @@ def sort_clips(body: dict):
         sort_idle()
         return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold)
     except Exception as exc:
-        recorder.finish(ok=False)
         from werkzeug.exceptions import HTTPException
 
         if isinstance(exc, HTTPException):

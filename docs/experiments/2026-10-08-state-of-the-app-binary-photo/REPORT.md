@@ -186,6 +186,30 @@ the next retrain learns from.
 Most first prompts come in Autopilot's `hard` phase (63%, 69% and 76%), the rest in `new` or `done`. The last review
 prompted 43 to 45% of sessions.
 
+## Where the app said stop (#3560)
+
+The app announces *All quality indicators are green* the first time Smart, Stable and Span are all green. A user
+may stop there; the simulated session clicks on to 150 either way. A session's **stop** is that first click. The KM
+median keeps the sessions that never fired, censored at click 150. Every column after it covers only the sessions
+that fired. The gain is Fβ at click 150 minus at the stop, paired within session, with its SE over the 49 class
+means. From `stopping_by_preset.csv` (`stops_by_preset.py` over each run's `stops.csv`).
+
+| preset | fired | stop, KM median | Fβ at stop (median) | gain to 150, mean ± SE | ended ≥0.02 better | ended ≥0.02 worse | short of own best (median) | clicks past own best (median) |
+|---:|---:|---:|---:|---|---:|---:|---:|---:|
+| 1/4 | 83% | 81 | 0.73 | +0.075 ± 0.005 | 60% | 15% | 0.10 | −18 |
+| 1 | 82% | 83 | 0.55 | +0.076 ± 0.005 | 69% | 9% | 0.09 | −33 |
+| 4 | 79% | 93 | 0.69 | +0.046 ± 0.003 | 58% | 10% | 0.06 | −27 |
+
+**The stop comes early.** Clicking on past it raises Fβ at every preset, by far more than the SE, and the median
+session stops before its own best (64%, 81% and 78% of fired sessions do).
+
+**By band, it is the small objects that never fire.** Fired: large 98–100%, medium 86–91%, small 51–57%. In the
+small band the KM median stop is 132, 142 and 150. Every band gains after the stop (+0.040 to +0.089).
+
+**Span is the binding light.** It is not green on every held click of every session, and its margin sits at −35
+nodes. Smart is not green on 62–63% of held clicks, Stable on 44–60%. The full blocks, with each gate's margin, are in
+each run's `analysis-binary/summary.md`. This agrees with #4647: the stop fires with Fβ still to come.
+
 ## Where the app does well and where it does poorly
 
 **By size band** (beta 1, every run; the objective after the check, AP of the ranking):
@@ -319,6 +343,7 @@ directory, uncommitted.
 - `perbeta_summary.md`: every per-preset table above, from `perp.py --kind balance`.
 - `precision_recall_path.csv`: each preset's returned set at 25, 50, 100 and 150 clicks and after the check.
 - `objective_by_click.csv`: each preset's objective at every click (`by_click.py`).
+- `stopping_by_preset.csv`: where the app said stop, per preset and band (`stops_by_preset.py`).
 - `figures/`: the objective, the returned set and its path, per preset; AP and Goods over clicks; every cell.
 - `why/`: the confuser sheets and `why.csv`.
 - **Runs and full analyses:**

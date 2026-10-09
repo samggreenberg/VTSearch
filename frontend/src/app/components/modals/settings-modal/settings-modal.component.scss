@@ -49,6 +49,12 @@
   cursor: pointer;
 }
 
+// Toasty's hints: Hide All / Show All side by side.
+.hint-buttons {
+  display: flex;
+  gap: var(--space-sm);
+}
+
 // "Browser motion: Allowed / Blocked" status line under the Show Animations
 // toggle. Always visible: it reports whether the browser/OS reduce-motion
 // gate (which overrides the toggle) is currently suppressing animations, so a

@@ -74,10 +74,11 @@ that bite:
   the first time a caller supplies a path. Accept it and ignore it if you
   have nowhere to put it.
 - **Every field listed above is required.** `CoreConfig` is a frozen
-  dataclass with defaults only for seven optional fields
+  dataclass with defaults only for its optional fields
   (`autofind_exporter`, `autofind_exporter_field_values`,
-  `projection_n_neighbors`, `projection_min_dist`, `signpost_captioner`,
-  `signpost_vocab`, `hide_ingest_eta`) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
+  `autofind_cli_delete_dataset`, `projection_n_neighbors`,
+  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`, `beta`,
+  `hide_ingest_eta` and `inclusion` (both deprecated)) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
   means.
 
 ## 2. Load a folder of audio files

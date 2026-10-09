@@ -103,6 +103,14 @@
   padding: var(--space-md) var(--space-lg);
 }
 
+// Toasty's face for the level (#4680), ahead of the level's glyph.
+.toast__toasty {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin: calc(var(--space-xs) * -1) 0;
+}
+
 .toast__icon {
   flex: 0 0 18px;
   width: 18px;

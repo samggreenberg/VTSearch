@@ -10,6 +10,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`
+  stores F-beta's beta as a top-level `"beta"` (`BETA_KEY`) beside the labelset: `stored_beta(data)`,
+  `valid_beta(raw)`, `detector_stored_beta(detector_id)` and `keep_beta(det_ctx, value)`.
+  `vtscore.state.get_beta()` now seeds the active detector's first read from the balance its
+  detector keeps, and only then from `CoreConfig.from_settings().beta`; the new
+  `vtscore.state.detector_beta(ctx)` does the same for any context, and
+  `seed_detector_beta(ctx, data)` seeds one the registry cannot name from the JSON its caller holds.
+  `set_beta` writes the active detector's file as well as persisting the `"beta"` setting.
+  Behaviour change for a library caller: `train_and_threshold(det_ctx=...)` cuts at `det_ctx`'s own
+  balance rather than the active detector's (they are the same context on every live path), and
+  `resolve_or_train_detector`'s throwaway context and the CLI's per-detector context are seeded
+  from the detector's JSON, so a cold train, an AutoFind and `--autodetect` draw each detector's line
+  at the balance it keeps. `recompute_detector_thresholds(beta)` cuts a detector that has not read
+  its balance yet at the one it keeps, `beta` only when it keeps none. A detector JSON with no
+  `"beta"` behaves exactly as before.
+
 - **The eval harness can draw a share of Autopilot's picks the way the spot check does** (issue #4482).
   `simulate_voting_iterations` takes `band_share` (`None`, the default and the app; or N: one in N of the
   picks past the opening is drawn uniformly within one band of the unvoted ranking, cycling through the bands
@@ -343,6 +359,25 @@ instead, since every commit on `dev` is effectively a new app release.)
     `_safe_threshold_for_step` takes `check=`.
 
 ### Added
+
+- **A subset layout can be started ahead of the click, on an idle server** (issue #4683).
+  `vtscore.projection.service.prep_subset_layout(ctx, ids)` starts the same fit
+  `build_layout(ctx, ids=ids)` would, so a later build of those ids finds it ready or joins it,
+  but answers `{"status": "busy", "reason": ...}` and starts nothing while
+  `vtscore.concurrency.async_jobs.busy_reason()` names work in flight: a loading-tasks or
+  detector-loading row, a job on a user-visible `JobManager`, or the shared sort / eval / find bar
+  mid-run. Additive: no existing signature changed.
+
+- **A saving CLI run can delete what it imported once AutoFind has run** (issue #4674).
+  `CoreConfig` gains `autofind_cli_delete_dataset` (`bool`, default `False`; the app fills
+  it from the per-user setting of the same name). With it on, a `save_dataset=True` run of
+  the `vtscore.cli.autodetect_*_main` entry points (and a pipeline file without
+  `tempimport: true`) unregisters the dataset it imported, pickle and sidecars included,
+  after its detectors have scored it and the exporter has run, and emits a new
+  `cli_progress` event, `dataset_deleted` (`dataset_id`, `name`). A run that detected
+  nothing, failed, or scored a pickle that already was a registered dataset deletes nothing.
+  The dry-run plan's `source` carries `delete_after_detection: true` when it would. Additive:
+  a `CoreConfig(...)` built without the field keeps every dataset it saves.
 
 - **The calibration frame carries the objective's oracle** (issue #4654).
   `vtscore.eval.calibration_metrics.oracle_fbeta_cut(scores, labels, beta)`
@@ -1210,6 +1245,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Deprecated
 
+- **The per-environment timing profile and the ingest-ETA switch are no-ops** (issue #4667).
+  Dataset imports, staging imports and labelset missing-media fetches now build their trackers
+  with `publish_eta=False` unconditionally, so `vtscore.concurrency.progress.ingest_eta_hidden()`
+  always returns `True` and `CoreConfig.hide_ingest_eta` is accepted and ignored. In
+  `vtscore.timing`, the profile layer is gone and its names answer "no profile":
+  `active_profile()`, `reload_profile()` and `parse_profile()` return `EMPTY_PROFILE`,
+  `profile_covers()` is `False`, `slot_shares()` is `None`, and `VTSEARCH_TIMING_PROFILE` is not
+  read. The recorder is a no-op: `record_task()` returns a `TaskTimingRecorder` whose methods do
+  nothing, `recording_enabled()` is `False`, `note_branch()` / `note_no_encoder_load()` do
+  nothing, and `VTSEARCH_TIMING_RECORD` is not read. `step_weights()` / `step_terms()` keep their
+  signatures but price from the shipped defaults only, so `device`, `embedder`, `n`, `size_mb` and
+  `branch` are ignored; `media_type` and `skip_steps` work as before. `TimingProfile`,
+  `StepCoeffs`, `CHEAP_BRANCHES`, `DEAR_BRANCHES` and the `PROFILE_ENV_VAR` / `SCHEMA_*` /
+  `RECORD_ENV_VAR` constants are kept unchanged. See `packages/timing.md`.
+
 - **A retrain no longer builds the #4220 precision estimate, and its
   calibration filter is retired** (issue #4362). `train_and_threshold`,
   `train_and_score`, `labelset_train_and_score` and `run_learned_sort` stopped
@@ -1326,6 +1376,12 @@ instead, since every commit on `dev` is effectively a new app release.)
   own lock, which is state by any reading.
 
 ### Removed
+
+- **`vtscore.timing.fit`** (issue #4667). The module that fitted recorded timing rows into a
+  profile document (`load_rows`, `normalize_row`, `affine_fit`, `fit_step`, `fit_branches`,
+  `fit_profile`, `coverage_report`, …) is deleted, along with the recorder it read and the
+  profile it wrote (see the Deprecated entry above). It had no caller outside the repo's
+  tuning script, which went with it.
 
 - **The precision floor** (issue #4421). The balance (#4413) is the only
   preference a detector's line is drawn at. None of these was in a release

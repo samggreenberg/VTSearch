@@ -203,12 +203,17 @@ const GRID_ROWS = 3;
 // these are persisted per media type and the Label view reads the same keys: a
 // run that left them behind would shoot the next run's train loop in this
 // layout.
+// Both side panels open: Train and Test fold them to a strip by default
+// (#4673), and every slide is of what is in them.
+const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
 const FIND_LINE_LAYOUT = {
+  ...PANELS_OPEN,
   grid_icon_size_left: { image: 'L' },
   panel_pct_left: { image: 500 },
   panel_pct_right: { image: 225 },
 };
 const DEFAULT_LAYOUT = {
+  ...PANELS_OPEN,
   grid_icon_size_left: { image: 'M' },
   panel_pct_left: { image: 260 },
   panel_pct_right: { image: 300 },
@@ -322,10 +327,14 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * non-dismissing "this page is running an out-of-date build" banner across the
  * top of every frame. It is doing its job — see the note in `CLAUDE.md` — and
  * it has nothing to do with the application a slide is showing.
+ *
+ * Toasty's hints (#4680) are hidden too: the slide around a frame already says
+ * what to click, and a speech bubble saying it again is a hat on a hat. They
+ * float over the page, so hiding one moves nothing else.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
-  + 'vt-toast-container,.toast-stack{display:none!important}';
+  + 'vt-toast-container,.toast-stack,vt-toasty-hint{display:none!important}';
 
 async function enterLabelView(page, datasetName, detectorName) {
   await openDashboard(page);

@@ -12,7 +12,7 @@ for audio.
 
 ## Setup
 
-One job ([`run_atlas_3595.sbatch`](../../../scripts/experiments/drive_cold/run_atlas_3595.sbatch),
+One job ([`run_atlas_3595.sbatch`](https://github.com/samggreenberg/VTSearch/blob/80e7724cea4688205ee1c99de2d25b72df7c93fb/scripts/experiments/drive_cold/run_atlas_3595.sbatch),
 SLURM 678051) ran on `rack7n06`, the same V100 + cuML node as #3521
 ([`measurements/env.txt`](measurements/env.txt)), with its own data dir and demo
 media symlinked from the shared cache. Each dataset was imported once. The job
@@ -25,7 +25,7 @@ rebuilds (through the on-demand endpoint) and two restores:
   (4995 / 8732).
 
 The tables and figures are rebuilt from the committed rows by
-[`analyze_atlas_3595.py`](../../../scripts/experiments/drive_cold/analyze_atlas_3595.py)
+[`analyze_atlas_3595.py`](https://github.com/samggreenberg/VTSearch/blob/80e7724cea4688205ee1c99de2d25b72df7c93fb/scripts/experiments/drive_cold/analyze_atlas_3595.py)
 ([`tables.md`](tables.md)).
 
 ## 1. The rebuild is linear to 36 497 items

@@ -1,4 +1,4 @@
-<div class="layout" #layout>
+<div class="layout" #layout [class.layout--left-collapsed]="leftCollapsed()" [class.layout--right-collapsed]="rightCollapsed()">
   <div class="panel-left">
     <vt-left-panel
       [medias]="mediaState.mediasSignal()"
@@ -46,13 +46,14 @@
       (indicatorClick)="onIndicatorClick($event)"
       (sortCancel)="onSortCancel()"
       [datasetName]="pairScope.datasetName()"
-      [autopilotCollapsed]="autopilotCollapsed()"
+      [collapsed]="panelHide.left()"
       [autopilotEnabled]="autopilotEnabled()"
       [autopilotDisabled]="autopilotDisabled"
+      [autopilotOnly]="autopilotOnly()"
       (autopilotStart)="onAutopilotStart()"
       (autopilotStop)="onAutopilotStop()"
       (autopilotRefocus)="onAutopilotRefocus()"
-      (autopilotToggleCollapse)="onAutopilotToggleCollapse()"
+      (toggleCollapse)="onTogglePanel('left')"
       (autopilotEnabledChange)="onAutopilotEnabledChange($event)"
     />
   </div>
@@ -61,7 +62,7 @@
     vtPanelResize="left"
     [layoutEl]="layoutRef().nativeElement"
     [minWidth]="leftMin"
-    [opposingWidth]="rightWidth()"
+    [opposingWidth]="rightExtent()"
     [centerMin]="CENTER_MIN"
     [dividerTotal]="DIVIDER_TOTAL"
     (widthChange)="onLeftWidthChange($event)"
@@ -79,6 +80,7 @@
       [exhaustedHeading]="exhaustedHeading()"
       [exhaustedDetail]="exhaustedDetail()"
       [advancePending]="advancePending()"
+      [startVotingHint]="startVotingHint()"
       (mediaVoted)="onMediaVoted($event)"
       (navigateRequested)="onNavigate($event)"
     />
@@ -87,21 +89,24 @@
     class="pane-divider"
     vtPanelResize="right"
     [layoutEl]="layoutRef().nativeElement"
-    [minWidth]="RIGHT_MIN"
-    [opposingWidth]="leftWidth()"
+    [minWidth]="rightMin"
+    [opposingWidth]="leftExtent()"
     [centerMin]="CENTER_MIN"
     [dividerTotal]="DIVIDER_TOTAL"
     (widthChange)="onRightWidthChange($event)"
     (resizeEnd)="onRightResizeEnd($event)"
   ></div>
   <div class="panel-right">
-    <vt-right-panel
-      [medias]="mediaState.mediasSignal()"
-      [focusMode]="focusModeRight"
-      [trainableModelName]="trainableModelName()"
-      (mediaSelected)="onMediaSelect($event)"
-      (mediaVoted)="onHoverVote($event)"
-    />
+    <vt-side-panel-toggle side="right" label="Labels" [collapsed]="rightCollapsed()" (toggle)="onTogglePanel('right')" />
+    @if (!rightCollapsed()) {
+      <vt-right-panel
+        [medias]="mediaState.mediasSignal()"
+        [focusMode]="focusModeRight"
+        [trainableModelName]="trainableModelName()"
+        (mediaSelected)="onMediaSelect($event)"
+        (mediaVoted)="onHoverVote($event)"
+      />
+    }
   </div>
 </div>
 

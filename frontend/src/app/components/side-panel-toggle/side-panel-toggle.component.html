@@ -1,0 +1,10 @@
+@if (collapsed()) {
+  <button type="button" class="side-strip" (click)="toggle.emit()" [title]="title()" [attr.aria-label]="title()">
+    <span class="collapse-toggle" aria-hidden="true">{{ arrow() }}</span>
+    <span class="side-strip-label" aria-hidden="true">{{ label() }}</span>
+  </button>
+} @else {
+  <div class="side-bar" [class.side-bar--right]="side() === 'right'">
+    <button type="button" class="collapse-toggle" (click)="toggle.emit()" [title]="title()" [attr.aria-label]="title()">{{ arrow() }}</button>
+  </div>
+}

@@ -88,9 +88,11 @@ class AppSettingsSchema(Schema):
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
-    label_hint_dismissed = fields.Boolean()
+    hide_all_hints = fields.Boolean()
+    hidden_hints = fields.List(fields.String())
     autopilot_enabled = fields.Boolean()
-    hide_autopilot = fields.Boolean()
+    hide_left_panel = fields.Boolean()
+    hide_right_panel = fields.Boolean()
     autopilot_top_greens = fields.Integer()
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
@@ -188,13 +190,13 @@ class AppSettingsSchema(Schema):
     # picker and the Server settings tab can report the restriction. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     semantic_only = fields.Boolean(dump_only=True)
-    # Server-tier switch that withholds the ETA from ingest progress bars. Set
-    # via the ``--hide-ingest-eta`` CLI flag / ``VTSEARCH_HIDE_INGEST_ETA`` env
-    # var (process-wide, all users) or the persisted settings file; the
-    # backend enforces it by publishing ``eta_seconds=None``, and it is
-    # surfaced read-only here so the Server settings tab can report it. Not in
+    # Server-tier switch that locks Train and Test to their Autopilot tabs
+    # (#4666). Set via the ``--autopilot-only`` CLI flag /
+    # ``VTSEARCH_AUTOPILOT_ONLY`` env var (process-wide, all users) or the
+    # persisted settings file; surfaced read-only here so the SPA can drop the
+    # Manual and Review tabs and the Server settings tab can report it. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
-    hide_ingest_eta = fields.Boolean(dump_only=True)
+    autopilot_only = fields.Boolean(dump_only=True)
     # Server-tier solo-mediaType restriction. Set via the
     # ``--solo-media-type`` CLI flag (process-wide, all users) or the
     # persisted settings file; surfaced read-only here as the value actually
@@ -225,6 +227,9 @@ class AppSettingsSchema(Schema):
     # is saved; the Add Dataset dialog's "Run AutoFind" checkbox starts from it,
     # and each import that sends the box remembers its state here.
     autofind_on_import = fields.Boolean()
+    # Whether a command-line AutoFind deletes the dataset it imported once its
+    # detectors have run (#4674); the AutoFind settings tab's checkbox.
+    autofind_cli_delete_dataset = fields.Boolean()
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -283,7 +288,8 @@ class SettingsUpdateSchema(Schema):
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
-    label_hint_dismissed = fields.Boolean()
+    hide_all_hints = fields.Boolean()
+    hidden_hints = fields.List(fields.String())
 
     grid_icon_size_left = fields.Raw()
     grid_icon_size_right = fields.Raw()
@@ -297,7 +303,8 @@ class SettingsUpdateSchema(Schema):
     bin_details_docked = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
-    hide_autopilot = fields.Boolean()
+    hide_left_panel = fields.Boolean()
+    hide_right_panel = fields.Boolean()
     autopilot_top_greens = fields.Integer()
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
@@ -330,6 +337,7 @@ class SettingsUpdateSchema(Schema):
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Raw()
     autofind_on_import = fields.Boolean()
+    autofind_cli_delete_dataset = fields.Boolean()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()

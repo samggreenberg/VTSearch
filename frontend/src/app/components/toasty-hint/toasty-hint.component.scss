@@ -1,0 +1,126 @@
+// The component measures the hint and sets `left` / `top` so Toasty stands
+// centred on the control, just past its edge, with the bubble reaching away
+// (see `toastyHintPlacement`). Reaching left puts Toasty at the right end of
+// the row.
+:host {
+  --toasty-size: 64px;
+  position: absolute;
+  z-index: var(--z-elevated);
+  // An absolute box shrinks to the room between `left` and the container's
+  // right edge, which by a right-hand + button is next to none; size to the
+  // content instead (the bubble's max-width wraps the text).
+  width: max-content;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  // Toasty himself never takes a click meant for what's under him; the
+  // bubble opts back in for its checkboxes.
+  pointer-events: none;
+  animation: toasty-hint-in var(--transition-slow) var(--ease-out);
+}
+
+:host(.toasty-hint--reach-right) {
+  flex-direction: row;
+}
+
+:host(.toasty-hint--above) {
+  align-items: flex-end;
+}
+
+:host(.toasty-hint--off) {
+  display: none;
+}
+
+.toasty-hint__toasty {
+  flex-shrink: 0;
+  width: var(--toasty-size);
+  height: var(--toasty-size);
+  animation: toasty-hint-hop calc(var(--transition-slow) * 2) var(--ease-out);
+}
+
+.toasty-hint__bubble {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-width: 260px;
+  margin-top: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+}
+
+:host(.toasty-hint--above) .toasty-hint__bubble {
+  margin: 0 0 var(--space-sm);
+}
+
+// The tail: a square turned 45°, bordered on the two sides that face Toasty,
+// so it reads as one outline with the bubble.
+.toasty-hint__bubble::after {
+  content: '';
+  position: absolute;
+  top: var(--space-lg);
+  right: -6px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border: solid var(--accent);
+  border-width: 1px 1px 0 0;
+  transform: rotate(45deg);
+}
+
+:host(.toasty-hint--reach-right) .toasty-hint__bubble::after {
+  right: auto;
+  left: -6px;
+  border-width: 0 0 1px 1px;
+}
+
+:host(.toasty-hint--above) .toasty-hint__bubble::after {
+  top: auto;
+  bottom: var(--space-lg);
+}
+
+.toasty-hint__text {
+  margin: 0;
+  font-size: var(--font-md);
+  color: var(--text-primary);
+}
+
+.toasty-hint__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.toasty-hint__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+@keyframes toasty-hint-in {
+  from {
+    opacity: 0;
+  }
+}
+
+// Toasty hops into place. The reduce-motion rules in styles.scss silence it
+// along with the fade.
+@keyframes toasty-hint-hop {
+  0% {
+    transform: translateY(var(--space-sm));
+  }
+  60% {
+    transform: translateY(calc(var(--space-2xs) * -1));
+  }
+  100% {
+    transform: none;
+  }
+}

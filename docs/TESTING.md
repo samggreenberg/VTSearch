@@ -14,7 +14,7 @@ How the test suite is organised and gated, and how to write tests that stay isol
 
 No CI runs tests — the repo's two workflows only publish (slide decks, and the State of the App links) — so a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
 
-Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s = 30 min**, `0` opts out for a deliberately long run) and `.claude/hooks/ensure-test-deps.sh` (minutes on a cold container, near-instant after).
+Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s = 30 min**, `0` opts out for a deliberately long run) and `.claude/hooks/ensure-test-deps.sh` (minutes on a cold container, near-instant after). The hook installs with `python -m pip`, so the stack lands in whichever interpreter `python` resolves to, never in a bare `pip`'s, which a cloud image has put on a different version. It skips on its marker only while `flask` and `vulture` still import (#4662).
 
 **Stage 1 — cheap gates, serial, fail-fast (~10s total; every invocation except `vtscore-clean`, and a `slides` run keeps only the rows that can see a deck):**
 

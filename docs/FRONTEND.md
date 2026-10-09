@@ -211,9 +211,27 @@ The three panels are shared with the Test view:
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
 
+**Folding the side panels** (#4673). Each side folds to a 48px strip
+(`vt-side-panel-toggle`), per the `hide_left_panel` / `hide_right_panel`
+settings, both on by default and shared by Train and Test.
+`PanelHideStateService` (root) reads them and holds a click until the PUT
+echoes it. The left folds on an Autopilot tab only (`LeftPanelComponent.folded`;
+Manual and Review are driven from the list), and in Train its strip is the
+Autopilot panel's own phase rail. The right folds on every tab, and Test opens
+it on its own while a verdict is up (`FindViewComponent.rightCollapsed`). A fold
+swaps the grid column, not the width: `--left-width` / `--right-width` keep the
+open width, and the `.layout--*-collapsed` classes put the strip's 48px in its
+place. A folded right panel is unmounted, which is why the views, not
+`vt-right-panel`, own the votes poll.
+
 **The Threshold** (`vt-balance`, the balance, in the Manual tab and Test's
 top row; #4413) is the one knob on the detector's line. The balance is
 F-beta's beta: which way to lean between false positives and false negatives.
+It is the detector's own, kept on the detector (#4665): the New Detector modal
+mounts the same control (with no line, so no state line) and sends the pick
+as `beta` on the create POST, starting on the user's `beta` setting, their last
+pick. That is the only way Train's Autopilot tab, which has no Threshold of its
+own, gets a balance the user chose.
 The line is the set with the best estimated F-beta, and a spot check just says
 what it estimated. Two values back the control, and they travel separately:
 `SortStateService.beta` is the balance the radios show, seeded per pair by
@@ -914,9 +932,13 @@ bundle's *static* imports from `main.js` and fails if the package reappears.
 `components/icon/` maps names (and backend-supplied emoji) to sanitised inline
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
 `skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` are the small
-shared widgets. `pointer-arrow/` draws a measured "look here" arrow from one
-element to another (the Dashboard's first-run hints); drop it under any
-positioned container that encloses both ends. `directives/no-focus-steal.directive.ts` stops toolbar buttons
+shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
+speech bubble beside the control to click next, with "Hide this hint" / "Hide
+all hints" boxes that `HintsService` keeps in the user's settings. Drop it
+under any positioned container; it measures itself against its anchor and
+flips the bubble to the other side when it would run off the edge. Its `face`
+(happy / sad / surprised, `utils/toasty-faces.ts`) is the same set the toasts
+use. `directives/no-focus-steal.directive.ts` stops toolbar buttons
 next to the Browse canvas from swallowing keyboard focus on mousedown.
 
 Services are root-provided by default; provide one on a component only when

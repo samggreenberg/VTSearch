@@ -18,6 +18,10 @@ import { provideHttpTesting } from '../../testing/test-providers';
 import { BALANCE_STATES, lineBalance, wireBalance } from '../../testing/line-balance';
 import { wireLineTest, wireTest } from '../../testing/line-test';
 
+/** Both side panels open: the layout these specs were written against. The
+ *  folds, and their hidden default, have their own specs (#4673). */
+const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
+
 /**
  * Zoneless staleness canary for the Find view.
  * Phase 2.5 signalized find-view's own subscribe/effect
@@ -75,7 +79,7 @@ describe('FindViewComponent (zoneless canary)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -240,7 +244,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -393,7 +397,7 @@ describe('FindViewComponent (balance supersession)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -534,7 +538,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -624,7 +628,7 @@ describe('FindViewComponent ↓ then ↑ (#4306)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -702,7 +706,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
       httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -885,5 +889,126 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       await flushInit(ranking.map(({ id }) => id));
       expect(start).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('FindViewComponent folding the side panels (#4673)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+
+  /** Drain the init loads, answering settings with *saved* (no hide keys: the hidden default). */
+  async function flushInit(saved: Record<string, unknown> = {}): Promise<void> {
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush([{ id: 1, media_type: 'image' }]));
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock
+        .match((req) => req.url === '/api/settings' && req.method === 'GET')
+        .forEach((req) => req.flush({ volume: 0.8, ...saved }));
+      httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'ds' }));
+    }
+    await settleZoneless(fixture);
+  }
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const layout = () => el().querySelector('.layout')!.classList;
+  const settingsPuts = () =>
+    httpMock.match((req) => req.url === '/api/settings' && req.method === 'PUT').map((req) => {
+      req.flush({});
+      return req.request.body;
+    });
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    TestBed.inject(VoteStateService).stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  it('opens on Autopilot with both sides folded to their strips by default', async () => {
+    await flushInit();
+    expect(layout()).toContain('layout--left-collapsed');
+    expect(layout()).toContain('layout--right-collapsed');
+    expect(el().querySelector('.left-tabs')).toBeNull();
+    expect(el().querySelector('.panel-left .side-strip')!.textContent).toContain('Autopilot');
+    expect(el().querySelector('vt-line-test-result')).toBeNull();
+    expect(el().querySelector('.panel-right .side-strip')!.textContent).toContain('Result');
+  });
+
+  it('keeps the left open on Review, which is driven from its list, and the right folded', async () => {
+    await flushInit();
+    fixture.componentInstance.onFindTabChange('review');
+    await flushInit();
+    expect(layout()).not.toContain('layout--left-collapsed');
+    expect(el().querySelector('vt-media-list')).not.toBeNull();
+    expect(el().querySelector('vt-right-panel')).toBeNull();
+    expect(el().querySelector('.panel-right .side-strip')!.textContent).toContain('Labels');
+  });
+
+  it('opens a side from its strip and remembers it', async () => {
+    await flushInit();
+    el().querySelector<HTMLButtonElement>('.panel-left .side-strip')!.click();
+    await settleZoneless(fixture);
+    expect(layout()).not.toContain('layout--left-collapsed');
+    expect(el().querySelector('.left-tabs')).not.toBeNull();
+    expect(settingsPuts()).toEqual([{ hide_left_panel: false }]);
+  });
+
+  it('opens the result on its own when the verdict lands, without touching the setting', async () => {
+    await flushInit();
+    const view = fixture.componentInstance;
+    view.lineTest.response.set(wireLineTest(wireTest({ phase: 'done' })));
+    await settleZoneless(fixture);
+    expect(el().querySelector('vt-line-test-result')).not.toBeNull();
+    expect(layout()).not.toContain('layout--right-collapsed');
+    expect(settingsPuts()).toEqual([]);
+
+    // Folded again, it stays folded for this verdict...
+    el().querySelector<HTMLButtonElement>('.panel-right .side-bar button')!.click();
+    await settleZoneless(fixture);
+    expect(el().querySelector('vt-line-test-result')).toBeNull();
+    expect(settingsPuts()).toEqual([{ hide_right_panel: true }]);
+    view.onFindTabChange('review');
+    view.onFindTabChange('autopilot');
+    await settleZoneless(fixture);
+    expect(el().querySelector('vt-line-test-result')).toBeNull();
+
+    // ...and the next test's verdict opens it again.
+    view.lineTest.response.set(wireLineTest(wireTest({ phase: 'matches' })));
+    await settleZoneless(fixture);
+    view.lineTest.response.set(wireLineTest(wireTest({ phase: 'done' })));
+    await settleZoneless(fixture);
+    expect(el().querySelector('vt-line-test-result')).not.toBeNull();
+  });
+
+  it('opens a folded side when its divider is dragged out past the panel minimum', async () => {
+    await flushInit();
+    const layoutEl = el().querySelector('.layout') as HTMLElement;
+    vi.spyOn(layoutEl, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 1200, width: 1200 } as DOMRect);
+    const divider = el().querySelectorAll<HTMLElement>('.pane-divider')[1];
+
+    divider.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 1100 }));
+    expect(fixture.componentInstance.rightCollapsed()).toBe(true);
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 900 }));
+    expect(fixture.componentInstance.rightCollapsed()).toBe(false);
+    document.dispatchEvent(new MouseEvent('mouseup'));
+    expect(layoutEl.style.getPropertyValue('--right-width')).toBe('300px');
   });
 });

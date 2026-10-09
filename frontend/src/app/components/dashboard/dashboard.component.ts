@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, timer } from 'rxjs';
@@ -53,8 +53,32 @@ import { LabelImporterModalComponent } from '../modals/label-importer-modal/labe
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
-import { PointerArrowComponent } from '../pointer-arrow/pointer-arrow.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
+import { HintId } from '../../services/hints.service';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
+
+/** What a dataset of each media type holds, for Toasty's "add a dataset" hint. */
+const MEDIA_PLURALS: Readonly<Record<string, string>> = {
+  image: 'images',
+  audio: 'audio clips',
+  text: 'text paragraphs',
+  video: 'videos',
+  document: 'documents',
+  face: 'faces',
+};
+
+/** Toasty's Dashboard hints, in the order {@link DashboardComponent.dashboardHint} tries them. */
+type DashboardHintId = Extract<
+  HintId,
+  | 'add-dataset'
+  | 'select-dataset'
+  | 'mixed-datasets'
+  | 'add-detector'
+  | 'select-detector'
+  | 'mismatch'
+  | 'train'
+  | 'test-or-find'
+>;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,7 +95,7 @@ import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-b
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
     IconComponent,
-    PointerArrowComponent,
+    ToastyHintComponent,
     UsageBarComponent,
     SkeletonComponent
 ],
@@ -94,6 +118,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private hfAuth = inject(HuggingFaceAuthService);
   private dashSelection = inject(DashboardSelectionService);
   private newThingFlows = inject(NewThingFlowsService);
+  /** The two "add" flows' state as signals, so Toasty's hints go away the
+   *  moment either dialog opens, from the Dashboard's + or anywhere else. */
+  private readonly importerFlow = toSignal(this.newThingFlows.importer$, { requireSync: true });
+  private readonly newDetectorFlow = toSignal(this.newThingFlows.newDetector$, { requireSync: true });
   modals = inject(DashboardModalsService);
   loadingTasksSvc = inject(DashboardLoadingTasksService);
   browsePrep = inject(BrowsePrepService);
@@ -1144,16 +1172,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Embedder of the single active/selected dataset (mirrors
-   *  ``activeDatasetMediaType``). Empty when ambiguous or unrecorded; lets the
-   *  new-detector modal warn about text-only detectors on no-text datasets. */
+   *  ``activeDatasetMediaType``). Empty when ambiguous or unrecorded. */
   get activeDatasetEmbedder(): string {
+    return this.embedderSourceDataset?.embedder ?? '';
+  }
+
+  /** Every embedder that dataset binds; with the primary above, lets the
+   *  new-detector modal require an example item when none can search by text
+   *  (#4666). */
+  get activeDatasetEmbedders(): string[] {
+    return this.embedderSourceDataset?.bound_embedders ?? [];
+  }
+
+  /** The dataset the two getters above describe: the single selected one when
+   *  it records an embedder, else the first loaded one. */
+  private get embedderSourceDataset(): DatasetRegistryEntry | undefined {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
       const sel = this.datasetState.datasetById().get(selId);
-      if (sel?.embedder) return sel.embedder;
+      if (sel?.embedder) return sel;
     }
-    const loaded = this.datasets.find((d) => d.loaded);
-    return loaded?.embedder ?? '';
+    return this.datasets.find((d) => d.loaded);
   }
 
   openNewDetectorModal(): void {
@@ -1161,6 +1200,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.newThingFlows.openNewDetector({
       defaultMediaType: this.activeDatasetMediaType,
       datasetEmbedder: this.activeDatasetEmbedder,
+      datasetEmbedders: this.activeDatasetEmbedders,
     });
   }
 
@@ -1259,10 +1299,44 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.isContextSwitching || this.browsePrep.preparing;
   }
 
-  /** Whether to show the "Click Train to teach your new detector." hint and
-   *  its arrow (#4227): exactly one detector is selected, it has no training
-   *  labels yet (its #Training cell reads "Empty"), and Train is clickable
-   *  because a compatible dataset is selected too. */
+  /**
+   * Which of Toasty's hints the Dashboard shows (#4680), or `null`. At most one
+   * at a time: the first step, in the order a new user takes them, that the
+   * current state is waiting on. Each goes away the moment that step is taken
+   * (and while Add Dataset or New Detector is open, since opening one is
+   * taking it).
+   */
+  get dashboardHint(): DashboardHintId | null {
+    if (!this.registryLoaded || this.isNavBusy) return null;
+    if (this.importerFlow().open || this.newDetectorFlow().open) return null;
+    const pickedDatasets = this.resolvedSelectedDatasets;
+    const pickedDetectors = this.resolvedSelectedModels;
+    const importing = this.loadingTasksSvc.orphanLoadingTasks.length > 0;
+    if (this.datasets.length === 0 && !importing) return this.loading ? null : 'add-dataset';
+    if (this.datasets.length > 0 && pickedDatasets.length === 0) return 'select-dataset';
+    if (new Set(pickedDatasets.map((d) => d.media_type)).size > 1) return 'mixed-datasets';
+    if (this.detectors.length === 0) return 'add-detector';
+    if (pickedDetectors.length === 0) return this.visibleDetectors.length > 0 ? 'select-detector' : null;
+    // Only an import under way, no dataset row to pair with yet.
+    if (pickedDatasets.length === 0) return null;
+    if (!this.findMediaTypesMatch()) return 'mismatch';
+    if (this.showTrainHint) return 'train';
+    if (this.autofindEnabled) return 'test-or-find';
+    return null;
+  }
+
+  /** What Toasty's "add a dataset" hint says a dataset holds: the server's one
+   *  media type when it is locked to one (`solo_media_type`), else a mix. */
+  get addDatasetMedia(): string {
+    const solo = this.settingsState.settingsSignal()?.solo_media_type;
+    if (!solo) return 'images, sounds or other media';
+    return MEDIA_PLURALS[solo] ?? `${solo} files`;
+  }
+
+  /** Whether Toasty points at Train (#4227, #4680): exactly one detector is
+   *  selected, it has no training labels yet (its #Training cell reads
+   *  "Empty"), and Train is clickable because a compatible dataset is
+   *  selected too. */
   get showTrainHint(): boolean {
     if (!this.labelEnabled || this.isNavBusy) return false;
     const models = this.resolvedSelectedModels;

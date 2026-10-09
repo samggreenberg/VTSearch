@@ -36,7 +36,13 @@ control shows a stored balance off the list on its nearest radio in log
 space, a tie going to the radio that leans further, so a stored 2 or 0.5
 keeps its side. The API takes any beta in `[0.25, 4]`; a
 number outside it is clamped, and a boolean, non-number or `null` is a 422.
-The balance is kept per detector and seeded from the user's `beta` setting.
+The balance is kept per detector, on the detector's JSON (#4665): it is asked
+for when the detector is created, and every `POST` here stores the new value
+there, so Autopilot, which has no Threshold control of its own, runs at it. A
+detector that keeps none (one made before #4665, or by AutoFind or the CLI)
+is seeded on first read from the user's `beta` setting, which every pick also
+updates: it is the user's last pick, and what the New Detector form starts
+on.
 
 Since #4452 the line comes **from the labels alone**, so an exported labelset
 draws it again on any corpus: the calibration folds' held-out scores of the
@@ -60,7 +66,8 @@ A `POST` is a pure cutoff move: the active detector's line moves to the new
 beta's cut of the same labels' line without retraining and, in Find mode, the
 unverified items re-split. Both verbs return the new line in the same round
 trip, so the app's control moves its line without re-scoring. The same value
-is settable as `beta` on `PUT /api/settings`.
+is settable as `beta` on `PUT /api/settings`, which also sets the active
+detector's.
 
 | Field | Meaning |
 |---|---|

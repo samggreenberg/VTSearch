@@ -4,8 +4,7 @@ Issue #2949.  The scoring routes park the shared ``find_progress`` singleton at
 ``"idle"`` on every anticipated exit (success, ``abort()``, cancel), but an
 unhandled exception used to skip all of them: the request 500'd through the
 global handler while the tracker stayed at ``"running"`` on whatever step it
-died on — broadcast to every SSE client until the next Find reset it, with the
-``auto_finish`` timing recorder still subscribed to the singleton.
+died on — broadcast to every SSE client until the next Find reset it.
 
 ``vtsearch.routes._progress.find_idle_on_crash`` now guards the post-resolve body
 of ``/api/find``, ``/api/find-label``, and ``/api/auto-detect``, mirroring
@@ -53,23 +52,6 @@ class TestGuardUnit:
         assert snap["step"] is None
         assert snap["total_steps"] is None
 
-    def test_closes_the_recorder_as_a_failed_run(self):
-        """The idle update's ``auto_finish`` hook would otherwise bank a crashed
-        run's partial phase timings as a good cost sample."""
-        from vtsearch.routes._progress import find_idle_on_crash
-
-        calls: list[bool] = []
-
-        class _Recorder:
-            def finish(self, n=None, size_mb=None, ok=True):
-                calls.append(ok)
-
-        with pytest.raises(_Boom), find_idle_on_crash(_Recorder()):
-            raise _Boom("dimension mismatch")
-
-        assert calls == [False]
-        assert get_find_progress()["status"] == "idle"
-
     def test_abort_passes_through_untouched(self):
         """``abort()`` already parked the tracker; the guard must not re-push an
         idle frame or re-render flask-smorest's envelope."""
@@ -77,20 +59,17 @@ class TestGuardUnit:
 
         from vtsearch.routes._progress import find_idle_on_crash
 
-        calls: list[bool] = []
-
-        class _Recorder:
-            def finish(self, n=None, size_mb=None, ok=True):
-                calls.append(ok)
-
+        find_progress.update("running", "Scoring…", step=3, total_steps=4)
         with app_module.app.test_request_context("/api/find-label"):
             with pytest.raises(HTTPException) as excinfo:
-                with find_idle_on_crash(_Recorder()):
+                with find_idle_on_crash():
                     from flask_smorest import abort
 
                     abort(409, message="Find cancelled")
         assert excinfo.value.code == 409
-        assert calls == []
+        # Whoever called ``abort()`` owns parking the tracker; the guard left
+        # this one exactly where it was.
+        assert get_find_progress()["status"] == "running"
 
 
 class TestFindLabelCrash:

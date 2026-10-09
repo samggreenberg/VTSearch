@@ -265,6 +265,31 @@ Runs live in memory only, and only the most recent few, so **404** covers an
 unknown run, another user's, one that has aged out, and any from before a
 restart alike.
 
+### Prepare Browse for AutoFind results
+
+```
+POST /api/autofind/runs/{run_id}/browse-prep
+```
+
+Starts laying out run `run_id`'s Good results (every detector's `hits`, once
+each) as the subset map the Find Results dialog's **Browse** builds, on the
+run's own dataset rather than the request's active one, so that Browse, when
+pressed, finds it ready or part-way there (#4683). The dialog sends it while
+open. It starts nothing while other work is in flight: a dataset or detector
+load, a background AutoFind or Find, a projection build, a learned sort or
+eval, or a Find, sort or eval bar mid-run.
+
+```json
+{"status": "busy", "reason": "a dataset task is running"}
+```
+
+`status` is `building` (the fit is under way; `job_id` names it), `ready`
+(the map is built; `projection_id`), `busy` (nothing started: ask again
+later), or `skipped` with a `reason` (the dataset is no longer loaded, or the
+run found nothing Good). A layout already built for these ids, or the fit
+already running for them, is reported whatever the server is doing. **404**
+as for [AutoFind results](#autofind-results).
+
 ### Test the line
 
 ```

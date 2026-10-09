@@ -142,8 +142,9 @@ export interface Shot {
    */
   rerunPerTheme?: boolean;
   /**
-   * What to frame, grown by `pad` CSS px on every side; omit for the full
-   * viewport. A small padded clip of one button is how the guide's inline
+   * What to frame, grown by `pad` CSS px on every side, and further where the
+   * shot's callouts reach past that (#4686); omit for the full viewport. A
+   * small padded clip of one button is how the guide's inline
    * crops are made — the tiny pictures set into a sentence next to the words
    * "click **+**" so a first-time reader can find the button (#4202).
    */
@@ -1176,7 +1177,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'settings-appearance',
     embeddedIn: `${GUIDE}#solo-media-type-streamline-for-one-media-type`,
-    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
+    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, the Hide All / Show All buttons for Toasty\'s hints, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
     themes: BOTH,
     async recipe(_page, h) {
       await openAppearance(h);
@@ -2186,7 +2187,8 @@ export const SHOTS: Shot[] = [
     //
     // Posed at one moment, or the frame is whatever the clock gives (#4299):
     // the recipe waits for the embedding step, the longest by far, then pins
-    // the count, the bar and the time left, which move every second.
+    // the count and the bar, which move every second. (An import publishes no
+    // time-left estimate, #4667, so there is no chip to pin.)
     async recipe(page, h) {
       await h.app.dropDatasets('drawings-more');
       await h.dashboard();
@@ -2210,7 +2212,6 @@ export const SHOTS: Shot[] = [
         const jp = document.querySelector('tr.loading-task-row vt-job-progress')!;
         const detail = jp.querySelector('.jp__detail')!;
         detail.textContent = (detail.textContent || '').replace(/^\d+\//, '60/');
-        jp.querySelector('.jp__eta')!.textContent = '';
       });
       await page.addStyleTag({ content: 'tr.loading-task-row vt-job-progress .progress-fill{width:45%!important}' });
       await h.wait(500);

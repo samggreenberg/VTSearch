@@ -1,6 +1,20 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
+import { HttpContext } from '@angular/common/http';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  effect,
+  inject,
+  input,
+  OnInit,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { finalize, take } from 'rxjs/operators';
+import { Router } from '@angular/router';
+import { Observable, of, Subscription } from 'rxjs';
+import { catchError, finalize, take, takeWhile } from 'rxjs/operators';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -8,9 +22,12 @@ import {
   ClipboardColumn,
   ClipboardCopyComponent,
 } from '../../clipboard-copy/clipboard-copy.component';
+import { SKIP_ERROR_TOAST } from '../../../interceptors/error.interceptor';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { adaptivePoll } from '../../../services/adaptive-poll';
 import { BrowseSubsetPrepService } from '../../../services/browse-subset-prep.service';
 import { ContextSwitchService } from '../../../services/context-switch.service';
+import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { PluginTemplateVarsService } from '../../../services/plugin-template-vars.service';
@@ -20,6 +37,7 @@ import {
   AutoDetectResultsData,
   ImporterField,
 } from '../../../models/api.models';
+import type { AutoFindBrowsePrepResponse } from '../../../generated/api-client/models/auto-find-browse-prep-response';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import { IconComponent } from '../../icon/icon.component';
 import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
@@ -31,8 +49,9 @@ import { ProgressBarComponent } from '../../progress-bar/progress-bar.component'
 /** The Find Results dialog: one Find or AutoFind run's hits on one dataset,
  *  with the good / bad / both filter, copy-to-clipboard, an Export button that
  *  sends the listed rows to any exporter that reads a scored run, and a Browse
- *  button that opens the listed items in Browse (#4615). Mounted once in
- *  `AppComponent`, fed by `AutoFindService`. */
+ *  button that opens the listed items in Browse (#4615). While it is open, the
+ *  server lays out the Good results for that button whenever it has nothing
+ *  else to do (#4683). Mounted once in `AppComponent`, fed by `AutoFindService`. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
@@ -47,6 +66,8 @@ export class AutoDetectResultsModalComponent implements OnInit {
   private toast = inject(ToastService);
   private activeContext = inject(ActiveContextService);
   private contextSwitch = inject(ContextSwitchService);
+  private findApi = inject(DetectorsFindApiService);
+  private router = inject(Router);
   /** Builds the Browse map while the dialog shows its progress. */
   readonly browsePrep = inject(BrowseSubsetPrepService);
   /** Browse was clicked and the run's dataset is being made active (and
@@ -79,6 +100,25 @@ export class AutoDetectResultsModalComponent implements OnInit {
   ];
 
   private readonly destroyRef = inject(DestroyRef);
+
+  /** How often to ask whether the server is free to lay out the Good results
+   *  for Browse: quickly at first, easing off while the answer stays `busy`. */
+  static readonly WARM_FAST_MS = 3000;
+  static readonly WARM_SLOW_MS = 15000;
+  /** The run whose Good results are being readied for Browse, and the loop
+   *  asking the server to; see {@link warmBrowse}. */
+  private warmRunId = '';
+  private warmSub: Subscription | null = null;
+
+  constructor() {
+    // Per run, not once: a toast's View results can swap another run into
+    // the open dialog.
+    effect(() => {
+      const { run_id: runId, dataset_id: datasetId } = this.data();
+      untracked(() => this.warmBrowse(runId ?? '', datasetId ?? ''));
+    });
+    this.destroyRef.onDestroy(() => this.stopWarm());
+  }
 
   ngOnInit(): void {
     this.exportersApi.getExporters().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -336,6 +376,9 @@ export class AutoDetectResultsModalComponent implements OnInit {
     const runId = this.data().run_id;
     const ids = this.browseIds;
     if (this.browseBlocker || !datasetId || !runId || this.browseStarting() || this.browsePrep.preparing()) return;
+    // Browse's own build takes over from here: it attaches to a fit the
+    // warm-up already started, or finds the map built.
+    this.stopWarm();
     this.browseStarting.set(true);
     // Completes without emitting when the load fails; its own toast says why.
     this.contextSwitch
@@ -354,5 +397,51 @@ export class AutoDetectResultsModalComponent implements OnInit {
     // A map still building would navigate away from wherever the user went.
     if (this.browsePrep.preparing()) this.browsePrep.cancel();
     this.closed.emit();
+  }
+
+  /**
+   * Get run *runId*'s Good results ready to Browse while the user reads them
+   * (#4683): the server lays them out as the Browse button would, but only
+   * when it has nothing else to do, answering `busy` otherwise. So this asks
+   * again, easing off, for as long as the dialog stays open and the answer
+   * stays `busy`; any other answer (`building`, `ready`, `skipped`) or a
+   * failure ends it. Nothing is shown: the user only notices a Browse that
+   * opens sooner.
+   */
+  private warmBrowse(runId: string, datasetId: string): void {
+    if (runId === this.warmRunId) return;
+    this.stopWarm();
+    this.warmRunId = runId;
+    if (!runId || !datasetId) return;
+    // A hint, not an action of the user's: never toast its failures.
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    const ask = (): Observable<AutoFindBrowsePrepResponse> =>
+      this.viewingSubsetOf(datasetId)
+        ? of<AutoFindBrowsePrepResponse>({ status: 'busy' })
+        : this.findApi
+            .prepAutofindRunBrowse(runId, context)
+            .pipe(catchError(() => of<AutoFindBrowsePrepResponse>({ status: 'skipped' })));
+    this.warmSub = adaptivePoll(ask, {
+      fastMs: AutoDetectResultsModalComponent.WARM_FAST_MS,
+      slowMs: AutoDetectResultsModalComponent.WARM_SLOW_MS,
+    })
+      .pipe(takeWhile((answer) => answer.status === 'busy'))
+      .subscribe();
+  }
+
+  private stopWarm(): void {
+    this.warmSub?.unsubscribe();
+    this.warmSub = null;
+  }
+
+  /**
+   * Whether this tab is showing a subset map of *datasetId*. A dataset holds
+   * one subset layout at a time, so laying out these results would replace
+   * the map under the user's eyes; that waits until they have moved on.
+   */
+  private viewingSubsetOf(datasetId: string): boolean {
+    const tree = this.router.parseUrl(this.router.url);
+    const segments = tree.root.children['primary']?.segments.map((s) => s.path) ?? [];
+    return segments[0] === 'browse' && segments[1] === datasetId && !!tree.queryParams['subset'];
   }
 }

@@ -23,7 +23,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 from collections.abc import Container, Iterable
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -77,12 +77,16 @@ if TYPE_CHECKING:
     def set_show_usage_bars(value: str) -> None: ...
     def get_show_metadata() -> bool: ...
     def set_show_metadata(value: bool) -> None: ...
-    def get_label_hint_dismissed() -> bool: ...
-    def set_label_hint_dismissed(value: bool) -> None: ...
+    def get_hide_all_hints() -> bool: ...
+    def set_hide_all_hints(value: bool) -> None: ...
+    def get_hidden_hints() -> list[str]: ...
+    def set_hidden_hints(value: list[str]) -> None: ...
     def get_autopilot_enabled() -> bool: ...
     def set_autopilot_enabled(value: bool) -> None: ...
-    def get_hide_autopilot() -> bool: ...
-    def set_hide_autopilot(value: bool) -> None: ...
+    def get_hide_left_panel() -> bool: ...
+    def set_hide_left_panel(value: bool) -> None: ...
+    def get_hide_right_panel() -> bool: ...
+    def set_hide_right_panel(value: bool) -> None: ...
     def get_enable_achievements() -> bool: ...
     def set_enable_achievements(value: bool) -> None: ...
     def get_browse_panel_width() -> int: ...
@@ -121,8 +125,8 @@ if TYPE_CHECKING:
     def set_docs_links(value: list[dict[str, str]]) -> None: ...
     def get_semantic_only() -> bool: ...
     def set_semantic_only(value: bool) -> None: ...
-    def get_hide_ingest_eta() -> bool: ...
-    def set_hide_ingest_eta(value: bool) -> None: ...
+    def get_autopilot_only() -> bool: ...
+    def set_autopilot_only(value: bool) -> None: ...
     def get_browse_signpost_vocab() -> dict[str, list[str]]: ...
     def set_browse_signpost_vocab(value: dict[str, list[str]]) -> None: ...
     def get_projection_n_neighbors() -> int: ...
@@ -142,6 +146,8 @@ if TYPE_CHECKING:
     def set_autofind_exporter_field_values(value: dict[str, dict[str, str]]) -> None: ...
     def get_autofind_on_import() -> bool: ...
     def set_autofind_on_import(value: bool) -> None: ...
+    def get_autofind_cli_delete_dataset() -> bool: ...
+    def set_autofind_cli_delete_dataset(value: bool) -> None: ...
 
     # Client-only view prefs: the backend stores and echoes these, but no
     # Python code reads them - the VTSBrowse bin-details panel and bin popup
@@ -280,7 +286,12 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 #: (validating them against ``UserSettings``, which owns them) and drops only
 #: the reverse direction: a server key stranded in a per-user file.
 _DEFAULT_USER_FALLBACK_KEYS: frozenset[str] = frozenset(
-    {"autofind_detectors", "autofind_exporter", "autofind_exporter_field_values"}
+    {
+        "autofind_detectors",
+        "autofind_exporter",
+        "autofind_exporter_field_values",
+        "autofind_cli_delete_dataset",
+    }
 )
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
@@ -622,6 +633,7 @@ def get_all() -> dict[str, Any]:
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()
+    result["autofind_cli_delete_dataset"] = get_autofind_cli_delete_dataset()
     # The raw file value can hold entries the normalizer drops (a blank label,
     # a ``javascript:`` URL); read through the accessor so only usable links
     # ever reach the Help modal.
@@ -670,7 +682,10 @@ def _build_field_adapter(model: type, key: str) -> TypeAdapter[Any] | None:
         # + ``metadata=[meta...]``; re-wrap so the ``BeforeValidator``
         # clamps and case-folds still run under the adapter.
         annotation = Annotated[tuple([annotation, *field_info.metadata])]
-    return TypeAdapter(annotation)
+    # pydantic >= 2.14 types the argument as ``TypeForm[T]``, which an
+    # ``Annotated`` built at runtime cannot satisfy statically; the value is a
+    # valid type form, so tell the checker so.
+    return TypeAdapter(cast(Any, annotation))
 
 
 def _validate_field(model: type, key: str, value: Any) -> Any:
@@ -1214,28 +1229,27 @@ def get_effective_semantic_only() -> bool:
     return get_effective_override("semantic_only")
 
 
-def get_cli_hide_ingest_eta() -> bool | None:
+def get_cli_autopilot_only() -> bool | None:
     """Return the process-level CLI / env override (``None`` if unset)."""
-    return _admin.get_override("hide_ingest_eta")
+    return _admin.get_override("autopilot_only")
 
 
-def get_effective_hide_ingest_eta() -> bool:
-    """Return whether ingest progress bars withhold their ETA on this instance.
+def get_effective_autopilot_only() -> bool:
+    """Return whether Train and Test are locked to their Autopilot tabs.
 
     Resolution order:
 
-    1. The process-level override (``--hide-ingest-eta`` /
-       ``VTSEARCH_HIDE_INGEST_ETA``, stored by :mod:`vtsearch.admin_overrides`),
+    1. The process-level override (``--autopilot-only`` /
+       ``VTSEARCH_AUTOPILOT_ONLY``, stored by :mod:`vtsearch.admin_overrides`),
        which applies to every user for the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``), which
        defaults to ``False``.
 
-    When true, dataset imports, staging imports and labelset missing-media
-    fetches publish ``eta_seconds=None``, so their bars show progress but no
-    remaining-time estimate. The value reaches the library tier as
-    :attr:`vtscore.config.CoreConfig.hide_ingest_eta`.
+    When true, the SPA renders neither Train's Manual / Autopilot tabs nor
+    Test's Autopilot / Review tabs: both views stay on their Autopilot panel
+    (#4666).
     """
-    return get_effective_override("hide_ingest_eta")
+    return get_effective_override("autopilot_only")
 
 
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:

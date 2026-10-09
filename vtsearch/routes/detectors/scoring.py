@@ -17,11 +17,13 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
+from vtsearch.hooks import state_sync_exempt
 from vtsearch.routes._context import require_dataset_header, require_detector_header
 from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
+    AutoFindBrowsePrepResponseSchema,
     AutoFindRunResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
     FindEvidenceCoverageResponseSchema,
@@ -160,10 +162,8 @@ def find_label(body: dict):
 
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
     _FIND_LABEL_STEPS = 4
-    #: Timing-profile task name; its step names and shipped fallback weights
-    #: live in :data:`vtscore.timing.tasks.TASKS`. An admin
-    #: ``VTSEARCH_TIMING_PROFILE`` replaces them with the seconds this
-    #: deployment's GPU actually spends training and scoring.
+    #: Timing task name; its step names and shipped weights live in
+    #: :data:`vtscore.timing.tasks.TASKS`.
     _TRAIN_SCORE_TASK = "train_and_score"
 
     detector_id = body["detector_id"]
@@ -193,27 +193,13 @@ def find_label(body: dict):
 
     media_type = d.get("media_type", "") or next(iter(snap.values())).get("media_type", "image")
 
-    # Both the train and score steps scale with the active dataset, so the bar
-    # can be paced against its real size instead of a fixed guess. Every exit
-    # below — success, abort, and unexpected crash alike — parks the tracker at
-    # "idle", which is what closes the recorder. The crash case is the guard's
-    # job (see :func:`find_idle_on_crash`).
+    # Every exit below — success, abort, and unexpected crash alike — parks the
+    # tracker at "idle". The crash case is the guard's job (see
+    # :func:`find_idle_on_crash`).
     from vtscore import timing  # noqa: PLC0415
 
-    score_embedder = next(iter(snap.values())).get("embedder", "")
-    find_progress.set_step_weights(
-        timing.step_weights(_TRAIN_SCORE_TASK, media_type=media_type, embedder=score_embedder, n=len(snap))
-    )
-    recorder = timing.record_task(
-        find_progress,
-        _TRAIN_SCORE_TASK,
-        media_type=media_type,
-        embedder=score_embedder,
-        auto_finish=True,
-    )
-    recorder.start()
-    recorder.set_scale(n=len(snap))
-    with find_idle_on_crash(recorder):
+    find_progress.set_step_weights(timing.step_weights(_TRAIN_SCORE_TASK, media_type=media_type))
+    with find_idle_on_crash():
         det_path = _detector_path(d["name"])
         det_data = _read_detector(det_path)
 
@@ -847,3 +833,33 @@ def get_autofind_run(run_id: str):
     if record is None:
         abort(404, message="AutoFind results not found")
     return record
+
+
+@detector_scoring_bp.route("/api/autofind/runs/<run_id>/browse-prep", methods=["POST"])
+@state_sync_exempt
+@detector_scoring_bp.response(200, AutoFindBrowsePrepResponseSchema)
+@detector_scoring_bp.alt_response(
+    404,
+    description="No such run for the caller: unknown, another user's, or aged out of the kept window.",
+)
+def prep_autofind_run_browse(run_id: str):
+    """Start laying out a finished run's Good results for Browse, if the server is idle.
+
+    The Find Results dialog asks this while it is open (#4683), so its Browse
+    button finds the map built, or part-way there, rather than starting a fit
+    when pressed.  The map is the one that button builds: the run's Good
+    results on the run's own dataset, which need not be the caller's active one
+    (no ``X-Dataset-Id`` is read).  Nothing is started while other work is in
+    flight: ``busy`` says to ask again later.
+
+    ``@state_sync_exempt``: the dialog repeats the request while the server is
+    busy, which is exactly when ``_state_lock`` is most likely held, and the
+    handler reads no request proxy - it resolves the run's dataset by id.
+    """
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtsearch.autofind import prep_run_browse  # noqa: PLC0415
+
+    answer = prep_run_browse(run_id, get_current_user())
+    if answer is None:
+        abort(404, message="AutoFind results not found")
+    return answer

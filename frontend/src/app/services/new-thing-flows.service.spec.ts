@@ -52,6 +52,7 @@ describe('NewThingFlowsService', () => {
       open: true,
       defaultMediaType: '',
       datasetEmbedder: '',
+      datasetEmbedders: [],
       seedMediaId: undefined,
       seedCropParams: undefined,
     });
@@ -62,6 +63,7 @@ describe('NewThingFlowsService', () => {
     service.openNewDetector({
       defaultMediaType: 'image',
       datasetEmbedder: 'siglip',
+      datasetEmbedders: ['siglip', 'dinov2_patch'],
       seedMediaId: 42,
       seedCropParams,
     });
@@ -69,6 +71,7 @@ describe('NewThingFlowsService', () => {
       open: true,
       defaultMediaType: 'image',
       datasetEmbedder: 'siglip',
+      datasetEmbedders: ['siglip', 'dinov2_patch'],
       seedMediaId: 42,
       seedCropParams,
     });
@@ -81,6 +84,7 @@ describe('NewThingFlowsService', () => {
       open: false,
       defaultMediaType: '',
       datasetEmbedder: '',
+      datasetEmbedders: [],
       seedMediaId: undefined,
       seedCropParams: undefined,
     });

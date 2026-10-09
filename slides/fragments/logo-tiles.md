@@ -19,11 +19,11 @@
      page wide and eighteen percent tall, overlapping by half — plus a layer
      at half that size for small marks (#4415) — and a page scores its best
      tile. That is the max-over-regions from region
-     voting, one section back. In its tile the crest is 58% of the keypoints,
-     so that tile's vector is about the crest. -->
+     voting, one section back. Here the best tile is a small one, and all 350
+     of its keypoints are on the crest, so that tile's vector is about
+     nothing else. -->
 
 <!-- Compressed with a whitened PCA to 512 numbers a tile, 178 tiles a
      page, it costs about 180 KB a page, held in memory. At 5,000 pages the
      app's path matches checking every page; at 50,000 it reaches AP
-     0.93 by ten clicks (v5.0, #4415). The figure draws the coarse layer
-     only. -->
+     0.93 by ten clicks (v5.0, #4415). -->

@@ -137,6 +137,12 @@ class CoreConfig:
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = field(default_factory=dict)
 
+    # Whether a saving CLI autodetect run deletes the dataset it imported once
+    # its detectors have run (#4674; per-user ``autofind_cli_delete_dataset``).
+    # A run that detected nothing keeps its dataset either way.  Defaulted off
+    # so library-only ``CoreConfig(...)`` constructions keep what they save.
+    autofind_cli_delete_dataset: bool = False
+
     # Operator overrides for the Browse projection's UMAP knobs (server-tier
     # ``projection_n_neighbors`` / ``projection_min_dist``).  Mirrored onto the
     # library tier because *both* fit paths — the on-demand route and the
@@ -167,13 +173,11 @@ class CoreConfig:
     # working unchanged.
     signpost_vocab: dict[str, list[str]] = field(default_factory=dict)
 
-    # Operator switch: ingest progress bars (dataset imports, staging imports,
-    # a labelset's missing-media fetch) publish no remaining-time estimate,
-    # for deployments where no timing profile makes one trustworthy (issue
-    # #4233).  The app populates it from the ``hide_ingest_eta`` admin
-    # setting.  Read by :func:`vtscore.concurrency.progress.ingest_eta_hidden`.
-    # Defaulted here so library-only ``CoreConfig(...)`` constructions
-    # without the app shim keep working unchanged.
+    # Deprecated and ignored (#4667).  It was the operator switch that hid the
+    # remaining-time estimate on ingest progress bars (#4233); ingest bars now
+    # never publish one, for every deployment.  Kept only so an out-of-tree
+    # ``CoreConfig(..., hide_ingest_eta=...)`` construction is not a
+    # ``TypeError``; nothing reads it.
     hide_ingest_eta: bool = False
 
     # The balance (#4413): F-beta's beta, the preference the line is drawn at,

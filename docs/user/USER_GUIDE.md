@@ -115,7 +115,10 @@ leans toward. You set it at the top of the left panel, on a spectrum from
 **False Positives** to **False Negatives** with three radio buttons under
 it (see [Threshold](#3-threshold)). Toward False Positives the line returns
 the most, with more wrong ones in it; toward False Negatives it returns only
-the surest, and misses more. Every detector starts on the middle radio. Each
+the surest, and misses more. You pick it when you create the detector (the
+New Detector form starts on your last pick, the middle radio until you have
+one), and Autopilot, which has no Threshold of its own, draws the line there.
+Moving it later in Manual or Test changes it for that detector only. Each
 radio is a **balance** of precision and recall - how many wrong items you
 will take in the results against how many right ones you will accept
 missing - and the line is drawn where that balance is best: the middle radio
@@ -308,8 +311,11 @@ time. For each one:
 
 1. Click **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> (or press `→`) if it is what you are looking for.
 2. Click **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or press `←`) if it is not.
-3. Your answers collect on the right. The detector retrains after every
-   one, and Autopilot picks the next picture from what it has just learned.
+3. Your answers collect in the right panel, which starts folded to a thin
+   strip: click the strip to open it (see
+   [The three-panel layout](#the-three-panel-layout)). The detector retrains
+   after every one, and Autopilot picks the next picture from what it has just
+   learned.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-vote.dark.webp" />
@@ -352,7 +358,8 @@ tab, which tests the detector's line: it shows you pictures picked at random
 from either side of the line, you answer each with **Good** or **Bad**, and
 the result on the right says how much of what the detector would ship is
 likely right and how many of the real matches it likely found. Click until
-**Done!**; a few dozen answers is usual. Then open the **Review** tab for the
+**Done!**; a few dozen answers is usual. The result panel opens on its own
+then, if you have not opened it already. Then open the **Review** tab for the
 results in full:
 
 1. The pictures, best match first. How many the detector calls a match (the
@@ -616,7 +623,9 @@ instead, so none of them is lost. The dialog's **Browse** button opens
 the listed items - the Good ones, or whichever side you switched to - in
 [Browse](#browse-exploring-a-dataset-spatially), laid out as a map of their own;
 **&larr; Back** there brings you back to the Dashboard with the results
-open again. Like every AutoFind, the runs also go to your Settings
+open again. While the dialog is open, the server starts building the map
+of the Good results whenever it has nothing else to do, so Browse often
+opens straight away. Like every AutoFind, the runs also go to your Settings
 **AutoFind** exporter when you have picked one.
 
 ### Pre-computed embeddings (.npz)
@@ -727,6 +736,15 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 The dividers between panels can be dragged to resize them. The app
 remembers your layout per media type.
 
+Train and Test open with both side panels **folded** to a thin strip, so the
+item in the middle has the room. The left one folds on the **Autopilot** tab
+only (Manual and Review are driven from its list); the right one folds on
+every tab. Click a strip, or drag its divider out, to open the panel, and the
+small ◀ / ▶ at the top of an open panel folds it again. Each side remembers
+your choice; **Hide left panel in Train and Test** and **Hide right panel in
+Train and Test**, in the Settings modal's Appearance tab, set it too. A test
+that reaches **Done!** opens its result panel on its own.
+
 ---
 
 ## Autopilot: the guided workflow
@@ -785,13 +803,16 @@ shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal. Hover the light for
 the details.
 
-When all five phases are done, Autopilot shows **Done!** and a
-**Detector Trained** dialog offers you the choice: **Continue
-Training** stays put so you can keep labeling (the detector continues
-to improve), and **Head to Dashboard** takes you out to export it or
-run it over another dataset. Nothing happens on its own, and the
-dialog only appears for the run that trained the detector - coming
-back later to refine it further will not raise it again.
+When all five phases are done, Autopilot shows **Done!** and Toasty
+appears under the top bar's **Dashboard** button to say the detector is
+trained: keep voting and it keeps improving (your next vote sends Toasty
+away), or click **Dashboard** to export it or run it over another dataset.
+Nothing happens on its own, and the hint only appears for the run that
+trained the detector - coming back later to refine it further will not
+raise it again. If you label every item before then, Toasty says so instead
+and points you back to the Dashboard. When you open the Train view on a
+detector with no labels yet, Toasty also stands over the **Good** / **Bad**
+buttons until your first vote. See [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays checked, and a seventh step, **Keep
 Improving.**, takes over for as long as you keep labeling. It is
@@ -826,13 +847,13 @@ dry run there means the detector has found what it can.
 
 ### The collapsed bar
 
-You can collapse Autopilot to a thin strip that just shows the
-phase indicators, with the current phase's light above its name.
+Autopilot starts collapsed to a thin strip that just shows the
+phase indicators, with the current phase's light above its name
+(the left panel's fold; see [The three-panel layout](#the-three-panel-layout)).
 Click any active phase to re-pick the
 current recommendation (useful if you voted the wrong way and
-want a fresh suggestion). Collapsed mode is handy once you're
-comfortable with the flow and want more vertical room for the
-media list.
+want a fresh suggestion). The ▶ at the top of the strip opens the
+full phase list, and its ◀ collapses it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
@@ -853,8 +874,7 @@ modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="as
   before finishing (default 40).
 
 Raising these numbers trains a more thorough detector at the cost of
-more labelling effort. The same tab also has a **Hide autopilot panel**
-toggle.
+more labelling effort.
 
 ---
 
@@ -865,6 +885,10 @@ by and which unlabeled item is served next. Use it if Autopilot's
 defaults don't fit your workflow, you're debugging a weird
 ranking, or you want to label under an unusual regime (e.g. pure
 diversity sampling with no voting).
+
+Your server may not offer it: an administrator can set VTSearch to
+**Autopilot only**, which removes the Manual tab (and Test's **Review** tab),
+leaving Autopilot with no tab bar. Settings ▸ Server shows whether it is on.
 
 The Manual tab shows three control rows above the media list.
 
@@ -924,7 +948,8 @@ radio (the default) weighs the two mistakes equally. The radios carry no
 numbers because what the line keeps is measured, not promised: a check says
 how close it got. Hover a radio for what it does. Changing the Threshold
 moves the line over the scores the detector already has; the ranking itself
-does not change.
+does not change. The detector keeps the change: it is the Threshold Autopilot
+uses from then on, and the one the next New Detector form starts on.
 
 Once the list is ranked by the detector (a **Learned** sort, or Test), the
 note under the spectrum says what the Threshold is doing to the line, in one
@@ -1111,8 +1136,12 @@ It has two tabs:
   the bottom left, beside **Cancel**; collapsed by default) so you can
   choose which one this detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
   That choice fixes what the detector is compatible with later. If the
-  dataset's embedder can't search by text, you'll see a note that you can
-  still create the detector but must label a few examples to train it.
+  dataset's embedder can't search by text, a text description has nothing to
+  rank by there, so **Create** stays disabled until you add an example item.
+- **Threshold** (both tabs) - which mistake this detector leans toward, the
+  same three radios as the [Threshold](#3-threshold) in Manual mode. The
+  detector keeps it, and Autopilot draws its line there. It starts on your
+  last pick; you can change it later in Manual or Test.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server
@@ -1148,6 +1177,9 @@ Manual split applied to testing:
   the test's picks already in the piles. A user who wants the list without
   testing clicks **Review** once scoring ends; the test waits on its tab, and
   the Threshold stays frozen until it reaches **Done!**.
+
+On a server set to **Autopilot only**, Test shows the Autopilot alone, with
+no tab bar and no Review tab.
 
 Test is where you decide whether to trust a detector. To run detectors you
 already trust and collect what they match, with no view to work through, use
@@ -1233,7 +1265,7 @@ The right pane shows the result as it forms, and the verdict at Done:
 - **Picks by band** - where the picks came from and what each band said.
 
 At **Done!** the verdict reads the ranges in a sentence, and offers three
-ways out, as the **Detector Trained** dialog does in Train:
+ways out, as Toasty does when Autopilot finishes in Train:
 
 - **Move to AutoFind** - the reason the test exists. The detector joins your
   AutoFind list, and you land on the Dashboard. It is offered whatever the
@@ -1395,10 +1427,13 @@ eight tabs:
   bars** (**Default** shows each one only when its free space is getting
   low, meaning it would hold fewer than three more datasets the size of your
   largest; **View** and **Hide** show them always or never), the metadata
-  panel, the **Enable achievements** toggle, and per-media-type Scroll
-  Style (focus mode and thumbnail size).
-- **AutoFind** - what exporter to send AutoFind results to. (Which
-  detectors run is chosen on the Dashboard's **AutoFind** tab; see
+  panel, the **Enable achievements** toggle, **Hide All** / **Show All** for
+  [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
+  mode and thumbnail size).
+- **AutoFind** - what exporter to send AutoFind results to, and whether
+  a command-line run deletes the dataset it imported once AutoFind has run
+  (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
+  (Which detectors run is chosen on the Dashboard's **AutoFind** tab; see
   [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
@@ -1487,8 +1522,8 @@ several at once. See
 [Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
-row to select them (a detector you just made, with no labels yet, gets a
-"Click Train to teach your new detector." hint), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
+row to select them (a detector you just made, with no labels yet, gets one
+of [Toasty's hints](#toastys-hints) pointing at **Train**), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
@@ -1506,6 +1541,35 @@ selected detector, shown on its row, and the results open in the
 You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Test / Find buttons
 work on whichever rows you currently have selected.
+
+### Toasty's hints
+
+King Toasty (the toast with the magnifying glass in the logo) stands beside
+the next thing to click, with a speech bubble that says what to do and why.
+On the Dashboard he shows one step at a time:
+
+- the **Datasets** card's **+** while you have no datasets, or a nudge to
+  select one when you have some but none is selected;
+- a warning (he looks surprised) when the selected datasets hold different
+  kinds of media;
+- the **Detectors** card's **+** once a dataset is in, or a nudge to select a
+  detector when you have some but none is selected;
+- a warning when the selected dataset and detector are for different kinds of
+  media;
+- **Train** once a new detector with no labels is selected beside a matching
+  dataset, and **Test** or **Find** once the selected detector is trained.
+
+In the Train view he asks for your first vote over **Good** / **Bad** while
+Autopilot runs on a detector with no labels, and when Autopilot finishes he
+stands under the top bar's **Dashboard** button (see [Autopilot: the guided
+workflow](#autopilot-the-guided-workflow)).
+
+Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
+bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
+**Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**,
+which brings back every hint, including ones you hid one at a time. Toasty
+also turns up on the notifications at the top of the screen: happy on good
+news, surprised on a warning, sad on an error.
 
 ### Combining datasets and detectors
 

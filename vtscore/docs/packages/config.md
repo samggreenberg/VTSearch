@@ -82,12 +82,15 @@ after the table do have defaults, precisely so a library-only
 
 Optional (defaulted) fields: `autofind_exporter` (`str`, `""`),
 `autofind_exporter_field_values` (`dict[str, dict[str, str]]`, `{}` -
-keyed by exporter name), `projection_n_neighbors` (`int`,
+keyed by exporter name), `autofind_cli_delete_dataset` (`bool`, `False` -
+whether a saving CLI run deletes the dataset it imported once its detectors
+have run; see [cli.md](cli.md#behaviour)), `projection_n_neighbors` (`int`,
 `PROJECTION_N_NEIGHBORS`), `projection_min_dist` (`float`,
 `PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
 `signpost_vocab` (`dict[str, list[str]]`, `{}`), `hide_ingest_eta`
-(`bool`, `False` - when `True`, ingest progress bars publish no ETA; see
-[concurrency.md](concurrency.md#progresstracker)), and `beta` (`float`,
+(`bool`, `False` - **deprecated and ignored** (#4667): ingest progress bars
+never publish an ETA now; see [concurrency.md](concurrency.md#progresstracker)),
+and `beta` (`float`,
 `DEFAULT_BETA` = `1.0` - the user's balance, F-beta's beta, which seeds each
 detector's own; see [state.md](state.md#setting-persistence-hooks)).
 

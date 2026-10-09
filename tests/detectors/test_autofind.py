@@ -16,13 +16,18 @@ which is what makes AutoFind detectors actually run on an imported dataset.
 from __future__ import annotations
 
 import threading
+import uuid
+from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 import vtsearch.autofind as autofind_mod
 from tests import load_detector_and_wait, wait_for_loading_task
 from tests.helpers import setup_trainable_model_in_registry
+from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.concurrency.progress import find_progress, loading_tasks
+from vtscore.projection import Projection
 from vtscore.state.core import DatasetContext, get_detector_context, register_context
 from vtsearch import settings
 from vtsearch.autofind import TASK_PREFIX, get_autofind_run, import_post_load
@@ -464,6 +469,40 @@ class TestImportRoutesPassTheChoice:
         assert settings.get_autofind_on_import() is False
 
 
+class TestWebRunsNeverDelete:
+    """``autofind_cli_delete_dataset`` (#4674) is for the command line alone:
+    AutoFind started from the web app keeps its dataset whatever it says."""
+
+    def test_run_autofind_keeps_the_dataset(self, client):
+        from vtscore.datasets.registry import get_dataset
+
+        settings.set_autofind_cli_delete_dataset(True)
+        entry, _ctx = _registered_copy("Kept after Run AutoFind")
+        _autofind_detector("ar-keep")
+
+        final = wait_for_loading_task(_start(client, entry["id"]))
+
+        assert final["error"] is None, final
+        assert final["autofind"]["detectors_run"] == 1
+        assert get_dataset(entry["id"]) is not None
+
+    def test_import_triggered_run_keeps_the_dataset(self, client):
+        from vtscore.datasets.registry import get_dataset
+
+        settings.set_autofind_cli_delete_dataset(True)
+        entry, ctx = _registered_copy("Kept after import")
+        _autofind_detector()
+
+        hook = import_post_load("true")
+        assert hook is not None
+        hook(ctx)
+
+        (row,) = _autofind_tasks()
+        final = wait_for_loading_task(row["task_id"])
+        assert final["error"] is None, final
+        assert get_dataset(entry["id"]) is not None
+
+
 class TestKeptRuns:
     """Kept results are bounded by run count and by total hits, oldest first."""
 
@@ -489,3 +528,101 @@ class TestKeptRuns:
         assert get_autofind_run("small", "default") is None
         assert get_autofind_run("medium", "default") is None
         assert get_autofind_run("huge", "default") is not None
+
+
+class TestRunGoodIds:
+    """The ids a Browse of a run's Good results lays out: what the prep builds."""
+
+    def test_merges_every_detectors_hits_once_each_and_ignores_the_bad(self):
+        record = {
+            "results": {
+                "owl": {"hits": [{"id": 4}, {"id": 2}], "negative_hits": [{"id": 9}]},
+                "wren": {"hits": [{"id": 2}, {"id": 7}], "negative_hits": []},
+            }
+        }
+        assert autofind_mod.run_good_ids(record) == [2, 4, 7]
+
+    def test_a_hit_without_a_media_id_is_left_out(self):
+        record = {"results": {"owl": {"hits": [{"md5": "a"}, {"id": None}, {"id": True}, {"id": 5}]}}}
+        assert autofind_mod.run_good_ids(record) == [5]
+
+
+class TestBrowsePrepRoute:
+    """``POST /api/autofind/runs/<run_id>/browse-prep`` (#4683)."""
+
+    RUN_ID = f"{TASK_PREFIX}prep"
+
+    def _keep(self, dataset_id: str, good: list[int], owner: str = "default") -> str:
+        hits = [{"id": i, "md5": f"m{i}"} for i in good]
+        autofind_mod._keep_run(
+            self.RUN_ID,
+            {
+                "run_id": self.RUN_ID,
+                "owner": owner,
+                "dataset_id": dataset_id,
+                "results": {"det": {"hits": hits, "negative_hits": [{"id": 20, "md5": "m20"}]}},
+            },
+        )
+        return f"/api/autofind/runs/{self.RUN_ID}/browse-prep"
+
+    @staticmethod
+    def _await_projection() -> None:
+        job = projection_jobs.current()
+        if job is not None:
+            assert job.done_event.wait(timeout=30)
+
+    @staticmethod
+    def _faked_fit():
+        """UMAP stood in for by a seeded random layout: the fit is not under test."""
+
+        def fit(matrix, ids, **_kwargs):
+            coords = np.random.default_rng(len(ids)).standard_normal((len(ids), 2)).astype(np.float32)
+            return Projection(uuid.uuid4().hex, list(ids), coords, "fake")
+
+        return patch("vtscore.projection.fit_projection", side_effect=fit)
+
+    def test_lays_out_the_good_results_on_the_runs_own_dataset(self, client):
+        """The run's dataset need not be the request's active one."""
+        entry, ctx = _registered_copy("Prep target")
+        url = self._keep(entry["id"], [3, 1, 2, 3])
+
+        with self._faked_fit() as fit:
+            resp = client.post(url)
+            assert resp.status_code == 200, resp.get_json()
+            assert resp.get_json()["status"] == "building"
+            self._await_projection()
+            # The dialog's Browse then finds the map built, with no second fit.
+            again = client.post(url).get_json()
+        assert again["status"] == "ready"
+        assert fit.call_count == 1
+        assert ctx._subset_ids == [1, 2, 3]
+        assert ctx._subset_pyramids
+
+    def test_a_busy_server_starts_nothing(self, client):
+        entry, ctx = _registered_copy("Prep busy")
+        url = self._keep(entry["id"], [1, 2, 3])
+        loading_tasks.create_task("someone-elses-load", "Loading")
+
+        resp = client.post(url)
+        assert resp.status_code == 200
+        assert resp.get_json() == {"status": "busy", "reason": "a dataset task is running"}
+        assert ctx._subset_ids is None
+
+    def test_an_unloaded_dataset_is_skipped(self, client):
+        url = self._keep("not-loaded", [1, 2])
+        data = client.post(url).get_json()
+        assert data["status"] == "skipped"
+        assert "not loaded" in data["reason"]
+
+    def test_a_run_with_nothing_good_is_skipped(self, client):
+        entry, ctx = _registered_copy("Prep empty")
+        url = self._keep(entry["id"], [])
+        data = client.post(url).get_json()
+        assert data["status"] == "skipped"
+        assert ctx._subset_ids is None
+
+    def test_another_users_run_or_an_unknown_one_is_404(self, client):
+        entry, _ctx = _registered_copy("Prep foreign")
+        url = self._keep(entry["id"], [1, 2], owner="someone-else")
+        assert client.post(url).status_code == 404
+        assert client.post("/api/autofind/runs/_autofind_nope/browse-prep").status_code == 404

@@ -278,6 +278,14 @@ class TestSettingsAPI:
         data = res.get_json()
         assert data["autofind_exporter_field_values"]["server_json_file"]["filepath"] == "/tmp/out.json"
 
+    def test_autofind_cli_delete_dataset_round_trip(self, client):
+        """Off unless the user turns it on (#4674); a plain boolean PUT."""
+        assert client.get("/api/settings").get_json()["autofind_cli_delete_dataset"] is False
+        res = client.put("/api/settings", json={"autofind_cli_delete_dataset": True})
+        assert res.status_code == 200
+        assert res.get_json()["autofind_cli_delete_dataset"] is True
+        assert client.get("/api/settings").get_json()["autofind_cli_delete_dataset"] is True
+
     def test_autofind_exporter_excluded_from_defaults(self, client):
         res = client.get("/api/settings/defaults")
         assert res.status_code == 200
@@ -356,18 +364,31 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["show_metadata"] is True
 
-    def test_update_label_hint_dismissed(self, client):
-        # Default is False; the hint shows on first session.
-        initial = client.get("/api/settings").get_json()
-        assert initial["label_hint_dismissed"] is False
+    def test_toasty_hints_start_shown(self, client):
+        """No hint is hidden until the user hides it (#4680)."""
+        data = client.get("/api/settings").get_json()
+        assert data["hide_all_hints"] is False
+        assert data["hidden_hints"] == []
 
-        res = client.put("/api/settings", json={"label_hint_dismissed": True})
+    def test_hide_one_hint_then_show_all(self, client):
+        res = client.put("/api/settings", json={"hidden_hints": ["add-dataset"]})
         assert res.status_code == 200
-        assert res.get_json()["label_hint_dismissed"] is True
+        assert res.get_json()["hidden_hints"] == ["add-dataset"]
 
-        # Persists across reads.
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["label_hint_dismissed"] is True
+        res = client.put("/api/settings", json={"hide_all_hints": True})
+        assert res.get_json()["hide_all_hints"] is True
+        assert res.get_json()["hidden_hints"] == ["add-dataset"]
+
+        # Settings' Show All clears both in one write.
+        res = client.put("/api/settings", json={"hide_all_hints": False, "hidden_hints": []})
+        assert res.status_code == 200
+        data = client.get("/api/settings").get_json()
+        assert data["hide_all_hints"] is False
+        assert data["hidden_hints"] == []
+
+    def test_hidden_hints_must_be_a_list_of_strings(self, client):
+        res = client.put("/api/settings", json={"hidden_hints": "add-dataset"})
+        assert res.status_code == 422
 
     def test_update_grid_icon_size_left_per_type(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_left": {"audio": "XS", "image": "XL"}})
@@ -612,6 +633,17 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"autopilot_enabled": True})
         assert res.status_code == 200
         assert res.get_json()["autopilot_enabled"] is True
+
+    def test_side_panel_hides_round_trip(self, client):
+        defaults = client.get("/api/settings/defaults").get_json()
+        assert defaults["hide_left_panel"] is True
+        assert defaults["hide_right_panel"] is True
+
+        res = client.put("/api/settings", json={"hide_left_panel": False})
+        assert res.status_code == 200
+        data = client.get("/api/settings").get_json()
+        assert data["hide_left_panel"] is False
+        assert data["hide_right_panel"] is True
 
     def test_update_autopilot_goal_diversity(self, client):
         res = client.put("/api/settings", json={"autopilot_goal_diversity": 60})

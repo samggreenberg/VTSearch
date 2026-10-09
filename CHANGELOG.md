@@ -17,6 +17,50 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
+  King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
+  click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
+  arrows. On the Dashboard, one step at a time: **+** to add a dataset, select a dataset, a warning
+  when the selected datasets mix kinds of media, **+** to make a detector, select a detector, a
+  warning when the dataset and detector are for different media, **Train** for a new detector,
+  and **Test** or **Find** for a trained one. In the Train view he asks for your first vote while
+  Autopilot runs on a detector with no labels (replacing the faint "Use ← / →" line), and the
+  **Detector Trained** and **Nothing Left to Label** dialogs are now his hints under the top bar's
+  **Dashboard** button; any further vote sends him away. Each hint goes when its step is taken,
+  and has **Hide this hint** and **Hide all hints** boxes kept in your settings (`hidden_hints`,
+  `hide_all_hints`); **Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**.
+  Notifications show his face too: happy, surprised on warnings, sad on errors. The
+  `label_hint_dismissed` setting is gone, and `/favicon-smile.ico` (the plain favicon smiles
+  already) now 404s.
+- **Train and Test fold either side panel to a strip, and open with both folded** (issue #4673).
+  The left panel's fold (Autopilot's collapse, Train only until now) comes to Test's Autopilot tab,
+  and the right panel gains one in both views. Each side folds to a thin strip on its own: click
+  the strip, or drag its divider out, to open it, and the ◀ / ▶ at its top folds it again. The
+  left folds on the Autopilot tab only, since Manual and Review are driven from its list. Both
+  start folded, leaving the item in the middle the room, and each remembers your choice; the
+  Settings modal's Appearance tab has **Hide left panel in Train and Test** and **Hide right panel
+  in Train and Test** in place of Autopilot's **Hide autopilot panel**. A test that reaches
+  **Done!** opens its result on its own. The `hide_autopilot` setting is now `hide_left_panel`,
+  beside a new `hide_right_panel`, both `true` by default; a saved `hide_autopilot` is not
+  carried over.
+- **Choose a detector's Threshold when you create it, and Autopilot follows it** (issue #4665).
+  The New Detector form (Blank and Trained) now has the Threshold control, the same three radios
+  from False Positives to False Negatives as the Manual tab. The choice is saved with the detector,
+  and Autopilot, which has no Threshold control of its own, draws the line, picks and checks at it.
+  Moving the Threshold in Manual or Test saves the new choice on the detector too, so each detector
+  keeps its own instead of all of them sharing your last one. The form starts on your last pick. A
+  detector made before this change, or by AutoFind or the CLI, uses your last pick until you set
+  one. Combine keeps the sources' Threshold when they all agree. Find, AutoFind and
+  `--autodetect` draw each detector's line at the Threshold it keeps.
+- **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
+  hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
+  show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
+  sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
+  form, which is no longer indented.
+- **A detector on a dataset that can't search by text needs an example item** (issue #4666). The
+  New Detector dialog used to let a text-only detector through with a warning that Autopilot
+  could not start until it was trained. **Create** now stays disabled until you add an example
+  item, so Autopilot always has a first sort.
 - **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
   AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
   with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
@@ -40,6 +84,26 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Find Results get their Browse map ready while you read them** (issue #4683). While the Find
+  Results dialog is open, the server lays out the map its **Browse** button opens for the Good
+  results, but only when nothing else is running: no dataset or detector load, no other Find, map
+  build, sort or evaluation. Pressing Browse then opens the map at once, or picks up the build
+  where it has got to, instead of starting it. If the server is busy when the dialog opens, the
+  map is started once the other work is done, as long as the dialog is still open. A map of
+  selected items from the same dataset that you are already looking at is left alone.
+- **The command line can delete what it imports once AutoFind has run** (issue #4674).
+  Settings › **AutoFind** gains **Delete the dataset after AutoFind**, under **Command Line**,
+  off by default. With it on, `python app.py --autodetect` (or `--pipeline`) deletes the dataset it
+  imported once its detectors have run and the results are exported, so a nightly run no longer
+  fills the dashboard. A run with no AutoFind detector to run, one that fails, and one pointed at a
+  dataset already on the dashboard keep it, and AutoFind started inside the app never deletes. The
+  setting is per user (`autofind_cli_delete_dataset`; a `--settings` file can set it for a run
+  without `--user`), and a deleting run reports a `dataset_deleted` progress event.
+- **Autopilot-only servers** (issue #4666). An operator can set `--autopilot-only`,
+  `VTSEARCH_AUTOPILOT_ONLY=1` or `"autopilot_only": true` in the server settings file to keep
+  Train and Test on their Autopilot tabs. Train's Manual tab and Test's Review tab are removed,
+  and neither view shows a tab bar. Settings ▸ Server reports the switch, and the startup banner
+  names it when on.
 - **AutoRun is now AutoFind; its ⋯ run opens no dialog, and Find Results
   gains Browse** (issue #4615). The Dashboard's **AutoRun** tab, the detector
   ⋯ menu's **Move to AutoRun**, the dataset ⋯ menu's **Run AutoRun** and the
@@ -100,6 +164,18 @@ not list every commit. Use `git log` for the full history.
   date. New routes under `/api/line-test`.
 
 ### Removed
+
+- **Imports no longer show a time-left estimate, and the switches around it are gone**
+  (issue #4667). The estimate on dataset imports, staging imports and labelset
+  missing-media fetches swung too wildly to trust, so it is gone for everyone; those bars
+  still fill, count and name their step, and every other progress bar keeps its estimate.
+  With it go the operator switch that hid it (`--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA`, `"hide_ingest_eta"` and its Settings ▸ Server row) and the
+  per-deployment timing profile that tuned the progress bars' pacing
+  (`VTSEARCH_TIMING_PROFILE`, `VTSEARCH_TIMING_RECORD`,
+  `scripts/profiling/tune_timing_profile.py`). A server started with `--hide-ingest-eta`
+  must drop the flag, which is no longer accepted; the two environment variables and the
+  settings key are ignored. Every bar now paces from the weights the app ships with.
 
 - **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
   and Evidence coverage chips, its 2×2 of your checks and its precision chart

@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 
 import { HttpTestingController } from '@angular/common/http/testing';
+import { Router } from '@angular/router';
 import { AutoDetectResultsModalComponent } from './autodetect-results-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
@@ -376,5 +377,135 @@ describe('AutoDetectResultsModalComponent Browse', () => {
     browsePrep.preparing.set(true);
     component.close();
     expect(browsePrep.cancel).toHaveBeenCalled();
+  });
+});
+
+/**
+ * While the dialog is open, the server is asked to lay out the run's Good
+ * results for Browse whenever it has nothing else to do (#4683): asked again,
+ * easing off, while it answers `busy`, and never again once it has started.
+ */
+describe('AutoDetectResultsModalComponent Browse warm-up', () => {
+  let component: AutoDetectResultsModalComponent;
+  let fixture: ComponentFixture<AutoDetectResultsModalComponent>;
+  let httpMock: HttpTestingController;
+  let router: Router;
+  let toast: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; warning: ReturnType<typeof vi.fn> };
+
+  const PREP_URL = '/api/autofind/runs/_autofind_7/browse-prep';
+  const run = {
+    run_id: '_autofind_7',
+    dataset_id: 'ds1',
+    dataset_name: 'Birds',
+    media_type: 'audio',
+    detectors_run: 1,
+    results: { owl: { hits: [{ id: 1, md5: 'a' }], negative_hits: [{ id: 3, md5: 'c' }] } },
+  };
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    toast = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [AutoDetectResultsModalComponent],
+      providers: [
+        ...provideZoneless(),
+        ...provideHttpTesting(),
+        { provide: ToastService, useValue: toast },
+        { provide: ContextSwitchService, useValue: { applyActivePair: vi.fn(() => new Subject<void>()) } },
+        { provide: BrowseSubsetPrepService, useValue: { preparing: signal(false), start: vi.fn(), cancel: vi.fn() } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AutoDetectResultsModalComponent);
+    component = fixture.componentInstance;
+    httpMock = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    httpMock.verify();
+    vi.useRealTimers();
+  });
+
+  /** Open the dialog on *data*, and answer its exporter list. */
+  function open(data: unknown): void {
+    fixture.componentRef.setInput('data', data as any);
+    fixture.detectChanges();
+    httpMock.match('/api/exporters').forEach((req) => req.flush([]));
+  }
+
+  function answer(status: string): void {
+    const req = httpMock.expectOne(PREP_URL);
+    expect(req.request.method).toBe('POST');
+    req.flush({ status });
+  }
+
+  it('asks once the dialog opens, and not again once the server has started', async () => {
+    open(run);
+    answer('building');
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS * 2);
+    httpMock.expectNone(PREP_URL);
+  });
+
+  it('asks again while the server is busy, until it is free', async () => {
+    open(run);
+    answer('busy');
+    httpMock.expectNone(PREP_URL);
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_FAST_MS);
+    answer('busy');
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_FAST_MS);
+    answer('ready');
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS * 2);
+    httpMock.expectNone(PREP_URL);
+  });
+
+  it('stops asking when Browse is pressed: its own build takes over', async () => {
+    open(run);
+    answer('busy');
+    component.browse();
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS * 2);
+    httpMock.expectNone(PREP_URL);
+  });
+
+  it('stops asking when the dialog closes', async () => {
+    open(run);
+    answer('busy');
+    fixture.destroy();
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS * 2);
+    httpMock.expectNone(PREP_URL);
+  });
+
+  it('asks nothing for results that name no run', async () => {
+    open({ ...run, run_id: undefined });
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS);
+    httpMock.expectNone((req) => req.url.endsWith('/browse-prep'));
+  });
+
+  it('gives up quietly when the run is gone', async () => {
+    open(run);
+    httpMock.expectOne(PREP_URL).flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS * 2);
+    httpMock.expectNone(PREP_URL);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("waits while this tab shows a subset map of the run's dataset", async () => {
+    const url = vi.spyOn(router, 'url', 'get').mockReturnValue('/browse/ds1?subset=1&from=test');
+    open(run);
+    httpMock.expectNone(PREP_URL);
+    url.mockReturnValue('/dashboard');
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS);
+    answer('building');
+  });
+
+  it('starts over for another run swapped into the open dialog', async () => {
+    open(run);
+    answer('busy');
+    fixture.componentRef.setInput('data', { ...run, run_id: '_autofind_8' } as any);
+    fixture.detectChanges();
+    httpMock.expectOne('/api/autofind/runs/_autofind_8/browse-prep').flush({ status: 'building' });
+    await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.WARM_SLOW_MS * 2);
+    httpMock.expectNone(PREP_URL);
   });
 });

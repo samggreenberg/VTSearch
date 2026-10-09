@@ -261,7 +261,8 @@ export class DatasetImporterModalComponent implements OnInit {
    *  them - so categories like "Services" remain visible even when no
    *  extension importers are installed.  Categories used by importers but
    *  never declared get appended at the end with a title-cased label and
-   *  no icon. */
+   *  no icon.  When this leaves a single tab, the source picker hides the
+   *  bar (``hideSoloTabBar``): ``ngOnInit`` has already selected it. */
   get visibleImporterTabs(): ImporterPickerTab[] {
     const visible: ImporterPickerTab[] = [];
     const seen = new Set<string>();

@@ -208,6 +208,11 @@ def resolve_or_train_detector(
             media_type=media_type,
             embedder_type=det_data.get("embedder_type", "") or "",
         )
+        # With no registry id to look it up by, the throwaway is handed the
+        # balance its detector keeps (#4665), so the cut is drawn there.
+        from vtscore.state import seed_detector_beta
+
+        seed_detector_beta(train_ctx, det_data)
 
     def _on_label(_name: str, current: int, total: int) -> None:
         # Resolving a label that isn't in *snap* costs an importer fetch (plus a

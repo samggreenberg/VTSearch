@@ -1,12 +1,18 @@
-<div class="left-panel" animate.enter="drawer-enter-left" animate.leave="drawer-leave-left" [class.collapsed-autopilot]="panelMode() === 'label' && activeTab() === 'autopilot' && autopilotCollapsed()" [class.disabled]="disabled()">
-  @if (datasetName() && !(panelMode() === 'label' && activeTab() === 'autopilot' && autopilotCollapsed())) {
+<div class="left-panel" animate.enter="drawer-enter-left" animate.leave="drawer-leave-left" [class.collapsed-autopilot]="folded()" [class.disabled]="disabled()">
+  @if (datasetName() && !folded()) {
     <div class="dataset-name" [title]="datasetName()">{{ datasetName() }}</div>
   }
-  @if (panelMode() === 'find') {
+  @if (panelMode() === 'find' && folded()) {
+    <!-- Test's Autopilot tab, hidden (#4673): the strip, as Train's folds to
+         its phase rail. The tabs come back with the panel. -->
+    <vt-side-panel-toggle side="left" label="Autopilot" [collapsed]="true" (toggle)="toggleCollapse.emit()" />
+  } @else if (panelMode() === 'find') {
     <!-- Test mode (#4524; `find` in code, #4525): the Test autopilot on one
          tab, Review (the ranked list in full) on the other, the Train view's
          Autopilot / Manual split applied to Test. The host owns the tab,
-         since the centre and right panes switch with it. -->
+         since the centre and right panes switch with it. The Autopilot-only
+         lock drops the bar and leaves Test on its Autopilot (#4666). -->
+    @if (!autopilotOnly()) {
     <div class="left-tabs" role="tablist" aria-label="Test mode">
       <button
         class="left-tab"
@@ -25,6 +31,7 @@
         title="Review the ranked list under the line yourself: walk the boundary, verify items into the Good and Bad piles, and send the matches on."
       >Review</button>
     </div>
+    }
     @if (findDetectorNote()) {
       <!-- Under the label quota the detector is the Goods' centroid (#4643):
            said on both tabs, since both read its line. -->
@@ -33,6 +40,7 @@
 
     @if (findTab() === 'autopilot') {
       <div class="tab-panel-autopilot" role="tabpanel" aria-label="Test autopilot">
+        <vt-side-panel-toggle side="left" label="Autopilot" [collapsed]="false" (toggle)="toggleCollapse.emit()" />
         <!-- The balance, live between phases and frozen within one: the host
              says which. Its state line is this corpus's test result, or
              untested, never Train's check range. No spot check here (#4317). -->
@@ -160,8 +168,9 @@
     </div>
     }
   } @else {
-    <!-- Label mode: full labeling UI with tabs -->
-    @if (!(activeTab() === 'autopilot' && autopilotCollapsed())) {
+    <!-- Label mode: full labeling UI with tabs. The Autopilot-only lock drops
+         the bar and Manual with it (#4666). -->
+    @if (!autopilotOnly() && !folded()) {
       <div class="left-tabs" role="tablist" aria-label="Panel mode">
         <button
           class="left-tab"
@@ -282,7 +291,17 @@
         </div>
       </div>
     } @else {
-      <div class="tab-panel-autopilot" [class.collapsed]="autopilotCollapsed()" role="tabpanel" aria-label="Autopilot mode">
+      <div class="tab-panel-autopilot" [class.collapsed]="folded()" role="tabpanel" aria-label="Autopilot mode">
+        @if (autopilotOnly() && autopilotDisabled() && !folded()) {
+          <!-- No Manual to fall back to (#4666): say why nothing is running.
+               Collapsed, the panel keeps its strip and the toggle that opens it. -->
+          <p class="info-text autopilot-blocked-note" role="note">
+            Autopilot can't start here. This dataset can't search by text, and this
+            detector has neither an example item nor enough labels to start from.
+            Open a dataset that can search by text, or make a new detector with an
+            example item.
+          </p>
+        } @else {
         <vt-autopilot-panel
           [goodVotes]="goodVotes()"
           [badVotes]="badVotes()"
@@ -291,12 +310,13 @@
           [labelsetBadCount]="labelsetBadCount()"
           [votesLoaded]="votesLoaded()"
           [labelingStatus]="labelingStatus()"
-          [collapsed]="autopilotCollapsed()"
+          [collapsed]="folded()"
           (started)="autopilotStart.emit()"
           (stopped)="autopilotStop.emit()"
-          (toggleCollapse)="autopilotToggleCollapse.emit()"
+          (toggleCollapse)="toggleCollapse.emit()"
           (refocus)="autopilotRefocus.emit()"
         />
+        }
       </div>
     }
   }

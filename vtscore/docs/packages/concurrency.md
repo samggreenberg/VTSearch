@@ -197,7 +197,19 @@ register it here for the active-jobs surface to pick up.
 `[{dataset_id, detector_id, job_types}, ...]` for every (dataset,
 detector) pair with at least one running or pending job across every
 user-visible manager. Jobs missing `dataset_id` / `detector_id` are
-dropped. `reset_all_async_jobs_for_tests()` walks the whole of
+dropped.
+
+`busy_reason()` answers a wider question - *is anything the user asked
+for still running?* - for work started only on the chance it will be
+wanted (the Find Results dialog's Browse prep, #4683). It returns a short
+description of the first thing it finds, or `None`: a `loading-tasks` or
+detector-loading row still working, a running or pending job on any
+user-visible manager, or the shared sort / eval / find bar mid-run. The
+hidden managers do not count; they are speculative work themselves, and
+the archive thumbnail sweep can run for as long as a large archive takes
+to read.
+
+`reset_all_async_jobs_for_tests()` walks the whole of
 `JOB_MANAGERS` — hidden managers included, since test isolation cares
 about every daemon thread — and clears state. Register a new manager
 in `JOB_MANAGERS` only; never keep a second hand-maintained list.
@@ -265,9 +277,10 @@ neighbouring rung once the smoothed estimate overshoots the boundary by
 A tracker built with `publish_eta=False` never publishes one:
 `eta_seconds` stays `None` on every snapshot while `current`/`total` and
 `overall` update as usual. The ingest paths (dataset import, staging
-import, labelset missing-media fetch) build theirs that way when
-`ingest_eta_hidden()` is true, i.e. when `CoreConfig.hide_ingest_eta` is
-set; with no `CoreConfig` builder installed it reads `False`.
+import, labelset missing-media fetch) always build theirs that way: an
+import's rate is too erratic to estimate (#4667). `ingest_eta_hidden()`,
+which once read the `CoreConfig.hide_ingest_eta` switch, is deprecated and
+always returns `True`.
 
 **Subscribers:** `subscribe(cb)` registers a callback fired with a
 snapshot after every `update()`, synchronously on the producer thread
@@ -648,6 +661,6 @@ lines then locate.
 ## Cross-references
 
 - [`state.md`](state.md) - the contexts these jobs and trackers operate against.
-- [`timing.md`](timing.md) - the per-step duration model that turns a step index into an ETA.
+- [`timing.md`](timing.md) - the shipped per-step weights that pace the whole-job `overall` fraction.
 - [`datasets.md`](datasets.md#concurrency-gates) - the two `ConcurrencyGate`s that pace dataset loads.
 - [`cli.md`](cli.md) - `cli_progress.notification_subscriber`, the headless consumer of `notify()`.

@@ -3,20 +3,9 @@
 // flex-shrink: 0 from :host.
 :host {
   flex-shrink: 0;
-}
-
-// First-vote hint: faint text shown above the Good/Bad buttons when the
-// labeling session is fresh (zero votes) and the user hasn't dismissed it.
-// Stays subtle so it never competes with the media for the user's eye.
-.vote-hint {
-  flex-shrink: 0;
-  width: 100%;
-  padding: var(--space-2xs) 0 var(--space-xs);
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  text-align: center;
-  opacity: var(--opacity-dim);
-  pointer-events: none;
+  // Positioning context for Toasty's start-voting hint, which stands over
+  // the buttons.
+  position: relative;
 }
 
 .vote-buttons {
