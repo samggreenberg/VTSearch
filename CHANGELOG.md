@@ -17,6 +17,22 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
+  Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
+  another on one CPU core, and most of each fit's time went to statistics over a few dozen
+  points. The fits now run on 4 threads and the statistics take less time. On a V100 a Good
+  takes ~1.4 s at 5,000 pages (was 1.9 s) and ~1.6 s at 50,000 (was 2.1 s). Rankings are unchanged.
+
+- **A plainer Update Sort Example? prompt** (issue #4721). Autopilot's resort prompt no longer
+  opens with a focus ring on its big Keep button (it took focus when you were voting with the
+  arrow keys, so it read as the recommended answer, and the next Space or Enter chose it); focus
+  goes to the dialog itself, and Tab still reaches every control. The paragraph at the top is now
+  one line of read-only fields, **Clicked**, **Positives** and **Sort**, and Toasty, below the
+  dialog, explains: how many positives Autopilot needs before it can move on, and that you can
+  keep going or try a different sort. The left side has a **Keep clicking:** heading over a
+  **Continue** button, which no longer names the sort or the number of labels before the next
+  prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
+  **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
 - **Tabs look like tabs, and form labels read alike** (issues #4718, #4726). Every horizontal tab
   strip (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
   Keyboard Shortcuts, and the left panel's **Manual** / **Autopilot** in Train and **Autopilot** /

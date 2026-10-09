@@ -526,6 +526,13 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  // A dialog opened with `initialFocus="dialog"` focuses this box rather than a
+  // control, so that no answer looks preselected (#4721). The box is not a
+  // control and draws no ring; its own frame already shows where focus is.
+  &:focus-visible {
+    outline: none;
+  }
 }
 
 .modal-header {

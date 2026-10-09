@@ -256,6 +256,8 @@ restore_resolvers  # noqa: F821 - re-binds the resolver globals via monkeypatch 
 clean_paths  # noqa: F821 - saves/restores sys.path and sys.meta_path around setup_env
 restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via monkeypatch for the test
 schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
+old_switch_off  # noqa: F821 - installs a CoreConfig with the retired hide_ingest_eta switch off
+scratch_dir  # noqa: F821 - points the detector registry at a per-test scratch directory
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
@@ -345,3 +347,17 @@ NOT_A_FUNCTION  # noqa: F821
 # preflight knob check inspects the patched harness default.
 # ---------------------------------------------------------------------------
 __signature__  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Deprecated ``vtscore`` surfaces kept only so out-of-tree callers keep
+# working (#4667 retired ingest ETAs and the timing profiler). Nothing in the
+# repo reads them by design; removing one is a library break.
+# ---------------------------------------------------------------------------
+hide_ingest_eta  # noqa: F821 - vtscore.config.CoreConfig field, accepted and ignored
+SCHEMA_NAME  # noqa: F821 - vtscore.timing.profile, the retired profile JSON's marker
+generated_at  # noqa: F821 - vtscore.timing.profile.TimingProfile field
+reset_seen_models_for_tests  # noqa: F821 - vtscore.timing.recorder no-op
+disclaim_encoder  # noqa: F821 - vtscore.timing.recorder.TaskTimingRecorder no-op method
+status_phases  # noqa: F821 - vtscore.timing.recorder.record_task kwarg, accepted and ignored
+auto_finish  # noqa: F821 - same
+only_phases  # noqa: F821 - same

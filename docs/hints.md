@@ -41,8 +41,9 @@ while the Dashboard is switching context.
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
 | `start-voting` | happy | Click **Bad** / **Good** (or ← / →) to vote whether this is what you're looking for. Autopilot picks what to ask next. Your detector learns from every answer. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
+| `resort-prompt` | happy | We need {N positives} before Autopilot can move on. This is an opportunity to try a different example sort, or just keep clicking with the original sort. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough. Answering the prompt ends it, and so does opening its media picker. |
 | `autopilot-done` | happy | Your detector is trained! Every quality light is green. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | An Autopilot run that started on an untrained detector finishes with every quality light green. The next vote ends it. |
 | `autopilot-ran-dry` | happy | Your detector is trained! {N} of its best matches in a row were not good, so it has likely found what it can. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | As `autopilot-done`, on a document dataset, where Autopilot finishes when its best matches run dry rather than on the lights. |
 | `all-labeled` | happy | You've labeled every item in this dataset! Click **Dashboard** to test or run your detector on another dataset. | An Autopilot run that started on an untrained detector labels every item before it finishes. The next vote ends it. |
 
-`{N}` is the dry-run length, 16.
+`{N}` is the dry-run length, 16. `{N positives}` is Autopilot's Good target, "3 positives" by default.
