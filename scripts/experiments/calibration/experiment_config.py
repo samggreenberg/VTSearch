@@ -1115,6 +1115,11 @@ MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
 _BAND_SHARE = os.environ.get("CALIB_BAND_SHARE", "").strip()
 BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else (_BAND_SHARE or None)
 
+#: Issue #4668's floor knob: ``absolute`` holds the labels line's spread floor at
+#: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
+#: sigma_floor``).  Unset (the default, ``relative``) is the app.
+SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
+
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
 #: only frame that records the **opening**, which emits no main row because no

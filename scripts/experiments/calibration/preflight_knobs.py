@@ -40,6 +40,7 @@ def env(name: str) -> str | None:
 
 def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
+    from vtscore.eval.live_threshold_rules import SIGMA_FLOORS
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
         MORE_WALKS,
@@ -252,6 +253,11 @@ def probe(C: Any) -> list[str]:
             rows.append(("band_share", str(C.BAND_SHARE), "<unset> = the app's own picks, no band picks"))
         else:
             refuse("band_share", "CALIB_BAND_SHARE", "must be a positive integer, one pick in N")
+    # #4668's spread floor before #4492: a retired piece of the labels line.
+    if C.SIGMA_FLOOR not in SIGMA_FLOORS:
+        refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))
+    elif C.SIGMA_FLOOR != "relative":
+        rows.append(("sigma_floor", C.SIGMA_FLOOR, "<unset> = relative, the app's floor (#4492)"))
 
     # The balance the line is drawn at (#4413).  Unset is the app's default;
     # the precision floor went in #4421 (experiment_config refuses its knob).
