@@ -84,6 +84,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **The command line makes several datasets from one importer run** (issue #4707). The
+  Multi-Dataset import has a headless form: `--autodetect --importer <name> --outputs '<json>'` (a
+  list with one object per dataset, in the shape the web API's `outputs` entries take) and an
+  `outputs:` list under a pipeline file's `importer:` block. The importer runs once and every
+  entry becomes its own dataset, named `"<name> – <Category>"` unless the entry names it: saved to
+  the dashboard (unless `--tempimport`), scored by the AutoFind detectors that reach its media
+  type, and exported on its own, each results set carrying a `dataset` block; `{dataset_name}` in
+  an exporter field is the dataset's name, and a `--filepath` without it gains the name before the
+  extension so the files stay apart. A dataset no detector applies to is skipped with a note and a
+  dataset whose import failed is reported while the others still run (the run then exits
+  non-zero). The dry-run plan lists the datasets; `--progress-format json` gains `dataset_start`
+  and `dataset_failed` events. See [`docs/CLI.md`](docs/CLI.md).
 - **Multi-Dataset import: several datasets from one folder** (issue #4703). A **Multi-Dataset** box
   above the *Dataset media type* dropdown on the Folder, Manifest, Local Folder and Local Files
   importers (and on any importer with a media-type field) replaces the dropdown with a

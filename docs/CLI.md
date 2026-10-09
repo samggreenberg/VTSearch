@@ -142,6 +142,50 @@ python app.py --autodetect --importer http_archive --url /data/sounds.tar.gz --m
 
 Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `local_archive_member`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them. `--help` resolves the named plugin first, so its flags are listed at the end of the usual help output (the same works for `--exporter <name> --help`).
 
+**Several datasets from one importer run (`--outputs`).** The dashboard's
+**Multi-Dataset** import ([`docs/api/datasets.md`](api/datasets.md#loading-datasets))
+has a command-line form: `--outputs` takes a JSON list with one object per
+dataset the single importer run should produce, in the shape the web API's
+`outputs` entries take. Each object names its dataset's `media_type` and may
+add `source_specs`, `category`, `dataset_name`, `embedder`, `clipper`,
+`clipper_params` and `cleaners`; it replaces the importer's `--media-type`
+(setting both is refused). The importer acquires its source once (an archive
+is downloaded and unpacked once) and every entry becomes its own dataset:
+
+```bash
+python app.py --autodetect --importer server_folder --path /data/field_kit \
+  --outputs '[{"media_type": "audio"}, {"media_type": "image"}]' \
+  --settings settings.json --exporter server_json_file --filepath hits.json
+```
+
+Each dataset is then handled on its own, in the list's order, exactly as a
+single-dataset run would handle it: saved to the dashboard (unless
+`--tempimport`) under `"<importer's name> – <Category>"` (`field_kit – Audio`,
+`field_kit – Image`; an entry's own `dataset_name` wins), scored by the
+AutoFind detectors that reach its media type (directly or through a converter
+route), and **exported separately** — the exporter runs once per dataset, and
+each results set carries a `dataset` block (`name`, `media_type`, `category`,
+and the registry `id` when saved) saying which dataset it holds. So that the
+files do not overwrite each other, `{dataset_name}` in any exporter field is
+replaced by the dataset's name, and a `--filepath` that does not mention it
+gets the name inserted before the extension (`hits-field_kit – Audio.json`,
+`hits-field_kit – Image.json`); a list of one dataset leaves the path as given.
+The console exporter prints a `=== Dataset 1 of 2: … ===` line before each
+dataset's hits. `--chunk-size` and `--stream-results` apply per dataset (a
+streamed NDJSON file's `_meta` line carries the `dataset` block too).
+
+A dataset no detector applies to is skipped with a `Detection skipped for
+dataset '…'` note and the others still run; only a `--tempimport` run in which
+*no* dataset could be scored fails for it (a saving run's datasets are the
+point, as for a single one). A dataset whose import failed — the importer
+produced nothing for it, say — is reported as `Import of dataset '…' failed:
+…`, the others are still scored and exported, and the run then exits non-zero
+naming it, so one bad output costs nothing but its own results. Only importers
+that make several datasets per run accept the flag (the ones the dashboard
+offers **Multi-Dataset** for; `demo` does not). `--create-detector` without
+`--detector-media-type` takes the media type the outputs share, and needs the
+flag when they differ.
+
 **Reference mode**: importers that offer a "Reference files in place" checkbox
 in the GUI (`server_folder`, `server_files`) expose it here as
 `--reference-files` / `--no-reference-files`. Enabled, the dataset stores a path
@@ -374,6 +418,11 @@ Exporter: server_json_file
   filepath: out.json
 ```
 
+With `--outputs`, the source block lists the datasets the run would make, one
+line per entry (its category, media type, source rows and any per-dataset
+options), under `Datasets (2; one importer run, one dataset per entry):`; the
+JSON `dry_run_plan` event's `source` carries them as `outputs`.
+
 When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
 under the source (noting whether negatives are dropped or included), so a
 streaming run can be sanity-checked before it starts. The `Save to dashboard`
@@ -520,7 +569,13 @@ dashboard), and a run that had no detector to use as `detection_skipped` with a
 [`autofind_cli_delete_dataset`](#saving-the-dataset-to-the-dashboard---tempimport)
 setting) reports a `dataset_deleted` event with the same `dataset_id` and
 `name`, after `export_complete`. While the import runs, its progress arrives as
-ordinary `progress` events:
+ordinary `progress` events. A multi-dataset run (`--outputs`) reports each
+dataset in turn: a `dataset_start` event (`name`, `media_type`, `category`,
+`dataset_id`, `index`, `count`) opens each dataset's detection, `dataset_saved`
+/ `detection_skipped` / `export_complete` then arrive once per dataset
+(`detection_skipped` naming it in `dataset`), a dataset whose import failed is a
+`dataset_failed` event (`name`, `error`), and the import's `progress` events
+carry the dataset's name as `dataset`:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json \
@@ -577,6 +632,17 @@ importer:
     path: /data/sounds
     media_type: audio
     recursive: true
+  # Optional. Several datasets from this one importer run (same as --outputs):
+  # one mapping per dataset, in the shape the web API's `outputs` entries take
+  # (media_type, source_specs, category, dataset_name, embedder, embedders,
+  # clipper, clipper_params, clipper_chain, cleaners). Replaces
+  # `fields.media_type`; each dataset is saved, scored and exported on its own.
+  # outputs:
+  #   - media_type: audio
+  #   - media_type: image
+  #     category: document
+  #     source_specs: [{source_type: document, converter: document2image}]
+  #     dataset_name: scans
 
 # Optional. Path to the same settings JSON the --settings flag accepts.
 # Defaults to data/settings.json.
@@ -629,7 +695,13 @@ exporter:
 
 Plugin names (`importer.name`, `exporter.name`, `import_labels.importer.name`)
 and their `fields` keys are validated against the registered plugins at load
-time, so a typo fails fast before any media is loaded.
+time, so a typo fails fast before any media is loaded. So is
+`importer.outputs`: every entry needs a `media_type`, an unknown key, media
+type or converter is refused with the web API's own message, and the list is
+rejected for an importer that makes one dataset per run. The run then behaves
+as [`--outputs`](#auto-detect-run-detectors-on-a-dataset) does: one dataset per
+entry, each exported to its own file (`{dataset_name}` in `exporter.fields`
+names it; a `filepath` without it gains the name before the extension).
 
 The shorter `import_labels` form is still accepted: `importer: <name>` given as
 a plain string, with `file: <path>` as shorthand for the importer's `filepath`
