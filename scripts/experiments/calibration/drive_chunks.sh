@@ -30,9 +30,9 @@ log() { echo "$(date '+%m-%d %H:%M:%S') $*" >> "$BASE/drive.log"; }
 declare -A TRIES
 log "start (pid $$) per_rung=$PER_RUNG chunk=$CHUNK n=$N arms: $RUNGS"
 
-done_set() {
-  find "$BASE/$1/results/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null \
-    | sed -E 's/.*task_0*([0-9]+)\.csv.*/\1/' | sort -n -u
+done_set() {  # the main frames only (task_NNNN.csv[.gz]); side frames carry a `__`
+  find "$BASE/$1/results/cells" -maxdepth 1 \( -name 'task_[0-9][0-9][0-9][0-9].csv' -o -name 'task_[0-9][0-9][0-9][0-9].csv.gz' \) \
+    -size +0 2>/dev/null | xargs -r -n1 basename | cut -c6-9 | sed -E 's/^0+([0-9])/\1/' | sort -n -u
 }
 queued_set() {
   squeue -u "$USER" -h -r -n "$JOB_PREFIX-$1" -o "%K" 2>/dev/null | grep -E '^[0-9]+$' | sort -n -u
@@ -60,9 +60,12 @@ while :; do
     for i in "${list[@]}"; do
       TRIES[$r:$i]=$((${TRIES[$r:$i]:-0} + 1))
       ((TRIES[$r:$i] == 2)) && log "$r: retrying index $i"
-      for z in $(find "$BASE/$r/results/cells" -maxdepth 1 -size 0 -name "$(printf 'task_%04d' "$i")*" 2>/dev/null); do
-        log "$r: removing zero-byte $(basename "$z")"
-        rm -f "$z"
+      cell=$(printf 'task_%04d' "$i")
+      for z in "$BASE/$r/results/cells/$cell.csv" "$BASE/$r/results/cells/$cell.csv.gz"; do
+        if [[ -f "$z" && ! -s "$z" ]]; then
+          log "$r: removing zero-byte $(basename "$z")"
+          rm -f "$z"
+        fi
       done
     done
     thr=$((PER_RUNG - running))
@@ -108,7 +111,8 @@ for k in "${!TRIES[@]}"; do
   ((TRIES[$k] >= 2)) || continue
   r=${k%%:*}
   i=${k##*:}
-  if ! compgen -G "$(printf '%s/%s/results/cells/task_%04d.csv*' "$BASE" "$r" "$i")" >/dev/null; then
+  cell=$(printf 'task_%04d' "$i")
+  if [[ ! -s "$BASE/$r/results/cells/$cell.csv.gz" && ! -s "$BASE/$r/results/cells/$cell.csv" ]]; then
     log "FAILED twice: $k"
     gave_up=$((gave_up + 1))
   fi
