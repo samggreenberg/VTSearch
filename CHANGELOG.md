@@ -33,9 +33,10 @@ not list every commit. Use `git log` for the full history.
   **Continue** button, which no longer names the sort or the number of labels before the next
   prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
   **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
-- **Tabs look like tabs, and form labels read alike** (issue #4718). Every horizontal tab strip
-  (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
-  Keyboard Shortcuts) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
+- **Tabs look like tabs, and form labels read alike** (issues #4718, #4726). Every horizontal tab
+  strip (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
+  Keyboard Shortcuts, and the left panel's **Manual** / **Autopilot** in Train and **Autopilot** /
+  **Review** in Test) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
   the active one open into the content below with an accent edge on top. New Detector's
   **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
   labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
