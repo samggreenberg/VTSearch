@@ -23,6 +23,11 @@ not list every commit. Use `git log` for the full history.
   `VTSEARCH_STALL_STARTUP_MS` (5 s) from the ML imports until **VTSearch is ready**, so a startup that
   takes minutes is still reported and a routine import is not; the `diagnostics config` line reports it
   as `watchdog_startup=`, and a `stall:` line from that window says `bar 5000ms`.
+- **New Detector keeps a preset media type and the Threshold under Advanced** (issue #4717).
+  When a selected dataset has already set and locked the detector's **Media type**, the field
+  moves from the top of the Blank form to **Advanced ▾**, unlock button and all, and stays there
+  if you unlock it. The **Threshold** moves under **Advanced ▾** on both tabs; it still starts on
+  your last pick. A media type nothing has set stays at the top of the form.
 - **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
   King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
   click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
