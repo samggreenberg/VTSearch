@@ -35,6 +35,7 @@ import {
   type EmbedderType,
 } from '../../../services/embedder-capability.service';
 import { MediaStateService } from '../../../services/media-state.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
 import {
   ImporterField,
   ImporterInfo,
@@ -130,6 +131,7 @@ export class NewDetectorModalComponent implements OnInit {
   private settingsState = inject(SettingsStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private mediaState = inject(MediaStateService);
+  private datasetState = inject(DatasetStateService);
 
   /** Media type of the currently active dataset, if any. */
   readonly defaultMediaType = input('');
@@ -484,12 +486,49 @@ export class NewDetectorModalComponent implements OnInit {
    *  seeds-only stack leaves Name for the user to fill. */
   private autoFillNameFromExample(): void {
     if (this.nameTouched) return;
+    const fromExample = this.nameFromExample();
+    if (fromExample) this.name.set(fromExample);
+  }
+
+  /** The name the picked example suggests: the first hand-picked media's
+   *  filename, else the text example in sentence case; '' when there is
+   *  neither (seeds don't count, see {@link autoFillNameFromExample}). */
+  private nameFromExample(): string {
     const first = this.mediaExamples().find((ex) => !ex.seed);
-    if (first?.display) {
-      this.name.set(this.sanitizeName(this.nameFromFilename(first.display)));
-    } else if (this.pendingText()) {
-      this.name.set(this.nameFromText(this.pendingText()));
+    if (first?.display) return this.sanitizeName(this.nameFromFilename(first.display));
+    return this.nameFromText(this.pendingText());
+  }
+
+  /** The name Create sends: what the user typed, or {@link defaultName} when
+   *  they left the field blank (#4718). */
+  get effectiveName(): string {
+    return this.name().trim() || this.defaultName;
+  }
+
+  /** What a blank Name resolves to: the name the example suggests, or on the
+   *  Trained tab the imported file's name (else the importer's), falling back
+   *  to "New detector". Numbered past any detector that already has the name,
+   *  since names must be unique. */
+  get defaultName(): string {
+    let base = '';
+    if (this.tab === 'trained') {
+      const imp = this.selectedLabelImporter;
+      if (this.labelImporterFile) base = this.sanitizeName(this.nameFromFilename(this.labelImporterFile.name));
+      else if (imp) base = `${imp.display_name || imp.name} detector`;
+    } else {
+      base = this.nameFromExample();
     }
+    return this.uniqueDetectorName(base || 'New detector');
+  }
+
+  /** ``base``, or ``base 2``, ``base 3``, … when a registered detector
+   *  already has that name (compared case-insensitively, as the server does). */
+  private uniqueDetectorName(base: string): string {
+    const taken = new Set(this.datasetState.detectors.map((d) => (d.name ?? '').trim().toLowerCase()));
+    if (!taken.has(base.toLowerCase())) return base;
+    let n = 2;
+    while (taken.has(`${base} ${n}`.toLowerCase())) n++;
+    return `${base} ${n}`;
   }
 
   onPendingTextInput(value: string): void {
@@ -680,23 +719,22 @@ export class NewDetectorModalComponent implements OnInit {
     return this.datasetSuppliedTypes.length > 1 ? this.effectiveEmbedderType : '';
   }
 
+  /** A blank name is fine: Create falls back to {@link defaultName}. */
   get canSubmitBlank(): boolean {
-    return !!this.name().trim() && this.hasExample && !this.submitting();
+    return this.hasExample && !this.submitting();
   }
 
   /** Title for the blank-tab Create button. When enabled, describes the
-   *  action; when disabled, names the specific blocker (missing example or
-   *  missing name) so the user knows what still needs filling in. */
+   *  action; when disabled, names the blocker (a missing example) so the
+   *  user knows what still needs filling in. */
   get blankSubmitTitle(): string {
     if (this.canSubmitBlank) return 'Create the detector with the example you provided';
     if (!this.hasExample) return this.exampleHint;
-    if (!this.name().trim()) return 'Enter a detector name to create the detector';
     return 'Create the detector';
   }
 
   get canSubmitTrained(): boolean {
     return (
-      !!this.name().trim() &&
       !!this.selectedLabelImporter &&
       this.trainedView === 'form' &&
       !this.submitting()
@@ -770,6 +808,14 @@ export class NewDetectorModalComponent implements OnInit {
     }
     if (this.exampleTab() === 'text') return 'Provide a text description to start the detector.';
     return `Provide an example ${this.exampleMediaNoun} to start the detector.`;
+  }
+
+  /** The text example's placeholder: the instruction itself, in the box
+   *  rather than as a line under it (#4718). On a dataset that can't search
+   *  by text it points at the media tab instead (#4666). */
+  get textExamplePlaceholder(): string {
+    if (!this.datasetSearchesText) return `This dataset can't search by text; use the ${this.exampleMediaTabLabel} tab`;
+    return 'Describe what this detector should find';
   }
 
   /** "image", "video", "audio clip", …: the media tab's label as a countable
@@ -1236,11 +1282,6 @@ export class NewDetectorModalComponent implements OnInit {
   submitTrained(): void {
     if (this.submitting()) return;
 
-    const trimmedName = this.name().trim();
-    if (!trimmedName) {
-      this.error.set('Name is required');
-      return;
-    }
     if (!this.selectedLabelImporter) {
       this.error.set('A label importer is required');
       return;
@@ -1250,7 +1291,7 @@ export class NewDetectorModalComponent implements OnInit {
     this.error.set('');
 
     const params: Record<string, unknown> = {
-      name: trimmedName,
+      name: this.effectiveName,
       embedder_type: this.submittedEmbedderType(),
       beta: this.beta(),
       ...this.labelImporterValues,
@@ -1340,12 +1381,6 @@ export class NewDetectorModalComponent implements OnInit {
       return;
     }
 
-    const trimmedName = this.name().trim();
-    if (!trimmedName) {
-      this.error.set('Name is required');
-      return;
-    }
-
     // Media examples win over pending text (the two are mutually exclusive
     // in the form; a non-empty stack means the text field was cleared).
     const mediaExamples = this.mediaExamples();
@@ -1386,7 +1421,7 @@ export class NewDetectorModalComponent implements OnInit {
 
     this.detectorsRegistryApi
       .registerDetector({
-        name: trimmedName,
+        name: this.effectiveName,
         media_type: this.mediaType(),
         text_query: textQuery,
         media_example: mediaExample,

@@ -203,58 +203,10 @@
 }
 
 // --- Export tabs ---
-
-.export-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid var(--border);
-  margin-bottom: 0;
-}
-
-.export-tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-md) var(--space-xl);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  font-size: var(--font-md);
-  color: var(--text-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color var(--transition-base), border-color var(--transition-base);
-
-  // Active-underline wipe: the accent underline grows in (scaleX 0 → 1)
-  // rather than hard-cutting on. Sits over the 2px bottom-border region so it
-  // lands exactly on the tab bar's border line.
-  &::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -2px;
-    height: 2px;
-    background: var(--accent);
-    transform: scaleX(0);
-    transform-origin: center;
-    transition: transform var(--transition-slow);
-    pointer-events: none;
-  }
-
-  &:hover {
-    color: var(--text-primary);
-  }
-
-  &.active {
-    color: var(--text-primary);
-    font-weight: var(--weight-semibold);
-
-    &::after { transform: scaleX(1); }
-  }
-}
+//
+// The strip is the shared `.tab-bar` / `.tab` primitive (`_picker-shared.scss`);
+// `.tab-content` below is the box its active tab opens into. `.export-tabs` /
+// `.export-tab` ride alongside as unstyled hooks for the screenshot manifest.
 
 .tab-icon {
   font-size: var(--font-xl);
@@ -271,7 +223,6 @@
   border-top: none;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   padding: var(--space-lg);
-  background: var(--bg-subtle);
 }
 
 .tab-pane {

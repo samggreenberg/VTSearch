@@ -75,7 +75,7 @@
         @if (activeSettingsTab() === 'appearance') {
           <h3>Appearance</h3>
           <div class="form-group">
-            <label class="form-label" for="setting-theme" title="Color theme for the application interface">Theme</label>
+            <label class="form-label" for="setting-theme" title="Color theme for the application interface">Theme:</label>
             <select id="setting-theme" class="form-select" [ngModel]="settings().theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme">
               <option value="system">System</option>
               <option value="dark">Dark</option>
@@ -84,7 +84,7 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-animations" title="Choose whether decorative motion plays across the whole app">Show animations<vt-field-hint-icon hint="Controls decorative motion across the app. “Show” forces it on, “Hide” turns it off, and “OS Setting” follows your system’s reduce-motion preference."></vt-field-hint-icon></label>
+            <label class="form-label" for="setting-animations" title="Choose whether decorative motion plays across the whole app">Show animations:<vt-field-hint-icon hint="Controls decorative motion across the app. “Show” forces it on, “Hide” turns it off, and “OS Setting” follows your system’s reduce-motion preference."></vt-field-hint-icon></label>
             <select id="setting-animations" class="form-select" [ngModel]="settings().show_animations" (ngModelChange)="onAnimationModeChange($event)" title="Choose whether decorative motion plays">
               <option value="show">Show</option>
               <option value="hide">Hide</option>
@@ -107,7 +107,7 @@
             }
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-usage-bars" title="Choose when the Dashboard shows the server's RAM and Disk usage bars">RAM / Disk bars<vt-field-hint-icon hint="The server RAM and Disk usage bars beside the Dashboard’s Train, Test and Find buttons. “View” always shows them, “Hide” never does, and “Default” shows each one only when its free space is getting low for the size of your datasets."></vt-field-hint-icon></label>
+            <label class="form-label" for="setting-usage-bars" title="Choose when the Dashboard shows the server's RAM and Disk usage bars">RAM / Disk bars:<vt-field-hint-icon hint="The server RAM and Disk usage bars beside the Dashboard’s Train, Test and Find buttons. “View” always shows them, “Hide” never does, and “Default” shows each one only when its free space is getting low for the size of your datasets."></vt-field-hint-icon></label>
             <select id="setting-usage-bars" class="form-select" [ngModel]="settings().show_usage_bars ?? 'default'" (ngModelChange)="onUsageBarsModeChange($event)" title="Choose when the Dashboard shows the RAM and Disk usage bars">
               <option value="hide">Hide</option>
               <option value="default">Default</option>
@@ -131,7 +131,7 @@
             Enable achievements
           </label>
           <div class="form-group" role="group" aria-labelledby="setting-hints-label">
-            <span id="setting-hints-label" class="form-label" title="King Toasty's hints beside the next thing to click">Toasty's hints<vt-field-hint-icon hint="While you're getting started, King Toasty stands beside the next thing to click and says what it does. Each hint has its own “Hide this hint” and “Hide all hints” boxes. Show All brings back every hint, including ones you hid one at a time."></vt-field-hint-icon></span>
+            <span id="setting-hints-label" class="form-label" title="King Toasty's hints beside the next thing to click">Toasty's hints:<vt-field-hint-icon hint="While you're getting started, King Toasty stands beside the next thing to click and says what it does. Each hint has its own “Hide this hint” and “Hide all hints” boxes. Show All brings back every hint, including ones you hid one at a time."></vt-field-hint-icon></span>
             <div class="hint-buttons">
               <button class="btn btn--secondary btn--sm" (click)="onHideAllHints()" [disabled]="allHintsHidden()" title="Hide every one of Toasty's hints">Hide All</button>
               <button class="btn btn--secondary btn--sm" (click)="onShowAllHints()" [disabled]="noHintsHidden()" title="Show all of Toasty's hints again, including ones you hid one at a time">Show All</button>
@@ -218,11 +218,11 @@
             Enrich descriptions
           </label>
           <div class="form-group">
-            <label class="form-label" for="setting-calibrate-count" title="Number of items to check when tuning the detector's cutoff after training">Tuning count</label>
+            <label class="form-label" for="setting-calibrate-count" title="Number of items to check when tuning the detector's cutoff after training">Tuning count:</label>
             <input id="setting-calibrate-count" type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to check when tuning the cutoff" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-calibration-fraction" title="Fraction of labeled items to set aside for checking (0 = none, 1 = all). Leave empty for automatic: 0.3 for single-vector models, 0.5 for patch models.">Tuning fraction</label>
+            <label class="form-label" for="setting-calibration-fraction" title="Fraction of labeled items to set aside for checking (0 = none, 1 = all). Leave empty for automatic: 0.3 for single-vector models, 0.5 for patch models.">Tuning fraction:</label>
             <input id="setting-calibration-fraction" type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" placeholder="auto" title="Fraction of labeled items to set aside for checking (0.0 to 1.0); empty = automatic per-model default" />
           </div>
         }
@@ -258,19 +258,19 @@
         @if (activeSettingsTab() === 'autopilot') {
           <h3>Autopilot &amp; Actions</h3>
           <div class="form-group">
-            <label class="form-label" for="setting-autopilot-greens" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start</label>
+            <label class="form-label" for="setting-autopilot-greens" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start:</label>
             <input id="setting-autopilot-greens" type="number" class="form-input" [ngModel]="settings().autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-autopilot-reds" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start</label>
+            <label class="form-label" for="setting-autopilot-reds" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start:</label>
             <input id="setting-autopilot-reds" type="number" class="form-input" [ngModel]="settings().autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-autopilot-resort" title="How many new votes to collect before autopilot triggers a re-sort (retrain + re-rank)"># Start to re-sort</label>
+            <label class="form-label" for="setting-autopilot-resort" title="How many new votes to collect before autopilot triggers a re-sort (retrain + re-rank)"># Start to re-sort:</label>
             <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity</label>
+            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity:</label>
             <input id="setting-autopilot-diversity" type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 
@@ -282,7 +282,7 @@
           <!-- Applies to every media type: this describes your browser's
                rendering capability, not the data. -->
           <div class="form-group">
-            <label class="form-label" for="setting-browse-graphics" title="How much visual polish the Browse map's animations use">Graphics<vt-field-hint-icon hint="“Auto” checks whether your browser has hardware acceleration and picks for you. “Full” always uses the richest animations. “Reduced” keeps every animation but drops the costly effects (image smoothing while panning/zooming, shadows) — pick it if the map feels laggy. Applies to all media types."></vt-field-hint-icon></label>
+            <label class="form-label" for="setting-browse-graphics" title="How much visual polish the Browse map's animations use">Graphics:<vt-field-hint-icon hint="“Auto” checks whether your browser has hardware acceleration and picks for you. “Full” always uses the richest animations. “Reduced” keeps every animation but drops the costly effects (image smoothing while panning/zooming, shadows) — pick it if the map feels laggy. Applies to all media types."></vt-field-hint-icon></label>
             <select id="setting-browse-graphics" class="form-select" [ngModel]="browseGraphics" (ngModelChange)="onBrowseGraphicsChange($event)" title="How much visual polish the Browse map's animations use">
               <option value="auto">Auto</option>
               <option value="full">Full</option>
@@ -315,7 +315,7 @@
               </label>
               @if (browseTabHasCaptioner(activeBrowseTab())) {
                 <div class="form-group">
-                  <label class="form-label" title="How signpost region names are generated for this media type">Signpost text<vt-field-hint-icon hint="Tags names regions from a fixed vocabulary (fast, no download). Captions runs a generative model to describe each item (sharper on fine-grained sets, but downloads a multi-GB model and runs at build time)."></vt-field-hint-icon></label>
+                  <label class="form-label" title="How signpost region names are generated for this media type">Signpost text:<vt-field-hint-icon hint="Tags names regions from a fixed vocabulary (fast, no download). Captions runs a generative model to describe each item (sharper on fine-grained sets, but downloads a multi-GB model and runs at build time)."></vt-field-hint-icon></label>
                   <div class="segmented-toggle segmented-toggle--stretch">
                     <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseSignpostCaptioner(activeBrowseTab())" (click)="onBrowseSignpostCaptionerChange(activeBrowseTab(), false)" title="Name regions from a fixed tag vocabulary (fast, no download)">
                       Tags
@@ -327,7 +327,7 @@
                 </div>
               }
               <div class="form-group">
-                <label class="form-label" for="setting-browse-colormap" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
+                <label class="form-label" for="setting-browse-colormap" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap:<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab())) {
                   <select id="setting-browse-colormap" class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
                     <option value="gray" selected>Grayscale</option>
@@ -342,7 +342,7 @@
                 }
               </div>
               <div class="form-group">
-                <label class="form-label" for="setting-browse-cell-size" title="On-screen size of the map cells">Cell size</label>
+                <label class="form-label" for="setting-browse-cell-size" title="On-screen size of the map cells">Cell size:</label>
                 <select id="setting-browse-cell-size" class="form-select" [ngModel]="getBrowseIconSize(activeBrowseTab())" (ngModelChange)="onBrowseIconSizeChange(activeBrowseTab(), $event)" aria-label="Browser cell size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
@@ -356,7 +356,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" for="setting-browse-thumb-border" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border<vt-field-hint-icon hint="Colored band around stacked thumbnail tiles (image, video); its color shows how many items are piled there. Set to 0 to hide."></vt-field-hint-icon></label>
+                <label class="form-label" for="setting-browse-thumb-border" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border:<vt-field-hint-icon hint="Colored band around stacked thumbnail tiles (image, video); its color shows how many items are piled there. Set to 0 to hide."></vt-field-hint-icon></label>
                 <input
                   id="setting-browse-thumb-border"
                   class="form-input"
@@ -369,7 +369,7 @@
                   aria-label="Browser thumbnail border width" />
               </div>
               <div class="form-group">
-                <label class="form-label" for="setting-browse-popup-size" title="Thumbnail size in the bin popup's grid">Popup thumbnail size<vt-field-hint-icon hint="Thumbnail size in the right-click bin popup. Changing it while browsing is remembered here."></vt-field-hint-icon></label>
+                <label class="form-label" for="setting-browse-popup-size" title="Thumbnail size in the bin popup's grid">Popup thumbnail size:<vt-field-hint-icon hint="Thumbnail size in the right-click bin popup. Changing it while browsing is remembered here."></vt-field-hint-icon></label>
                 <select id="setting-browse-popup-size" class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab())" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab(), $event)" aria-label="Bin popup thumbnail size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
@@ -379,7 +379,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" title="How many mouse-wheel notches (and +/- button clicks) it takes to cross one zoom level of the bin pyramid">Mouse-zooms per level<vt-field-hint-icon hint="How many mouse-wheel notches (or +/- clicks) it takes to cross one zoom level. 1 = 2× per notch; 2 (default) = √2; 3 = ∛2."></vt-field-hint-icon></label>
+                <label class="form-label" title="How many mouse-wheel notches (and +/- button clicks) it takes to cross one zoom level of the bin pyramid">Mouse-zooms per level:<vt-field-hint-icon hint="How many mouse-wheel notches (or +/- clicks) it takes to cross one zoom level. 1 = 2× per notch; 2 (default) = √2; 3 = ∛2."></vt-field-hint-icon></label>
                 <div class="segmented-toggle segmented-toggle--stretch">
                   <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 1" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 1)" title="One notch per level (2× per zoom)">
                     1
@@ -403,35 +403,35 @@
           <h3>Server Settings<vt-field-hint-icon hint="Fixed when the server starts and shared by everyone. Shown for reference; can’t be changed here."></vt-field-hint-icon></h3>
 
           <div class="form-group">
-            <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory</label>
+            <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory:</label>
             <div class="server-value server-value--mono">{{ settings().saved_datasets_dir || '—' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="Root directory where detector configurations are stored on the server">Detectors directory</label>
+            <label class="form-label" title="Root directory where detector configurations are stored on the server">Detectors directory:</label>
             <div class="server-value server-value--mono">{{ settings().detectors_dir || '—' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="Maximum number of dataset downloads the server runs in parallel">Max concurrent dataset downloads</label>
+            <label class="form-label" title="Maximum number of dataset downloads the server runs in parallel">Max concurrent dataset downloads:</label>
             <div class="server-value">{{ settings().max_concurrent_dataset_downloads ?? '—' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="How many datasets the server analyzes at once">Max datasets analyzed at once</label>
+            <label class="form-label" title="How many datasets the server analyzes at once">Max datasets analyzed at once:</label>
             <div class="server-value">{{ settings().max_concurrent_dataset_embeddings ?? '—' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="When on, this server offers Semantic embedders only: the prototype Patch Semantic and Structural types are hidden from every picker and rejected by the API. Set with --semantic-only, VTSEARCH_SEMANTIC_ONLY, or the semantic_only setting.">Semantic embedders only</label>
+            <label class="form-label" title="When on, this server offers Semantic embedders only: the prototype Patch Semantic and Structural types are hidden from every picker and rejected by the API. Set with --semantic-only, VTSEARCH_SEMANTIC_ONLY, or the semantic_only setting.">Semantic embedders only:</label>
             <div class="server-value">{{ settings().semantic_only ? 'On' : 'Off' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="When on, Train and Test stay on their Autopilot tabs: Train has no Manual tab, Test has no Review tab, and neither shows a tab bar. Set with --autopilot-only, VTSEARCH_AUTOPILOT_ONLY, or the autopilot_only setting.">Autopilot only</label>
+            <label class="form-label" title="When on, Train and Test stay on their Autopilot tabs: Train has no Manual tab, Test has no Review tab, and neither shows a tab bar. Set with --autopilot-only, VTSEARCH_AUTOPILOT_ONLY, or the autopilot_only setting.">Autopilot only:</label>
             <div class="server-value">{{ settings().autopilot_only ? 'On' : 'Off' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out. Set with --solo-media-type or the solo_media_type setting.">Solo media type</label>
+            <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out. Set with --solo-media-type or the solo_media_type setting.">Solo media type:</label>
             <div class="server-value" [class.server-value--empty]="!effectiveSoloMediaType">{{ soloMediaTypeDisplay }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins</label>
+            <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins:</label>
             @if (hiddenPluginsDisplay.length > 0) {
               <ul class="server-list">
                 @for (row of hiddenPluginsDisplay; track row.family) {
@@ -443,7 +443,7 @@
             }
           </div>
           <div class="form-group">
-            <label class="form-label" title="Words this server uses to name the map's regions in Tags mode, replacing the built-in tag vocabulary (AudioSet for audio, Open Images for images). Set in the server's settings file; media types not listed use the built-in vocabulary.">Custom signpost tags<vt-field-hint-icon hint="An instance-wide term list for naming map regions, set by whoever runs this server. Media types not listed here use the built-in vocabulary. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
+            <label class="form-label" title="Words this server uses to name the map's regions in Tags mode, replacing the built-in tag vocabulary (AudioSet for audio, Open Images for images). Set in the server's settings file; media types not listed use the built-in vocabulary.">Custom signpost tags:<vt-field-hint-icon hint="An instance-wide term list for naming map regions, set by whoever runs this server. Media types not listed here use the built-in vocabulary. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
             @if (signpostVocabDisplay.length > 0) {
               <ul class="server-list">
                 @for (row of signpostVocabDisplay; track row.mediaType) {

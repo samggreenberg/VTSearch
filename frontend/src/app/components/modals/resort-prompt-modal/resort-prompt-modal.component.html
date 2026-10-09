@@ -31,12 +31,12 @@
         <div class="choice-col choice-col--alt">
           <h4 class="choice-heading">Supply a different sort:</h4>
           <div class="example-group">
-            <label class="form-label">Text example</label>
+            <label class="form-label">Text example:</label>
             <div class="text-input-row">
               <input
                 class="form-input"
                 [(ngModel)]="pendingText"
-                placeholder="e.g. large books"
+                placeholder="Describe what to sort by"
                 title="Enter a text description to sort by"
                 (keydown.enter)="$event.preventDefault(); submitText()"
               />
@@ -44,7 +44,7 @@
             </div>
           </div>
           <div class="example-group">
-            <label class="form-label">Media example</label>
+            <label class="form-label">Media example:</label>
             <div class="media-btn-row">
               <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media…</button>
               <input

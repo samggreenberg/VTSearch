@@ -65,14 +65,15 @@
   gap: var(--space-sm);
 }
 
-// Nested tab bar (Text / Image) under the "Example" label. Tighter than the
-// top-level Blank/Trained tabs since it sits inside a form group.
+// Nested tab bar (Text / Image) under the "Example:" label. Tighter and in
+// smaller type than the top-level Blank/Trained tabs: it sits inside a form
+// group, and its tabs must not outweigh the label heading them (#4718).
 .example-tab-bar {
   margin-bottom: var(--space-sm);
 
   .tab {
-    padding: var(--space-sm) var(--space-lg);
-    font-size: var(--font-md);
+    padding: var(--space-xs) var(--space-lg);
+    font-size: var(--font-sm);
   }
 }
 

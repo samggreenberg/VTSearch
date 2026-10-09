@@ -27,6 +27,16 @@ not list every commit. Use `git log` for the full history.
   **Continue** button, which no longer names the sort or the number of labels before the next
   prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
   **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
+- **Tabs look like tabs, and form labels read alike** (issue #4718). Every horizontal tab strip
+  (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
+  Keyboard Shortcuts) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
+  the active one open into the content below with an accent edge on top. New Detector's
+  **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
+  labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
+  **Threshold:** label matches them. The text boxes now carry their instructions (**Describe what
+  this detector should find**) in place of a faint example and a line under the box, and
+  **Detector name** can be left blank: the detector is named after its example (or, on the
+  Trained tab, the imported file), numbered past any detector that already has that name.
 - **No stall report for a slow import at startup.** On a cold page cache the scikit-learn import
   (through pandas, pyarrow's shared library) held the GIL for just over a second, and the stall watchdog
   wrote every thread's stack to the terminal of a routine `python app.py`. The watchdog's bar is now
