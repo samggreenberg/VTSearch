@@ -21,6 +21,14 @@
   white-space: nowrap;
 }
 
+// Among a form's fields the heading reads as one of their labels: the type of
+// the shared `.form-label` (`_components.scss`), so it doesn't stand apart (#4718).
+.balance-label--form {
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
 // The spectrum and the three radios under it share one width, so each radio
 // sits centred under its third of the bar.
 .balance-spectrum {

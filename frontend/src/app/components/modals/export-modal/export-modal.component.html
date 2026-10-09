@@ -116,11 +116,13 @@
 
   <!-- Export Tabs -->
   <div class="export-section">
-    <div class="export-tabs">
+    <div class="tab-bar export-tabs" role="tablist">
       <!-- Clipboard tab -->
       <button
-        class="export-tab"
+        class="tab export-tab"
+        role="tab"
         [class.active]="activeTab === 'clipboard'"
+        [attr.aria-selected]="activeTab === 'clipboard'"
         (click)="activeTab = 'clipboard'"
         title="Copy the exported data to your clipboard as delimited text"
       >
@@ -130,8 +132,10 @@
       <!-- Exporter tabs -->
       @for (exp of exporters(); track exp.name) {
         <button
-          class="export-tab"
+          class="tab export-tab"
+          role="tab"
           [class.active]="activeTab === exp.name"
+          [attr.aria-selected]="activeTab === exp.name"
           (click)="selectExporterTab(exp)"
           [title]="exp.description || exp.display_name || exp.name"
         >
