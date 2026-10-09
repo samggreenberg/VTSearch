@@ -81,6 +81,13 @@ CHECKS = {"b1_xcal": False, "b2_labels": False, "b3_floor": False, "b4_check": T
 
 CHECKPOINTS = (10, 25, 50, 100, 150)
 WINDOWS = ((1, 25), (1, 50), (51, 150), (1, 150))
+#: The step table's columns, the session mean first: one number for "did this step improve the app" is the area
+#: under the objective over votes, i.e. its mean (owner, 2026-10-09). Points on the curve come after.
+STEP_COLUMNS = ("mean 1-150", "mean 1-50", "mean 51-150", "t=50", "t=150")
+RETURNED_NOTE = (
+    "Each row reads only the runs showing a detector at that vote, a subset that differs by rung before the "
+    "hand-over (a check's steps carry no headline row). Compare rungs at vote 150; the curves carry the early votes."
+)
 
 
 def text_fbeta(baseline: pd.DataFrame, p_col: str, r_col: str, beta: float) -> dict[tuple, float]:
@@ -214,7 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     lines.append("")
     if failures:
         lines += ["## Premise failures", "", *[f"- {f}" for f in failures], ""]
-    (out / "provenance.json").write_text(json.dumps(provs, indent=2, default=str))
+    (out / "provenance.json").write_text(json.dumps(provs, indent=2, default=str) + "\n")
 
     seen = pd.concat([f[CELL] for f in frames.values()], ignore_index=True)
     anchored = bl["today"][CELL] if seeds is None else bl["today"].loc[bl["today"]["seed"].isin(seeds), CELL]
@@ -275,14 +282,17 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             lines.append(
                 f"| {p} | {key} | {arm} | {len(cells)} | {lost} | {cov.get(25, np.nan):.2f} | {cov.get(50, np.nan):.2f} |"
             )
-            # What the user gets at the horizon, on runs showing a detector by then.
-            last = frame[(frame["t"] == args.horizon) & (frame["app_trained"].fillna(0).astype(int) == 1)]
-            if not last.empty:
+            # What the user gets at votes 25 and 50 and at the horizon, on runs showing a detector by then.
+            for at in sorted({25, 50, args.horizon}):
+                last = frame[(frame["t"] == at) & (frame["app_trained"].fillna(0).astype(int) == 1)]
+                if last.empty:
+                    continue
                 ret_rows.append(
                     {
                         "preset": p,
                         "rung": key,
                         "label": label,
+                        "t": at,
                         "runs": len(last),
                         "precision": float(np.nan_to_num(last["precision"]).mean()),
                         "recall": float(last["recall"].mean()),
@@ -312,43 +322,51 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     pts = [0, *CHECKPOINTS]
     for p in presets:
         c = curve[curve["preset"] == p]
-        lines += [f"## Beta {PRESETS[p]:g}: the objective (filled) at checkpoints", ""]
+        # The session mean leads: the area under the curve over votes, divided by the votes (owner, 2026-10-09).
+        lines += [f"## Beta {PRESETS[p]:g}: the objective (filled), the session mean first", ""]
         lines += [
-            "| rung | " + " | ".join(f"t={t}" for t in pts) + " | mean 1-150 |",
-            "|---|" + "---|" * (len(pts) + 1),
+            "| rung | mean 1-150 | mean 1-50 | " + " | ".join(f"t={t}" for t in pts) + " |",
+            "|---|" + "---|" * (len(pts) + 2),
         ]
         for key, label, *_ in STEPS:
             ck = c[c["rung"] == key].set_index("t")
             if ck.empty:
                 continue
             avg = ck.loc[1 : args.horizon, "mean"].mean()
+            early = ck.loc[1:50, "mean"].mean()
             lines.append(
-                f"| {key} {label} | " + " | ".join(f"{ck.loc[t, 'mean']:.2g}" for t in pts) + f" | {avg:.2g} |"
+                f"| {key} {label} | {avg:.2g} | {early:.2g} | "
+                + " | ".join(f"{ck.loc[t, 'mean']:.2g}" for t in pts)
+                + " |"
             )
         lines += ["", "Each rung against the one before (positive = the step helped; bold = beyond 2 SE):", ""]
         lines += [
-            "| step | " + " | ".join(r for r in ["t=50", "t=150", "mean 1-50", "mean 51-150", "mean 1-150"]) + " |",
+            "| step | " + " | ".join(r for r in STEP_COLUMNS) + " |",
             "|---|---|---|---|---|---|",
         ]
         pp = pairs[(pairs["preset"] == p) & (pairs["kind"] == "step")]
         for (f, t), g in pp.groupby(["from", "to"], sort=False):
             g = g.set_index("at")
             cells_ = []
-            for at in ["t=50", "t=150", "mean 1-50", "mean 51-150", "mean 1-150"]:
+            for at in STEP_COLUMNS:
                 r = g.loc[at]
                 star = "**" if r["resolvable"] else ""
                 cells_.append(f"{star}{r['mean']:+.3f}{star} ± {r['se']:.3f}")
             lines.append(f"| {f} → {t} | " + " | ".join(cells_) + " |")
         lines.append("")
     if not returned.empty:
-        lines += ["## What the user gets at the horizon (runs showing a detector)", ""]
-        lines += ["| preset | rung | precision | recall | returned, median | over 200 |", "|---|---|---|---|---|---|"]
+        lines += ["## What the user gets at votes 25, 50 and 150 (runs showing a detector)", "", RETURNED_NOTE, ""]
+        lines += [
+            "| preset | rung | vote | runs | precision | recall | returned, median | over 200 |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
         for r in returned.itertuples(index=False):
             lines.append(
-                f"| {r.preset} | {r.rung} | {r.precision:.2f} | {r.recall:.2f} | {r.returned_median:.0f} | {r.over_200:.0%} |"
+                f"| {r.preset} | {r.rung} | {r.t} | {r.runs} | {r.precision:.2f} | {r.recall:.2f} "
+                f"| {r.returned_median:.0f} | {r.over_200:.0%} |"
             )
         lines.append("")
-    (out / "REPORT_buildup.md").write_text("\n".join(lines) + "\n")
+    (out / "REPORT_buildup.md").write_text("\n".join(lines).rstrip("\n") + "\n")
     print("\n".join(lines))
 
     if not args.no_figures and frames:
@@ -408,15 +426,19 @@ def figures(curve: pd.DataFrame, figdir: Path, presets: list[str]) -> None:
     fig.savefig(figdir / "buildup_curves.png", dpi=130)
     plt.close(fig)
 
-    fig, axes = plt.subplots(1, len(presets), figsize=(5.2 * len(presets), 3.6), squeeze=False)
+    # Two windows: the whole session (the area under the curve, as a mean) and a short one, which is most sessions.
+    windows = (("1-150", 1, 150, "#2a78d6"), ("1-50", 1, 50, "#eb6834"))
+    fig, axes = plt.subplots(1, len(presets), figsize=(5.2 * len(presets), 3.8), squeeze=False)
     for ax, p in zip(axes[0], presets, strict=True):
-        c = curve[(curve["preset"] == p) & (curve["t"] >= 1)]
-        means = c.groupby("rung", sort=False)["mean"].mean().reindex(keys).dropna()
-        ax.step(range(len(means)), means.to_numpy(), where="mid", color="#2a78d6")
-        ax.plot(range(len(means)), means.to_numpy(), "o", color="#2a78d6")
-        ax.set_xticks(range(len(means)), list(means.index))
-        ax.set_title(f"F-beta {PRESETS[p]:g}: mean over clicks 1-150")
+        for name, lo, hi, colour in windows:
+            c = curve[(curve["preset"] == p) & (curve["t"] >= lo) & (curve["t"] <= hi)]
+            means = c.groupby("rung", sort=False)["mean"].mean().reindex(keys).dropna()
+            ax.step(range(len(means)), means.to_numpy(), where="mid", color=colour)
+            ax.plot(range(len(means)), means.to_numpy(), "o", color=colour, label=f"mean over votes {name}")
+            ax.set_xticks(range(len(means)), list(means.index))
+        ax.set_title(f"F-beta {PRESETS[p]:g}, at its own preset")
         ax.grid(alpha=0.3)
+    axes[0][0].legend(fontsize=8, loc="upper left")
     fig.tight_layout()
     fig.savefig(figdir / "buildup_steps.png", dpi=130)
     plt.close(fig)

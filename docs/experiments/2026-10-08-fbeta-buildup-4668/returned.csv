@@ -1,22 +1,64 @@
-preset,rung,label,runs,precision,recall,returned_median,returned_mean,over_200
-b025,b1,cross-calibration,685,0.484414,0.693844,69,297.206,0.248175
-b025,b2,the labels line at the preset,685,0.67038,0.467762,36,51.4832,0.049635
-b025,b3,+ the relative spread floor,685,0.686074,0.444622,33,47.9197,0.0394161
-b025,b4,+ the weak-separation check,685,0.709812,0.423097,29,34.5723,0.010219
-b025,b5,+ even-odds asking (today's sessions),685,0.756801,0.402183,24,29.8336,0.00437956
-b025,b6,+ the typed query's per-preset line (today's app),685,0.756801,0.402183,24,29.8336,0.00437956
-b025,b7,+ the detector walk (not shipped),651,0.765162,0.411226,23,25.9155,0
-b1,b1,cross-calibration,685,0.484414,0.693844,69,297.206,0.248175
-b1,b2,the labels line at the preset,685,0.527557,0.632197,54,158.909,0.2
-b1,b3,+ the relative spread floor,685,0.545256,0.62002,51,159.045,0.19562
-b1,b4,+ the weak-separation check,685,0.566631,0.580925,49,97.3109,0.112409
-b1,b5,+ even-odds asking (today's sessions),685,0.591868,0.577676,48,79.3956,0.0715328
-b1,b6,+ the typed query's per-preset line (today's app),685,0.591868,0.577676,48,79.3956,0.0715328
-b1,b7,+ the detector walk (not shipped),651,0.604492,0.59298,48,65.0891,0.0414747
-b4,b1,cross-calibration,685,0.484414,0.693844,69,297.206,0.248175
-b4,b2,the labels line at the preset,685,0.372252,0.797364,125,593.483,0.418978
-b4,b3,+ the relative spread floor,685,0.387751,0.791336,122,633.923,0.417518
-b4,b4,+ the weak-separation check,685,0.39694,0.751662,113,357.098,0.360584
-b4,b5,+ even-odds asking (today's sessions),685,0.373404,0.749632,126,292.982,0.367883
-b4,b6,+ the typed query's per-preset line (today's app),685,0.373404,0.749632,126,292.982,0.367883
-b4,b7,+ the detector walk (not shipped),664,0.387279,0.746778,124,205.73,0.350904
+preset,rung,label,t,runs,precision,recall,returned_median,returned_mean,over_200
+b025,b1,cross-calibration,25,263,0.672882,0.709768,49,113.129,0.110266
+b025,b1,cross-calibration,50,452,0.688202,0.679051,47,191.907,0.108407
+b025,b1,cross-calibration,150,685,0.484414,0.693844,69,297.206,0.248175
+b025,b2,the labels line at the preset,25,263,0.914534,0.404889,21,24.8175,0
+b025,b2,the labels line at the preset,50,452,0.790045,0.541988,35,58.5133,0.0132743
+b025,b2,the labels line at the preset,150,685,0.67038,0.467762,36,51.4832,0.049635
+b025,b3,+ the relative spread floor,25,263,0.809984,0.590886,36,46.3498,0.0114068
+b025,b3,+ the relative spread floor,50,452,0.814881,0.490536,30,72.2301,0.0420354
+b025,b3,+ the relative spread floor,150,685,0.686074,0.444622,33,47.9197,0.0394161
+b025,b4,+ the weak-separation check,25,263,0.809984,0.590886,36,46.3498,0.0114068
+b025,b4,+ the weak-separation check,50,353,0.863054,0.548314,33,40.1445,0.0254958
+b025,b4,+ the weak-separation check,150,685,0.709812,0.423097,29,34.5723,0.010219
+b025,b5,+ even-odds asking (today's sessions),25,263,0.827086,0.583192,35,44.8061,0.0152091
+b025,b5,+ even-odds asking (today's sessions),50,298,0.85978,0.490586,28,39.2282,0.0234899
+b025,b5,+ even-odds asking (today's sessions),150,685,0.756801,0.402183,24,29.8336,0.00437956
+b025,b6,+ the typed query's per-preset line (today's app),25,263,0.827086,0.583192,35,44.8061,0.0152091
+b025,b6,+ the typed query's per-preset line (today's app),50,298,0.85978,0.490586,28,39.2282,0.0234899
+b025,b6,+ the typed query's per-preset line (today's app),150,685,0.756801,0.402183,24,29.8336,0.00437956
+b025,b7,+ the detector walk (not shipped),25,224,0.879133,0.553747,31,33.6964,0
+b025,b7,+ the detector walk (not shipped),50,248,0.91832,0.51754,28,28.4395,0.00403226
+b025,b7,+ the detector walk (not shipped),150,651,0.765162,0.411226,23,25.9155,0
+b1,b1,cross-calibration,25,263,0.672882,0.709768,49,113.129,0.110266
+b1,b1,cross-calibration,50,452,0.688202,0.679051,47,191.907,0.108407
+b1,b1,cross-calibration,150,685,0.484414,0.693844,69,297.206,0.248175
+b1,b2,the labels line at the preset,25,263,0.809915,0.578995,38,47.2776,0.0190114
+b1,b2,the labels line at the preset,50,452,0.658112,0.657728,49,105.947,0.0530973
+b1,b2,the labels line at the preset,150,685,0.527557,0.632197,54,158.909,0.2
+b1,b3,+ the relative spread floor,25,263,0.682691,0.703986,51,71.8859,0.0418251
+b1,b3,+ the relative spread floor,50,452,0.714045,0.62451,43,157.15,0.0641593
+b1,b3,+ the relative spread floor,150,685,0.545256,0.62002,51,159.045,0.19562
+b1,b4,+ the weak-separation check,25,263,0.682691,0.703986,51,71.8859,0.0418251
+b1,b4,+ the weak-separation check,50,350,0.778422,0.672373,44,67.52,0.0314286
+b1,b4,+ the weak-separation check,150,685,0.566631,0.580925,49,97.3109,0.112409
+b1,b5,+ even-odds asking (today's sessions),25,263,0.710227,0.698067,49,68.7529,0.0456274
+b1,b5,+ even-odds asking (today's sessions),50,296,0.766636,0.668801,44,77.152,0.0506757
+b1,b5,+ even-odds asking (today's sessions),150,685,0.591868,0.577676,48,79.3956,0.0715328
+b1,b6,+ the typed query's per-preset line (today's app),25,263,0.710227,0.698067,49,68.7529,0.0456274
+b1,b6,+ the typed query's per-preset line (today's app),50,296,0.766636,0.668801,44,77.152,0.0506757
+b1,b6,+ the typed query's per-preset line (today's app),150,685,0.591868,0.577676,48,79.3956,0.0715328
+b1,b7,+ the detector walk (not shipped),25,224,0.805513,0.647741,40,44.6741,0
+b1,b7,+ the detector walk (not shipped),50,246,0.865229,0.679983,41,42.5325,0.00406504
+b1,b7,+ the detector walk (not shipped),150,651,0.604492,0.59298,48,65.0891,0.0414747
+b4,b1,cross-calibration,25,263,0.672882,0.709768,49,113.129,0.110266
+b4,b1,cross-calibration,50,452,0.688202,0.679051,47,191.907,0.108407
+b4,b1,cross-calibration,150,685,0.484414,0.693844,69,297.206,0.248175
+b4,b2,the labels line at the preset,25,263,0.56974,0.738672,75,119.395,0.125475
+b4,b2,the labels line at the preset,50,452,0.505198,0.761231,71,252.823,0.176991
+b4,b2,the labels line at the preset,150,685,0.372252,0.797364,125,593.483,0.418978
+b4,b3,+ the relative spread floor,25,263,0.509017,0.78953,83,143.529,0.140684
+b4,b3,+ the relative spread floor,50,452,0.54151,0.762224,64,394.338,0.185841
+b4,b3,+ the relative spread floor,150,685,0.387751,0.791336,122,633.923,0.417518
+b4,b4,+ the weak-separation check,25,263,0.509017,0.78953,83,143.529,0.140684
+b4,b4,+ the weak-separation check,50,336,0.629782,0.792818,56,191.158,0.107143
+b4,b4,+ the weak-separation check,150,685,0.39694,0.751662,113,357.098,0.360584
+b4,b5,+ even-odds asking (today's sessions),25,263,0.532571,0.789105,77,136.662,0.152091
+b4,b5,+ even-odds asking (today's sessions),50,274,0.5683,0.811313,65,202.569,0.135036
+b4,b5,+ even-odds asking (today's sessions),150,685,0.373404,0.749632,126,292.982,0.367883
+b4,b6,+ the typed query's per-preset line (today's app),25,263,0.532571,0.789105,77,136.662,0.152091
+b4,b6,+ the typed query's per-preset line (today's app),50,274,0.5683,0.811313,65,202.569,0.135036
+b4,b6,+ the typed query's per-preset line (today's app),150,685,0.373404,0.749632,126,292.982,0.367883
+b4,b7,+ the detector walk (not shipped),25,224,0.684673,0.730463,51,62.8438,0.0223214
+b4,b7,+ the detector walk (not shipped),50,241,0.697289,0.806303,55,78.3817,0.0207469
+b4,b7,+ the detector walk (not shipped),150,664,0.387279,0.746778,124,205.73,0.350904

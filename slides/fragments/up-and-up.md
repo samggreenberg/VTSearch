@@ -17,21 +17,21 @@
      the set the typed query returns. -->
 
 <!-- **a** — Cross-calibration, the first rule: one line from the labels,
-     whatever the user wants. At β = ¼ it ends at 0.46. -->
+     whatever the user wants. At β = ¼ it averages 0.38 over the session. -->
 
 <!-- **b** — The labels line at the preset (Beta Max, What to Expect): the
      same votes, the line drawn where F-beta ¼ peaks. It pulls away from about
-     vote 50 and ends at 0.59, +0.13: half as many images back (a median of 36
-     against 69), at precision 0.67 against 0.48. -->
+     vote 50: 0.44 over the session, +0.06, and by vote 150 half as many
+     images back (a median of 36 against 69) at precision 0.67 against 0.48. -->
 
 <!-- **c** — Today's app. The typed query now draws its own line at the
      preset, so the opening returns a set worth 0.48 instead of 0.01, and the
-     first fifty votes rise with it, +0.26. It ends at 0.63, returning a median
-     of 24 at precision 0.76. Between b and c sit three more changes, the floor
-     under the line's spreads, the weak-separation check and asking at even
-     odds: each adds about 0.01 to the end, 0.04 together. At β 1 and 4 the
-     opening's lift holds (+0.19, +0.16 over votes 1-50); the labels line's
-     late gain is β ¼'s. If asked about the small dip at vote 23: that is where
-     the app first shows a detector, and for about five votes its set is worse
-     than the typed query's. The report is
+     first fifty votes rise with it: 0.48 against 0.22 over votes 1-50. Over
+     the whole session it averages 0.54, +0.10 on line b. Between b and c sit three more
+     changes, the floor under the line's spreads, the weak-separation check and
+     asking at even odds: 0.005, 0.005 and nothing over the session. At β 1
+     and 4 the opening's lift holds (+0.19, +0.16 over votes 1-50); the
+     labels line's gain is β ¼'s. If asked about the small dip at vote 23:
+     that is where the app first shows a detector, and for about five votes
+     its set is worse than the typed query's. The report is
      docs/experiments/2026-10-08-fbeta-buildup-4668. -->
