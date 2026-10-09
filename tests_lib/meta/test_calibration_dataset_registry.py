@@ -129,6 +129,29 @@ class TestCocoBetterIsRunnable:
         assert cfg.EXPERIMENT_QUERIES["coco_better"] == cfg.EXPERIMENT_QUERIES["vg_scale"]
 
 
+class TestFhibeIsRunnable:
+    """#4699: the four FHIBE cells are a roster the harness can enumerate."""
+
+    FHIBE = ("fhibe_1024", "fhibe_640", "fhibe_faces_1024", "fhibe_faces_640")
+
+    def test_every_fhibe_pile_dataset_has_a_roster(self, cfg, pc):
+        built = {ds for ds, spec in pc.DATASETS.items() if spec.get("kind") == "fhibe"}
+        assert built == set(self.FHIBE)
+        for ds in self.FHIBE:
+            assert cfg.DATASET_EMBEDDERS[ds], ds
+
+    def test_each_roster_names_embedders_the_pile_builds_for_it(self, cfg, pc):
+        """Media type pairs them: FaceNet for the crops, an image embedder for the photos."""
+        for ds in self.FHIBE:
+            for emb in cfg.DATASET_EMBEDDERS[ds]:
+                assert pc.embeds(cfg.learn_embedder(emb), ds), f"{ds} x {emb} is never built"
+
+    def test_no_identity_has_a_query_to_type(self, cfg):
+        """FHIBE's categories are subject ids, so its cells open on example photos."""
+        for ds in self.FHIBE:
+            assert ds not in cfg.EXPERIMENT_QUERIES
+
+
 class TestTrainMixCells:
     """#4160: a mixed cell is enumerated per class and opens on its class's text."""
 

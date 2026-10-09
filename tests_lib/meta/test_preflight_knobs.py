@@ -96,6 +96,8 @@ _DIVERGENT = [
     ({"CALIB_MORE_WALK": "detector"}, "more_walk"),
     ({"CALIB_BAND_SHARE": "8"}, "band_share"),
     ({"CALIB_SIGMA_FLOOR": "absolute"}, "sigma_floor"),
+    ({"CALIB_SEED_EXAMPLES": "1"}, "seed_examples"),
+    ({"CALIB_STRATIFY_TARGET": "1"}, "stratify_target"),
     ({"CALIB_BETA": "off"}, "beta"),
     ({"CALIB_BETA": "4"}, "beta"),
     ({"CALIB_WALK_SHAPE": "walk"}, "walk_shape"),

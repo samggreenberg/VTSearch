@@ -74,6 +74,15 @@ def _config(monkeypatch, declared: str | None):
     return _load("_calib_experiment_config", _CALIB / "experiment_config.py")
 
 
+def _example_config(monkeypatch, declared: str | None, examples: str | None):
+    """``experiment_config`` with ``CALIB_SEED_EXAMPLES`` set too (#4699)."""
+    if examples is None:
+        monkeypatch.delenv("CALIB_SEED_EXAMPLES", raising=False)
+    else:
+        monkeypatch.setenv("CALIB_SEED_EXAMPLES", examples)
+    return _config(monkeypatch, declared)
+
+
 def _run_cells(cfg):
     """``run_cells`` bound to *cfg*, with a stub ``common`` so import is inert."""
     stub: Any = types.ModuleType("common")
@@ -97,7 +106,7 @@ def _run_cells(cfg):
 # --- The declaration itself --------------------------------------------------
 
 
-@pytest.mark.parametrize("declared", ["text", "known_good", "mixed"])
+@pytest.mark.parametrize("declared", ["text", "known_good", "example", "mixed"])
 def test_every_documented_value_is_accepted(monkeypatch, declared):
     assert _config(monkeypatch, declared).REQUIRE_OPENING == declared
 
@@ -137,6 +146,39 @@ def test_a_pinned_known_good_study_refuses_a_text_cell(monkeypatch):
     cfg = _config(monkeypatch, "known_good")
     with pytest.raises(RuntimeError, match="opened on 'text'"):
         _run_cells(cfg).check_declared_opening("vg_scale", "siglip", "boat@small", "text")
+
+
+# --- The example opening (#4699) ---------------------------------------------
+
+
+def test_an_example_study_opens_every_cell_on_its_examples(monkeypatch):
+    """The knob decides, not the cell: a dataset with a typed query still opens on the photos."""
+    cfg = _example_config(monkeypatch, "example", "4")
+    scores, mode, query, space = _run_cells(cfg).cell_opening("fhibe_faces_1024", "face", "subject-a", {})
+    assert (scores, mode, query, space) == (None, "example", "examples=4", "face")
+
+
+def test_the_example_count_must_be_a_positive_whole_number(monkeypatch):
+    with pytest.raises(ValueError, match="CALIB_SEED_EXAMPLES"):
+        _example_config(monkeypatch, None, "0")
+
+
+def test_an_example_declaration_runs_an_example_cell(monkeypatch):
+    cfg = _example_config(monkeypatch, "example", "1")
+    _run_cells(cfg).check_declared_opening("fhibe_1024", "siglip", "subject-a", "example")
+
+
+def test_an_example_declaration_refuses_a_cell_launched_without_the_knob(monkeypatch):
+    """The declaration is what catches a launcher that forgot CALIB_SEED_EXAMPLES."""
+    cfg = _example_config(monkeypatch, "example", None)
+    with pytest.raises(RuntimeError, match="opened on 'known_good'"):
+        _run_cells(cfg).check_declared_opening("fhibe_1024", "siglip", "subject-a", "known_good")
+
+
+def test_a_text_study_refuses_an_example_cell(monkeypatch):
+    cfg = _example_config(monkeypatch, "text", "1")
+    with pytest.raises(RuntimeError, match="opened on 'example'"):
+        _run_cells(cfg).check_declared_opening("vg_scale", "siglip", "boat@small", "example")
 
 
 @pytest.mark.parametrize("declared", [None, "mixed"])

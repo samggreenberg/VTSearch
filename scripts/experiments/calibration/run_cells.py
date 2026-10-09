@@ -187,6 +187,24 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     return {ids[k]: float(cos[k]) for k in range(len(ids))}
 
 
+def cell_opening(ds: str, emb: str, cat: str, medias: dict) -> "tuple[dict[int, float] | None, str, str, str]":
+    """``(seed_scores, seed_mode, seed_query, seed_embedder)``: how this cell opens.
+
+    ``CALIB_SEED_EXAMPLES`` (#4699) wins: the cell starts from that many photos
+    of its target, and the simulator builds the example sort itself, after the
+    split, so ``seed_scores`` is ``None``.  ``seed_query`` names the count, the
+    one thing that tells two example arms apart in a pooled frame, and
+    ``seed_embedder`` is the space the example sort ranks in.  Otherwise a
+    typed query's text sort where there is one, else the known-good start.
+    """
+    if cfg.SEED_EXAMPLES is not None:
+        return None, "example", f"examples={cfg.SEED_EXAMPLES}", cfg.learn_embedder(emb)
+    seed_scores = _text_seed_scores(ds, emb, cat, medias)
+    if seed_scores is None:
+        return None, "known_good", "", ""
+    return seed_scores, "text", _seed_query_text(ds, cat), cfg.text_embedder(emb)
+
+
 def check_declared_opening(ds: str, emb: str, cat: str, seed_mode: str) -> None:
     """Raise unless this cell opened the way the study said it would (#3278).
 
@@ -204,7 +222,7 @@ def check_declared_opening(ds: str, emb: str, cat: str, seed_mode: str) -> None:
     it, and a cell that ran under the wrong opening is not.  ``mixed`` (and unset) assert
     nothing -- a re-runner mirroring a completed grid legitimately holds both.
     """
-    if cfg.REQUIRE_OPENING not in ("text", "known_good") or seed_mode == cfg.REQUIRE_OPENING:
+    if cfg.REQUIRE_OPENING not in ("text", "known_good", "example") or seed_mode == cfg.REQUIRE_OPENING:
         return
     raise RuntimeError(
         f"cell {ds}x{emb}:{cat} opened on {seed_mode!r} but this study declares "
@@ -316,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
+        f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -342,10 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     medias: dict[int, dict] = load_medias(pkl, repair=True)  # as the app holds them (#4095)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 
-    seed_scores = _text_seed_scores(ds, emb, cat, medias)
-    seed_mode = "text" if seed_scores is not None else "known_good"
-    seed_query = _seed_query_text(ds, cat) if seed_scores is not None else ""
-    seed_embedder = cfg.text_embedder(emb) if seed_scores is not None else ""
+    seed_scores, seed_mode, seed_query, seed_embedder = cell_opening(ds, emb, cat, medias)
     if cfg.is_paired(emb) and seed_mode != "text":
         # A pair exists FOR the text sort.  Falling back to known-goods here
         # would run an arm that is identical to the bare learn embedder while
@@ -353,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
         # experiment and is not it.  Fail the cell instead: a missing cell is
         # visible and a mislabelled one is not.
         raise RuntimeError(
-            f"paired embedder {emb!r} fell back to the known-good start for {ds}:{cat} "
+            f"paired embedder {emb!r} opened on {seed_mode!r}, not its text sort, for {ds}:{cat} "
             f"(query={_seed_query_text(ds, cat)!r}); the pair exists to take the text sort"
         )
     # After the pair guard, which says the same thing about a paired arm in more
@@ -464,6 +480,8 @@ def main(argv: list[str] | None = None) -> int:
                 sim_size=cfg.SIM_SIZE,
                 rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
                 calibration_seed=cal_seed,
+                seed_examples=cfg.SEED_EXAMPLES,
+                stratify_target=cfg.STRATIFY_TARGET,
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
@@ -503,6 +521,7 @@ def main(argv: list[str] | None = None) -> int:
             r["seed_embedder"] = seed_embedder
             r["calibration_fraction"] = cell_calibration_fraction
             r["sim_fraction"] = cfg.SIM_FRACTION
+            r["stratify_target"] = cfg.STRATIFY_TARGET
             r["exclusion_arm"] = exclusion_arm
             r["exclusion_min_remainder"] = exclusion_floor
             r["live_cut_rule"] = live_cut_rule
@@ -572,6 +591,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed_embedder",
         "calibration_fraction",
         "sim_fraction",
+        "stratify_target",
         "exclusion_arm",
         "exclusion_min_remainder",
         "live_cut_rule",

@@ -70,7 +70,7 @@ done
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
   echo "                    [--require-text-seed]      # every cell must seed from a TYPED QUERY" >&2
-  echo "                    (or declare it once with CALIB_REQUIRE_OPENING=text|known_good|mixed," >&2
+  echo "                    (or declare it once with CALIB_REQUIRE_OPENING=text|known_good|example|mixed," >&2
   echo "                     which run_cells.py also asserts per cell)" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
   echo "                    [--require-harvest-headroom BAR]  # the pre-registered compression bar," >&2
@@ -101,8 +101,14 @@ case "${CALIB_REQUIRE_OPENING:-}" in
       exit 2
     fi
     WANT_OPENING="known_good" ;;
+  example)
+    if [[ "$WANT_OPENING" == "text" ]]; then
+      echo "--require-text-seed contradicts CALIB_REQUIRE_OPENING=example; pick one" >&2
+      exit 2
+    fi
+    WANT_OPENING="example" ;;
   mixed|"") ;;
-  *) echo "CALIB_REQUIRE_OPENING=${CALIB_REQUIRE_OPENING} is not text|known_good|mixed" >&2; exit 2 ;;
+  *) echo "CALIB_REQUIRE_OPENING=${CALIB_REQUIRE_OPENING} is not text|known_good|example|mixed" >&2; exit 2 ;;
 esac
 
 # Check 16c's declaration, from either half of it: the flags a launcher passes
@@ -874,6 +880,28 @@ info, want = json.load(open(sys.argv[1])), sys.argv[2]
 bad, seen, held = [], 0, 0
 for ds, embs in info.get("datasets", {}).items():
     for emb, d in embs.items():
+        # The example opening (#4699) is chosen by a knob, not by the cell, so
+        # there is no tower to probe.  What can fail is supply: the opening
+        # needs CALIB_SEED_EXAMPLES positives in the voting half, which only the
+        # stratified split makes a fixed count rather than a draw.
+        if cfg.SEED_EXAMPLES is not None:
+            from vtscore.eval.example_opening import positive_split_sizes  # noqa: E402
+
+            counts = d.get("category_counts") or {}
+            for cat in d.get("selected_categories") or []:
+                seen += 1
+                if want != "example":
+                    bad.append(f"{ds}x{emb}:{cat}=opens on {cfg.SEED_EXAMPLES} example(s) (CALIB_SEED_EXAMPLES)")
+                elif not cfg.STRATIFY_TARGET:
+                    bad.append(f"{ds}x{emb}:{cat}=example opening without CALIB_STRATIFY_TARGET=1")
+                elif positive_split_sizes(int(counts.get(cat, 0)), cfg.SIM_FRACTION)[0] < cfg.SEED_EXAMPLES:
+                    bad.append(f"{ds}x{emb}:{cat}=only {counts.get(cat, 0)} positives for {cfg.SEED_EXAMPLES} example(s)")
+                else:
+                    held += 1
+            continue
+        if want == "example":
+            bad.append(f"{ds}x{emb}: CALIB_REQUIRE_OPENING=example but CALIB_SEED_EXAMPLES is unset")
+            continue
         # The other half of the seed mode: an embedder with no text tower can
         # never produce a text sort however good the query is (DINOv3).  For a
         # PAIRED arm the tower that matters is the text half's, which is the
@@ -914,7 +942,11 @@ PY
     case "$SEEDCHK" in
       HOLDS*) say_ok "seed mode: ${SEEDCHK#HOLDS }" ;;
       FAILS*)
-        if [[ "$WANT_OPENING" == "text" ]]; then
+        if [[ "$WANT_OPENING" == "example" ]]; then
+          say_fail "cells that cannot open on example photos: ${SEEDCHK#FAILS }"
+          echo "        -> set CALIB_SEED_EXAMPLES and CALIB_STRATIFY_TARGET=1, and keep only"
+          echo "           categories with enough positives (scripts/experiments/fhibe/identities.py)"
+        elif [[ "$WANT_OPENING" == "text" ]]; then
           say_fail "cells that would NOT seed from a text sort: ${SEEDCHK#FAILS }"
           echo "        -> these take the known-good start instead, so their seed sort is a"
           echo "           different ranking; add the query to EXPERIMENT_QUERIES, pair the arm"
