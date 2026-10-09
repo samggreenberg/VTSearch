@@ -425,7 +425,7 @@ is anchored in the argument, and a topic change gets an unmistakable signal to
 wake up for.
 
 **The opening list is unmarked, and the marked first section follows it.** The
-room reads `I … X` all one weight — every section still ahead of them — and
+room reads `I … XI` all one weight — every section still ahead of them — and
 only then does section I go bold and the rest go quiet. Those two pages are not
 a stutter: the first is the shape of the talk and the second is the entry into
 it, and running them together (opening straight on `+at1`) means the whole list
@@ -433,10 +433,10 @@ is never once shown as a list. So a deck's outline appears *N* + 2 times for
 *N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on, and
 then once more to close the deck (below).
 
-**All of those pages are one slide**, numbered `1a … 1l` in `hold-the-line` —
+**All of those pages are one slide**, numbered `1a … 1m` in `hold-the-line` —
 see *Numbering* in [`README.md`](README.md). The room is being shown the same
 thing again with a different line marked, and the deck should say so rather than
-spending twelve numbers on it.
+spending thirteen numbers on it.
 
 **The outline's last showing is the last slide, and it says `Conclusion`.** A deck
 does not need a separate "Questions" page: the room is already looking at the
@@ -464,7 +464,7 @@ the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that
 slide's figure — it is the one thing the room is asked to look at — so it gets
 the slot the deck gives figures, and the title does not move on the one slide
-that comes back twelve times.
+that comes back thirteen times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
