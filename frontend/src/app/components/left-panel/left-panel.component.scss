@@ -89,10 +89,12 @@
     pointer-events: none;
   }
 
-  // Not on the active tab: this selector outranks `.active`, and a hover fill
-  // there would cut the tab off from the panel it opens into.
+  // Hover lights the text and edge but keeps the fill: the step toward the
+  // panel that `.view-tab` takes lands, in the light theme, on all but the
+  // active tab's shade, so a hovered tab read as a second active one. Not on
+  // the active tab either: this selector outranks `.active`.
   &:hover:not(:disabled):not(.active) {
-    background: var(--bg-subtle);
+    border-color: var(--border-secondary);
     color: var(--text-primary);
   }
 
