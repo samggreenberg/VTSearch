@@ -4529,6 +4529,10 @@
             "description": "Which view the dataset-importer modal opens for this card: ``form`` (default), ``demo``, ``server_folder``, ``local_folder``, or ``local_files``.",
             "type": "string"
           },
+          "supports_multi_output": {
+            "description": "Whether one run of this importer may produce several datasets (the Add Dataset dialog's Multi-Dataset mode; ``POST /api/dataset/import/{importer_name}`` with ``outputs``). True when the importer declares a ``media_type`` field and has not opted out.",
+            "type": "boolean"
+          },
           "ui_mode": {
             "type": "string"
           }

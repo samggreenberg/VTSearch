@@ -412,8 +412,8 @@ class ImporterInfoSchema(Schema):
 
     Fixed shape: ``PluginBase.to_dict()`` emits the shared plugin metadata
     and ``ImporterBase.to_dict()`` appends ``picker_view`` / ``category`` /
-    ``available_converters_by_media_type``.  No concrete importer overrides
-    ``to_dict``, so this schema is strict.
+    ``available_converters_by_media_type`` / ``supports_multi_output``.  No
+    concrete importer overrides ``to_dict``, so this schema is strict.
     """
 
     name = fields.String(required=True)
@@ -438,6 +438,15 @@ class ImporterInfoSchema(Schema):
             "description": (
                 "Picker tab this importer belongs to. One of ``services``, ``server``, ``local``, ``demo``, "
                 'or ``""`` (uncategorised).'
+            )
+        }
+    )
+    supports_multi_output = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether one run of this importer may produce several datasets (the Add Dataset dialog's "
+                "Multi-Dataset mode; ``POST /api/dataset/import/{importer_name}`` with ``outputs``). True when "
+                "the importer declares a ``media_type`` field and has not opted out."
             )
         }
     )

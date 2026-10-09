@@ -85,9 +85,11 @@ class TestGenericImportRoute:
         assert "produces" in resp.get_json()["message"]
 
     def test_an_importer_fixed_to_one_dataset_refuses_outputs(self, client):
+        from vtscore.datasets import DEMO_DATASETS
+
         resp = client.post(
             "/api/dataset/import/demo",
-            json={"name": "esc50", "outputs": [{"media_type": "audio"}]},
+            json={"name": next(iter(DEMO_DATASETS)), "outputs": [{"media_type": "audio"}]},
         )
         assert resp.status_code == 400
         assert "one dataset per run" in resp.get_json()["message"]

@@ -33,15 +33,27 @@ def _sync_thread_factory():
     return fake_thread
 
 
-def _media(media_id: int, media_type: str) -> dict:
+def _default_embedder(media_type: str) -> str:
+    from vtscore.media import embedders_for_type
+
+    return embedders_for_type(media_type)[0].name
+
+
+def _media(media_id: int, media_type: str, embedder: str) -> dict:
+    """A pre-embedded media, so the load's embed stage has nothing to compute.
+
+    The suite's embedder stubs cover ``embed_media``; an image embedder's bulk
+    path still declines a media with no bytes, so carrying the vector in is
+    what keeps the fixture about the pipeline rather than about decoding.
+    """
     return {
         "id": media_id,
         "media_type": media_type,
         "duration": 1.0,
         "file_size": 100,
         "md5": f"{media_type}-{media_id}",
-        "embedder": "",
-        "embedding": np.full(8, media_id, dtype=np.float32),
+        "embedder": embedder,
+        "embeddings": {embedder: np.full(512, media_id, dtype=np.float32)},
         "filename": f"{media_type}_{media_id}.bin",
         "category": "unknown",
         "origin": None,
@@ -73,8 +85,9 @@ class _MultiImporter(ImporterBase):
     def run(self, field_values, medias, thin=False):
         media_type = field_values["media_type"]
         self.run_calls.append(media_type)
+        embedder = field_values.get("embedder") or _default_embedder(media_type)
         for i in range(1, self.per_type.get(media_type, 2) + 1):
-            medias[i] = _media(i, media_type)
+            medias[i] = _media(i, media_type, embedder)
 
 
 class _AcquireOnce(_MultiImporter):
