@@ -258,6 +258,7 @@ known_first_party = [
     "coco_fixture",
     "data_card",
     "dataset_samples",
+    "fhibe_media",
     "fullmarks_media",
     "report_svg",
     "slide_figure",
