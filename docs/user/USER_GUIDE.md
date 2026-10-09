@@ -1132,11 +1132,15 @@ It has two tabs:
 </picture>
 
 - **Blank** - start a fresh detector that learns from your votes as you
-  label. Pick its **Media type** (locked to the active dataset's type
-  when you have one selected; hidden entirely on a solo-media-type
-  server), give it a **Detector name**, and seed it under **Example**
-  one of two ways: the **Text** tab takes a short description ("e.g.
-  large books"), and the media tab next to it (named for the media
+  label. Pick its **Media type** at the top of the form (hidden entirely
+  on a solo-media-type server). When you have a dataset selected, the type
+  is already set to that dataset's and locked, so the field moves out of the
+  way, under **Advanced ▾** (the toggle at the bottom left, beside
+  **Cancel**; collapsed by default), with an unlock button beside it if you
+  do want another type. Give the detector a **Detector name**, or leave
+  it blank to name it after its example, and seed it
+  under **Example** one of two ways: the **Text** tab takes a short description (such as
+  "large books"), and the media tab next to it (named for the media
   type, e.g. **Image**) takes one or more **media examples**. A typed
   description also fills in the name: your words as typed, with the first
   letter capitalised and "detector" on the end ("large books" becomes
@@ -1162,22 +1166,25 @@ It has two tabs:
   *average* - it surfaces items resembling what the examples have in
   common, and each example is seeded as a Good vote when the detector
   loads. When the active dataset offers more than one kind of embedder, a
-  **Detector Embedder Type** picker sits under **Advanced ▾** (the toggle at
-  the bottom left, beside **Cancel**; collapsed by default) so you can
-  choose which one this detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
+  **Detector Embedder Type** picker sits under **Advanced ▾** too, so you
+  can choose which one this detector uses: **Semantic**, **Patch Semantic**,
+  or **Structural**.
   That choice fixes what the detector is compatible with later. If the
   dataset's embedder can't search by text, a text description has nothing to
-  rank by there, so **Create** stays disabled until you add an example item.
-- **Threshold** (both tabs) - which mistake this detector leans toward, the
-  same three radios as the [Threshold](#3-threshold) in Manual mode. The
-  detector keeps it, and Autopilot draws its line there. It starts on your
-  last pick; you can change it later in Manual or Test.
+  rank by there, so the **Text** box says so and **Create** stays disabled
+  until you add an example item.
+- **Threshold** (both tabs, under **Advanced ▾**) - which mistake this
+  detector leans toward, the same three radios as the [Threshold](#3-threshold)
+  in Manual mode. The detector keeps it, and Autopilot draws its line there.
+  It starts on your last pick, so most detectors never need it opened; you
+  can change it later in Manual or Test.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server
   (**Server JSON File** / **Server CSV File**), and plugins can add other
   sources. Pick one, fill its form, and VTSearch trains the detector on
-  the imported labels (the button reads **Create & Import**). It takes files
+  the imported labels (the button reads **Create & Import**). A name left
+  blank comes from the imported file's name. It takes files
   exported from VTSearch, which record where each item came from (see
   [Move a detector to another VTSearch](howto/move-a-detector.md)); to add
   labels made elsewhere, use **Import Labels** on an existing detector
@@ -1590,7 +1597,9 @@ On the Dashboard he shows one step at a time:
   dataset, and **Test** or **Find** once the selected detector is trained.
 
 In the Train view he asks for your first vote over **Good** / **Bad** while
-Autopilot runs on a detector with no labels, and when Autopilot finishes he
+Autopilot runs on a detector with no labels, explains the **Update Sort
+Example?** prompt from just below it (see [Get Autopilot
+unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he
 stands under the top bar's **Dashboard** button (see [Autopilot: the guided
 workflow](#autopilot-the-guided-workflow)).
 
@@ -1943,11 +1952,15 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   audio span before using the item as a sort example or detector seed.
 - **The Autopilot resort prompt.** While Autopilot is looking for
   positives by sorting on an example, VTSearch periodically stops to say
-  how that sort is going (**Update Sort Example?**): how many items you
-  have labelled with it and how few positives it has turned up. On the
-  left, **Keep clicking** carries on with the same sort for a set number
-  of labels (the interval grows each time you keep it); on the right,
-  **Supply a different sort** swaps in a new example. A new example
+  how that sort is going (**Update Sort Example?**): one line of
+  read-only fields gives how many items you have labelled with it
+  (**Clicked**), how many were positive (**Positives**) and the sort
+  itself (**Sort**), and Toasty, below the dialog, says how many
+  positives Autopilot needs before it can move on. On the left,
+  **Continue** (under **Keep clicking:**) carries on with the same sort
+  for a set number of labels (the interval grows each time you keep
+  it); on the right, **Supply a different sort:** swaps in a new
+  example. A new example
   can be typed as text, uploaded from your computer (**Upload File…**), or
   picked with **Browse Media…**, which offers the same single-item sources
   as the New Detector modal - a path on the server, a URL, a file inside a

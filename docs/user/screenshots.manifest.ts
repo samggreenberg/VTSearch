@@ -1681,7 +1681,7 @@ export const SHOTS: Shot[] = [
     id: 'unstick-prompt',
     embeddedIn: `${HOWTO}/unstick-autopilot.md#when-autopilot-asks`,
     caption:
-      'Update Sort Example? (1) Keep clicking with the same sort, or supply a different one: (2) a new description, then Use, or (3) an example picture',
+      'Update Sort Example? (1) Continue with the same sort, or supply a different one: (2) a new description, then Use, or (3) an example picture',
     themes: BOTH,
     annotations: [
       { target: '.keep-btn', kind: 'step', step: 1 },

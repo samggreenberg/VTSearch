@@ -1,4 +1,15 @@
-import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, effect, input, output, untracked } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  HostListener,
+  OnDestroy,
+  effect,
+  input,
+  output,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 
 /**
@@ -24,7 +35,21 @@ export class ModalComponent implements OnDestroy {
   readonly title = input('');
   readonly open = input(false);
   readonly showCloseButton = input(true);
+  /**
+   * Where focus lands when the dialog opens. `'first-control'` moves it to the
+   * first tabbable control, so a form is ready to type into. `'dialog'` puts it
+   * on the dialog box itself, so no answer is preselected: for a dialog that
+   * pops up mid-task asking the user to choose (#4721). There a focused button
+   * draws the keyboard focus ring when the user was working with the keyboard,
+   * reads as the recommended answer, and takes the next Enter or Space. Tab
+   * still steps into the controls.
+   */
+  readonly initialFocus = input<'first-control' | 'dialog'>('first-control');
   readonly closed = output<void>();
+
+  /** The dialog box (`.modal-content`), for projected content that places
+   *  itself against the box's outline rather than inside it. */
+  readonly box = viewChild<ElementRef<HTMLElement>>('box');
 
   constructor() {
     // Track this instance's place in the open-modal stack. Runs on every

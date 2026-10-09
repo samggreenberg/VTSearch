@@ -21,6 +21,7 @@ export const HINT_IDS = [
   'find',
   // Train view.
   'start-voting',
+  'resort-prompt',
   'autopilot-done',
   'autopilot-ran-dry',
   'all-labeled',

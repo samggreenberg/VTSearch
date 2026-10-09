@@ -246,7 +246,7 @@ Nor is a muted, link-like text button - a secondary affordance that sits beside 
 
 ```html
 <div class="form-group">
-  <label class="form-label">Dataset name <span class="required">*</span></label>
+  <label class="form-label">Dataset name: <span class="required">*</span></label>
   <input class="form-input" required />
   <p class="form-hint">JSON, CSV, or NPZ accepted.</p>
 </div>
@@ -258,8 +258,9 @@ Nor is a muted, link-like text button - a secondary affordance that sits beside 
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
+- **A field label ends in a colon**: `Media type:`, `Threshold:`. The colon follows the text and comes before the required `*` and any hint icon (`Example: *`). A checkbox's caption takes none: the text beside a box names the option, it doesn't head a field below it. Labels rendered from plugin field specs add the colon in the template, so a plugin author's `label` stays bare.
 - `.form-hint` (used for plugin-field `hint` strings) is muted `--font-mono` at `--font-sm`, and preserves newlines (`white-space: pre-wrap`) so a multi-line schema hint keeps its shape.
-- **Required fields are marked twice: on the question and on the answer.** `.required` puts a `--color-bad` `*` after the label; the control itself carries `required` (`[required]="!!field.required"` on a plugin field), and `.form-input` / `.form-select` then give an unanswered required field a red well (`--color-bad` border over a `--bad-bg` tint) via `:required:invalid`. The well clears the moment the field has a value, yields to the accent border while focused, and never shows on a disabled control. A star without `required` on its control is the regression this rule exists to stop. Mark only what the *user* has to supply: a field the app fills in for them is not required of the user, even when submit needs a value, so it gets neither the star nor `required`. New Detector's **Detector name** is the example: it is derived from the example, so an empty form must not flag it. Required answers that aren't native controls opt in explicitly: `<vt-file-browser [required]>` forwards it to its path input, and `<vt-drop-zone [missing]>` takes the parent's "nothing picked yet" flag (the zone forgets each pick once emitted, so it can't tell on its own).
+- **Required fields are marked twice: on the question and on the answer.** `.required` puts a `--color-bad` `*` after the label; the control itself carries `required` (`[required]="!!field.required"` on a plugin field), and `.form-input` / `.form-select` then give an unanswered required field a red well (`--color-bad` border over a `--bad-bg` tint) via `:required:invalid`. The well clears the moment the field has a value, yields to the accent border while focused, and never shows on a disabled control. A star without `required` on its control is the regression this rule exists to stop. Mark only what the *user* has to supply: a field the app fills in for them is not required of the user, even when submit needs a value, so it gets neither the star nor `required`. New Detector's **Detector name** is the example: it is derived from the example, and a name left blank falls back to that default on Create, so an empty form must not flag it. Required answers that aren't native controls opt in explicitly: `<vt-file-browser [required]>` forwards it to its path input, and `<vt-drop-zone [missing]>` takes the parent's "nothing picked yet" flag (the zone forgets each pick once emitted, so it can't tell on its own).
 - **`.browse-row` + `.browse-panel`** are the canonical "type a path, or pick one" field. `.browse-row` lays a `.form-input` and its `Browse` `.btn` on one line (the input flexes, the button hugs its label) so the pair reads as a single control rather than two stacked fields; `.browse-panel` frames the `<vt-folder-browser>` that the button reveals below it as a recessed sub-surface. Both `<vt-file-browser>` (pick a file) and the Add Dataset server-folder field (pick a folder) use them - a new "browse the server" field should too, rather than stacking a bare button under an input.
 
 Focus state is provided globally by `:focus-visible { outline: 2px solid var(--accent); }`. Inputs additionally swap their border to `--accent` on focus. **Do not override focus styling per component.**
@@ -285,6 +286,8 @@ Focus state is provided globally by `:focus-visible { outline: 2px solid var(--a
 | `title` (input) | Renders as the header `<h2>` **and** the dialog's `aria-label`. Title Case (§4.1). |
 | `open` (input) | Whether the dialog is mounted. Most call sites are already inside an `@if` and pass `[open]="true"`. |
 | `showCloseButton` (input, default `true`) | Renders the header `×`. See "Close-less dialogs" below. |
+| `initialFocus` (input, default `'first-control'`) | Where focus lands on open: the first tabbable control, or `'dialog'` for the dialog box itself, so no answer looks preselected. Use `'dialog'` for a dialog that interrupts a keyboard-driven task to ask a choice (the Autopilot resort prompt): a focused button there draws the focus ring, reads as the recommended answer, and takes the next Enter or Space. The box draws no ring of its own; Tab steps into the controls. |
+| `box` (signal) | The dialog box element (`.modal-content`), for projected content that places itself against the box rather than inside it, as the resort prompt's Toasty hint does below it. |
 | `closed` (output) | Fired by the `×`, a backdrop click, and Escape. Wire it to whatever tears the dialog down. |
 | default `<ng-content>` | Projected into `.modal-body` (the only scrollable region). |
 | `[modal-footer]` slot | Projected into `.modal-footer`. Put the action buttons in a plain `<div modal-footer>`. |
@@ -378,7 +381,7 @@ There are no `.importer-card` / `.importer-name` / `.importer-desc` classes; the
 
 Three shared tab primitives, each with a different shape. Pick by orientation and by whether the tab flows into a panel.
 
-**Horizontal strip - `.tab-bar` / `.tab`** (`_picker-shared.scss`). The default: a full-width bar with a bottom border, tabs that underline in `--accent` on activation (the underline wipes in via a `scaleX` pseudo-element) and go `--weight-semibold`. **The active class is the bare `.active`**, not a BEM modifier.
+**Horizontal strip - `.tab-bar` / `.tab`** (`_picker-shared.scss`). The default, drawn as folder tabs: a full-width bar with a 1px bottom border, and every tab an outlined box with rounded top corners, so an inactive tab looks clickable at rest rather than only on hover. Inactive tabs are filled `--bg-subtle` in `--text-secondary`; the active one takes `--bg-surface` and drops its bottom edge, so it opens into the content below, goes `--text-primary` at `--weight-medium`, and gains an `--accent` edge along its top (wiped in via a `scaleX` pseudo-element). The text itself is never accent-coloured, so a nested strip can't outshout the label above it. **The active class is the bare `.active`**, not a BEM modifier.
 
 ```html
 <div class="tab-bar" role="tablist">
@@ -397,7 +400,7 @@ Subclasses extend the base via SCSS `@extend`, so they inherit every rule and ad
 
 **Vertical rail - `.side-tab-bar` / `.side-tab`** (`_components.scss`). A fixed-width (140px) column of tabs down the left edge of a modal, with a 3px left-border active indicator instead of an underline. The Settings modal's rail is its only consumer today; it's the extract-and-fold target for any other vertical rail. Active class: `.side-tab--active`.
 
-**Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). A tab strip whose active tab visually flows into the inset content region below it: the active tab's background matches `.view-tab-content` so the border between them disappears, leaving only the accent underline. Use when the tabs sit *inside* a panel and own a bordered content box (the AutoFind and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
+**Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). The same folder tabs, smaller, over a bordered content box: the active tab's background matches `.view-tab-content` and it drops its bottom edge, so it opens into the box, with the accent edge along its top. The strip's bottom border is the box's top edge; with no strip, the box keeps its own. Use when the tabs sit *inside* a panel and own a bordered content box (the AutoFind and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
 
 Note the state-class inconsistency: `.tab` takes `.active`, while `.side-tab` and `.view-tab` take `--active` modifiers. Match the primitive you're using.
 
@@ -610,12 +613,12 @@ status messages, fallback labels).
 ### 4.3 Placeholder format
 
 - **Sentence case**, no trailing ellipsis, no trailing period.
-- For "here's what to type" examples, prefix with `e.g. ` and match the casing
-  of the real value: a free-text query is lowercase (`e.g. large books`), a
-  proper name is Title Case (`e.g. Large Book Detector`). Pick an example that
-  fits every media type the field can serve; don't assume audio.
+- **The placeholder is the field's instruction**, not a faint example value:
+  say what to type (`Describe what this detector should find`). Don't also
+  write the instruction as a line under the field; guidance beyond that goes
+  in a Toasty hint.
 - For "leave blank to get a default" inputs, state that: `Leave blank to use a
-  default name`.
+  default name`, `Enter a new name or leave blank`.
 - For a server/file path, use the shared hint `path/to/file` (or
   `/absolute/server/path/to/file` when an absolute path is required) - don't
   invent a new spelling.

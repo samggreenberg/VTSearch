@@ -14,6 +14,7 @@ import { settleZoneless } from '../../testing/settle-resource';
       [title]="'Test Modal'"
       [open]="isOpen()"
       [showCloseButton]="showCloseButton()"
+      [initialFocus]="initialFocus()"
       (closed)="onClose()"
     >
       <p>Body content</p>
@@ -26,6 +27,7 @@ class TestHostComponent {
   // field write on the top-level host would not schedule change detection).
   readonly isOpen = signal(false);
   readonly showCloseButton = signal(true);
+  readonly initialFocus = signal<'first-control' | 'dialog'>('first-control');
   closeCalled = false;
   onClose(): void {
     this.closeCalled = true;
@@ -169,6 +171,35 @@ describe('ModalComponent focus management', () => {
     // Auto-capture is what pulls focus in on open and restores it to the trigger
     // on close.
     expect(trapEl.injector.get(CdkTrapFocus).autoCapture).toBe(true);
+  });
+
+  it('leaves initial focus to the first control by default', async () => {
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const box = fixture.nativeElement.querySelector('.modal-content') as HTMLElement;
+    expect(box.hasAttribute('cdkFocusInitial')).toBe(false);
+    expect(box.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it("with initialFocus 'dialog', makes the box itself the initial focus (#4721)", async () => {
+    host.initialFocus.set('dialog');
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const box = fixture.nativeElement.querySelector('.modal-content') as HTMLElement;
+    // The trap's initial-element marker, on an element that can take focus but
+    // is not in the Tab order.
+    expect(box.hasAttribute('cdkFocusInitial')).toBe(true);
+    expect(box.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('exposes the dialog box for content placed against it', async () => {
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const modal = fixture.debugElement.query(By.directive(ModalComponent)).componentInstance as ModalComponent;
+    expect(modal.box()?.nativeElement).toBe(fixture.nativeElement.querySelector('.modal-content'));
   });
 
   it('does not render a focus trap while the dialog is closed', async () => {

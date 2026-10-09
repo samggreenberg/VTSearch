@@ -144,9 +144,9 @@
   <vt-resort-prompt-modal
     [currentExampleType]="resortCurrentType"
     [currentExampleDisplay]="resortCurrentDisplay"
-    [keepLabelsCount]="nextResortThreshold"
     [clicksSoFar]="resortSortClicks"
     [positivesSoFar]="resortSortPositives"
+    [positivesNeeded]="resortPositivesNeeded"
     (keepExample)="onResortKeep()"
     (newExample)="onResortNewExample($event)"
     (closed)="onResortClosed()"
