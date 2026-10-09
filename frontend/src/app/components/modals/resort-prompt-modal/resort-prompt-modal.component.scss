@@ -44,8 +44,8 @@
   }
 }
 
-// The sort's name takes what room is left and ellipsises; its `title` has
-// the whole of it.
+// The sort's name takes what room is left and ends in an ellipsis past it;
+// its `title` has the whole of it.
 .sort-status__field--sort {
   flex: 1;
   min-width: 0;
