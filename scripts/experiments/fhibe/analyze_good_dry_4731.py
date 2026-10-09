@@ -124,6 +124,46 @@ def dry_fire(picks: pd.DataFrame, dry_run: int) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+def sensitivity(picks: pd.DataFrame, strata: pd.DataFrame, lengths: tuple[int, ...]) -> pd.DataFrame:
+    """Where a dry run of each length would end the control's Good walks, and how many it ends too early.
+
+    "Too early": the walk ran dry at that length, yet the control went on to find its third Good. Read
+    off the control's own picks, which every arm shares until its dry run fires.
+    """
+    rows = []
+    for (ds, cat), g in picks.groupby(["dataset", "category"], sort=False):
+        g = g.sort_values("t")
+        goods, run, longest, third = 0, 0, 0, math.nan
+        for p in g.itertuples():
+            if p.phase not in ("example", "good"):
+                break
+            if p.picked_label == 1:
+                goods, run = goods + 1, 0
+                if goods >= 3 and math.isnan(third):
+                    third = float(p.t)
+            elif goods >= 1:
+                run += 1
+                longest = max(longest, run)
+        rows.append({"dataset": ds, "category": cat, "longest_run": longest, "third_good_at": third})
+    walks = pd.DataFrame(rows).merge(strata, on="category", how="left")
+    out = []
+    for (stratum, ds), g in walks.groupby(["stratum", "dataset"]):
+        for n in lengths:
+            fires = g["longest_run"] >= n
+            out.append(
+                {
+                    "stratum": stratum,
+                    "dataset": ds,
+                    "dry_run": n,
+                    "sessions": len(g),
+                    "fires": float(fires.mean()),
+                    "fires_yet_found_third": float((fires & g["third_good_at"].notna()).mean()),
+                    "never_found_third": float(g["third_good_at"].isna().mean()),
+                }
+            )
+    return pd.DataFrame(out)
+
+
 def agree_until(a: pd.DataFrame, b: pd.DataFrame, upto: pd.DataFrame) -> pd.DataFrame:
     """Per session: did arms *a* and *b* pick the same media through click ``fires_at``?"""
     key = ["dataset", "category"]
@@ -216,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     pd.concat([s.drop(columns=["curve"]).assign(arm=n) for n, s in sessions.items()]).to_csv(
         args.out / "sessions.csv", index=False
     )
+
+    sensitivity(picks[ctl_name], strata, (8, 12, 16, 24, 32)).to_csv(args.out / "dry_run_lengths.csv", index=False)
 
     # Pick-for-pick agreement with the control until the dry run fires.
     agree = []

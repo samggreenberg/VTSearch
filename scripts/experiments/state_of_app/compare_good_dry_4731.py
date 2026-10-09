@@ -134,11 +134,12 @@ def main() -> int:
         for i, (name, m) in enumerate(
             (("every run", np.ones(len(order), bool)), ("runs where the dry run fires", fired))
         ):
-            for arm, color in (("C", "#8a8985"), ("Q", "#eb6834"), ("D", "#2a78d6")):
+            for arm, color in (("C", "#2a78d6"), ("Q", "#eb6834"), ("D", "#1baf7a")):
                 if arm in F and m.any():
                     ax[i].plot(GRID_T[1:], F[arm][m, 1:].mean(0), color=color, lw=2, label=f"{arm}: {ARMS[arm]}")
             ax[i].set_title(f"COCO Better Binary, beta 1: {name} ({int(m.sum())})", fontsize=10)
             ax[i].set_xlabel("click")
+            ax[i].set_ylim(bottom=0)
             ax[i].spines[["top", "right"]].set_visible(False)
         ax[0].set_ylabel("mean F-beta of the set shown")
         ax[0].legend(frameon=False, fontsize=9)
