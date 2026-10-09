@@ -51,13 +51,13 @@ from vtscore.concurrency.progress import CancelledError, clear_thread_progress, 
 from vtscore.datasets.clipper_chain import append_cleaner_steps
 from vtscore.datasets.import_event import DatasetImported
 from vtscore.datasets.importers.base import OutputSpec, output_dataset_name
+from vtscore.datasets import load_pipeline as _pipeline
 from vtscore.datasets.load_pipeline import (
     _DatasetLoadSpec,
     _LoadGateController,
     _LoadIds,
     _finish_dataset_load,
     _handle_load_failure,
-    _last_embedder_persistence_hook,
     _parse_bool,
     _parse_chain_field,
     _park_load_terminal,
@@ -192,10 +192,12 @@ def _build_jobs(
         origin = origin_for(output, narrowed) if origin_for is not None else importer.build_origin(narrowed)
 
         # Remember the pick per media type, as the single path does, so the
-        # next Add Dataset form pre-selects it.
-        if output.media_type and output.embedder and _last_embedder_persistence_hook is not None:
+        # next Add Dataset form pre-selects it.  Read off the pipeline module
+        # at call time: the app installs the hook after import.
+        hook = _pipeline._last_embedder_persistence_hook
+        if output.media_type and output.embedder and hook is not None:
             try:
-                _last_embedder_persistence_hook(output.media_type, output.embedder)
+                hook(output.media_type, output.embedder)
             except Exception:
                 pass
 

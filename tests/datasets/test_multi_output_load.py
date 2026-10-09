@@ -294,6 +294,21 @@ class TestCancellation:
         assert all(loading_tasks.is_finished(t) for t in task_ids)
 
 
+class TestEmbedderMemory:
+    def test_each_output_remembers_its_embedder_pick(self, isolated_settings, monkeypatch):
+        """The per-media-type "last embedder" memory sees the hook the app installs after import."""
+        from vtscore.datasets import load_pipeline
+
+        remembered: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            load_pipeline, "_last_embedder_persistence_hook", lambda mt, emb: remembered.append((mt, emb))
+        )
+
+        _run(_MultiImporter(), [OutputSpec("audio", embedder="clap"), OutputSpec("image", embedder="siglip")])
+
+        assert remembered == [("audio", "clap"), ("image", "siglip")]
+
+
 class TestCleanupAndOriginHooks:
     def test_cleanup_runs_after_the_importer_before_finalizing(self, isolated_settings):
         from vtscore.datasets import load_multi
