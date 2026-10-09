@@ -80,7 +80,6 @@ surface of a module.
 # discovery happens at import time through ``getattr``.
 # ---------------------------------------------------------------------------
 EXPORTER  # noqa: F821
-CONVERTER  # noqa: F821
 SETTINGS_SOURCE  # noqa: F821
 LABELSET_SOURCE  # noqa: F821
 DATASOURCE_IMPORTER  # noqa: F821 - vtscore.datasource_importers, sentinel= in its registry
