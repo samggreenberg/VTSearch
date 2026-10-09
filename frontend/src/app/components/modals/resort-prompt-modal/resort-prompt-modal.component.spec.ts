@@ -100,13 +100,13 @@ describe('ResortPromptModalComponent', () => {
     const hint = el.querySelector('vt-toasty-hint');
     expect(hint).not.toBeNull();
     expect(squash(hint!.querySelector('.toasty-hint__text')?.textContent)).toBe(
-      'We need 3 positives to start training. This is an opportunity to try a different ' +
+      'We need 3 positives before Autopilot can move on. This is an opportunity to try a different ' +
         'example sort, or just keep clicking with the original sort.',
     );
 
     fixture.componentRef.setInput('positivesNeeded', 1);
     await settleZoneless(fixture);
-    expect(squash(hint!.textContent)).toContain('We need 1 positive to start training.');
+    expect(squash(hint!.textContent)).toContain('We need 1 positive before Autopilot can move on.');
   });
 
   it('opens with focus on the dialog box, not on an answer (#4721)', () => {

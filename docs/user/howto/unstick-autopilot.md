@@ -21,8 +21,8 @@ answers. After ten without enough matches (three, by default), it shows
 **Update Sort Example?**. One line reads out where the sort stands: how many
 pictures you have answered (**Clicked**), how many were matches
 (**Positives**), and what it has been sorting by (**Sort**). Toasty, below the
-dialog, says how many matches Autopilot needs before it trains, and what you
-can do about it.
+dialog, says how many matches Autopilot needs before it can move on, and what
+you can do about it.
 
 1. **Continue**, under **Keep clicking:**, carries on with the same sort for a
    while longer. Pick it if the matches are there but few, and you would rather

@@ -53,7 +53,7 @@ export class ResortPromptModalComponent {
   readonly clicksSoFar = input(0);
   /** How many of those labels were positive. */
   readonly positivesSoFar = input(0);
-  /** Positives Autopilot needs before it trains (its Good target). */
+  /** Positives Autopilot needs to finish its first phase (its Good target). */
   readonly positivesNeeded = input(0);
   readonly closed = output<void>();
   readonly keepExample = output<void>();

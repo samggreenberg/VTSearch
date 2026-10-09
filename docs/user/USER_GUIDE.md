@@ -1953,10 +1953,11 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   read-only fields gives how many items you have labelled with it
   (**Clicked**), how many were positive (**Positives**) and the sort
   itself (**Sort**), and Toasty, below the dialog, says how many
-  positives Autopilot needs before it trains. On the left, **Continue**
-  (under **Keep clicking:**) carries on with the same sort for a set
-  number of labels (the interval grows each time you keep it); on the
-  right, **Supply a different sort:** swaps in a new example. A new example
+  positives Autopilot needs before it can move on. On the left,
+  **Continue** (under **Keep clicking:**) carries on with the same sort
+  for a set number of labels (the interval grows each time you keep
+  it); on the right, **Supply a different sort:** swaps in a new
+  example. A new example
   can be typed as text, uploaded from your computer (**Upload File…**), or
   picked with **Browse Media…**, which offers the same single-item sources
   as the New Detector modal - a path on the server, a URL, a file inside a
