@@ -260,6 +260,22 @@ def probe(C: Any) -> list[str]:
         rows.append(("seed_examples", str(C.SEED_EXAMPLES), "<unset> = the text or known-good opening"))
     if C.STRATIFY_TARGET:
         rows.append(("stratify_target", "1", "<unset> = the plain random split"))
+    # #4731's Good-phase dry run and the quota tier it leaves: arms the app does not take.
+    for knob, var, val, app in (
+        (
+            "good_dry_run",
+            "CALIB_GOOD_DRY_RUN",
+            C.GOOD_DRY_RUN,
+            "<unset> = the app's Good phase, which waits for 3 Goods",
+        ),
+        ("quota_dry_bads", "CALIB_QUOTA_DRY_BADS", C.QUOTA_DRY_BADS, "<unset> = the app's quota, 3 Goods and 4 Bads"),
+    ):
+        if val is None:
+            continue
+        if isinstance(val, int) and val >= 1:
+            rows.append((knob, str(val), app))
+        else:
+            refuse(knob, var, "must be a positive integer")
     # #4668's spread floor before #4492: a retired piece of the labels line.
     if C.SIGMA_FLOOR not in SIGMA_FLOORS:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))

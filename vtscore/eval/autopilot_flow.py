@@ -421,11 +421,30 @@ class AutopilotFlow:
         startup: Optional[StartupState] = None,
         dry_run_stop: bool = False,
         smart_gate: str = "app",
+        good_dry_run: int | None = None,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
         self.more_target = more_target
         self.more_dry_run = more_dry_run
+        #: #4731's arm, not the app: the Good phase also ends once this many of
+        #: its picks in a row held no positive, with a Good in hand.  The seed
+        #: sort has then run dry, so the ``more`` walk down it is spent too.
+        #: :func:`next_phase` is left as the app's: the flow lowers the Good
+        #: target it passes to the Goods found, as a schedule passes 0.
+        #: ``None`` (the default) is the app, which waits for ``good_target``
+        #: Goods however long the walk.
+        if good_dry_run is not None and (
+            isinstance(good_dry_run, bool) or not isinstance(good_dry_run, int) or good_dry_run < 1
+        ):
+            raise ValueError(f"good_dry_run must be an integer >= 1 or None, got {good_dry_run!r}")
+        if good_dry_run is not None and startup is not None:
+            raise ValueError("good_dry_run ends the app's own Good phase; a startup schedule owns the opening")
+        self.good_dry_run = good_dry_run
+        #: The Good walk's misses since its latest Good, and whether it has run
+        #: dry (latched, as the ``more`` walk's end is).
+        self.good_misses = 0
+        self.good_dry = False
         #: A document dataset (#4488): the walk is the rest of the run and its
         #: dry run is ``done`` (see :func:`next_phase`).
         self.dry_run_stop = dry_run_stop
@@ -600,7 +619,7 @@ class AutopilotFlow:
             smart="yellow" if self.smart_gate == "never" else smart,
             stable=stable,
             span=sp,
-            good_target=0 if self.startup is not None else self.good_target,
+            good_target=0 if self.startup is not None else self._good_target(good_count),
             bad_target=0 if self.startup is not None else self.bad_target,
             more_target=0 if self.startup is not None else self.more_target,
             more_done=self.more_done,
@@ -614,6 +633,12 @@ class AutopilotFlow:
             self.more_done = True
         return self.phase
 
+    def _good_target(self, good_count: int) -> int:
+        """The Good target :func:`next_phase` is given: the app's, or the Goods in hand once the walk ran dry (#4731)."""
+        if self.good_dry and good_count >= 1:
+            return min(self.good_target, good_count)
+        return self.good_target
+
     def _note_more_vote(self, good_count: int, bad_count: int) -> None:
         """Fold the vote just cast into the ``more`` walk's run of misses.
 
@@ -624,6 +649,18 @@ class AutopilotFlow:
         """
         prev_good, prev_bad = self._counts
         self._counts = (good_count, bad_count)
+        if self.phase == "good" and self.good_dry_run is not None and not self.good_dry:
+            # #4731: the same reading for the Good walk.  A miss counts only
+            # with a Good already in hand, so the run is the misses since the
+            # latest Good, and a walk that has found nothing never runs dry.
+            if good_count > prev_good:
+                self.good_misses = 0
+            elif bad_count > prev_bad and prev_good >= 1:
+                self.good_misses += 1
+                if self.good_misses >= self.good_dry_run:
+                    self.good_dry = True
+                    self.more_done = True
+            return
         if self.phase != "more" or (self.more_done and not self.dry_run_stop):
             return
         if good_count > prev_good:

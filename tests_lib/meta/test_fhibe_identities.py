@@ -51,3 +51,28 @@ def test_the_sample_is_seeded_and_sorted(ids):
     b, _ = ids.sample(pools, 10, seed=1)
     assert a == b == sorted(a)
     assert len(a) == 10
+
+
+def test_strata_parse_as_inclusive_bands(ids):
+    assert ids.parse_strata("2-4,5-6,7-") == [("2-4", 2, 4), ("5-6", 5, 6), ("7-", 7, float("inf"))]
+
+
+@pytest.mark.parametrize("spec", ["2-4,4-6", "5-6,2-4", "4-2", "two-4", "4"])
+def test_bad_strata_are_refused(ids, spec):
+    with pytest.raises(ValueError):
+        ids.parse_strata(spec)
+
+
+def test_each_band_draws_its_own_identities(ids):
+    """#4731: a band of few photos and a band of many, drawn apart, from people every cell admits."""
+    counts = Counter({f"s{i:03d}": 2 + i % 8 for i in range(200)})
+    pools = {"photo": set(counts), "face": set(counts) - {"s002"}}
+    strata = ids.parse_strata("2-4,5-6,7-")
+    chosen, band_of, common = ids.sample_strata(pools, counts, strata, 5, seed=0)
+    assert len(chosen) == 15 and chosen == sorted(chosen) and "s002" not in chosen
+    for c in chosen:
+        lo, hi = {"2-4": (2, 4), "5-6": (5, 6), "7-": (7, 99)}[band_of[c]]
+        assert lo <= counts[c] <= hi
+    # A band's draw does not depend on the bands after it.
+    first, _, _ = ids.sample_strata(pools, counts, strata[:1], 5, seed=0)
+    assert set(first) == {c for c in chosen if band_of[c] == "2-4"}

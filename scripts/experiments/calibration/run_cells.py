@@ -335,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
+        f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -482,6 +483,8 @@ def main(argv: list[str] | None = None) -> int:
                 calibration_seed=cal_seed,
                 seed_examples=cfg.SEED_EXAMPLES,
                 stratify_target=cfg.STRATIFY_TARGET,
+                good_dry_run=cfg.GOOD_DRY_RUN,
+                quota_dry_bads=cfg.QUOTA_DRY_BADS,
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
@@ -522,6 +525,8 @@ def main(argv: list[str] | None = None) -> int:
             r["calibration_fraction"] = cell_calibration_fraction
             r["sim_fraction"] = cfg.SIM_FRACTION
             r["stratify_target"] = cfg.STRATIFY_TARGET
+            r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""
+            r["quota_dry_bads"] = cfg.QUOTA_DRY_BADS or ""
             r["exclusion_arm"] = exclusion_arm
             r["exclusion_min_remainder"] = exclusion_floor
             r["live_cut_rule"] = live_cut_rule

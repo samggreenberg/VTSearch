@@ -98,6 +98,8 @@ _DIVERGENT = [
     ({"CALIB_SIGMA_FLOOR": "absolute"}, "sigma_floor"),
     ({"CALIB_SEED_EXAMPLES": "1"}, "seed_examples"),
     ({"CALIB_STRATIFY_TARGET": "1"}, "stratify_target"),
+    ({"CALIB_GOOD_DRY_RUN": "16"}, "good_dry_run"),
+    ({"CALIB_QUOTA_DRY_BADS": "16"}, "quota_dry_bads"),
     ({"CALIB_BETA": "off"}, "beta"),
     ({"CALIB_BETA": "4"}, "beta"),
     ({"CALIB_WALK_SHAPE": "walk"}, "walk_shape"),
@@ -176,6 +178,8 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_BAND_SHARE": "0"}, "band_share"),
         ({"CALIB_BAND_SHARE": "one"}, "band_share"),
         ({"CALIB_SIGMA_FLOOR": "abs"}, "sigma_floor"),
+        ({"CALIB_GOOD_DRY_RUN": "0"}, "good_dry_run"),
+        ({"CALIB_QUOTA_DRY_BADS": "sixteen"}, "quota_dry_bads"),
     ],
 )
 def test_a_value_the_harness_refuses_is_refused(check, env, knob):
