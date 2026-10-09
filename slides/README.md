@@ -526,6 +526,16 @@ datasets and detector are deleted and rebuilt every run, because the first
 shot's subject is an app with nothing in it. That costs a re-embed of both piles
 (~470 photographs, a few minutes on CPU) per run.
 
+With nothing serving on `$APP`, the harness **starts its app on a fresh data
+dir**, `data/.slides-app`, emptied every run, and stops it at the end, as
+`scripts/screenshots/refresh.sh` does with `data/.screenshots-app`. It never
+uses the `VTSEARCH_DATA_DIR` it inherits, which may be a live install's: on the
+GRID, `~/.bashrc` exports the live app's, and a run that inherited it imported
+`photos-train` into the live registry (#4697). The model cache is shared
+(`VTSEARCH_MODELS_DIR`, else `data/models`). An app you started yourself is
+used as it is, with its own data, so its first frame shows whatever that app
+already holds.
+
 The corpus and the detector are the **Book example**
 (`scripts/screenshots/book-example.mjs`). The user guide's screenshots were
 shot on it too (#4202), until they moved to generated drawings of their own,
