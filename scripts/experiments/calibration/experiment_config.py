@@ -1108,6 +1108,11 @@ OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or Non
 #: default, ``seed``) is the app: the top of the text sort.
 MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
 
+#: Issue #4671's New-phase knob: ``hard`` takes the Hard pick where Autopilot's
+#: New phase would walk the Coverage Atlas, the phase machine unchanged.  Unset
+#: (the default, ``atlas``) is the app.
+NEW_WALK = os.environ.get("CALIB_NEW_WALK", "").strip() or "atlas"
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive

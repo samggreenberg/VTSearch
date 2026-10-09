@@ -22,6 +22,7 @@ test or type coverage.
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -86,11 +87,30 @@ def _stub_bin(tmp_path: Path, *, mine: int = 0, others: int = 0, private: str = 
     return bin_dir
 
 
+def _no_scheduler_bin(tmp_path: Path) -> Path:
+    """A `bin/` whose `scontrol` and `squeue` fail as a missing command does (exit 127).
+
+    A machine with Slurm installed (the GRID: /usr/bin/scontrol) would otherwise
+    answer the "no scheduler" tests from the real cluster.
+    """
+    bin_dir = tmp_path / "noslurm"
+    bin_dir.mkdir(exist_ok=True)
+    for name in ("scontrol", "squeue"):
+        path = bin_dir / name
+        path.write_text(f"#!/bin/sh\necho '{name}: command not found' >&2\nexit 127\n")
+        path.chmod(0o755)
+    return bin_dir
+
+
 def _env(tmp_path: Path, bin_dir: Path | None, **extra: str) -> dict[str, str]:
     path = f"{Path(sys.executable).parent}:/usr/bin:/bin:/usr/local/bin"
     if bin_dir is not None:
         path = f"{bin_dir}:{path}"
-    return {"PATH": path, "HOME": str(tmp_path), "USER": "me", **extra}
+    # The GRID's venv python is linked against a libpython it finds only through
+    # LD_LIBRARY_PATH; stripped of it, every subprocess exits 127 there (as
+    # test_preflight_knobs found).
+    keep = {"LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH", "")}
+    return {"PATH": path, "HOME": str(tmp_path), "USER": "me", **keep, **extra}
 
 
 def _cli(tmp_path: Path, bin_dir: Path | None, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
@@ -196,7 +216,7 @@ class TestCli:
         assert proc.returncode == 0 and "(ceiling 4,000)" in proc.stdout
 
     def test_no_scheduler_is_unknown_not_fits(self, tmp_path):
-        proc = _cli(tmp_path, None, "--tasks", "720")
+        proc = _cli(tmp_path, _no_scheduler_bin(tmp_path), "--tasks", "720")
         assert proc.returncode == 3
         assert proc.stdout.startswith("UNKNOWN: could not run `scontrol show config`")
 
@@ -227,7 +247,7 @@ class TestPreflightCheck18:
         assert "  ok    job records: 720 array tasks fit" in proc.stdout
 
     def test_an_unread_ceiling_fails(self, tmp_path):
-        proc = self._preflight(tmp_path, None, "--array-tasks", "720")
+        proc = self._preflight(tmp_path, _no_scheduler_bin(tmp_path), "--array-tasks", "720")
         assert "  FAIL  job records: could not run `scontrol show config`" in proc.stdout
         assert "an unread ceiling is not a passing one" in proc.stdout
 

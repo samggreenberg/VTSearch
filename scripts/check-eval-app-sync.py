@@ -171,7 +171,8 @@ MIRRORS: list[Mirror] = [
             "simulated by scripts/experiments/fullmarks/sota_documents.py, which clicks the top of "
             "the retrained structural ranking at every step. The harness's more_walk='detector' (#4637) "
             "is an experiment arm that walks a photo dataset's 'more' on the detector's top; the "
-            "default, 'seed', is the app's row."
+            "default, 'seed', is the app's row. Likewise new_walk='hard' (#4671) is an arm that takes "
+            "the Hard pick in 'new' instead of the atlas's; the default, 'atlas', is the app's row."
         ),
     ),
     Mirror(
