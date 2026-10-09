@@ -117,8 +117,8 @@ def test_the_demo_loader_bypasses_the_app_cache():
     ]
     assert calls, "the pile's demo loader no longer calls load_demo_dataset"
     for call in calls:
-        flags = {kw.arg: kw.value for kw in call.keywords}
-        assert isinstance(flags.get("use_cache"), ast.Constant) and flags["use_cache"].value is False, (
+        use_cache = {kw.arg: kw.value for kw in call.keywords}.get("use_cache")
+        assert isinstance(use_cache, ast.Constant) and use_cache.value is False, (
             "the pile must build demo cells from the source (use_cache=False): a cache hit "
             "hands back another build's vectors under this build's provenance"
         )
