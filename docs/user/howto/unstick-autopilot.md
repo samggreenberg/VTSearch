@@ -18,12 +18,16 @@ screenshot show where to click, in order.
 
 While Autopilot is in its first phase, **Find Initial Goods**, it counts your
 answers. After ten without enough matches (three, by default), it shows
-**Update Sort Example?**: how many pictures you have answered, how few matches
-turned up, and what it has been sorting by.
+**Update Sort Example?**. One line reads out where the sort stands: how many
+pictures you have answered (**Clicked**), how many were matches
+(**Positives**), and what it has been sorting by (**Sort**). Toasty, below the
+dialog, says how many matches Autopilot needs before it trains, and what you
+can do about it.
 
-1. **Keep clicking** carries on with the same sort for a while longer. Pick
-   it if the matches are there but few, and you would rather keep going.
-2. **Supply a different sort**: type a new description under **Text
+1. **Continue**, under **Keep clicking:**, carries on with the same sort for a
+   while longer. Pick it if the matches are there but few, and you would rather
+   keep going.
+2. **Supply a different sort:** type a new description under **Text
    example** and click **Use**,
 3. or pick a picture that looks like what you want, with **Browse Media…**
    (from a file on the server, an address on the web, or a demo dataset) or
@@ -31,7 +35,7 @@ turned up, and what it has been sorting by.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/unstick-prompt.dark.webp" />
-  <img src="../assets/unstick-prompt.light.webp" alt="Update Sort Example? (1) Keep clicking with the same sort, or supply a different one: (2) a new description, then Use, or (3) an example picture" width="720" />
+  <img src="../assets/unstick-prompt.light.webp" alt="Update Sort Example? (1) Continue with the same sort, or supply a different one: (2) a new description, then Use, or (3) an example picture" width="720" />
 </picture>
 
 A new description or picture re-sorts the dataset straight away, and

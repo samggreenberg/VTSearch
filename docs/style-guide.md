@@ -285,6 +285,8 @@ Focus state is provided globally by `:focus-visible { outline: 2px solid var(--a
 | `title` (input) | Renders as the header `<h2>` **and** the dialog's `aria-label`. Title Case (§4.1). |
 | `open` (input) | Whether the dialog is mounted. Most call sites are already inside an `@if` and pass `[open]="true"`. |
 | `showCloseButton` (input, default `true`) | Renders the header `×`. See "Close-less dialogs" below. |
+| `initialFocus` (input, default `'first-control'`) | Where focus lands on open: the first tabbable control, or `'dialog'` for the dialog box itself, so no answer looks preselected. Use `'dialog'` for a dialog that interrupts a keyboard-driven task to ask a choice (the Autopilot resort prompt): a focused button there draws the focus ring, reads as the recommended answer, and takes the next Enter or Space. The box draws no ring of its own; Tab steps into the controls. |
+| `box` (signal) | The dialog box element (`.modal-content`), for projected content that places itself against the box rather than inside it, as the resort prompt's Toasty hint does below it. |
 | `closed` (output) | Fired by the `×`, a backdrop click, and Escape. Wire it to whatever tears the dialog down. |
 | default `<ng-content>` | Projected into `.modal-body` (the only scrollable region). |
 | `[modal-footer]` slot | Projected into `.modal-footer`. Put the action buttons in a plain `<div modal-footer>`. |

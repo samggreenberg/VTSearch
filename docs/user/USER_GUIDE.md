@@ -1590,7 +1590,9 @@ On the Dashboard he shows one step at a time:
   dataset, and **Test** or **Find** once the selected detector is trained.
 
 In the Train view he asks for your first vote over **Good** / **Bad** while
-Autopilot runs on a detector with no labels, and when Autopilot finishes he
+Autopilot runs on a detector with no labels, explains the **Update Sort
+Example?** prompt from just below it (see [Get Autopilot
+unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he
 stands under the top bar's **Dashboard** button (see [Autopilot: the guided
 workflow](#autopilot-the-guided-workflow)).
 
@@ -1943,11 +1945,14 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   audio span before using the item as a sort example or detector seed.
 - **The Autopilot resort prompt.** While Autopilot is looking for
   positives by sorting on an example, VTSearch periodically stops to say
-  how that sort is going (**Update Sort Example?**): how many items you
-  have labelled with it and how few positives it has turned up. On the
-  left, **Keep clicking** carries on with the same sort for a set number
-  of labels (the interval grows each time you keep it); on the right,
-  **Supply a different sort** swaps in a new example. A new example
+  how that sort is going (**Update Sort Example?**): one line of
+  read-only fields gives how many items you have labelled with it
+  (**Clicked**), how many were positive (**Positives**) and the sort
+  itself (**Sort**), and Toasty, below the dialog, says how many
+  positives Autopilot needs before it trains. On the left, **Continue**
+  (under **Keep clicking:**) carries on with the same sort for a set
+  number of labels (the interval grows each time you keep it); on the
+  right, **Supply a different sort:** swaps in a new example. A new example
   can be typed as text, uploaded from your computer (**Upload File…**), or
   picked with **Browse Media…**, which offers the same single-item sources
   as the New Detector modal - a path on the server, a URL, a file inside a

@@ -4,6 +4,16 @@
   width: var(--modal-w-md);
 }
 
+// Room for the keyboard focus ring: the Keep button and the right-hand
+// buttons sit flush with the body's edges, and the body scrolls, so it clips
+// whatever crosses them. A negative margin takes the inset back, so the
+// content stays level with the title.
+:host ::ng-deep .modal-body {
+  padding: var(--space-xs);
+  margin: calc(-1 * var(--space-xs));
+  margin-bottom: calc(var(--space-xl) - var(--space-xs));
+}
+
 .resort-prompt {
   display: flex;
   flex-direction: column;
