@@ -15,10 +15,13 @@ still works unchanged.
 
 from __future__ import annotations
 
+import threading
+
 import cv2
 import numpy as np
 import pytest
 
+from vtscore.media import structural
 from vtscore.media.structural import (
     DEFAULT_MAX_FEATURES,
     SIFT_DESCRIPTOR_DIM,
@@ -231,6 +234,134 @@ class TestVerifyMany:
         got = matcher.verify_many(empty, cands)
         assert len(got) == 3
         assert all(s.inlier_count == 0 and not s.model_ok for s in got)
+
+
+# --------------------------------------------------------------------------
+# SiftMatcher._fit_similarity_many: the RANSAC fits on a thread pool (#4516)
+# --------------------------------------------------------------------------
+
+
+def _correspondence_jobs(n_pairs: int, seed: int = 0) -> tuple[np.ndarray, list]:
+    """A template's keypoints and *n_pairs* ``(c_kp, t_idx, c_idx)`` fit jobs against it.
+
+    Each pair plants a similarity-mapped inlier set among random outliers, at
+    0-60 correspondences like a Stage-2 shortlist's, so a batch holds fits that
+    pass the gate, fits that fail it, and pairs too small to fit at all.
+    """
+    rng = np.random.default_rng(seed)
+    t_kp = rng.random((200, 4)).astype(np.float32)
+    jobs = []
+    for _ in range(n_pairs):
+        n = int(rng.integers(0, 60))
+        t_idx = rng.choice(200, size=n, replace=False).astype(np.int64)
+        inliers = int(rng.integers(0, n + 1))
+        theta, s = rng.uniform(-np.pi, np.pi), rng.uniform(0.05, 2.0)
+        rot = s * np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        xy = rng.random((n, 2))
+        xy[:inliers] = t_kp[t_idx[:inliers], :2] @ rot.T + rng.random(2) + rng.normal(0, 0.002, (inliers, 2))
+        c_kp = np.zeros((n, 4), dtype=np.float16)
+        c_kp[:, :2] = xy
+        jobs.append((c_kp, t_idx, np.arange(n, dtype=np.int64)))
+    return t_kp, jobs
+
+
+def _fit_before_4516(t_kp: np.ndarray, c_kp: np.ndarray, t_idx: np.ndarray, c_idx: np.ndarray) -> MatchStats:
+    """``SiftMatcher._fit_similarity`` as it was before #4516, numpy calls and all."""
+    tentative = int(t_idx.shape[0])
+    if tentative < 2:
+        return MatchStats(tentative_count=tentative)
+    src = np.ascontiguousarray(t_kp[t_idx, :2], dtype=np.float32)
+    dst = np.ascontiguousarray(c_kp[c_idx, :2], dtype=np.float32)
+    model, inlier_mask = cv2.estimateAffinePartial2D(
+        src, dst, method=cv2.RANSAC, ransacReprojThreshold=0.02, maxIters=2000, confidence=0.99, refineIters=10
+    )
+    if model is None or inlier_mask is None or not np.isfinite(model).all():
+        return MatchStats(tentative_count=tentative)
+    mask = inlier_mask.ravel().astype(bool)
+    inlier_count = int(mask.sum())
+    scale = float(np.hypot(float(model[0, 0]), float(model[1, 0])))
+    reflection = bool(np.linalg.det(np.asarray(model[:, :2], dtype=np.float64)) < 0)
+    model_ok = inlier_count >= 4 and 0.03 <= scale <= 10.0 and not reflection
+    mean_err = median_err = spread = 0.0
+    box = None
+    if inlier_count:
+        src_in, dst_in = src[mask], dst[mask]
+        proj = (src_in @ model[:, :2].T) + model[:, 2]
+        errs = np.linalg.norm(proj - dst_in, axis=1)
+        mean_err = float(errs.mean())
+        median_err = float(np.median(errs))
+        centroid = dst_in.mean(axis=0)
+        spread = float(np.sqrt(((dst_in - centroid) ** 2).sum(axis=1).mean()))
+        x0, y0 = dst_in.min(axis=0)
+        x1, y1 = dst_in.max(axis=0)
+        box = (float(x0), float(y0), float(x1), float(y1))
+    return MatchStats(
+        inlier_count=inlier_count,
+        inlier_ratio=inlier_count / tentative,
+        tentative_count=tentative,
+        mean_reproj_error=mean_err,
+        median_reproj_error=median_err,
+        scale=scale,
+        reflection=reflection,
+        inlier_spread=spread,
+        model_ok=model_ok,
+        inlier_box=box if model_ok else None,
+    )
+
+
+def _spy_threads(monkeypatch: pytest.MonkeyPatch, matcher: SiftMatcher) -> set[str]:
+    """Record the name of every thread *matcher* runs a RANSAC call on."""
+    names: set[str] = set()
+    ransac = matcher._ransac
+
+    def spy(*args):
+        names.add(threading.current_thread().name)
+        return ransac(*args)
+
+    monkeypatch.setattr(matcher, "_ransac", spy)
+    return names
+
+
+class TestFitSimilarityMany:
+    def test_stats_are_bit_identical_to_the_numpy_calls_they_replaced(self) -> None:
+        """The cheaper median/mean/norm/det are the same float operations: every field is equal, not approximately."""
+        t_kp, jobs = _correspondence_jobs(300)
+        got = [SiftMatcher()._fit_similarity(t_kp, *job) for job in jobs]
+        want = [_fit_before_4516(t_kp, *job) for job in jobs]
+        assert got == want
+        # The batch exercises every branch: no fit, a failed fit, a passing fit, odd and even inlier counts.
+        assert {s.tentative_count < 2 for s in want} == {True, False}
+        assert {s.model_ok for s in want} == {True, False}
+        assert {s.inlier_count % 2 for s in want if s.inlier_count} == {0, 1}
+
+    def test_pool_returns_the_loop_s_fits_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(structural, "_ransac_workers", lambda: 4)
+        matcher = SiftMatcher()
+        t_kp, jobs = _correspondence_jobs(3 * structural._RANSAC_POOL_MIN_PAIRS + 7, seed=1)
+        loop = [matcher._fit_similarity(t_kp, *job) for job in jobs]
+        threads = _spy_threads(monkeypatch, matcher)
+        assert matcher._fit_similarity_many(t_kp, jobs) == loop
+        assert threads and all(name.startswith("ransac") for name in threads)
+
+    def test_small_batch_fits_inline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(structural, "_ransac_workers", lambda: 4)
+        matcher = SiftMatcher()
+        threads = _spy_threads(monkeypatch, matcher)
+        t_kp, jobs = _correspondence_jobs(structural._RANSAC_POOL_MIN_PAIRS - 1, seed=2)
+        assert len(matcher._fit_similarity_many(t_kp, jobs)) == len(jobs)
+        assert threads == {threading.current_thread().name}
+
+    @pytest.mark.parametrize(("cpus", "workers"), [(64, 8), (8, 8), (3, 3), (1, 1)])
+    def test_workers_follow_the_affinity_mask_up_to_the_cap(
+        self, monkeypatch: pytest.MonkeyPatch, cpus: int, workers: int
+    ) -> None:
+        monkeypatch.setattr(structural.os, "sched_getaffinity", lambda _pid: set(range(cpus)), raising=False)
+        assert structural._ransac_workers() == workers
+
+    def test_workers_without_an_affinity_mask_use_the_cpu_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delattr(structural.os, "sched_getaffinity", raising=False)
+        monkeypatch.setattr(structural.os, "cpu_count", lambda: 2)
+        assert structural._ransac_workers() == 2
 
 
 # --------------------------------------------------------------------------
