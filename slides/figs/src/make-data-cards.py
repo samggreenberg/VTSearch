@@ -1029,14 +1029,27 @@ def frame_fullmarks_zoom() -> Any:
 
 #: Six one-person photos for the 3x2 grid, by FHIBE `uid`, in `FHIBE_BANDS`
 #: order: the zoom's first, so the picture grows out of its own cell as
-#: `COCO_GRID`'s does. Empty until the card has been rendered once where FHIBE
-#: is — the GRID, see `fhibe_media.py` — because nothing here can open the
-#: release to choose. An unpinned run draws them by `_fhibe_pick`, which is
-#: deterministic for a release, and prints the six uids to paste here: then
-#: later renders redraw the same card, the way every other card's pinned picks
-#: do, and a re-release with one subject withdrawn is a visible change to this
-#: tuple rather than a silent reshuffle.
-FHIBE_GRID: tuple[str, ...] = ()
+#: `COCO_GRID`'s does. Chosen where FHIBE is — the GRID, see `fhibe_media.py`
+#: — because nothing else can open the release: an unpinned run (empty this
+#: tuple) draws them by `_fhibe_pick`, which is deterministic for a release, and
+#: prints the six uids to paste here. Pinned, later renders redraw the same
+#: card, the way every other card's pinned picks do, and a re-release with one
+#: subject withdrawn is a visible change to this tuple rather than a silent
+#: reshuffle.
+#:
+#: Drawn on the GRID for #4714, with one swap: the draw's sixth photo had the
+#: subject in front of a gate under a legible house number and street name,
+#: which a slide has no reason to carry. Its replacement is the first later draw
+#: from the same Small pool (same seed, a subject with as many photos) whose
+#: frame holds nothing that says where it was taken.
+FHIBE_GRID: tuple[str, ...] = (
+    "3d3e0b3e-a283-427a-a079-d684354ad65a",
+    "6d905b97-f40f-403f-9538-019063eaac11",
+    "dff5ee0e-4dbd-4657-9137-1f5ec58fde0c",
+    "a18eb395-4201-45fb-b39f-905a88790355",
+    "3f6ebf5f-951b-4569-ad47-4e6a09c74e76",
+    "4be5cf9c-d6e3-40a7-ba32-22fdbe946bd3",
+)
 #: The size band of each grid cell under the shipped `BOX_BANDS` rule, so a
 #: Small face is a COCO Better Small: under 1/196 of the frame. Checked against
 #: the release when the frame is drawn, as `COCO_BETTER_GRID`'s bands are.
