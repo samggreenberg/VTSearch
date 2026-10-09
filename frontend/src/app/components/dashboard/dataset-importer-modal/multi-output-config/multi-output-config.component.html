@@ -3,24 +3,47 @@
   <ul class="mo-rows" role="list">
     @for (draft of drafts(); track draft.category) {
       <li class="mo-row" [class.mo-row--checked]="draft.checked">
-        <div class="mo-row-line">
-          <label class="mo-row-main" [for]="rowId(draft)" [title]="rowTitle(draft)">
-            <input
-              [id]="rowId(draft)"
-              type="checkbox"
-              class="mo-checkbox"
-              [checked]="draft.checked"
-              (change)="toggle(draft, $any($event.target).checked)"
-            />
-            @if (iconFor(draft)) {
-              <vt-icon [icon]="iconFor(draft)" [size]="16"></vt-icon>
+        <!-- The row line is written twice because a template reference
+             (#adv, the row's own Advanced block) is only visible inside the
+             control-flow block that declares it, and only a ticked row has
+             a block for the Details link to open. -->
+        @if (!draft.checked) {
+          <div class="mo-row-line">
+            <label class="mo-row-main" [for]="rowId(draft)" [title]="rowTitle(draft)">
+              <input
+                [id]="rowId(draft)"
+                type="checkbox"
+                class="mo-checkbox"
+                [checked]="false"
+                (change)="toggle(draft, $any($event.target).checked)"
+              />
+              @if (iconFor(draft)) {
+                <vt-icon [icon]="iconFor(draft)" [size]="16"></vt-icon>
+              }
+              <span class="mo-row-label">{{ labelFor(draft) }}</span>
+            </label>
+            @if (countHint(draft); as hint) {
+              <span class="mo-row-count">{{ hint }}</span>
             }
-            <span class="mo-row-label">{{ labelFor(draft) }}</span>
-          </label>
-          @if (countHint(draft); as hint) {
-            <span class="mo-row-count">{{ hint }}</span>
-          }
-          @if (draft.checked) {
+          </div>
+        } @else {
+          <div class="mo-row-line">
+            <label class="mo-row-main" [for]="rowId(draft)" [title]="rowTitle(draft)">
+              <input
+                [id]="rowId(draft)"
+                type="checkbox"
+                class="mo-checkbox"
+                [checked]="true"
+                (change)="toggle(draft, $any($event.target).checked)"
+              />
+              @if (iconFor(draft)) {
+                <vt-icon [icon]="iconFor(draft)" [size]="16"></vt-icon>
+              }
+              <span class="mo-row-label">{{ labelFor(draft) }}</span>
+            </label>
+            @if (countHint(draft); as hint) {
+              <span class="mo-row-count">{{ hint }}</span>
+            }
             <button
               type="button"
               class="link-btn mo-details-toggle"
@@ -30,16 +53,14 @@
             >
               Details {{ adv.advancedOpen() ? '▴' : '▾' }}
             </button>
-          }
-        </div>
-        @if (draft.checked) {
+          </div>
           <vt-import-advanced
             #adv
             class="mo-row-advanced"
             [availableConverters]="convertersFor(draft)"
             [nativeType]="draft.mediaType"
             [nativeImportable]="nativeImportable(draft)"
-            [typeLabels]="typeLabels"
+            [typeLabels]="typeLabels()"
             [convertTargets]="convertTargets(draft)"
             [convertOptional]="false"
             [selectedConvertTarget]="draft.convertTarget"

@@ -36,6 +36,7 @@ import {
 import {
   OutputDraft,
   buildOutputDrafts,
+  convertersByTypeOf,
   isMultiOutputImporter,
   outputsFromDrafts,
   tickCategory,
@@ -397,7 +398,7 @@ export class LocalFolderPickerComponent {
   }
 
   get convertersByType(): Record<string, ConverterInfo[]> {
-    return (this.backingImporter?.available_converters_by_media_type as Record<string, ConverterInfo[]> | undefined) || {};
+    return convertersByTypeOf(this.backingImporter);
   }
 
   /** Switch between the single-dataset form and the Multi-Dataset editor.

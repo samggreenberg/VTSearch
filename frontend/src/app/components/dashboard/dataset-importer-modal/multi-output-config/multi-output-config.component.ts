@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -26,6 +26,13 @@ interface TypeOptions {
   clippers: ClipperInfo[];
   cleaners: CleanerInfo[];
 }
+
+/** Shared empties, so a binding that has nothing to offer hands the child the
+ *  same reference every pass instead of a fresh array (a fresh one per pass
+ *  reads as a change to a signal input on every refresh). */
+const NO_OPTIONS: TypeOptions = Object.freeze({ embedders: [], clippers: [], cleaners: [] }) as TypeOptions;
+const NO_CONVERTERS: ConverterInfo[] = [];
+const NO_TARGETS: string[] = [];
 
 /** The Add Dataset dialog's **Multi-Dataset** editor (#4703): one row per
  *  ingestion category, each ticked row a dataset of its own with its own
@@ -94,9 +101,7 @@ export class MultiOutputConfigComponent {
     });
   }
 
-  get typeLabels(): Record<string, string> {
-    return mediaTypeLabels(this.mediaTypes());
-  }
+  readonly typeLabels = computed(() => mediaTypeLabels(this.mediaTypes()));
 
   category(draft: OutputDraft): MediaTypeInfo | undefined {
     return this.mediaTypes().find((m) => m.type_id === draft.category);
@@ -126,7 +131,7 @@ export class MultiOutputConfigComponent {
     const mt = this.category(draft);
     const label = this.labelFor(draft);
     if (mt?.embeddable === false) {
-      return `Make a dataset of the ${label.toLowerCase()} files, converted to ${this.typeLabels[draft.mediaType] || draft.mediaType} so they can be searched.`;
+      return `Make a dataset of the ${label.toLowerCase()} files, converted to ${this.typeLabels()[draft.mediaType] || draft.mediaType} so they can be searched.`;
     }
     if (mt?.importable === false) {
       return `Make a ${label} dataset from what the converters below find in the other files (nothing of this type is read from disk directly).`;
@@ -140,7 +145,7 @@ export class MultiOutputConfigComponent {
   }
 
   convertTargets(draft: OutputDraft): string[] {
-    return this.isConvertOut(draft) ? this.category(draft)?.converts_to || [] : [];
+    return (this.isConvertOut(draft) && this.category(draft)?.converts_to) || NO_TARGETS;
   }
 
   nativeImportable(draft: OutputDraft): boolean {
@@ -149,12 +154,12 @@ export class MultiOutputConfigComponent {
 
   /** Converters feeding the row's dataset type, for its include-media rows. */
   convertersFor(draft: OutputDraft): ConverterInfo[] {
-    if (this.isConvertOut(draft)) return [];
-    return this.convertersByType()[draft.mediaType] || [];
+    if (this.isConvertOut(draft)) return NO_CONVERTERS;
+    return this.convertersByType()[draft.mediaType] || NO_CONVERTERS;
   }
 
   options(draft: OutputDraft): TypeOptions {
-    return this.typeOptions()[draft.mediaType] || { embedders: [], clippers: [], cleaners: [] };
+    return this.typeOptions()[draft.mediaType] || NO_OPTIONS;
   }
 
   lockedEmbedder(draft: OutputDraft): string {

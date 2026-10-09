@@ -41,6 +41,7 @@ import {
 import {
   OutputDraft,
   buildOutputDrafts,
+  convertersByTypeOf,
   isMultiOutputImporter,
   outputsFromDrafts,
   tickCategory,
@@ -374,8 +375,7 @@ export class ServerFolderPickerComponent {
   }
 
   get convertersByType(): Record<string, ConverterInfo[]> {
-    const importer = this.importers().find((imp) => imp.name === 'server_folder');
-    return (importer?.available_converters_by_media_type as Record<string, ConverterInfo[]> | undefined) || {};
+    return convertersByTypeOf(this.importers().find((imp) => imp.name === 'server_folder'));
   }
 
   /** Switch between the single-dataset form and the Multi-Dataset editor.

@@ -27,7 +27,7 @@ import {
 } from '../../../../../models/api.models';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { availableConvertersFor, composeEmbedders, mediaTypeLabels, mediaTypeOptionIcons, mediaTypeOptionLabels, toFolderName, toTypeId } from '../shared/media-type.util';
-import { OutputDraft, buildOutputDrafts, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
+import { OutputDraft, buildOutputDrafts, convertersByTypeOf, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
 import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { PluginCheckboxComponent } from '../../../../plugin-checkbox/plugin-checkbox.component';
 
@@ -413,7 +413,7 @@ export class GenericFormPickerComponent {
   }
 
   get convertersByType(): Record<string, ConverterInfo[]> {
-    return (this.selectedImporter()?.available_converters_by_media_type as Record<string, ConverterInfo[]> | undefined) || {};
+    return convertersByTypeOf(this.selectedImporter());
   }
 
   /** Switch between the single-dataset form and the Multi-Dataset editor.

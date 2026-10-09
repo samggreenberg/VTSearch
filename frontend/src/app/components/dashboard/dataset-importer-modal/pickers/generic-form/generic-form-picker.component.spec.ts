@@ -4,6 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { GenericFormPickerComponent } from './generic-form-picker.component';
 import { provideZoneless } from '../../../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../../../testing/test-providers';
+import { settleZoneless } from '../../../../../testing/settle-resource';
 
 describe('GenericFormPickerComponent', () => {
   let component: GenericFormPickerComponent;
@@ -14,6 +15,8 @@ describe('GenericFormPickerComponent', () => {
     name: 'generic_form',
     display_name: 'Generic Form Importer',
     picker_view: 'form',
+    supports_multi_output: true,
+    available_converters_by_media_type: {},
     fields: [
       { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'image'] },
       { key: 'path', field_type: 'text', label: 'Path', required: true },
@@ -29,6 +32,10 @@ describe('GenericFormPickerComponent', () => {
     fixture = TestBed.createComponent(GenericFormPickerComponent);
     component = fixture.componentInstance;
     fixture.componentRef.setInput('importers', [importer]);
+    fixture.componentRef.setInput('mediaTypes', [
+      { type_id: 'audio', name: 'Audio', folder_import_name: 'audio' } as any,
+      { type_id: 'image', name: 'Image', folder_import_name: 'image' } as any,
+    ]);
     httpMock = TestBed.inject(HttpTestingController);
   });
 
@@ -214,5 +221,63 @@ describe('GenericFormPickerComponent', () => {
 
     expect(component.submitting()).toBe(false);
     expect(component.error()).toBe('boom');
+  });
+
+  describe('Multi-Dataset mode (#4703)', () => {
+    function flushTypeOptions(mediaType: string): void {
+      httpMock.expectOne((r) => r.url === '/api/embedders' && r.params.get('media_type') === mediaType).flush({ embedders: [] });
+      httpMock.expectOne((r) => r.url === '/api/clippers' && r.params.get('media_type') === mediaType).flush({ clippers: [] });
+      httpMock.expectOne((r) => r.url === '/api/cleaners' && r.params.get('media_type') === mediaType).flush({ cleaners: [] });
+    }
+
+    /** The suggested-name lookup is debounced on a real timer; drain it. */
+    function drainSuggestedName(): void {
+      httpMock.match((r) => r.url.endsWith('/suggested-name')).forEach((r) => r.flush({ dataset_name: 's' }));
+    }
+
+    it('is offered when the importer supports it and starts from the dropdown type', async () => {
+      openAndFlush();
+      expect(component.supportsMultiOutput).toBe(true);
+      component.setMultiDataset(true);
+      await settleZoneless(fixture);
+      flushTypeOptions('audio');
+      expect(component.outputDrafts().map((d) => [d.category, d.checked])).toEqual([
+        ['audio', true],
+        ['image', false],
+      ]);
+      expect(fixture.nativeElement.querySelector('vt-multi-output-config')).not.toBeNull();
+      // The single-dataset block is gone; the one Advanced block left is the ticked row's own.
+      expect(component.importAdvanced()).toBeUndefined();
+      expect(fixture.nativeElement.querySelectorAll('vt-multi-output-config vt-import-advanced').length).toBe(1);
+      drainSuggestedName();
+    });
+
+    it('needs a ticked row before it can submit, then posts the outputs list', async () => {
+      openAndFlush();
+      component.formValues['path'] = '/data/mixed';
+      component.setMultiDataset(true);
+      await settleZoneless(fixture);
+      flushTypeOptions('audio');
+      expect(component.canSubmit).toBe(true);
+
+      component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
+      expect(component.canSubmit).toBe(false);
+      component.onOutputDraftsChange(component.outputDrafts().map((d) => (d.category === 'image' ? { ...d, checked: true } : d)));
+      await settleZoneless(fixture);
+      flushTypeOptions('image');
+      expect(component.canSubmit).toBe(true);
+
+      component.submit();
+      const req = httpMock.expectOne('/api/dataset/import/generic_form');
+      const body = req.request.body as Record<string, unknown>;
+      expect(body['path']).toBe('/data/mixed');
+      expect(body['media_type']).toBe('image');
+      expect(body['outputs']).toEqual([
+        { media_type: 'image', category: 'image', source_specs: [{ source_type: 'image', converter: null, params: {} }] },
+      ]);
+      expect(body['embedder']).toBeUndefined();
+      req.flush({});
+      drainSuggestedName();
+    });
   });
 });

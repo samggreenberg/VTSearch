@@ -19,8 +19,8 @@ import { composeEmbedders } from './media-type.util';
  *  it; {@link draftToOutputRequest} turns a ticked draft into one entry of the
  *  request's `outputs` list.
  *
- *  Three shapes of category, following the half-media-type model
- *  (`docs/plans/half-media-types.md`):
+ *  Three shapes of category, following the media types' `importable` /
+ *  `embeddable` / `converts_to` flags (`docs/EXTENDING-media.md`):
  *
  *  - an **embeddable, importable** type (image, audio, video, text) is a
  *    dataset of its own files, plus whatever other source types the user
@@ -60,6 +60,16 @@ export interface OutputRequest {
   clipper?: string;
   clipper_params?: Record<string, number | string>;
   cleaners?: CleanerSelection[];
+}
+
+/** The converters-by-type map of *importer*, or one shared empty map.  Shared
+ *  rather than a fresh `{}` per read because the pickers bind it straight into
+ *  the editor's signal input, and a new object every change-detection pass
+ *  reads as a change every pass. */
+const NO_CONVERTERS_BY_TYPE: Record<string, ConverterInfo[]> = Object.freeze({});
+
+export function convertersByTypeOf(importer: ImporterInfo | null | undefined): Record<string, ConverterInfo[]> {
+  return (importer?.available_converters_by_media_type as Record<string, ConverterInfo[]> | undefined) || NO_CONVERTERS_BY_TYPE;
 }
 
 /** Whether the Multi-Dataset toggle is offered for *importer*: it must say so
