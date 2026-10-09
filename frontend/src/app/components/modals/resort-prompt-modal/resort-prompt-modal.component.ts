@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { PluginImportFormComponent } from '../../plugin-import-form/plugin-import-form.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
@@ -35,7 +36,7 @@ function countPhrase(n: number, one: string, many: string): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-resort-prompt-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, PluginImportFormComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, PluginImportFormComponent, ToastyHintComponent],
   templateUrl: './resort-prompt-modal.component.html',
   styleUrl: './resort-prompt-modal.component.scss',
 })
@@ -48,11 +49,12 @@ export class ResortPromptModalComponent {
 
   readonly currentExampleType = input<'text' | 'media'>('text');
   readonly currentExampleDisplay = input('');
-  readonly keepLabelsCount = input(0);
   /** Labels cast while sorting by the current example. */
   readonly clicksSoFar = input(0);
   /** How many of those labels were positive. */
   readonly positivesSoFar = input(0);
+  /** Positives Autopilot needs before it trains (its Good target). */
+  readonly positivesNeeded = input(0);
   readonly closed = output<void>();
   readonly keepExample = output<void>();
   readonly newExample = output<ResortResult>();
@@ -64,8 +66,7 @@ export class ResortPromptModalComponent {
       ? `“${this.currentExampleDisplay()}”`
       : this.currentExampleDisplay(),
   );
-  readonly clicksPhrase = computed(() => countPhrase(this.clicksSoFar(), 'time', 'times'));
-  readonly positivesPhrase = computed(() => countPhrase(this.positivesSoFar(), 'positive', 'positives'));
+  readonly positivesNeededPhrase = computed(() => countPhrase(this.positivesNeeded(), 'positive', 'positives'));
 
   view: ModalView = 'prompt';
   pendingText = '';

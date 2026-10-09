@@ -17,6 +17,7 @@ export const HINT_IDS = [
   'test-or-find',
   // Train view.
   'start-voting',
+  'resort-prompt',
   'autopilot-done',
   'all-labeled',
 ] as const;
