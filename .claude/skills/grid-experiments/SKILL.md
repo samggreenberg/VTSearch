@@ -121,6 +121,17 @@ mistakes that cost the most queue time in #3129: an array that claims your whole
 GRID-PLAYBOOK.md for measured RSS per cell type), and a **job name you are
 already using**, which silently breaks the per-name completion waiter below.
 
+**Size the array against the cluster's job records, too.** Slurm's `MaxJobCount`
+(10,000 on the GRID) is one table shared by every user, and each array task is a
+record from the moment it is queued. A `%N` throttle limits running tasks, not
+records. #4668's sixteen 720-task arrays filled 85% of the table, and its last
+four were refused (#4701). `calibration/launch_cells.sh` now refuses an array
+that would take the cluster past half the table, or you past a quarter, before
+`sbatch` sees it, and prints how many tasks fit. A launcher that submits its own
+array passes `--array-tasks N` to preflight (bundled: cells / bundle, not
+`--print-cells`). Thousands of tasks across a launch loop means chunk the arrays
+or pack cells per task.
+
 Add `--reuse-prepare "$PREPARE_DIR"` when you are skipping a GPU prepare stage by
 reusing a finished study's output. It checks that every `crops/` entry still
 resolves — the links point into the study that generated them, and `readlink -f`

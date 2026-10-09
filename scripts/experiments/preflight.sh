@@ -35,6 +35,7 @@ PILOT_CELLS=""
 RESOLVE_DELTA=""
 RESOLVE_SIGMA=""
 PAIRED_CELLS=""
+ARRAY_TASKS=""
 
 # This script's own directory, so check 16c can reach its sibling sizing script
 # without depending on VTS_REPO -- which check 4 may already have failed on.
@@ -60,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --resolve-delta) RESOLVE_DELTA="$2"; shift 2 ;;
     --sigma) RESOLVE_SIGMA="$2"; shift 2 ;;
     --paired-cells) PAIRED_CELLS="$2"; shift 2 ;;
+    --array-tasks) ARRAY_TASKS="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
@@ -79,6 +81,7 @@ done
   echo "                                               # (D in the decision metric's units: the objective at" >&2
   echo "                                               #  CALIB_BETA's balance, or cost with CALIB_BETA=off)" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
+  echo "                    [--array-tasks N]          # the array's task count, against the cluster's MaxJobCount" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
 }
@@ -158,6 +161,10 @@ if [[ -n "$RESOLVE_DELTA" ]]; then
     echo "--paired-cells wants a whole number of cells, got '$PAIRED_CELLS'" >&2
     exit 2
   fi
+fi
+if [[ -n "$ARRAY_TASKS" && ! "$ARRAY_TASKS" =~ ^[0-9]+$ ]]; then
+  echo "--array-tasks wants a whole number of array tasks, got '$ARRAY_TASKS'" >&2
+  exit 2
 fi
 
 FAILED=0
@@ -1269,6 +1276,37 @@ PY
     fi
     echo "        -> σ=$RESOLVE_SIGMA is $SIGMA_WHY"
   fi
+fi
+
+# --- 18. An array that would fill the cluster's job-record table -------------
+# Slurm's MaxJobCount (10,000 on the GRID) caps the job records slurmctld holds
+# for the WHOLE cluster, and every array task is one from the moment it is
+# queued.  A `%6` throttle limits running tasks, not records.  #4668 queued
+# sixteen 720-task arrays, each of which passed this preflight on its own: the
+# first twelve held 8,500 of the cluster's ~9,200 records, the last four were
+# refused ("Slurm temporarily unable to accept job"), and so would anyone
+# else's array have been (#4701).
+#
+# The ceilings are 50% of MaxJobCount for the cluster and 25% for you
+# (`VTS_RECORDS_CLUSTER_PCT` / `VTS_RECORDS_USER_PCT`), read off a live squeue,
+# so a launch loop meets this check with its own earlier arrays already counted.
+# Opt-in with the task count, because only the launcher knows it: for a bundled
+# launcher that is cells / BUNDLE, not `run_cells.py --print-cells`.
+# `calibration/launch_cells.sh` runs the same check itself, on the count it is
+# about to submit.
+if [[ -n "$ARRAY_TASKS" ]]; then
+  JR=$(python3 "$HERE/../slurm/job_records.py" --tasks "$ARRAY_TASKS" 2>&1)
+  JRV=$(printf '%s\n' "$JR" | head -1)
+  jr_detail() { printf '%s\n' "$JR" | sed '1d' | sed 's/^/        /'; }
+  case "$JRV" in
+    FITS:*) say_ok "job records: ${JRV#FITS: }"; jr_detail ;;
+    OVER:*) say_fail "job records: ${JRV#OVER: }"; jr_detail ;;
+    UNKNOWN:*)
+      say_fail "job records: ${JRV#UNKNOWN: }"
+      echo "        -> an unread ceiling is not a passing one (--warn-only if you accept the risk)"
+      ;;
+    *) say_fail "could not check the array against MaxJobCount: $JR" ;;
+  esac
 fi
 
 echo
