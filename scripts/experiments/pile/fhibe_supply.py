@@ -320,6 +320,54 @@ def stage_report(out: Path) -> None:
                     f"| {b} | {len(sub)} | {pct(hit, len(sub))} | {pct(top1, len(sub))} | "
                     f"{statistics.median(ious):.2f} | {statistics.median(px):.0f} | {extra / len(sub):.2f} |"
                 )
+        say("")
+        say("### What a miss is, and recall by the face's size as stored")
+        say(
+            "Miss kinds: *none* = no app-kept detection at all; *off* = the best kept detection overlaps "
+            "the face at IoU 0.1-0.5; *elsewhere* = kept detections, none on the face (IoU < 0.1)."
+        )
+        say("")
+        say("| resolution | misses | none | off | elsewhere |")
+        say("|---|---|---|---|---|")
+        px_bins = (0, 16, 24, 32, 48, 64, 96, 128, 1 << 20)
+        by_px: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
+        by_pose: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
+        for res in resolutions:
+            kinds = collections.Counter()
+            for r in rows:
+                rec = det[r["img"]]
+                s = rec["scale"][res]
+                kept = [d for d in rec["det"][res] if app_keeps(d, s)]
+                gt = [r["x1"], r["y1"], r["x2"], r["y2"]]
+                best = max((iou(gt, d) for d in kept), default=None)
+                hit = best is not None and best >= IOU_HIT
+                if not hit:
+                    kinds["none" if best is None else "off" if best >= 0.1 else "elsewhere"] += 1
+                px = min(r["x2"] - r["x1"], r["y2"] - r["y1"]) * s
+                b = next(j for j in range(len(px_bins) - 1) if px < px_bins[j + 1])
+                by_px[b][0] += hit
+                by_px[b][1] += 1
+                if res == "full":
+                    by_pose[r["head_pose"]][0] += hit
+                    by_pose[r["head_pose"]][1] += 1
+            m = sum(kinds.values())
+            say(f"| {res} | {m} | {kinds['none']} | {kinds['off']} | {kinds['elsewhere']} |")
+        say("")
+        say("Recall by the face box's short side in the pixels the app sees, pooled over every resolution:")
+        say("")
+        say("| face px | photos | hit |")
+        say("|---|---|---|")
+        for j in sorted(by_px):
+            lo, hi = px_bins[j], px_bins[j + 1]
+            label = f">= {lo}" if hi == 1 << 20 else f"{lo}-{hi - 1}"
+            say(f"| {label} | {by_px[j][1]} | {pct(*by_px[j])} |")
+        say("")
+        say("Recall at full resolution by FHIBE's head-pose label:")
+        say("")
+        say("| head pose | photos | hit |")
+        say("|---|---|---|")
+        for p in sorted(by_pose):
+            say(f"| {p or '(none)'} | {by_pose[p][1]} | {pct(*by_pose[p])} |")
     text = "\n".join(lines) + "\n"
     (out / "census.md").write_text(text)
     print(text)
