@@ -576,6 +576,36 @@ If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.
 
+### Multi-Dataset import: several datasets from one folder
+
+A folder (or archive) often holds more than one kind of media: photos, the
+PDFs that go with them, a few recordings. Each kind needs its own dataset,
+and importing the folder once per kind means reading it once per kind. Tick
+**Multi-Dataset**, the box above the *Dataset media type* dropdown on the
+**Folder**, **Manifest**, **Local Folder** and **Local Files** importers (and
+on any Services importer that lists a media type), and the dropdown gives way
+to a **Datasets to make** list: one row per kind of media, each a dataset of
+its own. The folder is read once; every ticked row becomes a dataset named
+after the import and the kind (`holiday – Image`, `holiday – Document`), with
+its own row on the Dashboard while it loads, its own **Cancel**, and its own
+AutoFind run.
+
+- Rows are pre-ticked from what the folder scan finds; tick or untick as you
+  like. **Document** makes an image dataset of the rendered pages (or, under
+  its **Details ▾**, extracted text); **Face** makes a dataset of the faces
+  cropped out of the images, so it has no files of its own to find.
+- Each ticked row's **Details ▾** opens that dataset's own Advanced settings
+  (*Include media*, embedders, clipper, cleanup), in place of the dialog's
+  single **Advanced ▾** toggle. *Build Browse map now* and *Merge
+  near-duplicates* apply to every dataset of the import and sit once, under
+  the list.
+- **Dataset name** becomes the shared base name; leave it blank for the
+  folder's name.
+
+Cancelling one row while the folder is still being read stops that dataset
+alone; the others carry on. The **Downloaded Media** importer has no
+Multi-Dataset box: a demo is one dataset of one kind.
+
 ### Running AutoFind on a new dataset
 
 Once you have a detector on the Dashboard's **AutoFind** tab, every
