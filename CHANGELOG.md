@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
+  Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
+  another on one CPU core, and most of each fit's time went to statistics over a few dozen
+  points. The fits now run on 4 threads and the statistics take less time. On a V100 a Good
+  takes ~1.4 s at 5,000 pages (was 1.9 s) and ~1.6 s at 50,000 (was 2.1 s). Rankings are unchanged.
+
 - **A plainer Update Sort Example? prompt** (issue #4721). Autopilot's resort prompt no longer
   opens with a focus ring on its big Keep button (it took focus when you were voting with the
   arrow keys, so it read as the recommended answer, and the next Space or Enter chose it); focus

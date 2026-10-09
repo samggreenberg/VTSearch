@@ -39,6 +39,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`SiftMatcher.verify_many` fits a batch's RANSAC pairs on a thread pool** (issue #4516).
+  `_fit_similarity` is now `_ransac` (the `cv2.estimateAffinePartial2D` call) followed by
+  `_similarity_stats`. The stats make the same ufunc calls that `np.median`,
+  `np.linalg.norm`/`det` and `mean` made, so every `MatchStats` field is bit-identical.
+  `_fit_similarity_many` runs the cv2 calls of a batch of 128 or more pairs on up to 4 threads
+  (`_ransac_workers`: the affinity mask, capped), then computes the stats in the calling thread.
+  RANSAC per Good on a V100 drops from ~0.8 s to ~0.3 s.
+
 - **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`
   stores F-beta's beta as a top-level `"beta"` (`BETA_KEY`) beside the labelset: `stored_beta(data)`,
   `valid_beta(raw)`, `detector_stored_beta(detector_id)` and `keep_beta(det_ctx, value)`.
