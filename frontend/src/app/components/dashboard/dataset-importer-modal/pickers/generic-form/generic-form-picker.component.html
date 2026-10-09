@@ -11,8 +11,11 @@
               [mediaTypeOptions]="field.options || []"
               [mediaTypeOptionLabels]="mediaTypeOptionLabels"
               [mediaTypeOptionIcons]="mediaTypeOptionIcons"
+              [showMultiToggle]="supportsMultiOutput"
+              [multiDataset]="multiDataset()"
+              (multiDatasetChange)="setMultiDataset($event)"
             ></vt-import-config>
-            @if (field.hint) {
+            @if (field.hint && !multiDataset()) {
               <p class="form-hint">{{ field.hint }}</p>
             }
           }
@@ -174,6 +177,21 @@
       <p class="info-text">This importer requires no additional configuration.</p>
     }
 
+    @if (multiDataset()) {
+      <vt-multi-output-config
+        idPrefix="form"
+        [mediaTypes]="mediaTypes()"
+        [convertersByType]="convertersByType"
+        [drafts]="outputDrafts()"
+        (draftsChange)="onOutputDraftsChange($event)"
+        [guessedMediaEmbedder]="guessedMediaEmbedder()"
+        [buildProjection]="buildProjection()"
+        (buildProjectionChange)="buildProjectionChange.emit($event)"
+        [mergeNearDuplicates]="mergeNearDuplicates()"
+        (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+        (clipperChooserRequested)="openClipperChooserFor($event)"
+      ></vt-multi-output-config>
+    } @else {
     <vt-import-advanced
       [availableConverters]="availableConverters"
       [nativeType]="outputTypeId"
@@ -201,6 +219,7 @@
       [mergeNearDuplicates]="mergeNearDuplicates()"
       (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
     ></vt-import-advanced>
+    }
 
     @if (error()) {
       <p class="error-text">{{ error() }}</p>

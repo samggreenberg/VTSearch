@@ -1,0 +1,98 @@
+<div class="form-group">
+  <label class="form-label" title="Tick each kind of media to make a dataset of. Every ticked row becomes its own dataset, named after the import and the kind.">Datasets to make</label>
+  <ul class="mo-rows" role="list">
+    @for (draft of drafts(); track draft.category) {
+      <li class="mo-row" [class.mo-row--checked]="draft.checked">
+        <div class="mo-row-line">
+          <label class="mo-row-main" [for]="rowId(draft)" [title]="rowTitle(draft)">
+            <input
+              [id]="rowId(draft)"
+              type="checkbox"
+              class="mo-checkbox"
+              [checked]="draft.checked"
+              (change)="toggle(draft, $any($event.target).checked)"
+            />
+            @if (iconFor(draft)) {
+              <vt-icon [icon]="iconFor(draft)" [size]="16"></vt-icon>
+            }
+            <span class="mo-row-label">{{ labelFor(draft) }}</span>
+          </label>
+          @if (countHint(draft); as hint) {
+            <span class="mo-row-count">{{ hint }}</span>
+          }
+          @if (draft.checked) {
+            <button
+              type="button"
+              class="link-btn mo-details-toggle"
+              (click)="adv.toggleAdvanced()"
+              [attr.aria-expanded]="adv.advancedOpen()"
+              [title]="adv.advancedToggleTitle"
+            >
+              Details {{ adv.advancedOpen() ? '▴' : '▾' }}
+            </button>
+          }
+        </div>
+        @if (draft.checked) {
+          <vt-import-advanced
+            #adv
+            class="mo-row-advanced"
+            [availableConverters]="convertersFor(draft)"
+            [nativeType]="draft.mediaType"
+            [nativeImportable]="nativeImportable(draft)"
+            [typeLabels]="typeLabels"
+            [convertTargets]="convertTargets(draft)"
+            [convertOptional]="false"
+            [selectedConvertTarget]="draft.convertTarget"
+            (selectedConvertTargetChange)="onConvertTargetChange(draft, $event)"
+            [embedders]="options(draft).embedders"
+            [clippers]="options(draft).clippers"
+            [cleaners]="options(draft).cleaners"
+            [selectedCleaners]="draft.cleaners"
+            (selectedCleanersChange)="onCleanersChange(draft, $event)"
+            [showSourceSpecs]="!isConvertOut(draft)"
+            [sourceSpecs]="draft.sourceSpecs"
+            (sourceSpecsChange)="onSourceSpecsChange(draft, $event)"
+            [selectedEmbedder]="draft.embedder"
+            (selectedEmbedderChange)="onEmbedderChange(draft, $event)"
+            [selectedPatchEmbedder]="draft.patchEmbedder"
+            (selectedPatchEmbedderChange)="onPatchEmbedderChange(draft, $event)"
+            [selectedStructuralEmbedder]="draft.structuralEmbedder"
+            (selectedStructuralEmbedderChange)="onStructuralEmbedderChange(draft, $event)"
+            [lockedEmbedder]="lockedEmbedder(draft)"
+            [selectedClipper]="draft.clipper"
+            [selectedClipperParams]="draft.clipperParams"
+            (clipperChooserRequested)="onClipperRequested(draft)"
+            [showIngestToggles]="false"
+          ></vt-import-advanced>
+        }
+      </li>
+    }
+  </ul>
+  @if (!anyChecked) {
+    <p class="info-text">Tick at least one kind of media to import.</p>
+  }
+</div>
+
+<!-- Shared across every dataset of the import, so rendered once rather than
+     inside each row's Details. Same two toggles as the single-dataset Advanced
+     block. -->
+<div class="form-group">
+  <label class="form-label" [for]="idPrefix() + '-projection'" title="Build the Browse map — and its region signposts, where supported — now, while importing. Costs extra time up front but makes Browse open instantly, already lettered. When off, the map and signs are built the first time you open Browse.">
+    <input
+      [id]="idPrefix() + '-projection'"
+      type="checkbox"
+      [ngModel]="buildProjection()"
+      (ngModelChange)="buildProjectionChange.emit($event)"
+    />
+    Build Browse map now
+  </label>
+  <label class="form-label" [for]="idPrefix() + '-near-dupes'" title="Merge near-duplicate images and text (visually/textually near-identical copies — resizes, recompressions, trivial edits) in addition to exact duplicates. Keeps the largest copy of each group; exporting one member exports the whole group.">
+    <input
+      [id]="idPrefix() + '-near-dupes'"
+      type="checkbox"
+      [ngModel]="mergeNearDuplicates()"
+      (ngModelChange)="mergeNearDuplicatesChange.emit($event)"
+    />
+    Merge near-duplicates
+  </label>
+</div>

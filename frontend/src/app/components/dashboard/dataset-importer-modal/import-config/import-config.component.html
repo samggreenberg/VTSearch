@@ -1,3 +1,23 @@
+@if (showMultiToggle()) {
+  <div class="form-group">
+    <label
+      class="form-label multi-toggle-label"
+      [for]="multiToggleId"
+      title="Make several datasets from this one import: one per kind of media you tick (Image, Audio, Document pages, Faces…), each with its own settings."
+    >
+      <input
+        [id]="multiToggleId"
+        type="checkbox"
+        class="multi-toggle"
+        [checked]="multiDataset()"
+        (change)="onMultiToggle($any($event.target).checked)"
+      />
+      Multi-Dataset
+      <vt-field-hint-icon hint="One import, several datasets. The source is read once; each kind of media you tick below becomes its own dataset, named after the import and the kind (for example “holiday – Image” and “holiday – Document”)."></vt-field-hint-icon>
+    </label>
+  </div>
+}
+@if (!multiDataset()) {
 <div class="form-group">
   <label
     class="form-label"
@@ -56,3 +76,4 @@
     <p class="detection-hint">{{ detectionHint() }}</p>
   }
 </div>
+}
