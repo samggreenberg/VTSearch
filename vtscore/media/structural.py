@@ -551,8 +551,10 @@ _MAX_SANE_SCALE = 10.0
 _MIN_MODEL_INLIERS = 4
 # A batch of RANSAC fits runs on a thread pool of at most this many threads (#4516).
 # ``cv2.estimateAffinePartial2D`` releases the GIL and seeds a fresh RNG on every
-# call, so a fit made on the pool is the fit a loop makes, bit for bit.
-_RANSAC_MAX_WORKERS = 8
+# call, so a fit made on the pool is the fit a loop makes, bit for bit.  Each call
+# still holds the GIL to convert its arrays, so the pool stops scaling early: per
+# pair on V100 nodes' Xeons, 3-4 threads were fastest and 8 were 8-12% slower.
+_RANSAC_MAX_WORKERS = 4
 # Pairs per pool task, and the batch size below which the pool is not worth starting.
 _RANSAC_CHUNK = 64
 _RANSAC_POOL_MIN_PAIRS = 128

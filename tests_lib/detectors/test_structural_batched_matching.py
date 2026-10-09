@@ -351,7 +351,7 @@ class TestFitSimilarityMany:
         assert len(matcher._fit_similarity_many(t_kp, jobs)) == len(jobs)
         assert threads == {threading.current_thread().name}
 
-    @pytest.mark.parametrize(("cpus", "workers"), [(64, 8), (8, 8), (3, 3), (1, 1)])
+    @pytest.mark.parametrize(("cpus", "workers"), [(64, 4), (4, 4), (3, 3), (1, 1)])
     def test_workers_follow_the_affinity_mask_up_to_the_cap(
         self, monkeypatch: pytest.MonkeyPatch, cpus: int, workers: int
     ) -> None:
