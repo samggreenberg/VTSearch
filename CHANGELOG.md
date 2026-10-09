@@ -84,6 +84,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Multi-Dataset import: several datasets from one folder** (issue #4703). A **Multi-Dataset** box
+  above the *Dataset media type* dropdown on the Folder, Manifest, Local Folder and Local Files
+  importers (and on any importer with a media-type field) replaces the dropdown with a
+  **Datasets to make** list, one row per kind of media (Image, Audio, Video, Text, Document, Face),
+  pre-ticked from what the folder scan finds. The folder is read once and every ticked row becomes
+  its own dataset, named `"<name> – <Kind>"`, with its own Dashboard row, Cancel and AutoFind run;
+  each row's **Details ▾** holds that dataset's own Advanced settings. **Document** makes an image
+  dataset of the rendered pages (or extracted text), **Face** a dataset of the faces cropped from
+  the images. The API takes the same list as `outputs` on `POST /api/dataset/import/{importer}`,
+  `import-local-folder` and `import-local-files`, and answers with `task_ids`, one per dataset;
+  importers report `supports_multi_output`. The URL-archive importer downloads and extracts its
+  archive once for every dataset it makes.
+
 - **Find Results get their Browse map ready while you read them** (issue #4683). While the Find
   Results dialog is open, the server lays out the map its **Browse** button opens for the Good
   results, but only when nothing else is running: no dataset or detector load, no other Find, map

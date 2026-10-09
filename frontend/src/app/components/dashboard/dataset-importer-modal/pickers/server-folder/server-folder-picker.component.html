@@ -75,7 +75,7 @@
   </div>
 
   <div class="form-group">
-    <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset name</label>
+    <label class="form-label" for="sf-dataset-name" [title]="multiDataset() ? 'Optional base name for the new datasets; each is named after it and its kind of media. Leave blank to use the picked folder name.' : 'Optional name for the new dataset. Leave blank to use the picked folder name.'">Dataset name</label>
     <input
       id="sf-dataset-name"
       type="text"
@@ -84,8 +84,27 @@
       (ngModelChange)="onDatasetNameInput($event)"
       placeholder="Leave blank to use a default name"
     />
+    @if (multiDataset()) {
+      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ datasetName || 'folder' }} – Image”.</p>
+    }
   </div>
 
+  @if (multiDataset()) {
+    <vt-multi-output-config
+      idPrefix="sf"
+      [mediaTypes]="mediaTypes()"
+      [convertersByType]="convertersByType"
+      [drafts]="outputDrafts()"
+      (draftsChange)="onOutputDraftsChange($event)"
+      [detection]="detection()"
+      [guessedMediaEmbedder]="guessedMediaEmbedder()"
+      [buildProjection]="buildProjection()"
+      (buildProjectionChange)="buildProjectionChange.emit($event)"
+      [mergeNearDuplicates]="mergeNearDuplicates()"
+      (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+      (clipperChooserRequested)="openClipperChooserFor($event)"
+    ></vt-multi-output-config>
+  } @else {
   <vt-import-advanced
     [availableConverters]="availableConverters"
     [nativeType]="outputTypeId"
@@ -113,6 +132,7 @@
     [mergeNearDuplicates]="mergeNearDuplicates()"
     (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
   ></vt-import-advanced>
+  }
 </div>
 
 <vt-clipper-chooser

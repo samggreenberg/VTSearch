@@ -335,16 +335,18 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``undefined`` before an importer is picked, when there is no footer. */
   get activeImportAdvanced(): ImportAdvancedComponent | undefined {
     if (!this.selectedImporter()) return undefined;
+    // In Multi-Dataset mode every ticked row has its own block, opened from
+    // the row; there is no single block for a footer toggle to open (#4703).
     switch (this.activePickerView) {
       case 'demo':
         return this.demoPicker().importAdvanced();
       case 'local_folder':
       case 'local_files':
-        return this.localFolderPicker().importAdvanced();
+        return this.localFolderPicker().multiDataset() ? undefined : this.localFolderPicker().importAdvanced();
       case 'server_folder':
-        return this.serverFolderPicker().importAdvanced();
+        return this.serverFolderPicker().multiDataset() ? undefined : this.serverFolderPicker().importAdvanced();
       default:
-        return this.genericFormPicker().importAdvanced();
+        return this.genericFormPicker().multiDataset() ? undefined : this.genericFormPicker().importAdvanced();
     }
   }
 

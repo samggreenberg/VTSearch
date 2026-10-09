@@ -261,6 +261,7 @@ VTSearch/
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
+│   │   ├── load_multi.py           Multi-dataset import: one importer run fanned into N datasets (#4703)
 │   │   ├── import_event.py         DatasetImported: how an import ended, for on-finished hooks
 │   │   ├── ingest.py               Shared ingest core, driven by ingest_task.py as a background job
 │   │   ├── container.py            Dataset container: a ZIP with `medias.pkl` + `meta.json` and
@@ -288,7 +289,8 @@ VTSearch/
 │   │   │                           optional embedding, embedder_name, extra metadata)
 │   │   └── importers/              Plugin importers (server_folder, server_files, local_folder,
 │   │                               local_files, local_archive_member, pickle, http_archive,
-│   │                               combine_datasets, demo, synthetic)
+│   │                               combine_datasets, demo, synthetic); base/outputs.py holds
+│   │                               OutputSpec, one dataset of a multi-dataset import
 │   │
 │   ├── datasource_importers/       Datasource importers: fetch *one* file on demand (server_file,
 │   │                               url_download) rather than ingesting a whole corpus

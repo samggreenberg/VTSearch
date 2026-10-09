@@ -666,6 +666,9 @@ to the framework.
 | `get_field_options()` | `(field_key: str, current_values: dict) -> Sequence[FieldOption]` | Compute dropdown options for fields declared with `dynamic_options=True`; each option is a plain string or a `(value, label)` tuple. See [Dynamic field options](#dynamic-field-options) |
 | `default_display_name()` | `(field_values: dict) -> str` | Name the datasets this importer produces. Shown live in the form's Dataset Name box and used verbatim when the user leaves it blank. Default derives a name from your URL / path / upload fields. See [Naming the imported dataset](#naming-the-imported-dataset) |
 | `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
+| `run_outputs()` | `(field_values, outputs: list[OutputSpec], thin) -> Iterator[tuple[OutputSpec, dict]]` | **Multi-dataset import:** produce every dataset in `outputs` from one run, yielding `(output, medias)`. Default runs `run()` once per output. Override to acquire the source once. See [Multi-dataset imports](#multi-dataset-imports) |
+| `run_outputs_chunked()` | `(field_values, outputs, chunk_size, thin) -> Iterator[tuple[OutputSpec, dict]]` | Chunked twin of `run_outputs()`; the hook the pipeline drives when `supports_chunked` is `True`. Default runs `run_chunked()` once per output |
+| `multi_output` | `bool` (class attribute, default `True`) | Whether one run may produce several datasets. Set `False` on an importer fixed to one dataset (the demo importer); the form then never offers **Multi-Dataset** and the API refuses `outputs` |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
 | `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |
@@ -1162,6 +1165,75 @@ behavioural change.
 
 See [`EXTENDING-media.md` § Adding a Media Converter](EXTENDING-media.md#adding-a-media-converter)
 for how converters compose with importers.
+
+### Multi-dataset imports
+
+Multi-media imports are **many-to-one**: several source types feed one
+dataset. A **multi-dataset** import (issue #4703) is the other direction:
+one run of the importer produces **several datasets**, one per
+`OutputSpec` (`vtscore.datasets.importers.base`). The Add Dataset dialog's
+**Multi-Dataset** box builds the list (one row per kind of media the user
+ticks: Image, Audio, Video, Text, Document pages, Faces…), and
+`POST /api/dataset/import/<name>` carries it as `outputs`.
+
+An `OutputSpec` is the pair of values a single-dataset import's form holds
+for one dataset, plus the per-dataset load options the pipeline (not the
+importer) applies:
+
+```python
+OutputSpec(
+    media_type="image",          # type_id of the dataset to build
+    source_specs=[SourceSpec("document", "document2image", {})],
+    category="document",         # the kind of media the row stands for; names the dataset
+    embedder="siglip", clipper="", cleaners=None, dataset_name="",
+)
+```
+
+Two outputs may share a `media_type`: a **Document** row is an *image*
+dataset of rendered pages beside the **Image** row's image dataset of the
+photos; `category` is what tells them apart and what the dataset is named
+after (`"<base name> – Document"`).
+
+**Nothing is required of an importer.** The pipeline drives
+`run_outputs_chunked()` (when `supports_chunked`) or `run_outputs()`, whose
+defaults run your single-dataset `run_chunked()` / `run()` once per output
+on `output.narrow(field_values)`: a copy of the form values with that
+output's `media_type` (as the `folder_import_name` your select field
+speaks) and `source_specs` folded in. Every importer with a `media_type`
+field therefore already produces every dataset correctly, at the cost of
+re-acquiring its source per output.
+
+**Override when acquiring is the expensive part** and can be done once,
+then yield each output from the acquired copy. Yield the very `OutputSpec`
+objects you were given (the pipeline keys its datasets by them), and put
+shared cleanup in a `finally` around the whole loop, since the pipeline
+consumes the iterator before it finalizes any dataset:
+
+```python
+def run_outputs_chunked(self, field_values, outputs, chunk_size, thin=False):
+    extract_dir = self._download_and_extract(field_values)   # once
+    try:
+        for output in outputs:
+            for chunk in self._iter_extracted_chunks(extract_dir, output.narrow(field_values), chunk_size, thin):
+                yield output, chunk
+    finally:
+        shutil.rmtree(extract_dir, ignore_errors=True)
+```
+
+The URL-archive importer (`vtscore/datasets/importers/http_archive/`) is the
+in-tree example; the folder importer takes the default (a second scan of a
+folder is cheap). An importer that supports chunking overrides the chunked
+hook (or both); one that does not overrides `run_outputs()`.
+
+**What the pipeline does per output** (`vtscore/datasets/load_multi.py`):
+one loading task and dashboard row from the moment the request returns,
+the shared acquire mirrored onto every row, then each dataset's own clip →
+embed → finalize → register under the embed gate, its own
+`DatasetImported` event and AutoFind run. Each output's origin is
+`build_origin()` of its narrowed values, so a reload from origin rebuilds
+that one dataset through the ordinary single-dataset path. A cancel on one
+row during the acquire drops that output alone; a failure in one output's
+stages is that output's alone.
 
 ---
 

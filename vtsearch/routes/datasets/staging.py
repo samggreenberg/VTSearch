@@ -32,7 +32,8 @@ from vtscore.concurrency.progress import CancelledError, loading_tasks
 from vtscore.config import EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtscore.datasets.file_types import count_file_types
-from vtscore.datasets.importers.base import DATASET_NAME_FIELD_KEY
+from vtscore.datasets.importers.base import DATASET_NAME_FIELD_KEY, parse_output_specs
+from vtscore.datasets.load_multi import _run_multi_output_load_in_background
 from vtscore.datasets.load_pipeline import (
     STAGING_DIR,
     _run_importer_in_background,
@@ -121,6 +122,28 @@ def _abort_if_semantic_only(field_values: dict) -> None:
 
     names = [str(field_values.get("embedder") or "")]
     names.extend(_parse_embedder_list(field_values.get("embedders")) or [])
+    abort_if_semantic_only_embedders(names)
+
+
+def _parse_outputs_or_400(raw):
+    """Parse a request's ``outputs`` (multi-dataset import, #4703); ``[]`` when absent.
+
+    A malformed list is the caller's error, reported with the validator's own
+    message (an unknown media type, a converter that does not produce the
+    output's type, bad JSON on a multipart body).
+    """
+    try:
+        return parse_output_specs(raw)
+    except ValueError as exc:
+        abort(400, message=f"Invalid outputs: {exc}")
+
+
+def _abort_if_outputs_semantic_only(outputs) -> None:
+    """The multi-dataset twin of :func:`_abort_if_semantic_only`: every output's picks."""
+    names: list[str] = []
+    for output in outputs:
+        names.append(output.embedder)
+        names.extend(output.embedders or [])
     abort_if_semantic_only_embedders(names)
 
 
@@ -665,8 +688,8 @@ def importer_suggested_name(body: dict, importer_name: str):
 # :func:`validate_plugin_args` enforces the per-plugin field types at
 # request time; pass-through keys (``source_specs``, ``clipper``,
 # ``cleaners``, ``embedder``, ``embedders``, ``clipper_params``,
-# ``dataset_name``, ``autofind``) ride along on the body and are preserved via
-# ``Meta.unknown = "include"``.
+# ``dataset_name``, ``autofind``, ``outputs``) ride along on the body and are
+# preserved via ``Meta.unknown = "include"``.
 # ---------------------------------------------------------------------------
 
 
@@ -679,6 +702,13 @@ def import_dataset(importer_name: str):
     static OpenAPI schema.  Fetch them at runtime from
     ``GET /api/dataset/importers``, whose ``fields`` array carries each key's
     ``field_type``, ``required`` flag, and any ``options`` / bounds.
+
+    An ``outputs`` list (one ``{media_type, source_specs, embedder, clipper,
+    …}`` object per dataset) turns the request into a **multi-dataset**
+    import (#4703): the importer runs once and every output lands as its own
+    dataset, each with its own task id in ``task_ids``.  Without it the body's
+    ``media_type`` / ``source_specs`` describe the one dataset to build and
+    ``task_ids`` holds that single task.
     """
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
@@ -698,17 +728,32 @@ def import_dataset(importer_name: str):
             "build_projection",
             "merge_near_duplicates",
             "autofind",
+            "outputs",
         ),
     )
     # Not an importer field: the choice to run AutoFind once the dataset is
     # saved.  Resolved (and remembered) only once the request has passed every
     # check below, so a refused import leaves the setting alone.
     autofind_flag = field_values.pop("autofind", None)
+    outputs = _parse_outputs_or_400(field_values.pop("outputs", None))
 
     # A Semantic-locked instance never offers a patch/structural embedder in a
     # picker, so an import that names one is stale or hand-rolled: reject it
     # here rather than binding a type the rest of the UI hides.
     _abort_if_semantic_only(field_values)
+    _abort_if_outputs_semantic_only(outputs)
+
+    if outputs:
+        if not getattr(importer, "multi_output", True):
+            abort(400, message=f"Importer {importer_name!r} produces one dataset per run; 'outputs' is not accepted.")
+        task_ids = _run_multi_output_load_in_background(
+            importer,
+            field_values,
+            outputs,
+            post_load=import_post_load(autofind_flag),
+            on_finished=fire_dataset_imported,
+        )
+        return jsonify({"ok": True, "message": "Loading started", "task_id": task_ids[0], "task_ids": task_ids})
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
     # importer has file fields; the per-plugin schema treats it as an
@@ -726,4 +771,7 @@ def import_dataset(importer_name: str):
         post_load=import_post_load(autofind_flag),
         on_finished=fire_dataset_imported,
     )
-    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+    task_id = str(task_id) if task_id else ""
+    return jsonify(
+        {"ok": True, "message": "Loading started", "task_id": task_id, "task_ids": [task_id] if task_id else []}
+    )

@@ -8,6 +8,22 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+### Added
+
+- **Multi-dataset imports: one importer run, several datasets** (issue #4703).
+  `vtscore.datasets.importers.base` gains `OutputSpec` (one dataset of a multi-dataset import: its
+  `media_type`, `source_specs`, `category`, and the per-dataset embedder / clipper / cleaners the
+  pipeline applies), `parse_output_specs(raw)` and `output_dataset_name(base, output)`.
+  `ImporterBase` gains the hooks `run_outputs(field_values, outputs, thin)` and
+  `run_outputs_chunked(field_values, outputs, chunk_size, thin)`, yielding `(output, medias)`
+  pairs; their defaults run `run()` / `run_chunked()` once per output on `output.narrow(field_values)`,
+  so every existing importer produces every dataset with no change, and an importer whose acquire
+  is expensive overrides them to acquire once (the URL-archive importer does). The class attribute
+  `multi_output` (default `True`) opts an importer out, reported by `to_dict()` as
+  `supports_multi_output`. The new `vtscore.datasets.load_multi` runs the fan-out: one loading task,
+  context, registry entry, `DatasetImported` event and post-load hook per output, under the same
+  download / embed gates as a single load. Additive: no existing member changes.
+
 ### Changed
 
 - **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`

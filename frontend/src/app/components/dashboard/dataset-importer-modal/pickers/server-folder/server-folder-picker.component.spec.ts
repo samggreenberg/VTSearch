@@ -14,6 +14,10 @@ describe('ServerFolderPickerComponent', () => {
   const serverFolderImporter = {
     name: 'server_folder',
     picker_view: 'server_folder',
+    supports_multi_output: true,
+    available_converters_by_media_type: {
+      image: [{ name: 'document2image', source_type: 'document', target_type: 'image', fields: [] }],
+    },
     fields: [{ key: 'media_type', field_type: 'select', default: 'audio', options: ['audio', 'image'] }],
   } as any;
 
@@ -29,6 +33,7 @@ describe('ServerFolderPickerComponent', () => {
     fixture.componentRef.setInput('mediaTypes', [
       { type_id: 'audio', name: 'Audio', folder_import_name: 'audio' } as any,
       { type_id: 'image', name: 'Image', folder_import_name: 'image' } as any,
+      { type_id: 'document', name: 'Document', folder_import_name: 'document', embeddable: false, converts_to: ['image'] } as any,
     ]);
     httpMock = TestBed.inject(HttpTestingController);
   });
@@ -183,5 +188,109 @@ describe('ServerFolderPickerComponent', () => {
 
     expect(component.submitting()).toBe(false);
     expect(started).toBe(true);
+  });
+
+  describe('Multi-Dataset mode (#4703)', () => {
+    /** The editor loads each ticked type's options; answer them. */
+    function flushTypeOptions(mediaType: string): void {
+      httpMock.expectOne((r) => r.url === '/api/embedders' && r.params.get('media_type') === mediaType).flush({ embedders: [] });
+      httpMock.expectOne((r) => r.url === '/api/clippers' && r.params.get('media_type') === mediaType).flush({ clippers: [] });
+      httpMock.expectOne((r) => r.url === '/api/cleaners' && r.params.get('media_type') === mediaType).flush({ cleaners: [] });
+    }
+
+    it('is offered when the folder importer supports it, and starts from the dropdown type', async () => {
+      openAndFlush();
+      expect(component.supportsMultiOutput).toBe(true);
+      expect(component.multiDataset()).toBe(false);
+
+      component.setMultiDataset(true);
+      await settleZoneless(fixture);
+      flushTypeOptions('audio');
+
+      expect(component.multiDataset()).toBe(true);
+      expect(component.outputDrafts().map((d) => [d.category, d.checked])).toEqual([
+        ['audio', true],
+        ['image', false],
+        ['document', false],
+      ]);
+      expect(component.hasOutputs).toBe(true);
+      expect(fixture.nativeElement.querySelector('vt-multi-output-config')).not.toBeNull();
+      // The single-dataset block is gone; the one Advanced block left is the ticked row's own.
+      expect(component.importAdvanced()).toBeUndefined();
+      expect(fixture.nativeElement.querySelectorAll('vt-multi-output-config vt-import-advanced').length).toBe(1);
+    });
+
+    it('ticks the categories a folder scan finds', async () => {
+      openAndFlush();
+      component.setMultiDataset(true);
+      await settleZoneless(fixture);
+      flushTypeOptions('audio');
+
+      component.onPathInput('/data/mixed');
+      component.applyPathInput();
+      httpMock
+        .expectOne((r) => r.url === '/api/dataset/detect-media-type')
+        .flush({ sample_size: 4, counts_by_type: { image: 3, document: 1 }, extensions: {}, dominant: 'image' });
+      await settleZoneless(fixture);
+      // The single-dataset dropdown still follows the dominant type, and its
+      // option lists reload for it.
+      httpMock.match((r) => r.url === '/api/embedders').forEach((r) => r.flush({ embedders: [] }));
+      httpMock.match((r) => r.url === '/api/clippers').forEach((r) => r.flush({ clippers: [] }));
+      httpMock.match((r) => r.url === '/api/cleaners').forEach((r) => r.flush({ cleaners: [] }));
+
+      const ticked = component.outputDrafts().filter((d) => d.checked).map((d) => d.category);
+      expect(ticked).toEqual(['audio', 'image', 'document']);
+    });
+
+    it('submits one outputs entry per ticked row and none of the single-dataset settings', async () => {
+      openAndFlush();
+      component.onPathInput('/data/mixed');
+      component.folderPath.set('/data/mixed');
+      component.setMultiDataset(true);
+      await settleZoneless(fixture);
+      flushTypeOptions('audio');
+      component.onOutputDraftsChange(
+        component.outputDrafts().map((d) => (d.category === 'document' ? { ...d, checked: true, embedder: 'siglip' } : d)),
+      );
+      await settleZoneless(fixture);
+      flushTypeOptions('image');
+
+      component.submit();
+      const req = httpMock.expectOne('/api/dataset/import/server_folder');
+      const body = req.request.body as Record<string, unknown>;
+      expect(body['path']).toBe('/data/mixed');
+      expect(body['media_type']).toBe('audio');
+      expect(body['outputs']).toEqual([
+        { media_type: 'audio', category: 'audio', source_specs: [{ source_type: 'audio', converter: null, params: {} }] },
+        {
+          media_type: 'image',
+          category: 'document',
+          source_specs: [{ source_type: 'document', converter: 'document2image', params: {} }],
+          embedder: 'siglip',
+        },
+      ]);
+      expect(body['embedder']).toBeUndefined();
+      expect(body['source_specs']).toBeUndefined();
+      req.flush({});
+    });
+
+    it('has nothing to import with every row unticked', async () => {
+      openAndFlush();
+      component.setMultiDataset(true);
+      await settleZoneless(fixture);
+      flushTypeOptions('audio');
+      component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
+      expect(component.hasOutputs).toBe(false);
+    });
+
+    it('open() leaves multi mode', async () => {
+      openAndFlush();
+      component.setMultiDataset(true);
+      await settleZoneless(fixture);
+      flushTypeOptions('audio');
+      openAndFlush();
+      expect(component.multiDataset()).toBe(false);
+      expect(component.outputDrafts()).toEqual([]);
+    });
   });
 });

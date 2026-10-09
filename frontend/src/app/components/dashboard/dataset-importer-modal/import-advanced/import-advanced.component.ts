@@ -63,6 +63,10 @@ export class ImportAdvancedComponent {
   /** Native (output) type id of the dataset (e.g. ``"image"``). Drives
    *  the "include directly" row inside the source-specs picker. */
   readonly nativeType = input('');
+  /** Whether files of the native type are read from disk at all. ``false``
+   *  for a convert-in type (``face``), whose dataset is made only of what the
+   *  converters produce, so the source-specs picker shows no native row. */
+  readonly nativeImportable = input(true);
   /** Map of ``type_id`` → human label for the source-specs picker. */
   readonly typeLabels = input<Record<string, string>>({});
   /** Embedders available for the current media type.  When fewer than
@@ -166,6 +170,11 @@ export class ImportAdvancedComponent {
    *  because it changes which items appear in the dataset. */
   readonly mergeNearDuplicates = input(false);
   readonly mergeNearDuplicatesChange = output<boolean>();
+
+  /** Whether to render the two ingest toggles above. The Multi-Dataset
+   *  editor hosts one block per dataset but the toggles are shared across
+   *  the whole import, so it renders them once itself and turns these off. */
+  readonly showIngestToggles = input(true);
 
   /** Whether the Advanced section is currently expanded.  Local state
    *  per instance; opening Advanced in one flow does not carry over

@@ -26,6 +26,40 @@ describe('ImportConfigComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('Multi-Dataset box (#4703)', () => {
+    it('is absent unless offered', () => {
+      expect(fixture.nativeElement.querySelector('.multi-toggle')).toBeNull();
+    });
+
+    it('renders beside the dropdown and emits the switch', async () => {
+      fixture.componentRef.setInput('showMultiToggle', true);
+      await settleZoneless(fixture);
+      const box = fixture.nativeElement.querySelector('.multi-toggle') as HTMLInputElement;
+      expect(box).not.toBeNull();
+      expect(box.checked).toBe(false);
+      expect(fixture.nativeElement.querySelector('.media-type-trigger')).not.toBeNull();
+
+      let emitted: boolean | undefined;
+      component.multiDatasetChange.subscribe((v) => (emitted = v));
+      box.click();
+      expect(emitted).toBe(true);
+    });
+
+    it('hides the media-type dropdown while multi mode is on', async () => {
+      fixture.componentRef.setInput('showMultiToggle', true);
+      fixture.componentRef.setInput('multiDataset', true);
+      await settleZoneless(fixture);
+      expect((fixture.nativeElement.querySelector('.multi-toggle') as HTMLInputElement).checked).toBe(true);
+      expect(fixture.nativeElement.querySelector('.media-type-trigger')).toBeNull();
+    });
+
+    it('derives the box id from the trigger id', async () => {
+      fixture.componentRef.setInput('mediaTypeFieldId', 'sf-media-type');
+      await settleZoneless(fixture);
+      expect(component.multiToggleId).toBe('sf-media-type-multi');
+    });
+  });
+
   describe('id derivation', () => {
     it('derives listboxId from the trigger field id', async () => {
       fixture.componentRef.setInput('mediaTypeFieldId', 'sf-media-type');

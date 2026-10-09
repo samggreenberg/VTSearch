@@ -8,6 +8,7 @@
       <vt-source-specs-picker
         [availableConverters]="availableConverters()"
         [nativeType]="nativeType()"
+        [nativeImportable]="nativeImportable()"
         [typeLabels]="typeLabels()"
         [specs]="sourceSpecs()"
         [clippers]="clippers()"
@@ -160,6 +161,7 @@
     </div>
   }
 
+  @if (showIngestToggles()) {
   <div class="form-group">
     <label class="form-label" for="import-advanced-projection" title="Build the Browse map — and its region signposts, where supported — now, while importing. Costs extra time up front but makes Browse open instantly, already lettered. When off, the map and signs are built the first time you open Browse.">
       <input
@@ -180,4 +182,5 @@
       Merge near-duplicates
     </label>
   </div>
+  }
 }
