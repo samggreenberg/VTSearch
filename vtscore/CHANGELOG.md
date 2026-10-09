@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The CLI entry points take an `outputs` list** (issue #4707). `vtscore.cli.autodetect_importer_main`
+  and `autodetect_importer_main_chunked` accept `outputs=` (a list of `OutputSpec`, as
+  `parse_output_specs` returns) and then run the importer once through `run_outputs` /
+  `run_outputs_chunked`, saving, scoring and exporting one dataset per entry; a pipeline file's
+  `importer.outputs` and the `--outputs` flag resolve to it. The streaming-exporter `header`
+  (`ResultsExporter.export_cli_streaming`) gains an optional `dataset` block naming the dataset
+  the records belong to; the bundled NDJSON exporter writes it into its `_meta` line. Additive.
 - **Multi-dataset imports: one importer run, several datasets** (issue #4703).
   `vtscore.datasets.importers.base` gains `OutputSpec` (one dataset of a multi-dataset import: its
   `media_type`, `source_specs`, `category`, and the per-dataset embedder / clipper / cleaners the
