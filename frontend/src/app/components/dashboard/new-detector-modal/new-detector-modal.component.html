@@ -14,61 +14,15 @@
     </div>
 
     <form class="new-detector-form" (ngSubmit)="submit()">
-      @if (tab === 'blank' && !effectiveSoloMediaType) {
-        <div class="form-group">
-          <label class="form-label" title="The type of media this detector will process">Media type</label>
-          <div class="media-type-row">
-            <div class="custom-select"
-              [class.open]="mediaTypeDropdownOpen"
-              [class.locked]="mediaTypeLocked"
-              [title]="mediaTypeLocked ? 'Locked to the active dataset\'s media type. Click the unlock button to choose a different type.' : 'The type of media this detector will process'">
-              <button type="button" class="custom-select-trigger form-input"
-                [class.is-locked]="mediaTypeLocked"
-                [disabled]="mediaTypeLocked"
-                [attr.aria-disabled]="mediaTypeLocked"
-                (click)="toggleMediaTypeDropdown()"
-                [title]="mediaTypeLocked ? 'Locked to the active dataset\'s media type' : 'Select the media type for this detector'">
-                <span class="select-option-content">
-                  @if (getMediaTypeIcon(mediaType())) {
-                    <vt-icon [type]="getMediaTypeIcon(mediaType())" [size]="14"></vt-icon>
-                  }
-                  <span>{{ getMediaTypeLabel(mediaType()) }}</span>
-                </span>
-                @if (!mediaTypeLocked) {
-                  <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z"/></svg>
-                }
-              </button>
-              @if (mediaTypeDropdownOpen && !mediaTypeLocked) {
-                <div class="custom-select-options">
-                  @for (mt of mediaTypes(); track mt) {
-                    <button type="button" class="custom-select-option" [class.selected]="mt === mediaType()" (click)="mediaType.set(mt); mediaTypeDropdownOpen = false">
-                      @if (getMediaTypeIcon(mt)) {
-                        <vt-icon [type]="getMediaTypeIcon(mt)" [size]="14"></vt-icon>
-                      }
-                      <span>{{ getMediaTypeLabel(mt) }}</span>
-                    </button>
-                  }
-                </div>
-              }
-            </div>
-            @if (mediaTypeLocked) {
-              <button type="button" class="lock-toggle"
-                (click)="unlockMediaType()"
-                title="Unlock to choose a different media type"
-                aria-label="Unlock media type">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
-                </svg>
-              </button>
-            }
-          </div>
-        </div>
+      <!-- The media type sits here unless the active dataset preset and locked
+           it, in which case it waits under Advanced (#4717). -->
+      @if (showMediaTypeField && !mediaTypePreset) {
+        <ng-container [ngTemplateOutlet]="mediaTypeField"></ng-container>
       }
 
       @if (tab === 'blank') {
         <div class="form-group example-group">
-          <label class="form-label">Example <span class="required">*</span></label>
+          <label class="form-label">Example: <span class="required">*</span></label>
           <div class="tab-bar example-tab-bar" role="tablist">
             <button type="button" class="tab" role="tab"
               [class.active]="exampleTab() === 'text'"
@@ -122,18 +76,11 @@
                   [ngModel]="pendingText()"
                   (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
-                  placeholder="e.g. large books"
+                  [placeholder]="textExamplePlaceholder"
                   title="A text description of what this detector should find"
                   (keydown.enter)="$event.preventDefault(); submit()"
                 />
               </div>
-              @if (showNoTextWarning) {
-                <p class="warn-text">
-                  This dataset's embedder can't search by text. You can still create this
-                  detector, but you won't be able to start in Autopilot or use Text sort —
-                  label a few good and bad examples first to train it.
-                </p>
-              }
             </div>
           } @else {
             <div class="example-panel">
@@ -150,17 +97,13 @@
               }
             </div>
           }
-
-          @if (!hasExample) {
-            <p class="info-text example-empty-hint">{{ exampleHint }}</p>
-          }
         </div>
       }
 
       @if (tab === 'trained') {
         @if (trainedView === 'picker') {
           <div class="form-group">
-            <label class="form-label">Import labels from <span class="required">*</span></label>
+            <label class="form-label">Import labels from: <span class="required">*</span></label>
             <p class="info-text">Choose where to import labels from. The resulting detector's training data will be the imported labels.</p>
             @if (labelImportersLoading()) {
               <p class="empty-state">Loading importers…</p>
@@ -201,7 +144,7 @@
                         [title]="field.description || field.label || field.key"
                       ></vt-plugin-checkbox>
                     }
-                    {{ field.label || field.key }}
+                    {{ field.label || field.key }}{{ field.field_type === 'checkbox' ? '' : ':' }}
                     @if (field.required) {
                       <span class="required">*</span>
                     }
@@ -343,49 +286,64 @@
       }
 
       <div class="form-group">
-        <label class="form-label" for="detector-name" title="A short name to identify this detector">Detector name</label>
+        <label class="form-label" for="detector-name" title="A short name to identify this detector. Leave it blank to name the detector after its example.">Detector name:</label>
         <input
           id="detector-name"
           class="form-input"
           [ngModel]="name()"
           (ngModelChange)="onNameInput($event)"
           name="name"
-          placeholder="e.g. Large book detector"
-          title="A short name to identify this detector"
+          placeholder="Enter a new name or leave blank"
+          title="A short name to identify this detector. Leave it blank to name the detector after its example."
           (keydown.enter)="onNameEnter($event)"
         />
       </div>
 
       <!-- Opened from the footer's "Advanced" toggle (#4305), so the options
            land at the foot of the form, just above the toggle. -->
-      @if (showAdvancedToggle && advancedOpen()) {
-        <div class="form-group" id="new-detector-advanced" #advancedFields>
-          @if (showEmbedderTypePicker) {
-            <label class="form-label" for="detector-embedder-type"
-              title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
-              Detector Embedder Type
-            </label>
-            <select
-              id="detector-embedder-type"
-              class="form-select"
-              name="detectorEmbedderType"
-              [ngModel]="effectiveEmbedderType"
-              (ngModelChange)="onEmbedderTypeChange($event)"
-            >
-              @for (type of embedderTypeOptions; track type) {
-                <option [value]="type">{{ embedderTypeLabel(type) }}</option>
+      @if (advancedOpen()) {
+        <div class="advanced-fields" id="new-detector-advanced" #advancedFields>
+          @if (showMediaTypeField && mediaTypePreset) {
+            <ng-container [ngTemplateOutlet]="mediaTypeField"></ng-container>
+          }
+          @if (showEmbedderTypePicker || primaryLicenseNotice) {
+            <div class="form-group">
+              @if (showEmbedderTypePicker) {
+                <label class="form-label" for="detector-embedder-type"
+                  title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
+                  Detector Embedder Type:
+                </label>
+                <select
+                  id="detector-embedder-type"
+                  class="form-select"
+                  name="detectorEmbedderType"
+                  [ngModel]="effectiveEmbedderType"
+                  (ngModelChange)="onEmbedderTypeChange($event)"
+                >
+                  @for (type of embedderTypeOptions; track type) {
+                    <option [value]="type">{{ embedderTypeLabel(type) }}</option>
+                  }
+                </select>
+                @if (embedderTypeUnavailable) {
+                  <p class="info-text">
+                    The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
+                    this detector won't run here — it'll be available on datasets that bind one.
+                  </p>
+                }
               }
-            </select>
-            @if (embedderTypeUnavailable) {
-              <p class="info-text">
-                The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
-                this detector won't run here — it'll be available on datasets that bind one.
-              </p>
-            }
+              @if (primaryLicenseNotice; as notice) {
+                <div class="license-warning" role="note">⚠ {{ notice }}</div>
+              }
+            </div>
           }
-          @if (primaryLicenseNotice; as notice) {
-            <div class="license-warning" role="note">⚠ {{ notice }}</div>
-          }
+          <!-- The detector's balance (#4665), asked for on this form because
+               Autopilot has no Threshold control of its own: it is kept on the
+               detector and Autopilot runs at it. It starts on the user's last
+               pick, so it waits under Advanced (#4717); Manual and Test can
+               move it later. -->
+          <div class="form-group">
+            <vt-balance [value]="beta()" [formLabel]="true" (valueChange)="pickBeta($event)" />
+          </div>
         </div>
       }
 
@@ -410,8 +368,9 @@
 
   <!-- The collapsed toggle shares the Cancel / Create row instead of taking a
        half-empty line of its own (#4305). Its own @if, so it projects into the
-       footer's start slot as a single root. -->
-  @if (view() === 'main' && showAdvancedToggle) {
+       footer's start slot as a single root. Never empty: the Threshold is
+       always under it. -->
+  @if (view() === 'main') {
     <button
       modal-footer-start
       type="button"
@@ -419,7 +378,7 @@
       (click)="toggleAdvanced()"
       [attr.aria-expanded]="advancedOpen()"
       [attr.aria-controls]="advancedOpen() ? 'new-detector-advanced' : null"
-      title="Advanced options: the kind of embedder this detector works with."
+      [title]="advancedToggleTitle"
     >
       Advanced {{ advancedOpen() ? '▴' : '▾' }}
     </button>
@@ -513,7 +472,7 @@
       @if (activePickerView === 'demo' && selectedImporter && demoFileBrowsing) {
         <div class="server-folder-browser">
           <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoTable()" title="Return to the demo list">&larr; Back to demo list</button>
-          <label class="form-label" for="demo-path-input">Path to a media file in <strong>{{ demoFileBrowseLabel }}</strong></label>
+          <label class="form-label" for="demo-path-input">Path to a media file in <strong>{{ demoFileBrowseLabel }}</strong>:</label>
           <input
             id="demo-path-input"
             type="text"
@@ -584,5 +543,59 @@
     @if (showAdd) {
       <button type="button" class="btn btn--secondary btn--sm add-example-btn" (click)="openMediaPicker()" title="Add another example. The detector starts from what the examples have in common.">+ Add</button>
     }
+  </div>
+</ng-template>
+
+<!-- The media-type field, rendered at the top of the Blank form or, when the
+     active dataset preset and locked it, under Advanced (#4717). -->
+<ng-template #mediaTypeField>
+  <div class="form-group">
+    <label class="form-label" title="The type of media this detector will process">Media type:</label>
+    <div class="media-type-row">
+      <div class="custom-select"
+        [class.open]="mediaTypeDropdownOpen"
+        [class.locked]="mediaTypeLocked"
+        [title]="mediaTypeLocked ? 'Locked to the active dataset\'s media type. Click the unlock button to choose a different type.' : 'The type of media this detector will process'">
+        <button type="button" class="custom-select-trigger form-input"
+          [class.is-locked]="mediaTypeLocked"
+          [disabled]="mediaTypeLocked"
+          [attr.aria-disabled]="mediaTypeLocked"
+          (click)="toggleMediaTypeDropdown()"
+          [title]="mediaTypeLocked ? 'Locked to the active dataset\'s media type' : 'Select the media type for this detector'">
+          <span class="select-option-content">
+            @if (getMediaTypeIcon(mediaType())) {
+              <vt-icon [type]="getMediaTypeIcon(mediaType())" [size]="14"></vt-icon>
+            }
+            <span>{{ getMediaTypeLabel(mediaType()) }}</span>
+          </span>
+          @if (!mediaTypeLocked) {
+            <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z"/></svg>
+          }
+        </button>
+        @if (mediaTypeDropdownOpen && !mediaTypeLocked) {
+          <div class="custom-select-options" #mediaTypeOptions>
+            @for (mt of mediaTypes(); track mt) {
+              <button type="button" class="custom-select-option" [class.selected]="mt === mediaType()" (click)="mediaType.set(mt); mediaTypeDropdownOpen = false">
+                @if (getMediaTypeIcon(mt)) {
+                  <vt-icon [type]="getMediaTypeIcon(mt)" [size]="14"></vt-icon>
+                }
+                <span>{{ getMediaTypeLabel(mt) }}</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+      @if (mediaTypeLocked) {
+        <button type="button" class="lock-toggle"
+          (click)="unlockMediaType()"
+          title="Unlock to choose a different media type"
+          aria-label="Unlock media type">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+          </svg>
+        </button>
+      }
+    </div>
   </div>
 </ng-template>

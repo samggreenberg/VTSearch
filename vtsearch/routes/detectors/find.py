@@ -51,10 +51,8 @@ detector_find_bp = Blueprint(
 
 # Number of high-level Find steps: prepare detectors, load data, score.
 _FIND_STEPS = 3
-#: Timing-profile task name; its step names and shipped fallback weights live in
-#: :data:`vtscore.timing.tasks.TASKS`. An admin ``VTSEARCH_TIMING_PROFILE``
-#: replaces those with seconds measured on this deployment's own storage, which
-#: is what the "load datasets from pkl" step actually varies with.
+#: Timing task name; its step names and shipped weights live in
+#: :data:`vtscore.timing.tasks.TASKS`.
 _FIND_TASK = "find"
 
 
@@ -523,16 +521,18 @@ def _score_with_cold_detector(
     """
     from vtscore.config import CoreConfig  # noqa: PLC0415
     from vtscore.detectors.labelset_training import labelset_train_and_score  # noqa: PLC0415
+    from vtscore.state import seed_detector_beta  # noqa: PLC0415
 
     det_ctx = _cold_detector_context(dc)
     # The same training settings the load and learned-sort paths read.  A cold
-    # detector has no per-detector balance of its own (it has never been the
-    # active detector), so it takes the user's persisted value - what its
-    # ``DetectorContext.beta`` would be seeded with on first load (#4413) -
-    # cut on the corpus this Find decides.  Leaving these at the call's
-    # defaults cut every cold Find with no balance and two calibration splits,
-    # whatever the user had set.
+    # detector's context has no registry id to look its balance up by, so it
+    # is seeded from the detector's JSON: the balance it keeps (#4665), else
+    # the user's - what its ``DetectorContext.beta`` would be seeded with on
+    # first load (#4413) - cut on the corpus this Find decides.  Leaving these
+    # at the call's defaults cut every cold Find with no balance and two
+    # calibration splits, whatever the user had set.
     cfg = CoreConfig.from_settings()
+    beta = seed_detector_beta(det_ctx, dc["detector_data"])
     labelset = _cold_labelset(dc)
     media_type = dc["detector_data"].get("media_type", "audio")
 
@@ -563,7 +563,7 @@ def _score_with_cold_detector(
             calibration_fraction=cfg.calibration_fraction,
             rows=rows,
             on_progress=_on_label,
-            beta=cfg.beta,
+            beta=beta,
             # A Find hands the detector out: under the label quota it is the
             # Goods' centroid, as Test and AutoFind give (#4643).
             label_quota=True,
@@ -776,28 +776,15 @@ def multi_find(body: dict):
 
     datasets = _resolve_find_datasets(dataset_ids)
 
-    # Pace against the actual size of this Find: the scoring step scales with
-    # every media in every selected dataset, and the pkl-load step with the same
-    # count on this host's storage. Both are known now that the registry entries
-    # are resolved, so the weights need not fall back to a size-blind guess.
     from vtscore import timing  # noqa: PLC0415
 
-    n_scored = sum(int(ds.get("num_items") or 0) for ds in datasets)
     find_media_type = next((ds.get("media_type", "") for ds in datasets if ds.get("media_type")), "")
-    find_embedder = next((ds.get("embedder", "") for ds in datasets if ds.get("embedder")), "")
-    find_progress.set_step_weights(
-        timing.step_weights(_FIND_TASK, media_type=find_media_type, embedder=find_embedder, n=n_scored)
-    )
-    # Every exit below — success, cancel, abort, and unexpected crash alike —
-    # parks the tracker at "idle", which is what closes the recorder.  The
-    # crash case is the guard's job (see :func:`find_idle_on_crash`).
-    recorder = timing.record_task(
-        find_progress, _FIND_TASK, media_type=find_media_type, embedder=find_embedder, auto_finish=True
-    )
-    recorder.start()
-    recorder.set_scale(n=n_scored)
+    find_progress.set_step_weights(timing.step_weights(_FIND_TASK, media_type=find_media_type))
 
-    with find_idle_on_crash(recorder):
+    # Every exit below — success, cancel, abort, and unexpected crash alike —
+    # parks the tracker at "idle".  The crash case is the guard's job (see
+    # :func:`find_idle_on_crash`).
+    with find_idle_on_crash():
         detectors = _resolve_find_detectors(detector_ids)
         detector_configs = _build_detector_configs(detectors)
         detector_names = [dc["name"] for dc in detector_configs]
@@ -833,9 +820,6 @@ def multi_find(body: dict):
                 if not detected_media_type and ds_media_type:
                     detected_media_type = ds_media_type
         except CancelledError:
-            # A cancelled run's phase timings describe a partial job, so they are
-            # recorded as not-ok and the fit drops them.
-            recorder.finish(ok=False)
             _abort_find(409, "Find cancelled")
 
         find_idle()

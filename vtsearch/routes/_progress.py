@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
 
 from werkzeug.exceptions import HTTPException
 
@@ -35,7 +34,7 @@ def find_idle() -> None:
 
 
 @contextmanager
-def find_idle_on_crash(recorder: Any = None) -> Iterator[None]:
+def find_idle_on_crash() -> Iterator[None]:
     """Park ``find_progress`` at idle when the wrapped body dies unexpectedly.
 
     Every *anticipated* exit from a scoring route resets the tracker itself:
@@ -46,18 +45,13 @@ def find_idle_on_crash(recorder: Any = None) -> Iterator[None]:
     the shared singleton stays at ``"running"`` on whatever step it died on —
     broadcast to every SSE client, and only cleared by the next Find.
 
-    *recorder* (a :func:`vtscore.timing.record_task` handle, when the route runs
-    one) is closed first, as a failed run: the idle update would otherwise trip
-    its ``auto_finish`` hook and bank a crashed run's partial phase timings as a
-    good cost sample.  ``abort()`` is left alone — it already parked the tracker
-    and closed the recorder, and flask-smorest renders its envelope unchanged.
+    ``abort()`` is left alone — it already parked the tracker, and
+    flask-smorest renders its envelope unchanged.
     """
     try:
         yield
     except HTTPException:
         raise
     except Exception:
-        if recorder is not None:
-            recorder.finish(ok=False)
         find_idle()
         raise

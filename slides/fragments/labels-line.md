@@ -18,7 +18,7 @@
      nothing else (#4452). -->
 
 <!-- **a** — The votes, each scored by a fold model that never saw it: section
-     2's calibration folds, put to a new use. Mostly Bad low and Good high, and
+     II's calibration folds, put to a new use. Mostly Bad low and Good high, and
      one ✗ above a ✓. The Bads sit near the middle, not down with most of the
      corpus, because Autopilot asked about the items near its line. -->
 
@@ -28,12 +28,13 @@
      score's logit, where they look like normals. -->
 
 <!-- **c** — The corpus, every unvoted item scored. The labels' Good normal,
-     its shape held, plus a normal for everything else, fitted with its share,
-     say how many matches it holds: about 220 here, against a true 240. It
-     reads low because a session's Goods are its easiest. A guard stops it
-     running high: a cut that keeps R items holds at most R matches. A
-     three-part fit, the Bads' normal added, gives each item its chance of
-     being a match, honest near the line. -->
+     its shape held, plus a normal for everything else, fitted with its
+     share by Great Expectations' EM, say how many matches it holds: about
+     220 here, against a true 240. It reads low because a session's Goods
+     are its easiest. A guard stops it running high: a cut that keeps R
+     items holds at most R matches. A three-part fit, the Bads' normal
+     added, gives each item its chance of being a match, honest near the
+     line. -->
 
 <!-- **d** — Now Beta Max's formula, expected. At each cut down the ranking,
      the items returned are counted, the Goods returned are the sum of their

@@ -91,10 +91,15 @@ function ramFreeMB(): number {
  * (`ProgressBarComponent.fillColor`, `'high-bad'`), rather than in
  * `maskVolatile`, because the usage poll re-binds the inline width and colour
  * after any DOM write; an `!important` rule outranks both, whenever they land.
+ *
+ * Toasty's hints (#4680) are off in every shot: the guide around a screenshot
+ * already says what to click, and a speech bubble saying it again inside the
+ * picture is a hat on a hat. They float over the page, so hiding one moves
+ * nothing else, and it leaves the app's own hint settings alone.
  */
 const STILL_CSS =
   `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +
-  `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot{display:none!important}` +
+  `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot,vt-toasty-hint{display:none!important}` +
   `.settings-saved{opacity:0!important}` +
   `vt-usage-bar .progress-fill{width:50%!important;background:var(--text-warning)!important}`;
 
@@ -424,19 +429,45 @@ function makeHelpers(page: Page, timing?: Timing): Helpers {
   return h;
 }
 
-/** The viewport box *shot.clip* frames, grown by its `pad`. */
-async function clipBox(page: Page, clip: NonNullable<Shot['clip']>) {
-  const box = await resolveBox(page, clip.target);
+/** A viewport box, as `resolveBox` and `drawCallouts` give them. */
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Room left round the callouts a clip is grown to hold, for the discs' shadow. */
+const MARKS_MARGIN = 6;
+
+/**
+ * The viewport box *shot.clip* frames, grown by its `pad`, and grown again to
+ * take in *marks* (the box the shot's callouts cover, from `drawCallouts`): a
+ * disc set beside a target near the crop's edge would otherwise be cut through
+ * (#4686).
+ */
+async function clipBox(page: Page, clip: NonNullable<Shot['clip']>, marks: Box | null) {
+  const box: Box | null = await resolveBox(page, clip.target);
   if (!box) throw new Error(`clip target not found: ${JSON.stringify(clip.target)}`);
   const pad = clip.pad ?? 0;
   const vp = page.viewportSize() ?? VIEWPORT;
-  const x = Math.max(0, box.x - pad);
-  const y = Math.max(0, box.y - pad);
+  let left = box.x - pad;
+  let top = box.y - pad;
+  let right = box.x + box.w + pad;
+  let bottom = box.y + box.h + pad;
+  if (marks) {
+    left = Math.min(left, marks.x - MARKS_MARGIN);
+    top = Math.min(top, marks.y - MARKS_MARGIN);
+    right = Math.max(right, marks.x + marks.w + MARKS_MARGIN);
+    bottom = Math.max(bottom, marks.y + marks.h + MARKS_MARGIN);
+  }
+  const x = Math.max(0, left);
+  const y = Math.max(0, top);
   return {
     x,
     y,
-    width: Math.min(vp.width, box.x + box.w + pad) - x,
-    height: Math.min(vp.height, box.y + box.h + pad) - y,
+    width: Math.min(vp.width, right) - x,
+    height: Math.min(vp.height, bottom) - y,
   };
 }
 
@@ -570,14 +601,14 @@ async function captureShot(
       await maskVolatile(page);
       // Drawn per theme, over the frame as it stands: `drawCallouts` replaces
       // the layer the theme before drew.
-      if (shot.annotations?.length) await drawCallouts(page, shot.annotations);
+      const marks: Box | null = shot.annotations?.length ? await drawCallouts(page, shot.annotations) : null;
       await page.waitForTimeout(300);
       // Re-assert volatile-text masking right before capture: the dashboard usage
       // gauges poll on an interval and re-render live values into the DOM after
       // the first mask, so mask again once the frame has settled.
       await maskVolatile(page);
       const png = shot.clip
-        ? await page.screenshot({ clip: await clipBox(page, shot.clip) })
+        ? await page.screenshot({ clip: await clipBox(page, shot.clip, marks) })
         : await page.screenshot();
       written.set(theme, encodeWebp(png, resolve(ASSETS, `${shot.id}.${theme}.webp`)));
     }
@@ -613,12 +644,25 @@ async function warnIfMotionForced(): Promise<void> {
   }
 }
 
+/**
+ * Open both side panels of Train and Test for the run. They start folded to a
+ * strip (#4673), and the shots are of what is in them: the vote piles, the work
+ * queue, the test's result. A recipe that wants a fold clicks its arrow.
+ */
+async function openSidePanels(): Promise<void> {
+  await appClient(APP).api('/api/settings', {
+    method: 'PUT',
+    body: { hide_left_panel: false, hide_right_panel: false },
+  });
+}
+
 const firstLine = (e: any) => String(e?.message || e).split('\n')[0];
 const secs = (s: number) => `${s.toFixed(1)}s`;
 
 async function main() {
   await mkdir(ASSETS, { recursive: true });
   await warnIfMotionForced();
+  await openSidePanels();
   const browser: Browser = await launchChromium();
   const started = Date.now();
   const results: { id: string; theme: Theme; written?: Promise<void>; err?: string }[] = [];

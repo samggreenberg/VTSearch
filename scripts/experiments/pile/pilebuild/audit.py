@@ -23,6 +23,27 @@ from pilebuild.geometry import region_geometry_problems, scale_label_digest
 from pilebuild.loaders import loader_for
 
 
+def label_problems(ds: str, medias: dict) -> list[str]:
+    """Whether a boxed dataset's medias still carry their labels (#4117).
+
+    Every boxed loader writes ``categories`` and ``regions`` on every media,
+    negatives included (as empty lists). A cell without them loads, has the right
+    media count, vectors and patch grids, and is wrong for every study that reads
+    it: ``media_is_positive`` falls back to the single ``category``, and a region
+    arm has no box to drag. A rebuild through the app's demo cache produced
+    exactly that on all 4,193 ``visual_genome_m`` medias, and no other check here
+    could see it -- the cross-cell media counts still agreed.
+    """
+    if not pc.DATASETS.get(ds, {}).get("boxed") or not medias:
+        return []
+    n = len(medias)
+    bare = {f: sum(1 for m in medias.values() if m.get(f) is None) for f in ("categories", "regions")}
+    out = [f"{k}/{n} medias carry no `{f}`" for f, k in bare.items() if k]
+    if not out and not any(m.get("regions") for m in medias.values()):
+        out.append(f"none of {n} medias carries a region box")
+    return out
+
+
 def negative_pool_problems(ds: str, medias: dict) -> list[str]:
     """What one dataset's shared negative pool is MADE OF, and how big it is (#3670).
 
@@ -255,10 +276,14 @@ def verify() -> int:
             if (v := media_embedding(m)) is not None
         ]
         off_unit = [x for x in norms if abs(x - 1.0) > io.UNIT_NORM_TOL]
+        unlabelled = label_problems(ds, medias)
         state = "ok"
         if n == 0:
             state = "EMPTY"
             problems.append(f"{ds} x {emb}: 0 medias")
+        elif unlabelled:
+            state = "NO-LABELS"
+            problems += [f"{ds} x {emb}: {u}" for u in unlabelled]
         elif dim in ("", "NO-VECTOR"):
             state = "NO-VECTOR"
             problems.append(f"{ds} x {emb}: medias carry no embedding")

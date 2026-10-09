@@ -10,20 +10,22 @@
 
 <!-- build: figs/calib-quantile-flow.build6.png -->
 
-<!-- Where section 2's line ended up, end to end. Open on the problem: the
-     folds' cuts are scalars, each on its own model's scale, and the obvious
-     move is to take their mean. The line to land at the end is "cuts don't
-     transfer; ranks do". It is no longer the line the user sees: that comes
-     from the labels now (section 3). Every retrain still fits this, to place
-     Autopilot's next question (Second Cut), and falls back on it when the
-     votes cannot support the labels' model. -->
+<!-- Appendix: where the mixture line ended up before the labels line, end
+     to end. Open on the problem: the folds' cuts are scalars, each on its
+     own model's scale, and the obvious move is to take their mean. The
+     argument is "cuts don't transfer; ranks do", and the measurement is not
+     on its side: scored in F-beta over the session the raw mean beat rank
+     transfer, by 0.052, 0.075 and 0.16 at β ¼, 1 and 4 (#4582). Today it draws the line and
+     places Autopilot's question only as a fallback, when the votes cannot
+     support the labels' model. -->
 
 <!-- **a** — Where it turns. M₀ scores the corpus too, and its distribution
      appears on the right — bare bars, nothing estimated. This is not a third
      piece of evidence. It is the *scale the answer has to be spoken in*,
      because M₀ is the model that will apply the threshold. -->
 
-<!-- **b** — The strawman; let the room do the arithmetic. The fold cuts are
+<!-- **b** — The strawman, which measured better; let the room do the
+     arithmetic. The fold cuts are
      0.50 and 0.66, the average is 0.58, and here is 0.58 on M₀. It is the
      middle of the Good mound. Three models scored the same media and none of
      them agreed what 0.58 means. -->

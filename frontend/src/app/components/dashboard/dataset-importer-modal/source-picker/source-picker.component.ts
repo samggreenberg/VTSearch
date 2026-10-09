@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../../icon/icon.component';
 import { DropZoneComponent } from '../../../drop-zone/drop-zone.component';
@@ -18,7 +18,9 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
  *  `.back-btn` here: the tabs never hide an outer view, so switching
  *  source is done by clicking a different tab rather than retreating.
  *  See CLAUDE.md "Nested-modal back buttons" → persistent-tab-picker
- *  exception (issue #2329).  Source views rendered below the chrome:
+ *  exception (issue #2329).  Either row can drop out when it would hold
+ *  a single option (``alwaysShowSubtabBar`` / ``hideSoloTabBar``).
+ *  Source views rendered below the chrome:
  *
  *  - ``demo``                   → media-type tab bar + sortable demo table
  *  - ``server_folder``          → typed absolute-path input
@@ -56,6 +58,7 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
   imports: [CommonModule, IconComponent, DropZoneComponent],
   templateUrl: './source-picker.component.html',
   styleUrl: './source-picker.component.scss',
+  host: { '[class.chromeless]': 'chromeless()' },
 })
 export class SourcePickerComponent {
   // === Importer tab/subtab chrome ===
@@ -99,6 +102,30 @@ export class SourcePickerComponent {
    *  distinct kind of source the user should see labelled) set this to
    *  ``true``. */
   readonly alwaysShowSubtabBar = input(false);
+
+  /** When ``true``, the top-level category bar is suppressed while there
+   *  is exactly one category and it is the active one: a single tab is no
+   *  choice, just a label above the form (#4669).  Opt-in because the
+   *  bar is also how a category gets picked in the first place, so only
+   *  a caller that selects the lone tab itself can hide it - the Add
+   *  Dataset modal does; the New Detector media picker opens with no tab
+   *  selected and leaves this off. */
+  readonly hideSoloTabBar = input(false);
+
+  /** Whether the top-level category bar renders.  Never hidden while the
+   *  lone tab is unselected, so a caller can't strand the user with
+   *  nothing to click. */
+  readonly showTabBar = computed(() => {
+    const tabs = this.visibleImporterTabs();
+    return !(this.hideSoloTabBar() && tabs.length === 1 && tabs[0].id === this.activeTab());
+  });
+
+  /** Neither tab row renders: one category holding one importer, so the
+   *  source form is all there is.  Bound as a host class so the parent
+   *  can drop the indent its forms take from the tab rows above them. */
+  readonly chromeless = computed(
+    () => !this.showTabBar() && this.importersForActiveTab().length === 1 && !this.alwaysShowSubtabBar(),
+  );
 
   // === Demo source view ===
 

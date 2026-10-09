@@ -260,6 +260,28 @@ def test_a_model_floors_afresh_on_each_corpus():
     assert line.on_corpus(wide) is not None
 
 
+def test_the_absolute_floor_is_the_line_before_4492():
+    """#4668's harness switch: ``sigma_floor("absolute")`` draws the line as it was before #4492, inside the block only."""
+    from vtscore.eval.live_threshold_rules import sigma_floor
+
+    model, scores, _ = _compressed_session(1.0)
+    assert model is not None and model.sigma_raw is not None and model.sigma_raw < MIN_LOGIT_SIGMA
+    relative = _line_on(model, scores, None, {})
+    with sigma_floor("absolute"):
+        absolute = _line_on(model, scores, None, {})
+    assert relative is not None and absolute is not None
+    # The old floor holds the class model and the corpus bulk to MIN_LOGIT_SIGMA ...
+    assert absolute.spread == MIN_LOGIT_SIGMA
+    # ... so on an early head's squeezed corpus it read no positives and kept next to nothing (#4492's symptom).
+    assert int((scores >= absolute.threshold(1.0)).sum()) <= 2
+    assert int((scores >= relative.threshold(1.0)).sum()) >= 10
+    after = _line_on(model, scores, None, {})
+    assert after is not None and after.threshold(1.0) == relative.threshold(1.0), "undone on the way out"
+    with pytest.raises(ValueError, match="sigma_floor"):
+        with sigma_floor("abs"):
+            pass
+
+
 def test_a_saved_model_without_a_raw_spread_still_loads():
     """Models saved before #4492 carry no sigma_raw; their sigma is taken as given."""
     old = {"mu_pos": 0.4, "mu_neg": -0.6, "sigma": 0.25, "n_pos": 5, "n_neg": 20}

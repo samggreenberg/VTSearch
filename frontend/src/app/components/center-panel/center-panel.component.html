@@ -152,7 +152,7 @@
       [isBad]="isBad"
       [disabled]="isVoting() || disabled()"
       [spinningVote]="spinningVote()"
-      [showHint]="showFirstVoteHint"
+      [showHint]="startVotingHint()"
       (voted)="castVote($event)"
     ></vt-voting-overlay>
 

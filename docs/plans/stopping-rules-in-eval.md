@@ -1,8 +1,11 @@
 # Reporting the app's stopping rules in eval studies (issue #3560)
 
 **Status:** the measurement layer has shipped, and the State of the App
-analyzer reports it; what is owed is the *first reading* of a real review, and
-then adopting the convention.
+analyzer reports it. The first reading of a real review is done: the 2026-10-08
+Binary Photo review's [stopping section](../experiments/2026-10-08-state-of-the-app-binary-photo/REPORT.md)
+(#4611). The stop fires in about 80% of sessions, around click 80 to 90, and comes early:
+Fβ rises 0.05 to 0.08 after it. What is owed is adopting the convention, and the
+"are the rules any good" questions.
 
 ## Background
 
@@ -46,7 +49,8 @@ issue. No study gets slower for reporting a stopping point.
 
 <!-- item-sep -->
 
-- **Read one State of the App review's stopping block** — no re-run. The
+- **Read one State of the App review's stopping block** — no re-run. **Done
+  2026-10-08** for the Binary Photo review (#4611); the rest of this item is how. The
   three studies this item first named ([#3156 vg-scale](../experiments/2026-08-25-vg-scale/REPORT.md),
   [#2877 acquisition-inclusion](../experiments/2026-08-07-acquisition-inclusion/REPORT.md),
   [#3267 good-mining](../experiments/2026-08-27-good-mining-3267/REPORT.md))

@@ -111,6 +111,43 @@ def _abort_if_name_taken(name: str, *, own_path: Path | None = None, exclude_id:
         abort(409, message=f"A detector named '{name}' already exists")
 
 
+def _creation_beta(raw) -> float | None:
+    """The balance a new detector is created at (#4665), or ``None`` when the request names none.
+
+    Validated by the same ``settings.validate_beta`` the Threshold control's
+    ``POST /api/balance`` uses, so the two cannot disagree about the range;
+    an unparseable value is a 400, a boolean included, as there.  A
+    form-encoded create (a label importer with a file field) sends it as a
+    string, and an empty one means none.
+    """
+    from vtsearch import settings  # noqa: PLC0415
+
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, bool):
+        abort(400, message="beta: must be a number")
+    try:
+        return float(settings.validate_beta(raw))
+    except (TypeError, ValueError) as exc:
+        abort(400, message=f"beta: {exc}")
+
+
+def _keep_creation_beta(detector_data: dict, beta: float | None) -> None:
+    """Keep *beta* on a new detector's JSON, and as the user's balance (their last pick, #4665).
+
+    The user's balance is what the next New Detector form starts on and what a
+    detector that keeps none takes.  With no *beta* the detector keeps none,
+    and takes the user's balance when it is loaded.
+    """
+    from vtscore.detectors.balance import BETA_KEY  # noqa: PLC0415
+    from vtsearch import settings  # noqa: PLC0415
+
+    if beta is None:
+        return
+    detector_data[BETA_KEY] = beta
+    settings.set_beta(beta)
+
+
 # ---------------------------------------------------------------------------
 # GET /api/detectors/registry
 # ---------------------------------------------------------------------------
@@ -216,6 +253,8 @@ def register_detector_route(body: dict):
     # the sibling create routes) rather than a reuse of the existing file.
     _abort_if_name_taken(name)
 
+    beta = _creation_beta(body.get("beta"))
+
     examples = body.get("examples") or []
     if not examples and text_query:
         examples = [{"type": "text", "value": text_query}]
@@ -245,6 +284,7 @@ def register_detector_route(body: dict):
         "embedder_type": embedder_type,
         "labelset": LabelSet(example_labels).to_dict(),
     }
+    _keep_creation_beta(detector_data, beta)
     _write_detector(_detector_path(name), detector_data)
 
     entry = register_detector(
@@ -354,14 +394,16 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = validate_plugin_args(importer, extra_keys=("name", "embedder_type"))
+    field_values = validate_plugin_args(importer, extra_keys=("name", "embedder_type", "beta"))
 
-    # ``name`` and ``embedder_type`` are pass-through keys (not declared plugin
-    # fields) but are owned by this route.  ``validate_plugin_args`` only keeps
-    # the keys we list in ``extra_keys``, so the route enforces presence.
+    # ``name``, ``embedder_type`` and ``beta`` are pass-through keys (not
+    # declared plugin fields) but are owned by this route.
+    # ``validate_plugin_args`` only keeps the keys we list in ``extra_keys``,
+    # so the route enforces presence.
     name = str(field_values.pop("name", "") or "").strip()
     if not name:
         abort(422, message="Validation error", errors={"json": {"name": ["Missing data for required field."]}})
+    beta = _creation_beta(field_values.pop("beta", None))
 
     from vtscore.detectors.embedder_type import resolve_detector_embedder_type
 
@@ -425,6 +467,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         "embedder_type": embedder_type_val,
         "labelset": labelset.to_dict(),
     }
+    _keep_creation_beta(detector_data, beta)
     _write_detector(det_path, detector_data)
 
     entry = register_detector(
@@ -464,10 +507,8 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
 
 
 _LOAD_STEPS = 3  # restore labels, seed examples, train MLP
-#: Timing-profile task name; its step names and shipped fallback weights live in
-#: :data:`vtscore.timing.tasks.TASKS`. An admin ``VTSEARCH_TIMING_PROFILE``
-#: replaces those with seconds measured here, so a detector with 40 labels and
-#: one with 4000 no longer get the same three-way split of the bar.
+#: Timing task name; its step names and shipped weights live in
+#: :data:`vtscore.timing.tasks.TASKS`.
 _DETECTOR_LOAD_TASK = "detector_load"
 
 
@@ -681,7 +722,6 @@ def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
     from vtsearch.state import DetectorContext
 
     task_id = f"_detload_{detector_id}"
-    timing_recorder = None
     try:
         # Build the context but do NOT register it yet: the worker publishes it
         # into the global store only after labels/embeddings/MLP are populated,
@@ -694,42 +734,27 @@ def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
         )
 
         det_media_type = entry.get("media_type", "")
-        det_embedder = entry.get("embedder", "") or ""
-        n_labels = int(entry.get("num_training") or 0)
 
         tracker = detector_loading_tasks.create_task(
             task_id,
             entry.get("name", detector_id),
             detector_id=detector_id,
             media_type=det_media_type,
-            step_weights=timing.step_weights(
-                _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder, n=n_labels
-            ),
+            step_weights=timing.step_weights(_DETECTOR_LOAD_TASK, media_type=det_media_type),
         )
-        timing_recorder = timing.record_task(
-            tracker, _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder
-        )
-        timing_recorder.start()
-        timing_recorder.set_scale(n=n_labels)
         tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
 
         det_name = entry.get("name", "")
 
         def load_task():
-            try:
-                _run_detector_load_task(
-                    detector_id=detector_id,
-                    det_ctx=det_ctx,
-                    thread_ds_ctx=thread_ds_ctx,
-                    det_name=det_name,
-                    tracker=tracker,
-                    task_id=task_id,
-                )
-            finally:
-                # The worker reports failures on the tracker rather than
-                # raising, so the tracker — not an exception — is what says
-                # whether these timings describe a real load or an aborted one.
-                timing_recorder.finish(ok=not tracker.get().get("error"))
+            _run_detector_load_task(
+                detector_id=detector_id,
+                det_ctx=det_ctx,
+                thread_ds_ctx=thread_ds_ctx,
+                det_name=det_name,
+                tracker=tracker,
+                task_id=task_id,
+            )
 
         from vtsearch.threading import spawn
 
@@ -737,8 +762,6 @@ def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
     except Exception:
         logger.exception("Detector load for %s failed before the worker started", detector_id)
         end_detector_load(detector_id)
-        if timing_recorder is not None:
-            timing_recorder.finish(ok=False)
         leaked_tracker = detector_loading_tasks.get_tracker(task_id)
         if leaked_tracker is not None:
             leaked_tracker.update("idle", "", 0, 0, error="Detector load failed to start", step=None, total_steps=None)

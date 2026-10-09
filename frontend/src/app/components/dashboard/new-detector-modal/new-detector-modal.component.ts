@@ -2,6 +2,7 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   HostListener,
   inject,
@@ -34,6 +35,7 @@ import {
   type EmbedderType,
 } from '../../../services/embedder-capability.service';
 import { MediaStateService } from '../../../services/media-state.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
 import {
   ImporterField,
   ImporterInfo,
@@ -69,6 +71,8 @@ import { sortRowsByColumn } from '../../../utils/sort-rows';
 import { revealInScrollParent } from '../../../utils/reveal-in-scroll-parent';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { BalanceComponent } from '../../left-panel/balance/balance.component';
+import { DEFAULT_BETA, nearestBalancePreset } from '../../../utils/line-balance';
 
 type ModalView = 'main' | 'media-picker';
 type ModalTab = 'blank' | 'trained';
@@ -106,7 +110,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -127,15 +131,19 @@ export class NewDetectorModalComponent implements OnInit {
   private settingsState = inject(SettingsStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private mediaState = inject(MediaStateService);
+  private datasetState = inject(DatasetStateService);
 
   /** Media type of the currently active dataset, if any. */
   readonly defaultMediaType = input('');
 
-  /** Embedder of the active dataset, if one is in context. When it can't
-   *  search by text, a text-only detector won't be able to start in Autopilot
-   *  or use Text sort on that dataset; the form surfaces a warning. Empty when
-   *  unknown, which suppresses the warning. */
+  /** Primary embedder of the active dataset, if one is in context. Empty when
+   *  unknown. See {@link datasetSearchesText}. */
   readonly datasetEmbedder = input('');
+
+  /** Every embedder the active dataset binds (the registry's
+   *  ``bound_embedders``, or a media's ``embedders``), primary first. Empty
+   *  when unknown, which falls back to {@link datasetEmbedder}. */
+  readonly datasetEmbedders = input<string[]>([]);
 
   /** When set, the modal opens with this loaded-media id materialised into
    *  example_media/ as the seed example. The picker is bypassed and the
@@ -171,6 +179,18 @@ export class NewDetectorModalComponent implements OnInit {
   readonly submitting = signal(false);
   readonly error = signal('');
 
+  /** The balance the user picked in this form; null until they pick one. */
+  private readonly pickedBeta = signal<number | null>(null);
+  /**
+   * The new detector's balance, F-beta's beta (#4665): which way its line
+   * leans, kept on the detector and what Autopilot runs at. It starts on the
+   * user's own balance (their last pick, which settings carry), shown as the
+   * preset the Threshold control would snap it to.
+   */
+  readonly beta = computed(
+    () => this.pickedBeta() ?? nearestBalancePreset(this.settingsState.settingsSignal()?.beta ?? DEFAULT_BETA).value,
+  );
+
   /** Live snapshot of the background task that pulls the imported labels'
    *  media into the active dataset, while Create & Import waits it out.
    *  ``null`` when no ingest is running. */
@@ -183,12 +203,15 @@ export class NewDetectorModalComponent implements OnInit {
    *  (see {@link submittedEmbedderType}). Set only when the user changes the
    *  Advanced picker. */
   readonly embedderType = signal<EmbedderType | ''>('');
-  /** Whether the collapsible "Advanced" section (which holds the embedder-type
-   *  picker) is expanded. Collapsed by default — the common single-embedder
-   *  create needs no interaction; advanced users open it to lock a type. */
+  /** Whether the collapsible "Advanced" section is expanded. It holds what a
+   *  create rarely needs to touch: the embedder-type picker, the Threshold
+   *  (which starts on the user's last pick), and a media type the active
+   *  dataset already set (#4717). Collapsed by default. */
   readonly advancedOpen = signal(false);
   /** The options the footer's Advanced toggle reveals, at the foot of the form. */
   private readonly advancedFields = viewChild<ElementRef<HTMLElement>>('advancedFields');
+  /** The media-type dropdown's open list, wherever the field is rendered. */
+  private readonly mediaTypeOptions = viewChild<ElementRef<HTMLElement>>('mediaTypeOptions');
   private readonly injector = inject(Injector);
   mediaTypeDropdownOpen = false;
   /** True when the media-type field is locked to the active dataset's type.
@@ -196,6 +219,11 @@ export class NewDetectorModalComponent implements OnInit {
    *  user clicks the unlock button. The dropdown trigger is disabled while
    *  locked so the user can't accidentally change it. */
   mediaTypeLocked = false;
+  /** True when the form opened with the media type preset and locked to the
+   *  active dataset's type. The field then sits under Advanced rather than at
+   *  the top of the form (#4717), and stays there after an unlock so it doesn't
+   *  jump across the form while the user is changing it. */
+  mediaTypePreset = false;
 
   // Media examples (a vertical stack; mutually exclusive with the text
   // example). Each entry has its own Remove button; the Add button below
@@ -346,6 +374,7 @@ export class NewDetectorModalComponent implements OnInit {
       // can't change it without an explicit unlock click.
       this.mediaType.set(this.defaultMediaType());
       this.mediaTypeLocked = true;
+      this.mediaTypePreset = true;
     } else {
       this.datasetsRegistryApi.getRegistry().subscribe({
         next: (res) => {
@@ -457,12 +486,49 @@ export class NewDetectorModalComponent implements OnInit {
    *  seeds-only stack leaves Name for the user to fill. */
   private autoFillNameFromExample(): void {
     if (this.nameTouched) return;
+    const fromExample = this.nameFromExample();
+    if (fromExample) this.name.set(fromExample);
+  }
+
+  /** The name the picked example suggests: the first hand-picked media's
+   *  filename, else the text example in sentence case; '' when there is
+   *  neither (seeds don't count, see {@link autoFillNameFromExample}). */
+  private nameFromExample(): string {
     const first = this.mediaExamples().find((ex) => !ex.seed);
-    if (first?.display) {
-      this.name.set(this.sanitizeName(this.nameFromFilename(first.display)));
-    } else if (this.pendingText()) {
-      this.name.set(this.nameFromText(this.pendingText()));
+    if (first?.display) return this.sanitizeName(this.nameFromFilename(first.display));
+    return this.nameFromText(this.pendingText());
+  }
+
+  /** The name Create sends: what the user typed, or {@link defaultName} when
+   *  they left the field blank (#4718). */
+  get effectiveName(): string {
+    return this.name().trim() || this.defaultName;
+  }
+
+  /** What a blank Name resolves to: the name the example suggests, or on the
+   *  Trained tab the imported file's name (else the importer's), falling back
+   *  to "New detector". Numbered past any detector that already has the name,
+   *  since names must be unique. */
+  get defaultName(): string {
+    let base = '';
+    if (this.tab === 'trained') {
+      const imp = this.selectedLabelImporter;
+      if (this.labelImporterFile) base = this.sanitizeName(this.nameFromFilename(this.labelImporterFile.name));
+      else if (imp) base = `${imp.display_name || imp.name} detector`;
+    } else {
+      base = this.nameFromExample();
     }
+    return this.uniqueDetectorName(base || 'New detector');
+  }
+
+  /** ``base``, or ``base 2``, ``base 3``, … when a registered detector
+   *  already has that name (compared case-insensitively, as the server does). */
+  private uniqueDetectorName(base: string): string {
+    const taken = new Set(this.datasetState.detectors.map((d) => (d.name ?? '').trim().toLowerCase()));
+    if (!taken.has(base.toLowerCase())) return base;
+    let n = 2;
+    while (taken.has(`${base} ${n}`.toLowerCase())) n++;
+    return `${base} ${n}`;
   }
 
   onPendingTextInput(value: string): void {
@@ -498,6 +564,17 @@ export class NewDetectorModalComponent implements OnInit {
   toggleMediaTypeDropdown(): void {
     if (this.mediaTypeLocked) return;
     this.mediaTypeDropdownOpen = !this.mediaTypeDropdownOpen;
+    if (!this.mediaTypeDropdownOpen) return;
+    // Under Advanced the field sits at the foot of the form (#4717), where the
+    // list it opens runs past the dialog's scroll box: bring it in once it has
+    // rendered. At the top of the form it is already in view, so nothing moves.
+    afterNextRender(
+      () => {
+        const list = this.mediaTypeOptions()?.nativeElement;
+        if (list) revealInScrollParent(list);
+      },
+      { injector: this.injector },
+    );
   }
 
   get modalTitle(): string {
@@ -505,22 +582,25 @@ export class NewDetectorModalComponent implements OnInit {
     return 'New Detector';
   }
 
+  /**
+   * Whether the detector has something its first sort can start from. A text
+   * description only counts when the dataset can search by text (#4666): on
+   * one that can't, a text-only detector has nothing to start Autopilot with
+   * until it is trained, so the form requires an example item instead.
+   */
   get hasExample(): boolean {
-    return this.hasMediaExample || !!this.pendingText().trim();
+    return this.hasMediaExample || (this.hasPendingText && this.datasetSearchesText);
   }
 
   /**
-   * True when the active dataset's embedder can't search by text and the user
-   * is creating a text-hint-only detector (text entered, no media example).
-   * Such a detector still works — but only after labeling enough to train it —
-   * so we warn that Autopilot and Text sort won't be available up front.
+   * Whether the dataset in context binds an embedder that can search by text.
+   * The same test Train makes before it lets Autopilot start (any bound
+   * embedder will do), so the two never disagree. True when the dataset or the
+   * embedder registry is unknown, so missing metadata never blocks a create.
    */
-  get showNoTextWarning(): boolean {
-    return (
-      !this.embedderCaps.supportsText(this.datasetEmbedder()) &&
-      this.hasPendingText &&
-      !this.hasMediaExample
-    );
+  get datasetSearchesText(): boolean {
+    const names = this.datasetEmbedders().length > 0 ? this.datasetEmbedders() : [this.datasetEmbedder()];
+    return this.embedderCaps.supportsTextAny(names);
   }
 
   get hasMediaExample(): boolean {
@@ -558,11 +638,20 @@ export class NewDetectorModalComponent implements OnInit {
     return this.embedderTypeOptions.length > 1;
   }
 
-  /** Whether the Advanced toggle is worth showing. Normally yes (it hosts the
-   *  type picker); on a `semantic_only` server only when there is a license
-   *  notice left to surface, so the block never opens onto nothing. */
-  get showAdvancedToggle(): boolean {
-    return this.showEmbedderTypePicker || !!this.primaryLicenseNotice;
+  /** Whether the media-type field renders at all: the Blank tab only, and
+   *  never on a solo-media-type server, where the type is not a choice. */
+  get showMediaTypeField(): boolean {
+    return this.tab === 'blank' && !this.effectiveSoloMediaType;
+  }
+
+  /** The Advanced toggle's tooltip, naming what is under it right now. */
+  get advancedToggleTitle(): string {
+    const parts: string[] = [];
+    if (this.showMediaTypeField && this.mediaTypePreset) parts.push('the media type');
+    if (this.showEmbedderTypePicker) parts.push('the kind of embedder');
+    parts.push('the Threshold');
+    const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+    return `Advanced options: ${list} for this detector.`;
   }
 
   /** The embedder *types* the active dataset supplies, or `[]` when no dataset
@@ -630,23 +719,22 @@ export class NewDetectorModalComponent implements OnInit {
     return this.datasetSuppliedTypes.length > 1 ? this.effectiveEmbedderType : '';
   }
 
+  /** A blank name is fine: Create falls back to {@link defaultName}. */
   get canSubmitBlank(): boolean {
-    return !!this.name().trim() && this.hasExample && !this.submitting();
+    return this.hasExample && !this.submitting();
   }
 
   /** Title for the blank-tab Create button. When enabled, describes the
-   *  action; when disabled, names the specific blocker (missing example or
-   *  missing name) so the user knows what still needs filling in. */
+   *  action; when disabled, names the blocker (a missing example) so the
+   *  user knows what still needs filling in. */
   get blankSubmitTitle(): string {
     if (this.canSubmitBlank) return 'Create the detector with the example you provided';
     if (!this.hasExample) return this.exampleHint;
-    if (!this.name().trim()) return 'Enter a detector name to create the detector';
     return 'Create the detector';
   }
 
   get canSubmitTrained(): boolean {
     return (
-      !!this.name().trim() &&
       !!this.selectedLabelImporter &&
       this.trainedView === 'form' &&
       !this.submitting()
@@ -715,8 +803,19 @@ export class NewDetectorModalComponent implements OnInit {
    *  than "create" because the example only seeds the detector; labeling is
    *  what builds it (#4227). Seed-importer tabs share the media wording. */
   get exampleHint(): string {
+    if (!this.datasetSearchesText) {
+      return `This dataset can't search by text, so provide an example ${this.exampleMediaNoun} to start the detector.`;
+    }
     if (this.exampleTab() === 'text') return 'Provide a text description to start the detector.';
     return `Provide an example ${this.exampleMediaNoun} to start the detector.`;
+  }
+
+  /** The text example's placeholder: the instruction itself, in the box
+   *  rather than as a line under it (#4718). On a dataset that can't search
+   *  by text it points at the media tab instead (#4666). */
+  get textExamplePlaceholder(): string {
+    if (!this.datasetSearchesText) return `This dataset can't search by text; use the ${this.exampleMediaTabLabel} tab`;
+    return 'Describe what this detector should find';
   }
 
   /** "image", "video", "audio clip", …: the media tab's label as a countable
@@ -1183,11 +1282,6 @@ export class NewDetectorModalComponent implements OnInit {
   submitTrained(): void {
     if (this.submitting()) return;
 
-    const trimmedName = this.name().trim();
-    if (!trimmedName) {
-      this.error.set('Name is required');
-      return;
-    }
     if (!this.selectedLabelImporter) {
       this.error.set('A label importer is required');
       return;
@@ -1197,8 +1291,9 @@ export class NewDetectorModalComponent implements OnInit {
     this.error.set('');
 
     const params: Record<string, unknown> = {
-      name: trimmedName,
+      name: this.effectiveName,
       embedder_type: this.submittedEmbedderType(),
+      beta: this.beta(),
       ...this.labelImporterValues,
     };
 
@@ -1268,6 +1363,11 @@ export class NewDetectorModalComponent implements OnInit {
     return formatProgressMessage(this.ingestTask(), 'Fetching the imported labels’ media…');
   }
 
+  /** The user picked a balance on the form's Threshold control. */
+  pickBeta(value: number): void {
+    this.pickedBeta.set(value);
+  }
+
   // --- Submit ---
 
   submit(): void {
@@ -1281,12 +1381,6 @@ export class NewDetectorModalComponent implements OnInit {
       return;
     }
 
-    const trimmedName = this.name().trim();
-    if (!trimmedName) {
-      this.error.set('Name is required');
-      return;
-    }
-
     // Media examples win over pending text (the two are mutually exclusive
     // in the form; a non-empty stack means the text field was cleared).
     const mediaExamples = this.mediaExamples();
@@ -1294,6 +1388,13 @@ export class NewDetectorModalComponent implements OnInit {
 
     if (mediaExamples.length === 0 && !pendingTrimmed) {
       this.error.set('An example (text or media) is required');
+      return;
+    }
+    // Enter in the text field reaches here past the disabled Create button: a
+    // description alone can't start a detector on a dataset that can't search
+    // by text (#4666).
+    if (!this.hasExample) {
+      this.error.set(this.exampleHint);
       return;
     }
 
@@ -1320,12 +1421,13 @@ export class NewDetectorModalComponent implements OnInit {
 
     this.detectorsRegistryApi
       .registerDetector({
-        name: trimmedName,
+        name: this.effectiveName,
         media_type: this.mediaType(),
         text_query: textQuery,
         media_example: mediaExample,
         examples: examplesPayload,
         embedder_type: this.submittedEmbedderType(),
+        beta: this.beta(),
       })
       .subscribe({
         next: (resp: any) => {

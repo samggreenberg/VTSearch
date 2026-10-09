@@ -41,11 +41,16 @@ The rules, in the deck's order:
 
 An unset rule (``None``) is the shipped fold-anchored cut, untouched, so the
 harness's default arm cannot drift from the app through this module.
+
+One retired piece of the labels line lives here too, for #4668's build-up of
+the F-beta era: :func:`sigma_floor` ``("absolute")`` holds the line's spread
+floor at the absolute ``MIN_LOGIT_SIGMA``, the floor before #4492.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -184,3 +189,40 @@ def live_threshold(
             xcal = NO_GOOD_THRESHOLD
         return calculate_safe_threshold(xcal, list(haystack_scores or []), ctx, schedule=schedule), "blend"
     raise ValueError(f"unknown live_threshold {rule!r}")
+
+
+#: The labels line's spread floors (#4668).  ``relative`` is the app's: a share of
+#: the corpus's own robust spread (#4492).  ``absolute`` is the floor before it.
+SIGMA_FLOORS: tuple[str, ...] = ("relative", "absolute")
+
+
+@contextmanager
+def sigma_floor(mode: str) -> Iterator[None]:
+    """Hold the labels line's spread floor at *mode* while the block runs (#4668).
+
+    ``absolute`` swaps :func:`~vtscore.training.thresholds.labels_line.corpus_sigma_floor`
+    for ``MIN_LOGIT_SIGMA``, which is the line exactly as it was before #4492
+    (03510401e): the class model held to ``max(raw, MIN_LOGIT_SIGMA)``, and the
+    corpus fits floored at ``MIN_LOGIT_SIGMA``.  Every corpus the line is drawn on
+    goes through that one function, Train's and Find's alike, so the swap reaches
+    both.  ``relative`` changes nothing.  The swap is process-wide, which suits a
+    run whose every cell is the same arm, and it is undone on the way out.
+    """
+    if mode not in SIGMA_FLOORS:
+        raise ValueError(f"unknown sigma_floor {mode!r}; expected one of {', '.join(SIGMA_FLOORS)}")
+    if mode == "relative":
+        yield
+        return
+    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+
+    shipped = labels_line.corpus_sigma_floor
+
+    def absolute(scores: Any) -> float:
+        del scores  # the absolute floor reads no corpus
+        return labels_line.MIN_LOGIT_SIGMA
+
+    labels_line.corpus_sigma_floor = absolute
+    try:
+        yield
+    finally:
+        labels_line.corpus_sigma_floor = shipped

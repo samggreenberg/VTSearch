@@ -412,8 +412,8 @@ class ImporterInfoSchema(Schema):
 
     Fixed shape: ``PluginBase.to_dict()`` emits the shared plugin metadata
     and ``ImporterBase.to_dict()`` appends ``picker_view`` / ``category`` /
-    ``available_converters_by_media_type``.  No concrete importer overrides
-    ``to_dict``, so this schema is strict.
+    ``available_converters_by_media_type`` / ``supports_multi_output``.  No
+    concrete importer overrides ``to_dict``, so this schema is strict.
     """
 
     name = fields.String(required=True)
@@ -438,6 +438,15 @@ class ImporterInfoSchema(Schema):
             "description": (
                 "Picker tab this importer belongs to. One of ``services``, ``server``, ``local``, ``demo``, "
                 'or ``""`` (uncategorised).'
+            )
+        }
+    )
+    supports_multi_output = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether one run of this importer may produce several datasets (the Add Dataset dialog's "
+                "Multi-Dataset mode; ``POST /api/dataset/import/{importer_name}`` with ``outputs``). True when "
+                "the importer declares a ``media_type`` field and has not opted out."
             )
         }
     )
@@ -841,11 +850,27 @@ class DatasetLoadStartedResponseSchema(Schema):
     ``task_id`` is the background-task tracker id (string) used by the
     SSE progress stream; it may be empty when the load completes
     synchronously (rare).
+
+    ``task_ids`` is set by the three routes that accept a multi-dataset
+    ``outputs`` list (``import/{importer_name}``, ``import-local-folder``,
+    ``import-local-files``): one task id per dataset the request started, in
+    the outputs' order, so a client can follow (and cancel) each row.  A
+    single-dataset request through those routes gets ``[task_id]``.
     """
 
     ok = fields.Boolean(required=True)
     message = fields.String(required=True)
     task_id = fields.String(required=True)
+    task_ids = fields.List(
+        fields.String(),
+        metadata={
+            "description": (
+                "One task id per dataset a multi-dataset import started, in the request's ``outputs`` order "
+                "(a single-dataset request lists its one ``task_id``).  Only the importer / local-folder / "
+                "local-files routes set it."
+            )
+        },
+    )
 
 
 class DatasetClearResponseSchema(Schema):
@@ -1034,13 +1059,6 @@ class DatasetRegistryEntrySchema(Schema):
     ``clipper`` display-name resolution, and the legacy fallbacks for
     ``bound_embedders`` / ``embedder_types``.  The writer's key set is closed,
     so this is a strict schema.
-
-    One persisted key is deliberately **not** here: ``coverage_branch``, the
-    memo the load route writes recording which path that dataset's coverage
-    atlas took last time (see ``vtsearch/routes/datasets/registry.py``).  It
-    exists to pace the next load's progress bar before the pickle is read, and
-    nothing outside the server has any use for it, so it stays out of the wire
-    format rather than becoming a field the frontend must ignore.
 
     Optionality mirrors what the frontend treats as optional (same convention
     as :class:`MediaTypeInfoSchema`), not what the current writer always

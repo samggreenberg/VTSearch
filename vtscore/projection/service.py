@@ -504,6 +504,55 @@ def build_subset_layout(
     return start_subset_build(ctx, sorted_ids, matrix, bin_shape, force=force)
 
 
+def prep_subset_layout(ctx: DatasetContext, requested_ids: list[int]) -> dict:
+    """Get the subset layout a Browse of *requested_ids* needs ready ahead of the click.
+
+    The speculative sibling of :func:`build_subset_layout`, for a caller that
+    can guess what the user will browse next (the Good results of a Find run
+    they are looking at, #4683).  It produces exactly the layout that Browse's
+    own build would — same ids, same signature — so the click then finds it
+    ready, or attaches to the fit already under way, instead of starting one.
+
+    What it will not do is *start* a fit on a busy server: a fit is single-slot
+    and cannot be interrupted, so one started on a guess would hold up whatever
+    the user asks for next.  Serving or re-binning a layout already built for
+    these ids, or reporting the fit already running for them, costs nothing and
+    is answered whatever the server is doing.  Anything that needs a new fit
+    first asks :func:`~vtscore.concurrency.async_jobs.busy_reason`, and answers
+    ``{"status": "busy", "reason": ...}`` rather than queueing.
+
+    Otherwise answers as :func:`build_layout` does (``ready`` or ``building``),
+    and raises :class:`NothingToProject` in the same cases.
+    """
+    from vtscore.concurrency.async_jobs import busy_reason, projection_jobs  # noqa: PLC0415
+
+    if not requested_ids:
+        raise NothingToProject("No items selected — nothing to project.")
+    # The id set build_subset_layout would arrive at, without stacking the
+    # matrix: that is only worth paying for once a build is going ahead.  Read
+    # off one reference to the dict and without ``_state_lock``, so a caller
+    # asking again and again while the server is busy never queues behind a
+    # long lock-holder to be told so; the build re-derives it under the lock.
+    medias = ctx.medias
+    wanted = sorted({cid for cid in requested_ids if cid in medias})
+
+    if not wanted:
+        # Nothing here to lay out; the build says which way (and fits nothing).
+        return build_subset_layout(ctx, requested_ids, shape_for(ctx))
+    if ctx._subset_ids == wanted:
+        job = projection_jobs.get(ctx._subset_job_id) if ctx._subset_job_id else None
+        in_flight = job is not None and job.status in ("running", "pending")
+        if ctx._subset_projection is not None or in_flight:
+            # Built (perhaps only in the other shape) or being built: answered
+            # without a fit, so there is nothing to wait for.
+            return build_subset_layout(ctx, requested_ids, shape_for(ctx))
+
+    reason = busy_reason()
+    if reason is not None:
+        return {"status": "busy", "reason": reason}
+    return build_subset_layout(ctx, requested_ids, shape_for(ctx))
+
+
 def start_subset_build(
     ctx: DatasetContext,
     sorted_ids: list[int],
@@ -638,6 +687,7 @@ __all__ = [
     "labels_payload",
     "layout_meta",
     "media_type_for",
+    "prep_subset_layout",
     "rebin_from_existing_layout",
     "remove_subset_ids",
     "reset_full_projection",

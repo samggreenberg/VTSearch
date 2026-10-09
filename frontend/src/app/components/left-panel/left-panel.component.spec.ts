@@ -165,6 +165,82 @@ describe('LeftPanelComponent', () => {
     expect(component.mediaSelect.emit).toHaveBeenCalledWith(42);
   });
 
+  describe('under the Autopilot-only lock (#4666)', () => {
+    function locked(inputs: Record<string, unknown> = {}): ComponentFixture<LeftPanelComponent> {
+      const fresh = TestBed.createComponent(LeftPanelComponent);
+      fresh.componentRef.setInput('autopilotOnly', true);
+      for (const [name, value] of Object.entries(inputs)) fresh.componentRef.setInput(name, value);
+      return fresh;
+    }
+
+    it('renders no tab bar in Train, only the Autopilot panel', () => {
+      const fresh = locked();
+      TestBed.tick();
+      const el = fresh.nativeElement as HTMLElement;
+      expect(el.querySelector('.left-tabs')).toBeNull();
+      expect(el.querySelector('.tab-panel-autopilot')).toBeTruthy();
+      expect(el.querySelector('.tab-panel-manual')).toBeNull();
+    });
+
+    it('renders no tab bar in Test', () => {
+      const fresh = locked({ panelMode: 'find' });
+      TestBed.tick();
+      expect((fresh.nativeElement as HTMLElement).querySelector('.left-tabs')).toBeNull();
+    });
+
+    it('starts Autopilot even when the user last left it for Manual', () => {
+      const fresh = locked({ autopilotEnabled: false });
+      vi.spyOn(fresh.componentInstance.autopilotStart, 'emit');
+      TestBed.tick();
+      expect(fresh.componentInstance.activeTab()).toBe('autopilot');
+      expect(fresh.componentInstance.autopilotStart.emit).toHaveBeenCalled();
+    });
+
+    it('refuses a switch to Manual', () => {
+      const fresh = locked();
+      TestBed.tick();
+      fresh.componentInstance.setTab('manual');
+      expect(fresh.componentInstance.activeTab()).toBe('autopilot');
+    });
+
+    it('says why when Autopilot has nothing to start from, instead of falling back to Manual', () => {
+      const fresh = locked({ autopilotDisabled: true });
+      vi.spyOn(fresh.componentInstance.autopilotStart, 'emit');
+      TestBed.tick();
+      const el = fresh.nativeElement as HTMLElement;
+      expect(fresh.componentInstance.activeTab()).toBe('autopilot');
+      expect(fresh.componentInstance.autopilotStart.emit).not.toHaveBeenCalled();
+      expect(el.querySelector('.autopilot-blocked-note')).toBeTruthy();
+      expect(el.querySelector('vt-autopilot-panel')).toBeNull();
+    });
+
+    it('stops in place when Autopilot becomes impossible, and starts again once it is not', () => {
+      const fresh = locked();
+      const comp = fresh.componentInstance;
+      TestBed.tick();
+      vi.spyOn(comp.autopilotStop, 'emit');
+      vi.spyOn(comp.autopilotStart, 'emit');
+
+      fresh.componentRef.setInput('autopilotDisabled', true);
+      TestBed.tick();
+      expect(comp.activeTab()).toBe('autopilot');
+      expect(comp.autopilotStop.emit).toHaveBeenCalled();
+
+      fresh.componentRef.setInput('autopilotDisabled', false);
+      TestBed.tick();
+      expect(comp.autopilotStart.emit).toHaveBeenCalled();
+    });
+
+    it('moves a panel already on Manual to Autopilot when the lock lands late', () => {
+      component.setTab('manual');
+      vi.spyOn(component.autopilotStart, 'emit');
+      fixture.componentRef.setInput('autopilotOnly', true);
+      TestBed.tick();
+      expect(component.activeTab()).toBe('autopilot');
+      expect(component.autopilotStart.emit).toHaveBeenCalled();
+    });
+  });
+
   /**
    * The grid lists every item, labeled or not, each with its own vote badge —
    * so the count in the header says nothing about whether any of them are

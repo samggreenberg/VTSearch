@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -87,6 +87,12 @@ export class CenterPanelComponent implements OnDestroy {
    * see {@link swipeParked}. Hosts whose advance is synchronous leave it false.
    */
   readonly advancePending = input(false);
+  /**
+   * Show Toasty's "start voting" hint over the Good / Bad buttons (#4680). The
+   * host decides: Train shows it while Autopilot runs on a detector with no
+   * labels yet, and it goes with the first vote.
+   */
+  readonly startVotingHint = input(false);
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
@@ -126,12 +132,6 @@ export class CenterPanelComponent implements OnDestroy {
    */
   private readonly swipeParked = signal(false);
 
-  /** Persisted dismissal of the zero-votes first-vote hint. Initialised
-   *  to ``true`` so the hint never flashes before settings load resolves;
-   *  loadSettings() flips it to ``false`` only when the server confirms
-   *  the user has never dismissed it. */
-  private readonly labelHintDismissed = signal(true);
-
   /** Transient text shown after Cmd/Ctrl-Z; auto-cleared after a short delay. */
   readonly undoToastText = signal<string | null>(null);
   private undoToastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -170,19 +170,6 @@ export class CenterPanelComponent implements OnDestroy {
       this.audioPlaying.set(settings.audio_playing !== false);
       this.showAnimations.set(settings.show_animations !== 'hide');
       this.showMetadata.set(settings.show_metadata === true);
-      this.labelHintDismissed.set(settings.label_hint_dismissed === true);
-    });
-
-    // Any vote in any pane (center buttons, keyboard, hover-vote) retires the
-    // first-vote hint for this user. VoteStateService is signal-backed, so an
-    // effect tracking the vote sets covers every channel without each call site
-    // knowing about the hint. The dismiss logic runs `untracked` because it both
-    // reads and writes `labelHintDismissed` — tracking that read would loop the
-    // effect (zoneless-migration.md, Phase 2.5).
-    effect(() => {
-      this.voteState.goodVotes;
-      this.voteState.badVotes;
-      untracked(() => this.maybeDismissLabelHint());
     });
 
     // Reset per-item transient state on every media change (including same-id
@@ -304,14 +291,6 @@ export class CenterPanelComponent implements OnDestroy {
       .subscribe((t) => this.showUndoToast(t.action, t.mediaName));
   }
 
-  /** Persist the first-vote hint as dismissed once the first vote lands. */
-  private maybeDismissLabelHint(): void {
-    if (this.labelHintDismissed()) return;
-    if (this.voteState.goodVotes.size === 0 && this.voteState.badVotes.size === 0) return;
-    this.labelHintDismissed.set(true);
-    this.settingsState.update({ label_hint_dismissed: true }).subscribe();
-  }
-
   private showUndoToast(action: 'undo' | 'redo', mediaName: string): void {
     const verb = action === 'undo' ? 'Undid vote on' : 'Redid vote on';
     this.undoToastText.set(`${verb} ${mediaName}`);
@@ -416,14 +395,6 @@ export class CenterPanelComponent implements OnDestroy {
   get isBad(): boolean {
     const media = this.media();
     return media ? this.voteState.effectiveBad(media.id) : false;
-  }
-
-  /** True when the labeling session is fresh (no votes yet across either
-   *  polarity) and the user has not previously dismissed the hint. The
-   *  hint dismisses on the first vote in this session and persists. */
-  get showFirstVoteHint(): boolean {
-    if (this.labelHintDismissed()) return false;
-    return this.voteState.goodVotes.size === 0 && this.voteState.badVotes.size === 0;
   }
 
   get customMetadata(): Record<string, unknown> {

@@ -33,16 +33,15 @@
         }
       </ul>
     } @else if (datasets.length === 0 && loadingTasksSvc.orphanLoadingTasks.length === 0 && !loading) {
-      <!-- First-run hint (#4227): the inline + is a working copy of the header
-           button, and the arrow teaches where the real one lives for next time. -->
+      <!-- First-run empty state (#4227): the inline + is a working copy of the
+           header button, which Toasty's hint points at (see the foot of this view). -->
       <div class="empty-state empty-state--fill">
-        <p #datasetEmptyMsg class="empty-state__message">No datasets yet. Click
+        <p class="empty-state__message">No datasets yet. Click
           <button class="btn btn--primary btn--sm inline-add-btn"
             [disabled]="isContextSwitching"
             (click)="openImporterModal()" title="Import a new dataset" aria-label="Import a new dataset">+</button>
           to add one.</p>
       </div>
-      <vt-pointer-arrow [from]="datasetEmptyMsg" [to]="datasetAddBtn" />
     } @else {
       <div class="dashboard-grid">
         <table class="data-table data-table--grid dash-table" [class.table-fixed]="datasetCols.tableFixed" [class.actions-has-load]="anyDatasetUnloaded">
@@ -219,13 +218,12 @@
     } @else if (visibleDetectors.length === 0) {
       @if (detectorTab() === 'drafts') {
         <div class="empty-state empty-state--fill">
-          <p #detectorEmptyMsg class="empty-state__message">No draft detectors. Click
+          <p class="empty-state__message">No draft detectors. Click
             <button class="btn btn--primary btn--sm inline-add-btn"
               [disabled]="isContextSwitching"
               (click)="openNewDetectorModal()" title="Create a new detector" aria-label="Create a new detector">+</button>
             to add one.</p>
         </div>
-        <vt-pointer-arrow [from]="detectorEmptyMsg" [to]="detectorAddBtn" />
       } @else {
         <p class="empty-state empty-state--fill">No AutoFind detectors yet. Open a draft detector's ⋯ menu and pick "Move to AutoFind" to run it automatically on every dataset you import.</p>
       }
@@ -300,12 +298,6 @@
           </tbody>
         </table>
       </div>
-      <!-- A new, still-empty detector is selected with a matching dataset:
-           Train is the next step, so say so and point at it (#4227). -->
-      @if (showTrainHint) {
-        <p #trainHint class="intro-hint">Click Train to teach your new detector.</p>
-        <vt-pointer-arrow [from]="trainHint" [to]="trainBtn" />
-      }
     }
   </div>
   </div>
@@ -341,6 +333,7 @@
          find-view component; #4525), as Train opens the one called label. -->
     <div class="action-btn-group">
       <button
+        #testBtn
         class="btn btn--primary"
         [class.loading-active]="findLoading()"
         [disabled]="!findEnabled || isNavBusy"
@@ -360,6 +353,7 @@
          (`isNavBusy`), since it navigates nowhere. -->
     <div class="action-btn-group">
       <button
+        #findBtn
         class="btn btn--primary"
         [disabled]="!autofindEnabled || isContextSwitching"
         [title]="autofindHint"
@@ -379,6 +373,66 @@
     }
 
   </div>
+
+  <!-- Toasty's hints (#4680): King Toasty stands beside the control to click
+       next and says why. At most one shows (see `dashboardHint`), each goes
+       away the moment its step is taken, and the user can hide them (see
+       HintsService). They sit here, outside the panels, so they position
+       against .dashboard-view and paint over the tables. -->
+  @switch (dashboardHint) {
+    @case ('add-dataset') {
+      <vt-toasty-hint hintId="add-dataset" [anchor]="datasetAddBtn">
+        Start here! Click <strong>+</strong> to add a dataset: the {{ addDatasetMedia }} you want to
+        train or search on.
+      </vt-toasty-hint>
+    }
+    @case ('select-dataset') {
+      <vt-toasty-hint hintId="select-dataset" [anchor]="datasetAddBtn">
+        Select a dataset or click <strong>+</strong> to add a new one.
+      </vt-toasty-hint>
+    }
+    @case ('mixed-datasets') {
+      <vt-toasty-hint hintId="mixed-datasets" [anchor]="datasetAddBtn" face="surprised">
+        These datasets hold different kinds of media, so they can't be searched together. Select
+        datasets of one kind.
+      </vt-toasty-hint>
+    }
+    @case ('add-detector') {
+      <vt-toasty-hint hintId="add-detector" [anchor]="detectorAddBtn">
+        Next, click <strong>+</strong> to make a detector. Tell it what you're looking for, and it
+        learns to find it in your datasets.
+      </vt-toasty-hint>
+    }
+    @case ('select-detector') {
+      <vt-toasty-hint hintId="select-detector" [anchor]="detectorAddBtn">
+        Now click a detector to select it, or click <strong>+</strong> to make a new one.
+      </vt-toasty-hint>
+    }
+    @case ('mismatch') {
+      <vt-toasty-hint hintId="mismatch" [anchor]="detectorAddBtn" face="surprised">
+        This detector is for a different kind of media than your dataset, so they can't work
+        together. Select ones that match, or click <strong>+</strong> to make a detector for this
+        dataset.
+      </vt-toasty-hint>
+    }
+    @case ('train') {
+      <vt-toasty-hint hintId="train" [anchor]="trainBtn" side="above" reach="right">
+        Click <strong>Train</strong> to teach your new detector. Mark examples Good or Bad for it to
+        learn.
+      </vt-toasty-hint>
+    }
+    @case ('test-or-find') {
+      <vt-toasty-hint hintId="test-or-find" [anchor]="testBtn" side="above" reach="right">
+        Click <strong>Test</strong> to eval or improve this detector. Or <strong>Find</strong> to
+        collect its matches.
+      </vt-toasty-hint>
+    }
+    @case ('find') {
+      <vt-toasty-hint hintId="find" [anchor]="findBtn" side="above" reach="left">
+        Click <strong>Find</strong> to run these detectors on this dataset.
+      </vt-toasty-hint>
+    }
+  }
 </div>
 
 @if (modals.combineDatasets.open) {

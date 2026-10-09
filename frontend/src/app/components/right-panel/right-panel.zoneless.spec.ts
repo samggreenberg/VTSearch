@@ -101,8 +101,8 @@ describe('RightPanelComponent', () => {
   });
 
   function cleanup(): void {
-    // Stops the two pollers the hook owns. The labelset subscriptions ride on
-    // the component's `DestroyRef` and outlive a bare hook call, so the
+    // Stops the labelset poller the hook owns. The labelset subscriptions ride
+    // on the component's `DestroyRef` and outlive a bare hook call, so the
     // discard below is what clears them out of `httpMock`.
     component.ngOnDestroy();
     const voteState = TestBed.inject(VoteStateService);
@@ -112,20 +112,12 @@ describe('RightPanelComponent', () => {
 
   async function flushInit(): Promise<void> {
     TestBed.tick();
-    // Allow the votes poll's `timer(0, …)` first emission to fire on a real
-    // macrotask (and drain microtasks) so its GET is issued.
+    // Let anything the hooks scheduled on a real macrotask issue its GET.
     await new Promise<void>((resolve) => setTimeout(resolve));
     // Settings request
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({
       volume: 1,
-    });
-    // First votes poll
-    httpMock.expectOne('/api/votes').flush({
-      good: [],
-      bad: [],
-      click_times: {},
-      learned_scores: {},
     });
   }
 
@@ -135,11 +127,12 @@ describe('RightPanelComponent', () => {
     cleanup();
   });
 
-  it('should poll for votes on init', async () => {
-    TestBed.tick();
-    await new Promise<void>((resolve) => setTimeout(resolve));
-    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
-    httpMock.expectOne('/api/settings').flush({ volume: 1 });
+  it('shows the vote state, and leaves its polling to the view', async () => {
+    await flushInit();
+    // The panel unmounts while it is folded (#4673): the poll is the view's.
+    httpMock.expectNone('/api/votes');
+
+    TestBed.inject(VoteStateService).loadVotes();
     httpMock.expectOne('/api/votes').flush({
       good: [1, 2],
       bad: [3],

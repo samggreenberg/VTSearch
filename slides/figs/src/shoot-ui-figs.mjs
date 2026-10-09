@@ -56,17 +56,21 @@
  *
  * Like `scripts/screenshots/refresh.sh`, this drives a SINGLE running app
  * rather than booting its own: the box is RAM-tight and two instances would
- * load the image embedder twice. Start one with `python app.py --local` first,
- * or let this script start one.
+ * load the image embedder twice. With nothing serving on $APP it starts one,
+ * on a fresh data dir (`data/.slides-app`, emptied every run) rather than the
+ * caller's VTSEARCH_DATA_DIR, and stops it at the end; that is the
+ * reproducible path. An app you started yourself is used as it is, with its
+ * own data.
  *
  * The download is idempotent — COCO is fetched and the corpora filed only if
  * absent — but the session is not: its datasets and detector are deleted and
  * rebuilt every run, because the first frame's whole subject is an app with
  * nothing in it, and a run that reused last run's votes would be shooting a
  * screen nobody ever sat in front of. That costs one re-embed of both piles
- * (about 470 photographs) per run. It deletes the Book example's own datasets
- * and detectors and the user guide's (the docs harness rebuilds those on its
- * next run); a dataset of anyone else's would still show on the empty
+ * (about 470 photographs) per run. On an app it started, the fresh data dir
+ * sees to that. On one you started, it deletes the Book example's own
+ * datasets and detectors and the user guide's (the docs harness rebuilds those
+ * on its next run); a dataset of anyone else's would still show on the empty
  * dashboard, and the run says so.
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
@@ -89,6 +93,7 @@ import {
 } from '../../../scripts/screenshots/book-example.mjs';
 import { FIXTURES as GUIDE_FIXTURES } from '../../../scripts/screenshots/smiley-example.mjs';
 import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -96,6 +101,8 @@ const APP = process.env.APP || 'http://localhost:5000';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../../..');
 const FIGS = resolve(HERE, '..');
+// The data dir of an app this script starts, emptied every run (see ensureApp).
+const APP_DATA_DIR = join(REPO, 'data', '.slides-app');
 
 // A screenshot's text renders at (slot width / CSS width) of its authored size,
 // so what matters is not how many pixels the PNG has but how wide the browser
@@ -203,12 +210,17 @@ const GRID_ROWS = 3;
 // these are persisted per media type and the Label view reads the same keys: a
 // run that left them behind would shoot the next run's train loop in this
 // layout.
+// Both side panels open: Train and Test fold them to a strip by default
+// (#4673), and every slide is of what is in them.
+const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
 const FIND_LINE_LAYOUT = {
+  ...PANELS_OPEN,
   grid_icon_size_left: { image: 'L' },
   panel_pct_left: { image: 500 },
   panel_pct_right: { image: 225 },
 };
 const DEFAULT_LAYOUT = {
+  ...PANELS_OPEN,
   grid_icon_size_left: { image: 'M' },
   panel_pct_left: { image: 260 },
   panel_pct_right: { image: 300 },
@@ -322,10 +334,14 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * non-dismissing "this page is running an out-of-date build" banner across the
  * top of every frame. It is doing its job — see the note in `CLAUDE.md` — and
  * it has nothing to do with the application a slide is showing.
+ *
+ * Toasty's hints (#4680) are hidden too: the slide around a frame already says
+ * what to click, and a speech bubble saying it again is a hat on a hat. They
+ * float over the page, so hiding one moves nothing else.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
-  + 'vt-toast-container,.toast-stack{display:none!important}';
+  + 'vt-toast-container,.toast-stack,vt-toasty-hint{display:none!important}';
 
 async function enterLabelView(page, datasetName, detectorName) {
   await openDashboard(page);
@@ -1105,6 +1121,17 @@ async function shootRegionVoting(page) {
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Use the app serving on $APP, or start one on a fresh data dir.
+ *
+ * An app already serving is the caller's choice and is used as it is. One this
+ * script starts runs on `data/.slides-app`, emptied first, as refresh.sh's does
+ * (#4299), and never on the caller's VTSEARCH_DATA_DIR: that may be a live
+ * install's data, and on the GRID it is. `~/.bashrc` exports the owner's, and a
+ * run that inherited it imported photos-train into the live registry and shot
+ * the owner's datasets on the "empty" dashboard (#4697). The model cache is
+ * shared, as refresh.sh shares it, so nothing is downloaded twice.
+ */
 let appProcess = null;
 async function ensureApp() {
   try {
@@ -1112,13 +1139,27 @@ async function ensureApp() {
   } catch {
     /* not running */
   }
-  log('no app running — starting one');
+  log(`no app running — starting one on a fresh data dir (${APP_DATA_DIR})`);
+  const inherited = process.env.VTSEARCH_DATA_DIR;
+  if (inherited && resolve(inherited) !== APP_DATA_DIR) {
+    log(`  not on the inherited VTSEARCH_DATA_DIR=${inherited}, which this run leaves alone`);
+  }
+  rmSync(APP_DATA_DIR, { recursive: true, force: true });
+  mkdirSync(APP_DATA_DIR, { recursive: true });
   appProcess = spawn('python', ['app.py', '--local'], {
     cwd: REPO,
-    env: { ...process.env, VTSEARCH_TORCH_THREADS: '2' },
+    env: {
+      ...process.env,
+      VTSEARCH_DATA_DIR: APP_DATA_DIR,
+      VTSEARCH_MODELS_DIR: process.env.VTSEARCH_MODELS_DIR || join(REPO, 'data', 'models'),
+      VTSEARCH_TORCH_THREADS: '2',
+    },
     stdio: 'ignore',
     detached: false,
   });
+  // The `finally` at the bottom stops it after a run; this stops it when the
+  // run dies before reaching that block, e.g. on the wait below timing out.
+  process.on('exit', () => appProcess?.kill());
   await app.waitFor('the app', async () => {
     try {
       return (await fetch(APP + '/api/version')).ok;

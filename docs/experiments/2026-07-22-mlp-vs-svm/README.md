@@ -12,6 +12,26 @@
 > deterministically from the CSVs, so it still states the verdict it measured;
 > read it that way. See [`docs/ML.md`](../../ML.md#the-three-heads-which-one-is-shipped-and-why).
 
+> **The `visual_genome_m` panel was scored on primary labels only** (found
+> 2026-10-08, #4695). The Stage A/B/C tasks loaded VG from a warm demo cache,
+> and at the time a cache reload dropped VG's multi-label `categories` (#4117).
+> So each image was a positive only for its single primary `category`. An image
+> that contains the object under a secondary label counted as a negative, both
+> for the simulated voter and on the held-out half. Positives as scored vs.
+> positives in the labels, of 4,193 images:
+>
+> | category | scored | in labels | counted as negatives |
+> |---|---|---|---|
+> | building | 1,252 (0.30) | 1,645 (0.39) | 393 |
+> | chair | 140 (0.033) | 354 (0.084) | 214 |
+> | cup | 30 (0.0072) | 102 (0.024) | 72 |
+> | bench | 133 (0.032) | 161 (0.038) | 28 |
+> | giraffe | 6 (0.0014) | 24 (0.0057) | 18 |
+>
+> The "scored" column is the `realized_prevalence` in `stage_b.csv.gz`, to six
+> places. Caltech and VGGFace2 are single-label datasets and are unaffected. Not
+> re-run, since the study is superseded (above).
+
 Verdict at the time: **keep the MLP.** The SVMs are more label-efficient in the first ~50
 votes but the MLP overtakes them decisively by 200 votes, especially on
 rare-event false-negatives — so no SVM variant met the pre-registered switch

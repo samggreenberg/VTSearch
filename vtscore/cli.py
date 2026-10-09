@@ -24,6 +24,7 @@ from vtscore.datasets.loader import apply_custom_metadata_md5, load_dataset_from
 from vtscore.utils.hits import build_media_hit
 
 if TYPE_CHECKING:
+    from vtscore.datasets.importers.base import OutputSpec
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.training import ScoringRows
 
@@ -82,15 +83,54 @@ def _print_dry_run_source(source_description: dict[str, Any]) -> None:
                 print(f"    {k}: {v if v != '' else '(empty)'}", flush=True)
         else:
             print("  Params: (none)", flush=True)
+        outputs = source_description.get("outputs") or []
+        if outputs:
+            print(f"  Datasets ({len(outputs)}; one importer run, one dataset per entry):", flush=True)
+            for output in outputs:
+                print(f"    - {_describe_output(output)}", flush=True)
     chunk_size = source_description.get("chunk_size")
     print(f"  Chunk size: {chunk_size if chunk_size else 'whole dataset'}", flush=True)
     if source_description.get("stream_results"):
         neg = "included" if source_description.get("keep_negatives") else "dropped"
         print(f"  Streaming: yes (hits written to the exporter per chunk; negatives {neg})", flush=True)
-    if source_description.get("save_dataset"):
+    if source_description.get("delete_after_detection"):
+        print(
+            "  Save to dashboard: until detection has run (the autofind_cli_delete_dataset setting then deletes it;"
+            " a run that detects nothing keeps it)",
+            flush=True,
+        )
+    elif source_description.get("save_dataset"):
         print("  Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)", flush=True)
     else:
         print("  Save to dashboard: no (--tempimport: the dataset is discarded after detection)", flush=True)
+
+
+def _describe_output(output: dict[str, Any]) -> str:
+    """One line of the dry-run plan for an entry of a multi-dataset import's ``outputs``.
+
+    Reads the :meth:`~vtscore.datasets.importers.base.OutputSpec.to_dict` shape
+    the source description carries: the category label leads (it is what names
+    the dataset), then the dataset's media type, its source rows as
+    ``source[→converter]``, and whichever per-dataset options were set.
+    """
+    from vtscore.datasets.importers.base.outputs import _type_label  # noqa: PLC0415
+
+    media_type = str(output.get("media_type") or "")
+    category = str(output.get("category") or media_type)
+    sources = ", ".join(
+        f"{s.get('source_type', '')}→{s['converter']}" if s.get("converter") else str(s.get("source_type", ""))
+        for s in output.get("source_specs") or []
+    )
+    parts = [f"media_type={media_type}"]
+    if category != media_type:
+        parts.append(f"category={category}")
+    parts.append(f"sources={sources or media_type}")
+    for key in ("dataset_name", "embedder", "clipper"):
+        if output.get(key):
+            parts.append(f"{key}={output[key]}")
+    if output.get("embedders"):
+        parts.append(f"embedders={','.join(output['embedders'])}")
+    return f"{_type_label(category)}  [{', '.join(parts)}]"
 
 
 def _print_dry_run_plan(
@@ -253,6 +293,7 @@ def _load_and_train_detectors(
     )
     from vtscore.detectors.store import _detector_path, _read_detector
     from vtscore.detectors.labelset_training import Haystack, train_from_labelset
+    from vtscore.state import seed_detector_beta
     from vtscore.state.core import DetectorContext
 
     dataset_spec = extract_input_spec_from_medias(snap)
@@ -317,6 +358,9 @@ def _load_and_train_detectors(
             raise ValueError(f"Detector '{det_name}' has no labels.")
 
         det_ctx = DetectorContext(det_name, media_type=det_media_type or media_type)
+        # The context is keyed by name, not a registry id, so it is handed the
+        # balance the detector keeps (#4665) from the JSON already read.
+        seed_detector_beta(det_ctx, det)
 
         target_type = det_media_type or media_type
 
@@ -416,19 +460,19 @@ def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
 def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
     """What the balance says about *det_name*'s trained cut: unchecked, because nobody can vote.
 
-    Read at the balance the training read (:func:`vtscore.state.line_knobs`,
-    #4413).  A headless run cannot spot-check its line (#4272), so it exports
+    Read at the balance the training read: the detector's own
+    (:func:`vtscore.state.detector_beta`, #4413, #4665).  A headless run cannot spot-check its line (#4272), so it exports
     the balance's unchecked set - the cap or the mixture's F-beta argmax,
     whichever is smaller (#4389) - and the ``detector_unchecked`` event is
     the run's record that the set it exports was never checked.  ``None``
     with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
     the Inclusion 0 cut, and there is no set to report.
     """
-    from vtscore.state import get_beta  # noqa: PLC0415
+    from vtscore.state import detector_beta  # noqa: PLC0415
     from vtscore.state.core import detector_balance_state  # noqa: PLC0415
     from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
 
-    balance = detector_balance_state(det_ctx, get_beta())
+    balance = detector_balance_state(det_ctx, detector_beta(det_ctx))
     if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         cli_progress.emit(
             "detector_unchecked",
@@ -707,13 +751,23 @@ def _score_one_detector(
 def _build_multi_results_dict(
     detector_results: dict[str, dict[str, Any]],
     media_type: str = "unknown",
+    dataset: "_RunDataset | None" = None,
 ) -> dict[str, Any]:
-    """Build the full results dict from multi-detector scoring."""
-    return {
+    """Build the full results dict from multi-detector scoring.
+
+    *dataset* is the dataset this results set belongs to when the run produced
+    several (a multi-dataset import, #4707); it rides along as a ``dataset``
+    block so an exported file says which of the run's datasets it holds.  A
+    single-dataset run carries no such block, as before.
+    """
+    results: dict[str, Any] = {
         "media_type": media_type,
         "detectors_run": len(detector_results),
         "results": detector_results,
     }
+    if dataset is not None:
+        results["dataset"] = dataset.to_dict()
+    return results
 
 
 def _detect_media_type(medias: dict[int, dict[str, Any]]) -> str:
@@ -1205,6 +1259,150 @@ def _load_importer_chunked(
         yield _embed_loaded_medias(chunk)
 
 
+def _check_multi_output(importer: Any) -> None:
+    """Refuse an ``outputs`` list for an importer that makes one dataset per run.
+
+    The same two conditions the Add Dataset form's *Multi-Dataset* box checks
+    (``supports_multi_output`` in the importer's listing): the importer has not
+    opted out, and it declares a ``media_type`` field for the outputs to
+    multiply.
+    """
+    if not getattr(importer, "multi_output", True) or not any(f.key == "media_type" for f in importer.fields):
+        raise ValueError(
+            f"Importer {importer.name!r} produces one dataset per run; it does not accept an outputs list."
+        )
+
+
+def _output_dataset_names(importer: Any, field_values: dict[str, Any], outputs: "list[OutputSpec]") -> list[str]:
+    """The dataset name each entry of *outputs* lands under, in order.
+
+    The same derivation the load pipeline uses
+    (:func:`~vtscore.datasets.importers.base.output_dataset_name` over the
+    importer's own display name), so a temporary run reports its datasets by
+    the names a saving run would have given them.
+    """
+    from vtscore.datasets.importers.base import output_dataset_name  # noqa: PLC0415
+
+    base_name = importer.resolve_display_name(dict(field_values))
+    return [output_dataset_name(base_name, output) for output in outputs]
+
+
+def _output_index(outputs: "list[OutputSpec]", yielded: "OutputSpec") -> int:
+    """Which entry of *outputs* the importer's *yielded* spec is.
+
+    Importers are asked to yield the very objects they were given, so identity
+    is the lookup; one that copied them is matched by equality, first match
+    wins (as :func:`vtscore.datasets.load_multi._job_for` does).  ``-1`` when
+    it is none of them.
+    """
+    for index, output in enumerate(outputs):
+        if output is yielded:
+            return index
+    for index, output in enumerate(outputs):
+        if output == yielded:
+            return index
+    return -1
+
+
+def _group_output_chunks(
+    stream: "Iterator[tuple[OutputSpec, dict[int, dict[str, Any]]]]",
+    outputs: "list[OutputSpec]",
+    importer_name: str,
+) -> "Iterator[tuple[OutputSpec, Iterator[dict[int, dict[str, Any]]]]]":
+    """Regroup an importer's ``(output, chunk)`` stream into one chunk iterator per output.
+
+    The multi-output hooks yield every dataset's chunks through one iterator,
+    finishing one output before starting the next (the contract on
+    :meth:`~vtscore.datasets.importers.base.core.ImporterBase.run_outputs_chunked`;
+    the GUI pipeline tolerates interleaving because it holds every dataset at
+    once, which is the one thing a chunked CLI run exists not to do).  Each
+    pair yielded here is an output and a lazy iterator over *its* raw chunks,
+    in the order the importer produced them; the inner iterator is drained
+    (without further work) when the consumer moves on before exhausting it.
+    An output the importer never yielded for comes last with an empty
+    iterator, so every output is reported.  A chunk for an output already
+    finished is an error naming the importer, as is a chunk for an output the
+    importer was not asked for.
+    """
+    it = iter(stream)
+    pending = next(it, None)
+    finished: set[int] = set()
+    while pending is not None:
+        index = _output_index(outputs, pending[0])
+        if index < 0:
+            raise ValueError(
+                f"Importer {importer_name!r} yielded media for an output it was not asked for: {pending[0]!r}"
+            )
+        if index in finished:
+            raise ValueError(
+                f"Importer {importer_name!r} yielded media for {outputs[index].category_label()!r} after moving on "
+                "to another output; a multi-dataset run needs each output's media produced in one go."
+            )
+        output = outputs[index]
+
+        def chunks(current: int = index) -> Iterator[dict[int, dict[str, Any]]]:
+            nonlocal pending
+            while pending is not None and _output_index(outputs, pending[0]) == current:
+                chunk = pending[1]
+                pending = next(it, None)
+                if chunk:
+                    yield chunk
+
+        yield output, chunks()
+        while pending is not None and _output_index(outputs, pending[0]) == index:
+            pending = next(it, None)
+        finished.add(index)
+    for index, output in enumerate(outputs):
+        if index not in finished:
+            yield output, iter(())
+
+
+def _load_importer_outputs(
+    importer_name: str,
+    field_values: dict[str, Any],
+    outputs: "list[OutputSpec]",
+    chunk_size: int | None,
+) -> "Iterator[tuple[OutputSpec, Iterator[dict[int, dict[str, Any]]]]]":
+    """Run a named importer once for several datasets; yield ``(output, chunks)`` per dataset.
+
+    The multi-dataset twin of :func:`_load_importer_whole` /
+    :func:`_load_importer_chunked`: one call to
+    :meth:`~vtscore.datasets.importers.base.core.ImporterBase.run_outputs_chunked`
+    (with *chunk_size*) or :meth:`~ImporterBase.run_outputs` (without), so an
+    importer that acquires its source once does so once, regrouped by
+    :func:`_group_output_chunks`.  Each output's chunks are renumbered from 1
+    and embedded as they are pulled, so an output the caller gives up on
+    (nothing to detect with) costs no embedding work.
+
+    The shared *field_values* are validated as the single-dataset path
+    validates its own (the importer's ``media_type`` field, when it has no
+    value, takes its default here and is overridden per output by
+    :meth:`~OutputSpec.narrow`); file-typed fields are wrapped for the
+    importer as :meth:`~ImporterBase.run_cli` would wrap them.
+    """
+    from vtscore.datasets.importers import get_importer  # noqa: PLC0415
+    from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
+
+    importer = get_importer(importer_name)
+    if importer is None:
+        available = _list_importer_names()
+        raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+    _check_multi_output(importer)
+
+    field_values = dict(field_values)
+    importer.validate_cli_field_values(field_values)
+    thin = _reference_files_choice(field_values)
+    field_values = wrap_cli_file_fields(importer.fields, field_values)
+    field_values.pop("outputs", None)
+    outputs = list(outputs)
+    if chunk_size:
+        stream = importer.run_outputs_chunked(field_values, outputs, chunk_size, thin=thin)
+    else:
+        stream = importer.run_outputs(field_values, outputs, thin=thin)
+    for output, raw_chunks in _group_output_chunks(stream, outputs, importer_name):
+        yield output, (_embed_loaded_medias(chunk) for chunk in _renumber_chunks(raw_chunks))
+
+
 @dataclass(frozen=True)
 class _SourceSpec:
     """Where one autodetect run gets its medias: pickle/importer x whole/chunked.
@@ -1222,6 +1420,14 @@ class _SourceSpec:
     importer_name: str = ""
     field_values: dict[str, Any] = field(default_factory=dict)
     chunk_size: int | None = None
+    #: A multi-dataset import (#4707): the importer runs once and every entry
+    #: becomes its own dataset, scored and exported on its own.  Only an
+    #: importer source carries one; empty is the ordinary single-dataset run.
+    outputs: tuple[OutputSpec, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.outputs and self.kind != "importer":
+            raise ValueError("Only an importer source can produce several datasets (outputs).")
 
     @property
     def empty_error(self) -> str:
@@ -1231,7 +1437,13 @@ class _SourceSpec:
         return f"No medias loaded by importer '{self.importer_name}'"
 
     def load(self) -> Iterator[dict[int, dict[str, Any]]]:
-        """Open the media source, one dict per chunk (one chunk when whole)."""
+        """Open the media source, one dict per chunk (one chunk when whole).
+
+        A multi-dataset source has no single media stream; open it with
+        :meth:`load_outputs` instead.
+        """
+        if self.outputs:
+            raise ValueError("A multi-dataset source is opened with load_outputs(), one media stream per dataset.")
         if self.kind == "pickle":
             if self.chunk_size:
                 return _load_pickle_chunked(self.dataset_path, self.chunk_size)
@@ -1239,6 +1451,17 @@ class _SourceSpec:
         if self.chunk_size:
             return _load_importer_chunked(self.importer_name, self.field_values, self.chunk_size)
         return _load_importer_whole(self.importer_name, self.field_values)
+
+    def load_outputs(self) -> Iterator[tuple[OutputSpec, Iterator[dict[int, dict[str, Any]]]]]:
+        """Open a multi-dataset source: one ``(output, chunks)`` pair per dataset.
+
+        One importer run feeds every pair (see :func:`_load_importer_outputs`);
+        the chunks of each are pulled lazily, so the whole run is never held
+        at once.
+        """
+        if not self.outputs:
+            raise ValueError("This source produces one dataset; open it with load().")
+        return _load_importer_outputs(self.importer_name, self.field_values, list(self.outputs), self.chunk_size)
 
     def describe(self, *, stream_results: bool, keep_negatives: bool, save_dataset: bool = False) -> dict[str, Any]:
         """Build the ``source_description`` block reported by ``--dry-run``."""
@@ -1251,7 +1474,10 @@ class _SourceSpec:
         }
         if self.kind == "pickle":
             return {**common, "dataset": self.dataset_path}
-        return {**common, "importer": self.importer_name, "params": self.field_values}
+        described = {**common, "importer": self.importer_name, "params": self.field_values}
+        if self.outputs:
+            described["outputs"] = [output.to_dict() for output in self.outputs]
+        return described
 
 
 def _source_media_type(spec: _SourceSpec) -> str:
@@ -1269,6 +1495,11 @@ def _source_media_type(spec: _SourceSpec) -> str:
         from vtscore.datasets.loader_pickle import _read_pkl_meta_safe
 
         return str(_read_pkl_meta_safe(path).get("media_type") or "")
+    if spec.outputs:
+        # Several datasets declare one type only when they all share it; a
+        # mixed run leaves the caller to say which type it means.
+        types = {output.media_type for output in spec.outputs}
+        return next(iter(types)) if len(types) == 1 else ""
     from vtscore.datasets.importers import get_importer
 
     importer = get_importer(spec.importer_name)
@@ -1329,6 +1560,8 @@ def _validate_dry_run_source(sd: dict[str, Any]) -> None:
         if importer is None:
             available = _list_importer_names()
             raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+        if sd.get("outputs"):
+            _check_multi_output(importer)
         importer.validate_cli_field_values(sd.get("params") or {})
 
 
@@ -1468,8 +1701,13 @@ def _run_live_pipeline(
     override_detectors: list[str] | None,
     autofind_detectors: list[str],
     empty_error: str,
+    dataset: "_RunDataset | None" = None,
 ) -> None:
-    """Iterate *media_source*, score each chunk, and run the exporter on the merged results."""
+    """Iterate *media_source*, score each chunk, and run the exporter on the merged results.
+
+    *dataset* names the dataset this pass scores when the run produces several
+    (#4707); it rides into the results the exporter receives.
+    """
     merged_results: dict[str, dict[str, Any]] = {}
     media_type: str | None = None
     detector_mlps: dict[str, dict[str, Any]] | None = None
@@ -1509,7 +1747,7 @@ def _run_live_pipeline(
             chunks=chunk_num,
         )
 
-    results = _build_multi_results_dict(merged_results, media_type or "unknown")
+    results = _build_multi_results_dict(merged_results, media_type or "unknown", dataset)
     _run_exporter(exporter_name or "gui", exporter_field_values or {}, results, detector_mlps)
 
 
@@ -1575,13 +1813,16 @@ def _run_streaming_pipeline(
     autofind_detectors: list[str],
     keep_negatives: bool,
     empty_error: str,
+    dataset: "_RunDataset | None" = None,
 ) -> None:
     """Stream scored hits straight to a streaming-capable exporter.
 
     Trains detectors on the first chunk (so the exporter gets its header
     before any hit), then hands the exporter a lazy record iterator.  Nothing
     accumulates across chunks, so this is the path that scales to a media
-    source with more items (and more hits) than fit in RAM.
+    source with more items (and more hits) than fit in RAM.  *dataset*, when
+    the run produces several (#4707), rides into the header as a ``dataset``
+    block.
     """
     from vtscore.exporters import get_exporter
 
@@ -1625,6 +1866,8 @@ def _run_streaming_pipeline(
         ],
         "keep_negatives": bool(keep_negatives),
     }
+    if dataset is not None:
+        header["dataset"] = dataset.to_dict()
 
     records = _stream_hit_records(first_chunk, iterator, detector_mlps, keep_negatives, routed)
     result = exporter.export_cli_streaming(header, records, exporter_field_values or {})
@@ -1645,7 +1888,8 @@ def _run_pipeline(
     keep_negatives: bool = False,
     source_description: dict[str, Any] | None = None,
     skip_without_detectors: bool = False,
-) -> None:
+    dataset: "_RunDataset | None" = None,
+) -> bool:
     """Shared pipeline: read settings, iterate media chunks, score, export.
 
     All four CLI entry points (pickle / importer, whole / chunked) delegate
@@ -1665,7 +1909,21 @@ def _run_pipeline(
     *skip_without_detectors* is set by a run that saved its dataset first:
     there the import is the point and detection is the extra, so having no
     detector to run - none configured, or none for this media type - ends the
-    run with a note instead of an error.
+    run with a note instead of an error.  A multi-dataset run sets it for every
+    dataset, saved or not: one dataset no detector applies to must not stop
+    the others being scored (the caller errors only when none was).
+
+    *dataset* is the dataset this pass scores when the run produces several
+    (#4707).  It names the pass in the progress output, rides into the results
+    the exporter gets, and gives that exporter its own destination:
+    ``{dataset_name}`` in any exporter field is replaced by the dataset's name,
+    and a ``filepath`` that does not mention it gains the name before its
+    extension, so two datasets' files do not overwrite each other (see
+    :func:`_exporter_fields_for_dataset`).
+
+    Returns whether detection ran: ``True`` once the detectors have scored the
+    source and the exporter has run, ``False`` for a dry run and for a saving
+    run that skipped detection.
     """
     from vtscore.config import CoreConfig
 
@@ -1675,17 +1933,13 @@ def _run_pipeline(
     config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
     autofind_detectors = list(config.autofind_detectors)
     detector_names = list(override_detectors) if override_detectors is not None else autofind_detectors
-
-    # When no explicit ``--exporter`` was given, fall back to the AutoFind
-    # results exporter configured in settings (its per-exporter field values
-    # come along too). An explicit ``--exporter`` always wins; if neither is
-    # set the downstream default (``gui``) applies.
-    if exporter_name is None and config.autofind_exporter:
-        exporter_name = config.autofind_exporter
-        if exporter_field_values is None:
-            exporter_field_values = dict(config.autofind_exporter_field_values.get(config.autofind_exporter, {}))
+    exporter_name, exporter_field_values = _resolve_exporter(config, exporter_name, exporter_field_values)
+    if dataset is not None and not dry_run:
+        exporter_field_values = _exporter_fields_for_dataset(exporter_name or "gui", exporter_field_values, dataset)
 
     if dry_run:
+        if source_description and source_description.get("save_dataset") and config.autofind_cli_delete_dataset:
+            source_description = {**source_description, "delete_after_detection": True}
         _run_dry_run(
             source_description,
             settings_path,
@@ -1694,13 +1948,16 @@ def _run_pipeline(
             exporter_field_values,
             override_detectors,
         )
-        return
+        return False
+
+    if dataset is not None:
+        dataset.announce()
 
     if skip_without_detectors and not detector_names:
         # Checked before the source is opened: with nothing to score, reading
         # the whole dataset back in would be wasted work.
-        _emit_detection_skipped("no AutoFind detectors are configured")
-        return
+        _emit_detection_skipped("no AutoFind detectors are configured", dataset)
+        return False
 
     try:
         if stream_results:
@@ -1712,30 +1969,138 @@ def _run_pipeline(
                 autofind_detectors=autofind_detectors,
                 keep_negatives=keep_negatives,
                 empty_error=empty_error,
+                dataset=dataset,
             )
-            return
-
-        _run_live_pipeline(
-            media_source,
-            exporter_name=exporter_name,
-            exporter_field_values=exporter_field_values,
-            override_detectors=override_detectors,
-            autofind_detectors=autofind_detectors,
-            empty_error=empty_error,
-        )
+        else:
+            _run_live_pipeline(
+                media_source,
+                exporter_name=exporter_name,
+                exporter_field_values=exporter_field_values,
+                override_detectors=override_detectors,
+                autofind_detectors=autofind_detectors,
+                empty_error=empty_error,
+                dataset=dataset,
+            )
     except _NoApplicableDetectorsError as exc:
         if not skip_without_detectors:
             raise
-        _emit_detection_skipped(str(exc))
+        _emit_detection_skipped(str(exc), dataset)
+        return False
+    return True
 
 
-def _emit_detection_skipped(reason: str) -> None:
-    """Report that a saving run imported its dataset but had nothing to detect with."""
-    cli_progress.emit(
-        "detection_skipped",
-        text=f"Detection skipped: {reason}. The dataset was still saved to the dashboard.",
-        reason=reason,
-    )
+def _resolve_exporter(
+    config: Any, exporter_name: str | None, exporter_field_values: dict[str, Any] | None
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Fall back to the settings' AutoFind results exporter when no ``--exporter`` was given.
+
+    Its per-exporter field values come along too.  An explicit ``--exporter``
+    always wins; if neither is set the downstream default (``gui``) applies.
+    """
+    if exporter_name is None and config.autofind_exporter:
+        exporter_name = config.autofind_exporter
+        if exporter_field_values is None:
+            exporter_field_values = dict(config.autofind_exporter_field_values.get(config.autofind_exporter, {}))
+    return exporter_name, exporter_field_values
+
+
+def _emit_detection_skipped(reason: str, dataset: "_RunDataset | None" = None) -> None:
+    """Report that a run had nothing to detect its dataset with.
+
+    A saved dataset stays on the dashboard, and the note says so; one dataset
+    of a multi-dataset run is named, since the others may still be scored.
+    """
+    saved = dataset is None or bool(dataset.dataset_id)
+    subject = f"Detection skipped for dataset {dataset.name!r}" if dataset is not None else "Detection skipped"
+    kept = " The dataset was still saved to the dashboard." if saved else ""
+    fields: dict[str, Any] = {"reason": reason}
+    if dataset is not None:
+        fields["dataset"] = dataset.name
+    cli_progress.emit("detection_skipped", text=f"{subject}: {reason}.{kept}", **fields)
+
+
+@dataclass
+class _RunDataset:
+    """One dataset of a multi-dataset run (#4707), as the scoring pass sees it.
+
+    *name* is the dataset's name (what a saving run registers it under, and
+    what a temporary run would have); *dataset_id* its registry id when it was
+    saved, empty otherwise.  *index* / *count* place it among the run's
+    datasets, for the progress output and for telling whether an exporter's
+    file needs the name to stay distinct.
+    """
+
+    name: str
+    media_type: str
+    category: str
+    dataset_id: str = ""
+    index: int = 0
+    count: int = 1
+
+    def to_dict(self) -> dict[str, Any]:
+        """The ``dataset`` block carried by the results the exporter receives."""
+        return {
+            "name": self.name,
+            "media_type": self.media_type,
+            "category": self.category,
+            "id": self.dataset_id or None,
+        }
+
+    def announce(self) -> None:
+        """Say which of the run's datasets is about to be scored."""
+        cli_progress.emit(
+            "dataset_start",
+            text=f"=== Dataset {self.index + 1} of {self.count}: {self.name!r} ({self.media_type}) ===",
+            name=self.name,
+            media_type=self.media_type,
+            category=self.category,
+            dataset_id=self.dataset_id or None,
+            index=self.index,
+            count=self.count,
+        )
+
+
+def _exporter_fields_for_dataset(
+    exporter_name: str, field_values: dict[str, Any] | None, dataset: _RunDataset
+) -> dict[str, Any]:
+    """The exporter's field values for one dataset of a multi-dataset run.
+
+    The exporter runs once per dataset, so its destination has to tell them
+    apart.  ``{dataset_name}`` in any of its fields is replaced by the
+    dataset's name (made path-safe, as every template value is); when no field
+    mentions it and the run produces more than one dataset, an exporter with a
+    ``filepath`` field gets the name inserted before the extension, as the
+    portable-detector exporter does with ``{detector_name}``, so the files do
+    not overwrite each other.  A run of one dataset leaves the path alone.
+    The framework's own template variables (``{YYYYMMDD}``, ``{username}``,
+    ...) are substituted afterwards, by the exporter's usual validation.
+    """
+    from vtscore.exporters import get_exporter  # noqa: PLC0415
+    from vtscore.security.path_validation import sanitize_template_value  # noqa: PLC0415
+
+    values = dict(field_values or {})
+    exporter = get_exporter(exporter_name)
+    if exporter is None:
+        # Reported, with the available names, when the exporter is resolved.
+        return values
+    slug = sanitize_template_value(dataset.name)
+    mentioned = False
+    for f in exporter.fields:
+        value = values.get(f.key)
+        if value is None or value == "":
+            value = f.default
+        if isinstance(value, str) and "{dataset_name}" in value:
+            values[f.key] = value.replace("{dataset_name}", slug)
+            mentioned = True
+    if mentioned or dataset.count < 2:
+        return values
+    path_field = next((f for f in exporter.fields if f.key == "filepath"), None)
+    if path_field is not None:
+        raw = values.get("filepath") or path_field.default
+        if isinstance(raw, str) and raw:
+            path = Path(raw)
+            values["filepath"] = str(path.with_name(f"{path.stem}-{slug}{path.suffix}"))
+    return values
 
 
 def _registered_entry_for_pickle(dataset_path: str) -> dict[str, Any] | None:
@@ -1755,13 +2120,15 @@ def _registered_entry_for_pickle(dataset_path: str) -> dict[str, Any] | None:
     return None
 
 
-def _relay_import_progress() -> Callable[[dict[str, Any]], None]:
+def _relay_import_progress(label: str = "") -> Callable[[dict[str, Any]], None]:
     """Build a load-tracker subscriber that narrates a saving import on the CLI.
 
     JSON mode forwards every tick as a ``progress`` event, the same stream the
     embedding stack feeds.  Text mode prints one line per phase rather than per
     tick: the tracker updates once per embedded item, and a line each would
-    bury the run's real output.
+    bury the run's real output.  *label* names the dataset when the run
+    imports several at once (#4707), so the lines of one row can be told from
+    another's; the ``progress`` events then carry it as ``dataset``.
     """
     last_phase: list[Any] = [None]
 
@@ -1769,45 +2136,62 @@ def _relay_import_progress() -> Callable[[dict[str, Any]], None]:
         status = str(snapshot.get("status") or "")
         message = str(snapshot.get("message") or "")
         if cli_progress.get_format() == "json":
-            cli_progress.progress_callback(
-                status, message, int(snapshot.get("current") or 0), int(snapshot.get("total") or 0)
-            )
+            if not label:
+                cli_progress.progress_callback(
+                    status, message, int(snapshot.get("current") or 0), int(snapshot.get("total") or 0)
+                )
+            elif message or snapshot.get("total"):
+                cli_progress.emit(
+                    "progress",
+                    status=status,
+                    message=message,
+                    current=int(snapshot.get("current") or 0),
+                    total=int(snapshot.get("total") or 0),
+                    dataset=label,
+                )
             return
         phase = (status, snapshot.get("step"))
         if phase == last_phase[0] or status == "idle" or not message:
             return
         last_phase[0] = phase
-        cli_progress.emit("import_progress", text=f"Importing: {message}")
+        subject = f"Importing {label!r}" if label else "Importing"
+        cli_progress.emit("import_progress", text=f"{subject}: {message}")
 
     return relay
 
 
-def _wait_for_import(task_id: str) -> str:
-    """Block until the background load *task_id* finishes; return its dataset id.
+def _await_import_tasks(task_ids: list[str], labels: list[str] | None = None) -> list[tuple[str, str]]:
+    """Block until every background load in *task_ids* finishes; return ``(dataset_id, error)`` per task.
 
     The GUI's load pipeline runs on a worker thread and reports through the
     shared ``loading_tasks`` tracker, which is also where the registry id of
-    the saved dataset is posted.  A Ctrl-C here cancels the load cooperatively
-    - the same stop the dashboard's cancel button sends - so an interrupted run
-    does not leave a half-built dataset registered.
+    the saved dataset is posted.  A Ctrl-C here cancels every load
+    cooperatively - the same stop the dashboard's cancel button sends - so an
+    interrupted run does not leave a half-built dataset registered.  Each
+    task's outcome is reported on its own: its dataset id when it saved, else
+    why it did not (its tracker's error, or a finish that registered nothing).
+
+    *labels* name the datasets for the progress lines when there are several
+    (a multi-dataset import, #4707); a single task is narrated unlabelled.
     """
     from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
 
-    tracker = loading_tasks.get_tracker(task_id)
-    if tracker is None:
-        raise RuntimeError(f"Import task {task_id} was not registered.")
+    trackers = [_import_tracker(task_id) for task_id in task_ids]
     done = threading.Event()
     registered: dict[str, str] = {}
 
     def on_tasks(rows: list[dict[str, Any]]) -> None:
         for row in rows:
-            if row.get("task_id") == task_id and row.get("dataset_id"):
-                registered["dataset_id"] = row["dataset_id"]
-        if loading_tasks.is_finished(task_id):
+            if row.get("task_id") in task_ids and row.get("dataset_id"):
+                registered[row["task_id"]] = row["dataset_id"]
+        if all(loading_tasks.is_finished(task_id) for task_id in task_ids):
             done.set()
 
-    relay = _relay_import_progress()
-    tracker.subscribe(relay)
+    relays = [
+        _relay_import_progress(labels[index] if labels and len(task_ids) > 1 else "") for index in range(len(task_ids))
+    ]
+    for tracker, relay in zip(trackers, relays, strict=True):
+        tracker.subscribe(relay)
     loading_tasks.subscribe(on_tasks)
     try:
         # The worker may have got some way (or all the way) before the
@@ -1817,19 +2201,50 @@ def _wait_for_import(task_id: str) -> str:
         try:
             done.wait()
         except KeyboardInterrupt:
-            loading_tasks.cancel_task(task_id)
+            for task_id in task_ids:
+                loading_tasks.cancel_task(task_id)
             done.wait()
             raise
     finally:
         loading_tasks.unsubscribe(on_tasks)
-        tracker.unsubscribe(relay)
+        for tracker, relay in zip(trackers, relays, strict=True):
+            tracker.unsubscribe(relay)
 
+    return [
+        _import_outcome(tracker, registered.get(task_id, ""))
+        for task_id, tracker in zip(task_ids, trackers, strict=True)
+    ]
+
+
+def _import_tracker(task_id: str) -> Any:
+    """The progress tracker of the background load *task_id*; it must have been registered."""
+    from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
+
+    tracker = loading_tasks.get_tracker(task_id)
+    if tracker is None:
+        raise RuntimeError(f"Import task {task_id} was not registered.")
+    return tracker
+
+
+def _import_outcome(tracker: Any, dataset_id: str) -> tuple[str, str]:
+    """``(dataset_id, error)`` for one finished load: the id it registered, else why it has none."""
     error = tracker.get().get("error")
     if error:
-        raise ValueError(f"Import failed: {error}")
-    dataset_id = registered.get("dataset_id")
+        return "", f"Import failed: {error}"
     if not dataset_id:
-        raise ValueError("Import finished but the dataset could not be saved to the registry.")
+        return "", "Import finished but the dataset could not be saved to the registry."
+    return dataset_id, ""
+
+
+def _wait_for_import(task_id: str) -> str:
+    """Block until the background load *task_id* finishes; return its dataset id.
+
+    The single-dataset form of :func:`_await_import_tasks`: a load that failed,
+    or finished without registering a dataset, raises.
+    """
+    dataset_id, error = _await_import_tasks([task_id])[0]
+    if error:
+        raise ValueError(error)
     return dataset_id
 
 
@@ -1856,7 +2271,7 @@ def _release_imported_context(dataset_id: str) -> None:
     gc.collect()
 
 
-def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
+def _save_source_dataset(spec: _SourceSpec) -> tuple[dict[str, Any], bool]:
     """Import *spec*'s source exactly as the GUI would and register the result.
 
     Runs the dashboard's own load pipeline (clipping, embedding, duplicate
@@ -1867,7 +2282,8 @@ def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
     registry deletes a dataset's pickle when the dataset is deleted, so it must
     never adopt a file the user still owns.
 
-    Returns the new registry entry.
+    Returns the registry entry and whether this call imported it: ``False``
+    when the pickle already was a dashboard dataset, which is then used as is.
     """
     from vtscore.datasets.importers import get_importer  # noqa: PLC0415
     from vtscore.datasets.load_pipeline import _run_importer_in_background  # noqa: PLC0415
@@ -1888,7 +2304,7 @@ def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
                 pkl_path=existing.get("pkl_path", ""),
                 already_saved=True,
             )
-            return existing
+            return existing, False
         if not Path(spec.dataset_path).exists():
             raise FileNotFoundError(f"Dataset file not found: {spec.dataset_path}")
         importer_name, field_values = "pickle", {"file": spec.dataset_path}
@@ -1906,6 +2322,40 @@ def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
     if entry is None:
         raise ValueError(f"Saved dataset {dataset_id} is missing from the registry.")
     _release_imported_context(dataset_id)
+    _emit_dataset_saved(entry, dataset_id)
+    return entry, True
+
+
+def _delete_after_detection(entry: dict[str, Any], settings_path: str | None) -> None:
+    """Delete the dataset this run imported, if the user asked for that (#4674).
+
+    The per-user ``autofind_cli_delete_dataset`` setting makes a saving run
+    clean up after itself once its detectors have scored the dataset and the
+    results are exported.  The caller only gets here after such a run, and only
+    with a dataset the run imported itself: one that was already on the
+    dashboard stays, as does the dataset of a run that detected nothing (there
+    the import was the point) or failed (so it can be searched again from the
+    dashboard).
+    """
+    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.datasets.registry import unregister_dataset  # noqa: PLC0415
+
+    config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
+    if not config.autofind_cli_delete_dataset or not unregister_dataset(entry["id"]):
+        return
+    cli_progress.emit(
+        "dataset_deleted",
+        text=(
+            f"Deleted dataset {entry.get('name', '')!r} (id {entry['id']}) from the dashboard: "
+            "AutoFind has run, and the autofind_cli_delete_dataset setting is on."
+        ),
+        dataset_id=entry["id"],
+        name=entry.get("name", ""),
+    )
+
+
+def _emit_dataset_saved(entry: dict[str, Any], dataset_id: str) -> None:
+    """Report a dataset a saving run just registered on the dashboard."""
     cli_progress.emit(
         "dataset_saved",
         text=(
@@ -1918,7 +2368,195 @@ def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
         pkl_path=entry.get("pkl_path", ""),
         already_saved=False,
     )
-    return entry
+
+
+@dataclass
+class _OutputRun:
+    """One dataset of a multi-dataset run (#4707), ready to score - or not.
+
+    *medias* is the dataset's chunk stream (``None`` when its import failed,
+    with *error* saying why); *entry* its registry entry when this run saved
+    it, so the ``autofind_cli_delete_dataset`` setting can delete it afterwards.
+    """
+
+    dataset: _RunDataset
+    medias: Iterator[dict[int, dict[str, Any]]] | None
+    entry: dict[str, Any] | None = None
+    error: str = ""
+
+
+def _multi_source_importer(spec: _SourceSpec) -> tuple[Any, dict[str, Any]]:
+    """Resolve a multi-dataset source's importer and validate its shared field values."""
+    from vtscore.datasets.importers import get_importer  # noqa: PLC0415
+
+    importer = get_importer(spec.importer_name)
+    if importer is None:
+        available = _list_importer_names()
+        raise ValueError(f"Unknown importer: {spec.importer_name}. Available: {', '.join(available)}")
+    _check_multi_output(importer)
+    field_values = dict(spec.field_values)
+    importer.validate_cli_field_values(field_values)
+    return importer, field_values
+
+
+def _save_multi_source_datasets(spec: _SourceSpec) -> list[_OutputRun]:
+    """Import a multi-dataset source as the GUI would; return one run per output.
+
+    One call to :func:`~vtscore.datasets.load_multi._run_multi_output_load_in_background`
+    - the importer acquires its source once, every output is finalized as its
+    own dataset - then every output is awaited and reported: a
+    ``dataset_saved`` event for each that registered, a ``dataset_failed``
+    one for each that did not.  A failure is that output's alone, as on the
+    dashboard: the others are returned ready to score, and the caller fails
+    the run once they have been.
+    """
+    from vtscore.datasets.load_multi import _run_multi_output_load_in_background  # noqa: PLC0415
+    from vtscore.datasets.registry import get_dataset  # noqa: PLC0415
+
+    importer, field_values = _multi_source_importer(spec)
+    outputs = list(spec.outputs)
+    names = _output_dataset_names(importer, field_values, outputs)
+    task_ids = _run_multi_output_load_in_background(importer, field_values, outputs)
+    outcomes = _await_import_tasks(task_ids, names)
+
+    runs: list[_OutputRun] = []
+    for index, (output, name, (dataset_id, error)) in enumerate(zip(outputs, names, outcomes, strict=True)):
+        dataset = _RunDataset(name, output.media_type, output.category, index=index, count=len(outputs))
+        entry = get_dataset(dataset_id) if dataset_id else None
+        if not error and entry is None:
+            error = f"Saved dataset {dataset_id} is missing from the registry."
+        if error:
+            cli_progress.emit(
+                "dataset_failed", text=f"Import of dataset {name!r} failed: {error}", name=name, error=error
+            )
+            runs.append(_OutputRun(dataset, None, error=error))
+            continue
+        assert entry is not None
+        _release_imported_context(dataset_id)
+        _emit_dataset_saved(entry, dataset_id)
+        dataset.dataset_id = dataset_id
+        dataset.name = str(entry.get("name") or name)
+        medias = _SourceSpec(kind="pickle", dataset_path=entry["pkl_path"], chunk_size=spec.chunk_size).load()
+        runs.append(_OutputRun(dataset, medias, entry=entry))
+    return runs
+
+
+def _temporary_output_runs(spec: _SourceSpec) -> Iterator[_OutputRun]:
+    """Open a multi-dataset source for a temporary run; yield one run per output as it is produced.
+
+    The importer's first chunk of each output is pulled here, so an output it
+    produced nothing for is reported as that output's failure (what the
+    dashboard's row would say) rather than as the run's; the rest of the
+    output's chunks stay lazy.
+    """
+    import itertools  # noqa: PLC0415
+
+    importer, field_values = _multi_source_importer(spec)
+    outputs = list(spec.outputs)
+    names = _output_dataset_names(importer, field_values, outputs)
+    for output, chunks in spec.load_outputs():
+        index = _output_index(outputs, output)
+        dataset = _RunDataset(names[index], output.media_type, output.category, index=index, count=len(outputs))
+        first = next((chunk for chunk in chunks if chunk), None)
+        if first is None:
+            error = f"Import produced no {output.category_label()} media."
+            cli_progress.emit(
+                "dataset_failed",
+                text=f"Import of dataset {dataset.name!r} failed: {error}",
+                name=dataset.name,
+                error=error,
+            )
+            yield _OutputRun(dataset, None, error=error)
+            continue
+        yield _OutputRun(dataset, itertools.chain([first], chunks))
+
+
+def _run_multi_source(
+    spec: _SourceSpec,
+    *,
+    save_dataset: bool,
+    settings_path: str | None,
+    exporter_name: str | None,
+    exporter_field_values: dict[str, Any] | None,
+    override_detectors: list[str] | None,
+    dry_run: bool,
+    stream_results: bool,
+    keep_negatives: bool,
+) -> None:
+    """Run a multi-dataset source (#4707): one importer run, then detect and export per dataset.
+
+    The multi-dataset form of :func:`_run_source`.  A saving run imports every
+    output through the dashboard's own multi-dataset pipeline first and scores
+    each saved copy; a temporary run scores each output straight off the
+    importer.  Either way each dataset is then its own pass of
+    :func:`_run_pipeline`: its own detectors (the AutoFind ones that apply to
+    its media type), its own results, its own exporter run with its own
+    destination (:func:`_exporter_fields_for_dataset`).
+
+    What is per dataset and what is the run's: a dataset no detector applies
+    to is skipped with a note, and only a run in which *no* dataset could be
+    scored fails for it (when temporary; a saving run's datasets are the point
+    and stay saved).  A dataset whose import failed is reported and skipped,
+    and the run fails once every other dataset has been scored and exported,
+    so one bad output costs nothing but its own results.
+    """
+    source_description = spec.describe(
+        stream_results=stream_results, keep_negatives=keep_negatives, save_dataset=save_dataset
+    )
+    if dry_run:
+        _run_pipeline(
+            iter(()),
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            override_detectors=override_detectors,
+            empty_error=spec.empty_error,
+            dry_run=True,
+            stream_results=stream_results,
+            keep_negatives=keep_negatives,
+            source_description=source_description,
+            skip_without_detectors=save_dataset,
+        )
+        return
+
+    runs: Iterator[_OutputRun]
+    if save_dataset:
+        if stream_results:
+            raise ValueError(f"--stream-results: {_STREAM_CANNOT_SAVE}. Run it as a temporary import.")
+        runs = iter(_save_multi_source_datasets(spec))
+    else:
+        runs = _temporary_output_runs(spec)
+
+    failures: list[str] = []
+    detected_any = False
+    for run in runs:
+        if run.medias is None:
+            failures.append(f"{run.dataset.name}: {run.error}")
+            continue
+        detected = _run_pipeline(
+            run.medias,
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            override_detectors=override_detectors,
+            empty_error=f"No medias loaded for dataset {run.dataset.name!r} by importer '{spec.importer_name}'",
+            stream_results=stream_results,
+            keep_negatives=keep_negatives,
+            source_description=source_description,
+            skip_without_detectors=True,
+            dataset=run.dataset,
+        )
+        detected_any = detected_any or detected
+        if detected and run.entry is not None:
+            _delete_after_detection(run.entry, settings_path)
+
+    if failures:
+        raise ValueError(f"{len(failures)} of {len(spec.outputs)} dataset(s) failed to import: " + "; ".join(failures))
+    if not detected_any and not save_dataset:
+        raise _NoApplicableDetectorsError(
+            f"No AutoFind detector applies to any of the {len(spec.outputs)} dataset(s) this run produced. "
+            "Add detectors for their media types to the settings file's autofind_detectors list."
+        )
 
 
 #: Why a streaming run cannot save its dataset, shared by every entry point that refuses one.
@@ -1944,17 +2582,37 @@ def _run_source(
     set the source is imported and registered first, and detection then runs
     over the saved pickle - so its hits are the ones the user will find on that
     dashboard row.  A temporary run (the pre-#4226 behaviour) scores the source
-    straight from the importer and keeps nothing.
+    straight from the importer and keeps nothing.  A saving run whose user
+    turned on ``autofind_cli_delete_dataset`` deletes what it imported once
+    detection has run (:func:`_delete_after_detection`).  A source with
+    ``outputs`` is several datasets from one importer run, each saved, scored
+    and exported on its own (:func:`_run_multi_source`).
     """
+    if spec.outputs:
+        _run_multi_source(
+            spec,
+            save_dataset=save_dataset,
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            override_detectors=override_detectors,
+            dry_run=dry_run,
+            stream_results=stream_results,
+            keep_negatives=keep_negatives,
+        )
+        return
     source_description = spec.describe(
         stream_results=stream_results, keep_negatives=keep_negatives, save_dataset=save_dataset
     )
+    imported: dict[str, Any] | None = None
     if save_dataset and not dry_run:
         if stream_results:
             raise ValueError(f"--stream-results: {_STREAM_CANNOT_SAVE}. Run it as a temporary import.")
-        entry = _save_source_dataset(spec)
+        entry, is_new = _save_source_dataset(spec)
+        if is_new:
+            imported = entry
         spec = _SourceSpec(kind="pickle", dataset_path=entry["pkl_path"], chunk_size=spec.chunk_size)
-    _run_pipeline(
+    detected = _run_pipeline(
         spec.load() if not dry_run else iter(()),
         settings_path=settings_path,
         exporter_name=exporter_name,
@@ -1967,6 +2625,8 @@ def _run_source(
         source_description=source_description,
         skip_without_detectors=save_dataset,
     )
+    if detected and imported is not None:
+        _delete_after_detection(imported, settings_path)
 
 
 def _autodetect(
@@ -2054,13 +2714,20 @@ def autodetect_importer_main(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    outputs: list[OutputSpec] | None = None,
 ) -> None:
     """CLI entry point: run autodetect with a named importer and output results.
 
     *save_dataset* and *override_detectors* behave as in :func:`autodetect_main`.
+    *outputs*, when given, makes the one importer run produce several datasets
+    (#4707), one per :class:`~vtscore.datasets.importers.base.OutputSpec`,
+    each saved (unless temporary), scored and exported on its own; see
+    :func:`_run_multi_source`.
     """
     _autodetect(
-        _SourceSpec(kind="importer", importer_name=importer_name, field_values=field_values),
+        _SourceSpec(
+            kind="importer", importer_name=importer_name, field_values=field_values, outputs=tuple(outputs or ())
+        ),
         settings_path=settings_path,
         exporter_name=exporter_name,
         exporter_field_values=exporter_field_values,
@@ -2117,12 +2784,14 @@ def autodetect_importer_main_chunked(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    outputs: list[OutputSpec] | None = None,
 ) -> None:
     """CLI entry point: chunked autodetect with a named importer.
 
-    *save_dataset* and *override_detectors* behave as in
-    :func:`autodetect_main`; *chunk_size* bounds the scoring pass over the
-    saved copy (the import itself is held in memory whole, as a GUI import is).
+    *save_dataset*, *override_detectors* and *outputs* behave as in
+    :func:`autodetect_importer_main`; *chunk_size* bounds the scoring pass over
+    the saved copy (the import itself is held in memory whole, as a GUI import
+    is).
     """
     _autodetect(
         _SourceSpec(
@@ -2130,6 +2799,7 @@ def autodetect_importer_main_chunked(
             importer_name=importer_name,
             field_values=field_values,
             chunk_size=chunk_size,
+            outputs=tuple(outputs or ()),
         ),
         settings_path=settings_path,
         exporter_name=exporter_name,

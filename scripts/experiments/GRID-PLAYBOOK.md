@@ -74,6 +74,11 @@ so one allocation processes a *series* of units on the GPU it grabbed**:
 - The wins are real but bounded: chunking removes re-scheduling stalls and
   redundant embedding, **not** the per-unit compute (the model-training/scoring
   sims dominate and don't shrink).
+- **Count job records, not running tasks.** Slurm's `MaxJobCount` (**10,000**
+  for the whole cluster) counts every array task from the moment it is queued,
+  so a `%6` throttle does not make a 720-task array cheap. #4668's sixteen such
+  arrays filled 85% of it and the last four were refused (#4701).
+  `python3 scripts/slurm/job_records.py --tasks N` says whether N more fit.
 
 ## 4. Know which mount you are on
 

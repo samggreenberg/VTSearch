@@ -100,6 +100,9 @@ class ServerJsonResultsExporter(ResultsExporter):
             "detectors": header.get("detectors", []),
             "keep_negatives": bool(header.get("keep_negatives", False)),
         }
+        if header.get("dataset"):
+            # One of several datasets from one run (#4707): say which.
+            meta["dataset"] = header["dataset"]
 
         total_hits = 0
         with atomic_write_stream(filepath) as f:

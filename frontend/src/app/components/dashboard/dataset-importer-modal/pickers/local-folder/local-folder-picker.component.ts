@@ -33,6 +33,16 @@ import {
   toFolderName,
   toTypeId,
 } from '../shared/media-type.util';
+import {
+  OutputDraft,
+  buildOutputDrafts,
+  convertersByTypeOf,
+  isMultiOutputImporter,
+  outputsFromDrafts,
+  tickCategory,
+  tickDetectedCategories,
+} from '../shared/multi-output.util';
+import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { Observable } from 'rxjs';
 
 /** Local-folder / local-files picker view: the user drops (or browses
@@ -50,7 +60,7 @@ import { Observable } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-local-folder-picker',
   standalone: true,
-  imports: [FormsModule, ImportAdvancedComponent, ClipperChooserComponent],
+  imports: [FormsModule, ImportAdvancedComponent, MultiOutputConfigComponent, ClipperChooserComponent],
   templateUrl: './local-folder-picker.component.html',
   styleUrl: './local-folder-picker.component.scss',
 })
@@ -63,6 +73,9 @@ export class LocalFolderPickerComponent {
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
   readonly importAdvanced = viewChild(ImportAdvancedComponent);
+  /** The Multi-Dataset editor, mounted in place of the Advanced block while
+   *  :prop:`multiDataset` is on (#4703). */
+  readonly multiOutputConfig = viewChild(MultiOutputConfigComponent);
 
   readonly importers = input<ImporterInfo[]>([]);
   readonly mediaTypes = input<MediaTypeInfo[]>([]);
@@ -117,6 +130,15 @@ export class LocalFolderPickerComponent {
 
   sourceSpecs: SourceSpec[] = [];
 
+  /** Multi-Dataset mode (#4703): one dataset per ticked category of
+   *  :prop:`outputDrafts`, all from the one upload.  Read by the parent modal
+   *  (the footer toggle and the Import button), hence signals. */
+  readonly multiDataset = signal(false);
+  readonly outputDrafts = signal<OutputDraft[]>([]);
+  /** The category whose row opened the clipper chooser, or ``null`` when the
+   *  single-dataset Advanced block did. */
+  private clipperChooserCategory: string | null = null;
+
   clipperChooserOpen = false;
   clipperChooserClippers: ClipperInfo[] = [];
 
@@ -168,6 +190,8 @@ export class LocalFolderPickerComponent {
     this.recursive = readRecursiveDefault(importer);
     this.datasetName = '';
     this.datasetNameDirty = false;
+    this.multiDataset.set(false);
+    this.outputDrafts.set([]);
 
     const folderImporter = this.importers().find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
@@ -241,6 +265,9 @@ export class LocalFolderPickerComponent {
   private applyDetection(): void {
     const detection = this.detection();
     if (!detection) return;
+    if (this.multiDataset()) {
+      this.outputDrafts.set(tickDetectedCategories(this.outputDrafts(), detection));
+    }
     const { mediaType, sourceSpecs } = autofillFromDetection(this.mediaTypes(), detection, this.mediaTypeOptions, (typeId) =>
       availableConvertersFor(this.importers(), 'server_folder', typeId),
     );
@@ -359,6 +386,43 @@ export class LocalFolderPickerComponent {
     return availableConvertersFor(this.importers(), 'server_folder', this.outputTypeId);
   }
 
+  /** The server-side importer the upload is handed to. */
+  private get backingImporter(): ImporterInfo | undefined {
+    const name = this.pickerKind() === 'files' ? 'server_files' : 'server_folder';
+    return this.importers().find((imp) => imp.name === name);
+  }
+
+  /** Whether the Multi-Dataset box is offered: the backing importer says so. */
+  get supportsMultiOutput(): boolean {
+    return isMultiOutputImporter(this.backingImporter);
+  }
+
+  get convertersByType(): Record<string, ConverterInfo[]> {
+    return convertersByTypeOf(this.backingImporter);
+  }
+
+  /** Switch between the single-dataset form and the Multi-Dataset editor.
+   *  Entering multi mode seeds one row per category, ticks the type the
+   *  dropdown had picked, and ticks whatever the dropped files were found to be. */
+  setMultiDataset(on: boolean): void {
+    this.multiDataset.set(on);
+    if (on && this.outputDrafts().length === 0) {
+      const seeded = tickCategory(buildOutputDrafts(this.mediaTypes(), this.convertersByType), this.outputTypeId);
+      this.outputDrafts.set(tickDetectedCategories(seeded, this.detection()));
+    }
+    this.cdr.markForCheck();
+  }
+
+  onOutputDraftsChange(drafts: OutputDraft[]): void {
+    this.outputDrafts.set(drafts);
+  }
+
+  /** Whether the import has something to make: always in single mode, at
+   *  least one ticked category in multi mode. */
+  get hasOutputs(): boolean {
+    return !this.multiDataset() || this.outputDrafts().some((d) => d.checked);
+  }
+
   private resetSourceSpecs(): void {
     this.sourceSpecs = this.importDefaults.specsListWithDefaultsFor(this.mediaTypes(), this.outputTypeId, this.availableConverters);
   }
@@ -368,18 +432,36 @@ export class LocalFolderPickerComponent {
   }
 
   openClipperChooser(): void {
+    this.clipperChooserCategory = null;
     this.clipperChooserClippers = this.clippers();
+    this.clipperChooserOpen = true;
+  }
+
+  /** A Multi-Dataset row asked for the chooser: open it on that row's clippers. */
+  openClipperChooserFor(request: { category: string; clippers: ClipperInfo[] }): void {
+    this.clipperChooserCategory = request.category;
+    this.clipperChooserClippers = request.clippers;
     this.clipperChooserOpen = true;
   }
 
   onClipperChooserSelected(selection: ClipperSelection): void {
     this.clipperChooserOpen = false;
+    if (this.clipperChooserCategory !== null) {
+      this.multiOutputConfig()?.setClipper(this.clipperChooserCategory, selection.name, selection.params);
+      this.clipperChooserCategory = null;
+      return;
+    }
     this.selectedClipper.set(selection.name);
     this.clipperParamValues.set({ ...selection.params });
   }
 
   onClipperChooserCancelled(): void {
     this.clipperChooserOpen = false;
+    if (this.clipperChooserCategory !== null) {
+      // The row keeps the clipper it had.
+      this.clipperChooserCategory = null;
+      return;
+    }
     const clippers = this.clipperChooserClippers;
     const defaultClipper = clippers.find((c) => c.name.endsWith('_default')) || clippers[0];
     this.selectedClipper.set(defaultClipper?.name || '');
@@ -389,6 +471,10 @@ export class LocalFolderPickerComponent {
   submit(): void {
     if (this.files().length === 0) {
       this.error.set(this.pickerKind() === 'files' ? 'Please select a paths file to upload.' : 'Please select a folder to upload.');
+      return;
+    }
+    if (!this.hasOutputs) {
+      this.error.set('Tick at least one kind of media to import.');
       return;
     }
     if (this.pickerKind() === 'files') {
@@ -422,7 +508,7 @@ export class LocalFolderPickerComponent {
       const rel = (file as any).webkitRelativePath as string | undefined;
       formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
     }
-    if (this.sourceSpecs.length > 0) {
+    if (!this.multiDataset() && this.sourceSpecs.length > 0) {
       formData.append('source_specs', JSON.stringify(this.sourceSpecs));
     }
 
@@ -438,7 +524,7 @@ export class LocalFolderPickerComponent {
     formData.append('media_type', this.mediaType);
     formData.append('paths_file', pathsFile, pathsFile.name);
     this.appendCommonFormFields(formData);
-    if (this.sourceSpecs.length > 0) {
+    if (!this.multiDataset() && this.sourceSpecs.length > 0) {
       formData.append('source_specs', JSON.stringify(this.sourceSpecs));
     }
 
@@ -464,21 +550,27 @@ export class LocalFolderPickerComponent {
     if (name) {
       formData.append('dataset_name', name);
     }
-    if (this.selectedEmbedder()) {
-      formData.append('embedder', this.selectedEmbedder());
-    }
-    const embedders = composeEmbedders(this.selectedEmbedder(), this.selectedPatchEmbedder(), this.selectedStructuralEmbedder());
-    if (embedders) {
-      formData.append('embedders', JSON.stringify(embedders));
-    }
-    if (this.selectedClipper()) {
-      formData.append('clipper', this.selectedClipper());
-      if (this.clipperParams.length > 0 && Object.keys(this.clipperParamValues()).length > 0) {
-        formData.append('clipper_params', JSON.stringify(this.clipperParamValues()));
+    if (this.multiDataset()) {
+      // One dataset per ticked category, each row with its own settings; the
+      // single-dataset embedder / clipper / cleanup stay home.
+      formData.append('outputs', JSON.stringify(outputsFromDrafts(this.outputDrafts())));
+    } else {
+      if (this.selectedEmbedder()) {
+        formData.append('embedder', this.selectedEmbedder());
       }
-    }
-    if (this.selectedCleaners().length > 0) {
-      formData.append('cleaners', JSON.stringify(this.selectedCleaners()));
+      const embedders = composeEmbedders(this.selectedEmbedder(), this.selectedPatchEmbedder(), this.selectedStructuralEmbedder());
+      if (embedders) {
+        formData.append('embedders', JSON.stringify(embedders));
+      }
+      if (this.selectedClipper()) {
+        formData.append('clipper', this.selectedClipper());
+        if (this.clipperParams.length > 0 && Object.keys(this.clipperParamValues()).length > 0) {
+          formData.append('clipper_params', JSON.stringify(this.clipperParamValues()));
+        }
+      }
+      if (this.selectedCleaners().length > 0) {
+        formData.append('cleaners', JSON.stringify(this.selectedCleaners()));
+      }
     }
     formData.append('build_projection', this.buildProjection() ? 'true' : 'false');
     formData.append('merge_near_duplicates', this.mergeNearDuplicates() ? 'true' : 'false');
@@ -487,6 +579,9 @@ export class LocalFolderPickerComponent {
   }
 
   private offerSaveImportDefaults(): void {
+    // A multi-dataset import has no single configuration to offer as the
+    // type's default.
+    if (this.multiDataset()) return;
     const typeId = this.outputTypeId;
     const cfg = this.importDefaults.snapshotImportConfig(
       typeId,

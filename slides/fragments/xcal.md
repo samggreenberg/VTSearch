@@ -36,6 +36,9 @@
 <!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, red
      is Bad. -->
 
-<!-- The shipped code has refined this since — pooled scores, a quantile,
-     redrawn splits. Polish, not the idea. The next
-     slide is what happens *before* "enough labels". -->
+<!-- This is the idea the rest of the deck keeps. Scored in F-beta at each
+     of the app's three radios, no line rule after it beat it until the
+     labels line in section III (#4582, #4519), and that line is built on
+     these folds: the scores each fold gives the votes it never saw are its
+     class model. The next slide is what happens *before* "enough
+     labels". -->

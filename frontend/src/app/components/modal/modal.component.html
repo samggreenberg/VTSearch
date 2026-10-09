@@ -4,7 +4,8 @@
   management app-wide: on open it saves the triggering element and moves focus to
   the first tabbable control inside the dialog; Tab/Shift+Tab then cycle within
   the dialog instead of escaping to the page behind it; and on close (the `@if`
-  destroys this subtree) focus is restored to the trigger.
+  destroys this subtree) focus is restored to the trigger. With initialFocus
+  'dialog', the box itself is the initial element (cdkFocusInitial) instead.
 -->
 <div
   class="modal-backdrop"
@@ -16,7 +17,12 @@
   cdkTrapFocus
   [cdkTrapFocusAutoCapture]="true"
 >
-  <div class="modal-content">
+  <div
+    #box
+    class="modal-content"
+    [attr.tabindex]="initialFocus() === 'dialog' ? -1 : null"
+    [attr.cdkFocusInitial]="initialFocus() === 'dialog' ? '' : null"
+  >
     <div class="modal-header">
       <h2>{{ title() }}</h2>
       @if (showCloseButton()) {

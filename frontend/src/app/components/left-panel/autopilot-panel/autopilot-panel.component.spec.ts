@@ -595,50 +595,35 @@ describe('AutopilotPanelComponent', () => {
   });
 
   describe('completion hand-off', () => {
-    it('offers both ways out and does nothing on its own', async () => {
+    it("raises Toasty's hand-off and moves nobody (#4680)", async () => {
       const router = TestBed.inject(Router);
       const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
       reachDone();
       await settleZoneless(fixture);
 
       expect(component.state.phase).toBe('done');
-      expect(component.completionPrompt()?.heading).toBe('Detector Trained');
-
-      const modal = fixture.nativeElement.querySelector('vt-autopilot-complete-modal');
-      expect(modal).toBeTruthy();
-      const labels = [...modal.querySelectorAll('.modal-footer button')].map(
-        (b: HTMLButtonElement) => b.textContent!.trim(),
-      );
-      expect(labels).toEqual(['Continue Training', 'Head to Dashboard']);
-
-      // Nothing is on a timer any more: the user is never moved without asking.
+      // 20 Good + 5 Bad: the vote total it went up at.
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25, dryRun: undefined });
+      // No dialog, and nothing on a timer: the user is never moved without asking.
+      expect(fixture.nativeElement.querySelector('vt-modal')).toBeNull();
       expect(navigate).not.toHaveBeenCalled();
     });
 
-    it('stays in the Train window when the user picks Continue Training', async () => {
-      const router = TestBed.inject(Router);
-      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    it('drops the hand-off on the next vote: voting on is the answer', async () => {
       reachDone();
       await settleZoneless(fixture);
+      expect(autopilotState.handoff()).toBeTruthy();
 
-      component.onStay();
+      fixture.componentRef.setInput('goodVotes', goods(21));
       await settleZoneless(fixture);
-
-      expect(component.completionPrompt()).toBeNull();
-      expect(fixture.nativeElement.querySelector('vt-autopilot-complete-modal')).toBeNull();
-      expect(navigate).not.toHaveBeenCalled();
+      expect(autopilotState.handoff()).toBeNull();
     });
 
-    it('navigates when the user picks Head to Dashboard', async () => {
-      const router = TestBed.inject(Router);
-      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    it('drops the hand-off when Autopilot is stopped', async () => {
       reachDone();
       await settleZoneless(fixture);
-
-      component.onGoToDashboard();
-
-      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
-      expect(component.completionPrompt()).toBeNull();
+      component.deactivate();
+      expect(autopilotState.handoff()).toBeNull();
     });
 
     it('announces the exhausted state too', async () => {
@@ -650,13 +635,13 @@ describe('AutopilotPanelComponent', () => {
       await settleZoneless(fixture);
 
       expect(component.state.phase).toBe('exhausted');
-      expect(component.completionPrompt()?.heading).toBe('Nothing Left to Label');
+      expect(autopilotState.handoff()?.kind).toBe('all-labeled');
     });
 
     it('does not announce again when the user returns to the Train window', async () => {
       reachDone();
       await settleZoneless(fixture);
-      expect(component.completionPrompt()).toBeTruthy();
+      expect(autopilotState.handoff()).toBeTruthy();
 
       // Leaving and coming back rebuilds the panel and (via label-view) clears
       // the service, so this is a brand-new run — but the detector it finds is
@@ -675,7 +660,7 @@ describe('AutopilotPanelComponent', () => {
       await settleZoneless(revisit);
 
       expect(revisit.componentInstance.state.phase).toBe('done');
-      expect(revisit.componentInstance.completionPrompt()).toBeNull();
+      expect(autopilotState.handoff()).toBeNull();
     });
 
     it('does not announce for a detector that started partially trained', async () => {
@@ -697,7 +682,7 @@ describe('AutopilotPanelComponent', () => {
       await settleZoneless(fresh);
 
       expect(fresh.componentInstance.state.phase).toBe('done');
-      expect(fresh.componentInstance.completionPrompt()).toBeNull();
+      expect(autopilotState.handoff()).toBeNull();
     });
 
     it('re-reads the labelset when the active pair changes mid-run', async () => {
@@ -725,7 +710,7 @@ describe('AutopilotPanelComponent', () => {
       await settleZoneless(fixture);
 
       expect(component.state.phase).toBe('done');
-      expect(component.completionPrompt()).toBeNull();
+      expect(autopilotState.handoff()).toBeNull();
     });
 
     it('holds the hand-off until the labelset has actually loaded', async () => {
@@ -740,7 +725,7 @@ describe('AutopilotPanelComponent', () => {
       await settleZoneless(pending);
 
       expect(pending.componentInstance.state.phase).toBe('done');
-      expect(pending.componentInstance.completionPrompt()).toBeNull();
+      expect(autopilotState.handoff()).toBeNull();
     });
   });
 
@@ -782,15 +767,14 @@ describe('AutopilotPanelComponent', () => {
       expect(more?.light?.color).toBe('yellow');
     });
 
-    it('announces Detector Trained when the walk runs dry', async () => {
+    it('hands off as trained when the walk runs dry', async () => {
       await enterWalk();
       for (let n = 5; n <= 20; n++) {
         fixture.componentRef.setInput('badVotes', bads(n));
         await settleZoneless(fixture);
       }
       expect(component.state.phase).toBe('done');
-      expect(component.completionPrompt()?.heading).toBe('Detector Trained');
-      expect(component.completionPrompt()?.detail).toContain('16 of the detector\'s best matches in a row were not good');
+      expect(autopilotState.handoff()).toMatchObject({ kind: 'done', dryRun: 16 });
       // Nothing undoes a dry run, so there is no Keep Improving step (#4621).
       expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'done']);
       expect(component.steps.find((st) => st.state === 'active')?.phase).toBe('done');

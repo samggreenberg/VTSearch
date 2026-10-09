@@ -17,7 +17,7 @@
 <!-- Where the two halves collide: the fused fit cuts at a midpoint, and a
      midpoint never reads a cost weight. The slider went inert again. -->
 
-<!-- **a** — Iteration 4's conclusion: a fold's anchored mixture cut at the
+<!-- **a** — Above Average's conclusion: a fold's anchored mixture cut at the
      midpoint, and M₀'s distribution where the quantile is realised. -->
 
 <!-- **b** — The failure, and it is a measurement: the bare midpoint admits one

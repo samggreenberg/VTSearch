@@ -15,8 +15,8 @@
 <!-- **a** — The same votes and the same model as the last slide, rearranged.
      The new object is the grey bar above: the unlabeled corpus the votes were
      drawn out of. Far wider, and no Good/Bad hatching, because unlabeled means
-     the classes are unknown, not absent. The labelled sliver is what iteration
-     1 starved on, and the grey bar was there the whole time. -->
+     the classes are unknown, not absent. The labelled sliver is what the last
+     slide starved on, and the grey bar was there the whole time. -->
 
 <!-- **b** — So run the loop the other way round. Train M₀ on the votes as
      before. **c** — And score the *whole corpus*: fifty thousand scores instead
@@ -26,7 +26,11 @@
      midpoint between the two means. That is the whole estimator, and nothing
      in the bottom half of the figure ever looks at a vote. -->
 
-<!-- The midpoint looks naive and survived two separate attempts to replace it.
-     And colouring the low mode red and the high mode green is an assumption
-     the fit cannot justify: measured later, it was wrong by a factor of four —
-     a fitted high-component weight of 0.35 against a true prevalence of 0.09. -->
+<!-- Say which half lasted. Reading the corpus did: section III's line
+     counts its matches on exactly this grey bar. The midpoint did not.
+     Scored in F-beta over the session, cutting here instead of
+     cross-calibrating lost 0.36, 0.36 and 0.28 at β ¼, 1 and 4 (#4582): where under half a percent
+     of the corpus matches, a cut between the two means keeps far more than
+     there are matches. And the colours are an assumption the fit cannot
+     justify: measured, the high component weighed 0.35 against a true
+     prevalence of 0.09. -->

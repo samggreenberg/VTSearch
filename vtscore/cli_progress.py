@@ -22,15 +22,30 @@ Event names emitted today:
   URL for the caller to open, since the CLI has no browser of its own)
 - ``progress``       - a tick from the embedding / loading stack
   fields: ``status`` (str), ``message`` (str?), ``current`` (int?),
-  ``total`` (int?), ``pct`` (float? - only when total > 0)
+  ``total`` (int?), ``pct`` (float? - only when total > 0), ``dataset``
+  (str? - the dataset's name, when a multi-dataset run imports several at
+  once)
 - ``dataset_saved``  - a saving run registered (or found) its dataset on the
-  dashboard
+  dashboard; once per dataset of a multi-dataset run
   fields: ``dataset_id`` (str), ``name`` (str), ``num_items`` (int),
   ``pkl_path`` (str), ``already_saved`` (bool - the pickle was already a
   registered dataset, so nothing new was imported)
-- ``detection_skipped`` - a saving run had no detector to score with; the
-  dataset is still saved and the run exits 0
-  fields: ``reason`` (str)
+- ``detection_skipped`` - a run had no detector to score its dataset with; a
+  saved dataset stays saved, and a single-dataset run exits 0
+  fields: ``reason`` (str), ``dataset`` (str? - the dataset's name, in a
+  multi-dataset run, whose other datasets still run)
+- ``dataset_deleted`` - a saving run deleted the dataset it imported once its
+  detectors had run, because the user's ``autofind_cli_delete_dataset``
+  setting is on
+  fields: ``dataset_id`` (str), ``name`` (str)
+- ``dataset_start``  - a multi-dataset run (``--outputs``, #4707) is about to
+  score one of its datasets; what follows, up to the next one, is that
+  dataset's
+  fields: ``name`` (str), ``media_type`` (str), ``category`` (str),
+  ``dataset_id`` (str? - when saved), ``index`` (int, 0-based), ``count`` (int)
+- ``dataset_failed`` - one dataset of a multi-dataset run could not be
+  imported; the others still run, and the run exits non-zero at the end
+  fields: ``name`` (str), ``error`` (str)
 - ``notification``   - a non-fatal message a plugin wanted the user to see
   (see :mod:`vtscore.concurrency.notifications`; in the GUI these become
   toasts). The run continues either way, including at ``level="error"``.

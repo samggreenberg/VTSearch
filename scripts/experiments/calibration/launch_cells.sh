@@ -4,6 +4,10 @@
 # or run it by hand once prepare is done).
 set -uo pipefail
 
+# This script's own directory, for the record check below: VTS_REPO can name an
+# older frozen worktree that predates the helper.
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 WT="${VTS_REPO:-/exp/$USER/projects/vts-calib}"
 HERE="$WT/scripts/experiments/calibration"
 export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration}"
@@ -39,11 +43,40 @@ echo "cells to run: $N (array 0-$((N-1))%$CONC, partition=$PARTITION gres=$GRES)
 # every single-array launcher is unaffected.
 JOB_NAME="${CALIB_JOB_NAME:-cal-cells}"
 
+# `sbatch --parsable` prints nothing when the submission is refused, and the
+# launch used to carry on with an empty id: #4668's last four arrays went that
+# way, and the dependent analyze step with them (#4701).
+require_jobid() {
+  if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: $2 was REFUSED by sbatch (no job id came back)." >&2
+    echo "       'Slurm temporarily unable to accept job' means the cluster's job-record table" >&2
+    echo "       (MaxJobCount) is full; see scripts/slurm/job_records.py" >&2
+    exit 1
+  fi
+}
+
+# Every array task is a job record from the moment it is queued, and the
+# cluster's MaxJobCount caps records for every user at once; the %CONC throttle
+# caps running tasks, not records.  So check the array against the live queue
+# before sbatch sees it: a launch loop then stops at the array that would push
+# the cluster past half its records, not at the one sbatch refuses (#4701).
+# CALIB_SKIP_RECORD_CHECK=1 skips it.
+if [[ "${CALIB_SKIP_RECORD_CHECK:-0}" != "1" ]]; then
+  if ! python3 "$SELF/../../slurm/job_records.py" --tasks "$N"; then
+    echo "ERROR: not submitting $JOB_NAME's $N-task array (see above)." >&2
+    echo "       Chunk it or pack cells per task, or set CALIB_SKIP_RECORD_CHECK=1 if you mean it." >&2
+    exit 1
+  fi
+fi
+
 B=$(sbatch --parsable --job-name="$JOB_NAME" --array=0-$((N-1))%$CONC \
   "${GRES_ARG[@]}" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
   --export=ALL --output="$LOGS/cells-%A_%a.out" \
   --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
+require_jobid "$B" "$JOB_NAME's cells array"
 echo "cells array: $B"
+# Recorded now, so a refused analyze step below still leaves the array findable.
+echo "$B" > "$LOGS/.cells_jobid"
 
 # Which analyzer runs after the cells: the #2781 study's analyze.py (default)
 # or the #2799 safe-threshold study's analyze_safe.py (set by launch_safe.sh).
@@ -58,6 +91,6 @@ A=$(sbatch --parsable --dependency=afterany:$B --job-name="$JOB_NAME-analyze" --
   --cpus-per-task=4 --time="$ATIME" --partition=cpu \
   --export=ALL --output="$LOGS/analyze-%j.out" \
   --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $ANALYZE")
+require_jobid "$A" "$JOB_NAME's analyze step"
 echo "analyze: $A"
-echo "$B" > "$LOGS/.cells_jobid"
 echo "Report -> $CALIB_RESULTS/REPORT.md"

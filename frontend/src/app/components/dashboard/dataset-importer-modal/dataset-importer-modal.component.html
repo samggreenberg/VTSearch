@@ -4,6 +4,7 @@
     [importersForActiveTab]="importersForActiveTab"
     [activeImporterTabLabel]="activeImporterTabLabel"
     [activeTab]="activeImporterTab()"
+    [hideSoloTabBar]="true"
     (activeTabChange)="selectImporterTab($event)"
     [selectedImporter]="selectedImporter()"
     (importerSelected)="selectImporter($event)"
@@ -60,6 +61,9 @@
           [mediaTypeOptionLabels]="serverFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="serverFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="serverFolderPicker().detectionHint()"
+          [showMultiToggle]="serverFolderPicker().supportsMultiOutput"
+          [multiDataset]="serverFolderPicker().multiDataset()"
+          (multiDatasetChange)="serverFolderPicker().setMultiDataset($event)"
         ></vt-import-config>
       }
     </ng-container>
@@ -99,6 +103,9 @@
           [mediaTypeOptionLabels]="localFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="localFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="localFolderPicker().detectionHint()"
+          [showMultiToggle]="localFolderPicker().supportsMultiOutput"
+          [multiDataset]="localFolderPicker().multiDataset()"
+          (multiDatasetChange)="localFolderPicker().setMultiDataset($event)"
         ></vt-import-config>
       }
     </ng-container>
@@ -186,7 +193,7 @@
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="localFolderPicker().submit()" [disabled]="localFolderPicker().submitting() || localFolderPicker().files().length === 0">
+      <button class="btn btn--primary" (click)="localFolderPicker().submit()" [disabled]="localFolderPicker().submitting() || localFolderPicker().files().length === 0 || !localFolderPicker().hasOutputs">
         @if (localFolderPicker().submitting()) {
           Uploading…
         } @else {
@@ -199,7 +206,7 @@
   @if (activePickerView === 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="serverFolderPicker().submit()" [disabled]="serverFolderPicker().submitting() || !serverFolderPicker().folderPath()">
+      <button class="btn btn--primary" (click)="serverFolderPicker().submit()" [disabled]="serverFolderPicker().submitting() || !serverFolderPicker().folderPath() || !serverFolderPicker().hasOutputs">
         @if (serverFolderPicker().submitting()) {
           Importing…
         } @else {

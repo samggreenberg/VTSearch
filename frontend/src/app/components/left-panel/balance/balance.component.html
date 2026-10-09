@@ -1,6 +1,6 @@
 <div class="balance">
   <div class="balance-head">
-    <span class="balance-label" [id]="labelId">Threshold:</span>
+    <span class="balance-label" [class.balance-label--form]="formLabel()" [id]="labelId">Threshold:</span>
     <vt-field-hint-icon [hint]="hint" ariaLabel="What the threshold means" placement="below-block" />
     <!-- Controls that belong on the heading's line (Find's work-queue actions). -->
     <ng-content select="[balanceActions]" />

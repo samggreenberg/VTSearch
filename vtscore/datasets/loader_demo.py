@@ -183,25 +183,6 @@ def _try_load_cached(
     return True
 
 
-def _note_import_branch(branch: str) -> None:
-    """Tell the timing recorder whether this demo load did the work or read a pkl.
-
-    ``embed`` is the step name in both task families that route through here —
-    ``dataset_load``'s and ``dataset_stage``'s — so one call covers both.
-
-    The distinction is invisible from the timings alone and survives the
-    process: #3345's sweep ran ``dataset_stage`` in a *fresh interpreter* after
-    ``dataset_load``, and still measured 0.000-0.002 s of embedding on all four
-    image tiers, because the cache it hit was this pkl on disk. Marking it here,
-    where the branch is chosen, is the only place the fact exists (#3521).
-    """
-    from vtscore.timing import note_branch, note_no_encoder_load  # noqa: PLC0415 - avoid an import cycle
-
-    note_branch("embed", branch)
-    if branch == "cached":
-        note_no_encoder_load()
-
-
 def _resolve_demo_embedder(embedder_name: str, media_type_id: str) -> Any:
     """Resolve the embedder to use for a demo load.
 
@@ -228,6 +209,7 @@ def load_demo_dataset(
     converter_name: str = "",
     clipper_name: str = "",
     clipper_params: dict[str, Any] | None = None,
+    use_cache: bool = True,
 ) -> None:
     """Load a named demo dataset into the medias dict, downloading and embedding as needed.
 
@@ -268,6 +250,12 @@ def load_demo_dataset(
             metadata so a later load with a different clipper re-derives.
         clipper_params: Optional parameter overrides for *clipper_name*
             (e.g. ``{"duration": 5.0}`` for a tiling clipper).
+        use_cache: When ``False``, neither read nor write the ``.pkl``
+            cache: always build from the source and embed now.  For a caller
+            that records *how* its vectors were made (the pile's provenance
+            sidecar): a cache hit hands back vectors embedded whenever the
+            cache was written, by whatever code and batch size did it, and the
+            caller has no way to tell (#4117).
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
@@ -287,7 +275,7 @@ def load_demo_dataset(
 
     # Check if already embedded
     pkl_file = EMBEDDINGS_DIR / f"{cache_key}.pkl"
-    if _try_load_cached(
+    if use_cache and _try_load_cached(
         pkl_file,
         dataset_name,
         media_type_id,
@@ -298,16 +286,7 @@ def load_demo_dataset(
         clipper_name,
         clipper_params,
     ):
-        # This import downloaded nothing, embedded nothing, and never
-        # instantiated the encoder — it read a pkl. Tell the timing recorder
-        # so the fitter does not average a pkl read together with the imports
-        # that do the work, and does not let this run claim the encoder
-        # residency key on behalf of the next one, which will pay the real
-        # load. Both are no-ops unless a sweep is recording (#3521).
-        _note_import_branch("cached")
         return
-
-    _note_import_branch("fresh")
 
     # Resolve the embedder
     from vtscore.media import get as media_get
@@ -373,44 +352,57 @@ def load_demo_dataset(
     # clipper (a no-op).  Runs after any converter so it operates on the
     # final media type.
     if clipper_applied:
-        from vtscore.datasets.stages.clipper import _apply_clipper
-
-        def _clip_progress(current: int, total: int, phase: str) -> None:
-            if phase == "clipping":
-                msg = "Clipping media…"
-            elif phase == "converting":
-                msg = "Converting media…"
-            elif phase == "embedding":
-                msg = "Embedding clips…"
-            else:
-                # A loading/warmup message forwarded verbatim from the embedder.
-                msg = phase
-            on_progress("loading", msg, current, total)
-
-        _clip_progress(0, 0, "clipping")
-        _apply_clipper(
+        _clip_demo_medias(
             medias,
             _effective_clipper(clipper_name, media_type_id),
             clipper_params,
-            on_progress=_clip_progress,
             embedder=embedder,
+            on_progress=on_progress,
         )
 
-    _write_demo_cache(
-        pkl_file=pkl_file,
-        dataset_name=dataset_name,
-        media_type_id=media_type_id,
-        medias=medias,
-        mt=mt,
-        embedder=embedder,
-        external_dir=external_dir,
-        converter_name=converter_name,
-        clipper_name=clipper_name,
-        clipper_params=clipper_params,
-        clipper_applied=clipper_applied,
-    )
+    if use_cache:
+        _write_demo_cache(
+            pkl_file=pkl_file,
+            dataset_name=dataset_name,
+            media_type_id=media_type_id,
+            medias=medias,
+            mt=mt,
+            embedder=embedder,
+            external_dir=external_dir,
+            converter_name=converter_name,
+            clipper_name=clipper_name,
+            clipper_params=clipper_params,
+            clipper_applied=clipper_applied,
+        )
 
     on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
+
+
+def _clip_demo_medias(
+    medias: dict[int, dict[str, Any]],
+    clipper: str,
+    clipper_params: dict[str, Any] | None,
+    *,
+    embedder: Any,
+    on_progress: ProgressCallback,
+) -> None:
+    """Split every demo media with the real (non-default) *clipper*, re-embedding the clips."""
+    from vtscore.datasets.stages.clipper import _apply_clipper
+
+    def _clip_progress(current: int, total: int, phase: str) -> None:
+        if phase == "clipping":
+            msg = "Clipping media…"
+        elif phase == "converting":
+            msg = "Converting media…"
+        elif phase == "embedding":
+            msg = "Embedding clips…"
+        else:
+            # A loading/warmup message forwarded verbatim from the embedder.
+            msg = phase
+        on_progress("loading", msg, current, total)
+
+    _clip_progress(0, 0, "clipping")
+    _apply_clipper(medias, clipper, clipper_params, on_progress=_clip_progress, embedder=embedder)
 
 
 def _write_demo_cache(

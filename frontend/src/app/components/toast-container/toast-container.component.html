@@ -22,6 +22,7 @@
       role="alert"
     >
       <div class="toast__main">
+        <img class="toast__toasty" [src]="toastyFace(t.level)" alt="" />
         <!-- One glyph per level, so severity survives a colour-blind or
              greyscale reading of the same stack: tick / bang / "i" / cross. -->
         @switch (t.level) {

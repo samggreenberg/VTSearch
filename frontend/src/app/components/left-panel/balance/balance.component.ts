@@ -30,7 +30,9 @@ type Dot = 'green' | 'yellow' | 'none';
 /**
  * The Threshold control (#4317): the balance, which way to lean between
  * false positives and false negatives (#4413; the control was the precision
- * floor's, #4246). Mounted in the Find row and the Manual tab.
+ * floor's, #4246). Mounted in the Find row and the Manual tab, and on the New
+ * Detector form, which asks for the new detector's balance (#4665) with no
+ * line to report on.
  *
  * A horizontal spectrum from False Positives to False Negatives, with three
  * radios under it (`BALANCE_PRESETS`: beta 4, 1 and 1/4, left to right), one
@@ -104,6 +106,9 @@ export class BalanceComponent {
   readonly locked = input(false);
   /** The host's own state line, in place of the check's (Test: this corpus's result, or untested). */
   readonly lineState = input<TestLineState | null>(null);
+  /** Style the "Threshold:" heading as a form field's label, for a host that sets it among other form
+   *  fields (the New Detector form), rather than as the side panel's small caption (#4718). */
+  readonly formLabel = input(false);
 
   /** A balance the user picked, as a beta. */
   readonly valueChange = output<number>();

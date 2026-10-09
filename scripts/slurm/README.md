@@ -9,6 +9,7 @@ the tunnel make the day-to-day loop a two-command affair:
 | [`vtsearch-slurm.sh`](vtsearch-slurm.sh) | the **cluster** (a login node) | Allocates a GPU compute node with `srun`, activates the venv, and runs `app.py` on it. Prints the node it landed on. Holds the allocation until you quit. |
 | [`vtsearch-tunnel.sh`](vtsearch-tunnel.sh) | your **local machine** | Finds your running VTSearch job, SSH-forwards your local port to that compute node (auto-discovering the node + per-user port), and drops you into the project dir. `VTS_BIND=<addr>` serves the port to another device; `--no-shell` holds the tunnel open without a login shell. |
 | [`pick_gpu.py`](pick_gpu.py) | the **cluster** | Picks the GPU type with the most free capacity on the partition (via `scontrol`); the launcher calls it, and `VTS_GPU` overrides it. `--explain` prints the per-type free/total table. |
+| [`job_records.py`](job_records.py) | the **cluster** | Refuses an array that would take the cluster past 50% of Slurm's `MaxJobCount`, or you past 25%. Every array task is a job record, pending ones included. Called by `scripts/experiments/calibration/launch_cells.sh` before it submits, and by preflight's `--array-tasks`. |
 | [`vtsearch-tunnel.service`](vtsearch-tunnel.service) | your **local machine** | systemd *user* unit that keeps the tunnel up with no terminal attached, for an always-on box that holds the VPN on other devices' behalf. |
 
 The launcher and tunnel are parameterized by environment variables (no hard-coded usernames,

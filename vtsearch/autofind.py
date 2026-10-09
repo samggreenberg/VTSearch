@@ -336,20 +336,20 @@ def score_detector(
 def _line_state(name: str, det_ctx: Any) -> dict | None:
     """What the balance says about *name*'s cut in an AutoFind: unchecked, because nobody can vote.
 
-    Rides with the cut (``balance``), read at the beta of the thread that
-    trained it (#4413).  A headless run cannot spot-check its line (#4272), so
+    Rides with the cut (``balance``), read at the balance it was cut at: the
+    detector's own (#4413, #4665).  A headless run cannot spot-check its line (#4272), so
     the cut exported is the balance's unchecked set, and the log line is the
     record that it was never checked.  ``None`` for a detector with no trained
     context to ask, or with no balance (a library caller's choice; the app
     always sets one).
     """
+    from vtscore.state import detector_beta  # noqa: PLC0415
     from vtscore.state.core import detector_balance_state  # noqa: PLC0415
     from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
-    from vtsearch.state import get_beta  # noqa: PLC0415
 
     if det_ctx is None:
         return None
-    balance = detector_balance_state(det_ctx, get_beta())
+    balance = detector_balance_state(det_ctx, detector_beta(det_ctx))
     if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         logger.info(
             "Auto-detect: detector %s exports its top %d unchecked (%s); nobody is here to check it",
@@ -581,6 +581,58 @@ def get_autofind_run(run_id: str, user: str) -> dict[str, Any] | None:
     if record is None or record.get("owner") != user:
         return None
     return record
+
+
+def run_good_ids(record: dict[str, Any]) -> list[int]:
+    """The media ids a Browse of *record*'s Good results lays out, once each.
+
+    Every detector's ``hits``, merged: a media two detectors both called Good is
+    one item on the map.  This must name the same set as the Find Results
+    dialog's ``browseIds`` with **Good** picked, or a prepared layout
+    (:func:`prep_run_browse`) is not the one its Browse button asks for.
+    """
+    ids: set[int] = set()
+    for result in (record.get("results") or {}).values():
+        for hit in result.get("hits") or []:
+            cid = hit.get("id")
+            if isinstance(cid, int) and not isinstance(cid, bool):
+                ids.add(cid)
+    return sorted(ids)
+
+
+def prep_run_browse(run_id: str, user: str) -> dict[str, Any] | None:
+    """Start laying out run *run_id*'s Good results for Browse, if the server is idle (#4683).
+
+    Called while the Find Results dialog is open, so that pressing its Browse
+    button finds the map already built, or part-way there, instead of waiting
+    on a whole fit.  The map is the one that button builds (the run's Good
+    results, on the run's dataset), so nothing changes for a user who never
+    presses it but a subset layout held in memory.
+
+    ``None`` for a run *user* cannot see (as :func:`get_autofind_run`).
+    Otherwise :func:`vtscore.projection.service.prep_subset_layout`'s answer:
+    ``ready``, ``building``, or ``busy`` while other work is in flight (ask
+    again later), or ``skipped`` with a ``reason`` when there is nothing to
+    prepare - the dataset is no longer loaded, or the run found nothing Good.
+    """
+    from vtscore.projection import service  # noqa: PLC0415
+    from vtscore.state.core import get_context  # noqa: PLC0415
+
+    record = get_autofind_run(run_id, user)
+    if record is None:
+        return None
+    ctx = get_context(record.get("dataset_id") or "")
+    if ctx is None:
+        return {"status": "skipped", "reason": "The run's dataset is not loaded."}
+    ids = run_good_ids(record)
+    if not ids:
+        return {"status": "skipped", "reason": "The run found no Good results."}
+    try:
+        return service.prep_subset_layout(ctx, ids)
+    except ValueError as exc:
+        # NothingToProject and the matrix builder's own refusals: Browse would
+        # meet the same, and its own build will say so when it is pressed.
+        return {"status": "skipped", "reason": str(exc)}
 
 
 def clear_autofind_runs() -> None:

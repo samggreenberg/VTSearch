@@ -180,6 +180,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Name of the data importer to use (e.g. folder, pickle, http_archive). Used with --autodetect.",
     )
     parser.add_argument(
+        "--outputs",
+        type=str,
+        default=None,
+        dest="outputs",
+        metavar="JSON",
+        help=(
+            "Make several datasets from the one --importer run (a multi-dataset import): a JSON "
+            "list with one object per dataset, in the shape the web API's 'outputs' takes, e.g. "
+            '\'[{"media_type": "image"}, {"media_type": "audio"}]\'. Each object names '
+            "its dataset's media_type and may add source_specs, category, dataset_name, embedder, "
+            "clipper, clipper_params and cleaners. Every dataset is saved, scored and exported on "
+            "its own. Replaces the importer's --media-type. Used with --autodetect --importer."
+        ),
+    )
+    parser.add_argument(
         "--exporter",
         type=str,
         help="Name of the results exporter to use (e.g. file, email_smtp, gui). Used with --autodetect.",
@@ -305,8 +320,8 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     # The process-level admin overrides (--solo-media-type, --solo-embedder,
-    # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only,
-    # --hide-ingest-eta) are declared once in vtsearch.admin_overrides, which
+    # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only)
+    # are declared once in vtsearch.admin_overrides, which
     # owns their flag spellings, help text, env-var equivalents and validators
     # together.
     admin_overrides.register_override_flags(parser)
@@ -369,6 +384,7 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
             "autodetect",
             "dataset",
             "importer",
+            "outputs",
             "exporter",
             "settings",
             "chunk_size",
@@ -631,8 +647,12 @@ def _create_detector_media_type(args, parser, importer) -> str:
     if not args.create_detector:
         return ""
     if args.importer:
+        outputs = _importer_outputs(args, parser, importer)
         spec = _SourceSpec(
-            kind="importer", importer_name=args.importer, field_values=_importer_field_values(args, importer)
+            kind="importer",
+            importer_name=args.importer,
+            field_values=_importer_field_values(args, importer),
+            outputs=tuple(outputs or ()),
         )
     elif args.dataset:
         spec = _SourceSpec(kind="pickle", dataset_path=args.dataset)
@@ -654,6 +674,42 @@ def _create_detector_media_type(args, parser, importer) -> str:
 def _importer_field_values(args, importer) -> dict[str, Any]:
     """The ``--importer``'s field values, as its per-plugin flags parsed them."""
     return {f.key: getattr(args, f.key, f.default) for f in importer.fields}
+
+
+def _importer_outputs(args, parser, importer) -> list | None:
+    """The datasets ``--outputs`` asks the one importer run for, or ``None`` without the flag.
+
+    The JSON goes through the web API's own validator
+    (:func:`~vtscore.datasets.importers.base.parse_output_specs`), so a
+    malformed list fails here, before any media is loaded, with that
+    validator's message.  The flag needs an ``--importer`` that makes several
+    datasets per run, and it replaces the importer's ``--media-type`` /
+    ``--source-specs``: each output names its own, so setting one beside the
+    list is refused rather than silently ignored.
+    """
+    raw = getattr(args, "outputs", None)
+    if not raw:
+        return None
+    if not args.importer:
+        parser.error("--outputs requires --importer <name> (a pickle holds one dataset)")
+    from vtscore.cli import _check_multi_output
+    from vtscore.datasets.importers.base import parse_output_specs
+
+    try:
+        _check_multi_output(importer)
+        outputs = parse_output_specs(raw)
+    except ValueError as exc:
+        parser.error(f"--outputs: {exc}")
+    if not outputs:
+        parser.error("--outputs must list at least one dataset to make")
+    for f in importer.fields:
+        if f.key not in ("media_type", "source_specs"):
+            continue
+        value = getattr(args, f.key, f.default)
+        if value and value != f.default:
+            flag = f"--{f.key.replace('_', '-')}"
+            parser.error(f"--outputs and {flag} both set; with --outputs each dataset names its own {f.key}")
+    return outputs
 
 
 def _label_importer_field_values(args, parser) -> dict[str, str]:
@@ -703,13 +759,21 @@ def _dispatch_autodetect(
     # other argument is identical across the four, so the call is written once.
     entry_point: Callable[..., None]
     source_args: tuple[Any, ...]
+    source_kwargs: dict[str, Any] = {}
     if args.importer:
         field_values = _importer_field_values(args, importer)
+        outputs = _importer_outputs(args, parser, importer)
+        if outputs:
+            # Several datasets from the one run (#4707); the outputs carry
+            # their own media types, so the importer's flag default is moot.
+            source_kwargs["outputs"] = outputs
         if chunk_size:
             entry_point, source_args = autodetect_importer_main_chunked, (args.importer, field_values, chunk_size)
         else:
             entry_point, source_args = autodetect_importer_main, (args.importer, field_values)
     elif args.dataset:
+        if getattr(args, "outputs", None):
+            parser.error("--outputs requires --importer <name> (a pickle holds one dataset)")
         if chunk_size:
             entry_point, source_args = autodetect_main_chunked, (args.dataset, chunk_size)
         else:
@@ -727,6 +791,7 @@ def _dispatch_autodetect(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         override_detectors=[args.import_labels_into] if args.import_labels_into else None,
+        **source_kwargs,
     )
 
 

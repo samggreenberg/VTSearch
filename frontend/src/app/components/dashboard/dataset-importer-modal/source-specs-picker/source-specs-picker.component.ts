@@ -33,6 +33,11 @@ export class SourceSpecsPickerComponent {
    *  type.  The native checkbox represents "include direct files of
    *  this type, no conversion". */
   readonly nativeType = input('');
+  /** Whether native files exist to include directly. ``false`` for a
+   *  convert-in type (``face``): nothing of that type is on disk, so the
+   *  always-checked native row would promise an include that never happens
+   *  and is left out; only the converter rows remain. */
+  readonly nativeImportable = input(true);
   /** Two-way bound source-spec list submitted to the importer. */
   readonly specs = input<SourceSpec[]>([]);
   /** Map of type_id → human-readable label.  Falls back to the type_id

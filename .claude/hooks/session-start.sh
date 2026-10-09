@@ -115,7 +115,7 @@ fi
 # Install lightweight dev tools only: linter and formatter.
 # Heavy dependencies (PyTorch, transformers, etc.) are installed lazily
 # by ensure-test-deps.sh the first time tests or the app are run.
-pip install ruff -q
+python -m pip install ruff -q
 
 # Surface missing or placeholder HF_TOKEN loudly so gated-model downloads
 # (DINOv3 etc.) don't fail later with confusing 401s. Don't hard-fail the

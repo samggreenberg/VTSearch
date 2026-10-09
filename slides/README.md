@@ -302,7 +302,7 @@ rules about *fragments*, which Marpit cannot see:
   2. Marpit's own counter would number it and hide the number.
 - **A fragment used more than once is one slide, shown several ways.** All its
   pages share a number and take consecutive letters — the outline reads
-  `1a … 1l` however far apart its twelve pages fall — which is the same rule a
+  `1a … 1m` however far apart its thirteen pages fall — which is the same rule a
   build already follows, applied to the other way a slide can have pages.
   Marpit can hold the previous page's number, which is no help when the pages
   are eighty slides apart.
@@ -310,8 +310,8 @@ rules about *fragments*, which Marpit cannot see:
 A numbering group's presenter notes are written per letter, as for a build,
 and the speaker build then gives each showing only the notes naming *its*
 letters (plus, on the first showing, any note naming none). That is what
-keeps a slide the room sees twelve times from printing the same four paragraphs
-into the speaker's hand twelve times.
+keeps a slide the room sees thirteen times from printing the same four paragraphs
+into the speaker's hand thirteen times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with the final stage large beside the notes and every page of the group under
@@ -325,7 +325,7 @@ against `NOTES_LINES` conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
 one `**c** —` per reveal, though one note may cover several. That counts the
-group across the whole deck, so a fragment shown twelve times owes twelve lettered
+group across the whole deck, so a fragment shown thirteen times owes thirteen lettered
 notes even though it carries no build markers. A frame nobody wrote a line for
 is invisible until you are standing in front of a room.
 
@@ -401,11 +401,12 @@ them changes a pixel of any slide:
   for the reason it keeps the numbering: an address is the same whether or not
   it is printed.
 
-The speaker deck gets the last four, aimed at *its* pages: a bookmark lands on the
-slide's one speaker page, a label is the number the page prints in its corner,
-that number links back to the speaker page of the section's outline, and the
-outline's numerals are clickable on the miniature, jumping to the speaker page
-where that section starts.
+The speaker deck gets all five, aimed at *its* pages: clicking the middle of a
+speaker page turns to the next slide's speaker page (#4634), the outline's
+numerals are clickable on the miniature, jumping to the speaker page where that
+section starts, the number the page prints in its corner links back to the
+speaker page of the section's outline, a bookmark lands on the slide's one
+speaker page, and a label is that printed number.
 
 **How.** The links are markdown links that `build.py` writes at the start of
 the outline's lines, with no text because the numeral is the theme's counter,
@@ -425,7 +426,9 @@ around any link of its own that reaches into it, rather than let the two
 overlap and leave the viewer to pick which one a click means. On a speaker page
 the outline is a picture, so its links have to be measured: `render.sh` renders
 the outline's showings alone (`_build/<deck>.probe.md`, a few seconds), and
-`pdf_nav.py` scales each link Chromium drew there onto the miniature.
+`pdf_nav.py` scales each link Chromium drew there onto the miniature — before
+it lays the click-to-advance area, which is then carved around them exactly as
+on the audience page.
 
 **A headline that repeats needs a bookmark of its own.** Bookmarks exist to
 tell pages apart, so `build.py --check` fails a deck where two different
@@ -522,6 +525,16 @@ The COCO download is idempotent, but the session is deliberately *not*: its
 datasets and detector are deleted and rebuilt every run, because the first
 shot's subject is an app with nothing in it. That costs a re-embed of both piles
 (~470 photographs, a few minutes on CPU) per run.
+
+With nothing serving on `$APP`, the harness **starts its app on a fresh data
+dir**, `data/.slides-app`, emptied every run, and stops it at the end, as
+`scripts/screenshots/refresh.sh` does with `data/.screenshots-app`. It never
+uses the `VTSEARCH_DATA_DIR` it inherits, which may be a live install's: on the
+GRID, `~/.bashrc` exports the live app's, and a run that inherited it imported
+`photos-train` into the live registry (#4697). The model cache is shared
+(`VTSEARCH_MODELS_DIR`, else `data/models`). An app you started yourself is
+used as it is, with its own data, so its first frame shows whatever that app
+already holds.
 
 The corpus and the detector are the **Book example**
 (`scripts/screenshots/book-example.mjs`). The user guide's screenshots were

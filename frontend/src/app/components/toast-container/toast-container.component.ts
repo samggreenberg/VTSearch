@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject, OnDestroy, signal } from '@angular/core';
 
 import { AsyncPipe } from '@angular/common';
-import { Toast, ToastService } from '../../services/toast.service';
+import { Toast, ToastLevel, ToastService } from '../../services/toast.service';
+import { TOASTY_FACES } from '../../utils/toasty-faces';
 
 /**
  * Stacked toast renderer mounted once in ``AppComponent``. Binds
@@ -30,6 +31,14 @@ export class ToastContainerComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     if (this.copiedTimer) clearTimeout(this.copiedTimer);
+  }
+
+  /** Toasty's face for a toast (#4680): sad on an error, surprised on a
+   *  warning, happy otherwise. The level's glyph still says it in shape. */
+  toastyFace(level: ToastLevel): string {
+    if (level === 'error') return TOASTY_FACES.sad;
+    if (level === 'warning') return TOASTY_FACES.surprised;
+    return TOASTY_FACES.happy;
   }
 
   trackById(_: number, t: Toast): number {

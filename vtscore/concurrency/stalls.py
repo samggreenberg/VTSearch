@@ -43,6 +43,15 @@ leaves a trace at the default log level:
   there for a diagnostic session that accepts that risk
   (``VTSEARCH_STALL_LIVE_DUMP=1``), and is off by default.
 
+  The bar is higher while the server starts (:func:`startup_grace`,
+  ``VTSEARCH_STALL_STARTUP_MS``, 5 s by default).  The ML imports and the
+  embedder preload hold the GIL across disk reads, and on a cold page cache
+  one ``dlopen`` of pyarrow's shared library is a second of that, which the
+  watchdog cannot tell from a stall: the process shows no CPU and a few dozen
+  major faults either way.  At the 1 s bar that wrote a full thread dump to
+  the terminal of a routine ``python app.py``; at 5 s a startup that takes
+  minutes (issue #3715) is still reported and a routine import is not.
+
 * :func:`install_gc_pause_logging` - ``gc.callbacks`` timing, logged at
   WARNING above ``VTSEARCH_GC_WARN_MS``.  A full collection holds the GIL for
   its whole duration and shows up in a thread dump only as an
@@ -98,6 +107,12 @@ log = logging.getLogger(__name__)
 WATCHDOG_MS_ENV = "VTSEARCH_STALL_WATCHDOG_MS"
 _DEFAULT_WATCHDOG_MS = 1000.0
 
+#: Env var: the heartbeat-miss threshold while the server starts (the ML
+#: imports and the embedder preload; see :func:`startup_grace`).  Never below
+#: ``VTSEARCH_STALL_WATCHDOG_MS``; ``0`` keeps that bar throughout.
+STARTUP_MS_ENV = "VTSEARCH_STALL_STARTUP_MS"
+_DEFAULT_STARTUP_MS = 5000.0
+
 #: Env var: file the thread stacks are written to when the heartbeat misses.
 #: Defaults to ``VTSEARCH_LOG_FILE`` when set, else stderr.
 DUMP_FILE_ENV = "VTSEARCH_STALL_DUMP_FILE"
@@ -151,6 +166,11 @@ def slow_phase_threshold_ms() -> float:
 def watchdog_threshold_ms() -> float:
     """Heartbeat-miss threshold; ``0`` means the watchdog is off."""
     return _env_ms(WATCHDOG_MS_ENV, _DEFAULT_WATCHDOG_MS)
+
+
+def startup_threshold_ms() -> float:
+    """Heartbeat-miss threshold while the server starts; ``0`` keeps the normal bar."""
+    return _env_ms(STARTUP_MS_ENV, _DEFAULT_STARTUP_MS)
 
 
 def live_dump_enabled() -> bool:
@@ -686,6 +706,9 @@ class StallWatchdog:
         logger: logging.Logger | None = None,
     ) -> None:
         self.threshold_s = max(threshold_ms, 1.0) / 1000.0
+        #: The bar as constructed; ``threshold_s`` is the one in effect,
+        #: which :meth:`relaxed` raises for a block.
+        self.base_threshold_s = self.threshold_s
         # Beat often enough that a stall is measured to within a quarter
         # threshold, but never faster than 20 Hz (the sample reads /proc).
         self.interval_s = max(self.threshold_s / 4.0, 0.05)
@@ -724,6 +747,33 @@ class StallWatchdog:
     @property
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    # -- the bar -------------------------------------------------------------
+
+    @contextmanager
+    def relaxed(self, threshold_ms: float) -> Iterator[float]:
+        """Raise the bar to *threshold_ms* for the block; never lower it.
+
+        The beat keeps its interval, so a stall is measured to the same
+        resolution; only what counts as one changes, and a report made under
+        the raised bar says so (``bar …ms``).  The live dump, when armed, is
+        re-armed at the new bar on entry and at the old one on exit, unless
+        the watchdog was stopped meanwhile (``stop`` cancelled it, and a
+        block that outlives the watchdog must not arm it again).  Yields the
+        bar in effect, in ms.
+        """
+        previous = self.threshold_s
+        self.threshold_s = max(previous, threshold_ms / 1000.0)
+        self._rearm()
+        try:
+            yield self.threshold_s * 1000.0
+        finally:
+            self.threshold_s = previous
+            self._rearm()
+
+    def _rearm(self) -> None:
+        if self._arm is not None and not self._stop.is_set():
+            self._arm(self.threshold_s)
 
     # -- the beat ------------------------------------------------------------
 
@@ -839,6 +889,8 @@ class StallWatchdog:
         if stacks is not None:
             self._write_stacks(stacks, names or {}, before, after, lag_s)
         parts = [f"stall: heartbeat late by {lag_s * 1000.0:.0f}ms"]
+        if self.threshold_s != self.base_threshold_s:
+            parts.append(f"bar {self.threshold_s * 1000.0:.0f}ms")
         if before is not None:
             wall_ms = max(gap_s, 1e-6) * 1000.0
             proc_before, proc_after = before.get("proc_cpu"), after.get("proc_cpu")
@@ -975,3 +1027,24 @@ def stop_stall_diagnostics() -> None:
 
 def active_watchdog() -> Optional[StallWatchdog]:
     return _active
+
+
+@contextmanager
+def startup_grace() -> Iterator[float | None]:
+    """Raise the active watchdog's bar to ``VTSEARCH_STALL_STARTUP_MS`` for the block.
+
+    For the server's own startup.  The ML imports and the embedder preload
+    hold the GIL across disk reads that take a second or more on a cold page
+    cache, and at the normal bar that wrote every thread's stack to the
+    terminal of a routine ``python app.py``.  Never lowers the bar, so a
+    diagnostic session that set a higher normal one keeps it.  Yields the bar
+    in effect in ms, or ``None`` when there is no watchdog or the startup bar
+    is ``0``.
+    """
+    watchdog = _active
+    bar = startup_threshold_ms()
+    if watchdog is None or bar <= 0:
+        yield None
+        return
+    with watchdog.relaxed(bar) as applied:
+        yield applied

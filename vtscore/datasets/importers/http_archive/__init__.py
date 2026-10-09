@@ -16,6 +16,15 @@ The importer participates in the multi-media import flow.  Each
 * a converter row scans the extracted archive for files of the
   converter's source type and runs the converter (with per-row params)
   to produce media of the chosen output type.
+
+Multi-dataset imports
+---------------------
+A multi-dataset import (#4703) downloads and extracts the archive **once**
+and then builds every requested dataset from the one extraction:
+:meth:`~HttpArchiveDatasetImporter.run_outputs` /
+:meth:`~HttpArchiveDatasetImporter.run_outputs_chunked` override the base
+hooks (which would re-download per output) to share the extraction
+directory across outputs and delete it after the last one.
 """
 
 from __future__ import annotations
@@ -30,7 +39,7 @@ from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.config import DATA_DIR
 from vtscore.datasets.archive import extract_archive, is_archive_path, load_archive_into
 from vtscore.datasets.downloader import download_file_with_progress
-from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
+from vtscore.datasets.importers.base import DatasetImporter, OutputSpec, PluginField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder
 
 
@@ -141,12 +150,12 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
-        media_type = field_values.get("media_type", "audio")
-        specs = self.effective_source_specs(field_values)
 
         if not _is_url(url):
             # Local server path to an archive: extract (cached) and load,
             # stamping local_archive origins for on-demand re-derivation.
+            media_type = field_values.get("media_type", "audio")
+            specs = self.effective_source_specs(field_values)
             medias.clear()
             load_archive_into(
                 url,
@@ -160,37 +169,102 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             )
             return
 
-        DATA_DIR.mkdir(exist_ok=True)
-
-        progress = resolve_progress_callback()
-
-        # Derive a local filename from the URL so we preserve the extension
-        url_path = url.split("?")[0].rstrip("/")
-        url_filename = url_path.split("/")[-1] or "archive"
-        run_id = uuid4().hex[:12]
-        archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
-        extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
-
-        progress("downloading", "Downloading archive...", 0, 0)
-        download_file_with_progress(url, archive_path, on_progress=progress)
-
-        progress("loading", "Extracting archive...", 0, 0)
-        extract_dir.mkdir(exist_ok=True)
-        extract_archive(archive_path, extract_dir, on_progress=progress)
-        archive_path.unlink(missing_ok=True)
-
+        extract_dir = self._download_and_extract(field_values)
         try:
-            load_dataset_from_folder(
-                extract_dir,
-                media_type,
-                medias,
-                on_progress=progress,
-                thin=thin,
-                content_vectors=self.content_vectors or None,
-                content_md5s=self.content_md5s or None,
-                custom_metadata_map=self.custom_metadata_map or None,
-            )
-            _run_converter_specs(extract_dir, media_type, field_values, specs, medias, thin=thin)
+            self._load_extracted(extract_dir, field_values, medias, thin=thin)
+        finally:
+            shutil.rmtree(extract_dir, ignore_errors=True)
+
+    def _load_extracted(self, extract_dir: Path, field_values: dict[str, Any], medias: dict, thin: bool) -> None:
+        """Load one dataset's medias out of an already-extracted archive.
+
+        The post-download half of :meth:`run`, split out so a multi-dataset
+        import (:meth:`run_outputs`) can call it once per output over a single
+        extraction.  *field_values* carries that dataset's ``media_type`` and
+        ``source_specs``.
+        """
+        media_type = field_values.get("media_type", "audio")
+        specs = self.effective_source_specs(field_values)
+        load_dataset_from_folder(
+            extract_dir,
+            media_type,
+            medias,
+            on_progress=resolve_progress_callback(),
+            thin=thin,
+            content_vectors=self.content_vectors or None,
+            content_md5s=self.content_md5s or None,
+            custom_metadata_map=self.custom_metadata_map or None,
+        )
+        _run_converter_specs(extract_dir, media_type, field_values, specs, medias, thin=thin)
+
+    def _iter_extracted_chunks(
+        self,
+        extract_dir: Path,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        """Chunked twin of :meth:`_load_extracted`; the post-download half of :meth:`run_chunked`."""
+        from vtscore.datasets.loader import load_dataset_from_folder_chunked  # noqa: PLC0415
+
+        media_type = field_values.get("media_type", "audio")
+        specs = self.effective_source_specs(field_values)
+        converter_specs = [s for s in specs if s.converter is not None]
+        yield from load_dataset_from_folder_chunked(
+            extract_dir,
+            media_type,
+            chunk_size,
+            thin=thin,
+            content_vectors=self.content_vectors or None,
+            content_md5s=self.content_md5s or None,
+            custom_metadata_map=self.custom_metadata_map or None,
+        )
+        if converter_specs:
+            converter_chunk: dict[int, dict[str, Any]] = {}
+            _run_converter_specs(extract_dir, media_type, field_values, converter_specs, converter_chunk, thin=thin)
+            if converter_chunk:
+                yield converter_chunk
+
+    def run_outputs(
+        self,
+        field_values: dict[str, Any],
+        outputs: list[OutputSpec],
+        thin: bool = False,
+    ) -> Iterator[tuple[OutputSpec, dict[int, dict[str, Any]]]]:
+        """Download and extract once, then load every output from the one extraction.
+
+        A local archive path takes the base class's per-output loop: its
+        extraction is already cached by :func:`load_archive_into`, so a second
+        output costs a scan, not a second unpack.
+        """
+        if not _is_url(field_values.get("url", "")):
+            yield from super().run_outputs(field_values, outputs, thin=thin)
+            return
+        extract_dir = self._download_and_extract(field_values)
+        try:
+            for output in outputs:
+                medias: dict[int, dict[str, Any]] = {}
+                self._load_extracted(extract_dir, output.narrow(field_values), medias, thin=thin)
+                yield output, medias
+        finally:
+            shutil.rmtree(extract_dir, ignore_errors=True)
+
+    def run_outputs_chunked(
+        self,
+        field_values: dict[str, Any],
+        outputs: list[OutputSpec],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[tuple[OutputSpec, dict[int, dict[str, Any]]]]:
+        """Chunked twin of :meth:`run_outputs`: one download, every output's chunks."""
+        if not _is_url(field_values.get("url", "")):
+            yield from super().run_outputs_chunked(field_values, outputs, chunk_size, thin=thin)
+            return
+        extract_dir = self._download_and_extract(field_values)
+        try:
+            for output in outputs:
+                for chunk in self._iter_extracted_chunks(extract_dir, output.narrow(field_values), chunk_size, thin):
+                    yield output, chunk
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
@@ -242,8 +316,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         chunk_size: int,
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
-        from vtscore.datasets.loader import load_dataset_from_folder_chunked
-
         if not _is_url(field_values.get("url", "")):
             # Local archive path: load everything as a single chunk via run().
             local_medias: dict[int, dict[str, Any]] = {}
@@ -253,31 +325,8 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             return
 
         extract_dir = self._download_and_extract(field_values)
-        media_type = field_values.get("media_type", "audio")
-        specs = self.effective_source_specs(field_values)
-        converter_specs = [s for s in specs if s.converter is not None]
         try:
-            yield from load_dataset_from_folder_chunked(
-                extract_dir,
-                media_type,
-                chunk_size,
-                thin=thin,
-                content_vectors=self.content_vectors or None,
-                content_md5s=self.content_md5s or None,
-                custom_metadata_map=self.custom_metadata_map or None,
-            )
-            if converter_specs:
-                converter_chunk: dict[int, dict[str, Any]] = {}
-                _run_converter_specs(
-                    extract_dir,
-                    media_type,
-                    field_values,
-                    converter_specs,
-                    converter_chunk,
-                    thin=thin,
-                )
-                if converter_chunk:
-                    yield converter_chunk
+            yield from self._iter_extracted_chunks(extract_dir, field_values, chunk_size, thin)
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 

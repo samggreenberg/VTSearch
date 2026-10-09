@@ -1,8 +1,8 @@
 """A staging import must report its importer's progress against the right step.
 
 ``dataset_stage`` declares three steps — ``acquire``, ``embed``, ``serialize`` —
-and the timing recorder labels a measured duration with whichever step the
-tracker was on when it ran. The staging flow used to bind the importer's
+and the whole-job bar paces each update against whichever step the tracker is
+on. The staging flow used to bind the importer's
 progress sink straight to ``tracker.update``, so the importer's calls arrived
 stepless and the tracker kept step 1 for the whole of ``run()``. Every demo
 source embeds *inside* ``run()``, so the entire embed landed under ``acquire``:

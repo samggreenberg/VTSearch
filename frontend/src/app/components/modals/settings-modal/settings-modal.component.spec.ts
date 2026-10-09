@@ -159,6 +159,44 @@ describe('SettingsModalComponent', () => {
     req.flush(mockSettings);
   });
 
+  it("hides all of Toasty's hints, then shows them all again (#4680)", async () => {
+    await flushInit();
+    expect(component.noHintsHidden()).toBe(true);
+    expect(component.allHintsHidden()).toBe(false);
+
+    component.onHideAllHints();
+    let req = httpMock.expectOne('/api/settings');
+    expect(req.request.body.hide_all_hints).toBe(true);
+    req.flush(mockSettings);
+    expect(component.allHintsHidden()).toBe(true);
+
+    // Show All also brings back the hints hidden one at a time.
+    component.settings.update((s) => ({ ...s, hidden_hints: ['train'] }));
+    component.onShowAllHints();
+    req = httpMock.expectOne('/api/settings');
+    expect(req.request.body.hide_all_hints).toBe(false);
+    expect(req.request.body.hidden_hints).toEqual([]);
+    req.flush(mockSettings);
+    expect(component.noHintsHidden()).toBe(true);
+  });
+
+  it("disables Show All while no hint is hidden and Hide All once they all are (#4680)", async () => {
+    await flushInit();
+    component.activeSettingsTab.set('appearance');
+    await settleZoneless(fixture);
+    const buttons = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll('.hint-buttons button')] as HTMLButtonElement[];
+    expect(buttons().map((b) => [b.textContent?.trim(), b.disabled])).toEqual([
+      ['Hide All', false],
+      ['Show All', true],
+    ]);
+
+    buttons()[0].click();
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+    await settleZoneless(fixture);
+    expect(buttons().map((b) => b.disabled)).toEqual([true, false]);
+  });
+
   it('should show "Default" in the RAM / Disk bars pulldown when the setting is unset', async () => {
     await flushInit();
     component.activeSettingsTab.set('appearance');
@@ -166,6 +204,26 @@ describe('SettingsModalComponent', () => {
     const select = (fixture.nativeElement as HTMLElement).querySelector('#setting-usage-bars') as HTMLSelectElement;
     expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['Hide', 'Default', 'View']);
     expect(select.value).toBe('default');
+  });
+
+  it('should save the AutoFind tab\'s command-line delete checkbox (#4674)', async () => {
+    await flushInit();
+    component.activeSettingsTab.set('autofind');
+    await settleZoneless(fixture);
+    // The tab's exporter picker loads its list on init.
+    httpMock.expectOne('/api/exporters').flush([]);
+    await settleZoneless(fixture);
+    const box = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.checkbox-row')]
+      .find((row) => row.textContent?.includes('Delete the dataset after AutoFind'))
+      ?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    // Off by default: the CLI keeps what it imports unless the user opts in.
+    expect(box.checked).toBe(false);
+    box.click();
+    await settleZoneless(fixture);
+    expect(component.settings().autofind_cli_delete_dataset).toBe(true);
+    const req = httpMock.expectOne('/api/settings');
+    expect(req.request.body.autofind_cli_delete_dataset).toBe(true);
+    req.flush(mockSettings);
   });
 
   it('should default the Graphics pulldown to auto when the setting is unset', async () => {

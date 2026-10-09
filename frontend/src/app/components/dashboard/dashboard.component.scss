@@ -9,11 +9,10 @@
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
-  // Positioning context for the first-run `<vt-pointer-arrow>`s, which span
-  // from a panel's message to a header button or down to the Train button.
+  // Positioning context for Toasty's hints (`<vt-toasty-hint>`), which stand
+  // beside a panel's + button or above the Train button.
   position: relative;
-  // Width of each Train / Test / Find group. Shared with `.intro-hint`,
-  // which uses it to sit directly above the Train button.
+  // Width of each Train / Test / Find group.
   --action-btn-group-width: 220px;
 }
 
@@ -155,14 +154,18 @@
     font-size: var(--font-sm);
 
     // No detectors yet: both tabs are locked (Drafts stays the active one)
-    // and drop their accent colour until the first detector arrives.
+    // and read as plain inactive tabs, accent edge and all, until the first
+    // detector arrives.
     &:disabled,
     &:disabled:hover {
       color: var(--text-secondary);
       font-weight: var(--weight-regular);
-      background: none;
+      background: var(--bg-subtle);
+      border-bottom-color: var(--border);
       opacity: var(--opacity-disabled);
       cursor: not-allowed;
+
+      &::after { transform: scaleX(0); }
     }
   }
 }
@@ -172,22 +175,6 @@
 .inline-add-btn {
   vertical-align: middle;
   margin: 0 var(--space-2xs);
-}
-
-// "Click Train to teach your new detector." pinned under the detector grid,
-// shrink-wrapped so its arrow starts from the text rather than the panel edge,
-// and shifted from the panel's centre line to the Train button's (the left of
-// the three centred `.action-btn-group`s below, one group plus one gap left of
-// centre) so the arrow drops straight onto it instead of flattening into a
-// sideways curve. The bottom margin lifts it off the panel edge so that arrow
-// is long enough to catch the eye.
-.intro-hint {
-  flex-shrink: 0;
-  align-self: center;
-  margin: var(--space-md) 0 var(--space-2xl);
-  transform: translateX(calc((var(--action-btn-group-width) + var(--space-lg)) * -1));
-  font-size: var(--font-md);
-  color: var(--text-secondary);
 }
 
 .dashboard-grid {

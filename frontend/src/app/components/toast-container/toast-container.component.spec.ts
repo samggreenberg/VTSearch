@@ -41,6 +41,17 @@ describe('ToastContainerComponent', () => {
     expect(el.textContent).toContain('Something broke');
   });
 
+  it("shows Toasty's face for the level: sad, surprised, happy (#4680)", async () => {
+    toast.error({ message: 'Broke' });
+    toast.warning({ message: 'Careful' });
+    toast.success({ message: 'Done' });
+    await settleZoneless(fixture);
+    const faces = [...fixture.nativeElement.querySelectorAll('.toast__toasty')].map((img: HTMLImageElement) =>
+      img.getAttribute('src'),
+    );
+    expect(faces).toEqual(['toasty-sad.png', 'toasty-surprised.png', 'logo.png']);
+  });
+
   it('removes a toast when dismissed (zoneless canary)', async () => {
     const id = toast.error({ message: 'Transient' });
     await settleZoneless(fixture);

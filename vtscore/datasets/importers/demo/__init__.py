@@ -38,6 +38,9 @@ class DemoDatasetImporter(ImporterBase):
     # ``load_demo_dataset`` applies the clipper itself (and caches the
     # clipped + embedded result), so the shared pipeline must not clip again.
     handles_own_clipping = True
+    #: A demo is one named download of one media type; there is nothing to
+    #: multiply into several datasets (#4703).
+    multi_output = False
 
     fields = [
         PluginField(

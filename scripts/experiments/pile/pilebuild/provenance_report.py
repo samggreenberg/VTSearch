@@ -43,6 +43,12 @@ def _sacct_build_nodes() -> dict[str, str]:
     return {ds: next(iter(nodes)) for ds, nodes in seen.items() if len(nodes) == 1}
 
 
+#: What a backfill writes where the batch size was never recorded. Most of
+#: those cells were embedded at the then-shipped default of 32, but an env
+#: override is invisible after the fact, so the sidecar does not claim it.
+_BATCH_UNKNOWN = "unknown: cell predates the key (#3683)"
+
+
 def provenance_report(backfill: bool = False) -> int:
     """Show which device built each cell -- and, with ``--backfill-provenance``,
     stamp what is still knowable for the cells built before this existed.
@@ -75,6 +81,8 @@ def provenance_report(backfill: bool = False) -> int:
                         "hostname_recovered": recovered.get(ds),
                         "recovered_from": "sacct pile-<dataset> job" if recovered.get(ds) else None,
                         "note": "unknown: cell predates per-cell provenance (#3160)",
+                        "embed_batch_size": None,
+                        "embed_batch_size_note": _BATCH_UNKNOWN,
                     },
                     "cell_summary": {"megabytes": round(stat.st_size / 1e6, 1)},
                     "fingerprint": cell_fingerprint(ds, emb),
@@ -96,6 +104,17 @@ def provenance_report(backfill: bool = False) -> int:
             rec["device"] = dev
             path.write_text(json.dumps(rec, indent=2) + "\n")
             log(f"recovered build node for {ds} x {emb}: {recovered[ds]}")
+        # A sidecar written before #3683 has no `embed_batch_size` at all, which
+        # a reader can take for "not relevant". It is relevant -- a rebuild at
+        # another batch size moves the vectors (#3159 measured ~1.3% of
+        # `dinov3_patch` float16 elements between 32 and 64) -- and it is not
+        # recoverable, so the backfill says so in the sidecar itself.
+        if backfill and "embed_batch_size" not in dev:
+            dev["embed_batch_size"] = None
+            dev["embed_batch_size_note"] = _BATCH_UNKNOWN
+            rec["device"] = dev
+            path.write_text(json.dumps(rec, indent=2) + "\n")
+            log(f"stamped batch size unknown on {ds} x {emb}")
         rows.append(
             (
                 ds,

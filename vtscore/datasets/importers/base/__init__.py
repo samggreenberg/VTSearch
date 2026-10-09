@@ -31,6 +31,8 @@ The base is split across submodules:
   spec-parsing / converter-ingestion helpers.
 - :mod:`~vtscore.datasets.importers.base.origin` — origin-serialisation policy
   helpers and the synthetic dataset-name field.
+- :mod:`~vtscore.datasets.importers.base.outputs` — :class:`OutputSpec`, one
+  dataset of a multi-dataset import, and :func:`parse_output_specs`.
 - :mod:`~vtscore.datasets.importers.base.naming` — the generic dataset-name
   derivation behind :meth:`~ImporterBase.default_display_name`.
 
@@ -78,6 +80,7 @@ from .core import ImporterBase
 from .dataset_importer import DatasetImporter
 from .naming import derive_display_name, strip_archive_suffix
 from .origin import DATASET_NAME_FIELD_KEY
+from .outputs import OutputSpec, output_dataset_name, parse_output_specs
 from .specs import MissingMediaTypeError, PickerView, SourceSpec
 
 __all__ = [
@@ -85,9 +88,12 @@ __all__ = [
     "DatasetImporter",
     "ImporterBase",
     "MissingMediaTypeError",
+    "OutputSpec",
     "PickerView",
     "PluginField",
     "SourceSpec",
     "derive_display_name",
+    "output_dataset_name",
+    "parse_output_specs",
     "strip_archive_suffix",
 ]

@@ -5,7 +5,7 @@
 profile cell key `cuda+cuml`) — the same node and device key #3345 measured on.
 Analysis 612126 on a GPU node. Rows, profiles and figures in
 `/expscratch/sgreenberg/drive-3521/`. Pre-registration: [PREREG.md](PREREG.md).
-Code: [`scripts/experiments/drive_cold/`](../../../scripts/experiments/drive_cold/).
+Code: [`scripts/experiments/drive_cold/`](https://github.com/samggreenberg/VTSearch/tree/80e7724cea4688205ee1c99de2d25b72df7c93fb/scripts/experiments/drive_cold/).
 
 ---
 

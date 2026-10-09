@@ -12,7 +12,8 @@
 
 <!-- An aside, and say so: the last slide said "fit a two-component Gaussian
      mixture" as though everyone had met that algorithm. It is called EM, and
-     it is two lines long. -->
+     it is two lines long. It earns its minute because the app's line, in
+     section III, runs it on the corpus at every retrain. -->
 
 <!-- **a** — Two bell curves, put down anywhere. The guess is deliberately
      terrible — both sit in the valley. Where you start does not matter. -->
@@ -29,4 +30,6 @@
 <!-- **d** — And that is the algorithm: do those two again. A few dozen rounds
      and the pair has locked onto the two mounds, having never seen a label. It
      never asks which mound is which; calling the high one Good is a separate
-     claim entirely. Hold that thought. -->
+     claim entirely. Hold that thought: section III answers it by not letting
+     EM choose. The Good curve's shape comes from the votes and stays put,
+     and EM fits only its share and the rest. -->

@@ -17,6 +17,87 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
+  Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
+  another on one CPU core, and most of each fit's time went to statistics over a few dozen
+  points. The fits now run on 4 threads and the statistics take less time. On a V100 a Good
+  takes ~1.4 s at 5,000 pages (was 1.9 s) and ~1.6 s at 50,000 (was 2.1 s). Rankings are unchanged.
+
+- **A plainer Update Sort Example? prompt** (issue #4721). Autopilot's resort prompt no longer
+  opens with a focus ring on its big Keep button (it took focus when you were voting with the
+  arrow keys, so it read as the recommended answer, and the next Space or Enter chose it); focus
+  goes to the dialog itself, and Tab still reaches every control. The paragraph at the top is now
+  one line of read-only fields, **Clicked**, **Positives** and **Sort**, and Toasty, below the
+  dialog, explains: how many positives Autopilot needs before it can move on, and that you can
+  keep going or try a different sort. The left side has a **Keep clicking:** heading over a
+  **Continue** button, which no longer names the sort or the number of labels before the next
+  prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
+  **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
+- **Tabs look like tabs, and form labels read alike** (issue #4718). Every horizontal tab strip
+  (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
+  Keyboard Shortcuts) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
+  the active one open into the content below with an accent edge on top. New Detector's
+  **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
+  labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
+  **Threshold:** label matches them. The text boxes now carry their instructions (**Describe what
+  this detector should find**) in place of a faint example and a line under the box, and
+  **Detector name** can be left blank: the detector is named after its example (or, on the
+  Trained tab, the imported file), numbered past any detector that already has that name.
+- **No stall report for a slow import at startup.** On a cold page cache the scikit-learn import
+  (through pandas, pyarrow's shared library) held the GIL for just over a second, and the stall watchdog
+  wrote every thread's stack to the terminal of a routine `python app.py`. The watchdog's bar is now
+  `VTSEARCH_STALL_STARTUP_MS` (5 s) from the ML imports until **VTSearch is ready**, so a startup that
+  takes minutes is still reported and a routine import is not; the `diagnostics config` line reports it
+  as `watchdog_startup=`, and a `stall:` line from that window says `bar 5000ms`.
+- **New Detector keeps a preset media type and the Threshold under Advanced** (issue #4717).
+  When a selected dataset has already set and locked the detector's **Media type**, the field
+  moves from the top of the Blank form to **Advanced ▾**, unlock button and all, and stays there
+  if you unlock it. The **Threshold** moves under **Advanced ▾** on both tabs; it still starts on
+  your last pick. A media type nothing has set stays at the top of the form.
+- **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
+  King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
+  click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
+  arrows. On the Dashboard, one step at a time: **+** to add a dataset, select a dataset, a warning
+  when the selected datasets mix kinds of media, **+** to make a detector, select a detector, a
+  warning when the dataset and detector are for different media, **Train** for a new detector,
+  and **Test** or **Find** for a trained one. In the Train view he asks for your first vote while
+  Autopilot runs on a detector with no labels (replacing the faint "Use ← / →" line), and the
+  **Detector Trained** and **Nothing Left to Label** dialogs are now his hints under the top bar's
+  **Dashboard** button; any further vote sends him away. Each hint goes when its step is taken,
+  and has **Hide this hint** and **Hide all hints** boxes kept in your settings (`hidden_hints`,
+  `hide_all_hints`); **Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**.
+  Notifications show his face too: happy, surprised on warnings, sad on errors. The
+  `label_hint_dismissed` setting is gone, and `/favicon-smile.ico` (the plain favicon smiles
+  already) now 404s.
+- **Train and Test fold either side panel to a strip, and open with both folded** (issue #4673).
+  The left panel's fold (Autopilot's collapse, Train only until now) comes to Test's Autopilot tab,
+  and the right panel gains one in both views. Each side folds to a thin strip on its own: click
+  the strip, or drag its divider out, to open it, and the ◀ / ▶ at its top folds it again. The
+  left folds on the Autopilot tab only, since Manual and Review are driven from its list. Both
+  start folded, leaving the item in the middle the room, and each remembers your choice; the
+  Settings modal's Appearance tab has **Hide left panel in Train and Test** and **Hide right panel
+  in Train and Test** in place of Autopilot's **Hide autopilot panel**. A test that reaches
+  **Done!** opens its result on its own. The `hide_autopilot` setting is now `hide_left_panel`,
+  beside a new `hide_right_panel`, both `true` by default; a saved `hide_autopilot` is not
+  carried over.
+- **Choose a detector's Threshold when you create it, and Autopilot follows it** (issue #4665).
+  The New Detector form (Blank and Trained) now has the Threshold control, the same three radios
+  from False Positives to False Negatives as the Manual tab. The choice is saved with the detector,
+  and Autopilot, which has no Threshold control of its own, draws the line, picks and checks at it.
+  Moving the Threshold in Manual or Test saves the new choice on the detector too, so each detector
+  keeps its own instead of all of them sharing your last one. The form starts on your last pick. A
+  detector made before this change, or by AutoFind or the CLI, uses your last pick until you set
+  one. Combine keeps the sources' Threshold when they all agree. Find, AutoFind and
+  `--autodetect` draw each detector's line at the Threshold it keeps.
+- **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
+  hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
+  show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
+  sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
+  form, which is no longer indented.
+- **A detector on a dataset that can't search by text needs an example item** (issue #4666). The
+  New Detector dialog used to let a text-only detector through with a warning that Autopilot
+  could not start until it was trained. **Create** now stays disabled until you add an example
+  item, so Autopilot always has a first sort.
 - **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
   AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
   with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
@@ -40,6 +121,51 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **The command line makes several datasets from one importer run** (issue #4707). The
+  Multi-Dataset import has a headless form: `--autodetect --importer <name> --outputs '<json>'` (a
+  list with one object per dataset, in the shape the web API's `outputs` entries take) and an
+  `outputs:` list under a pipeline file's `importer:` block. The importer runs once and every
+  entry becomes its own dataset, named `"<name> – <Category>"` unless the entry names it: saved to
+  the dashboard (unless `--tempimport`), scored by the AutoFind detectors that reach its media
+  type, and exported on its own, each results set carrying a `dataset` block; `{dataset_name}` in
+  an exporter field is the dataset's name, and a `--filepath` without it gains the name before the
+  extension so the files stay apart. A dataset no detector applies to is skipped with a note and a
+  dataset whose import failed is reported while the others still run (the run then exits
+  non-zero). The dry-run plan lists the datasets; `--progress-format json` gains `dataset_start`
+  and `dataset_failed` events. See [`docs/CLI.md`](docs/CLI.md).
+- **Multi-Dataset import: several datasets from one folder** (issue #4703). A **Multi-Dataset** box
+  above the *Dataset media type* dropdown on the Folder, Manifest, Local Folder and Local Files
+  importers (and on any importer with a media-type field) replaces the dropdown with a
+  **Datasets to make** list, one row per kind of media (Image, Audio, Video, Text, Document, Face),
+  pre-ticked from what the folder scan finds. The folder is read once and every ticked row becomes
+  its own dataset, named `"<name> – <Kind>"`, with its own Dashboard row, Cancel and AutoFind run;
+  each row's **Details ▾** holds that dataset's own Advanced settings. **Document** makes an image
+  dataset of the rendered pages (or extracted text), **Face** a dataset of the faces cropped from
+  the images. The API takes the same list as `outputs` on `POST /api/dataset/import/{importer}`,
+  `import-local-folder` and `import-local-files`, and answers with `task_ids`, one per dataset;
+  importers report `supports_multi_output`. The URL-archive importer downloads and extracts its
+  archive once for every dataset it makes.
+
+- **Find Results get their Browse map ready while you read them** (issue #4683). While the Find
+  Results dialog is open, the server lays out the map its **Browse** button opens for the Good
+  results, but only when nothing else is running: no dataset or detector load, no other Find, map
+  build, sort or evaluation. Pressing Browse then opens the map at once, or picks up the build
+  where it has got to, instead of starting it. If the server is busy when the dialog opens, the
+  map is started once the other work is done, as long as the dialog is still open. A map of
+  selected items from the same dataset that you are already looking at is left alone.
+- **The command line can delete what it imports once AutoFind has run** (issue #4674).
+  Settings › **AutoFind** gains **Delete the dataset after AutoFind**, under **Command Line**,
+  off by default. With it on, `python app.py --autodetect` (or `--pipeline`) deletes the dataset it
+  imported once its detectors have run and the results are exported, so a nightly run no longer
+  fills the dashboard. A run with no AutoFind detector to run, one that fails, and one pointed at a
+  dataset already on the dashboard keep it, and AutoFind started inside the app never deletes. The
+  setting is per user (`autofind_cli_delete_dataset`; a `--settings` file can set it for a run
+  without `--user`), and a deleting run reports a `dataset_deleted` progress event.
+- **Autopilot-only servers** (issue #4666). An operator can set `--autopilot-only`,
+  `VTSEARCH_AUTOPILOT_ONLY=1` or `"autopilot_only": true` in the server settings file to keep
+  Train and Test on their Autopilot tabs. Train's Manual tab and Test's Review tab are removed,
+  and neither view shows a tab bar. Settings ▸ Server reports the switch, and the startup banner
+  names it when on.
 - **AutoRun is now AutoFind; its ⋯ run opens no dialog, and Find Results
   gains Browse** (issue #4615). The Dashboard's **AutoRun** tab, the detector
   ⋯ menu's **Move to AutoRun**, the dataset ⋯ menu's **Run AutoRun** and the
@@ -100,6 +226,18 @@ not list every commit. Use `git log` for the full history.
   date. New routes under `/api/line-test`.
 
 ### Removed
+
+- **Imports no longer show a time-left estimate, and the switches around it are gone**
+  (issue #4667). The estimate on dataset imports, staging imports and labelset
+  missing-media fetches swung too wildly to trust, so it is gone for everyone; those bars
+  still fill, count and name their step, and every other progress bar keeps its estimate.
+  With it go the operator switch that hid it (`--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA`, `"hide_ingest_eta"` and its Settings ▸ Server row) and the
+  per-deployment timing profile that tuned the progress bars' pacing
+  (`VTSEARCH_TIMING_PROFILE`, `VTSEARCH_TIMING_RECORD`,
+  `scripts/profiling/tune_timing_profile.py`). A server started with `--hide-ingest-eta`
+  must drop the flag, which is no longer accepted; the two environment variables and the
+  settings key are ignored. Every bar now paces from the weights the app ships with.
 
 - **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
   and Evidence coverage chips, its 2×2 of your checks and its precision chart

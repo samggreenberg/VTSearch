@@ -26,6 +26,18 @@ import numpy as np
 #: importing it from their own leaf.
 from vtscore.concurrency.progress import ProgressCallback  # noqa: F401 - re-exported for consumers
 
+#: Store-only ground truth a media can carry for the eval harness to read
+#: (:mod:`vtscore.eval.labels`): the multi-label ``categories`` list, the
+#: ``regions`` boxes, and the ``evaluable_categories`` a pool negative is
+#: answerable for.  Visual Genome's demo source writes the first two on every
+#: clip (``_emit_image_clip``).  None of them was in the pickle loader's fixed
+#: field list, so a warm demo cache reloaded every VG media with its labels gone
+#: and nothing failed: ``media_is_positive`` reads a missing ``categories`` as
+#: "single-label" and falls back to ``category`` (#4117).  Written and restored
+#: only when present, and an empty list is kept: ``[]`` on a multi-label media
+#: means "positive for nothing", which is not the same as absent.
+GROUND_TRUTH_FIELDS: tuple[str, ...] = ("categories", "regions", "evaluable_categories")
+
 
 def _pop_md5_key(d: dict[str, Any]) -> str:
     """Pop and return the MD5 value from *d*, trying both ``"md5"`` and ``"MD5"`` keys.

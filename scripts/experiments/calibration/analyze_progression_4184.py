@@ -48,6 +48,7 @@ import pandas as pd  # noqa: E402
 
 import _cells_io  # noqa: E402
 import curves  # noqa: E402
+from _rank_metrics import beta_tag  # noqa: E402
 
 CELL = ["dataset", "embedder", "category", "seed"]
 
@@ -195,6 +196,31 @@ def fbeta(precision: Any, recall: Any, beta: float) -> Any:
         return np.where(den > 0, (1 + b2) * p * r / den, 0.0)
 
 
+def text_fbeta_anchors(baseline: pd.DataFrame) -> tuple[dict[str, dict[tuple, float]], dict[str, str]]:
+    """Per F-beta curve, each cell's typed-query F-beta before the hand-over, and the line it was read at.
+
+    Since #4603 the app draws the typed query's line per preset, so each curve reads
+    the line at its own beta (``text_line_*_<beta>``), as ``state_of_app/analyze.
+    _text_app_line`` does (#4625).  A baseline from before #4603 records only the
+    beta-blind cut (``text_precision``/``text_recall``) and is read there.
+    """
+    text_f: dict[str, dict[tuple, float]] = {}
+    used: dict[str, str] = {}
+    for tag, b in FBETAS.items():
+        cols = [f"text_line_precision_{beta_tag(b)}", f"text_line_recall_{beta_tag(b)}"]
+        if set(cols) <= set(baseline.columns) and baseline[cols[1]].notna().any():
+            used[tag] = f"the preset's line (`text_line_*_{beta_tag(b)}`)"
+        elif {"text_precision", "text_recall"} <= set(baseline.columns):
+            cols = ["text_precision", "text_recall"]
+            used[tag] = "the beta-blind cut (`text_precision`/`text_recall`): the baseline predates #4603"
+        else:
+            continue
+        per = baseline.groupby(CELL)[cols].mean()
+        vals = fbeta(per[cols[0]].to_numpy(), per[cols[1]].to_numpy(), b)
+        text_f[tag] = {tuple(k): float(v) for k, v in zip(per.index, vals, strict=True)}
+    return text_f, used
+
+
 def summarize(m: pd.DataFrame) -> pd.DataFrame:
     """Per-click mean, SE and count of a ``cell x t`` matrix."""
     n = m.notna().sum(axis=0)
@@ -236,15 +262,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     baseline = curves.text_sort_baseline(args.baseline)
     text_cost = {tuple(k): float(v) for k, v in baseline.groupby(CELL)["text_cost"].mean().items()}
     text_ap = {tuple(k): float(v) for k, v in baseline.groupby(CELL)["text_AP"].mean().items()}
-    # The text sort's own line (its blind GMM cut) anchors the F-beta curves, as the
-    # State of the App's `app line` rule does (#4474): the set a user sees before
-    # the app shows a detector.
-    text_f = {}
-    if {"text_precision", "text_recall"} <= set(baseline.columns):
-        per = baseline.groupby(CELL)[["text_precision", "text_recall"]].mean()
-        for tag, b in FBETAS.items():
-            vals = fbeta(per["text_precision"].to_numpy(), per["text_recall"].to_numpy(), b)
-            text_f[tag] = {tuple(k): float(v) for k, v in zip(per.index, vals, strict=True)}
+    # The text sort's own line anchors the F-beta curves, as the State of the App's
+    # `app line` rule does (#4474): the set a user sees before the app shows a detector.
+    text_f, text_line_used = text_fbeta_anchors(baseline)
 
     frames: dict[str, pd.DataFrame] = {}
     provs: dict[str, dict] = {}
@@ -289,6 +309,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     grid = pd.concat([seen, baseline[CELL]], ignore_index=True).drop_duplicates().reset_index(drop=True)
     lines.append(f"Grid: {len(grid)} cells (union of every rung's cells and the baseline's).")
     lines.append("")
+    if text_line_used:
+        lines.append("Typed query before the hand-over, per F-beta curve:")
+        lines += [f"- `{tag}`: {how}" for tag, how in text_line_used.items()]
+        lines.append("")
 
     mats: dict[str, pd.DataFrame] = {}
     ap_mats: dict[str, pd.DataFrame] = {}

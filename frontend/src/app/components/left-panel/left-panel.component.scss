@@ -103,6 +103,11 @@
 
 .left-panel.collapsed-autopilot {
   align-items: center;
+
+  // Test's strip is one button the height and width of the pane.
+  vt-side-panel-toggle {
+    align-self: stretch;
+  }
 }
 
 .tab-panel-manual,
@@ -167,8 +172,11 @@
   flex-shrink: 0;
 }
 
-// The Goods'-centroid note under Test's tabs (#4643).
-.find-detector-note {
+// The Goods'-centroid note under Test's tabs (#4643), and the note Train's
+// Autopilot tab shows in place of its panel when the Autopilot-only lock leaves
+// no Manual to fall back to (#4666).
+.find-detector-note,
+.autopilot-blocked-note {
   padding: var(--space-xs) var(--space-md);
   flex-shrink: 0;
 }

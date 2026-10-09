@@ -1,0 +1,78 @@
+// The Multi-Dataset editor: a column of category rows, each a checkbox line
+// with an optional per-row Advanced block beneath it, then the two shared
+// ingest toggles. The host is a flex column with the importer form's own
+// rhythm (style-guide §2.3: a projected component's stacked fields need their
+// own gap; an ancestor's never crosses the boundary).
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.mo-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.mo-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+// Checkbox + icon + label on the left, the count hint beside them, the
+// Details link pushed to the right; mirrors the include-media rows so the two
+// pickers read as one family.
+.mo-row-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-2xs) 0;
+}
+
+.mo-row-main {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+  cursor: pointer;
+}
+
+.mo-checkbox {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.mo-row-label {
+  font-size: var(--font-md);
+}
+
+.mo-row--checked .mo-row-label {
+  font-weight: var(--weight-medium);
+}
+
+.mo-row-count {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+// Placement only: the button's look is the global `.link-btn`.
+.mo-details-toggle {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+// A row's open Advanced block indents under its checkbox label and gets a
+// dashed foot, like an include-media row's details panel, so the next row
+// reads as a sibling of the checkbox line above rather than of the block.
+.mo-row-advanced.is-open {
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding: 0 0 var(--space-md) var(--space-xl);
+  border-bottom: 1px dashed var(--border);
+}

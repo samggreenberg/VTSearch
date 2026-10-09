@@ -78,9 +78,12 @@ def _stub_resolve(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
 
 
-def _settings_file(tmp_path: Path, autofind: list[str]) -> Path:
+def _settings_file(tmp_path: Path, autofind: list[str], *, delete_after: bool = False) -> Path:
     p = tmp_path / "settings.json"
-    p.write_text(json.dumps({"autofind_detectors": list(autofind), "detectors_dir": str(get_detectors_dir())}))
+    data = {"autofind_detectors": list(autofind), "detectors_dir": str(get_detectors_dir())}
+    if delete_after:
+        data["autofind_cli_delete_dataset"] = True
+    p.write_text(json.dumps(data))
     return p
 
 
@@ -313,6 +316,171 @@ class TestPipelineFile:
 
         assert len(list_datasets()) == saved
         assert "yaml-saver" in json.loads(out_path.read_text())["results"]
+
+
+# ---------------------------------------------------------------------------
+# Deleting the import after AutoFind (#4674)
+# ---------------------------------------------------------------------------
+
+
+def _json_events(out: str) -> list[dict]:
+    return [json.loads(line) for line in out.splitlines() if line.startswith("{")]
+
+
+class TestDeleteAfterAutoFind:
+    """The ``autofind_cli_delete_dataset`` setting: a saving run deletes the
+    dataset it imported once AutoFind has actually run, and only then."""
+
+    def _detect(self, tmp_path, monkeypatch, *, source=None, autofind=("cleaner",), **kwargs):
+        """Run a saving pickle run with the setting on; return the hits file path."""
+        _stub_resolve(monkeypatch, tmp_path)
+        for name in autofind:
+            _write_detector(name)
+        out_path = tmp_path / "hits.json"
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(source or _make_dataset_file(tmp_path, medias)),
+            settings_path=str(_settings_file(tmp_path, list(autofind), delete_after=True)),
+            exporter_name=kwargs.pop("exporter_name", "server_json_file"),
+            exporter_field_values={"filepath": str(out_path)},
+            save_dataset=True,
+            **kwargs,
+        )
+        return out_path
+
+    def test_deletes_the_import_once_detection_has_run(self, client, tmp_path, monkeypatch, capsys):
+        from vtscore import cli_progress
+
+        cli_progress.set_format("json")
+        try:
+            out_path = self._detect(tmp_path, monkeypatch)
+        finally:
+            cli_progress.set_format("text")
+
+        assert list_datasets() == []
+        # The results were exported before the dataset went.
+        assert "cleaner" in json.loads(out_path.read_text())["results"]
+        events = _json_events(capsys.readouterr().out)
+        [saved] = [e for e in events if e["event"] == "dataset_saved"]
+        [deleted] = [e for e in events if e["event"] == "dataset_deleted"]
+        assert deleted["dataset_id"] == saved["dataset_id"]
+        assert deleted["name"] == saved["name"]
+        assert not Path(saved["pkl_path"]).exists(), "the saved pickle goes with the dataset"
+        order = [e["event"] for e in events]
+        assert order.index("export_complete") < order.index("dataset_deleted")
+
+    def test_text_mode_says_so(self, client, tmp_path, monkeypatch, capsys):
+        self._detect(tmp_path, monkeypatch)
+        assert "Deleted dataset" in capsys.readouterr().out
+
+    def test_off_by_default(self, client, tmp_path, monkeypatch, capsys):
+        _stub_resolve(monkeypatch, tmp_path)
+        _write_detector("keeper")
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(_make_dataset_file(tmp_path, medias)),
+            settings_path=str(_settings_file(tmp_path, ["keeper"])),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(tmp_path / "hits.json")},
+            save_dataset=True,
+        )
+        assert len(list_datasets()) == 1
+        assert "Deleted dataset" not in capsys.readouterr().out
+
+    def test_keeps_it_without_autofind_detectors(self, client, tmp_path, monkeypatch, capsys):
+        """No AutoFind detector means no AutoFinding: the import is the product."""
+        self._detect(tmp_path, monkeypatch, autofind=())
+        assert len(list_datasets()) == 1
+        out = capsys.readouterr().out
+        assert "Detection skipped" in out
+        assert "Deleted dataset" not in out
+
+    def test_keeps_it_when_no_detector_applies(self, client, tmp_path, monkeypatch, capsys):
+        _stub_resolve(monkeypatch, tmp_path)
+        _write_detector("videos-only", media_type="video")
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(_make_dataset_file(tmp_path, medias)),
+            settings_path=str(_settings_file(tmp_path, ["videos-only"], delete_after=True)),
+            save_dataset=True,
+        )
+        assert len(list_datasets()) == 1
+        assert "Deleted dataset" not in capsys.readouterr().out
+
+    def test_keeps_a_dataset_that_was_already_on_the_dashboard(self, client, tmp_path, monkeypatch):
+        """Only what the run imported is deleted, never a dataset the user already had."""
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(_make_dataset_file(tmp_path, medias)),
+            settings_path=str(_settings_file(tmp_path, [])),
+            save_dataset=True,
+        )
+        [entry] = list_datasets()
+
+        out_path = self._detect(tmp_path, monkeypatch, source=entry["pkl_path"])
+
+        assert [e["id"] for e in list_datasets()] == [entry["id"]]
+        assert Path(entry["pkl_path"]).is_file()
+        assert "cleaner" in json.loads(out_path.read_text())["results"]
+
+    def test_keeps_it_when_the_run_fails(self, client, tmp_path, monkeypatch, capsys):
+        """A failed export leaves the dataset to search again from the dashboard."""
+        with pytest.raises(SystemExit) as exc:
+            self._detect(tmp_path, monkeypatch, exporter_name="no_such_exporter")
+        assert exc.value.code == 1
+        assert "Unknown exporter" in capsys.readouterr().err
+        assert len(list_datasets()) == 1
+
+    def test_a_temporary_run_has_nothing_to_delete(self, client, tmp_path, monkeypatch, capsys):
+        _stub_resolve(monkeypatch, tmp_path)
+        _write_detector("temp")
+        out_path = tmp_path / "hits.json"
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(_make_dataset_file(tmp_path, medias)),
+            settings_path=str(_settings_file(tmp_path, ["temp"], delete_after=True)),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(out_path)},
+        )
+        assert "temp" in json.loads(out_path.read_text())["results"]
+        assert list_datasets() == []
+        assert "Deleted dataset" not in capsys.readouterr().out
+
+    def test_dry_run_plan_says_the_dataset_is_deleted(self, client, tmp_path, capsys):
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(_make_dataset_file(tmp_path, medias)),
+            settings_path=str(_settings_file(tmp_path, [], delete_after=True)),
+            dry_run=True,
+            save_dataset=True,
+        )
+        assert "Save to dashboard: until detection has run" in capsys.readouterr().out
+        assert list_datasets() == []
+
+    def test_pipeline_file_deletes_too(self, client, tmp_path, monkeypatch):
+        _stub_resolve(monkeypatch, tmp_path)
+        _write_detector("yaml-cleaner")
+        out_path = tmp_path / "hits.json"
+        pipeline = {
+            "dataset": str(_make_dataset_file(tmp_path, medias)),
+            "settings": str(_settings_file(tmp_path, ["yaml-cleaner"], delete_after=True)),
+            "exporter": {"name": "server_json_file", "fields": {"filepath": str(out_path)}},
+        }
+        path = tmp_path / "pipeline.yaml"
+        path.write_text(yaml.safe_dump(pipeline))
+
+        from vtscore.cli_pipeline import run_pipeline_file
+
+        run_pipeline_file(path)
+
+        assert list_datasets() == []
+        assert "yaml-cleaner" in json.loads(out_path.read_text())["results"]
 
 
 # ---------------------------------------------------------------------------

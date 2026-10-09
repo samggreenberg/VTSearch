@@ -197,7 +197,19 @@ register it here for the active-jobs surface to pick up.
 `[{dataset_id, detector_id, job_types}, ...]` for every (dataset,
 detector) pair with at least one running or pending job across every
 user-visible manager. Jobs missing `dataset_id` / `detector_id` are
-dropped. `reset_all_async_jobs_for_tests()` walks the whole of
+dropped.
+
+`busy_reason()` answers a wider question - *is anything the user asked
+for still running?* - for work started only on the chance it will be
+wanted (the Find Results dialog's Browse prep, #4683). It returns a short
+description of the first thing it finds, or `None`: a `loading-tasks` or
+detector-loading row still working, a running or pending job on any
+user-visible manager, or the shared sort / eval / find bar mid-run. The
+hidden managers do not count; they are speculative work themselves, and
+the archive thumbnail sweep can run for as long as a large archive takes
+to read.
+
+`reset_all_async_jobs_for_tests()` walks the whole of
 `JOB_MANAGERS` — hidden managers included, since test isolation cares
 about every daemon thread — and clears state. Register a new manager
 in `JOB_MANAGERS` only; never keep a second hand-maintained list.
@@ -265,9 +277,10 @@ neighbouring rung once the smoothed estimate overshoots the boundary by
 A tracker built with `publish_eta=False` never publishes one:
 `eta_seconds` stays `None` on every snapshot while `current`/`total` and
 `overall` update as usual. The ingest paths (dataset import, staging
-import, labelset missing-media fetch) build theirs that way when
-`ingest_eta_hidden()` is true, i.e. when `CoreConfig.hide_ingest_eta` is
-set; with no `CoreConfig` builder installed it reads `False`.
+import, labelset missing-media fetch) always build theirs that way: an
+import's rate is too erratic to estimate (#4667). `ingest_eta_hidden()`,
+which once read the `CoreConfig.hide_ingest_eta` switch, is deprecated and
+always returns `True`.
 
 **Subscribers:** `subscribe(cb)` registers a callback fired with a
 snapshot after every `update()`, synchronously on the producer thread
@@ -627,9 +640,10 @@ picks up a change:
 
 | Name | Description |
 |------|-------------|
-| `StallWatchdog(threshold_ms, *, arm=None, snapshot=None, dump_file=None, sampler=default_sampler, dump_path="<stderr>", logger=None)` | Heartbeat thread. A beat that wakes `threshold_ms` late first calls `snapshot` for every thread's stack, before anything that could release the GIL. Then it writes those stacks to `dump_file` (stderr when `None`), the thread that burned the most CPU across the gap first, and logs one WARNING. The WARNING names the threads whose CPU time grew across the gap (from `/proc/self/task`), and gives the process CPU-to-wall ratio, major faults, RSS, cgroup memory counters and GC pauses. `arm` is called with the threshold on every beat; it exists for the opt-in live dump. `beat(now=…)` is the unit of work, so a test drives it with an explicit clock |
+| `StallWatchdog(threshold_ms, *, arm=None, snapshot=None, dump_file=None, sampler=default_sampler, dump_path="<stderr>", logger=None)` | Heartbeat thread. A beat that wakes `threshold_ms` late first calls `snapshot` for every thread's stack, before anything that could release the GIL. Then it writes those stacks to `dump_file` (stderr when `None`), the thread that burned the most CPU across the gap first, and logs one WARNING. The WARNING names the threads whose CPU time grew across the gap (from `/proc/self/task`), and gives the process CPU-to-wall ratio, major faults, RSS, cgroup memory counters and GC pauses. `arm` is called with the threshold on every beat; it exists for the opt-in live dump. `beat(now=…)` is the unit of work, so a test drives it with an explicit clock. `relaxed(threshold_ms)` is a context manager that raises the bar for the block (never lowers it, and re-arms the live dump at it); a stall reported under it carries `bar …ms` |
 | `capture_thread_stacks() -> dict[int, list[FrameLine]]` / `format_thread_stacks(stacks, *, header, threads=None, exited=frozenset())` | Every Python thread's stack as `(filename, line, function)` tuples keyed by `ident`, taken with `sys._current_frames()` while holding the GIL, so no thread can be changing its frames. The formatter renders them in `faulthandler`'s layout. It orders threads by the CPU they burned across the gap, then threads that exited before their CPU could be read, then the rest |
 | `start_stall_diagnostics_from_env() -> StallWatchdog \| None` | What the app calls. It installs GC-pause logging and starts the watchdog with `snapshot=capture_thread_stacks`. `VTSEARCH_STALL_WATCHDOG_MS` sets the threshold (default 1000; `0` disables the watchdog). The stacks go to `VTSEARCH_STALL_DUMP_FILE`, else `VTSEARCH_LOG_FILE`, else stderr. It arms `faulthandler.dump_traceback_later` only when `live_dump_enabled()` (`VTSEARCH_STALL_LIVE_DUMP=1`). That timer's C thread walks every thread's frames without the GIL while they run, and it has segfaulted the app (issue #4345) |
+| `startup_grace()` | Context manager the app wraps its ML imports and embedder preload in: raises the running watchdog's bar to `VTSEARCH_STALL_STARTUP_MS` (default 5000; `0` keeps the normal bar) for the block, because a cold page cache holds the GIL across a second-long `dlopen` there with exactly a stall's signature. Never lowers the bar; a no-op without a watchdog. Yields the bar in effect, in ms, or `None` |
 | `install_gc_pause_logging()` / `gc_pause_stats()` / `gc_pause_ms_total()` | `gc.callbacks` timer; a pause at or above `gc_warn_threshold_ms()` logs its generation, duration and collected count. The threshold reads `VTSEARCH_GC_WARN_MS`, and unset it tracks `VTSEARCH_SLOW_PHASE_MS` (half of it, capped at the 200 ms default) so a collection can never be below the reporting bar while still being large enough to inflate the phase it lands in. `gc_pause_ms_total()` is the monotonic total a window snapshots at both ends |
 | `freeze_gc_after_preload() -> (objects, ms) \| None` | `gc.collect()` then `gc.freeze()`, moving everything alive into the permanent generation that full collections skip. Called once after the model preload, where the live set is the imported libraries and the embedders (issue #3870). `VTSEARCH_GC_FREEZE` falsey skips it |
 | `thread_cpu_ms()` | This thread's CPU time, or `0.0` where the platform has no `time.thread_time` |
@@ -648,6 +662,6 @@ lines then locate.
 ## Cross-references
 
 - [`state.md`](state.md) - the contexts these jobs and trackers operate against.
-- [`timing.md`](timing.md) - the per-step duration model that turns a step index into an ETA.
+- [`timing.md`](timing.md) - the shipped per-step weights that pace the whole-job `overall` fraction.
 - [`datasets.md`](datasets.md#concurrency-gates) - the two `ConcurrencyGate`s that pace dataset loads.
 - [`cli.md`](cli.md) - `cli_progress.notification_subscriber`, the headless consumer of `notify()`.

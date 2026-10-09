@@ -23,7 +23,7 @@
       <!-- Source specs (converters per source mediaType + native clipper) -->
       @if (activeConverters.length > 0 || activeClippers.length > 1) {
         @if (activeConverters.length > 0) {
-          <label class="form-label" title="Pick which other media types should be pulled in and converted whenever you import a {{ activeTypeLabel }} dataset. The native row is always included.">Include media</label>
+          <label class="form-label" title="Pick which other media types should be pulled in and converted whenever you import a {{ activeTypeLabel }} dataset. The native row is always included.">Include media:</label>
         }
         <vt-source-specs-picker
           [availableConverters]="activeConverters"
@@ -40,7 +40,7 @@
 
       <!-- Embedder -->
       @if (activeEmbedders.length > 1) {
-        <label class="form-label" [for]="'import-default-embedder-' + activeType" title="The embedder used to analyze each {{ activeTypeLabel }} item so it can be searched">Embedder</label>
+        <label class="form-label" [for]="'import-default-embedder-' + activeType" title="The embedder used to analyze each {{ activeTypeLabel }} item so it can be searched">Embedder:</label>
         <select
           [id]="'import-default-embedder-' + activeType"
           class="form-select"

@@ -5,6 +5,7 @@ import { AppComponent } from './app.component';
 import { provideRouter } from '@angular/router';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
+import { AutopilotStateService } from './services/autopilot-state.service';
 import { provideZoneless } from './testing/zoneless-testbed';
 import { provideHttpTesting } from './testing/test-providers';
 
@@ -127,6 +128,38 @@ describe('AppComponent', () => {
     const dashBtn = fixture.nativeElement.querySelector('.top-bar-btn') as HTMLButtonElement;
     expect(logo.classList).not.toContain('disabled');
     expect(dashBtn.disabled).toBe(false);
+  });
+
+  it("shows Toasty's Autopilot hand-off under Dashboard in the Train view (#4680)", () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    const autopilot = TestBed.inject(AutopilotStateService);
+    autopilot.handoff.set({ kind: 'done', votes: 25 });
+    TestBed.tick();
+    // Not on the Train view: nothing to hand off from.
+    expect(fixture.nativeElement.querySelector('header vt-toasty-hint')).toBeNull();
+
+    fixture.componentInstance.isOnLabelView.set(true);
+    TestBed.tick();
+    const hint = fixture.nativeElement.querySelector('header vt-toasty-hint') as HTMLElement;
+    expect(hint.textContent).toContain('Your detector is trained!');
+    expect(hint.textContent).toContain('Every quality light is green.');
+
+    // A document walk that ran dry says why instead: a hint of its own.
+    autopilot.handoff.set({ kind: 'done', votes: 30, dryRun: 16 });
+    TestBed.tick();
+    const dry = fixture.nativeElement.querySelector('header vt-toasty-hint') as HTMLElement;
+    expect(dry.textContent).toContain('16 of its best matches in a row were not good');
+    expect(dry.textContent).not.toContain('Every quality light is green.');
+
+    autopilot.handoff.set({ kind: 'all-labeled', votes: 40 });
+    TestBed.tick();
+    expect(fixture.nativeElement.querySelector('header vt-toasty-hint')?.textContent).toContain(
+      "You've labeled every item in this dataset!",
+    );
+
+    autopilot.handoff.set(null);
+    TestBed.tick();
+    expect(fixture.nativeElement.querySelector('header vt-toasty-hint')).toBeNull();
   });
 
   it('should not navigate to dashboard when disabled', () => {

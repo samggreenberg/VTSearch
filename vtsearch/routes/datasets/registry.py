@@ -215,44 +215,13 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     # dominant slice keeps a rebuild advancing the bar across its whole span
     # instead of the old equal split, where the instant dedup drove step 2
     # to ~100% and the bar then sat frozen there through the entire rebuild.
-    # That reasoning is the *fallback*, and it is per media type: an audio
-    # pickle's read runs 3.5-16 s, so audio's fallback gives step 1 0.40 of
-    # the bar where image's gives it 0.15 (#4105). An admin
-    # ``VTSEARCH_TIMING_PROFILE`` replaces either with the split this host's
-    # disk and clustering backend actually produce at this dataset's size.
-    #
-    # Which of those two the atlas step will be is worth up to the whole bar
-    # (#3521 measured a restore and a rebuild of the same 2954-item dataset at
-    # 0.011 s and 7.7 s), and it is not knowable here — the pickle has not been
-    # read yet. ``coverage_branch`` is what the *last* open of this dataset
-    # found, written back below: whether a pickle carries a restorable atlas is
-    # a durable fact about the file, so the cheapest way to have it before the
-    # read is to remember it from the read before. Absent (a dataset opened for
-    # the first time since the memo existed) means "no claim", and the lookup
-    # paces as it did before — the dear branch, which is the safe direction.
+    # The split is per media type: an audio pickle's read runs 3.5-16 s, so
+    # audio's weights give step 1 0.40 of the bar where image's give it 0.15
+    # (#4105). It is the rebuild's split; a restore crosses the coverage slice
+    # at once.
     from vtscore import timing
 
-    _open_media_type = entry.get("media_type", "")
-    _open_embedder = entry.get("embedder", "") or ""
-    _open_n = int(entry.get("num_items") or 0)
-    _remembered_branch = str(entry.get("coverage_branch") or "") or None
-
-    def _pace_open(branch: str | None, n: int) -> None:
-        """(Re)weight the open's bar for the branch its atlas step is taking."""
-        tracker.set_step_weights(
-            timing.step_weights(
-                "dataset_open",
-                media_type=_open_media_type,
-                embedder=_open_embedder,
-                n=n,
-                branch=branch,
-            )
-        )
-
-    _pace_open(_remembered_branch, _open_n)
-    timing_recorder = timing.record_task(tracker, "dataset_open", media_type=_open_media_type, embedder=_open_embedder)
-    timing_recorder.start()
-    timing_recorder.set_scale(n=_open_n)
+    tracker.set_step_weights(timing.step_weights("dataset_open", media_type=entry.get("media_type", "")))
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
@@ -331,30 +300,8 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # Past the auto-build threshold a missing cache is left absent -
                 # the build would cost minutes/GBs and the user can trigger it
                 # on demand via the coverage-atlas endpoint.
-                # Which of the three branches ran is the single most important
-                # thing about this step's timing and the one thing its duration
-                # cannot say. A restore is milliseconds and a rebuild is
-                # 0.0027 s/item (#3595); #3345's sweep opened 16 datasets, restored on every
-                # one, and produced a profile pricing the atlas at 2 % of a bar
-                # whose shipped default gives it 85 % — both correct about
-                # different branches, with nothing recording which (#3521).
-                if restore_coverage_atlas_from_cache(ctx, cached_coverage_atlas):
-                    coverage_branch = "restored"
-                elif should_auto_build_coverage_atlas(len(ctx.medias)):
-                    coverage_branch = "rebuilt"
-                else:
-                    coverage_branch = "deferred"
-                timing_recorder.mark_branch("coverage", coverage_branch)
-                # Now the branch is known — and, for a rebuild, known *before*
-                # the build itself. Re-pace against it (and against the
-                # exact post-dedup count, which the registry's ``num_items``
-                # only approximates) so the profile's per-branch coefficients
-                # are used rather than the branch-agnostic ones the first call
-                # had to settle for. Re-weighting mid-job only ever moves the
-                # bar forward: the tracker clamps its overall fraction to be
-                # monotonic.
-                _pace_open(coverage_branch, len(ctx.medias))
-                if coverage_branch == "rebuilt":
+                restored = restore_coverage_atlas_from_cache(ctx, cached_coverage_atlas)
+                if not restored and should_auto_build_coverage_atlas(len(ctx.medias)):
                     _coverage_progress(0, 0)
                     build_coverage_atlas_for_context(ctx, on_progress=_coverage_progress)
                 # Fill the coverage slice to completion in every branch (cache
@@ -373,16 +320,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                     for m in ctx.medias.values()
                     if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
                 )
-                # ``coverage_branch`` rides along with the counts rather than
-                # taking its own read-modify-write of the registry file: it is a
-                # pacing memo for the next open (see ``_pace_open``), never a
-                # fact anyone waits on.
-                _reg_update(
-                    dataset_id,
-                    num_items=len(ctx.medias),
-                    num_dupes=num_dupes,
-                    coverage_branch=coverage_branch,
-                )
+                _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
                 ctx.dataset_display_name = entry.get("name", "")
 
                 # Embedder warm-up runs fire-and-forget so the dashboard row
@@ -416,10 +354,6 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
                 tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
             finally:
-                # Every branch above parks the tracker at "idle", setting
-                # ``error`` when it failed or was cancelled — which is what says
-                # whether these phase timings describe a real load.
-                timing_recorder.finish(ok=not tracker.get().get("error"))
                 clear_thread_progress()
                 _reg_end_load(dataset_id)
                 _loading_tasks.mark_finished(task_id)
@@ -479,26 +413,6 @@ def build_dataset_coverage_atlas(dataset_id: str):
         media_type=entry.get("media_type", ""),
         embedder=entry.get("embedder", ""),
     )
-    # This endpoint runs a ``dataset_open``'s second step on its own, over the
-    # same medias, through the same ``build_coverage_atlas_for_context``. Record
-    # it as that step so a sweep can price the rebuild branch without stripping
-    # cached atlases out of anybody's pickles — the only other way to make an
-    # open rebuild, and one that would turn a read-only tuning family into a
-    # destructive one (#3521). ``only_phases`` keeps the run from writing a zero
-    # for ``items``, which it never had the chance to perform.
-    from vtscore import timing
-
-    atlas_recorder = timing.record_task(
-        tracker,
-        "dataset_open",
-        media_type=entry.get("media_type", ""),
-        embedder=entry.get("embedder", "") or "",
-        status_phases={"loading": "coverage"},
-        only_phases=("coverage",),
-    )
-    atlas_recorder.start()
-    atlas_recorder.set_scale(n=len(ctx.medias))
-    atlas_recorder.mark_branch("coverage", "rebuilt")
     tracker.update("loading", "Building coverage atlas…", 0, 0, step=1, total_steps=1)
 
     _request_user = get_current_user()
@@ -507,7 +421,6 @@ def build_dataset_coverage_atlas(dataset_id: str):
         from vtsearch.auth import thread_user
 
         with thread_user(_request_user):
-            ok = True
             try:
 
                 def _progress(current: int, total: int) -> None:
@@ -525,21 +438,15 @@ def build_dataset_coverage_atlas(dataset_id: str):
                     with _state_lock:
                         resync_coverage_atlas_to_detector(ctx, det_ctx)
             except CancelledError:
-                ok = False
                 ctx.coverage_atlas = None
                 tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
             except Exception as e:
                 import traceback as _tb
 
-                ok = False
                 _tb.print_exc()
                 error_msg = str(e) or repr(e) or "Unknown error building coverage atlas"
                 tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
             finally:
-                # A cancelled or failed build measured how long someone waited
-                # before giving up, not what the rebuild costs; ``ok=False``
-                # keeps the fitter from reading it as the latter.
-                atlas_recorder.finish(ok=ok)
                 _loading_tasks.mark_finished(task_id)
 
     from vtsearch.threading import spawn
