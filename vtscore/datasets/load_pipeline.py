@@ -577,6 +577,128 @@ def _park_load_terminal(tracker, n_items: int) -> None:
     )
 
 
+@dataclass
+class _DatasetLoadSpec:
+    """The per-dataset half of a load's parameters: what the post-import stages need.
+
+    Everything :func:`_finish_dataset_load` reads about *one* dataset, gathered
+    so a multi-dataset import (:mod:`vtscore.datasets.load_multi`) can carry
+    one of these per output while the single-dataset load builds one from its
+    keyword arguments.
+    """
+
+    task_id: str
+    origin: dict
+    name: str
+    clipper: str
+    clipper_params: dict | None
+    chain_steps: list[dict] | None
+    embedder: str
+    embedders: list[str] | None
+    created_by: str
+    media_type: str
+    build_projection: bool
+    ingest_started_at: float
+
+
+@dataclass
+class _LoadIds:
+    """The ids :func:`_finish_dataset_load` learns as it goes.
+
+    Mutable on purpose: the caller's failure handler needs the registry entry
+    id even when the stages raise *after* registration, so the helper writes
+    it here the moment it exists rather than returning it at the end.
+    """
+
+    context_id: str
+    registry_entry_id: str | None = None
+
+
+def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoadSpec, ids: _LoadIds) -> None:
+    """Run every post-import stage on *ctx*: origin tagging through registration and warm-ups.
+
+    The importer has populated ``ctx.medias``; this stamps origins, clips,
+    embeds, finalizes (drops failed embeds, dedups, builds the coverage atlas),
+    saves and registers the dataset, then kicks off the opt-in projection and
+    the fire-and-forget warm-ups.  Progress goes through *pacer* (the load's
+    :class:`AdaptiveLoadPacer`) and *tracker*; ``ids.context_id`` /
+    ``ids.registry_entry_id`` are updated as soon as the registry stage has
+    migrated the context, so a caller catching an exception from here can roll
+    the entry back.  Runs with *ctx* pinned as the thread's dataset context by
+    the caller.
+    """
+    apply_custom_metadata_md5(ctx.medias)
+    _tag_origins(ctx.medias, spec.origin)
+    _apply_clipper_stage(ctx, pacer, spec.clipper, spec.clipper_params, spec.chain_steps)
+    embed_failures = _embed_missing_stage(ctx, pacer, spec.embedders if spec.embedders else [spec.embedder])
+    # Step 4 (finalize) bundles several sub-stages. Route them
+    # through a FinalizeProgress proxy so each maps into its own
+    # ordered slice of the step-4 bar instead of independently
+    # filling (and pinning at 100%) the whole slice — keeps the
+    # bar advancing and the ETA self-correcting through the
+    # serialize/disk-write window. See FinalizeProgress.
+    fin = FinalizeProgress(pacer, spec.media_type)
+    fin.begin("cleanup")
+    _drop_none_embeddings_stage(ctx, fin, embed_failures)
+    # Re-lazify clips from reference (thin) parents now that
+    # embedding is done: strip their materialized bytes so the
+    # dataset stores recipes, not duplicated clip payloads.
+    _relazify_reference_clips_stage(ctx, fin)
+    fin.begin("dedup")
+    _collapse_duplicates_stage(ctx, fin)
+    _collapse_near_duplicates_stage(ctx, fin)
+    fin.begin("coverage")
+    _build_coverage_atlas_stage(ctx, fin)
+    tracker.check_cancelled()
+    # Opt-in (rides the projection opt-in): cache a signpost
+    # text per media BEFORE the registry save, so the texts —
+    # the sign pipeline's only full-corpus model cost — are
+    # pickled with the dataset and later browse / Find→Browse
+    # re-fits skip the text models entirely.
+    _maybe_signpost_texts_stage(ctx, fin, spec.build_projection)
+    fin.begin("registry")
+    ids.context_id, ids.registry_entry_id = _register_and_migrate(
+        ctx,
+        fin,
+        spec.task_id,
+        spec.origin,
+        spec.name,
+        spec.clipper,
+        spec.embedder,
+        spec.created_by,
+        spec.ingest_started_at,
+    )
+    # Opt-in: compute + persist the 2-D Browse projection now,
+    # so the Browse canvas opens instantly instead of building
+    # UMAP lazily on first visit.  Best-effort and runs after
+    # registration: the dataset is already saved and usable, so
+    # a failure (or a cancel during the fit) leaves it intact
+    # and just defers the projection to the lazy Browse path.
+    if spec.build_projection:
+        fin.begin("projection")
+        try:
+            _build_projection_stage(ctx, fin)
+        except Exception:
+            traceback.print_exc()
+    # Embedder warm-up is fire-and-forget so the dashboard row goes
+    # green immediately.  Text sort waits behind its own progress
+    # bar on first use if the model isn't ready yet.
+    _warmup_embedder_async(ctx.medias)
+    # Same deal for archive-member thumbnails: the importer reads
+    # no member bytes by design, so those media land with no
+    # thumbnail and every browse tile would stream a tar member
+    # and decode it on the request thread.  Warm them off the
+    # request path now that the dataset is registered and
+    # browsable; a no-op for every other import path.  Kicked on
+    # reload too (this runs for pickle loads as well), since the
+    # save above necessarily predates the pass.
+    start_archive_thumbnail_warm(ctx)
+
+    from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
+
+    record_achievement("dataset_load", str(spec.origin.get("importer", "")))
+
+
 def _run_origin_load_in_background(
     load_fn,
     origin: dict,
@@ -686,8 +808,21 @@ def _run_origin_load_in_background(
         # the same for the user identity, and runs ``mark_finished`` after both
         # scopes have exited so callers waiting on ``has_active_tasks() ==
         # False`` see fully cleaned-up worker state.
-        context_id = task_id
-        registry_entry_id: str | None = None
+        ids = _LoadIds(context_id=task_id)
+        spec = _DatasetLoadSpec(
+            task_id=task_id,
+            origin=origin,
+            name=name,
+            clipper=clipper,
+            clipper_params=clipper_params,
+            chain_steps=chain_steps,
+            embedder=embedder,
+            embedders=embedders,
+            created_by=created_by,
+            media_type=media_type,
+            build_projection=build_projection,
+            ingest_started_at=ingest_started_at,
+        )
         controller = _LoadGateController(tracker, task.total_steps)
         # Pace the unified bar from the per-phase cost terms, rebasing on what
         # actually happens (cached archives, observed bandwidth, skipped
@@ -731,70 +866,12 @@ def _run_origin_load_in_background(
                     # mid-load.
                     controller.swap_to_embed()
 
-                    apply_custom_metadata_md5(ctx.medias)
-                    _tag_origins(ctx.medias, origin)
-                    _apply_clipper_stage(ctx, pacer, clipper, clipper_params, chain_steps)
-                    embed_failures = _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
-                    # Step 4 (finalize) bundles several sub-stages. Route them
-                    # through a FinalizeProgress proxy so each maps into its own
-                    # ordered slice of the step-4 bar instead of independently
-                    # filling (and pinning at 100%) the whole slice — keeps the
-                    # bar advancing and the ETA self-correcting through the
-                    # serialize/disk-write window. See FinalizeProgress.
-                    fin = FinalizeProgress(pacer, media_type)
-                    fin.begin("cleanup")
-                    _drop_none_embeddings_stage(ctx, fin, embed_failures)
-                    # Re-lazify clips from reference (thin) parents now that
-                    # embedding is done: strip their materialized bytes so the
-                    # dataset stores recipes, not duplicated clip payloads.
-                    _relazify_reference_clips_stage(ctx, fin)
-                    fin.begin("dedup")
-                    _collapse_duplicates_stage(ctx, fin)
-                    _collapse_near_duplicates_stage(ctx, fin)
-                    fin.begin("coverage")
-                    _build_coverage_atlas_stage(ctx, fin)
-                    tracker.check_cancelled()
-                    # Opt-in (rides the projection opt-in): cache a signpost
-                    # text per media BEFORE the registry save, so the texts —
-                    # the sign pipeline's only full-corpus model cost — are
-                    # pickled with the dataset and later browse / Find→Browse
-                    # re-fits skip the text models entirely.
-                    _maybe_signpost_texts_stage(ctx, fin, build_projection)
-                    fin.begin("registry")
-                    context_id, registry_entry_id = _register_and_migrate(
-                        ctx, fin, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
-                    )
-                    # Opt-in: compute + persist the 2-D Browse projection now,
-                    # so the Browse canvas opens instantly instead of building
-                    # UMAP lazily on first visit.  Best-effort and runs after
-                    # registration: the dataset is already saved and usable, so
-                    # a failure (or a cancel during the fit) leaves it intact
-                    # and just defers the projection to the lazy Browse path.
-                    if build_projection:
-                        fin.begin("projection")
-                        try:
-                            _build_projection_stage(ctx, fin)
-                        except Exception:
-                            traceback.print_exc()
-                    # Embedder warm-up is fire-and-forget so the dashboard row goes
-                    # green immediately.  Text sort waits behind its own progress
-                    # bar on first use if the model isn't ready yet.
-                    _warmup_embedder_async(ctx.medias)
-                    # Same deal for archive-member thumbnails: the importer reads
-                    # no member bytes by design, so those media land with no
-                    # thumbnail and every browse tile would stream a tar member
-                    # and decode it on the request thread.  Warm them off the
-                    # request path now that the dataset is registered and
-                    # browsable; a no-op for every other import path.  Kicked on
-                    # reload too (this runs for pickle loads as well), since the
-                    # save above necessarily predates the pass.
-                    start_archive_thumbnail_warm(ctx)
-
-                    from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
-
-                    record_achievement("dataset_load", str(origin.get("importer", "")))
+                    # Everything after the importer — origin tagging, clipping,
+                    # embedding, finalize, registry, warm-ups — is the per-dataset
+                    # helper, shared with the multi-dataset import.
+                    _finish_dataset_load(ctx, tracker, pacer, spec, ids)
                 except Exception as exc:
-                    _handle_load_failure(exc, context_id, tracker, registry_entry_id=registry_entry_id)
+                    _handle_load_failure(exc, ids.context_id, tracker, registry_entry_id=ids.registry_entry_id)
                 finally:
                     controller.release()
         finally:
@@ -817,7 +894,7 @@ def _run_origin_load_in_background(
             on_finished,
             ctx,
             tracker,
-            dataset_id=context_id,
+            dataset_id=ids.context_id,
             name=name or _origin_to_str(origin),
             user=task.request_user,
             media_type=media_type,

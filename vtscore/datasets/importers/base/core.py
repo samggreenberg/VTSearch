@@ -23,6 +23,7 @@ from vtscore.plugins import FieldOption, PluginBase, PluginField
 
 from .naming import derive_display_name
 from .origin import _dataset_name_field, _field_in_origin, _serialise_origin_value
+from .outputs import OutputSpec
 
 
 class ImporterBase(PluginBase):
@@ -169,6 +170,19 @@ class ImporterBase(PluginBase):
     #: the pipeline's clipper stage.
     handles_own_clipping: bool = False
 
+    #: Whether one run of this importer may produce **several datasets** of
+    #: different media types (#4703).  The Add Dataset form offers its
+    #: *Multi-Dataset* toggle for an importer that has this on **and** declares
+    #: a ``media_type`` field (one that doesn't has no dataset type for the
+    #: form to multiply); the multi-dataset request then arrives as an
+    #: ``outputs`` list and the pipeline drives :meth:`run_outputs` /
+    #: :meth:`run_outputs_chunked`.  The defaults of those hooks run the
+    #: single-dataset :meth:`run` / :meth:`run_chunked` once per output, so every
+    #: importer gains the capability with no change; set this ``False`` on an
+    #: importer whose run is fixed to one dataset by design (the demo importer,
+    #: whose dataset is a named download).
+    multi_output: bool = True
+
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers
         #: that supply content vectors alongside media should populate this
@@ -205,6 +219,7 @@ class ImporterBase(PluginBase):
         d["picker_view"] = self.picker_view
         d["category"] = self.category
         d["fields"] = d["fields"] + [_dataset_name_field().to_dict()]
+        d["supports_multi_output"] = self.multi_output and any(f.key == "media_type" for f in self.fields)
 
         # For each media type the user can select, list N→M converters
         # that produce that type; the UI can show a datagrid of
@@ -442,6 +457,78 @@ class ImporterBase(PluginBase):
         medias: dict[int, dict[str, Any]] = {}
         self.run_cli(field_values, medias, thin=thin)
         yield medias
+
+    # ------------------------------------------------------------------
+    # Multi-dataset imports: one run, several datasets (#4703)
+    # ------------------------------------------------------------------
+
+    def run_outputs(
+        self,
+        field_values: dict[str, Any],
+        outputs: list[OutputSpec],
+        thin: bool = False,
+    ) -> Iterator[tuple[OutputSpec, dict[int, dict[str, Any]]]]:
+        """Produce every dataset in *outputs* from one run; yield ``(output, medias)``.
+
+        Each :class:`~vtscore.datasets.importers.base.outputs.OutputSpec`
+        names one dataset to build: its media type and the source rows that
+        feed it, exactly the two values a single-dataset import's
+        ``media_type`` / ``source_specs`` fields hold.  The default yields the
+        outputs in order, running :meth:`run` once per output on
+        :meth:`OutputSpec.narrow` of *field_values*, so an importer that never
+        heard of outputs already produces every dataset correctly, at the
+        cost of re-acquiring its source per output.
+
+        Override this when acquiring the source is the expensive part and
+        can be done once (download and unpack an archive, open a connection,
+        list a bucket), then build each output from the acquired copy.  Yield
+        the very ``OutputSpec`` objects you were given (the pipeline keys its
+        datasets by them), each paired with that dataset's ``medias`` dict in
+        the shape :meth:`run` populates.  Shared cleanup (deleting the
+        extraction directory) belongs in a ``finally`` around the whole loop,
+        since the pipeline consumes this iterator before it finalizes any
+        dataset.
+
+        The pipeline calls this hook for an importer whose
+        :attr:`supports_chunked` is ``False``; a chunked importer gets
+        :meth:`run_outputs_chunked` instead, so an importer that supports
+        chunking overrides that one (or both).
+
+        Args:
+            field_values: The shared form values, as :meth:`run` receives
+                them, minus the per-dataset keys the outputs carry.
+            outputs: The datasets to produce, in the user's order.
+            thin: As for :meth:`run`.
+        """
+        for output in outputs:
+            medias: dict[int, dict[str, Any]] = {}
+            self.run(output.narrow(field_values), medias, thin=thin)
+            yield output, medias
+
+    def run_outputs_chunked(
+        self,
+        field_values: dict[str, Any],
+        outputs: list[OutputSpec],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[tuple[OutputSpec, dict[int, dict[str, Any]]]]:
+        """Chunked twin of :meth:`run_outputs`: yield ``(output, chunk)`` pairs.
+
+        Each chunk is a self-contained medias dict of at most *chunk_size*
+        items with ids starting at 1, as :meth:`run_chunked` yields; the
+        pipeline renumbers them into the output's dataset as they arrive.
+        Chunks of different outputs may interleave, though the default (and
+        every sensible override) finishes one output before starting the
+        next.  The default runs :meth:`run_chunked` once per output on
+        :meth:`OutputSpec.narrow` of *field_values*.
+
+        This is the hook the pipeline drives for an importer whose
+        :attr:`supports_chunked` is ``True``, so an acquire-once override on
+        such an importer goes here; see :meth:`run_outputs` for the contract.
+        """
+        for output in outputs:
+            for chunk in self.run_chunked(output.narrow(field_values), chunk_size, thin=thin):
+                yield output, chunk
 
     # ------------------------------------------------------------------
     # CLI support

@@ -841,11 +841,27 @@ class DatasetLoadStartedResponseSchema(Schema):
     ``task_id`` is the background-task tracker id (string) used by the
     SSE progress stream; it may be empty when the load completes
     synchronously (rare).
+
+    ``task_ids`` is set by the three routes that accept a multi-dataset
+    ``outputs`` list (``import/{importer_name}``, ``import-local-folder``,
+    ``import-local-files``): one task id per dataset the request started, in
+    the outputs' order, so a client can follow (and cancel) each row.  A
+    single-dataset request through those routes gets ``[task_id]``.
     """
 
     ok = fields.Boolean(required=True)
     message = fields.String(required=True)
     task_id = fields.String(required=True)
+    task_ids = fields.List(
+        fields.String(),
+        metadata={
+            "description": (
+                "One task id per dataset a multi-dataset import started, in the request's ``outputs`` order "
+                "(a single-dataset request lists its one ``task_id``).  Only the importer / local-folder / "
+                "local-files routes set it."
+            )
+        },
+    )
 
 
 class DatasetClearResponseSchema(Schema):
