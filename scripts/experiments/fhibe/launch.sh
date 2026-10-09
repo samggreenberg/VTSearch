@@ -87,12 +87,13 @@ export CALIB_EMIT_PICKS=1
 export CALIB_RANK_FRAME_STEPS="${CALIB_RANK_FRAME_STEPS:-10,25,50,100,150}"
 export CALIB_REPOOL_VARIANTS="" CALIB_SCHEDULE_VARIANTS="" CALIB_FOLD_COUNTS=""
 
-# NOT SIZED YET. A whole-image Binary Photo run on ~10k COCO Better medias took
-# ~7 min at 4G and 2 CPUs (#4651), and every FHIBE cell is that size. Run `size`
-# and read Elapsed and MaxRSS off sacct before trusting these.
-MEM="${CALIB_MEM:-6G}"
+# Sized 2026-10-09 on the smoke run (1 example, 150 clicks, ceiling on, 2 CPUs):
+# a 1024 photo cell took 3:04 at 635 MB peak (job 939415), a 1024 face cell 4:56
+# at 561 MB (939416). 3G and an hour leave room for a cell whose Good phase
+# never ends, which walks the example sort for all 150 clicks.
+MEM="${CALIB_MEM:-3G}"
 CPUS="${CALIB_CPUS:-2}"
-TIME="${CALIB_TIME:-2:00:00}"
+TIME="${CALIB_TIME:-1:00:00}"
 PARTITION="${CALIB_PARTITION:-cpu}"
 CONC="${CALIB_CONC:-60}"
 JOB_NAME="${CALIB_JOB_NAME:-fhibe-k$FHIBE_EXAMPLES${_BTAG:-}}"
@@ -132,7 +133,7 @@ identities)
   # Every listed cell, not just this run's datasets: a later run on fewer arms
   # can reuse the file and still pair with the full one.
   echo "identities: admitted at $FHIBE_MAX_EXAMPLES example(s), n=${FHIBE_N_IDENTITIES:-all} -> $FHIBE_IDENTITIES"
-  submit identities --job-name=fhibe-ids --mem=24G --cpus-per-task=2 --time=1:00:00 \
+  submit identities --job-name=fhibe-ids --mem=8G --cpus-per-task=2 --time=1:00:00 \
     --partition="$PARTITION" --export=ALL --output="$LOGS/identities-%j.out" \
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python identities.py --examples $FHIBE_MAX_EXAMPLES \
 ${FHIBE_N_IDENTITIES:+--n $FHIBE_N_IDENTITIES} --out $FHIBE_IDENTITIES && chmod 600 $FHIBE_IDENTITIES"
