@@ -3,7 +3,10 @@ import { SettingsStateService } from './settings-state.service';
 
 /**
  * Every hint Toasty gives (#4680), by the id the `hidden_hints` setting stores.
- * A new hint adds its id here; the server keeps whatever ids it is sent.
+ * One id is one bubble with one text: a hint that would say something else in
+ * another state is a second hint, so hiding one never hides words the user has
+ * not read. A new hint adds its id here and a row to `docs/hints.md` (a test
+ * holds the two together); the server keeps whatever ids it is sent.
  */
 export const HINT_IDS = [
   // Dashboard, in the order a new user meets them.
@@ -15,10 +18,12 @@ export const HINT_IDS = [
   'mismatch',
   'train',
   'test-or-find',
+  'find',
   // Train view.
   'start-voting',
   'resort-prompt',
   'autopilot-done',
+  'autopilot-ran-dry',
   'all-labeled',
 ] as const;
 export type HintId = (typeof HINT_IDS)[number];

@@ -422,17 +422,15 @@
       </vt-toasty-hint>
     }
     @case ('test-or-find') {
-      <!-- Test takes one dataset and one detector; Find takes any number. -->
-      @if (findEnabled) {
-        <vt-toasty-hint hintId="test-or-find" [anchor]="testBtn" side="above" reach="right">
-          Click <strong>Test</strong> to eval or improve this detector. Or <strong>Find</strong> to
-          collect its matches.
-        </vt-toasty-hint>
-      } @else {
-        <vt-toasty-hint hintId="test-or-find" [anchor]="findBtn" side="above" reach="left">
-          Click <strong>Find</strong> to run these detectors on this dataset.
-        </vt-toasty-hint>
-      }
+      <vt-toasty-hint hintId="test-or-find" [anchor]="testBtn" side="above" reach="right">
+        Click <strong>Test</strong> to eval or improve this detector. Or <strong>Find</strong> to
+        collect its matches.
+      </vt-toasty-hint>
+    }
+    @case ('find') {
+      <vt-toasty-hint hintId="find" [anchor]="findBtn" side="above" reach="left">
+        Click <strong>Find</strong> to run these detectors on this dataset.
+      </vt-toasty-hint>
     }
   }
 </div>

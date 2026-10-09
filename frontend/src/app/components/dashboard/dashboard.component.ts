@@ -78,6 +78,7 @@ type DashboardHintId = Extract<
   | 'mismatch'
   | 'train'
   | 'test-or-find'
+  | 'find'
 >;
 
 @Component({
@@ -1321,7 +1322,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (pickedDatasets.length === 0) return null;
     if (!this.findMediaTypesMatch()) return 'mismatch';
     if (this.showTrainHint) return 'train';
-    if (this.autofindEnabled) return 'test-or-find';
+    // Test takes one dataset and one detector; Find takes any number.
+    if (this.findEnabled) return 'test-or-find';
+    if (this.autofindEnabled) return 'find';
     return null;
   }
 
