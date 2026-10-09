@@ -32,18 +32,28 @@ if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
 fi
 echo "cells to run: $N (array 0-$((N-1))%$CONC, $GRES)"
 
+require_jobid() {
+  if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: $2 was REFUSED by sbatch (no job id came back)." >&2
+    exit 1
+  fi
+}
+
 WRAP="source $WT/gridenv.sh && export MAXPATCH_EXP=$MAXPATCH_EXP MAXPATCH_EMBEDDERS=$MAXPATCH_EMBEDDERS MAXPATCH_N_CATEGORIES=$MAXPATCH_N_CATEGORIES MAXPATCH_N_SEEDS=$MAXPATCH_N_SEEDS MAXPATCH_MAX_STEPS=$MAXPATCH_MAX_STEPS && cd $HERE"
 
 B=$(sbatch --parsable --job-name=mp-cells --array=0-$((N-1))%$CONC \
   --gres="$GRES" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition=gpu \
   --export=ALL --output="$LOGS/cells-%A_%a.out" \
   --wrap="$WRAP && python run_cells.py")
+require_jobid "$B" "cells array"
 echo "cells array: $B"
+# Recorded now, so a refused summarize step below still leaves the array findable.
+echo "$B" > "$LOGS/.cells_jobid"
 
 S=$(sbatch --parsable --dependency=afterany:$B --job-name=mp-sum --mem=16G \
   --cpus-per-task=4 --time=0:30:00 --partition=gpu --gres=gpu:v100:1 \
   --export=ALL --output="$LOGS/summarize-%j.out" \
   --wrap="source $WT/gridenv.sh && export MAXPATCH_EXP=$MAXPATCH_EXP && cd $HERE && python analyze.py")
+require_jobid "$S" "summarize"
 echo "summarize: $S"
-echo "$B" > "$LOGS/.cells_jobid"
 echo "Report -> $MAXPATCH_EXP/results/REPORT.md"
