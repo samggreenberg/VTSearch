@@ -204,7 +204,50 @@ DATASETS: dict[str, dict] = {
     # the default sweep. A bare `build_pile.py` would otherwise quietly add five
     # cells nobody asked for, one of them a ~7 GB `dinov3_patch` grid. Name it
     # to build it: `--datasets vg_scale_deep --embedders siglip`.
+    #
+    # FHIBE (#4699): Sony's consented face benchmark. One media per one-person
+    # photo, `category` = FHIBE's subject id, read from a copy whose long side is
+    # `long_side` px -- the census (docs/experiments/2026-10-09-fhibe-supply-4699)
+    # found MTCNN's recall is a pixel cliff at 24 px, so the stored size IS the
+    # localization difficulty, and the owner chose to build both sizes. The
+    # `fhibe_faces_*` datasets are the `image2face` crops of the same copy,
+    # embedded with FaceNet; they are separate datasets because a photo yields
+    # zero, one or several crops, and `--verify` requires one media count per
+    # dataset. All four are `on_request`: FHIBE is downloaded per user under
+    # Sony's terms and is not in every checkout's pile.
+    "fhibe_1024": {"boxed": True, "kind": "fhibe", "long_side": 1024, "on_request": True},
+    "fhibe_640": {"boxed": True, "kind": "fhibe", "long_side": 640, "on_request": True},
+    "fhibe_faces_1024": {"boxed": False, "kind": "fhibe", "long_side": 1024, "media_type": "face", "on_request": True},
+    "fhibe_faces_640": {"boxed": False, "kind": "fhibe", "long_side": 640, "media_type": "face", "on_request": True},
 }
+
+#: FHIBE's release, as downloaded by ``scripts/experiments/pile/fhibe/download.sbatch``.
+#: Owner-only on scratch and never redistributed: each user registers with Sony
+#: and downloads their own copy. The release name carries the archive's hash, so
+#: a consent-revocation re-release is a NEW directory and a new value here, and
+#: the derived copies (``fhibe_derived_dir``) live beside it to be deleted with it.
+FHIBE_ROOT = Path(os.environ.get("VTS_FHIBE_ROOT", f"/expscratch/{USER}/fhibe"))
+FHIBE_RELEASE = os.environ.get("VTS_FHIBE_RELEASE", "fhibe-full-resolution-674a7dcf")
+
+
+def fhibe_derived_dir(long_side: int) -> Path:
+    """Where the build stages FHIBE's downscaled copies: beside the release, deleted with it."""
+    return FHIBE_ROOT / f"{FHIBE_RELEASE}-derived" / f"long{long_side}"
+
+
+def private_cell_dir(dataset: str) -> Path | None:
+    """Where a dataset's cells must really live, when the shared pile is the wrong place.
+
+    The pile is world-readable, and FHIBE's terms forbid passing it on: its cells
+    are vectors of photos other GRID users may not have. They are written here,
+    owner-only and beside the release so they are deleted with it, and the pile
+    holds a symlink -- which the harness opens as it opens any cell, and nobody
+    else can follow into a mode-700 directory.
+    """
+    if DATASETS.get(dataset, {}).get("kind") == "fhibe":
+        return FHIBE_ROOT / f"{FHIBE_RELEASE}-derived" / "cells"
+    return None
+
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
 #: embedder's geometry (the same anchors the calibration harness bands on):
@@ -3515,7 +3558,25 @@ EMBEDDERS: dict[str, dict] = {
     # they carry far more activation memory per item than their backbone size
     # alone suggests.
     "dinov3_patch": {"patch": True, "gated": True, "batch": 64},
+    # FaceNet over `image2face` crops (#4699). The only embedder of `face` media,
+    # so it pairs only with datasets whose `media_type` is "face" -- see `cells`.
+    "face": {"patch": False, "batch": 128, "media_type": "face"},
 }
+
+
+def media_type_of(dataset: str) -> str:
+    """The media type a dataset's cells hold; ``image`` unless it says otherwise."""
+    return DATASETS[dataset].get("media_type", "image")
+
+
+def embeds(embedder: str, dataset: str) -> bool:
+    """Whether *embedder* can embed *dataset*'s media at all.
+
+    Every embedder used to embed every dataset, because every dataset was images.
+    FaceNet embeds only face crops and SigLIP no face crops, so a pair whose
+    media types differ is not a missing cell but no cell.
+    """
+    return EMBEDDERS.get(embedder, {}).get("media_type", "image") == media_type_of(dataset)
 
 
 def embed_batch_size(embedder: str) -> int | None:
@@ -3525,8 +3586,8 @@ def embed_batch_size(embedder: str) -> int | None:
 
 
 def cells() -> list[tuple[str, str]]:
-    """Every ``(dataset, embedder)`` cell in the full grid."""
-    return [(ds, emb) for ds in DATASETS for emb in EMBEDDERS]
+    """Every ``(dataset, embedder)`` cell in the full grid: each dataset with each embedder of its media type."""
+    return [(ds, emb) for ds in DATASETS for emb in EMBEDDERS if embeds(emb, ds)]
 
 
 def pickle_name(dataset: str, embedder: str) -> str:
