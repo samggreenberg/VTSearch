@@ -25,7 +25,7 @@
           @if (activeQuestions.length > 0) {
             @for (q of activeQuestions; track q.key) {
               <div class="form-group">
-                <label class="form-label" [for]="'cq-' + q.key" [title]="q.description || ''">{{ q.label }}</label>
+                <label class="form-label" [for]="'cq-' + q.key" [title]="q.description || ''">{{ q.label }}:</label>
                 @if (q.type === 'number') {
                   <input
                     [id]="'cq-' + q.key"

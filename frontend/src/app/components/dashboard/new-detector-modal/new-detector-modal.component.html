@@ -190,7 +190,7 @@
                         [title]="field.description || field.label || field.key"
                       ></vt-plugin-checkbox>
                     }
-                    {{ field.label || field.key }}
+                    {{ field.label || field.key }}{{ field.field_type === 'checkbox' ? '' : ':' }}
                     @if (field.required) {
                       <span class="required">*</span>
                     }

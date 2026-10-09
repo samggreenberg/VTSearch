@@ -4,7 +4,7 @@
 @if (advancedOpen()) {
   @if (hasSourceSpecsColumn) {
     <div class="form-group">
-      <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+      <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media:</label>
       <vt-source-specs-picker
         [availableConverters]="availableConverters()"
         [nativeType]="nativeType()"
@@ -28,7 +28,7 @@
         [title]="convertOptional()
           ? 'Optionally convert this media into another type on load (e.g. crop faces out of images).'
           : 'This media type isn\'t embeddable on its own; pick what to convert it into on load.'"
-      >Convert to</label>
+      >Convert to:</label>
       <select
         id="import-advanced-convert-target"
         class="form-select"
@@ -47,7 +47,7 @@
 
   @if (showEmbedderPicker) {
     <div class="form-group">
-      <label class="form-label" for="import-advanced-embedder" title="The embedder used to analyze each item so it can be searched">Embedder</label>
+      <label class="form-label" for="import-advanced-embedder" title="The embedder used to analyze each item so it can be searched">Embedder:</label>
       <select
         id="import-advanced-embedder"
         class="form-select"
@@ -77,7 +77,7 @@
 
   @if (patchEmbedderOptions.length > 0) {
     <div class="form-group">
-      <label class="form-label" for="import-advanced-patch-embedder" title="Optionally add a region-aware embedder that lets you vote on parts of an image and search by region. Leave as None to skip.">Region embedder (optional)</label>
+      <label class="form-label" for="import-advanced-patch-embedder" title="Optionally add a region-aware embedder that lets you vote on parts of an image and search by region. Leave as None to skip.">Region embedder (optional):</label>
       <select
         id="import-advanced-patch-embedder"
         class="form-select"
@@ -97,7 +97,7 @@
 
   @if (structuralEmbedderOptions.length > 0) {
     <div class="form-group">
-      <label class="form-label" for="import-advanced-structural-embedder" title="Optionally add a pattern-matching embedder that finds a specific object or logo. Leave as None to skip.">Instance embedder (optional)</label>
+      <label class="form-label" for="import-advanced-structural-embedder" title="Optionally add a pattern-matching embedder that finds a specific object or logo. Leave as None to skip.">Instance embedder (optional):</label>
       <select
         id="import-advanced-structural-embedder"
         class="form-select"
@@ -117,7 +117,7 @@
 
   @if (showStandaloneClipperButton) {
     <div class="form-group">
-      <label class="form-label" title="Pre-processing clipper applied before each item is analyzed (e.g. clips audio into shorter segments)">Clipper</label>
+      <label class="form-label" title="Pre-processing clipper applied before each item is analyzed (e.g. clips audio into shorter segments)">Clipper:</label>
       <button
         class="btn btn--secondary clipper-btn"
         (click)="onClipperClick()"
@@ -130,7 +130,7 @@
 
   @if (showCleanupSection) {
     <div class="form-group">
-      <label class="form-label" title="Optional cleanup passes applied to every item just before it's analyzed, so the analysis isn't spent on content-free regions. Each one is independent — tick any combination.">Cleanup</label>
+      <label class="form-label" title="Optional cleanup passes applied to every item just before it's analyzed, so the analysis isn't spent on content-free regions. Each one is independent — tick any combination.">Cleanup:</label>
       @for (cleaner of cleaners(); track cleaner.name) {
         <label class="form-label cleanup-row" [title]="cleaner.description || ''">
           <input
@@ -143,7 +143,7 @@
         @if (isCleanerEnabled(cleaner.name)) {
           @for (param of cleanerParameters(cleaner); track param.key) {
             <label class="form-label cleanup-param" [title]="param.description || ''">
-              {{ param.label }}
+              {{ param.label }}:
               <input
                 class="form-input"
                 [type]="param.type === 'number' ? 'number' : 'text'"
