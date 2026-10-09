@@ -60,8 +60,10 @@ the camera distance and the subject id, and stops there.
 **Detection** runs the app's own `FaceLocalizer` (MTCNN, keep-all, the same
 construction `image2face` uses) on every image three ways: the original PNG, and a
 bicubic downscale to a long side of 1,024 and of 640 px, re-encoded as JPEG q90. The
-two downscales stand in for a benchmark that stores smaller copies. 10,901 images at
-32 MP do not fit in a pickle, so the build will have to pick a size. A detection
+two downscales stand in for a benchmark that reads smaller copies. A pile cell keeps
+vectors and no pixels, but `build_pile.py` holds every image's bytes in RAM before it
+embeds (`coco_better` peaks at 20.9 GB), and FHIBE's originals are 140 GB, so the
+build has to read a smaller copy in any case. A detection
 counts only if the app would keep it: confidence >= 0.5 (`FaceLocalizer`'s default)
 and a padded crop >= 32 px (`image2face`'s `min_size` after its 0.25 padding). A
 **hit** is a kept detection at IoU >= 0.5 with the annotated box.
@@ -153,8 +155,8 @@ so harmless to the labels, but it inflates the haystack at full resolution.
   identity. At 640 px, the small band loses 30% of its faces, but to a pixel floor.
   To test *finding* rather than *resolving*, a band would need faces above 24 px
   that MTCNN still misses. At 1,024 px there are few: 5% of photos.
-- **Storage size is forced anyway.** The originals average 14 MB as PNG (140 GB in
-  all). Measured on 30 random photos, a 1,024 px JPEG q90 averages 224 KB (1/61; ~2.4 GB
+- **A size has to be picked anyway.** The originals average 14 MB as PNG (140 GB in
+  all), too much for a build that holds every image's bytes in RAM. Measured on 30 random photos, a 1,024 px JPEG q90 averages 224 KB (1/61; ~2.4 GB
   for the set) and a 640 px one 93 KB.
 
 ## Limits
