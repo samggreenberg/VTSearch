@@ -938,7 +938,8 @@ all hints" boxes that `HintsService` keeps in the user's settings. Drop it
 under any positioned container; it measures itself against its anchor and
 flips the bubble to the other side when it would run off the edge. Its `face`
 (happy / sad / surprised, `utils/toasty-faces.ts`) is the same set the toasts
-use. `directives/no-focus-steal.directive.ts` stops toolbar buttons
+use. [`hints.md`](hints.md) charts every hint, its face and when it fires;
+a new hint adds a row there. `directives/no-focus-steal.directive.ts` stops toolbar buttons
 next to the Browse canvas from swallowing keyboard focus on mousedown.
 
 Services are root-provided by default; provide one on a component only when
