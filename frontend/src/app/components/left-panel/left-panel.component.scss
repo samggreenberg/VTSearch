@@ -39,11 +39,11 @@
 // Folder tabs, like the shared `.tab` and `.view-tab` (#4718, #4726): each an
 // outlined box with rounded top corners, so an inactive one reads as something
 // to click and not as a stray label. The strip sits on the panel, so the fills
-// follow `.view-tab` rather than `.tab`: inactive tabs take `--bg-hover`
-// (`--bg-subtle` is all but the panel's shade in the light theme), and the
-// active one takes `--bg-panel` and drops its bottom edge, so it opens into the
-// tab panel below. The strip is inset by the tab panel's own padding, so the
-// tabs line up with the content under them.
+// and hover follow `.view-tab` rather than `.tab`: inactive tabs take
+// `--bg-hover` (`--bg-subtle` is all but the panel's shade in the light theme),
+// and the active one takes `--bg-panel` and drops its bottom edge, so it opens
+// into the tab panel below. The strip is inset by the tab panel's own padding,
+// so the tabs line up with the content under them.
 .left-tabs {
   display: flex;
   align-items: flex-end;
@@ -89,10 +89,10 @@
     pointer-events: none;
   }
 
-  // Hover lights the text and edge but keeps the fill: the step toward the
-  // panel that `.view-tab` takes lands, in the light theme, on all but the
-  // active tab's shade, so a hovered tab read as a second active one. Not on
-  // the active tab either: this selector outranks `.active`.
+  // Hover lights the text and edge but keeps the fill: a step toward the
+  // panel lands, in the light theme, on all but the active tab's shade, so a
+  // hovered tab read as a second active one. Not on the active tab either:
+  // this selector outranks `.active`.
   &:hover:not(:disabled):not(.active) {
     border-color: var(--border-secondary);
     color: var(--text-primary);

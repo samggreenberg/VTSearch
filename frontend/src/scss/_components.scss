@@ -916,7 +916,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // `.view-tab-content` with no bottom edge and an accent edge along its top.
 // Inactive ones take `--bg-hover`, not `.tab`'s `--bg-subtle`: in the light
 // theme `--bg-subtle` is all but the panel's own shade, so the active tab
-// wouldn't stand out from the rest. The strip's bottom border is the
+// wouldn't stand out from the rest. For the same reason hover lights an
+// inactive tab's text and edge and leaves its fill: a step toward the panel
+// read as a second active tab (#4726). The strip's bottom border is the
 // content box's top edge; with no strip (a lone tab isn't drawn), the box
 // keeps its own. Lives here (not in a component SCSS) so child components can
 // reuse the pattern without copying the rules; Angular's emulated
@@ -964,9 +966,11 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     pointer-events: none;
   }
 
-  &:hover {
+  // Not on the active tab: this selector outranks the one-class `--active`,
+  // and the edge colour would draw a line under the tab it opens out of.
+  &:hover:not(.view-tab--active) {
     color: var(--text-primary);
-    background: var(--bg-subtle);
+    border-color: var(--border-secondary);
   }
 
   &--active {
