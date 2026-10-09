@@ -57,7 +57,9 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  padding: var(--space-md) var(--space-lg);
+  // The tabs split the strip, so the side padding only reserves room for the
+  // label; it is kept small so the label fits down to the query below.
+  padding: var(--space-md);
   border: 1px solid var(--border);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   // Overlap the strip's bottom border, so the active tab's panel-coloured
@@ -113,14 +115,17 @@
   display: none;
 }
 
-@container left-panel (max-width: 140px) {
+// Short labels once "Autopilot" stops fitting its folder tab (~170px, with
+// slack for wider system fonts). The narrowest panel a drag leaves is ~147px
+// (`LEFT_MIN` less the panel's padding), so tighter padding there keeps
+// "Manual" and "Review" inside their tabs too.
+@container left-panel (max-width: 190px) {
   .label-full {
     display: none;
   }
   .label-short {
     display: inline;
   }
-  // Two tabs share ~130px here: give the labels the room the padding took.
   .left-tab {
     padding-inline: var(--space-xs);
   }
