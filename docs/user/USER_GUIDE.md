@@ -1137,9 +1137,10 @@ It has two tabs:
   is already set to that dataset's and locked, so the field moves out of the
   way, under **Advanced ▾** (the toggle at the bottom left, beside
   **Cancel**; collapsed by default), with an unlock button beside it if you
-  do want another type. Give the detector a **Detector name**, and seed it
-  under **Example** one of two ways: the **Text** tab takes a short description ("e.g.
-  large books"), and the media tab next to it (named for the media
+  do want another type. Give the detector a **Detector name**, or leave
+  it blank to name it after its example, and seed it
+  under **Example** one of two ways: the **Text** tab takes a short description (such as
+  "large books"), and the media tab next to it (named for the media
   type, e.g. **Image**) takes one or more **media examples**. A typed
   description also fills in the name: your words as typed, with the first
   letter capitalised and "detector" on the end ("large books" becomes
@@ -1170,7 +1171,8 @@ It has two tabs:
   or **Structural**.
   That choice fixes what the detector is compatible with later. If the
   dataset's embedder can't search by text, a text description has nothing to
-  rank by there, so **Create** stays disabled until you add an example item.
+  rank by there, so the **Text** box says so and **Create** stays disabled
+  until you add an example item.
 - **Threshold** (both tabs, under **Advanced ▾**) - which mistake this
   detector leans toward, the same three radios as the [Threshold](#3-threshold)
   in Manual mode. The detector keeps it, and Autopilot draws its line there.
@@ -1181,7 +1183,8 @@ It has two tabs:
   from**); a stock install offers a JSON or CSV label file on the server
   (**Server JSON File** / **Server CSV File**), and plugins can add other
   sources. Pick one, fill its form, and VTSearch trains the detector on
-  the imported labels (the button reads **Create & Import**). It takes files
+  the imported labels (the button reads **Create & Import**). A name left
+  blank comes from the imported file's name. It takes files
   exported from VTSearch, which record where each item came from (see
   [Move a detector to another VTSearch](howto/move-a-detector.md)); to add
   labels made elsewhere, use **Import Labels** on an existing detector

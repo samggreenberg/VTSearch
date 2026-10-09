@@ -74,6 +74,14 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(root().querySelector('select')).toBeNull();
     });
 
+    it('styles the heading as a form label only when the host asks (#4718)', async () => {
+      const label = () => root().querySelector('.balance-label')!;
+      expect(label().classList).not.toContain('balance-label--form');
+      fixture.componentRef.setInput('formLabel', true);
+      await settleZoneless(fixture);
+      expect(label().classList).toContain('balance-label--form');
+    });
+
     it('offers three radios under it, beta 4 / 1 / 0.25 left to right, starting at the balanced middle', () => {
       expect(radios().map((r) => r.value)).toEqual(['4', '1', '0.25']);
       expect(checkedValue()).toBe('1');

@@ -1,5 +1,5 @@
 <div class="form-group">
-  <label class="form-label" title="Tick each kind of media to make a dataset of. Every ticked row becomes its own dataset, named after the import and the kind.">Datasets to make</label>
+  <label class="form-label" title="Tick each kind of media to make a dataset of. Every ticked row becomes its own dataset, named after the import and the kind.">Datasets to make:</label>
   <ul class="mo-rows" role="list">
     @for (draft of drafts(); track draft.category) {
       <li class="mo-row" [class.mo-row--checked]="draft.checked">

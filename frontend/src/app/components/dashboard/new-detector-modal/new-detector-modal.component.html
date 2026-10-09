@@ -22,7 +22,7 @@
 
       @if (tab === 'blank') {
         <div class="form-group example-group">
-          <label class="form-label">Example <span class="required">*</span></label>
+          <label class="form-label">Example: <span class="required">*</span></label>
           <div class="tab-bar example-tab-bar" role="tablist">
             <button type="button" class="tab" role="tab"
               [class.active]="exampleTab() === 'text'"
@@ -76,7 +76,7 @@
                   [ngModel]="pendingText()"
                   (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
-                  placeholder="e.g. large books"
+                  [placeholder]="textExamplePlaceholder"
                   title="A text description of what this detector should find"
                   (keydown.enter)="$event.preventDefault(); submit()"
                 />
@@ -97,17 +97,13 @@
               }
             </div>
           }
-
-          @if (!hasExample) {
-            <p class="info-text example-empty-hint">{{ exampleHint }}</p>
-          }
         </div>
       }
 
       @if (tab === 'trained') {
         @if (trainedView === 'picker') {
           <div class="form-group">
-            <label class="form-label">Import labels from <span class="required">*</span></label>
+            <label class="form-label">Import labels from: <span class="required">*</span></label>
             <p class="info-text">Choose where to import labels from. The resulting detector's training data will be the imported labels.</p>
             @if (labelImportersLoading()) {
               <p class="empty-state">Loading importers…</p>
@@ -148,7 +144,7 @@
                         [title]="field.description || field.label || field.key"
                       ></vt-plugin-checkbox>
                     }
-                    {{ field.label || field.key }}
+                    {{ field.label || field.key }}{{ field.field_type === 'checkbox' ? '' : ':' }}
                     @if (field.required) {
                       <span class="required">*</span>
                     }
@@ -290,15 +286,15 @@
       }
 
       <div class="form-group">
-        <label class="form-label" for="detector-name" title="A short name to identify this detector">Detector name</label>
+        <label class="form-label" for="detector-name" title="A short name to identify this detector. Leave it blank to name the detector after its example.">Detector name:</label>
         <input
           id="detector-name"
           class="form-input"
           [ngModel]="name()"
           (ngModelChange)="onNameInput($event)"
           name="name"
-          placeholder="e.g. Large book detector"
-          title="A short name to identify this detector"
+          placeholder="Enter a new name or leave blank"
+          title="A short name to identify this detector. Leave it blank to name the detector after its example."
           (keydown.enter)="onNameEnter($event)"
         />
       </div>
@@ -315,7 +311,7 @@
               @if (showEmbedderTypePicker) {
                 <label class="form-label" for="detector-embedder-type"
                   title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
-                  Detector Embedder Type
+                  Detector Embedder Type:
                 </label>
                 <select
                   id="detector-embedder-type"
@@ -346,7 +342,7 @@
                pick, so it waits under Advanced (#4717); Manual and Test can
                move it later. -->
           <div class="form-group">
-            <vt-balance [value]="beta()" (valueChange)="pickBeta($event)" />
+            <vt-balance [value]="beta()" [formLabel]="true" (valueChange)="pickBeta($event)" />
           </div>
         </div>
       }
@@ -476,7 +472,7 @@
       @if (activePickerView === 'demo' && selectedImporter && demoFileBrowsing) {
         <div class="server-folder-browser">
           <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoTable()" title="Return to the demo list">&larr; Back to demo list</button>
-          <label class="form-label" for="demo-path-input">Path to a media file in <strong>{{ demoFileBrowseLabel }}</strong></label>
+          <label class="form-label" for="demo-path-input">Path to a media file in <strong>{{ demoFileBrowseLabel }}</strong>:</label>
           <input
             id="demo-path-input"
             type="text"
@@ -554,7 +550,7 @@
      active dataset preset and locked it, under Advanced (#4717). -->
 <ng-template #mediaTypeField>
   <div class="form-group">
-    <label class="form-label" title="The type of media this detector will process">Media type</label>
+    <label class="form-label" title="The type of media this detector will process">Media type:</label>
     <div class="media-type-row">
       <div class="custom-select"
         [class.open]="mediaTypeDropdownOpen"
