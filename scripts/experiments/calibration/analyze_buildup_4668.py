@@ -81,6 +81,29 @@ CHECKS = {"b1_xcal": False, "b2_labels": False, "b3_floor": False, "b4_check": T
 
 CHECKPOINTS = (10, 25, 50, 100, 150)
 WINDOWS = ((1, 25), (1, 50), (51, 150), (1, 150))
+#: The step table's columns, the session mean first: one number for "did this step improve the app" is the area
+#: under the objective over votes, i.e. its mean (owner, 2026-10-09). Points on the curve come after.
+STEP_COLUMNS = ("mean 1-150", "mean 1-50", "mean 51-150", "t=50", "t=150")
+RETURNED_NOTE = (
+    "Every run at every vote, filled as the curves are: until a detector shows, the user's set is the typed query's "
+    "own, at the line of the rung's era (the midpoint for b1-b5, today's per-preset line for b6-b7); after, the last "
+    "line shown. Each value is a mean over the votes in the window (`returned_curve.csv` has every vote). 'Over 200' "
+    "and 'nothing' are shares of run-votes."
+)
+
+
+def text_set(raw: pd.DataFrame, p_col: str, r_col: str, fpr_col: str) -> dict[str, dict[tuple, float]]:
+    """The typed query's own set per cell, on the withheld half: its precision, recall and how many it returns.
+
+    What Find returns before a detector shows is this set, so every per-vote read fills from it (#4631: every run
+    counts at every vote). An empty set has precision 0.
+    """
+    if "supports_text" in raw.columns:
+        raw = raw[raw["supports_text"] == 1]
+    per = raw.groupby(CELL)[[p_col, r_col, fpr_col, "n_test", "n_test_pos"]].mean()
+    returned = per[r_col] * per["n_test_pos"] + per[fpr_col] * (per["n_test"] - per["n_test_pos"])
+    cols = {"precision": per[p_col].fillna(0.0), "recall": per[r_col], "n_flagged": returned}
+    return {m: {tuple(k): float(v) for k, v in col.items()} for m, col in cols.items()}
 
 
 def text_fbeta(baseline: pd.DataFrame, p_col: str, r_col: str, beta: float) -> dict[tuple, float]:
@@ -185,6 +208,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         "midpoint": curves.text_sort_baseline(args.midpoint or base / "text_baseline_midpoint.csv"),
         "today": curves.text_sort_baseline(args.today or base / "text_baseline.csv"),
     }
+    raw_bl = {
+        "midpoint": pd.read_csv(args.midpoint or base / "text_baseline_midpoint.csv"),
+        "today": pd.read_csv(args.today or base / "text_baseline.csv"),
+    }
 
     lines = ["# #4668 build-up - machine summary", ""]
     failures: list[str] = []
@@ -214,14 +241,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     lines.append("")
     if failures:
         lines += ["## Premise failures", "", *[f"- {f}" for f in failures], ""]
-    (out / "provenance.json").write_text(json.dumps(provs, indent=2, default=str))
+    (out / "provenance.json").write_text(json.dumps(provs, indent=2, default=str) + "\n")
 
     seen = pd.concat([f[CELL] for f in frames.values()], ignore_index=True)
     anchored = bl["today"][CELL] if seeds is None else bl["today"].loc[bl["today"]["seed"].isin(seeds), CELL]
     grid = pd.concat([seen, anchored], ignore_index=True).drop_duplicates().reset_index(drop=True)
     lines += [f"Grid: {len(grid)} cells.", ""]
 
-    curve_rows, pair_rows, ret_rows = [], [], []
+    curve_rows, pair_rows, ret_rows, ret_curve_rows = [], [], [], []
     mats: dict[tuple[str, str], pd.DataFrame] = {}
     lines += ["| preset | rung | arm | cells | lost | coverage@25 | coverage@50 |", "|---|---|---|---|---|---|---|"]
     for p in presets:
@@ -232,6 +259,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             "today": text_fbeta(bl["today"], f"text_line_precision_{tag}", f"text_line_recall_{tag}", beta),
         }
         ap_anchor = {tuple(k): float(v) for k, v in bl["today"].groupby(CELL)["text_AP"].mean().items()}
+        sets = {
+            "midpoint": text_set(raw_bl["midpoint"], "text_precision", "text_recall", "text_fpr"),
+            "today": text_set(
+                raw_bl["today"], f"text_line_precision_{tag}", f"text_line_recall_{tag}", f"text_line_fpr_{tag}"
+            ),
+        }
         for order, (key, label, d, which, shown) in enumerate(STEPS, start=1):
             arm = d.format(p=p)
             if arm not in frames:
@@ -253,6 +286,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             m, shown_mask = filled_matrix(
                 frame, cells, {}, args.horizon, metric="objective", baseline_metric=anchors[which]
             )
+            # Once a run hands over, a detector stays on screen; a check's own steps carry no headline row, so the
+            # raw mask reads a run mid-check as not showing one. The objective already carries the last line.
+            shown_mask = shown_mask.astype(int).cummax(axis=1).astype(bool)
             m_ap, _ = filled_matrix(
                 frame, cells, {}, args.horizon, metric="average_precision", baseline_metric=ap_anchor
             )
@@ -275,20 +311,45 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             lines.append(
                 f"| {p} | {key} | {arm} | {len(cells)} | {lost} | {cov.get(25, np.nan):.2f} | {cov.get(50, np.nan):.2f} |"
             )
-            # What the user gets at the horizon, on runs showing a detector by then.
-            last = frame[(frame["t"] == args.horizon) & (frame["app_trained"].fillna(0).astype(int) == 1)]
-            if not last.empty:
+            # What the user gets at votes 25 and 50 and at the horizon, over EVERY run, filled as the curves are:
+            # the typed query's own set until a detector shows, then the last line shown (#4631; owner 2026-10-09:
+            # "Find would return SOMETHING, even if it's just the text sort").
+            frame["precision"] = np.nan_to_num(frame["precision"].to_numpy(dtype=float))
+            got = {
+                m: filled_matrix(frame, cells, {}, args.horizon, metric=m, baseline_metric=sets[which][m])[0]
+                for m in ("precision", "recall", "n_flagged")
+            }
+            # At every vote (the curves), then as session means over votes 1-150 and 1-50 (owner, 2026-10-09).
+            k_all = got["n_flagged"]
+            ret_curve_rows.append(
+                pd.DataFrame(
+                    {
+                        "t": k_all.columns.astype(int),
+                        "showing_detector": shown_mask.mean(axis=0).to_numpy(),
+                        "precision": got["precision"].mean(axis=0).to_numpy(),
+                        "recall": got["recall"].mean(axis=0).to_numpy(),
+                        "returned_median": k_all.median(axis=0).to_numpy(),
+                        "over_200": (k_all > 200).mean(axis=0).to_numpy(),
+                        "returned_none": (k_all < 0.5).mean(axis=0).to_numpy(),
+                    }
+                ).assign(preset=p, rung=key, label=label)
+            )
+            for window, lo, hi in (("1-150", 1, args.horizon), ("1-50", 1, 50)):
+                ts = list(range(lo, hi + 1))
+                k = k_all[ts]
                 ret_rows.append(
                     {
                         "preset": p,
                         "rung": key,
                         "label": label,
-                        "runs": len(last),
-                        "precision": float(np.nan_to_num(last["precision"]).mean()),
-                        "recall": float(last["recall"].mean()),
-                        "returned_median": float(last["n_flagged"].median()),
-                        "returned_mean": float(last["n_flagged"].mean()),
-                        "over_200": float((last["n_flagged"] > 200).mean()),
+                        "window": window,
+                        "runs": int(k.shape[0]),
+                        "showing_detector": float(shown_mask[ts].to_numpy().mean()),
+                        "precision": float(np.nanmean(got["precision"][ts].to_numpy())),
+                        "recall": float(np.nanmean(got["recall"][ts].to_numpy())),
+                        "returned_run_mean_median": float(k.mean(axis=1).median()),
+                        "over_200": float((k > 200).to_numpy().mean()),
+                        "returned_none": float((k < 0.5).to_numpy().mean()),
                     }
                 )
         keys = [k for k, *_ in STEPS if (p, k) in mats]
@@ -308,51 +369,64 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     pairs.to_csv(out / "paired.csv", index=False, float_format="%.6g")
     returned = pd.DataFrame(ret_rows)
     returned.to_csv(out / "returned.csv", index=False, float_format="%.6g")
+    returned_curve = pd.concat(ret_curve_rows, ignore_index=True) if ret_curve_rows else pd.DataFrame()
+    returned_curve.to_csv(out / "returned_curve.csv", index=False, float_format="%.6g")
 
     pts = [0, *CHECKPOINTS]
     for p in presets:
         c = curve[curve["preset"] == p]
-        lines += [f"## Beta {PRESETS[p]:g}: the objective (filled) at checkpoints", ""]
+        # The session mean leads: the area under the curve over votes, divided by the votes (owner, 2026-10-09).
+        lines += [f"## Beta {PRESETS[p]:g}: the objective (filled), the session mean first", ""]
         lines += [
-            "| rung | " + " | ".join(f"t={t}" for t in pts) + " | mean 1-150 |",
-            "|---|" + "---|" * (len(pts) + 1),
+            "| rung | mean 1-150 | mean 1-50 | " + " | ".join(f"t={t}" for t in pts) + " |",
+            "|---|" + "---|" * (len(pts) + 2),
         ]
         for key, label, *_ in STEPS:
             ck = c[c["rung"] == key].set_index("t")
             if ck.empty:
                 continue
             avg = ck.loc[1 : args.horizon, "mean"].mean()
+            early = ck.loc[1:50, "mean"].mean()
             lines.append(
-                f"| {key} {label} | " + " | ".join(f"{ck.loc[t, 'mean']:.2g}" for t in pts) + f" | {avg:.2g} |"
+                f"| {key} {label} | {avg:.2g} | {early:.2g} | "
+                + " | ".join(f"{ck.loc[t, 'mean']:.2g}" for t in pts)
+                + " |"
             )
         lines += ["", "Each rung against the one before (positive = the step helped; bold = beyond 2 SE):", ""]
         lines += [
-            "| step | " + " | ".join(r for r in ["t=50", "t=150", "mean 1-50", "mean 51-150", "mean 1-150"]) + " |",
+            "| step | " + " | ".join(r for r in STEP_COLUMNS) + " |",
             "|---|---|---|---|---|---|",
         ]
         pp = pairs[(pairs["preset"] == p) & (pairs["kind"] == "step")]
         for (f, t), g in pp.groupby(["from", "to"], sort=False):
             g = g.set_index("at")
             cells_ = []
-            for at in ["t=50", "t=150", "mean 1-50", "mean 51-150", "mean 1-150"]:
+            for at in STEP_COLUMNS:
                 r = g.loc[at]
                 star = "**" if r["resolvable"] else ""
                 cells_.append(f"{star}{r['mean']:+.3f}{star} ± {r['se']:.3f}")
             lines.append(f"| {f} → {t} | " + " | ".join(cells_) + " |")
         lines.append("")
     if not returned.empty:
-        lines += ["## What the user gets at the horizon (runs showing a detector)", ""]
-        lines += ["| preset | rung | precision | recall | returned, median | over 200 |", "|---|---|---|---|---|---|"]
+        lines += ["## What the user gets, over the session (every run, every vote)", "", RETURNED_NOTE, ""]
+        lines += [
+            "| preset | rung | votes | showing a detector | precision | recall | a run's mean returned, median "
+            "| over 200 | nothing |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
         for r in returned.itertuples(index=False):
             lines.append(
-                f"| {r.preset} | {r.rung} | {r.precision:.2f} | {r.recall:.2f} | {r.returned_median:.0f} | {r.over_200:.0%} |"
+                f"| {r.preset} | {r.rung} | {r.window} | {r.showing_detector:.0%} | {r.precision:.2f} "
+                f"| {r.recall:.2f} | {r.returned_run_mean_median:.0f} | {r.over_200:.0%} | {r.returned_none:.0%} |"
             )
         lines.append("")
-    (out / "REPORT_buildup.md").write_text("\n".join(lines) + "\n")
+    (out / "REPORT_buildup.md").write_text("\n".join(lines).rstrip("\n") + "\n")
     print("\n".join(lines))
 
     if not args.no_figures and frames:
         figures(curve, out / "figures", presets)
+        if not returned_curve.empty:
+            figures_returned(returned_curve, out / "figures", presets)
         main_frame = pd.concat([f.assign(arm=a) for a, f in frames.items()], ignore_index=True)
         denominator = pd.concat([grid.assign(arm=a) for a in frames], ignore_index=True)
         curves.quality_vs_clicks(
@@ -408,17 +482,62 @@ def figures(curve: pd.DataFrame, figdir: Path, presets: list[str]) -> None:
     fig.savefig(figdir / "buildup_curves.png", dpi=130)
     plt.close(fig)
 
-    fig, axes = plt.subplots(1, len(presets), figsize=(5.2 * len(presets), 3.6), squeeze=False)
+    # Two windows: the whole session (the area under the curve, as a mean) and a short one, which is most sessions.
+    windows = (("1-150", 1, 150, "#2a78d6"), ("1-50", 1, 50, "#eb6834"))
+    fig, axes = plt.subplots(1, len(presets), figsize=(5.2 * len(presets), 3.8), squeeze=False)
     for ax, p in zip(axes[0], presets, strict=True):
-        c = curve[(curve["preset"] == p) & (curve["t"] >= 1)]
-        means = c.groupby("rung", sort=False)["mean"].mean().reindex(keys).dropna()
-        ax.step(range(len(means)), means.to_numpy(), where="mid", color="#2a78d6")
-        ax.plot(range(len(means)), means.to_numpy(), "o", color="#2a78d6")
-        ax.set_xticks(range(len(means)), list(means.index))
-        ax.set_title(f"F-beta {PRESETS[p]:g}: mean over clicks 1-150")
+        for name, lo, hi, colour in windows:
+            c = curve[(curve["preset"] == p) & (curve["t"] >= lo) & (curve["t"] <= hi)]
+            means = c.groupby("rung", sort=False)["mean"].mean().reindex(keys).dropna()
+            ax.step(range(len(means)), means.to_numpy(), where="mid", color=colour)
+            ax.plot(range(len(means)), means.to_numpy(), "o", color=colour, label=f"mean over votes {name}")
+            ax.set_xticks(range(len(means)), list(means.index))
+        ax.set_title(f"F-beta {PRESETS[p]:g}, at its own preset")
         ax.grid(alpha=0.3)
+    axes[0][0].legend(fontsize=8, loc="upper left")
     fig.tight_layout()
     fig.savefig(figdir / "buildup_steps.png", dpi=130)
+    plt.close(fig)
+
+
+def figures_returned(rc: pd.DataFrame, figdir: Path, presets: list[str]) -> None:
+    """What the user gets at every vote, per rung: precision, recall, the returned set's size and the share over 200."""
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    figdir.mkdir(parents=True, exist_ok=True)
+    keys = [k for k, *_ in STEPS]
+    cmap = plt.get_cmap("viridis")
+    colours = {k: cmap(i / max(1, len(keys) - 1)) for i, k in enumerate(keys)}
+    rows = (
+        ("precision", "precision", False),
+        ("recall", "recall", False),
+        ("returned_median", "returned, median over runs", True),
+        ("over_200", "share of runs returning > 200", False),
+    )
+    fig, axes = plt.subplots(len(rows), len(presets), figsize=(5.2 * len(presets), 3.0 * len(rows)), squeeze=False)
+    for j, p in enumerate(presets):
+        c = rc[rc["preset"] == p]
+        for i, (col, name, log) in enumerate(rows):
+            ax = axes[i][j]
+            for key, label, *_ in STEPS:
+                ck = c[c["rung"] == key]
+                if not ck.empty:
+                    ax.plot(ck["t"], ck[col], color=colours[key], lw=1.4, label=f"{key} {label}")
+            if log:
+                ax.set_yscale("log")
+            if i == 0:
+                ax.set_title(f"beta {PRESETS[p]:g}, at its own preset")
+            if j == 0:
+                ax.set_ylabel(name)
+            if i == len(rows) - 1:
+                ax.set_xlabel("votes")
+            ax.grid(alpha=0.3)
+    axes[0][-1].legend(fontsize=7, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(figdir / "returned_curves.png", dpi=80)
     plt.close(fig)
 
 
