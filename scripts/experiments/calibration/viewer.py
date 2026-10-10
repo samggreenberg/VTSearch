@@ -863,41 +863,50 @@ def beta_label(beta: float) -> str:
     return f"β {Fraction(beta).limit_denominator(64)}"
 
 
-def parse_beta_runs(specs: Sequence[str]) -> list[tuple[float, Path]]:
-    """``BETA=DIR`` pairs, sorted by beta; refuses a malformed pair and a beta named twice."""
-    runs: list[tuple[float, Path]] = []
+def parse_beta_runs(specs: Sequence[str]) -> list[tuple[float, Path, str | None]]:
+    """``BETA=DIR`` or ``BETA=DIR::DATASET`` triples, sorted by beta.
+
+    ``::DATASET`` names the dataset that run's cells show under, for a review whose session sets
+    differ in more than the balance (a face review's starting photos, #4762): two runs may then
+    share a beta, and each becomes its own dataset on the page under that beta's chip.  Refuses a
+    malformed pair and a beta named twice without distinct dataset names.
+    """
+    runs: list[tuple[float, Path, str | None]] = []
     for spec in specs:
-        beta_s, sep, d = spec.partition("=")
+        beta_s, sep, rest = spec.partition("=")
+        d, _, label = rest.partition("::")
         try:
             beta = float(beta_s)
         except ValueError:
             beta = float("nan")
         if not sep or not d or not (np.isfinite(beta) and beta > 0):
-            raise SystemExit(f"viewer: --beta-run wants BETA=DIR with a positive beta, got {spec!r}")
-        runs.append((beta, Path(d)))
-    betas = [b for b, _ in runs]
-    if len(set(betas)) != len(betas):
-        raise SystemExit(f"viewer: a beta is named twice in --beta-run: {', '.join(f'{b:g}' for b in betas)}")
-    return sorted(runs)
+            raise SystemExit(f"viewer: --beta-run wants BETA=DIR[::DATASET] with a positive beta, got {spec!r}")
+        runs.append((beta, Path(d), label or None))
+    keys = [(b, lab) for b, _, lab in runs]
+    if len(set(keys)) != len(keys):
+        named = ", ".join(f"{b:g}" + (f"::{lab}" if lab else "") for b, lab in keys)
+        raise SystemExit(f"viewer: a beta is named twice in --beta-run without distinct datasets: {named}")
+    return sorted(runs, key=lambda r: (r[0], r[2] or ""))
 
 
 def load_beta_runs(
-    runs: Sequence[tuple[float, Path]], *, skyline: bool = True
+    runs: Sequence[tuple[float, Path, str | None]], *, skyline: bool = True
 ) -> tuple[pd.DataFrame, pd.DataFrame | None, list[str]]:
-    """``(frame, skyline, arms)``: one arm per session set, each chip named for the beta it ran at (#4636).
+    """``(frame, skyline, arms)``: one arm per balance, each chip named for the beta it ran at (#4636).
 
     A review runs one set of sessions per preset (``SOTA_BETA``, #4413), each
     in its own run directory, and the app at each beta trains, checks and
     draws its line differently, so the sets are three configurations of the
     app rather than three readings of one.  Each *runs* entry is ``(beta,
-    run directory)``, read from the directory's ``results/`` as ``analyze.sh``
-    reads it.  A set whose rows were drawn at another beta, at several, or at
-    none is refused: a swapped pair would put the beta-4 sessions under the
-    ``β 1/4`` chip, which nothing on screen would show and which inverts every
-    comparison the page exists for.
+    run directory, dataset name or None)``, read from the directory's ``results/``
+    as ``analyze.sh`` reads it; a dataset name replaces the cells' own, so runs
+    that share a beta sit side by side as datasets under its chip.  A set whose
+    rows were drawn at another beta, at several, or at none is refused: a swapped
+    pair would put the beta-4 sessions under the ``β 1/4`` chip, which nothing on
+    screen would show and which inverts every comparison the page exists for.
     """
     parts, skies, arms = [], [], []
-    for beta, run_dir in runs:
+    for beta, run_dir, dataset in runs:
         label = beta_label(beta)
         frame = curves._load(run_dir, ["results"])
         if frame.empty:
@@ -908,12 +917,30 @@ def load_beta_runs(
                 f"viewer: {run_dir} was named as the beta {beta:g} sessions, but its rows were drawn at "
                 f"{', '.join(f'{b:g}' for b in found) or 'no balance'}"
             )
-        parts.append(frame.assign(arm=label))
-        arms.append(label)
+        frame = frame.assign(arm=label)
+        if dataset:
+            frame = frame.assign(dataset=frame["dataset"].astype(str).map(lambda ds, d=dataset: d.format(ds=ds)))
+        parts.append(frame)
+        if label not in arms:
+            arms.append(label)
         if skyline:
-            skies.append(load_skyline(run_dir, ["results"], [label]))
+            sky = load_skyline(run_dir, ["results"], [label])
+            if dataset and not sky.empty:
+                sky = sky.assign(dataset=sky["dataset"].astype(str).map(lambda ds, d=dataset: d.format(ds=ds)))
+            skies.append(sky)
     sky = pd.concat([s for s in skies if not s.empty], ignore_index=True) if any(not s.empty for s in skies) else None
     return pd.concat(parts, ignore_index=True), sky, arms
+
+
+def apply_category_map(df: pd.DataFrame | None, mapping: Mapping[str, str] | None) -> pd.DataFrame | None:
+    """*df* with each category replaced by its stratum in *mapping* (``other`` where it has none).
+
+    For a bench whose categories name people (FHIBE, #4762): the page then offers strata, and its
+    per-category moments pool exactly over the people in each, as "all categories" pools them.
+    """
+    if df is None or mapping is None or df.empty or "category" not in df.columns:
+        return df
+    return df.assign(category=df["category"].astype(str).map(mapping).fillna("other"))
 
 
 def _skyline_arrays(skyline: pd.DataFrame | None, shape: _Shape) -> tuple[np.ndarray, np.ndarray, str]:
@@ -1502,7 +1529,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="a review's sessions at one balance (#4636): DIR is the run directory whose results/ holds the "
         "sessions run at BETA (SOTA_BETA). Repeat it per preset; each set becomes a chip named for its beta, "
         "the arms control reads as the sessions' beta, and a set whose rows carry another beta is refused. "
-        "In place of --results / --arms.",
+        "In place of --results / --arms. `BETA=DIR::DATASET` shows that run's cells under DATASET "
+        "(`{ds}` stands for the cells' own dataset), so runs that differ in more than the balance can share a beta.",
+    )
+    ap.add_argument(
+        "--category-map",
+        default=None,
+        metavar="CSV",
+        help="a CSV of category,label: each category is shown as its label (unlisted ones as `other`), pooling "
+        "the categories that share one. For a bench whose categories name people (FHIBE, #4762).",
     )
     ap.add_argument("--out", help="path to write the HTML to")
     ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
@@ -1584,7 +1619,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         ap.error("--beta-run names the arms itself; give it or --arms, not both")
     if not (args.arms or args.beta_run) or not args.out:
         ap.error("--arms (or --beta-run) and --out are required unless --reskin is given")
+    cmap = None
+    if args.category_map:
+        cm = pd.read_csv(args.category_map, dtype=str)
+        cmap = dict(zip(cm["category"], cm["label"], strict=True))
     baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
+    baseline = apply_category_map(baseline, cmap)
     common_kw = {
         "baseline": baseline,
         "title": args.title if args.title is not None else "Quality over clicks",
@@ -1600,6 +1640,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         runs = parse_beta_runs(args.beta_run)
         frame, skyline, arms = load_beta_runs(runs, skyline=not args.no_skyline)
         frame, skyline = _only_embedders(frame, args.embedders), _only_embedders(skyline, args.embedders)
+        frame, skyline = apply_category_map(frame, cmap), apply_category_map(skyline, cmap)
         out = build_viewer(
             frame,
             Path(args.out),
@@ -1607,7 +1648,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             skyline=skyline,
             arms_control=BETA_ARMS_CONTROL,
             build={
-                "beta_runs": [f"{b:g}={d.resolve()}" for b, d in runs],
+                "beta_runs": [f"{b:g}={d.resolve()}" + (f"::{lab}" if lab else "") for b, d, lab in runs],
+                "category_map": str(Path(args.category_map).resolve()) if args.category_map else None,
                 "baseline": str(Path(args.baseline).resolve()) if args.baseline else None,
                 "built": _now(),
             },

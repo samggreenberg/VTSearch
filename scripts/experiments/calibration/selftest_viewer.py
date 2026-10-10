@@ -1208,7 +1208,14 @@ def _beta_checks(tmp: Path) -> bool:  # noqa: C901
     # --- naming the sets ------------------------------------------------------
     ok &= _check(
         "--beta-run pairs are sorted by beta",
-        [b for b, _ in V.parse_beta_runs([f"4={dirs[4.0]}", f"0.25={dirs[0.25]}"])] == [0.25, 4.0],
+        [b for b, *_ in V.parse_beta_runs([f"4={dirs[4.0]}", f"0.25={dirs[0.25]}"])] == [0.25, 4.0],
+    )
+    # A face review's sets differ in the starting photos too (#4762): two runs may share a beta when
+    # each names the dataset its cells show under.
+    ok &= _check(
+        "--beta-run takes BETA=DIR::DATASET, and a shared beta with distinct datasets",
+        [lab for *_, lab in V.parse_beta_runs([f"1={dirs[0.25]}::{{ds}} a", f"1={dirs[4.0]}::{{ds}} b"])]
+        == ["{ds} a", "{ds} b"],
     )
     for bad in ([f"1={dirs[0.25]}", f"1={dirs[4.0]}"], ["x=somewhere"], ["1"], ["-1=somewhere"]):
         try:
@@ -1219,12 +1226,22 @@ def _beta_checks(tmp: Path) -> bool:  # noqa: C901
     # A swapped pair is invisible on screen and inverts every comparison the
     # page exists for, so a set whose rows carry another beta is refused.
     try:
-        V.load_beta_runs([(4.0, dirs[0.25])], skyline=False)
+        V.load_beta_runs([(4.0, dirs[0.25], None)], skyline=False)
         ok &= _check("refuses a set named for a beta its rows were not drawn at", False, "loaded anyway")
     except SystemExit as exc:
         ok &= _check("refuses a set named for a beta its rows were not drawn at", "0.25" in str(exc), str(exc))
     ok &= _check(
         "a chip reads as the preset's fraction", [V.beta_label(b) for b in (0.25, 1.0, 4.0)] == ["β 1/4", "β 1", "β 4"]
+    )
+    named, _sky, named_arms = V.load_beta_runs([(0.25, dirs[0.25], "{ds}, 1 photo")], skyline=False)
+    ok &= _check(
+        "a named run's cells show under its dataset name",
+        named_arms == ["β 1/4"] and set(named["dataset"]) == {f"{ds}, 1 photo" for ds in frame0_ds(dirs[0.25])},
+    )
+    mapped = V.apply_category_map(named, {"cat@large": "big"})
+    ok &= _check(
+        "--category-map pools categories under their labels, the rest as other",
+        set(mapped["category"]) == {"big", "other"} and len(mapped) == len(named),
     )
 
     # --- the page, through the CLI -------------------------------------------
@@ -1323,6 +1340,11 @@ def _beta_checks(tmp: Path) -> bool:  # noqa: C901
         and abs(mo[g, hi, ko.index("fbeta"), t0] - _fb(*TEXT_BLIND[:2], 4.0)) <= step,
     )
     return ok
+
+
+def frame0_ds(run_dir: Path) -> set[str]:
+    """The datasets a run directory's cells name, as the viewer loads them."""
+    return set(V.curves._load(run_dir, ["results"])["dataset"].astype(str))
 
 
 if __name__ == "__main__":
