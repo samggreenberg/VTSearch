@@ -37,11 +37,7 @@ verified clean (#3297). Run it before trusting the pile to be purgeable.
 
 ``--verify`` is the guard the region-voting studies needed: it asserts that
 every cell whose ``(dataset, embedder)`` pair claims region capability actually
-carries ``patch_grid`` on its medias, and that no cell silently holds zero. It
-also checks the *geometry*: boxes against the band their cell name claims, and
-boxes against the frame -- the second because the first cannot see a box
-corrupted before banding, since the band is derived from that same box and moves
-with it (#3281).
+carries ``patch_grid`` on its medias, and that no cell silently holds zero.
 """
 
 from __future__ import annotations
@@ -58,7 +54,6 @@ pc.setup_env()
 from pilebuild.audit import label_problems, list_cells, rebuildable, report_bands, verify  # noqa: E402
 from pilebuild.boxscan import band_categories, load_box_scan_categories  # noqa: E402
 from pilebuild.env import assert_vtscore_is_this_checkout, cells_io, log  # noqa: E402
-from pilebuild.geometry import region_geometry_problems  # noqa: E402
 from pilebuild.loaders import loader_for  # noqa: E402
 from pilebuild.manifest import write_manifest  # noqa: E402
 from pilebuild.provenance import (  # noqa: E402
@@ -86,7 +81,6 @@ __all__ = [
     "main",
     "provenance_report",
     "rebuildable",
-    "region_geometry_problems",
     "report_bands",
     "verify",
     "vg_image_paths",

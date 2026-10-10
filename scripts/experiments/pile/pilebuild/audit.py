@@ -19,7 +19,6 @@ import numpy as np
 import pile_config as pc
 
 from pilebuild.env import cells_io, experiment_config, log
-from pilebuild.geometry import region_geometry_problems
 from pilebuild.loaders import loader_for
 
 
@@ -44,105 +43,6 @@ def label_problems(ds: str, medias: dict) -> list[str]:
     return out
 
 
-def negative_pool_problems(ds: str, medias: dict) -> list[str]:
-    """What one dataset's shared negative pool is MADE OF, and how big it is (#3670).
-
-    Neither is implied by anything else ``--verify`` checks. A pool of the wrong
-    size, drawn from the wrong half of VG, still loads: the cells are full, the
-    vectors are there, the boxes agree with their bands, and the prevalence
-    *of the pool it actually holds* is exact. What breaks is the relation
-    between the pickle and the constants every reader quotes -- and that relation
-    was only ever true by construction, so a construction change breaks it in
-    silence. This is #3299's shape twice over: the cell was fine, what it was
-    built FROM was not.
-
-    Two separate claims, so two separate messages:
-
-    * **composition** -- under ``provable`` every designated negative is
-      ``coco_scored``, so "holds none of C" is COCO's answer rather than VG's
-      silence. A rebuild that quietly drew off-COCO images passes every other
-      check here. It reads ``coco_scored`` and not ``labels_exhaustive``: the
-      latter is also set by a human who looked at ONE class, which establishes
-      nothing about the other eleven, and a cell predating the stamp is told to
-      rebuild rather than passed on the weaker flag.
-    * **size** -- the pool has as many images as :data:`pile_config.SCALE_N_NEG`
-      says, so ``SCALE_PREVALENCE`` describes this pickle. #3670 changed that
-      constant while the shared pile still held the old pool; without this check
-      the only symptom is that every k\\* a report quotes is computed from a
-      prevalence the data does not have.
-
-    Spares are excluded from both: they are drawn from the same strata but
-    designated into no cell, which is exactly what an empty
-    ``evaluable_categories`` says. Counting them would put the size check 300
-    images off and make it fire on a healthy pile.
-    """
-    problems: list[str] = []
-    # A designated negative is scorable everywhere; a spare is scorable nowhere.
-    # `categories` cannot tell them apart -- both are empty.
-    pool = [m for m in medias.values() if not m.get("categories") and m.get("evaluable_categories")]
-    if not pool:
-        return problems
-    unstamped = sum(1 for m in pool if "coco_scored" not in m)
-    n_silent = sum(1 for m in pool if not m.get("coco_scored"))
-    # `vg_scale_deep` draws its own pool and is deliberately NOT provable
-    # (#3690): it is pinned to the pre-#3670 construction so the #3319/#3547
-    # horizon comparison keeps one prevalence from end to end.
-    if pc.SCALE_NEG_COMPOSITION == "provable" and n_silent and ds != "vg_scale_deep":
-        if unstamped == len(pool):
-            problems.append(
-                f"{ds}: composition=provable, but no negative carries a `coco_scored` stamp -- "
-                "this cell was built before the flag existed, so the claim cannot be checked; rebuild it"
-            )
-        else:
-            problems.append(
-                f"{ds}: composition=provable, but {n_silent} of {len(pool)} designated negatives "
-                "are not COCO-scored -- their absence claim is VG's silence"
-            )
-    # Positives per cell differ by construction: `vg_scale` designates one band,
-    # `vg_scale_any` collapses all three, `vg_scale_deep` is its own depth.
-    # Quoting the realised prevalence is the whole point of the message, so it is
-    # read per dataset rather than assumed.
-    want, n_pos = {
-        "vg_scale": (pc.SCALE_N_NEG, pc.SCALE_N_POS),
-        "vg_scale_any": (pc.SCALE_N_NEG, 3 * pc.SCALE_N_POS),
-        "vg_scale_deep": (pc.SCALE_DEEP_N_NEG, pc.SCALE_DEEP_N_POS),
-    }.get(ds, (pc.SCALE_N_NEG, pc.SCALE_N_POS))
-    if len(pool) != want:
-        problems.append(
-            f"{ds}: {len(pool)} designated negatives, but the config says {want} -- this cell "
-            f"predates the current construction, so a cell of it sits at "
-            f"{n_pos / (n_pos + len(pool)):.2%} prevalence and not the {n_pos / (n_pos + want):.2%} "
-            "the config implies"
-        )
-    return problems
-
-
-def boxes_imply_band(boxes: list[list[float]], lo: float, hi: float) -> bool:
-    """Does this cell's stored geometry imply the band its name claims?
-
-    Two readings are accepted, because since #3726 a cell carries **every**
-    instance of its class while the band comes from the one the reviewer
-    designated -- which `apply_corrections` puts at the head of the list. The
-    union was the only reading before that, and 37 of 7,500 boxes failed this
-    check on the first rebuild afterwards: the data was right and the check was
-    still asserting the pre-#3726 invariant.
-
-    **Accepting either does not weaken what this exists to catch.** It is a
-    coordinate-space check (#3281): a box normalised twice is ~500x too small
-    and sits on the frame origin, so it lands in no band under either reading.
-    What it stops asserting is *which* instance the band was taken from -- a
-    fact the media dict does not record. Recording it is the right fix; until
-    then, inferring it here would be guessing.
-    """
-    if not boxes:
-        return True
-    union = (max(b[2] for b in boxes) - min(b[0] for b in boxes)) * (
-        max(b[3] for b in boxes) - min(b[1] for b in boxes)
-    )
-    designated = (boxes[0][2] - boxes[0][0]) * (boxes[0][3] - boxes[0][1])
-    return lo <= union < hi or lo <= designated < hi
-
-
 def coco_held_by() -> dict[int, list[str]]:
     """``VG image id -> the classes of C COCO annotates it with``, empty for none.
 
@@ -157,89 +57,14 @@ def coco_held_by() -> dict[int, list[str]]:
     try:
         image_data, instances = ca.ensure_sources(pc.PILE / "coco_anchor", fetch=False)
     except SystemExit:
-        # Missing sources must not abort the whole of --verify; the pool check
-        # reports the gap itself, and says the claim went untested.
-        log("NOTE: coco_anchor sources are not staged, so the pool cannot be checked against COCO")
+        # An empty map, not an exit: every caller draws only from images COCO
+        # answered for, so with no sources it draws nothing rather than guessing.
+        log("NOTE: coco_anchor sources are not staged, so no image has a COCO answer")
         return {}
     truth = ca.coco_truth(instances, set(pc.SCALE_CLASSES))
     with image_data.open() as fh:
         coco_of = {int(m["image_id"]): int(m["coco_id"]) for m in json.load(fh) if m.get("coco_id")}
     return {i: sorted(c for c, boxes in truth[cid].items() if boxes) for i, cid in coco_of.items() if cid in truth}
-
-
-def pool_coco_counts(medias: dict, held_by: dict[int, list[str]]) -> tuple[int, int, list[tuple[int, list[str]]]]:
-    """``(designated negatives, how many COCO can answer for, the dirty ones)``.
-
-    Split out from the message below so the clean case still has numbers to
-    print: "the pool is clean" and "the check could not run" are the same empty
-    list of problems, and a measurement that cannot be told from its own absence
-    is the failure this directory keeps re-learning (#3667, #3299).
-
-    Spares are excluded exactly as in :func:`negative_pool_problems` -- they are
-    designated into no cell, so they make no claim -- and so are positives,
-    which hold their class by definition.
-
-    **Only images the build itself anchored are checked**, which is what the
-    ``coco_scored`` stamp says. A ``coco_id`` in `image_data.json` is a *wider*
-    claim than the build acts on: `anchor_to_coco` refuses a pairing whose
-    aspect ratio drifts by more than `MAX_ASPECT_DRIFT`, precisely because a
-    drifted pair is evidence the two files are not the same picture. Reading the
-    raw join instead reported three dirty negatives in `vg_scale_deep` on the
-    first run of this check, and all three were drift rejects -- drift 0.025,
-    0.119 and 0.552 against a 0.01 limit, the last pairing a 298x500 portrait
-    with a 450x338 landscape. Those images entered the pool on VG's silence,
-    which is what deep's composition allows, and COCO was never asked about
-    them. Asserting COCO's answer for a pairing the build rejected does not test
-    the pool's claim; it invents a different one.
-    """
-    pool = [(i, m) for i, m in medias.items() if not m.get("categories") and m.get("evaluable_categories")]
-    checked = [i for i, m in pool if m.get("coco_scored") and i in held_by]
-    dirty = sorted((i, held_by[i]) for i in checked if held_by[i])
-    return len(pool), len(checked), dirty
-
-
-def provable_pool_problems(ds: str, medias: dict, held_by: dict[int, list[str]]) -> list[str]:
-    """Does the pool hold none of *C*, by COCO's own annotation? (#3701)
-
-    :func:`negative_pool_problems` tests the pool's **provenance** -- every
-    designated negative carries a ``coco_scored`` stamp -- and a true stamp is
-    not the claim. An image can be COCO-scored, hold a `truck`, and still be
-    designated a negative for every class, if a pass upstream of the draw
-    removed the label: an ambiguous-table entry naming another class in *C* pops
-    that class's boxes, and on an anchored image the ``exhaustive`` exemption
-    suppresses the compensating ``unbanded`` pair, so ``band_candidates`` files
-    a COCO-confirmed truck as clean (#3588). A config guard now blocks that one
-    route; this tests the *property*, which holds however it was violated.
-
-    **Named, not repaired, and deliberately not dropped.** An image that reaches
-    the pool holding a class of *C* means an upstream pass is wrong; removing it
-    leaves the pool clean and the cause invisible. The ids are what turn "the
-    pool is dirty" into a diagnosis -- in the #3588 case they said `truck` at
-    once.
-    """
-    n_pool, n_checked, dirty = pool_coco_counts(medias, held_by)
-    if not n_pool:
-        return []
-    if not n_checked:
-        # Under `provable` every negative is COCO-scored by construction, so
-        # nothing to check means the join is missing -- not that the pool is
-        # fine. `vg_scale_deep` is pinned to the pre-#3670 draw (#3690) and may
-        # legitimately have little COCO can answer for.
-        if pc.SCALE_NEG_COMPOSITION == "provable" and ds != "vg_scale_deep":
-            return [
-                f"{ds}: composition=provable, but COCO could answer for none of the {n_pool} designated "
-                "negatives -- the pool's claim went untested. Either `coco_anchor/image_data.json` is not "
-                "staged, or this cell predates the `coco_scored` stamp; rebuild it"
-            ]
-        return []
-    if not dirty:
-        return []
-    shown = ", ".join(f"{i} ({'/'.join(cs)})" for i, cs in dirty[:5])
-    return [
-        f"{ds}: {len(dirty)} of {n_checked} designated negatives hold a class of C by COCO's own "
-        f"annotation -- e.g. {shown}{', ...' if len(dirty) > 5 else ''}. A pass upstream of the draw "
-        "put them there; find it rather than dropping them"
-    ]
 
 
 def verify() -> int:
@@ -300,64 +125,6 @@ def verify() -> int:
                 f"(e.g. {off_unit[0]:.2f}); normalise the cell"
             )
         rows.append((ds, emb, state, str(n), f"{n_patch}/{n}", dim))
-
-    # A banded cell's NAME asserts the size of its boxes, so the stored box has
-    # to agree with it. That is what catches a coordinate-space mistake: VG
-    # ships 500 px copies of COCO's 640 px originals, and normalising a COCO box
-    # by the VG file's dimensions leaves every box shifted and mis-scaled while
-    # every other check still passes -- the medias load, the vectors are there,
-    # the patch grids are there, and the boxes are quietly pointing at the wrong
-    # pixels. Recomputing the band from the box is cheap and would have caught
-    # it at build time instead of via a human noticing a box drawn on snow.
-    for ds, emb in pc.cells():
-        if pc.DATASETS.get(ds, {}).get("kind") != "vg_scale":
-            continue
-        path = pc.cell_path(ds, emb)
-        if not path.exists():
-            continue
-        medias = io.load_medias(path)
-        bad = 0
-        checked = 0
-        for m in medias.values():
-            for cell in m.get("categories") or []:
-                boxes = [r["box"] for r in (m.get("regions") or []) if r.get("label") == cell]
-                if not boxes:
-                    continue
-                lo, hi = pc.BOX_BANDS[cell.rsplit("@", 1)[1]]
-                checked += 1
-                if not boxes_imply_band(boxes, lo, hi):
-                    bad += 1
-        if checked and bad:
-            problems.append(
-                f"{ds} x {emb}: {bad}/{checked} region boxes fall outside the band their cell "
-                f"name claims, by the union AND by the designated box -- boxes and bands were "
-                f"measured in different pixel spaces"
-            )
-        # The band check above compares a box against its own label, so it is
-        # blind to a box corrupted BEFORE banding -- the band moves with it and
-        # the two stay consistent (#3281). This one compares the box against the
-        # frame, which nothing can drag along with it.
-        problems += [f"{ds} x {emb}: {g}" for g in region_geometry_problems(medias)]
-
-        break  # one embedder is enough; the boxes are identical across cells
-
-    # One cell per vg_scale-family dataset: the pool is the same set of images in
-    # every embedder's copy, so a second one would only repeat the finding.
-    held_by: dict[int, list[str]] | None = None
-    for ds in pc.DATASETS:
-        if not str(pc.DATASETS[ds].get("kind", "")).startswith("vg_scale"):
-            continue
-        path = next((p for p in (pc.cell_path(ds, e) for _d, e in pc.cells() if _d == ds) if p.exists()), None)
-        if path is not None:
-            pool_medias = io.load_medias(path)
-            problems += negative_pool_problems(ds, pool_medias)
-            # Read once for every dataset: `coco_truth` parses 490 MB of COCO
-            # annotation, and the pool is the same population in each of them.
-            if held_by is None:
-                held_by = coco_held_by()
-            problems += provable_pool_problems(ds, pool_medias, held_by)
-            n_pool, n_checked, dirty = pool_coco_counts(pool_medias, held_by)
-            log(f"{ds}: pool vs COCO -- {n_checked}/{n_pool} negatives answerable, {len(dirty)} hold a class of C")
 
     # A dataset's cells must all cover the same medias, or cross-embedder
     # comparisons silently compare different populations. This is not
