@@ -82,4 +82,15 @@ export class MediaTypeCapabilityService {
   usesThumbnails(mediaType: string): boolean {
     return this.thumbnailTypeIds().has(mediaType);
   }
+
+  /**
+   * Whether *mediaType* is a convert-in type: one no importer makes, whose
+   * items only ever come out of a converter (`face`, from `image2face`), as
+   * the served ``importable: false`` says. Every item of such a dataset has a
+   * source item to show (Show in photo, #4750). False until the registry loads,
+   * so a caller must have called {@link ensureLoaded}.
+   */
+  isConvertIn(mediaType: string): boolean {
+    return this.infos()?.find((m) => m.type_id === mediaType)?.importable === false;
+  }
 }

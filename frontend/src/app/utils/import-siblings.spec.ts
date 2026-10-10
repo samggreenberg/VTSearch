@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clusterImportSiblings, importSiblingNames } from './import-siblings';
+import { clusterImportSiblings, importSiblingNames, importSiblingsOfType } from './import-siblings';
 
 // Already sorted by name, as the Dashboard hands them over: "Pets" falls
 // between the two "Photos" siblings, and a third dataset joins the group from
@@ -38,5 +38,28 @@ describe('importSiblingNames', () => {
     expect(names.has('a')).toBe(false);
     expect(names.has('c')).toBe(false);
     expect(names.has('e')).toBe(false);
+  });
+});
+
+describe('importSiblingsOfType', () => {
+  const typed = [
+    { id: 'face', name: 'Photos – Face', media_type: 'face', import_group: 'g1' },
+    { id: 'img', name: 'Photos – Image', media_type: 'image', import_group: 'g1' },
+    { id: 'doc', name: 'Photos – Document', media_type: 'document', import_group: 'g1' },
+    { id: 'other', name: 'Pets', media_type: 'image', import_group: 'g2' },
+    { id: 'loose', name: 'Loose', media_type: 'image' },
+  ];
+
+  it('finds the group\'s datasets of that type, other than the row', () => {
+    expect(importSiblingsOfType(typed[0], typed, 'image').map((r) => r.id)).toEqual(['img']);
+  });
+
+  it('never returns the row itself', () => {
+    expect(importSiblingsOfType(typed[1], typed, 'image')).toEqual([]);
+  });
+
+  it('is empty for an ungrouped or missing row', () => {
+    expect(importSiblingsOfType(typed[4], typed, 'image')).toEqual([]);
+    expect(importSiblingsOfType(null, typed, 'image')).toEqual([]);
   });
 });

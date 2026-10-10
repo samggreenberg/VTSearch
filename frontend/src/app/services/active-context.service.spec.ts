@@ -172,4 +172,18 @@ describe('ActiveContextService', () => {
       expect(svc.mediaUrl('/x')).toBe('/x?dataset_id=d%201%26x&detector_id=m%2F1');
     });
   });
+
+  describe('mediaUrlIn', () => {
+    // Show in photo (#4750): an item of a dataset other than the active one.
+    it('names the given dataset and never the active detector', () => {
+      svc.setActive('faces', 'face-det');
+      expect(svc.mediaUrlIn('photos', '/api/medias/2/image')).toBe('/api/medias/2/image?dataset_id=photos');
+    });
+
+    it('appends non-empty extras after the dataset', () => {
+      expect(svc.mediaUrlIn('photos', '/x', { variant: 'original', skip: '' })).toBe(
+        '/x?dataset_id=photos&variant=original',
+      );
+    });
+  });
 });

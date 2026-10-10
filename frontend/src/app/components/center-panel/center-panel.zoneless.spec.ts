@@ -76,6 +76,7 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     for (const req of httpMock.match((r) => r.url.includes('embedders'))) {
       req.flush({ embedders: [] });
     }
+    httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
     await settleZoneless(fixture);
   });
 

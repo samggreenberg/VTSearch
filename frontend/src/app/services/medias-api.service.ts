@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
@@ -10,12 +10,15 @@ import type { MediaParagraphResponse } from '../generated/api-client/models/medi
 import type { MediaVoteRequest } from '../generated/api-client/models/media-vote-request';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import type { MediaAddToPileResponse } from '../generated/api-client/models/media-add-to-pile-response';
+import type { MediaSourceResponse } from '../generated/api-client/models/media-source-response';
+import { DATASET_OVERRIDE } from '../interceptors/active-context.interceptor';
 import type { PayloadVariant } from '../models/api.models';
 import type { VoteProvenance } from './vote-provenance.service';
 import { listMediaIds } from '../generated/api-client/fn/medias/list-media-ids';
 import { batchMedias } from '../generated/api-client/fn/medias/batch-medias';
 import { mediaParagraphGet2 } from '../generated/api-client/fn/medias/media-paragraph-get-2';
 import { voteMedia } from '../generated/api-client/fn/medias/vote-media';
+import { mediaSource } from '../generated/api-client/fn/medias/media-source';
 
 @Injectable({ providedIn: 'root' })
 export class MediasApiService {
@@ -33,6 +36,25 @@ export class MediasApiService {
 
   getMediasBatch(ids: number[]): Observable<MediaBatchResponse[]> {
     return batchMedias(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
+  }
+
+  /**
+   * {@link getMediasBatch} out of *datasetId* rather than the active dataset,
+   * with no detector (`DATASET_OVERRIDE`): Show in photo reads the photo's
+   * metadata from the Face dataset's Image sibling (#4750).
+   */
+  getMediasBatchIn(datasetId: string, ids: number[]): Observable<MediaBatchResponse[]> {
+    const context = new HttpContext().set(DATASET_OVERRIDE, datasetId);
+    return batchMedias(this.http, this.config.rootUrl, { body: { ids } }, context).pipe(map((r) => r.body));
+  }
+
+  /**
+   * The item a converter output was made from, in its sibling dataset, and the
+   * output's box in it (#4749). Answers 404 when there is none and 409 when the
+   * sibling is not loaded; `SourcePhotoService.lookup` reads both as answers.
+   */
+  getSource(id: number, context?: HttpContext): Observable<MediaSourceResponse> {
+    return mediaSource(this.http, this.config.rootUrl, { media_id: id }, context).pipe(map((r) => r.body));
   }
 
   /** Text content of a text media.  `variant: 'original'` returns the

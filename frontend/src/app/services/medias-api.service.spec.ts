@@ -3,6 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 
 import { MediasApiService } from './medias-api.service';
 import { provideHttpTesting } from '../testing/test-providers';
+import { DATASET_OVERRIDE } from '../interceptors/active-context.interceptor';
 
 describe('MediasApiService', () => {
   let service: MediasApiService;
@@ -36,6 +37,22 @@ describe('MediasApiService', () => {
     const req = httpMock.expectOne('/api/medias/batch');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ ids: [1] });
+    req.flush(mock);
+  });
+
+  it('getMediasBatchIn sends the batch to the named dataset', () => {
+    service.getMediasBatchIn('photos', [2]).subscribe();
+    const req = httpMock.expectOne('/api/medias/batch');
+    expect(req.request.body).toEqual({ ids: [2] });
+    expect(req.request.context.get(DATASET_OVERRIDE)).toBe('photos');
+    req.flush([]);
+  });
+
+  it('getSource should GET /api/medias/<id>/source', () => {
+    const mock = { dataset_id: 'photos', media_id: 2, box: [0.1, 0.2, 0.3, 0.4] };
+    service.getSource(7).subscribe((data) => expect(data).toEqual(mock));
+    const req = httpMock.expectOne('/api/medias/7/source');
+    expect(req.request.method).toBe('GET');
     req.flush(mock);
   });
 

@@ -606,6 +606,14 @@ Cancelling one row while the folder is still being read stops that dataset
 alone; the others carry on. The **Downloaded Media** importer has no
 Multi-Dataset box: a demo is one dataset of one kind.
 
+**Show in photo.** When an import made both a Face and an Image dataset, a
+face in Train or Test is one click from the photo it was cut out of. Click
+**Show in photo** under the face, or, in Train, right-click it in the list. The photo
+opens over the ranking with the face outlined, and **← Back** (or Esc) returns
+you to the face you were on, with the ranking as you left it. If the Image
+dataset isn't loaded, the window offers to load it first. A face whose photo
+isn't in the Image dataset (you left that image out, say) has no button.
+
 ### Running AutoFind on a new dataset
 
 Once you have a detector on the Dashboard's **AutoFind** tab, every

@@ -934,6 +934,70 @@ describe('ImageViewerComponent', () => {
     });
   });
 
+  // Show in photo (#4750): the face's box on its photo, on a dataset that may
+  // have no patch embedder and so no Highlight toggle to turn on.
+  describe('outline overlay', () => {
+    it('draws whatever the Highlight toggle says', () => {
+      fixture.componentRef.setInput('media', mockMedia);
+      fixture.componentRef.setInput('outlineBox', [0.1, 0.2, 0.6, 0.8]);
+      component.renderedW.set(400);
+      component.renderedH.set(300);
+      fixture.detectChanges();
+      expect(component.highlightMode()).toBe(false);
+      expect(component.outlineBoxStyle).toEqual({
+        left: '10.000%',
+        top: '20.000%',
+        width: '50.000%',
+        height: '60.000%',
+      });
+      expect(fixture.nativeElement.querySelector('.outline-box')).not.toBeNull();
+    });
+
+    it('keeps a box round the whole image, which the highlight drops', () => {
+      fixture.componentRef.setInput('outlineBox', [0, 0, 1, 1]);
+      expect(component.outlineBoxStyle).not.toBeNull();
+    });
+
+    it('draws nothing without a box, or for a malformed one', () => {
+      fixture.componentRef.setInput('media', mockMedia);
+      component.renderedW.set(400);
+      component.renderedH.set(300);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.outline-box')).toBeNull();
+      fixture.componentRef.setInput('outlineBox', [0.5, 0.5, 0.4, 0.6]);
+      expect(component.outlineBoxStyle).toBeNull();
+    });
+  });
+
+  describe('regionDraw off', () => {
+    it('makes Shift and the Marquee toggle draw nothing', () => {
+      fixture.componentRef.setInput('regionDraw', false);
+      component.shiftHeld.set(true);
+      component.marqueeMode.set(true);
+      expect(component.regionDrawActive).toBe(false);
+    });
+  });
+
+  describe('another dataset (datasetId)', () => {
+    it('loads the image out of that dataset, naming no detector', () => {
+      TestBed.inject(ActiveContextService).setActive('faces', 'face-det');
+      fixture.componentRef.setInput('media', mockMedia);
+      fixture.componentRef.setInput('datasetId', 'photos');
+      TestBed.tick();
+      expect(component.imageSrc()).toBe('/api/medias/2/image?dataset_id=photos');
+    });
+
+    it('refetches when only the dataset changes, since ids are per dataset', () => {
+      fixture.componentRef.setInput('media', mockMedia);
+      TestBed.tick();
+      component.onImageLoad();
+      fixture.componentRef.setInput('datasetId', 'photos');
+      TestBed.tick();
+      expect(component.imageReady()).toBe(false);
+      expect(component.imageSrc()).toBe('/api/medias/2/image?dataset_id=photos');
+    });
+  });
+
   describe('armed-confirm cancel routing', () => {
     it('emits armedConfirmCanceled instead of clearing the box when Esc is pressed while armed', () => {
       component.regionBox.set([0.1, 0.2, 0.5, 0.6]);

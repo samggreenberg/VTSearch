@@ -90,6 +90,15 @@
       </div>
     }
 
+    @if (showInPhotoOffered()) {
+      <button
+        type="button"
+        class="btn btn--toolbar"
+        (click)="openSourcePhoto()"
+        title="Open the photo this item was cut from, with the item outlined"
+      >Show in photo</button>
+    }
+
     @if (mediaType === 'image' && imageViewer(); as imageViewer) {
       <div class="image-view-controls">
         <button
@@ -198,3 +207,7 @@
     </div>
   }
 </div>
+
+@if (sourcePhoto.request(); as request) {
+  <vt-source-photo-modal [request]="request" (closed)="sourcePhoto.close()" />
+}
