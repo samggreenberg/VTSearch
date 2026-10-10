@@ -73,6 +73,43 @@ class TestTheRules:
             centroid_cut(_rare_target(), rule="tail")
 
 
+class TestTheHeadKeepsWhatTheLineKeeps:
+    """The count line sits on a media's cosine; the float32 head must still keep that media."""
+
+    def test_the_gap_centre_keeps_the_same_media(self):
+        from vtscore.detectors.centroid_head import _gap_centre
+
+        cos = _rare_target()
+        for rule in CENTROID_LINE_RULES:
+            line = centroid_cut(cos, rule=rule, beta=1.0)
+            cut = _gap_centre(cos, line)
+            assert np.array_equal(cos >= line, cos >= cut)
+            assert not np.any(cos == cut)
+        assert _gap_centre(cos, 99.0) == 99.0
+        assert _gap_centre(cos, -99.0) == -99.0
+
+    @pytest.mark.parametrize("beta", [0.25, 1.0, 4.0])
+    def test_a_count_head_keeps_the_count(self, beta):
+        from vtscore.detectors.centroid_head import fit_centroid_head, goods_centroid
+        from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
+
+        rng = np.random.default_rng(1)
+        dim, emb = 32, "test_embedder"
+        centre = rng.standard_normal(dim)
+        vecs = np.vstack([rng.standard_normal((3000, dim)), centre * 4 + rng.standard_normal((5, dim)) * 0.5])
+        vecs = (vecs / np.linalg.norm(vecs, axis=1, keepdims=True)).astype(np.float32)
+        snap = {
+            i: {"id": i, "media_type": "image", "embedder": emb, "embeddings": {emb: v}} for i, v in enumerate(vecs)
+        }
+        rows = scoring_rows_for_snap(snap, emb)
+        goods = [vecs[-1]]
+        cosines = rows.matrix.astype(np.float64) @ goods_centroid(goods).astype(np.float64)
+        want = int((cosines >= centroid_cut(cosines, rule="count", beta=beta)).sum())
+        head, threshold = fit_centroid_head(goods, lambda h: score_rows_with_model(h, rows)[0], rule="count", beta=beta)
+        got = int((np.asarray(score_rows_with_model(head, rows)[0]) >= threshold).sum())
+        assert got == want >= 1
+
+
 class TestVariantSpec:
     def test_parses_rule_at_beta(self):
         assert parse_centroid_line_variants("count@0.25, text@1,midpoint@4") == [

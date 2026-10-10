@@ -131,6 +131,22 @@ def centroid_cut(
     return float(guarded_text_sort_threshold(scores)[0])
 
 
+def _gap_centre(cosines: np.ndarray, line: float) -> float:
+    """*line* moved to the middle of the gap it falls in, keeping the same media (``cosine >= line``).
+
+    The count line sits exactly on a media's cosine (#4603's ``_count_line``), and a
+    float32 head computes ``scale * (cosine - cut)`` with rounding either side of 0, so
+    the media on the line could fall out of the set.  The gap's middle keeps exactly
+    the media the line keeps, with the widest margin either side.  A line above or
+    below every cosine is returned as it is.
+    """
+    s = np.sort(np.asarray(cosines, dtype=np.float64))
+    i = int(np.searchsorted(s, line, side="left"))
+    if 0 < i < s.size:
+        return float((s[i - 1] + s[i]) / 2.0)
+    return float(line)
+
+
 def fit_centroid_head(
     goods: Sequence[np.ndarray],
     score: Callable[["nn.Sequential"], Sequence[float]],
@@ -150,11 +166,14 @@ def fit_centroid_head(
     :func:`~vtscore.training.query_sort.cosine_sort_active` draws for the same
     centroid on the same corpus.  Media the scorer could not score (the
     non-finite sentinel, outside ``(0, 1)``) are left out of the fit.
-    *rule* and *beta* are :func:`centroid_cut`'s.
+    *rule* and *beta* are :func:`centroid_cut`'s; the cut is centred in the gap
+    the line falls in (:func:`_gap_centre`), so the head keeps exactly what the
+    line keeps.
     """
     centroid = goods_centroid(goods)
     probe = centroid_head(centroid, 0.0, scale=1.0)
     s = np.asarray(score(probe), dtype=np.float64)
     s = s[(s > 0.0) & (s < 1.0)]
     cosines = np.log(s) - np.log1p(-s)
-    return centroid_head(centroid, centroid_cut(cosines, rule=rule, beta=beta)), CENTROID_THRESHOLD
+    cut = _gap_centre(cosines, centroid_cut(cosines, rule=rule, beta=beta))
+    return centroid_head(centroid, cut), CENTROID_THRESHOLD
