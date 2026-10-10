@@ -619,8 +619,7 @@ Do not aggregate across provenances without saying so.
 pile's `embeddings/` dir, in the pile's format, via its pickle IO. It is
 deliberately *not* a `pile_config.DATASETS` entry: the pile builds the full
 dataset × embedder cross-product, so adding FullMarks and `sift_vlad` there would
-silently schedule `sift_vlad` cells for all six existing datasets, on a mount
-the playbook already calls chronically full.
+silently schedule `sift_vlad` cells for every existing dataset.
 
 ## Strict partition, cheap merge
 
@@ -645,8 +644,8 @@ file `build_corpus.py` replays, and it is the *only* one: a rebuild re-clusters
 from the sources and writes `classes.json` from scratch. So a verdict recorded
 only in `classes.json` is applied exactly until the next build, which is a
 documented step of the pipeline — stage 3 rebuilds the corpus to stamp the
-roster — and not an accident someone might avoid. Until #3343 that was true of
-two passes:
+roster — and not an accident someone might avoid. Two passes record more than
+a pair (#3343):
 
 - a **`split`** left its pieces in `classes.json` and nothing in the
   adjudications, so the next build re-proposed the over-merge a person had just
@@ -731,9 +730,7 @@ A tier-`s` SPODS-only build fits on a laptop. Tiers `m` and `l` need the
 cluster — see **[`GRID-RUNBOOK.md`](GRID-RUNBOOK.md)** for sizing, staging, the
 resume story and what to check afterwards.
 
-`python build_corpus.py --probe` first, wherever you run. Every source fails
-differently — a decommissioned hostname, a missing Kaggle token, an absent RAR
-extractor — and finding out which costs seconds now and a queue slot later.
-SPODS needs one of `bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800
-need a Kaggle token. The probe is metadata-only — it fetches no source bytes —
-so asking it repeatedly is free.
+`python build_corpus.py --probe` first, wherever you run: it fetches no source
+bytes and names which source is unreachable (SPODS needs one of `bsdtar` / `7z`
+/ `unar` / `unrar`; StaVer and Tobacco800 need a Kaggle token). Details in the
+runbook's [Preflight](GRID-RUNBOOK.md#preflight).

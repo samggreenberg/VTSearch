@@ -446,8 +446,9 @@ The same shape generalises to:
 - **Video** (`from vtscore.media import video`, X-CLIP, 768-D).
 - **Documents** (`from vtscore.media import document` plus a converter).
 
-Mix media types by combining datasets via the
-[`combine_datasets` importer](../packages/datasets.md#importers).
+To merge several saved datasets of the **same** media type into one,
+use the [`combine_datasets` importer](../packages/datasets.md#importers)
+(it rejects a mix of media types).
 
 ## Where to next
 

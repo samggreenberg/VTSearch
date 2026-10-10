@@ -17,39 +17,12 @@ this page covers the behaviour the schemas don't show.
 GET /api/settings
 ```
 
-→ The merged server-tier + per-user settings object (abridged):
-
-```json
-{
-  "volume": 1.0,
-  "theme": "system",
-  "beta": 1.0,
-  "calibrate_count": 2,
-  "calibration_fraction": null,
-  "show_animations": "show",
-  "autopilot_enabled": true,
-  "autopilot_top_greens": 3,
-  "autofind_detectors": [],
-  "autofind_exporter": "",
-  "browse_graphics": "auto",
-  "grid_icon_size_left": {"audio": "M"},
-  "saved_datasets_dir": "data/saved_datasets",
-  "detectors_dir": "data/detectors",
-  "solo_media_type": null,
-  "effective_solo_embedder_per_media_type": {},
-  "hidden_plugins": {}
-}
-```
-
-Keys fall into these groups:
+→ The merged server-tier + per-user settings object. Keys fall into these groups:
 
 | Group | Keys | Notes |
 |-------|------|-------|
 | Appearance & playback | `theme`, `show_animations`, `show_usage_bars`, `volume`, `audio_playing`, `show_metadata`, `hide_all_hints`, `hidden_hints`, `enable_achievements`, `hide_left_panel`, `hide_right_panel` | `theme`: `dark` / `light` / `highviz` / `system` (default `system`, which follows the OS `prefers-color-scheme`). `show_animations`: `show` (default) / `hide` / `os`. `show_usage_bars` (the Dashboard's RAM / Disk bars): `default` (each shown only while its probe reports free space `low`; see [Dashboard › Headroom](dashboard.md#headroom)) / `hide` / `view`. `volume` 0–1. `hide_all_hints` (default `false`) hides every one of Toasty's hints, the speech bubbles beside the control a new user should click next; `hidden_hints` lists the ids of hints hidden one at a time (blank and repeated ids are dropped). Turning `enable_achievements` off wipes the stored achievement counters. `hide_left_panel` / `hide_right_panel` (both default `true`) fold Train's and Test's side panels to a thin strip; the left folds only on the Autopilot tab. |
-| Training | `beta`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions` | `beta` is the **balance** the line is drawn at (F-beta's beta; #4413), clamped to 0.25..4 (same value as `POST /api/balance`); `1` by default, with `4` the recall-leaning preset and `0.25` the precision-leaning one (#4448; they were `2` and `0.5`). It is the user's last pick (#4665): every balance pick and every New
-Detector updates it, the New Detector form starts on it, and a detector that
-keeps no balance of its own (one made before #4665, or by AutoFind or the CLI)
-is seeded from it on first read; a detector that keeps one ignores it. It is never `null`: a `null` in a `PUT` is a 422, and one left in an older settings file reads as the default. The retired `inclusion`, `min_precision` and `line_preference` keys are dropped like any unknown key. `calibration_fraction` `null` = no explicit split; the per-embedder default applies (0.3 single-vector, 0.5 patch). Changing these drops stale thresholds/heads on every loaded detector. |
+| Training | `beta`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions` | `beta` is the **balance** the line is drawn at (F-beta's beta), clamped to 0.25..4 (same value as `POST /api/balance`); default `1`, with `4` the recall-leaning preset and `0.25` the precision-leaning one. It is the user's last pick: every balance pick and every New Detector updates it, the New Detector form starts on it, and a detector that keeps no balance of its own (AutoFind- or CLI-made) is seeded from it on first read; a detector that keeps one ignores it. It is never `null`: a `null` in a `PUT` is a 422, and one left in a settings file reads as the default. `calibration_fraction` `null` = no explicit split; the per-embedder default applies (0.3 single-vector, 0.5 patch). Changing these drops stale thresholds/heads on every loaded detector. |
 | Autopilot | `autopilot_enabled`, `autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_resort_interval`, `autopilot_goal_diversity` | Clamped to ≥ 1. |
 | AutoFind | `autofind_detectors`, `autofind_exporter`, `autofind_exporter_field_values`, `autofind_on_import`, `autofind_cli_delete_dataset` | `autofind_exporter` must name a pickable exporter (`""` = none); field values are `{exporter: {key: value}}`. `autofind_on_import` (default `true`) is whether a web import runs the AutoFind detectors on the new dataset: the Add Dataset dialog's **Run AutoFind** checkbox starts from it, and an import that sends `autofind` writes it back. `autofind_cli_delete_dataset` (default `false`) is whether a command-line AutoFind deletes the dataset it imported once its detectors have run; only the CLI reads it (see [CLI](../CLI.md#saving-the-dataset-to-the-dashboard---tempimport)). See [below](#detector-autofind-flag). |
 | Per-media-type UI state | `focus_mode_{left,right}`, `grid_icon_size_{left,right,popup}`, `panel_pct_{left,right}`, `popup_metadata_shown`, `popup_preview_size`, `bin_details_docked`, `import_defaults_by_media_type`, `browse_colormap`, `browse_icon_size`, `browse_thumbnail_border`, `browse_mouse_zooms_per_level`, `browse_signposts`, `browse_signpost_captioner` | Dicts keyed by media type id, e.g. `{"audio": "M"}`; a missing entry means "use the frontend default". |
@@ -97,7 +70,7 @@ GET /api/settings/defaults
 `autofind_detectors` is a flat list of registered detector names that
 should run during `/api/auto-detect` and the CLI's `--autodetect` flow.
 Toggle a detector via `PUT /api/detectors/registry/{detector_id}/autofind`
-(see `docs/api/detectors.md`); the registry endpoint is the source of
+(see [Detectors](detectors.md)); the registry endpoint is the source of
 truth and writes through to this settings list.
 
 ---
@@ -119,20 +92,7 @@ GET /api/settings-sources
 ```
 
 → JSON array of source plugin objects (`name`, `display_name`, `description`,
-`icon`, `fields`, `ui_mode`, `hidden_from_picker`):
-
-```json
-[
-  {
-    "name": "server_json_file",
-    "display_name": "Server JSON File",
-    "icon": "🔄",
-    "fields": [
-      {"key": "filepath", "label": "Server file path", "type": "server_path"}
-    ]
-  }
-]
-```
+`icon`, `fields`, `ui_mode`, `hidden_from_picker`).
 
 ### Get active settings source
 
@@ -197,20 +157,7 @@ value).
 GET /api/labelset-sources
 ```
 
-→ JSON array of source plugin objects:
-
-```json
-[
-  {
-    "name": "server_json_file",
-    "display_name": "Server JSON File",
-    "icon": "🔄",
-    "fields": [
-      {"key": "filepath", "label": "Server file path", "type": "server_path"}
-    ]
-  }
-]
-```
+→ JSON array of source plugin objects, same shape as the settings-source list.
 
 ### Get detector's labelset source
 

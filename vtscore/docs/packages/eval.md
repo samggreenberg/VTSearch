@@ -43,6 +43,8 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/al_benchmark.py`          | Hermetic harness around the voting-iterations eval       |
 | `vtscore/eval/autopilot_flow.py`        | The app's Autopilot phase machine, **ported** from TypeScript |
 | `vtscore/eval/seed_scores.py`           | Text-sort seed scores that start the simulation          |
+| `vtscore/eval/example_opening.py`       | The example opening (#4699): `choose_examples` / `example_sort` start a session from *K* photos; `stratified_split` keeps a positive on each side |
+| `vtscore/eval/line_test_arm.py`         | The Test arm (#4523): Test mode's autopilot on the withheld half, read against the truth; `row_from_snapshot` replays a saved snapshot |
 
 **Experiment arms** - each answers one study; none is the default arm.
 

@@ -5,13 +5,16 @@
 list) share one machinery: a
 `PluginRegistry` per family scans its package directory at import time,
 registers every sub-package or flat module that exposes a sentinel
-attribute (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …), and then walks the
+attribute (`IMPORTER`, `EXPORTER`, `CONVERTER`, …), and then walks the
 matching `importlib.metadata` entry-point group so third-party
 distributions can drop plugins in without forking the repo. Each
 plugin subclasses one base ABC (`DatasetImporter`, `ResultsExporter`,
-`MediaEmbedder`, …) that inherits from `PluginBase`, declares its
-user-facing inputs as a list of `PluginField`s, and implements one or
-two abstract methods.
+…) that inherits from `PluginBase`, declares its user-facing inputs as
+a list of `PluginField`s, and implements one or two abstract methods.
+The four media families (media types, embedders, clippers, cleaners)
+are the exception: they are plain registries filled by the
+`vtscore.media` sub-package scan, with no entry-point group (see the
+table below).
 
 **This doc set is the library contract**, written for someone shipping a
 plugin as a separate distribution against the semver'd `vtscore` package.
@@ -42,20 +45,20 @@ group to pick.
 
 ### Library tier (in `vtscore`)
 
-| Family | Entry-point group | Sentinel | Base class | Purpose |
-|--------|-------------------|----------|------------|---------|
-| Dataset importers | `vtscore.importers` | `IMPORTER` | `DatasetImporter` | Pull media into a dataset from a source (folder, archive, API, etc.) |
-| Datasource importers | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | Fetch *one* media item on demand, so a user can supply an exemplar from a URL, a server path, a service |
-| Seed importers | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | Contribute a *batch* of unlabeled seed media ("close but not quite") to a new blank detector |
-| Results exporters | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | Send autodetect results or labels somewhere (file, webhook, email, …). `LabelsetExporter` is a permanent alias for the old name |
-| Label importers | `vtscore.label_importers` | `LABEL_IMPORTER` | `LabelImporter` | One-shot pull of `(md5, label)` pairs from an external source |
-| Labelset sources | `vtscore.labelset_sources` | `LABELSET_SOURCE` | `LabelsetSource` | Bidirectional sync of a detector's labelset with an external store |
-| Media converters | `vtscore.converters` | `CONVERTER` | `MediaConverter` | Cross-format access: image → text (OCR), audio → image (spectrogram), … |
-| Media sources | `vtscore.media_sources` | `SOURCE` | `MediaSource` (via factory) | Low-level file-resolution for an origin (local folder, HTTP archive, …) |
-| Media types | - (in-tree only) | `MEDIA_TYPE` | `MediaType` | A whole new content kind (file extensions, HTTP serving, demos) |
-| Media embedders | - (in-tree only) | `EMBEDDER` | `MediaEmbedder` | A new encoder for an existing or new media type |
-| Media clippers | - (in-tree only) | `CLIPPERS` (list) | `MediaClipper` | Split one media into many (tiling, sentence-split, scene-split) |
-| Media cleaners | - (in-tree only) | `CLEANERS` (list) | `MediaCleaner` | Strip content-free regions in place, 1 → 1 (letterbox bars, leading silence) |
+| Family | Package | Entry-point group | Sentinel | Base class | Purpose |
+|--------|---------|-------------------|----------|------------|---------|
+| Dataset importers | `vtscore.datasets.importers` | `vtscore.importers` | `IMPORTER` | `DatasetImporter` | Pull media into a dataset from a source (folder, archive, API, etc.) |
+| Datasource importers | `vtscore.datasource_importers` | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | Fetch *one* media item on demand, so a user can supply an exemplar from a URL, a server path, a service |
+| Seed importers | `vtscore.seed_importers` | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | Contribute a *batch* of unlabeled seed media ("close but not quite") to a new blank detector |
+| Results exporters | `vtscore.exporters` | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | Send autodetect results or labels somewhere (file, webhook, email, …). `LabelsetExporter` is a permanent alias for the old name |
+| Label importers | `vtscore.labels.importers` | `vtscore.label_importers` | `LABEL_IMPORTER` | `LabelImporter` | One-shot pull of `(md5, label)` pairs from an external source |
+| Labelset sources | `vtscore.labels.sources` | `vtscore.labelset_sources` | `LABELSET_SOURCE` | `LabelsetSource` | Bidirectional sync of a detector's labelset with an external store |
+| Media converters | `vtscore.converters` | `vtscore.converters` | `CONVERTER` | `MediaConverter` | Cross-format access: image → text (OCR), audio → image (spectrogram), … |
+| Media sources | `vtscore.datasets.sources` | `vtscore.media_sources` | `SOURCE` | `MediaSource` (via factory) | Low-level file-resolution for an origin (local folder, HTTP archive, …) |
+| Media types | `vtscore.media.<type>` | - (in-tree only) | `MEDIA_TYPE` | `MediaType` | A whole new content kind (file extensions, HTTP serving, demos) |
+| Media embedders | `vtscore.media.<type>` | - (in-tree only) | `EMBEDDER` | `MediaEmbedder` | A new encoder for an existing or new media type |
+| Media clippers | `vtscore.media.<type>` | - (in-tree only) | `CLIPPERS` (list) | `MediaClipper` | Split one media into many (tiling, sentence-split, scene-split) |
+| Media cleaners | `vtscore.media.<type>` | - (in-tree only) | `CLEANERS` (list) | `MediaCleaner` | Strip content-free regions in place, 1 → 1 (letterbox bars, leading silence) |
 
 Media types, embedders, clippers, and cleaners do not currently expose
 an entry-point group - they discover via the `vtscore.media`
@@ -90,11 +93,14 @@ sync at the model layer.
 - [Labelset sources](labelset-sources.md) - bidirectional label sync
 - [Media sources](media-sources.md) - resolve an origin back to a file
 
-Datasource importers, seed importers and media cleaners have no guide
-here yet; their contracts are documented with their packages -
-[datasource-importers](../packages/datasource-importers.md),
-[seed-importers](../packages/seed-importers.md), and the cleaner section
-of [media](../packages/media.md).
+Datasource importers, seed importers and media cleaners have no
+library-tier guide. Their contracts are summarised in the package docs
+([datasource-importers](../packages/datasource-importers.md),
+[seed-importers](../packages/seed-importers.md)), and the full authoring
+walkthroughs live in the repo-level guides:
+[`EXTENDING-plugins.md` § Adding a Datasource Importer](../../../docs/EXTENDING-plugins.md#adding-a-datasource-importer),
+[§ Adding a Seed Importer](../../../docs/EXTENDING-plugins.md#adding-a-seed-importer), and
+[`EXTENDING-media.md` § Adding a Media Cleaner](../../../docs/EXTENDING-media.md#adding-a-media-cleaner).
 
 ## Shared rules for every plugin
 
@@ -149,7 +155,7 @@ bug.
 off *declared field types*. A URL you build by joining a configured base
 with a path segment, or a filesystem path you join from a field plus a
 filename, is not a declared field value and still needs
-`vtscore.security.validate_url`
+`vtscore.security.url_validation.validate_url`
 ([`vtscore/security/url_validation.py`](../../security/url_validation.py))
 or `validate_server_filepath` with
 `base_dir=get_file_access_base_dir()`
@@ -212,32 +218,14 @@ a URL or a server path must validate it itself.
 
 ### Template variables
 
-Substitution is **opt-in per field**. A `PluginField` that does not
+Substitution is **opt-in per field**: a `PluginField` that does not
 declare `template_vars` passes `{detector_name}` through as a literal
-string — a silent no-op that reads as a plugin bug:
-
-```python
-PluginField(
-    key="filepath",
-    label="Save to (server path)",
-    field_type="server_path",
-    placeholder=f"{DATA_DIR}/labels/{{detector_name}}.labels.json",
-    template_vars=("detector_id", "detector_name"),
-)
-```
-
-| Variable | Resolves to |
-|----------|-------------|
-| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp; unique per run, so consecutive exports don't overwrite each other |
-| `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, for date-stamped paths from scheduled runs |
-| `{detector_name}` / `{detector_id}` | The active `DetectorContext`'s name / id |
-| `{username}` | The current user; `"default"` on single-user installs |
-
-Declaring a name outside that set raises `ValueError` on the first
-request, so a typo fails fast instead of shipping a literal placeholder
-into a filename. Every resolved value passes through
-`sanitize_template_value`, so a detector named `../../etc/passwd`
-cannot escape the directory the admin-configured template implies.
+string. The supported variables, the sanitisation every resolved value
+gets, and why declaring them also makes the GUI show the resolved value
+are documented once, in
+[results-exporters.md § Template-variable interpolation](results-exporters.md#template-variable-interpolation)
+(the exporter family is where they are used most, but the rules apply to
+every family).
 
 Resolving a template for something *other* than the active context —
 the detector-rename flow needs both the old and the new path — can't use

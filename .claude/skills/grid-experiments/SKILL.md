@@ -22,9 +22,8 @@ Three companions, each with a different job:
 
 Every session on the GRID shares one `.git`, one Slurm QOS and two checkouts
 that must stay clean. Work that ignores this strands other sessions' work
-without anyone noticing: on 2026-09-23 the shared checkout held 17 files staged
-and forgotten for five days, the deploy clone held 137, and 57 worktrees sat on
-disk, 27 of them already merged (#4133).
+without anyone noticing (#4133: forgotten staged files in both checkouts, and
+27 merged worktrees still on disk).
 
 **The two checkouts nobody works in:**
 
@@ -121,14 +120,11 @@ mistakes that cost the most queue time in #3129: an array that claims your whole
 GRID-PLAYBOOK.md for measured RSS per cell type), and a **job name you are
 already using**, which silently breaks the per-name completion waiter below.
 
-**Size the array against the cluster's job records, too.** Slurm's `MaxJobCount`
-(10,000 on the GRID) is one table shared by every user, and each array task is a
-record from the moment it is queued. A `%N` throttle limits running tasks, not
-records. #4668's sixteen 720-task arrays filled 85% of the table, and its last
-four were refused (#4701). `calibration/launch_cells.sh` now refuses an array
-that would take the cluster past half the table, or you past a quarter, before
-`sbatch` sees it, and prints how many tasks fit. A launcher that submits its own
-array passes `--array-tasks N` to preflight (bundled: cells / bundle, not
+**Size the array against the cluster's job records, too** (`MaxJobCount`, shared
+by every user and counted per queued task; GRID-PLAYBOOK.md §3).
+`calibration/launch_cells.sh` refuses an array that would take the cluster past
+half the table, or you past a quarter. A launcher that submits its own array
+passes `--array-tasks N` to preflight (bundled: cells / bundle, not
 `--print-cells`). Thousands of tasks across a launch loop means chunk the arrays
 or pack cells per task.
 
@@ -384,8 +380,10 @@ a relative-path image link and a caption that says how to read the figure and wh
 **Any study that simulates a VTSearch user clicking owes two figures showing how
 good that user's detector is as they click more.** Not positives mined — that is
 what the *acquisition* did; an arm can mine well and rank badly. The metric is
-the one the ship decision reads (`cost`, and `average_precision` beside it),
-plotted against the axis the user actually spends:
+the one the ship decision reads (the objective, `fbeta`, on a run with a
+balance; `cost` only on the `CALIB_BETA=off` Inclusion arm; `average_precision`
+beside it; `curves.resolve_metric` picks it), plotted against the axis the user
+actually spends:
 
 - **the averages** — one panel **per dataset**, one line **per arm**, averaged
   over every seed and category on that dataset, with an inter-quartile band.
@@ -495,12 +493,9 @@ the viewer's behaviour and the payload carries only the study's numbers, so
 `python viewer.py --reskin docs/experiments/*/viewer.html` pushes a template
 improvement onto every committed report, even one whose results directory is
 long gone. It cannot add data the payload never carried, so a new *series* still
-needs a rebuild from the cell CSVs. Both series added in #3325 were backfilled
-that way in #3326. The oracle cut was free to recover, because its inputs are on
-every base row ever emitted. The skyline is vote-independent, so it was measured
-by a second, cheaper pass over the same cells and merged in with
-`--skyline-results`; re-running the loop for it would have replaced the
-performance rows the reports' tables were read off.
+needs a rebuild from the cell CSVs. A vote-independent series (the skyline) can
+be measured by a second, cheaper pass over the same cells and merged in with
+`--skyline-results`, rather than re-running the loop.
 
 Which metric a page **opens on** is the study's to choose, and so is which ones
 it offers at all: `--default-metric` and `--hide-metrics` write a `view` block
@@ -513,16 +508,12 @@ it. A study whose report retired cost hides it, as the State of the App's
 stay in the payload.
 
 **A run inside a spot check stays in the mean.** A prompted check (#4496)
-answers its picks in rounds of about five, so a run inside one is scored once
-per round and has no row at the clicks between. Both the viewer's averaged
-line and `curves.py`'s PNG mean used to be taken over "the runs with a row at
-this click", which skipped exactly those runs, and a check prompts where the
-labels separate weakly, so what it skipped was the weak sessions: a survivor's
-mean that fell at the end of every review as the checks ran out of budget and
-the weak runs came back (#4624). Both now carry each run's last scored row
-through the clicks it has none for (`curves.fill_gaps`): inside the run's span
-only, never before its first row or after its last, and a metric undefined on
-a scored row stays undefined. The page says so in its reading note
+answers its picks in rounds of about five, so a run inside one has no row at
+the clicks between; a mean over "the runs with a row at this click" would skip
+exactly the weak sessions (#4624). Both the viewer and `curves.py` carry each
+run's last scored row through the clicks it has none for (`curves.fill_gaps`):
+inside the run's span only, and a metric undefined on a scored row stays
+undefined. The page says so in its reading note
 (`gaps_filled`). A committed page built before the carry gets it from its own
 per-seed lines with `python viewer.py --reskin <page> --fill-gaps`, which
 refuses a page whose per-seed lines were thinned to fit the budget (rebuild
@@ -531,10 +522,9 @@ that one from its cells).
 **A run with no detector stays in the mean too, as a loss.** Before a run's
 first Good vote, and at every click of a run that never got one, the harness
 writes no row, and a user there has nothing: with no Good there is nothing to
-sort toward, and Test on it is refused. (In results run before #4643 the rows
-start at the first Good *and* Bad, when Test refused one class too; the same
-rule - every click before a run's first row - reads both.) Both the viewer and
-`curves.py` now score those clicks as the empty returned set
+sort toward, and Test on it is refused. (Results from before #4643 start at the
+first Good *and* Bad; the same rule — every click before a run's first row —
+reads both.) Both the viewer and `curves.py` score those clicks as the empty returned set
 (`curves.score_empty_sets`, `curves.EMPTY_SET`: recall, F1 and the objective
 0, precision 0, FPR 0, FNR 1, AP the test split's prevalence, AUROC 0.5, cost
 the miss weight), so a failing run is averaged in rather than averaged out

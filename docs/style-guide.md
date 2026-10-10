@@ -1,6 +1,6 @@
 # VTSearch Frontend Style Guide
 
-This is the canonical reference for visual styling in the Angular frontend. **All component SCSS must use the tokens and classes defined here** - raw `px`/`rem` values for padding, margins, gaps, font sizes, border radii, and transition durations are not allowed. Hex color literals are not allowed. The shared classes in `frontend/src/scss/_components.scss` are the source of truth for buttons, form fields, modals, and typography; one-off restyling of these elements is not allowed.
+This is the canonical reference for visual styling and UI copy in the Angular frontend, for anyone writing component SCSS, templates, or user-visible strings (the SPA's architecture is in [FRONTEND.md](FRONTEND.md)). Sections: tokens (§1), shared classes (§2), layout patterns (§3), copy style (§4), anti-patterns (§5), adding shared styles (§6). **All component SCSS must use the tokens and classes defined here** - raw `px`/`rem` values for padding, margins, gaps, font sizes, border radii, and transition durations are not allowed. Hex color literals are not allowed. The shared classes in `frontend/src/scss/_components.scss` are the source of truth for buttons, form fields, modals, and typography; one-off restyling of these elements is not allowed.
 
 The frontend is **desktop-only**. There are no responsive breakpoints, touch-targeted controls, or mobile layouts to design for.
 
@@ -142,7 +142,7 @@ Never use a raw z-index. If you need a new layer, add a token.
 |----------------------|-------|-------------|
 | `--opacity-disabled` | 0.5   | The `opacity` value on every `:disabled` / `.disabled` button or interactive element styled via opacity. |
 
-There is only one disabled opacity. Don't write `opacity: 0.35` or `opacity: 0.4` because it "looks right" - a rendered style audit found seven different ad-hoc values in the wild, several of which dropped text below readable contrast.
+There is only one disabled opacity. Don't write `opacity: 0.35` or `opacity: 0.4` because it "looks right" - ad-hoc values drift apart and can drop text below readable contrast.
 
 **Don't use opacity to disable text on a saturated background.** Opacity dims the rendered pixels toward the background, so 50% white on the accent-blue header collapses to a mid-blue that fails contrast. For buttons sitting on `--header-bg` (or any saturated surface), shift `color` to a theme-aware dimmed token (e.g. `--header-text-dim`) and keep the cursor change - skip `opacity` entirely.
 
@@ -160,7 +160,7 @@ Distinct from `--opacity-disabled`: that one is reserved for interactive `:disab
 |-------------------|--------|-------------|
 | `--tracking-wide` | 0.05em | The uppercase micro-labels that pepper the UI: table headers, section micro-headings, tier chips. |
 
-One canonical "wide" value, em-based so it tracks the label's font size. A rendered audit found a dozen hand-picked values (0.02-0.06em, plus a raw `0.5px`) all doing this same job; they resolve here now. Uppercase text without tracking is the only other legal option - don't invent a third value.
+One canonical "wide" value, em-based so it tracks the label's font size. Uppercase text without tracking is the only other legal option - don't invent a third value.
 
 ### 1.12 Modal widths - `--modal-w-*`
 
@@ -236,7 +236,7 @@ Rules:
 - **`.btn--cancel`** for low-weight cancel/close affordances next to progress bars.
 - **`.btn--toolbar`** for compact outline buttons in toolbars and panel action rows (the right-panel Import Labels / Add Corrections / Export cluster, the image-view-controls strip): tighter padding, `--font-xs`, a muted resting color, `white-space: nowrap`, and a hover that promotes the border to `--accent`.
 - **This list is the whole taxonomy.** There is no `--xs`, `--ghost`, or `--icon-square`; if you need a size or treatment that isn't here, add it to `_components.scss` (and to this list) rather than inventing a class name that no rule matches.
-- **Do not write per-component `padding` / `font-size` / `border-radius` on a button.** Every "small button" implementation in component SCSS that bypassed this taxonomy has been removed.
+- **Do not write per-component `padding` / `font-size` / `border-radius` on a button.**
 
 A borderless icon button inside a card row or action cluster is **not** a `.btn` variant - use `.card-icon-btn` (§2.11).
 
@@ -254,7 +254,7 @@ Nor is a muted, link-like text button - a secondary affordance that sits beside 
 ```
 
 - `.form-group` is the label+control wrapper: a flex column with `gap: var(--space-xs)`. It owns the spacing *inside* one field; the surrounding form (`.importer-form`, §2.5) owns the spacing between fields. `.form-group--section` adds `margin-top: var(--space-xl)` above a grouped block inside an importer form (the Embedder/Clipper "Advanced" block).
-- **Every stacked field belongs to a form container, including projected ones.** A run of `.form-group`s that are a *component's own* root children get no rhythm from the `.importer-form` two components up - `gap` only reaches direct children, so the fields land flush against each other while the projected component as a whole sits `--space-lg` from its neighbours. That mismatch ("large gap above the block, no gap inside it") is what the Add Dataset pickers shipped for a while. Either wrap the component's fields in their own `.importer-form`, or give its `:host` the same `flex-direction: column; gap: var(--space-lg)` - never rely on an ancestor's `gap` crossing a component boundary.
+- **Every stacked field belongs to a form container, including projected ones.** A run of `.form-group`s that are a *component's own* root children get no rhythm from the `.importer-form` two components up - `gap` only reaches direct children, so the fields land flush against each other while the projected component as a whole sits `--space-lg` from its neighbours. The symptom is "large gap above the block, no gap inside it". Either wrap the component's fields in their own `.importer-form`, or give its `:host` the same `flex-direction: column; gap: var(--space-lg)` - never rely on an ancestor's `gap` crossing a component boundary.
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
@@ -374,8 +374,6 @@ The canonical back-button markup:
 **Only the card is shared; the container isn't (yet).** `.importer-picker` / `.exporter-picker` name the list wrapper, but the shared rule's responsive grid is currently overridden by every consumer, each of which declares its own `display: flex; flex-direction: column` locally (component-scoped rules win via Angular's encapsulation specificity bump). So set the container layout you actually want in your component SCSS rather than assuming the global one applies. Reconciling the two is tracked in `docs/plans/codebase-audit-2026-08.md`.
 
 The form half of a picker modal uses `.importer-form` (flex column, `gap: var(--space-lg)`) wrapping `.form-group` fields (§2.3), with `.back-btn` at the top of the inner view (§2.4 → Back vs Cancel).
-
-There are no `.importer-card` / `.importer-name` / `.importer-desc` classes; the names above replaced them.
 
 ### 2.6 Tabs
 

@@ -5,10 +5,15 @@ selectively extract** components from VTSearch.  It maps the module
 structure, dependency graph, and public APIs so you can quickly identify
 which pieces you need and how to pull them out.
 
-It covers the **Python tiers**.  The Angular SPA in `frontend/` has its own
-map: **[FRONTEND.md](FRONTEND.md)** — change-detection model, service layer,
-active dataset/detector propagation, the generated API client, and the
-component conventions.
+It covers the **Python tiers**.  Neighbouring maps:
+
+- The Angular SPA in `frontend/`: **[FRONTEND.md](FRONTEND.md)** —
+  change-detection model, service layer, active dataset/detector propagation,
+  the generated API client, and the component conventions.
+- The library tier from a consumer's side (seams, `CoreConfig`, threading,
+  import paths): [vtscore/docs/architecture.md](../vtscore/docs/architecture.md).
+- Writing a plugin: [EXTENDING.md](EXTENDING.md) and its
+  `EXTENDING-*.md` siblings.
 
 ## Table of Contents
 
@@ -161,6 +166,7 @@ VTSearch/
 │   │   ├── structural.py           Structural (geometric-verification) embedding, with
 │   │   │   structural_geometry.py  the geometric consistency check and
 │   │   │   structural_splg.py      the SPLG local-feature backend
+│   │   ├── structural_tiles.py     Tiled VLAD: per-window page vectors for structural document search
 │   │   ├── lazy_clip.py            Replays converter/clipper recipes to rebuild bytes on demand
 │   │   ├── clip_recipe.py          One parser for the origin.params clip dialects, shared by
 │   │   │                           lazy_clip and the detector resolver's replay path
@@ -198,11 +204,13 @@ VTSearch/
 │   │   ├── mlp.py                  build_model, train_model — the head selector (LINEAR_SVM_HEAD is
 │   │   │                           production; LINEAR_HEAD and the MLP survive as eval arms)
 │   │   ├── svm.py                  fit_linear_svm_head (the production head) + kernel sweep arms
+│   │   ├── logreg.py               Converged logistic-regression head (an eval arm)
 │   │   ├── thresholds/             Conformal / GMM / anchored / blend threshold helpers
 │   │   ├── blend_schedules.py      Vote-count → blend-weight schedules (production + arms)
 │   │   ├── query_sort.py           External-query sorts: example media, label files
 │   │   ├── region_similarity.py    Region-aware cosine similarity scoring
-│   │   └── structural_similarity.py  Geometric-verification scoring for structural embedders
+│   │   ├── structural_similarity.py  Geometric-verification scoring for structural embedders
+│   │   └── structural_stage1.py    Tiled Stage 1 + verification cache for structural document search
 │   │
 │   ├── coverage/                   Coverage Atlas algorithm (atlas.py): hierarchical k-means +
 │   │                               per-class evidence channels + typicality; no context, no lock.
@@ -227,6 +235,10 @@ VTSearch/
 │   │   ├── training.py             Vote-aware training, origin-based training
 │   │   ├── learned_sort.py         Learned-sort scoring/ranking over a trained detector
 │   │   ├── model_loading.py        Build/restore in-memory head from labels (no persisted weights)
+│   │   ├── label_quota.py          Goods/Bads a labelset needs before it gets a trained head
+│   │   ├── centroid_head.py        The Goods' centroid as the head below that quota
+│   │   ├── balance.py              The detector's balance (F-beta's beta), kept on the detector
+│   │   ├── line_verdicts.py        A finished Test-mode verdict, kept on the detector
 │   │   ├── workflow.py             apply-labels-and-retrain orchestration; scopes the target
 │   │   │                           detector with override_detector_context (no Flask)
 │   │   ├── resolver.py             Origin → file + embedding resolution
@@ -327,6 +339,8 @@ VTSearch/
 │   │   ├── evt_mixture.py          Gumbel/Normal mixture — the research arm behind the gumbel_* cuts
 │   │   ├── autopilot_flow.py       Ported autopilot loop (the app's TypeScript flow, re-implemented)
 │   │   ├── voting_iterations.py    Voting-iteration simulation
+│   │   ├── example_opening.py      The example-sort opening (a session that starts from K photos)
+│   │   ├── line_test_arm.py        The Test arm: Test mode's autopilot read against the truth
 │   │   ├── al_strategies.py        Active-learning acquisition strategies, benchmarked by
 │   │   │   al_benchmark.py         the AL benchmark driver
 │   │   ├── label_curve.py          Labels-vs-quality curves (label_curve_main.py is its CLI)
@@ -413,7 +427,7 @@ VTSearch/
 │   │                               truth for setting types, defaults, ranges, and enums
 │   ├── admin_overrides.py          Declarative registry of the process-level admin overrides
 │   │                               (solo mediaType / embedder locks, plugin hides, dataset
-│   │                               retention, support email, Semantic-only): one descriptor
+│   │                               retention, support email, Semantic-only, Autopilot-only): one descriptor
 │   │                               per knob carrying its CLI flag, env var, shared validator,
 │   │                               resolution rule, and /api/settings key
 │   ├── import_hooks.py             The admin's --on-dataset-imported functions: flag / env parsing,
@@ -481,6 +495,8 @@ VTSearch/
 │       ├── sessions.py             Session management (/api/sessions/*)
 │       ├── achievements.py         Achievement routes (/api/achievements/*)
 │       ├── projection.py           VTSBrowse projection routes (/api/projection/*); the lifecycle is vtscore/projection/service.py
+│       ├── precision_check.py      The balance's spot check (/api/precision-check/*)
+│       ├── line_test.py            Test mode's test of the line (/api/line-test/*)
 │       ├── datasets/               Dataset routes; listings, load, staging, registry, status, ui
 │       ├── detectors/              Detector routes; crud, labels, registry, scoring, find, export
 │       ├── processors/             Processor routes; crud, scoring (extractors/localizers)
@@ -489,12 +505,18 @@ VTSearch/
 │       ├── labels/                 Label routes; vote, importers, exporters
 │       └── settings/               Settings routes; api, io, sources
 │
-├── static/                         Angular build output (HTML + CSS + JS)
+├── static/                         Angular build output (HTML + CSS + JS; gitignored)
 ├── frontend/                       Angular SPA source (components, services, SCSS)
 │                                   -> see docs/FRONTEND.md for the SPA architecture
 ├── tests/                          App-tier test suite (uses Flask client, vtsearch.*)
 ├── tests_lib/                      Library-tier test suite (Flask-import-clean, vtscore.*)
-└── tests_shared/                   Conftest machinery both suites import (no test modules)
+├── tests_shared/                   Conftest machinery both suites import (no test modules)
+├── scripts/                        Repo tooling: run-tests.sh gates, doc generators, experiments
+├── docs/                           Developer + user docs (docs/user/ is served in-app)
+├── slides/                         Slide-deck sources (see slides/README.md)
+├── docker/, gunicorn.conf.py       Container images and the production WSGI config
+├── requirements/                   base-no-agpl.txt: the AGPL-free install set (VTSEARCH_NO_AGPL=1)
+└── run-tests.sh                    The test + gate runner (docs/TESTING.md)
 ```
 
 **The library tier is entirely Flask-free, and that is enforced, not
@@ -550,8 +572,10 @@ modules on the right.
 │ vtscore/exporters/*      │  │ vtscore/labels/        │
 │                          │  │ importers/*            │
 │ base.py (ABC)            │  │                        │
-│ server_json, server_csv  │  │ base.py (ABC)          │
-│ email_smtp, webhook, gui │  │ server_json, server_csv│
+│ server_json, server_csv, │  │ base.py (ABC)          │
+│ email_smtp, webhook, gui,│  │ server_json, server_csv│
+│ open_url,                │  │                        │
+│ portable_detector        │  │                        │
 │                          │  │                        │
 │ (NO Flask, NO state,     │  │ (NO Flask, NO state,   │
 │  pure data in/out)       │  │  pure data processing) │
@@ -817,8 +841,11 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 The form-driven families share a common `PluginBase` / `PluginField` /
 `PluginRegistry` architecture in `vtscore/plugins/__init__.py`:
 
-1. **Base class** (`PluginBase`) defines `name`, `display_name`, `fields`,
-   and an abstract `run()`/`export()`/`load()`/`save()` method.
+1. **Base class** (`PluginBase`) defines `name`, `display_name`,
+   `description`, `icon`, `fields`, and the shared helpers (`notify()`,
+   `get_field_options()`, CLI wiring); each family's own base class
+   (`DatasetImporter`, `ResultsExporter`, …) adds that family's abstract
+   entry point.
 2. **Field dataclass** (`PluginField`, re-exported by every family's base
    module) describes each user-configurable input with type, label,
    default, validation, and placeholder.
@@ -948,8 +975,9 @@ than being re-plumbed per knob.
 
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.
-The AutoFind keys read through to the server file for the built-in `default`
-user (CLI / single-user back-compat); see `_DEFAULT_USER_FALLBACK_KEYS`.
+The AutoFind keys other than `autofind_on_import` read through to the server
+file for the built-in `default` user (CLI / single-user); see
+`_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings.py`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).
 
@@ -1131,8 +1159,8 @@ the prior thread-local automatically), so per-user writes — autopilot toggles,
 sync-source exports — land in the right file. A single-file
 `data/settings.json` that pre-dates the split is **not** migrated: its
 per-user keys simply have no effect where they sit, and the file is left as
-written (the one exception is the AutoFind trio, which the built-in `default`
-user reads through to — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
+written (the one exception is the AutoFind keys the built-in `default` user
+reads through to, above — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
 
 ---
 

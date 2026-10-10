@@ -21,7 +21,7 @@ does not say what each rule enforces — see
 [Reading the rules that are actually set](#reading-the-rules-that-are-actually-set)
 below, and read them before relying on any specific guarantee.
 
-### The one limitation that has not changed
+### Collaborators cannot be made read-only
 
 **Every collaborator on a personal-account repo has write access.** The
 Read / Triage / Write / Maintain roles exist only inside organizations, so the
@@ -44,15 +44,16 @@ branch rule's push restriction, not by giving anyone a weaker role.
 `suite-grid` is a GitHub commit status posted by
 [`scripts/slurm/suite.sbatch`](../scripts/slurm/suite.sbatch) at the end of every
 GRID run of the full suite, success or failure, on the exact SHA it tested. It is
-the only machine-readable record that a commit passed the suite (the repo runs no
-GitHub Actions), so it is worth posting and worth reading on a PR.
+the only machine-readable record that a commit passed the suite (the repo's two
+GitHub Actions workflows only publish and gate nothing), so it is worth posting
+and worth reading on a PR.
 
-It is **not** a required check. #4133 briefly added it to `dev`'s ruleset, and
-that locked every Claude Code on the web session out of merging: a cloud session
-has no `ssh` to reach the GRID, no working `gh` to post a status, and the GitHub
-MCP tools can merge but cannot post one. It also meant every merge of `dev` into a
-PR branch needed a fresh ~13-minute GRID run, since the status belongs to one SHA.
-The owner removed it from the ruleset on 2026-09-23 (#4149).
+It is **not** a required check, and must not become one: a cloud session has no
+`ssh` to reach the GRID, no working `gh` to post a status, and the GitHub MCP
+tools can merge but cannot post one, so requiring it locks every Claude Code on
+the web session out of merging (#4133 tried it; #4149 reverted it). It would also
+make every merge of `dev` into a PR branch wait on a fresh ~13-minute GRID run,
+since the status belongs to one SHA.
 
 **The merge gate on every surface is a full, green `./run-tests.sh`.** A
 `suite-grid` status is supporting evidence when a GRID session has one; its
@@ -156,9 +157,7 @@ merges the release PR through @samggreenberg's account (RELEASE.md step 8). With
 `enforce_admins: false` the owner's account may merge without a separate
 approval. GitHub will not let an author approve their own PR, so turning on
 `enforce_admins` makes every release wait for a human again. The routine then
-leaves the PR open and says so rather than working around the refusal. On
-2026-10-06 the open release PR (#4501) read `mergeable_state: clean`, so no
-review gate was blocking it.
+leaves the PR open and says so rather than working around the refusal.
 
 Keep `dev` lighter — a PR guardrail with no mandatory approver, so routine work
 and Claude PRs keep flowing:
@@ -182,9 +181,3 @@ JSON
 
 `allow_deletions: false` on `dev` is the setting that makes the release flow
 above safe. It is worth confirming it is actually set.
-
-## History
-
-Earlier versions of this document described the repo as private on the Free plan,
-where protection was unavailable. The repo has since gone public, so enforcement is
-available and in place; the sections describing its absence were removed.

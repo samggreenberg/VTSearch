@@ -159,25 +159,6 @@ than once were collapsed to one record each (#4054).
   major one is not: at v4.0 the baselines are **re-run**, because the roster, the
   positive sets and the page list all moved.
 
-**v5.0 is a major bump: the roster grew from 27 classes to 36** (#4143). The page
-set is unchanged. The nine new classes were proposals the v3 roster passed over:
-six SPODS text stamps and three Tobacco800 logos (the Rockefeller University
-seal, a pointed-oval religious seal and a "Mount Sinai" wordmark). Each went
-through every pass the original classes did:
-- **identity:** 45 pairs against the nearest existing classes and each other,
-  all different;
-- **membership:** every instance confirmed;
-- **completeness:** two rounds of SIFT candidates.
-
-Completeness mattered most here. Five of the six stamps had been split across
-several clusters, so the stamps grew from 77 instances at admission to 219. Traffic Manager
-(`00514`) and NOT-DELIVERED (`00716`) were still turning up scattered copies in
-their second round (3 and 6 of 30), so a few more may sit below SIFT's top 60.
-The President stamp's query crop was chosen by hand (the automatic one, the
-largest instance in the class's core, was a faded print); a rebuild would
-re-pick it. **Every baseline is re-run at v5.0**, and a v4.x mean over 27
-classes is not a v5.0 mean.
-
 **v4.1 is a minor bump.** Pages, tiers, labels and roster are unchanged; only
 the four UCSF classes' pools grew, when the contamination rule for UCSF classes
 narrowed from all of UCSF to its Tobacco industry (below). A v4.0 number for
@@ -197,6 +178,25 @@ every class. The cells need no relabel.
 boxes set to their crop's extent. Retrieval scores are page-level, so every v4.2
 retrieval number is a v4.3 number. A number that reads boxes (localisation,
 crops cut from members) is not.
+
+**v5.0 is a major bump: the roster grew from 27 classes to 36** (#4143). The page
+set is unchanged. The nine new classes were proposals the v3 roster passed over:
+six SPODS text stamps and three Tobacco800 logos (the Rockefeller University
+seal, a pointed-oval religious seal and a "Mount Sinai" wordmark). Each went
+through every pass the original classes did:
+- **identity:** 45 pairs against the nearest existing classes and each other,
+  all different;
+- **membership:** every instance confirmed;
+- **completeness:** two rounds of SIFT candidates.
+
+Completeness mattered most here. Five of the six stamps had been split across
+several clusters, so the stamps grew from 77 instances at admission to 219. Traffic Manager
+(`00514`) and NOT-DELIVERED (`00716`) were still turning up scattered copies in
+their second round (3 and 6 of 30), so a few more may sit below SIFT's top 60.
+The President stamp's query crop was chosen by hand (the automatic one, the
+largest instance in the class's core, was a faded print); a rebuild would
+re-pick it. **Every baseline is re-run at v5.0**, and a v4.x mean over 27
+classes is not a v5.0 mean.
 
 `build_report.json` records `corpus_version` from builds after v3.1. The
 on-disk v3.1 corpus predates that field, and is recognisable by
@@ -328,7 +328,7 @@ those copies is scored down for it, and SIFT is not.
 
 | question shape | verdict | what decides it |
 |---|---|---|
-| **Method A vs method B**, `own_verified`, one tier, v3.1 | **supported, with a stated bias** | Same pages and labels for both arms. Residual missed positives are not symmetric between methods: they are the ones SIFT ranked low, so a SIFT-family method is favoured on exactly the pages still unlabelled. Say so beside any SIFT-vs-other result, and inspect the top-ranked "false positives" of the non-SIFT arm before claiming it lost. |
+| **Method A vs method B**, `own_verified`, one tier, one corpus version | **supported, with a stated bias** | Same pages and labels for both arms. Residual missed positives are not symmetric between methods: they are the ones SIFT ranked low, so a SIFT-family method is favoured on exactly the pages still unlabelled. Say so beside any SIFT-vs-other result, and inspect the top-ranked "false positives" of the non-SIFT arm before claiming it lost. |
 | How does a method degrade as the haystack grows (`s` → `m` → `l`)? | **supported for UCSF distractors only** | Tiers `m` and `l` add only UCSF pages; the same-source hard negatives are all already in `s`. The drop measures robustness to real, unrelated scans, not to harder same-style pages. Tier `l` has only a `siglip` cell. |
 | Absolute AP under the `eligible` pool | **not supported as a headline** | The source shortcut: `source_prior` scores AP 1.00 there (#3904). |
 | Anything on the `naive` pool for a Tobacco800 class | **not supported** | UCSF Tobacco pages carry roster letterheads unlabelled; `naive` scores a correct retrieval as a false positive. |
@@ -339,7 +339,7 @@ those copies is scored down for it, and SIFT is not.
 | Is class X **harder** than class Y? | **read with the known-gaps list** | Label residuals differ by class (below). `spods/stamp_00931_1` (OUTWARD-) had the weakest SIFT evidence of any class, so its completeness is least certain. |
 | Telling **near-identical marks** apart | **supported** | All 276 v3 roster pairs adjudicated, and each v5.0 class against its three nearest classes and every other new class of its source (45 pairs, #4143); the three leaf marks, two chiefs and four Secretary stamps are separate classes by ruling, and cannot-links are permanent. |
 | **Localisation** (box IoU, detection mAP) | **supported for the four UCSF classes; not supported for StaVer; unmeasured elsewhere** | UCSF (v4.3, #4109): 303 boxes were proposed by fitting the query crop's ink outline with SIFT, padded 10%, and each was accepted or redrawn by hand. **The tolerance:** a box counts as tight if it clips only the tips of descending loops, and not if it cuts off substantial strokes such as the tops of letters (owner's rule, 2026-09-23). A loose-IoU criterion suits that tolerance; a strict one does not. The 30 marks no proposal fitted were boxed by hand (#4125), and the 3 query pages carry their crop's own extent. The rjr_script logo is the script. The "Tobacco Company" line is printed under it on some letters and not others, and does not change what the mark is (owner, 2026-09-23). So a box with or without that line is correct: 4 hand-drawn boxes take it in, because the script's loops hug it, and the query crop and the other 64 do not. Other sources' boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
-| **Query sensitivity**: how much does the crop matter? | **not yet** | One crop per class until #3949 is applied. `tobacco800/logo_aeq93a00_1`'s crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
+| **Query sensitivity**: how much does the crop matter? | **measurable, not yet measured** | Up to four hand-chosen alternates per class exist (`query_crops`, #3949); no study has reported the spread yet. `tobacco800/logo_aeq93a00_1`'s primary crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
 | Retrieval **of UCSF letterheads** (the four roster classes) | **supported at tier `m`, with the control beside it** | At v4.2 a mark-blind Tobacco-industry control scores AP 0.15–0.17 at `m` (above). Quote it beside any UCSF-class number, and read tiers `s` and `l` with their residuals. The other band classes proposed in #3902 are still audit candidates (#3921, #3922). |
 | Compare against a number measured **before 2026-09-17 07:40** | **not comparable** | That is v3: 108 of today's positives were negatives then. Re-score against the relabelled cells. |
 
@@ -400,9 +400,9 @@ python score_ranker.py score --scores my_idea.csv.gz --tiers s,m --name my_idea 
   Queue them with `surprise_review.py`: if one carries the mark, the method was
   right and the labels were not (#4089).
 - Every result is stamped with the corpus version, and with whether the corpus
-  on disk still matches that version's frozen manifest in `versions/`. v4.3 is
-  the first frozen version: `versions/v4.3.json` checksums the six files that
-  define it and all 27 query crops. A version bump runs `score_ranker.py freeze`.
+  on disk still matches that version's frozen manifest in `versions/`
+  (`v4.3.json`, `v5.0.json`), which checksums the files that define it and its
+  query crops. A version bump runs `score_ranker.py freeze`.
 
 To start from a built-in method, `score_ranker.py export --method siglip --tier m`
 writes SigLIP's scores in that format. Export from the tier you score, because

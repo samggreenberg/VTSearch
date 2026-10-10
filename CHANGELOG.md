@@ -15,111 +15,6 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
-### Changed
-
-- **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
-  Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
-  another on one CPU core, and most of each fit's time went to statistics over a few dozen
-  points. The fits now run on 4 threads and the statistics take less time. On a V100 a Good
-  takes ~1.4 s at 5,000 pages (was 1.9 s) and ~1.6 s at 50,000 (was 2.1 s). Rankings are unchanged.
-
-- **A plainer Update Sort Example? prompt** (issue #4721). Autopilot's resort prompt no longer
-  opens with a focus ring on its big Keep button (it took focus when you were voting with the
-  arrow keys, so it read as the recommended answer, and the next Space or Enter chose it); focus
-  goes to the dialog itself, and Tab still reaches every control. The paragraph at the top is now
-  one line of read-only fields, **Clicked**, **Positives** and **Sort**, and Toasty, below the
-  dialog, explains: how many positives Autopilot needs before it can move on, and that you can
-  keep going or try a different sort. The left side has a **Keep clicking:** heading over a
-  **Continue** button, which no longer names the sort or the number of labels before the next
-  prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
-  **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
-- **Tabs look like tabs, and form labels read alike** (issues #4718, #4726). Every horizontal tab
-  strip (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
-  Keyboard Shortcuts, and the left panel's **Manual** / **Autopilot** in Train and **Autopilot** /
-  **Review** in Test) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
-  the active one open into the content below with an accent edge on top. New Detector's
-  **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
-  labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
-  **Threshold:** label matches them. The text boxes now carry their instructions (**Describe what
-  this detector should find**) in place of a faint example and a line under the box, and
-  **Detector name** can be left blank: the detector is named after its example (or, on the
-  Trained tab, the imported file), numbered past any detector that already has that name.
-- **No stall report for a slow import at startup.** On a cold page cache the scikit-learn import
-  (through pandas, pyarrow's shared library) held the GIL for just over a second, and the stall watchdog
-  wrote every thread's stack to the terminal of a routine `python app.py`. The watchdog's bar is now
-  `VTSEARCH_STALL_STARTUP_MS` (5 s) from the ML imports until **VTSearch is ready**, so a startup that
-  takes minutes is still reported and a routine import is not; the `diagnostics config` line reports it
-  as `watchdog_startup=`, and a `stall:` line from that window says `bar 5000ms`.
-- **New Detector keeps a preset media type and the Threshold under Advanced** (issue #4717).
-  When a selected dataset has already set and locked the detector's **Media type**, the field
-  moves from the top of the Blank form to **Advanced ▾**, unlock button and all, and stays there
-  if you unlock it. The **Threshold** moves under **Advanced ▾** on both tabs; it still starts on
-  your last pick. A media type nothing has set stays at the top of the form.
-- **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
-  King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
-  click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
-  arrows. On the Dashboard, one step at a time: **+** to add a dataset, select a dataset, a warning
-  when the selected datasets mix kinds of media, **+** to make a detector, select a detector, a
-  warning when the dataset and detector are for different media, **Train** for a new detector,
-  and **Test** or **Find** for a trained one. In the Train view he asks for your first vote while
-  Autopilot runs on a detector with no labels (replacing the faint "Use ← / →" line), and the
-  **Detector Trained** and **Nothing Left to Label** dialogs are now his hints under the top bar's
-  **Dashboard** button; any further vote sends him away. Each hint goes when its step is taken,
-  and has **Hide this hint** and **Hide all hints** boxes kept in your settings (`hidden_hints`,
-  `hide_all_hints`); **Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**.
-  Notifications show his face too: happy, surprised on warnings, sad on errors. The
-  `label_hint_dismissed` setting is gone, and `/favicon-smile.ico` (the plain favicon smiles
-  already) now 404s.
-- **Train and Test fold either side panel to a strip, and open with both folded** (issue #4673).
-  The left panel's fold (Autopilot's collapse, Train only until now) comes to Test's Autopilot tab,
-  and the right panel gains one in both views. Each side folds to a thin strip on its own: click
-  the strip, or drag its divider out, to open it, and the ◀ / ▶ at its top folds it again. The
-  left folds on the Autopilot tab only, since Manual and Review are driven from its list. Both
-  start folded, leaving the item in the middle the room, and each remembers your choice; the
-  Settings modal's Appearance tab has **Hide left panel in Train and Test** and **Hide right panel
-  in Train and Test** in place of Autopilot's **Hide autopilot panel**. A test that reaches
-  **Done!** opens its result on its own. The `hide_autopilot` setting is now `hide_left_panel`,
-  beside a new `hide_right_panel`, both `true` by default; a saved `hide_autopilot` is not
-  carried over.
-- **Choose a detector's Threshold when you create it, and Autopilot follows it** (issue #4665).
-  The New Detector form (Blank and Trained) now has the Threshold control, the same three radios
-  from False Positives to False Negatives as the Manual tab. The choice is saved with the detector,
-  and Autopilot, which has no Threshold control of its own, draws the line, picks and checks at it.
-  Moving the Threshold in Manual or Test saves the new choice on the detector too, so each detector
-  keeps its own instead of all of them sharing your last one. The form starts on your last pick. A
-  detector made before this change, or by AutoFind or the CLI, uses your last pick until you set
-  one. Combine keeps the sources' Threshold when they all agree. Find, AutoFind and
-  `--autodetect` draw each detector's line at the Threshold it keeps.
-- **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
-  hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
-  show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
-  sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
-  form, which is no longer indented.
-- **A detector on a dataset that can't search by text needs an example item** (issue #4666). The
-  New Detector dialog used to let a text-only detector through with a warning that Autopilot
-  could not start until it was trained. **Create** now stays disabled until you add an example
-  item, so Autopilot always has a first sort.
-- **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
-  AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
-  with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
-  opening quorum), they now give the Goods' centroid: everything ranked by how close it is to the
-  average of the Goods, cut where the scores split, with no Bad needed. One Good is enough to test
-  a detector, and the Test view and AutoFind results say when the centroid was used and how many
-  more Goods and Bads a trained detector needs. The Threshold control does not move the centroid's
-  line. Labels still save on every vote, and Export labels is not gated: whatever imports the labels
-  gets the same rule. The Train view's own sort is unchanged.
-- **Autopilot's Hard and New picks go where the detector is least sure** (issue #3546). They now
-  sample where the detector's own model puts even odds on an image being a match, instead of a fixed
-  depth below the line that had stopped following the detector. In simulation that finds about 3 more
-  matches per 150 votes at every balance setting; 38% of Hard picks are matches (was 19-24%), and the
-  final detector is as good or better. The `hard` phase's help text now says what it does.
-- **Autopilot stays Done once it gets there** (issue #4621). Labeling on after **Done!** used to
-  drop the phase panel back to **Refine Boundary** whenever a vote knocked an indicator off green,
-  then jump it forward to Done again when the indicator recovered. Done now stays checked, and a
-  seventh step, **Keep Improving.**, takes over: its light shows the lowest of Smart, Stable and
-  Span, and its line says whether Autopilot is offering boundary items or diverse ones, or that all
-  indicators are green. What Autopilot picks is unchanged.
-
 ### Added
 
 - **The command line makes several datasets from one importer run** (issue #4707). The
@@ -226,27 +121,374 @@ not list every commit. Use `git log` for the full history.
   votes never train the detector; **Add Corrections** marks the result out of
   date. New routes under `/api/line-test`.
 
-### Removed
+- **An AutoRun button on the Dashboard runs the selected detectors on the selected datasets**
+  (issue #4529). A third big button beside **Train** and **Find**, enabled on Find's rule (a
+  dataset and a detector ticked, one media type, every detector trained), starts a background
+  AutoRun on every ticked dataset with every ticked detector, loading a dataset first if
+  needed. Drafts run as they are, without moving to the AutoRun tab. The first run to finish
+  opens the AutoRun Results dialog and later ones offer **View results**. The API route behind
+  it, `POST /api/datasets/registry/<id>/autorun`, takes an optional `detector_ids` list; without
+  it, the dataset ⋯ **Run AutoRun** still runs the AutoRun tab.
 
-- **Imports no longer show a time-left estimate, and the switches around it are gone**
-  (issue #4667). The estimate on dataset imports, staging imports and labelset
-  missing-media fetches swung too wildly to trust, so it is gone for everyone; those bars
-  still fill, count and name their step, and every other progress bar keeps its estimate.
-  With it go the operator switch that hid it (`--hide-ingest-eta`,
-  `VTSEARCH_HIDE_INGEST_ETA`, `"hide_ingest_eta"` and its Settings ▸ Server row) and the
-  per-deployment timing profile that tuned the progress bars' pacing
-  (`VTSEARCH_TIMING_PROFILE`, `VTSEARCH_TIMING_RECORD`,
-  `scripts/profiling/tune_timing_profile.py`). A server started with `--hide-ingest-eta`
-  must drop the flag, which is no longer accepted; the two environment variables and the
-  settings key are ignored. Every bar now paces from the weights the app ships with.
+- **A deployment can list its own docs in the Help modal** (issue #4310). An
+  operator who adds plugins or extensions points users at the docs for them
+  with a new `docs_links` key in `data/settings.json`: an ordered list of
+  `{"label": ..., "url": ...}` objects. The Help modal lists them under **Docs
+  for this server**, above the *Email us* line, on every tab; each opens in a
+  new browser tab. A URL must be an absolute `http(s)` URL or a `/path` on the
+  same host; an entry that isn't, or has no label, is left out, and the startup
+  log names it. Read-only over the API, like the other operator settings.
+- **AutoRun detectors really run on what you import, and on demand** (issue
+  #4252). The Dashboard's AutoRun tab and the user guide promised that AutoRun
+  detectors run on every imported dataset, but only the CLI's `--autodetect`
+  ever ran them. Now a web import runs the importing user's AutoRun detectors
+  on the new dataset once it is saved: the run shows on the dataset's row
+  (cancellable), its results go to the Auto-Find exporter if one is set, and a
+  notice with **View results** opens them. The Add Dataset dialog has a **Run
+  AutoRun detectors on this dataset** checkbox (shown once you have an AutoRun
+  detector) that remembers how you left it, as the new `autorun_on_import`
+  setting. A dataset's ⋯ menu gains **Run AutoRun**, which runs them on an
+  existing dataset right away and opens the results when done. The **AutoRun
+  Results** dialog (the old Auto-Detect Results dialog, which nothing opened)
+  now has a working **Export** button that sends the rows it lists.
 
-- **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
-  and Evidence coverage chips, its 2×2 of your checks and its precision chart
-  now live in the Autopilot tab's result pane; the chart draws the test's
-  ranges at every band edge instead of the *Checked by you* curve, which
-  counted only what the boundary walk happened to serve.
+- **Detectors draw their line at a precision floor: "show me what's at least
+  half right"** (issue #4245, the backend of #4224). A detector's line is now
+  the cut that returns as much as it can while at least a set share of it is
+  estimated right. Every detector starts at **50%**, taken from your new
+  `min_precision` setting, and each keeps its own. The estimate is cautious: it
+  only promises once it has seen about ten positives among the votes it holds
+  back to check itself, and it only counts votes you made off the learned sort
+  (Autopilot's Hard picks, or working down a list sorted by the detector). Until
+  then, or when no cut can reach the floor, the line stays exactly where
+  Inclusion 0 puts it, so nothing you see empties or jumps. A set floor wins
+  over Inclusion: while the Inclusion stepper is still on screen it does not
+  move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
+  or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
+  on-screen control that replaces the stepper arrives in #4246. New endpoint:
+  `GET|POST /api/min-precision` (removed with the floor, #4421).
+
+- **An unpromised line says so** (issue #4247). When a detector can't yet
+  promise its precision floor - too little evidence, or no cut on the
+  dataset reaches it - its line stays at the Inclusion 0 cut and is now
+  labelled: the threshold line in the Find and Label lists is dashed and
+  reads *unpromised*, the minimap marker is dashed too, and hovering says
+  why. Nothing stops working on it: the Unverified Good count, the Find
+  review walk, To Dataset, Export and Browse all act on the items above the
+  line as before. AutoRun and command-line runs export the same set and
+  record that it was unpromised, in the log and as a `floor` entry beside
+  each detector's `threshold`. Every response that carries a detector's
+  line (the learned sort, `/api/find-label`, `/api/auto-detect`) now
+  carries that `floor` too (replaced by `balance`, #4413, #4421).
+
+- **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
+  pages under `docs/user/howto/` each walk through one task click by click,
+  in the style of the user guide's *Step by step*, on the same Synthetic
+  Media drawings and `Yellow Smileys` detector: checking and correcting Find's
+  calls, borderline matches and Inclusion, how far to trust a detector,
+  exporting matches, starting from an example picture, region voting,
+  getting Autopilot unstuck, Manual mode, moving a detector, importing
+  labels, AutoRun from the command line, combining, Browse, dataset and
+  detector stats, import options, demo datasets, and saving settings. The
+  guide lists them under **How-to guides**, and the in-app Help panel now
+  opens a linked page in place, with **← Back** to return.
+
+- **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
+  #4240). The **Demo → Synthetic Media** image generator used to draw one
+  smiley or a few flat shapes on a plain background. It now draws round
+  cartoon faces in seven colours and seven expressions, piles of shapes and
+  busy little scenes, on plain, polka-dot, striped, checked or gradient
+  backgrounds, with enough near-misses (a frowning yellow face, a smiling
+  orange one, a yellow disc) that "find the yellow smiley faces" is a real
+  search. A new **Seed** field picks which set is made: the same seed always
+  makes the same media, and two seeds make two sets with nothing in common.
+  A synthetic dataset imported before this keeps its old pictures; import
+  Synthetic Media again for the new ones.
+
+- **`--create-detector` makes the detector `--import-labels-into` names**
+  (issue #4238). A label file and a dataset are now enough for a headless run:
+  `--autodetect --import-labels-into NAME --create-detector --label-importer-file …`
+  creates NAME from the imported labels when it doesn't exist, then scores the
+  dataset with it. The detector is registered like one made with **New
+  Detector**, so it shows up on the Dashboard's Drafts tab for the user the run
+  ran as. Its media type comes from the source (a pickle's recorded type, or the
+  importer's `--media-type`), or from `--detector-media-type`. Without the flag
+  a missing detector still fails, now saying which flag would create it.
+  Pipeline files take `import_labels.create: true` and
+  `import_labels.media_type`.
+
+- **Operators can hide the ETA on import progress bars** (issue #4233). On
+  some servers an import's speed is too erratic to predict, and its
+  remaining-time estimate could climb from "About 10 sec left" to "About
+  45 min left" in a single import. Setting `--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA=1` or `"hide_ingest_eta": true` in the server
+  settings file removes the estimate from dataset imports, staging imports
+  and labelset missing-media fetches. Those bars still fill and show their
+  counts, and every other progress bar keeps its estimate. Settings ▸ Server
+  shows whether the switch is on.
+
+- **A friendlier first run on the Dashboard** (issue #4227). An empty
+  Datasets or Detectors panel now shows a working **+** inside its "Click + to
+  add one." message, with an arrow to the real **+** in the panel header so
+  you know where it lives next time. While there are no detectors, the
+  **Drafts** / **AutoRun** tabs are dimmed and locked to Drafts, and the
+  disabled Combine and Delete icons beside **+** are fainter. Once a new
+  detector with no labels is selected next to a matching dataset, a
+  "Click Train to teach your new detector." hint points at **Train**. The
+  RAM / Disk bars now stay hidden until you have a detector; **Settings →
+  Appearance → RAM / Disk bars** switches them to always (**View**) or never
+  (**Hide**). In the New Detector dialog the examples no longer assume sound
+  ("e.g. large books", "e.g. Large Book Detector"), the hint under the example
+  tabs names only what that tab takes, a typed description becomes a
+  title-cased "… Detector" name, and Enter in the name field creates the
+  detector.
+
+- **A click-by-click walkthrough in the user guide** (#4202). The guide opens
+  with *Step by step: your first search* — load a folder of photos, make a
+  detector, train it, load a second folder, and Find — with a screenshot per
+  step whose red numbered markers show exactly where to click, in order. Small
+  pictures of the buttons now sit in the sentences that name them ("click the
+  **+**"), in the in-app Help panel as well as on GitHub, and every screenshot
+  in the guide now shows real photographs (the slide deck's books example)
+  instead of synthetic shapes.
+
+- **Double-click the image to zoom in** (#3934). Looking closer at a borderline
+  item meant reaching for the zoom control below the image, which breaks the
+  rhythm of keyboard voting. A double-click on the image in the Train / Find
+  centre panel now zooms 2x about the point you clicked, the way it already
+  does on the Browse map. Repeat to go deeper; because the viewer caps at 5x,
+  a double-click *at* the cap returns to fit instead of doing nothing, so the
+  mouse alone gets you both in and out. Any rotation you applied is kept, and
+  the gesture stands aside while a region draw owns it (Shift held, or the
+  Marquee toggle on).
+
+- **Stall diagnostics, on by default** (#3853). A rare 5-20 s freeze during
+  labeling in which every in-flight request finishes at once could not be
+  told apart from a slow endpoint by the request timer alone. The app now runs
+  a heartbeat watchdog that, when the interpreter cannot run it for
+  `VTSEARCH_STALL_WATCHDOG_MS` (default 1 s), logs which thread burned the
+  wall clock (or that none did, pointing at memory pressure) and has
+  `faulthandler` dump every thread's frames from inside the stall; logs any GC
+  pause over `VTSEARCH_GC_WARN_MS`; and logs a phase breakdown of the
+  learned-sort retrain, the per-vote labelset rewrite, the labeling-status
+  replay and a vote rehydrate - plus waits on the locks they share - when
+  one exceeds `VTSEARCH_SLOW_PHASE_MS`. `VTSEARCH_LOG_FILE` appends the log
+  (and the dump) to a file, and the SLURM launcher sets it under
+  `data/logs/`, so the pane scrolling away no longer loses the evidence. See
+  `docs/DEPLOYMENT.md` → "Diagnosing a stall".
+
+- **`gc.freeze()` after the model preload** (#3870). A labeling session logged
+  a gen-2 collection of ~300 ms every ~2 minutes - 35 of them over 2,400 votes,
+  flat with label count - and each one holds the GIL, so whatever was in flight
+  froze with it (a vote POST to 333 ms, a learned sort to 351 ms). The pause is
+  dominated by the object graph the process starts with: `transformers`,
+  `torch`, `sklearn`, `cuml`/`numba` contribute millions of tracked containers
+  that every full collection traverses and never frees. The app now freezes
+  that graph into the permanent generation once the preload finishes, which
+  full collections skip. Measured on the GRID over an otherwise identical
+  600-vote run: **ten pauses of 290-360 ms became zero**, and vote POST max
+  fell 377 ms → 121 ms. Datasets and detectors load lazily afterwards and stay
+  collectable, so unloading one still frees its cycles. `VTSEARCH_GC_FREEZE=0`
+  skips it.
+
+- **One switch for a diagnostic session, and a log that says what its bars
+  were** (#3853). `VTSEARCH_DIAGNOSE=1` sets the whole set together — INFO
+  level, a 400 ms request bar, a 150 ms phase bar, and by the coupling a 75 ms
+  GC bar — each as a default, so a variable you set yourself still wins. It
+  deliberately does not pin `VTSEARCH_GC_WARN_MS`, since that would bypass the
+  coupling. Two sessions in that issue produced inconclusive logs for
+  configuration reasons alone: one ran at the shipped 1 s request bar, so a
+  600–900 ms vote was invisible to it, and one got lower bars only through
+  uncommitted edits to two source files. Every run now also logs a
+  `diagnostics config:` line at startup (at WARNING, so a stock deployment has
+  it), because a log that omits its own thresholds makes every absence in it
+  ambiguous — "no slow requests" reads as *nothing was slow* and as *the bar
+  was a second* equally well.
+
+- **New demo dataset: Rico Icons -- screenshots with boxed, labelled icons.**
+  Four new image demos (`rico_icons_s/m/l/a`) built on the Rico UI-semantics
+  corpus: 66,261 Android screenshots whose annotations sit on the *elements*
+  rather than the screen. Each media carries the icon classes visible on it as
+  multi-label categories (32 curated semantics -- Search, Back arrow, Overflow
+  menu, Notification bell, ...) plus one ground-truth bounding box per icon
+  instance. This is the first demo in the tree that boxes something *inside* a
+  screenshot: every other born-digital source (Enrico, RICO App UIs) labels the
+  screen as a whole, and the only two boxed sources (Visual Genome, OpenLogo)
+  are natural photographs. Boxes are stored normalised, exactly like Visual
+  Genome's.
+
+  Unlike every other demo, the four size variants advertise **different**
+  download figures (~0.9 / 1.1 / 1.5 / 8.3 GB). The corpus's screenshots run to
+  ~7.7 GB across 67 shard folders, so the loader fetches the annotation manifest
+  first, slices it, and then pulls only the shard folders that slice actually
+  lands in -- an (S) load costs two folders, not sixty-seven. Re-loading, or
+  moving from (S) to (M), pays only for the shards it adds.
+
+- **Three long-form audio demos: Apollo 11, BirdVox Full Night, and the Nixon
+  White House Tapes.** Every audio demo so far was a corpus of short labelled
+  clips (ESC-50, GTZAN, UrbanSound8K) or, in TUT's case, 32 four-minute street
+  soundscapes. These three are hours-long *unlabelled* recordings where the
+  interesting content is discrete events scattered through the runtime — the
+  Quindar beeps, master alarms and MOCR applause in 174 hours of NASA mission
+  loops; the sub-second bird flight calls in six ten-hour night recordings from
+  BirdVox-full-night; the telephone rings, laughter and room noise under 12
+  tapes' worth of Nixon's secret taping system. Each loads as one
+  undifferentiated bucket, so you clip it yourself, vote on a handful of hits,
+  and let the detector rank the rest. All three sources are freely
+  redistributable (CC PD Mark, Creative Commons, and US federal public domain
+  respectively).
+
+  Unlike the older demos, **each size variant downloads only its own slice** of
+  the source rather than the whole thing — at 5-10 GB apiece that difference
+  matters, so (S) costs a twelfth (Apollo, Nixon) or a sixth (BirdVox) of the
+  figure shown in [`docs/demos.md`](docs/demos.md). BirdVox's ten-hour FLAC
+  units are segmented into 10-minute chunks as they download, since a ten-hour
+  file cannot be handed to the clipper as a single item.
+
+- **Seed importers: a new plugin family for unlabeled seed media.** An
+  external package can now contribute its own tab to the New Detector modal's
+  **Blank** flow, beside Text and the media picker, by registering a
+  `SeedImporter` in the `vtscore.seed_importers` entry-point group. Where a
+  label importer imports media that already carry a good/bad verdict, a seed
+  importer imports a *batch* of media with **no verdict** — items that are
+  "close but not quite" what the user is hunting for. Seeds are stored on the
+  detector as `{"type": "media", "value": …, "labeled": false}`: they steer
+  the first sort (Autopilot ranks against the centroid of every media
+  example) but never become a Good label or vote, so a detector seeded this
+  way starts untrained. Nothing ships in-tree, so an install with no such
+  plugin looks exactly as before. New endpoints: `GET /api/seed-importers`,
+  `POST /api/seed-import/<name>`, `POST /api/seed-import/<name>/options`.
+- **Server-side code can raise a toast.** A new `notify()`
+  (`vtscore/concurrency/notifications.py`) lets any backend code — most
+  usefully a plugin that hit a recoverable problem — tell the user something
+  happened *without* failing the operation: "skipped 3 unreadable files",
+  "the remote API rate-limited us, results are partial". The message is
+  broadcast over a new `notification` channel on `/api/events` and rendered
+  as a toast; toasts gained `warning` and `info` levels alongside the
+  existing `error` and `success`. Plugin subclasses get `self.notify(...)`
+  with their display name attached. Headless runs print the same messages
+  (stderr in text mode, `notification` NDJSON records under
+  `--progress-format json`). Delivery is live-only — there is no replay for
+  a client that connects afterwards. See
+  [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md#notifying-the-user-toasts).
+
+- **The app now tells you when your browser is running an out-of-date build.**
+  `static/` is a build artifact that git does not track, so pulling new code and
+  restarting the server used to leave the browser loading whichever bundle was
+  last built — silently, since the version in Settings is the *server's* and
+  looks current regardless. The bundle now carries the commit it was built from,
+  and a mismatch raises a toast naming both versions and the rebuild command,
+  plus a `⚠ bundle v …` chip beside the version in the Settings footer.
+
+- `vtscore` library distribution with its own [README](vtscore/README.md) and
+  [CHANGELOG](vtscore/CHANGELOG.md). See the
+  [package reference](vtscore/docs/README.md#package-reference) for the
+  documented public surface.
 
 ### Changed
+
+- **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
+  Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
+  another on one CPU core, and most of each fit's time went to statistics over a few dozen
+  points. The fits now run on 4 threads and the statistics take less time. On a V100 a Good
+  takes ~1.4 s at 5,000 pages (was 1.9 s) and ~1.6 s at 50,000 (was 2.1 s). Rankings are unchanged.
+
+- **A plainer Update Sort Example? prompt** (issue #4721). Autopilot's resort prompt no longer
+  opens with a focus ring on its big Keep button (it took focus when you were voting with the
+  arrow keys, so it read as the recommended answer, and the next Space or Enter chose it); focus
+  goes to the dialog itself, and Tab still reaches every control. The paragraph at the top is now
+  one line of read-only fields, **Clicked**, **Positives** and **Sort**, and Toasty, below the
+  dialog, explains: how many positives Autopilot needs before it can move on, and that you can
+  keep going or try a different sort. The left side has a **Keep clicking:** heading over a
+  **Continue** button, which no longer names the sort or the number of labels before the next
+  prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
+  **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
+- **Tabs look like tabs, and form labels read alike** (issues #4718, #4726). Every horizontal tab
+  strip (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
+  Keyboard Shortcuts, and the left panel's **Manual** / **Autopilot** in Train and **Autopilot** /
+  **Review** in Test) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
+  the active one open into the content below with an accent edge on top. New Detector's
+  **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
+  labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
+  **Threshold:** label matches them. The text boxes now carry their instructions (**Describe what
+  this detector should find**) in place of a faint example and a line under the box, and
+  **Detector name** can be left blank: the detector is named after its example (or, on the
+  Trained tab, the imported file), numbered past any detector that already has that name.
+- **No stall report for a slow import at startup.** On a cold page cache the scikit-learn import
+  (through pandas, pyarrow's shared library) held the GIL for just over a second, and the stall watchdog
+  wrote every thread's stack to the terminal of a routine `python app.py`. The watchdog's bar is now
+  `VTSEARCH_STALL_STARTUP_MS` (5 s) from the ML imports until **VTSearch is ready**, so a startup that
+  takes minutes is still reported and a routine import is not; the `diagnostics config` line reports it
+  as `watchdog_startup=`, and a `stall:` line from that window says `bar 5000ms`.
+- **New Detector keeps a preset media type and the Threshold under Advanced** (issue #4717).
+  When a selected dataset has already set and locked the detector's **Media type**, the field
+  moves from the top of the Blank form to **Advanced ▾**, unlock button and all, and stays there
+  if you unlock it. The **Threshold** moves under **Advanced ▾** on both tabs; it still starts on
+  your last pick. A media type nothing has set stays at the top of the form.
+- **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
+  King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
+  click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
+  arrows. On the Dashboard, one step at a time: **+** to add a dataset, select a dataset, a warning
+  when the selected datasets mix kinds of media, **+** to make a detector, select a detector, a
+  warning when the dataset and detector are for different media, **Train** for a new detector,
+  and **Test** or **Find** for a trained one. In the Train view he asks for your first vote while
+  Autopilot runs on a detector with no labels (replacing the faint "Use ← / →" line), and the
+  **Detector Trained** and **Nothing Left to Label** dialogs are now his hints under the top bar's
+  **Dashboard** button; any further vote sends him away. Each hint goes when its step is taken,
+  and has **Hide this hint** and **Hide all hints** boxes kept in your settings (`hidden_hints`,
+  `hide_all_hints`); **Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**.
+  Notifications show his face too: happy, surprised on warnings, sad on errors. The
+  `label_hint_dismissed` setting is gone, and `/favicon-smile.ico` (the plain favicon smiles
+  already) now 404s.
+- **Train and Test fold either side panel to a strip, and open with both folded** (issue #4673).
+  The left panel's fold (Autopilot's collapse, Train only until now) comes to Test's Autopilot tab,
+  and the right panel gains one in both views. Each side folds to a thin strip on its own: click
+  the strip, or drag its divider out, to open it, and the ◀ / ▶ at its top folds it again. The
+  left folds on the Autopilot tab only, since Manual and Review are driven from its list. Both
+  start folded, leaving the item in the middle the room, and each remembers your choice; the
+  Settings modal's Appearance tab has **Hide left panel in Train and Test** and **Hide right panel
+  in Train and Test** in place of Autopilot's **Hide autopilot panel**. A test that reaches
+  **Done!** opens its result on its own. The `hide_autopilot` setting is now `hide_left_panel`,
+  beside a new `hide_right_panel`, both `true` by default; a saved `hide_autopilot` is not
+  carried over.
+- **Choose a detector's Threshold when you create it, and Autopilot follows it** (issue #4665).
+  The New Detector form (Blank and Trained) now has the Threshold control, the same three radios
+  from False Positives to False Negatives as the Manual tab. The choice is saved with the detector,
+  and Autopilot, which has no Threshold control of its own, draws the line, picks and checks at it.
+  Moving the Threshold in Manual or Test saves the new choice on the detector too, so each detector
+  keeps its own instead of all of them sharing your last one. The form starts on your last pick. A
+  detector made before this change, or by AutoFind or the CLI, uses your last pick until you set
+  one. Combine keeps the sources' Threshold when they all agree. Find, AutoFind and
+  `--autodetect` draw each detector's line at the Threshold it keeps.
+- **Add Dataset hides its tab bar when there is only one tab** (issue #4669). A deployment that
+  hides all but one importer category (with `hidden_plugins` and a solo media type, say) used to
+  show a one-tab bar above the form. The modal now opens on that category with no bar. Its importer
+  sub-tabs still show if it holds several, and when it holds one the dialog opens on that importer's
+  form, which is no longer indented.
+- **A detector on a dataset that can't search by text needs an example item** (issue #4666). The
+  New Detector dialog used to let a text-only detector through with a warning that Autopilot
+  could not start until it was trained. **Create** now stays disabled until you add an example
+  item, so Autopilot always has a first sort.
+- **Too few labels give the Goods' centroid, not a half-trained detector** (issue #4643). Test,
+  AutoFind, Find and the CLI used to train a detector from the first Good and Bad, so a detector
+  with 3 Goods and 1 Bad could be tested or exported. Below 3 Goods and 4 Bads (Autopilot's own
+  opening quorum), they now give the Goods' centroid: everything ranked by how close it is to the
+  average of the Goods, cut where the scores split, with no Bad needed. One Good is enough to test
+  a detector, and the Test view and AutoFind results say when the centroid was used and how many
+  more Goods and Bads a trained detector needs. The Threshold control does not move the centroid's
+  line. Labels still save on every vote, and Export labels is not gated: whatever imports the labels
+  gets the same rule. The Train view's own sort is unchanged.
+- **Autopilot's Hard and New picks go where the detector is least sure** (issue #3546). They now
+  sample where the detector's own model puts even odds on an image being a match, instead of a fixed
+  depth below the line that had stopped following the detector. In simulation that finds about 3 more
+  matches per 150 votes at every balance setting; 38% of Hard picks are matches (was 19-24%), and the
+  final detector is as good or better. The `hard` phase's help text now says what it does.
+- **Autopilot stays Done once it gets there** (issue #4621). Labeling on after **Done!** used to
+  drop the phase panel back to **Refine Boundary** whenever a vote knocked an indicator off green,
+  then jump it forward to Done again when the indicator recovered. Done now stays checked, and a
+  seventh step, **Keep Improving.**, takes over: its light shows the lowest of Smart, Stable and
+  Span, and its line says whether Autopilot is offering boundary items or diverse ones, or that all
+  indicators are green. What Autopilot picks is unchanged.
 
 - **A text sort's green region follows the balance** (issue #4603). At a
   balance of beta 1 or below, a typed query's line now keeps about as many
@@ -382,21 +624,6 @@ not list every commit. Use `git log` for the full history.
   (`advisory` or `trim`) and `audited` (the set the walk ended on); the check
   modal and the balance control say which set the ranges describe.
 
-- **Reverted the day after: Autopilot's picks sample at the line − 4 re-cut
-  again under the balance** (issue #4427). The half-argmax cut below was priced
-  on the rank-count reading of the line; on the objective (the withheld images
-  above the threshold the app holds) it was worse at every preset, because its
-  harvest thins the unvoted top and the kept set's edge score climbs.
-- **Autopilot's picks sample higher under the balance** (issue #4409, the
-  pricing in `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
-  The acquisition cut the Hard / New picks sample around is now the score at
-  half the depth of the mixture's F-beta argmax over the unvoted ranking
-  (`ACQUISITION_ARGMAX_FACTOR`), carried on the learned sort's
-  `acq_threshold` as before; it can sit below the line. On the bench that
-  finds about nine more positives per 150 clicks than the old cut four
-  inclusion steps above the line, with the returned set's F-beta up and AP up
-  0.02–0.03 at every preset. With no mixture estimate, and under the
-  deprecated floor, the old cut stands.
 - **The Threshold control is a balance, not a precision floor** (issue #4413,
   the owner's ruling of 2026-10-01 after #4411 priced it). The three radios
   under the False Positives … False Negatives spectrum now pick how to weigh
@@ -544,105 +771,389 @@ not list every commit. Use `git log` for the full history.
   books" becomes **Large books detector**, "NASA rockets" **NASA rockets
   detector**), instead of title-casing every word.
 
-### Added
+- **The precision floor offers three named floors: Lean: Complete, Centered or
+  Correct** (issue #4298). The picker read **At least [50%] right**, with five
+  percentages to pick from, which claimed a precision the cautious estimate
+  behind the line rarely delivers exactly. It now reads **Lean: [Centered]**,
+  with **Complete** (the old 10%), **Centered** (50%, still the default) and
+  **Correct** (90%). The number is gone everywhere the floor is named: the
+  note under the picker says *Confirmed*, *Aimed at Correct: likely 11–73%
+  right (checked 5)* or *Top 32 kept, unchecked · aiming at Centered*, and
+  Find's **Stats** legend reads *Floor: Correct*. What a check measured - its
+  likely range - and the chart's axis stay numbers. A floor
+  that is not one of the three - a 25% or 75% picked before, or one set from
+  the command line or `POST /api/min-precision` - shows as the nearest of
+  them, and the picker moves the detector to it once no sort is running. The
+  CLI's `--min-precision` and the API still take any value.
 
-- **An AutoRun button on the Dashboard runs the selected detectors on the selected datasets**
-  (issue #4529). A third big button beside **Train** and **Find**, enabled on Find's rule (a
-  dataset and a detector ticked, one media type, every detector trained), starts a background
-  AutoRun on every ticked dataset with every ticked detector, loading a dataset first if
-  needed. Drafts run as they are, without moving to the AutoRun tab. The first run to finish
-  opens the AutoRun Results dialog and later ones offer **View results**. The API route behind
-  it, `POST /api/datasets/registry/<id>/autorun`, takes an optional `detector_ids` list; without
-  it, the dataset ⋯ **Run AutoRun** still runs the AutoRun tab.
+- **The Export window says whether it is sending a detector's labels or
+  Find's results** (issue #4079). The same window, with the same
+  destinations, opens from the labeling view, the dashboard and Find, which
+  read as one list mixing two kinds of exporter. Its title is now **Export
+  Detector Labels** or **Export Results**, the button of a destination that
+  opens a website says **Open Labels in …** or **Open Results in …** (it said
+  **Open Labelset in …** everywhere), and the export messages count *labels*
+  or *results* to match.
 
-- **A deployment can list its own docs in the Help modal** (issue #4310). An
-  operator who adds plugins or extensions points users at the docs for them
-  with a new `docs_links` key in `data/settings.json`: an ordered list of
-  `{"label": ..., "url": ...}` objects. The Help modal lists them under **Docs
-  for this server**, above the *Email us* line, on every tab; each opens in a
-  new browser tab. A URL must be an absolute `http(s)` URL or a `/path` on the
-  same host; an entry that isn't, or has no label, is left out, and the startup
-  log names it. Read-only over the API, like the other operator settings.
-- **AutoRun detectors really run on what you import, and on demand** (issue
-  #4252). The Dashboard's AutoRun tab and the user guide promised that AutoRun
-  detectors run on every imported dataset, but only the CLI's `--autodetect`
-  ever ran them. Now a web import runs the importing user's AutoRun detectors
-  on the new dataset once it is saved: the run shows on the dataset's row
-  (cancellable), its results go to the Auto-Find exporter if one is set, and a
-  notice with **View results** opens them. The Add Dataset dialog has a **Run
-  AutoRun detectors on this dataset** checkbox (shown once you have an AutoRun
-  detector) that remembers how you left it, as the new `autorun_on_import`
-  setting. A dataset's ⋯ menu gains **Run AutoRun**, which runs them on an
-  existing dataset right away and opens the results when done. The **AutoRun
-  Results** dialog (the old Auto-Detect Results dialog, which nothing opened)
-  now has a working **Export** button that sends the rows it lists.
+- **Inclusion is gone as a setting; every detector has a precision floor**
+  (issue #4269). The floor replaced the Inclusion stepper in #4246, and nothing
+  in the app wrote Inclusion after that, so the setting and its endpoint are
+  removed: `GET|POST /api/inclusion` answers 404, `PUT /api/settings` drops an
+  `inclusion` key like any unknown key, and `GET /api/settings` no longer
+  reports one. A detector whose floor can promise nothing draws its line at
+  the Inclusion 0 cut, as before; one that promises draws the floor's. There is
+  no "no floor" any more: `POST /api/min-precision` and `PUT /api/settings`
+  refuse `min_precision: null` with a 422, a `null` left in a settings file
+  reads as the default 50%, and the floor picker's *No floor* entry is gone.
+  If you had cleared the floor through the API or the settings file to let
+  Inclusion draw your line, your detectors are back on the 50% floor.
 
-- **Detectors draw their line at a precision floor: "show me what's at least
-  half right"** (issue #4245, the backend of #4224). A detector's line is now
-  the cut that returns as much as it can while at least a set share of it is
-  estimated right. Every detector starts at **50%**, taken from your new
-  `min_precision` setting, and each keeps its own. The estimate is cautious: it
-  only promises once it has seen about ten positives among the votes it holds
-  back to check itself, and it only counts votes you made off the learned sort
-  (Autopilot's Hard picks, or working down a list sorted by the detector). Until
-  then, or when no cut can reach the floor, the line stays exactly where
-  Inclusion 0 puts it, so nothing you see empties or jumps. A set floor wins
-  over Inclusion: while the Inclusion stepper is still on screen it does not
-  move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
-  or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
-  on-screen control that replaces the stepper arrives in #4246. New endpoint:
-  `GET|POST /api/min-precision` (removed with the floor, #4421).
+- **The Inclusion stepper is gone: pick a precision floor instead** (issue
+  #4246). Where the Manual tab and Find's left pane had the -10..10
+  Inclusion box, they now read **At least [50%] right**, with **10%**,
+  **25%**, **50%**, **75%** and **90%** to pick from. A note under it says what the
+  floor is doing to the line: *At least 50% right* with how many items it
+  returns, *Can't reach 50% on this dataset*, or *Not enough evidence yet*
+  with the Good votes it has - the last two showing the default cut, as the
+  dashed *unpromised* line already said. The floor is the detector's own,
+  seeded from the last one you picked. In Find, **Stats** draws the floor
+  across its precision chart and says whether the line keeps it; the chart's
+  "Current cut (incl N)" legend is gone, and so are the unused `sweep` and
+  `inclusion` fields of `GET /api/find/stats`, which gains the line's
+  `floor`. Inclusion itself is retired too (issue #4269, below). The how-to
+  *Catch the borderline matches* now covers the floor.
 
-- **An unpromised line says so** (issue #4247). When a detector can't yet
-  promise its precision floor - too little evidence, or no cut on the
-  dataset reaches it - its line stays at the Inclusion 0 cut and is now
-  labelled: the threshold line in the Find and Label lists is dashed and
-  reads *unpromised*, the minimap marker is dashed too, and hovering says
-  why. Nothing stops working on it: the Unverified Good count, the Find
-  review walk, To Dataset, Export and Browse all act on the items above the
-  line as before. AutoRun and command-line runs export the same set and
-  record that it was unpromised, in the log and as a `floor` entry beside
-  each detector's `threshold`. Every response that carries a detector's
-  line (the learned sort, `/api/find-label`, `/api/auto-detect`) now
-  carries that `floor` too (replaced by `balance`, #4413, #4421).
+- **Find Stats charts precision against how many items are returned** (issue
+  #4242). The chart that plotted wrong and missed matches at each Inclusion
+  stop now reads down the ranked list: for the top N items, on a log-scale
+  count axis, it draws the precision VTSearch estimates (a cautious lower
+  bound from the detector's own held-out votes, shown once they include 10
+  Good ones) and the precision of the items you have checked. A dashed line
+  marks the current cut, the line under the chart reads both numbers there,
+  and hovering reads them at any count. **Kept rate** now counts only the
+  matches you checked, with the count beside it ("7 of 10 checked"); it used
+  to count every unchecked match as right, so it read close to 100% however
+  the checks went.
 
-- **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
-  pages under `docs/user/howto/` each walk through one task click by click,
-  in the style of the user guide's *Step by step*, on the same Synthetic
-  Media drawings and `Yellow Smileys` detector: checking and correcting Find's
-  calls, borderline matches and Inclusion, how far to trust a detector,
-  exporting matches, starting from an example picture, region voting,
-  getting Autopilot unstuck, Manual mode, moving a detector, importing
-  labels, AutoRun from the command line, combining, Browse, dataset and
-  detector stats, import options, demo datasets, and saving settings. The
-  guide lists them under **How-to guides**, and the in-app Help panel now
-  opens a linked page in place, with **← Back** to return.
+- **The Smart indicator measures every detector at Inclusion 0** (issue
+  #4243). Smart asks whether the detector is still getting better, by
+  re-scoring the recent detectors against your current votes. It used to
+  price their mistakes at your Inclusion and measure each at the line it
+  showed you. It now counts a false alarm and a miss equally, at the line
+  each detector would draw at Inclusion 0, whatever Inclusion you have set.
+  Nothing changes at the default Inclusion. This keeps the light steady once
+  a precision floor, rather than Inclusion, sets the line (#4224).
 
-- **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
-  #4240). The **Demo → Synthetic Media** image generator used to draw one
-  smiley or a few flat shapes on a plain background. It now draws round
-  cartoon faces in seven colours and seven expressions, piles of shapes and
-  busy little scenes, on plain, polka-dot, striped, checked or gradient
-  backgrounds, with enough near-misses (a frowning yellow face, a smiling
-  orange one, a yellow disc) that "find the yellow smiley faces" is a real
-  search. A new **Seed** field picks which set is made: the same seed always
-  makes the same media, and two seeds make two sets with nothing in common.
-  A synthetic dataset imported before this keeps its old pictures; import
-  Synthetic Media again for the new ones.
+- **The User Guide is illustrated with the yellow smiley example** (issue
+  #4240). Every screenshot in [the guide](docs/user/USER_GUIDE.md) now follows
+  a detector learning to find the yellow smiley faces among Synthetic Media's
+  drawings, instead of books in COCO photographs, and *Step by step* says which
+  Size and Seed make the very same pictures, so you can follow along without
+  any data of your own.
 
-- **`--create-detector` makes the detector `--import-labels-into` names**
-  (issue #4238). A label file and a dataset are now enough for a headless run:
-  `--autodetect --import-labels-into NAME --create-detector --label-importer-file …`
-  creates NAME from the imported labels when it doesn't exist, then scores the
-  dataset with it. The detector is registered like one made with **New
-  Detector**, so it shows up on the Dashboard's Drafts tab for the user the run
-  ran as. Its media type comes from the source (a pickle's recorded type, or the
-  importer's `--media-type`), or from `--detector-media-type`. Without the flag
-  a missing detector still fails, now saying which flag would create it.
-  Pipeline files take `import_labels.create: true` and
-  `import_labels.media_type`.
+- **`--import-labels-into` runs the detector it imports into, and only that
+  one** (issue #4235). Importing labels from the command line used to merge
+  them into the detector and then score with whatever was on the settings
+  file's Auto-Find list, so the detector you had just labelled only ran if you
+  had first opened the UI and moved it to **AutoRun**. Now
+  `--autodetect --import-labels-into NAME --label-importer-file …` scores with
+  NAME alone, whether or not it is on AutoRun, and nothing else on AutoRun
+  runs with it. A pipeline file's `import_labels:` block does the same unless
+  the file also lists `detectors:`. `--dry-run` shows the detector under
+  `Detectors (1; overrides the settings' Auto-Find list)`.
+
+- **`--autodetect` saves the dataset it imports to the dashboard** (issue
+  #4226). A CLI run used to import a dataset, score it, and throw it away. It
+  now imports through the same pipeline as **Add dataset**, saves the result,
+  and scores that saved copy, so the next time the UI is opened the dataset is
+  there (owned by `--user`, or the default user). With no Auto-Find detector
+  for the dataset, the import still succeeds and the run exits 0 with a
+  `Detection skipped` note, which makes `--autodetect` a plain headless import
+  too. **Add `--tempimport` to keep the old import-and-discard behaviour** —
+  cron jobs that should not grow the dashboard need it. `--tempimport` implies
+  `--autodetect`. `--stream-results` now requires `--tempimport`, since a
+  streamed source is never held whole and so cannot be saved. Pipeline files
+  follow the same default and take a `tempimport: true` key.
+
+- **The Autopilot "Update Sort Example?" prompt says what it is asking**
+  (issue #4200). It used to show the current example and ask whether to keep
+  it. It now reports how the sort has gone ("You've clicked 10 times and only
+  found 1 positive while sorting based on …") and lays out the two answers
+  side by side: **Keep clicking** that sort for the next interval on the
+  left, **Supply a different sort** (text or media example) on the right.
+
+- **Structural (instance-matching) search is ~3x faster on both of its hot
+  paths** (#3900). Ingest with the `sift_vlad` embedder no longer runs SIFT
+  detection at the source's full resolution: detection cost scales with pixel
+  count while the keypoint set is capped regardless, so a high-resolution
+  source was paying many times over for the same descriptors. Detection is now
+  bounded by `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP, `0` opts
+  out) — measured 2.8x faster on a 4.5 MP corpus, and it *improves* the
+  verified-pair rate, because the keypoints an uncapped detection spends its
+  budget on sit in fine texture that does not survive a rescale. Separately,
+  the Stage-2 geometric re-rank now matches the whole shortlist in one batched
+  `torch` computation instead of a `cv2.BFMatcher` call per pair — 2.9x on CPU
+  with identical ranking, and it is the one part of the pipeline that uses a
+  GPU when there is one.
+
+- **Every request and phase now reports CPU and GC time beside wall time**
+  (#3853). A 4918 ms vote POST that did 12 ms of work and one that did 4900 ms
+  are the same number to a `perf_counter` pair, which is why the captured stall
+  could be seen but not explained: six of the eight slow votes in that trace
+  were slow *alone*, so something released the GIL, and nothing recorded
+  whether it had blocked or merely been descheduled. `slow request` and
+  `slow phase` lines now carry `cpu=` and `gc=`, and below the slow bar (at
+  `VTSEARCH_LOG_LEVEL=INFO`) every request is logged as `request trace:` with
+  the same figures, so a diagnostic run can add up a vote cycle instead of
+  hunting for an outlier in it -- the shape the remaining felt pauses actually
+  have. `VTSEARCH_GC_WARN_MS`, left unset, now tracks `VTSEARCH_SLOW_PHASE_MS`
+  rather than sitting at a fixed 200 ms: a collection under the GC bar is
+  invisible but still lands inside whatever phase was running, so the old
+  default silently inflated phases whenever the phase bar was lowered below it.
+
+- **The Smart indicator no longer flaps on a category that has plateaued**
+  (#3832). Smart called the error cost "still declining" whenever a line
+  fitted through the last ten models sloped down by more than 1.5% of the mean
+  per step - with no notion of how much that cost bounces around between
+  retrains. On a category the embedding cannot resolve the cost is flat on
+  average but noisy, so the test fired on a quarter to a third of windows with
+  nothing having changed about the detector, and Autopilot's phase display
+  bounced between Done and Boundary with it. A decline now has to be bigger
+  than the window's own scatter (the slope at least two standard errors below
+  zero) before it holds the light yellow. A genuine improvement still does:
+  a run losing 5% of its cost per step reads yellow on 99% of windows, and the
+  synthetic dice reproduction's cleanly separable control reaches Done on the
+  same click it did before and never leaves. The indicator's tooltip says
+  which kind of green it is, and the status carries `slope_t` beside `slope`.
+
+- **The Stable indicator no longer waits for a category the embedding cannot
+  separate, and no longer degenerates as the haystack fills up** (#3831). It
+  now counts only *confident* flips - items that sat clear of the cut under
+  both the previous detector and this one - and divides by the whole pool
+  rather than the shrinking unlabeled remainder. A pool of dice labeled by
+  their roll used to hold Autopilot in the boundary phase for 127 of 150
+  clicks because the d8s flipped every retrain; it now reaches Done and
+  stays there for most of the run, while a cleanly separable category stops
+  at exactly the click it did before. When Stable goes green with items
+  still wobbling across the cut, the indicator tooltip and the Autopilot
+  Done step say so ("the remaining ambiguity looks irreducible in this
+  embedding") instead of implying the pool converged.
+
+- **Opening a saved dataset paces its progress bar for the branch its coverage
+  atlas actually takes.** That step either restores the atlas cached in the
+  dataset's pickle (~10 ms) or rebuilds a hierarchical k-means from scratch
+  (0.0026 s/item, so seconds at the sizes anybody has swept and minutes only
+  near the auto-build threshold) - measured 110-700x apart on the same
+  datasets - and a
+  timing profile could hold only one number for both, so whichever it held made
+  the other case's bar up to 0.94 of a bar wrong. A profile can now carry
+  coefficients for each branch, and the load route names the branch it is taking
+  as soon as it knows, before the expensive part starts. It also remembers on
+  the registry entry which branch that dataset took last time, so the weights
+  are right from the first update rather than from the middle of the load.
+  Pacing only: nothing about what is loaded or stored changes.
+
+- **Your Dashboard selection now survives leaving the Dashboard.** Going to
+  Train and back used to drop the highlighted rows and blank the top bar to
+  "Select a dataset" -- even though the pair you had just opened was still
+  loaded -- because the selection lived on the Dashboard component and died
+  with it. It now lives in `DashboardSelectionService`, so the rows come back
+  highlighted and the top bar keeps naming them. The detector grid's
+  Drafts/AutoRun tab travels with the selection it scopes, so returning can no
+  longer leave a hidden AutoRun row feeding the section actions. (Issue #3445.)
+
+- **Switching between two loaded detectors no longer throws away the labeling
+  indicators' cached work.** The Smart / Stable per-step cache retrains one MLP
+  per label-history step, and it used to be a single slot stamped with whichever
+  `(dataset, detector)` pair last touched it -- so re-selecting a detector you
+  had already been labeling in dropped the other one's cache outright, and the
+  next `/api/labeling-status` poll rebuilt it from step zero. The cache is now
+  keyed by the pair, with the three most recent kept warm, so an A-to-B-and-back
+  switch costs nothing. The stability pool tensor -- the largest thing the cache
+  holds -- is keyed by dataset instead and shared across that dataset's
+  detectors, so keeping several pairs warm does not multiply memory. (Issue
+  #3390.)
+
+- **"Enrich descriptions" is now a per-model choice, and can no longer make
+  your search worse.** The setting averages a typed query over several
+  phrasings ("the sound of a dog", "a recording of a dog", "a dog", ...)
+  instead of embedding it as typed. Measured across 22 evaluation collections
+  and 560 queries, that helps on some models and hurts on others: it is a gain
+  on CLAP General (audio) and X-CLIP (video), and a loss on SigLIP (images),
+  E5 and BGE (text) and the faster CLAP -- for text it ranked *worse on all 45
+  categories tested*. The phrasings are now attached to the models they
+  actually help, so turning the setting on is simply a no-op for the rest,
+  rather than a small silent cost. The default stays **off**. (Issue #3341,
+  following #3127.)
+
+- **The Settings -> Sorting "Enrich descriptions" tooltip described a
+  different feature.** It read "Prepend item filenames to text-sort queries to
+  improve matching for named items"; the setting has never touched filenames.
+  It averages the text-sort query over the embedder's phrasing templates
+  ("a photo of ...", "the sound of ...") instead of embedding it as typed. The
+  tooltip now says that, and says where it helps: the #3127 measurement across
+  every media-type default found it worth +0.014 AP on CLAP audio search,
+  inert on images, and -0.057 on text search -- so the default stays **off**.
+  (Issue #3127.)
+
+- **The calibrated cutoff no longer counts your own votes in its picture of
+  the collection.** The threshold estimator reads score distributions over
+  the whole collection to place the Good/Bad line; the voted items' scores
+  in those distributions are optimistically shifted (the models were trained
+  on them), so they are now dropped before the line is placed. On large
+  collections nothing visibly changes; on small ones (demo-sized, or heavy
+  voting) the cutoff gets slightly more accurate. The correction steps
+  aside when almost everything has been voted — a tiny leftover pool is a
+  worse guide than the full collection — so no regime pays for it.
+  (Issue #3308.)
+
+- **The Tuning-fraction default is now per-model.** With no explicit setting,
+  the Train/Calibrate split of each calibration fold is 0.3 (70% Train / 30%
+  Calibrate) for detectors that learn in a single-vector space and stays 0.5
+  for patch-grid models — the #3287 measurement found more Train buys
+  −0.012 to −0.013 cost on single-vector embedders in every vote band, while
+  patch embedders want the incumbent 0.5 in both their voting styles. The
+  Settings → Sorting "Tuning fraction" field now reads empty ("auto") by
+  default; typing a value pins it for every detector as before, and clearing
+  the field returns to the automatic per-model default. Stored settings that
+  already carry an explicit `calibration_fraction` keep winning unchanged.
+  (Issues #3287/#3290.)
+
+- **The Add Dataset dialog has one consistent vertical rhythm, and Advanced
+  really is hidden.** The Folder, Manifest and Demo forms all laid their fields
+  out differently: a field's own controls could sit further apart than two
+  unrelated fields, the "Folder to import" path and its **Browse** button were
+  separated as if they were different questions while the checkboxes below ran
+  together with no gap at all, and the folder browser opened as loose rows with
+  no frame. Every field in every importer now shares the same spacing, the path
+  input and **Browse** sit on one line (matching the Manifest importer's file
+  field), and the browser opens in a framed panel under it. Separately, the
+  **Advanced** section now shows *nothing* until you open it: **Embedder** and
+  the Demo importer's **Convert to** used to appear on the collapsed form
+  whenever their value differed from the default — which, on a demo dataset
+  that picks its own embedder, was most of the time. Any non-default choice is
+  still disclosed, in the **Advanced** toggle's tooltip. (#3215)
+
+- **Autopilot's "you're done" hand-off is a dialog you answer, and it appears
+  once.** Reaching the end of training used to raise a toast that counted down
+  and then returned you to the Dashboard unless you cancelled it — and because
+  the countdown re-armed on every entry to the Train window, anyone who thought
+  their detector needed more work had to dismiss the same redirect each time
+  they came back. It is now a **Detector Trained** dialog with two plain
+  buttons, **Continue Training** and **Head to Dashboard**, and nothing happens
+  until you pick one. It is also raised only for the autopilot run that
+  actually trained the detector: continuing afterwards, or picking up a
+  detector already trained on another dataset, no longer announces anything.
+  (#3201)
+
+- **The detector head is now a linear SVM.** Every trained detector — new
+  detectors, saved ones re-derived from their labels, and the per-step models
+  behind the labeling-progress indicators — is fitted to the class-balanced
+  maximum-margin boundary between your Good and Bad votes (scikit-learn's
+  `LinearSVC`) instead of by logistic regression. It is the same shape of model
+  as before, a single linear boundary over the embedding space, so nothing
+  about detector files, exports, or the ONNX bundle changes: only where the
+  boundary lands. Measurements in a separate environment put the SVM's ranking
+  clearly ahead of the logistic head's, and while *why* is still under
+  investigation, the best-measured head is the one that ships. Detector scores
+  will move — a detector retrained after this change can put items in a
+  different order and cut at a different threshold than the same votes did
+  before. The regularisation strength is tunable via `VTSEARCH_SVM_HEAD_C`
+  (default `1.0`), and `VTSEARCH_TRAIN_EPOCHS` / `VTSEARCH_TRAIN_PATIENCE` no
+  longer affect a detector fit. See [`docs/ML.md`](docs/ML.md).
+
+- **A seed importer's results now appear on its own tab.** Running a seed
+  importer in the New Detector modal used to switch the user to the media
+  tab, where the batch had been appended — an odd jump mid-import, and one
+  that hid the form they were still working in. The example stack is now
+  mirrored under each seed importer's form, so seeds land in view where they
+  were added. It stays one list: the mirrored rows carry the same Seed badges
+  and Remove buttons, and edits from either tab hit the same stack. Picking an
+  exemplar by hand still lands on the media tab, which is where the picker
+  lives. (#3192)
+
+- **Image preprocessing now names its backend instead of inheriting one.**
+  Every image embedder builds its processor by asking `transformers` for the
+  `torchvision` backend outright (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, new
+  default `torchvision`; set `auto` for the previous behaviour). Nothing in the
+  code used to say which implementation resized and normalised an image, and
+  the answer changed *inside* the version range we pin: `transformers` 5
+  removed the `Fast` suffix, so the bare `SiglipImageProcessor` means the PIL
+  implementation below 5 and the torchvision one at 5+, while
+  `requirements/image-embedders.txt` asks only for `>=4.49`. The two are not
+  interchangeable — they disagree on 53–59% of pixel elements and by a median
+  `1 − cos` of ~1.5e-04 on `siglip2_l`, 50× the perturbation half precision
+  causes — so two hosts resolving different wheels produced different vectors
+  from identical code and weights, with nothing recording which. **On a
+  `transformers` 5 host this changes nothing** (the pre-embedded pile is
+  torchvision-built, reproduced to 7.6e-13). **On a 4.x host it changes the
+  vectors**, which is the point: that host was quietly disagreeing with the
+  pile and now agrees with it. Because a backend request is a request and not a
+  guarantee — DINOv3 ships no PIL implementation, and `transformers` warns and
+  falls back rather than raising — each embedder now reads back the class it
+  actually loaded and logs a warning naming itself when it differs. (#3173)
+
+- **Bad pre-computed vectors are now rejected at import, with an error that says
+  what is wrong.** Importing an `.npz` manifest of pre-computed embeddings used
+  to accept anything: vectors of the wrong width for the embedder the manifest
+  named, `NaN`/infinite rows from a failed embed, ragged archives, `float64` or
+  half-precision exports. None of those failed at import. A wrong-width row
+  surfaced later as `could not broadcast input array from shape (768,) into
+  shape (1152,)` on an unrelated search, naming neither the file nor the
+  manifest; a non-finite row never raised at all and silently corrupted every
+  score and threshold it touched. Manifests are now checked as they are read —
+  including against the declared embedder's own dimension, so an archive that
+  says `siglip2_l` while shipping 768-dim rows is caught immediately — and
+  vectors are widened to `float32`, so a half-precision or double-precision
+  export imports cleanly instead of leaving the dataset mixed. If a dataset
+  still ends up holding two widths, sorting and training now name the offending
+  item and both dimensions instead of failing with a bare numpy shape error.
+- **Audio now defaults to the larger CLAP checkpoint.** New audio datasets and
+  text queries use `clap_general` (`laion/larger_clap_general`, shown as "CLAP
+  (general, larger)") instead of `clap`. It wins every measured retrieval
+  comparison on ESC-50, at roughly 2.1x the embedding time. The old checkpoint
+  is still selectable as "CLAP (general, faster)" for large collections where
+  ingest speed matters more, and existing datasets and detectors built with it
+  keep working. Cached demo-dataset pickles built with `clap` are re-embedded
+  the next time they are loaded with the new default.
+- **Library extracted.** The reusable core of VTSearch was carved out into a
+  separate `vtscore/` package. The user-facing application surface (the Flask
+  app, the Angular SPA, the settings system, the auth layer) is unchanged.
+  Internally, every library-candidate import path moved from `vtsearch.<lib>`
+  to `vtscore.<lib>`; `vtsearch/state/__init__.py` is now a thin app-tier shim
+  that re-exports `vtscore.state` and layers the proxy view (`medias`,
+  `good_votes`, …) on top. See
+  [`vtscore/docs/architecture.md`](vtscore/docs/architecture.md) for the
+  seven seams the refactor introduced.
+- **Plugin entry-point groups renamed.** Library-tier plugin families now
+  register under `vtscore.<family>` instead of `vtsearch.<family>`
+  (`vtscore.importers`, `vtscore.label_importers`, `vtscore.labelset_sources`,
+  `vtscore.media_sources`, `vtscore.converters`). Settings-related families
+  remain under `vtsearch.<family>` because they stay app-side
+  (`vtsearch.settings_importers`, `vtsearch.settings_exporters`,
+  `vtsearch.settings_sources`). Third-party plugin authors targeting the
+  library tier need to update their `pyproject.toml` entry-point group
+  names.
 
 ### Removed
+
+- **Imports no longer show a time-left estimate, and the switches around it are gone**
+  (issue #4667). The estimate on dataset imports, staging imports and labelset
+  missing-media fetches swung too wildly to trust, so it is gone for everyone; those bars
+  still fill, count and name their step, and every other progress bar keeps its estimate.
+  With it go the operator switch that hid it (`--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA`, `"hide_ingest_eta"` and its Settings ▸ Server row) and the
+  per-deployment timing profile that tuned the progress bars' pacing
+  (`VTSEARCH_TIMING_PROFILE`, `VTSEARCH_TIMING_RECORD`,
+  `scripts/profiling/tune_timing_profile.py`). A server started with `--hide-ingest-eta`
+  must drop the flag, which is no longer accepted; the two environment variables and the
+  settings key are ignored. Every bar now paces from the weights the app ships with.
+
+- **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
+  and Evidence coverage chips, its 2×2 of your checks and its precision chart
+  now live in the Autopilot tab's result pane; the chart draws the test's
+  ranges at every band edge instead of the *Checked by you* curve, which
+  counted only what the boundary walk happened to serve.
 
 - **The precision floor** (issue #4421). The precision/recall balance
   (#4413) is the only preference the line is drawn at, so the floor it
@@ -657,6 +1168,38 @@ not list every commit. Use `git log` for the full history.
   `min_precision`, and its status is `running`, `checked` or `cancelled`).
   `GET|POST /api/balance` no longer reports `line_preference`, and the
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
+
+- **Four REST endpoints with no consumer are gone.** `GET /api/dashboard/dataset-info`,
+  `PUT /api/dashboard/dataset-rename`, `POST /api/dataset/load-folder` and
+  `POST /api/votes/seed-from-examples` had no caller anywhere in the app -- the
+  SPA reads dataset metadata and renames through `/api/datasets/registry`,
+  loads folders through the generic importer flow, and seeds examples as part
+  of loading a detector. Nothing in the UI changes. An out-of-repo script
+  calling one of them directly will now get a 404; the same work is available
+  through `GET /api/datasets/registry`,
+  `PUT /api/datasets/registry/{id}/rename`,
+  `POST /api/dataset/import/server_folder`, and detector load respectively.
+  (Issue #3438.)
+
+- **Old settings-file shapes are no longer migrated forward.** VTSearch used to
+  carry three shims for settings written by older versions: a one-shot rewrite
+  that split a pre-tier-split `data/settings.json` across the two files, and a
+  pair of coercions that read a pre-enum boolean `show_animations` as
+  `"show"` / `"hide"`. `CLAUDE.md`'s backwards-compatibility policy allows
+  breaking saved data freely and forbids exactly these shims, so they are gone.
+  A value the settings models reject -- one written before a field changed
+  shape, or a hand-edit out of range -- is now **ignored on load** and the
+  field's default applies. Your file is never rewritten, so nothing is lost:
+  fix the value and it takes effect on the next start. Concretely, a boolean
+  `show_animations` now reads as `"show"` (the default) rather than mapping
+  True-ish to `"show"` and False-ish to `"hide"`, and `PUT /api/settings` now
+  rejects the boolean with a 422 instead of silently rewriting it. Per-user
+  keys sitting in `data/settings.json` are inert rather than migrated into the
+  default user's file. The one deliberate tier exception is unchanged: the
+  built-in `default` user still reads `autofind_detectors`,
+  `autofind_exporter` and `autofind_exporter_field_values` through to
+  `data/settings.json`, which is what keeps the CLI's `--settings` flat-file
+  workflow working. (Issue #3413.)
 
 ### Fixed
 
@@ -848,284 +1391,6 @@ not list every commit. Use `git log` for the full history.
   deliberately suppressed while focus sits in a text field, so left/right did
   nothing until you clicked elsewhere. Submitting the sort now blurs the box.
   A query you are still typing keeps focus, as before.
-
-### Changed
-
-- **The precision floor offers three named floors: Lean: Complete, Centered or
-  Correct** (issue #4298). The picker read **At least [50%] right**, with five
-  percentages to pick from, which claimed a precision the cautious estimate
-  behind the line rarely delivers exactly. It now reads **Lean: [Centered]**,
-  with **Complete** (the old 10%), **Centered** (50%, still the default) and
-  **Correct** (90%). The number is gone everywhere the floor is named: the
-  note under the picker says *Confirmed*, *Aimed at Correct: likely 11–73%
-  right (checked 5)* or *Top 32 kept, unchecked · aiming at Centered*, and
-  Find's **Stats** legend reads *Floor: Correct*. What a check measured - its
-  likely range - and the chart's axis stay numbers. A floor
-  that is not one of the three - a 25% or 75% picked before, or one set from
-  the command line or `POST /api/min-precision` - shows as the nearest of
-  them, and the picker moves the detector to it once no sort is running. The
-  CLI's `--min-precision` and the API still take any value.
-
-- **The Export window says whether it is sending a detector's labels or
-  Find's results** (issue #4079). The same window, with the same
-  destinations, opens from the labeling view, the dashboard and Find, which
-  read as one list mixing two kinds of exporter. Its title is now **Export
-  Detector Labels** or **Export Results**, the button of a destination that
-  opens a website says **Open Labels in …** or **Open Results in …** (it said
-  **Open Labelset in …** everywhere), and the export messages count *labels*
-  or *results* to match.
-
-- **Inclusion is gone as a setting; every detector has a precision floor**
-  (issue #4269). The floor replaced the Inclusion stepper in #4246, and nothing
-  in the app wrote Inclusion after that, so the setting and its endpoint are
-  removed: `GET|POST /api/inclusion` answers 404, `PUT /api/settings` drops an
-  `inclusion` key like any unknown key, and `GET /api/settings` no longer
-  reports one. A detector whose floor can promise nothing draws its line at
-  the Inclusion 0 cut, as before; one that promises draws the floor's. There is
-  no "no floor" any more: `POST /api/min-precision` and `PUT /api/settings`
-  refuse `min_precision: null` with a 422, a `null` left in a settings file
-  reads as the default 50%, and the floor picker's *No floor* entry is gone.
-  If you had cleared the floor through the API or the settings file to let
-  Inclusion draw your line, your detectors are back on the 50% floor.
-
-- **The Inclusion stepper is gone: pick a precision floor instead** (issue
-  #4246). Where the Manual tab and Find's left pane had the -10..10
-  Inclusion box, they now read **At least [50%] right**, with **10%**,
-  **25%**, **50%**, **75%** and **90%** to pick from. A note under it says what the
-  floor is doing to the line: *At least 50% right* with how many items it
-  returns, *Can't reach 50% on this dataset*, or *Not enough evidence yet*
-  with the Good votes it has - the last two showing the default cut, as the
-  dashed *unpromised* line already said. The floor is the detector's own,
-  seeded from the last one you picked. In Find, **Stats** draws the floor
-  across its precision chart and says whether the line keeps it; the chart's
-  "Current cut (incl N)" legend is gone, and so are the unused `sweep` and
-  `inclusion` fields of `GET /api/find/stats`, which gains the line's
-  `floor`. Inclusion itself is retired too (issue #4269, below). The how-to
-  *Catch the borderline matches* now covers the floor.
-
-- **Find Stats charts precision against how many items are returned** (issue
-  #4242). The chart that plotted wrong and missed matches at each Inclusion
-  stop now reads down the ranked list: for the top N items, on a log-scale
-  count axis, it draws the precision VTSearch estimates (a cautious lower
-  bound from the detector's own held-out votes, shown once they include 10
-  Good ones) and the precision of the items you have checked. A dashed line
-  marks the current cut, the line under the chart reads both numbers there,
-  and hovering reads them at any count. **Kept rate** now counts only the
-  matches you checked, with the count beside it ("7 of 10 checked"); it used
-  to count every unchecked match as right, so it read close to 100% however
-  the checks went.
-
-- **The Smart indicator measures every detector at Inclusion 0** (issue
-  #4243). Smart asks whether the detector is still getting better, by
-  re-scoring the recent detectors against your current votes. It used to
-  price their mistakes at your Inclusion and measure each at the line it
-  showed you. It now counts a false alarm and a miss equally, at the line
-  each detector would draw at Inclusion 0, whatever Inclusion you have set.
-  Nothing changes at the default Inclusion. This keeps the light steady once
-  a precision floor, rather than Inclusion, sets the line (#4224).
-
-- **The User Guide is illustrated with the yellow smiley example** (issue
-  #4240). Every screenshot in [the guide](docs/user/USER_GUIDE.md) now follows
-  a detector learning to find the yellow smiley faces among Synthetic Media's
-  drawings, instead of books in COCO photographs, and *Step by step* says which
-  Size and Seed make the very same pictures, so you can follow along without
-  any data of your own.
-
-- **`--import-labels-into` runs the detector it imports into, and only that
-  one** (issue #4235). Importing labels from the command line used to merge
-  them into the detector and then score with whatever was on the settings
-  file's Auto-Find list, so the detector you had just labelled only ran if you
-  had first opened the UI and moved it to **AutoRun**. Now
-  `--autodetect --import-labels-into NAME --label-importer-file …` scores with
-  NAME alone, whether or not it is on AutoRun, and nothing else on AutoRun
-  runs with it. A pipeline file's `import_labels:` block does the same unless
-  the file also lists `detectors:`. `--dry-run` shows the detector under
-  `Detectors (1; overrides the settings' Auto-Find list)`.
-
-- **`--autodetect` saves the dataset it imports to the dashboard** (issue
-  #4226). A CLI run used to import a dataset, score it, and throw it away. It
-  now imports through the same pipeline as **Add dataset**, saves the result,
-  and scores that saved copy, so the next time the UI is opened the dataset is
-  there (owned by `--user`, or the default user). With no Auto-Find detector
-  for the dataset, the import still succeeds and the run exits 0 with a
-  `Detection skipped` note, which makes `--autodetect` a plain headless import
-  too. **Add `--tempimport` to keep the old import-and-discard behaviour** —
-  cron jobs that should not grow the dashboard need it. `--tempimport` implies
-  `--autodetect`. `--stream-results` now requires `--tempimport`, since a
-  streamed source is never held whole and so cannot be saved. Pipeline files
-  follow the same default and take a `tempimport: true` key.
-
-- **The Autopilot "Update Sort Example?" prompt says what it is asking**
-  (issue #4200). It used to show the current example and ask whether to keep
-  it. It now reports how the sort has gone ("You've clicked 10 times and only
-  found 1 positive while sorting based on …") and lays out the two answers
-  side by side: **Keep clicking** that sort for the next interval on the
-  left, **Supply a different sort** (text or media example) on the right.
-
-- **Structural (instance-matching) search is ~3x faster on both of its hot
-  paths** (#3900). Ingest with the `sift_vlad` embedder no longer runs SIFT
-  detection at the source's full resolution: detection cost scales with pixel
-  count while the keypoint set is capped regardless, so a high-resolution
-  source was paying many times over for the same descriptors. Detection is now
-  bounded by `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP, `0` opts
-  out) — measured 2.8x faster on a 4.5 MP corpus, and it *improves* the
-  verified-pair rate, because the keypoints an uncapped detection spends its
-  budget on sit in fine texture that does not survive a rescale. Separately,
-  the Stage-2 geometric re-rank now matches the whole shortlist in one batched
-  `torch` computation instead of a `cv2.BFMatcher` call per pair — 2.9x on CPU
-  with identical ranking, and it is the one part of the pipeline that uses a
-  GPU when there is one.
-
-### Added
-
-- **Operators can hide the ETA on import progress bars** (issue #4233). On
-  some servers an import's speed is too erratic to predict, and its
-  remaining-time estimate could climb from "About 10 sec left" to "About
-  45 min left" in a single import. Setting `--hide-ingest-eta`,
-  `VTSEARCH_HIDE_INGEST_ETA=1` or `"hide_ingest_eta": true` in the server
-  settings file removes the estimate from dataset imports, staging imports
-  and labelset missing-media fetches. Those bars still fill and show their
-  counts, and every other progress bar keeps its estimate. Settings ▸ Server
-  shows whether the switch is on.
-
-- **A friendlier first run on the Dashboard** (issue #4227). An empty
-  Datasets or Detectors panel now shows a working **+** inside its "Click + to
-  add one." message, with an arrow to the real **+** in the panel header so
-  you know where it lives next time. While there are no detectors, the
-  **Drafts** / **AutoRun** tabs are dimmed and locked to Drafts, and the
-  disabled Combine and Delete icons beside **+** are fainter. Once a new
-  detector with no labels is selected next to a matching dataset, a
-  "Click Train to teach your new detector." hint points at **Train**. The
-  RAM / Disk bars now stay hidden until you have a detector; **Settings →
-  Appearance → RAM / Disk bars** switches them to always (**View**) or never
-  (**Hide**). In the New Detector dialog the examples no longer assume sound
-  ("e.g. large books", "e.g. Large Book Detector"), the hint under the example
-  tabs names only what that tab takes, a typed description becomes a
-  title-cased "… Detector" name, and Enter in the name field creates the
-  detector.
-
-- **A click-by-click walkthrough in the user guide** (#4202). The guide opens
-  with *Step by step: your first search* — load a folder of photos, make a
-  detector, train it, load a second folder, and Find — with a screenshot per
-  step whose red numbered markers show exactly where to click, in order. Small
-  pictures of the buttons now sit in the sentences that name them ("click the
-  **+**"), in the in-app Help panel as well as on GitHub, and every screenshot
-  in the guide now shows real photographs (the slide deck's books example)
-  instead of synthetic shapes.
-
-- **Double-click the image to zoom in** (#3934). Looking closer at a borderline
-  item meant reaching for the zoom control below the image, which breaks the
-  rhythm of keyboard voting. A double-click on the image in the Train / Find
-  centre panel now zooms 2x about the point you clicked, the way it already
-  does on the Browse map. Repeat to go deeper; because the viewer caps at 5x,
-  a double-click *at* the cap returns to fit instead of doing nothing, so the
-  mouse alone gets you both in and out. Any rotation you applied is kept, and
-  the gesture stands aside while a region draw owns it (Shift held, or the
-  Marquee toggle on).
-
-- **Stall diagnostics, on by default** (#3853). A rare 5-20 s freeze during
-  labeling in which every in-flight request finishes at once could not be
-  told apart from a slow endpoint by the request timer alone. The app now runs
-  a heartbeat watchdog that, when the interpreter cannot run it for
-  `VTSEARCH_STALL_WATCHDOG_MS` (default 1 s), logs which thread burned the
-  wall clock (or that none did, pointing at memory pressure) and has
-  `faulthandler` dump every thread's frames from inside the stall; logs any GC
-  pause over `VTSEARCH_GC_WARN_MS`; and logs a phase breakdown of the
-  learned-sort retrain, the per-vote labelset rewrite, the labeling-status
-  replay and a vote rehydrate - plus waits on the locks they share - when
-  one exceeds `VTSEARCH_SLOW_PHASE_MS`. `VTSEARCH_LOG_FILE` appends the log
-  (and the dump) to a file, and the SLURM launcher sets it under
-  `data/logs/`, so the pane scrolling away no longer loses the evidence. See
-  `docs/DEPLOYMENT.md` → "Diagnosing a stall".
-
-- **`gc.freeze()` after the model preload** (#3870). A labeling session logged
-  a gen-2 collection of ~300 ms every ~2 minutes - 35 of them over 2,400 votes,
-  flat with label count - and each one holds the GIL, so whatever was in flight
-  froze with it (a vote POST to 333 ms, a learned sort to 351 ms). The pause is
-  dominated by the object graph the process starts with: `transformers`,
-  `torch`, `sklearn`, `cuml`/`numba` contribute millions of tracked containers
-  that every full collection traverses and never frees. The app now freezes
-  that graph into the permanent generation once the preload finishes, which
-  full collections skip. Measured on the GRID over an otherwise identical
-  600-vote run: **ten pauses of 290-360 ms became zero**, and vote POST max
-  fell 377 ms → 121 ms. Datasets and detectors load lazily afterwards and stay
-  collectable, so unloading one still frees its cycles. `VTSEARCH_GC_FREEZE=0`
-  skips it.
-
-- **One switch for a diagnostic session, and a log that says what its bars
-  were** (#3853). `VTSEARCH_DIAGNOSE=1` sets the whole set together — INFO
-  level, a 400 ms request bar, a 150 ms phase bar, and by the coupling a 75 ms
-  GC bar — each as a default, so a variable you set yourself still wins. It
-  deliberately does not pin `VTSEARCH_GC_WARN_MS`, since that would bypass the
-  coupling. Two sessions in that issue produced inconclusive logs for
-  configuration reasons alone: one ran at the shipped 1 s request bar, so a
-  600–900 ms vote was invisible to it, and one got lower bars only through
-  uncommitted edits to two source files. Every run now also logs a
-  `diagnostics config:` line at startup (at WARNING, so a stock deployment has
-  it), because a log that omits its own thresholds makes every absence in it
-  ambiguous — "no slow requests" reads as *nothing was slow* and as *the bar
-  was a second* equally well.
-
-### Changed
-
-- **Every request and phase now reports CPU and GC time beside wall time**
-  (#3853). A 4918 ms vote POST that did 12 ms of work and one that did 4900 ms
-  are the same number to a `perf_counter` pair, which is why the captured stall
-  could be seen but not explained: six of the eight slow votes in that trace
-  were slow *alone*, so something released the GIL, and nothing recorded
-  whether it had blocked or merely been descheduled. `slow request` and
-  `slow phase` lines now carry `cpu=` and `gc=`, and below the slow bar (at
-  `VTSEARCH_LOG_LEVEL=INFO`) every request is logged as `request trace:` with
-  the same figures, so a diagnostic run can add up a vote cycle instead of
-  hunting for an outlier in it -- the shape the remaining felt pauses actually
-  have. `VTSEARCH_GC_WARN_MS`, left unset, now tracks `VTSEARCH_SLOW_PHASE_MS`
-  rather than sitting at a fixed 200 ms: a collection under the GC bar is
-  invisible but still lands inside whatever phase was running, so the old
-  default silently inflated phases whenever the phase bar was lowered below it.
-
-- **The Smart indicator no longer flaps on a category that has plateaued**
-  (#3832). Smart called the error cost "still declining" whenever a line
-  fitted through the last ten models sloped down by more than 1.5% of the mean
-  per step - with no notion of how much that cost bounces around between
-  retrains. On a category the embedding cannot resolve the cost is flat on
-  average but noisy, so the test fired on a quarter to a third of windows with
-  nothing having changed about the detector, and Autopilot's phase display
-  bounced between Done and Boundary with it. A decline now has to be bigger
-  than the window's own scatter (the slope at least two standard errors below
-  zero) before it holds the light yellow. A genuine improvement still does:
-  a run losing 5% of its cost per step reads yellow on 99% of windows, and the
-  synthetic dice reproduction's cleanly separable control reaches Done on the
-  same click it did before and never leaves. The indicator's tooltip says
-  which kind of green it is, and the status carries `slope_t` beside `slope`.
-
-- **The Stable indicator no longer waits for a category the embedding cannot
-  separate, and no longer degenerates as the haystack fills up** (#3831). It
-  now counts only *confident* flips - items that sat clear of the cut under
-  both the previous detector and this one - and divides by the whole pool
-  rather than the shrinking unlabeled remainder. A pool of dice labeled by
-  their roll used to hold Autopilot in the boundary phase for 127 of 150
-  clicks because the d8s flipped every retrain; it now reaches Done and
-  stays there for most of the run, while a cleanly separable category stops
-  at exactly the click it did before. When Stable goes green with items
-  still wobbling across the cut, the indicator tooltip and the Autopilot
-  Done step say so ("the remaining ambiguity looks irreducible in this
-  embedding") instead of implying the pool converged.
-
-- **Opening a saved dataset paces its progress bar for the branch its coverage
-  atlas actually takes.** That step either restores the atlas cached in the
-  dataset's pickle (~10 ms) or rebuilds a hierarchical k-means from scratch
-  (0.0026 s/item, so seconds at the sizes anybody has swept and minutes only
-  near the auto-build threshold) - measured 110-700x apart on the same
-  datasets - and a
-  timing profile could hold only one number for both, so whichever it held made
-  the other case's bar up to 0.94 of a bar wrong. A profile can now carry
-  coefficients for each branch, and the load route names the branch it is taking
-  as soon as it knows, before the expensive part starts. It also remembers on
-  the registry entry which branch that dataset took last time, so the weights
-  are right from the first update rather than from the middle of the load.
-  Pacing only: nothing about what is loaded or stored changes.
-
-### Fixed
 
 - **A `PluginField`'s `default` is now a value everywhere, not just on the CLI**
   (issue #3874). A plugin declaring `default=DEFAULT_EMAIL` on a field showed
@@ -1386,191 +1651,6 @@ not list every commit. Use `git log` for the full history.
   boundary, published on a coarse sticky ladder so the figure doesn't twitch),
   and the projection status payload passes it through as `eta_seconds`.
 
-### Added
-
-- **New demo dataset: Rico Icons -- screenshots with boxed, labelled icons.**
-  Four new image demos (`rico_icons_s/m/l/a`) built on the Rico UI-semantics
-  corpus: 66,261 Android screenshots whose annotations sit on the *elements*
-  rather than the screen. Each media carries the icon classes visible on it as
-  multi-label categories (32 curated semantics -- Search, Back arrow, Overflow
-  menu, Notification bell, ...) plus one ground-truth bounding box per icon
-  instance. This is the first demo in the tree that boxes something *inside* a
-  screenshot: every other born-digital source (Enrico, RICO App UIs) labels the
-  screen as a whole, and the only two boxed sources (Visual Genome, OpenLogo)
-  are natural photographs. Boxes are stored normalised, exactly like Visual
-  Genome's.
-
-  Unlike every other demo, the four size variants advertise **different**
-  download figures (~0.9 / 1.1 / 1.5 / 8.3 GB). The corpus's screenshots run to
-  ~7.7 GB across 67 shard folders, so the loader fetches the annotation manifest
-  first, slices it, and then pulls only the shard folders that slice actually
-  lands in -- an (S) load costs two folders, not sixty-seven. Re-loading, or
-  moving from (S) to (M), pays only for the shards it adds.
-
-### Removed
-
-- **Four REST endpoints with no consumer are gone.** `GET /api/dashboard/dataset-info`,
-  `PUT /api/dashboard/dataset-rename`, `POST /api/dataset/load-folder` and
-  `POST /api/votes/seed-from-examples` had no caller anywhere in the app -- the
-  SPA reads dataset metadata and renames through `/api/datasets/registry`,
-  loads folders through the generic importer flow, and seeds examples as part
-  of loading a detector. Nothing in the UI changes. An out-of-repo script
-  calling one of them directly will now get a 404; the same work is available
-  through `GET /api/datasets/registry`,
-  `PUT /api/datasets/registry/{id}/rename`,
-  `POST /api/dataset/import/server_folder`, and detector load respectively.
-  (Issue #3438.)
-
-- **Old settings-file shapes are no longer migrated forward.** VTSearch used to
-  carry three shims for settings written by older versions: a one-shot rewrite
-  that split a pre-tier-split `data/settings.json` across the two files, and a
-  pair of coercions that read a pre-enum boolean `show_animations` as
-  `"show"` / `"hide"`. `CLAUDE.md`'s backwards-compatibility policy allows
-  breaking saved data freely and forbids exactly these shims, so they are gone.
-  A value the settings models reject -- one written before a field changed
-  shape, or a hand-edit out of range -- is now **ignored on load** and the
-  field's default applies. Your file is never rewritten, so nothing is lost:
-  fix the value and it takes effect on the next start. Concretely, a boolean
-  `show_animations` now reads as `"show"` (the default) rather than mapping
-  True-ish to `"show"` and False-ish to `"hide"`, and `PUT /api/settings` now
-  rejects the boolean with a 422 instead of silently rewriting it. Per-user
-  keys sitting in `data/settings.json` are inert rather than migrated into the
-  default user's file. The one deliberate tier exception is unchanged: the
-  built-in `default` user still reads `autofind_detectors`,
-  `autofind_exporter` and `autofind_exporter_field_values` through to
-  `data/settings.json`, which is what keeps the CLI's `--settings` flat-file
-  workflow working. (Issue #3413.)
-
-### Changed
-
-- **Your Dashboard selection now survives leaving the Dashboard.** Going to
-  Train and back used to drop the highlighted rows and blank the top bar to
-  "Select a dataset" -- even though the pair you had just opened was still
-  loaded -- because the selection lived on the Dashboard component and died
-  with it. It now lives in `DashboardSelectionService`, so the rows come back
-  highlighted and the top bar keeps naming them. The detector grid's
-  Drafts/AutoRun tab travels with the selection it scopes, so returning can no
-  longer leave a hidden AutoRun row feeding the section actions. (Issue #3445.)
-
-- **Switching between two loaded detectors no longer throws away the labeling
-  indicators' cached work.** The Smart / Stable per-step cache retrains one MLP
-  per label-history step, and it used to be a single slot stamped with whichever
-  `(dataset, detector)` pair last touched it -- so re-selecting a detector you
-  had already been labeling in dropped the other one's cache outright, and the
-  next `/api/labeling-status` poll rebuilt it from step zero. The cache is now
-  keyed by the pair, with the three most recent kept warm, so an A-to-B-and-back
-  switch costs nothing. The stability pool tensor -- the largest thing the cache
-  holds -- is keyed by dataset instead and shared across that dataset's
-  detectors, so keeping several pairs warm does not multiply memory. (Issue
-  #3390.)
-
-- **"Enrich descriptions" is now a per-model choice, and can no longer make
-  your search worse.** The setting averages a typed query over several
-  phrasings ("the sound of a dog", "a recording of a dog", "a dog", ...)
-  instead of embedding it as typed. Measured across 22 evaluation collections
-  and 560 queries, that helps on some models and hurts on others: it is a gain
-  on CLAP General (audio) and X-CLIP (video), and a loss on SigLIP (images),
-  E5 and BGE (text) and the faster CLAP -- for text it ranked *worse on all 45
-  categories tested*. The phrasings are now attached to the models they
-  actually help, so turning the setting on is simply a no-op for the rest,
-  rather than a small silent cost. The default stays **off**. (Issue #3341,
-  following #3127.)
-
-- **The Settings -> Sorting "Enrich descriptions" tooltip described a
-  different feature.** It read "Prepend item filenames to text-sort queries to
-  improve matching for named items"; the setting has never touched filenames.
-  It averages the text-sort query over the embedder's phrasing templates
-  ("a photo of ...", "the sound of ...") instead of embedding it as typed. The
-  tooltip now says that, and says where it helps: the #3127 measurement across
-  every media-type default found it worth +0.014 AP on CLAP audio search,
-  inert on images, and -0.057 on text search -- so the default stays **off**.
-  (Issue #3127.)
-
-- **The calibrated cutoff no longer counts your own votes in its picture of
-  the collection.** The threshold estimator reads score distributions over
-  the whole collection to place the Good/Bad line; the voted items' scores
-  in those distributions are optimistically shifted (the models were trained
-  on them), so they are now dropped before the line is placed. On large
-  collections nothing visibly changes; on small ones (demo-sized, or heavy
-  voting) the cutoff gets slightly more accurate. The correction steps
-  aside when almost everything has been voted — a tiny leftover pool is a
-  worse guide than the full collection — so no regime pays for it.
-  (Issue #3308.)
-
-- **The Tuning-fraction default is now per-model.** With no explicit setting,
-  the Train/Calibrate split of each calibration fold is 0.3 (70% Train / 30%
-  Calibrate) for detectors that learn in a single-vector space and stays 0.5
-  for patch-grid models — the #3287 measurement found more Train buys
-  −0.012 to −0.013 cost on single-vector embedders in every vote band, while
-  patch embedders want the incumbent 0.5 in both their voting styles. The
-  Settings → Sorting "Tuning fraction" field now reads empty ("auto") by
-  default; typing a value pins it for every detector as before, and clearing
-  the field returns to the automatic per-model default. Stored settings that
-  already carry an explicit `calibration_fraction` keep winning unchanged.
-  (Issues #3287/#3290.)
-
-- **The calibration deck is a talk about ideas again, and every reveal has a
-  name.** `slides/decks/hold-the-line.deck` was rebuilt end to end: the
-  measurement slides are parked after the Questions slide as backup, so the
-  main line is what we found rather than how we ran the study; the two slides
-  that argued the threshold's double duty in the abstract are gone, and the
-  point is now made on the field of items where it can be seen — one detector
-  curve, then the same curve cut looser and tighter, then the item the loose
-  and tight cuts disagree about, which is also the item the user gets asked. A
-  new slide sets up what the Inclusion knob is *for* before the section that
-  shows it failing, and the epilogue's two compressed bullets became two
-  slides: why the midpoint of two means is not the Bayes-optimal cut, and why
-  a region-voted score is an extreme-value statistic. Every page of a build now
-  carries a letter after the shared page number (5a, 5b, 5c), the speaker view
-  shows the whole build as a lettered contact sheet under the slide, and
-  presenter notes that would have been clipped spill onto a continuation page
-  instead.
-
-- **The Add Dataset dialog has one consistent vertical rhythm, and Advanced
-  really is hidden.** The Folder, Manifest and Demo forms all laid their fields
-  out differently: a field's own controls could sit further apart than two
-  unrelated fields, the "Folder to import" path and its **Browse** button were
-  separated as if they were different questions while the checkboxes below ran
-  together with no gap at all, and the folder browser opened as loose rows with
-  no frame. Every field in every importer now shares the same spacing, the path
-  input and **Browse** sit on one line (matching the Manifest importer's file
-  field), and the browser opens in a framed panel under it. Separately, the
-  **Advanced** section now shows *nothing* until you open it: **Embedder** and
-  the Demo importer's **Convert to** used to appear on the collapsed form
-  whenever their value differed from the default — which, on a demo dataset
-  that picks its own embedder, was most of the time. Any non-default choice is
-  still disclosed, in the **Advanced** toggle's tooltip. (#3215)
-
-- **Autopilot's "you're done" hand-off is a dialog you answer, and it appears
-  once.** Reaching the end of training used to raise a toast that counted down
-  and then returned you to the Dashboard unless you cancelled it — and because
-  the countdown re-armed on every entry to the Train window, anyone who thought
-  their detector needed more work had to dismiss the same redirect each time
-  they came back. It is now a **Detector Trained** dialog with two plain
-  buttons, **Continue Training** and **Head to Dashboard**, and nothing happens
-  until you pick one. It is also raised only for the autopilot run that
-  actually trained the detector: continuing afterwards, or picking up a
-  detector already trained on another dataset, no longer announces anything.
-  (#3201)
-
-- **The detector head is now a linear SVM.** Every trained detector — new
-  detectors, saved ones re-derived from their labels, and the per-step models
-  behind the labeling-progress indicators — is fitted to the class-balanced
-  maximum-margin boundary between your Good and Bad votes (scikit-learn's
-  `LinearSVC`) instead of by logistic regression. It is the same shape of model
-  as before, a single linear boundary over the embedding space, so nothing
-  about detector files, exports, or the ONNX bundle changes: only where the
-  boundary lands. Measurements in a separate environment put the SVM's ranking
-  clearly ahead of the logistic head's, and while *why* is still under
-  investigation, the best-measured head is the one that ships. Detector scores
-  will move — a detector retrained after this change can put items in a
-  different order and cut at a different threshold than the same votes did
-  before. The regularisation strength is tunable via `VTSEARCH_SVM_HEAD_C`
-  (default `1.0`), and `VTSEARCH_TRAIN_EPOCHS` / `VTSEARCH_TRAIN_PATIENCE` no
-  longer affect a detector fit. See [`docs/ML.md`](docs/ML.md).
-
-### Fixed
-
 - **A results exporter's `dynamic_options` select is now filled in, in both
   places an exporter is configured.** A `"select"` field declared with
   `dynamic_options=True` is supposed to have its options computed at runtime by
@@ -1714,140 +1794,3 @@ not list every commit. Use `git log` for the full history.
   releases the load reservation and surfaces an error on the row, and load
   failures are written to the server log. (#3139)
 
-### Changed
-
-- **A seed importer's results now appear on its own tab.** Running a seed
-  importer in the New Detector modal used to switch the user to the media
-  tab, where the batch had been appended — an odd jump mid-import, and one
-  that hid the form they were still working in. The example stack is now
-  mirrored under each seed importer's form, so seeds land in view where they
-  were added. It stays one list: the mirrored rows carry the same Seed badges
-  and Remove buttons, and edits from either tab hit the same stack. Picking an
-  exemplar by hand still lands on the media tab, which is where the picker
-  lives. (#3192)
-
-- **Image preprocessing now names its backend instead of inheriting one.**
-  Every image embedder builds its processor by asking `transformers` for the
-  `torchvision` backend outright (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, new
-  default `torchvision`; set `auto` for the previous behaviour). Nothing in the
-  code used to say which implementation resized and normalised an image, and
-  the answer changed *inside* the version range we pin: `transformers` 5
-  removed the `Fast` suffix, so the bare `SiglipImageProcessor` means the PIL
-  implementation below 5 and the torchvision one at 5+, while
-  `requirements/image-embedders.txt` asks only for `>=4.49`. The two are not
-  interchangeable — they disagree on 53–59% of pixel elements and by a median
-  `1 − cos` of ~1.5e-04 on `siglip2_l`, 50× the perturbation half precision
-  causes — so two hosts resolving different wheels produced different vectors
-  from identical code and weights, with nothing recording which. **On a
-  `transformers` 5 host this changes nothing** (the pre-embedded pile is
-  torchvision-built, reproduced to 7.6e-13). **On a 4.x host it changes the
-  vectors**, which is the point: that host was quietly disagreeing with the
-  pile and now agrees with it. Because a backend request is a request and not a
-  guarantee — DINOv3 ships no PIL implementation, and `transformers` warns and
-  falls back rather than raising — each embedder now reads back the class it
-  actually loaded and logs a warning naming itself when it differs. (#3173)
-
-- **Bad pre-computed vectors are now rejected at import, with an error that says
-  what is wrong.** Importing an `.npz` manifest of pre-computed embeddings used
-  to accept anything: vectors of the wrong width for the embedder the manifest
-  named, `NaN`/infinite rows from a failed embed, ragged archives, `float64` or
-  half-precision exports. None of those failed at import. A wrong-width row
-  surfaced later as `could not broadcast input array from shape (768,) into
-  shape (1152,)` on an unrelated search, naming neither the file nor the
-  manifest; a non-finite row never raised at all and silently corrupted every
-  score and threshold it touched. Manifests are now checked as they are read —
-  including against the declared embedder's own dimension, so an archive that
-  says `siglip2_l` while shipping 768-dim rows is caught immediately — and
-  vectors are widened to `float32`, so a half-precision or double-precision
-  export imports cleanly instead of leaving the dataset mixed. If a dataset
-  still ends up holding two widths, sorting and training now name the offending
-  item and both dimensions instead of failing with a bare numpy shape error.
-- **Audio now defaults to the larger CLAP checkpoint.** New audio datasets and
-  text queries use `clap_general` (`laion/larger_clap_general`, shown as "CLAP
-  (general, larger)") instead of `clap`. It wins every measured retrieval
-  comparison on ESC-50, at roughly 2.1x the embedding time. The old checkpoint
-  is still selectable as "CLAP (general, faster)" for large collections where
-  ingest speed matters more, and existing datasets and detectors built with it
-  keep working. Cached demo-dataset pickles built with `clap` are re-embedded
-  the next time they are loaded with the new default.
-- **Library extracted.** The reusable core of VTSearch was carved out into a
-  separate `vtscore/` package. The user-facing application surface (the Flask
-  app, the Angular SPA, the settings system, the auth layer) is unchanged.
-  Internally, every library-candidate import path moved from `vtsearch.<lib>`
-  to `vtscore.<lib>`; `vtsearch/state/__init__.py` is now a thin app-tier shim
-  that re-exports `vtscore.state` and layers the proxy view (`medias`,
-  `good_votes`, …) on top. See
-  [`vtscore/docs/architecture.md`](vtscore/docs/architecture.md) for the
-  seven seams the refactor introduced.
-- **Plugin entry-point groups renamed.** Library-tier plugin families now
-  register under `vtscore.<family>` instead of `vtsearch.<family>`
-  (`vtscore.importers`, `vtscore.label_importers`, `vtscore.labelset_sources`,
-  `vtscore.media_sources`, `vtscore.converters`). Settings-related families
-  remain under `vtsearch.<family>` because they stay app-side
-  (`vtsearch.settings_importers`, `vtsearch.settings_exporters`,
-  `vtsearch.settings_sources`). Third-party plugin authors targeting the
-  library tier need to update their `pyproject.toml` entry-point group
-  names.
-
-### Added
-
-- **Three long-form audio demos: Apollo 11, BirdVox Full Night, and the Nixon
-  White House Tapes.** Every audio demo so far was a corpus of short labelled
-  clips (ESC-50, GTZAN, UrbanSound8K) or, in TUT's case, 32 four-minute street
-  soundscapes. These three are hours-long *unlabelled* recordings where the
-  interesting content is discrete events scattered through the runtime — the
-  Quindar beeps, master alarms and MOCR applause in 174 hours of NASA mission
-  loops; the sub-second bird flight calls in six ten-hour night recordings from
-  BirdVox-full-night; the telephone rings, laughter and room noise under 12
-  tapes' worth of Nixon's secret taping system. Each loads as one
-  undifferentiated bucket, so you clip it yourself, vote on a handful of hits,
-  and let the detector rank the rest. All three sources are freely
-  redistributable (CC PD Mark, Creative Commons, and US federal public domain
-  respectively).
-
-  Unlike the older demos, **each size variant downloads only its own slice** of
-  the source rather than the whole thing — at 5-10 GB apiece that difference
-  matters, so (S) costs a twelfth (Apollo, Nixon) or a sixth (BirdVox) of the
-  figure shown in [`docs/demos.md`](docs/demos.md). BirdVox's ten-hour FLAC
-  units are segmented into 10-minute chunks as they download, since a ten-hour
-  file cannot be handed to the clipper as a single item.
-
-- **Seed importers: a new plugin family for unlabeled seed media.** An
-  external package can now contribute its own tab to the New Detector modal's
-  **Blank** flow, beside Text and the media picker, by registering a
-  `SeedImporter` in the `vtscore.seed_importers` entry-point group. Where a
-  label importer imports media that already carry a good/bad verdict, a seed
-  importer imports a *batch* of media with **no verdict** — items that are
-  "close but not quite" what the user is hunting for. Seeds are stored on the
-  detector as `{"type": "media", "value": …, "labeled": false}`: they steer
-  the first sort (Autopilot ranks against the centroid of every media
-  example) but never become a Good label or vote, so a detector seeded this
-  way starts untrained. Nothing ships in-tree, so an install with no such
-  plugin looks exactly as before. New endpoints: `GET /api/seed-importers`,
-  `POST /api/seed-import/<name>`, `POST /api/seed-import/<name>/options`.
-- **Server-side code can raise a toast.** A new `notify()`
-  (`vtscore/concurrency/notifications.py`) lets any backend code — most
-  usefully a plugin that hit a recoverable problem — tell the user something
-  happened *without* failing the operation: "skipped 3 unreadable files",
-  "the remote API rate-limited us, results are partial". The message is
-  broadcast over a new `notification` channel on `/api/events` and rendered
-  as a toast; toasts gained `warning` and `info` levels alongside the
-  existing `error` and `success`. Plugin subclasses get `self.notify(...)`
-  with their display name attached. Headless runs print the same messages
-  (stderr in text mode, `notification` NDJSON records under
-  `--progress-format json`). Delivery is live-only — there is no replay for
-  a client that connects afterwards. See
-  [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md#notifying-the-user-toasts).
-
-- **The app now tells you when your browser is running an out-of-date build.**
-  `static/` is a build artifact that git does not track, so pulling new code and
-  restarting the server used to leave the browser loading whichever bundle was
-  last built — silently, since the version in Settings is the *server's* and
-  looks current regardless. The bundle now carries the commit it was built from,
-  and a mismatch raises a toast naming both versions and the rebuild command,
-  plus a `⚠ bundle v …` chip beside the version in the Settings footer.
-
-- `vtscore` library distribution with its own [README](vtscore/README.md) and
-  [CHANGELOG](vtscore/CHANGELOG.md). See the
-  [package reference](vtscore/docs/README.md#package-reference) for the
-  documented public surface.

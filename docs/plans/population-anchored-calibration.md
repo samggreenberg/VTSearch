@@ -7,6 +7,13 @@ the whole knob — it held (#2865,
 remains: the fused path covers binary voting, where it does not beat the blend
 it replaced.
 
+**Since #4452 a trained head's line is the labels line** (`fit_labels_line`;
+[`ML.md`](../ML.md#the-labels-line)), so the fused estimator no longer places the
+reported cut. It still feeds the acquisition fallback and the line when no class
+model can be fitted ([`cost-to-fbeta.md`](cost-to-fbeta.md)). Every item below was
+priced on cost at a retired Inclusion knob (#4269); re-check that it still moves
+something on the shipped path before running it.
+
 ## Background
 
 The threshold used to treat the GMM (population) cut and the cross-calibration
@@ -38,10 +45,6 @@ folds.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
-<!-- item-sep -->
-
 - **Explain the k=0 loss on `coco_val × dinov3_patch`.** `rate` is worse than
   `mid` there by 0.015±0.002 — five times its inclusion-0 gap in the other three
   environments, and the single reason `rate` did not ship in #2865. If the
@@ -62,8 +65,6 @@ folds.
   3 → 0.1 from 20 to 300 votes, so a fixed κ is a compromise costing ~0.008 at
   each end. A fixed *total* anchor mass (κ = M/n, or M/n_good) is a one-line
   change to the caller.
-
-<!-- item-sep -->
 
 <!-- item-sep -->
 

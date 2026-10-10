@@ -50,4 +50,6 @@ sbatch --array=0-$((N-1))%24 ... --wrap "... python stage_b_autopilot.py"
   everywhere set `VTSEARCH_DISABLE_CUML=1`.
 - Rare-arm cells for low-prevalence categories are skipped (they'd leave < 15
   positives); those tasks write a 0-row CSV, which `summarize.py` drops.
-- Results live under `/exp/$USER/mlp-svm/results`.
+- Results live under `$MLPSVM_EXP/results` (default `/exp/$USER/mlp-svm`). For a
+  re-run, point `MLPSVM_EXP` at `/expscratch/$USER/...`: `/exp` is the 50 G
+  quota ([GRID-PLAYBOOK §4](../GRID-PLAYBOOK.md#4-know-which-mount-you-are-on)).

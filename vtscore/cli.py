@@ -466,8 +466,8 @@ def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
 
     Read at the balance the training read: the detector's own
     (:func:`vtscore.state.detector_beta`, #4413, #4665).  A headless run cannot spot-check its line (#4272), so it exports
-    the balance's unchecked set - the cap or the mixture's F-beta argmax,
-    whichever is smaller (#4389) - and the ``detector_unchecked`` event is
+    the unchecked set its trained line keeps (the labels line, #4452) - and
+    the ``detector_unchecked`` event is
     the run's record that the set it exports was never checked.  ``None``
     with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
     the Inclusion 0 cut, and there is no set to report.

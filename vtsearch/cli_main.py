@@ -169,15 +169,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--settings",
         type=str,
-        help=(
-            "Path to a settings JSON file containing autorun processors. "
-            "Used with --autodetect. Defaults to data/settings.json."
-        ),
+        help=("Path to a settings JSON file. Used with --autodetect. Defaults to data/settings.json."),
     )
     parser.add_argument(
         "--importer",
         type=str,
-        help="Name of the data importer to use (e.g. folder, pickle, http_archive). Used with --autodetect.",
+        help="Name of the data importer to use (e.g. server_folder, pickle, http_archive). Used with --autodetect.",
     )
     parser.add_argument(
         "--outputs",
@@ -197,7 +194,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--exporter",
         type=str,
-        help="Name of the results exporter to use (e.g. file, email_smtp, gui). Used with --autodetect.",
+        help="Name of the results exporter to use (e.g. server_json_file, email_smtp, gui). Used with --autodetect.",
     )
     parser.add_argument(
         "--chunk-size",
@@ -218,7 +215,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "Stream each chunk's hits straight to the exporter instead of "
             "accumulating them all in memory. Requires --chunk-size and a "
             "streaming-capable exporter (server_json_file → NDJSON, "
-            "server_csv_file, gui). Output is ordered by chunk, not globally "
+            "server_csv_file, gui, webhook, email_smtp). Output is ordered by chunk, not globally "
             "sorted by score. Lets --autodetect run against a media source "
             "with more items (and more hits) than fit in RAM."
         ),

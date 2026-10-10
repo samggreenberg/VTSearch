@@ -17,8 +17,7 @@ with **no embedder**. It must be converted to an embeddable type (image via
 clipper-chain (`vtscore/datasets/clipper_chain.py`) already runs converter
 steps at load time, so `document → image/text → embed` is a supported
 pipeline — what was missing is that the *abstraction never named the gap*, so
-each subsystem improvised. The two issues below are that improvisation showing
-through.
+each subsystem improvised.
 
 ## The model (shipped)
 
@@ -60,7 +59,10 @@ pretending its raw bytes are an image — render it *as a document*.
 
 <!-- item-sep -->
 
-- **Convert-in output types in the folder importer.** The importer's output
+- **Convert-in output types in the folder importer.** The Add Dataset dialog's
+  Multi-Dataset mode (#4703, `multi-output.util.ts`) already keys its rows off
+  `importable` / `embeddable` / `converts_to`; this item and the next are owed
+  only for the single-dataset form. There the folder importer's output
   media-type dropdown is populated from `all_folder_names()` (every registered
   type), so a *convert-in* type like `face` shows up as a native folder type
   even though it can't be scanned from files (empty `file_extensions`).

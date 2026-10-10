@@ -34,14 +34,15 @@ ABC, update both sides and let the gate confirm it.
 | Guide | What you build | Library contract |
 |-------|----------------|------------------|
 | [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, seed importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory and the entry-point group table live there too). | [dataset-importers](../vtscore/docs/extending/dataset-importers.md), [results-exporters](../vtscore/docs/extending/results-exporters.md), [label-importers](../vtscore/docs/extending/label-importers.md), [labelset-sources](../vtscore/docs/extending/labelset-sources.md) |
-| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). | [media-types](../vtscore/docs/extending/media-types.md), [embedders](../vtscore/docs/extending/embedders.md), [clippers](../vtscore/docs/extending/clippers.md), [converters](../vtscore/docs/extending/converters.md) |
+| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). | [media-types](../vtscore/docs/extending/media-types.md), [embedders](../vtscore/docs/extending/embedders.md), [clippers](../vtscore/docs/extending/clippers.md), [converters](../vtscore/docs/extending/converters.md), [media-sources](../vtscore/docs/extending/media-sources.md) |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. | — (app tier only; processors are not auto-discovered) |
 
 Each guide explains the interface contract, where files go, how
 discovery/registration works, and includes a complete example. The
-library-tier index — including the families with no app-tier guide of
-their own (datasource importers, seed importers, media sources) — is
+library-tier index is
 [`vtscore/docs/extending/README.md`](../vtscore/docs/extending/README.md).
+Datasource importers, seed importers, and media cleaners have no
+library-tier page; the guides here are their only contract docs.
 
 ## Cross-cutting reference
 
@@ -67,6 +68,8 @@ Flask-backed providers, and is the import path app code should use.
 ### Interface
 
 ```python
+from pathlib import Path
+
 from vtsearch.auth import LoginProvider
 
 class MyProvider(LoginProvider):
@@ -260,7 +263,7 @@ See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding
 
 - [ ] Create `vtscore/datasets/importers/<name>/__init__.py`
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values, medias, thin=False)`: populate `medias` in-place
+- [ ] Implement one override point — `list_records()` + `fetch_record()`, `fetch_source_media()`, `fetch_all_source_media()`, or `run(self, field_values, medias, thin=False)` (populate `medias` in place); see [Choosing your override point](EXTENDING-plugins.md#choosing-your-override-point)
 - [ ] Expose `IMPORTER = YourImporter()` at module level
 - [ ] If your form holds opaque values (ids, query keys), override `default_display_name(field_values)` so the Dataset Name box shows a readable name — see [Naming the imported dataset](EXTENDING-plugins.md#naming-the-imported-dataset)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
@@ -423,7 +426,7 @@ See [EXTENDING-processors.md](EXTENDING-processors.md).
 - [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.processors`
 - [ ] Implement `name` (from a constructor argument, **not** hardcoded),
       `media_type`, and the type-specific method (`localize` or `extract`)
-- [ ] Optionally override `load_model()` for one-time resource loading
+- [ ] Optionally override `load_model()`, and call it (idempotently) from `localize` / `extract` — the app never calls it
 - [ ] Add a `from_config(name, config)` classmethod, and a `to_dict()` that
       reports the matching `extractor_type` / `localizer_type` + `config`
 - [ ] **Wire it into the hardcoded factory dict** in

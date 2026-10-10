@@ -4,8 +4,10 @@ Angular SPA for the VTSearch media explorer. Built with Angular CLI 21.2 and Typ
 
 ## Prerequisites
 
-- **Node.js 22+** (LTS recommended)
+- **Node.js 20.19+, 22.12+, or 24+** (Angular 21's engine range; the Dockerfiles build on `node:20-slim`)
 - **npm** (bundled with Node.js)
+
+Install steps per OS are in [`../docs/SETUP.md` § Building the frontend](../docs/SETUP.md#building-the-frontend).
 
 ## Development server
 

@@ -105,8 +105,7 @@ same edit.
     paired by seed. It is still two paths as they ship, not an A/B.
 - **Stable links that follow `dev` (owner, 2026-10-06):** the newest report
   of each kind, and its `viewer.html`, have fixed URLs on GitHub Pages that
-  move as soon as a report merges to `dev` (first set to follow releases to
-  `main`, then switched the same day). A report commits its viewer so the link
+  move as soon as a report merges to `dev`. A report commits its viewer so the link
   has one. See
   [Where the owner reads it](#where-the-owner-reads-it-the-stable-links).
 - **The viewer carries every balance (owner, 2026-10-07, #4636):** the
@@ -177,7 +176,8 @@ same edit.
     came. Not yet a report section: the first review to read it decides
     whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
 - **The opening is the text sort (#4605).** The app stays on the text sort
-  through Autopilot's opening (Good, Bad, More) and shows a detector only from
+  through Autopilot's opening (Good, Bad, and More where that walk runs: off on
+  photos since #4740) and shows a detector only from
   the Hard phase on, a median ~40 clicks in. The harness scores the detector
   Test would give during the opening anyway (from the first Good: the Goods'
   centroid under the label quota, then the trained head; #4643,
@@ -492,23 +492,11 @@ things keep a report on its link:
   only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
   offer cost (#4576); a page built before that gets both from
   `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
-  Its averaged line carries a run's last scored value through a spot check's
-  rounds (#4624): a run inside a prompted check is scored once per round of
-  picks, and a mean over "the runs with a row at this click" skipped it between
-  rounds, which skipped exactly the weak sessions and drew a dip at the end of
-  every session as the checks ran out of budget. A page built before that gets
-  the carry from its own per-seed lines with `viewer.py --reskin <page>
-  --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
-  it). `analyze.py`'s curves and `by_click.py` already carried. A click where
-  a run has no detector (before its first Good, or every click of a run that
-  never got one; before its first Good and Bad in a review run before #4643)
-  is scored as the empty returned set, the nothing Test gives that labelset,
-  so the runs that never trained are in its mean as losses
-  (`curves.score_empty_sets`); from the first Good on, Autopilot's opening
-  included, it draws the harness's detector, the Goods' centroid under the
-  label quota (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
-  undefined; a page built before that is rebuilt with `analyze.sh`, since a
-  reskin has no prevalence to put AP at.
+  How the page averages (the carry through a spot check's rounds, the empty
+  set before a run's first Good, precision 0 on an empty set, the Goods'
+  centroid under the label quota) is the general viewer's, in the
+  `grid-experiments` skill's "The interactive viewer"; it says which older
+  pages need a `--reskin --fill-gaps` and which a rebuild with `analyze.sh`.
   The report's own tables score a run with no detector at the typed query its
   session shows instead (owner, 2026-10-07, #4631; see the standing decisions):
   the viewer has no opening rule, and the report says so in one line.

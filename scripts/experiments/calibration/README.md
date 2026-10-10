@@ -96,7 +96,6 @@ produced.
 | **#3551 Tuning the retired `rare` / `corridor` blend schedules** — [plan](../../../docs/experiments/2026-09-22-blend-endpoints-3551/PLAN.md) | `launch_blend_3551.sh`, `analyze_blend_3551.py`, `selftest_analyze_blend_3551.py`, `analyze_blend_ab_3551.py`. The schedule is now only the fused cut's fold fallback, so the screen splits every schedule row by `shipped_provenance` into Q1 (the fallback it would ship) and Q2 (a replacement for the fused cut), and gates on the shipped fallback reproducing the live threshold; `ab` runs promoted arms per voting mode (`AB_MODE`) |
 | **#4184 The calibration ladder on COCO Better** (one cost curve per rung of the *Hold The Line* deck, for its slide) — [plan](../../../docs/experiments/2026-09-25-progression-4184/PLAN.md), [report](../../../docs/experiments/2026-09-25-progression-4184/REPORT.md) | `launch_progression_4184.sh`, `analyze_progression_4184.py`, `selftest_analyze_progression_4184.py`, and for the #4201 prevalence arm (`CALIB_HAYSTACK_PREVALENCE`) `compare_prevalence_4201.py` (the rungs at two prevalences, paired per cell) and `figure_prevalence_4201.py` (the report's two figures). Seven run-level arms, one per rung; the four retired thresholds are `CALIB_LIVE_THRESHOLD` (`vtscore/eval/live_threshold_rules.py`), because a rung's line picks its own questions and a re-cut of another rung's trajectory would not. The 1% re-run (#4519) and today's app at each preset (#4548, rungs `r8_labels_b025` and `r8_labels_b4`) feed the deck's slide 32, `slides/figs/src/make-follow-suit-fig.py`, from `docs/experiments/2026-10-05-ladder-fbeta-4519/presets/progression_curve.csv` |
 | **#4114 The converged logistic head in the loop, on COCO Better** — [report](../../../docs/experiments/2026-09-27-logreg-head-4114/REPORT.md) (analyzers, examples and figures live in [`../svm_vs_logistic/`](../svm_vs_logistic/)) | `launch_logreg_4114.sh`. Arms `svm` / `lrconv` (head `linear_logreg`) / `linear` |
-
 | **#4220 Can a precision-floor promise be kept from the app's votes?** (the #4223 ruling's objective, priced offline) — [report](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md) | `analyze_pframes_4220.py`, `selftest_analyze_pframes_4220.py`, `figure_pframes_4220.py`. Reads the per-cell precision frames `task_NNNN__pframes.npz` that `CALIB_PFRAME_STEPS` makes the cell runner record (test truth, pool, votes, fold held-out votes and haystacks); prices P(y\|score) estimators (in-sample, fold-rank, fold-raw × logistic/isotonic × point/bootstrap lower bound, ± EM prior shift) on recall at a precision floor X and the violation rate, in the same-prevalence and shifted-corpus scenarios |
 | **#4222 Stay in TextTop until G Goods, in the low-prevalence world** (does a deeper text opening mine the positives a precision promise needs?) — [report](../../../docs/experiments/2026-09-28-textgood-4222/REPORT.md) | `launch_textgood_4222.sh`, `analyze_textgood_4222.py`, `selftest_analyze_textgood_4222.py`, `figure_textgood_4222.py`. Today's app with the opening's Good round at G = 3 (production) / 6 / 10 / 20, at COCO Better's default 0.44% and positives thinned to 0.1% (`CALIB_TARGET_PREVALENCE`); precision frames on. Reports harvest, calibration positives against the #4220 gate, the #4220 estimator's promises, and AP paired against the G = 3 control, then applies the decision rule fixed in #4222 |
 | **#4224 Rank frames for precision-floor studies off the GRID** — [data and schema](../../../docs/experiments/2026-09-28-rank-frames/README.md) | `export_rank_frames.py`. Cuts the #4220/#4222 precision frames down to the ranks of each test corpus's positives, plus the shipped estimator's cuts (as shipped, and with a consistent reference pool) at X = 25/50/75%, so random-verification and audit-sampling studies can run from CSVs in the repo |
@@ -123,11 +122,13 @@ produced.
 
 ## Arms
 
-| Dataset | Embedder | Style(s) | Calibration |
-|---|---|---|---|
-| `visual_genome_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
-| `visual_genome_m` | `dinov3_patch` | `max_patch` | grouped (bag max-pool) |
-| `caltech101_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
+The base grid is `CALIB_DATASETS` (default `visual_genome_m,caltech101_m`), each
+with the embedders `experiment_config.DATASET_EMBEDDERS` gives it (default
+`siglip,siglip2_l,dinov3_patch`; `CALIB_VG_EMBEDDERS` / `CALIB_CALTECH_EMBEDDERS`
+override). Single-vector embedders run `whole_image` with row-wise calibration;
+patch embedders run `CALIB_PATCH_STYLES` (default `max_patch`) with grouped
+(bag max-pool) calibration. Study launchers re-point both, usually at a pile
+dataset such as `coco_better`.
 
 Two #2781 arms are **off by default** now that their questions are closed, and a
 study that wants either adds it back explicitly (and declares the divergence to
@@ -147,9 +148,9 @@ study that wants either adds it back explicitly (and declares the divergence to
 ## Stages
 
 1. **`prepare_data.py`** — ensures a per-`(dataset, embedder)` pickle + exemplar
-   crops for every arm. Reuses the Max-Patch pickles/crops where the pair
-   coincides (VG×{siglip,dinov3_patch}, Caltech×siglip); only embeds the missing
-   `siglip_l` pairs.
+   crops for every arm. Reads pickles in place where they already exist (the
+   Max-Patch datadir under `launch_all.sh`, the pile under `pile_env.sh`) and
+   embeds only the missing pairs.
 2. **`run_cells.py`** — one SLURM-array task per `(dataset, embedder, category,
    seed)` cell; runs every style for the embedder, emitting the calibration
    metrics (`CALIBRATION_COLUMNS`) to `results/cells/task_<idx>.csv` and the
@@ -177,16 +178,16 @@ the sample size. Run it with `python theory_bench.py --reps 40`.
 ## Running on the Grid
 
 ```bash
-cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+cd <your worktree>/scripts/experiments/calibration   # VTS_REPO defaults to /exp/$USER/projects/vts-calib
 bash launch_all.sh          # reuse-symlink -> prepare (GPU) -> cells -> analyze
 bash launch_safe.sh         # the #2799 safe-threshold sizing, analyze_safe.py
 bash launch_cut.sh          # the #2836 cut-rule study: theory bench + analyze_cut.py
 bash launch_anchored.sh     # the #2852 anchored-mixture study, analyze_anchored.py
 ```
 
-Both study launchers are thin wrappers over `launch_all.sh` that flip the
-pre-registered knobs and point `CALIB_EXP` somewhere the other studies' outputs
-are not.
+The study launchers are thin wrappers over `launch_all.sh` (or
+`launch_cells.sh`) that flip the pre-registered knobs and point `CALIB_EXP`
+somewhere the other studies' outputs are not.
 
 Each analyzer has a self-test that runs it on fabricated cells with a planted
 answer, so a sign error is caught before an overnight run rather than after:
@@ -220,9 +221,10 @@ the extreme of the regime several of these studies are about. `describe_load`
 formats them into one line so two reports mean the same thing by "N of M cells".
 
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
-embeddings pickles and demo data are read in place (the `siglip_l` pickles land
-alongside them harmlessly), and writes all study output under
-`/exp/$USER/calibration`.
+embeddings pickles and demo data are read in place (newly embedded pickles land
+alongside them), and writes study output under `CALIB_EXP` (default
+`/exp/$USER/calibration`; newer launchers default to `/expscratch/$USER/<study>`,
+because `/exp` is the 50 G quota).
 
 ## Fixed config (pre-registered)
 
@@ -245,7 +247,7 @@ control sets `CALIB_SAFE_THRESHOLDS=0` and declares the divergence.
 ## Safe-threshold GMM study (issue #2799)
 
 ```bash
-cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+cd <worktree>/scripts/experiments/calibration
 bash launch_safe.sh      # safe_thresholds ON, VG only, 30 votes, 8 seeds
 ```
 
@@ -260,7 +262,7 @@ shared Max-Patch pickles/crops in place.
 ## Anchored-mixture study (issue #2852)
 
 ```bash
-cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+cd <worktree>/scripts/experiments/calibration
 bash launch_anchored.sh  # safe+anchored ON, VG only, 300 votes (deep regime), 4 seeds
 ```
 
@@ -286,7 +288,7 @@ per step (`calibrate_count=2` → two extra scoring passes); disable them with
 ## Cut-rule × Inclusion study (issue #2865)
 
 ```bash
-cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+cd <worktree>/scripts/experiments/calibration
 python selftest_analyze_cutincl.py   # planted answer; run before the array
 bash launch_incl_2865.sh             # reuses the #2861 prepare stage
 python analyze_cutincl.py
@@ -338,7 +340,7 @@ the `mid` arm, the honest null.
 ## Fold-count study (issue #2897)
 
 ```bash
-cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+cd <worktree>/scripts/experiments/calibration
 python selftest_analyze_folds_2897.py   # planted answer; run before the array
 bash launch_folds_2897.sh               # the screen: every K in one run
 bash launch_folds_2897_ab.sh 2 8        # then the live A/B, once K* is named
@@ -420,7 +422,7 @@ and cross-fitting checks.
 ## Voted-media exclusion floor (issue #3312)
 
 ```bash
-cd /exp/$USER/projects/vts-exclusion-3312/scripts/experiments/calibration
+cd <worktree>/scripts/experiments/calibration
 python selftest_analyze_exclusion.py          # planted answer; run before the array
 bash launch_exclusion_3308.sh prepare         # stage 0, ONCE, shared by every arm
 bash launch_exclusion_3308.sh baseline        # the click-0 text-sort anchor
@@ -644,7 +646,7 @@ python selftest_viewer.py     # planted-answer check on the codec and the poolin
 The skyline notch needs skyline rows, so it appears only for a run launched with
 `CALIB_SKYLINE_ARMS` (see [Supervised skyline / training regret](#supervised-skyline--training-regret-issue-3322)
 above). `viewer.py` reads them straight out of the cell CSVs, because
-`analyze_spikes.load_arm` — which every analyzer goes through — filters
+`_cells_io.load_arm` — which every analyzer goes through — filters
 `gmm_variant`-tagged rows out by design, and a skyline reads ground-truth labels
 the app can never see. A run without them still builds; the page just has no
 floor, and the builder says so. `--no-skyline` skips the pass.

@@ -18,15 +18,10 @@ _out/       rendered decks (gitignored)
 missing fragment or figure — or a headline that has grown to three lines —
 fails the suite rather than rotting quietly.
 
-**Test a deck change with `./run-tests.sh slides`** — about four seconds, versus
-three and a half minutes for the full suite. It is not a shortcut you are
-trading safety for: it runs every gate that can observe a deck (ruff over
-`build.py`, codespell over slide prose, `check-docs.py` over the fragments, and
-the manifest preflight) and skips only checks that provably cannot see one —
-nothing imports `build.py`, pyright does not read it, and no test in either tree
-opens a deck. For a change confined to `slides/` it is the whole gate, and it
-refuses to run once the branch touches anything else, so it cannot quietly
-become one.
+**Test a deck change with `./run-tests.sh slides`** (~8s). For a change
+confined to `slides/` it is the whole gate, not a shortcut, and it refuses to
+run once the branch touches anything else; why that is safe is in
+[`docs/TESTING.md`](../docs/TESTING.md#test-groups).
 
 **Read [`STYLE.md`](STYLE.md) before writing or editing a deck.** It holds the
 house rules that apply to every talk — no running footer, real subscripts,
@@ -42,7 +37,8 @@ extra (else `pip install pymupdf`). Run from this directory:
 
 ```bash
 ./render.sh hold-the-line           # -> _out/hold-the-line.pdf
-./render.sh hold-the-line html      # or html / pptx
+./render.sh hold-the-line html      # or pptx / png
+./render.sh hold-the-line --watch   # live-reloading preview while writing
 ./render.sh hold-the-line pdf --speaker  # -> _out/hold-the-line.speaker.pdf
 ./render.sh hold-the-line pptx --no-pageno  # -> _out/hold-the-line.unnumbered.pptx
 ./render.sh hold-the-line pptx --editable   # -> _out/hold-the-line.editable.pptx
@@ -141,13 +137,10 @@ There's also a `Makefile` (`make`, `make FMT=html`, `make watch DECK=…`) but
 **`make` is not installed on the laptop** — `render.sh` is the working path
 here. The Makefile is for the grid or wherever make exists.
 
-For live preview while writing:
-
-```bash
-./build.py hold-the-line
-npx @marp-team/marp-cli@4 _build/hold-the-line.md \
-    --theme-set themes/ --allow-local-files -w --preview
-```
+Always go through `render.sh` (or `make`, which delegates to it) rather than
+calling Marp by hand: it passes `--no-stdin`, without which Marp waits forever
+for EOF in a script or agent shell, and it fails the render when Marp dies or a
+figure does not resolve, which bare Marp reports as success.
 
 If Marp can't find a browser (it drives one to rasterise), point it at one:
 `CHROME_PATH=/path/to/chrome ./render.sh <deck>`.
@@ -276,9 +269,8 @@ fragments/train-loop.md: presenter notes overflow the speaker page by about
 2 of 26 lines — trim roughly 336 characters …
 ```
 
-That is a deliberate wall rather than a convenience. Notes used to spill onto
-continuation pages, and a presenter mid-sentence does not turn over — more
-often they never notice the second page is there. The page is laid out to give
+That is a deliberate wall: a presenter mid-sentence does not turn over to a
+continuation page, and often never notices it is there. The page is laid out to give
 the notes as much room as it can (the pictures float, so a note starts beside
 them and finishes across the full width underneath), and past that the answer
 is a shorter note.
@@ -319,8 +311,7 @@ it as a lettered contact sheet. The speaker narrates from the complete picture,
 sees what each advance will put on screen, and refers to them by the letters
 the audience deck prints. Markers never leak into presenter notes.
 
-Presenter notes that do not fit are a `--check` failure, not a continuation
-page — see *One slide, one speaker page* above. `build.py` estimates the fit
+`build.py` estimates the notes' fit (see *One slide, one speaker page* above)
 against `NOTES_LINES` conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
@@ -537,10 +528,9 @@ used as it is, with its own data, so its first frame shows whatever that app
 already holds.
 
 The corpus and the detector are the **Book example**
-(`scripts/screenshots/book-example.mjs`). The user guide's screenshots were
-shot on it too (#4202), until they moved to generated drawings of their own,
-the Smiley example (`scripts/screenshots/smiley-example.mjs`, #4240), which
-needs no COCO download. The two harnesses still drive one app, so each clears
+(`scripts/screenshots/book-example.mjs`). The user guide's screenshots use the
+Smiley example instead (`scripts/screenshots/smiley-example.mjs`), which needs
+no COCO download. The two harnesses still drive one app, so each clears
 the other's datasets and detectors before it shoots. **A GUI change that moves
 the docs screenshots moves these too**, so queue both: a GUI-changing session
 names the groups it moved as `slides:<group>` in its

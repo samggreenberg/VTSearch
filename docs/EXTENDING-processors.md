@@ -42,14 +42,6 @@ Processor (ABC)
 
 Each processor operates on exactly one media type.
 
-> **Processors are not auto-discovered.** Unlike the plugin families in
-> [EXTENDING-plugins.md](EXTENDING-plugins.md), there is no registry scan and
-> no module-level sentinel here: the app instantiates processors through two
-> **hardcoded factory dicts** in `vtsearch/routes/processors/crud.py`. Writing
-> the subclass below is only half the job — a class that isn't in a factory
-> dict cannot be built by any endpoint. See [Registering a Processor with the
-> App](#registering-a-processor-with-the-app) for the other half.
-
 ### Adding a Detector
 
 A Detector answers "is this media Good?" with a boolean.
@@ -80,7 +72,8 @@ class LoudnessDetector(Detector):
         return "audio"
 
     def load_model(self) -> None:
-        """Optional: load heavyweight resources once before first use."""
+        """Optional: load heavyweight resources. Nothing calls this for
+        you: call it (idempotently) from detect() yourself."""
         pass
 
     def detect(self, media: dict[str, Any]) -> bool:
@@ -190,7 +183,7 @@ subtype-specific method below — you do **not** override `process()`.
 
 | Member | Type | Description |
 |--------|------|-------------|
-| `load_model()` | `() -> None` | One-time model loading (default: no-op) |
+| `load_model()` | `() -> None` | Model loading hook (default: no-op). The app never calls it; call it yourself from `localize()` / `extract()` |
 | `to_dict()` | `() -> dict` | Metadata for API responses (default: `name` + `media_type`) |
 
 **Not on the ABC, but required by the app** (see
@@ -346,10 +339,11 @@ Four behaviours of this layer are worth knowing before you debug it:
   build (`_run_single` swallows the exception and returns `None`), so a
   processor removed from a factory dict later just disappears from the results
   rather than erroring.
-- **Instances are per-request.** Nothing caches a built processor, so
-  `load_model()` runs again on every call. Cache heavy resources on the
-  instance (`if self._model is not None: return`, as the in-tree processors do)
-  and expect the load cost once per request.
+- **Instances are per-request, and nothing calls `load_model()` for you.**
+  The routes build a fresh processor and call `extract()` / `localize()`
+  directly. Every in-tree processor calls `self.load_model()` at the top of
+  `extract()` / `localize()` behind an `if self._model is not None: return`
+  guard; do the same, and expect the load cost once per request.
 - **The stored `media_type` is what routes it.** `POST /api/autorun-*` takes
   `media_type` from the request body and never cross-checks it against your
   class's `media_type` property; `/api/auto-extract` selects processors by that

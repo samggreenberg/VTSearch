@@ -128,9 +128,9 @@ Threshold there.
 
 ## Where the setting goes
 
-The detector keeps its Threshold while VTSearch runs, and the Threshold
-decides where the line sits the next time you run this detector, on this dataset
-or any other. The line decides which unchecked pictures count as matches when
+The detector keeps its Threshold (it is saved with the detector), and the
+Threshold decides where the line sits the next time you run this detector, on
+this dataset or any other. The line decides which unchecked pictures count as matches when
 you **Export** or use **To Dataset**
 ([Send your matches somewhere](export-matches.md)).
 

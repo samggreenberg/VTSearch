@@ -45,7 +45,7 @@ Optional but commonly overridden:
 | `display_name` | `name` | Friendlier label for the picker UI |
 | `embedding_dim` | `None` | Output dimensionality, declared without loading weights (tooling and the generated inventories read it) |
 | `is_default` | `False` | Exactly one embedder per media type should return `True` - that one is what `embedders_for_type(t)[0]` returns |
-| `_embed_text_impl(text)` | `None` | Text-query hook - override this, NOT `embed_text`, which L2-normalizes the result for you. Leave the default to disable text-query sort; otherwise return a vector in the same space as `_embed_media_impl` |
+| `_embed_text_impl(text)` | `None` | Text-query hook - override this, NOT `embed_text`, which L2-normalizes the result for you. Leave the default (and set `supports_text` to `False`, whose default is `True`) to disable text-query sort; otherwise return a vector in the same space as `_embed_media_impl` |
 | `description_wrappers` | `[]` | Templates with `{text}` for enriched text embedding (e.g. `["the sound of {text}"]`). Keep the default unless you have measured that the ensemble beats the typed query on your checkpoint - it is a loss on most (#3127/#3341) |
 | `_embed_media_bulk_impl(medias)` | per-item loop | Native bulk hook for service embedders or batched GPU forward passes |
 | `_patch_forward_impl(media)` | `None` | For patch-capable image encoders; required when `supports_patch_regions = True` |
@@ -291,6 +291,12 @@ import pytest
 from vtscore.media import embedders_for_type, get_embedder
 
 
+def _has_module(name: str) -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec(name) is not None
+
+
 class TestMiniLMRegistration:
     def test_is_registered(self):
         names = [e.name for e in embedders_for_type("text")]
@@ -315,12 +321,6 @@ class TestMiniLMEmbed:
         assert vec.shape == (384,)
         # Normalized
         assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-4
-
-
-def _has_module(name: str) -> bool:
-    import importlib.util
-
-    return importlib.util.find_spec(name) is not None
 ```
 
 See [`tests_lib/detectors/test_new_embedders.py`](../../../tests_lib/detectors/test_new_embedders.py)

@@ -65,8 +65,8 @@ they define the library's interface boundary.
 | 3 | **Global state** | Library code imported the `medias`, `good_votes`, … proxies | `DatasetContext` / `DetectorContext` are the library primitives; the proxies stayed app-side in `vtsearch/state_proxies.py`. |
 | 4 | **Filesystem** | Hardcoded `"data/"` paths scattered around | Every path routes through `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), snapshotted into `CoreConfig.data_dir`. |
 | 5 | **Plugin discovery** | Module scan over `vtsearch.<family>` package paths | Generic `PluginRegistry[T]` walks any package by name + sentinel; library families register under `vtscore.<family>` entry-point groups, app families stay `vtsearch.<family>`. |
-| 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | Audit confirmed `safe_pickle_load`'s allowlist already prevents app-class references in any saved artefact. No shim needed. |
-| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook that refuses `flask` / `werkzeug` / `flask_smorest`. The hook (`tests_lib/flask_blocker.py`) is re-installed at the top of `tests_lib/conftest.py` in every xdist worker, since `sys.meta_path` is per-process and the workers are what import the code under test. |
+| 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | `safe_pickle_load`'s allowlist admits only plain Python types and numpy arrays, so no saved artefact can reference an app class. |
+| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook (`tests_lib/flask_blocker.py`) that refuses `flask` / `werkzeug` / `flask_smorest`. |
 
 If you find code in `vtscore/` that violates one of these seams, it's a bug.
 The one-way dependency is enforced by a test; see
@@ -146,7 +146,7 @@ shows the wiring with a `ContextVar`.
 library actually reads:
 
 - ML knobs: `calibrate_count`, `calibration_fraction`,
-  `enrich_descriptions`, `beta`, `autopilot_goal_diversity`.
+  `enrich_descriptions`, `autopilot_goal_diversity`.
 - Filesystem knobs: `data_dir`, `saved_datasets_dir`, `detectors_dir`.
 - Concurrency knobs: `max_concurrent_dataset_downloads`,
   `max_concurrent_dataset_embeddings`.
@@ -154,11 +154,11 @@ library actually reads:
 - Optional, defaulted fields: `autofind_exporter`,
   `autofind_exporter_field_values`, `autofind_cli_delete_dataset`,
   `projection_n_neighbors`,
-  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
-  `hide_ingest_eta` (deprecated, ignored).
+  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`, `beta`,
+  and the deprecated `hide_ingest_eta` / `inclusion`.
 
 Every field without a default is required, so constructing one by hand
-means passing all twelve (as below).
+means passing all eleven (as below).
 
 Library code calls `CoreConfig.from_settings()` to get a populated config
 for the current request / thread. That classmethod is a thin wrapper that
@@ -168,13 +168,16 @@ delegates to whatever builder the app installed via
 `vtsearch.settings`. The builder is called with one positional
 `settings_path` argument, so declare it even if you ignore it.
 
-**Library-only consumers don't need a builder.** They construct `CoreConfig`
-directly and pass it where it's needed:
+**Library-only consumers still install a builder** if they use anything
+that reads configuration internally - detector storage
+(`vtscore.detectors.store`), the dataset and detector registries, and the
+load pipeline all call `CoreConfig.from_settings()` themselves. The builder
+can simply return a fixed value built once:
 
 ```python
 from pathlib import Path
 
-from vtscore.config import CoreConfig
+from vtscore.config import CoreConfig, register_core_config_builder
 
 config = CoreConfig(
     data_dir=Path("/var/lib/myapp/data"),
@@ -189,8 +192,11 @@ config = CoreConfig(
     enrich_descriptions=False,
     autopilot_goal_diversity=8,
 )
+register_core_config_builder(lambda _settings_path=None: config)
 ```
 
+Pure functions that take their inputs as arguments (`train_model`,
+`load_dataset_from_folder`, `embed_missing`, …) need no builder at all.
 If a library consumer calls `CoreConfig.from_settings()` without first
 installing a builder, the method raises a clear `RuntimeError`. That's
 intentional - silent fallback to "some default" would mask integration
@@ -200,8 +206,8 @@ bugs.
 
 Every plugin family in `vtscore` follows the same shape:
 
-1. A base ABC (`DatasetImporter`, `ResultsExporter`, `MediaEmbedder`, …)
-2. A sentinel attribute name (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …)
+1. A base ABC (`DatasetImporter`, `ResultsExporter`, `MediaConverter`, …)
+2. A sentinel attribute name (`IMPORTER`, `EXPORTER`, `CONVERTER`, …)
 3. A `PluginRegistry[T]` constructed with that sentinel, eager by default
 4. An optional `importlib.metadata` entry-point group (`vtscore.<family>`)
    that third-party packages can register under
@@ -437,10 +443,7 @@ the library has working defaults for all five (no context, no
 **The dependency direction is enforced by a test.**
 `tests_lib/meta/test_library_layering.py` walks the AST of every
 `vtscore` module and fails on any `import vtsearch`, at any nesting
-depth. Lazy function-level imports were how the rule kept breaking: the
-module still imported cleanly and the inverted dependency only bit at
-call time, in exactly the Flask-free deployment the tier exists for. A
-short allowlist there carries the remaining imports with their rationale
-(two optional `try`/`except`-guarded ones, both wrapped so the library
-still works when the app package is absent); add a hook rather than a
-sixth category.
+depth - including lazy function-level imports, which import cleanly and
+only break at call time in a Flask-free deployment. A short allowlist
+there carries the two remaining optional `try`/`except`-guarded imports
+with their rationale; add a hook rather than another exemption.

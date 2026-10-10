@@ -345,8 +345,9 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
 
 Notes on the multi-thread story:
 
-- `train_model` is thread-safe - it uses `torch.random.fork_rng()` to
-  isolate its RNG and a local `torch.Generator` for the model weights.
+- `train_model` is thread-safe: the production linear-SVM head is fitted
+  by liblinear, which touches no global RNG, and the BCE heads use a
+  local `torch.Generator` plus `torch.random.fork_rng()`.
 - The state lock (`_state_lock` in `vtscore/state/core.py`) is an
   `RLock`, so one public function can call another while holding the
   lock without deadlock.

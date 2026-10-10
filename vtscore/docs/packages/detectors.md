@@ -41,6 +41,8 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
 | `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
 | `vtscore/detectors/balance.py`               | The detector's balance (beta), kept on the detector JSON            |
+| `vtscore/detectors/label_quota.py`           | The label quota: which detector a labelset's counts give            |
+| `vtscore/detectors/centroid_head.py`         | The Goods' centroid head served under the quota                     |
 
 **Labels: resolving, syncing, restoring**
 
@@ -287,10 +289,12 @@ Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
 the ranking the line keeps a set of (`line_ranking`, #4272). It no longer
 builds the #4220 estimate (#4362), so `precision_floor_cache` stays `None`.
-Under a balance the threshold keeps a set - the top *count* unvoted items of
-the haystack, the set the detector's last spot check ended on (where the
-check's shape lets it move the line) or the mixture's F-beta argmax under the
-balance's cap - and with no balance it is the Inclusion 0 cut.
+Every retrain also fits the **labels line** (#4452,
+[training.md](training.md#the-labels-line-fit_labels_line-labelsline)) and
+parks it as `det_ctx.labels_line`. Under a balance the threshold is that
+line's cut at the balance; with no balance (or too few labels for a class
+model) it is the fold-anchored Inclusion 0 cut, and with no usable folds the
+schedule blend (`calculate_safe_threshold`).
 `calibrating_groups` is deprecated and ignored (#4362): it chose the votes
 that estimate could use as evidence. Leave it unset; passing it emits a
 `DeprecationWarning`.
@@ -689,21 +693,20 @@ indicators. It is unrelated to `vtscore.concurrency.progress`
 [`concurrency.md`](concurrency.md#two-kinds-of-progress).
 
 All cache state lives in `_ProgressCache` instances held in `_caches`, an
-LRU-bounded map keyed by `(dataset_id, detector_id)`. Each cache carries
+LRU map keyed by `(dataset_id, detector_id)` and bounded at
+`_MAX_CACHED_PAIRS` (3). Each cache carries
 `steps` (one entry per label-history step with
 `model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
-`good_ids` / `bad_ids` (running label sets), `prev_predictions` (stability
-baseline), `coverage_atlas` (the per-step replay of coverage evidence),
-`status_snapshot` (the last full `/api/labeling-status` payload), and
-`live_models` (models injected by `train_and_score` during sorting, keyed by
-`(frozenset(good), frozenset(bad))`). The stability pool tensors sit beside
-them in `_monitored_pools`, keyed by `dataset_id` alone and shared by every
-cache over that dataset: the pool is a pure function of `clips_dict`, and its
-tensor is by far the largest thing the module holds, so sharing is what keeps
-several warm pairs from multiplying peak memory.
+`good_ids` / `bad_ids` (running label sets), `prev_snapshot` (the last
+model-bearing step's scores over the unlabeled pool, with its cut and
+ambiguity band: the Stable baseline), `coverage_atlas` (the per-step replay
+of coverage evidence), `status_snapshot` (the last full
+`/api/labeling-status` payload), `live_models` (models injected by
+`train_and_score` during sorting, keyed by `(frozenset(good),
+frozenset(bad))`; the module's only source of models) and `smart_memo`.
 
-A single `threading.RLock` (`_progress_lock`) protects both maps and every
-field inside them. Keying by the pair is a correctness requirement: a
+A single `threading.RLock` (`_progress_lock`) protects the map and every
+field inside it. Keying by the pair is a correctness requirement: a
 shared slot would replay one detector's history onto another's labels.
 Every entry point resolves its cache through the active
 `(dataset_id, detector_id)` key (`_active_cache()` / `_ensure_cache`).

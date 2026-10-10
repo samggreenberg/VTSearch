@@ -139,6 +139,11 @@ bench checkpoints per configuration, so a rerun resumes.
 
 ## Open work
 
+**Read against today's line first.** Since #4452 a trained head's line is the
+labels line, so κ and the fused cut no longer place the reported threshold; they
+still feed the acquisition fallback and the no-class-model line
+([`population-anchored-calibration.md`](population-anchored-calibration.md)).
+
 <!-- item-sep -->
 
 - **Run 2 of the synthetic bench to completion.** `python

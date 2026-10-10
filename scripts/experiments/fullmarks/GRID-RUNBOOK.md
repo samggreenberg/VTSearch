@@ -9,6 +9,22 @@ A tier-`s` SPODS-only build fits comfortably on a laptop or a cloud container
 `l`: 50k–200k UCSF pages to fetch and render, and `sift_vlad` local features
 over all of them.
 
+On the cluster every stage goes through `launch_fullmarks.sh`, which sources
+`gridenv.sh` and the pile env, puts `~/.local/bin` on the job's `PATH`, and
+submits:
+
+| command | stage | resources (env override) |
+|---|---|---|
+| `probe` | can every source be reached? (runs inline) | — |
+| `build` | 1: sources + clustering; runs `preflight.sh` first | CPU, 64G (`VTS_FULLMARKS_MEM`), 8 CPUs, 4 days (`VTS_FULLMARKS_TIME`) |
+| `slate` | 3: the human-audit bundle | CPU, 32G (`VTS_FULLMARKS_SLATE_MEM`) |
+| `siglip` | 3: the audit's semantic second opinion | GPU |
+| `embed <tier>` | 4: one tier's cells (`VTS_FULLMARKS_EMBEDDERS`, default `sift_vlad,siglip`) | GPU via `pick_gpu.py` (`VTS_FULLMARKS_GPU`), 32G, 12 h |
+| `status` | queue plus the real signal on disk | — |
+
+The `python …` commands below are what each stage runs, for a laptop build or a
+manual re-run.
+
 ## Sizing
 
 Measured or estimated per page: a rendered UCSF page at 150 dpi is ~250 KB PNG;
@@ -48,16 +64,14 @@ extractor, or a UCSF endpoint that is down. Seconds now, a queue slot later.
 
 **The probe downloads nothing**, so it is safe to run repeatedly on a login
 node: a `HEAD` for SPODS, a file listing for the Kaggle mirrors, a result count
-for UCSF. It also sweeps away any `_probe_*` directories left under
-`$VTS_FULLMARKS_RAW` by the version that *did* fetch (~2 GB of duplicated
-StaVer/Tobacco800 bytes), reporting what it reclaimed.
+for UCSF. It also sweeps away any stale `_probe_*` directories under
+`$VTS_FULLMARKS_RAW`, reporting what it reclaimed.
 
 **RAR extractor.** SPODS is RAR4. The builder tries `bsdtar`, `7z`, `unar`,
-`unrar` in that order. **On this cluster none of the four is present** — not on
-the login nodes and not on a compute node, so the hope that `bsdtar` would be
-there did not survive contact. `libarchive.so.13` is installed but the `bsdtar`
-binary that fronts it is not, so the probe reports `rar extractor: NONE FOUND`
-and SPODS is unreachable, Kaggle token or no Kaggle token.
+`unrar` in that order. **On this cluster none of the four is present**, on login
+or compute nodes (`libarchive.so.13` is installed, the `bsdtar` binary is not),
+so without the fix below the probe reports `rar extractor: NONE FOUND` and SPODS
+is unreachable.
 
 Fixed once, for the user, by dropping a static 7-Zip in `~/.local/bin`:
 
@@ -77,16 +91,17 @@ probe passing interactively is not evidence the job will find the extractor.
 and Tobacco800; a SPODS-only roster does not touch Kaggle.
 
 `access_token` is the file "Create New Token" writes today, and the one
-`kagglesdk` reads; the probe accepts it as of #3343. Also note the `kaggle` CLI
+`kagglesdk` reads. Also note the `kaggle` CLI
 itself is not installed on this cluster — `uv tool install kaggle` puts it in
 `~/.local/bin` without touching the shared venv, which is what the launcher's
 `PATH` already picks up.
 
-Then the standard gate, which checks the things a script cannot:
+Then the standard gate. `launch_fullmarks.sh build` runs it itself, with the
+job's own `--mem` and `--conc 1`; by hand:
 
 ```bash
 bash scripts/experiments/preflight.sh --exp "$VTS_FULLMARKS_OUT" \
-  --job-name fullmarks-build --mem 16G --conc 8
+  --job-name fullmarks-build --mem 64G --conc 1
 ```
 
 ## Stage 1 — sources and clustering (CPU, one job)
@@ -96,15 +111,16 @@ CPU-bound. This is one long job rather than an array, because the sources are
 sequential and the clustering needs every mark in memory at once.
 
 ```bash
+bash launch_fullmarks.sh build     # submits the command below
 python build_corpus.py \
   --sources spods,staver,tobacco800,ucsf \
   --ucsf-distractors 200000 \
   --ucsf-letterhead-per-author 2000
 ```
 
-Ask for **64 GB and a wall clock in hours**, not minutes. 16 GB was the
-inherited figure; a 1,541-page smoke already peaked at 6.5 GB, and clustering
-holds every mark at once while the letterhead candidates go from 160 to 16,000.
+Ask for **64 GB and a wall clock in days** (the launcher's defaults): a
+1,541-page smoke already peaked at 6.5 GB, and clustering holds every mark at
+once while the letterhead candidates go from 160 to 16,000.
 
 **Do not parallelise the pull across many jobs.** That is the rule, and it is
 about jobs: a single job fetches 3-wide behind `_Throttle`, which surrenders a
@@ -130,11 +146,8 @@ sits at 37% CPU is under-driven, which is invisible in an ETA.
 **Resume is free** — measured, at ~89 pages/s against ~8.6 cold. Downloads are
 atomic (temp + rename), the Solr cursor order is stable, and a page whose PNGs
 are all on disk is **not re-rendered**: its dimensions are read back off the
-images. That last part was false until #3343 (the skip guarded the *save* while
-the render above it ran unconditionally, so a resumed job re-rendered everything
-and threw it away — ~10 h at 200k pages). It is what makes a multi-day pull
-correctable mid-flight rather than something you can only endure, so it is
-pinned by `TestResumeSkipsRendering`.
+images (pinned by `TestResumeSkipsRendering`; see
+[`lessons/2026-09-01-resume-was-free-except-for-ten-hours-of-rendering.md`](../lessons/2026-09-01-resume-was-free-except-for-ten-hours-of-rendering.md)).
 
 Before resuming, delete zero-byte outputs — they count as "done" and resume
 cannot see that they are empty — and any `.part` files, which resume via a Range
@@ -178,9 +191,7 @@ so on a corpus that has not been through stage 2 there is nothing for it to
 render. `slate` renders the merge sheets, says `membership: SKIPPED`, and bundles
 `audit/merge` alone; the log's `contains:` line is the record of what is actually
 in the tarball. Pick the roster, rebuild with `--roster`, then run `slate` again
-for the membership half. Until #3601 that skip was silent — an empty
-`verdicts.jsonl` went into the tarball and the job exited 0, so a bundle that
-held one pass looked like a bundle that held two.
+for the membership half.
 
 **Then the second opinion, on a GPU**, which re-renders both similarity passes
 against a semantic embedder (see README's *The descriptor the audit asks with is
@@ -239,6 +250,7 @@ that is 1,770 sheets, which is why the slate exists.
 ## Stage 4 — embedding cells (GPU)
 
 ```bash
+bash launch_fullmarks.sh embed s     # submits the first command below; then m, then l
 python embed_corpus.py --tier s --embedders sift_vlad,siglip
 python embed_corpus.py --tier m --embedders sift_vlad,siglip
 python embed_corpus.py --tier l --embedders sift_vlad,siglip
@@ -297,17 +309,11 @@ the premium-embedder column, not by default.
 
 ## After launching
 
-A submission is not a launch. Confirm each job came back with a numeric id and
-that output starts appearing, then arm a completion notification rather than
-watching:
-
-```bash
-ssh grid 'until [ "$(squeue -u $USER -h -n fullmarks-build -o %i | wc -l)" -eq 0 ]; do sleep 120; done; echo DONE; ls -la '"$VTS_FULLMARKS_OUT"
-```
-
-Poll the real signal — page counts in `build_report.json`, cell sizes in
-`embed_corpus.py --list` — not just `squeue`. A drained queue with missing
-output means failures, not completion.
+Confirm the launch and arm a completion waiter as the `grid-experiments` skill
+describes (job name `fullmarks-build`, or `fullmarks-embed-<tier>`). The real
+signal here is `launch_fullmarks.sh status` (rendered pages, free space, slate
+sheets), page counts in `build_report.json` and cell sizes in
+`embed_corpus.py --list`, not `squeue`.
 
 ## What to check when it finishes
 

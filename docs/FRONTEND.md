@@ -4,8 +4,11 @@ This document maps the Angular single-page app in `frontend/`. It is the
 front-end counterpart to [ARCHITECTURE.md](ARCHITECTURE.md), which covers the
 Python tiers.
 
-It is a **map, not an inventory.** The SPA holds roughly ninety components and
-sixty services; enumerating them here would be a list that rots on the next
+It is for anyone changing the SPA — read §5 before touching state, and §6
+before touching anything that names a dataset or detector.
+
+It is a **map, not an inventory.** The SPA holds roughly a hundred components
+and seventy services; enumerating them here would be a list that rots on the next
 commit. Instead this document explains the handful of mechanisms everything
 else is built on — the change-detection model, the service layer, the
 active-dataset/detector context, the generated API client, and the component
@@ -211,175 +214,106 @@ The three panels are shared with the Test view:
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
 
-**Folding the side panels** (#4673). Each side folds to a 48px strip
-(`vt-side-panel-toggle`), per the `hide_left_panel` / `hide_right_panel`
-settings, both on by default and shared by Train and Test.
-`PanelHideStateService` (root) reads them and holds a click until the PUT
-echoes it. The left folds on an Autopilot tab only (`LeftPanelComponent.folded`;
-Manual and Review are driven from the list), and in Train its strip is the
-Autopilot panel's own phase rail. The right folds on every tab, and Test opens
-it on its own while a verdict is up (`FindViewComponent.rightCollapsed`). A fold
-swaps the grid column, not the width: `--left-width` / `--right-width` keep the
-open width, and the `.layout--*-collapsed` classes put the strip's 48px in its
-place. A folded right panel is unmounted, which is why the views, not
-`vt-right-panel`, own the votes poll.
+**Folding the side panels.** Each side folds to a 48px strip
+(`vt-side-panel-toggle`) per the `hide_left_panel` / `hide_right_panel`
+settings, shared by Train and Test; `PanelHideStateService` (root) holds a
+click until the settings PUT echoes it. The left folds on an Autopilot tab only
+(`LeftPanelComponent.folded`); the right folds on every tab, and Test opens it
+itself while a verdict is up (`FindViewComponent.rightCollapsed`). A fold swaps
+the grid column (`.layout--*-collapsed`), not `--left-width` / `--right-width`,
+so the open width survives. A folded right panel is unmounted, which is why the
+views, not `vt-right-panel`, own the votes poll.
 
-**The Threshold** (`vt-balance`, the balance, in the Manual tab and Test's
-top row; #4413) is the one knob on the detector's line. The balance is
-F-beta's beta: which way to lean between false positives and false negatives.
-It is the detector's own, kept on the detector (#4665): the New Detector modal
-mounts the same control (with no line, so no state line) and sends the pick
-as `beta` on the create POST, starting on the user's `beta` setting, their last
-pick. That is the only way Train's Autopilot tab, which has no Threshold of its
-own, gets a balance the user chose.
-The line is the set with the best estimated F-beta, and a spot check just says
-what it estimated. Two values back the control, and they travel separately:
-`SortStateService.beta` is the balance the radios show, seeded per pair by
-`PairScopeService.seedBeta` (`GET /api/balance`); `balance` is the state of
-the line on screen (`utils/line-balance.ts`, `LineBalance`: `unchecked` or
-`checked`, the count kept, the check's two likely ranges and its F-beta
-estimate), and only ever arrives *with* that line (a sort, a Test pass, or the
-balance POST's own response). Each view has one write path, both
-`switchMap`-ed and pair-scoped so a balance the user moved past can never land
-last. Test's
-(`betaRequests$`, debounced) installs the returned line straight over the
-frozen scores. Label's (in `SortRunnerService`) re-runs the learned sort, but
-only from the POST's response: the learned sort reads the balance server-side
-and caches by it, so a re-sort that beat the POST would come back at the old
-balance. When the balance keeps the same count of items before and after, the
-line stays put and only its state is swapped: the count, not the state,
-decides where the line sits. The control is a False Positives - False
-Negatives spectrum with three radios under its thirds (`BALANCE_PRESETS` in
-`utils/line-balance.ts`: beta 4 toward false positives, 1 balanced, 1/4 toward
-false negatives; #4448), and never shows a balance as a word or a number: each
-radio's tooltip says where it sits (#4298, #4317). The radios show the host's
-balance, never the click: a pick puts the DOM back on `value()` before
-emitting, so a pick the host drops (Test, mid-pass) leaves them where they
-were. A stored balance off the list is shown on the nearest radio (nearest in
-log space, a tie to the preset farther from 1, so the old 2 and 0.5 show as 4
-and 1/4) and snapped to it through the control's
-own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Test
-drops a balance change while a pass is running. Under the spectrum the state
-line reads "Checked · likely 55–100% right, about half of them found (checked
-5) · 32 kept" or "Top 32 kept, unchecked" (`balanceSummary`; the recall range
-is in words, `foundWords`, and as a number only in the tooltip,
-`balanceExplanation`), with a green dot when checked and a yellow one when
-not; there is no red.
+**The Threshold** (`vt-balance`, in Train's Manual tab and Test's top row) is
+the one knob on the detector's line. The balance is F-beta's beta, kept on the
+detector: the New Detector modal mounts the same control and sends its pick as
+`beta` on the create POST, which is how Train's Autopilot tab (no Threshold of
+its own) gets a balance the user chose. The control is three radios over a
+False Positives – False Negatives spectrum (`BALANCE_PRESETS` in
+`utils/line-balance.ts`); a stored balance off the presets is shown on the
+nearest radio and snapped to it once the host is not `busy`. The radios show
+the host's value, never the click, so a pick the host drops leaves them where
+they were. Two values back the control, and they travel separately:
 
-**The spot check** (`vt-spot-check-modal`, #4273, walking to the balance's
-peak since #4413) measures that line, in Train only. The control's "Check N
-picks" emits `check`; the left panel forwards it as `check`, and the label
-view hosts the modal behind a `showSpotCheck` signal. Test sets the control's
-`offerCheck` false and hosts no modal: it tests the balance Train set, and
-labelling more to set one is too late there (#4317); its own test of the line
-is the Test autopilot (below), and the control's state line there is the
-host's (`lineState`: this corpus's result, or untested) with the radios
-`locked` while a phase runs.
-**When a check is due** (#4496): the balance's `checkDue` (the server's
-`check_due`, `weak_check_due` on the labels line's `separation`) turns the
-control's button `btn--primary` and adds a `.balance-due` note. The label view
-runs the check itself under Autopilot: an effect on the balance and
-`sortBusy` calls `runDueCheck()`, which opens the modal with an `intro` line
-once a learned sort has landed with `checkDue`, never in Autopilot's opening
-(`good`/`bad`/`more`, where no detector is trained) nor over another step;
-closing it advances Autopilot past any item the check voted.
-The modal owns the check's lifecycle against `/api/precision-check` and holds a
-round's votes locally until every pick has one, then sends the round whole. It
-takes the vote keys through `KeyboardService.captureVoteKeys`, a claim that
-routes ←/→ and ↓/↑ to its holder even with a modal open and sends nothing to
-`action$`, so the ranked list behind it never votes. The walk goes deeper
-while its F-beta estimate does not fall ("Better so far: checking the next
-32.") and turns back once it does ("Past the peak: checking a shorter list."),
-and the check is finished when `check.status` is `checked`; the result reads
-"Checked: likely 55–100% right, about half of them found (checked 15)." over
-"The line keeps these 32: the set where the check's balance peaked." Each
-round's `voted` event refreshes the piles; a finished check has moved the line
-server-side, so the view re-reads it with `GET /api/balance` and installs it
-over the ranking on screen through `SortRunnerService.refreshLine`. No re-sort
-follows: a retrain moves the list under the result, which is what reports it
-`stale`, and the owner's model is that *later* votes do that. The line draws
-the same in every state; the state and its likely range live in the balance
-control and on the Stats chart (which draws no horizontal line any more: a
-balance is a preference, not a precision to keep), and a stale range differs
-only in its tooltip. The Test view draws neither the range nor the Stats
-chart that used to carry it: its result pane draws the test's own ranges.
+- `SortStateService.beta` — the balance the radios show, seeded per pair by
+  `PairScopeService.seedBeta` (`GET /api/balance`).
+- `balance` — the state of the line on screen (`LineBalance`: `unchecked` or
+  `checked`, the count kept, the check's likely ranges and F-beta estimate). It
+  only ever arrives *with* that line: a sort, a Test pass, or the balance
+  POST's own response.
+
+Each view has one write path, `switchMap`-ed and pair-scoped so a balance the
+user moved past can never land last. Test's (`betaRequests$`, debounced)
+installs the returned line over the frozen scores. Label's (in
+`SortRunnerService`) re-runs the learned sort only from the POST's response:
+the learned sort reads the balance server-side and caches by it, so a re-sort
+that beat the POST would come back at the old balance. The state line's
+wording lives in `balanceSummary` / `foundWords` / `balanceExplanation`.
+
+**The spot check** (`vt-spot-check-modal`, Train only) audits that line. The
+control's "Check N picks" emits `check`, and the label view hosts the modal
+behind a `showSpotCheck` signal; under Autopilot the view opens it itself
+(`runDueCheck()`) once a learned sort lands with `checkDue` (the server's
+`check_due`), never during Autopilot's opening phases. The modal owns the
+check's lifecycle against `/api/precision-check`, holds a round's votes locally
+until every pick has one, and takes the vote keys through
+`KeyboardService.captureVoteKeys` (a claim that routes the vote keys to its
+holder and sends nothing to `action$`), so the ranked list behind it never
+votes. A finished check has moved the line server-side, so the view re-reads it
+with `GET /api/balance` and installs it through `SortRunnerService.refreshLine`;
+no re-sort follows. Test sets the control's `offerCheck` false and hosts no
+modal: its measurement of the line is the Test autopilot (below).
 
 ### Test view (`components/find-view/`)
 
 The Dashboard's **Test** button opens it at `/test/:datasetId/:detectorId`.
-It was called Find until #4525 renamed it, and its code keeps that name, as
-the Train view's is `label`: `FindViewComponent`, `panelMode: 'find'`,
+It was called Find until #4525 renamed it, and its code keeps that name (as the
+Train view's is `label`): `FindViewComponent`, `panelMode: 'find'`,
 `VoteStateService.findMode`, and on the API side `/api/find-label`,
 `find_mode` and the `find` SSE channel. **Find** is now the Dashboard's third
 button, which opens no view: it starts a background AutoFind run per ticked
 dataset with the ticked detectors (`DashboardComponent.onAutofind`,
-`AutoFindService.find`), and the Find Results dialog opens as they land. The
-dialog's **Browse** lays the listed items out in Browse through the same
-`BrowseSubsetPrepService` the Test view's Browse uses, with an origin
-(`?from=results&run=…`) that sends Browse's Back to those results instead of
-to Test.
+`AutoFindService.find`). The Find Results dialog's **Browse** lays the listed
+items out through the same `BrowseSubsetPrepService` the Test view uses, with
+an origin (`?from=results&run=…`) that sends Browse's Back to those results.
 
-Scores the active pair's dataset with its detector (`POST /api/find-label`)
-and opens on two tabs in the left panel (`findTab`, owned by the view since
-the centre and right panes switch with it; #4524): **Autopilot**, the Test
-autopilot, and **Review**, the ranked result in full (the work queue under
-the line, the boundary walk, the Verified Good / Verified Bad piles, To
-Dataset / Export / Browse, which can hand a subset of result ids to Browse
-through `BrowseSubsetService`). Train's Autopilot / Manual split applied to
-testing: the guided flow is the default, the open one a tab away.
+The view scores the active pair's dataset with its detector
+(`POST /api/find-label`) and opens on two left-panel tabs (`findTab`, owned by
+the view because the centre and right panes switch with it): **Autopilot**, the
+Test autopilot, and **Review**, the ranked result in full (the work queue under
+the line, the Verified Good / Verified Bad piles, To Dataset / Export / Browse,
+the last handing a subset of ids to Browse through `BrowseSubsetService`).
 
 **The Test autopilot** measures the line on the corpus in front of the user
-with uniform picks from rank bands on both sides of it (`vtscore/docs/packages/training.md`;
-the statistics are `vtscore/training/thresholds/line_test.py`, the routes
-`/api/line-test`). The server owns the sample and derives the phase on every
-read (`line_phase`), so nothing in the frontend accumulates it: the view's
-component-provided `LineTestSessionService` holds the last `/api/line-test`
-response plus the one thing the wire does not carry, the round *as dealt*
-(the stage's dots show every pick of the round with its vote, where the
-wire's `picks` are only the ones still pending). A vote goes out as it is
-cast, a fast voter's next one while the last is in flight, and the ↓ key
-sends an unvote; replies carry the whole state and can land out of order, so
-each is stamped with its request's sequence and an older one never
-overwrites a newer. The view starts the test once the pass lands and the
-Autopilot tab is up (`startTestIfDue`), reloads it on the way back from the
-Browser, and clears it with the pair state.
+with uniform picks from rank bands on both sides of it (design:
+`vtscore/docs/packages/training.md`; statistics:
+`vtscore/training/thresholds/line_test.py`; routes: `/api/line-test*` in
+`vtsearch/routes/line_test.py`). The server owns the sample and derives the
+phase on every read (`line_phase`), so nothing in the frontend accumulates it:
+the component-provided `LineTestSessionService` holds the last response plus
+the one thing the wire does not carry, the round *as dealt*. Votes go out as
+they are cast; replies carry the whole state and can land out of order, so each
+is stamped with its request's sequence and an older one never overwrites a
+newer. The view starts the test once the pass lands and the Autopilot tab is up
+(`startTestIfDue`), and clears it with the pair state.
 
 - `vt-line-test-panel` (left, projected into the left panel as
-  `[findAutopilot]`, under the balance): Score, Check the matches, Check the
-  misses, Done, in the shape of `vt-autopilot-panel`, each with one light
-  (`widthLight`: red beyond twice the range's target width, yellow within
-  twice, green at or under). The ranked list is not shown while a test runs:
-  a pick is drawn from a band, and the list would show its rank (#4267).
+  `[findAutopilot]`): the phases in the shape of `vt-autopilot-panel`, each
+  with a `widthLight`. The ranked list is hidden while a test runs: a pick is
+  drawn from a band, and the list would show its rank.
 - `vt-line-test-stage` (centre): the current pick with Good and Bad, the
-  round's dots, the phase's prompt, through a `KeyboardService.captureVoteKeys`
-  claim held while it is on screen, as the spot-check modal's round, but as
-  the view rather than a modal over a list.
-- `vt-line-test-result` (right): the result as it forms, in place of the two
-  piles: the F-beta headline, the Right and Found ranges with their lights,
-  the band-resolution precision curve (which replaces the retired Stats
-  modal's *Checked by you* curve), the picks by band, and at Done the
-  verdict with its three exits (**Move to AutoFind**, which sets the
-  detector's autofind flag and heads to the Dashboard; **Lean the
-  Threshold**, the per-preset table the server prices from the same picks,
-  whose click is the control's own balance pick; **Add Corrections and
-  retrain**, the view's existing corrections path). The Stats modal's trust
-  chips (Training-domain overlap, Evidence coverage) and its 2×2 of the
-  session's checks live under the verdict, read once the test is done.
-- The balance is live between phases and frozen within one
-  (`LineTestSessionService.locked`): the view drops a pick while a phase
-  runs, and after a pick lands it re-reads the test so the result reports
-  the line `moved`. **Add Corrections** marks it `stale` (the detector has
-  now seen the test set), as `find_eval_stale` always did.
-- The verdict is kept on the detector server-side (#4526), so a `start` over
-  an unchanged ranking can come back already `done` with `test.kept_at` set:
-  the result pane says when those picks were taken, and the service re-reads
-  the votes, since the kept picks are session votes again. There is no
-  forget button: a retrain marks the verdict stale and a changed ranking
-  deals a fresh test, so nothing is owed to the user there
-  (`/api/line-test/forget` is the screenshot harness's reset). The two readers of the kept verdicts are the
-  detector Stats modal's *Tested on* section and the AutoFind tab's
-  `vt-detector-card`, which shows its row's `test_verdict` under the name;
-  both word it through `verdictLine` / `verdictTitle` in `utils/line-test.ts`.
+  round's dots, and a `KeyboardService.captureVoteKeys` claim while on screen.
+- `vt-line-test-result` (right, in place of the two piles): the result as it
+  forms, and at Done the verdict with its exits (**Move to AutoFind**, **Lean
+  the Threshold**, **Add Corrections and retrain**).
+- The balance is frozen within a phase (`LineTestSessionService.locked`);
+  **Add Corrections** marks the result `stale` (the detector has now seen the
+  test set).
+- The verdict is kept on the detector server-side, so a `start` over an
+  unchanged ranking can come back already `done` with `test.kept_at` set. Its
+  other readers are the detector Stats modal's *Tested on* section and the
+  AutoFind tab's `vt-detector-card`; all word it through `verdictLine` /
+  `verdictTitle` in `utils/line-test.ts`.
 
 ### Browse view (`components/browse-*`)
 
@@ -499,13 +433,10 @@ this codebase, and it is silent.
   `testing/getter-signal-zoneless.spec.ts` pins this.
 - **Per-media-type settings prefs go through `SettingsStateService.perMediaType`.**
   A `{media_type: value}` settings key bound to a media-type signal returns a
-  `computed` value plus a merge-preserving setter, replacing the shadow
-  `Record` field + settings-mirror `effect()` + media-switch `effect()` +
-  hand-spread write that used to be repeated at every consumer. Two things it
-  buys: the value is a real signal (so a template binding on it repaints on its
-  own, instead of relying on some co-located `effect()` to dirty the view), and
-  there is no mirror left to go stale when a key disappears server-side. The
-  setter **merges**; a setter that replaced the dict would wipe every other
+  `computed` value plus a merge-preserving setter — do not hand-roll a shadow
+  `Record` field kept in sync by `effect()`s. The value is a real signal (a
+  template binding on it repaints on its own), and there is no mirror to go
+  stale when a key disappears server-side. The setter **merges**; a setter that replaced the dict would wipe every other
   media type's preference. It takes a plain key, or a *signal* of a key where
   the key itself varies (`vt-view-controls` picks `focus_mode_left` /
   `_right` / `_popup` from its `side` input). `LabelViewPanelStateService` is
@@ -753,10 +684,11 @@ render their own inline validation. The error still propagates to
 `ProgressEventsService` holds **one** `EventSource` on `/api/events` and fans
 it out to every consumer, replacing what used to be several REST polls.
 Channels: `server` (a per-connect `boot_id`, so a backend restart fires
-`serverReset$` and consumers can drop state keyed on dead `task_id`s),
-`dataset`, `loading-tasks`, `detector-loading-tasks`, `sort`, `find`, `eval`.
-Every one of those carries the same `ProgressEvent` shape, so any of them can
-be rendered by `utils/format-progress.ts`. The channel state is held in
+`serverReset$` and consumers can drop state keyed on dead `task_id`s);
+`loading-tasks` and `detector-loading-tasks` (`LoadingTask[]` lists); and
+`sort`, `find`, `eval`, which carry the `ProgressEvent` shape that
+`utils/format-progress.ts` renders. A payload-less `heartbeat` keeps the
+circuit breaker online during long silent operations. The channel state is held in
 signals — a signal write inside the SSE callback notifies Angular's scheduler
 directly, which is precisely what makes the pump work without zone.js.
 
@@ -809,8 +741,9 @@ component is very much still alive. It legitimately takes one of two shapes,
 and both are correct as written:
 
 - A **scope subject** fired on each reset, for a family of streams that share
-  a lifetime shorter than the component's: `findPolling$` (`dashboard`) and
-  `stopPolling$` (`VoteStateService`) cancel a superseded poll. Name it for the
+  a lifetime shorter than the component's: `polling$`
+  (`DashboardLoadingTasksService`), `stopPolling$` (`VoteStateService`) and
+  `sortSuperseded$` (`SortRunnerService`) cancel superseded work. Name it for the
   scope it bounds, never `destroy$`.
 
   The dataset/detector pair's scope is the one case where the subject is not a
@@ -819,8 +752,7 @@ and both are correct as written:
   operator, because the *ordering* around firing it is load-bearing. A pair
   switch must supersede **before** any of the new pair's state is installed, or
   a late response repaints the old pair's ranking over the new one's — a silent
-  wrong-results bug, not a crash. Both views used to spell that sequence out in
-  a comment and enforce nothing; `resetForNewPair()` is now the only caller that
+  wrong-results bug, not a crash. `resetForNewPair()` is the only caller that
   can fire the scope, so the order is not a caller's to get wrong. The service's
   own `ngOnDestroy` covers destroy-time teardown, so a view must not (and need
   not) fire the scope by hand.
@@ -945,8 +877,9 @@ next to the Browse canvas from swallowing keyboard focus on mousedown.
 Services are root-provided by default; provide one on a component only when
 per-instance state or a component-bound lifetime is the point.  The complete
 list today: `LabelViewPanelStateService` and `SortRunnerService`
-(`label-view`), `PairScopeService` (`label-view`, `find-view`), and
-`BrowseViewportService` / `BrowseSelectionService` (`browse-view`).
+(`label-view`), `PairScopeService` (`label-view`, `find-view`),
+`LineTestSessionService` (`find-view`), and `BrowseViewportService` /
+`BrowseSelectionService` (`browse-view`).
 
 ---
 
@@ -995,6 +928,10 @@ Shared fragments live in `src/app/testing/` and compose freely in a
 - `provideZoneless()` / `configureZoneless()` — put the `TestBed` under
   zoneless change detection.
 - `mocks.ts` — shared service stubs.
+- `settle-resource.ts` — `settleResource()` / `settleZoneless(fixture)`, the
+  awaits the two subsections below rely on.
+- `line-balance.ts` / `line-test.ts` — wire-shaped fixtures for the balance and
+  Test-autopilot payloads.
 
 ### The zoneless oracle
 

@@ -66,11 +66,6 @@ directory) the dataset is on the dashboard, owned by the user the run ran as.
 Detection then runs over that saved copy, so its hits are the ones Find would
 give on that dashboard row.
 
-```bash
-# Import a folder, save it to the dashboard, and run the AutoFind detectors on it.
-python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json
-```
-
 With a saving run the import is the point and detection is the extra: when no
 AutoFind detector is configured, or none applies to the dataset's media type,
 the dataset is still saved and the run ends with a `Detection skipped: …` note
@@ -105,9 +100,8 @@ import starts, the **Find** button) never deletes anything. Unlike
 `--tempimport`, the dataset still goes through the dashboard's import pipeline,
 so the hits are the ones a dashboard import of the same source would give.
 
-**`--tempimport`** makes the run temporary instead — the behaviour
-`--autodetect` had before datasets were saved: the source is scored straight
-from the importer and nothing is kept. Having no applicable detector is then an
+**`--tempimport`** makes the run temporary instead: the source is scored
+straight from the importer and nothing is kept. Having no applicable detector is then an
 error, since the run would do nothing. `--tempimport` implies `--autodetect`,
 though spelling out both reads better in scripts:
 
@@ -120,6 +114,8 @@ A saving run holds the whole dataset in memory while it imports, exactly as a
 GUI import does; `--chunk-size` then bounds only the scoring pass over the saved
 copy. `--stream-results` exists for sources too large to hold, so it **requires
 `--tempimport`** — the run is refused otherwise.
+
+### Sources
 
 **From a pickle file:**
 
@@ -140,7 +136,7 @@ python app.py --autodetect --importer http_archive --url https://example.com/dat
 python app.py --autodetect --importer http_archive --url /data/sounds.tar.gz --media-type audio --settings settings.json
 ```
 
-Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `local_archive_member`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them. `--help` resolves the named plugin first, so its flags are listed at the end of the usual help output (the same works for `--exporter <name> --help`).
+Use `python app.py --list-importers` to see all available importers. The built-in set is: `server_folder`, `server_files`, `local_folder`, `local_files`, `local_archive_member`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them. `--help` resolves the named plugin first, so its flags are listed at the end of the usual help output (the same works for `--exporter <name> --help`).
 
 **Several datasets from one importer run (`--outputs`).** The dashboard's
 **Multi-Dataset** import ([`docs/api/datasets.md`](api/datasets.md#loading-datasets))
@@ -201,6 +197,8 @@ it cannot be embedded, and is then skipped at scoring. That silently shortens
 the hit list *and* moves the detector's threshold, because the line's
 prevalence is estimated on the population actually being scored.
 
+### Large datasets: chunking and streaming
+
 **Chunked loading**: for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
 ```bash
@@ -238,7 +236,9 @@ sends one email per `--batch-size` hits. Both default to 500 hits per batch and
 always deliver at least once (even for a zero-hit run), so the receiver learns
 the run happened.
 
-**Exporting results**: by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
+### Exporting results
+
+By default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter server_json_file --filepath results.json
@@ -247,7 +247,21 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --exporte
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter email_smtp --to recipient@example.com
 ```
 
-Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `portable_detector` (standalone ONNX scoring bundles; see below), `gui` (default: print to console), `open_url` (open a scheme-validated URL per hit, useful for hand-off to another tool). Run `python app.py --list-exporters` for the current set.
+Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `portable_detector` (standalone ONNX scoring bundles; see below), `gui` (default: print to console), `open_url` (format the hits' ids into one scheme-validated URL for another tool's viewer; see [Progress output format](#progress-output-format)). Run `python app.py --list-exporters` for the current set.
+
+The default `gui` exporter prints:
+
+```
+Predicted Good (5 items):
+
+  1-34094-A-6.wav
+  1-30226-A-0.wav
+  1-17150-B-2.wav
+  1-22694-A-4.wav
+  1-77445-A-1.wav
+```
+
+Items with origin information include the origin display string before the filename.
 
 **Exporting the detectors themselves** (`portable_detector`): instead of the
 scored hits, write one standalone, portable scoring bundle per detector the run
@@ -255,10 +269,8 @@ trained — the ONNX head (sigmoid baked in) plus a `manifest.json` and `README.
 carrying **no embeddings and no raw media**. It lets CI/automation produce a
 shareable scoring model; the request-scoped equivalent is
 `POST /api/detectors/{detector_id}/portable-bundle`
-(see [`docs/api/detectors.md`](api/detectors.md#export-portable-bundle)). There is
-deliberately no GUI affordance for either — the bundle is an expert artifact, and
-as a dashboard menu item it read as a confusing second "export" beside **Export
-labels**. The `--dataset`/`--importer` still supplies the embedder space the
+(see [`docs/api/detectors.md`](api/detectors.md#export-portable-bundle)); the
+dashboard deliberately has no menu item for it. The `--dataset`/`--importer` still supplies the embedder space the
 detector trains in; the media is embedded but the hits are discarded.
 
 ```bash
@@ -275,6 +287,8 @@ other. Detectors whose scoring isn't a plain forward pass over one whole-item
 vector (patch DINOv2/v3, structural SIFT/VLAD) are skipped with a note rather
 than failing the run.
 
+### How the run scores
+
 **Scoring across source types (converter routing).** A detector declares the
 embedding space it needs (its `media_type`); it does not store a converter. When
 the dataset's media are a different type, the CLI routes them to the detector's
@@ -290,10 +304,8 @@ threshold, and it surfaces as a single hit on the video, not one per frame.
 
 **The CLI scores a media exactly as the GUI does.** Both go through one row
 builder (`scoring_rows_for_snap`), so on a patch dataset a media's score is the
-max over its score rows — image-level vector plus every raw patch — not the
-image-level vector alone. That is also the geometry the detector's threshold was
-calibrated on, so a CLI run and a GUI Find agree on which media clear it (issue
-#3180).
+max over its score rows — image-level vector plus every raw patch — and a CLI
+run and a GUI Find agree on which media clear the threshold.
 
 **Matching the detector's clipper granularity.** A detector trained on a
 specific clipper (its `input_spec.clipper` — e.g. 2-second audio tiles, or an
@@ -306,38 +318,30 @@ with the matching clipper is scored as-is (no redundant re-clip), and a detector
 with no `input_spec.clipper` scores whole media.
 
 **The line's prevalence is estimated on whatever the run ends up scoring.** The
-line itself comes from the labels (#4452): the class model the calibration folds'
-held-out scores of the votes imply. Only how common matches are is read off the
-scored corpus, and converting and re-clipping change that population, not just
-the item count: the max over a media's clips is never below the media's own
-whole-item score, so an estimate taken on the loaded medias and applied to the
-routed ones would sit in the wrong distribution. So the routing pass happens
-**before** calibration, and each detector's prevalence is estimated on the
-converted, re-clipped, re-embedded snapshot its own scoring pass will read
-(issue #3647). On a natively-typed
-dataset needing no re-clip the two are the same set and nothing changes; on a
-converter-routed or re-clipped one the threshold moves, and moving it is the
-fix. The first chunk is prepared once and handed to both passes, so the
-correction costs no extra conversion or embedding work.
+line comes from the labels; only how common matches are is read off the scored
+corpus. Converting and re-clipping change that population, so the routing pass
+runs **before** calibration and each detector's prevalence is estimated on the
+converted, re-clipped, re-embedded items its own scoring pass reads. On a
+natively-typed dataset that needs no re-clip the two populations are the same;
+on a routed or re-clipped one the threshold follows the population actually
+scored.
 
 **The exported set is unchecked, and the run says so.** Each detector's line
-is its labels' line at its balance (F-beta's beta, the one the detector
-keeps, chosen when it was created in the app, #4665; a detector that keeps
-none takes the `beta` setting, 1 unless you change it; 4 leans toward
-recall, 1/4 toward precision): the class
-model the labels imply, cut where the expected F-beta peaks at the prevalence
-estimated on the scored corpus (#4452). It keeps every item above the cut,
-possibly none - there is no fixed count and no cap. In the app a spot check
-measures how much of that set is right and how much it found; nobody can vote
-in a headless run, so the run exports the unchecked set as it is. The run prints a line naming the detector and the size of the
-set - `Detector 'det' exports its top 32 unchecked (at F1); nobody is here to
-check it.` - which is a `detector_unchecked` event under
-`--progress-format json` carrying `beta`, `status` and `count`, and every
-result the detector produces carries a `balance` object beside its
-`threshold` (`status` `unchecked`, with `count`), which the JSON exporters
-write out with the hits. See [the line state](api/labeling.md#the-line-state).
+is cut where the expected F-beta peaks, at the detector's own balance (the
+beta chosen when it was created in the app; a detector without one takes the
+`beta` setting, 1 by default; 4 leans toward recall, 1/4 toward precision).
+Every item above the cut is exported, possibly none — there is no fixed count
+and no cap. In the app a spot check measures how good that set is; nobody can
+vote in a headless run, so the run exports the set unchecked and prints a line
+saying so — `Detector 'det' exports its top 32 unchecked (at F1); nobody is
+here to check it.` That line is a `detector_unchecked` event under
+`--progress-format json` (carrying `beta`, `status` and `count`), and every
+result carries a `balance` object beside its `threshold` (`status`
+`unchecked`, with `count`), which the JSON exporters write out with the hits.
+See [the line state](api/labeling.md#the-line-state).
 
-**How to get the files:**
+### Settings and detector files
+
 
 - **Dataset file** (only for `--dataset`; `--importer` reads the source media directly): a demo dataset loaded once in the web UI leaves a cached `.pkl` under `data/embeddings/`. The currently active dataset can also be downloaded as a pickle through the API, `GET /api/dataset/export` (see [`docs/api/datasets.md`](api/datasets.md#export-dataset)); the dashboard has no menu item for it.
 - **Settings file**: A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/` (see [Detector file names](#detector-file-names) below); the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh head, and scores the dataset.
@@ -368,20 +372,6 @@ Don't hand-construct these paths when you can avoid it: `--dry-run` (below)
 prints the resolved file for every detector it would run, which is the reliable
 way to check that a name in your settings file points where you think it does.
 
-**Example output:**
-
-```
-Predicted Good (5 items):
-
-  1-34094-A-6.wav
-  1-30226-A-0.wav
-  1-17150-B-2.wav
-  1-22694-A-4.wav
-  1-77445-A-1.wav
-```
-
-Items with origin information include the origin display string before the filename.
-
 ### Dry-run mode
 
 Add `--dry-run` to any `--autodetect` invocation to print the plan
@@ -399,13 +389,16 @@ settings file, every detector listed under `autofind_detectors` (with its
 media type and label count), and the exporter + its field values:
 
 ```
-DRY RUN: no media will be loaded, embedded, scored, or exported.
+DRY RUN - no media will be loaded, embedded, scored, or exported.
 
 Source:
   Importer: server_folder
   Params:
-    path: /data/sounds
     media_type: audio
+    path: /data/sounds
+    recursive: True
+    dig_archives: False
+    reference_files: False
   Chunk size: whole dataset
   Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)
 
@@ -617,10 +610,13 @@ file and pass it via `--pipeline`:
 python app.py --pipeline pipeline.yaml
 ```
 
-The YAML supports every knob the `--autodetect` flag set does. It cannot be
-combined with the other autodetect flags; declare everything inline. Like the
-flags, a pipeline run saves its dataset to the dashboard unless the file sets
-`tempimport: true`.
+The YAML covers the source, settings file, detectors, chunking, streaming,
+label import and exporter. Those autodetect flags cannot be combined with
+`--pipeline` (the run is refused; declare them in the file). A few flags have
+no pipeline form and are **not applied** to a pipeline run: `--dry-run` (refused),
+`--user` / `--api-key` (the run is always the `default` user), `--progress-format`
+(progress is always text), and `-v`. Like the flags, a pipeline run saves its
+dataset to the dashboard unless the file sets `tempimport: true`.
 
 ```yaml
 # Pick exactly one source.

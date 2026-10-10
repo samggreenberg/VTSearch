@@ -59,7 +59,9 @@ builds - i.e. in how it produces media chunks:
 All four take optional `settings_path`, `exporter_name`,
 `exporter_field_values`, and the keyword-only `dry_run=False`,
 `stream_results=False`, `keep_negatives=False`, `save_dataset=False` and
-`override_detectors=None`. They catch every
+`override_detectors=None`; the two importer variants also take
+`outputs=None` (several datasets from one import; see [Behaviour](#behaviour)).
+They catch every
 exception, report it via `cli_progress.emit_error()`, and
 `sys.exit(1)` - i.e. they're meant to be called from a
 `__main__`-style wrapper, not as well-behaved library functions.
@@ -107,6 +109,7 @@ def autodetect_importer_main(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    outputs: list[OutputSpec] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main_chunked(
@@ -122,6 +125,7 @@ def autodetect_importer_main_chunked(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    outputs: list[OutputSpec] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 ```
 
@@ -141,6 +145,16 @@ def autodetect_importer_main_chunked(
   scored it and the exporter has run, with a `dataset_deleted` event. A run
   that detected nothing or failed keeps it, and so does a pickle that already
   was a registered dataset, since the run did not import it.
+- **Several datasets from one import.** `outputs=[OutputSpec, ...]` (`vtscore.datasets.importers.base`, #4707)
+  makes the one importer run produce one dataset per entry, the dashboard's
+  multi-dataset import. Each dataset is then its own pass: its own applicable
+  AutoFind detectors, its own results and its own exporter run. The exporter's
+  destination tells them apart: `{dataset_name}` in any field is replaced by the
+  dataset's name, and with no such placeholder a multi-dataset run inserts the
+  name before a `filepath` field's extension. A dataset whose import failed is
+  reported (`dataset_failed`) and skipped, and the run exits non-zero only once
+  every other dataset is scored and exported. The pipeline YAML's
+  `importer.outputs:` list takes the same entries.
 - **Chunked variants** stream the source in `chunk_size`-sized
   batches; peak RAM stays at roughly `chunk_size` medias regardless
   of total length. Detectors are trained **once** against the first
@@ -280,12 +294,13 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
    direct or one-hop converter route from the dataset's types is
    *skipped* with a `detector_skipped` event; one whose
    `input_spec.clipper` doesn't match the dataset is *re-clipped* at
-   scoring time (a `detector_reclip` event), not skipped. Nobody can
-   vote in a headless run, so a detector's line is never spot-checked:
-   it keeps the balance's unchecked set (the mixture's F-beta argmax
-   under the balance's cap) and is announced with a
-   `detector_unchecked` event; every result it produces carries the
-   same state under `balance`.
+   scoring time (a `detector_reclip` event), not skipped. A detector
+   under the label quota scores as its Goods' centroid
+   ([detectors.md](detectors.md#the-label-quota-and-the-goods-centroid-4643))
+   and is announced with a `detector_centroid` event. Nobody can vote in a
+   headless run, so a trained detector's line is never spot-checked: it is
+   announced with a `detector_unchecked` event, and every result it
+   produces carries the same state under `balance`.
 5. Score each chunk via `_score_medias_with_detectors`, merging hits
    into the accumulated results in place.
 6. Hand the merged `{media_type, detectors_run, results}` dict to
@@ -318,7 +333,7 @@ dispatch.
 | Key             | Type                  | Meaning                                                                  |
 |-----------------|-----------------------|--------------------------------------------------------------------------|
 | `dataset`       | `str` path            | Path to a dataset pickle.                                                |
-| `importer`      | `{name, fields?}`     | Importer name + per-field values. Mutually exclusive with `dataset`.     |
+| `importer`      | `{name, fields?, outputs?}` | Importer name + per-field values. Mutually exclusive with `dataset`. `outputs:` (one mapping per dataset, the keys an `OutputSpec` takes; each needs `media_type`) makes several datasets from one run, and excludes `fields.media_type` / `fields.source_specs`. |
 | `settings`      | `str` path            | Override settings file path.                                             |
 | `detectors`     | `list[str]`           | Override `autofind_detectors` for this run only. Defaults to `[import_labels.detector]` when `import_labels` is set. |
 | `chunk_size`    | positive `int`        | Stream the source in chunks of this size.                                |
@@ -446,9 +461,16 @@ event includes `event` and `ts`; each row lists the extra fields.
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
 | `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
+| `detector_centroid` | `detector`, plus `served_quota`'s fields (`tier`, counts owed) | `cli.py`, when a detector is under the label quota |
 | `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |
 | `medias_skipped`   | `skipped: int`, `skipped_ids` (first 100), `embedder`             | `_emit_skipped_medias` in `cli.py`    |
 | `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli.py`    |
+| `detection_skipped` | reason-specific fields, `dataset` in a multi-dataset run        | `cli.py`, when no detector applies     |
+| `import_progress`  | (text only)                                                       | a saving run's import relay           |
+| `dataset_start`    | `name`, `media_type`, `category`, `dataset_id`, `index`, `count`  | each dataset of a multi-dataset run   |
+| `dataset_saved`    | `dataset_id`, `name`, `num_items`, `pkl_path`, `already_saved`    | a saving run, per dataset             |
+| `dataset_failed`   | `name`, `error`                                                   | a multi-dataset output that did not import |
+| `dataset_deleted`  | `dataset_id`, `name`                                              | `autofind_cli_delete_dataset` on      |
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |
 | `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
 | `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`      | `progress_callback`                   |

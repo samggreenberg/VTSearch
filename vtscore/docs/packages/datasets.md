@@ -35,6 +35,8 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
 | `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
 | `vtscore/datasets/load_pipeline.py` | Load orchestration: background threading, gate handoff, staging |
+| `vtscore/datasets/load_multi.py` | Multi-dataset imports (#4703): one importer run fanned out into one dataset per `OutputSpec` |
+| `vtscore/datasets/import_event.py` | `DatasetImported`, the frozen event a finished import hands its `on_finished` hook (#4616) |
 | `vtscore/datasets/stages/` | The post-import stages the pipeline runs - see below |
 | `vtscore/datasets/container.py` | ZIP-based dataset container format |
 | `vtscore/datasets/registry.py` | Persistent on-disk registry of `.pkl` datasets |
@@ -45,7 +47,7 @@ The largest package in the library. Every module, grouped by role.
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/datasets/importers/` | Dataset-importer registry, ABCs, and the built-in importers |
+| `vtscore/datasets/importers/` | Dataset-importer registry, ABCs (`base/`, including `OutputSpec` in `base/outputs.py` and default dataset naming in `base/naming.py`), the picker tabs (`tabs.py`), and the built-in importers |
 | `vtscore/datasets/sources/` | `MediaSource` registry and the built-in low-level media sources |
 | `vtscore/datasets/downloader/` | Demo-dataset downloaders, per media type |
 | `vtscore/datasets/archive.py` | Extract zip/tar/rar archives and load their media |
@@ -73,9 +75,10 @@ The post-import pipeline, one module per stage, run in this order:
 | `registry.py` | Save to the dataset registry, migrate the context id |
 
 `_common.py` holds shared constants and helpers; `_load_profiler.py` and
-`_load_cost_model.py` are the env-gated per-phase timing recorder and
-the affine cost coefficients fit from its measurements, which is how the
-loader predicts a remaining-time estimate.
+`_load_cost_model.py` are the env-gated per-phase timing recorder
+(`VTSEARCH_PROFILE_LOAD`) and the affine cost coefficients fit from its
+measurements, which pace the load's progress bar (an import publishes no
+remaining-time estimate, #4667).
 
 ---
 
@@ -205,7 +208,7 @@ over three sibling modules. It re-exports **loaders only** — the demo
 metadata parsers live in `vtscore/datasets/metadata.py` and the
 pickle-safety names in `vtscore/security/pickle.py`; import those from
 their own modules rather than through the façade. Helpers the three
-siblings share (`ProgressCallback`, `_default_progress`, the MD5 and
+siblings share (`ProgressCallback`, the MD5 and
 embedding coercion helpers) live in `vtscore/datasets/loader_common.py`,
 a dependency-free leaf, so the façade can import its siblings at the top
 of the file instead of at the bottom to dodge a cycle.
@@ -276,7 +279,7 @@ media_type="", name="", created_at=None, expires_at=None,
 extra_pickle_keys=None, on_stage=None)` returns a ZIP container
 (`medias.pkl` + `meta.json`) as `bytes`, with embeddings as plain lists
 so it deserialises cleanly under
-[`vtscore.security.safe_pickle_load`](../../security/pickle.py).
+[`vtscore.security.pickle.safe_pickle_load`](../../security/pickle.py).
 `load_dataset_from_pickle` reads both this container and legacy raw
 pickles; medias whose bytes can't be resolved or whose embedding is
 missing are skipped. `load_dataset_from_pickle_chunked(file_path,
@@ -300,7 +303,10 @@ clipper_params=None)` is a cache-aware wrapper: it loads a cached
 `.pkl` from `vtscore.config.EMBEDDINGS_DIR` when one exists and its
 media bytes are still reachable, and otherwise downloads + embeds
 fresh. `converter_name` loads the source type and converts it (cached
-under a separate key). Unknown names raise `ValueError`. The actual download / embedding is delegated to each
+under a separate key). The package root also re-exports the raw
+downloaders behind some demos (`download_esc50`, `download_cifar10`,
+`download_ucf101_subset`, `download_20newsgroups`) and the generic
+`download_file_with_progress` (`vtscore/datasets/downloader/`). Unknown names raise `ValueError`. The actual download / embedding is delegated to each
 `MediaType.load_demo_source` implementation, so adding a new demo
 dataset is a media-tier concern.
 
@@ -530,6 +536,22 @@ under the embed gate. One dataset can start downloading while another
 is still embedding. Library consumers normally don't touch these
 gates directly; they're driven by the load orchestrator and read
 their limits from `CoreConfig`.
+
+**Several datasets from one import** (`load_multi.py`, #4703). A
+multi-dataset load runs the importer's acquire phase once, under the
+download gate, through `ImporterBase.run_outputs`, then fans the result
+into one `DatasetContext` per `OutputSpec` (media type, source rows,
+embedders, clipper, cleaners, name). Each goes through the post-import
+stages on its own and lands as its own registry entry with its own
+`DatasetImported` event; each output's origin records only its own
+`media_type` / `source_specs`, so a reload rebuilds that one dataset.
+
+**When an import ends.** `_run_origin_load_in_background(...,
+on_finished=None)` calls *on_finished* once with a frozen
+`DatasetImported(outcome, dataset_id, name, user, media_type, n_media,
+origin, error)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
+is not reported). The app routes it to the functions an admin names with
+`--on-dataset-imported`.
 
 ---
 

@@ -10,7 +10,7 @@ in-memory state automatically aligned.
 The package is intentionally minimal - it owns only the contract.
 Concrete subclasses live wherever the data domain does:
 
-- [`vtscore.labels.sources.LabelsetSource`](../../labels/sources/base.py) -
+- [`vtscore.labels.sources.base.LabelsetSource`](../../labels/sources/base.py) -
   round-trips detector labels (library tier, documented in
   [`labels`](labels.md)).
 - `vtsearch.settings_io.sources.SettingsSource` - round-trips app

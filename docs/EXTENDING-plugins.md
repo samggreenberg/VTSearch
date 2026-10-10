@@ -684,6 +684,7 @@ to the framework.
 |-----------|------|-------------|
 | `content_vectors` | `dict[str, np.ndarray]` | Pre-computed embeddings keyed by filename; skips embedding model |
 | `content_md5s` | `dict[str, str]` | Pre-computed MD5 hashes keyed by filename; skips hash computation |
+| `custom_metadata_map` | `dict[str, dict]` | Per-file `custom_metadata`; a non-empty `"md5"` / `"embedding"` key in it overrides the two dicts above. `yield_precomputed()` writes all three at once |
 
 ### Element-level origin tracking
 
@@ -747,8 +748,8 @@ no vector after `run()` returns, using the user-selected embedder (or the
 default for the media type).  Only pre-populate `embeddings` when your data
 source ships pre-computed vectors that are dimension-compatible with the
 embedder the user picked: set `embeddings={"<name>": vec}` and `embedder="<name>"`
-naming that embedder.  (There is no singular `embedding` key any more —
-`media["embeddings"]` is the sole per-media vector store.)
+naming that embedder.  `media["embeddings"]` is the sole per-media vector
+store.
 
 ```python
 def run(self, field_values, medias, thin=False):
@@ -1169,7 +1170,7 @@ for how converters compose with importers.
 ### Multi-dataset imports
 
 Multi-media imports are **many-to-one**: several source types feed one
-dataset. A **multi-dataset** import (issue #4703) is the other direction:
+dataset. A **multi-dataset** import is the other direction:
 one run of the importer produces **several datasets**, one per
 `OutputSpec` (`vtscore.datasets.importers.base`). The Add Dataset dialog's
 **Multi-Dataset** box builds the list (one row per kind of media the user
@@ -1245,8 +1246,7 @@ path, a third-party service) so users can supply exemplar media — e.g. the
 seed examples of a new detector — from the same kinds of places a whole
 dataset can come from. The New Detector modal's example-media picker lists
 every registered datasource importer and renders its declared fields as a
-dynamic form, exactly like the Add Dataset modal does for dataset importers
-(GitHub issue #2767).
+dynamic form, exactly like the Add Dataset modal does for dataset importers.
 
 ### File structure
 
@@ -1352,7 +1352,7 @@ new (blank) detector: items that are *close but not quite* what the user is
 hunting for. It sits between the two families it resembles — a datasource
 importer fetches one exemplar the user picked by hand, a label importer
 imports media that already carry a `good` / `bad` verdict — by importing
-media with **no verdict attached** (GitHub issue #3140).
+media with **no verdict attached**.
 
 Each registered seed importer becomes **its own tab in the New Detector
 modal's Blank flow**, beside the stock Text and media tabs, with its
@@ -1362,8 +1362,8 @@ packages.
 
 A run's results appear **on the importer's own tab**, under its form: the
 media tab's example stack is mirrored there, so a batch lands in view where
-the user asked for it rather than switching them to the media tab
-(issue #3192). It is one list, not a copy — the seed tab's Remove buttons
+the user asked for it rather than switching them to the media tab.
+It is one list, not a copy — the seed tab's Remove buttons
 edit the same stack the media tab shows, and only the media tab carries the
 "+ Add" browse affordance, since a seed tab adds through its own form.
 
@@ -2468,18 +2468,11 @@ normalization](#framework-side-field-normalization).
 
 ### Circular trigger prevention
 
-When a source imports labels (via `sync_from_labelset_source()`), each
-applied label would normally trigger a re-export back. A **module-level**
-(deliberately not thread-local) `_syncing` flag in
-`vtscore/labels/sync.py`, coordinated by a re-entrant `_sync_lock`,
-suppresses this: the flag is set for the duration of the import's apply
-pass, and `sync_to_labelset_source()` checks it both when scheduling and
-when executing the debounced push.
-
-Your source participates for free — the guard wraps the apply pass, not
-your `_do_load()` / `_do_save()`. Just know that `_do_save()` will never
-be called as a side effect of `_do_load()` returning labels.
-
-The same pattern is used in `vtsearch/settings.py` for settings sources.
+Your source needs no code for this: a module-level `_syncing` guard in
+`vtscore/labels/sync.py` wraps the apply pass, so `_do_save()` is never
+called as a side effect of `_do_load()` returning labels. The guard, the
+200 ms push debounce, and the shutdown flush are described in
+[`vtscore/docs/extending/labelset-sources.md` § Circular-trigger
+prevention](../vtscore/docs/extending/labelset-sources.md#circular-trigger-prevention-_syncing-guard).
 
 ---

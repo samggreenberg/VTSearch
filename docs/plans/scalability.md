@@ -92,8 +92,8 @@ client-side ranking.
   false "All items reviewed."
 - Feed the left-panel `unverifiedGoodCount` from the response's `above_threshold`
   (minus verified) rather than a full-order scan.
-- Under a window, moving the Inclusion cutoff changes which items are "above," so
-  `onInclusionChange` must refetch the window instead of recomputing
+- Under a window, moving the cutoff (the balance, `onBetaChange`) changes which
+  items are "above," so it must refetch the window instead of recomputing
   `above_threshold` over frozen client-side scores. Scores stay frozen
   server-side, so this is a new slice + count, not a re-sort.
 

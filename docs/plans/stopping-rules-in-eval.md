@@ -49,29 +49,6 @@ issue. No study gets slower for reporting a stopping point.
 
 <!-- item-sep -->
 
-- **Read one State of the App review's stopping block** — no re-run. **Done
-  2026-10-08** for the Binary Photo review (#4611); the rest of this item is how. The
-  three studies this item first named ([#3156 vg-scale](../experiments/2026-08-25-vg-scale/REPORT.md),
-  [#2877 acquisition-inclusion](../experiments/2026-08-07-acquisition-inclusion/REPORT.md),
-  [#3267 good-mining](../experiments/2026-08-27-good-mining-3267/REPORT.md))
-  cannot usefully be re-read. Finished study dirs went in the 2026-09-18
-  `/expscratch` deletion (#4001): #4128 confirms #3267's results root is gone,
-  #2877's readers carry the deletion guard, and vg-scale's
-  `scale-3156-map` is unconfirmed. Their committed `viewer.html` pages carry
-  every metric per click but not `phase`, and all three are Cost-era. A
-  State of the App run is the replacement: balance-era, post-margins (so the
-  binding light and the margins are answerable too, not only the stop), and
-  kept on `/expscratch` while it is current. Re-run `analyze.sh` over the
-  newest review's run dir (its `summary.md` then carries the block), read the
-  block, and write what it says into that review's `REPORT.md`.
-
-  Check before quoting a number: that the run dir is still on `/expscratch`,
-  and that its runs went far enough for the rules to fire at all — a block
-  where `fired` is 0% everywhere is a finding about the budget, not about the
-  rules.
-
-<!-- item-sep -->
-
 - **Adopt the reporting convention.** Once one study has been through it and the
   table has survived a reading, fold it into the mandatory set: the
   `grid-experiments` skill already requires the quality-over-clicks pair and the
@@ -95,8 +72,8 @@ issue. No study gets slower for reporting a stopping point.
 
   The two qualifications are not optional decoration. **`fired`** comes before
   every other column because each of them is conditional on it, and the runs it
-  excludes are systematically the slow ones. **Δcost** is paired within run and
-  keeps its sign: a positive Δ means the clicks spent past the app's advice made
+  excludes are systematically the slow ones. **Δfbeta** is paired within run and
+  keeps its sign: a negative Δ means the clicks spent past the app's advice made
   the detector *worse*, which is a finding about the stopping rule and not a
   wrinkle to average away.
 
@@ -112,7 +89,7 @@ issue. No study gets slower for reporting a stopping point.
     columns of the table above). A rule that fires 40 clicks after the run's
     floor is a rule that costs users clicks; one that fires 40 clicks before it
     is a rule that costs them quality. What is owed is the reading, which
-    comes with the first State of the App block above. The best is the extreme
+    the 2026-10-08 Binary Photo review's stopping block began (#4611). The best is the extreme
     of a noisy series, so the two columns are read together, never alone.
   - **Which indicator is binding, and is it the right one?** Needs the lights,
     which a State of the App run carries, so the block's binding note and margin

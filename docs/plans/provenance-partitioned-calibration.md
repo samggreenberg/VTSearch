@@ -39,7 +39,7 @@ surfacing context the study measured as trustworthy.
   round-trips through labelset export/import. **Shipped as separate axes, not
   the single fused `surfaced_by` enum this plan first proposed:** `flow ∈
   {autopilot, list_review, find_verify, labelset_review, seed_example, import,
-  bulk, undo, check, test, unknown}`, `phase ∈ {good, bad, hard, new}` (autopilot only),
+  bulk, undo, check, test, unknown}`, `phase ∈ {good, bad, more, hard, new}` (autopilot only),
   `select_mode ∈ {top, hard, new}`, `sort_kind ∈ {learned, text, load}`, plus
   `rank_at_vote` and `score_at_vote`. The fused enum labelled votes by *who was
   driving* while the bias this plan exists to repair tracks *how the item was

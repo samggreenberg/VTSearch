@@ -65,8 +65,9 @@ Below **Select**, the **Threshold** - a spectrum from **False Positives** to
 detector leans toward returning every match it can (toward False Positives)
 or only the ones most likely right (toward False Negatives), which moves its
 line between match and not a match without changing the order of the list.
-The note under it says whether the line can keep that promise yet, and
-**Check 5 picks** beside it measures that with a spot check (see
+The note under it says how many pictures the line keeps and whether anything
+has measured how many of them are right; **Check 5 picks** beside it measures
+that with a spot check (see
 [How close the line got](../USER_GUIDE.md#how-close-the-line-got)). When the
 button is highlighted and a note says your labels still overlap, check now:
 those picks are the answers the detector most needs.

@@ -80,7 +80,7 @@ dataset are dropped - that's by design. A label-importer's job is to
 hand the route a list; the route's job is to apply what fits.
 
 The dict may carry extra keys (`filename`, `category`,
-`custom_metadata`, …) and they're preserved through the new
+`custom_metadata`, …) and they're preserved through the
 labelset-import path which builds `LabeledElement`s
 ([`vtscore/datasets/labelset.py`](../../datasets/labelset.py)).
 Keep them - they round-trip cleanly through labelset export.

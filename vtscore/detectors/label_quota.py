@@ -27,7 +27,7 @@ the labels.
 (``GOOD_TARGET`` / ``BAD_TARGET`` in :mod:`vtscore.eval.autopilot_flow`): the
 counts at which the opening has always judged the labels enough to train on.
 Until #4282 it handed over to the learned sort right there.  The "more" walk
-#4282 added after them mines positives because the typed query's sort is still
+#4282 added after them (off on photos since #4740) mines positives because the typed query's sort is still
 paying, not because a head at 3 and 4 is unready, so it is no reason to raise
 the quota: its 20 Goods would leave a rare class (around 11 positives at 0.1%
 prevalence, #4222) with no trained head at all.  The labelset cannot see the

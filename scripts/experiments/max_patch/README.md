@@ -2,7 +2,9 @@
 
 Code that runs the study designed in
 [`docs/plans/max-patch-experiment.md`](../../../docs/plans/max-patch-experiment.md)
-on the HLTCOE Grid and generates the report.  Image-only.
+on the HLTCOE Grid and generates the report.  Image-only. The published
+report is
+[`docs/experiments/2026-07-29-max-patch/REPORT.md`](../../../docs/experiments/2026-07-29-max-patch/REPORT.md).
 
 ## The arms
 
@@ -120,4 +122,6 @@ object rather than a union over scattered instances.
   Across embedders the split and exemplar image are also identical (both are
   derived from seeds/ids, not vectors), so arm comparisons are paired
   everywhere.
-- Results live under `/exp/$USER/max-patch/results`.
+- Results live under `$MAXPATCH_EXP/results` (default `/exp/$USER/max-patch`).
+  For a re-run, point `MAXPATCH_EXP` at `/expscratch/$USER/...`: `/exp` is the
+  50 G quota ([GRID-PLAYBOOK §4](../GRID-PLAYBOOK.md#4-know-which-mount-you-are-on)).

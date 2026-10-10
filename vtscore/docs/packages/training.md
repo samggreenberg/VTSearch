@@ -17,7 +17,8 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds/`                                        | Threshold helpers: `gmm`, `conformal`, `anchored`, `blend`, `costs`, `knobs` (all re-exported from `vtscore.training.thresholds`) |
+| `vtscore/training/logreg.py`                                          | `fit_linear_logreg_head`, the converged logistic head (an eval arm, `LINEAR_LOGREG_HEAD`) |
+| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line`, `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the production head's fit) |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
@@ -78,6 +79,12 @@ so the threshold is always calibrated on the head the final model has.
 regression. It is a named eval arm (`head="linear"`, see [eval.md](eval.md)),
 not a production path.
 
+**Converged logistic head - eval harness only.** `LINEAR_LOGREG_HEAD` (`-2`,
+#4114) is the same `Linear(input_dim, 1)` with the logistic loss fitted to
+convergence by scikit-learn (balanced, L2, `LOGREG_HEAD_C` = 1) in
+`vtscore/training/logreg.py::fit_linear_logreg_head`, rather than by the
+early-stopped Adam loop. It is not reachable from the app.
+
 **MLP head - eval harness and tests only.** Any `hidden_dim > 0`:
 
 ```python
@@ -95,10 +102,10 @@ production path. See
 [`docs/ML.md`](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
 for why the SVM head ships.
 
-All three are built by
+All four are built by
 `vtscore/training/mlp.py::build_model(input_dim, hidden_dim=64, dropout=0.0, generator=None)`
-(`LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD)` both build the bare
-`Linear`). Pass a seeded `torch.Generator` to
+(every sentinel in `LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD,
+LINEAR_LOGREG_HEAD)` builds the bare `Linear`). Pass a seeded `torch.Generator` to
 deterministically re-initialise the `Linear` weights (Kaiming uniform
 on the weight matrix, uniform on the bias with the standard PyTorch
 fan-in bound).
@@ -220,7 +227,7 @@ parallel.
 reconstructs a model from a dict of lists (the output of
 `tensor.tolist()` per state-dict entry). It infers the head from the keys
 present: `0.*` alone means a linear head, while a `3.weight` means an MLP
-whose hidden width is the length of `0.bias`. The two linear heads are
+whose hidden width is the length of `0.bias`. The linear heads are
 indistinguishable here by design - they have the same architecture, and which
 objective produced the numbers is irrelevant once the numbers are in hand. It also remaps the
 legacy 3-layer MLP key format (`0.*`, `2.*`).
@@ -254,11 +261,13 @@ are summarised in
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
 | `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, and off the Find Stats chart since #4360 |
-| `reporting_line`                          | The estimator's own line at an operating point; the app hands it no estimate any more (see `balance_line`) |
+| `reporting_line`                          | The estimator's own line at an operating point: the app's line with no balance (the Inclusion 0 cut) |
+| `fit_labels_line` / `LabelsLine`          | **The balance's line** (#4452): the labels' class model cut where expected F-beta peaks on the corpus being decided |
+| `target_precision_threshold`              | Autopilot's acquisition cut under a balance (#3546): where the labels line's posterior falls below `ACQUISITION_TARGET_PRECISION` |
 | `balance_schedule` / `SpotCheck` / `likely_range` | The balance's spot check (#4272, #4413): the cap, bands and picks a walk costs, the walk itself, and the likely ranges a checked set carries |
-| `LineRanking` / `balance_line` / `balance_state` | The ranking a detector's line keeps a set of, the line the balance draws over it, and the state every response carries |
+| `LineRanking` / `balance_line` / `balance_state` | The ranking a detector's line keeps, the count rule over it (now only for a context with no head), and the state every response carries |
 
-### `text_sort_cuts(scores, rule=None)`
+### `text_sort_cuts(scores, rule=None, beta=None)`
 
 `vtscore/training/thresholds/gmm.py` (import from `vtscore.training.thresholds`).
 The two lines a **typed-query** sort carries (issue #4136), as a frozen
@@ -281,13 +290,21 @@ Example and label-file sorts keep `calculate_gmm_threshold`.
     midpoint admits a median 43% of the haystack.
   - `gmm_midpoint`: exactly `calculate_gmm_threshold` (`branch ==
     "midpoint"`), the pre-#3826 line, kept as the opt-out.
+  - **The count line** (#4603): under `guarded_tail`, a *beta* at or below
+    `TEXT_SORT_COUNT_MAX_BETA` (1) draws the display line by count instead
+    (`branch == "count"`): it keeps the top `round(beta **
+    TEXT_SORT_COUNT_EXPONENT * n_hat)`, where `n_hat` is the excess over a
+    Gaussian bulk above median + `TEXT_SORT_COUNT_Z` (4) x 1.4826 MAD. Fewer
+    than `TEXT_SORT_COUNT_MIN_SCORES` (50) scores, or `beta=None` (a library
+    caller with no balance), keeps the guarded line. `text_sort_active(query_vec,
+    *, snap=None, beta=None)` passes the user's balance through.
 - `acq_threshold` is the **acquisition** cut Autopilot's Bad phase samples
   around: the shipped midpoint, `calculate_gmm_threshold`, under *every*
   rule. The guarded line made that opening worse in an A/B
   (`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`), so it moves
   only the display line.
 
-`text_sort_threshold(scores, rule=None)` returns the display line alone;
+`text_sort_threshold(scores, rule=None, beta=None)` returns the display line alone;
 `text_sort_acquisition_threshold(scores)` the acquisition cut alone (the
 eval harness's opening calls it). Both are thin wrappers, and the latter is
 bit-identical to `calculate_gmm_threshold`.
@@ -508,14 +525,60 @@ internal unit, not a user preference (#4269) - the app passes
 `PRECISION_FLOOR_FALLBACK_INCLUSION`, and a re-cut passes the acquisition or
 Smart inclusion. With a floor it says what the #4220 estimate says: a floor
 that is `promised` draws the estimate's own threshold, one that promises
-nothing draws the `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut. **The app
-does not draw its line here** (#4272, #4413): it passes `min_precision=None`
-and no estimate, and draws the balance's line with `balance_line` below,
-coming here only when there is no balance or no ranking to keep a set of. The
+nothing draws the `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut. **Under a
+balance the app does not draw its line here**: it passes `min_precision=None`
+and no estimate, and draws the labels line (below), coming here only when
+there is no balance or too few labels for a class model. The
 returned
 `ReportingLine` carries the verdict, and `line_inclusion` gives the inclusion
 Autopilot's acquisition offset starts from - derived from the line itself when
 no inclusion drew it.
+
+### The labels line: `fit_labels_line`, `LabelsLine`
+
+`vtscore/training/thresholds/labels_line.py` (#4452). **The line a detector
+draws under a balance**, derived from the labelset alone so an exported
+labelset gives the same line on another corpus or embedder; no count is drawn
+on the corpus it scores. Two inputs:
+
+- **What the labels say about the head's scores.** `class_score_model(orderings)`
+  models the calibration folds' held-out scores of the Goods and the Bads as two
+  normals of one spread on the logit scale (`ClassScoreModel`: `mu_pos`,
+  `mu_neg`, `sigma`, `n_pos`, `n_neg`), so the posterior is monotone and the
+  line is one cut. The spread is floored at `RELATIVE_SIGMA_FLOOR` (0.5) of the
+  corpus's own robust spread (`corpus_sigma_floor`, #4492), or `MIN_LOGIT_SIGMA`
+  with no corpus.
+- **How common the target is in the corpus being decided.** The corpus's
+  unvoted scores are fitted as the labels' Good component plus a normal for the
+  corpus's own negatives (`CorpusNegatives`); `corpus_fit` / `corpus_prevalence`
+  / `estimate_positives` read it. When there are at least `RANDOM_BADS_MIN`
+  (100) Bads and they are not over-represented at the corpus's top (an imported,
+  exhaustively labelled set, #4490), the Bads' own held-out scores model the
+  negatives instead (`LabelsLine.bads_shape`).
+
+`fit_labels_line(orderings, corpus_scores, corpus_ids=None, labels=None)`
+returns a `LabelsLine`, or `None` when the labels cannot support a class model
+(with too few Goods to hold one out, the head's in-sample scores of the labels
+stand in). `line.threshold(beta)` is the cut where the kept set's expected
+F-beta peaks (`corpus_cut` over each unvoted item's `corpus_posteriors`;
+`labels_line_threshold` for a line built by hand); `line.on_corpus(scores, ids,
+labels)` re-fits the corpus side for Find on another dataset;
+`line.separation` is d' between the class means. `train_and_threshold` fits it
+on every retrain and parks it as `DetectorContext.labels_line`, so a balance
+change re-cuts it without a retrain ([state.md](state.md)).
+
+Two rules read it beside the line:
+
+- `target_precision_threshold(line, p)` is the highest score whose posterior is
+  below *p*: Autopilot's `hard` / `new` picks sample there under a balance, at
+  `ACQUISITION_TARGET_PRECISION` (0.5, `thresholds/knobs.py`; #3546). `None`
+  restores the line - 4 inclusion re-cut, which stays the fallback with no
+  labels line.
+- `weak_check_due(separation, n_votes, votes_at_last_check, ...)` says a spot
+  check is due when `separation` is under `WEAK_SEPARATION_D` (1.5), after
+  `WEAK_CHECK_MIN_VOTES` (10) votes and every `WEAK_CHECK_COOLDOWN` (25) votes
+  after the last check (#4496). The app's Autopilot and the eval harness's
+  default arm both read it.
 
 ### The spot check: `balance_schedule`, `SpotCheck`, `likely_range`, `LineRanking`, `balance_line`, `balance_state`
 
@@ -758,19 +821,15 @@ top_ten = results[:10]
 
 ## Invariants worth restating
 
-- **No persisted model weights.** Library callers that load a model from
-  disk are expected to re-derive it from a labelset's origins (see
-  [`detectors.md`](detectors.md)). `build_model_from_weights` is a
-  utility, not a contract.
+- **No persisted model weights** (see [Reloading from saved weights](#reloading-from-saved-weights)).
 - **Config read at call time.** `train_model` reads
   `vtscore.config.TRAIN_EPOCHS` / `TRAIN_PATIENCE` / `MLP_HIDDEN_MIN` /
   `MLP_HIDDEN_MAX` / `MLP_DROPOUT` / `SVM_HEAD_C` at call time, so tests
   can monkey-patch them.
-- **Thread-safe RNG.** `train_model` uses `torch.random.fork_rng` so
-  parallel training calls don't interfere; cross-calibration uses an
-  optional `np.random.RandomState` (seeded with 42 by the cached
-  wrapper) so two threads sharing the cache still get deterministic
-  thresholds.
+- **Thread-safe RNG** (see [Thread safety and reproducibility](#thread-safety-and-reproducibility));
+  cross-calibration takes an optional `np.random.RandomState` (seeded with
+  42 by the cached wrapper) so two threads sharing the cache still get
+  deterministic thresholds.
 - **No settings lookups in the math.** Threshold/training inputs are
   function arguments. (`query_sort.py` is the exception by design: it reads
   the active dataset through `vtscore.state`.)
