@@ -1,5 +1,6 @@
 import os
 import platform
+import sys
 import warnings
 
 # Native math libraries read these env vars during *their* import, which happens
@@ -63,8 +64,10 @@ os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
 warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
 warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
 
-# Visual feedback for startup
-print(f"⏳ Initializing VTSearch... (PID {os.getpid()})", flush=True)
+# Visual feedback for startup. On stderr: this runs at import time, before argv
+# is parsed, so on stdout it would be the first line of a CLI run's
+# --progress-format json stream, which must be NDJSON throughout.
+print(f"⏳ Initializing VTSearch... (PID {os.getpid()})", file=sys.stderr, flush=True)
 
 from flask import Flask
 
