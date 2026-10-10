@@ -3652,6 +3652,10 @@
       "ExampleSortResponse": {
         "additionalProperties": false,
         "properties": {
+          "acq_threshold": {
+            "nullable": true,
+            "type": "number"
+          },
           "results": {
             "items": {
               "$ref": "#/components/schemas/_SortResultEntry"

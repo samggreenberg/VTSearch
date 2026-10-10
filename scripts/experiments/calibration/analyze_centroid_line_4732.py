@@ -151,6 +151,10 @@ def read_cell(args: tuple[str, int, list[tuple[str, float]], float]) -> list[dic
     rows_by: dict[tuple[str, float], pd.DataFrame] = {
         (r, b): g.groupby("t", as_index=False).last() for (r, b), g in var.groupby(["rule", "vbeta"])
     }
+    if not rows_by:
+        # Find never gave the centroid inside H (the first Good came with the quota met, #4731):
+        # every line's run is the untagged one.
+        rows_by = {(r, b): var.iloc[0:0] for r, b in variants}
     for (rule, vb), g in sorted(rows_by.items(), key=lambda kv: (kv[0][0] != "midpoint", kv[0])):
         curves = {}
         for m in ("fbeta", "precision", "recall"):
@@ -285,6 +289,18 @@ def summarize(cells: pd.DataFrame, horizon: int) -> str:
                 + " | ".join(f"{m:+.4f} ± {se:.4f}" for m, se, _ in d.values())
                 + " |"
             )
+        piv = g.pivot_table(index=["category", "seed", "beta"], columns="rule", values="d_fbeta_1-10")
+        piv150 = g.pivot_table(index=["category", "seed", "beta"], columns="rule", values="d_fbeta_1-150")
+        if {"count", "guarded"} <= set(piv.columns):
+            lines.append("")
+            lines.append("count minus guarded, paired per run (votes 1-10 / 1-150):")
+            for beta in sorted(piv.index.get_level_values("beta").unique()):
+                a = (piv["count"] - piv["guarded"]).xs(beta, level="beta")
+                b = (piv150["count"] - piv150["guarded"]).xs(beta, level="beta")
+                cl = pd.Series(a.index.get_level_values("category"), index=a.index)
+                m, se, _ = _mean_se(a, cl)
+                m2, se2, _ = _mean_se(b, cl)
+                lines.append(f"- beta {beta:g}: {m:+.4f} ± {se:.4f} / {m2:+.4f} ± {se2:.4f}")
         if "text_fbeta" in g.columns and g["text_fbeta"].notna().any():
             lines.append("")
             lines.append("Typed query's own set at the app's line (what the session shows), F-beta by beta:")
@@ -326,10 +342,18 @@ def main() -> None:
         frames.append(df)
         curves.update(cv)
     cells = pd.concat(frames, ignore_index=True)
+    # `text`, the typed query's own display rule, is count at beta <= 1 and guarded above: derived, not run.
+    text = cells[
+        ((cells["rule"] == "count") & (cells["beta"] <= 1)) | ((cells["rule"] == "guarded") & (cells["beta"] > 1))
+    ]
+    cells = pd.concat([cells, text.assign(rule="text")], ignore_index=True)
     for spec in args.text_baseline:
         label, _, path = spec.partition("=")
         cells = add_text_reference(cells, label, Path(path))
     cells.to_csv(args.out / "cells.csv", index=False)
+    for (label, ds, rule, beta), c in list(curves.items()):
+        if (rule == "count" and beta <= 1) or (rule == "guarded" and beta > 1):
+            curves[(label, ds, "text", beta)] = c
     rows = []
     for (label, ds, rule, beta), c in curves.items():
         for m, vs in c.items():

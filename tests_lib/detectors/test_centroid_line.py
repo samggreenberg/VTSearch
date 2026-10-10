@@ -200,3 +200,58 @@ class TestInTheHarness:
     def test_refuses_an_unknown_rule(self):
         with pytest.raises(ValueError, match="centroid_line"):
             self._run(centroid_line="tail")
+
+
+class TestTheAppRedrawsTheLine:
+    """A balance change redraws the centroid's line on the cosines it was drawn on; acquisition stays at the midpoint."""
+
+    @staticmethod
+    def _fit(rule: str, beta: float):
+        from vtscore.detectors.centroid_head import fit_centroid
+        from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
+
+        rng = np.random.default_rng(2)
+        dim, emb = 32, "test_embedder"
+        centre = rng.standard_normal(dim)
+        vecs = np.vstack([rng.standard_normal((3000, dim)), centre * 4 + rng.standard_normal((40, dim)) * 0.5])
+        vecs = (vecs / np.linalg.norm(vecs, axis=1, keepdims=True)).astype(np.float32)
+        snap = {
+            i: {"id": i, "media_type": "image", "embedder": emb, "embeddings": {emb: v}} for i, v in enumerate(vecs)
+        }
+        rows = scoring_rows_for_snap(snap, emb)
+        goods = [vecs[-1], vecs[-2]]
+        head, threshold, line = fit_centroid(goods, lambda h: score_rows_with_model(h, rows)[0], rule=rule, beta=beta)
+        scores = np.asarray(score_rows_with_model(head, rows)[0])
+        return head, threshold, line, scores
+
+    @pytest.mark.parametrize("rule", ["count", "text", "guarded", "midpoint"])
+    def test_the_line_at_its_own_balance_is_the_heads_threshold(self, rule):
+        _head, threshold, line, scores = self._fit(rule, 1.0)
+        assert line.rule == rule
+        assert line.threshold_at(1.0) == pytest.approx(threshold, abs=1e-9)
+        assert int((scores >= line.threshold_at(1.0)).sum()) == int((scores >= threshold).sum())
+
+    @pytest.mark.parametrize("beta", [0.25, 4.0])
+    def test_another_balance_keeps_what_that_line_keeps(self, beta):
+        _head, _threshold, line, scores = self._fit("count", 1.0)
+        want = int((line.cosines >= centroid_cut(line.cosines, rule="count", beta=beta)).sum())
+        assert int((scores >= line.threshold_at(beta)).sum()) == want
+
+    def test_acquisition_keeps_what_the_midpoint_keeps(self):
+        _head, _threshold, line, scores = self._fit("count", 1.0)
+        want = int((line.cosines >= calculate_gmm_threshold(line.cosines.tolist())).sum())
+        assert int((scores >= line.acquisition_threshold()).sum()) == want
+
+    def test_the_context_recuts_and_samples_through_the_line(self):
+        from vtscore.state.core import DetectorContext, detector_acquisition_threshold, recut_detector_threshold
+
+        head, threshold, line, _scores = self._fit("count", 1.0)
+        ctx = DetectorContext("", name="centroid", media_type="image")
+        ctx.model, ctx.threshold, ctx.centroid_line = head, threshold, line
+        assert recut_detector_threshold(ctx, beta=4.0) == pytest.approx(line.threshold_at(4.0))
+        assert detector_acquisition_threshold(ctx, beta=1.0) == pytest.approx(line.acquisition_threshold())
+        # A trained head that replaced the centroid never reads a stale line.
+        from vtscore.training.mlp import LINEAR_SVM_HEAD, build_model
+
+        ctx.model = build_model(32, hidden_dim=LINEAR_SVM_HEAD)
+        assert recut_detector_threshold(ctx, beta=4.0) != pytest.approx(line.threshold_at(4.0))

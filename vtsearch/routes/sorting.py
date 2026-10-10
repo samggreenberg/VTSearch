@@ -50,7 +50,7 @@ from vtsearch.schemas.sorting import (
 from vtscore.training.query_sort import (
     apply_crop_or_keep,
     embed_external_labels,
-    example_sort_from_paths,
+    example_sort_cuts_from_paths,
     parse_label_file,
     score_embedder_for_active,
     text_sort_active,
@@ -684,12 +684,13 @@ def example_sort():
         try:
             crop_params = _parse_crop_params(request.form.get("crop_params"))
             apply_crop_or_keep(temp_path, crop_params)
-            results, thresh = example_sort_from_paths([temp_path])
+            results, cuts = example_sort_cuts_from_paths([temp_path])
         finally:
             # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)
 
-        return windowed_sort_response(results, thresh)
+        # The display line is the Goods' centroid's (#4732); the Hard select samples at the midpoint.
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold)
 
     except Exception as exc:
         from werkzeug.exceptions import HTTPException

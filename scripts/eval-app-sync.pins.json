@@ -1,10 +1,10 @@
 {
   "acquisition.balance_cut": {
-    "app": "6554ee572ad278a844d6201cc6ca404ab799638351efd3c10ee52a30b47ae03f",
+    "app": "37eb7cae941c5244e9f8cb9fddaa98ecf10a9430536416b188e03740231d8570",
     "harness": "29c2fff0e1a8167f2b74a4de7f31313c2bc70579ae6008a97d75b2565721a897"
   },
   "acquisition.target_precision": {
-    "app": "6554ee572ad278a844d6201cc6ca404ab799638351efd3c10ee52a30b47ae03f",
+    "app": "37eb7cae941c5244e9f8cb9fddaa98ecf10a9430536416b188e03740231d8570",
     "harness": "549d2a02a7b1f62f52e164f31e27aa0a91668a27395b09b325dc2bc886551ef4"
   },
   "autopilot.auto_select_next": {
@@ -44,11 +44,11 @@
     "harness": "841d7ec31d00d8827250dae11129fd7ff71bd42c83883414a595a7f73c2dc5b1"
   },
   "detectors.label_quota_centroid": {
-    "app": "b03bf4cca2c22ba76b72940268718ba54141021c861d1e5678e07ea0ffca49e3",
+    "app": "efd8d383ac3cacc240596fb08e68c615db780078f7b5f75f69e968afa0586ee4",
     "harness": "5923b7ff1c978b52472b28e042e60fb42211b4baa933ff4fc9537997fc312740"
   },
   "detectors.label_quota_default": {
-    "app": "4962bc3c927f1aaf6b51792ed211cbc0cd43b389fa710d4e62acbb78730bf6b1"
+    "app": "d46f164284a7f65fe75eef644b8189430ceebd28d7ceb628375ca41d1bba1c0d"
   },
   "line_test.budgets_default": {
     "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",

@@ -557,10 +557,15 @@ class _SortResultEntrySchema(Schema):
 
 
 class ExampleSortResponseSchema(Schema):
-    """Response for ``POST /api/example-sort-server`` and ``/api/example-sort-origin``."""
+    """Response for ``POST /api/example-sort-server``, ``/api/example-sort-origin`` and ``/api/example-sort-by-id``.
+
+    ``threshold`` is the display line, the Goods' centroid's (#4732); ``acq_threshold``
+    is where Autopilot's Hard select samples, the two-Gaussian midpoint.
+    """
 
     results = fields.List(fields.Nested(_SortResultEntrySchema), required=True)
     threshold = fields.Float(required=True)
+    acq_threshold = fields.Float(required=False, allow_none=True)
 
 
 class DatasourceImporterEntrySchema(Schema):

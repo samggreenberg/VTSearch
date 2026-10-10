@@ -28,6 +28,7 @@ they take the linear SVM.  :func:`is_centroid_head` tells the two apart.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Sequence
 
 import numpy as np
@@ -147,14 +148,43 @@ def _gap_centre(cosines: np.ndarray, line: float) -> float:
     return float(line)
 
 
-def fit_centroid_head(
+@dataclass(frozen=True)
+class CentroidLine:
+    """A fitted centroid head's line, kept so a balance change can redraw it without a re-score (#4732).
+
+    *cosines* are the corpus cosines the line was drawn on, in the order it was
+    drawn on them (the mixture fit subsamples by position); *cut* is the
+    cosine the head's bias puts at logit 0; *rule* is the rule that drew it.  The
+    head is never rebuilt: a new line is a new threshold on its scores,
+    ``sigmoid(scale * (new_cut - cut))``, which keeps exactly the media whose
+    cosine clears *new_cut*.
+    """
+
+    cosines: np.ndarray
+    cut: float
+    rule: str
+    scale: float = CENTROID_LOGIT_SCALE
+
+    def _threshold_for(self, cut: float) -> float:
+        return float(1.0 / (1.0 + np.exp(-self.scale * (cut - self.cut))))
+
+    def threshold_at(self, beta: float | None) -> float:
+        """The head's threshold for the line *rule* draws at *beta*, on the same corpus."""
+        return self._threshold_for(_gap_centre(self.cosines, centroid_cut(self.cosines, rule=self.rule, beta=beta)))
+
+    def acquisition_threshold(self) -> float:
+        """The head's threshold at the cosines' midpoint: where Hard picks sample, whatever the line (#4136)."""
+        return self._threshold_for(_gap_centre(self.cosines, centroid_cut(self.cosines, rule="midpoint")))
+
+
+def fit_centroid(
     goods: Sequence[np.ndarray],
     score: Callable[["nn.Sequential"], Sequence[float]],
     *,
     rule: str | None = None,
     beta: float | None = None,
-) -> tuple["nn.Sequential", float]:
-    """The Goods' centroid head and its threshold, cut on the corpus *score* scores.
+) -> tuple["nn.Sequential", float, CentroidLine]:
+    """The Goods' centroid head, its threshold, and its :class:`CentroidLine`, cut on the corpus *score* scores.
 
     *score* runs a head over the corpus the line decides and returns one score
     per media, in whatever geometry the caller scores in - the app's
@@ -162,7 +192,7 @@ def fit_centroid_head(
     :func:`~vtscore.detectors.training.scoring_rows_for_snap`'s rows, or the
     eval harness's test-half scorer.  It is called once, with a probe head at
     unit scale and no cut, whose ``sigmoid(cosine)`` is inverted back to the
-    max-pooled cosine; the midpoint is fitted on those, so the cut is the one
+    max-pooled cosine; the line is drawn on those, so the cut is the one
     :func:`~vtscore.training.query_sort.cosine_sort_active` draws for the same
     centroid on the same corpus.  Media the scorer could not score (the
     non-finite sentinel, outside ``(0, 1)``) are left out of the fit.
@@ -170,10 +200,23 @@ def fit_centroid_head(
     the line falls in (:func:`_gap_centre`), so the head keeps exactly what the
     line keeps.
     """
+    chosen = CENTROID_LINE_RULE if rule is None else rule
     centroid = goods_centroid(goods)
     probe = centroid_head(centroid, 0.0, scale=1.0)
     s = np.asarray(score(probe), dtype=np.float64)
     s = s[(s > 0.0) & (s < 1.0)]
     cosines = np.log(s) - np.log1p(-s)
-    cut = _gap_centre(cosines, centroid_cut(cosines, rule=rule, beta=beta))
-    return centroid_head(centroid, cut), CENTROID_THRESHOLD
+    cut = _gap_centre(cosines, centroid_cut(cosines, rule=chosen, beta=beta))
+    return centroid_head(centroid, cut), CENTROID_THRESHOLD, CentroidLine(cosines, cut, chosen)
+
+
+def fit_centroid_head(
+    goods: Sequence[np.ndarray],
+    score: Callable[["nn.Sequential"], Sequence[float]],
+    *,
+    rule: str | None = None,
+    beta: float | None = None,
+) -> tuple["nn.Sequential", float]:
+    """The Goods' centroid head and its threshold: :func:`fit_centroid` without the line."""
+    head, threshold, _line = fit_centroid(goods, score, rule=rule, beta=beta)
+    return head, threshold

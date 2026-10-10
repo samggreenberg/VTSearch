@@ -100,15 +100,46 @@ def text_sort_active(query_vec, *, snap=None, beta: float | None = None) -> tupl
     return results, replace(cuts, threshold=round(cuts.threshold, 4), acq_threshold=round(cuts.acq_threshold, 4))
 
 
+def cosine_sort_cuts(
+    query_vec, *, role: str = "score", snap=None, beta: float | None = None
+) -> tuple[list[dict], TextSortCuts]:
+    """Sort every media in the active dataset by cosine similarity to *query_vec*, with both its lines.
+
+    Returns ``(results, cuts)`` as :func:`text_sort_active` does: *results* as
+    :func:`cosine_sort_active` gives them, and *cuts* the sort's display line
+    (``threshold``) and acquisition cut (``acq_threshold``), each rounded to 4
+    decimals.  A ``"text"`` query draws them by the typed query's rules (#3826,
+    #4136, #4603).  Any other query - an example's vector, several examples'
+    centroid - is the Goods' centroid's sort, so its display line is the one
+    :func:`~vtscore.detectors.centroid_head.centroid_cut` draws for a centroid
+    head on the same corpus (#4732), and its acquisition cut stays the
+    two-Gaussian midpoint, where Autopilot's Hard select has always sampled an
+    example sort.  *beta* is the balance the display line is drawn at; ``None``
+    reads the active one (:func:`vtscore.state.get_beta`).
+    """
+    if beta is None:
+        from vtscore.state import get_beta
+
+        beta = get_beta()
+    if role == "text":
+        return text_sort_active(query_vec, snap=snap, beta=beta)
+    from vtscore.detectors.centroid_head import CENTROID_LINE_RULE, centroid_cut
+    from vtscore.training.thresholds import TextSortCuts, calculate_gmm_threshold
+
+    results, sims_list = _cosine_sort_scored(query_vec, role=role, snap=snap)
+    acq = calculate_gmm_threshold(sims_list)
+    display = acq if CENTROID_LINE_RULE == "midpoint" else centroid_cut(sims_list, beta=beta)
+    return results, TextSortCuts(round(display, 4), round(acq, 4), CENTROID_LINE_RULE)
+
+
 def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[list[dict], float]:
     """Sort every media in the active dataset by cosine similarity to *query_vec*.
 
     Returns ``(results, threshold)`` where *results* is a list of
     ``{"id": …, "similarity": …}`` dicts sorted descending, and
-    *threshold* is the sort's display line (rounded to 4 decimals): for a
-    ``"text"`` query, :func:`text_sort_active`'s ``threshold``; for any
-    other, the GMM midpoint.  A caller that also needs a text sort's
-    acquisition cut calls :func:`text_sort_active` instead.
+    *threshold* is the sort's display line (rounded to 4 decimals):
+    :func:`cosine_sort_cuts`'s ``threshold``.  A caller that also needs the
+    acquisition cut calls :func:`cosine_sort_cuts` instead.
 
     *role* selects which bound embedder the haystack is scored against (the
     v3 routing table, see :meth:`DatasetContext.routed_embedder`): ``"text"``
@@ -127,16 +158,8 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
     single handler doesn't copy the full medias dict under ``_state_lock`` more
     than once per request; when ``None`` a fresh snapshot is taken.
     """
-    # A typed query draws its lines with the text-sort rules (#3826, #4136).
-    # Example and label-file sorts keep the midpoint: the guarded rule was
-    # measured on typed queries only.
-    if role == "text":
-        results, cuts = text_sort_active(query_vec, snap=snap)
-        return results, cuts.threshold
-    from vtscore.training.thresholds import calculate_gmm_threshold
-
-    results, sims_list = _cosine_sort_scored(query_vec, role=role, snap=snap)
-    return results, round(calculate_gmm_threshold(sims_list), 4)
+    results, cuts = cosine_sort_cuts(query_vec, role=role, snap=snap)
+    return results, cuts.threshold
 
 
 def score_embedder_for_active(snap=None) -> tuple[MediaEmbedder | None, str | None]:
@@ -169,9 +192,16 @@ def score_embedder_for_active(snap=None) -> tuple[MediaEmbedder | None, str | No
 
 
 def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
+    """:func:`example_sort_cuts_from_paths` with the display line alone: ``(results_list, threshold)``."""
+    results, cuts = example_sort_cuts_from_paths(file_paths)
+    return results, cuts.threshold
+
+
+def example_sort_cuts_from_paths(file_paths: list[Path]) -> tuple[list[dict], TextSortCuts]:
     """Embed one or more media files and sort all loaded medias by similarity.
 
-    Returns ``(results_list, threshold)`` on success, or raises
+    Returns ``(results_list, cuts)`` on success - *cuts* the display line and
+    the acquisition cut, as :func:`cosine_sort_cuts` draws them - or raises
     :class:`ValueError` when there are no example files, no medias loaded, no
     embedder for the dataset, or a file that the embedder cannot embed.
 
@@ -216,7 +246,7 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
         normed = [v / n if (n := float(np.linalg.norm(v))) > 0 else v for v in embeddings]
         query_vec = np.mean(np.stack(normed), axis=0)
 
-    results, threshold = cosine_sort_active(query_vec, snap=snap)
+    results, cuts = cosine_sort_cuts(query_vec, snap=snap)
 
     # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
     # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
@@ -233,10 +263,14 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
 
         example_features = [emb.local_features_forward(m) for m in medias]
         results, threshold = maybe_structural_rerank_example(
-            results, threshold, snap, example_features, score_key="similarity", beta=get_beta()
+            results, cuts.threshold, snap, example_features, score_key="similarity", beta=get_beta()
         )
+        # The verified ranking draws one line, which the Hard select reads too.
+        from vtscore.training.thresholds import TextSortCuts
 
-    return results, threshold
+        cuts = TextSortCuts(threshold, threshold, "structural")
+
+    return results, cuts
 
 
 def apply_crop_or_keep(temp_path: Path, crop_params: dict | None) -> Path:

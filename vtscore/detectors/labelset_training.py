@@ -952,34 +952,48 @@ class Haystack(NamedTuple):
     to_source: dict[int, int]
 
 
+def _centroid_beta(det_ctx) -> float | None:
+    """The balance a centroid's line is drawn at: the detector's own, as a trained head's (#4413, #4665)."""
+    from vtscore.state import detector_beta, line_knobs
+    from vtscore.state.core import DetectorContext
+
+    return detector_beta(det_ctx) if isinstance(det_ctx, DetectorContext) else line_knobs()["beta"]
+
+
 def install_centroid_head(
     det_ctx,
     goods: list[np.ndarray],
     score: Callable[[Any], Any],
     labelset: LabelSet | None,
+    *,
+    beta: float | None = None,
 ) -> tuple[Any, float]:
     """Store the Goods' centroid head on *det_ctx* as its detector, and return ``(head, threshold)``.
 
     What a labelset under the quota gives (#4643): see
     :mod:`~vtscore.detectors.centroid_head`.  *score* scores a head over the
-    corpus the line is cut on (:func:`~vtscore.detectors.centroid_head.fit_centroid_head`).
+    corpus the line is cut on (:func:`~vtscore.detectors.centroid_head.fit_centroid`),
+    and *beta* is the balance the line is drawn at (#4732): the detector's own,
+    as a trained head's is.
 
     Every cache a trained head's retrain leaves for a later re-cut is dropped:
-    the centroid has no calibration folds, no fitted cut and no labels line, so
-    a balance change finds nothing to re-cut and its line stays the midpoint.
-    No ranking is kept either; a Find pass builds one from its own scores.  The
-    head is stamped with *labelset*'s signature like a trained one (#4204).
+    the centroid has no calibration folds, no fitted cut and no labels line.  It
+    keeps its own line instead (``det_ctx.centroid_line``), so a balance change
+    redraws it on the cosines it was drawn on.  No ranking is kept; a Find pass
+    builds one from its own scores.  The head is stamped with *labelset*'s
+    signature like a trained one (#4204).
     """
-    from vtscore.detectors.centroid_head import fit_centroid_head
+    from vtscore.detectors.centroid_head import fit_centroid
     from vtscore.detectors.model_loading import labelset_signature
 
-    head, threshold = fit_centroid_head(goods, score)
+    head, threshold, line = fit_centroid(goods, score, beta=beta)
     det_ctx.model = head
     det_ctx.model_labels_sig = labelset_signature(labelset)
     det_ctx.threshold = threshold
     det_ctx.calibration_cache = None
     det_ctx.anchored_cut_cache = None
     det_ctx.labels_line = None
+    det_ctx.centroid_line = line
     det_ctx.line_ranking = None
     det_ctx.gate_passed = None
     return head, threshold
@@ -1040,6 +1054,7 @@ def train_from_labelset(
             [x for x, y in zip(X_list, y_list, strict=True) if y == 1.0],
             (lambda head: score_rows_with_model(head, rows)[0]) if rows is not None else (lambda _head: []),
             labelset,
+            beta=_centroid_beta(det_ctx),
         )
         return True
     if tier != TIER_TRAINED:
@@ -1154,6 +1169,7 @@ def labelset_train_and_score(
                 [x for x, y in zip(X_list, y_list, strict=True) if y == 1.0],
                 lambda h: score_rows_with_model(h, centroid_rows)[0],
                 labelset,
+                beta=beta,
             )
             scores, best_region = score_rows_with_model(head, centroid_rows)
             results = _format_results(centroid_rows.ids, scores, best_region, clips_dict)
