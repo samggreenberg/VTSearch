@@ -714,7 +714,7 @@ Every entry point resolves its cache through the active
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
-| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`) |
+| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`); `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines |
 | `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR + FNR on current votes, at each model's Smart cut          |
 | `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
@@ -745,7 +745,10 @@ Every entry point resolves its cache through the active
   the pool, no single step reached 1%, and the raw flip rate has stopped
   falling. Green with the raw rate still above 0.5% sets `plateau: true`:
   the detector has stopped improving but the pool has an ambiguous fringe
-  the embedding cannot resolve. The arithmetic lives
+  the embedding cannot resolve. Each detector is read at the line it was
+  served with, so the first detector served at a new balance starts the
+  comparison afresh: a balance change moves the line with no detector
+  changing its mind (issue #4745). The arithmetic lives
   in `vtscore.detectors.stability`, which the eval harness calls too.
 - **Span** - coverage-atlas coverage: the number of consecutive
   evidence-bearing nodes in BFS order. Green at

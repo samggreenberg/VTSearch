@@ -276,7 +276,7 @@ def run_learned_sort(
             # all under one, where it keeps a set (#4272, #4413).
             served_inclusion = detector_line_inclusion(det_ctx, beta_value)
             smart_threshold = smart_cut(threshold, served_inclusion, lambda k: recut_detector_threshold(det_ctx, k))
-            inject_live_model(good, bad, model, threshold, smart_threshold=smart_threshold)
+            inject_live_model(good, bad, model, threshold, smart_threshold=smart_threshold, beta=beta_value)
         clock.mark("inject_live_model")
 
         if det_ctx is not _empty_detector_context and model is not None:

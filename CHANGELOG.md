@@ -660,6 +660,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Changing the balance during Autopilot no longer knocks Stable off green**
+  (issue #4745). Stable counts the items that cross the line between one
+  detector and the next. A balance change moves the line without any detector
+  changing its mind, but the next vote's detector was compared, at the new
+  line, with one read at the old line, so every item between them counted as
+  a change of mind. That could hold Stable yellow and send Autopilot back to
+  Refine Boundary. The first detector after a balance change is now the one
+  the next is compared with.
 - **A structural detector's Threshold line says how many pass its gate**
   (issue #4505). On a `sift_vlad` / `sift_vlad_doc` collection the line is
   the verification gate's boundary, but the state under the Threshold control
