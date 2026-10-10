@@ -44,6 +44,7 @@ def probe(C: Any) -> list[str]:
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
         MORE_WALKS,
+        NEW_WALKS,
         PRODUCTION_HEAD,
         PRODUCTION_PATCH_STYLE,
         resolve_acquisition_factor,
@@ -247,6 +248,11 @@ def probe(C: Any) -> list[str]:
         refuse("more_walk", "CALIB_MORE_WALK", "must be one of %s" % ", ".join(MORE_WALKS))
     elif C.MORE_WALK != harness_default("more_walk"):
         rows.append(("more_walk", C.MORE_WALK, "<unset> = seed, the app's walk down the text sort"))
+    # #4671's New phase on the Hard pick: an arm the app does not take.
+    if C.NEW_WALK not in NEW_WALKS:
+        refuse("new_walk", "CALIB_NEW_WALK", "must be one of %s" % ", ".join(NEW_WALKS))
+    elif C.NEW_WALK != harness_default("new_walk"):
+        rows.append(("new_walk", C.NEW_WALK, "<unset> = atlas, the app's Coverage Atlas walk"))
     # #4482's band picks: an arm the app does not take.
     if C.BAND_SHARE is not None:
         if isinstance(C.BAND_SHARE, int) and C.BAND_SHARE >= 1:
