@@ -148,11 +148,21 @@ from _rank_metrics import (  # noqa: E402
 import objective  # noqa: E402
 import stopping  # noqa: E402
 
-#: The two production paths, as the harness names them.
-ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max_patch"): "DINOv3 region"}
+#: The production paths, as the harness names them.
+ARMS = {
+    ("siglip", "whole_image"): "SigLIP binary",
+    ("siglip+dinov3_patch", "max_patch"): "DINOv3 region",
+    ("face", "whole_image"): "FaceNet face crop",
+}
 #: The State of the App reports are one per production path (owner, 2026-09-24):
-#: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo").
-PATHS = {"binary": ("siglip", "whole_image"), "region": ("siglip+dinov3_patch", "max_patch")}
+#: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo"). "Face" is FaceNet on
+#: FHIBE's face crops (#4762), opened on the example sort; its two stored sizes share the path,
+#: so a face analysis also names its dataset (``--dataset``).
+PATHS = {
+    "binary": ("siglip", "whole_image"),
+    "region": ("siglip+dinov3_patch", "max_patch"),
+    "face": ("face", "whole_image"),
+}
 #: A spot check's round of picks (``vtscore.training.thresholds.spot_check.CHECK_MIN_PICKS``, which a test pins):
 #: how far past a checkpoint a run's next rank frame may be read when the run handed over inside a check round
 #: and has no frame on screen by the checkpoint (#4631).
@@ -1696,6 +1706,9 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--path", choices=["all", *PATHS], default="all", help="one production path per report")
     ap.add_argument("--seeds", type=int, default=0, help="keep seeds 0..N-1 only (0 = all); for a snapshot mid-run")
+    ap.add_argument(
+        "--dataset", default=None, help="keep one dataset's cells (a face review's two sizes share one path, #4762)"
+    )
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -1712,6 +1725,9 @@ def main() -> int:
         emb, style = PATHS[args.path]
         keep = lambda df: df[(df["embedder"] == emb) & (df["style"] == style)] if not df.empty else df  # noqa: E731
         base, sky, picks, frames = keep(base), keep(sky), keep(picks), keep(frames)
+    if args.dataset:
+        only = lambda df: df[df["dataset"] == args.dataset] if not df.empty else df  # noqa: E731
+        base, sky, picks, frames = only(base), only(sky), only(picks), only(frames)
     if args.seeds:
         within = lambda df: df[df["seed"] < args.seeds] if not df.empty else df  # noqa: E731
         base, sky, picks, frames = within(base), within(sky), within(picks), within(frames)
