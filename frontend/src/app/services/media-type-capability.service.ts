@@ -18,6 +18,7 @@ export const FALLBACK_THUMBNAIL_TYPE_IDS: ReadonlySet<string> = new Set([
   'video',
   'document',
   'audio',
+  'face',
 ]);
 
 /**

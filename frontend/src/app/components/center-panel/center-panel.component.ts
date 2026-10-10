@@ -24,6 +24,12 @@ import { IconComponent } from '../icon/icon.component';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
 
+/** The viewers the pane can show an item in. */
+export type CenterViewer = 'audio' | 'image' | 'video' | 'text' | 'document';
+
+/** The media types with a viewer of their own, named after the type. */
+const OWN_VIEWER_TYPES: ReadonlySet<string> = new Set<CenterViewer>(['audio', 'image', 'video', 'text', 'document']);
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-center-panel',
@@ -366,6 +372,21 @@ export class CenterPanelComponent implements OnDestroy {
     return this.media()?.media_type || 'audio';
   }
 
+  /**
+   * The viewer the focused item is shown in. A type with no viewer of its own
+   * goes to the image viewer when it has a still to paint (the served
+   * `has_thumbnail`, which `/api/medias/<id>/image` serves through the type's
+   * `image_response`), and to the document viewer's raw embed otherwise. So a
+   * face crop gets zoom, rotate and the full pane instead of the `<object>`'s
+   * 300×150 default box (#4771), and the next convert-in still type does too,
+   * with no edit here.
+   */
+  get viewer(): CenterViewer {
+    const type = this.mediaType;
+    if (OWN_VIEWER_TYPES.has(type)) return type as CenterViewer;
+    return this.mediaTypeCaps.usesThumbnails(type) ? 'image' : 'document';
+  }
+
   /** The embedder names bound to the focused media (the v3 trio).  Prefers the
    *  full ``embeddings`` key set the backend now ships under ``embedders``;
    *  falls back to the singular primary for older payloads. */
@@ -395,6 +416,17 @@ export class CenterPanelComponent implements OnDestroy {
       const info = this.infoFor(n);
       return info?.supports_patch_regions === true || info?.supports_geometric_verification === true;
     });
+  }
+
+  /** Whether a box drawn on the focused item would mean anything, which decides
+   *  whether the image viewer draws one (Marquee, Shift-drag). An image always
+   *  offers it: the box is kept on the label, and a patch embedder trains on
+   *  it, even one on another dataset the labels later go to. Any other still
+   *  type offers it only when a bound embedder reads regions; a face's FaceNet
+   *  embeds the whole crop, so a box there would only crop its Good-pile tile
+   *  and train nothing (#4771). */
+  get regionDrawOffered(): boolean {
+    return this.mediaType === 'image' || this.regionOverlayCapable;
   }
 
   /** Whether the active dataset binds a structural embedder (instance matching).
@@ -540,7 +572,7 @@ export class CenterPanelComponent implements OnDestroy {
    *  Drives the panel-wide crosshair, which is the only affordance saying the
    *  gesture reaches past the image into the space below it. */
   get regionDrawActive(): boolean {
-    return this.mediaType === 'image' && (this.imageViewer()?.regionDrawActive ?? false);
+    return this.viewer === 'image' && (this.imageViewer()?.regionDrawActive ?? false);
   }
 
   /** Off-canvas region-draw start: a Shift-drag begun on the toolbar strip, the
@@ -550,7 +582,7 @@ export class CenterPanelComponent implements OnDestroy {
    *  ignores anything begun on an interactive control, so every click down here
    *  keeps its current behaviour. */
   onPanelMouseDown(event: MouseEvent): void {
-    if (this.mediaType !== 'image') return;
+    if (this.viewer !== 'image') return;
     this.imageViewer()?.tryStartOffCanvasDraw(event);
   }
 
