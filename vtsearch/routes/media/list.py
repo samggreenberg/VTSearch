@@ -23,6 +23,7 @@ from typing import Any
 from flask import Response, jsonify, make_response, request, send_file
 from flask_smorest import Blueprint, abort
 
+from vtscore.datasets import source_item
 from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
@@ -36,6 +37,9 @@ from vtsearch.schemas.media import (
     MediaBatchResponseSchema,
     MediaIdsListResponseSchema,
     MediaParagraphResponseSchema,
+    MediaSourceBatchEntrySchema,
+    MediaSourceBatchRequestSchema,
+    MediaSourceResponseSchema,
     MediaVariantQuerySchema,
     MediaVoteBulkRequestSchema,
     MediaVoteBulkResponseSchema,
@@ -48,6 +52,7 @@ from vtsearch.state import (
     _state_lock,
     apply_label,
     cached_md5_lookup,
+    get_active_context,
     get_media,
     medias,
     next_media_id,
@@ -639,6 +644,112 @@ def batch_medias(body: dict):
                 continue
             media_data[clip_key] = c[clip_key]
         result.append(media_data)
+    return result
+
+
+#: Why a media's source cannot be named, by :class:`~vtscore.datasets.source_item.SourceLocation` status.
+#: ``source_item.SIBLING_NOT_LOADED`` is not here: it is the 409, not a 404.
+_SOURCE_NOT_FOUND_REPLIES = {
+    source_item.NOT_DERIVED: ("not_derived", "This item was not made by a converter, so it has no source item."),
+    source_item.NO_SIBLING: (
+        "no_source_dataset",
+        "No dataset you can read from the same import holds this item's source.",
+    ),
+    source_item.NOT_FOUND: ("source_not_found", "No item in the source dataset matches this item's source file."),
+}
+
+
+def _source_locator() -> source_item.SourceLocator:
+    """A locator for the requesting dataset, confined to what the current user may read."""
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+
+    return source_item.SourceLocator(get_active_context().dataset_id, user=get_current_user())
+
+
+def _abort_source_not_loaded(dataset_id: str | None) -> None:
+    abort(
+        409,
+        message="Load the source dataset to resolve this item's source.",
+        error_code="source_not_loaded",
+        dataset_id=dataset_id,
+    )
+
+
+@medias_bp.route("/api/medias/<int:media_id>/source")
+@medias_bp.response(200, MediaSourceResponseSchema)
+@medias_bp.alt_response(
+    404,
+    description=(
+        "Media not found; or it is no converter output (``error_code: not_derived``); or no readable "
+        "dataset of its import holds its source type (``no_source_dataset``); or the source dataset "
+        "has no matching item (``source_not_found``)."
+    ),
+)
+@medias_bp.alt_response(
+    409,
+    description=(
+        "The source dataset is registered but not loaded (``error_code: source_not_loaded``); "
+        "``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+    ),
+)
+@require_dataset_header
+def media_source(media_id: int):
+    """Resolve a converter output to the item it was made from, in its sibling dataset.
+
+    A face crop's photo, a video frame's video: found as a **media item** in
+    the dataset the same multi-dataset import produced for the source type
+    (the shared ``import_group``), since the source file itself is usually
+    gone.  ``box`` is where the output sat in its source (``source_box``), for
+    outlining it.  The sibling must be loaded; when it is not, the 409 names
+    it so the client can offer to load it.  Only siblings the current user may
+    read are considered.  See :mod:`vtscore.datasets.source_item`.
+    """
+    media = get_media(media_id)
+    if media is None:
+        abort(404, message="not found")
+    found = _source_locator().locate(media)
+    if found.status == source_item.SIBLING_NOT_LOADED:
+        _abort_source_not_loaded(found.dataset_id)
+    if found.status != source_item.RESOLVED:
+        error_code, message = _SOURCE_NOT_FOUND_REPLIES[found.status]
+        abort(404, message=message, error_code=error_code)
+    return {"dataset_id": found.dataset_id, "media_id": found.media_id, "box": found.box}
+
+
+@medias_bp.route("/api/medias/source-batch", methods=["POST"])
+@medias_bp.arguments(MediaSourceBatchRequestSchema)
+@medias_bp.response(200, MediaSourceBatchEntrySchema(many=True))
+@medias_bp.alt_response(
+    409,
+    description=(
+        "A requested id's source dataset is registered but not loaded (``error_code: source_not_loaded``); "
+        "``dataset_id`` names it."
+    ),
+)
+@require_dataset_header
+def media_source_batch(body: dict):
+    """Batch form of ``GET /api/medias/<id>/source``, for a whole results page.
+
+    Returns one entry per id that resolved, in request order; ids that do not
+    (unknown, not a converter output, no source dataset, no matching item) are
+    omitted, as ``POST /api/medias/batch`` omits unknown ids.  If any id needs
+    a source dataset that is not loaded the whole request is a 409 naming it:
+    load it and ask again.
+    """
+    snap = snapshot_medias()
+    locator = _source_locator()
+    result: list[dict[str, Any]] = []
+    for media_id in body["ids"]:
+        media = snap.get(media_id)
+        if media is None:
+            continue
+        found = locator.locate(media)
+        if found.status == source_item.SIBLING_NOT_LOADED:
+            _abort_source_not_loaded(found.dataset_id)
+        if found.status == source_item.RESOLVED:
+            result.append(
+                {"id": media_id, "dataset_id": found.dataset_id, "media_id": found.media_id, "box": found.box}
+            )
     return result
 
 

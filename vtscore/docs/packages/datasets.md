@@ -23,6 +23,7 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
 | `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
 | `vtscore/datasets/demo_counts.py` | Exact demo-dataset media counts, measured once and written down |
+| `vtscore/datasets/source_item.py` | Find a converter output's source item (a face's photo) in the sibling dataset of the same multi-dataset import |
 | `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded only; nothing reads it back yet) |
 
 **Loading and persistence**
@@ -488,7 +489,11 @@ load that was never registered.
 Per-entry fields include `created_by`, `readers` (list of usernames or
 `"*"`), `file_type_counts`, and `import_group` / `output_category`: the id
 every dataset of one multi-dataset import shares and the output category each
-stands for (`None` / `""` for a single-dataset import). Access-control helpers
+stands for (`None` / `""` for a single-dataset import).
+`vtscore.datasets.source_item` reads them to find a converter output's source
+item: `find_source_sibling` picks the group's entry whose `output_category` is
+the converter's `source_type`, and `resolve_source_item` joins the output's
+`source_file` to that sibling's `origin_name`. Access-control helpers
 (`can_user_access`, `is_owner`, `list_datasets_for_user`,
 `set_readers`) implement multi-user visibility rules; library-only
 consumers without users can ignore them and treat every dataset as

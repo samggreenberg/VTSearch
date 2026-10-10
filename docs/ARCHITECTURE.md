@@ -1233,6 +1233,20 @@ converter" says nothing about where the corpus came from).
 UI's metadata grid and the enriched label export.  A plainly imported file
 gets no `Source` / `Derived Via` — it is its own source.
 
+The source **file** is usually gone once the import ends (an archive's
+extract dir, an upload's staging dir), so the way back to it is the source
+**item**, in the dataset a multi-dataset import produced beside the outputs.
+`vtscore/datasets/source_item.py` makes that link: the sibling is the entry
+of the same `import_group` whose `output_category` is the converter's
+`source_type` (by category, not media type, because a Document output is an
+image dataset too), and the item is the one whose `origin_name` is the
+output's `source_file`, which holds because both datasets come from one scan
+of one folder.  `GET /api/medias/<id>/source` and
+`POST /api/medias/source-batch` serve it
+([API](api/medias.md#resolve-a-derived-items-source)); they read the sibling
+through `get_context(sibling_id)`, never the request's proxies, and only
+resolve into a sibling the user may read.
+
 Each is deliberately **one line**, not a key per `origin.params` entry:
 flattening the params into a per-item grid reads as if every key were a
 property of *this item*, and a dataset-level import knob (`size=60`) is not.

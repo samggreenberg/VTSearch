@@ -122,6 +122,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **The server can find a face's photo** (issue #4749). For a face crop imported in the same
+  multi-dataset import as its photos, `GET /api/medias/<id>/source` returns the photo as an item
+  of the "– Image" dataset beside it, with the face's box in it; `POST /api/medias/source-batch`
+  does a whole page in one request. It works the same for any converter output whose source
+  dataset came in with it (a video frame and its video). The photos' dataset has to be loaded; if
+  it is not, the reply names it so it can be loaded first. Only a dataset you can read is
+  searched. Nothing in the app calls these yet: they are the server half of opening a face's photo
+  and of grouping faces by photo.
 - **A face crop knows where it sat in its photo** (issue #4748). Every face the **Images → Faces**
   converter cuts out now records its box in the source photo, kept with the dataset, and the
   face's details show it as **Source Box** (fractions of the photo's width and height). Faces from
