@@ -183,10 +183,11 @@ pair was re-run against the app before #4731 (`CALIB_GOOD_DRY_RUN=off CALIB_QUOT
 `g3@top,b4@mid`, at commit b85a70dc3 (dev with #4741 merged). The same 5 seeds of COCO Better Binary were used, now at
 all three presets, plus Region at beta 1 over 2 seeds and the same 300 FHIBE people.
 
-**Over a session it still does not lose, and the gain is smaller.** COCO Binary at beta 1 gains +0.0017 ±
+**Over a session it still does not lose. On Binary the gain is smaller, and on Region it is larger.** COCO Binary at beta 1 gains +0.0017 ±
 0.0009 over clicks 1–150, against #4738's +0.0038, and is flat over 1–50. At beta 1/4 it gains +0.0042. At beta 4
 it is flat over 1–150 but loses −0.0018 ± 0.0007 over clicks 1–50, and that loss is the trained-head tier's, not
-the exit's (below). Medium objects lean slightly negative, by about 0.1% of
+the exit's (below). Region, which #4738 never ran, gains +0.0101 ± 0.0026 at beta 1, and +0.058 where the exit
+fires. Medium objects lean slightly negative, by about 0.1% of
 their F-beta. FHIBE does not move: the gain for 2–4-photo people is the same, and every band with 5 or more photos
 still gains.
 
@@ -195,15 +196,22 @@ still gains.
 | Binary, beta 1/4 | 720 | **+0.0042** ± 0.0016 | +0.0016 ± 0.0010 | +0.021 ± 0.009 | +0.015 ± 0.005 | −0.0014 ± 0.0015 | 0 |
 | Binary, beta 1 | 720 | **+0.0017** ± 0.0009 | +0.0000 ± 0.0004 | +0.0087 ± 0.0039 | +0.0066 ± 0.0029 | −0.0011 ± 0.0006 | 0 |
 | Binary, beta 4 | 720 | +0.0010 ± 0.0015 | **−0.0018** ± 0.0007 | +0.0049 ± 0.0064 | +0.0054 ± 0.0048 | −0.0021 ± 0.0012 | 0 |
-REGION_ROW
+| Region, beta 1 (2 seeds) | 288 | **+0.0101** ± 0.0026 | +0.0043 ± 0.0015 | +0.058 ± 0.011 | +0.021 ± 0.006 | +0.010 ± 0.005 | 0 |
 
 *Small / medium / large are gains over clicks 1–150 by object band. The exit fires in the same 144 of 720 Binary
-runs at every preset (20%), and its picks match the control's up to that click.*
+runs at every preset (20%), and in 50 of 288 Region runs (17%). Every fired run picks as the control does up to that
+click, and every other run is identical to the control throughout. Region is priced against #4637's two-seed
+Region text baseline.*
 
 ![COCO Better Binary at beta 1 on today's opening: mean F-beta of the set shown over clicks](fig_coco_guard_binary_b1.png)
 
 *Figure 3. COCO Better Binary, beta 1, on today's opening. Left: all 720 runs. Right: the 144 where the Good walk
 runs 16 picks dry with a Good in hand. Blue is the app before #4731; orange is the app.*
+
+![COCO Better Region at beta 1 on today's opening: mean F-beta of the set shown over clicks](fig_coco_guard_region_b1.png)
+
+*Figure 4. The same for Region at beta 1, 2 seeds: all 288 runs, and the 50 where the exit fires. Beta 1/4 and 4
+for Binary are `fig_coco_guard_binary_b025.png` and `fig_coco_guard_binary_b4.png`.*
 
 - **Why the gain halved at beta 1.** The exit's own sessions are unchanged by #4740: it already spent the walk. The
   control changed. Before #4740, a slow walk that found its third Good walked More next. That walk is now gone, and
@@ -214,6 +222,9 @@ runs 16 picks dry with a Good in hand. Blue is the app before #4731; orange is t
   the cost #4738 saw on FHIBE's 5+ photo faces.
 - **Small objects carry the gain**, at +0.0066 (beta 1) and +0.015 (beta 1/4). The rule is for rare targets, and
   small objects are COCO's rare ones.
+- **Region gains most**, at +0.0101 over clicks 1–150 and +0.0043 over 1–50. That includes medium objects (+0.010),
+  which lean negative on Binary. Where the exit fires, the control's Region session has a mean of only 0.11, and the
+  app reaches 0.17. 38 of the 50 fired runs gain.
 - **At beta 4 the second quota costs short sessions.** Over clicks 1–50 the app loses −0.0018 ± 0.0007 overall
   and −0.0092 ± 0.0032 where the exit fires. Over 1–150 it is flat (+0.0010 ± 0.0015). The exit is not the cause.
   An extra arm D (exit alone, the centroid shown at one or two Goods) was run on the 144 fired runs at beta 4. Its
@@ -310,6 +321,17 @@ cd $W/scripts/experiments/state_of_app
 bash good_dry_4731.sh dirs 5
 for arm in C Q D; do bash good_dry_4731.sh launch $arm 5; done   # GOODDRY_PACK=1 when the cpu cap is full
 # (C is now the pre-#4731 app, Q the app; the run used C = unset, Q = both 16, D = dry run 16)
+
+# #4743, on today's opening: three Binary presets, Region at beta 1 over 2 seeds, each priced and compared.
+export GOODDRY_DATE=2026-10-10
+for b in 0.25 1 4; do GOODDRY_BETA=$b bash good_dry_4731.sh dirs 5
+  for arm in C Q; do GOODDRY_BETA=$b bash good_dry_4731.sh launch $arm 5; done; done
+GOODDRY_PATH=region bash good_dry_4731.sh dirs 2; for arm in C Q; do GOODDRY_PATH=region bash good_dry_4731.sh launch $arm 2; done
+for b in 0.25 1 4; do GOODDRY_BETA=$b bash good_dry_4731.sh price <priced> 5 <this dir>; done
+GOODDRY_PATH=region bash good_dry_4731.sh price <priced> 2 <this dir>
+# FHIBE: the same launcher per arm, ctl = CALIB_GOOD_DRY_RUN=off CALIB_QUOTA_DRY_BADS=off and app = unset, on
+# 2026-10-09-4731-ctl-k1's identity file; then analyze_good_dry_4731.py --runs ctl=<dir> app=<dir> and
+# figures_good_dry_4731.py --name fig_fhibe_curves_4743.png.
 ```
 
 The cpu partition's cap was held by other arrays, so both studies ran as pack jobs on V100 nodes,
