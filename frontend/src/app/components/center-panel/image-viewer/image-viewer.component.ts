@@ -79,8 +79,9 @@ export class ImageViewerComponent implements OnDestroy {
    */
   readonly datasetId = input('');
   /**
-   * Whether a Shift- or Marquee-drag draws a region box. Off where there is
-   * nothing to vote on, as in the Show in photo overlay, so a drag only pans.
+   * Whether a Shift- or Marquee-drag draws a region box. Off where a box would
+   * mean nothing, so a drag only pans: the Show in photo overlay, where there
+   * is nothing to vote on, and a face, whose embedder reads the whole crop.
    */
   readonly regionDraw = input(true);
   readonly regionBoxChange = output<RegionBox | null>();

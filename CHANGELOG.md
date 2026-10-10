@@ -716,6 +716,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A face in Train or Test fills the pane and can be zoomed** (issue #4771). A face crop was
+  shown through the document viewer, which clipped it to a 300×150 box and offered no image
+  toolbar. It now opens in the image viewer, with zoom and rotate, as does any media type that
+  has a thumbnail and no viewer of its own. The Marquee is not offered on a face: its embedder
+  reads the whole crop, so a drawn box would train nothing.
+
 - **`--pipeline` honours `--user`, `--progress-format`, `-v` and the admin overrides**
   (issue #4753). A pipeline run started before those flags were applied, so
   `--pipeline p.yaml --user bob` ran as the `default` user without asking for

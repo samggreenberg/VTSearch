@@ -93,7 +93,7 @@ Optional overrides:
 | `ensure_thumbnail_bytes(media)` | cached value | Build + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that arrived with no readable file |
 | `load_demo_source(...)` | raises `ValueError` | Download and embed one of this type's `demo_datasets` entries |
 | `load_thin_media_data(file_path)` | `load_media_data` minus payload keys | Display fields for a *thin* (reference) load that keeps only `media_path` |
-| `has_thumbnail` | `False` | Class attr: `True` when items have a browsable still (every shipped type except `text`; audio uses its waveform) |
+| `has_thumbnail` | `False` | Class attr: `True` when items have a browsable still (every shipped type except `text`; audio uses its waveform). In VTSearch's Train and Test pane, a type with no viewer of its own is shown in the image viewer, painting `image_response`, when this is `True`, and as a raw embed of `media_response` otherwise |
 | `converts_to` | `[]` | Class attr: embeddable `type_id`s a non-embeddable type must be converted into (first = default) |
 | `importable` | `True` | Whether users import this type directly; `False` for a type that only arises from converting another |
 

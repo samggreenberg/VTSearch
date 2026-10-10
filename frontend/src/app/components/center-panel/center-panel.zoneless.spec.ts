@@ -11,6 +11,7 @@ import { settleZoneless } from '../../testing/settle-resource';
 import { provideRouter, Router } from '@angular/router';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { voteBodyWithoutProvenance } from '../../testing/mocks';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 
 /**
  * Zoneless staleness canary for the center panel.
@@ -273,6 +274,88 @@ describe('CenterPanelComponent', () => {
     fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'document' });
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-document-viewer')).toBeTruthy();
+  });
+
+  /**
+   * #4771: a face crop fell to `@default`, the document viewer, whose
+   * `<object>` clipped it to a 300×150 box with no image toolbar. A type with
+   * no viewer of its own now goes by the served `has_thumbnail`.
+   */
+  describe('a type with no viewer of its own (#4771)', () => {
+    const faceMedia: Media = { ...mockMedia, media_type: 'face', filename: 'face_0.png', embedder: 'face' };
+
+    function toolbar(): HTMLElement | null {
+      return fixture.nativeElement.querySelector('.image-view-controls');
+    }
+
+    function loadRegistry(): void {
+      TestBed.inject(MediaTypeCapabilityService).ensureLoaded();
+      httpMock.expectOne('/api/media-types').flush({
+        media_types: [
+          { type_id: 'face', name: 'Face', has_thumbnail: true, importable: false },
+          { type_id: 'point_cloud', name: 'Point Cloud', has_thumbnail: true },
+          { type_id: 'legacy', name: 'Legacy', has_thumbnail: false },
+        ],
+      });
+    }
+
+    it('shows a face crop in the image viewer, with zoom and rotate', () => {
+      fixture.componentRef.setInput('media', faceMedia);
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('vt-document-viewer')).toBeNull();
+      expect(toolbar()!.querySelector('[aria-label="Zoom in"]')).toBeTruthy();
+      expect(toolbar()!.querySelector('[aria-label="Rotate image left"]')).toBeTruthy();
+    });
+
+    it('keeps it there once the registry loads', () => {
+      loadRegistry();
+      fixture.componentRef.setInput('media', faceMedia);
+      TestBed.tick();
+      expect(component.viewer).toBe('image');
+      expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
+    });
+
+    it('offers no region drawing on a face, whose FaceNet would drop the box', () => {
+      fixture.componentRef.setInput('media', faceMedia);
+      (component as unknown as { embedderInfos: EmbedderInfo[] }).embedderInfos = [
+        { name: 'face', media_type_id: 'face', supports_patch_regions: false },
+      ];
+      TestBed.tick();
+      expect(component.regionDrawOffered).toBe(false);
+      expect(component.imageViewer()!.regionDraw()).toBe(false);
+      // Neither Marquee nor Highlight, and no separator left leading the strip.
+      expect(toolbar()!.querySelector('.ivc-btn-toggle')).toBeNull();
+      expect(toolbar()!.querySelector('.ivc-sep')).toBeNull();
+    });
+
+    it('offers it on a still type whose embedder reads regions', () => {
+      fixture.componentRef.setInput('media', faceMedia);
+      (component as unknown as { embedderInfos: EmbedderInfo[] }).embedderInfos = [
+        { name: 'face', media_type_id: 'face', supports_patch_regions: true },
+      ];
+      expect(component.regionDrawOffered).toBe(true);
+    });
+
+    it('still offers it on every image, as before', () => {
+      fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'image', filename: 'pic.png' });
+      TestBed.tick();
+      expect(component.regionDrawOffered).toBe(true);
+      expect(component.imageViewer()!.regionDraw()).toBe(true);
+      expect(toolbar()!.querySelector('[aria-label^="Marquee"]')).toBeTruthy();
+    });
+
+    it('goes by the served has_thumbnail, so a new still type needs no edit here', () => {
+      loadRegistry();
+      fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'point_cloud' });
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
+
+      fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'legacy' });
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeNull();
+      expect(fixture.nativeElement.querySelector('vt-document-viewer')).toBeTruthy();
+    });
   });
 
   it('should show voting overlay when media is selected', () => {
