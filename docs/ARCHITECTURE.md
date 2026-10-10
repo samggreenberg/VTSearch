@@ -1247,6 +1247,18 @@ of one folder.  `GET /api/medias/<id>/source` and
 through `get_context(sibling_id)`, never the request's proxies, and only
 resolve into a sibling the user may read.
 
+**Collapse to photos** (#4751) shows a face ranking as its photos without a
+second ranking: `GET /api/sort/collapsed` groups the ranking stored under a
+sort token with `vtscore/datasets/source_groups.py` (a group per photo, scored
+as its best face, every face in exactly one group) and windows the grouped
+list, so a photo never straddles a page. The grouping is built once per token
+and kept on the sort cache's entry (`SortResultsCache.derived`), so it is
+evicted with the ranking and a re-sort regroups; votes are read per request.
+Votes, counts and Find's bulk actions stay on faces: the detector is a face
+detector and its labels are face crops, so the photo is presentation only.
+`/api/find-label` registers its ranking for a token too, though it sends it
+whole.
+
 Each is deliberately **one line**, not a key per `origin.params` entry:
 flattening the params into a per-item grid reads as if every key were a
 property of *this item*, and a dataset-level import knob (`size=60`) is not.

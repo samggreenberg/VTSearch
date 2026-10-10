@@ -555,6 +555,7 @@ from `vtscore.state.sort_results_cache` (not re-exported).
 | `initial_window_end(total, above_threshold)` | End index (exclusive) of that initial window |
 | `result_score(result)` / `count_above_threshold(results, threshold)` | Read a row's score under either key; count rows above a cut |
 | `SortResultsCache(max_entries=8)`, `.store(...)` / `.page(...)` | LRU of full lists: stash one and mint a token; page into a stored one |
+| `.derived(token, key, build, *, dataset_id=None)` / `.forget_derived(token, key)` | A view built once over a stored list (`build(results)`) and kept with it, evicted with it; the app keeps Collapse to photos' grouping here (#4751) |
 
 Only the lightweight ranking rows (`{"id", "score"}` or
 `{"id", "similarity"[, "best_region"]}`) are cached - never embeddings

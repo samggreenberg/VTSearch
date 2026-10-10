@@ -41,6 +41,8 @@ import { learnedSortResult } from '../generated/api-client/fn/sorting/learned-so
 import { sortClips } from '../generated/api-client/fn/sorting/sort-clips';
 import { sortPage } from '../generated/api-client/fn/sorting/sort-page';
 import type { SortPageResponse } from '../generated/api-client/models/sort-page-response';
+import { sortCollapsed } from '../generated/api-client/fn/sorting/sort-collapsed';
+import type { SortCollapsedResponse } from '../generated/api-client/models/sort-collapsed-response';
 import { sortLine } from '../generated/api-client/fn/sorting/sort-line';
 import type { SortLineResponse } from '../generated/api-client/models/sort-line-response';
 import { getTextsortSuggestionsRoute } from '../generated/api-client/fn/sorting/get-textsort-suggestions-route';
@@ -102,6 +104,21 @@ export class SortingApiService {
    */
   getSortPage(token: string, offset: number, limit: number): Observable<SortPageResponse> {
     return sortPage(this.http, this.config.rootUrl, { token, offset, limit }).pipe(map((r) => r.body));
+  }
+
+  /**
+   * One window of the ranking under `token`, grouped by the photo each face
+   * was cut from (Collapse to photos, #4751). `offset` / `limit` count photo
+   * rows. A 409 `source_not_loaded` names an Image dataset to load first, and a
+   * 404 an expired token: both are answers the caller shows, so no toast.
+   */
+  getSortCollapsed(token: string, offset: number, limit: number): Observable<SortCollapsedResponse> {
+    return sortCollapsed(
+      this.http,
+      this.config.rootUrl,
+      { token, offset, limit },
+      new HttpContext().set(SKIP_ERROR_TOAST, true),
+    ).pipe(map((r) => r.body));
   }
 
   /**

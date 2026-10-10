@@ -1,14 +1,13 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, output, signal } from '@angular/core';
-import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable, catchError, map, of, switchMap } from 'rxjs';
 
 import { Media } from '../../../models/api.models';
 import { ModalComponent } from '../../modal/modal.component';
 import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
-import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
-import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import { MediasApiService } from '../../../services/medias-api.service';
+import { SiblingLoadService } from '../../../services/sibling-load.service';
 import { SourceLookup, SourcePhotoRequest, SourcePhotoService } from '../../../services/source-photo.service';
 
 /** What the overlay shows: the lookup, and for a found photo its metadata. */
@@ -30,6 +29,7 @@ type SourcePhotoView =
   selector: 'vt-source-photo-modal',
   standalone: true,
   imports: [ModalComponent, ImageViewerComponent],
+  providers: [SiblingLoadService],
   templateUrl: './source-photo-modal.component.html',
   styleUrl: './source-photo-modal.component.scss',
 })
@@ -37,9 +37,7 @@ export class SourcePhotoModalComponent {
   private readonly sourcePhoto = inject(SourcePhotoService);
   private readonly mediasApi = inject(MediasApiService);
   private readonly datasetState = inject(DatasetStateService);
-  private readonly datasetsRegistryApi = inject(DatasetsRegistryApiService);
-  private readonly loadingTasks = inject(DashboardLoadingTasksService);
-  private readonly destroyRef = inject(DestroyRef);
+  private readonly siblingLoad = inject(SiblingLoadService);
 
   readonly request = input.required<SourcePhotoRequest>();
   readonly closed = output<void>();
@@ -52,13 +50,11 @@ export class SourcePhotoModalComponent {
   /** The lookup's answer, or null while it is still out. */
   readonly view = computed<SourcePhotoView | null>(() => this.resource.value() ?? null);
 
-  /** The task id of the sibling load this overlay started, while it runs. */
-  private readonly loadTaskId = signal<string | null>(null);
-  readonly siblingLoading = computed(() => this.loadTaskId() !== null);
+  readonly siblingLoading = this.siblingLoad.loading;
   /** The sibling is loading, or the lookup is being asked again after it. */
   readonly busy = computed(() => this.siblingLoading() || this.resource.isLoading());
   /** Why the sibling load failed, once it has. */
-  readonly loadError = signal('');
+  readonly loadError = this.siblingLoad.error;
 
   /** The name of the dataset the photo lives in (or would, once loaded). */
   readonly siblingName = computed(() => {
@@ -72,54 +68,13 @@ export class SourcePhotoModalComponent {
     return v?.kind === 'found' ? this.siblingName() : 'Show in photo';
   });
 
-  constructor() {
-    // The load's completion is registered on a root service and can land after
-    // the overlay closed; forgetting the task makes `afterSiblingLoad` a no-op.
-    this.destroyRef.onDestroy(() => this.loadTaskId.set(null));
-    // A sibling load that settles with an error never calls back (the
-    // loading-task service fires completions only on success), so watch its
-    // row for the error instead; the failure is also toasted app-wide.
-    effect(() => {
-      const taskId = this.loadTaskId();
-      if (!taskId) return;
-      const failed = this.loadingTasks.loadingTasks.find((t) => t.task_id === taskId && t.status === 'idle' && t.error);
-      if (!failed) return;
-      this.loadTaskId.set(null);
-      this.loadError.set(failed.error ?? 'Loading failed.');
-    });
-  }
-
   close(): void {
     this.closed.emit();
   }
 
   /** Load the sibling the lookup named, then look again. */
   loadSibling(datasetId: string): void {
-    if (this.siblingLoading()) return;
-    this.loadError.set('');
-    this.loadTaskId.set('');
-    this.datasetsRegistryApi
-      .loadRegistered(datasetId)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (resp) => {
-          const taskId = resp?.task_id ?? '';
-          if (!taskId) {
-            this.afterSiblingLoad();
-            return;
-          }
-          this.loadTaskId.set(taskId);
-          this.loadingTasks.startProgressPolling(taskId, () => this.afterSiblingLoad(taskId));
-        },
-        error: () => this.loadTaskId.set(null),
-      });
-  }
-
-  /** The sibling is loaded: ask again, unless the overlay moved on. */
-  private afterSiblingLoad(taskId = ''): void {
-    if (this.loadTaskId() !== taskId) return;
-    this.loadTaskId.set(null);
-    this.resource.reload();
+    this.siblingLoad.load(datasetId, () => this.resource.reload());
   }
 
   private withPhoto(found: SourceLookup): Observable<SourcePhotoView> {

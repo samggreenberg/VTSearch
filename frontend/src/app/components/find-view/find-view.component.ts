@@ -322,7 +322,13 @@ export class FindViewComponent implements OnInit, OnDestroy {
         // The response is the balance's state and the line it draws, in one:
         // the line always keeps a set, checked or not (#4272, #4413).
         if (resp.threshold != null && this.sortState.sortOrder) {
-          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold, lineBalanceFrom(resp));
+          // The same ranking under a new line: it keeps its token.
+          this.sortState.setSortResults(
+            this.sortState.sortOrder,
+            resp.threshold,
+            lineBalanceFrom(resp),
+            this.sortState.sortToken,
+          );
         }
         // The server re-thresholded the unverified items over the frozen
         // scores; pull the new good/bad split back for the left/right panes.
@@ -554,7 +560,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
           // Set sort results for stripe display. The threshold is the last item
           // of the set the balance keeps, and the balance's state rides with
           // it (#4272, #4413).
-          this.sortState.setSortResults(sorted, threshold, lineBalanceFrom(response.balance));
+          this.sortState.setSortResults(sorted, threshold, lineBalanceFrom(response.balance), response.sort_token ?? null);
           this.labelQuota.set(response.label_quota ?? null);
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');

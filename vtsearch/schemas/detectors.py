@@ -618,6 +618,9 @@ class FindLabelResponseSchema(Schema):
 
     ok = fields.Boolean(required=True)
     results = fields.List(fields.Nested(_FindLabelResultSchema), required=True)
+    # The ranking's handle for ``GET /api/sort/collapsed`` (#4751).  Find sends
+    # the whole ranking, so nothing pages it through ``/api/sort/page``.
+    sort_token = fields.String(required=True)
     threshold = fields.Float(required=True)
     # What the balance says about ``threshold`` (#4247, #4272, #4413).
     balance = fields.Nested(BalanceStateSchema, required=True)

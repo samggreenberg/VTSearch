@@ -1,0 +1,32 @@
+@if (collapse.offered()) {
+  <!-- Its own line rather than a control beside the count: the header row is
+       full at the panel's narrowest, and a third control there pushes the view
+       controls onto a second line (#4028). -->
+  <div class="collapse-photos-row">
+    <span class="collapse-photos-label" id="collapse-photos-label">Show:</span>
+    <div class="segmented-toggle" role="group" aria-labelledby="collapse-photos-label">
+      <button
+        type="button"
+        class="segmented-toggle__btn"
+        [class.segmented-toggle__btn--active]="!collapse.on()"
+        [attr.aria-pressed]="!collapse.on()"
+        (click)="collapse.set(false)"
+        title="Show the ranking as faces"
+        aria-label="Show faces"
+      >
+        <vt-icon type="face" [size]="13"></vt-icon> Faces
+      </button>
+      <button
+        type="button"
+        class="segmented-toggle__btn"
+        [class.segmented-toggle__btn--active]="collapse.on()"
+        [attr.aria-pressed]="collapse.on()"
+        (click)="collapse.set(true)"
+        title="Collapse to photos: show each photo once, with every matching face outlined. Votes and counts stay on faces."
+        aria-label="Collapse to photos"
+      >
+        <vt-icon type="image" [size]="13"></vt-icon> Photos
+      </button>
+    </div>
+  </div>
+}

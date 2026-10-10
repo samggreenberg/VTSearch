@@ -192,7 +192,7 @@ export class SortStateService {
     return this._sortHasMore();
   }
 
-  /** Paging handle for GET /api/sort/page (the sort-generation token). */
+  /** Handle on the ranking for GET /api/sort/page and /api/sort/collapsed (the sort-generation token). */
   get sortToken(): string | null {
     return this._sortToken();
   }
@@ -210,7 +210,17 @@ export class SortStateService {
     this._selectMode.set(mode);
   }
 
-  setSortResults(order: SortedItem[], threshold: number, balance: LineBalance | null = null): void {
+  /**
+   * Install a whole ranking at once. `token` is its `sort_token` when the
+   * server registered it (Find's, for Collapse to photos, #4751); the ranking
+   * is never paged through it here, since all of it is present.
+   */
+  setSortResults(
+    order: SortedItem[],
+    threshold: number,
+    balance: LineBalance | null = null,
+    token: string | null = null,
+  ): void {
     this._sortOrder.set(order);
     this._threshold.set(threshold);
     this._balance.set(balance);
@@ -222,7 +232,7 @@ export class SortStateService {
     // (load-sort, tests) behaving exactly as before.
     this._sortTotal.set(order.length);
     this._sortHasMore.set(false);
-    this._sortToken.set(null);
+    this._sortToken.set(token);
     this._aboveThreshold.set(order.filter((i) => i.score >= threshold).length);
   }
 

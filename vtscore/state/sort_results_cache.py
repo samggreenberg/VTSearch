@@ -31,7 +31,7 @@ from __future__ import annotations
 import threading
 import uuid
 from collections import OrderedDict
-from typing import Any, Protocol
+from typing import Any, Callable, Hashable, Protocol
 
 
 class RedrawableLine(Protocol):
@@ -168,6 +168,50 @@ class SortResultsCache:
             "threshold": threshold,
             "has_more": end < total,
         }
+
+    def derived(
+        self,
+        token: str,
+        key: Hashable,
+        build: Callable[[list[dict]], Any],
+        *,
+        dataset_id: str | None = None,
+    ) -> tuple[bool, Any]:
+        """Return a view of a stored ranking, built once per token and *key*.
+
+        *build* is called with the stored list the first time *key* is asked
+        for under *token*, outside the lock, and its result is kept on the
+        entry, so it is evicted with the ranking and a re-sort (a new token)
+        builds afresh.  Collapse to photos keeps its grouping here (#4751).
+        If *build* raises, nothing is kept and the error propagates.
+
+        Returns ``(found, view)``: ``(False, None)`` when the token is unknown
+        or belongs to another dataset (as in :meth:`page`).
+        """
+        with self._lock:
+            entry = self._entries.get(token)
+            if entry is None:
+                return False, None
+            if dataset_id is not None and entry["dataset_id"] and entry["dataset_id"] != dataset_id:
+                return False, None
+            self._entries.move_to_end(token)
+            views: dict[Hashable, Any] = entry.setdefault("derived", {})
+            if key in views:
+                return True, views[key]
+            results: list[dict] = entry["results"]
+
+        view = build(results)
+        with self._lock:
+            # A concurrent first ask may have built it too; either copy is the same view.
+            views.setdefault(key, view)
+            return True, views[key]
+
+    def forget_derived(self, token: str, key: Hashable) -> None:
+        """Drop the view :meth:`derived` kept under *token* and *key*, if any."""
+        with self._lock:
+            entry = self._entries.get(token)
+            if entry is not None:
+                entry.get("derived", {}).pop(key, None)
 
     def redraw(
         self,

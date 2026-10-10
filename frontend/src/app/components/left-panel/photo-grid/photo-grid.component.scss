@@ -1,0 +1,226 @@
+// `.empty-state`, `.error-text` and `.btn` come from `_components.scss`.
+
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.photo-grid {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--photo-w, 160px), 1fr));
+  gap: var(--space-sm);
+  padding: var(--space-xs);
+  align-content: start;
+  // Photos keep their own aspect, so a row's cards differ in height.
+  align-items: start;
+}
+
+.photo-grid-note,
+.photo-threshold-line,
+.photo-load-more,
+.photo-grid-empty,
+.empty-state {
+  grid-column: 1 / -1;
+}
+
+.photo-grid-note {
+  margin: 0;
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+}
+
+.photo-grid-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-2xl);
+  font-style: italic;
+  font-size: var(--font-md);
+}
+
+// The same marker the face list draws, across the whole grid.
+.photo-threshold-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-md);
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--accent);
+    opacity: var(--opacity-dim);
+  }
+}
+
+.threshold-label {
+  font-size: var(--font-2xs);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+}
+
+.photo-load-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-sm);
+}
+
+.photo-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+
+  &.active {
+    background: var(--accent-highlight-bg);
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+}
+
+// Sized by its image, so a box's percentages are percentages of the photo.
+.photo-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  line-height: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  // Holds a photo's place until it loads, so lazy loading sees a real layout;
+  // the photo's own aspect takes over once it does.
+  aspect-ratio: auto 4 / 3;
+}
+
+// A face whose photo is not in the photo dataset stands in for it.
+.orphan-face {
+  &.good {
+    outline: 2px solid var(--color-good);
+    outline-offset: -2px;
+  }
+
+  &.bad {
+    outline: 2px dashed var(--color-bad);
+    outline-offset: -2px;
+  }
+
+  &.selected {
+    box-shadow: inset 0 0 0 3px var(--accent);
+  }
+}
+
+// A face on its photo: the image viewer's machine-annotation stroke (white
+// dashes over a dark hairline, legible on any photo), solid in the vote's
+// colour once voted. A button, so it takes the face card's gestures.
+.face-box {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  border: 1.5px dashed rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.7) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.7);
+  transition: border-color var(--transition-fast);
+
+  &:hover,
+  &:focus-visible {
+    border-style: solid;
+    outline: none;
+  }
+
+  &.good {
+    border: 2px solid var(--color-good);
+  }
+
+  &.bad {
+    border: 2px dashed var(--color-bad);
+  }
+
+  &.selected {
+    border-width: 3px;
+    border-color: var(--accent);
+  }
+
+  // Under the line and not voted: in the ranking, not a match.
+  &.below:not(.good):not(.bad):not(.selected) {
+    border-style: dotted;
+    opacity: var(--opacity-dim);
+  }
+}
+
+.face-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.face-chip {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--bg-surface);
+  line-height: 0;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--border-secondary);
+    outline: none;
+  }
+
+  &.good {
+    border-color: var(--color-good);
+  }
+
+  &.bad {
+    border-style: dashed;
+    border-color: var(--color-bad);
+  }
+
+  &.selected {
+    border-color: var(--accent);
+  }
+
+  &.below:not(.good):not(.bad):not(.selected) {
+    opacity: var(--opacity-dim);
+  }
+}
+
+.photo-orphan-note {
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+  font-style: italic;
+}

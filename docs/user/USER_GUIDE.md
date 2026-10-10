@@ -614,6 +614,20 @@ you to the face you were on, with the ranking as you left it. If the Image
 dataset isn't loaded, the window offers to load it first. A face whose photo
 isn't in the Image dataset (you left that image out, say) has no button.
 
+**Collapse to photos.** On the same kind of Face dataset, the list in Train's
+**Manual** tab and Test's **Review** tab has a **Show: Faces | Photos** switch
+under its header. **Photos** shows the ranking as the photos the faces came
+from: each photo once, where its best face ranks, with every ranked face in it
+outlined and a small picture of each face underneath. Faces below the line are
+outlined faintly; the others are the matches. An outlined face (or its small
+picture) works just like that face's card in the list: click it to show it in
+the middle, or, with hover focus, click and right-click to vote it Bad and
+Good. Votes always go on the face, never the photo, and the counts and Test's
+**Browse**, **To Dataset** and **Export** still count and send faces, as the
+line above the photos reminds you. A face whose photo isn't in the Image
+dataset shows on its own, marked "photo not found". If the Image dataset isn't
+loaded, the list offers to load it.
+
 ### Running AutoFind on a new dataset
 
 Once you have a detector on the Dashboard's **AutoFind** tab, every
