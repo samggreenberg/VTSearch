@@ -144,8 +144,8 @@ Scores every loaded media with the given detector and applies Good/Bad labels
 to **all** elements by threshold, freezing scores and initial labels for the
 Find verification workflow. If no current head is cached in the detector
 context, it builds one on the fly from the detector's labelset (resolving label
-origins as needed). Which one follows the **label quota** (#4643): under 3
-Goods or 4 Bads the detector is the Goods' centroid (every item ranked by its
+origins as needed). Which one follows the **label quota** (#4643, #4731): under
+3 Goods or 4 Bads, unless a Good has 16 Bads beside it, the detector is the Goods' centroid (every item ranked by its
 cosine to the average of the Goods, cut at the midpoint of a two-Gaussian fit
 to those cosines on this dataset), and from there the trained head. One Good is
 enough; a labelset with no Good is a **400** that says so. `label_quota` says

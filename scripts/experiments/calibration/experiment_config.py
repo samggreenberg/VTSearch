@@ -1096,7 +1096,7 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
 #: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
-#: the first Good until 3 Goods and 4 Bads); ``CALIB_LABEL_QUOTA=off`` is the
+#: the first Good until 3 Goods and 4 Bads, or a Good and 16 Bads); ``CALIB_LABEL_QUOTA=off`` is the
 #: pre-#4643 arm, a trained head from the first Good and Bad, which the study
 #: extras that vary its cut need at every such step.
 LABEL_QUOTA: bool | None = False if os.environ.get("CALIB_LABEL_QUOTA", "").strip().lower() == "off" else None
@@ -1144,12 +1144,13 @@ if SEED_EXAMPLES is not None and SEED_EXAMPLES < 1:
 #: keeps one on each side.  Off (the default) is the plain random split.
 STRATIFY_TARGET = os.environ.get("CALIB_STRATIFY_TARGET", "0") == "1"
 
-#: Issue #4731's arms, neither the app.  ``CALIB_GOOD_DRY_RUN=<n>`` ends
-#: Autopilot's Good phase once n of its picks in a row held no positive, with a
-#: Good in hand.  ``CALIB_QUOTA_DRY_BADS=<n>`` gives the trained head to a
-#: labelset with a Good and n Bads, under the label quota.  Unset (the default)
-#: is the app.  A value that is not a positive integer is kept as given, for
-#: preflight to refuse.
+#: Issue #4731's two rules, both the app's since #4731 shipped.
+#: ``CALIB_GOOD_DRY_RUN`` is the Good walk's dry run (the app's 16): the Good
+#: phase also ends once that many picks in a row held no positive, with a Good
+#: in hand.  ``CALIB_QUOTA_DRY_BADS`` is the label quota's second tier (the
+#: app's 16): a Good and that many Bads get the trained head.  Unset is the
+#: app; ``off`` is the pre-#4731 arm; another count is an arm.  Any other value
+#: is kept as given, for preflight to refuse.
 _GOOD_DRY_RUN = os.environ.get("CALIB_GOOD_DRY_RUN", "").strip()
 GOOD_DRY_RUN: "int | str | None" = int(_GOOD_DRY_RUN) if _GOOD_DRY_RUN.isdigit() else (_GOOD_DRY_RUN or None)
 _QUOTA_DRY_BADS = os.environ.get("CALIB_QUOTA_DRY_BADS", "").strip()

@@ -34,7 +34,9 @@ that measures a flow nobody takes.  ``scripts/check-eval-app-sync.py`` — a
 
 The phase ordering the app implements, and the harness therefore reproduces:
 
-1. ``good`` until ``good_target`` positives exist (text sort, take the top).
+1. ``good`` until ``good_target`` positives exist (text sort, take the top), or
+   until the walk runs dry: :data:`MORE_DRY_RUN` of its picks in a row held no
+   positive, with one in hand (issue #4731).  The ``more`` walk is then spent.
 2. ``bad`` until ``bad_target`` negatives exist — still on the **text/example
    sort**, taking the item nearest that sort's cutoff.  No detector is trained
    in this phase, which is why the app never computes a threshold from a
@@ -223,7 +225,7 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
 SMART_GATES = ("app", "never")
 
 
-def next_phase(
+def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, kept diffable by eye
     good_count: int,
     bad_count: int,
     *,
@@ -237,6 +239,7 @@ def next_phase(
     more_done: bool = False,
     dry_run_stop: bool = False,
     ran_dry: bool = False,
+    good_ran_dry: bool = False,
 ) -> Phase:
     """Port of ``AutopilotStateService.checkPhaseTransition``.
 
@@ -254,11 +257,19 @@ def next_phase(
     ``stop_rule == "dry_run"``, #4488): the walk has no Good target, runs in
     retrain mode too, and *ran_dry* (its run of misses complete) is ``done``.
     The indicators are not read.
+
+    *good_ran_dry* is the Good walk's dry run (#4731): :data:`MORE_DRY_RUN` of
+    its picks in a row held no Good, with a Good in hand, so the Goods found so
+    far meet its target.  History, like *more_done*: the caller holds it
+    (:class:`AutopilotFlow`), and the walk down the same sort is then spent.
     """
     # Cap each target at the most votes of that class the collection could still
     # yield, so a tiny dataset can still advance past the initial phases instead
     # of stranding in ``good`` forever.
     eff_good_target = min(good_target, good_count + remaining_unlabeled)
+    # A Good walk that ran dry has met its target with the Goods it found (#4731).
+    if good_ran_dry and good_count >= 1:
+        eff_good_target = min(eff_good_target, good_count)
     eff_bad_target = min(bad_target, bad_count + remaining_unlabeled)
 
     if good_count < eff_good_target:
@@ -421,26 +432,23 @@ class AutopilotFlow:
         startup: Optional[StartupState] = None,
         dry_run_stop: bool = False,
         smart_gate: str = "app",
-        good_dry_run: int | None = None,
+        good_dry_run: int | None = MORE_DRY_RUN,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
         self.more_target = more_target
         self.more_dry_run = more_dry_run
-        #: #4731's arm, not the app: the Good phase also ends once this many of
-        #: its picks in a row held no positive, with a Good in hand.  The seed
-        #: sort has then run dry, so the ``more`` walk down it is spent too.
-        #: :func:`next_phase` is left as the app's: the flow lowers the Good
-        #: target it passes to the Goods found, as a schedule passes 0.
-        #: ``None`` (the default) is the app, which waits for ``good_target``
-        #: Goods however long the walk.
+        #: The Good walk's dry run (#4731, the app's ``moreDryRun``): the Good
+        #: phase also ends once this many of its picks in a row held no positive,
+        #: with a Good in hand, and the ``more`` walk down the same sort is then
+        #: spent.  ``None`` is the pre-#4731 arm, which waits for ``good_target``
+        #: Goods however long the walk.  A startup schedule owns its own opening,
+        #: so the run is off under one.
         if good_dry_run is not None and (
             isinstance(good_dry_run, bool) or not isinstance(good_dry_run, int) or good_dry_run < 1
         ):
             raise ValueError(f"good_dry_run must be an integer >= 1 or None, got {good_dry_run!r}")
-        if good_dry_run is not None and startup is not None:
-            raise ValueError("good_dry_run ends the app's own Good phase; a startup schedule owns the opening")
-        self.good_dry_run = good_dry_run
+        self.good_dry_run = None if startup is not None else good_dry_run
         #: The Good walk's misses since its latest Good, and whether it has run
         #: dry (latched, as the ``more`` walk's end is).
         self.good_misses = 0
@@ -619,12 +627,13 @@ class AutopilotFlow:
             smart="yellow" if self.smart_gate == "never" else smart,
             stable=stable,
             span=sp,
-            good_target=0 if self.startup is not None else self._good_target(good_count),
+            good_target=0 if self.startup is not None else self.good_target,
             bad_target=0 if self.startup is not None else self.bad_target,
             more_target=0 if self.startup is not None else self.more_target,
             more_done=self.more_done,
             dry_run_stop=self.dry_run_stop,
             ran_dry=self.more_misses >= self.more_dry_run,
+            good_ran_dry=self.good_dry,
         )
         if self.phase not in ("good", "bad", "more"):
             # The walk ends once the machine has moved past it - its target met
@@ -632,12 +641,6 @@ class AutopilotFlow:
             # round never does.
             self.more_done = True
         return self.phase
-
-    def _good_target(self, good_count: int) -> int:
-        """The Good target :func:`next_phase` is given: the app's, or the Goods in hand once the walk ran dry (#4731)."""
-        if self.good_dry and good_count >= 1:
-            return min(self.good_target, good_count)
-        return self.good_target
 
     def _note_more_vote(self, good_count: int, bad_count: int) -> None:
         """Fold the vote just cast into the ``more`` walk's run of misses.
@@ -650,7 +653,7 @@ class AutopilotFlow:
         prev_good, prev_bad = self._counts
         self._counts = (good_count, bad_count)
         if self.phase == "good" and self.good_dry_run is not None and not self.good_dry:
-            # #4731: the same reading for the Good walk.  A miss counts only
+            # #4731: the same reading for the Good walk, as checkPhaseTransition takes it.  A miss counts only
             # with a Good already in hand, so the run is the misses since the
             # latest Good, and a walk that has found nothing never runs dry.
             if good_count > prev_good:

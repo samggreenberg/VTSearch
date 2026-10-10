@@ -4749,6 +4749,10 @@
           "bads_owed": {
             "type": "integer"
           },
+          "dry_bad_quota": {
+            "description": "Bads that give a single Good the trained head (#4731).",
+            "type": "integer"
+          },
           "good_quota": {
             "type": "integer"
           },
@@ -4774,6 +4778,7 @@
         "required": [
           "bad_quota",
           "bads_owed",
+          "dry_bad_quota",
           "good_quota",
           "goods_owed",
           "n_bad",

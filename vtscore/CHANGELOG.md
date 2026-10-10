@@ -10,6 +10,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A Good and 16 Bads get the trained head, and Autopilot's Good walk can run dry** (issue #4731).
+  `vtscore.detectors.label_quota` gains a second quota, `DRY_BAD_QUOTA` (16, Autopilot's
+  `moreDryRun`): a labelset with a Good and that many Bads is `TIER_TRAINED`. `LabelQuota` takes
+  `dry_bad_quota` (default `DRY_BAD_QUOTA`; `None` is the pre-#4731 rule), `label_quota()` takes it
+  as a keyword, `as_dict()` reports it, and `goods_owed` / `bads_owed` are 0 whenever a head is
+  given. Behaviour change for a library caller: `train_from_labelset` trains the head for 1-2 Goods
+  with 16 or more Bads, where it stored the centroid. The eval harness ports Autopilot's new Good-phase
+  exit - `moreDryRun` picks in a row without a Good, with a Good in hand, end the Good phase and spend
+  the More walk - as `autopilot_flow.next_phase(good_ran_dry=)` and `AutopilotFlow(good_dry_run=)`
+  (default `MORE_DRY_RUN`, `None` the pre-#4731 arm), and `simulate_voting_iterations` takes
+  `good_dry_run` / `quota_dry_bads` (`None` the app, `"off"` the pre-#4731 arm, or a count).
+
 - **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`
   stores F-beta's beta as a top-level `"beta"` (`BETA_KEY`) beside the labelset: `stored_beta(data)`,
   `valid_beta(raw)`, `detector_stored_beta(detector_id)` and `keep_beta(det_ctx, value)`.

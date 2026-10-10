@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # #4731: the COCO guard for a Good phase that runs dry. State of the App arms at one commit, paired run for run
-# and identical until the Good walk's 16th miss in a row with a Good in hand:
-#   C  the app
-#   Q  CALIB_GOOD_DRY_RUN=16 CALIB_QUOTA_DRY_BADS=16: the Good phase ends on that run of misses, and a Good with
-#      16 Bads gets the trained head instead of the Goods' centroid
-#   D  CALIB_GOOD_DRY_RUN=16 alone: the phase change without the quota tier
+# and identical until the Good walk's 16th miss in a row with a Good in hand. Since #4731 shipped, Q is the app:
+#   C  CALIB_GOOD_DRY_RUN=off CALIB_QUOTA_DRY_BADS=off: the app before #4731
+#   Q  the app: the Good phase ends on that run of misses, and a Good with 16 Bads gets the trained head
+#      instead of the Goods' centroid
+#   D  CALIB_QUOTA_DRY_BADS=off: the phase change without the quota's second tier
 # The rule fires in ~19% of Binary sessions at beta 1 (2026-10-08-b1's picks), so FHIBE alone cannot clear it.
 #
 #   good_dry_4731.sh dirs SEEDS                  run dirs <root>/<date>-gooddry4731{C,Q,D}-b1 on the 2026-10-08 grid
@@ -50,11 +50,11 @@ launch)
   (( FIRST >= 0 && FIRST <= LAST && LAST < SEEDS )) || { echo "seeds must satisfy 0 <= FIRST <= LAST < SEEDS" >&2; exit 2; }
   unset CALIB_GOOD_DRY_RUN CALIB_QUOTA_DRY_BADS
   case $ARM in
-    C) ;;
-    Q) export CALIB_GOOD_DRY_RUN=16 CALIB_QUOTA_DRY_BADS=16
+    C) export CALIB_GOOD_DRY_RUN=off CALIB_QUOTA_DRY_BADS=off
        export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}good_dry_run,quota_dry_bads" ;;
-    D) export CALIB_GOOD_DRY_RUN=16
-       export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}good_dry_run" ;;
+    Q) ;;
+    D) export CALIB_QUOTA_DRY_BADS=off
+       export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}quota_dry_bads" ;;
     *) echo "ARM must be C, Q or D" >&2; exit 2 ;;
   esac
   export CALIB_MEM="${CALIB_MEM:-4G}"

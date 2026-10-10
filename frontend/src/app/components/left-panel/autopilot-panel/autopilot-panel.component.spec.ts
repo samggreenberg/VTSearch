@@ -106,6 +106,20 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('hard');
   });
 
+  it('finishes the good step when its walk runs dry with one good (#4731)', async () => {
+    fixture.componentRef.setInput('goodVotes', goods(1));
+    await settleZoneless(fixture);
+    const active = component.steps.find((st: any) => st.phase === 'good');
+    expect(active!.light!.title).toContain('after 16 matches in a row that are not good');
+    for (let n = 1; n <= 16; n++) {
+      fixture.componentRef.setInput('badVotes', bads(n));
+      await settleZoneless(fixture);
+    }
+    expect(component.state.phase).toBe('hard');
+    expect(component.state.goodRanDry).toBe(true);
+    expect(component.steps.find((st: any) => st.phase === 'good')!.state).toBe('done');
+  });
+
   it('should transition from hard to new when smart+stable are green', async () => {
     // Advance to hard phase
     fixture.componentRef.setInput('goodVotes', goods(20));

@@ -125,7 +125,10 @@ MIRRORS: list[Mirror] = [
             "in AutopilotFlow._note_more_vote, which next_phase reads as more_done. A document "
             "dataset (stop_rule 'dry_run', #4488) takes its own branch after the opening - the "
             "walk with no Good target, its dry run as done - ported as next_phase(dry_run_stop=, "
-            "ran_dry=) and AutopilotFlow(dry_run_stop=)."
+            "ran_dry=) and AutopilotFlow(dry_run_stop=). The Good walk's dry run (#4731: moreDryRun "
+            "misses with a Good in hand end the Good phase and spend the walk) is the same kind of "
+            "history: the app's goodMisses/goodRanDry, the harness's AutopilotFlow good_misses/"
+            "good_dry, read by next_phase as good_ran_dry."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
@@ -346,6 +349,16 @@ MIRRORS: list[Mirror] = [
             "tests_lib/detectors/test_startup_schedule.py pins it two ways: literally against "
             "GOOD_TARGET/BAD_TARGET, and behaviourally by requiring it to reproduce a "
             "default-arm run click for click."
+        ),
+        divergence=(
+            "Since #4731 the app's Good phase also ends when its walk runs dry - moreDryRun picks in "
+            "a row without a Good, with a Good in hand - and the More walk is then spent. The "
+            "schedule grammar cannot say that: a round's '+dry<m>/<w>' stop fires with no Good in "
+            "hand, and a later round never learns an earlier one ran dry. So PRODUCTION_STARTUP is "
+            "the app's opening only for a session whose Good walk finds its third Good before 16 "
+            "misses in a row; the default arm (no schedule) is the app in every session. A #3267 "
+            "study comparing schedules against PRODUCTION_STARTUP compares openings that both lack "
+            "the dry exit."
         ),
     ),
     Mirror(
@@ -761,8 +774,8 @@ MIRRORS: list[Mirror] = [
         note=(
             "The label quota (#4643): train_from_labelset - Test, AutoFind, a load and the CLI - "
             "gives the Goods' centroid from the first Good until the resolved labels hold "
-            "GOOD_QUOTA Goods and BAD_QUOTA Bads (label_quota.quota_from_groups), the trained head "
-            "from there, and nothing with no Good. The harness's default arm (label_quota=None on "
+            "GOOD_QUOTA Goods and BAD_QUOTA Bads, or a Good and DRY_BAD_QUOTA Bads (#4731) "
+            "(label_quota.quota_from_groups), the trained head from there, and nothing with no Good. The harness's default arm (label_quota=None on "
             "the app trainer) scores the withheld half the same way: a row from the first Good, "
             "the centroid's metrics under the quota (label_quota.label_quota, delegated), the "
             "head's from it. If the app's tiers move - a new tier, a quota read from somewhere "

@@ -44,14 +44,20 @@ counts (#4643, `vtscore/detectors/label_quota.py`):
 | Labels | Detector |
 |---|---|
 | no Good | none: Test is refused, there is nothing to sort toward |
-| a Good, but under 3 Goods or 4 Bads | **the Goods' centroid** |
+| a Good, but under both quotas below | **the Goods' centroid** |
 | 3 Goods and 4 Bads | the trained head above |
+| a Good and 16 Bads | the trained head above (#4731) |
 
-The quota is Autopilot's own quorum (`goodToStart` / `badToStart`), the counts
-its opening has always judged enough to train on; its "more" walk mines
+The first quota is Autopilot's own quorum (`goodToStart` / `badToStart`), the
+counts its opening has always judged enough to train on; its "more" walk mines
 positives because the typed query is still paying, not because the head is
 unready, and a quota of its 20 Goods would leave a rare class with no head at
-all. The counts are of labels that resolved to a vector.
+all. The second is what Autopilot's Good walk leaves when it runs dry
+(`moreDryRun`, 16 picks in a row without a Good, with a Good in hand), so a
+target with one or two Goods the sort can reach still gets a head; on FHIBE's
+face crops that took a 2-4-photo person's session from F-beta 0.001 to 0.47
+(`docs/experiments/2026-10-09-good-dry-4731`). The counts are of labels that
+resolved to a vector.
 
 The centroid (`vtscore/detectors/centroid_head.py`) is the example sort the app
 draws for several uploaded examples, built from the Goods: the unit mean of the

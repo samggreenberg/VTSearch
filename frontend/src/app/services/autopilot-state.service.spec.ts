@@ -237,6 +237,71 @@ describe('AutopilotStateService', () => {
     });
   });
 
+  describe('the good walk runs dry (#4731)', () => {
+    /** One Good (an example, or the first find), then `misses` Bads one vote at a time. */
+    function walk(misses: number, good = 1): void {
+      service.activate();
+      service.checkPhaseTransition(0, 0);
+      service.checkPhaseTransition(good, 0);
+      for (let bad = 1; bad <= misses; bad++) service.checkPhaseTransition(good, bad);
+    }
+
+    it('ends the good phase after moreDryRun misses in a row with a good in hand', () => {
+      walk(15);
+      expect(service.state.phase).toBe('good');
+      expect(service.state.goodMisses).toBe(15);
+      service.checkPhaseTransition(1, 16); // the 16th miss in a row
+      expect(service.state.goodRanDry).toBe(true);
+      // The Bads it cast meet the bad quorum, and the more walk down the same sort is spent.
+      expect(service.state.moreDone).toBe(true);
+      expect(service.state.phase).toBe('hard');
+    });
+
+    it('does not count misses before the first good', () => {
+      service.activate();
+      service.checkPhaseTransition(0, 0);
+      for (let bad = 1; bad <= 30; bad++) service.checkPhaseTransition(0, bad);
+      expect(service.state.phase).toBe('good');
+      expect(service.state.goodMisses).toBe(0);
+      service.checkPhaseTransition(1, 30);
+      for (let bad = 31; bad <= 45; bad++) service.checkPhaseTransition(1, bad);
+      expect(service.state.phase).toBe('good');
+      service.checkPhaseTransition(1, 46);
+      expect(service.state.phase).toBe('hard');
+    });
+
+    it('restarts the run on a good', () => {
+      walk(15);
+      service.checkPhaseTransition(2, 15);
+      expect(service.state.goodMisses).toBe(0);
+      for (let bad = 16; bad <= 30; bad++) service.checkPhaseTransition(2, bad);
+      expect(service.state.phase).toBe('good');
+    });
+
+    it('leaves the app as it was when the third good comes first', () => {
+      service.activate();
+      service.checkPhaseTransition(0, 0);
+      service.checkPhaseTransition(3, 0);
+      expect(service.state.phase).toBe('bad');
+      expect(service.state.goodRanDry).toBe(false);
+    });
+
+    it('stays ended if the good count later falls', () => {
+      walk(16, 2);
+      expect(service.state.phase).toBe('hard');
+      service.checkPhaseTransition(1, 16); // a good un-voted
+      expect(service.state.phase).toBe('hard');
+    });
+
+    it('starts afresh on a new run', () => {
+      walk(16);
+      service.clear();
+      service.activate();
+      expect(service.state.goodRanDry).toBe(false);
+      expect(service.state.goodMisses).toBe(0);
+    });
+  });
+
   describe('a document dataset stops on the dry run (#4488)', () => {
     const off: StatusIndicator = { status: 'off' };
     const documentStatus: LabelingStatusResponse = {

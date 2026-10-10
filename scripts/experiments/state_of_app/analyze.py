@@ -85,8 +85,8 @@ of 0, never an undefined precision that leaves the mean (``curves.EMPTY_SET``).
 
 **The report is the session, not Test (#4643).**  The harness scores the test
 split as Test would at each click: from the first Good, the Goods' centroid
-until the labels hold 3 Goods and 4 Bads (the label quota), the trained head
-from there (``detector_tier``).  The session shows neither until the Hard phase
+until the labels meet the label quota (3 Goods and 4 Bads, or a Good and 16
+Bads), the trained head from there (``detector_tier``).  The session shows neither until the Hard phase
 (``app_trained``, #4605): Autopilot's opening is the text sort, so Test differs
 from the session through the whole opening - the centroid before the quota, the
 trained head between the quota and the Hard phase.  This report follows the

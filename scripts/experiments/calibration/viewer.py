@@ -110,8 +110,9 @@ phase (``app_trained``, #4605), but every vote is saved as it is cast, and
 Export labels and Test have no phase gate: a user can take the labels away at
 any click, and an import or a Test builds a detector from them.  So from a
 run's first Good the page draws the harness's detector, which is what that
-gives: since #4643, the Goods' centroid until the labels hold 3 Goods and 4
-Bads (the label quota), the trained head from there.  The harness writes each
+gives: since #4643, the Goods' centroid until the labels meet the label quota
+(3 Goods and 4 Bads, or since #4731 a Good and 16 Bads), the trained head from
+there.  The harness writes each
 row as that detector (``detector_tier`` names which); nothing here reads
 ``detector_tier`` or ``app_trained``.  Before the first Good, Test is refused
 and the click is the empty set (:func:`curves.score_empty_sets`).  A page built

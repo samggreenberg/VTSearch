@@ -98,7 +98,10 @@ from typing import Literal, Optional, Sequence
 #: :func:`vtscore.eval.al_strategies._select_phase_faithful`; pinned against all
 #: of them by ``tests_lib/detectors/test_startup_schedule.py`` and by
 #: ``scripts/check-eval-app-sync.py``'s ``autopilot.startup_default`` mirror.
-#: Until #4282 it was ``g3@top,b4@mid``.
+#: Until #4282 it was ``g3@top,b4@mid``.  It does not spell the Good walk's dry
+#: run (#4731), which the grammar cannot: a session whose Good walk runs 16 picks
+#: dry with a Good in hand leaves it in the app and on the default arm, but not
+#: under this schedule (``autopilot.startup_default``'s declared divergence).
 PRODUCTION_STARTUP = "g3@top,b4@mid,g20+dry1/16@top"
 
 StopKind = Literal["good", "bad", "clicks"]

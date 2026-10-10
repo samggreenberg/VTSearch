@@ -1187,7 +1187,8 @@ the Dashboard's **Find** button instead (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
 **A detector with too few labels is tested as the Goods' centroid.** Until it
-has 3 Goods and 4 Bads, VTSearch does not train a detector from its labels:
+has 3 Goods and 4 Bads, or one Good and 16 Bads, VTSearch does not train a
+detector from its labels:
 Test, Find and AutoFind rank everything by how close it is to the average of
 its Goods instead, and draw the line where those scores split. One Good is
 enough to test it. The Test view says so under its tabs, with how many more

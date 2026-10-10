@@ -112,6 +112,7 @@ class TestFindLabel:
             "bads_owed": 4,
             "good_quota": 3,
             "bad_quota": 4,
+            "dry_bad_quota": 16,
         }
         assert body["threshold"] == 0.5
         # The centroid of one Good is that Good: the media leaning its way rank first.

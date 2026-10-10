@@ -399,7 +399,9 @@ export class AutopilotPanelComponent implements OnInit {
         const target = this.effGoodTarget;
         return light(
           progressLight(this.goodVotes().size, target),
-          countTitle(target, 'good'),
+          // The Good walk can run dry too (#4731); the step then reads as finished.
+          `${countTitle(target, 'good')} Once a good is in, the step can also end early, `
+          + `after ${st.moreDryRun} matches in a row that are not good.`,
         );
       }
       case 'bad': {

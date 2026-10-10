@@ -54,7 +54,7 @@ from vtscore.eval.example_opening import (
     example_sort,
     stratified_split,
 )
-from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -70,7 +70,7 @@ from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_ro
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import TIER_CENTROID
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, TIER_CENTROID
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -2231,15 +2231,29 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
-def _quota_centroid(n_good: int, n_bad: int, quota_dry_bads: Optional[int]) -> bool:
-    """Whether Test gives the Goods' centroid at these counts: the label quota (#4643), with #4731's dry tier.
+def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bool:
+    """Whether Test gives the Goods' centroid at these counts: the label quota (#4643, #4731).
 
-    *quota_dry_bads* set: a Good and that many Bads also get the trained head, which is what a Good
-    walk that ran dry leaves (``good_dry_run``).  Counts only, as the quota is.
+    *dry_bad_quota* is the second quota's Bads (a Good and that many get the trained head):
+    the app's :data:`~vtscore.detectors.label_quota.DRY_BAD_QUOTA`, or ``None`` for the
+    pre-#4731 rule.
     """
-    if quota_dry_bads is not None and n_good >= 1 and n_bad >= quota_dry_bads:
-        return False
-    return label_quota_tier(n_good, n_bad).tier == TIER_CENTROID
+    return label_quota_tier(n_good, n_bad, dry_bad_quota=dry_bad_quota).tier == TIER_CENTROID
+
+
+def _resolve_dry_knob(name: str, value: "int | str | None", app: int) -> Optional[int]:
+    """A #4731 knob as the run uses it: ``None`` is the app's *app*, ``"off"`` the pre-#4731 arm.
+
+    Raises:
+        ValueError: If *value* is neither of those nor an integer >= 1.
+    """
+    if value is None:
+        return app
+    if value == "off":
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be an integer >= 1, 'off' or None (the app's {app}); got {value!r}")
+    return value
 
 
 def simulate_voting_iterations(  # noqa: C901
@@ -2326,8 +2340,8 @@ def simulate_voting_iterations(  # noqa: C901
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
-    good_dry_run: Optional[int] = None,
-    quota_dry_bads: Optional[int] = None,
+    good_dry_run: "int | str | None" = None,
+    quota_dry_bads: "int | str | None" = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2461,18 +2475,21 @@ def simulate_voting_iterations(  # noqa: C901
             (:func:`~vtscore.eval.example_opening.stratified_split`).  ``False``
             - the default - is the plain random split, which can leave a
             few-positive class with nothing withheld.
-        good_dry_run: An experiment knob (#4731), not the app: Autopilot's Good
-            phase also ends once this many of its picks in a row held no
-            positive, with a Good in hand, and the ``more`` walk down the same
-            sort is then spent (:class:`~vtscore.eval.autopilot_flow.AutopilotFlow`).
-            ``None`` - the default - is the app, whose Good phase waits for
-            three Goods, so a target with fewer findable never leaves it.
-            Needs the phase machine and the app's own opening.
-        quota_dry_bads: An experiment knob (#4731), not the app: under the
-            label quota a labelset with a Good and at least this many Bads
-            also gets the trained head, the counts a Good walk that ran dry
-            leaves behind.  ``None`` - the default - is the app's quota
-            (:mod:`vtscore.detectors.label_quota`).  Inert without the quota.
+        good_dry_run: The Good walk's dry run (#4731): Autopilot's Good phase
+            also ends once this many of its picks in a row held no positive,
+            with a Good in hand, and the ``more`` walk down the same sort is
+            then spent (:class:`~vtscore.eval.autopilot_flow.AutopilotFlow`).
+            ``None`` - the default - is the app's ``moreDryRun``
+            (:data:`~vtscore.eval.autopilot_flow.MORE_DRY_RUN`); ``"off"`` is
+            the pre-#4731 arm, whose Good phase waits for three Goods however
+            long the walk; another integer is an arm.  A set value needs the
+            phase machine and the app's own opening.
+        quota_dry_bads: The label quota's second tier (#4731): a labelset with
+            a Good and this many Bads gets the trained head.  ``None`` - the
+            default - is the app's
+            (:data:`~vtscore.detectors.label_quota.DRY_BAD_QUOTA`); ``"off"``
+            is the pre-#4731 quota (3 Goods and 4 Bads only); another integer
+            is an arm.  Inert without the quota.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -2881,11 +2898,10 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
         )
-    for _name, _val in (("good_dry_run", good_dry_run), ("quota_dry_bads", quota_dry_bads)):
-        if _val is not None and (isinstance(_val, bool) or not isinstance(_val, int) or _val < 1):
-            raise ValueError(f"{_name} must be an integer >= 1 or None; got {_val!r}")
+    flow_good_dry_run = _resolve_dry_knob("good_dry_run", good_dry_run, MORE_DRY_RUN)
+    dry_bad_quota = _resolve_dry_knob("quota_dry_bads", quota_dry_bads, DRY_BAD_QUOTA)
     if good_dry_run is not None and startup_schedule is not None:
-        raise ValueError("good_dry_run ends the app's own Good phase; drop startup_schedule")
+        raise ValueError("good_dry_run sets the app's own Good phase; a startup schedule owns the opening")
     knobs = _resolve_run_knobs(
         fold_count_schedule=fold_count_schedule,
         calibrate_count=calibrate_count,
@@ -3203,7 +3219,7 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
-        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate, good_dry_run=good_dry_run)
+        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate, good_dry_run=flow_good_dry_run)
     elif more_walk != "seed":
         raise ValueError(
             "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
@@ -3799,7 +3815,7 @@ def simulate_voting_iterations(  # noqa: C901
         details.pop("find_on_test", None)
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
-        centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), quota_dry_bads)
+        centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
         centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single

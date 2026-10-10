@@ -553,7 +553,7 @@ sort until the Hard phase (`app_trained`, #4605), but the user can export the
 labels and run Test at any click, and either builds a detector from the
 labelset. So the page shows what that gives, and neither module reads
 `app_trained`. Since #4643 that is the label quota's: the Goods' centroid until
-the labels hold 3 Goods and 4 Bads, the trained head from there. The harness
+the labels hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731), the trained head from there. The harness
 writes each row as that detector and names it in `detector_tier`, which
 neither module reads either. A report that scores the *session* filters on
 `app_trained` itself, as the State of the App analyzer does. A study that wants
