@@ -261,10 +261,14 @@ export class AutopilotPanelComponent implements OnInit {
 
   get steps(): StepDisplay[] {
     // A document dataset stops on the walk's dry run (#4488): no Boundary or
-    // Diversity step.
+    // Diversity step. A photo opening lists More only when it walks one, which
+    // it does not since #4740 (``moreToStart`` 0).
+    const photoMore = this.state.moreToStart > this.state.goodToStart;
     const phases: AutopilotStep[] = this.state.dryRunStop
       ? ['good', 'bad', 'more', 'done']
-      : ['good', 'bad', 'more', 'hard', 'new', 'done'];
+      : photoMore
+        ? ['good', 'bad', 'more', 'hard', 'new', 'done']
+        : ['good', 'bad', 'hard', 'new', 'done'];
     if (this.improving) phases.push('improve');
     const phaseIndex = phases.indexOf(this.improving ? 'improve' : this.state.phase);
 

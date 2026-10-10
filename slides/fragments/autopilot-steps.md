@@ -15,12 +15,13 @@
      next four slides are how it decides it is done. In the panel each step
      has one light, red to yellow to green, and hands over at green. -->
 
-<!-- **a** — The opening, all on the ranking the user's own query gives,
-     typed words or example pictures: no detector is on screen yet. Three
-     Goods off the top. Four Bads from right at the query's own line, where
-     its mistakes are. Then back to the top, until the labels hold 20 Goods or
-     16 picks in a row have brought none. #4222 measured that walk: +0.05 AP by
-     vote 150 against the old two-step opening. -->
+<!-- **a** — The opening, both steps on the ranking the user's own query
+     gives, typed words or example pictures: no detector is on screen yet.
+     Three Goods off the top. Four Bads from right at the query's own line,
+     where its mistakes are. Then the detector takes over. Until #4740 a third
+     step went back to the top for more Goods; scored on F-beta over the
+     session it won the first 25 votes and lost every vote after the 23rd
+     (#4671), so it is gone. -->
 
 <!-- **b** — Boundary is the first step on the detector's own ranking, and it
      is Second Cut's pick: the unvoted item the line's fit calls even odds. It
@@ -35,5 +36,5 @@
 <!-- **d** — Done, when all three are green. Nothing is latched: the step is
      re-derived from the votes after every one, so a light that falls back to
      yellow sends Autopilot back to Boundary. A detector that already has
-     votes, from another collection, skips the walk and starts on its own
+     votes, from another collection, skips the opening and starts on its own
      ranking. -->

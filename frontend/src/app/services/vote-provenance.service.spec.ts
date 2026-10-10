@@ -1,9 +1,16 @@
 import { TestBed } from '@angular/core/testing';
+import { BehaviorSubject } from 'rxjs';
 
-import { AutopilotStateService } from './autopilot-state.service';
+import { AutopilotStateService, type AutopilotState } from './autopilot-state.service';
 import { SortStateService } from './sort-state.service';
 import { VoteProvenanceService } from './vote-provenance.service';
 import { provideHttpTesting } from '../testing/test-providers';
+
+/** #4282's walk (20 Goods), off on photos since #4740 but still a configurable rule. */
+function withWalk(svc: AutopilotStateService, moreToStart = 20): void {
+  const s = svc as unknown as { stateSubject: BehaviorSubject<AutopilotState> };
+  s.stateSubject.next({ ...s.stateSubject.value, moreToStart });
+}
 
 /**
  * The provenance assembler is the one place in the client that decides what a
@@ -41,6 +48,9 @@ describe('VoteProvenanceService', () => {
   });
 
   it('records the more walk, a top-of-list draw on the seed sort (#4282)', () => {
+    // Off on photos since #4740, so the walk is configured here; a document's
+    // walk and any configured one still record it.
+    withWalk(autopilot);
     autopilot.activate();
     autopilot.checkPhaseTransition(3, 4, 100);
     expect(autopilot.state.phase).toBe('more');

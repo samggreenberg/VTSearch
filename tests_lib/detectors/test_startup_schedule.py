@@ -22,7 +22,6 @@ import pytest
 from vtscore.eval.autopilot_flow import (
     BAD_TARGET,
     GOOD_TARGET,
-    MORE_DRY_RUN,
     MORE_TARGET,
     AutopilotFlow,
     app_has_detector,
@@ -96,10 +95,11 @@ def _run(schedule, *, max_steps=24, seed=3, n_pos=70):
 class TestParsing:
     def test_production_spec_parses_to_the_apps_own_targets(self):
         rounds = parse_startup_schedule(PRODUCTION_STARTUP)
+        # Since #4740 the photo opening has no More walk (MORE_TARGET 0).
+        assert MORE_TARGET == 0
         assert rounds == (
             StartupRound(stop="good", n=GOOD_TARGET, cut="top"),
             StartupRound(stop="bad", n=BAD_TARGET, cut="mid"),
-            StartupRound(stop="good", n=MORE_TARGET, cut="top", dry_goods=1, dry_window=MORE_DRY_RUN),
         )
 
     @pytest.mark.parametrize(
@@ -137,9 +137,7 @@ class TestParsing:
             parse_startup_schedule(spec)
 
     def test_whitespace_and_trailing_commas_are_tolerated(self):
-        assert parse_startup_schedule(" g3@top , b4@mid , g20+dry1/16@top ,") == parse_startup_schedule(
-            PRODUCTION_STARTUP
-        )
+        assert parse_startup_schedule(" g3@top , b4@mid ,") == parse_startup_schedule(PRODUCTION_STARTUP)
 
     def test_dry_stop_parses_to_its_count_and_window(self):
         assert parse_startup_schedule("g20+dry1/8@top,b4@mid") == (
@@ -379,8 +377,8 @@ class TestFlowIntegration:
 
 
 class TestProductionScheduleIsTheDefault:
-    #: Long enough for the #4282 walk to end and hand over, so the comparison
-    #: covers the whole opening rather than stopping inside the walk.
+    #: Long enough to hand over and run Hard for a while, so the comparison
+    #: covers the whole opening and the first learned picks.
     STEPS = 60
 
     def test_it_reproduces_the_default_opening_click_for_click(self):
@@ -390,25 +388,23 @@ class TestProductionScheduleIsTheDefault:
         assert [r["cost"] for r in prod_rows] == [r["cost"] for r in base_rows]
         assert any(p["phase"] == "hard" for p in base_picks), "the run never left the opening"
 
-    def test_it_reproduces_a_walk_that_runs_dry(self):
-        """A sparse pool: the walk ends on its run of misses, not its target."""
+    def test_it_reproduces_a_sparse_pool_click_for_click(self):
+        """A sparse pool, where the Bad round meets its target before the Good one would."""
         base_rows, base_picks = _run(None, max_steps=self.STEPS, n_pos=8)
         prod_rows, prod_picks = _run(PRODUCTION_STARTUP, max_steps=self.STEPS, n_pos=8)
-        phases = [p["phase"] for p in base_picks]
-        assert "hard" in phases, "the walk never ended"
-        handover = phases.index("hard")
-        assert sum(p["picked_label"] for p in base_picks[:handover]) < MORE_TARGET, "the walk met its target"
+        assert "hard" in [p["phase"] for p in base_picks], "the run never left the opening"
         assert [p["picked_id"] for p in prod_picks] == [p["picked_id"] for p in base_picks]
         assert [r["cost"] for r in prod_rows] == [r["cost"] for r in base_rows]
 
     def test_only_the_phase_labels_differ(self):
         _, base_picks = _run(None, max_steps=self.STEPS)
         _, prod_picks = _run(PRODUCTION_STARTUP, max_steps=self.STEPS)
-        # The walk is the default arm's `more` phase and the schedule's third round.
-        assert [(b["phase"], p["phase"]) for b, p in zip(base_picks, prod_picks) if b["phase"] == "more"]
-        assert all(p["phase"] == "s2" for b, p in zip(base_picks, prod_picks) if b["phase"] == "more")
+        # No More walk on photos since #4740: Good, Bad, then Hard.
+        assert not any(b["phase"] == "more" for b in base_picks)
         assert [p["phase"] for p in base_picks][:GOOD_TARGET] == ["good"] * GOOD_TARGET
         assert [p["phase"] for p in prod_picks][:GOOD_TARGET] == ["s0"] * GOOD_TARGET
+        bad = [(b["phase"], p["phase"]) for b, p in zip(base_picks, prod_picks) if b["phase"] == "bad"]
+        assert bad and all(p == "s1" for _, p in bad)
         # And both hand over to the same learned phase at the same click.
         tail = [(b["phase"], p["phase"]) for b, p in zip(base_picks, prod_picks) if b["phase"] == "hard"]
         assert tail and all(p == "hard" for _, p in tail)

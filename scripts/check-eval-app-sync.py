@@ -339,8 +339,8 @@ MIRRORS: list[Mirror] = [
         kind="default",
         note=(
             "issue #3267 made the Autopilot opening a parameter, so the harness now has a "
-            "spelling of the app's own opening - 'g3@top,b4@mid,g20+dry1/16@top' since #4282 "
-            "(it was 'g3@top,b4@mid') - that a study's control arm "
+            "spelling of the app's own opening - 'g3@top,b4@mid' again since #4740 (from #4282 "
+            "to #4740 it was 'g3@top,b4@mid,g20+dry1/16@top', the More walk) - that a study's control arm "
             "runs. If goodToStart/badToStart move, or the opening stops being 'top of the "
             "seed sort then its cutoff', this constant has to move with them or every #3267 "
             "study measures its deviations from an opening nobody ships. "
