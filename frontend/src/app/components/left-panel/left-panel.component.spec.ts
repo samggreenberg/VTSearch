@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { computed, signal } from '@angular/core';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { LeftPanelComponent } from './left-panel.component';
+import { PhotoGridComponent } from './photo-grid/photo-grid.component';
+import { CollapsePhotosService } from '../../services/collapse-photos.service';
 import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
 import { provideZoneless } from '../../testing/zoneless-testbed';
@@ -530,5 +533,79 @@ describe('LeftPanelComponent', () => {
     TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.tab-panel-manual vt-balance')).not.toBeNull();
+  });
+});
+
+/**
+ * Collapse to photos (#4751): the Faces | Photos switch in the ranking's
+ * header, offered only where faces have photos, swaps the face list for the
+ * photo grid in Train's Manual tab and Test's Review tab.
+ */
+describe('LeftPanelComponent with Collapse to photos', () => {
+  let fixture: ComponentFixture<LeftPanelComponent>;
+  const offered = signal(false);
+  const on = signal(false);
+  const stub = {
+    offered,
+    on,
+    active: computed(() => on() && offered()),
+    set: (v: boolean) => on.set(v),
+    toggle: () => on.update((v) => !v),
+  };
+
+  beforeEach(async () => {
+    offered.set(false);
+    on.set(false);
+    await TestBed.configureTestingModule({
+      imports: [LeftPanelComponent],
+      providers: [...provideZoneless(), ...provideHttpTesting(), { provide: CollapsePhotosService, useValue: stub }],
+    }).compileComponents();
+    fixture = TestBed.createComponent(LeftPanelComponent);
+    fixture.componentRef.setInput('autopilotEnabled', false);
+    TestBed.tick();
+  });
+
+  function q(selector: string): HTMLElement | null {
+    return (fixture.nativeElement as HTMLElement).querySelector(selector);
+  }
+
+  it('offers no switch, and keeps the face list, on a dataset whose faces have no photos', () => {
+    on.set(true);
+    TestBed.tick();
+    expect(q('vt-collapse-photos-toggle .segmented-toggle')).toBeNull();
+    expect(q('vt-media-list')).not.toBeNull();
+    expect(q('vt-photo-grid')).toBeNull();
+  });
+
+  it('swaps the face list and its minimap for the photo grid in Manual', async () => {
+    offered.set(true);
+    TestBed.tick();
+    expect(q('vt-collapse-photos-toggle .segmented-toggle')).not.toBeNull();
+    expect(q('vt-media-list')).not.toBeNull();
+
+    (q('vt-collapse-photos-toggle button[aria-label="Collapse to photos"]') as HTMLButtonElement).click();
+    TestBed.tick();
+    expect(on()).toBe(true);
+    expect(q('vt-photo-grid')).not.toBeNull();
+    expect(q('vt-media-list')).toBeNull();
+    expect(q('vt-stripe-overview')).toBeNull();
+  });
+
+  it('hands Test its hidden (verified) faces, and says the actions still send faces', async () => {
+    offered.set(true);
+    on.set(true);
+    fixture.componentRef.setInput('panelMode', 'find');
+    fixture.componentRef.setInput('findTab', 'review');
+    fixture.componentRef.setInput('hiddenIds', new Set([7]));
+    TestBed.tick();
+    const grid = fixture.debugElement.query((d) => d.componentInstance instanceof PhotoGridComponent)
+      .componentInstance as PhotoGridComponent;
+    expect(grid.hiddenIds()).toEqual(new Set([7]));
+    const browse = q('button[aria-label="Browse unverified positives"]') as HTMLButtonElement;
+    expect(browse.title).toContain('the faces themselves, not their photos');
+
+    on.set(false);
+    TestBed.tick();
+    expect(browse.title).not.toContain('faces themselves');
   });
 });

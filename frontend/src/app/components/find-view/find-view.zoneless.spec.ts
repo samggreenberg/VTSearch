@@ -464,6 +464,20 @@ describe('FindViewComponent (balance supersession)', () => {
     expect(sortState.threshold).toBe(0.9);
   });
 
+  it('keeps the ranking\'s token under the new line, for Collapse to photos (#4751)', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, null, 'find-tok');
+
+    vi.useFakeTimers();
+    fixture.componentInstance.onBetaChange(0.5);
+    vi.advanceTimersByTime(200);
+    httpMock.expectOne('/api/balance').flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.7, n_returned: 1 });
+    expect(sortState.threshold).toBe(0.7);
+    expect(sortState.sortToken).toBe('find-tok');
+  });
+
   it('keeps posting after a failed pick', async () => {
     await flushInit();
     await settleZoneless(fixture);
@@ -745,6 +759,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       httpMock.expectOne('/api/find-label').flush({
         ok: true,
         results: [{ id: 1, score: 0.9 }],
+        sort_token: 'find-tok',
         threshold: 0.5,
         balance: wireBalance(status),
         good_count: 1,
@@ -756,6 +771,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
 
       expect(sortState.threshold).toBe(0.5);
       expect(sortState.balance?.status).toBe(status);
+      expect(sortState.sortToken).toBe('find-tok');
       // The walk still seeds on the marginal positive. (One result draws no
       // line - nothing falls below it - so the label is pinned further down.)
       expect(TestBed.inject(MediaStateService).selectedId()).toBe(1);
