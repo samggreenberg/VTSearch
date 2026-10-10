@@ -72,7 +72,8 @@ class TestFlow:
         assert _walk(flow, "gbb") == ["good", "good", "bad"]
 
     def test_the_third_good_ends_it_as_in_the_app(self):
-        assert _walk(AutopilotFlow(good_dry_run=8), "g" * GOOD_TARGET + "b" * BAD_TARGET)[-1] == "more"
+        votes = "g" * GOOD_TARGET + "b" * BAD_TARGET
+        assert _walk(AutopilotFlow(good_dry_run=8), votes) == _walk(AutopilotFlow(), votes)
 
     @pytest.mark.parametrize("bad", [0, -1, True, 2.5, "8"])
     def test_refuses_a_value_that_is_not_a_run_length(self, bad):
