@@ -20,6 +20,7 @@ import logging
 from typing import Any, Optional
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
+from vtscore.media.provenance import SOURCE_BOX_FIELD
 from vtscore.plugins import PluginField
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,10 @@ class Image2FaceMediaConverter(MediaConverter):
     dataset - the intended semantic for a face-only collection. The three
     tunables mirror the (now-removed) image face clipper: confidence
     ``threshold``, crop ``padding``, and ``min_size``.
+
+    Each crop records where it sat in its photo as ``source_box``, the padded
+    crop box normalised to the upright source frame, so the face can be
+    outlined on the photo it came from.
     """
 
     display_name = "Images → Faces"
@@ -214,6 +219,10 @@ class Image2FaceMediaConverter(MediaConverter):
                     "duration": 0,
                     "width": x2 - x1,
                     "height": y2 - y1,
+                    # Where the crop sat in the photo, as a fraction of the
+                    # frame: the bounded decode may be a downsample, so pixels
+                    # here are not the original's (see SOURCE_BOX_FIELD).
+                    SOURCE_BOX_FIELD: [x1 / img_w, y1 / img_h, x2 / img_w, y2 / img_h],
                     "custom_metadata": {"Detection Confidence": round(conf, 4)},
                 }
             )
