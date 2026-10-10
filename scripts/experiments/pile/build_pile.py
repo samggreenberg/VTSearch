@@ -58,7 +58,7 @@ pc.setup_env()
 from pilebuild.audit import label_problems, list_cells, rebuildable, report_bands, verify  # noqa: E402
 from pilebuild.boxscan import band_categories, load_box_scan_categories  # noqa: E402
 from pilebuild.env import assert_vtscore_is_this_checkout, cells_io, log  # noqa: E402
-from pilebuild.geometry import region_geometry_problems, scale_label_digest  # noqa: E402
+from pilebuild.geometry import region_geometry_problems  # noqa: E402
 from pilebuild.loaders import loader_for  # noqa: E402
 from pilebuild.manifest import write_manifest  # noqa: E402
 from pilebuild.provenance import (  # noqa: E402
@@ -88,7 +88,6 @@ __all__ = [
     "rebuildable",
     "region_geometry_problems",
     "report_bands",
-    "scale_label_digest",
     "verify",
     "vg_image_paths",
     "write_manifest",
@@ -297,7 +296,7 @@ def main() -> int:
 
     # `on_request` datasets are built only when NAMED. The pile's default sweep
     # is "everything the shared studies need"; a cell sized for one study is a
-    # cost the sweep should not silently take on (see `vg_scale_deep`).
+    # cost the sweep should not silently take on (see `coco_better_full`).
     datasets = (
         args.datasets.split(",")
         if args.datasets
@@ -308,21 +307,6 @@ def main() -> int:
         raise SystemExit(f"unknown dataset {bad!r}; known: {sorted(pc.DATASETS)}")
     for bad in [e for e in embedders if e not in pc.EMBEDDERS]:
         raise SystemExit(f"unknown embedder {bad!r}; known: {sorted(pc.EMBEDDERS)}")
-
-    # A derived dataset joins the run whenever its parent is in it. `vg_scale`
-    # rebuilt without `vg_scale_any` leaves the derived cell holding the
-    # parent's previous labels, boxes and bands -- with the right media count
-    # and the right vectors, so nothing looks wrong (#3281 shipped that way).
-    # Pulling it in costs a relabel and no embedding pass, and `--force` is what
-    # makes it actually happen: the derived cell already exists.
-    derived = [
-        d
-        for d, spec in pc.DATASETS.items()
-        if spec.get("kind") == "vg_scale_any" and d not in datasets and "vg_scale" in datasets
-    ]
-    if derived:
-        log(f"including {', '.join(derived)}: derived from vg_scale, and stale the moment it is rebuilt")
-        datasets += derived
 
     # A face dataset is embedded by FaceNet and nothing else, and an image dataset
     # by everything but FaceNet (#4699): a pair across media types is no cell.

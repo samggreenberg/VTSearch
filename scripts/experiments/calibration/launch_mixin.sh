@@ -33,7 +33,7 @@ MODE="${1:-screen}"; shift || true
 WT="${VTS_REPO:-/exp/$USER/projects/vts-mixin2841}"
 HERE="$WT/scripts/experiments/calibration"
 export VTS_REPO="$WT"
-export CALIB_EXP="${CALIB_EXP:-/exp/$USER/mixin-2841}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/mixin-2841}"
 LOGS="$CALIB_EXP/logs"; mkdir -p "$LOGS"
 
 # --- the pre-registered grid (identical across both phases) ---

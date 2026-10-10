@@ -9,7 +9,7 @@
 set -uo pipefail
 WT="${VTS_REPO:-/exp/$USER/projects/vts-maxpatch}"
 HERE=$WT/scripts/experiments/max_patch
-export MAXPATCH_EXP="${MAXPATCH_EXP:-/exp/$USER/max-patch}"
+export MAXPATCH_EXP="${MAXPATCH_EXP:-/expscratch/$USER/max-patch}"
 LOGS="$MAXPATCH_EXP/logs"
 mkdir -p "$LOGS"
 export MAXPATCH_EMBEDDERS="${MAXPATCH_EMBEDDERS:-dinov3_patch,siglip}"

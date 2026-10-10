@@ -1,46 +1,8 @@
-"""Checks a region box must pass whoever wrote it, and the derived-label digest."""
+"""Checks a region box must pass whoever wrote it."""
 
 from __future__ import annotations
 
-import hashlib
-import json
-
 import pile_config as pc
-
-
-def scale_label_digest(medias: dict[int, dict]) -> str:
-    """A hash of exactly what ``vg_scale_any`` copies out of ``vg_scale``.
-
-    ``vg_scale_any`` is a *relabel* of the built ``vg_scale`` pickle, so a fix to
-    ``vg_scale``'s labels, boxes or bands leaves the derived cell holding the old
-    ones -- with the right media count, the right vectors and a healthy-looking
-    ``--verify``. #3281 is the case: the box repair moves 97 images between
-    bands, and ``build_pile.py --force vg_scale`` alone would ship a
-    ``vg_scale_any`` still carrying the pre-repair regions.
-
-    Vectors are deliberately not in it: they are identical by construction (the
-    derived build never re-embeds) and ``cell_fingerprint`` already covers them.
-    What this pins is the half a rebuild of the parent can actually change.
-    """
-    h = hashlib.sha256()
-    for mid in sorted(medias):
-        m = medias[mid]
-        h.update(
-            json.dumps(
-                [
-                    mid,
-                    m.get("category"),
-                    m.get("categories"),
-                    m.get("evaluable_categories"),
-                    [
-                        [r.get("label"), [round(float(v), 9) for v in r.get("box") or []]]
-                        for r in m.get("regions") or []
-                    ],
-                ],
-                sort_keys=True,
-            ).encode()
-        )
-    return h.hexdigest()
 
 
 def region_geometry_problems(medias: dict[int, dict]) -> list[str]:

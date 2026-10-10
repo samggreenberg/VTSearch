@@ -33,7 +33,7 @@ export VTS_REPO=${VTS_REPO:-/exp/$USER/projects/vts-acq-incl}
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="/exp/$USER/acq-incl"
+export CALIB_EXP="/expscratch/$USER/acq-incl"
 
 # --- environment: the #2847 grid, unchanged ---
 export CALIB_DATASETS=coco_val

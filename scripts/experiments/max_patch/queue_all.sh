@@ -18,7 +18,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="${VTS_REPO:-/exp/$USER/projects/vts-maxpatch}"
-LOGS="/exp/$USER/max-patch/logs"
+LOGS="/expscratch/$USER/max-patch/logs"
 mkdir -p "$LOGS"
 
 GRES="${MAXPATCH_GRES:-gpu:a100:1}"
@@ -48,4 +48,4 @@ S=$(sbatch --parsable --dependency=afterany:$B --job-name=maxpatch-sum --mem=16G
   --export=ALL \
   --wrap="$STAGE_WRAP && python summarize.py")
 echo "summarize: $S"
-echo "Report will land at /exp/$USER/max-patch/results/REPORT.md"
+echo "Report will land at /expscratch/$USER/max-patch/results/REPORT.md"

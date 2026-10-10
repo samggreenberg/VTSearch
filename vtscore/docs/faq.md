@@ -479,8 +479,11 @@ embedding under a `ConcurrencyGate` capped by
 multiple datasets embed in parallel.
 
 Within a single dataset, embedder fan-out is automatic: each importer's
-`run()` decides the fan-out. The folder importer fans out per-file using
-a pool sized by `cap_workers_by_memory()`.
+`run()` decides the fan-out. The folder importer fans out per-file across
+`min(8, os.cpu_count())` threads for an import of 64 files or more.
+`cap_workers_by_memory()` sizes the detector-scoring fan-out instead
+(auto-detect and processor scoring), where each worker holds a whole
+`(N, D)` embedding matrix.
 
 ## Threading and concurrency
 

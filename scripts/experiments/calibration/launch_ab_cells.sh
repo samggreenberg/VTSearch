@@ -6,8 +6,8 @@ set -uo pipefail
 
 WT="${VTS_REPO:-/exp/$USER/projects/vts-safe2799}"
 HERE="$WT/scripts/experiments/calibration"
-ON_EXP="${CALIB_AB_ON_EXP:-/exp/$USER/calibration-safe-linear}"
-OFF_EXP="${CALIB_AB_OFF_EXP:-/exp/$USER/calibration-off-linear}"
+ON_EXP="${CALIB_AB_ON_EXP:-/expscratch/$USER/calibration-safe-linear}"
+OFF_EXP="${CALIB_AB_OFF_EXP:-/expscratch/$USER/calibration-off-linear}"
 ON_RES="$ON_EXP/results"
 OFF_RES="$OFF_EXP/results"
 LOGS="$ON_EXP/logs"

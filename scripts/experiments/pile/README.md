@@ -69,7 +69,7 @@ any other worktree it embedded the pile out of a checkout 1,420 commits behind
 | `pilebuild/loaders/<kind>.py` | how a `DATASETS[ds]["kind"]` is built (`load`) **and** what a rebuild of it reads (`check`) |
 | `pilebuild/vgsource.py`, `boxscan.py` | reading the VG source; choosing a band's categories from the box scan |
 | `pilebuild/corrections.py` | human verdicts, and the one place their boxes cross from normalised into pixel space |
-| `pilebuild/geometry.py` | geometry no honest region box can have; the derived-label digest |
+| `pilebuild/geometry.py` | geometry no honest region box can have |
 | `pilebuild/provenance.py` | which machine **and which checkout** produced a cell, and its vector hash |
 | `pilebuild/audit.py`, `manifest.py`, `provenance_report.py` | the read-only modes |
 
@@ -440,12 +440,6 @@ Three things now stop it, because none of them alone would have:
   against the band its cell name claims — passed happily through all of this,
   because the band is *derived from* the box and moved with it. A consistency
   check between two values computed from one source is not a check.
-
-`vg_scale_any` is a relabel of the built `vg_scale` pickle and shares its
-vectors, so a parent rebuild used to leave it holding the parent's previous
-labels with a perfectly healthy media count. It now stamps a digest of the
-parent's labels, `--verify` compares that against the live parent, and a run
-that rebuilds `vg_scale` pulls the derived dataset in with it.
 
 ## A row records the rule it was answered under
 

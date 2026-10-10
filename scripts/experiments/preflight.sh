@@ -6,7 +6,7 @@
 # any of them: the document existed and nobody read it.  Run this immediately
 # before submitting arms.
 #
-#   bash scripts/experiments/preflight.sh --exp /exp/$USER/my-study --arms a,b,c
+#   bash scripts/experiments/preflight.sh --exp /expscratch/$USER/my-study --arms a,b,c
 #
 # Exits non-zero if anything is wrong.  `--warn-only` downgrades failures to
 # warnings for the cases where you genuinely mean it (resuming a partial run).
