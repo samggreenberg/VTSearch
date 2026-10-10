@@ -11,6 +11,7 @@ import { SortStateService } from '../../services/sort-state.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { ActiveDatasetService } from '../../services/active-dataset.service';
 import { SourcePhotoService } from '../../services/source-photo.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
@@ -53,6 +54,7 @@ export class CenterPanelComponent implements OnDestroy {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private activeDataset = inject(ActiveDatasetService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
   readonly sourcePhoto = inject(SourcePhotoService);
 
   readonly media = input<Media | null>(null);
@@ -279,6 +281,9 @@ export class CenterPanelComponent implements OnDestroy {
   init(): void {
     this.loadSettings();
     this.keyboard.start();
+    // Show in photo is offered on convert-in datasets only, which the
+    // media-type registry names (`SourcePhotoService.offered`).
+    this.mediaTypeCaps.ensureLoaded();
     this.datasetsListingsApi
       .getEmbedders()
       .pipe(takeUntilDestroyed(this.destroyRef))

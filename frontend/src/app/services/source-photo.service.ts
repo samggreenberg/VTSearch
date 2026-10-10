@@ -7,6 +7,7 @@ import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { importSiblingsOfType } from '../utils/import-siblings';
 import { ActiveDatasetService } from './active-dataset.service';
 import { DatasetStateService } from './dataset-state.service';
+import { MediaTypeCapabilityService } from './media-type-capability.service';
 import { MediasApiService } from './medias-api.service';
 
 /**
@@ -53,15 +54,22 @@ export class SourcePhotoService {
   private readonly mediasApi = inject(MediasApiService);
   private readonly activeDataset = inject(ActiveDatasetService);
   private readonly datasetState = inject(DatasetStateService);
+  private readonly mediaTypes = inject(MediaTypeCapabilityService);
 
   /**
-   * Whether to offer Show in photo on the active dataset: its import also
-   * produced an Image dataset, where the photos are. An item-level answer is
-   * {@link lookup}'s; this keeps every other dataset from asking per item.
+   * Whether to offer Show in photo on the active dataset: its items all came
+   * out of a converter (a convert-in type such as `face`), and its import also
+   * produced an Image dataset, where the photos are. That leaves out a
+   * Document dataset beside an Image one, whose pages have no source item.
+   * An item-level answer is {@link lookup}'s; this keeps every other dataset
+   * from asking per item. False until the media-type registry has loaded
+   * (`MediaTypeCapabilityService.ensureLoaded`, which `vt-center-panel` calls).
    */
-  readonly offered = computed(
-    () => importSiblingsOfType(this.activeDataset.dataset(), this.datasetState.datasets, 'image').length > 0,
-  );
+  readonly offered = computed(() => {
+    const dataset = this.activeDataset.dataset();
+    if (!dataset || !this.mediaTypes.isConvertIn(dataset.media_type)) return false;
+    return importSiblingsOfType(dataset, this.datasetState.datasets, 'image').length > 0;
+  });
 
   private readonly _request = signal<SourcePhotoRequest | null>(null);
   /** The open overlay, or null. */

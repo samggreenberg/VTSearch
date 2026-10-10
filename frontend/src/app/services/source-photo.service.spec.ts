@@ -3,6 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
+import { MediaTypeCapabilityService } from './media-type-capability.service';
 import { SourceLookup, SourcePhotoService } from './source-photo.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { provideHttpTesting } from '../testing/test-providers';
@@ -18,6 +19,8 @@ describe('SourcePhotoService', () => {
     { id: 'faces', name: 'Photos – Face', media_type: 'face', import_group: 'g1' },
     { id: 'photos', name: 'Photos – Image', media_type: 'image', import_group: 'g1' },
     { id: 'pages', name: 'Scans – Document', media_type: 'document', import_group: 'g2' },
+    { id: 'holiday-pages', name: 'Holiday – Document', media_type: 'document', import_group: 'g3' },
+    { id: 'holiday-photos', name: 'Holiday – Image', media_type: 'image', import_group: 'g3' },
     { id: 'birds', name: 'Birds', media_type: 'image' },
   ];
 
@@ -39,6 +42,15 @@ describe('SourcePhotoService', () => {
     activeContext = TestBed.inject(ActiveContextService);
     datasetState = TestBed.inject(DatasetStateService);
     httpMock = TestBed.inject(HttpTestingController);
+    // The media-type registry, which the centre pane loads: `face` is convert-in.
+    TestBed.inject(MediaTypeCapabilityService).ensureLoaded();
+    httpMock.expectOne('/api/media-types').flush({
+      media_types: [
+        { type_id: 'face', name: 'Face', importable: false },
+        { type_id: 'image', name: 'Image', importable: true },
+        { type_id: 'document', name: 'Document', importable: true },
+      ],
+    });
     flushRegistry();
   });
 
@@ -59,6 +71,11 @@ describe('SourcePhotoService', () => {
 
     it('is off when the group has no Image dataset', () => {
       activeContext.setActivePair('pages', 'det');
+      expect(service.offered()).toBe(false);
+    });
+
+    it('is off for a Document dataset beside an Image one: pages have no source item', () => {
+      activeContext.setActivePair('holiday-pages', 'det');
       expect(service.offered()).toBe(false);
     });
   });

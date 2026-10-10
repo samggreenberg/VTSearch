@@ -657,6 +657,19 @@ intent/active split.
 headers. Build those URLs with `ActiveContextService.mediaUrl(path, extra?)`,
 which appends `dataset_id` / `detector_id` query params from the active layer.
 
+**Reading an item of another dataset.** Show in photo (#4750) shows a face
+crop's photo out of the Image dataset the same import produced, in an overlay,
+while the Face pair stays active: switching the pair would land on the
+incompatible-pair explainer (a face detector cannot pair with an Image dataset)
+and reset the face ranking. Such a request names the other dataset **and no
+detector**: `DATASET_OVERRIDE` on an `HttpClient` request (the interceptor sets
+`X-Dataset-Id` to it and drops `X-Detector-Id`), `mediaUrlIn(datasetId, path)`
+for an `<img src>`. Never send the active detector with another dataset's id.
+The backend rehydrates a detector's votes whenever a request pairs it with a
+dataset other than the one they were derived for
+(`ensure_votes_match_active_dataset`), so one such request clears the session
+the user is in.
+
 ### Routes and guards — the URL is the source of truth
 
 `/label/:datasetId/:detectorId` and `/test/:datasetId/:detectorId` carry the

@@ -73,6 +73,9 @@ export class SourcePhotoModalComponent {
   });
 
   constructor() {
+    // The load's completion is registered on a root service and can land after
+    // the overlay closed; forgetting the task makes `afterSiblingLoad` a no-op.
+    this.destroyRef.onDestroy(() => this.loadTaskId.set(null));
     // A sibling load that settles with an error never calls back (the
     // loading-task service fires completions only on success), so watch its
     // row for the error instead; the failure is also toasted app-wide.

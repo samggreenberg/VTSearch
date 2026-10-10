@@ -139,6 +139,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Show in photo** (issue #4750). In Train and Test, a face from a multi-dataset import that
+  also made an Image dataset has a **Show in photo** button under it, and in Train its
+  right-click menu has the same entry. Either one opens the photo the face was cut from over the
+  ranking, with the face outlined. **← Back** or Esc returns to the face, with the ranking and
+  selection as they were: the window reads the photo out of the Image dataset without switching
+  the active dataset. If the Image dataset isn't loaded, the window offers to load it.
+
 - **The server can find a face's photo** (issue #4749). For a face crop imported in the same
   multi-dataset import as its photos, `GET /api/medias/<id>/source` returns the photo as an item
   of the "– Image" dataset beside it, with the face's box in it; `POST /api/medias/source-batch`
