@@ -1,0 +1,24 @@
+// `.back-btn`, `.empty-state` and `.error-text` come from `_components.scss`.
+
+:host ::ng-deep .modal-content {
+  width: var(--modal-w-lg);
+}
+
+// The viewer fills a flex column, so the stage gives it a height to fill.
+.source-photo-stage {
+  display: flex;
+  flex-direction: column;
+  height: 65vh;
+  margin-top: var(--space-md);
+}
+
+.source-photo-caption {
+  margin: var(--space-md) 0 0;
+  text-align: center;
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.source-photo-note {
+  color: var(--text-muted);
+}

@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
 import { Router } from '@angular/router';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService, NavDirection } from '../../services/keyboard.service';
@@ -9,6 +9,9 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
+import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { SourcePhotoService } from '../../services/source-photo.service';
+import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
@@ -35,6 +38,7 @@ import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/form
     VotingOverlayComponent,
     CopyDetailButtonComponent,
     IconComponent,
+    SourcePhotoModalComponent,
   ],
   templateUrl: './center-panel.component.html',
   styleUrl: './center-panel.component.scss',
@@ -48,6 +52,8 @@ export class CenterPanelComponent implements OnDestroy {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
+  private activeDataset = inject(ActiveDatasetService);
+  readonly sourcePhoto = inject(SourcePhotoService);
 
   readonly media = input<Media | null>(null);
   readonly disabled = input(false);
@@ -162,6 +168,37 @@ export class CenterPanelComponent implements OnDestroy {
 
   private _pausedByVisibility = false;
 
+  /**
+   * The focused item to ask Show in photo about (#4750), or undefined when the
+   * active dataset's import produced no Image dataset to find a photo in.
+   * Keyed on the dataset too, since media ids are per dataset; compared by
+   * value so a metadata hydration of the same item asks nothing new.
+   */
+  private readonly sourceKey = computed(
+    () => {
+      const media = this.media();
+      if (!media || !this.sourcePhoto.offered()) return undefined;
+      return { datasetId: this.activeDataset.activeId(), mediaId: media.id };
+    },
+    { equal: (a, b) => a?.datasetId === b?.datasetId && a?.mediaId === b?.mediaId },
+  );
+
+  private readonly sourceLookup = rxResource({
+    params: () => this.sourceKey(),
+    stream: ({ params }) => this.sourcePhoto.lookup(params.mediaId),
+  });
+
+  /**
+   * Offer Show in photo on the focused item: its dataset has a photo sibling,
+   * and the item's own lookup has not come back saying it has no source. An
+   * unloaded sibling (409) still offers it; the overlay offers the load.
+   */
+  readonly showInPhotoOffered = computed(() => {
+    if (!this.sourceKey()) return false;
+    const kind = this.sourceLookup.value()?.kind;
+    return kind !== 'none' && kind !== 'error';
+  });
+
   constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
@@ -210,11 +247,20 @@ export class CenterPanelComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // The overlay is rendered here; leaving the view must not leave it armed
+    // to reopen over the next one.
+    this.sourcePhoto.close();
     this.stopPlayback();
     this.keyboard.stop();
     if (this.spinTimer) clearTimeout(this.spinTimer);
     if (this.undoToastTimer) clearTimeout(this.undoToastTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  /** Open the focused item's source photo (Show in photo, #4750). */
+  openSourcePhoto(): void {
+    const media = this.media();
+    if (media) this.sourcePhoto.open(media.id);
   }
 
   /** Stop all media playback (used on navigation away). */

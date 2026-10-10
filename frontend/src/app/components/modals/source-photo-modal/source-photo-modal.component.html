@@ -1,0 +1,53 @@
+<vt-modal [open]="true" [title]="title()" (closed)="close()">
+  <button
+    type="button"
+    class="btn btn--secondary btn--sm back-btn"
+    (click)="close()"
+    [title]="'Return to ' + request().fromName"
+  >&larr; Back to {{ request().fromName }}</button>
+
+  @if (view(); as v) {
+    @if (v.kind === 'found') {
+      <div class="source-photo-stage">
+        <vt-image-viewer
+          [media]="v.photo"
+          [datasetId]="v.datasetId"
+          [outlineBox]="v.box"
+          [regionDraw]="false"
+        />
+      </div>
+      <p class="source-photo-caption">
+        {{ v.photo.filename || 'Photo #' + v.mediaId }}
+        @if (!v.box) {
+          <span class="source-photo-note">(no box was recorded for this item, so nothing is outlined)</span>
+        }
+      </p>
+    } @else if (v.kind === 'not-loaded') {
+      <div class="empty-state" role="status">
+        <p>The photo is in {{ siblingName() }}, which isn't loaded.</p>
+        <button
+          type="button"
+          class="btn btn--primary"
+          [disabled]="busy()"
+          (click)="loadSibling(v.datasetId)"
+          [title]="'Load ' + siblingName() + ' and show the photo'"
+        >{{ siblingLoading() ? 'Loading ' + siblingName() + '…' : 'Load ' + siblingName() }}</button>
+        @if (loadError()) {
+          <p class="error-text">{{ loadError() }}</p>
+        }
+      </div>
+    } @else if (v.kind === 'none') {
+      <div class="empty-state" role="status">
+        <p>There is no photo to show for this item.</p>
+        <p class="source-photo-note">{{ v.message }}</p>
+      </div>
+    } @else {
+      <div class="empty-state" role="alert">
+        <p>Couldn't find the photo.</p>
+        <p class="error-text">{{ v.message }}</p>
+      </div>
+    }
+  } @else {
+    <div class="empty-state" role="status"><p class="source-photo-note">Finding the photo…</p></div>
+  }
+</vt-modal>

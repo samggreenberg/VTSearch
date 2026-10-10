@@ -4,9 +4,14 @@ import type { ContextMenuItem } from '../context-menu/context-menu.component';
  * Build the right-click context-menu items for a media item in
  * `vt-label-view`.  The crop variants are only emitted for media types
  * whose viewer can produce a sub-region selection (`audio` spectrograms
- * and `image` raster regions).
+ * and `image` raster regions).  `showInPhoto` adds Show in photo (#4750),
+ * for a dataset whose import also produced an Image dataset
+ * (`SourcePhotoService.offered`).
  */
-export function buildMediaContextMenuItems(mediaType: string): ContextMenuItem[] {
+export function buildMediaContextMenuItems(
+  mediaType: string,
+  { showInPhoto = false }: { showInPhoto?: boolean } = {},
+): ContextMenuItem[] {
   const cropAble = mediaType === 'audio' || mediaType === 'image';
   const items: ContextMenuItem[] = [
     {
@@ -32,6 +37,13 @@ export function buildMediaContextMenuItems(mediaType: string): ContextMenuItem[]
       id: 'crop-seed',
       label: 'Crop, then use as detector seed…',
       title: 'Open the crop tool to pick a sub-region, then seed a new detector.',
+    });
+  }
+  if (showInPhoto) {
+    items.push({
+      id: 'show-in-photo',
+      label: 'Show in photo',
+      title: 'Open the photo this item was cut from, with the item outlined.',
     });
   }
   return items;

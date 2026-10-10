@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 
-import { activeContextInterceptor } from './active-context.interceptor';
+import { activeContextInterceptor, DATASET_OVERRIDE } from './active-context.interceptor';
 import { ActiveContextService } from '../services/active-context.service';
 import { provideHttpTesting } from '../testing/test-providers';
 
@@ -71,6 +71,26 @@ describe('activeContextInterceptor', () => {
     const req = httpMock.expectOne('/api/foo');
     expect(req.request.headers.get('X-Custom')).toBe('keep-me');
     expect(req.request.headers.get('X-Dataset-Id')).toBe('ds-1');
+    req.flush({});
+  });
+
+  // Show in photo (#4750) reads the face crop's photo out of the Image sibling
+  // while the Face pair stays active. The detector header must go: paired with
+  // another dataset, the backend rehydrates the detector's votes against it.
+  it('names the override dataset and drops the detector for DATASET_OVERRIDE', () => {
+    ctx.setActive('faces', 'face-det');
+    http.get('/api/foo', { context: new HttpContext().set(DATASET_OVERRIDE, 'photos') }).subscribe();
+    const req = httpMock.expectOne('/api/foo');
+    expect(req.request.headers.get('X-Dataset-Id')).toBe('photos');
+    expect(req.request.headers.has('X-Detector-Id')).toBe(false);
+    req.flush({});
+  });
+
+  it('applies DATASET_OVERRIDE with nothing active too', () => {
+    http.get('/api/foo', { context: new HttpContext().set(DATASET_OVERRIDE, 'photos') }).subscribe();
+    const req = httpMock.expectOne('/api/foo');
+    expect(req.request.headers.get('X-Dataset-Id')).toBe('photos');
+    expect(req.request.headers.has('X-Detector-Id')).toBe(false);
     req.flush({});
   });
 });

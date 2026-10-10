@@ -84,3 +84,20 @@ export function importSiblingNames<T extends ImportGroupedRow & { id: string }>(
   }
   return out;
 }
+
+/**
+ * The rows *row*'s import produced for *mediaType*, other than *row* itself.
+ *
+ * Show in photo (#4750) offers itself on a Face dataset only when the same
+ * import also produced an Image dataset, since that is where a face's photo
+ * lives as an item. Empty for a row with no group.
+ */
+export function importSiblingsOfType<T extends ImportGroupedRow & { id: string; media_type: string }>(
+  row: T | null | undefined,
+  rows: readonly T[],
+  mediaType: string,
+): T[] {
+  const group = row?.import_group;
+  if (!row || !group) return [];
+  return rows.filter((other) => other.import_group === group && other.id !== row.id && other.media_type === mediaType);
+}

@@ -33,6 +33,7 @@ import { PanelHideStateService, type PanelSide } from '../../services/panel-hide
 import { AutopilotStateService, type AutopilotPhase } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { SourcePhotoService } from '../../services/source-photo.service';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
@@ -97,6 +98,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private embedderCaps = inject(EmbedderCapabilityService);
   private activeContext = inject(ActiveContextService);
   private newThingFlows = inject(NewThingFlowsService);
+  private sourcePhoto = inject(SourcePhotoService);
   private toast = inject(ToastService);
   panelState = inject(LabelViewPanelStateService);
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
@@ -1134,7 +1136,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaContextRequest(event: { id: number; x: number; y: number }): void {
     const media = this.mediaState.mediasSignal().find((m) => m.id === event.id);
-    this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '');
+    this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '', {
+      showInPhoto: this.sourcePhoto.offered(),
+    });
     this.contextMenuMediaId = event.id;
     this.contextMenuX = event.x;
     this.contextMenuY = event.y;
@@ -1152,6 +1156,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.openSeedNewDetector(mediaId);
     } else if (action === 'crop-sort' || action === 'crop-seed') {
       this.openCropOverlay(mediaId, action === 'crop-sort' ? 'sort' : 'seed');
+    } else if (action === 'show-in-photo') {
+      this.sourcePhoto.open(mediaId);
     }
   }
 
