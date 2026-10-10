@@ -10,11 +10,15 @@ machine-readable recipe :mod:`vtscore.media.lazy_clip` replays to reproduce
 the bytes on demand; they are not what a human wants to read in the labeling
 UI's metadata grid.
 
-This module turns the recipe into three curated display fields:
+This module turns the recipe into up to four curated display fields:
 
 ``Source``
     The original file the item was derived from - e.g. the video a frame was
     extracted from, or the recording an audio clip was cut out of.
+
+``Source Box``
+    Where in that source the item sat, for a converter that records it (a
+    face crop's place in its photo; see :data:`SOURCE_BOX_FIELD`).
 
 ``Derived Via``
     The converter / clipper / cleaner chain that produced it, rendered with
@@ -52,6 +56,27 @@ DERIVED_VIA_LABEL = "Derived Via"
 
 #: Display label for the importer that brought the corpus in.
 IMPORTED_VIA_LABEL = "Imported Via"
+
+#: Display label for :data:`SOURCE_BOX_FIELD`.
+SOURCE_BOX_LABEL = "Source Box"
+
+#: Top-level media key locating a converter output inside the item it was
+#: derived from: a **normalised** ``[x0, y0, x1, y1]`` box in ``[0, 1]`` of the
+#: source image, upright (EXIF orientation applied).  ``image2face`` sets it on
+#: every face crop, so a crop can be outlined on its photo (#4748).
+#:
+#: Normalised rather than pixels for two reasons.  A converter may detect on a
+#: downsampled decode (``image2face`` reads through ``decode_bounded_rgb``), so
+#: its pixel coordinates are not the original's; a fraction of the frame is the
+#: same either way.  And the consumers already speak it: the image viewer's
+#: ``RegionBox`` and a vote's persisted ``region_box`` are both normalised.
+#:
+#: Not ``clip_box``, which says which pixels of a *shared* payload this item is
+#: (a video unit's crop of frames it shares with its siblings).  A face crop is
+#: its own image; the box only says where it came from.  Persisted top-level
+#: like the clip window (``vtscore.datasets.loader`` / ``loader_pickle``), and
+#: generic: any converter may set it.
+SOURCE_BOX_FIELD = "source_box"
 
 #: Top-level media keys describing a clipped / windowed item's playback window.
 #: Every reader of a clip window reads these *top-level* fields, not
@@ -235,13 +260,32 @@ def _describe_import(origin: dict[str, Any], params: dict[str, Any]) -> str:
     return _describe_step("importer", importer, params)
 
 
+def describe_source_box(media: dict[str, Any]) -> str:
+    """Render *media*'s :data:`SOURCE_BOX_FIELD` as ``"x0,y0,x1,y1"``, or ``""``.
+
+    Three decimals is a thousandth of the frame: finer than anyone reads, and
+    the stored value keeps full precision.  A malformed box (not four numbers)
+    renders as nothing rather than raising, since the field rides in a pickle
+    that may predate or postdate this code.
+    """
+    box = media.get(SOURCE_BOX_FIELD)
+    if not isinstance(box, (list, tuple)) or len(box) != 4:
+        return ""
+    try:
+        return ",".join(f"{float(v):.3f}" for v in box)
+    except (TypeError, ValueError):
+        return ""
+
+
 def provenance_metadata(media: dict[str, Any]) -> dict[str, str]:
     """Return the curated provenance entries for *media*.
 
     ``Source`` and ``Derived Via`` are present only for media produced by a
     converter or a clipper chain - a plainly imported file is its own source,
-    so labelling it as derived would be misleading.  ``Imported Via`` is
-    present whenever the origin names an importer.
+    so labelling it as derived would be misleading.  ``Source Box`` is present
+    whenever the media carries a :data:`SOURCE_BOX_FIELD`, which only a
+    converter sets.  ``Imported Via`` is present whenever the origin names an
+    importer.
     """
     origin = media.get("origin")
     if not isinstance(origin, dict):
@@ -256,6 +300,10 @@ def provenance_metadata(media: dict[str, Any]) -> dict[str, str]:
         source = _describe_source(media, origin, params)
         if source:
             result[SOURCE_LABEL] = source
+    source_box = describe_source_box(media)
+    if source_box:
+        result[SOURCE_BOX_LABEL] = source_box
+    if derived_via:
         result[DERIVED_VIA_LABEL] = derived_via
     imported_via = _describe_import(origin, params)
     if imported_via:

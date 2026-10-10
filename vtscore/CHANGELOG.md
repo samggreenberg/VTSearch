@@ -36,6 +36,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   `supports_multi_output`. The new `vtscore.datasets.load_multi` runs the fan-out: one loading task,
   context, registry entry, `DatasetImported` event and post-load hook per output, under the same
   download / embed gates as a single load. Additive: no existing member changes.
+- **A converter output can say where it sat in its source** (issue #4748). A dict `convert()`
+  returns may carry `source_box`, a normalised `[x0, y0, x1, y1]` box in `[0, 1]` of the upright
+  source image (`vtscore.media.provenance.SOURCE_BOX_FIELD`). It reaches the media on every ingest
+  path, survives the dataset pickle, and renders as one **Source Box** row
+  (`provenance.describe_source_box`). `image2face` sets it on every face crop. The folder and demo
+  conversion path (`vtscore.converters.runner`) also now keeps a converter's `custom_metadata`,
+  as the importer-hook and clipper-chain paths already did. Additive.
 
 ### Changed
 

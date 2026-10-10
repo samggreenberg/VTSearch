@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
+from vtscore.media.provenance import SOURCE_BOX_FIELD
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 from vtscore.utils.hashing import content_md5
 
@@ -55,7 +56,25 @@ def _normalise_converter_specs(
     return result
 
 
-_OPTIONAL_OUTPUT_FIELDS = ("media_bytes", "media_string", "width", "height", "word_count", "character_count")
+#: Converter-output keys :func:`_build_converted_media_dict` carries onto the
+#: media when the converter set them.  Everything else a converter returns is
+#: dropped here, so a field a converter emits for the media to keep has to be
+#: named: ``custom_metadata`` is the converter's own metadata rows (and the
+#: source's, which ``convert_normalized`` copies onto each output), and
+#: ``source_box`` is where the output sat in its source
+#: (:data:`vtscore.media.provenance.SOURCE_BOX_FIELD`).  The importer-hook
+#: and clipper-chain paths keep the whole output dict, so without these two
+#: names a folder or demo conversion lost what the other paths keep (#4748).
+_OPTIONAL_OUTPUT_FIELDS = (
+    "media_bytes",
+    "media_string",
+    "width",
+    "height",
+    "word_count",
+    "character_count",
+    "custom_metadata",
+    SOURCE_BOX_FIELD,
+)
 
 
 def _scan_source_files(folder_path: Path, source_mt, recursive: bool) -> list[Path]:

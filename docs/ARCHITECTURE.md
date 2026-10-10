@@ -1197,7 +1197,11 @@ recoverable long after the import job ended:
   scanned folder is a staging area of symlinks — the `server_files`
   (Manifest) importer links listed paths into a temp dir under their
   basenames, disambiguating collisions as `name__1.ext` — so `source_path` is
-  the authoritative pointer back at the original media.
+  the authoritative pointer back at the original media.  A converter that
+  cuts its output out of a region of the source also sets the top-level
+  `source_box` (normalised `[x0, y0, x1, y1]` of the upright source;
+  `image2face` does, per face), which persists beside the clip window and
+  renders as the **Source Box** row.
 - **Clipper-chain output**
   (`vtscore/datasets/clipper_chain.py::_stamp_origin`) inherits the parent's
   `origin` and `origin_name` and adds the full `clipper_chain` JSON trail plus
@@ -1217,7 +1221,8 @@ to reproduce the bytes on demand, which is what makes reference-mode derived
 media possible (no duplicated clip/page bytes in the dataset).
 
 `vtscore/media/provenance.py` renders the same recipe for humans, as up to
-three curated lines: **Source** (the file the item was derived from),
+four curated lines: **Source** (the file the item was derived from),
+**Source Box** (where in it, when the converter recorded a `source_box`),
 **Derived Via** (the chain that derived it, e.g.
 `"Video → Images (n_clips=2) → Object (threshold=0.4)"`), and **Imported
 Via** (the importer that brought the corpus in, e.g.
