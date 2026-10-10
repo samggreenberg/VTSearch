@@ -215,4 +215,27 @@ describe('DatasetCardComponent', () => {
     expect(btn.disabled).toBe(true);
     expect(btn.textContent?.trim()).toBe('Cancelling…');
   });
+
+  it('shows no category badge for a dataset with no import siblings', () => {
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.badge-category')).toBeFalsy();
+  });
+
+  it('shows the import category, naming the siblings, for a multi-dataset import (#4747)', async () => {
+    fixture.componentRef.setInput('dataset', {
+      ...mockDataset,
+      name: 'Photos – Document',
+      media_type: 'image',
+      import_group: 'g1',
+      output_category: 'document',
+    });
+    fixture.componentRef.setInput('importSiblings', ['Photos – Image', 'Photos – Face']);
+    await settleZoneless(fixture);
+
+    const badge = (fixture.nativeElement as HTMLElement).querySelector('.badge-category') as HTMLElement;
+    expect(badge).toBeTruthy();
+    // The category, not the media type: the rendered pages are image media.
+    expect(badge.textContent?.trim()).toBe('Document');
+    expect(badge.title).toBe('Imported together with Photos – Image, Photos – Face');
+  });
 });

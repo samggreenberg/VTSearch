@@ -26,6 +26,10 @@ What is shared and what is per output:
   reload-from-origin rebuilds that one dataset through the ordinary
   single-dataset path.
 
+The N datasets stay linked: every registry entry records the run's
+``import_group`` (one id minted per run) and the ``output_category`` it stands
+for, so a Face dataset can find the Image sibling its crops were cut from.
+
 Progress and cancellation: every output has its own loading task from the
 moment the request returns, so the dashboard shows N rows at once.  While the
 shared acquire runs, its progress is mirrored onto every row; a cancel on one
@@ -46,6 +50,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from typing import Any, Callable
+from uuid import uuid4
 
 from vtscore.concurrency.progress import CancelledError, clear_thread_progress, loading_tasks, set_thread_progress
 from vtscore.datasets.clipper_chain import append_cleaner_steps
@@ -170,7 +175,12 @@ def _build_jobs(
     ingest_started_at: float,
     origin_for: Callable[[OutputSpec, dict[str, Any]], dict[str, Any]] | None,
 ) -> list[_OutputJob]:
-    """Mint one loading task, context and pacer per output; nothing runs yet."""
+    """Mint one loading task, context and pacer per output; nothing runs yet.
+
+    Also mints the run's import group: one id stamped on every output's spec,
+    so the registry entries they land as can name each other.
+    """
+    import_group = uuid4().hex
     jobs: list[_OutputJob] = []
     for output in outputs:
         narrowed = output.narrow(field_values)
@@ -228,6 +238,8 @@ def _build_jobs(
             media_type=output.media_type,
             build_projection=build_projection,
             ingest_started_at=ingest_started_at,
+            import_group=import_group,
+            output_category=output.category,
         )
         label = output.category_label()
         jobs.append(

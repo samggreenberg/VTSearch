@@ -1141,6 +1141,24 @@ class DatasetRegistryEntrySchema(Schema):
             )
         },
     )
+    import_group = fields.String(
+        allow_none=True,
+        metadata={
+            "description": (
+                "Id shared by every dataset one multi-dataset import produced, so siblings can be found from any "
+                "one of them; ``null`` for a single-dataset import."
+            )
+        },
+    )
+    output_category = fields.String(
+        metadata={
+            "description": (
+                "The ingestion category (a media type id) this dataset stands for within its import group, e.g. "
+                '``"face"`` or ``"document"``; it can differ from ``media_type`` (a Document dataset holds '
+                'rendered page images). Empty for a single-dataset import.'
+            )
+        },
+    )
 
 
 class DatasetsRegistryListResponseSchema(Schema):

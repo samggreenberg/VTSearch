@@ -130,6 +130,7 @@
                 [loadingTask]="browsePrep.displayTask(dataset.id) ?? loadingTasksSvc.getInlineTask(dataset.id)"
                 [taskKind]="browsePrep.taskKind(dataset.id)"
                 [autofindDetectorCount]="autofindDetectorCountFor(dataset)"
+                [importSiblings]="importSiblings().get(dataset.id)"
                 [deleting]="deletingDatasetId() === dataset.id"
                 (rowClick)="!isContextSwitching && toggleDatasetSelection(dataset.id, $event)"
                 (checkboxToggle)="!isContextSwitching && toggleDatasetCheckbox(dataset.id)"

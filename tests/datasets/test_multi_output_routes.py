@@ -5,6 +5,9 @@
 per dataset in ``task_ids``; without it they behave as before and list their
 single task.  The background runner is patched out: what these pin down is
 the request parsing and the hand-off, not the load itself.
+
+``GET /api/datasets/registry`` then says which datasets came from the same
+import (#4747): ``import_group`` and ``output_category`` on every entry.
 """
 
 from __future__ import annotations
@@ -194,3 +197,47 @@ class TestLocalFilesRoute:
         assert captured["field_values"]["paths_file"].endswith("paths_file.txt")
         origin = captured["kwargs"]["origin_for"](captured["outputs"][0], {"media_type": "audio"})
         assert origin["params"] == {"paths_file": "<browser_upload>", "media_type": "audio"}
+
+
+class TestRegistryListsTheImportGroup:
+    def test_siblings_carry_their_group_and_category(self, client, tmp_path):
+        from vtscore.datasets.registry import register_dataset
+
+        for category, media_type in (("image", "image"), ("document", "image")):
+            register_dataset(
+                name=f"holiday – {category}",
+                media_type=media_type,
+                num_items=1,
+                pkl_path=str(tmp_path / f"{category}.pkl"),
+                import_group="g-holiday",
+                output_category=category,
+            )
+        register_dataset(name="solo", media_type="audio", num_items=1, pkl_path=str(tmp_path / "solo.pkl"))
+
+        resp = client.get("/api/datasets/registry")
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        by_name = {d["name"]: d for d in resp.get_json()["datasets"]}
+        assert by_name["holiday – image"]["import_group"] == "g-holiday"
+        assert by_name["holiday – document"]["import_group"] == "g-holiday"
+        assert by_name["holiday – document"]["output_category"] == "document"
+        assert by_name["holiday – document"]["media_type"] == "image"
+        assert by_name["solo"]["import_group"] is None
+        assert by_name["solo"]["output_category"] == ""
+
+    def test_an_entry_saved_before_the_fields_reads_as_ungrouped(self, client, tmp_path):
+        """The manifest is saved data with no migration: an older entry just lacks the keys."""
+        from vtscore.datasets import registry
+
+        entry = registry.register_dataset(name="old", media_type="audio", num_items=1, pkl_path=str(tmp_path / "o.pkl"))
+        entries = registry._load()
+        for e in entries:
+            if e["id"] == entry["id"]:
+                del e["import_group"], e["output_category"]
+        registry._save(entries)
+
+        resp = client.get("/api/datasets/registry")
+
+        (listed,) = resp.get_json()["datasets"]
+        assert listed["import_group"] is None
+        assert listed["output_category"] == ""
