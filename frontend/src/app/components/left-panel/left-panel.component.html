@@ -118,8 +118,8 @@
           side="left"
           [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
           class="view-controls-slot" />
-        <vt-collapse-photos-toggle class="view-controls-slot" />
       </div>
+      <vt-collapse-photos-toggle />
 
       @if (sortBusy()) {
         <vt-progress-indicators
@@ -265,8 +265,8 @@
             side="left"
             [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
             class="view-controls-slot" />
-          <vt-collapse-photos-toggle class="view-controls-slot" />
         </div>
+        <vt-collapse-photos-toggle />
 
         @if (allLabeled()) {
           <p

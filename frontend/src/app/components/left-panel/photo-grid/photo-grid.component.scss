@@ -163,6 +163,12 @@
     border-width: 3px;
     border-color: var(--accent);
   }
+
+  // Under the line and not voted: in the ranking, not a match.
+  &.below:not(.good):not(.bad):not(.selected) {
+    border-style: dotted;
+    opacity: var(--opacity-dim);
+  }
 }
 
 .face-chips {
@@ -206,6 +212,10 @@
 
   &.selected {
     border-color: var(--accent);
+  }
+
+  &.below:not(.good):not(.bad):not(.selected) {
+    opacity: var(--opacity-dim);
   }
 }
 

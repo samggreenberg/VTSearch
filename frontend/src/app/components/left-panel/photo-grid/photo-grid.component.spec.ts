@@ -155,6 +155,15 @@ describe('PhotoGridComponent', () => {
     expect(line).toBe(firstBelow - 1);
   });
 
+  it('draws a face under the line faint, beside the matches', async () => {
+    await open();
+    const [match, below] = boxes(cards()[0]);
+    expect(match.classList).not.toContain('below');
+    expect(below.classList).toContain('below');
+    expect(below.getAttribute('aria-label')).toContain('below the line');
+    expect(cards()[0].querySelectorAll('.face-chip')[1].classList).toContain('below');
+  });
+
   it('colours faces from the live votes, not from the page', async () => {
     fixture.componentRef.setInput('goodVotes', new Set([3]));
     fixture.componentRef.setInput('badVotes', new Set([1]));

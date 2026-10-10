@@ -60,6 +60,9 @@ interface Page {
  * windows it (`GET /api/sort/collapsed`), so this pages photo rows and never
  * regroups. A photo scores as its best face and keeps that face's place.
  *
+ * Faces scoring under the line are drawn faint: in the ranking, and votable,
+ * but not matches.
+ *
  * Every outlined face, and its chip under the photo, is that face's card:
  * the same click / hover / right-click gestures as `vt-media-item` in the
  * current focus mode, emitted as the face's media id, so votes land on faces
@@ -282,6 +285,15 @@ export class PhotoGridComponent {
     return null;
   }
 
+  /**
+   * The face scores under the line: it is in the ranking, and votable, but
+   * not one of the matches, so it is drawn faint beside the faces that are.
+   */
+  isBelow(face: CollapsedFace): boolean {
+    const threshold = this.threshold();
+    return threshold != null && face.score < threshold;
+  }
+
   holdsSelected(photo: ShownPhoto): boolean {
     const id = this.selectedId();
     return id != null && photo.faces.some((f) => f.media_id === id);
@@ -289,7 +301,8 @@ export class PhotoGridComponent {
 
   faceLabel(face: CollapsedFace): string {
     const vote = this.voteOf(face.media_id);
-    return `Face #${face.media_id}, score ${face.score.toFixed(2)}${vote ? `, voted ${vote}` : ''}`;
+    const below = this.isBelow(face) ? ', below the line' : '';
+    return `Face #${face.media_id}, score ${face.score.toFixed(2)}${below}${vote ? `, voted ${vote}` : ''}`;
   }
 
   photoTitle(photo: ShownPhoto): string {
