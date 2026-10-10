@@ -638,6 +638,12 @@ CSS classes) are exempt - this rule is about *visible* strings only.
 | Measuring a detector's line on a dataset it never trained on | **Test** (the Dashboard button and its view) | — |
 | Running detectors across datasets to collect their matches | **Find** (the Dashboard button) / **AutoFind** (the detector tab, and the runs it starts on every import and from the CLI) / **AutoFind** (the settings tab for where those results go) | — |
 | The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
+| The mascot | **King Toasty** ("Toasty" in running text) | Searchy, or any other name |
+
+**Toasty is always drawn searching.** Every picture of him (the header and
+login logo, `/logo.svg`, the favicons, and the hint and toast faces in
+`utils/toasty-faces.ts`) is the crowned toast holding the magnifying glass. A new
+face or pose is a variant of that drawing, never a different one.
 
 `Train`, `Test` and `Find` are the three flow verbs surfaced to users; keep
 them stable. The Test view's code is still named `find` (#4525), as the Train
