@@ -1517,6 +1517,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **Stable no longer counts a balance change as flips** (issue #4745).
+  `vtscore.detectors.labeling_progress.inject_live_model` takes `beta=`, the
+  balance its `threshold` was drawn at (default `None`, for a caller with
+  none). The Stable chain compared each detector with the last one, each read
+  at its own line, so after a balance change every item between the two
+  balances' lines counted as a flip although no detector changed its mind.
+  A detector served at another balance now becomes the baseline instead, as
+  after a gap. The line moving with the labels under one balance still
+  counts. Additive: a caller that never passes `beta=` behaves as before.
 - **A balance walk on a small ranking no longer keeps all of it whatever
   its audits say** (issue #4424). `SpotCheck` started a balance walk on the
   band holding the cap and stepped shallower only after a deeper step fell,

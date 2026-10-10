@@ -1104,9 +1104,14 @@ class TestLiveModelReuse:
         # A live model should have been injected for the current vote set
         key = (frozenset(good_votes), frozenset(bad_votes))
         assert key in _prog_cache().live_models, "learned-sort should inject the live model"
-        model, threshold, smart_threshold = _prog_cache().live_models[key]
+        model, threshold, smart_threshold, beta = _prog_cache().live_models[key]
         assert model is not None
         assert isinstance(threshold, float)
+        # The balance the line was drawn at rides along, so Stable never compares
+        # two detectors across two balances' lines (#4745).
+        from vtscore.state import get_beta
+
+        assert beta == get_beta()
         # Under a balance the line keeps a set, not an inclusion (#4272), so Smart
         # re-cuts the model at its own Inclusion 0 cut (#4243).
         from vtscore.detectors.cost_trend import SMART_INCLUSION
