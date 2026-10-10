@@ -3,9 +3,9 @@
 # centroid, cut at its two-Gaussian midpoint, which keeps about half the corpus on a rare target.
 # One run per K on the baseline's identities (#4699, 562 people x 4 arms), at the app's balance, with
 # every candidate line priced as tagged rows on the same sessions (CALIB_CENTROID_LINE_VARIANTS):
-#   midpoint  the app's line (the untagged rows draw it too)
+#   midpoint  the app's line until #4732 (at the pricing commit the untagged rows drew it too)
 #   guarded   the typed query's guarded line, which takes no balance (#3826)
-#   count     the typed query's count line at the row's balance (#4603); `text` (the typed query's own
+#   count     the typed query's count line at the row's balance (#4603), the app's since #4732; `text` (the typed query's own
 #             display rule) is count at beta <= 1 and guarded above, so it needs no rows of its own
 # each at beta 1/4, 1 and 4. The centroid never picks and the opening reads no balance, so the rows
 # pair exactly and differ only on the clicks Test gives the centroid. That tier ends at the quota

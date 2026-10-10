@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector with too few labels returns the images that stand out, not half the collection**
+  (issue #4732). Below 3 Goods and 4 Bads, Test, Find and AutoFind rank everything by the Goods'
+  centroid. Its line used to sit where the scores split into two groups, which on a rare target
+  splits the non-matches: with one photo of a person in a 5,400-face collection, the person's other
+  photos ranked first and the line still kept about 2,300 faces. It now keeps about as many images as
+  stand out from the rest, the rule a typed query's line uses, so the same Test keeps one to three
+  faces. The Threshold moves it: more toward false positives, fewer toward false negatives. An
+  example sort draws the same line. Autopilot's picks on an example sort are unchanged.
 - **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
   Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
   another on one CPU core, and most of each fit's time went to statistics over a few dozen

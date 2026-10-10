@@ -47,7 +47,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--panel", action="append", required=True, help="run/dataset=Title")
     ap.add_argument("--run-beta", type=float, default=1.0)
+    ap.add_argument(
+        "--ref", action="append", default=[], help="run/dataset=VALUE:label, a reference line on the top row"
+    )
     args = ap.parse_args(argv)
+    refs = {}
+    for spec in args.ref:
+        key, _, rest = spec.partition("=")
+        value, _, label = rest.partition(":")
+        refs[key] = (float(value), label)
     curves = pd.read_csv(args.curves)
     panels = []
     for spec in args.panel:
@@ -83,6 +91,10 @@ def main(argv: list[str] | None = None) -> int:
             names.append(name)
             colors.append(color)
         x_end = float(sub["t"].max()) if len(sub) else 1.0
+        if f"{run}/{ds}" in refs:
+            value, label = refs[f"{run}/{ds}"]
+            top.axhline(value, color=INK2, lw=1.0, ls="--")
+            top.text(1, value + 0.02, label, color=INK2, fontsize=8, va="bottom")
         for y, name, color in zip(_spread(ends, 0.04), names, colors):
             top.text(x_end + 0.6, y, name, color=color, va="center", fontsize=9)
         top.set_title(title, fontsize=10, color=INK, loc="left")

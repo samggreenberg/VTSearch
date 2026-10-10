@@ -6,16 +6,24 @@ app already draws for several uploaded examples
 (:func:`vtscore.training.query_sort.example_sort_from_paths`): the mean of the
 L2-normalised Good vectors, every media ranked by its cosine to that centroid
 (max-pooled over a patch media's rows, as every scorer here pools), and the line
-the two-Gaussian midpoint of those cosines
-(:func:`~vtscore.training.thresholds.calculate_gmm_threshold`).
+:func:`centroid_cut` draws over those cosines.
 
-**The line does not take the balance.**  It is the example sort's cut, the one
-every non-text cosine sort draws.  The typed query's balance-aware rules
-(#4603) were measured on typed queries only, and the trained head's labels line
-needs held-out Bads the centroid does not have.  A balance change leaves it
-where it is (:func:`~vtscore.state.core.recut_detector_threshold` finds nothing
-to re-cut), and a Find on another corpus refits the midpoint there, as a cold
-Find refits a trained head's line.
+**The line is the typed query's count line, at the balance (#4732).**  It keeps
+``beta ** 0.708`` times the count of media standing out of the cosines' bulk
+(#4603's ``_count_line``), the guarded line where there is nothing to count.  It
+was the two-Gaussian midpoint until #4732, and on a rare target that midpoint
+splits the negatives' own bulk: on FHIBE's face crops the centroid ranked a
+person's withheld photos first of 5,439 and its line kept about 2,300.  Priced on
+the FHIBE cells and the State of the App's Binary opening, the count line won at
+every balance there; the guarded line, the typed query's own at beta 4, lost to
+it by 0.21 F-beta on faces, where its separated branch falls back to the
+midpoint (``docs/experiments/2026-10-10-centroid-line-4732``).  The trained
+head's labels line needs held-out Bads the centroid does not have.  A balance
+change redraws the line on the cosines it was drawn on
+(:class:`CentroidLine`, :func:`~vtscore.state.core.recut_detector_threshold`),
+Autopilot's Hard select still samples at the cosines' midpoint
+(:meth:`CentroidLine.acquisition_threshold`), and a Find on another corpus
+redraws the line there, as a cold Find refits a trained head's line.
 
 **It is a ``Linear(D, 1)``, so it travels where a head travels.**  The weight is
 :data:`CENTROID_LOGIT_SCALE` times the unit centroid and the bias puts the
@@ -89,17 +97,17 @@ def is_centroid_head(model: object) -> bool:
 
 #: The rules a centroid's line can be drawn by (#4732), each over the corpus cosines:
 #:
-#: * ``midpoint`` - the two-Gaussian midpoint, the example sort's line since before #4643;
+#: * ``midpoint`` - the two-Gaussian midpoint, the centroid's and the example sort's line until #4732;
 #: * ``text`` - the typed query's display line at the balance
 #:   (:func:`~vtscore.training.thresholds.text_sort_cuts`: the count line at beta 1 or
 #:   below, #4603, else the guarded line);
 #: * ``guarded`` - the guarded line alone, which takes no balance (#3826);
 #: * ``count`` - the count line at every balance, ``beta ** 0.708`` times the bulk's excess
-#:   (#4603), the guarded line where the count has nothing to measure.
+#:   (#4603), the guarded line where the count has nothing to measure.  The app's (#4732).
 CENTROID_LINE_RULES = ("midpoint", "text", "guarded", "count")
 
-#: The rule the app draws a centroid's line by.
-CENTROID_LINE_RULE = "midpoint"
+#: The rule the app draws a centroid's line by: the count line at every balance (#4732).
+CENTROID_LINE_RULE = "count"
 
 
 def centroid_cut(

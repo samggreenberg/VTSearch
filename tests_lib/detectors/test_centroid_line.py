@@ -29,10 +29,11 @@ def _rare_target(n_neg: int = 5000, n_pos: int = 4, seed: int = 0) -> np.ndarray
 
 
 class TestTheRules:
-    def test_the_app_draws_the_midpoint(self):
-        assert CENTROID_LINE_RULE == "midpoint"
+    def test_the_app_draws_the_count_line(self):
+        assert CENTROID_LINE_RULE == "count"
         cos = _rare_target()
-        assert centroid_cut(cos) == pytest.approx(calculate_gmm_threshold(cos.tolist()))
+        for beta in (0.25, 1.0, 4.0):
+            assert centroid_cut(cos, beta=beta) == pytest.approx(_count_line(cos, beta))
 
     def test_each_rule_is_the_typed_querys_line_it_names(self):
         cos = _rare_target()
@@ -176,10 +177,10 @@ class TestInTheHarness:
             assert set(tagged) == set(clicks)
             assert all(r["beta"] == float(beta) for r in tagged.values())
 
-    def test_the_midpoint_variant_is_the_apps_row(self):
-        rows, _ = self._run(centroid_line_variants=["midpoint@1"])
+    def test_the_apps_rule_at_the_runs_balance_is_the_apps_row(self):
+        rows, _ = self._run(centroid_line_variants=[f"{CENTROID_LINE_RULE}@1"])
         base = self._centroid_rows(rows)
-        tagged = self._centroid_rows(rows, centroid_line_tag("midpoint", 1.0))
+        tagged = self._centroid_rows(rows, centroid_line_tag(CENTROID_LINE_RULE, 1.0))
         for t, r in base.items():
             assert tagged[t]["fbeta"] == pytest.approx(r["fbeta"])
             assert tagged[t]["precision"] == pytest.approx(r["precision"])

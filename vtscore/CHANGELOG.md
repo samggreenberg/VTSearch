@@ -39,6 +39,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The Goods' centroid's line is the count line, at the balance** (issue #4732). `centroid_cut` takes
+  `rule` (`CENTROID_LINE_RULES`: `midpoint`, the line before #4732; `text`; `guarded`; `count`, the
+  app's `CENTROID_LINE_RULE`) and `beta`. `fit_centroid` returns the head, its threshold and a
+  `CentroidLine` (the corpus cosines the line was drawn on: `threshold_at(beta)` redraws it,
+  `acquisition_threshold()` is their midpoint); `fit_centroid_head` keeps its signature and gains
+  `rule` / `beta`. The cut sits in the middle of the gap the line falls in, so a float32 head keeps
+  exactly what the line keeps. `install_centroid_head` draws at the detector's own balance and keeps
+  the line on `DetectorContext.centroid_line`, which `recut_detector_threshold` redraws and
+  `detector_acquisition_threshold` samples at the midpoint of. `query_sort.cosine_sort_cuts` and
+  `example_sort_cuts_from_paths` return an example sort's two lines (`TextSortCuts`: the centroid's
+  display line and the midpoint). `simulate_voting_iterations` takes `centroid_line` (`None` the app,
+  `"midpoint"` the line before) and `centroid_line_variants` (`"<rule>@<beta>"` rows tagged
+  `gmm_variant="centroid_line:<rule>@<beta>"`). Behaviour change: a centroid head keeps far fewer
+  media on a rare target.
 - **A Good and 16 Bads get the trained head, and Autopilot's Good walk can run dry** (issue #4731).
   `vtscore.detectors.label_quota` gains a second quota, `DRY_BAD_QUOTA` (16, Autopilot's
   `moreDryRun`): a labelset with a Good and that many Bads is `TIER_TRAINED`. `LabelQuota` takes
