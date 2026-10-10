@@ -1,0 +1,134 @@
+<div
+  class="photo-grid"
+  #scroller
+  role="listbox"
+  aria-label="Photos"
+  [style.--photo-w]="photoWidth() + 'px'"
+  (scroll)="onScroll($event)"
+>
+  @if (!token()) {
+    <div class="photo-grid-empty" role="status">Collapse to photos groups a ranking: sort first.</div>
+  } @else if (problem(); as p) {
+    @if (p.kind === 'not-loaded') {
+      <div class="empty-state" role="status">
+        <p>The photos are in {{ siblingName() }}, which isn't loaded.</p>
+        <button
+          type="button"
+          class="btn btn--primary btn--sm"
+          [disabled]="siblingLoading()"
+          (click)="loadSibling(p.datasetId)"
+          [title]="'Load ' + siblingName() + ' and show the ranking as its photos'"
+        >{{ siblingLoading() ? 'Loading ' + siblingName() + '…' : 'Load ' + siblingName() }}</button>
+        @if (loadError()) {
+          <p class="error-text">{{ loadError() }}</p>
+        }
+      </div>
+    } @else if (p.kind === 'expired') {
+      <div class="empty-state" role="status">
+        <p>This ranking is no longer held on the server. Sort again to see it as photos.</p>
+      </div>
+    } @else {
+      <div class="empty-state" role="alert">
+        <p>Couldn't group the ranking by photo.</p>
+        <p class="error-text">{{ p.message }}</p>
+        <button type="button" class="btn btn--secondary btn--sm" (click)="retry()">Try again</button>
+      </div>
+    }
+  } @else {
+    @if (total() > 0) {
+      <p
+        class="photo-grid-note"
+        title="Votes, counts and the actions on the matches are per face: a photo is shown once, with every matching face outlined."
+      >{{ faceTotal() | number }} faces in {{ total() | number }} photos &middot; {{ scopeNote() }}</p>
+    }
+    @for (photo of shown(); track trackRow(photo); let i = $index) {
+      @if (photo.lineBefore) {
+        <div class="photo-threshold-line" title="The line between the detector's good and bad matches" aria-label="Good/Bad threshold">
+          <span class="threshold-label">threshold</span>
+        </div>
+      }
+      <div
+        class="photo-card"
+        [class.active]="holdsSelected(photo)"
+        [class.orphan]="photo.row.source_media_id === null"
+        [attr.data-row]="i"
+        role="group"
+        [attr.aria-label]="photoTitle(photo)"
+      >
+        @if (photo.row.source_media_id === null) {
+          <!-- No photo to show: the face itself, which is its card. -->
+          <button
+            type="button"
+            class="photo-wrap orphan-face"
+            [class.good]="voteOf(photo.faces[0].media_id) === 'good'"
+            [class.bad]="voteOf(photo.faces[0].media_id) === 'bad'"
+            [class.selected]="selectedId() === photo.faces[0].media_id"
+            [title]="photoTitle(photo)"
+            [attr.aria-label]="faceLabel(photo.faces[0])"
+            (click)="onFaceClick(photo.faces[0].media_id, $event)"
+            (contextmenu)="onFaceContextMenu(photo.faces[0].media_id, $event)"
+            (mouseenter)="onFaceEnter(photo.faces[0].media_id)"
+          >
+            <img class="photo" [src]="photoUrl(photo.row)" alt="" loading="lazy" />
+          </button>
+          <span class="photo-orphan-note">photo not found</span>
+        } @else {
+          <div class="photo-wrap" [title]="photoTitle(photo)" (click)="onPhotoClick(photo)">
+            <img class="photo" [src]="photoUrl(photo.row)" alt="" loading="lazy" />
+            @for (face of photo.faces; track face.media_id) {
+              @if (boxStyle(face); as style) {
+                <button
+                  type="button"
+                  class="face-box"
+                  [class.good]="voteOf(face.media_id) === 'good'"
+                  [class.bad]="voteOf(face.media_id) === 'bad'"
+                  [class.selected]="selectedId() === face.media_id"
+                  [style.left]="style['left']"
+                  [style.top]="style['top']"
+                  [style.width]="style['width']"
+                  [style.height]="style['height']"
+                  [title]="faceLabel(face)"
+                  [attr.aria-label]="faceLabel(face)"
+                  (click)="onFaceClick(face.media_id, $event)"
+                  (contextmenu)="onFaceContextMenu(face.media_id, $event)"
+                  (mouseenter)="onFaceEnter(face.media_id)"
+                ></button>
+              }
+            }
+          </div>
+          <div class="face-chips">
+            @for (face of photo.faces; track face.media_id) {
+              <button
+                type="button"
+                class="face-chip"
+                [class.good]="voteOf(face.media_id) === 'good'"
+                [class.bad]="voteOf(face.media_id) === 'bad'"
+                [class.selected]="selectedId() === face.media_id"
+                [title]="faceLabel(face)"
+                [attr.aria-label]="faceLabel(face)"
+                (click)="onFaceClick(face.media_id, $event)"
+                (contextmenu)="onFaceContextMenu(face.media_id, $event)"
+                (mouseenter)="onFaceEnter(face.media_id)"
+              >
+                <img [src]="faceUrl(face)" alt="" loading="lazy" />
+              </button>
+            }
+          </div>
+        }
+      </div>
+    } @empty {
+      @if (!loading()) {
+        <div class="photo-grid-empty" role="status">{{ emptyNote() }}</div>
+      }
+    }
+    @if (hasMore()) {
+      <div class="photo-load-more">
+        <button type="button" class="btn btn--secondary btn--sm" (click)="loadMore()" [disabled]="loading()">
+          {{ loading() ? 'Loading…' : 'Load more photos' }}
+        </button>
+      </div>
+    } @else if (loading() && shown().length === 0) {
+      <div class="photo-grid-empty" role="status">Grouping the ranking by photo…</div>
+    }
+  }
+</div>

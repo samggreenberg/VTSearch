@@ -84,7 +84,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="browse.emit()"
               aria-label="Browse unverified positives"
-              title="Browse the likely matches you haven't reviewed yet as their own map"
+              [title]="'Browse the likely matches you haven\'t reviewed yet as their own map' + queueFacesNote()"
             >
               <vt-icon type="eye" [size]="14"></vt-icon>
             </button>
@@ -93,7 +93,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="toDataset.emit()"
               aria-label="Unverified positives to dataset"
-              title="Promote the likely matches you haven't reviewed yet into their own dataset"
+              [title]="'Promote the likely matches you haven\'t reviewed yet into their own dataset' + queueFacesNote()"
             >
               <vt-icon type="cubes" [size]="14"></vt-icon>
             </button>
@@ -102,7 +102,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="unverifiedExport.emit()"
               aria-label="Export unverified positives"
-              title="Export the likely matches you haven't reviewed yet — e.g. to re-import as a dataset"
+              [title]="'Export the likely matches you haven\'t reviewed yet — e.g. to re-import as a dataset' + queueFacesNote()"
             >
               <vt-icon type="export" [size]="14"></vt-icon>
             </button>
@@ -118,7 +118,7 @@
           side="left"
           [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
           class="view-controls-slot" />
-
+        <vt-collapse-photos-toggle class="view-controls-slot" />
       </div>
 
       @if (sortBusy()) {
@@ -136,6 +136,22 @@
       }
 
       <div class="media-list-container">
+        @if (collapse.active()) {
+          <vt-photo-grid
+            [token]="sortToken()"
+            [threshold]="threshold()"
+            [selectedId]="selectedId()"
+            [goodVotes]="goodVotes()"
+            [badVotes]="badVotes()"
+            [hiddenIds]="hiddenIds()"
+            [gridGoalWidth]="gridGoalWidth()"
+            [focusMode]="focusMode()"
+            [emptyNote]="'All verified — nothing left to review.'"
+            [scopeNote]="'counts, votes and Browse / To Dataset / Export are per face'"
+            (mediaSelect)="mediaSelect.emit($event)"
+            (mediaVote)="mediaVote.emit($event)"
+          />
+        } @else {
         <vt-media-list
           [medias]="medias()"
           [sortOrder]="sortOrder()"
@@ -164,6 +180,7 @@
           [totalCount]="medias().length"
           (stripeClick)="onStripeClick($event)"
         />
+        }
       </div>
     </div>
     }
@@ -248,6 +265,7 @@
             side="left"
             [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
             class="view-controls-slot" />
+          <vt-collapse-photos-toggle class="view-controls-slot" />
         </div>
 
         @if (allLabeled()) {
@@ -259,6 +277,20 @@
         }
 
         <div class="media-list-container">
+          @if (collapse.active()) {
+            <vt-photo-grid
+              [token]="sortToken()"
+              [threshold]="threshold()"
+              [selectedId]="selectedId()"
+              [goodVotes]="goodVotes()"
+              [badVotes]="badVotes()"
+              [gridGoalWidth]="gridGoalWidth()"
+              [focusMode]="focusMode()"
+              (mediaSelect)="mediaSelect.emit($event)"
+              (mediaVote)="mediaVote.emit($event)"
+              (mediaContextRequest)="mediaContextRequest.emit($event)"
+            />
+          } @else {
           <vt-media-list
             [medias]="medias()"
             [sortOrder]="sortOrder()"
@@ -288,6 +320,7 @@
             [totalCount]="medias().length"
             (stripeClick)="onStripeClick($event)"
           />
+          }
         </div>
       </div>
     } @else {

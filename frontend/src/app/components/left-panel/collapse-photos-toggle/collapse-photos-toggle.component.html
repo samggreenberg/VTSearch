@@ -1,0 +1,26 @@
+@if (collapse.offered()) {
+  <div class="segmented-toggle segmented-toggle--compact" role="group" aria-label="Show the ranking as">
+    <button
+      type="button"
+      class="segmented-toggle__btn"
+      [class.segmented-toggle__btn--active]="!collapse.on()"
+      [attr.aria-pressed]="!collapse.on()"
+      (click)="collapse.set(false)"
+      title="Show the ranking as faces"
+      aria-label="Show faces"
+    >
+      <vt-icon type="face" [size]="13"></vt-icon>
+    </button>
+    <button
+      type="button"
+      class="segmented-toggle__btn"
+      [class.segmented-toggle__btn--active]="collapse.on()"
+      [attr.aria-pressed]="collapse.on()"
+      (click)="collapse.set(true)"
+      title="Collapse to photos: show each photo once, with every matching face outlined. Votes and counts stay on faces."
+      aria-label="Collapse to photos"
+    >
+      <vt-icon type="image" [size]="13"></vt-icon>
+    </button>
+  </div>
+}

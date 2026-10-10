@@ -18,6 +18,8 @@ import { SelectModeComponent } from './select-mode/select-mode.component';
 import { BalanceComponent } from './balance/balance.component';
 import { ProgressIndicatorsComponent } from './progress-indicators/progress-indicators.component';
 import { MediaListComponent } from './media-list/media-list.component';
+import { PhotoGridComponent } from './photo-grid/photo-grid.component';
+import { CollapsePhotosToggleComponent } from './collapse-photos-toggle/collapse-photos-toggle.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
@@ -28,6 +30,7 @@ import type { LabelingStatusResponse } from '../../generated/api-client/models/l
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
+import { CollapsePhotosService } from '../../services/collapse-photos.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { allItemsLabeled } from '../../utils/all-labeled';
 import { DEFAULT_BETA, type LineBalance } from '../../utils/line-balance';
@@ -46,6 +49,8 @@ export type { SortMode, SelectMode, SortedItem };
     BalanceComponent,
     ProgressIndicatorsComponent,
     MediaListComponent,
+    PhotoGridComponent,
+    CollapsePhotosToggleComponent,
     StripeOverviewComponent,
     AutopilotPanelComponent,
     ViewControlsComponent,
@@ -65,6 +70,10 @@ export class LeftPanelComponent implements OnInit {
   readonly sortHasMore = input(false);
   /** True while a page fetch is in flight. */
   readonly loadingMore = input(false);
+  /** The ranking's `sort_token`, which Collapse to photos groups by photo (#4751). */
+  readonly sortToken = input<string | null>(null);
+  /** Faces Collapse to photos leaves out: Test's verified ones, as its list does. */
+  readonly hiddenIds = input<Set<number>>(new Set());
   readonly selectedId = input<number | null>(null);
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
@@ -190,6 +199,17 @@ export class LeftPanelComponent implements OnInit {
   readonly findTabChange = output<'autopilot' | 'review'>();
 
   readonly mediaListComponent = viewChild(MediaListComponent);
+
+  /** Collapse to photos (#4751): the list shows the ranking as its photos. */
+  readonly collapse = inject(CollapsePhotosService);
+  /**
+   * Said on Test's work-queue actions while the ranking shows photos: they
+   * still send faces, since the detector is a face detector and its labels
+   * are face crops.
+   */
+  readonly queueFacesNote = computed(() =>
+    this.collapse.active() ? ' (the faces themselves, not their photos)' : '',
+  );
 
   readonly activeTab = signal<'manual' | 'autopilot'>('autopilot');
 
