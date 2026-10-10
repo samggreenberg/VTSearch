@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
-import { catchError, filter, finalize, switchMap, take, takeUntil, tap } from 'rxjs/operators';
+import { catchError, filter, finalize, map, switchMap, take, takeUntil, tap } from 'rxjs/operators';
 
 import { adaptivePoll } from './adaptive-poll';
 import { ActiveContextService } from './active-context.service';
@@ -209,6 +209,7 @@ export class SortRunnerService {
     this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
     this._newestSortKind.set(null);
+    this.redrawWhenSortLands = false;
   }
 
   /** Fires when a sort starts, ending the one before it. See {@link beginSort}. */
@@ -257,6 +258,8 @@ export class SortRunnerService {
     this.sortState.setSortProgress(0, 0);
     this.currentLearnedSortJobId = null;
     this._newestSortKind.set(kind);
+    // A sort asked for now reads the balance the server already has.
+    this.redrawWhenSortLands = false;
     return (source) => source.pipe(this.pairScope.scoped(), takeUntil(this.sortSuperseded$));
   }
 
@@ -271,6 +274,20 @@ export class SortRunnerService {
    * server would hand back the old balance's line from that cache.
    */
   private readonly betaRequests$ = new Subject<number>();
+
+  /**
+   * Sort tokens whose display line the server should redraw at the balance it
+   * now has (#4760), one at a time: `switchMap`, so the line drawn at a balance
+   * the user has since moved past can never land after the newer one's.
+   */
+  private readonly lineRedraws$ = new Subject<string>();
+
+  /**
+   * A balance change landed while a sort was in flight. That sort may have
+   * read the old balance server-side, so its line is redrawn once it lands.
+   * Cleared when a newer sort starts, since that one reads the new balance.
+   */
+  private redrawWhenSortLands = false;
 
   constructor() {
     this.betaRequests$
@@ -287,6 +304,25 @@ export class SortRunnerService {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((resp) => this.afterBalanceChange(lineBalanceFrom(resp)));
+
+    this.lineRedraws$
+      .pipe(
+        switchMap((token) =>
+          this.sortingApi.getSortLine(token).pipe(
+            this.pairScope.scoped(),
+            map((line) => ({ token, line })),
+            // A 404 is a sort whose line is not redrawn there; either way the
+            // line stays where it is and the pipeline lives on.
+            catchError(() => EMPTY),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(({ token, line }) => {
+        // A ranking that has replaced the one asked about keeps its own line.
+        if (this.sortState.sortToken !== token) return;
+        this.sortState.setLine(line.threshold, this.sortState.balance, line.above_threshold);
+      });
   }
 
   // --- Sort handlers ---
@@ -330,6 +366,10 @@ export class SortRunnerService {
       token: response.sort_token ?? null,
       aboveThreshold: response.above_threshold ?? items.filter((i) => i.score >= threshold).length,
     });
+    if (this.redrawWhenSortLands) {
+      this.redrawWhenSortLands = false;
+      this.redrawSortLine();
+    }
   }
 
   /**
@@ -783,28 +823,45 @@ export class SortRunnerService {
   }
 
   /**
-   * The server has the new balance. Only a learned ranking draws the
-   * detector's line, so only it can move: every other sort ranks by something
-   * else and keeps its own threshold.
+   * The server has the new balance, and every line drawn at a balance moves.
    *
-   * When the line keeps the same count of items before and after (two
-   * unchecked balances can start from the same candidate, #4272, #4413), it
-   * is the same line - the count, not the state, decides where it sits - so
-   * a beta change that keeps the same count only replaces the state.
-   * Otherwise the learned sort re-runs at the new balance, which brings the
-   * line, its state, the count above it and Autopilot's acquisition cut back
-   * together, and lands on the next pick from them.
+   * **A learned ranking** draws the detector's line. When it keeps the same
+   * count of items before and after (two unchecked balances can start from the
+   * same candidate, #4272, #4413), it is the same line - the count, not the
+   * state, decides where it sits - so a beta change that keeps the same count
+   * only replaces the state. Otherwise the learned sort re-runs at the new
+   * balance, which brings the line, its state, the count above it and
+   * Autopilot's acquisition cut back together, and lands on the next pick from
+   * them.
+   *
+   * **A text or example ranking** draws its own line at the balance too: a
+   * typed query's count line at beta 1 or below (#4603), the Goods' centroid's
+   * at every balance (#4732). Its ranking does not move, so it is not re-run:
+   * the server redraws the line on the scores it was drawn on
+   * ({@link redrawSortLine}). The acquisition cut stays, and so does the
+   * selection. Any other ranking (a detector's Find, a label-file sort) has a
+   * line the server does not redraw, and keeps it.
    */
   private afterBalanceChange(balance: LineBalance | null): void {
-    if (this.sortState.sortMode !== 'learned') return;
-    const before = this.sortState.balance;
-    if (before && balance && before.count === balance.count) {
-      this.sortState.setBalance(balance);
-      return;
+    if (this.sortState.sortMode === 'learned') {
+      const before = this.sortState.balance;
+      if (before && balance && before.count === balance.count) {
+        this.sortState.setBalance(balance);
+        return;
+      }
+      if (this.voteState.learnedSortAvailable) {
+        this.scheduleLearnedSort();
+        return;
+      }
     }
-    if (this.voteState.learnedSortAvailable) {
-      this.scheduleLearnedSort();
-    }
+    this.redrawSortLine();
+    if (this.sortState.sortBusy) this.redrawWhenSortLands = true;
+  }
+
+  /** Ask the server to redraw the ranking on screen's line at the balance it has now (#4760). */
+  private redrawSortLine(): void {
+    const token = this.sortState.sortToken;
+    if (token) this.lineRedraws$.next(token);
   }
 
   /**

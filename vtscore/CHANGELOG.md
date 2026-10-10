@@ -10,6 +10,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A text or example sort keeps its display line, to redraw it at another balance** (issue #4760).
+  `vtscore.training.query_sort.SortLine` holds the rule that drew a cosine sort's line (`"text"`,
+  `"centroid"` or `"structural"`) and the scores it was drawn on; `threshold_at(beta)` draws the
+  sort's own number at that balance. `TextSortCuts` gains an optional `line` field (default `None`,
+  left out of equality and `repr`), which `text_sort_active`, `cosine_sort_cuts` and
+  `example_sort_cuts_from_paths` fill. `SortResultsCache.store` takes `line=`, and
+  `SortResultsCache.redraw(token, beta, *, dataset_id=None)` returns
+  `{"threshold", "above_threshold", "total"}` for a stored sort with a line, else `None`.
+  Additive.
 - **The dataset registry links the datasets of one multi-dataset import** (issue #4747).
   `vtscore.datasets.registry.register_dataset` takes `import_group: str | None = None` and
   `output_category: str = ""` and stores both on the entry; the multi-dataset load

@@ -743,6 +743,169 @@ describe('SortRunnerService', () => {
     });
   });
 
+  describe('a balance change redraws a text or example line (#4760)', () => {
+    const balancePost = (req: { url: string; method: string }) =>
+      req.url === '/api/balance' && req.method === 'POST';
+    const lineGet = (token: string) => (req: { url: string; urlWithParams: string }) =>
+      req.url === '/api/sort/line' && req.urlWithParams.includes(`token=${token}`);
+    const anyLineGet = (req: { url: string }) => req.url === '/api/sort/line';
+
+    /** A ranking whose line the server can redraw: three rows, one above the line. */
+    const RANKING = {
+      results: [
+        { id: 1, similarity: 0.9 },
+        { id: 2, similarity: 0.4 },
+        { id: 3, similarity: 0.1 },
+      ],
+      threshold: 0.5,
+      acq_threshold: 0.2,
+      total: 3,
+      above_threshold: 1,
+      has_more_below: false,
+    };
+
+    beforeEach(() => sortState.setSelectMode('top'));
+
+    function textRanking(token = 'tok-text'): void {
+      sortState.setSortMode('text');
+      runner.onTextSort('birds');
+      httpMock.expectOne('/api/sort').flush({ ...RANKING, sort_token: token });
+    }
+
+    /** The server has the new balance; the line it then redraws comes back. */
+    function changeBalance(beta: number): void {
+      runner.onBetaChange(beta);
+      httpMock.expectOne(balancePost).flush({ ...wireBalance('unchecked', { beta }), threshold: null, n_returned: null });
+    }
+
+    function expectOnlyTheLineMoved(threshold: number, aboveThreshold: number): void {
+      expect(sortState.threshold).toBe(threshold);
+      expect(sortState.aboveThreshold).toBe(aboveThreshold);
+      // The ranking, Autopilot's acquisition cut and the selection stay.
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([1, 2, 3]);
+      expect(sortState.acqThreshold).toBe(0.2);
+      expect(mediaState.selectedId()).toBe(1);
+      expect(sortState.balance).toBeNull();
+      httpMock.expectNone('/api/sort');
+    }
+
+    it('redraws a text sort\'s line without re-running it', () => {
+      textRanking();
+
+      changeBalance(0.25);
+      httpMock.expectOne(lineGet('tok-text')).flush({ threshold: 0.85, above_threshold: 1, total: 3 });
+
+      expectOnlyTheLineMoved(0.85, 1);
+    });
+
+    it('redraws an example sort\'s line without re-running it', () => {
+      runner.runExampleSortById(7, 'Example');
+      httpMock.expectOne('/api/example-sort-by-id').flush({ ...RANKING, sort_token: 'tok-example' });
+      expect(sortState.sortMode).toBe('load');
+
+      changeBalance(4);
+      httpMock.expectOne(lineGet('tok-example')).flush({ threshold: 0.3, above_threshold: 2, total: 3 });
+
+      expectOnlyTheLineMoved(0.3, 2);
+      httpMock.expectNone('/api/example-sort-by-id');
+    });
+
+    it('redraws the line of an example sort the Load modal installed', () => {
+      runner.onExampleSortStarted({ ...RANKING, sort_token: 'tok-modal', source: { kind: 'files', filenames: ['a.png'] } });
+
+      changeBalance(4);
+      httpMock.expectOne(lineGet('tok-modal')).flush({ threshold: 0.05, above_threshold: 3, total: 3 });
+
+      expectOnlyTheLineMoved(0.05, 3);
+      httpMock.expectNone('/api/example-sort-server');
+    });
+
+    it('leaves the line where it is when the server has none to redraw', () => {
+      textRanking();
+
+      changeBalance(0.25);
+      httpMock.expectOne(anyLineGet).flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.aboveThreshold).toBe(1);
+    });
+
+    it('asks nothing of a ranking that came without a token', () => {
+      sortState.setSortMode('text');
+      sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
+
+      changeBalance(0.25);
+
+      httpMock.expectNone(anyLineGet);
+      expect(sortState.threshold).toBe(0.3);
+    });
+
+    it('does not draw an old ranking\'s line over a newer one', () => {
+      textRanking('tok-old');
+
+      changeBalance(0.25);
+      const redraw = httpMock.expectOne(lineGet('tok-old'));
+      textRanking('tok-new');
+      redraw.flush({ threshold: 0.85, above_threshold: 1, total: 3 });
+
+      expect(sortState.sortToken).toBe('tok-new');
+      expect(sortState.threshold).toBe(0.5);
+    });
+
+    it('drops the line of a balance the user moved past', () => {
+      textRanking();
+
+      changeBalance(0.25);
+      const stale = httpMock.expectOne(anyLineGet);
+      changeBalance(4);
+
+      expect(stale.cancelled).toBe(true);
+      httpMock.expectOne(anyLineGet).flush({ threshold: 0.3, above_threshold: 2, total: 3 });
+      expect(sortState.threshold).toBe(0.3);
+    });
+
+    it('redraws a sort that was in flight when the balance landed, once it lands', () => {
+      textRanking('tok-old');
+      runner.onTextSort('cats');
+      const inFlight = httpMock.expectOne('/api/sort');
+
+      // The server may have drawn the new sort's line at the old balance.
+      changeBalance(0.25);
+      httpMock.expectOne(lineGet('tok-old')).flush({ threshold: 0.85, above_threshold: 1, total: 3 });
+      inFlight.flush({ ...RANKING, sort_token: 'tok-new' });
+
+      httpMock.expectOne(lineGet('tok-new')).flush({ threshold: 0.3, above_threshold: 2, total: 3 });
+      expect(sortState.threshold).toBe(0.3);
+      expect(sortState.aboveThreshold).toBe(2);
+    });
+
+    it('does not redraw a sort started after the balance landed', () => {
+      textRanking('tok-old');
+      runner.onTextSort('cats');
+      httpMock.expectOne('/api/sort');
+      changeBalance(0.25);
+      httpMock.expectOne(lineGet('tok-old')).flush({ threshold: 0.85, above_threshold: 1, total: 3 });
+
+      // A newer sort ends the one in flight, and reads the new balance server-side.
+      textRanking('tok-new');
+
+      httpMock.expectNone(anyLineGet);
+      expect(sortState.threshold).toBe(0.5);
+    });
+
+    it('redraws a text ranking under a learned mode that cannot run', () => {
+      textRanking();
+      // A learned mode carried into a pair with no labels yet (#4326).
+      sortState.setSortMode('learned');
+
+      changeBalance(0.25);
+
+      httpMock.expectOne(lineGet('tok-text')).flush({ threshold: 0.85, above_threshold: 1, total: 3 });
+      expect(sortState.threshold).toBe(0.85);
+      httpMock.expectNone('/api/learned-sort');
+    });
+  });
+
   // --- exhausted queue (#3887) ---------------------------------------------
 
   /**
