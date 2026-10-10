@@ -71,14 +71,65 @@ def _fbeta(p: float, r: float, beta: float) -> float:
     return 0.0 if not (p > 0 or r > 0) else (1 + b2) * p * r / (b2 * p + r)
 
 
-def read_cell(args: tuple[str, int]) -> list[dict] | None:
-    """One cell file -> one row per (rule, beta) with its curves and session means, or ``None``."""
-    path, horizon = args
+def _no_good_cell(path: str, horizon: int, variants: list[tuple[str, float]], run_beta: float) -> list[dict] | None:
+    """A run that found no Good inside H: Find gives nothing at every vote, under every line.
+
+    The main frame has no rows (no detector is ever scored), but the pick log names the run.
+    Every rule returns the same nothing, so each difference is exactly 0 and each F-beta 0; the
+    run still counts in every average (#4631).  ``None`` when there is no pick log either.
+    """
+    picks = Path(path.replace(".csv", "__picks.csv"))
     try:
-        df = pd.read_csv(path, usecols=lambda c: c in COLS, low_memory=False)
+        p = pd.read_csv(picks, nrows=1)
     except (pd.errors.EmptyDataError, OSError, ValueError):
         return None
-    if df.empty or "gmm_variant" not in df.columns:
+    if p.empty:
+        return None
+    first = p.iloc[0]
+    zero = np.zeros(horizon)
+    out = []
+    for rule, vb in variants:
+        rec = {
+            "dataset": first["dataset"],
+            "category": first["category"],
+            "embedder": first.get("embedder", ""),
+            "seed": int(first["seed"]),
+            "n_test_pos": np.nan,
+            "run_beta": run_beta,
+            "rule": rule,
+            "beta": vb,
+            "n_tier": 0,
+            "tier_first": np.nan,
+            "tier_last": np.nan,
+            "tier_past_h": False,
+            "no_good": True,
+            **{f"tier_{m}": np.nan for m in METRICS},
+            "tier_n_median": np.nan,
+            "_curves": {m: zero for m in ("fbeta", "precision", "recall")} if vb == run_beta else {},
+            "_dcurve": zero,
+        }
+        for span, n in SPANS.items():
+            rec[f"d_fbeta_{span}"] = 0.0
+            if vb == run_beta and n <= horizon:
+                rec[f"fbeta_{span}"] = 0.0
+        if vb == run_beta:
+            rec[f"fbeta_1-{horizon}"] = 0.0
+        out.append(rec)
+    return out
+
+
+def read_cell(args: tuple[str, int, list[tuple[str, float]], float]) -> list[dict] | None:
+    """One cell file -> one row per (rule, beta) with its curves and session means, or ``None``."""
+    path, horizon, variants, run_beta_default = args
+    try:
+        df = pd.read_csv(path, usecols=lambda c: c in COLS, low_memory=False)
+    except pd.errors.EmptyDataError:
+        return _no_good_cell(path, horizon, variants, run_beta_default)
+    except (OSError, ValueError):
+        return None
+    if df.empty:
+        return _no_good_cell(path, horizon, variants, run_beta_default)
+    if "gmm_variant" not in df.columns:
         return None
     df = df[~_cells_io.check_rows(df)]
     tag = df["gmm_variant"].fillna("").astype(str)
@@ -88,7 +139,7 @@ def read_cell(args: tuple[str, int]) -> list[dict] | None:
     if base.empty:
         return None
     first = base.iloc[0]
-    run_beta = float(first["beta"]) if pd.notna(first["beta"]) else 1.0
+    run_beta = float(first["beta"]) if pd.notna(first["beta"]) else run_beta_default
     tier = base.loc[base["detector_tier"].astype(str) == "centroid", "t"].to_numpy(dtype=int)
     all_tier = df.loc[(tag == "") & (df["detector_tier"].astype(str) == "centroid"), "t"]
     t_base = base["t"].to_numpy(dtype=float)
@@ -121,6 +172,7 @@ def read_cell(args: tuple[str, int]) -> list[dict] | None:
             "tier_first": int(tier.min()) if len(tier) else np.nan,
             "tier_last": int(tier.max()) if len(tier) else np.nan,
             "tier_past_h": bool(len(all_tier) and all_tier.max() >= horizon),
+            "no_good": False,
             # What the centroid returns on its own clicks, averaged over them.
             **{f"tier_{m}": float(g[m].astype(float).mean()) if len(g) else np.nan for m in METRICS},
             "tier_n_median": float(g["n_flagged"].astype(float).median()) if len(g) else np.nan,
@@ -146,10 +198,12 @@ def read_cell(args: tuple[str, int]) -> list[dict] | None:
     return out
 
 
-def load_run(label: str, run: Path, horizon: int, workers: int) -> tuple[pd.DataFrame, dict]:
+def load_run(
+    label: str, run: Path, horizon: int, workers: int, variants: list[tuple[str, float]], run_beta: float
+) -> tuple[pd.DataFrame, dict]:
     files = [str(f) for f in _cells_io.main_frame_files(run / "results" / "cells")]
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        got = list(pool.map(read_cell, [(f, horizon) for f in files], chunksize=8))
+        got = list(pool.map(read_cell, [(f, horizon, variants, run_beta) for f in files], chunksize=8))
     rows, curves = [], {}
     for cell in got:
         for r in cell or []:
@@ -163,7 +217,8 @@ def load_run(label: str, run: Path, horizon: int, workers: int) -> tuple[pd.Data
             if d is not None:
                 curves.setdefault(key, {}).setdefault("d_fbeta", []).append(d)
     n_empty = sum(1 for c in got if not c)
-    print(f"{label}: {len(files)} cells, {n_empty} empty or unreadable", file=sys.stderr)
+    n_no_good = sum(1 for c in got if c and c[0].get("no_good"))
+    print(f"{label}: {len(files)} cells, {n_no_good} with no Good inside H, {n_empty} unreadable", file=sys.stderr)
     return pd.DataFrame(rows), curves
 
 
@@ -205,9 +260,13 @@ def summarize(cells: pd.DataFrame, horizon: int) -> str:
         "(the person on FHIBE). Session means are over votes; on FHIBE the K examples are the first K votes."
     )
     lines.append("")
-    past = cells.groupby("run")["tier_past_h"].mean()
-    for run, share in past.items():
-        lines.append(f"- {run}: centroid tier still on at vote {horizon} in {share:.1%} of runs")
+    one = cells.drop_duplicates(["run", "dataset", "category", "seed"])
+    for run, g in one.groupby("run"):
+        lines.append(
+            f"- {run}: {len(g)} runs; {int(g['no_good'].sum())} found no Good by vote {horizon} (every line returns "
+            f"nothing there: difference 0, counted); centroid tier still on at vote {horizon} in "
+            f"{g['tier_past_h'].mean():.1%}"
+        )
     lines.append("")
     for (run, ds), g in cells.groupby(["run", "dataset"], sort=False):
         lines.append(f"## {run} / {ds}")
@@ -251,12 +310,19 @@ def main() -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--horizon", type=int, default=40)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument(
+        "--variants",
+        default="midpoint@0.25,midpoint@1,midpoint@4,guarded@0.25,guarded@1,guarded@4,count@0.25,count@1,count@4",
+        help="the runs' CALIB_CENTROID_LINE_VARIANTS, for the runs that found no Good",
+    )
+    ap.add_argument("--run-beta", type=float, default=1.0, help="the runs' balance, for the runs that found no Good")
     args = ap.parse_args()
+    variants = [(v.split("@")[0], float(v.split("@")[1])) for v in args.variants.split(",") if v]
     args.out.mkdir(parents=True, exist_ok=True)
     frames, curves = [], {}
     for spec in args.run:
         label, _, run = spec.partition("=")
-        df, cv = load_run(label, Path(run), args.horizon, args.workers)
+        df, cv = load_run(label, Path(run), args.horizon, args.workers, variants, args.run_beta)
         frames.append(df)
         curves.update(cv)
     cells = pd.concat(frames, ignore_index=True)
