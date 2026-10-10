@@ -1,0 +1,118 @@
+beta,rule,read,n,delta,se,sd,resolved
+0.25,tp25,"objective, votes 1-30",432,-0.00012449,0.00041567,0.0082773,False
+0.25,tp25,"objective, votes 31-100",432,0.00030696,0.0012664,0.032498,False
+0.25,tp25,"objective, votes 101-150",432,0.0017059,0.0019196,0.03864,False
+0.25,tp25,"objective, votes 1-150",432,0.000687,0.00094992,0.022524,False
+0.25,tp25,"objective, vote 150",432,-0.0010379,0.0028317,0.054766,False
+0.25,tp25,"objective, after the check",432,0.0012191,0.003442,0.063644,False
+0.25,tp25,"AP, vote 150",411,0.0010645,0.0011191,0.018563,False
+0.25,tp25,"returned set size, after the check",430,-0.33721,0.53427,13.979,False
+0.25,tp25,"precision, after the check",430,0.0018471,0.0053165,0.10346,False
+0.25,tp25,goods,430,-1.2047,0.23662,3.9737,True
+0.25,tp25,hard_good_share,369,-0.065998,0.013008,0.19694,True
+0.25,tp25,hard_picks,369,0.42276,0.3531,6.574,False
+0.25,tp25,hard_end,369,0.63686,1.4728,27.39,False
+0.25,line,"objective, votes 1-30",432,-0.00056453,0.00041125,0.0095813,False
+0.25,line,"objective, votes 31-100",432,0.00045452,0.0017239,0.034451,False
+0.25,line,"objective, votes 101-150",432,2.3248e-05,0.0017993,0.037838,False
+0.25,line,"objective, votes 1-150",432,0.00010695,0.0010517,0.021252,False
+0.25,line,"objective, vote 150",432,-0.0045667,0.0039926,0.074911,False
+0.25,line,"objective, after the check",432,0.0036945,0.0038025,0.072087,False
+0.25,line,"AP, vote 150",411,0.0016671,0.00095676,0.020146,False
+0.25,line,"returned set size, after the check",430,-4.1814,2.7777,61.326,False
+0.25,line,"precision, after the check",430,0.0095535,0.0064579,0.13184,False
+0.25,line,goods,430,0.72093,0.22395,3.6235,True
+0.25,line,hard_good_share,366,-0.0055611,0.012192,0.20857,False
+0.25,line,hard_picks,366,0.95355,0.34629,6.3609,True
+0.25,line,hard_end,366,3.265,1.6244,28.689,True
+0.25,ctl,"objective, votes 1-30",432,-0.0011937,0.00075431,0.014743,False
+0.25,ctl,"objective, votes 31-100",432,0.0059446,0.0026601,0.047168,True
+0.25,ctl,"objective, votes 101-150",432,-0.0073227,0.0032774,0.062126,True
+0.25,ctl,"objective, votes 1-150",432,9.4519e-05,0.0019115,0.035235,False
+0.25,ctl,"objective, vote 150",432,-0.018569,0.0047234,0.10098,True
+0.25,ctl,"objective, after the check",432,8.7219e-05,0.0040723,0.085909,False
+0.25,ctl,"AP, vote 150",411,-0.011743,0.0020339,0.035589,True
+0.25,ctl,"returned set size, after the check",430,-0.78372,3.1738,62.806,False
+0.25,ctl,"precision, after the check",430,-0.0042426,0.0062959,0.13457,False
+0.25,ctl,goods,430,-3.0326,0.69828,9.2949,True
+0.25,ctl,hard_good_share,367,-0.13688,0.019497,0.2951,True
+0.25,ctl,hard_picks,367,2.2125,0.60136,10.119,True
+0.25,ctl,hard_end,367,-4.5668,2.1377,34.766,True
+1,tp25,"objective, votes 1-30",432,0.00067716,0.00035346,0.0070103,False
+1,tp25,"objective, votes 31-100",432,0.0021828,0.0010137,0.02418,True
+1,tp25,"objective, votes 101-150",432,-0.0001514,0.0010159,0.020602,False
+1,tp25,"objective, votes 1-150",432,0.0011036,0.00057534,0.013932,False
+1,tp25,"objective, vote 150",432,0.0011831,0.0017574,0.035284,False
+1,tp25,"objective, after the check",432,0.00081493,0.0017773,0.039183,False
+1,tp25,"AP, vote 150",411,0.00029597,0.0011584,0.020165,False
+1,tp25,"returned set size, after the check",430,-2.2209,3.0225,61.095,False
+1,tp25,"precision, after the check",430,-2.0691e-05,0.0038585,0.08133,False
+1,tp25,goods,430,-1.1814,0.21489,3.8624,True
+1,tp25,hard_good_share,392,-0.067385,0.010435,0.19889,True
+1,tp25,hard_picks,392,0.39031,0.31686,6.2369,False
+1,tp25,hard_end,392,1.2347,1.3756,27.11,False
+1,line,"objective, votes 1-30",432,0.00049234,0.00038296,0.0070253,False
+1,line,"objective, votes 31-100",432,0.0037712,0.0013131,0.027636,True
+1,line,"objective, votes 101-150",432,-0.00061884,0.0012018,0.024712,False
+1,line,"objective, votes 1-150",432,0.0016521,0.00081667,0.016615,True
+1,line,"objective, vote 150",432,-0.0021291,0.0019518,0.040436,False
+1,line,"objective, after the check",432,0.00028149,0.0020693,0.044076,False
+1,line,"AP, vote 150",411,-0.0016325,0.0012796,0.022523,False
+1,line,"returned set size, after the check",430,-5.5884,7.1671,156.26,False
+1,line,"precision, after the check",430,-0.0027294,0.004396,0.092944,False
+1,line,goods,430,-2.2651,0.22044,3.9489,True
+1,line,hard_good_share,391,-0.14347,0.011928,0.20628,True
+1,line,hard_picks,391,0.97187,0.35101,6.8085,True
+1,line,hard_end,391,3.89,1.5728,29.353,True
+1,ctl,"objective, votes 1-30",432,-0.00031727,0.00065249,0.013111,False
+1,ctl,"objective, votes 31-100",432,0.0020881,0.002068,0.038916,False
+1,ctl,"objective, votes 101-150",432,-0.0097269,0.0020051,0.036607,True
+1,ctl,"objective, votes 1-150",432,-0.0023313,0.0012417,0.024829,False
+1,ctl,"objective, vote 150",432,-0.013912,0.0029322,0.052478,True
+1,ctl,"objective, after the check",432,-0.0029657,0.0021584,0.04599,False
+1,ctl,"AP, vote 150",411,-0.013145,0.0022279,0.03688,True
+1,ctl,"returned set size, after the check",430,2.3186,9.5931,178.51,False
+1,ctl,"precision, after the check",430,-0.0063532,0.0041998,0.093773,False
+1,ctl,goods,430,-2.9535,0.70431,9.3384,True
+1,ctl,hard_good_share,391,-0.16354,0.019578,0.29246,True
+1,ctl,hard_picks,391,2.6292,0.6081,10.414,True
+1,ctl,hard_end,391,-1.555,2.0062,33.325,False
+4,tp25,"objective, votes 1-30",432,0.00055875,0.00028599,0.0059399,False
+4,tp25,"objective, votes 31-100",432,0.0015282,0.0010351,0.021274,False
+4,tp25,"objective, votes 101-150",432,-0.00083291,0.0011776,0.022504,False
+4,tp25,"objective, votes 1-150",432,0.00054729,0.00069903,0.013953,False
+4,tp25,"objective, vote 150",432,-0.00036182,0.001991,0.038375,False
+4,tp25,"objective, after the check",432,-0.0030738,0.0018068,0.040954,False
+4,tp25,"AP, vote 150",411,-0.0011595,0.0010043,0.020076,False
+4,tp25,"returned set size, after the check",430,8.5605,9.2717,199.91,False
+4,tp25,"precision, after the check",430,-0.0018364,0.0031121,0.064123,False
+4,tp25,goods,430,-1.1814,0.22384,3.9241,True
+4,tp25,hard_good_share,405,-0.066674,0.0086841,0.15914,True
+4,tp25,hard_picks,405,0.53333,0.33427,6.6244,False
+4,tp25,hard_end,406,0.05665,1.2438,25.012,False
+4,line,"objective, votes 1-30",432,0.00057354,0.00039794,0.0070211,False
+4,line,"objective, votes 31-100",432,0.0036656,0.001416,0.02684,True
+4,line,"objective, votes 101-150",432,-0.0043732,0.001879,0.035404,True
+4,line,"objective, votes 1-150",432,0.00036761,0.0011207,0.020975,False
+4,line,"objective, vote 150",432,-0.0065786,0.0032823,0.057993,True
+4,line,"objective, after the check",432,-0.0030088,0.0021298,0.049545,False
+4,line,"AP, vote 150",411,-0.015861,0.0025749,0.04223,True
+4,line,"returned set size, after the check",430,55.377,37.344,691.61,False
+4,line,"precision, after the check",430,-0.0031849,0.0041025,0.077329,False
+4,line,goods,430,-7.5744,0.49148,7.1685,True
+4,line,hard_good_share,403,-0.28,0.013874,0.20853,True
+4,line,hard_picks,403,4.4218,0.57842,10.296,True
+4,line,hard_end,404,11.052,1.7006,31.248,True
+4,ctl,"objective, votes 1-30",432,0.00012915,0.0005125,0.011054,False
+4,ctl,"objective, votes 31-100",432,-0.0080334,0.0018046,0.0322,True
+4,ctl,"objective, votes 101-150",432,-0.013416,0.002332,0.042595,True
+4,ctl,"objective, votes 1-150",432,-0.0081951,0.0014087,0.024935,True
+4,ctl,"objective, vote 150",432,-0.012386,0.0031761,0.06052,True
+4,ctl,"objective, after the check",432,-0.007798,0.002514,0.055382,True
+4,ctl,"AP, vote 150",411,-0.015896,0.0025404,0.041182,True
+4,ctl,"returned set size, after the check",430,52.621,20.927,391.99,True
+4,ctl,"precision, after the check",430,0.011402,0.0043216,0.083001,True
+4,ctl,goods,430,-3.8488,0.71741,9.5667,True
+4,ctl,hard_good_share,403,-0.19642,0.019567,0.2815,True
+4,ctl,hard_picks,403,3.5782,0.60533,11.091,True
+4,ctl,hard_end,404,1.0743,2.1336,35.813,False
