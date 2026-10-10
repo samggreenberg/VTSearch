@@ -147,64 +147,6 @@ DATASETS: dict[str, dict] = {
         }
         for i in range(COCO_BETTER_SHARDS)
     },
-    # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
-    # free-text vocabulary) rather than the demo pipeline's 100 curated
-    # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a
-    # dataset *size* tier and says nothing about boxes; these are the box bands.
-    # The same-class-across-bands set (#3156). One pickle, one class list, one
-    # negative pool; the band lives on the category name (`bus@small`). Not a
-    # replacement for `vg_box_*` -- those measured what they measured and stay
-    # reproducible -- but the two are not comparable: disjoint vocabularies
-    # against a fixed one.
-    #
-    # Drawn from the half of VG that COCO sourced, and labelled from COCO's
-    # exhaustive annotation rather than VG's free text, because VG's own labels
-    # cannot support the construction: measured on this pool its recall over C
-    # is 0.76, and 1.4% of the images it calls negative actually hold the object
-    # (`coco_anchor.py`). At 80 positives per cell that would be ~54 hidden
-    # positives sitting in the negatives.
-    # `vg_scale` with the box-size band collapsed away (#3115): the same images,
-    # boxes and corrections, keyed on the bare class.  A calibration study wants
-    # uniform prevalence across cells and does not care how big the box is;
-    # `visual_genome_m` gives neither (25 to 1645 positives, and its thin
-    # categories produce cells with no trainable step at all).
-    #
-    # DERIVED from the built `vg_scale` pickle, so it must be listed AFTER it -
-    # and so it inherits whatever that cell currently holds.  #3252 changed how
-    # `vg_scale` selects and corrects its cells, which means a `vg_scale_any`
-    # built before that commit is NOT the same dataset as one built after it.
-    # Rebuild it whenever `vg_scale` is rebuilt.  That used to be a rule nobody
-    # could check: `--force` on `vg_scale` alone left this cell holding the old
-    # labels with the right media count and the right vectors, so it looked
-    # healthy (#3281 shipped a box repair to one study and not the other).  It
-    # is now enforced twice -- `build_pile.py` pulls this dataset into any run
-    # that rebuilds its parent, and `--verify` compares the parent-label digest
-    # stamped on each derived media against the parent's live one.
-    # `vg_scale_any`'s construction with the BAND DROPPED FROM SELECTION rather
-    # than from the key, and sized for a long labelling session (#3547).
-    #
-    # `vg_scale_any` collapses `class@band` after the fact, so it inherits
-    # `vg_scale`'s per-band designation and is capped by the THINNEST band:
-    # `bus@small` has 138 candidates, which is why 100/band was the ceiling and
-    # 300 positives per class the result.  A study that never asks about box
-    # size does not need that cap.  Designating band-free off the same
-    # COCO-anchored labels takes the binding class from 414 candidates to 1006
-    # (`stop sign`), which is what makes a 400-click horizon measurable at all:
-    # #3319's deep wave harvested 82-85% of its ~150 sim positives.
-    #
-    # Prevalence is held at `vg_scale`'s designed 7.14% BY CONSTRUCTION rather
-    # than inherited by accident -- `SCALE_DEEP_N_NEG` is derived from
-    # `SCALE_DEEP_N_POS`, not set beside it.  That is the whole point: the
-    # optimum this dataset exists to locate is `k* = -log2((1-pi)/pi)`, so
-    # adding positives against a FIXED negative pool would move the answer
-    # (300->900 against 3900 shifts pi to 18.8% and k* by a full bit) while
-    # appearing to be nothing but "a deeper haystack".
-    #
-    # `on_request`: this one is 3x `vg_scale`'s media count, so it stays OUT of
-    # the default sweep. A bare `build_pile.py` would otherwise quietly add five
-    # cells nobody asked for, one of them a ~7 GB `dinov3_patch` grid. Name it
-    # to build it: `--datasets vg_scale_deep --embedders siglip`.
-    #
     # FHIBE (#4699): Sony's consented face benchmark. One media per one-person
     # photo, `category` = FHIBE's subject id, read from a copy whose long side is
     # `long_side` px -- the census (docs/experiments/2026-10-09-fhibe-supply-4699)
