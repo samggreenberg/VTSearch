@@ -65,7 +65,7 @@ for k in "${KS[@]}"; do
       source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
       cd "$SOTA/../calibration"
       python "$SOTA/perp.py" --kind balance "${runs[@]}" --out "$OUT/k$k-$size-perp" | tail -1
-      python "$SOTA/by_click.py" "${runs[@]}" --baseline "$base" --embedder face \
+      python "$SOTA/by_click.py" "${runs[@]}" --baseline "$base" --embedder face --dataset "fhibe_faces_$size" \
         --out "$OUT/k$k-$size-objective_by_click.csv" | tail -1
     )
   done
