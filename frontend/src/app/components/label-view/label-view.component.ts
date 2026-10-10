@@ -267,13 +267,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  whole run of the sort it is asking about. */
   resortSortClicks = 0;
   resortSortPositives = 0;
+  /** Autopilot's Good target, which the prompt's hint names. */
+  resortPositivesNeeded = 0;
   private resortInterval = 10;
   private resortVoteCount = 0;
   private resortNextThreshold = 0;
-
-  get nextResortThreshold(): number {
-    return Math.round(this.resortNextThreshold * 1.5);
-  }
 
   /** A folded side's strip, in px; the `.layout--*-collapsed` rules in the SCSS match it. */
   readonly COLLAPSED_WIDTH = 48;
@@ -1481,6 +1479,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       } else {
         return; // No example to prompt about
       }
+      this.resortPositivesNeeded = this.autopilotStateService.state.goodToStart;
       this.showResortPrompt.set(true);
     }
   }

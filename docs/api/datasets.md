@@ -365,7 +365,27 @@ POST /api/dataset/import/{importer_name}
 `GET /api/dataset/all-importers`), plus the shared load options (`embedder`,
 `clipper`, `clipper_params`, `cleaners`, `dataset_name`, …).
 
-→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
+→ `{"ok": true, "message": "Loading started", "task_id": "...", "task_ids": ["..."]}`
+
+**Multi-dataset import.** An `outputs` list turns one run of the importer
+into several datasets, one per entry (the Add Dataset dialog's
+**Multi-Dataset** mode). Each entry carries one dataset's `media_type`
+(the type it ends up holding), its `source_specs` (the same rows a
+single-dataset import sends, every converter producing that type), an
+optional `category` (the ingestion category it stands for, when it is reached
+only through a converter: `{"media_type": "image", "category": "document",
+"source_specs": [{"source_type": "document", "converter":
+"document2image", …}]}` is the *Document* dataset of rendered pages), and
+its own `embedder` / `embedders` / `clipper` / `clipper_params` /
+`cleaners` / `dataset_name`. The body's top-level `dataset_name` is the base
+name; an entry without its own is named `"<base> – <Category>"`.
+`build_projection`, `merge_near_duplicates`, `reference_files` and
+`autofind` stay top-level and apply to every dataset. The importer acquires
+its source once (the URL-archive importer downloads and extracts once) and
+every dataset gets its own row, task id (listed in `task_ids`, in `outputs`
+order), import-finished event and AutoFind run; a cancel on one row stops
+that dataset alone. Only importers whose `GET /api/dataset/all-importers`
+entry reports `supports_multi_output: true` accept it (400 otherwise).
 
 **From source origin:**
 
@@ -387,12 +407,14 @@ POST /api/dataset/import-local-folder
 
 **Form (`multipart/form-data`):** `files` (repeated — one file field per file,
 each multipart filename set to its `webkitRelativePath`), `media_type`
-(required); optional `dataset_name` (default `"Local folder upload"`),
-`embedder`, `clipper_params` (JSON string), `build_projection`,
-`merge_near_duplicates`, and clipper-chain fields. Streams the uploaded folder
-to a server temp dir and runs the `server_folder` importer in the background.
+(required, unless `outputs` is sent); optional `dataset_name` (default
+`"Local folder upload"`), `embedder`, `clipper_params` (JSON string),
+`build_projection`, `merge_near_duplicates`, clipper-chain fields, and
+`outputs` (the multi-dataset list above, JSON-encoded, walking the one upload
+into several datasets). Streams the uploaded folder to a server temp dir and
+runs the `server_folder` importer in the background.
 
-→ `{"ok": true, "message": "...", "task_id": "..."}`
+→ `{"ok": true, "message": "...", "task_id": "...", "task_ids": ["..."]}`
 
 **From a browser paths-file upload:**
 
@@ -401,17 +423,20 @@ POST /api/dataset/import-local-files
 ```
 
 **Form (`multipart/form-data`):** `paths_file` (a single `.txt` / `.list` /
-`.npz` of media paths, required), `media_type` (required); optional
-`dataset_name` (default `"Local files upload"`), `embedder`, `clipper`,
-`clipper_params` (JSON string), `source_specs`. Runs the `server_files`
-importer in the background. Same response shape as `import-local-folder`.
+`.npz` of media paths, required), `media_type` (required, unless `outputs` is
+sent); optional `dataset_name` (default `"Local files upload"`), `embedder`,
+`clipper`, `clipper_params` (JSON string), `source_specs`, `outputs` (as for
+`import-local-folder`). Runs the `server_files` importer in the background.
+Same response shape as `import-local-folder`.
 
-→ `{"ok": true, "message": "...", "task_id": "..."}`
+→ `{"ok": true, "message": "...", "task_id": "...", "task_ids": ["..."]}`
 
 All load endpoints are async: they return as soon as the task is started, and
 the returned `task_id` names it on the `loading-tasks` channel of
 [`/api/events`](events.md) (SSE). `task_id` can be `""` in the rare case no task
-was registered. Cancel with `POST /api/dataset/cancel/{task_id}`.
+was registered. Cancel with `POST /api/dataset/cancel/{task_id}`. The three
+routes that accept `outputs` also return `task_ids`, one per dataset started
+(a single-dataset request lists its one `task_id`), each cancellable on its own.
 
 **AutoFind after import.** `load-file`, `load-demo`, `import/{importer_name}`,
 `import-local-folder` and `import-local-files` accept an optional `autofind`

@@ -31,6 +31,7 @@ on the library API and third-party packaging.
 - [Building media dicts](#building-media-dicts)
 - [Pre-computed embeddings, MD5s, and metadata](#pre-computed-embeddings-md5s-and-metadata)
 - [Multi-media imports](#multi-media-imports)
+- [Multi-dataset imports](#multi-dataset-imports)
 - [Reporting progress](#reporting-progress)
 - [Entry-point registration](#entry-point-registration)
 - [Testing pattern](#testing-pattern)
@@ -213,6 +214,39 @@ these (or from a custom `run()`) to inspect the resolved spec list.
 > **not** declare a `media_type` field (declaring the output type)
 > falls through to the `list_records()` path and raises
 > `NotImplementedError` at runtime.
+
+## Multi-dataset imports
+
+Multi-media imports are many-to-one; a **multi-dataset** import is
+one-to-many: one run of the importer produces several datasets, one per
+`OutputSpec` (`vtscore.datasets.importers.base`). Each `OutputSpec`
+carries one dataset's `media_type` and `source_specs` (the two values
+a single-dataset import's form holds), a `category` (the kind of
+media the row stands for, which names the dataset), and the
+per-dataset embedder / clipper / cleaners the pipeline applies.
+
+The base class handles it with no change on your side:
+`run_outputs(field_values, outputs, thin)` yields `(output, medias)`
+by running `run()` once per output on `output.narrow(field_values)`
+(the shared values with that output's `media_type` and `source_specs`
+folded in), and `run_outputs_chunked(field_values, outputs,
+chunk_size, thin)` does the same through `run_chunked()`. The host
+drives the chunked hook when `supports_chunked` is `True`, the plain
+one otherwise. `parse_output_specs(raw)` turns a request's `outputs`
+list (or its JSON) into validated `OutputSpec`s, and
+`output_dataset_name(base, output)` is the `"<base> – <Category>"`
+naming rule.
+
+Override the hook your importer's loading mode uses when acquiring
+the source is the expensive part and can be shared: acquire once,
+yield each output from the acquired copy (the very `OutputSpec`
+objects you were given), and clean up in a `finally` around the loop.
+Set the class attribute `multi_output = False` on an importer whose
+run is fixed to one dataset; `to_dict()` then reports
+`supports_multi_output: false` and the app offers no multi-dataset
+mode for it. [`docs/EXTENDING-plugins.md` § Multi-dataset
+imports](../../../docs/EXTENDING-plugins.md#multi-dataset-imports)
+has the worked override and what the app's pipeline does per output.
 
 ## Reporting progress
 

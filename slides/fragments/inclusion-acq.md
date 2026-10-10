@@ -50,6 +50,6 @@
 <!-- Measured on COCO Better against asking at the line (#3546): 38% of
      Boundary's picks are matches at every radio, where the line's fall from
      37% at β ¼ to 24% at β 1 and 10% at β 4. By vote 150 that is 32 Goods at
-     every radio, against 33, 30 and 24. The objective hardly moves: after the
-     check it is within 0.004 of asking at the line at every radio. Its worth
+     every radio, against 33, 30 and 24. The objective hardly moves: over the
+     session it is within 0.002 of asking at the line at every radio. Its worth
      is the matches it finds, not the line. -->

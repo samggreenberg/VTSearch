@@ -1128,6 +1128,11 @@ OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or Non
 #: default, ``seed``) is the app: the top of the text sort.
 MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
 
+#: Issue #4671's New-phase knob: ``hard`` takes the Hard pick where Autopilot's
+#: New phase would walk the Coverage Atlas, the phase machine unchanged.  Unset
+#: (the default, ``atlas``) is the app.
+NEW_WALK = os.environ.get("CALIB_NEW_WALK", "").strip() or "atlas"
+
 #: Issue #4699's **example opening**: each cell starts from this many photos of
 #: its target, drawn from the voting half, voted Good as the run's first votes,
 #: and ranked against as the app's example sort ranks (cosine to their

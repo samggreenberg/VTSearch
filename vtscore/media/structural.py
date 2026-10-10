@@ -30,6 +30,7 @@ functions that need them so the dataclasses/protocol import without OpenCV.
 from __future__ import annotations
 
 import functools
+import os
 import weakref
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -548,6 +549,28 @@ _MAX_SANE_SCALE = 10.0
 # redundancy and is trivially consistent; requiring more guards against random
 # descriptor coincidences between unrelated images declaring a spurious match.
 _MIN_MODEL_INLIERS = 4
+# A batch of RANSAC fits runs on a thread pool of at most this many threads (#4516).
+# ``cv2.estimateAffinePartial2D`` releases the GIL and seeds a fresh RNG on every
+# call, so a fit made on the pool is the fit a loop makes, bit for bit.  Each call
+# still holds the GIL to convert its arrays, so the pool stops scaling early: per
+# pair on V100 nodes' Xeons, 3-4 threads were fastest and 8 were 8-12% slower.
+_RANSAC_MAX_WORKERS = 4
+# Pairs per pool task, and the batch size below which the pool is not worth starting.
+_RANSAC_CHUNK = 64
+_RANSAC_POOL_MIN_PAIRS = 128
+
+
+def _ransac_workers() -> int:
+    """Threads for a batch of RANSAC fits: the CPUs this process may use, at most :data:`_RANSAC_MAX_WORKERS`.
+
+    ``os.cpu_count()`` counts the whole node, not a Slurm allocation, so the
+    affinity mask is asked first.
+    """
+    try:
+        cpus = len(os.sched_getaffinity(0))
+    except AttributeError:  # no affinity mask outside Linux
+        cpus = os.cpu_count() or 1
+    return max(1, min(_RANSAC_MAX_WORKERS, cpus))
 
 
 class SiftMatcher:
@@ -631,9 +654,8 @@ class SiftMatcher:
         descriptor-matching half - ~75% of a pair's cost, and what a Stage-2
         re-rank spends its latency on - runs as a single batched ``torch``
         distance computation over the whole shortlist, on the GPU when one is
-        available (:func:`ratio_test_matches`).  The RANSAC fit stays per-pair on
-        the CPU: it sees only the surviving correspondences, so it is already
-        cheap.
+        available (:func:`ratio_test_matches`).  The RANSAC fits stay per-pair on
+        the CPU, spread over a thread pool (:meth:`_fit_similarity_many`).
         """
         if not candidates:
             return []
@@ -649,18 +671,51 @@ class SiftMatcher:
             t_desc, [np.asarray(c.descriptors) for c in candidates], ratio=_LOWE_RATIO, cache=True
         )
         t_kp = template.keypoints_f32()
-        return [
-            self._fit_similarity(t_kp, np.asarray(cand.keypoints), t_idx, c_idx)
-            for cand, (t_idx, c_idx) in zip(candidates, pairs)
-        ]
+        return self._fit_similarity_many(
+            t_kp, [(np.asarray(cand.keypoints), t_idx, c_idx) for cand, (t_idx, c_idx) in zip(candidates, pairs)]
+        )
+
+    def _fit_similarity_many(
+        self, t_kp: np.ndarray, pairs: Sequence[tuple[np.ndarray, np.ndarray, np.ndarray]]
+    ) -> list[MatchStats]:
+        """``[self._fit_similarity(t_kp, c_kp, t_idx, c_idx) for c_kp, t_idx, c_idx in pairs]``, faster.
+
+        Fitted one after another, the pairs were half of a Good click's latency
+        on a V100 (#4516).  A large batch runs its RANSAC calls on a thread pool
+        first, then the statistics in this thread: they hold the GIL, and
+        computed on the pool they kept it from the fits.  Each fit is
+        independent and deterministic, so the result is the loop's, in the
+        loop's order.
+        """
+        workers = _ransac_workers()
+        if workers < 2 or len(pairs) < _RANSAC_POOL_MIN_PAIRS:
+            return [self._fit_similarity(t_kp, *pair) for pair in pairs]
+
+        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+
+        def ransac_chunk(start: int) -> list[tuple]:
+            return [self._ransac(t_kp, *pair) for pair in pairs[start : start + _RANSAC_CHUNK]]
+
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ransac") as pool:
+            chunks = list(pool.map(ransac_chunk, range(0, len(pairs), _RANSAC_CHUNK)))
+        return [_similarity_stats(*fit) for chunk in chunks for fit in chunk]
 
     def _fit_similarity(self, t_kp: np.ndarray, c_kp: np.ndarray, t_idx: np.ndarray, c_idx: np.ndarray) -> MatchStats:
         """RANSAC-fit a similarity transform to one pair's ratio-tested correspondences."""
+        return _similarity_stats(*self._ransac(t_kp, c_kp, t_idx, c_idx))
+
+    def _ransac(
+        self, t_kp: np.ndarray, c_kp: np.ndarray, t_idx: np.ndarray, c_idx: np.ndarray
+    ) -> tuple[int, Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
+        """The RANSAC half of :meth:`_fit_similarity`: ``(tentative, src, dst, model, inlier_mask)``.
+
+        ``model`` and ``inlier_mask`` are ``None`` when there was no fit.
+        """
         import cv2  # noqa: PLC0415
 
         tentative = int(t_idx.shape[0])
         if tentative < 2:
-            return MatchStats(tentative_count=tentative)
+            return tentative, None, None, None, None
 
         src = np.ascontiguousarray(t_kp[t_idx, :2], dtype=np.float32)
         dst = np.ascontiguousarray(c_kp[c_idx, :2], dtype=np.float32)
@@ -677,48 +732,74 @@ class SiftMatcher:
             confidence=0.99,
             refineIters=10,
         )
-        if model is None or inlier_mask is None or not np.isfinite(model).all():
-            # RANSAC can return a non-finite (degenerate) model; treat it as no
-            # fit rather than letting NaNs flow into the scale/determinant maths
-            # (which raises numpy "invalid value" warnings and yields garbage stats).
-            return MatchStats(tentative_count=tentative)
+        return tentative, src, dst, model, inlier_mask
 
-        mask = inlier_mask.ravel().astype(bool)
-        inlier_count = int(mask.sum())
-        a, b = float(model[0, 0]), float(model[1, 0])
-        scale = float(np.hypot(a, b))
-        # estimateAffinePartial2D never introduces a reflection (det = a^2+b^2 >= 0),
-        # but keep the determinant-sign check so a future full-affine backend that
-        # reuses this code path is covered.
-        reflection = bool(np.linalg.det(np.asarray(model[:, :2], dtype=np.float64)) < 0)
-        model_ok = inlier_count >= _MIN_MODEL_INLIERS and _MIN_SANE_SCALE <= scale <= _MAX_SANE_SCALE and not reflection
 
-        # Reprojection error + spatial spread over the inlier set.
-        mean_err = median_err = 0.0
-        spread = 0.0
-        inlier_box: Optional[tuple[float, float, float, float]] = None
-        if inlier_count:
-            src_in = src[mask]
-            dst_in = dst[mask]
-            proj = (src_in @ model[:, :2].T) + model[:, 2]
-            errs = np.linalg.norm(proj - dst_in, axis=1)
-            mean_err = float(errs.mean())
-            median_err = float(np.median(errs))
-            centroid = dst_in.mean(axis=0)
-            spread = float(np.sqrt(((dst_in - centroid) ** 2).sum(axis=1).mean()))
-            x0, y0 = dst_in.min(axis=0)
-            x1, y1 = dst_in.max(axis=0)
-            inlier_box = (float(x0), float(y0), float(x1), float(y1))
+def _similarity_stats(
+    tentative: int,
+    src: Optional[np.ndarray],
+    dst: Optional[np.ndarray],
+    model: Optional[np.ndarray],
+    inlier_mask: Optional[np.ndarray],
+) -> MatchStats:
+    """The :class:`MatchStats` of one :meth:`SiftMatcher._ransac` fit.
 
-        return MatchStats(
-            inlier_count=inlier_count,
-            inlier_ratio=inlier_count / tentative if tentative else 0.0,
-            tentative_count=tentative,
-            mean_reproj_error=mean_err,
-            median_reproj_error=median_err,
-            scale=scale,
-            reflection=reflection,
-            inlier_spread=spread,
-            model_ok=model_ok,
-            inlier_box=inlier_box if model_ok else None,
-        )
+    The inlier set is a few dozen points, so numpy's per-call overhead is the
+    whole cost here: ``np.median``, ``np.linalg.det``/``norm`` and the
+    ``mean`` wrappers took longer than the RANSAC itself (#4516).  Each
+    stand-in makes the same ufunc calls the replaced function made (numpy
+    2.2's ``mean`` is ``add.reduce`` then ``true_divide`` by an ``intp``
+    count), so every value is unchanged bit for bit.
+    """
+    if src is None or dst is None or model is None or inlier_mask is None or not np.isfinite(model).all():
+        # RANSAC can return a non-finite (degenerate) model; treat it as no
+        # fit rather than letting NaNs flow into the scale/determinant maths
+        # (which raises numpy "invalid value" warnings and yields garbage stats).
+        return MatchStats(tentative_count=tentative)
+
+    mask = inlier_mask.ravel().astype(bool)
+    inlier_count = int(np.count_nonzero(mask))
+    a, b = float(model[0, 0]), float(model[1, 0])
+    scale = float(np.hypot(a, b))
+    # estimateAffinePartial2D never introduces a reflection (det = a^2+b^2 >= 0),
+    # but keep the determinant-sign check so a future full-affine backend that
+    # reuses this code path is covered.
+    reflection = a * float(model[1, 1]) - float(model[0, 1]) * b < 0
+    model_ok = inlier_count >= _MIN_MODEL_INLIERS and _MIN_SANE_SCALE <= scale <= _MAX_SANE_SCALE and not reflection
+
+    # Reprojection error + spatial spread over the inlier set.
+    mean_err = median_err = 0.0
+    spread = 0.0
+    inlier_box: Optional[tuple[float, float, float, float]] = None
+    if inlier_count:
+        count = np.intp(inlier_count)
+        src_in = src[mask]
+        dst_in = dst[mask]
+        proj = (src_in @ model[:, :2].T) + model[:, 2]
+        diff = proj - dst_in
+        errs = np.sqrt(np.add.reduce(diff * diff, axis=1))  # np.linalg.norm(diff, axis=1)
+        mean_err = float(np.add.reduce(errs) / count)  # errs.mean()
+        ordered = np.sort(errs)  # np.median(errs): the middle value, or the mean of the middle two
+        mid = inlier_count // 2
+        median_err = float(ordered[mid]) if inlier_count % 2 else float((ordered[mid - 1] + ordered[mid]) / np.intp(2))
+        centroid = np.add.reduce(dst_in, axis=0)  # dst_in.mean(axis=0)
+        np.true_divide(centroid, count, out=centroid, casting="unsafe")
+        off = dst_in - centroid
+        # sqrt(((dst_in - centroid) ** 2).sum(axis=1).mean()), all in float32
+        spread = float(np.sqrt(np.float32(np.add.reduce(np.add.reduce(off * off, axis=1)) / count)))
+        lo = np.minimum.reduce(dst_in, axis=0)
+        hi = np.maximum.reduce(dst_in, axis=0)
+        inlier_box = (float(lo[0]), float(lo[1]), float(hi[0]), float(hi[1]))
+
+    return MatchStats(
+        inlier_count=inlier_count,
+        inlier_ratio=inlier_count / tentative if tentative else 0.0,
+        tentative_count=tentative,
+        mean_reproj_error=mean_err,
+        median_reproj_error=median_err,
+        scale=scale,
+        reflection=reflection,
+        inlier_spread=spread,
+        model_ok=model_ok,
+        inlier_box=inlier_box if model_ok else None,
+    )

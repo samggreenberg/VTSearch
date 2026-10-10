@@ -14,8 +14,8 @@
      to end. Open on the problem: the folds' cuts are scalars, each on its
      own model's scale, and the obvious move is to take their mean. The
      argument is "cuts don't transfer; ranks do", and the measurement is not
-     on its side: scored in F-beta the raw mean beat rank transfer, by 0.052,
-     0.072 and 0.14 at β ¼, 1 and 4 (#4582). Today it draws the line and
+     on its side: scored in F-beta over the session the raw mean beat rank
+     transfer, by 0.052, 0.075 and 0.16 at β ¼, 1 and 4 (#4582). Today it draws the line and
      places Autopilot's question only as a fallback, when the votes cannot
      support the labels' model. -->
 

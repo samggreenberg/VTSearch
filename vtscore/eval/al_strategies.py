@@ -144,6 +144,11 @@ class ALContext:
             the top of the current detector's ranking (``scores``) instead: the
             app showing the opening's detector from the end of the Bad phase
             (#4604) and walking the list it shows.
+        new_walk: What the ``new`` phase picks (issue #4671), an experiment
+            knob.  ``"atlas"`` - the default - is the app: the Coverage Atlas's
+            next under-explored item.  ``"hard"`` takes the Hard pick instead,
+            with the phase machine unchanged, so a run prices the atlas walk's
+            picks and nothing else.
     """
 
     pool_ids: list[int]
@@ -161,6 +166,7 @@ class ALContext:
     uncertainty: Optional[dict[int, float]] = None
     opening_diversity: Optional[tuple[float, int]] = None
     more_walk: str = "seed"
+    new_walk: str = "atlas"
 
 
 # ------------------------------------------------------------------
@@ -450,8 +456,8 @@ def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
     if phase == "bad":
         return _pick_bad_phase(ctx)
 
-    # --- new: explore the atlas; fall through to hard when exhausted. ---
-    if phase == "new":
+    # --- new: explore the atlas; fall through to hard when exhausted (or under #4671's arm). ---
+    if phase == "new" and ctx.new_walk == "atlas":
         pick = _atlas_next(ctx)
         if pick is not None:
             return pick

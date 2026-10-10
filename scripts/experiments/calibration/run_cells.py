@@ -333,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
@@ -471,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
                 startup_schedule=cfg.STARTUP_SCHEDULE,
                 opening_diversity=cfg.OPENING_DIVERSITY,
                 more_walk=cfg.MORE_WALK,
+                new_walk=cfg.NEW_WALK,
                 band_share=cfg.BAND_SHARE,
                 pick_sink=picks_local,
                 precision_frame_sink=pframes_local,

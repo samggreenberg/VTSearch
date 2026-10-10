@@ -428,6 +428,10 @@ _OPENING_PHASES = frozenset({"good", "bad", "more"})
 #: top of the text sort; ``"detector"`` the top of the step's detector ranking.
 MORE_WALKS = ("seed", "detector")
 
+#: What Autopilot's ``new`` phase can pick (#4671): ``"atlas"`` is the app, the
+#: Coverage Atlas's walk; ``"hard"`` the Hard pick, the phase machine unchanged.
+NEW_WALKS = ("atlas", "hard")
+
 #: The pick-log phase of a band pick (#4482): an ordinary click, past the opening,
 #: drawn the way the spot check draws (:func:`~vtscore.eval.al_strategies.band_pick`).
 BAND_PHASE = "band"
@@ -2293,6 +2297,7 @@ def simulate_voting_iterations(  # noqa: C901
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
+    new_walk: str = "atlas",
     band_share: Optional[int] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
@@ -2556,6 +2561,11 @@ def simulate_voting_iterations(  # noqa: C901
             (``app_trained``): the app showing the opening's detector from the
             end of the Bad phase (#4604).  Needs the app's own opening (no
             *startup_schedule*, no *opening_diversity*) and the phase machine.
+        new_walk: What Autopilot's ``new`` phase picks (issue #4671), an
+            experiment knob.  ``"atlas"`` - the default - is the app: the
+            Coverage Atlas's walk.  ``"hard"`` takes the Hard pick in ``new``
+            instead, with the phase machine (and so when Span gates ``done``)
+            unchanged.  Needs the phase machine.
         band_share: An experiment knob (issue #4482): one in *band_share* of
             Autopilot's picks past the opening (the phases where the app shows
             a detector) is a **band pick** instead of the phase's own, a draw
@@ -2877,6 +2887,8 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"band_share must be an integer >= 1 (one pick in band_share) or None; got {band_share!r}")
     if more_walk not in MORE_WALKS:
         raise ValueError(f"more_walk must be one of {MORE_WALKS}; got {more_walk!r}")
+    if new_walk not in NEW_WALKS:
+        raise ValueError(f"new_walk must be one of {NEW_WALKS}; got {new_walk!r}")
     if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
@@ -3210,6 +3222,8 @@ def simulate_voting_iterations(  # noqa: C901
         )
     elif good_dry_run is not None:
         raise ValueError("good_dry_run needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
+    elif new_walk != "atlas":
+        raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
     # #4482's band picks: how many picks past the opening, and how many of them were band picks.
@@ -3543,6 +3557,7 @@ def simulate_voting_iterations(  # noqa: C901
                     uncertainty=pool_uncertainty,
                     opening_diversity=diversity,
                     more_walk=more_walk,
+                    new_walk=new_walk,
                 )
                 cid = select_next(strategy, ctx)
             is_positive = _cast(cid, pick_phase)

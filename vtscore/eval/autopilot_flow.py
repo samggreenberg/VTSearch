@@ -88,9 +88,13 @@ BAD_TARGET = 4
 # The ``more`` walk (``INITIAL_STATE.moreToStart`` / ``moreDryRun``, issue #4282):
 # after the Good and Bad quorum, keep taking the top of the seed sort until this
 # many positives exist in total, or until this many walk picks in a row held no
-# positive.  #4222 measured the opening `g3@top,b4@mid,g20+dry1/16@top` (+0.051
-# AP at vote 150 on COCO Better's 0.44% pool, +0.030 at 0.1%).
-MORE_TARGET = 20
+# positive.  On photos the walk is OFF since #4740: ``MORE_TARGET = 0``, so the
+# opening is Good, Bad, then Hard again (``g3@top,b4@mid``).  #4222 had shipped it
+# at 20 on AP at vote 150; #4671 scored it on the objective against today's app
+# and the walk lost after vote 23 at every preset (the old opening +0.016 /
+# +0.013 / +0.014 over votes 51-150, AP +0.009 / +0.010 / +0.008), winning only
+# votes 1-25.  ``MORE_DRY_RUN`` still ends a document dataset's walk (#4488).
+MORE_TARGET = 0
 MORE_DRY_RUN = 16
 
 # ``_compute_smart_status`` / ``_compute_stable_status``: both indicators stay

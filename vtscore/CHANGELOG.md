@@ -8,7 +8,52 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+### Added
+
+- **`vtscore.concurrency.stalls`: a startup bar for the watchdog.** `StallWatchdog.relaxed(threshold_ms)`
+  raises the heartbeat-miss bar for a block (never lowers it, re-arms the opt-in live dump at it, and a stall
+  reported under it carries `bar …ms`); `startup_threshold_ms()` reads `VTSEARCH_STALL_STARTUP_MS` (default
+  5000; `0` keeps the normal bar); `startup_grace()` applies it to the active watchdog for the app's ML imports
+  and embedder preload, where a cold page cache holds the GIL across a second-long `dlopen` with exactly a
+  stall's signature. Additive.
+- **The CLI entry points take an `outputs` list** (issue #4707). `vtscore.cli.autodetect_importer_main`
+  and `autodetect_importer_main_chunked` accept `outputs=` (a list of `OutputSpec`, as
+  `parse_output_specs` returns) and then run the importer once through `run_outputs` /
+  `run_outputs_chunked`, saving, scoring and exporting one dataset per entry; a pipeline file's
+  `importer.outputs` and the `--outputs` flag resolve to it. The streaming-exporter `header`
+  (`ResultsExporter.export_cli_streaming`) gains an optional `dataset` block naming the dataset
+  the records belong to; the bundled NDJSON exporter writes it into its `_meta` line. Additive.
+- **Multi-dataset imports: one importer run, several datasets** (issue #4703).
+  `vtscore.datasets.importers.base` gains `OutputSpec` (one dataset of a multi-dataset import: its
+  `media_type`, `source_specs`, `category`, and the per-dataset embedder / clipper / cleaners the
+  pipeline applies), `parse_output_specs(raw)` and `output_dataset_name(base, output)`.
+  `ImporterBase` gains the hooks `run_outputs(field_values, outputs, thin)` and
+  `run_outputs_chunked(field_values, outputs, chunk_size, thin)`, yielding `(output, medias)`
+  pairs; their defaults run `run()` / `run_chunked()` once per output on `output.narrow(field_values)`,
+  so every existing importer produces every dataset with no change, and an importer whose acquire
+  is expensive overrides them to acquire once (the URL-archive importer does). The class attribute
+  `multi_output` (default `True`) opts an importer out, reported by `to_dict()` as
+  `supports_multi_output`. The new `vtscore.datasets.load_multi` runs the fan-out: one loading task,
+  context, registry entry, `DatasetImported` event and post-load hook per output, under the same
+  download / embed gates as a single load. Additive: no existing member changes.
+
 ### Changed
+
+- **Autopilot's photo opening drops the More walk** (issue #4740, from #4671). `vtscore.eval.autopilot_flow.MORE_TARGET`
+  is `0` (was `20`) and `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is `"g3@top,b4@mid"` (was
+  `"g3@top,b4@mid,g20+dry1/16@top"`), mirroring the app's `moreToStart: 0`: on a photo dataset the phase machine goes
+  Good, Bad, then Hard. #4671 scored the walk against the opening without it on the objective, every run at every
+  vote: the walk won votes 1-25 and lost from vote 23 on, at every preset. `MORE_DRY_RUN` still ends a document
+  dataset's walk (#4488), and an explicit `more_target` still runs one. A study whose control arm should keep the
+  walk passes `CALIB_STARTUP_SCHEDULE=g3@top,b4@mid,g20+dry1/16@top`.
+
+- **`SiftMatcher.verify_many` fits a batch's RANSAC pairs on a thread pool** (issue #4516).
+  `_fit_similarity` is now `_ransac` (the `cv2.estimateAffinePartial2D` call) followed by
+  `_similarity_stats`. The stats make the same ufunc calls that `np.median`,
+  `np.linalg.norm`/`det` and `mean` made, so every `MatchStats` field is bit-identical.
+  `_fit_similarity_many` runs the cv2 calls of a batch of 128 or more pairs on up to 4 threads
+  (`_ransac_workers`: the affinity mask, capped), then computes the stats in the calling thread.
+  RANSAC per Good on a V100 drops from ~0.8 s to ~0.3 s.
 
 - **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`
   stores F-beta's beta as a top-level `"beta"` (`BETA_KEY`) beside the labelset: `stored_beta(data)`,

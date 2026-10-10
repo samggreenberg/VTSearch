@@ -1178,7 +1178,7 @@ describe('DashboardComponent', () => {
       selection.selectOnly('dataset', ['d1', 'd2']);
       fixture.changeDetectorRef.markForCheck();
       TestBed.tick();
-      expect(component.dashboardHint).toBe('test-or-find');
+      expect(component.dashboardHint).toBe('find');
       expect(component.findEnabled).toBe(false);
       expect(hintTexts(el)).toEqual(['Click Find to run these detectors on this dataset.']);
     });

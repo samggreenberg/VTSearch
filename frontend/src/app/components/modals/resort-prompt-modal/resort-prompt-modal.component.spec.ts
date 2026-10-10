@@ -4,6 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { ResortPromptModalComponent } from './resort-prompt-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('ResortPromptModalComponent', () => {
   let component: ResortPromptModalComponent;
@@ -48,46 +49,74 @@ describe('ResortPromptModalComponent', () => {
     return (text ?? '').replace(/\s+/g, ' ').trim();
   }
 
-  it('says how the current sort has gone and offers both ways forward', () => {
+  /** The status line's fields, as "Label: value". */
+  function statusFields(el: HTMLElement): string[] {
+    return [...el.querySelectorAll('.sort-status__field')].map((f) =>
+      squash(`${f.querySelector('dt')?.textContent} ${f.querySelector('dd')?.textContent}`),
+    );
+  }
+
+  it('reports the current sort as read-only fields and offers both ways forward (#4721)', () => {
     const el = renderPrompt({
       currentExampleType: 'text',
       currentExampleDisplay: 'dog barking',
       clicksSoFar: 10,
       positivesSoFar: 1,
-      keepLabelsCount: 15,
+      positivesNeeded: 3,
     });
 
-    expect(squash(el.querySelector('.prompt-text')?.textContent)).toBe(
-      'You\'ve clicked 10 times and only found 1 positive while sorting based on ' +
-        '\u201cdog barking\u201d. You could keep clicking, or supply a different sort. ' +
-        'Which would you like to do?',
-    );
-    expect(squash(el.querySelector('.keep-btn')?.textContent)).toBe(
-      'Keep clicking \u201cdog barking\u201d for 15 more labels.',
-    );
-    expect(squash(el.querySelector('.choice-col--alt .choice-heading')?.textContent)).toBe(
-      'Supply a different sort',
-    );
-    // Both ways to give a different sort sit under that heading.
+    expect(statusFields(el)).toEqual(['Clicked: 10', 'Positives: 1', 'Sort: \u201cdog barking\u201d']);
+    // The fields are the whole of the dialog's own text: the explaining is Toasty's.
+    expect(el.querySelector('.prompt-text')).toBeNull();
+    expect([...el.querySelectorAll('.choice-heading')].map((h) => squash(h.textContent))).toEqual([
+      'Keep clicking:',
+      'Supply a different sort:',
+    ]);
+    // Both ways to give a different sort sit under the right-hand heading, the
+    // two media buttons on one line.
     const alt = el.querySelector('.choice-col--alt')!;
     expect(alt.querySelector('input.form-input')).not.toBeNull();
-    expect(alt.querySelectorAll('.media-btn').length).toBe(2);
+    expect(alt.querySelectorAll('.media-btn-row .media-btn').length).toBe(2);
   });
 
-  it('names a media example by its filename and pluralises the counts', () => {
-    const el = renderPrompt({
-      currentExampleType: 'media',
-      currentExampleDisplay: 'bark.wav',
-      clicksSoFar: 1,
-      positivesSoFar: 0,
-      keepLabelsCount: 0,
-    });
+  it('labels the keep button the same whatever the sort', () => {
+    const el = renderPrompt({ currentExampleType: 'media', currentExampleDisplay: 'book.png', clicksSoFar: 35 });
 
-    expect(squash(el.querySelector('.prompt-text')?.textContent)).toContain(
-      'You\'ve clicked 1 time and only found 0 positives while sorting based on bark.wav.',
+    expect(squash(el.querySelector('.keep-btn')?.textContent)).toBe('Continue');
+  });
+
+  it('names a media example by its filename', () => {
+    const el = renderPrompt({ currentExampleType: 'media', currentExampleDisplay: 'bark.wav' });
+
+    expect(statusFields(el)[2]).toBe('Sort: bark.wav');
+    expect(el.querySelector('.sort-status__field--sort dd')?.getAttribute('title')).toBe('bark.wav');
+  });
+
+  it("has Toasty explain the prompt below the dialog box (#4721)", async () => {
+    renderPrompt({ positivesNeeded: 3 });
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const hint = el.querySelector('vt-toasty-hint');
+    expect(hint).not.toBeNull();
+    expect(squash(hint!.querySelector('.toasty-hint__text')?.textContent)).toBe(
+      'We need 3 positives before Autopilot can move on. This is an opportunity to try a different ' +
+        'example sort, or just keep clicking with the original sort.',
     );
-    // No next-prompt count to promise: the keep option drops the clause.
-    expect(squash(el.querySelector('.keep-btn')?.textContent)).toBe('Keep clicking bark.wav.');
+
+    fixture.componentRef.setInput('positivesNeeded', 1);
+    await settleZoneless(fixture);
+    expect(squash(hint!.textContent)).toContain('We need 1 positive before Autopilot can move on.');
+  });
+
+  it('opens with focus on the dialog box, not on an answer (#4721)', () => {
+    const el = renderPrompt({ currentExampleDisplay: 'dog barking' });
+
+    // A ring on the keep button read as the recommended answer, and the next
+    // Space or Enter took it.
+    const box = el.querySelector('.modal-content')!;
+    expect(box.hasAttribute('cdkFocusInitial')).toBe(true);
+    expect(box.getAttribute('tabindex')).toBe('-1');
   });
 
   it('keeps the current sort from the left-hand option', () => {

@@ -28,8 +28,8 @@
 
 <!-- Say which half lasted. Reading the corpus did: section III's line
      counts its matches on exactly this grey bar. The midpoint did not.
-     Scored in F-beta, cutting here instead of cross-calibrating lost 0.38,
-     0.40 and 0.33 at β ¼, 1 and 4 (#4582): where under half a percent
+     Scored in F-beta over the session, cutting here instead of
+     cross-calibrating lost 0.36, 0.36 and 0.28 at β ¼, 1 and 4 (#4582): where under half a percent
      of the corpus matches, a cut between the two means keeps far more than
      there are matches. And the colours are an assumption the fit cannot
      justify: measured, the high component weighed 0.35 against a true

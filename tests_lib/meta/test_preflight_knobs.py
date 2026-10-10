@@ -91,9 +91,10 @@ def test_a_clean_environment_matches(check):
 # declares for it.  The names the launchers already used (`startup_schedule`,
 # `spot_check`, `opening_diversity`) are kept exactly.
 _DIVERGENT = [
-    ({"CALIB_STARTUP_SCHEDULE": "g3@top,b4@mid"}, "startup_schedule"),
+    ({"CALIB_STARTUP_SCHEDULE": "g3@top,b4@mid,g20+dry1/16@top"}, "startup_schedule"),
     ({"CALIB_OPENING_DIVERSITY": "0.85/1"}, "opening_diversity"),
     ({"CALIB_MORE_WALK": "detector"}, "more_walk"),
+    ({"CALIB_NEW_WALK": "hard"}, "new_walk"),
     ({"CALIB_BAND_SHARE": "8"}, "band_share"),
     ({"CALIB_SIGMA_FLOOR": "absolute"}, "sigma_floor"),
     ({"CALIB_SEED_EXAMPLES": "1"}, "seed_examples"),
@@ -175,6 +176,7 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_WALK_SHAPE": "wlak"}, "walk_shape"),
         ({"CALIB_BETA": "100"}, "beta"),
         ({"CALIB_MORE_WALK": "learned"}, "more_walk"),
+        ({"CALIB_NEW_WALK": "boundary"}, "new_walk"),
         ({"CALIB_BAND_SHARE": "0"}, "band_share"),
         ({"CALIB_BAND_SHARE": "one"}, "band_share"),
         ({"CALIB_SIGMA_FLOOR": "abs"}, "sigma_floor"),
@@ -220,7 +222,7 @@ class TestPreflightWiring:
         "SKIPPED\tanchored grid (stub)",
         "REFUSED\tspot_check\tof\tmust be one of end, off, weak",
         "DIVERGES\tbeta\t4\t<unset> = the balance at beta 1",
-        "DIVERGES\tstartup_schedule\tg3@top\tg3@top,b4@mid,g20+dry1/16@top",
+        "DIVERGES\tstartup_schedule\tg3@top\tg3@top,b4@mid",
     ]
 
     def _preflight(self, tmp_path: Path, *args: str, probe: bool = True) -> str:

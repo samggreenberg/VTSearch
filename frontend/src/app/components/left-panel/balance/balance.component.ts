@@ -106,6 +106,9 @@ export class BalanceComponent {
   readonly locked = input(false);
   /** The host's own state line, in place of the check's (Test: this corpus's result, or untested). */
   readonly lineState = input<TestLineState | null>(null);
+  /** Style the "Threshold:" heading as a form field's label, for a host that sets it among other form
+   *  fields (the New Detector form), rather than as the side panel's small caption (#4718). */
+  readonly formLabel = input(false);
 
   /** A balance the user picked, as a beta. */
   readonly valueChange = output<number>();

@@ -119,6 +119,7 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_DIAGNOSE` | unset | Truthy turns on the whole diagnostic bar set at once: `VTSEARCH_LOG_LEVEL=INFO`, `VTSEARCH_SLOW_REQUEST_MS=400`, `VTSEARCH_SLOW_PHASE_MS=150` (and, by the coupling below, a 75 ms GC bar). Each is a default, so any variable you set yourself still wins. It deliberately does **not** pin `VTSEARCH_GC_WARN_MS`, because pinning it would bypass that coupling. |
 | `VTSEARCH_SLOW_REQUEST_MS` | `1000` | A request whose handler takes at least this long is logged at WARNING with its method, path, status, duration, thread CPU time, GC time and `request_id` (the same id the browser sees as `X-Request-Id`). Below the bar, and only at `VTSEARCH_LOG_LEVEL=INFO`, the same figures are logged as `request trace:` so a diagnostic run has the whole chain to add up. |
 | `VTSEARCH_STALL_WATCHDOG_MS` | `1000` | Heartbeat-miss threshold for the stall watchdog: when the interpreter cannot run the heartbeat thread for this long, a WARNING names the thread that burned the wall clock (or reports that none did), just after every thread's stack, taken the moment the heartbeat wakes. `0` disables the watchdog. |
+| `VTSEARCH_STALL_STARTUP_MS` | `5000` | The watchdog's threshold while the server starts, from the ML imports until **VTSearch is ready**. A cold page cache holds the GIL across disk reads for a second routinely there (one `dlopen` of pyarrow's shared library did, with the process at 5 % CPU and a few dozen major faults), which has exactly a stall's signature, and at the normal bar that wrote every thread's stack to the terminal of a routine `python app.py`. Never lower than `VTSEARCH_STALL_WATCHDOG_MS`; `0` keeps that bar throughout. A `stall:` line from the startup window says `bar 5000ms`. |
 | `VTSEARCH_STALL_DUMP_FILE` | `VTSEARCH_LOG_FILE`, else stderr | Where the watchdog writes the thread stacks. |
 | `VTSEARCH_STALL_LIVE_DUMP` | unset | **Can crash the app; off by default** (issue #4345). Set to `1` to also have `faulthandler` dump every thread's frames *during* a stall. That dump reads other threads' frames without the GIL while they run, and has segfaulted the app mid-import. Use it only for a diagnostic session chasing a GIL hold that the stacks taken at wake do not explain. |
 | `VTSEARCH_GC_WARN_MS` | half `VTSEARCH_SLOW_PHASE_MS`, capped at `200` | A garbage-collection pause at least this long is logged at WARNING with its generation and duration. Unset it tracks the phase threshold, so a collection can never be too small to report while still being large enough to inflate the phase it lands in. |
@@ -998,7 +999,11 @@ instruments that can, all on at the default log level:
   measures how late it wakes. When it misses by more than the threshold it
   logs `stall: heartbeat late by …ms` with the process's CPU time over the
   gap, the threads that consumed it, major page faults, RSS, the cgroup memory
-  counters and GC activity. Read it like this:
+  counters and GC activity. Until the server is ready the threshold is
+  `VTSEARCH_STALL_STARTUP_MS` (5 s) instead: the ML imports and the embedder
+  preload hold the GIL across cold-cache disk reads that have exactly a
+  stall's signature, and a `stall:` line from that window says `bar 5000ms`.
+  Read it like this:
   - *process cpu ≈ wall, one thread on top* → that thread held the GIL.
     Just above the `stall:` line, the watchdog writes every thread's Python
     stack (`Stall snapshot …`, to `VTSEARCH_STALL_DUMP_FILE`, which defaults
