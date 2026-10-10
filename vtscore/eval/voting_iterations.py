@@ -47,6 +47,13 @@ if TYPE_CHECKING:
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, band_pick, is_autopilot_strategy, select_next
+from vtscore.eval.example_opening import (
+    EXAMPLE_PHASE,
+    check_example_opening,
+    choose_examples,
+    example_sort,
+    stratified_split,
+)
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
@@ -2306,6 +2313,8 @@ def simulate_voting_iterations(  # noqa: C901
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
     label_quota: Optional[bool] = None,
+    seed_examples: Optional[int] = None,
+    stratify_target: bool = False,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2425,6 +2434,20 @@ def simulate_voting_iterations(  # noqa: C901
             follows the text sort (top items for the initial goods, the sort's
             cutoff for the initial bads); ``None`` (default) means the dataset
             has no text sort, so autopilot seeds from random known-good examples.
+        seed_examples: The **example opening** (#4699): the session starts from
+            this many of the voting half's positives, the photos a user loads
+            into the app's example sort.  They are the run's first votes, all
+            Good, logged with phase ``"example"``, and the seed sort is the
+            cosine to their centroid, so a run that starts with fewer than three
+            walks down it for the rest.  Nested in the count under one *seed*.
+            Replaces *seed_scores*; whole-image datasets only.  ``None`` - the
+            default - keeps the openings above.  See
+            :mod:`vtscore.eval.example_opening`.
+        stratify_target: Split the target's positives on their own (#4699), so
+            a class with two or more keeps at least one on each side
+            (:func:`~vtscore.eval.example_opening.stratified_split`).  ``False``
+            - the default - is the plain random split, which can leave a
+            few-positive class with nothing withheld.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -2788,6 +2811,14 @@ def simulate_voting_iterations(  # noqa: C901
     # SLURM array slot spent to learn nothing (#4044).
     _check_test_bands(test_bands, target_category, target_prevalence)
     _check_train_mix(train_mix, target_category, target_prevalence)
+    check_example_opening(
+        seed_examples,
+        stratify_target=stratify_target,
+        seed_scores=seed_scores,
+        startup_schedule=startup_schedule,
+        train_mix=train_mix,
+        target_prevalence=target_prevalence,
+    )
     if target_prevalence is not None and haystack_prevalence is not None:
         raise ValueError("target_prevalence and haystack_prevalence are two different arms; set one")
     check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
@@ -2885,7 +2916,10 @@ def simulate_voting_iterations(  # noqa: C901
     realized_prevalence = round(_prevalence(clips_dict, target_category), 6)
 
     if mix_split is None:
-        sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
+        if stratify_target:
+            sim_ids, test_ids = stratified_split(clips_dict, target_category, sim_fraction, rng)
+        else:
+            sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
         band_cohorts = _resolve_band_cohorts(
             unfiltered,
             target_category,
@@ -2930,6 +2964,14 @@ def simulate_voting_iterations(  # noqa: C901
     if not test_pos or not test_neg:
         return []
     band_neg_ids = test_neg if (test_bands and test_band_auroc) else None
+
+    # The example opening (#4699): the photos the user starts from, and the sort
+    # they make.  After the split and every thinning, so the examples are drawn
+    # from the voting half the run actually walks.
+    pending_examples: list[int] = []
+    if seed_examples is not None:
+        pending_examples = choose_examples(sim_ids, clips_dict, target_category, seed_examples, seed)
+        seed_scores = example_sort(clips_dict, pending_examples)
 
     # A patch dataset exposes a ``patch_grid`` per media; such datasets are
     # scored region-aware (max-pool over the image's score rows) the same way
@@ -3429,7 +3471,12 @@ def simulate_voting_iterations(  # noqa: C901
             startup_cut = startup_cuts[startup_round] if startup_round >= 0 else None
             cid = None
             pick_phase = phase
-            if band_share is not None and phase is not None and app_has_detector(phase) and pool_scores:
+            if pending_examples:
+                # The example opening (#4699): the user's own photos are the first
+                # votes, whatever the phase machine would pick.
+                cid = pending_examples.pop(0)
+                pick_phase = EXAMPLE_PHASE
+            if cid is None and band_share is not None and phase is not None and app_has_detector(phase) and pool_scores:
                 # #4482: every band_share-th pick past the opening is a band pick, on its
                 # own generator so the rest of the run's draws are the arm-free run's.
                 learned_picks += 1
