@@ -6,8 +6,8 @@
 * :mod:`pilebuild.env` -- which checkout and which harness this run resolves to.
 * :mod:`pilebuild.vgsource` / :mod:`pilebuild.boxscan` -- reading the Visual
   Genome source and choosing a band's categories from the box scan.
-* :mod:`pilebuild.corrections` -- human verdicts, and the one place their boxes
-  cross from normalised into pixel space (#3281).
+* :mod:`pilebuild.corrections` -- human verdicts, and the check that their boxes
+  are in the normalised space the file declares (#3281).
 * :mod:`pilebuild.loaders` -- one module per ``DATASETS[ds]["kind"]``, each
   owning both *how the cell is built* and *what a rebuild of it needs*.
 * :mod:`pilebuild.provenance` -- what machine produced a cell, and its hash.
