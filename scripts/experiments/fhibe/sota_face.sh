@@ -32,7 +32,16 @@ BETAS=(0.25 1 4)
 N_PEOPLE=562
 TASKS="${SOTA_FACE_TASKS:-$RUNS/$D-sota-tasks.txt}"
 
-btag() { python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$1"; }
+# The run dir's balance tag, as launch.sh writes it (0.25 -> 025, 1 -> 1, 4 -> 4). A lookup, not a
+# python call: the task list asks for it 6,744 times.
+btag() {
+  case "$1" in
+    0.25) echo 025 ;;
+    1) echo 1 ;;
+    4) echo 4 ;;
+    *) python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$1" ;;
+  esac
+}
 
 # The settings one run dir takes, for launch.sh: K and beta vary, the rest is the recipe.
 run_env() {  # K BETA
