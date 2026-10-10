@@ -39,6 +39,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Autopilot's photo opening drops the More walk** (issue #4740, from #4671). `vtscore.eval.autopilot_flow.MORE_TARGET`
+  is `0` (was `20`) and `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is `"g3@top,b4@mid"` (was
+  `"g3@top,b4@mid,g20+dry1/16@top"`), mirroring the app's `moreToStart: 0`: on a photo dataset the phase machine goes
+  Good, Bad, then Hard. #4671 scored the walk against the opening without it on the objective, every run at every
+  vote: the walk won votes 1-25 and lost from vote 23 on, at every preset. `MORE_DRY_RUN` still ends a document
+  dataset's walk (#4488), and an explicit `more_target` still runs one. A study whose control arm should keep the
+  walk passes `CALIB_STARTUP_SCHEDULE=g3@top,b4@mid,g20+dry1/16@top`.
+
 - **`SiftMatcher.verify_many` fits a batch's RANSAC pairs on a thread pool** (issue #4516).
   `_fit_similarity` is now `_ransac` (the `cv2.estimateAffinePartial2D` call) followed by
   `_similarity_stats`. The stats make the same ufunc calls that `np.median`,

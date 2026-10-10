@@ -751,8 +751,9 @@ def test_the_stop_is_read_off_the_ordinary_clicks_and_scores_the_analyzers_objec
     for cat in CATS:
         row, cell = stops.loc[cat], run["cells"].loc[cat]
         assert row["t_budget"] == cell["final_t"] == MAX_STEPS
-        assert row["fbeta_final"] == pytest.approx(cell["thr_fbeta_unchecked"])
-        assert row["average_precision_final"] == pytest.approx(cell["final_ap"])
+        # The stops table is written at 6 decimals (round6), so compare to that step, not to a relative 1e-6.
+        assert row["fbeta_final"] == pytest.approx(cell["thr_fbeta_unchecked"], abs=1e-6)
+        assert row["average_precision_final"] == pytest.approx(cell["final_ap"], abs=1e-6)
         assert row["fbeta_best"] >= row["fbeta_final"], "the run's best is its highest F-beta"
 
 

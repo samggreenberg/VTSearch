@@ -11,9 +11,10 @@ export interface AutopilotState {
   /**
    * The "more" walk (#4282): after the Good and Bad quorum, go back to the top
    * of the seed sort until the labelset holds ``moreToStart`` positives, or
-   * until ``moreDryRun`` walk picks in a row held none. #4222's study measured
-   * it against the old two-round opening on COCO Better: +0.05 AP by vote 150,
-   * with the same share of sessions left without a detector.
+   * until ``moreDryRun`` walk picks in a row held none. Off on photos since
+   * #4740 (``moreToStart`` 0, so Bad goes straight to Boundary): #4671 scored it
+   * against the opening without it and the walk lost from vote 23 on, at every
+   * preset. A document dataset's walk (``dryRunStop``) does not read it.
    */
   moreToStart: number;
   moreDryRun: number;
@@ -62,7 +63,8 @@ export interface AutopilotState {
    * that knocks Stable off green sends it back to ``hard`` for boundary items.
    * But the user was told the detector is trained, so the panel reads this
    * instead of the phase, keeping Done checked and showing further votes as
-   * an open-ended seventh step rather than bouncing back to step 4. Display
+   * an open-ended last step (Keep Improving) rather than bouncing back to
+   * Boundary. Display
    * only: it never feeds the phase. Cleared only by falling back into the
    * opening (votes un-done below its targets) or by a new run.
    */
@@ -89,7 +91,7 @@ const INITIAL_STATE: AutopilotState = {
   phase: 'idle',
   goodToStart: 3,
   badToStart: 4,
-  moreToStart: 20,
+  moreToStart: 0,
   moreDryRun: 16,
   moreMisses: 0,
   moreDone: false,

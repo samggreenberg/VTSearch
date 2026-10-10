@@ -392,7 +392,7 @@ The parameterisation rests on one observation: both of today's opening phases ar
 | `@k-3` | that same fitted GMM, split at **inclusion −3** |
 | `@q0.05` | the sort's 5th rank percentile, named directly |
 
-`PRODUCTION_STARTUP` (`"g3@top,b4@mid,g20+dry1/16@top"`, since #4282; it was `"g3@top,b4@mid"`) is today's opening, and [`vtscore/eval/startup_schedule.py`](../vtscore/eval/startup_schedule.py) is the full reference. `startup_schedule=None` — the default — leaves every trajectory byte-for-byte what it was; the explicit production spec is *required* to reproduce a default run click for click, which `tests_lib/detectors/test_startup_schedule.py` asserts and `scripts/check-eval-app-sync.py`'s `autopilot.startup_default` mirror keeps true.
+`PRODUCTION_STARTUP` (`"g3@top,b4@mid"` again since #4740; from #4282 to #4740 it was `"g3@top,b4@mid,g20+dry1/16@top"`, the More walk, which #4671 found lost after vote 23 on the objective) is today's opening, and [`vtscore/eval/startup_schedule.py`](../vtscore/eval/startup_schedule.py) is the full reference. `startup_schedule=None` — the default — leaves every trajectory byte-for-byte what it was; the explicit production spec is *required* to reproduce a default run click for click, which `tests_lib/detectors/test_startup_schedule.py` asserts and `scripts/check-eval-app-sync.py`'s `autopilot.startup_default` mirror keeps true.
 
 Rounds appear in the `phase` column as `s0`, `s1`, …, and `app_trained` is `0` throughout one: a round is on the seed sort by construction, so the app would have no detector on screen however many votes have been cast. Every row also carries **`startup_schedule`**, so a pooled frame says which arm it came from without depending on the directory it was read out of.
 

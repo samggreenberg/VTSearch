@@ -783,7 +783,7 @@ that reaches **Done!** opens its result panel on its own.
 Most users should never need Manual mode.
 
 Click the **Autopilot** tab in the left panel. Autopilot breaks
-labeling into five phases and tells you what to do at each step.
+labeling into four phases and tells you what to do at each step.
 You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
@@ -792,7 +792,7 @@ just picks *which* items to show you and *when* each phase ends.
   <img src="assets/autopilot-vote.light.webp" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
 </picture>
 
-### The five phases
+### The four phases
 
 The phase panel labels them, in order:
 
@@ -807,18 +807,12 @@ The phase panel labels them, in order:
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
    is usually quick.
-3. **Find More Goods.** - Autopilot goes back to the best text matches
-   and keeps offering them while they keep turning up goods: until you
-   have 20 goods, or until 16 matches in a row were not good. More goods
-   early make a noticeably better detector later. While this phase runs
-   the detector is still learning, so it catches up with (and then
-   passes) the old, shorter opening after about 50 votes.
-4. **Refine Boundary.** - Autopilot serves items the detector is
+3. **Refine Boundary.** - Autopilot serves items the detector is
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
    and "stable" indicators in the status bar both turn green).
-5. **Explore Diversity.** - Autopilot serves items from parts of the
+4. **Explore Diversity.** - Autopilot serves items from parts of the
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
@@ -827,13 +821,13 @@ The current phase carries one light that shows how close it is to done.
 It starts as a **red** circle, turns **yellow** once the phase is past
 halfway, and becomes a **green check** when the phase is finished, at
 which point Autopilot moves on to the next one; every finished phase
-keeps its check. For the three Find phases, halfway is half the
-vote target (2 of 3 goods, 10 of 20); for Refine Boundary the light
+keeps its check. For the two Find phases, halfway is half the
+vote target (2 of 3 goods, 2 of 4 bads); for Refine Boundary the light
 shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal. Hover the light for
 the details.
 
-When all five phases are done, Autopilot shows **Done!** and Toasty
+When all four phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
 trained: keep voting and it keeps improving (your next vote sends Toasty
 away), or click **Dashboard** to export it or run it over another dataset.
@@ -857,8 +851,8 @@ Boundary.
 ### Document collections stop on a dry run
 
 On a collection of document pages, where a detector finds logos and
-stamps by matching their shape, Autopilot has four phases instead of
-five. After the initial goods and bads, **Find More Goods.** offers the
+stamps by matching their shape, Autopilot has a different four phases.
+After the initial goods and bads, **Find More Goods.** offers the
 detector's own best matches, re-ranked after every vote, with no
 20-good target. It ends when **16 of them in a row were not good**:
 the top of the ranking has run dry, and the documents the detector can
@@ -887,7 +881,7 @@ full phase list, and its ◀ collapses it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
-  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the five phases (Find Initial Goods, Find Initial Bads, Find More Goods, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
@@ -957,7 +951,7 @@ Picks *which unlabeled item* the app highlights next.
 - **New** - Pick an item from a part of the dataset you haven't
   covered yet. Ensures a broad mix.
 
-Autopilot cycles through these automatically in its five phases,
+Autopilot cycles through these automatically in its four phases,
 but in Manual mode you choose directly.
 
 ### 3. Threshold
