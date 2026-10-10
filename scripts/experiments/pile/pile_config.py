@@ -3138,41 +3138,6 @@ SCALE_NEG_COMPOSITION = os.environ.get("VTS_SCALE_NEG_COMPOSITION", "provable")
 #: `docs/experiments/2026-09-06-cross-class-negatives-3667/REPORT.md`.
 SCALE_PREVALENCE = (3 * SCALE_N_POS) / (3 * SCALE_N_POS + SCALE_N_NEG)
 
-#: `vg_scale_deep`'s positives per class (#3547). 900 is the deepest value all
-#: twenty-five classes support band-free -- `stop sign`, the thinnest, has 1006
-#: candidates (`measure_supply.py`) -- and it is chosen against `preflight.sh`
-#: check 16b, which clears only when the sim half holds MORE positives than the
-#: horizon has steps: at `SIM_FRACTION` 0.5 that is 450 against 400.
-#:
-#: **The #3588 promotion did not move it, which was not a foregone conclusion.**
-#: Thirteen classes joined *C* and the binding constraint stayed exactly where it
-#: was: the thinnest of the thirteen band-free is `fire hydrant` at 1138, still
-#: clear of `stop sign`'s 1006, so depth and class list did not have to trade
-#: against each other. Had one of the thirteen come in under 900, the choice
-#: would have been between a deep set that carries fewer classes than the shallow
-#: one and a depth change that restates #3547's published optimum.
-#:
-#: Going deeper costs classes, not money: 1200 drops `kite`, `stop sign` and
-#: `fire hydrant`, and a class list that differs from #3319's would confound the
-#: horizon axis with a vocabulary axis in the one comparison this dataset exists
-#: to make.
-SCALE_DEEP_N_POS = int(os.environ.get("VTS_SCALE_DEEP_N_POS", "900"))
-#: `vg_scale_deep` does NOT follow #3670's expansion, and the pin is deliberate.
-#: Deriving its pool from the live `SCALE_PREVALENCE` would have taken it from
-#: 11,700 negatives to 29,700 as a silent side effect of a change to a DIFFERENT
-#: dataset. Deep exists for one comparison -- the #3319/#3547 acquisition horizon
-#: -- and moving its prevalence mid-stream would confound that axis with a
-#: prevalence axis, which is the argument `SCALE_DEEP_N_POS` already makes about
-#: holding the class list fixed. Whether deep should follow is #3690.
-#:
-#: Still DERIVED, never set: a negative pool written as a literal beside a
-#: positive count is how prevalence drifts. What is pinned is the `vg_scale`
-#: pool size deep's prevalence refers to, not the pool itself.
-SCALE_DEEP_PIN_N_NEG = int(os.environ.get("VTS_SCALE_DEEP_PIN_N_NEG", "3900"))
-SCALE_DEEP_PREVALENCE = (3 * SCALE_N_POS) / (3 * SCALE_N_POS + SCALE_DEEP_PIN_N_NEG)
-SCALE_DEEP_N_NEG = round(SCALE_DEEP_N_POS * (1 - SCALE_DEEP_PREVALENCE) / SCALE_DEEP_PREVALENCE)
-SCALE_DEEP_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_DEEP_N_NEG_SPARE", "300"))
-
 
 #: How far a VG copy's aspect ratio may drift from the COCO original before its
 #: boxes are considered untransferable, as a fraction of the COCO ratio.
@@ -3234,35 +3199,12 @@ def aspect_transferable(vg_wh: tuple[int, int], coco_wh: tuple[int, int]) -> boo
 #: the bug produced.
 CORRECTION_BOX_SPACE = "normalised"
 
-#: Below this normalised side length a box is sub-pixel on any image the pile
-#: holds -- VG's largest copy is 1280 px wide -- so it cannot describe anything
-#: that was observed. Zero legitimate boxes are anywhere near it; the 130
-#: double-normalised ones were all under 1e-3.
-MIN_BOX_SIDE = float(os.environ.get("VTS_MIN_BOX_SIDE", "0.000244"))  # 1/4096
-
-#: "Crushed to the origin": both corners inside the top-left square holding this
-#: fraction of the frame area. Unlike the sub-pixel rule this one has genuine
-#: hits -- a small object really can sit in the top-left corner, 43 of 3470
-#: healthy boxes do -- so it gates on the *rate*, not on any single box.
-CORNER_AREA_FRAC = float(os.environ.get("VTS_CORNER_AREA_FRAC", "0.01"))
-
-#: The share of a cell's boxes that may be crushed to the origin before the
-#: build is refused. The measured healthy rate is 1.2% and the defect put it at
-#: 100% of the affected images, so anything in between separates them.
-MAX_CORNER_RATE = float(os.environ.get("VTS_MAX_CORNER_RATE", "0.05"))
-
 
 #: Which images each cell currently holds. Selection is hash-stable, but a
 #: roster is what carries membership across a CHANGE of selection rule -- and
 #: across the corrections that are the whole point of the review, since a review
 #: is only worth what it still covers after the next rebuild.
 ROSTER = Path(os.environ.get("VTS_SCALE_ROSTER", str(PILE / "vg_scale_roster.json")))
-
-#: `vg_scale_deep`'s own roster. Separate from `ROSTER` on purpose: the two
-#: datasets designate different cells from the same candidates, and one file
-#: holding both would let a `vg_scale_deep` rebuild retire images `vg_scale`'s
-#: review is pinned to.
-DEEP_ROSTER = Path(os.environ.get("VTS_SCALE_DEEP_ROSTER", str(PILE / "vg_scale_deep_roster.json")))
 
 
 #: Where the `vg_scale` review has always kept its slates, verdict files and
