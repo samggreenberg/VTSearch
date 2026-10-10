@@ -8,12 +8,9 @@ diagnosed its own failures well, explained them in a summary, and then the next
 study made a variant of the same one. An explanation that lives only in a
 conversation is not a control.
 
-Two companions:
-
-- **`GRID-PLAYBOOK.md`** — SLURM *resource* practice (memory sizing, QOS caps,
-  chunking allocations). Read before sizing a sweep.
-- **`preflight.sh`** — the subset of these lessons that is mechanically
-  checkable, enforced rather than advised. Run before submitting arms.
+Companions: [`GRID-PLAYBOOK.md`](GRID-PLAYBOOK.md) (SLURM resource practice),
+`preflight.sh` (the mechanically checkable subset of these lessons, enforced
+rather than advised), and the `grid-experiments` skill (the study lifecycle).
 
 ## How to add an entry
 
@@ -39,31 +36,18 @@ take it seriously. State plainly whether it is now *prevented* or still only
 **Prevented?** preflight check N / code change / *advice only*.
 ```
 
-### Why one file per incident
+### When the index conflicts
 
-This was a single append-only file until 2026-08-17, and it conflicted on
-**every pair of concurrent experiment branches** — two studies each recording a
-lesson meant two appends to the same end of the same file, which git cannot
-reconcile no matter how the entries are separated. (The `<!-- entry-sep -->`
-sentinels this file used to carry protect concurrent *deletions*, which is a
-different problem; nothing anchors two appends at EOF.) One file per incident
-takes the *prose* out of the shared path: two studies now add two different
-files, and nothing either of them wrote has to be merged against the other.
-
-The index below is the one thing still shared, which is why it is **generated**.
-Two branches that each add a lesson on the same day do still collide on its
-table — and *only* on its table; the entry files themselves arrive intact, which
-is the half that used to cost prose merges. Resolve it by regenerating, never by
-hand-merging the rows:
+One file per incident keeps two branches' lessons from conflicting; only the
+generated table below is shared. When it conflicts on a merge, regenerate it,
+never hand-merge the rows — both branches' entry files are already in the tree,
+so the regenerated table is their union:
 
 ```bash
 git merge origin/dev                       # CONFLICT in LESSONS.md, and only there
 python scripts/gen-docs-inventories.py     # rewrites the table from both sides' files
 git add scripts/experiments/LESSONS.md && git commit
 ```
-
-Both entry files are already in the tree by then, so the regenerated table is the
-correct union of the two branches with no judgement involved.
 
 ## The log
 

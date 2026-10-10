@@ -11,8 +11,6 @@ Cross-cutting, still open:
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
 - **`patch_grid` / `local_features` stay singular.** The
   binding allows at most one patch and one structural embedder, so these are
   single-valued (owned by that role's embedder) rather than dict-keyed. Only
@@ -22,8 +20,6 @@ Cross-cutting, still open:
 <!-- item-sep -->
 
 Per-detector embedder-type follow-ups:
-
-<!-- item-sep -->
 
 <!-- item-sep -->
 

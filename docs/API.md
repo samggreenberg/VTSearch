@@ -31,6 +31,23 @@ list of any request or response, the generated spec is authoritative (see
 [Machine-readable schema](#machine-readable-schema)); where a page and the spec
 disagree on a field, trust the spec and fix the page.
 
+### Find a route by path
+
+| Path prefix | Page |
+|-------------|------|
+| `/api/auth/*`, `/api/version`, `/healthz`, `/readyz`, SPA and static paths | [auth.md](api/auth.md) |
+| `/api/medias/*`, `/api/votes*`, `/api/labels/*`, `/api/sort*`, `/api/learned-sort*`, `/api/example-sort*`, `/api/label-file-sort`, `/api/textsort-suggestions`, `/api/server-media-files*`, `/api/seed-import*`, `/api/datasource-import*` | [medias.md](api/medias.md) |
+| `/api/balance`, `/api/precision-check*`, `/api/labeling-*`, `/api/indicator-score-history`, `/api/eval/*`, `/api/coverage-atlas/*` | [labeling.md](api/labeling.md) |
+| `/api/detectors*` (except the labelset-source routes), `/api/detectors/registry*` | [detectors.md](api/detectors.md) |
+| `/api/dataset/*`, `/api/datasets/registry*`, `/api/media-types`, `/api/embed*`, `/api/clippers`, `/api/cleaners`, `/api/converters`, `/api/browse-media-files*`, `/api/projection/*` | [datasets.md](api/datasets.md) |
+| `/api/exporters/*`, `/api/label-importers/*`, `/api/pregen-processors*`, `/api/autorun-*`, `/api/extract`, `/api/localize`, `/api/auto-extract`, `/api/auto-localize`, `/api/settings-importers/*`, `/api/settings-exporters/*` | [io.md](api/io.md) |
+| `/api/settings*`, `/api/settings-sources*`, `/api/labelset-sources`, `/api/detectors/{id}/labelset-source*` | [settings.md](api/settings.md) |
+| `/api/dashboard/*` | [dashboard.md](api/dashboard.md) |
+| `/api/find*`, `/api/find-label`, `/api/auto-detect`, `/api/autofind/*`, `/api/line-test*` | [find.md](api/find.md) |
+| `/api/browse` | [file-browser.md](api/file-browser.md) |
+| `/api/events` | [events.md](api/events.md) |
+| `/api/achievements*`, `/api/sessions/recent`, `/api/jobs/active` | [Other endpoints](#other-endpoints) below |
+
 ### Other endpoints
 
 Small families with no page of their own. Field lists are in the spec.
@@ -60,7 +77,8 @@ chosen **per request** by two HTTP headers:
 | `X-Dataset-Id` | Which loaded `DatasetContext` the request's `medias` / coverage / dataset-scoped votes resolve to | Angular's `HttpClient` interceptor on every API call |
 | `X-Detector-Id` | Which loaded `DetectorContext` the request's `good_votes` / `bad_votes` / model / labelset resolve to | Same interceptor |
 
-Key semantics (`app.py` `before_request`, `vtsearch/routes/_context.py`):
+Key semantics (the `before_request` hook in `vtsearch/hooks.py`, and
+`vtsearch/routes/_context.py`):
 
 - **Per-request, not global.** The headers stash the chosen context on
   `flask.g` for the lifetime of the request; they do **not** mutate any global

@@ -45,48 +45,13 @@ root.
 > [Security](../DEPLOYMENT.md#security) before putting VTSearch on an
 > untrusted network.
 
-→
-```json
-{
-  "directories": [
-    {"name": "subdir", "path": "subdir", "modified_at": "2025-03-31T10:15:00"}
-  ],
-  "files": [
-    {"name": "labels.csv", "path": "labels.csv", "size_bytes": 1234, "modified_at": "2025-03-31T10:15:00"}
-  ],
-  "current_path": "data/labels"
-}
-```
+→ `{directories, files, current_path}`; each entry carries `name`, `path` and
+`modified_at`, and files also `size_bytes`. `current_path` is `""` at the root.
 
-(Shown with a confined root; in single-user mode the same listing carries
-absolute paths — `"path": "/data/labels/labels.csv"`,
-`"current_path": "/data/labels"`.)
-
-400 if the path escapes the browse root (path traversal prevention), 403 if
-permission is denied reading the directory, and 404 if the directory does not
-exist; all three use the [standard error envelope](../API.md#conventions).
-
-422 if a query parameter fails schema validation, with the standard
-per-field `errors` envelope:
-
-```json
-{
-  "code": 422,
-  "status": "Unprocessable Content",
-  "message": "Unprocessable Content",
-  "errors": {"query": {"path": ["Not a valid string."]}},
-  "request_id": "ab12cd34ef56"
-}
-```
-
-(`status` is the HTTP reason phrase as the running interpreter spells it —
-`"Unprocessable Entity"` before Python 3.13, `"Unprocessable Content"` from
-3.13 on. Match on `code` / `errors`, not on that string.)
-
-Both query params are optional strings, so in practice this endpoint
-rarely produces a 422; it is declared (and appears in
-`/api/openapi.json`) because the route is schema-validated like every
-other `flask-smorest` endpoint.
+400 if the path escapes the browse root, 403 if reading the directory is denied,
+404 if it does not exist. A 422 (standard `errors` envelope, see
+[Conventions](../API.md#conventions)) is declared because the route is
+schema-validated, but both parameters are optional strings, so it is rare.
 
 ---
 

@@ -28,14 +28,13 @@ detector lifecycle, evaluation. It has no Flask, no Angular, no settings
 JSON. `vtsearch` is the **application** that wraps `vtscore` with a
 Flask + Angular UI, a per-user settings system, and authentication.
 
-The two ship from the same git repository today. See
+The two ship from the same git repository. See
 [architecture.md](architecture.md) for the dependency direction
 (`vtsearch` depends on `vtscore`, never the reverse).
 
 ### Can I use `vtscore` without `vtsearch`?
 
-Yes. The whole point of the extraction was to make `vtscore` a standalone
-library. See [integration.md](integration.md) for what installing it in
+Yes; `vtscore` is a standalone library. See [integration.md](integration.md) for what installing it in
 your own app looks like.
 
 ### Why don't I see `vtscore` on PyPI?
@@ -261,20 +260,15 @@ Both rules are monotone non-increasing in `k`, so the included sets are
 nested: everything included at `k` is still included at `k + 1`. That is
 what makes "cut off at Inclusion 1, verify up to Inclusion 4" well-defined.
 
-Inclusion is no longer a user preference (#4269): the app's control is the
-**balance** (#4413), F-beta's beta, where the user says which way to lean
-between precision and recall: the line keeps the top of the ranking where the
-estimated F-beta peaks, and a spot check of random picks measures how much of
-it is right and how much it found
-(`vtscore.training.thresholds.spot_check`, #4272). `k` stays underneath, as
-the unit Autopilot's acquisition offset and the Smart indicator's pricing are
-measured in. The entry points that used to take
-the user's Inclusion (`train_and_score(inclusion_value=...)` and its
-siblings, `vtscore.state.set_inclusion`, `CoreConfig(inclusion=...)`) are
-deprecated: they accept only `0`, with a `DeprecationWarning`. The
-lower-level functions that take `inclusion_value` as a cut position
-(`conformal_threshold`, `threshold_from_folds`, `train_svm`, ...) are
-unchanged.
+Inclusion is not a user setting: the app's user-facing control is F-beta's
+beta (`CoreConfig.beta`, `vtscore.state.set_beta`), with `k` kept as an
+internal unit. The detector-level entry points that take an inclusion
+(`train_and_score(inclusion_value=...)` and its siblings,
+`vtscore.state.set_inclusion`, `CoreConfig(inclusion=...)`) are deprecated
+and accept only `0`, with a `DeprecationWarning`. The lower-level
+functions that take `inclusion_value` as a cut position
+(`conformal_threshold`, `threshold_from_folds`, `train_svm`, …) are
+unaffected.
 
 ### How is the decision threshold chosen?
 
@@ -285,11 +279,10 @@ fold's *held-out* votes clamped to their labeled component; each fold's
 midpoint cut is carried to the final model as a quantile, the folds are
 averaged in quantile space, and a cut at another inclusion shifts that
 quantile by the rate-optimal cut's own displacement from Inclusion 0. See
-`vtscore/training/thresholds/anchored.py:fold_anchored_gmm_threshold`. It is
-unconditional - there used to be a `safe_thresholds` toggle, but the
-fused estimator measured better at every label count, so the toggle was
-removed. `calculate_safe_threshold` remains the fallback for label sets
-too small to form calibration folds.
+`fold_anchored_gmm_threshold` in `vtscore/training/thresholds/anchored.py`.
+It is unconditional (no setting selects it).
+`calculate_safe_threshold` is the fallback for label sets too small to
+form calibration folds.
 
 ## Detectors on disk
 
@@ -478,9 +471,10 @@ embedding under a `ConcurrencyGate` capped by
 `CoreConfig.max_concurrent_dataset_embeddings`. Bumping that value lets
 multiple datasets embed in parallel.
 
-Within a single dataset, embedder fan-out is automatic: each importer's
-`run()` decides the fan-out. The folder importer fans out per-file using
-a pool sized by `cap_workers_by_memory()`.
+Within a single dataset, the folder loader builds per-file media dicts
+on a thread pool of `min(8, cpu_count)` workers; embedding itself is one
+bulk call per embedder, with forward passes serialised by the shared
+embed lock (see [Is the embedder cache thread-safe?](#is-the-embedder-cache-thread-safe)).
 
 ## Threading and concurrency
 

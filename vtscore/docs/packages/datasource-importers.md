@@ -118,7 +118,7 @@ example-media picker.
 | Name | Category | Notes |
 |------|----------|-------|
 | `server_file` | `server` | One `path` field (type `server_path`). Re-validates through `validate_server_filepath` against the per-user base dir, then records the **validated** path as the origin's `path` param |
-| `url_download` | `services` | One `url` field. Filename is taken from the URL path (fallback `download.bin`); origin is `{"url": ...}`, resolved later by the `url_download` `MediaSource`. The URL passes `vtscore.security.validate_url` (SSRF guard) at normalisation time and is re-checked on every redirect hop at fetch time |
+| `url_download` | `services` | One `url` field. Filename is taken from the URL path (fallback `download.bin`); origin is `{"url": ...}`, resolved later by the `url_download` `MediaSource`. The URL passes `vtscore.security.url_validation.validate_url` (SSRF guard) at normalisation time and is re-checked on every redirect hop at fetch time |
 
 ---
 

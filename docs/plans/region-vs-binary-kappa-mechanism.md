@@ -4,6 +4,15 @@
 bench (`scripts/experiments/calibration/theory_kappa_bench.py`) with
 preliminary results**
 
+**Rescoped 2026-10-10.** Since #4452 a trained head's line is the labels line,
+which never reads κ. κ now shapes only the fused fallback cut (no class model, or
+no labels line for acquisition), so the practical payoff below, a run-time
+gate, applies only there. The **theory** items stand on their own and cost no
+GPU. The real-data items wait on the gate item in
+[`population-anchored-calibration.md`](population-anchored-calibration.md): if
+the fallback barely decides anything on the shipped path, they are dropped. Any
+real-data measurement is priced on F-beta at the balance, not cost at Inclusion.
+
 ## Background — the observation that has no explanation yet
 
 PR #2864's anchor-mass sweep established two things empirically and explained
@@ -160,7 +169,8 @@ bench checkpoints per configuration, so a rerun resumes.
 
 <!-- item-sep -->
 
-- **Curvature as the shipped gate, if it survives.** The practical payoff of
+- **Curvature as the fallback's gate, if it survives (waits on run 2 and on
+  population-anchored-calibration's gate item).** The practical payoff of
   the mechanism is a gate that is *measurable at run time*. `L''(τ*)` is not
   observable, but the fitted mixture is: the two components' separation and
   the density at the cut are both available from `GmmFit1D` at zero extra
@@ -180,7 +190,8 @@ bench checkpoints per configuration, so a rerun resumes.
   the `repool_variants` machinery in `vtscore.eval.voting_iterations` from #2781) and re-run the κ sweep on each.
   A real-data κ\* that falls with `m` on the *same* images is the causal claim;
   #2864's cross-dataset comparison cannot make it. This is the expensive one
-  (GPU prepare + a full cell array) and should wait on run 2.
+  (GPU prepare + a full cell array). It waits on run 2, and runs only if the
+  fallback gate says the fused cut still decides enough of the shipped path.
 
 <!-- item-sep -->
 

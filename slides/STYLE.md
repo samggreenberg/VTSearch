@@ -162,20 +162,13 @@ that plus one `OBJECT_GAP_PT` — 27.8px at the largest scale a full-bleed figur
 is drawn at — so the nearest ink clears the headline by the deck's own standard
 gap. Hence 130.
 
-It was 200 until #3969 and 250 before #3242, and each was the same defect one
-rule-change behind: 250 was sized for sentence-length headlines #3242 retitled
-away, 200 for the four-line headlines (191.2px) the two-line cap removed. Those
-pixels are not free — they come out of every full-bleed figure, on the one axis
-a slide is short of.
-
-So what obliges a re-measure is now a change to the **type rule**: `h2`'s
+Do not pad it: those pixels come out of every full-bleed figure, on the one
+axis a slide is short of. What obliges a re-measure is now a change to the **type rule**: `h2`'s
 font-size or line-height, or the two-line cap itself. A longer headline cannot
 invalidate it. To re-take it, render the deck to HTML and read the boxes:
 
 ```bash
-./build.py hold-the-line
-npx @marp-team/marp-cli@4 _build/hold-the-line.md --theme-set themes/ \
-    --allow-local-files --html -o _out/hold-the-line.html
+./render.sh hold-the-line html    # -> _out/hold-the-line.html
 # then, in a browser: for every `section.full h2`, its height / (slide width / 1280)
 ```
 
@@ -195,11 +188,10 @@ for the reason a drawing that fills its slot has nowhere to spend the slack:
 unused reserve left a band under the title with no title in it and no items
 either. It takes the measured box plus one `OBJECT_GAP_PT`, giving 88.
 
-**Trim only for a one-line headline.** `embed-flow` also carried an override
-until #3969: its headline is two lines, so its measured box plus a gap came to
-exactly the 130 the standard now reserves. An override that equals the standard
-buys nothing and is worse than none, because it is a literal — it would have
-gone on saying 130 after the standard next moved. Do not trim x, y or width
+**Trim only for a one-line headline.** A two-line headline's measured box plus
+a gap is exactly the standard 130, and an override that equals the standard is
+worse than none: it is a literal that goes on saying 130 after the standard
+next moves. Do not trim x, y or width
 either; the notch's *position* is the standard, and a figure whose ink reaches
 the top-left corner still carries no title.
 
@@ -222,10 +214,9 @@ together. So a notch wider than that is unclearable at any aspect a slide can
 show, which is why 300px and not 420px.
 
 The hard case is a figure whose **top row spans the drawing** — a score axis or
-a scatter that starts in the top-left by construction. This used to be where a
-slide gave up its title. It is not, and #3242 is the proof: every full-bleed
-figure in the deck now clears the reserve, and `save()` enforces it on all of
-them rather than taking a `notch=False`. The blocker in that case is
+a scatter that starts in the top-left by construction. That is still no reason
+to give up the title: every full-bleed figure in the deck clears the reserve,
+and `save()` enforces it on all of them rather than taking a `notch=False`. The blocker in that case is
 *horizontal*, so shortening the reserve moves nothing out of it — which is why
 the repair is one of these three, in rising order of cost:
 
@@ -235,10 +226,8 @@ the repair is one of these three, in rising order of cost:
   `calib-quantile-flow` and `vote-boundary` are repaired this way and pay
   nothing at all.
 - **Move the one thing that reaches left.** Often the ink in the reserve is a
-  single object, not the drawing: the "Unlabeled" label that used to hang off
-  the left edge of `D`<sub>−1</sub> in three figures held all three two units
-  right of where they wanted to sit.
-  Drop it, shift it to the other side, or give its row back the space
+  single object, not the drawing — a label hanging off a box's left edge can
+  hold a whole figure units right of where it wants to sit. Drop it, shift it to the other side, or give its row back the space
   elsewhere.
 - **Indent the axis.** When the top row genuinely spans the drawing —
   `calib-knob-flow`, `-walk-`, `-tilt-` — the panel starts right of the notch
@@ -247,7 +236,7 @@ the repair is one of these three, in rising order of cost:
 
 A figure that resists all three still carries no title, and its headline
 becomes the first line of the notes. That is the standard working, not
-failing — but check the three first, because none of them was tried before.
+failing — but try the three first.
 
 <!-- item-sep -->
 
@@ -285,9 +274,7 @@ measures it in the browser Marp rasterises with, on the real deck, by trying
 every word break and reading the line boxes back:
 
 ```bash
-./build.py hold-the-line
-npx @marp-team/marp-cli@4 _build/hold-the-line.md --theme-set themes/ \
-    --allow-local-files --html -o _out/hold-the-line.html
+./render.sh hold-the-line html
 node balance-titles.mjs _out/hold-the-line.html            # report
 node balance-titles.mjs _out/hold-the-line.html --write    # apply
 ```
@@ -304,11 +291,9 @@ What is never the author's call is *where* a two-line headline divides.
 
 ## Size a figure to a 16:9 slot, not to a square one
 
-The old rule here read "the standard sidebar is a 717×720 box — very nearly
-*square*, so six panels go 3 rows × 2 cols, not 2 × 3." That was right for the
-sidebar and is exactly wrong now: a full-bleed slot is **1280×720**, and a tall
-grid in a wide box is the same decision as drawing everything at half size.
-Six panels go **2 rows × 3 cols**.
+A full-bleed slot is **1280×720**, not the near-square 717×720 sidebar, and a
+tall grid in a wide box is the same decision as drawing everything at half
+size. Six panels go **2 rows × 3 cols**.
 
 The arithmetic behind the type floor is unchanged — a figure `W` inches wide is
 drawn at `W × 72` points and displayed in a `P`-pixel slot, so it renders at
@@ -488,13 +473,10 @@ markers). Two rules keep a build honest:
 
   **A click-through is the exception, and declares itself.** A run of UI
   screenshots — three dialogs, six votes in a row — has no final page that
-  contains the others: each frame is a different screen of equal standing, and
-  the layout holds still only in the sense that the same slot keeps being
-  refilled. Such a fragment writes `<!-- frames: equal -->` at the top, which
-  is what tells the speaker build not to pick one of them to blow up. Everything
-  else is a build-up and needs no declaration. The difference is semantic, not
-  visual — it is about whether a later frame *contains* an earlier one — so it
-  is declared rather than detected.
+  contains the others, only the same slot refilled. Such a fragment writes
+  `<!-- frames: equal -->` at the top (see *Build-up, or equal weight?* in
+  [`README.md`](README.md)); everything else is a build-up and needs no
+  declaration.
 - **Chop at the mechanism's own joints.** One reveal per step the speaker
   narrates, not per bullet and not per sentence. A build that advances on
   every line is a slow way to read a list; a build that reveals "and now the
@@ -509,13 +491,8 @@ sheet labels each frame with. `build.py --check` requires every page of a
 group to be named by some note — one note may cover two, but no frame may go
 unmentioned.
 
-The speaker build draws the group in whichever of two shapes the fragment
-declares. A **build-up** gets its last page large — a speaker glancing at notes
-needs the whole picture, not whichever stage the audience is on — with the
-earlier frames small beneath it. An **equal-weight** group gets every frame at
-one size and no hero, which is also a bigger frame, because the space the hero
-would have taken is shared out. Either way the overview is why a note never has
-to *describe* the build: "this slide is a seven-page build" is a sentence spent
+The speaker build shows the whole group under the notes (the shapes are in
+[`README.md`](README.md)), which is why a note never has to *describe* the build: "this slide is a seven-page build" is a sentence spent
 saying what a picture already says.
 
 **Notes are budgeted, not paginated.** A wordy slide is an edit, not a

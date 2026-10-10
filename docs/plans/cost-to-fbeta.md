@@ -56,16 +56,16 @@ progress whatever the metric.
 
 | decision, where it lives | set by, read on | what it still does | disposition |
 |---|---|---|---|
-| Acquisition offset −4 (`ACQUISITION_INCLUSION_OFFSET`, `knobs.py`), re-cut through the fused estimator | #3319: cost plateau from −2 to −5; −4 chosen on hard-pick precision, at 7.1% prevalence | Autopilot's `hard` picks every click. The one shipping mechanism still parameterised in cost's units. #4409 / #4428 priced rank-depth *alternatives* on the objective and kept line − 4; the value itself, κ and the cut rule were never re-swept | **#3546** (open) owns it; the offset sweep and the region cross-check are added there |
+| Acquisition offset −4 (`ACQUISITION_INCLUSION_OFFSET`, `knobs.py`), re-cut through the fused estimator | #3319: cost plateau from −2 to −5; −4 chosen on hard-pick precision, at 7.1% prevalence | Autopilot's `hard` picks every click. The one shipping mechanism still parameterised in cost's units. #4409 / #4428 priced rank-depth *alternatives* on the objective and kept line − 4; the value itself, κ and the cut rule were never re-swept | **#3546** (closed) owned it; the offset sweep and the region cross-check are added there |
 | Fused estimator: κ = 0.3, `mid_tilt`, GMM midpoint, `qmean` (`anchored.py`, `gmm.py`) | #2852, #2865, #2836 on regret at Inclusion 0 | The acquisition re-cut above, and the line when no class model can be fitted | **#3546** and the re-scoring (#4582) |
-| Smart light: `FPR + FNR` at each model's Inclusion 0 cut (`vtscore/detectors/cost_trend.py`) | #3832, #4243, by reasoning; never A/B'd | Ends `hard`, gates `done` | **#4359** (open), re-keyed from the floor to the balance |
+| Smart light: `FPR + FNR` at each model's Inclusion 0 cut (`vtscore/detectors/cost_trend.py`) | #3832, #4243, by reasoning; never A/B'd | Ends `hard`, gates `done` | **#4359** (closed), re-keyed from the floor to the balance |
 | Calibration split 0.3 / 0.5 (`PRODUCTION_SPLIT_BY_SPACE`) and fold count 2 (`DEFAULT_CALIBRATE_COUNT`) | #3287, #3314 on Δcost of the *mixture* line | The folds whose held-out scores are the labels line's class model | **#4583**: the one Cost-era knob the new line reads that nobody has measured |
-| Text-sort line `gmm_midpoint` (`TEXT_SORT_CUT_RULE`; the guarded rule ships off) | #3826: the A/B failed a Δcost ship rule; the study's F1 reading favoured the guarded line | The threshold the app holds for the opening's ~23 votes, and where the Bad phase samples | **#4136** (open): the display half is now measurable on the objective without a trajectory A/B |
+| Text-sort line `gmm_midpoint` (`TEXT_SORT_CUT_RULE`; the guarded rule ships off) | #3826: the A/B failed a Δcost ship rule; the study's F1 reading favoured the guarded line | The threshold the app holds for the opening's ~23 votes, and where the Bad phase samples | **#4136** (closed): the display half is now measurable on the objective without a trajectory A/B |
 | Band schedule 8 / 8 / 16 / 32, 5 picks a band; the 32 / 128 cap (`spot_check.py`) | #4267, #4383 on the floor's promise; the walk arms were a wash on the objective (#4427) | The check's picks are training votes; the cap holds only the no-class-model fallback | Settled by #4427, #4452 and #4496; #4482 priced a band pick: worth no more than Autopilot's own |
-| Blend fallback schedules `corridor20` / `slow_cap50` (`blend_schedules.py`) | #2841, #3551 on cost under re-weighted losses | Fires on about 1% of steps, when no fold can be fitted | Not worth a run: the effect cannot reach the objective at that rate |
+| Blend fallback schedules `corridor20` / `slow_cap50` (`vtscore/training/blend_schedules.py`) | #2841, #3551 on cost under re-weighted losses | Fires on about 1% of steps, when no fold can be fitted | Not worth a run: the effect cannot reach the objective at that rate |
 | Anchored EM numerics (`_ANCHORED_EM_*`), the native 1-D EM | #3825, #3839, #3585 on convergence; a cost A/B as the guard | Every fused fit | Settled: numerical, not a cut decision |
 | Head: linear SVM at `C = 1` | #3197, #4114, #4219 on oracle cost, AUROC and AP | The ranking | Settled on ranking; re-scored only where AP and AUROC disagreed (#4582) |
-| Opening `g3@top,b4@mid,g20+dry1/16@top` (`PRODUCTION_STARTUP`) | #4222, #4282, #4303 on AP | Autopilot's first ~23 votes | Settled: read on AP |
+| Opening `g3@top,b4@mid` (`PRODUCTION_STARTUP`; the `g20+dry1/16@top` walk was dropped in #4740) | #4222, #4282, #4303 on AP | Autopilot's first ~23 votes | Settled: read on AP |
 | Stopping-point reporting | #3560's plan proposes `cost at stop` / `cost at budget` columns | How every future study reports where a user would have stopped | **#3560** (open): the tables carry the objective |
 | A/B sizing σ ≈ 0.04 per cell, `analyze_ab.py` deciding on `cost` | #3840, #4111 in cost units | Sizes and decides every rerun on this list | **#4584**: on balance-era pairs the objective's σ is about 0.08 at beta 1 and 0.16 at beta 1/4, so a grid sized for Δcost 0.01 resolves 0.02 to 0.04 of F-beta |
 
@@ -100,18 +100,6 @@ cut.
   decisions that flip to a grid.
 
 ## Open work
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
 
 <!-- item-sep -->
 

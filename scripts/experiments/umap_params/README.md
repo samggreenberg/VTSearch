@@ -4,7 +4,8 @@ Dev-only experiment harness for **Part 1** of `docs/plans/vtsbrowse-empirical-tu
 choose the VTSBrowse Stage-1 projection defaults (`n_neighbors`, `min_dist`, and
 the `compact` boolean) **per embedder**, by a parameter sweep scored with a
 ceiling-normalized taxonomy-separability metric, plus label-free structure
-guards and multi-seed stability. Runs on the GRID GPU cluster.
+guards and multi-seed stability. Runs on the GRID GPU cluster. Report:
+[`docs/experiments/2026-07-22-vtsbrowse-umap-tuning/REPORT.md`](../../../docs/experiments/2026-07-22-vtsbrowse-umap-tuning/REPORT.md).
 
 Not shipped: this directory is outside the package, outside `deptry`'s prod
 surface, and must not affect `./run-tests.sh`.
@@ -67,7 +68,7 @@ python scripts/experiments/umap_params/plots.py
 python scripts/experiments/umap_params/visualize.py esc50_l clap
 ```
 
-Env (`/exp/sgreenberg/umap_env.sh`): the venv needs
+Env (a personal `umap_env.sh`, not in the repo): the venv needs
 `LD_LIBRARY_PATH=/cluster/apps/python/3.12.3/lib`; models live on
 `/exp/scale26/.../models` (`VTSEARCH_MODELS_DIR` + `HF_HOME`) because the model
 cache does not fit on the 50 GB `/exp/$USER` volume; results write to

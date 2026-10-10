@@ -113,11 +113,13 @@ Two template variables resolve at runtime from the active
   rename endpoint resolves both old and new paths to detect orphaned
   files)
 
-**Declare them on the field; don't substitute them yourself.** The
-framework only interpolates a field that lists the variables in
-`template_vars`, and it sanitises each resolved value with
-`sanitize_template_value` so a detector named `../../etc/passwd` can't
-escape the admin-configured template:
+Declare them in the field's `template_vars` and the framework
+substitutes and sanitises them (rules in
+[results-exporters.md § Template-variable interpolation](results-exporters.md#template-variable-interpolation)).
+For a `server_path` field the same pass then confines the resolved path
+to the user's data directory and writes it back, so
+`field_values["filepath"]` in your `_do_load` / `_do_save` is already
+substituted *and* confined:
 
 ```python
 PluginField(
@@ -128,14 +130,6 @@ PluginField(
     template_vars=("detector_id", "detector_name"),
 )
 ```
-
-Because the field is typed `server_path`, the same pass also runs the
-resolved path through `confine_server_filepath()` anchored at the
-current user's data directory and writes the approved path back, so
-`field_values["filepath"]` in your `_do_load` / `_do_save` is already
-substituted *and* confined. Omit `template_vars` and the user's
-`{detector_name}` arrives as a literal - the placeholder ends up in the
-filename.
 
 The one case that still needs manual work is resolving a template for a
 detector that **isn't** the active one - the rename endpoint has to

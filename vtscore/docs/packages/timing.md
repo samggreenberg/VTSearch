@@ -130,19 +130,11 @@ ignored.
 
 ---
 
-## Retired: the per-environment profile
+## Deprecated: the per-environment profile
 
-Until #4667 a deployment could measure itself and override the shipped
-terms per cell: a recorder armed by `VTSEARCH_TIMING_RECORD` wrote one
-JSONL row per step, a tuning script fitted the rows into a profile JSON
-(`schema: vtsearch-timing-profile`), and `VTSEARCH_TIMING_PROFILE`
-pointed every instance at it. Its main job was steadying the
-remaining-time estimate on dataset imports, and that estimate was
-removed: an import's rate is set by the network, the source's disks and
-the files themselves, and no table predicted it well enough to show.
-The recorder, the fitter (`vtscore.timing.fit`) and the tuning script
-were deleted with it; neither environment variable is read any more.
-
+The admin-measured profile (`VTSEARCH_TIMING_PROFILE`, fed by the
+`VTSEARCH_TIMING_RECORD` recorder) was retired with the dataset-import ETA
+it chiefly existed to steady (#4667); neither environment variable is read.
 The public names are kept as **deprecated no-ops** so out-of-tree code
 keeps importing them:
 

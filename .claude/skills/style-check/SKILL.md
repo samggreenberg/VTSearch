@@ -6,9 +6,8 @@ description: Run a systematic frontend style audit. Use when the user asks for a
 # Frontend style check
 
 Static audit of `frontend/src/**/*.scss` against the rules in
-`docs/style-guide.md`. Catches the categories of mistakes that produce
-the kind of "spacing looks off / fonts inconsistent" bugs that motivated
-this skill in the first place.
+`docs/style-guide.md`: the mistakes behind "spacing looks off / fonts
+inconsistent" bugs.
 
 ## How to run it
 
@@ -19,7 +18,7 @@ python3 .claude/scripts/style-check.py
 The script prints findings grouped by style-guide section, with
 `file:line: snippet` for each hit, plus a one-line "why" per rule.
 It exits 0 even when findings exist - this is a **report tool, not a
-CI gate**. Many hits are legitimate (see "Curating findings" below);
+`run-tests.sh` gate**. Many hits are legitimate (see "Curating findings" below);
 your job is to review them and decide which to fix.
 
 ## What it checks

@@ -75,43 +75,12 @@ keeping VG.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
 - **Use it as a bench for METHOD comparisons (owner, 2026-09-23).** The data is
   never ours to choose in the field, so the value is A vs B, or A across settings,
   with `coco_better`'s classes and bands as strata to report ACROSS rather than as
   the variable under study. Data-property studies (#4051, #4043, #3589, #3807)
-  were closed on that ruling. The queued method studies that want this bench
-  include the acquisition offset's environment dependence (#3546) and region
-  styles (#2895).
+  were closed on that ruling. The queued method study that wants this bench is
+  region styles (#2895).
 
 <!-- item-sep -->
 

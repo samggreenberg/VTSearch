@@ -143,6 +143,10 @@ canonical persisted form.
 | `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the balance's state counts the unvoted items of it the line keeps, and the spot check draws its bands from it |
 | `precision_check` / `precision_check_run` | `SpotCheck \| None` | The balance's last finished spot check (kept across retrains; its ranges go `stale`) and the one running now |
 | `check_ended_votes` | `int \| None` | The vote total when the last spot check ended, finished or closed: the weak-separation prompt's cooldown counts from it (`weak_check_due`, #4496) |
+| `gate_passed` | `frozenset[int] \| None` | A structural detector's line: the items the verification gate passed on the last re-rank (#4505), counted by the balance in place of `line_ranking` |
+| `line_test` | `LineTest \| None` | The Test mode sample running on this detector ([training.md](training.md#the-test-sample-linetest-linebudgets-line_phase-found_words)) |
+| `labels_line` | `LabelsLine \| None` | The labels line the last retrain fitted (#4452): a balance change re-cuts it without a retrain |
+| `beta` / `beta_seeded` | `float \| None` / `bool` | The detector's balance and whether it has been seeded from its JSON or the user's setting (#4665; see [Setting-persistence hooks](#setting-persistence-hooks)) |
 
 Everything in this table is in-memory only. `model`,
 `label_embeddings`, `label_local_features`

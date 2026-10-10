@@ -131,7 +131,8 @@ The tables below are generated from the demo-dataset registry (each media type's
 > **Rico Icons is the one source whose size variants differ in download.** Its
 > screenshots run to ~7.7 GB across 67 shard folders, so the loader fetches the
 > 535 MB annotation manifest first, slices it, then pulls only the shard folders
-> that slice lands in — (S) costs two folders, not sixty-seven. Every other
+> that slice lands in (plus one for a slice that straddles a boundary) — (S)
+> costs three folders, not sixty-seven. Every other
 > source's **Download** column is the full-source figure for all four variants.
 
 

@@ -20,52 +20,52 @@ larger than `max_patch`, ties/beats at the oracle), but no pre-registered remedy
 (`topk`, sign-corrected `pnorm`) recovers it, so `max_patch` stays the region-vote
 strategy.
 
+**Rescoped 2026-10-10.** That study measured *cost regret* (the conformal cut
+against the cost oracle) at an Inclusion setting. Both are retired from the
+shipped path. Since #4452 the line is the labels line at the detector's balance,
+Inclusion is internal at 0 (#4269), and the harness now carries an F-beta oracle
+(`oracle_fbeta`, #4654). So the question this plan still owes is the same one,
+asked of today's line: **how far is the labels line from the best F-beta cut**,
+by voting mode and patch style, on trajectories a user would actually walk.
+
 ## Open follow-ups
 
 <!-- item-sep -->
 
-- **Max-pool-aware calibration for the raw-patch tree.** The study proves the
-  tree ranks best (lowest oracle cost) but is calibration-bottlenecked, and that
-  neither `topk` nor the sign-corrected `pnorm` (closes only ~21% of the gap)
-  recovers it. A calibration rule that models the max-over-N tail directly — or
-  a per-node-count threshold — is the remaining lever; measure it against
-  `max_patch`'s trained cost before any production change. The
-  `max_patch_hac` / `max_patch_pca_hac` styles (and `build_patch_hac_tree`)
-  survive in `vtscore/eval/patch_styles.py` for exactly this; production itself
-  is tree-free since #2886.
+- **Re-run the study on today's line.** Same cells and pickles; the default arm
+  (labels line at the balance, `autopilot_fidelity=True`) at the pre-registered
+  4 seeds, reporting F-beta over `oracle_fbeta` per step, instead of cost regret.
+  This one run folds in the old "4 seeds" and "Autopilot fidelity" follow-ups.
+  The tree geometry and re-pools are opt-in since #3400, so add
+  `CALIB_PATCH_STYLES=max_patch,max_patch_pca_hac
+  CALIB_REPOOL_VARIANTS=topk,pnorm` and declare `patch_style` to preflight.
 
 <!-- item-sep -->
 
-- **Re-run at the pre-registered 4 seeds with corrected `pnorm`.** This run used
-  2 seeds (4-GPU QOS cap) and only measured the sign-corrected `pnorm` on the
-  post-#2784 pass. A 4-seed replication would tighten the tree regret Wilcoxon
-  (currently p = 0.013 at 2 seeds) and give `pnorm` a clean, non-inverted read
-  from t = 0. Both the tree geometry and the re-pools are **opt-in** since #3400
-  (they were defaults, and every analyzer discards their rows), so this re-run
-  sets `CALIB_PATCH_STYLES=max_patch,max_patch_pca_hac
-  CALIB_REPOOL_VARIANTS=topk,pnorm` and declares `patch_style` to preflight.
+- **Max-pool-aware calibration for the raw-patch tree, if the re-run still shows
+  the gap.** The 2026-07-31 study found the tree ranks best but is
+  calibration-bottlenecked, and neither `topk` nor the sign-corrected `pnorm`
+  recovered it. The labels line fits its class model on the same max-pooled
+  scores, so the gap may persist; measure it in the re-run first. Only if it does
+  is a rule that models the max-over-N tail (or a per-node-count line) worth
+  building, measured against `max_patch` on F-beta. The `max_patch_hac` /
+  `max_patch_pca_hac` styles survive in `vtscore/eval/patch_styles.py` for this;
+  production is tree-free since #2886.
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **Re-run under Autopilot fidelity.** Every number in the report comes from the
-  legacy vote order (`autopilot_fidelity=False`): training from the first
-  (1 good, 1 bad) pair instead of the app's 3-good/4-bad quorum, bad votes from
-  the bottom of the sort rather than the text sort's cutoff. Re-running with the
-  default (`True`) would say how much of the measured regret — especially at low
-  `t` — survives on trajectories a user would actually walk. Cheap: same cells,
-  same pickles, one flag.
+<!-- item-sep -->
+
+- **Patch styles under binary voting.** Caltech × {`max_patch`,
+  `max_patch_pca_hac`} measures the line's F-beta gap when every Good vote is
+  image-level (the "user ignores region voting" mode). Run it as an extra cell of
+  the re-run above.
 
 <!-- item-sep -->
 
-- **Patch styles under binary voting** — Caltech × {`max_patch`,
-  `max_patch_pca_hac`} would measure grouped-calibration regret when every Good
-  vote is image-level (the "user ignores region voting" mode).
-
-<!-- item-sep -->
-
-- **Plain `max_patch_hac` arm** — isolates PCA merge-ordering from node-count
-  effects if a follow-up verdict hinges on something PCA-specific.
+- **Plain `max_patch_hac` arm.** Isolates PCA merge-ordering from node-count
+  effects, if a verdict from the re-run hinges on something PCA-specific.
 
 <!-- item-sep -->

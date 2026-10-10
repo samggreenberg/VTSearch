@@ -5,6 +5,10 @@
 > Endpoints that act on "the loaded dataset" resolve it via the
 > [`X-Dataset-Id` context header](../API.md#context-headers-x-dataset-id--x-detector-id)
 > (registry routes take the id in the path instead).
+>
+> This page covers purpose and non-obvious semantics. Exact request/response
+> fields are in the OpenAPI spec (`frontend/openapi.json`, or live at
+> `GET /api/docs`); see [Machine-readable schema](../API.md#machine-readable-schema).
 
 ---
 
@@ -16,21 +20,9 @@
 GET /api/media-types
 ```
 
-→
-```json
-{
-  "media_types": [
-    {
-      "type_id": "audio",
-      "name": "Audio",
-      "icon": "🔊",
-      "folder_import_name": "audio",
-      "loops": true,
-      "file_extensions": ["*.wav", "*.mp3"]
-    }
-  ]
-}
-```
+→ `{media_types: [...]}`: every registered media type with its `type_id`,
+display `name`, `icon`, `folder_import_name`, `loops` flag and accepted
+`file_extensions`.
 
 ### Embedders
 
@@ -41,7 +33,8 @@ GET /api/embedders
 **Query:** `?media_type=image` (optional): filter by `type_id` or
 `folder_import_name`.
 
-→ `{"embedders": [{"name": "siglip", "display_name": "SigLIP", "model_id": "google/siglip-base-patch16-224", "media_type_id": "image", ...}]}`
+→ `{embedders: [...]}`, each with its `name`, `display_name`, `model_id` and
+`media_type_id`.
 
 ### Embed on demand
 
@@ -71,24 +64,15 @@ Calls `embed_text(...)`; only embedders whose `supports_text` is `true`
 accept this mode (image/audio cross-modal embedders like CLIP, SigLIP, CLAP
 support it; vision-only embedders like DINOv3 do not).
 
-→
-```json
-{
-  "embedding": [0.123, -0.045, ...],
-  "dim": 512,
-  "norm": 1.0,
-  "embedder": "clip",
-  "media_type": "image"
-}
-```
+→ `{embedding, dim, norm, embedder, media_type}`.
 
 **Errors:**
 
 | Status | Cause |
 |--------|-------|
-| `400` | Missing `embedder`; missing `file` (multipart) or `text` (JSON); text sent to an embedder where `supports_text == false`; file extension does not match the embedder's media type; embedder returned no vector for the upload. |
-| `404` | Unknown embedder name. Response body lists every registered embedder's `name`. |
-| `500` | Model load failure, or text embedding returned `None`. |
+| `400` | Missing `embedder`; missing `file` (multipart) or `text` (JSON); text sent to an embedder where `supports_text == false` (body carries `supports_text: false`); file extension belongs to another media type than the embedder's; embedder returned no vector for the upload. |
+| `404` | Unknown embedder name; the body's `available` lists every registered embedder. |
+| `500` | Model load or embedding raised, or text embedding returned no vector. |
 
 ### Clippers
 
@@ -99,13 +83,10 @@ GET /api/clippers
 **Query:** `?media_type=audio` (optional): filter by `type_id` or
 `folder_import_name`.
 
-→ `{"clippers": [{"name": "sound_default", "media_type": "audio", "display_name": "Sound Default", "description": "Import each audio file as-is, without splitting.", ...}]}`
-
-Each clipper object includes `name`, `display_name`, `media_type`, and
-an optional `description` (short tooltip text). Clippers with
-configurable settings also include `parameters` and
-`creation_questions` arrays, where each parameter has `key`, `label`,
-`type`, `default`, and an optional `description` for hover tooltips.
+→ `{clippers: [...]}`. Each clipper carries `name`, `display_name`,
+`media_type` and an optional tooltip `description`; clippers with settings also
+carry `parameters` and `creation_questions` arrays (each parameter: `key`,
+`label`, `type`, `default`, optional `description`).
 
 ### Cleaners
 
@@ -116,7 +97,7 @@ GET /api/cleaners
 **Query:** `?media_type=image` (optional): filter by `type_id` or
 `folder_import_name`.
 
-→ `{"cleaners": [{"name": "image_exif_orient", "media_type": "image", "display_name": "EXIF Orientation", "default_enabled": false, "description": "Rewrite photos upright in their stored bytes…"}]}`
+→ `{cleaners: [...]}`.
 
 *Cleaners* are the optional 1-to-1 cleanup gates every imported item of a media
 type can pass through before it is embedded (see
@@ -150,7 +131,7 @@ GET /api/converters
 **Query (mutually exclusive):** `?source=video` or `?target=image`: filter by
 `type_id` or `folder_import_name`. Omit both to list all converters.
 
-→ `{"converters": [{"name": "video2image", "source_type": "video", "target_type": "image", ...}]}`
+→ `{converters: [...]}`, each with its `name`, `source_type` and `target_type`.
 
 ---
 
@@ -162,9 +143,8 @@ GET /api/converters
 GET /api/dataset/status
 ```
 
-→ `{"loaded": true, "num_medias": 500, "has_votes": true, "media_type": "audio", "display_name": "ESC-50", "num_dupes": 3}`
-
-With no dataset loaded: `loaded: false`, counts `0`, `media_type` and
+→ `{loaded, num_medias, has_votes, media_type, display_name, num_dupes}` for the
+active dataset. With none loaded: `loaded: false`, counts `0`, `media_type` and
 `display_name` `null`.
 
 ### Dataset progress (SSE)
@@ -173,16 +153,10 @@ Every dataset load, import, staging, combine, promote, and atlas build runs as
 a **task** with its own `task_id` (returned by the endpoint that started it),
 and progress streams on the `loading-tasks` channel of the unified
 [`/api/events`](events.md) Server-Sent Events endpoint — an array of every
-active task:
-
-```json
-[{"task_id": "task_abc", "name": "ESC-50", "status": "loading", "message": "...", "current": 50, "total": 500}]
-```
-
-See [events.md](events.md#task-object-shape-loading-tasks--detector-loading-tasks)
-for the full task shape. The first frame is the current snapshot; no separate
-bootstrap call is needed. (There is no process-wide `dataset` channel any
-more; work that isn't bound to a task reports nowhere.)
+active task. See
+[events.md](events.md#task-object-shape-loading-tasks--detector-loading-tasks)
+for the task shape. The first frame is the current snapshot, so no separate
+bootstrap call is needed. Work not bound to a task reports nowhere.
 
 ### Cancel loading
 
@@ -198,7 +172,7 @@ worker has to observe. `ok` therefore reports whether the cancel actually
 reached something, not merely that the flag was set — a flag set with no
 worker left to see it stops nothing.
 
-→ `200 {"ok": true, "message": "...", "targets": [...], "acknowledged": [...], "pending": [...], "unresponsive": [...]}`
+→ `{ok, message, targets, acknowledged, pending, unresponsive}`:
 
 | Field | Meaning |
 |---|---|
@@ -234,7 +208,9 @@ GET /api/dataset/all-importers
 Returns all registered importers including built-in ones (pickle, combine_datasets, demo),
 plus the picker-tab declarations the Add-Dataset modal groups them under.
 
-→ `{"importers": [{"name": "...", "display_name": "...", "description": "...", "fields": [...], "ui_mode": "form", "category": "...", ...}], "tabs": [{"id": "...", "label": "...", "icon": "...", "order": 0}]}`
+→ `{importers, tabs}`. Each importer carries its declared `fields`, `ui_mode`,
+`category` and `supports_multi_output`; each tab an `id`, `label`, `icon` and
+`order`.
 
 ```
 GET /api/dataset/importers
@@ -252,7 +228,7 @@ GET /api/dataset/available-files
 
 Lists `.pkl` files in the embeddings directory.
 
-→ `{"files": [{"name": "esc50", "path": "/abs/path/esc50.pkl", "size_mb": 12.3}]}`
+→ `{files: [{name, path, size_mb}]}`
 
 ### Importer field options (dynamic dropdowns)
 
@@ -266,9 +242,9 @@ current form snapshot, optional).
 Calls the importer's `get_field_options(field_key, values)` and returns
 dropdown options for a [dynamic-options field](../EXTENDING-plugins.md#dynamic-field-options).
 
-→ `{"options": [{"value": "a", "label": "A"}, {"value": "b", "label": "b"}]}`
-(each option carries a `value` to submit and a `label` to display; the two
-coincide for plain-string options and differ for `(value, label)` tuples).
+→ `{options: [{value, label}]}`: `value` is what to submit and `label` what to
+display; they coincide for plain-string options and differ for
+`(value, label)` tuples.
 
 400 (unknown / non-dynamic field), 404 (unknown importer), 501 (not
 implemented), 502 (remote error).
@@ -307,18 +283,11 @@ GET /api/dataset/detect-media-type
 Samples a folder's files by extension to pre-fill the import modal's
 media-type dropdown.
 
-→
-```json
-{
-  "sample_size": 50,
-  "counts_by_type": {"audio": 48, "image": 2},
-  "extensions": {".wav": 48, ".png": 2},
-  "dominant": "audio",
-  "truncated": false
-}
-```
-
-400 (path escapes root), 404 (source/dir not found).
+→ `{sample_size, counts_by_type, extensions, dominant, truncated}`; `dominant`
+is the media type with the most matching files (`null` when none match).
+`source` takes the same values as
+[`/api/browse-media-files`](#browse-media-files). 400 (path escapes the root),
+404 (source or directory not found).
 
 ---
 
@@ -461,29 +430,10 @@ GET /api/dataset/demo-list
 user is about to load with; each entry's `status` is computed against them
 (a cached pickle built with a different embedder/clipper is not `ready`).
 
-→
-```json
-{
-  "datasets": [
-    {
-      "name": "esc50_animals",
-      "label": "ESC-50 Animals",
-      "status": "ready",
-      "ready": true,
-      "num_files": 200,
-      "download_size_mb": 45.2,
-      "description": "...",
-      "media_type": "audio",
-      "num_categories": 5,
-      "pkl_embedder": "clap",
-      "pkl_clipper": "",
-      "available_converters": []
-    }
-  ]
-}
-```
-
-`status`: `"ready"`, `"needs_embedding"`, or `"needs_download"`.
+→ `{datasets: [...]}`, one entry per demo. `status` is `"ready"` (a cached
+pickle matches the requested choices), `"needs_embedding"` (the media is on disk
+but the pickle is missing or was built with another embedder/clipper) or
+`"needs_download"`.
 
 ### Demo categories
 
@@ -493,8 +443,7 @@ GET /api/dataset/demo-categories/{name}
 
 Lists the categories within a specific demo dataset.
 
-→ `{"categories": ["dog", "cat", "bird", "traffic"]}`
-404 if the demo name is not recognized.
+→ `{categories: [...]}`. 404 if the demo name is not recognized.
 
 ---
 
@@ -511,20 +460,10 @@ GET /api/browse-media-files
   configured `saved_datasets_dir`).
 - `path` (optional): relative sub-path within the root (default `""`).
 
-Lists files and subdirectories within an allowed root, filtered to only
-media files with recognized extensions.
-
-→
-```json
-{
-  "directories": [{"name": "dog", "path": "dog", "modified_at": "2025-03-31T10:15:00"}],
-  "files": [{"name": "bark.wav", "path": "dog/bark.wav", "size_bytes": 12345, "modified_at": "2025-03-31T10:15:00"}],
-  "root_path": "/absolute/path/to/root",
-  "default_path": ""
-}
-```
-
-`default_path` (optional) is the sub-path the picker should open at.
+Lists the subdirectories and recognised media files under an allowed root.
+→ `{directories, files, root_path, default_path}`; `default_path` (optional) is
+the sub-path the picker should open at. 400 if `path` escapes the root, 404 if
+the source or directory is missing.
 
 ### Select browsed file
 
@@ -549,7 +488,8 @@ POST /api/dataset/stage-file
 
 **Form:** `file` - `.pkl` file.
 
-→ `{"path": "/abs/staging/path.pkl", "name": "uploaded.pkl", "count": 500, "media_type": "audio"}`
+→ `{path, name, count, media_type}`: the staged file, ready to pass to
+[combine](#combine-datasets).
 
 ```
 POST /api/dataset/stage-import/{importer_name}
@@ -642,28 +582,10 @@ POST /api/dataset/clear
 GET /api/datasets/registry
 ```
 
-→
-```json
-{
-  "datasets": [
-    {
-      "id": "abc123",
-      "name": "ESC-50",
-      "media_type": "audio",
-      "num_items": 500,
-      "loaded": true,
-      "origin": "demo:esc50",
-      "source": {"importer": "demo", "params": {"name": "esc50"}},
-      "created_at": 1234567890.0
-    }
-  ]
-}
-```
-
-Entries also carry provenance and embedder fields (`created_by`, `readers`,
-`expires_at`, `embedder`, `bound_embedders`, `embedders_by_type`, `clipper`,
-`num_dupes`, `file_type_counts`, …); see the `DatasetsRegistryListResponse` schema in
-the spec for the full list.
+→ `{datasets: [...]}`: every registered dataset the caller can access, with its
+`id`, `name`, `media_type`, `num_items`, `loaded` flag, recorded `source`
+origin, ownership (`created_by`, `readers`, `expires_at`) and embedder fields.
+The full entry is the `DatasetsRegistryListResponse` schema in the spec.
 
 ### Load registered dataset
 
@@ -715,9 +637,7 @@ if `detector_ids` is not a list of strings.
 POST /api/datasets/registry/{dataset_id}/unload
 ```
 
-→ `{"ok": true}`
-
-400 if not loaded; 403 if the caller isn't the creator.
+→ `{"ok": true}`. 400 if not loaded; 403 if the caller isn't the creator.
 
 ### Delete registered dataset
 
@@ -725,7 +645,8 @@ POST /api/datasets/registry/{dataset_id}/unload
 DELETE /api/datasets/registry/{dataset_id}
 ```
 
-→ `{"ok": true}`
+Unloads the dataset if needed, removes it from the registry and deletes its
+pickle. → `{"ok": true}`. 403 if the caller isn't the creator, 404 if unknown.
 
 ### Rename registered dataset
 
@@ -733,9 +654,9 @@ DELETE /api/datasets/registry/{dataset_id}
 PUT /api/datasets/registry/{dataset_id}/rename
 ```
 
-**Body:** `{"name": "New Name"}`
-
-→ `{"ok": true, "name": "New Name"}`
+**Body:** `{"name": "New Name"}` → `{ok, name}`. Also renames the loaded
+context. 400 for a blank name, 403 if the caller isn't the creator, 404 if
+unknown.
 
 ### Dataset statistics
 
@@ -743,32 +664,10 @@ PUT /api/datasets/registry/{dataset_id}/rename
 GET /api/datasets/registry/{dataset_id}/stats
 ```
 
-Returns registry and ingest statistics for a registered dataset. The
-response is a superset of the Dashboard grid's row (`name`, `media_type`,
-`num_items`, `created_at`, `expires_at`, `created_by`, `readers`), so the
+Registry and ingest statistics for a registered dataset (`num_dupes`,
+`file_type_counts`, ingest start/finish times, `source`, `clipper`,
+`embedder`, …). The response is a superset of the Dashboard grid's row, so the
 Stats window can show everything the grid does while it covers the grid up.
-
-→
-```json
-{
-  "name": "Field recordings",
-  "media_type": "audio",
-  "num_items": 1250,
-  "num_dupes": 45,
-  "file_type_counts": {"wav": 800, "mp3": 450},
-  "created_at": 1743415500.0,
-  "expires_at": null,
-  "created_by": "alice",
-  "readers": ["bob"],
-  "ingest_started_at": 1743413700.0,
-  "ingest_finished_at": 1743415500.0,
-  "origin": "server_folder",
-  "source": {"importer": "server_folder", "params": {"path": "/data/sounds"}},
-  "clipper": "5 seconds",
-  "embedder": "clap"
-}
-```
-
 `expires_at` is `null` when the dataset never ages off.
 
 `file_type_counts` keys are file types, not necessarily filename extensions:
@@ -795,22 +694,7 @@ together and where each one came from. Each set corresponds to one
 `dupe_set` representative in the dataset's in-memory context; exact-dupe
 members share the representative's MD5, near-dupe members keep their own.
 
-→
-```json
-{
-  "duplicate_sets": [
-    {
-      "name": "a.wav",
-      "members": [
-        {"md5": "abc123", "filename": "a.wav", "category": "dogs",
-         "origin_name": "a.wav", "importer": "server_folder"},
-        {"md5": "abc123", "filename": "b.wav", "category": "pets",
-         "origin_name": "b.wav", "importer": "http_archive"}
-      ]
-    }
-  ]
-}
-```
+→ `{duplicate_sets: [{name, members: [{md5, filename, category, origin_name, importer}]}]}`
 
 400 if the dataset isn't loaded (duplicate provenance lives only in memory);
 403 if access is denied; 404 if the dataset does not exist.
@@ -823,10 +707,9 @@ PUT /api/datasets/registry/{dataset_id}/readers
 
 **Body:** `{"readers": ["user1", "user2"]}`
 
-Sets which users can access a dataset (multi-user deployments). Only the
-dataset owner or an admin can modify readers.
-
-→ `{"ok": true, "readers": ["user1", "user2"]}`
+Sets which users can access a dataset (multi-user deployments); `["*"]` makes
+it readable by every user. Only the dataset's creator can change it.
+→ `{ok, readers}`. 403 if the caller isn't the creator, 404 if unknown.
 
 ### Preload dataset embedder
 
@@ -867,11 +750,8 @@ header) look under `{dataset_id}`'s coverage atlas — `{dataset_id}` is the
 *reference*, i.e. the dataset a detector was trained on. Use it before
 trusting a detector trained on the reference against the active dataset.
 
-→ `{"reference_dataset_id": "…", "n_items": 40000, "alpha": 0.05,
-"frac_atypical": 0.31, "expected_atypical": 0.05, "z_score": 24.1,
-"median_pvalue": 0.18, "shifted": true}`
-
-`frac_atypical` is the fraction of active-dataset items whose typicality
+→ `{reference_dataset_id, n_items, alpha, frac_atypical, expected_atypical,
+z_score, median_pvalue, shifted}`. `frac_atypical` is the fraction of active-dataset items whose typicality
 score falls below `alpha` — roughly the shifted proportion (it stays near
 `expected_atypical` when there is no shift). `shifted` is the headline
 verdict (statistically clear **and** practically large excess).

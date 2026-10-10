@@ -8,6 +8,8 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+## [Unreleased]
+
 ### Added
 
 - **`vtscore.concurrency.stalls`: a startup bar for the watchdog.** `StallWatchdog.relaxed(threshold_ms)`
@@ -36,386 +38,6 @@ instead, since every commit on `dev` is effectively a new app release.)
   `supports_multi_output`. The new `vtscore.datasets.load_multi` runs the fan-out: one loading task,
   context, registry entry, `DatasetImported` event and post-load hook per output, under the same
   download / embed gates as a single load. Additive: no existing member changes.
-
-### Changed
-
-- **A Good and 16 Bads get the trained head, and Autopilot's Good walk can run dry** (issue #4731).
-  `vtscore.detectors.label_quota` gains a second quota, `DRY_BAD_QUOTA` (16, Autopilot's
-  `moreDryRun`): a labelset with a Good and that many Bads is `TIER_TRAINED`. `LabelQuota` takes
-  `dry_bad_quota` (default `DRY_BAD_QUOTA`; `None` is the pre-#4731 rule), `label_quota()` takes it
-  as a keyword, `as_dict()` reports it, and `goods_owed` / `bads_owed` are 0 whenever a head is
-  given. Behaviour change for a library caller: `train_from_labelset` trains the head for 1-2 Goods
-  with 16 or more Bads, where it stored the centroid. The eval harness ports Autopilot's new Good-phase
-  exit - `moreDryRun` picks in a row without a Good, with a Good in hand, end the Good phase and spend
-  the More walk - as `autopilot_flow.next_phase(good_ran_dry=)` and `AutopilotFlow(good_dry_run=)`
-  (default `MORE_DRY_RUN`, `None` the pre-#4731 arm), and `simulate_voting_iterations` takes
-  `good_dry_run` / `quota_dry_bads` (`None` the app, `"off"` the pre-#4731 arm, or a count).
-
-- **Autopilot's photo opening drops the More walk** (issue #4740, from #4671). `vtscore.eval.autopilot_flow.MORE_TARGET`
-  is `0` (was `20`) and `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is `"g3@top,b4@mid"` (was
-  `"g3@top,b4@mid,g20+dry1/16@top"`), mirroring the app's `moreToStart: 0`: on a photo dataset the phase machine goes
-  Good, Bad, then Hard. #4671 scored the walk against the opening without it on the objective, every run at every
-  vote: the walk won votes 1-25 and lost from vote 23 on, at every preset. `MORE_DRY_RUN` still ends a document
-  dataset's walk (#4488), and an explicit `more_target` still runs one. A study whose control arm should keep the
-  walk passes `CALIB_STARTUP_SCHEDULE=g3@top,b4@mid,g20+dry1/16@top`.
-
-- **`SiftMatcher.verify_many` fits a batch's RANSAC pairs on a thread pool** (issue #4516).
-  `_fit_similarity` is now `_ransac` (the `cv2.estimateAffinePartial2D` call) followed by
-  `_similarity_stats`. The stats make the same ufunc calls that `np.median`,
-  `np.linalg.norm`/`det` and `mean` made, so every `MatchStats` field is bit-identical.
-  `_fit_similarity_many` runs the cv2 calls of a batch of 128 or more pairs on up to 4 threads
-  (`_ransac_workers`: the affinity mask, capped), then computes the stats in the calling thread.
-  RANSAC per Good on a V100 drops from ~0.8 s to ~0.3 s.
-
-- **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`
-  stores F-beta's beta as a top-level `"beta"` (`BETA_KEY`) beside the labelset: `stored_beta(data)`,
-  `valid_beta(raw)`, `detector_stored_beta(detector_id)` and `keep_beta(det_ctx, value)`.
-  `vtscore.state.get_beta()` now seeds the active detector's first read from the balance its
-  detector keeps, and only then from `CoreConfig.from_settings().beta`; the new
-  `vtscore.state.detector_beta(ctx)` does the same for any context, and
-  `seed_detector_beta(ctx, data)` seeds one the registry cannot name from the JSON its caller holds.
-  `set_beta` writes the active detector's file as well as persisting the `"beta"` setting.
-  Behaviour change for a library caller: `train_and_threshold(det_ctx=...)` cuts at `det_ctx`'s own
-  balance rather than the active detector's (they are the same context on every live path), and
-  `resolve_or_train_detector`'s throwaway context and the CLI's per-detector context are seeded
-  from the detector's JSON, so a cold train, an AutoFind and `--autodetect` draw each detector's line
-  at the balance it keeps. `recompute_detector_thresholds(beta)` cuts a detector that has not read
-  its balance yet at the one it keeps, `beta` only when it keeps none. A detector JSON with no
-  `"beta"` behaves exactly as before.
-
-- **The eval harness can draw a share of Autopilot's picks the way the spot check does** (issue #4482).
-  `simulate_voting_iterations` takes `band_share` (`None`, the default and the app; or N: one in N of the
-  picks past the opening is drawn uniformly within one band of the unvoted ranking, cycling through the bands
-  a check starts from, and logged with phase `"band"`), with the pick rule in
-  `vtscore.eval.al_strategies.band_pick`. An experiment arm; the app is unchanged.
-
-- **The eval harness can walk Autopilot's More on the detector's top** (issue #4637). `simulate_voting_iterations`
-  takes `more_walk` (`"seed"`, the default and the app: the top of the typed query's sort; or `"detector"`: the More
-  walk takes the top of the step's detector ranking, and its steps record `app_trained = 1`), and
-  `vtscore.eval.autopilot_flow.app_has_detector` takes `more_shown`. An experiment arm; the app is unchanged.
-
-- **Under the label quota a labelset gives the Goods' centroid, not a trained head** (issue #4643).
-  `vtscore.detectors.labelset_training.train_from_labelset` - the app's Test, AutoFind,
-  detector load and CLI - now follows the new `vtscore.detectors.label_quota`: with no Good that
-  resolved it returns `False`; under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads (Autopilot's
-  quorum) it stores the Goods' centroid head and returns `True`, **one Good and no Bad
-  included**; with both met it trains as before. Behaviour change for a library caller: at 1-2
-  Goods or 1-3 Bads the stored model is a centroid head, not the SVM, and there is no switch
-  back: a head fitted to that few labels is what the rule exists to stop. The centroid is the new
-  `vtscore.detectors.centroid_head`: `fit_centroid_head(goods, score)` returns a `Linear(D, 1)`
-  ranking by cosine to the unit mean of the Goods, cut at the two-Gaussian midpoint of those
-  cosines on the scored corpus (threshold `CENTROID_THRESHOLD`, 0.5, balance-blind), so every
-  scoring path and a portable weight export take it as they take the linear SVM;
-  `is_centroid_head` tells them apart. `labelset_train_and_score` takes `label_quota`
-  (default `False`, the Train view's learned sort; a cold Find passes `True`), and
-  `model_loading.cached_head_is_current` refuses a trained head while its labelset is under the
-  quota. `install_centroid_head` drops the trained head's re-cut caches, so a balance change
-  leaves the centroid's line where it is. The eval harness's default arm follows
-  (`simulate_voting_iterations(label_quota=None)`): a row from the first Good, the centroid's
-  test metrics under the quota, and a `detector_tier` column; `label_quota=False` is the
-  pre-#4643 arm.
-
-- **The eval harness can hold Autopilot's Smart light yellow** (issue #4359). `simulate_voting_iterations`
-  and `vtscore.eval.autopilot_flow.AutopilotFlow` take `smart_gate` (`"app"`, the default and the app,
-  or `"never"`: the phase decision reads Smart as yellow, so a session stays in `hard`). A bound
-  for re-keying Smart; the app is unchanged.
-
-- **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
-  now returns the score where the labels line's corpus posterior falls below the new
-  `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new
-  `target_precision_threshold(line, p)` read off `ctx.labels_line`; the line - 4 re-cut
-  (`ACQUISITION_INCLUSION_OFFSET`, unchanged) is its fallback with no labels line. Set the
-  constant to `None` to restore the re-cut. The eval harness's default arm follows
-  (`resolve_acquisition_target`); `simulate_voting_iterations` takes `acq_target_p` (`None` = the app,
-  `"off"` = the offset cut, a number pins it) and `acq_origin` (`"line"`, or `"inclusion"`: the old
-  Inclusion-knob origin for the offset). Priced in `docs/experiments/2026-10-07-acquisition-cut-3546/`.
-
-- **A typed-query sort's display line takes the balance** (issue #4603).
-  `text_sort_cuts(scores, rule=None, beta=None)` and `text_sort_threshold(..., beta=None)`:
-  at `beta <= TEXT_SORT_COUNT_MAX_BETA` (1) the guarded rule draws the line by count
-  (branch `"count"`). It keeps the top `round(beta ** TEXT_SORT_COUNT_EXPONENT * n_hat)`, where
-  `n_hat` is the excess over a Gaussian bulk (median, 1.4826 x MAD) above
-  `median + TEXT_SORT_COUNT_Z * sigma` (z = 4) and the exponent puts c at 3/8 for beta 1/4.
-  `beta=None`, beta above 1, a sort under `TEXT_SORT_COUNT_MIN_SCORES` (50), or one with no
-  spread keeps the guarded line. `acq_threshold` never moves with beta.
-  `query_sort.text_sort_active(query_vec, snap=None, beta=None)` reads the active balance
-  (`vtscore.state.get_beta`) when `beta` is `None`.
-
-- **The CLI calls the settings' detector list AutoFind** (issue #4615). The
-  app renamed its AutoRun (and the Settings' *Auto-Find*) to AutoFind, so
-  `vtscore.cli`'s plan heading reads `AutoFind detectors (N):` and its two
-  no-detector messages say *AutoFind*. Only printed text changed: the
-  `autofind_detectors` settings key and every function name are as before.
-
-- **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
-  `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen
-  `TextSortCuts(threshold, acq_threshold, branch)` from one mixture fit: `threshold` is the
-  display line under `TEXT_SORT_CUT_RULE`, and `acq_threshold` is the shipped midpoint
-  (`calculate_gmm_threshold`) under every rule, which `text_sort_acquisition_threshold(scores)`
-  also returns on its own. `TEXT_SORT_CUT_DEFAULT` is `"guarded_tail"`: `text_sort_threshold`
-  now draws #3826's guarded line unless `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint`; it was
-  `"gmm_midpoint"` while the line was also Autopilot's sampling position. The eval harness's
-  Bad phase (`al_strategies._sort_threshold`) and the `@mid` schedule cut read the acquisition
-  cut, so an opening's picks no longer move with the display rule.
-  `vtscore.training.query_sort.text_sort_active(query_vec, snap=None)` returns `(results, cuts)`
-  for the text route; `cosine_sort_active` is unchanged in signature and returns the display
-  line for `role="text"`.
-
-- **A test's walk below the line runs to its budget when there is a class model** (issue #4542).
-  With `posteriors` given, `LineTest.misses_walk()` no longer stops at a dry band and
-  `line_phase` no longer ends the misses phase on `LineBudgets.misses_width`: the walk goes
-  one band deeper a round until `misses_picks` is spent or the bands run out. #4523 priced it:
-  the recall range held the truth in 13-38% of sessions at the old stops and 75-94% walking
-  to the budget, for about 30 more picks. `dry_run_share` and `misses_width` now govern only
-  a test with no class model (`posteriors=None`), whose walk keeps its dry-run stop.
-  `LineBudgets`' defaults are unchanged and are now the priced values. `LineTest.as_dict()`
-  gains `class_model`.
-
-- **A test's draws are read at any count** (issue #4524). `LineTest.estimate_at(count,
-  beta=None)` returns the `EdgeEstimate` the line would ship if it kept the top *count*,
-  from the same joint draws as `estimates()`: exact at a band edge, a band's positives
-  split in proportion inside one. The draws are cached until the next label. The app's
-  Test verdict reads it for the line each balance preset would draw.
-
-- **The CPU Stage 1 keeps a float32 tile matrix** (issue #4514). `_float32_matrix` converts the
-  fp16 matrix once per page set (torch's vectorised conversion), `_cpu_page_max` multiplies it
-  directly, and `exact_page_scores` reads it when present. numpy's per-call conversion was 95%
-  of a CPU click at 50,000 pages. The copy doubles the matrix's memory, on the CPU path only.
-
-- **Tiled Stage 1 orders on an exact score** (issue #4481). The page scorers return each
-  page's best (query, tile) pair (`PageMax`, `page_max_from_tiles`, `_gpu_page_max`,
-  `_cpu_page_max`), and `tiled_stage1` orders on that pair recomputed in float64
-  (`exact_page_scores`), then snapshot order. `_gpu_page_scores` is gone. With OpenBLAS
-  pinned, V100 and L40S nodes give the same Stage-1 and verified-head order in 24 of 24
-  diagnostic steps (12 of 24 before).
-
-- **A spot check is due when the labels separate weakly** (issue #4496).
-  `LabelsLine.separation` is the labels' d' in the spread the line was cut
-  with; `weak_check_due(separation, n_votes, votes_at_last_check)` is the rule
-  the app and the eval harness share (`WEAK_SEPARATION_D` 1.5,
-  `WEAK_CHECK_MIN_VOTES` 10, `WEAK_CHECK_COOLDOWN` 25).
-  `detector_balance_state` adds `separation` and `check_due`, counted from the
-  new `DetectorContext.check_ended_votes`. The harness's default arm is now
-  `spot_check="weak"` (`weak_phase="learned"`: only past Autopilot's
-  opening): a prompted check's picks are clicks inside the voting budget, and
-  frames record on them. Runs that never prompt are unchanged.
-
-- **The document stop** (issue #4488). `labeling_progress.dry_run_status`
-  counts the standing non-Good votes cast since the last Good (green at
-  `DRY_RUN_TARGET = 16`), and `document_labeling_status` is a tiled
-  dataset's labeling status: `stop_rule: "dry_run"`, the readout, and Smart /
-  Stable / Span `off`. The Autopilot port follows the app:
-  `next_phase(dry_run_stop=, ran_dry=)` and `AutopilotFlow(dry_run_stop=)` walk
-  with no Good target, in retrain mode too, and running dry is `done`.
-
-- **The labels line's spread floor follows the corpus** (issue #4492).
-  `class_score_model` keeps the raw pooled spread (`ClassScoreModel.sigma_raw`,
-  `floored()`); once a corpus is known, the class model and the corpus's
-  negative bulk are floored at `RELATIVE_SIGMA_FLOOR` (0.5) × that corpus's
-  robust logit spread (`corpus_sigma_floor`) rather than an absolute 0.25.
-  `fit_corpus` and `corpus_posteriors` take the floor as `floor=`. The
-  parametric fallback, with no corpus, keeps `MIN_LOGIT_SIGMA`.
-- **When the labels' Bads are a random sample, the labels line models the negatives with
-  their own scores** (issue #4490). `class_score_model` keeps the Bads' sorted held-out
-  logit scores on the model (`ClassScoreModel.neg_logits`, compared and summarised by
-  neither `==` nor `as_dict`) when there are at least `RANDOM_BADS_MIN` (100), never from
-  the in-sample fallback. `_line_on` reads them: when they are at most
-  `RANDOM_BADS_MAX_ENRICHMENT` (2) times over-represented in the corpus's top
-  `RANDOM_BADS_TOP_SHARE` (5%), each item's chance comes from the labels' Good normal
-  against a kernel density of the Bads, the positives' share fitted by EM, and the line
-  is the same `corpus_cut` over them; `LabelsLine.bads_shape` says which. Otherwise the
-  line is unchanged. A labelset from an exhaustively labelled dataset gains +0.155 /
-  +0.085 / +0.039 F-beta at 1/4, 1, 4 on the review's full-label ceiling; no session
-  within 150 clicks changes. `line_test_arm.row_from_snapshot` restores the Bads' scores
-  from a snapshot's folds, so its replay still matches the run.
-- **Withheld-half snapshots carry the calibration folds and the images' ids, and the
-  ceiling leaves one** (issue #4490). Every `test_score_sink` entry gains `fold_scores`,
-  `fold_labels` and `fold_index` (the step's held-out scores of its votes, from which
-  `class_score_model` is rebuilt exactly) and `ids` (the withheld images, in score order).
-  `_skyline_arm_rows(test_score_sink=...)` appends a `phase="ceiling"` entry for the
-  full-label model: the withheld half's scores and labels, its Find line's class model and
-  its folds. A line rule that changes the class model can be priced post hoc on a session
-  or on the ceiling without re-training either.
-- **The full-label ceiling's rank frame records Find's labels line** (issue
-  #4486). `_skyline_arm_rows` draws the labels line from the skyline's own
-  calibration folds (`_skyline_fit_and_score(details_sink=...)`), fits its
-  corpus side on the withheld half, and records what it keeps at each preset
-  (`test_line_k_b025/b1/b4`); it was -1. The skyline row itself is unchanged:
-  still the oracle's cut on the test labels.
-- **The rank frames record the app's line at the app's presets** (issue
-  #4471). `RANK_FRAME_BETAS` is `(0.25, 1.0, 4.0)` (was `(0.5, 1.0, 2.0)`),
-  with columns `test_line_k_b025` / `_b1` / `_b4`. Under the default arm the
-  count is what the labels line (#4452) keeps on the test half, from the same
-  fit the headline row cuts at the run's beta (so the two agree exactly), or
-  what the retrain's fallback cut keeps when no class model exists; it can be
-  0. A forced `walk_shape` arm still records the count line.
-- **`BALANCE_PRESETS` is `(0.25, 1.0, 4.0)`** (issue #4448; was
-  `(0.5, 1.0, 2.0)`): the presets' ends are `BETA_MIN` and `BETA_MAX`. The
-  spot check's start (`balance_schedule`) is unchanged: 32 at beta <= 1, 128
-  above.
-- **The balance's line from the labels alone** (issue #4452). New
-  `vtscore.training.thresholds.labels_line`: `ClassScoreModel` /
-  `class_score_model` (the calibration folds' held-out Good and Bad scores as
-  two normals of one spread on the logit scale; the head's in-sample scores
-  stand in with one Good), `estimate_positives`, `corpus_fit` and
-  `corpus_prevalence` (a 2-part fit of a corpus's unvoted scores, the labels'
-  Good component fixed and the bulk of negatives fitted as `CorpusNegatives`,
-  guarded by a counted bound), `corpus_posteriors` (each unvoted item's chance
-  of being a positive, from a 3-part fit with the labels' Bad component),
-  `corpus_cut` (the cut maximising expected F-beta with TP the running sum of
-  those chances, the total from the 2-part fit and the returned size counted;
-  between items), `labels_line_threshold` (the parametric cut at a prevalence,
-  for a line with no corpus scores), `LabelsLine` (`threshold(beta)`,
-  `on_corpus(...)` to re-fit the corpus side on another corpus) and
-  `fit_labels_line`. Every retrain fits it
-  and parks it on `DetectorContext.labels_line`; under a balance it is the
-  line (no count, no cap), the re-cut moves it with beta, and a Find over a
-  new dataset re-fits only the corpus side. `balance_state(...,
-  threshold=)` counts what a threshold keeps of the ranking; `check_shape`
-  is `advisory` at every beta. The eval harness's default arm draws the same
-  line on the sim set and cuts the withheld half at Find's threshold; its base
-  calibration rows gain `train_threshold`, `train_prevalence` and
-  `find_prevalence`, and a forced `walk_shape` runs the count line as an arm.
-  `simulate_voting_iterations` gains `sim_size` (train on a seeded subsample
-  of the sim set) and `test_score_sink` (the withheld half's scores and
-  labels, for Find scenarios drawn after the run).
-- **A balance walk's effect on the line follows the preset** (issue #4427).
-  `check_shape(beta)` is `advisory` at beta <= 1 and `trim` above:
-  `balance_count` / `balance_line` ignore a finished walk under `advisory`
-  (the line keeps the unchecked rule's count) and take its end under `trim`;
-  `SpotCheck.start_balance` defaults `shallow_only` to the shape (the walk
-  may only step shallower under `trim`); `BalanceState` gains `shape` and
-  `audited`. The eval harness's `walk_shape` (`None` the app's, `"walk"` the
-  full walk whose end moves the line, `"advisory"`, `"trim"`) replaces the
-  day-old `walk_advisory` / `walk_shallow_only` knobs, and its rows gain
-  `check_audited`.
-- **Reverted the day after (issue #4427): `ACQUISITION_ARGMAX_FACTOR` is
-  `None`**, so the balance keeps the line − 4 re-cut; `acquisition_count` /
-  `acquisition_threshold` return `None` with no factor and the harness's
-  default arm follows (`resolve_acquisition_factor(None, beta)` is `None`);
-  a number still runs the rank-cut arm.
-- **The acquisition cut under a balance is half the F-beta argmax's depth**
-  (issue #4409; `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
-  `acquisition_count` / `acquisition_threshold` give the rank and the score
-  at `ACQUISITION_ARGMAX_FACTOR` (0.5) of the mixture's F-beta argmax over
-  the unvoted ranking; `detector_acquisition_threshold` takes the detector's
-  `beta` and returns it, falling through to the line − 4 re-cut with no
-  mixture estimate. The eval harness's default arm follows
-  (`resolve_acquisition_factor`, the `acquisition.balance_cut` mirror of the
-  sync gate): `acq_p_crossing=None` under a balance is the shipped factor,
-  `"off"` (`CALIB_ACQ_P_CROSSING=off`) the offset cut, a number the arm.
-- **A collapsed mixture fit is no estimate, and a balance check always
-  starts** (issue #4419). On a tiny ranking the vote-anchored mixture can
-  land its high component on the top two scores alone (a standard deviation
-  under 1% of the score range, `MIXTURE_MIN_STD_SHARE`); its posterior then
-  puts no mass on anything else, and both the floor's and the balance's
-  unchecked line kept one item. `mixture_posterior` now treats such a fit as
-  none, so the unchecked line keeps the schedule's cap as #4389 intended. The
-  balance walk's recall denominator comes from the new `walk_positives`: the
-  mixture's count when it has one, else the balance's cap lowered to the
-  unvoted count, so `POST /api/precision-check/start` no longer refuses with
-  "No score model to read recall against" and the harness's end-of-run check
-  runs in the same cases.
-- **The line's default preference is the balance** (issue #4413).
-  `DEFAULT_LINE_PREFERENCE` is `"balance"`: `vtscore.state.line_knobs()` hands
-  every retrain and re-cut the detector's beta (`DEFAULT_BETA`, 1.0, until
-  set) and the floor only under `line_preference="floor"`, which is
-  deprecated with `min_precision` and goes next release. The eval harness's
-  default arm follows: `simulate_voting_iterations(min_precision=None,
-  beta=None)` now draws the line at the balance (the new
-  `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
-  of `line_knobs` and the `thresholds.line_preference_default` mirror of
-  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
-  `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
-  under a balance as it was under a floor. `aim_words(state)` says which
-  preference an unchecked set was exported at ("aiming at 25% right" / "at
-  F1") for the CLI's and AutoRun's log lines, whose results now carry
-  `balance` beside `floor`.
-- **The unchecked line is the smaller of the schedule's count and the
-  mixture's** (issue #4389, the owner's ruling on #4383). Before any spot
-  check - AutoRun, the CLI, a cold Find and every session before its first
-  check - `floor_count` / `floor_line` / `floor_state` take a `proposal`,
-  the count the new `mixture_count(ranking, min_precision, labels,
-  also_voted)` reads off a 2-component mixture fitted on the ranking's
-  scores and anchored on the votes (`anchored_gmm_fit`): the deepest top
-  *k* whose mean high-component posterior meets the floor. The count is
-  `min(schedule candidate, proposal)`, never more than before. The fit is
-  memoised on the `LineRanking` (`mixture`), one per ranking, on the first
-  caller's anchors: the retrain's training labels (`train_and_score`,
-  `train_and_threshold`, `_train_and_score_xy` and `_fused_threshold` take
-  `labels=`), or the human votes for a ranking a cold Find built
-  (`vtscore.state.core.detector_line_labels` / `detector_line_proposal`).
-  The eval default arm does the same (`_safe_threshold_for_step(labels=)`).
-  `labeled_media_labels` joins `labeled_media_ids` in `labelset_training`.
-
-- **The precision floor's spot check walks the ranking in bands** (issue
-  #4388, the owner's ruling on #4383). `SpotCheck.start` now takes the whole
-  unvoted ranking (ids in rank order) rather than a fixed candidate, cuts it
-  into bands (the top 8, the next 8, 16, 32, ...), audits each band with 5
-  uniform picks, and walks: one band deeper while the band-weighted share of
-  right picks meets the floor, one shallower while it does not, stopping on
-  the first reversal. The line keeps the deepest set that met the floor
-  (`confirmed`, a band edge) or the first band (`short`, 8 items) instead of a
-  halving candidate that bottomed out at 32. New: `BAND_BASE`, `band_edges`,
-  `bands_for`, `WALK_START` / `WALK_DEEPER` / `WALK_SHALLOWER`,
-  `SpotCheck.estimate`, `SpotCheck.band_counts`, `SpotCheck.band_ids`, the
-  `start_count=` keyword, and `bands`, `band`, `direction` and `estimate` in
-  `SpotCheck.as_dict`. Changed: `check_schedule(P).rounds` is the bands the
-  walk audits before its first verdict (5 at 10%, 4 at 25%, 3 at 50% and
-  above) and `.picks` is 5 at every floor below 1; `rounds_for` counts bands;
-  `range_tail` is the tail each band's interval gets over the set's bands;
-  `SpotCheck.range` is the size-weighted mean of the bands' intervals;
-  `SpotCheck.candidate_ids` is `ranking_ids`. The eval default arm runs the
-  same walk (`spot_check="end"`), one row per band.
-
-- **Python 3.11 or later is now required** (issue #4385). `requires-python`
-  moves from `>=3.10` to `>=3.11`, since Python 3.10 reaches end of life in
-  October 2026. No API changes.
-
-- **The eval harness refuses a non-zero `inclusion` under a precision floor**
-  (issue #4361). A set floor wins over the knob, so under one `inclusion`
-  only re-weighted the `cost` column and never moved the line.
-  `simulate_voting_iterations`, `run_voting_iterations_eval`,
-  `run_voting_iterations_eval_from_pickles` and `run_al_benchmark` now raise
-  `ValueError` for `inclusion != 0` unless `min_precision="off"` (the
-  Inclusion arm); the grid drivers raise before their first cell. `inclusion=0`
-  and the Inclusion arm are unchanged. `run_al_benchmark` gains
-  `min_precision` (additive, default `None`: the app's own floor), and
-  `python -m vtscore.eval.al_benchmark` gains `--min-precision` (a floor in
-  `(0, 1]`, or `off`), without which `--inclusion` other than 0 is refused.
-
-- **The precision floor's line is a set the spot check measures** (issue
-  #4272). Under a floor, `train_and_threshold` / `train_and_score` /
-  `labelset_train_and_score` / `run_learned_sort` and
-  `recut_detector_threshold(ctx, min_precision=...)` now cut at the last of
-  the top *count* unvoted items of the haystack - the set the detector's last
-  spot check ended on, or the floor's starting candidate (128 / 64 / 32 at
-  10% / 25% / 50% and above) - never at the Inclusion 0 fallback.
-  `reporting_line` is unchanged as library API but the app no longer draws
-  its line through it under a floor, and `precision_floor_cut` /
-  `PrecisionFloorEstimate` stay as the estimator behind the Find Stats curve.
-  - `vtscore.state.core.detector_floor_state` now returns
-    `{min_precision, status, count, range, schedule}` with `status` in
-    `unchecked` / `confirmed` / `short` (`FLOOR_STATES`), or `None` with no
-    floor; the `promised` / `unreachable` / `insufficient_evidence` states and
-    the `calibration_positives` / `min_calibration_positives` fields are gone.
-  - `detector_line_inclusion` returns `None` under any floor: a set, not an
-    inclusion, draws the line.
-  - CLI autodetect's `detector_unpromised` event is now `detector_unchecked`,
-    with `detector`, `min_precision`, `status` and `count`; every result's
-    `floor` carries the new state.
-  - `vtscore.datasets.vote_provenance.FLOWS` gains `check`, the flow a spot
-    check's votes are recorded with (`CHECK_PROVENANCE`); it does not
-    `calibrates_precision`.
-  - Eval: `simulate_voting_iterations` gains `spot_check` (`"end"`, the
-    default, runs the check once the voting steps are spent, its votes cast and
-    trained on, one row per round with `phase == "check"` past `max_steps`;
-    `"off"` never checks). The frame's `floor_status` values are the new
-    states, `calibration_positives` is replaced by `floor_count`, `range_lo`,
-    `range_hi`, `check_labelled`, `check_right` and `check_stale`, and
-    `_safe_threshold_for_step` takes `check=`.
-
-### Added
 
 - **A subset layout can be started ahead of the click, on an idle server** (issue #4683).
   `vtscore.projection.service.prep_subset_layout(ctx, ids)` starts the same fit
@@ -1060,7 +682,498 @@ instead, since every commit on `dev` is effectively a new app release.)
   private name was never contract. If you were calling one anyway, call
   `loaded_backbone()` instead.
 
+- **`ProgressCallback`, `noop_progress()` and `resolve_progress_callback()` are
+  exported from `vtscore.concurrency.progress`** (issue #3392). The
+  `(status, message, current, total)` type alias had been redeclared in ten
+  modules and the "use the thread's callback, else a default" resolution copied
+  byte-identically into eight; both now have one definition.
+  `resolve_progress_callback()` returns the calling thread's progress callback,
+  or `noop_progress` when none is bound. `vtscore.media.base` re-exports the
+  alias and the no-op, so existing imports from there keep working.
+
+- **The detector-JSON write lock and the cross-dataset labelset merge are now
+  public, and re-exported from the `labelset_ops` façade** (issue #3398).
+  `vtscore.detectors.label_sync._label_sync_write_lock` and
+  `_merge_labelsets_across_datasets` are now
+  `label_sync_write_lock` and `merge_labelsets_across_datasets`, exported from
+  `vtscore.detectors.labelset_ops` alongside the rest of the detector-labelset
+  surface. Neither is new behaviour — the lock's contract has always bound
+  out-of-module writers (any caller doing its own read-modify-write of a
+  detector JSON file must hold it for the whole pass, acquired *before*
+  `_state_lock`), and `sync_labels_to_loaded_detector` and the app's four route
+  writers all merge with the same function. The private names simply said
+  otherwise, which made the seam unenforceable and the symbols un-renameable.
+  Both old names are gone rather than aliased, per this repo's rule that
+  `_`-prefixed symbols carry no compatibility promise; an out-of-tree writer
+  that was reaching for them should import from `labelset_ops`.
+
+- **`vtscore.utils.hits.hit_custom_metadata(media)`** — the `custom_metadata`
+  sanitiser `build_media_hit` already applied is now a public export (issue
+  #3368). It returns a fresh copy of a media's importer metadata with the
+  `embedding` key stripped, and exists as a public name because every surface
+  that hands that dict to an outside caller — hits, the app's detector and
+  processor scoring routes, `POST /api/medias/batch`, the label-export blob —
+  has to agree on what it strips. A top-level key filter cannot: a
+  pre-computed vector shipped via `custom_metadata_map` rides *inside*
+  `custom_metadata`, where it would balloon the payload or fail JSON encoding
+  outright. Behaviour of `build_media_hit` is unchanged.
+
+- **`PluginBase.get_field_options(field_key, current_values)`** — the
+  dynamic-select hook now lives on the shared plugin base instead of on the
+  importer families alone, so every plugin family inherits it and a results
+  exporter can compute its options at runtime (issue #3360). The default
+  raises `NotImplementedError` naming the field, matching what the importer
+  bases already did; existing overrides are unaffected. A dynamic select's
+  declared `options` are also no longer used as the `choices` of its
+  auto-generated CLI flag — they are a seed for the first render, not the
+  allowed set, so pinning argparse to them rejected every value the plugin
+  resolved at runtime.
+
+- `vtscore.eval.seed_scores.build_seed_scores` accepts an `enrich` keyword
+  (default `False`, matching the app's shipped `enrich_descriptions`
+  default), so a simulated-user study can open on the same sort a real user
+  sees instead of silently always embedding the query plainly (issue #3341).
+
+- **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and
+  `NotificationBroker`: a fan-out channel for one-off user-facing messages.
+  The progress trackers publish *state* and an exception ends the operation;
+  neither fits "we skipped 3 unreadable files but the other 900 imported
+  fine". `notify()` is the third option — keep going, and say so. Consumers
+  subscribe to the process-wide `notifications` broker (the app's SSE stream
+  and the CLI printer both do); with no subscriber the message is still
+  logged at a severity matching its level. `PluginBase.notify()` wraps it
+  with the plugin's `display_name` as the source. The call never raises: bad
+  levels degrade, long messages truncate, broken subscribers are swallowed.
+
+- **`vtscore.security.login`** - the `LoginProvider` ABC,
+  `DefaultLoginProvider`, the process-wide `set_login_provider` /
+  `get_login_provider` registry, `get_user_data_dir()` and
+  `is_safe_username()`, moved down from the `vtsearch` app tier. Path
+  confinement (`vtscore.security.path_validation`) asks the active provider
+  where the current user's data lives, so the abstraction had to be reachable
+  in a process with no Flask in it — previously `get_file_access_base_dir()`
+  raised `ImportError` there. An embedder can now opt into per-user
+  confinement by registering a provider whose `get_user_data_dir()` returns a
+  per-user subtree; the default stays single-user and unconfined.
+
+- **`beats` audio embedder** - Microsoft's BEATs iter3+ AudioSet-2M
+  self-supervised encoder, exposed as a 768-d audio-only embedder
+  (`supports_text=False`). There is no `transformers` implementation, so the
+  architecture is vendored in `vtscore.media.audio._beats_model` (DeepNorm
+  residuals, a shared gated relative position bias, a weight-normalised
+  convolutional position embedding) and the released MIT-licensed checkpoint
+  is loaded onto it. Its Kaldi `compute-fbank-feats` front-end is ported from
+  torchaudio's pure-PyTorch implementation rather than taken as a dependency,
+  since torchaudio's wheels are built against a pinned torch.
+
+- **`vtscore.state.current_user`** - Flask-free resolution of "who is this
+  work for": a pluggable request-user resolver
+  (`register_request_user_resolver`), the `thread_user` thread-local scope
+  background jobs use to inherit a requester's identity, and the `"default"`
+  fallback. Library code that needs a username now calls
+  `vtscore.state.current_user.get_current_user()` instead of importing
+  `vtsearch.auth`, which made `JobManager.start()` (and label sync, dataset
+  loading, exporters, plugin templating) hard-require Flask at call time.
+  `vtsearch.auth` re-exports every name, so there is still exactly one
+  thread-local behind the app.
+- **`FoldAnchoredCut`** / **`fit_fold_anchored_cut`** - the fitted estimator,
+  split from the cut so a new Inclusion value can be re-cut arithmetically
+  without refitting or re-scoring.
+- **`inclusion_cost_weights`** - the single definition of what an Inclusion
+  value costs in `(fpr_weight, fnr_weight)`, read by both the shipped threshold
+  rule and the eval harness.
+
+- **`LabelsetExporter.opens_url`** and the `"open_url"` response key - an
+  exporter can return an `http(s)` URL for the frontend to open in a new
+  browser tab, which is how a third-party site with no ingest API receives a
+  labelset. Setting `opens_url = True` advertises it on `to_dict()` so the UI
+  can label the button before the export runs.
+- **`vtscore.security.url_validation.validate_browser_url`** - scheme
+  allowlist for URLs the *user's browser* opens. Deliberately not the
+  `validate_url` SSRF guard: no server-side request is made, so private hosts
+  are legitimate targets and only the scheme is dangerous.
+- **`open_url` exporter** - formats the labelset into a user-supplied URL
+  template (`{ids}`, `{count}`), URL-encoding the joined identifiers,
+  truncating to `max_items`, and refusing a URL past the ~2000-character
+  practical limit.
+
 ### Changed
+
+- **A Good and 16 Bads get the trained head, and Autopilot's Good walk can run dry** (issue #4731).
+  `vtscore.detectors.label_quota` gains a second quota, `DRY_BAD_QUOTA` (16, Autopilot's
+  `moreDryRun`): a labelset with a Good and that many Bads is `TIER_TRAINED`. `LabelQuota` takes
+  `dry_bad_quota` (default `DRY_BAD_QUOTA`; `None` is the pre-#4731 rule), `label_quota()` takes it
+  as a keyword, `as_dict()` reports it, and `goods_owed` / `bads_owed` are 0 whenever a head is
+  given. Behaviour change for a library caller: `train_from_labelset` trains the head for 1-2 Goods
+  with 16 or more Bads, where it stored the centroid. The eval harness ports Autopilot's new Good-phase
+  exit - `moreDryRun` picks in a row without a Good, with a Good in hand, end the Good phase and spend
+  the More walk - as `autopilot_flow.next_phase(good_ran_dry=)` and `AutopilotFlow(good_dry_run=)`
+  (default `MORE_DRY_RUN`, `None` the pre-#4731 arm), and `simulate_voting_iterations` takes
+  `good_dry_run` / `quota_dry_bads` (`None` the app, `"off"` the pre-#4731 arm, or a count).
+
+- **Autopilot's photo opening drops the More walk** (issue #4740, from #4671). `vtscore.eval.autopilot_flow.MORE_TARGET`
+  is `0` (was `20`) and `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is `"g3@top,b4@mid"` (was
+  `"g3@top,b4@mid,g20+dry1/16@top"`), mirroring the app's `moreToStart: 0`: on a photo dataset the phase machine goes
+  Good, Bad, then Hard. #4671 scored the walk against the opening without it on the objective, every run at every
+  vote: the walk won votes 1-25 and lost from vote 23 on, at every preset. `MORE_DRY_RUN` still ends a document
+  dataset's walk (#4488), and an explicit `more_target` still runs one. A study whose control arm should keep the
+  walk passes `CALIB_STARTUP_SCHEDULE=g3@top,b4@mid,g20+dry1/16@top`.
+
+- **`SiftMatcher.verify_many` fits a batch's RANSAC pairs on a thread pool** (issue #4516).
+  `_fit_similarity` is now `_ransac` (the `cv2.estimateAffinePartial2D` call) followed by
+  `_similarity_stats`. The stats make the same ufunc calls that `np.median`,
+  `np.linalg.norm`/`det` and `mean` made, so every `MatchStats` field is bit-identical.
+  `_fit_similarity_many` runs the cv2 calls of a batch of 128 or more pairs on up to 4 threads
+  (`_ransac_workers`: the affinity mask, capped), then computes the stats in the calling thread.
+  RANSAC per Good on a V100 drops from ~0.8 s to ~0.3 s.
+
+- **A detector keeps its balance on its JSON** (issue #4665). The new `vtscore.detectors.balance`
+  stores F-beta's beta as a top-level `"beta"` (`BETA_KEY`) beside the labelset: `stored_beta(data)`,
+  `valid_beta(raw)`, `detector_stored_beta(detector_id)` and `keep_beta(det_ctx, value)`.
+  `vtscore.state.get_beta()` now seeds the active detector's first read from the balance its
+  detector keeps, and only then from `CoreConfig.from_settings().beta`; the new
+  `vtscore.state.detector_beta(ctx)` does the same for any context, and
+  `seed_detector_beta(ctx, data)` seeds one the registry cannot name from the JSON its caller holds.
+  `set_beta` writes the active detector's file as well as persisting the `"beta"` setting.
+  Behaviour change for a library caller: `train_and_threshold(det_ctx=...)` cuts at `det_ctx`'s own
+  balance rather than the active detector's (they are the same context on every live path), and
+  `resolve_or_train_detector`'s throwaway context and the CLI's per-detector context are seeded
+  from the detector's JSON, so a cold train, an AutoFind and `--autodetect` draw each detector's line
+  at the balance it keeps. `recompute_detector_thresholds(beta)` cuts a detector that has not read
+  its balance yet at the one it keeps, `beta` only when it keeps none. A detector JSON with no
+  `"beta"` behaves exactly as before.
+
+- **The eval harness can draw a share of Autopilot's picks the way the spot check does** (issue #4482).
+  `simulate_voting_iterations` takes `band_share` (`None`, the default and the app; or N: one in N of the
+  picks past the opening is drawn uniformly within one band of the unvoted ranking, cycling through the bands
+  a check starts from, and logged with phase `"band"`), with the pick rule in
+  `vtscore.eval.al_strategies.band_pick`. An experiment arm; the app is unchanged.
+
+- **The eval harness can walk Autopilot's More on the detector's top** (issue #4637). `simulate_voting_iterations`
+  takes `more_walk` (`"seed"`, the default and the app: the top of the typed query's sort; or `"detector"`: the More
+  walk takes the top of the step's detector ranking, and its steps record `app_trained = 1`), and
+  `vtscore.eval.autopilot_flow.app_has_detector` takes `more_shown`. An experiment arm; the app is unchanged.
+
+- **Under the label quota a labelset gives the Goods' centroid, not a trained head** (issue #4643).
+  `vtscore.detectors.labelset_training.train_from_labelset` - the app's Test, AutoFind,
+  detector load and CLI - now follows the new `vtscore.detectors.label_quota`: with no Good that
+  resolved it returns `False`; under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads (Autopilot's
+  quorum) it stores the Goods' centroid head and returns `True`, **one Good and no Bad
+  included**; with both met it trains as before. Behaviour change for a library caller: at 1-2
+  Goods or 1-3 Bads the stored model is a centroid head, not the SVM, and there is no switch
+  back: a head fitted to that few labels is what the rule exists to stop. The centroid is the new
+  `vtscore.detectors.centroid_head`: `fit_centroid_head(goods, score)` returns a `Linear(D, 1)`
+  ranking by cosine to the unit mean of the Goods, cut at the two-Gaussian midpoint of those
+  cosines on the scored corpus (threshold `CENTROID_THRESHOLD`, 0.5, balance-blind), so every
+  scoring path and a portable weight export take it as they take the linear SVM;
+  `is_centroid_head` tells them apart. `labelset_train_and_score` takes `label_quota`
+  (default `False`, the Train view's learned sort; a cold Find passes `True`), and
+  `model_loading.cached_head_is_current` refuses a trained head while its labelset is under the
+  quota. `install_centroid_head` drops the trained head's re-cut caches, so a balance change
+  leaves the centroid's line where it is. The eval harness's default arm follows
+  (`simulate_voting_iterations(label_quota=None)`): a row from the first Good, the centroid's
+  test metrics under the quota, and a `detector_tier` column; `label_quota=False` is the
+  pre-#4643 arm.
+
+- **The eval harness can hold Autopilot's Smart light yellow** (issue #4359). `simulate_voting_iterations`
+  and `vtscore.eval.autopilot_flow.AutopilotFlow` take `smart_gate` (`"app"`, the default and the app,
+  or `"never"`: the phase decision reads Smart as yellow, so a session stays in `hard`). A bound
+  for re-keying Smart; the app is unchanged.
+
+- **Autopilot samples at a target pick precision under the balance** (issue #3546). `vtscore.state.core.detector_acquisition_threshold`
+  now returns the score where the labels line's corpus posterior falls below the new
+  `vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5), via the new
+  `target_precision_threshold(line, p)` read off `ctx.labels_line`; the line - 4 re-cut
+  (`ACQUISITION_INCLUSION_OFFSET`, unchanged) is its fallback with no labels line. Set the
+  constant to `None` to restore the re-cut. The eval harness's default arm follows
+  (`resolve_acquisition_target`); `simulate_voting_iterations` takes `acq_target_p` (`None` = the app,
+  `"off"` = the offset cut, a number pins it) and `acq_origin` (`"line"`, or `"inclusion"`: the old
+  Inclusion-knob origin for the offset). Priced in `docs/experiments/2026-10-07-acquisition-cut-3546/`.
+
+- **A typed-query sort's display line takes the balance** (issue #4603).
+  `text_sort_cuts(scores, rule=None, beta=None)` and `text_sort_threshold(..., beta=None)`:
+  at `beta <= TEXT_SORT_COUNT_MAX_BETA` (1) the guarded rule draws the line by count
+  (branch `"count"`). It keeps the top `round(beta ** TEXT_SORT_COUNT_EXPONENT * n_hat)`, where
+  `n_hat` is the excess over a Gaussian bulk (median, 1.4826 x MAD) above
+  `median + TEXT_SORT_COUNT_Z * sigma` (z = 4) and the exponent puts c at 3/8 for beta 1/4.
+  `beta=None`, beta above 1, a sort under `TEXT_SORT_COUNT_MIN_SCORES` (50), or one with no
+  spread keeps the guarded line. `acq_threshold` never moves with beta.
+  `query_sort.text_sort_active(query_vec, snap=None, beta=None)` reads the active balance
+  (`vtscore.state.get_beta`) when `beta` is `None`.
+
+- **The CLI calls the settings' detector list AutoFind** (issue #4615). The
+  app renamed its AutoRun (and the Settings' *Auto-Find*) to AutoFind, so
+  `vtscore.cli`'s plan heading reads `AutoFind detectors (N):` and its two
+  no-detector messages say *AutoFind*. Only printed text changed: the
+  `autofind_detectors` settings key and every function name are as before.
+
+- **A typed-query sort draws two lines, and the guarded one is the display default** (issue #4136).
+  `vtscore.training.thresholds.text_sort_cuts(scores, rule=None)` returns a frozen
+  `TextSortCuts(threshold, acq_threshold, branch)` from one mixture fit: `threshold` is the
+  display line under `TEXT_SORT_CUT_RULE`, and `acq_threshold` is the shipped midpoint
+  (`calculate_gmm_threshold`) under every rule, which `text_sort_acquisition_threshold(scores)`
+  also returns on its own. `TEXT_SORT_CUT_DEFAULT` is `"guarded_tail"`: `text_sort_threshold`
+  now draws #3826's guarded line unless `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint`; it was
+  `"gmm_midpoint"` while the line was also Autopilot's sampling position. The eval harness's
+  Bad phase (`al_strategies._sort_threshold`) and the `@mid` schedule cut read the acquisition
+  cut, so an opening's picks no longer move with the display rule.
+  `vtscore.training.query_sort.text_sort_active(query_vec, snap=None)` returns `(results, cuts)`
+  for the text route; `cosine_sort_active` is unchanged in signature and returns the display
+  line for `role="text"`.
+
+- **A test's walk below the line runs to its budget when there is a class model** (issue #4542).
+  With `posteriors` given, `LineTest.misses_walk()` no longer stops at a dry band and
+  `line_phase` no longer ends the misses phase on `LineBudgets.misses_width`: the walk goes
+  one band deeper a round until `misses_picks` is spent or the bands run out. #4523 priced it:
+  the recall range held the truth in 13-38% of sessions at the old stops and 75-94% walking
+  to the budget, for about 30 more picks. `dry_run_share` and `misses_width` now govern only
+  a test with no class model (`posteriors=None`), whose walk keeps its dry-run stop.
+  `LineBudgets`' defaults are unchanged and are now the priced values. `LineTest.as_dict()`
+  gains `class_model`.
+
+- **A test's draws are read at any count** (issue #4524). `LineTest.estimate_at(count,
+  beta=None)` returns the `EdgeEstimate` the line would ship if it kept the top *count*,
+  from the same joint draws as `estimates()`: exact at a band edge, a band's positives
+  split in proportion inside one. The draws are cached until the next label. The app's
+  Test verdict reads it for the line each balance preset would draw.
+
+- **The CPU Stage 1 keeps a float32 tile matrix** (issue #4514). `_float32_matrix` converts the
+  fp16 matrix once per page set (torch's vectorised conversion), `_cpu_page_max` multiplies it
+  directly, and `exact_page_scores` reads it when present. numpy's per-call conversion was 95%
+  of a CPU click at 50,000 pages. The copy doubles the matrix's memory, on the CPU path only.
+
+- **Tiled Stage 1 orders on an exact score** (issue #4481). The page scorers return each
+  page's best (query, tile) pair (`PageMax`, `page_max_from_tiles`, `_gpu_page_max`,
+  `_cpu_page_max`), and `tiled_stage1` orders on that pair recomputed in float64
+  (`exact_page_scores`), then snapshot order. `_gpu_page_scores` is gone. With OpenBLAS
+  pinned, V100 and L40S nodes give the same Stage-1 and verified-head order in 24 of 24
+  diagnostic steps (12 of 24 before).
+
+- **A spot check is due when the labels separate weakly** (issue #4496).
+  `LabelsLine.separation` is the labels' d' in the spread the line was cut
+  with; `weak_check_due(separation, n_votes, votes_at_last_check)` is the rule
+  the app and the eval harness share (`WEAK_SEPARATION_D` 1.5,
+  `WEAK_CHECK_MIN_VOTES` 10, `WEAK_CHECK_COOLDOWN` 25).
+  `detector_balance_state` adds `separation` and `check_due`, counted from the
+  new `DetectorContext.check_ended_votes`. The harness's default arm is now
+  `spot_check="weak"` (`weak_phase="learned"`: only past Autopilot's
+  opening): a prompted check's picks are clicks inside the voting budget, and
+  frames record on them. Runs that never prompt are unchanged.
+
+- **The document stop** (issue #4488). `labeling_progress.dry_run_status`
+  counts the standing non-Good votes cast since the last Good (green at
+  `DRY_RUN_TARGET = 16`), and `document_labeling_status` is a tiled
+  dataset's labeling status: `stop_rule: "dry_run"`, the readout, and Smart /
+  Stable / Span `off`. The Autopilot port follows the app:
+  `next_phase(dry_run_stop=, ran_dry=)` and `AutopilotFlow(dry_run_stop=)` walk
+  with no Good target, in retrain mode too, and running dry is `done`.
+
+- **The labels line's spread floor follows the corpus** (issue #4492).
+  `class_score_model` keeps the raw pooled spread (`ClassScoreModel.sigma_raw`,
+  `floored()`); once a corpus is known, the class model and the corpus's
+  negative bulk are floored at `RELATIVE_SIGMA_FLOOR` (0.5) × that corpus's
+  robust logit spread (`corpus_sigma_floor`) rather than an absolute 0.25.
+  `fit_corpus` and `corpus_posteriors` take the floor as `floor=`. The
+  parametric fallback, with no corpus, keeps `MIN_LOGIT_SIGMA`.
+- **When the labels' Bads are a random sample, the labels line models the negatives with
+  their own scores** (issue #4490). `class_score_model` keeps the Bads' sorted held-out
+  logit scores on the model (`ClassScoreModel.neg_logits`, compared and summarised by
+  neither `==` nor `as_dict`) when there are at least `RANDOM_BADS_MIN` (100), never from
+  the in-sample fallback. `_line_on` reads them: when they are at most
+  `RANDOM_BADS_MAX_ENRICHMENT` (2) times over-represented in the corpus's top
+  `RANDOM_BADS_TOP_SHARE` (5%), each item's chance comes from the labels' Good normal
+  against a kernel density of the Bads, the positives' share fitted by EM, and the line
+  is the same `corpus_cut` over them; `LabelsLine.bads_shape` says which. Otherwise the
+  line is unchanged. A labelset from an exhaustively labelled dataset gains +0.155 /
+  +0.085 / +0.039 F-beta at 1/4, 1, 4 on the review's full-label ceiling; no session
+  within 150 clicks changes. `line_test_arm.row_from_snapshot` restores the Bads' scores
+  from a snapshot's folds, so its replay still matches the run.
+- **Withheld-half snapshots carry the calibration folds and the images' ids, and the
+  ceiling leaves one** (issue #4490). Every `test_score_sink` entry gains `fold_scores`,
+  `fold_labels` and `fold_index` (the step's held-out scores of its votes, from which
+  `class_score_model` is rebuilt exactly) and `ids` (the withheld images, in score order).
+  `_skyline_arm_rows(test_score_sink=...)` appends a `phase="ceiling"` entry for the
+  full-label model: the withheld half's scores and labels, its Find line's class model and
+  its folds. A line rule that changes the class model can be priced post hoc on a session
+  or on the ceiling without re-training either.
+- **The full-label ceiling's rank frame records Find's labels line** (issue
+  #4486). `_skyline_arm_rows` draws the labels line from the skyline's own
+  calibration folds (`_skyline_fit_and_score(details_sink=...)`), fits its
+  corpus side on the withheld half, and records what it keeps at each preset
+  (`test_line_k_b025/b1/b4`); it was -1. The skyline row itself is unchanged:
+  still the oracle's cut on the test labels.
+- **The rank frames record the app's line at the app's presets** (issue
+  #4471). `RANK_FRAME_BETAS` is `(0.25, 1.0, 4.0)` (was `(0.5, 1.0, 2.0)`),
+  with columns `test_line_k_b025` / `_b1` / `_b4`. Under the default arm the
+  count is what the labels line (#4452) keeps on the test half, from the same
+  fit the headline row cuts at the run's beta (so the two agree exactly), or
+  what the retrain's fallback cut keeps when no class model exists; it can be
+  0. A forced `walk_shape` arm still records the count line.
+- **`BALANCE_PRESETS` is `(0.25, 1.0, 4.0)`** (issue #4448; was
+  `(0.5, 1.0, 2.0)`): the presets' ends are `BETA_MIN` and `BETA_MAX`. The
+  spot check's start (`balance_schedule`) is unchanged: 32 at beta <= 1, 128
+  above.
+- **The balance's line from the labels alone** (issue #4452). New
+  `vtscore.training.thresholds.labels_line`: `ClassScoreModel` /
+  `class_score_model` (the calibration folds' held-out Good and Bad scores as
+  two normals of one spread on the logit scale; the head's in-sample scores
+  stand in with one Good), `estimate_positives`, `corpus_fit` and
+  `corpus_prevalence` (a 2-part fit of a corpus's unvoted scores, the labels'
+  Good component fixed and the bulk of negatives fitted as `CorpusNegatives`,
+  guarded by a counted bound), `corpus_posteriors` (each unvoted item's chance
+  of being a positive, from a 3-part fit with the labels' Bad component),
+  `corpus_cut` (the cut maximising expected F-beta with TP the running sum of
+  those chances, the total from the 2-part fit and the returned size counted;
+  between items), `labels_line_threshold` (the parametric cut at a prevalence,
+  for a line with no corpus scores), `LabelsLine` (`threshold(beta)`,
+  `on_corpus(...)` to re-fit the corpus side on another corpus) and
+  `fit_labels_line`. Every retrain fits it
+  and parks it on `DetectorContext.labels_line`; under a balance it is the
+  line (no count, no cap), the re-cut moves it with beta, and a Find over a
+  new dataset re-fits only the corpus side. `balance_state(...,
+  threshold=)` counts what a threshold keeps of the ranking; `check_shape`
+  is `advisory` at every beta. The eval harness's default arm draws the same
+  line on the sim set and cuts the withheld half at Find's threshold; its base
+  calibration rows gain `train_threshold`, `train_prevalence` and
+  `find_prevalence`, and a forced `walk_shape` runs the count line as an arm.
+  `simulate_voting_iterations` gains `sim_size` (train on a seeded subsample
+  of the sim set) and `test_score_sink` (the withheld half's scores and
+  labels, for Find scenarios drawn after the run).
+- **A balance walk's effect on the line follows the preset** (issue #4427).
+  `check_shape(beta)` is `advisory` at beta <= 1 and `trim` above:
+  `balance_count` / `balance_line` ignore a finished walk under `advisory`
+  (the line keeps the unchecked rule's count) and take its end under `trim`;
+  `SpotCheck.start_balance` defaults `shallow_only` to the shape (the walk
+  may only step shallower under `trim`); `BalanceState` gains `shape` and
+  `audited`. The eval harness's `walk_shape` (`None` the app's, `"walk"` the
+  full walk whose end moves the line, `"advisory"`, `"trim"`) replaces the
+  day-old `walk_advisory` / `walk_shallow_only` knobs, and its rows gain
+  `check_audited`.
+- **Reverted the day after (issue #4427): `ACQUISITION_ARGMAX_FACTOR` is
+  `None`**, so the balance keeps the line − 4 re-cut; `acquisition_count` /
+  `acquisition_threshold` return `None` with no factor and the harness's
+  default arm follows (`resolve_acquisition_factor(None, beta)` is `None`);
+  a number still runs the rank-cut arm.
+- **The acquisition cut under a balance is half the F-beta argmax's depth**
+  (issue #4409; `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
+  `acquisition_count` / `acquisition_threshold` give the rank and the score
+  at `ACQUISITION_ARGMAX_FACTOR` (0.5) of the mixture's F-beta argmax over
+  the unvoted ranking; `detector_acquisition_threshold` takes the detector's
+  `beta` and returns it, falling through to the line − 4 re-cut with no
+  mixture estimate. The eval harness's default arm follows
+  (`resolve_acquisition_factor`, the `acquisition.balance_cut` mirror of the
+  sync gate): `acq_p_crossing=None` under a balance is the shipped factor,
+  `"off"` (`CALIB_ACQ_P_CROSSING=off`) the offset cut, a number the arm.
+- **A collapsed mixture fit is no estimate, and a balance check always
+  starts** (issue #4419). On a tiny ranking the vote-anchored mixture can
+  land its high component on the top two scores alone (a standard deviation
+  under 1% of the score range, `MIXTURE_MIN_STD_SHARE`); its posterior then
+  puts no mass on anything else, and both the floor's and the balance's
+  unchecked line kept one item. `mixture_posterior` now treats such a fit as
+  none, so the unchecked line keeps the schedule's cap as #4389 intended. The
+  balance walk's recall denominator comes from the new `walk_positives`: the
+  mixture's count when it has one, else the balance's cap lowered to the
+  unvoted count, so `POST /api/precision-check/start` no longer refuses with
+  "No score model to read recall against" and the harness's end-of-run check
+  runs in the same cases.
+- **The line's default preference is the balance** (issue #4413).
+  `DEFAULT_LINE_PREFERENCE` is `"balance"`: `vtscore.state.line_knobs()` hands
+  every retrain and re-cut the detector's beta (`DEFAULT_BETA`, 1.0, until
+  set) and the floor only under `line_preference="floor"`, which is
+  deprecated with `min_precision` and goes next release. The eval harness's
+  default arm follows: `simulate_voting_iterations(min_precision=None,
+  beta=None)` now draws the line at the balance (the new
+  `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
+  of `line_knobs` and the `thresholds.line_preference_default` mirror of
+  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
+  `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
+  under a balance as it was under a floor. `aim_words(state)` says which
+  preference an unchecked set was exported at ("aiming at 25% right" / "at
+  F1") for the CLI's and AutoRun's log lines, whose results now carry
+  `balance` beside `floor`.
+- **The unchecked line is the smaller of the schedule's count and the
+  mixture's** (issue #4389, the owner's ruling on #4383). Before any spot
+  check - AutoRun, the CLI, a cold Find and every session before its first
+  check - `floor_count` / `floor_line` / `floor_state` take a `proposal`,
+  the count the new `mixture_count(ranking, min_precision, labels,
+  also_voted)` reads off a 2-component mixture fitted on the ranking's
+  scores and anchored on the votes (`anchored_gmm_fit`): the deepest top
+  *k* whose mean high-component posterior meets the floor. The count is
+  `min(schedule candidate, proposal)`, never more than before. The fit is
+  memoised on the `LineRanking` (`mixture`), one per ranking, on the first
+  caller's anchors: the retrain's training labels (`train_and_score`,
+  `train_and_threshold`, `_train_and_score_xy` and `_fused_threshold` take
+  `labels=`), or the human votes for a ranking a cold Find built
+  (`vtscore.state.core.detector_line_labels` / `detector_line_proposal`).
+  The eval default arm does the same (`_safe_threshold_for_step(labels=)`).
+  `labeled_media_labels` joins `labeled_media_ids` in `labelset_training`.
+
+- **The precision floor's spot check walks the ranking in bands** (issue
+  #4388, the owner's ruling on #4383). `SpotCheck.start` now takes the whole
+  unvoted ranking (ids in rank order) rather than a fixed candidate, cuts it
+  into bands (the top 8, the next 8, 16, 32, ...), audits each band with 5
+  uniform picks, and walks: one band deeper while the band-weighted share of
+  right picks meets the floor, one shallower while it does not, stopping on
+  the first reversal. The line keeps the deepest set that met the floor
+  (`confirmed`, a band edge) or the first band (`short`, 8 items) instead of a
+  halving candidate that bottomed out at 32. New: `BAND_BASE`, `band_edges`,
+  `bands_for`, `WALK_START` / `WALK_DEEPER` / `WALK_SHALLOWER`,
+  `SpotCheck.estimate`, `SpotCheck.band_counts`, `SpotCheck.band_ids`, the
+  `start_count=` keyword, and `bands`, `band`, `direction` and `estimate` in
+  `SpotCheck.as_dict`. Changed: `check_schedule(P).rounds` is the bands the
+  walk audits before its first verdict (5 at 10%, 4 at 25%, 3 at 50% and
+  above) and `.picks` is 5 at every floor below 1; `rounds_for` counts bands;
+  `range_tail` is the tail each band's interval gets over the set's bands;
+  `SpotCheck.range` is the size-weighted mean of the bands' intervals;
+  `SpotCheck.candidate_ids` is `ranking_ids`. The eval default arm runs the
+  same walk (`spot_check="end"`), one row per band.
+
+- **Python 3.11 or later is now required** (issue #4385). `requires-python`
+  moves from `>=3.10` to `>=3.11`, since Python 3.10 reaches end of life in
+  October 2026. No API changes.
+
+- **The eval harness refuses a non-zero `inclusion` under a precision floor**
+  (issue #4361). A set floor wins over the knob, so under one `inclusion`
+  only re-weighted the `cost` column and never moved the line.
+  `simulate_voting_iterations`, `run_voting_iterations_eval`,
+  `run_voting_iterations_eval_from_pickles` and `run_al_benchmark` now raise
+  `ValueError` for `inclusion != 0` unless `min_precision="off"` (the
+  Inclusion arm); the grid drivers raise before their first cell. `inclusion=0`
+  and the Inclusion arm are unchanged. `run_al_benchmark` gains
+  `min_precision` (additive, default `None`: the app's own floor), and
+  `python -m vtscore.eval.al_benchmark` gains `--min-precision` (a floor in
+  `(0, 1]`, or `off`), without which `--inclusion` other than 0 is refused.
+
+- **The precision floor's line is a set the spot check measures** (issue
+  #4272). Under a floor, `train_and_threshold` / `train_and_score` /
+  `labelset_train_and_score` / `run_learned_sort` and
+  `recut_detector_threshold(ctx, min_precision=...)` now cut at the last of
+  the top *count* unvoted items of the haystack - the set the detector's last
+  spot check ended on, or the floor's starting candidate (128 / 64 / 32 at
+  10% / 25% / 50% and above) - never at the Inclusion 0 fallback.
+  `reporting_line` is unchanged as library API but the app no longer draws
+  its line through it under a floor, and `precision_floor_cut` /
+  `PrecisionFloorEstimate` stay as the estimator behind the Find Stats curve.
+  - `vtscore.state.core.detector_floor_state` now returns
+    `{min_precision, status, count, range, schedule}` with `status` in
+    `unchecked` / `confirmed` / `short` (`FLOOR_STATES`), or `None` with no
+    floor; the `promised` / `unreachable` / `insufficient_evidence` states and
+    the `calibration_positives` / `min_calibration_positives` fields are gone.
+  - `detector_line_inclusion` returns `None` under any floor: a set, not an
+    inclusion, draws the line.
+  - CLI autodetect's `detector_unpromised` event is now `detector_unchecked`,
+    with `detector`, `min_precision`, `status` and `count`; every result's
+    `floor` carries the new state.
+  - `vtscore.datasets.vote_provenance.FLOWS` gains `check`, the flow a spot
+    check's votes are recorded with (`CHECK_PROVENANCE`); it does not
+    `calibrates_precision`.
+  - Eval: `simulate_voting_iterations` gains `spot_check` (`"end"`, the
+    default, runs the check once the voting steps are spent, its votes cast and
+    trained on, one row per round with `phase == "check"` past `max_steps`;
+    `"off"` never checks). The frame's `floor_status` values are the new
+    states, `calibration_positives` is replaced by `floor_count`, `range_lo`,
+    `range_hi`, `check_labelled`, `check_right` and `check_stale`, and
+    `_safe_threshold_for_step` takes `check=`.
 
 - **Autopilot's opening walks for more goods** (issue #4282, measured by #4222).
   After the 3-good / 4-bad quorum a new phase, `more`, goes back to the top of
@@ -1300,6 +1413,214 @@ instead, since every commit on `dev` is effectively a new app release.)
   coverage report and the dataset-load path, neither of which calls it. It is
   public API with no in-repo caller, and is documented as such.
 
+- **`update_progress()` reports into the calling thread's tracker instead of a
+  global one** (issue #3376). It stays public and stays the documented way for
+  an importer to report progress without accepting an `on_progress` argument —
+  it is now the free-function spelling of `resolve_progress_callback()`.
+
+  This **fixes** out-of-tree importers that followed
+  `docs/extending/dataset-importers.md`. Writing straight to the global meant
+  their ticks landed on a channel the dashboard does not render, so the row for
+  their import never moved, and the `"embedding"` status that swaps the
+  download concurrency-gate for the embed gate never reached the pipeline.
+  Both work now with no change to the calling code. Two in-tree importers
+  (`recaller`, and `DatasetImporter`'s default record loop) had the same bug.
+
+  Two narrower changes to its signature: the `staging_result=` parameter is
+  gone (that field belongs to the staging task's own tracker, declared via
+  `create_task(..., extra_fields={"staging_result": None})`), and the remaining
+  extras (`error`, `step`, `total_steps`) are forwarded only when the bound
+  sink's signature accepts them — the four-argument callbacks the load pipeline
+  installs get the four positional arguments alone. Acceptance is decided by
+  inspecting the signature, not by catching `TypeError` from the call, so a
+  `TypeError` raised *inside* a sink still propagates.
+
+- **`description_wrappers` is now a per-embedder, measured choice, and four
+  built-in embedders return `[]`** (issue #3341, following #3127). Issue
+  #3127 measured wrapper-averaged text embedding on/off across 22 eval
+  datasets and 560 paired queries (paired Δ in text-sort average precision,
+  SEs clustered on (corpus, category)). The result splits by *model*, not by
+  media type: `clap_general` +0.014 ± 0.009 and `xclip` +0.008 ± 0.014, but
+  `siglip` −0.001 ± 0.002, `clap` −0.010 ± 0.008, `e5` −0.057 ± 0.009 and
+  `bge` −0.059 ± 0.009 (the two text embedders lost on 45 of 45 categories,
+  and every individual template was negative on all four). Those four now
+  override `description_wrappers` to return `[]`, so `embed_text_enriched`
+  degrades to `embed_text` and the app's `enrich_descriptions` setting is a
+  no-op for them. `clap_general`, `xclip` and the unmeasured cross-modal
+  siblings are unchanged.
+
+  **For plugin authors:** the base-class default is still `[]` and nothing in
+  the ABC moved, so no out-of-tree embedder is affected. But the default is
+  now documented as a *measured answer* rather than an unfilled slot — do not
+  add wrappers to your own embedder without measuring that they beat the typed
+  query on your checkpoint, because a sibling model's templates are not
+  evidence (`clap` and `clap_general` disagree on the identical five).
+
+- **Voted media are excluded from the calibrated threshold's haystacks**
+  (issue #3308). The fold-anchored threshold estimator drops the voted
+  items from every population sample it touches - each calibration fold
+  model's corpus scores and the final model's realization sample - because
+  those models were trained on the votes, so the votes' own scores under
+  them are optimistically shifted (and the calibration votes previously sat
+  in the haystack twice: once as free points, once as anchors). All the
+  distributions in the quantile transfer now cover one identical
+  population, the unlabeled remainder. New optional `voted_ids` parameter
+  on `vtscore.detectors.training.train_and_threshold` (and the internal
+  `_train_and_score_xy` / `_fused_threshold`); `train_and_score` and the
+  labelset/model-loading pipelines pass it automatically, and omitting it
+  keeps the historical include-everything behaviour. The exclusion switches
+  off entirely when it would leave fewer than
+  `vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER` (60) scores - a
+  drained remainder is too coarse and too selection-biased to be a
+  population estimate. Thresholds move only where votes are a nontrivial
+  share of the corpus (small datasets); on large corpora the change is
+  bounded by the votes' share of the ≤50k haystack sample.
+
+- **`calibration_fraction` defaults are now per-embedder, and `None` means
+  "resolve it".** The shipped Train/Calibrate split of each calibration fold
+  is keyed on the space the detector learns in (issue #3287):
+  `PRODUCTION_SPLIT_BY_SPACE` in `vtscore.training.thresholds` maps
+  `single_vector` → 0.3 and `patch` → 0.5, with `PRODUCTION_SPLIT = 0.5` as
+  the unknown-space fallback, resolved by `production_split_for(patch_space=…)`
+  (a three-state contract mirroring `production_schedule_for`) and, with the
+  explicit-setting precedence, by
+  `vtscore.detectors.training.resolve_calibration_fraction`. Accordingly the
+  `calibration_fraction` parameters of `train_and_score`,
+  `labelset_train_and_score`, `train_detector_from_origins`,
+  `simulate_voting_iterations`, `run_voting_iterations_eval[_from_pickles]`,
+  `eval_learned_sort`, and `run_eval` changed from `float = 0.5` to
+  `float | None = None`, where `None` resolves to the per-space production
+  default (the eval keys it on `patch_grid` presence, matching the app).
+  `CoreConfig.calibration_fraction` is now `float | None` (`None` = no
+  explicit user setting), and `vtscore.state.get_calibration_fraction()` /
+  `set_calibration_fraction()` pass that tri-state through. Callers that
+  passed an explicit fraction are unaffected; callers that *relied* on the
+  implicit 0.5 default and want it back should pass `0.5` explicitly.
+
+- **Train/Calibrate split sizes are dithered rather than rounded.**
+  `calibration_folds` / `calibration_folds_cached` (and the grouped,
+  bag-aware path behind them) now round a fractional split size up with
+  probability equal to its fractional part, instead of calling `round`.
+  The count is unbiased either way; what changes is that a *tie* no longer
+  resolves the same way for every labelset of a given size. `round` is
+  round-half-to-even, so at the default `calibration_fraction=0.5` the odd
+  label's destination alternated with the label count - Train at
+  `n % 4 == 1`, Calibrate at `n % 4 == 3` - and every threshold read off
+  the fold models inherited that period-4 seesaw. Harmless for one
+  detector, but any study that advances one label at a time saw it
+  phase-locked across every run, where it survived averaging as a
+  spurious 4-label ripple (issue #3286). Thresholds remain a pure,
+  reproducible function of the labelset: the tie-break RNG is seeded from
+  a digest of the labels and training vectors, so the same votes still
+  give the same cut, and the calibration cache stays valid.
+
+- **Results exporters declare which payload kinds they handle, instead of
+  sniffing the dict shape.** `LabelsetExporter` is now `ResultsExporter`
+  (the old name stays as a permanent module-level alias), and it exposes
+  `export_find_results()` and `export_labelset()` alongside the existing
+  `export_cli_detectors()`. `supported_payloads` is derived from which of
+  those a subclass overrides, so each picker offers an exporter only for the
+  kinds it can actually read and the export route answers 400 - rather than
+  letting an exporter be handed a shape it doesn't understand and deliver an
+  empty export while reporting success. `email_smtp` gained a labelset mode
+  it never had.
+
+  **Existing exporters keep working with no changes.** The default
+  `export_find_results()` / `export_labelset()` both delegate to `export()`,
+  so a plugin written against the single-method contract still runs and still
+  does its own `if "labels" in results` check; it is credited with both
+  payload kinds and logs one line at import pointing at the named methods.
+  Migrating is a mechanical split of that `if` into two methods, and buys
+  accurate picker filtering. See
+  [`vtscore/docs/extending/results-exporters.md`](docs/extending/results-exporters.md).
+
+- **`RemoteUnreachableError` now also covers a retryable HTTP status that
+  outlives the retry budget.** `download_file_with_progress` and
+  `fetch_text_with_retry` used to end a run of 500/502/503/504/429 responses by
+  calling `raise_for_status()`, so the caller got a raw `requests.HTTPError`
+  naming whichever CDN node the redirect landed on. Both now raise
+  `RemoteUnreachableError` with a sentence naming the host and the status.
+  Non-retryable statuses (404 and friends) still raise `HTTPError` unchanged,
+  and gated 401/403 still raise `GatedResourceError`.
+- **A multi-file demo download tolerates individual files the host refuses.**
+  The per-file sets (Apollo 11, the Nixon tapes) set a failed file aside, retry
+  it once after the rest of the set, then skip it with a `notify()` warning,
+  failing the download only when more than a quarter of the set is missing.
+
+- **`LINEAR_SVM_HEAD` is the production detector head**, replacing
+  `LINEAR_HEAD`. Both sentinels build the same `Linear(D, 1)`; the new one is
+  fitted by `vtscore.training.svm.fit_linear_svm_head` (squared hinge + L2 via
+  liblinear, `class_weight="balanced"`) rather than by `train_model`'s balanced
+  BCE loop. The fit delegates to `train_svm(kernel="linear")` — the very call
+  the eval harness scores as its `svm_linear` arm — so the shipped head and the
+  measured arm cannot drift apart, and `vtscore.eval.voting_iterations`'
+  `PRODUCTION_HEAD` moves to `"linear_svm"` with it. `head="linear"` and
+  `head="mlp"` remain as named eval arms. Callers that passed `LINEAR_HEAD` to
+  match production must now pass `LINEAR_SVM_HEAD`; scores from a detector
+  trained on the same labels will differ.
+- **`train_svm` accepts `sample_weight`** (`decision_sigmoid` calibration
+  only), mirroring `train_model`'s contract: per-row weights replace the
+  `class_weight` balance rather than stacking on it. This is how region
+  flooding weights a Bad image's many region rows down to one image's worth.
+
+- **`clap_general` is the default audio embedder**, replacing `clap`.
+  Measured on the full ESC-50 (2000 clips, all 50 categories),
+  `laion/larger_clap_general` wins every comparison against
+  `laion/clap-htsat-unfused`: text-sort mAP 0.869-0.895 vs 0.850-0.866,
+  learned-sort mean F1 0.523-0.564 vs 0.457-0.529, and leave-one-out 1-NN
+  accuracy 0.973 vs 0.958. `embedders_for_type("audio")[0]` and any caller
+  that passes `embedder=""`/`None` now resolve to `clap_general`.
+  `clap` is **not** removed - it stays a first-class explicit choice, ~2.1x
+  faster and ~20% smaller, and existing pickles and detector JSONs recording
+  `embedder: "clap"` keep resolving. Both are 512-d, so vectors from the two
+  are dimension-compatible but not interchangeable.
+- **The two general CLAP display names are now distinguishable.** `clap` reads
+  "CLAP (general, faster)" (was "CLAP (general audio)") and `clap_general`
+  reads "CLAP (general, larger)" (was "CLAP (general 2024)"); their progress
+  labels are "CLAP Fast" and "CLAP General".
+- **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
+  calibration fold, a semi-supervised 2-component mixture is fitted to that
+  fold model's scores over the whole collection with the fold's *held-out*
+  labels clamped to their component; each fold's cut is carried to the final
+  model as a quantile and the folds are combined in quantile space. Anchor mass
+  is 0.3 (each vote counts as three tenths of a haystack point) and the cut
+  rule is `mid_tilt`: at Inclusion 0 the midpoint between the fitted component
+  means — the interior optimum of a six-environment κ sweep — and away from 0
+  that midpoint's combined quantile shifted by the rate-optimal cut's own
+  displacement from its inclusion-0 position, so the fused threshold answers
+  the Inclusion knob monotonically while reproducing the measured midpoint arm
+  exactly where it was measured. The
+  label-count-scheduled blend (`calculate_safe_threshold`) is now only the
+  fallback for label sets too small to form calibration folds.
+- **`gmm_cut_from_fit(rule="rate")` continues past the component means instead
+  of falling back to the midpoint** when the density crossing has no root
+  between them. The cut is read as the highest score at which the low component
+  still out-densities the high one under the cost tilt, which makes it monotone
+  in the Inclusion knob (and so keeps the included sets nested); it equals the
+  old root wherever a crossing exists, including at every equal-weight cut.
+  Once the crossing runs off the inter-mean interval the cut keeps moving,
+  continuing past the edge by the log-cost excess times the mixture-weighted
+  variance over the mean gap - the equal-variance crossing's own slope, so for
+  equal-variance fits the continuation extends the interior crossing line
+  seamlessly. Returning the bare edge there (the first form of this change)
+  made the cut *constant* in the cost ratio, which flattened the composed
+  `mid_tilt` quantile over whole bands of the Inclusion knob and silently
+  collapsed the acquisition offset to a no-op inside them.
+- **`vtscore.eval` defaults `safe_thresholds=True`**, matching the app; `False`
+  is the no-fusion control arm. `eval_learned_sort` / `run_eval` lost the
+  parameter entirely - they delegate to the production trainer, which has no
+  such mode.
+- **`gmm_cut_from_fit` returns `(cut, kind)` instead of `(cut, flag)`**, where
+  *kind* is one of `CUT_KIND_INTERIOR` (`""`), `CUT_KIND_CONTINUED` or
+  `CUT_KIND_DEGENERATE_MIDPOINT`. It is empty exactly when the old flag was 0,
+  so `bool(kind)` is the previous "no interior stationary point" boolean; the
+  non-empty values distinguish a cut *continued* past a component mean (still
+  moving with the cost tilt, still the rate rule) from a fit too degenerate to
+  express a boundary at all (a midpoint, constant in the tilt). Those two were
+  indistinguishable before, which made a fallback countable but not
+  attributable. **Breaking:** a caller comparing the second element to `0`/`1`
+  should compare to `""` or wrap in `bool()`.
+
 ### Deprecated
 
 - **The per-environment timing profile and the ingest-ETA switch are no-ops** (issue #4667).
@@ -1515,6 +1836,42 @@ instead, since every commit on `dev` is effectively a new app release.)
   for you, since the callbacks the load pipeline binds check cancellation
   before recording each tick.
 
+- **The four never-implemented integration plugins** (issue #3451): the
+  `holder` results exporter (`vtscore.exporters.holder`), the `holder` label
+  importer (`vtscore.labels.importers.holder`), the `recaller` dataset
+  importer (`vtscore.datasets.importers.recaller`), and the `pullwrest` media
+  source (`vtscore.datasets.sources.pullwrest`). Every I/O entry point in all
+  four raised `NotImplementedError("TODO: implement ...")`, so no code path
+  through them had ever executed; they were registered but
+  `hidden_from_picker`. **Breaking:** `get_exporter("holder")`,
+  `get_label_importer("holder")` and `get_importer("recaller")` now return
+  `None`, `get_source_for_origin({"importer": "recaller", ...})` returns
+  `None`, and the modules no longer import. Their API routes
+  (`/api/dataset/import/recaller`, `/api/dataset/stage-import/recaller`,
+  `/api/label-importers/import/holder`,
+  `/api/detectors/{name}/import-labels/holder`,
+  `/api/detectors/registry/from-labelset/holder`) are gone with them. If you
+  copied one as a starting point, the shapes they demonstrated are now
+  documented directly: service-style dataset importers and the bulk-fetch
+  hook in `docs/EXTENDING-plugins.md` and
+  [`extending/dataset-importers.md`](docs/extending/dataset-importers.md),
+  labelset-only exporters in
+  [`extending/results-exporters.md`](docs/extending/results-exporters.md).
+
+- **`CoreConfig.safe_thresholds`**, `vtscore.state.get_safe_thresholds` /
+  `set_safe_thresholds`, and the `safe_thresholds` parameter of
+  `train_and_score`, `labelset_train_and_score`, and `run_learned_sort`. The
+  fused threshold measured better than the alternative at every label count, so
+  the switch was deleted rather than kept as a way to opt into a worse cut.
+  **Breaking:** construct `CoreConfig` without the field, and drop the keyword
+  from any `train_and_score` call.
+- **`vtscore.training.thresholds.xcal_is_discarded`** - it existed to skip the
+  fold training where the blend schedule zeroed the cross-cal cut, and the
+  fold-anchored estimator needs those fold models at every label count.
+- **`cross_calibration_threshold_cached`** - superseded by
+  `calibration_folds_cached`, which returns the fold models alongside the
+  orderings (plus `threshold_from_folds` for the cross-calibration cut).
+
 ### Fixed
 
 - **Stable no longer counts a balance change as flips** (issue #4745).
@@ -1684,272 +2041,6 @@ instead, since every commit on `dev` is effectively a new app release.)
   *should* leave out the media that live in another - but a silently short
   haystack is what hid this.
 
-### Added
-
-- **`ProgressCallback`, `noop_progress()` and `resolve_progress_callback()` are
-  exported from `vtscore.concurrency.progress`** (issue #3392). The
-  `(status, message, current, total)` type alias had been redeclared in ten
-  modules and the "use the thread's callback, else a default" resolution copied
-  byte-identically into eight; both now have one definition.
-  `resolve_progress_callback()` returns the calling thread's progress callback,
-  or `noop_progress` when none is bound. `vtscore.media.base` re-exports the
-  alias and the no-op, so existing imports from there keep working.
-
-### Changed
-
-- **`update_progress()` reports into the calling thread's tracker instead of a
-  global one** (issue #3376). It stays public and stays the documented way for
-  an importer to report progress without accepting an `on_progress` argument —
-  it is now the free-function spelling of `resolve_progress_callback()`.
-
-  This **fixes** out-of-tree importers that followed
-  `docs/extending/dataset-importers.md`. Writing straight to the global meant
-  their ticks landed on a channel the dashboard does not render, so the row for
-  their import never moved, and the `"embedding"` status that swaps the
-  download concurrency-gate for the embed gate never reached the pipeline.
-  Both work now with no change to the calling code. Two in-tree importers
-  (`recaller`, and `DatasetImporter`'s default record loop) had the same bug.
-
-  Two narrower changes to its signature: the `staging_result=` parameter is
-  gone (that field belongs to the staging task's own tracker, declared via
-  `create_task(..., extra_fields={"staging_result": None})`), and the remaining
-  extras (`error`, `step`, `total_steps`) are forwarded only when the bound
-  sink's signature accepts them — the four-argument callbacks the load pipeline
-  installs get the four positional arguments alone. Acceptance is decided by
-  inspecting the signature, not by catching `TypeError` from the call, so a
-  `TypeError` raised *inside* a sink still propagates.
-
-- **`description_wrappers` is now a per-embedder, measured choice, and four
-  built-in embedders return `[]`** (issue #3341, following #3127). Issue
-  #3127 measured wrapper-averaged text embedding on/off across 22 eval
-  datasets and 560 paired queries (paired Δ in text-sort average precision,
-  SEs clustered on (corpus, category)). The result splits by *model*, not by
-  media type: `clap_general` +0.014 ± 0.009 and `xclip` +0.008 ± 0.014, but
-  `siglip` −0.001 ± 0.002, `clap` −0.010 ± 0.008, `e5` −0.057 ± 0.009 and
-  `bge` −0.059 ± 0.009 (the two text embedders lost on 45 of 45 categories,
-  and every individual template was negative on all four). Those four now
-  override `description_wrappers` to return `[]`, so `embed_text_enriched`
-  degrades to `embed_text` and the app's `enrich_descriptions` setting is a
-  no-op for them. `clap_general`, `xclip` and the unmeasured cross-modal
-  siblings are unchanged.
-
-  **For plugin authors:** the base-class default is still `[]` and nothing in
-  the ABC moved, so no out-of-tree embedder is affected. But the default is
-  now documented as a *measured answer* rather than an unfilled slot — do not
-  add wrappers to your own embedder without measuring that they beat the typed
-  query on your checkpoint, because a sibling model's templates are not
-  evidence (`clap` and `clap_general` disagree on the identical five).
-
-- **Voted media are excluded from the calibrated threshold's haystacks**
-  (issue #3308). The fold-anchored threshold estimator drops the voted
-  items from every population sample it touches - each calibration fold
-  model's corpus scores and the final model's realization sample - because
-  those models were trained on the votes, so the votes' own scores under
-  them are optimistically shifted (and the calibration votes previously sat
-  in the haystack twice: once as free points, once as anchors). All the
-  distributions in the quantile transfer now cover one identical
-  population, the unlabeled remainder. New optional `voted_ids` parameter
-  on `vtscore.detectors.training.train_and_threshold` (and the internal
-  `_train_and_score_xy` / `_fused_threshold`); `train_and_score` and the
-  labelset/model-loading pipelines pass it automatically, and omitting it
-  keeps the historical include-everything behaviour. The exclusion switches
-  off entirely when it would leave fewer than
-  `vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER` (60) scores - a
-  drained remainder is too coarse and too selection-biased to be a
-  population estimate. Thresholds move only where votes are a nontrivial
-  share of the corpus (small datasets); on large corpora the change is
-  bounded by the votes' share of the ≤50k haystack sample.
-
-- **`calibration_fraction` defaults are now per-embedder, and `None` means
-  "resolve it".** The shipped Train/Calibrate split of each calibration fold
-  is keyed on the space the detector learns in (issue #3287):
-  `PRODUCTION_SPLIT_BY_SPACE` in `vtscore.training.thresholds` maps
-  `single_vector` → 0.3 and `patch` → 0.5, with `PRODUCTION_SPLIT = 0.5` as
-  the unknown-space fallback, resolved by `production_split_for(patch_space=…)`
-  (a three-state contract mirroring `production_schedule_for`) and, with the
-  explicit-setting precedence, by
-  `vtscore.detectors.training.resolve_calibration_fraction`. Accordingly the
-  `calibration_fraction` parameters of `train_and_score`,
-  `labelset_train_and_score`, `train_detector_from_origins`,
-  `simulate_voting_iterations`, `run_voting_iterations_eval[_from_pickles]`,
-  `eval_learned_sort`, and `run_eval` changed from `float = 0.5` to
-  `float | None = None`, where `None` resolves to the per-space production
-  default (the eval keys it on `patch_grid` presence, matching the app).
-  `CoreConfig.calibration_fraction` is now `float | None` (`None` = no
-  explicit user setting), and `vtscore.state.get_calibration_fraction()` /
-  `set_calibration_fraction()` pass that tri-state through. Callers that
-  passed an explicit fraction are unaffected; callers that *relied* on the
-  implicit 0.5 default and want it back should pass `0.5` explicitly.
-
-- **Train/Calibrate split sizes are dithered rather than rounded.**
-  `calibration_folds` / `calibration_folds_cached` (and the grouped,
-  bag-aware path behind them) now round a fractional split size up with
-  probability equal to its fractional part, instead of calling `round`.
-  The count is unbiased either way; what changes is that a *tie* no longer
-  resolves the same way for every labelset of a given size. `round` is
-  round-half-to-even, so at the default `calibration_fraction=0.5` the odd
-  label's destination alternated with the label count - Train at
-  `n % 4 == 1`, Calibrate at `n % 4 == 3` - and every threshold read off
-  the fold models inherited that period-4 seesaw. Harmless for one
-  detector, but any study that advances one label at a time saw it
-  phase-locked across every run, where it survived averaging as a
-  spurious 4-label ripple (issue #3286). Thresholds remain a pure,
-  reproducible function of the labelset: the tie-break RNG is seeded from
-  a digest of the labels and training vectors, so the same votes still
-  give the same cut, and the calibration cache stays valid.
-
-- **Results exporters declare which payload kinds they handle, instead of
-  sniffing the dict shape.** `LabelsetExporter` is now `ResultsExporter`
-  (the old name stays as a permanent module-level alias), and it exposes
-  `export_find_results()` and `export_labelset()` alongside the existing
-  `export_cli_detectors()`. `supported_payloads` is derived from which of
-  those a subclass overrides, so each picker offers an exporter only for the
-  kinds it can actually read and the export route answers 400 - rather than
-  letting an exporter be handed a shape it doesn't understand and deliver an
-  empty export while reporting success. `email_smtp` gained a labelset mode
-  it never had.
-
-  **Existing exporters keep working with no changes.** The default
-  `export_find_results()` / `export_labelset()` both delegate to `export()`,
-  so a plugin written against the single-method contract still runs and still
-  does its own `if "labels" in results` check; it is credited with both
-  payload kinds and logs one line at import pointing at the named methods.
-  Migrating is a mechanical split of that `if` into two methods, and buys
-  accurate picker filtering. See
-  [`vtscore/docs/extending/results-exporters.md`](docs/extending/results-exporters.md).
-
-- **`RemoteUnreachableError` now also covers a retryable HTTP status that
-  outlives the retry budget.** `download_file_with_progress` and
-  `fetch_text_with_retry` used to end a run of 500/502/503/504/429 responses by
-  calling `raise_for_status()`, so the caller got a raw `requests.HTTPError`
-  naming whichever CDN node the redirect landed on. Both now raise
-  `RemoteUnreachableError` with a sentence naming the host and the status.
-  Non-retryable statuses (404 and friends) still raise `HTTPError` unchanged,
-  and gated 401/403 still raise `GatedResourceError`.
-- **A multi-file demo download tolerates individual files the host refuses.**
-  The per-file sets (Apollo 11, the Nixon tapes) set a failed file aside, retry
-  it once after the rest of the set, then skip it with a `notify()` warning,
-  failing the download only when more than a quarter of the set is missing.
-
-- **`LINEAR_SVM_HEAD` is the production detector head**, replacing
-  `LINEAR_HEAD`. Both sentinels build the same `Linear(D, 1)`; the new one is
-  fitted by `vtscore.training.svm.fit_linear_svm_head` (squared hinge + L2 via
-  liblinear, `class_weight="balanced"`) rather than by `train_model`'s balanced
-  BCE loop. The fit delegates to `train_svm(kernel="linear")` — the very call
-  the eval harness scores as its `svm_linear` arm — so the shipped head and the
-  measured arm cannot drift apart, and `vtscore.eval.voting_iterations`'
-  `PRODUCTION_HEAD` moves to `"linear_svm"` with it. `head="linear"` and
-  `head="mlp"` remain as named eval arms. Callers that passed `LINEAR_HEAD` to
-  match production must now pass `LINEAR_SVM_HEAD`; scores from a detector
-  trained on the same labels will differ.
-- **`train_svm` accepts `sample_weight`** (`decision_sigmoid` calibration
-  only), mirroring `train_model`'s contract: per-row weights replace the
-  `class_weight` balance rather than stacking on it. This is how region
-  flooding weights a Bad image's many region rows down to one image's worth.
-
-### Added
-
-- **The detector-JSON write lock and the cross-dataset labelset merge are now
-  public, and re-exported from the `labelset_ops` façade** (issue #3398).
-  `vtscore.detectors.label_sync._label_sync_write_lock` and
-  `_merge_labelsets_across_datasets` are now
-  `label_sync_write_lock` and `merge_labelsets_across_datasets`, exported from
-  `vtscore.detectors.labelset_ops` alongside the rest of the detector-labelset
-  surface. Neither is new behaviour — the lock's contract has always bound
-  out-of-module writers (any caller doing its own read-modify-write of a
-  detector JSON file must hold it for the whole pass, acquired *before*
-  `_state_lock`), and `sync_labels_to_loaded_detector` and the app's four route
-  writers all merge with the same function. The private names simply said
-  otherwise, which made the seam unenforceable and the symbols un-renameable.
-  Both old names are gone rather than aliased, per this repo's rule that
-  `_`-prefixed symbols carry no compatibility promise; an out-of-tree writer
-  that was reaching for them should import from `labelset_ops`.
-
-- **`vtscore.utils.hits.hit_custom_metadata(media)`** — the `custom_metadata`
-  sanitiser `build_media_hit` already applied is now a public export (issue
-  #3368). It returns a fresh copy of a media's importer metadata with the
-  `embedding` key stripped, and exists as a public name because every surface
-  that hands that dict to an outside caller — hits, the app's detector and
-  processor scoring routes, `POST /api/medias/batch`, the label-export blob —
-  has to agree on what it strips. A top-level key filter cannot: a
-  pre-computed vector shipped via `custom_metadata_map` rides *inside*
-  `custom_metadata`, where it would balloon the payload or fail JSON encoding
-  outright. Behaviour of `build_media_hit` is unchanged.
-
-- **`PluginBase.get_field_options(field_key, current_values)`** — the
-  dynamic-select hook now lives on the shared plugin base instead of on the
-  importer families alone, so every plugin family inherits it and a results
-  exporter can compute its options at runtime (issue #3360). The default
-  raises `NotImplementedError` naming the field, matching what the importer
-  bases already did; existing overrides are unaffected. A dynamic select's
-  declared `options` are also no longer used as the `choices` of its
-  auto-generated CLI flag — they are a seed for the first render, not the
-  allowed set, so pinning argparse to them rejected every value the plugin
-  resolved at runtime.
-
-- `vtscore.eval.seed_scores.build_seed_scores` accepts an `enrich` keyword
-  (default `False`, matching the app's shipped `enrich_descriptions`
-  default), so a simulated-user study can open on the same sort a real user
-  sees instead of silently always embedding the query plainly (issue #3341).
-
-- **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and
-  `NotificationBroker`: a fan-out channel for one-off user-facing messages.
-  The progress trackers publish *state* and an exception ends the operation;
-  neither fits "we skipped 3 unreadable files but the other 900 imported
-  fine". `notify()` is the third option — keep going, and say so. Consumers
-  subscribe to the process-wide `notifications` broker (the app's SSE stream
-  and the CLI printer both do); with no subscriber the message is still
-  logged at a severity matching its level. `PluginBase.notify()` wraps it
-  with the plugin's `display_name` as the source. The call never raises: bad
-  levels degrade, long messages truncate, broken subscribers are swallowed.
-
-- **`vtscore.security.login`** - the `LoginProvider` ABC,
-  `DefaultLoginProvider`, the process-wide `set_login_provider` /
-  `get_login_provider` registry, `get_user_data_dir()` and
-  `is_safe_username()`, moved down from the `vtsearch` app tier. Path
-  confinement (`vtscore.security.path_validation`) asks the active provider
-  where the current user's data lives, so the abstraction had to be reachable
-  in a process with no Flask in it — previously `get_file_access_base_dir()`
-  raised `ImportError` there. An embedder can now opt into per-user
-  confinement by registering a provider whose `get_user_data_dir()` returns a
-  per-user subtree; the default stays single-user and unconfined.
-
-- **`beats` audio embedder** - Microsoft's BEATs iter3+ AudioSet-2M
-  self-supervised encoder, exposed as a 768-d audio-only embedder
-  (`supports_text=False`). There is no `transformers` implementation, so the
-  architecture is vendored in `vtscore.media.audio._beats_model` (DeepNorm
-  residuals, a shared gated relative position bias, a weight-normalised
-  convolutional position embedding) and the released MIT-licensed checkpoint
-  is loaded onto it. Its Kaldi `compute-fbank-feats` front-end is ported from
-  torchaudio's pure-PyTorch implementation rather than taken as a dependency,
-  since torchaudio's wheels are built against a pinned torch.
-
-### Removed
-
-- **The four never-implemented integration plugins** (issue #3451): the
-  `holder` results exporter (`vtscore.exporters.holder`), the `holder` label
-  importer (`vtscore.labels.importers.holder`), the `recaller` dataset
-  importer (`vtscore.datasets.importers.recaller`), and the `pullwrest` media
-  source (`vtscore.datasets.sources.pullwrest`). Every I/O entry point in all
-  four raised `NotImplementedError("TODO: implement ...")`, so no code path
-  through them had ever executed; they were registered but
-  `hidden_from_picker`. **Breaking:** `get_exporter("holder")`,
-  `get_label_importer("holder")` and `get_importer("recaller")` now return
-  `None`, `get_source_for_origin({"importer": "recaller", ...})` returns
-  `None`, and the modules no longer import. Their API routes
-  (`/api/dataset/import/recaller`, `/api/dataset/stage-import/recaller`,
-  `/api/label-importers/import/holder`,
-  `/api/detectors/{name}/import-labels/holder`,
-  `/api/detectors/registry/from-labelset/holder`) are gone with them. If you
-  copied one as a starting point, the shapes they demonstrated are now
-  documented directly: service-style dataset importers and the bulk-fetch
-  hook in `docs/EXTENDING-plugins.md` and
-  [`extending/dataset-importers.md`](docs/extending/dataset-importers.md),
-  labelset-only exporters in
-  [`extending/results-exporters.md`](docs/extending/results-exporters.md).
-
-### Fixed
-
 - **A pre-computed vector nested in `custom_metadata` no longer reaches a
   labelset** (issue #3368). `LabelSet.from_clips_and_votes` copied a media's
   `custom_metadata` onto every `LabeledElement` verbatim, so a dataset
@@ -1958,115 +2049,6 @@ instead, since every commit on `dev` is effectively a new app release.)
   persistence the no-persisted-vectors rule forbids. The dict now goes through
   `hit_custom_metadata` (see Added above); `LabeledElement.metadata` is `None` when
   the vector was its only key. No other importer metadata is affected.
-
-### Changed
-
-- **`clap_general` is the default audio embedder**, replacing `clap`.
-  Measured on the full ESC-50 (2000 clips, all 50 categories),
-  `laion/larger_clap_general` wins every comparison against
-  `laion/clap-htsat-unfused`: text-sort mAP 0.869-0.895 vs 0.850-0.866,
-  learned-sort mean F1 0.523-0.564 vs 0.457-0.529, and leave-one-out 1-NN
-  accuracy 0.973 vs 0.958. `embedders_for_type("audio")[0]` and any caller
-  that passes `embedder=""`/`None` now resolve to `clap_general`.
-  `clap` is **not** removed - it stays a first-class explicit choice, ~2.1x
-  faster and ~20% smaller, and existing pickles and detector JSONs recording
-  `embedder: "clap"` keep resolving. Both are 512-d, so vectors from the two
-  are dimension-compatible but not interchangeable.
-- **The two general CLAP display names are now distinguishable.** `clap` reads
-  "CLAP (general, faster)" (was "CLAP (general audio)") and `clap_general`
-  reads "CLAP (general, larger)" (was "CLAP (general 2024)"); their progress
-  labels are "CLAP Fast" and "CLAP General".
-- **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
-  calibration fold, a semi-supervised 2-component mixture is fitted to that
-  fold model's scores over the whole collection with the fold's *held-out*
-  labels clamped to their component; each fold's cut is carried to the final
-  model as a quantile and the folds are combined in quantile space. Anchor mass
-  is 0.3 (each vote counts as three tenths of a haystack point) and the cut
-  rule is `mid_tilt`: at Inclusion 0 the midpoint between the fitted component
-  means — the interior optimum of a six-environment κ sweep — and away from 0
-  that midpoint's combined quantile shifted by the rate-optimal cut's own
-  displacement from its inclusion-0 position, so the fused threshold answers
-  the Inclusion knob monotonically while reproducing the measured midpoint arm
-  exactly where it was measured. The
-  label-count-scheduled blend (`calculate_safe_threshold`) is now only the
-  fallback for label sets too small to form calibration folds.
-- **`gmm_cut_from_fit(rule="rate")` continues past the component means instead
-  of falling back to the midpoint** when the density crossing has no root
-  between them. The cut is read as the highest score at which the low component
-  still out-densities the high one under the cost tilt, which makes it monotone
-  in the Inclusion knob (and so keeps the included sets nested); it equals the
-  old root wherever a crossing exists, including at every equal-weight cut.
-  Once the crossing runs off the inter-mean interval the cut keeps moving,
-  continuing past the edge by the log-cost excess times the mixture-weighted
-  variance over the mean gap - the equal-variance crossing's own slope, so for
-  equal-variance fits the continuation extends the interior crossing line
-  seamlessly. Returning the bare edge there (the first form of this change)
-  made the cut *constant* in the cost ratio, which flattened the composed
-  `mid_tilt` quantile over whole bands of the Inclusion knob and silently
-  collapsed the acquisition offset to a no-op inside them.
-- **`vtscore.eval` defaults `safe_thresholds=True`**, matching the app; `False`
-  is the no-fusion control arm. `eval_learned_sort` / `run_eval` lost the
-  parameter entirely - they delegate to the production trainer, which has no
-  such mode.
-- **`gmm_cut_from_fit` returns `(cut, kind)` instead of `(cut, flag)`**, where
-  *kind* is one of `CUT_KIND_INTERIOR` (`""`), `CUT_KIND_CONTINUED` or
-  `CUT_KIND_DEGENERATE_MIDPOINT`. It is empty exactly when the old flag was 0,
-  so `bool(kind)` is the previous "no interior stationary point" boolean; the
-  non-empty values distinguish a cut *continued* past a component mean (still
-  moving with the cost tilt, still the rate rule) from a fit too degenerate to
-  express a boundary at all (a midpoint, constant in the tilt). Those two were
-  indistinguishable before, which made a fallback countable but not
-  attributable. **Breaking:** a caller comparing the second element to `0`/`1`
-  should compare to `""` or wrap in `bool()`.
-
-### Removed
-
-- **`CoreConfig.safe_thresholds`**, `vtscore.state.get_safe_thresholds` /
-  `set_safe_thresholds`, and the `safe_thresholds` parameter of
-  `train_and_score`, `labelset_train_and_score`, and `run_learned_sort`. The
-  fused threshold measured better than the alternative at every label count, so
-  the switch was deleted rather than kept as a way to opt into a worse cut.
-  **Breaking:** construct `CoreConfig` without the field, and drop the keyword
-  from any `train_and_score` call.
-- **`vtscore.training.thresholds.xcal_is_discarded`** - it existed to skip the
-  fold training where the blend schedule zeroed the cross-cal cut, and the
-  fold-anchored estimator needs those fold models at every label count.
-- **`cross_calibration_threshold_cached`** - superseded by
-  `calibration_folds_cached`, which returns the fold models alongside the
-  orderings (plus `threshold_from_folds` for the cross-calibration cut).
-
-### Added
-
-- **`vtscore.state.current_user`** - Flask-free resolution of "who is this
-  work for": a pluggable request-user resolver
-  (`register_request_user_resolver`), the `thread_user` thread-local scope
-  background jobs use to inherit a requester's identity, and the `"default"`
-  fallback. Library code that needs a username now calls
-  `vtscore.state.current_user.get_current_user()` instead of importing
-  `vtsearch.auth`, which made `JobManager.start()` (and label sync, dataset
-  loading, exporters, plugin templating) hard-require Flask at call time.
-  `vtsearch.auth` re-exports every name, so there is still exactly one
-  thread-local behind the app.
-- **`FoldAnchoredCut`** / **`fit_fold_anchored_cut`** - the fitted estimator,
-  split from the cut so a new Inclusion value can be re-cut arithmetically
-  without refitting or re-scoring.
-- **`inclusion_cost_weights`** - the single definition of what an Inclusion
-  value costs in `(fpr_weight, fnr_weight)`, read by both the shipped threshold
-  rule and the eval harness.
-
-- **`LabelsetExporter.opens_url`** and the `"open_url"` response key - an
-  exporter can return an `http(s)` URL for the frontend to open in a new
-  browser tab, which is how a third-party site with no ingest API receives a
-  labelset. Setting `opens_url = True` advertises it on `to_dict()` so the UI
-  can label the button before the export runs.
-- **`vtscore.security.url_validation.validate_browser_url`** - scheme
-  allowlist for URLs the *user's browser* opens. Deliberately not the
-  `validate_url` SSRF guard: no server-side request is made, so private hosts
-  are legitimate targets and only the scheme is dangerous.
-- **`open_url` exporter** - formats the labelset into a user-supplied URL
-  template (`{ids}`, `{count}`), URL-encoding the joined identifiers,
-  truncating to `max_items`, and refusing a URL past the ~2000-character
-  practical limit.
 
 ## [0.1.0] - Initial release
 

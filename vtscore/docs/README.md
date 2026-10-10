@@ -84,11 +84,10 @@ library discovers it automatically. See:
 - [Labelset sources](extending/labelset-sources.md)
 - [Media sources](extending/media-sources.md)
 
-Datasource importers, seed importers and media cleaners have no authoring
-guide yet; their contracts are described in
-[packages/datasource-importers.md](packages/datasource-importers.md),
-[packages/seed-importers.md](packages/seed-importers.md) and
-[packages/media.md](packages/media.md).
+Datasource importers, seed importers and media cleaners have no
+library-tier authoring guide; see
+[extending/README.md § Per-family guides](extending/README.md#per-family-guides)
+for where their contracts are documented.
 
 ## Conventions
 
@@ -140,10 +139,9 @@ enforced by `scripts/check-vtscore-docs.py` (a `./run-tests.sh` gate):
   it.** Add a module, and the gate fails until the table lists it. The
   tables are the inventory; write them from the tree, not from memory.
 - **Never cite a line number.** A `path.py` plus a colon plus a number
-  is wrong by the next edit - in practice every such anchor in this doc
-  set had rotted, most by hundreds of lines (which is why the gate
-  rejects the pattern outright, including in this sentence). Reference
-  the module and the symbol instead
+  is wrong by the next edit, so the gate rejects the pattern outright
+  (including in this sentence). Reference the module and the symbol
+  instead
   (``` `pool_box_from_media` in `vtscore/embedding/matrix.py` ```): it
   is stable under any edit that doesn't move the symbol, and it is
   greppable, which a line number never was.

@@ -284,7 +284,7 @@ The simulated user follows the app's **own** phase machine, ported in [`vtscore/
 
 | | app (and the harness now) | old approximation |
 |---|---|---|
-| First trained detector | at quorum — 3 good **and** 4 bad | at the first `(≥1 good, ≥1 bad)` pair |
+| First trained detector | at quorum — 3 good **and** 4 bad (or, once the Good walk runs dry, a Good and 16 bad, #4731) | at the first `(≥1 good, ≥1 bad)` pair |
 | Bad-phase pick | the **text sort's acquisition cut** (Select `hard` on a text sort: the mixture midpoint the route sends as `acq_threshold`, not the guarded line it paints green, #4136) | the bottom of the sort |
 | Hard-phase pick | nearest the cutoff **by rank** | nearest **by score** |
 | Hard → New | when the *smart* and *stable* indicators go green | alternating on step parity |
@@ -293,7 +293,7 @@ The first row is the one that bites. Because the app stays on the text sort thro
 
 Two columns make this visible in the output:
 
-- **`phase`** — the Autopilot phase after that vote (`good` / `bad` / `hard` / `new` / `done` / `exhausted`).
+- **`phase`** — the Autopilot phase after that vote (`good` / `bad` / `more` / `hard` / `new` / `done` / `exhausted`; `example` for an example-sort opening's own votes, `s0`, `s1`, … inside a startup schedule, `prompt` / `check` on spot-check rows).
 - **`app_trained`** — `1` exactly when the app would have had a trained detector on screen. **A threshold recorded where this is `0` is one no user would ever see**, so any analysis of threshold quality should filter on it.
 - **`detector_tier`** — which detector a Test at that click gives (#4643): `centroid`, the Goods' centroid, from the first Good until the votes hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731) (the label quota, [`ML.md`](ML.md#below-the-label-quota-the-goods-centroid-not-a-head)), else `trained`. The row's test metrics are that detector's, cut where Test cuts it on the withheld half; the Train side (acquisition, the lights, the spot check) runs on the trained head wherever there is a Good and a Bad, as the Train view's learned sort does. `label_quota=False` is the pre-#4643 arm: no row before the first Good and Bad, the head from there. The study extras that vary the trained head's cut (variant rows, fit-quality, rank and precision frames) ride only trained steps under the quota.
 
@@ -359,13 +359,13 @@ The app draws a detector's line at its **balance** — F-beta's beta, 1 unless t
 
 Each row records what the balance said: `beta` (NaN on the Inclusion arm), `floor_status` (`unchecked` or `checked`; empty with no balance line; the `floor_*` names predate the balance), `floor_count` (how many unvoted items the line keeps; since #4452 what clears the labels' threshold, possibly 0; -1 with no line), `range_lo` / `range_hi` (the check's likely range for the kept set's precision; NaN before a check ends), `check_labelled` / `check_right` (the labels behind it; -1 before) and `check_stale` (1 once the retrain after the check moved the set under it, 0 while it holds, -1 with no finished check). `check_audited` is the set the last walk audited, its end as a band edge (#4427): under the advisory check the line keeps `floor_count`, not it; -1 before a check. The base calibration row also carries `train_threshold` (the Train side's threshold; the row's `threshold` is then Find's, on the withheld half), `train_prevalence` (the prevalence the class model estimated on the sim set) and `find_prevalence` (the one it estimated on the withheld half) (#4452); every other row type carries them as NaN.
 
-#### The acquisition cut (`acq_inclusion_offset`, default: whatever `vtscore.training.thresholds` ships)
+#### The acquisition cut (`acq_target_p`, `acq_inclusion_offset`; default: whatever `vtscore.training.thresholds` ships)
 
-The selector and the metrics read **different thresholds**. Reporting and every emitted metric stay on the reporting line; the threshold handed to the picks is re-cut `acq_inclusion_offset` inclusion steps from that line's inclusion — `inclusion` on the Inclusion arm, and under a balance the inclusion the line derives to (`inclusion_for_threshold`) — from the same fold-anchored fit. This mirrors production, which decoupled the two jobs in PR #2876 — see [`docs/ML.md`](ML.md#threshold-calibration) for the mechanism and the measured effect.
+The selector and the metrics read **different thresholds**. Reporting and every emitted metric stay on the reporting line; the Hard and New picks read a separate acquisition cut, mirroring production (see [`docs/ML.md`](ML.md#threshold-calibration) for the mechanism and the measured effect). Which cut, by default, is the app's:
 
-The default is `ACQUISITION_INCLUSION_OFFSET` — the shipped value, **not** `0` — so an unconfigured run measures what users actually get. (PR #2876 shipped `-3`; PR #2891 cut it to `-1`; #3318 restored `-3`; #3319 moved it to `-4`. Read the constant, not a number written here.) Pass `acq_inclusion_offset=0` to `simulate_voting_iterations` (or `CALIB_ACQ_INCLUSION_OFFSET=0` to the calibration runner) for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
-
-**Under a balance the default is whatever `ACQUISITION_ARGMAX_FACTOR` ships** (#4409, #4413): `None` since the #4427 revert, so the offset cut above; a number would place the picks at that share of the depth of the mixture's F-beta argmax over the unvoted ranking, read as a rank (`acquisition_threshold`, the function the app reads too; `resolve_acquisition_factor` is the harness's side of the `acquisition.balance_cut` mirror), with the `acq_inclusion_offset` re-cut as the fallback for a step with no mixture estimate. `acq_p_crossing=<number>` (`CALIB_ACQ_P_CROSSING`) pins a factor for an arm, `"off"` forces the offset cut whatever ships (`docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md` priced 1.0 and 0.5 and, read on the objective, reverted 0.5).
+- **Under a balance** (every default run): the **target pick precision** (#3546) — the score where the labels line's corpus posterior falls below `ACQUISITION_TARGET_PRECISION` (0.5), via the app's own `target_precision_threshold`; `resolve_acquisition_target` is the harness's side of the `acquisition.target_precision` mirror. A step with no labels line falls back to the offset cut below. `acq_target_p=<number>` (`CALIB_ACQ_TARGET_P`) pins another target; `"off"` forces the offset cut.
+- **The offset cut**: the same fold-anchored fit re-cut `acq_inclusion_offset` inclusion steps from the line's inclusion — `inclusion` on the Inclusion arm, and under a balance the inclusion the line derives to (`inclusion_for_threshold`). The default is `ACQUISITION_INCLUSION_OFFSET` (the shipped value, **not** `0`; read the constant, not a number written here). `acq_inclusion_offset=0` (`CALIB_ACQ_INCLUSION_OFFSET=0`) is the pre-#2876 control where one threshold did both jobs, which is also what any pre-#2876 study implicitly ran at — reproducing one byte-for-byte means passing it explicitly, the way `autopilot_fidelity=False` reproduces the pre-fidelity harness. `acq_origin` (`CALIB_ACQ_ORIGIN`, `line` or `inclusion`) says where the offset counts from.
+- **The F-beta argmax share** (#4409): `ACQUISITION_ARGMAX_FACTOR` is `None` since the #4427 revert, so it does not ship; `acq_p_crossing=<number>` (`CALIB_ACQ_P_CROSSING`) runs it as an arm, at that share of the depth of the mixture's F-beta argmax over the unvoted ranking (`resolve_acquisition_factor`, the `acquisition.balance_cut` mirror; `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
 
 Three columns make the lever verifiable rather than assumed, all measured in the **pool** distribution the selector ranks:
 
@@ -592,6 +592,7 @@ The voting simulation takes two knobs that both sound like "which model?". They 
 |---|---|
 | `linear_svm` | `Linear(d, 1)` fitted by liblinear. **The shipped detector head**; `head=None` resolves here. |
 | `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced (#2790/#2809). |
+| `linear_logreg` | The same `Linear(d, 1)` with the logistic loss fitted to convergence by scikit-learn (balanced, L2, C = 1) rather than the early-stopped BCE loop (#4114). |
 | `mlp` | An auto-sized hidden layer, BCE — the head shipped before #2790 (#2781). |
 
 Passing `head=` alongside an `svm_*` or `gp_*` trainer is an error: those arms fit their own estimator and have no head to choose, which is why their rows carry an empty `head` column.
@@ -642,7 +643,7 @@ python scripts/check-eval-app-sync.py --update
 
 Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the other side defeats the whole thing — the digest is a prompt to check, not a checkbox.
 
-A handful of mirrors name a harness anchor too coarse to digest — one function serving several mirrors and carrying arm knobs that no mirror is about (today only `_safe_threshold_for_step`). Those declare `no_harness_pin=<reason>` and keep the app-side pin alone; the reason prints with the mirror when it trips. A `ported` mirror may never opt out, since the harness side of a hand copy *is* the copy. When a coarse anchor's blind spot starts to matter, the fix is to extract the reproduction into a helper small enough to pin — what `_resolve_production_defaults` is — not to digest a thousand lines.
+A handful of mirrors name a harness anchor too coarse to digest — one function serving several mirrors and carrying arm knobs that no mirror is about (today `_safe_threshold_for_step`, and `simulate_voting_iterations` for the label-quota mirror). Those declare `no_harness_pin=<reason>` and keep the app-side pin alone; the reason prints with the mirror when it trips. A `ported` mirror may never opt out, since the harness side of a hand copy *is* the copy. When a coarse anchor's blind spot starts to matter, the fix is to extract the reproduction into a helper small enough to pin — what `_resolve_production_defaults` is — not to digest a thousand lines.
 
 ### Adding and diverging
 

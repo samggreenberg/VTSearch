@@ -94,11 +94,11 @@ Now that the release PR is open, close the GitHub issues whose fixes are include
   - **Non-closing** — `Refs #N`, `Part of #N`, or a bare `#N` mention.
 - Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.) A pointer naming a **commit** rather than a PR (`Fixed on dev by <sha>`) belongs in this bucket too — resolve the SHA to the PR that carried it (step 6b's `NEEDS REVIEW` notes give the recipe, including the case where the SHA is not on `dev` at all), then reconcile it like any other orphan.
 
-**Both merge shapes count, which is why the list comes from a script.** A squash lands as a single **one-parent** commit, so `git log --merges` walks straight past it, and four squashes are already on `dev` (#3671, #3672, #3682, #3685). `scripts/release-prs.py` therefore walks `--first-parent` — what "landed on `dev`" actually means — and reads the PR number off the **trailing** `(#N)` of a squash subject, because the leading one is usually the issue the PR closes (`... measured (#3673) (#3685)`). Do not replace it with `git log --merges`.
+**Both merge shapes count, which is why the list comes from a script.** A squash lands as a **one-parent** commit, so `git log --merges` walks straight past it, and `dev` already holds a few. `scripts/release-prs.py` walks `--first-parent` and reads the PR number off the **trailing** `(#N)` of a squash subject (the leading one is usually the issue it closes). Do not replace it with `git log --merges`.
 
-Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main`. Real incident: #2940, #2930 and #2951 each shipped in the 2026-08-12 release under `Refs`, with an "Addressed in #M" comment on the issue, and all three stayed open. So the non-closing and orphan buckets get **reconciled** rather than dropped.
+Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main` (#2930, #2940 and #2951 did exactly this). So the non-closing and orphan buckets get **reconciled** rather than dropped.
 
-**The hardest orphan is a duplicate.** #2911 shipped to `main` in the 2026-08-11 release and stayed open until 2026-08-17. It was a duplicate of #3025, the fix PR wrote `Closes #3025` only, and at release time #2911 had no comments and no PR references at all — so all three buckets were blind to it by construction, not by a keyword slip. No sweep rule recovers an issue that nothing on GitHub links to; that one is prevented upstream, by CLAUDE.md's duplicate rule. What this step *can* do is catch the late pointer: the resolving comment landed a day after the release, so an issue whose newest comment claims a fix by a PR or commit from **any earlier** release deserves a look, not just this one's.
+**The hardest orphan is a duplicate** (#2911, a duplicate of #3025 whose fix PR named only #3025). An issue nothing on GitHub links to is invisible to all three buckets; CLAUDE.md's duplicate rule prevents that upstream. What this step *can* do is catch a late pointer: an issue whose newest comment claims a fix by a PR or commit from **any earlier** release deserves a look, not just this one's.
 
 **Reconcile each issue in the non-closing and orphan buckets.** Read the issue (body *and* comments) alongside the PR, then close it only when **both** hold:
 
@@ -171,7 +171,7 @@ Add `--check` to make it exit non-zero when anything needs attention, and `--jso
 
 ## 6c. Sweep the experiment queue for questions answered sideways
 
-Step 6 closes what a PR names. An `experiment` issue is often answered by something that never names it: a sibling study, an owner ruling, or a shipped change that removes the thing it was tuning. Such issues fall through all three of step 6's buckets and stay in `label:experiment` indefinitely. On 2026-09-30, 10 of 41 open experiment issues were already answered or moot; the #4267 ruling alone had mooted five. The `grid-experiments` skill asks each study to close the siblings its result settles ("Close what the study answered"); this step catches what that missed.
+Step 6 closes what a PR names. An `experiment` issue is often answered by something that never names it: a sibling study, an owner ruling, or a shipped change that removes the thing it was tuning. Such issues fall through all three of step 6's buckets and stay in `label:experiment` indefinitely (a quarter of the queue, the first time this was checked). The `grid-experiments` skill asks each study to close the siblings its result settles ("Close what the study answered"); this step catches what that missed.
 
 1. List the open issues labelled `experiment`, and keep the ones with **no activity in the last 14 days**. A fresh issue is being worked on; answers go unnoticed in the stale ones.
 2. For each one, read its body and comments, then look at what has landed since its last update that bears on it: newer directories in `docs/experiments/` on the same knob or study, `git log origin/main..origin/dev --grep '#<n>'` and the same for the numbers its body names, and the plan file that points at it.
@@ -202,14 +202,13 @@ This is what makes issue-dismissal trickle back automatically: because plans hol
 grep -rl 'docs/plans/<deleted-name>\.md' --include="*.py" --include="*.ts" --include="*.sh" --include="*.md" --include="*.json" --include="*.html" .
 ```
 
-Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule; issue #2982 is the incident that motivated it — 94 source files had gone dangling this way across 13 deleted plans before anyone grepped for them.
+Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule (#2982 is the incident). `scripts/check-docs.py` fails on a dangling citation, so the full `./run-tests.sh` in step 8 catches any you miss.
 
 ## 8. Merge the release PR
 
-The release merges itself (owner, 2026-10-06). It used to wait for a human, and
-the wait was easy to forget: the 2026-10-05 release PR (#4501) was still open a
-day later, so nothing in it had reached `main` while step 6 had already closed
-its issues as shipped. Merging here makes "closed" mean "on `main`".
+The release merges itself (owner, 2026-10-06), so that step 6's "closed as
+shipped" is true: an unmerged release PR leaves closed issues whose fixes never
+reached `main`.
 
 1. **Land everything first.** This step comes last so that every commit this run
    made reaches `dev` before the merge: step 2's triage, step 4's punch card,

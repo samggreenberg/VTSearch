@@ -1,39 +1,23 @@
 # Codebase audit — August 2026
 
-**Background.** A full-codebase inspection was run at `00664df5` (dev): fourteen
-specialist reviewers over disjoint areas (~118 k lines Python, ~44 k lines
-TypeScript), each reported finding then handed to an independent verifier
-prompted to *refute* it against the code and defaulting to "not real" when
-uncertain. 69 bugs survived that pass; 3 claims were refuted and dropped, and one
-more (#2972) was withdrawn after a second suite run disproved it. The
-repo's own gates were green throughout (7 860 tests, ruff, format, frontend
-build), so everything below came from reading code, not from a broken build.
-
-**What is still owed** is the improvement proposals below. The audit's confirmed
-defects were filed as GitHub issues and have all shipped. The proposals were *not*
-filed as issues because they are design directions rather than discrete shippable
-defects — their bodies live here and nowhere else. Delete a proposal when it ships
-or is rejected.
+**Background.** A full-codebase defect audit was run at `00664df5`; its confirmed
+bugs were filed as issues and have all shipped. What remains are the improvement
+proposals it surfaced, kept here rather than as issues because each is a judgement
+call about direction rather than a defect with a right answer. Promote one to an
+issue (and delete its item here) when it becomes concrete enough to ship on its
+own; delete it when it ships or is rejected.
 
 ---
 
 ## Improvement proposals
 
-Design and architecture directions surfaced by the same review. These are
-deliberately **not** issues: each is a judgement call about direction rather than
-a defect with a right answer, and several are alternatives to one another. Promote
-one to an issue (and delete its item here) when it becomes concrete enough to
-ship on its own.
-
 ### Flask API layer
-
-<!-- item-sep -->
 
 <!-- item-sep -->
 
 - **Detector listing re-reads full detector JSON files from disk on every request for legacy entries** — `vtsearch/routes/detectors/registry.py` (medium impact)
 
-  GET /api/detectors/registry backfills two fields for entries that predate them, and does so on every single request: line 127-129 calls `_read_detector(_detector_path(name))` whenever `entry.get('embedder_type')` is falsy, and lines 133-135 read the same file a second time whenever 'examples' is missing. `_read_detector` parses the whole detector JSON — including a labelset that can hold thousands of label dicts — so a dashboard that polls the registry pays O(legacy_detectors × labelset_size) JSON parsing per poll, twice per entry. Neither computed value is written back via update_detector, so the cost never amortizes. Benefit: one-time lazy migration turns a recurring disk+parse cost into a single write.
+  GET /api/detectors/registry backfills two fields for entries that predate them, and does so on every single request: `list_registry` calls `_read_detector(_detector_path(name))` whenever `entry.get('embedder_type')` is falsy, reads the same file a second time whenever 'examples' is missing, and a third time for the `test_verdict` of an autofind entry. `_read_detector` parses the whole detector JSON — including a labelset that can hold thousands of label dicts — so a dashboard that polls the registry pays O(legacy_detectors × labelset_size) JSON parsing per poll, twice per entry. Neither computed value is written back via update_detector, so the cost never amortizes. Benefit: one-time lazy migration turns a recurring disk+parse cost into a single write.
 
   *Direction:* Read the file once per entry, derive both embedder_type and examples from that single read, and persist them back with update_detector(did, embedder_type=..., examples=...) so subsequent listings hit only the registry entry.
 
@@ -49,7 +33,7 @@ ship on its own.
 
 - **Two parallel detector APIs (file-based /api/detectors vs registry) with divergent integrity rules** — `vtsearch/routes/detectors/crud.py` (medium impact)
 
-  The codebase exposes two overlapping detector CRUD surfaces operating on the same on-disk files: the file-keyed /api/detectors family (crud.py: list by directory scan, create/delete/rename by name) and the id-keyed /api/detectors/registry family (registry.py: ACLs, loaded flags, owner checks). They enforce different invariants — crud.py checks name collisions on create/rename but knows nothing about ACLs or the registry's loaded-ids, while the registry routes enforce ownership but skip collision checks (see the two bugs filed above); crud's DELETE /api/detectors/<name> unlinks the file while leaving any registry entry pointing at nothing, and crud's combine writes a detector file that never gets a registry entry. Any invariant fixed in one family has to be re-fixed in the other. Consolidating on the registry family (with the file store as its private persistence) — or routing crud handlers through shared helpers that own collision/ACL/registry consistency — would eliminate this class of drift; backwards-compat breaks are acceptable per repo policy.
+  The codebase exposes two overlapping detector CRUD surfaces operating on the same on-disk files: the file-keyed /api/detectors family (crud.py: list by directory scan, create/delete/rename by name) and the id-keyed /api/detectors/registry family (registry.py: ACLs, loaded flags, owner checks). They enforce different invariants — crud.py checks name collisions on create/rename but knows nothing about ACLs or the registry's loaded-ids, while the registry routes enforce ownership but skip collision checks; crud's DELETE /api/detectors/<name> unlinks the file while leaving any registry entry pointing at nothing, and crud's combine writes a detector file that never gets a registry entry. Any invariant fixed in one family has to be re-fixed in the other. Consolidating on the registry family (with the file store as its private persistence) — or routing crud handlers through shared helpers that own collision/ACL/registry consistency — would eliminate this class of drift; backwards-compat breaks are acceptable per repo policy.
 
   *Direction:* Fold the /api/detectors file-keyed routes into the registry blueprint (or shared service functions) so name-collision, ownership, registry-entry, and file lifecycle are enforced in exactly one place.
 
@@ -59,11 +43,9 @@ ship on its own.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
 - **Achievements persist a full settings-file RMW plus a source push on every single vote** — `vtsearch/achievements.py` (medium impact)
 
-  `record_vote` runs `mutate_user(...)` per vote (achievements.py), and `mutate_user` is heavyweight by design: cross-process flock on the user settings file, fresh `_load_path` re-read, full-dict `json.dumps` + `fsync` + rename (`_atomic_write`, settings_store.py), then a dirty-marking pass over *every* exportable key and a `_sync_to_source` push (settings.py) — which for a configured source means a second full serialize/write (plus a `peek_version` stat and a `.syncmark` write). A user hand-labeling in the Train flow votes multiple times per second, so each click costs 3-4 fsync'd file writes and lock round-trips on the request path, and the achievement counters share a file (and its lock) with every other settings read/write, amplifying contention on the very lock structure that finding #1 shows is fragile. The `days_seen`/`docs_read_ids`/`trained_detector_ids` lists also use O(n) `in` checks on every vote (achievements.py), which grows linearly with days active. Benefit: batching (e.g. accumulate credits in-process and flush on a short timer or every N votes, as the counters are approximate milestones anyway) or moving `achievement_state` to its own small file outside the settings-sync machinery would remove the per-click fsync+push cost and cut settings-lock traffic substantially.
+  `record_vote` runs `mutate_user(...)` per vote (achievements.py), and `mutate_user` is heavyweight by design: cross-process flock on the user settings file, fresh `_load_path` re-read, full-dict `json.dumps` + `fsync` + rename (`_atomic_write`, settings_store.py), then a dirty-marking pass over *every* exportable key and a `_sync_to_source` push (settings.py) — which for a configured source means a second full serialize/write (plus a `peek_version` stat and a `.syncmark` write). A user hand-labeling in the Train flow votes multiple times per second, so each click costs 3-4 fsync'd file writes and lock round-trips on the request path, and the achievement counters share a file (and its lock) with every other settings read/write, amplifying contention on the settings lock. The `days_seen`/`docs_read_ids`/`trained_detector_ids` lists also use O(n) `in` checks on every vote (achievements.py), which grows linearly with days active. Benefit: batching (e.g. accumulate credits in-process and flush on a short timer or every N votes, as the counters are approximate milestones anyway) or moving `achievement_state` to its own small file outside the settings-sync machinery would remove the per-click fsync+push cost and cut settings-lock traffic substantially.
 
   *Direction:* Accumulate vote credits in a process-local per-user buffer and flush to disk on a debounce (e.g. 5s or on get_full_state), and/or store achievement_state in a dedicated per-user file excluded from settings-source export.
 
@@ -94,14 +76,6 @@ ship on its own.
   The cache exists for 100k-1M item datasets (its own docstring), keeps up to max_entries=8 full result lists, and each list is a Python list of per-row dicts ({"id", "score"} or {"id", "similarity", "best_region"}) held by reference. At ~150-250 bytes per small dict, 8 rankings x 1M rows is roughly 1-2 GB of steady-state heap from a user simply re-sorting a large dataset a few times (each re-sort mints a new token, so distinct entries accumulate up to the cap even for the same dataset). The LRU bound protects against unbounded growth but not against exactly the large-N case the cache was built for.
 
   *Direction:* Bound the cache by total rows (e.g. evict oldest until sum(len(results)) <= ~2M) in store(), and/or store rankings columnar (an int64 id array + float32 score array, materializing row dicts only in page()) which cuts memory ~20x and also makes the stored list immune to caller mutation.
-
-<!-- item-sep -->
-
-### Training & detectors
-
-<!-- item-sep -->
-
-<!-- item-sep -->
 
 <!-- item-sep -->
 
@@ -149,11 +123,11 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **check-eval-app-sync gate does not pin several ported surfaces, including the two that actually drifted** — `scripts/check-eval-app-sync.py` (medium impact)
+- **check-eval-app-sync's Python normalizer erases the `(x,)` vs `(x)` difference** — `scripts/check-eval-app-sync.py` (low impact)
 
-  MIRRORS pins the phase machine, vote targets, three indicator rules, and four training defaults — but the harness ports more app logic than that, and the unpinned surfaces are exactly where drift was found: (1) `_select_phase_faithful` mirrors the phase->Sort/Select pairing (`restoreAutopilotSortSelect`), which is not pinned, so changing the app's pairing silently detaches every simulated pick (`autoSelectNext` itself is now pinned); (2) `_labelset_error_costs` / `AutopilotFlow.record_step` mirror `labeling_progress._eval_cached_models` / `_compute_step_stability` (the Smart/Stable input semantics) — unpinned (`_score_step` now is), and the Smart plumbing had in fact drifted once (fixed in #2923). One smaller mechanism gap remains: `_normalize_python`'s trailing-comma stripping erases the semantic difference between `(x,)` and `(x)`, so that one real logic change cannot trip a pin.
+  `_normalize_python` drops every comma that precedes a closing bracket so that `ruff format` re-wrapping a call is not read as a logic change. That also erases the semantic difference between a one-element tuple `(x,)` and a parenthesised expression `(x)`, so that one real logic change cannot trip a pin.
 
-  *Direction:* Add Mirror entries for the sort/select restore block and `py:vtscore.detectors.labeling_progress._eval_cached_models` / `_compute_step_stability`; keep the trailing comma when the next token is `)` and the previous token is not an argument (or only strip inside call/collection contexts with >1 element).
+  *Direction:* Keep the trailing comma when the bracket pair holds a single element (or only strip inside call/collection contexts with >1 element).
 
 <!-- item-sep -->
 
@@ -177,8 +151,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
 - **Hilbert ordering recomputed per level in _level_membership despite being level-independent** — `vtscore/projection/pyramid.py` (low impact)
 
   `_level_membership` calls `perm = _hilbert_order(coords)` inside the per-level cache-miss path. The Hilbert permutation depends only on the frozen coords — it is identical for every level — yet each level's first tile fetch pays a fresh O(N) quantize + 16-iteration bit-twiddle + O(N log N) stable argsort. On a large dataset with a deep pyramid (up to 14 levels), the browse canvas re-derives the exact same permutation up to 14 times as the user zooms through levels, each time on the request thread serving the first tile of that level.
@@ -193,7 +165,7 @@ ship on its own.
 
 - **Three near-identical dynamic plugin-field form engines should collapse into one shared component** — `frontend/src/app/components/modals/label-importer-modal/label-importer-modal.component.ts` (medium impact)
 
-  The plugin-field form machinery — default seeding (`field.default`, first static option for strict selects), dynamic-options fetching with per-key loading/error maps, `depends_on` cascades, free-text datalist vs strict select rendering, file-field capture, and the full template branch ladder for server_path/file/password/email/url/select/number/text — is implemented three times with only cosmetic differences: label-importer-modal.component.ts (~125–225 + template), new-detector-modal.component.ts (trained tab, ~992–1097 + ~130 template lines with `nmm-` id prefixes), and plugin-import-form.component.ts (~59–170). new-detector-modal's own comment admits it exists "mirroring label-importer-modal ... with full parity". Divergence has already crept in (plugin-import-form validates required fields in `canSubmit`; the trained tab does not, so a missing required file only fails server-side), and the stale-response race reported separately must be fixed in three places. A single `vt-plugin-fields-form` component taking `fields` + an options-fetch fn and emitting `{values, file, fileFieldKey}` would delete roughly 600 lines and make future field types (and the race fix) land once.
+  The plugin-field form machinery — default seeding (`field.default`, first static option for strict selects), dynamic-options fetching with per-key loading/error maps, `depends_on` cascades, free-text datalist vs strict select rendering, file-field capture, and the full template branch ladder for server_path/file/password/email/url/select/number/text — is implemented three times with only cosmetic differences: label-importer-modal.component.ts (~125–225 + template), new-detector-modal.component.ts (trained tab, ~992–1097 + ~130 template lines with `nmm-` id prefixes), and plugin-import-form.component.ts (~59–170). new-detector-modal's own comment admits it exists "mirroring label-importer-modal ... with full parity". Divergence has already crept in (plugin-import-form validates required fields in `canSubmit`; the trained tab does not, so a missing required file only fails server-side), though the stale-response guard for dynamic options is already shared (`frontend/src/app/utils/dynamic-field-options.ts`). A single `vt-plugin-fields-form` component taking `fields` + an options-fetch fn and emitting `{values, file, fileFieldKey}` would delete roughly 600 lines and make future field types land once.
 
   *Direction:* Extract a shared standalone component (fields input, getFieldOptions fn input, values/file outputs); adopt it in all three call sites. Backwards-compat breakage is acceptable per repo policy.
 
@@ -201,9 +173,9 @@ ship on its own.
 
 - **Add a lint/audit gate for the zoneless anti-pattern: plain template-bound fields mutated in async callbacks** — `frontend/src/app/components/folder-browser/folder-browser.component.ts` (medium impact)
 
-  This audit found five components in one area (folder-browser, login, progress-modal, combine-detectors-modal, settings-modal's exporter flag) that missed the zoneless migration's signalization pass, each producing invisible-until-next-click UI. The codebase clearly knows the rule — dozens of fields carry "signalized so the unpatched HTTP callbacks schedule CD under zoneless" comments, and local-folder/server-folder pickers even document the ancestor-marking subtleties around `markForCheck()` — but nothing enforces it, and component specs mask it by feeding synchronous `of(...)` observables so subscribe callbacks run inside an existing CD pass. Concrete benefit: a mechanical gate would have caught all five bugs. Two practical options: (a) an ESLint rule (typescript-eslint custom rule or `no-restricted-syntax` approximation) flagging `this.<identifier> =` assignments inside `.subscribe(...)` callbacks in `@Component` classes unless the property is a signal; (b) a test-infra convention requiring async fakes (`delay(0)` / Subjects) in specs that assert rendered output, which makes the missing repaint fail in Vitest.
+  This audit found five components in one area (folder-browser, login, progress-modal, combine-detectors-modal, settings-modal's exporter flag) that missed the zoneless migration's signalization pass, each producing invisible-until-next-click UI. The codebase clearly knows the rule — dozens of fields carry "signalized so the unpatched HTTP callbacks schedule CD under zoneless" comments, and local-folder/server-folder pickers even document the ancestor-marking subtleties around `markForCheck()` — but nothing enforces it, and component specs mask it by feeding synchronous `of(...)` observables so subscribe callbacks run inside an existing CD pass. Concrete benefit: a mechanical gate would have caught all five bugs. Two practical options: (a) a lint rule (the frontend has no ESLint setup today, so this means adding one — a typescript-eslint custom rule or `no-restricted-syntax` approximation) flagging `this.<identifier> =` assignments inside `.subscribe(...)` callbacks in `@Component` classes unless the property is a signal; (b) a test-infra convention requiring async fakes (`delay(0)` / Subjects) in specs that assert rendered output, which makes the missing repaint fail in Vitest.
 
-  *Direction:* Add the lint rule to the frontend ESLint config and sweep remaining plain template-bound fields to signals; run-tests.sh already fails on lint errors so this becomes a durable gate.
+  *Direction:* Add a frontend lint step carrying the rule, wire it into `run-tests.sh` as a gate, and sweep remaining plain template-bound fields to signals.
 
 <!-- item-sep -->
 
@@ -257,15 +229,11 @@ ship on its own.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
 - **`.form-actions` rule duplicated verbatim in six component SCSS files** — `frontend/src/app/components/modals/settings-importer-modal/settings-importer-modal.component.scss` (medium impact)
 
   The identical rule `display: flex; justify-content: flex-end; gap: var(--space-md); margin-top: var(--space-md)` is declared in settings-importer-modal:24, settings-exporter-modal:24, label-importer-modal:29, clipper-chooser:78, dataset-importer-modal:22, and (minus margin-top) combine-datasets-modal:192 — plus a seventh dead copy in export-modal:316. Style-guide §6 says to promote a pattern on its third copy; this one has seven. Worse, every one of these `.form-actions` divs sits in the `[modal-footer]` slot, where the global `.modal-footer` (_components.scss) already provides `display:flex; justify-content:flex-end; gap:var(--space-md)` — so the duplicated body is ~redundant with the slot it lives in, and any future tune of footer spacing will drift across seven files.
 
   *Direction:* Either drop the `.form-actions` wrapper divs entirely (project the buttons directly into `[modal-footer]`, which already lays them out) or promote one `.form-actions` rule to _components.scss and delete all local copies.
-
-<!-- item-sep -->
 
 <!-- item-sep -->
 
@@ -322,7 +290,5 @@ ship on its own.
   The ordering gate skips every physical line that continues a previous instruction (lines 38-41: `if is_continuation: continue`), so `RUN set -e \\\n && python scripts/foo.py` is never inspected — only a `python` on the RUN's first physical line is caught. It also matches only `\bpython\b` (line 62), so `python3 ...` (the actual interpreter name in Dockerfile.gpu, where `/usr/bin/python` is only a symlink created in the same layer) slips through. A future Dockerfile edit that runs Python in a multi-line RUN before vtsearch/+vtscore/ are copied would pass the gate the gate exists to catch. Relatedly, .dockerignore excludes `tests/` but not `tests_lib/`, so the library-tier test tree (with fixtures) is baked into every image for no reason.
 
   *Direction:* Accumulate logical instructions (join continuation lines before matching), broaden the regex to `python[0-9.]*`, and add tests_lib/ to .dockerignore.
-
-<!-- item-sep -->
 
 <!-- item-sep -->

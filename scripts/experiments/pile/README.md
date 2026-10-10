@@ -293,8 +293,9 @@ Embedders got re-run because the cache had no home of its own.
 
 ## The grid
 
-Eight datasets x five embedders, complete — 40 of 40 cells built as of
-2026-08-28.
+The configured grid is `pile_config.DATASETS` x `pile_config.EMBEDDERS`;
+`build_pile.py --list` shows which cells are on disk. `on_request` datasets
+(`coco_better_full*`, `fhibe_*`) are built only when named with `--datasets`.
 
 | embedder | dim | note |
 |---|---:|---|
@@ -303,6 +304,7 @@ Eight datasets x five embedders, complete — 40 of 40 cells built as of
 | `dinov3_patch` | 768 | the only patch-capable one, so the only region-voting column |
 | `clip` | 512 | a different pretraining *family*, at base capacity |
 | `clip_l` | 768 | the same family at large capacity |
+| `face` | — | FaceNet; embeds only `face`-media datasets (`fhibe_faces_*`, #4699) |
 
 Differing dims mean galleries are **not** interchangeable across columns.
 
@@ -312,14 +314,23 @@ either alone. That is what the CLIP columns are for: `clip`/`clip_l` change the
 pretraining family at two capacities, which is the axis #3292 needed and could
 not get from the SigLIP pair. The middle SigLIP columns (`siglip_l`, `siglip2`)
 are still deliberately absent — a study learns little from interpolating
-between endpoints — and `build_pile.py --embedders siglip2` rebuilds one if a
-result ever needs that split.
+between endpoints. Adding one means an `EMBEDDERS` entry first: `build_pile.py`
+refuses an embedder that table does not name.
 
 | dataset | medias | boxed | note |
 |---|---:|:--:|---|
 | `visual_genome_m` | 4193 | yes | demo dataset; ground-truth regions |
 | `caltech101_m` | 838 | no | demo dataset; whole-image labels only |
 | `coco_val` | 4952 | yes | assembled from the staged val2017 zip |
+| `coco_better` | — | yes | COCO 2017 train+val, exhaustively annotated, with the owner's label corrections (#4179) |
+| `fhibe_{1024,640}` / `fhibe_faces_{1024,640}` | — | photos yes / faces no | `on_request`; Sony's consented face benchmark, per-user download (#4699) |
+
+The rows below are **retired** cells: still on disk and readable, but no longer
+in `DATASETS`, so nothing builds or rebuilds them ([retired with Visual
+Genome](#retired-with-visual-genome-4038)).
+
+| dataset | medias | boxed | note |
+|---|---:|:--:|---|
 | `vg_box_small` | 12000 | yes | box-banded VG: union box **below one patch** |
 | `vg_box_medium` | 12000 | yes | box-banded VG: patch → HAC leaf |
 | `vg_box_large` | 12000 | yes | box-banded VG: leaf → the whole frame ([\*](#large-runs-to-the-whole-frame-2026-09-24)) |
@@ -667,34 +678,13 @@ count.
 
 **`--verify` does not tell you the pile is rebuildable; `--rebuildable` does.**
 The two paths share no code, so a cell can load perfectly while the code that
-would produce it again is broken. That is not hypothetical: `scan_vg_boxes.py`
-([retired](#retired-with-visual-genome-4038)) grew a
-`{"meta": …, "categories": …}` envelope on 2026-08-17, the scan file on
-scratch stayed pre-envelope, and every `vg_box_*` rebuild died with
-`KeyError: 'categories'` for eleven days behind a pile that verified clean
-(#3297). `--rebuildable` runs each dataset's *selection* step — really choosing
-`vg_box_*`'s categories, confirming everything else's sources are present and
-readable — and embeds nothing, so it costs seconds. Run it after changing
-anything a build reads, and before trusting scratch to be purgeable.
-
-The reader accepts **both** scan shapes, which was deliberate: re-running
-`scan_vg_boxes.py` would have produced a current-format file, but with per-image
-compact filtering (`10239c24e`) and per-band supply (`fb4f4ec03`) that qualify
-categories differently — silently redefining three datasets whose numbers are
-published in #3129 and #3156. The envelope was the only incompatibility; the
-selector reads `voted_area`, `n_images` and `union_inflation` and nothing else,
-all three present in the 2026-08-12 file.
-
-**Where a band is already built, `--rebuildable` also asks whether a rebuild
-would produce *that*.** "Selection runs" and "selection picks the same thing"
-come apart in the direction that hurts: both candidate repairs for #3297 made
-the selector run again, and only one kept choosing the categories the published
-sets hold — the other would have redefined three datasets with the right media
-count, the right vectors and nothing visible to say so. So the canary compares
-today's selection against the vocabulary the smallest built cell carries and
-reports `REBUILD-BROKEN` on any difference. Verified against the live pile on
-2026-08-28: all three bands reproduce exactly, 40/40 categories, agreeing
-across all three cells present at the time (#3299).
+would produce it again is broken: a scan-format change once broke every
+`vg_box_*` rebuild for eleven days behind a pile that verified clean (#3297).
+`--rebuildable` runs each `DATASETS` entry's selection step through the same
+loader module's `check()` that its `load()` builds with, confirming the sources
+are present and readable, and embeds nothing, so it costs seconds. Run it after
+changing anything a build reads, and before trusting scratch to be purgeable.
+Retired datasets are not in `DATASETS`, so it does not cover them.
 
 ## What a rebuilt cell reproduces (#3683)
 
@@ -759,18 +749,11 @@ weights the jobs cannot see.
 The GPU **type** is not pinned. `launch_pile.sh` calls
 [`pick_gpu.py`](../../slurm/pick_gpu.py) after the prefetch returns (availability
 measured before a blocking queue wait is stale) and requests the fastest type
-with enough free GPUs for the jobs it is about to submit. This used to be a
-hardcoded `v100`, which is why every cell built before 2026-08-17 was embedded on
-the slowest GPU on the cluster — 2.3× slower for `siglip2_l` than the L40S nodes
-sitting idle beside it. Set `VTS_GPU` to pin a type anyway; see
-[`docs/SETUP.md`](../../../docs/SETUP.md#which-gpu-type-gets-requested).
-
-Until 2026-08-28 that query was answering from a field this cluster does not
-emit, so it read every GPU as free and always returned the first candidate —
-a hardcoded `a100` wearing a query, which sent the #3299 build into a 24-hour
-queue with 109 V100s idle. It now reads `AllocTRES` where `GresUsed` is absent
-and refuses to count a node whose usage it cannot read; see
-[the lesson](../lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md).
+with enough free GPUs for the jobs it is about to submit. Set `VTS_GPU` to pin a
+type anyway; see [`docs/SETUP.md`](../../../docs/SETUP.md#which-gpu-type-gets-requested).
+Cells built before 2026-08-17 were embedded on a hardcoded `v100` (see
+[the lesson](../lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md) for
+how the picker itself once misread the cluster).
 
 ## Considering a new class for `vg_scale` (#3588)
 

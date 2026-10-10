@@ -6,7 +6,7 @@ float threshold. Detector-specific glue (sourcing ``X_list`` / ``y_list``
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across seven submodules, layered so that each one
+The implementation is split across ten submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -29,6 +29,12 @@ only reads from those above it:
   decides whether a detector's line is the floor's or the Inclusion knob's.
   Reads :mod:`~vtscore.training.thresholds.gmm` for its sampling and
   sentinel filtering; otherwise numpy and scikit-learn.
+* :mod:`~vtscore.training.thresholds.spot_check` - the balance's spot check:
+  uniform random picks that audit the ranking, and what they estimated.
+* :mod:`~vtscore.training.thresholds.labels_line` - the line drawn from the
+  labelset alone (#4452), which is what a trained head reports under a balance.
+* :mod:`~vtscore.training.thresholds.line_test` - Test mode's sample: the
+  line's precision, recall and F-beta on a corpus it never trained on.
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
 resolves exactly as it did when this was one module.  **Patch targets are the

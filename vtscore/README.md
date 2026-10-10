@@ -9,19 +9,10 @@ here works without it.
 
 ## Documentation
 
-Developer documentation lives under [`docs/`](docs/README.md), which is the
-index. Read it in this order:
-
-1. **[Quickstart](docs/quickstart.md)** - load a folder, train a detector, score new media. Start here.
-2. **[Concepts](docs/concepts.md)** - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, detector, plugin. The vocabulary every other doc assumes.
-3. **[Tutorials](docs/tutorials/README.md)** - longer end-to-end walkthroughs.
-4. **[Integration](docs/integration.md)** - the hooks to install when embedding `vtscore` in your own application.
-5. **[Package reference](docs/README.md#package-reference)** - one guide per subpackage; the canonical inventory of what each exports.
-6. **[Extending vtscore](docs/extending/README.md)** - authoring guides for the plugin families.
-
-[Architecture](docs/architecture.md) (layering, threading, the real import
-path of every package) and the [FAQ](docs/faq.md) are reference material to
-consult as needed.
+Developer documentation lives under [`docs/`](docs/README.md); its
+[Start here](docs/README.md#start-here) list is the reading order
+(quickstart → concepts → tutorials → integration → package reference →
+extending). Begin with the **[Quickstart](docs/quickstart.md)**.
 
 ## Install
 
@@ -37,14 +28,6 @@ bash scripts/install.sh   # auto-detects CPU vs GPU
 A standalone `vtscore` PyPI distribution is deferred until a real
 external consumer asks for it. For now, install the repo and import
 `vtscore` directly.
-
-## Quickstart
-
-There is deliberately no copy-paste snippet here: the shortest version that
-actually runs needs a `CoreConfig`, an origin stamp and an explicit embed
-step, and [docs/quickstart.md](docs/quickstart.md) walks through exactly
-that. Its snippets are executed by
-`tests_lib/integration/test_docs_quickstart.py`, so they stay honest.
 
 ## Plugins
 
@@ -71,10 +54,9 @@ or `vtsearch` imports: the rules every package follows are listed once, in
 
 ## Versioning
 
-`vtscore.__version__` is independent semver, bumped manually in
-`vtscore/__init__.py` on each release (the companion `vtsearch` app uses a
-git-derived timestamp instead). See [`CHANGELOG.md`](CHANGELOG.md) for
-per-release notes.
+Independent semver (`vtscore.__version__`); see
+[docs/README.md § Versioning](docs/README.md#versioning) and
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 
@@ -86,8 +68,10 @@ Two carve-outs matter if you are embedding `vtscore` in your own product:
 - **Model weights carry their own terms.** `vtscore` downloads embedding
   models at runtime rather than vendoring them, and each publisher licenses
   its own weights. Some are noncommercial (EUPE, under the FAIR
-  Noncommercial Research License) or gated (DINOv3). Embedders with a
-  restriction expose it through their descriptor's `license_notice` field.
+  Noncommercial Research License) or gated (DINOv3). An embedder whose
+  weights carry a usage restriction says so through its
+  `MediaEmbedder.license_notice` property (EUPE sets it; the DINOv3
+  embedders currently do not, so check the publisher's terms yourself).
 - **Two dependencies are AGPL-3.0, and are skippable**: `ultralytics` (image
   extractor and clipper) and `PyMuPDF` (PDF importer and document
   converters). A default install includes both. The Apache-2.0 grant on

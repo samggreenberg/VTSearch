@@ -45,8 +45,7 @@ including `/api/auth/huggingface/*`, sits behind the gate. Non-API paths
 Per provider:
 
 - **`default`** — `enforce_auth()` is `True` but every request is
-  authenticated, so single-user deployments never see a 401. No change from
-  historical behaviour.
+  authenticated, so single-user deployments never see a 401.
 - **`trivial`** — `enforce_auth()` is **`False`**, deliberately: the provider
   is passwordless, so a server-side gate would add no security (any caller
   could simply log in as any name first). Requests without a session cookie
@@ -88,19 +87,10 @@ path escape.
 GET /api/auth/status
 ```
 
-→
-```json
-{
-  "provider": "default",
-  "user": "default",
-  "authenticated": true,
-  "login_required": false
-}
-```
-
-Returns the active login provider name, current user, whether the request is
-authenticated, and whether the frontend should show a login screen. With
-`DefaultLoginProvider`, every request is authenticated as `"default"`.
+→ `{provider, user, authenticated, login_required}`: the active provider's
+name, the current user, whether this request is authenticated, and whether the
+SPA should show a login screen. Under `DefaultLoginProvider` every request is
+authenticated as `"default"`.
 
 ### Login
 
@@ -154,12 +144,7 @@ OpenAPI surface.
 GET /api/auth/huggingface/status
 ```
 
-→
-```json
-{"configured": true, "authenticated": false, "username": "", "scopes": ""}
-```
-
-`configured` reflects whether an OAuth client id is set; the rest reflect the
+→ `{configured, authenticated, username, scopes}`. `configured` reflects whether an OAuth client id is set; the rest reflect the
 current sign-in state (`authenticated`, `username`, `scopes`).
 
 ### HuggingFace login
@@ -216,7 +201,9 @@ catch-all serves like any other SPA URL.
 
 ## Health & version
 
-Outside `/api/`, so the probes are never auth-gated.
+`/healthz` and `/readyz` are outside `/api/`, so they are never auth-gated;
+`/api/version` is an ordinary API route and sits behind the
+[auth gate](#server-side-enforcement) like any other.
 
 | Method | Path | Response |
 |--------|------|----------|

@@ -6,7 +6,8 @@ library produce useful browse-map "street signs" for **audio** datasets,
 and which `object_to_text` (audio → a little text) strategy should feed it?
 
 Runs on the HLTCOE grid against the `vtscore` library tier (no Flask app).
-See the experiment report for findings.
+Findings:
+[`docs/experiments/2026-07-12-toponymy-audio-signposts/REPORT.md`](../../../docs/experiments/2026-07-12-toponymy-audio-signposts/REPORT.md).
 
 ## Pipeline
 
@@ -15,7 +16,11 @@ prepare_dataset.py <ds>              # download + CLAP-embed via vtscore demo lo
 make_texts.py <ds> <variant>         # object_to_text: clap_audioset | clap_esc50vocab | whisper | caption
 run_toponymy.py <ds> <variant> <namer>   # namer: keyphrase (no-LLM) | hf (local LLM)
 evaluate.py <ds>                     # metrics vs ground-truth categories + table
+summarize.py                         # RESULTS/summary.json
+visualize.py <ds> <run>              # browse-map mockup PNGs
 ```
+
+`queue_all.sh` runs the full matrix serially (GPU nodes are `Exclusive_Process`).
 
 Each stage writes JSON/npy under `$TOPO_RESULTS/<ds>/` and is independently
 re-runnable; stages only communicate through those files.
@@ -26,11 +31,11 @@ re-runnable; stages only communicate through those files.
 # one-time, inside a GPU allocation (node-local scratch):
 sbatch --job-name=topo-audio --gres=gpu:a100:1 --mem=64G --cpus-per-task=12 \
        --time=12:00:00 --wrap "sleep 43200"          # park an allocation
-srun --jobid=<JOBID> --overlap bash setup_node.sh    # venv on /scratch/$USER
+srun --jobid=<JOBID> --overlap bash setup_node.sh    # venv on /scratch/jobs/$USER
 
 # each experiment step:
 srun --jobid=<JOBID> --overlap bash -c \
-  'PYTHONPATH=/exp/sgreenberg/projects/VTSearch /scratch/$USER/topo-audio/venv/bin/python prepare_dataset.py esc50'
+  'PYTHONPATH=/exp/$USER/projects/VTSearch /scratch/jobs/$USER/topo-audio/venv/bin/python prepare_dataset.py esc50'
 ```
 
 Environment knobs (see `common.py`): `VTS_REPO` (VTSearch checkout),

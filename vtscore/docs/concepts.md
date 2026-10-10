@@ -428,9 +428,13 @@ Every plugin is:
 - A subclass of the family's base ABC (e.g. `DatasetImporter`).
 - Declared at module level via a **sentinel** attribute (`IMPORTER`,
   `EXPORTER`, `EMBEDDER`, `CLIPPERS`, …).
-- Auto-discovered by the family's `PluginRegistry` at construction time.
+- Auto-discovered at import time: by the family's `PluginRegistry`, or,
+  for media types, embedders, clippers and cleaners, by the
+  `vtscore.media` sub-package scan.
 - Optionally exposed to third parties via an `importlib.metadata` entry
-  point under `vtscore.<family>`.
+  point (group names are listed in
+  [extending/README.md § The families](extending/README.md#the-families));
+  the four media families have no entry-point group.
 
 The full mechanics are documented in [packages/plugins.md](packages/plugins.md)
 and the per-family authoring guides under [extending/](extending/).

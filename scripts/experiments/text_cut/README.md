@@ -19,7 +19,17 @@ The report is
 | figures | `figures_3826.py` | the report's figures, from the same CSVs |
 
 `launch_3826.sh` drives it on SLURM (`capture`, `gate`, `analyse`, `status`).
-Results root: `/expscratch/sgreenberg/textcut-3826`.
+Results root: `/expscratch/$USER/textcut-3826`.
+
+**The trajectory A/B** (does the guarded line change what Autopilot's opening
+buys?) is a separate pair of calibration grids differing only in
+`VTSEARCH_TEXT_SORT_CUT`: `launch_ab_3826.sh` (`prepare`, `size`, `ab`,
+`abanalyze`, `status`) runs `run_cells_ab_3826.py` per cell and
+`analyze_ab_3826.py` applies the pre-registered ship rule. Report:
+[`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`](../../../docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md).
+Since #4136 the flag moves only the *display* line, so a re-run of the A/B
+measures no trajectory difference by construction (see the
+`run_cells_ab_3826.py` docstring).
 
 ## Three things to know before reusing this
 

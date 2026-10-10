@@ -101,7 +101,7 @@ VTSearch includes an evaluation framework that measures sorting quality on demo 
 python -m vtscore.eval --plot-dir eval_output
 ```
 
-This runs text-sort and learned-sort evaluations across all demo datasets, prints a summary, and saves visualisation charts as PNGs. See [docs/EVAL.md](docs/EVAL.md) for the full guide, including:
+This runs text-sort and learned-sort evaluations across every demo dataset registered for evaluation (`--list` shows them; each downloads on first use, so `--datasets <id> …` narrows a first run), prints a summary, and saves visualisation charts as PNGs. See [docs/EVAL.md](docs/EVAL.md) for the full guide, including:
 
 - **[CLI reference](docs/EVAL.md#cli-reference)**: All flags and options for the eval runner.
 - **[Understanding the metrics](docs/EVAL.md#understanding-the-metrics)**: What mAP, P@k, R@k, F1, and other metrics mean.
@@ -112,9 +112,9 @@ This runs text-sort and learned-sort evaluations across all demo datasets, print
 
 VTSearch has a plugin architecture built on auto-discovered plugin families — importers, exporters, converters, media types, embedders, and more. The authoritative family inventory is the generated table in [docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md#shared-plugin-architecture); `python app.py --list-plugins` enumerates every installed plugin. The extending guide is split into three topic-specific docs plus an index:
 
-- **[docs/EXTENDING.md](docs/EXTENDING.md)**: index, authentication providers, dependency management, and a one-stop checklist for every extension type.
-- **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)**: data importers, datasource importers, results exporters, label importers, settings importers/exporters/sources, labelset sources.
-- **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)**: media types, embedders, clippers, converters, media sources.
+- **[docs/EXTENDING.md](docs/EXTENDING.md)**: index, authentication providers, dataset-import hooks, dependency management, and a one-stop checklist for every extension type.
+- **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)**: data importers, datasource importers, seed importers, results exporters, label importers, settings importers/exporters/sources, labelset sources.
+- **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)**: media types, embedders, clippers, cleaners, converters, media sources.
 - **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)**: detectors, localizers, extractors.
 
 ## License

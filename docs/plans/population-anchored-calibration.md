@@ -1,74 +1,69 @@
-# Population-anchored calibration — fuse the haystack distribution into the trained threshold instead of scheduling it out
+# Population-anchored calibration — the fused cut as the fallback line
 
-**Status:** Adopted at κ=0.3 with the `mid_tilt` cut (the measured midpoint at
-inclusion 0, rate-rule tilt away from it), and the tilt is now measured across
-the whole knob — it held (#2865,
-[`REPORT.md`](../experiments/2026-08-21-inclusion-cut-rule/REPORT.md)). One known gap
-remains: the fused path covers binary voting, where it does not beat the blend
-it replaced.
+**Status:** Shipped at κ=0.3 with the `mid_tilt` cut (#2865,
+[`REPORT.md`](../experiments/2026-08-21-inclusion-cut-rule/REPORT.md)). **Rescoped
+2026-10-10:** since #4452 a trained head's line is the labels line
+(`fit_labels_line`; [`ML.md`](../ML.md#the-labels-line)), which never reads κ or
+the fused mixture. The fused cut now decides only two fallbacks: the line when no
+class model can be fitted (too few votes, one class, held-out Goods below the
+Bads), and the acquisition cut for a detector with no labels line. The Inclusion
+knob it was tuned on is internal at 0 (#4269). So the open work is priced on
+**F-beta at the balance** (the shipped objective), **inside the regime where the
+fallback fires**, and only after the gate item below shows that regime matters.
 
 ## Background
 
 The threshold used to treat the GMM (population) cut and the cross-calibration
-(labeled) cut as **rivals on a hand-tuned schedule** — `calculate_safe_threshold`
-ramping GMM weight down as labels accumulated. Three structural deficits of the
-conformal cut motivated replacing that framing with a *fusion*: the quantile's
-tiny sample size, the fold→final scale transfer, and per-retrain variance (none
-of which decay with label count).
-
-The 2026-08-05 deep-regime run measured the candidates and the **fold-anchored
-mixture** ("cross-LabeledGMM") won; the 2026-08-06 anchor-mass sweep moved its
-operating point to the interior optimum, **κ=0.3 with the midpoint cut** — see
-[`docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md`](../experiments/2026-08-05-population-anchored-calibration/REPORT.md)
-for the numbers and
-[`docs/ML.md`](../ML.md) for what production now computes. The schedule blend
-survives only as the fallback for label sets too small to form calibration
-folds.
+(labeled) cut as rivals on a hand-tuned schedule (`calculate_safe_threshold`).
+The **fold-anchored mixture** replaced that schedule; the anchor-mass sweep put
+it at κ=0.3 with the midpoint cut. The numbers are in
+[`docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md`](../experiments/2026-08-05-population-anchored-calibration/REPORT.md).
+The schedule blend survives as the fallback below the fused cut. Every
+measurement on record was cost at an Inclusion setting, over the whole vote
+range: none of it isolates the few-vote, one-class states where the fused cut
+still decides anything.
 
 ## Open work
 
 <!-- item-sep -->
 
-- **Give binary voting a path back to `cap50`.** The fused threshold covers
-  binary-voting detectors too, unconditionally since #2863, and there it is at
-  best a dead heat with the `cap50` blend it replaced (−0.0004 n.s. at the
-  shipped `κ=0.3, mid`; the `κ=1, rate` that #2861 shipped was +0.0063 *worse*).
-  Either a voting-mode split (mirroring #2841) or the positive-count gate below.
-  Low positive counts want spread control, not a better-located cut.
+- **Measure how much the fallback decides (gate for every item below).** On the
+  shipped path (the eval default arm under a balance; the State of the App
+  datasets), count the steps where the reported line comes from the fused cut
+  rather than the labels line, and the Autopilot picks that read the offset
+  acquisition fallback rather than the target precision. Also price what the
+  fallback costs there: F-beta at the row's beta against `oracle_fbeta`. If the
+  fallback covers only the first few clicks and its F-beta gap is within noise,
+  retire this plan: its remaining items cannot move the shipped line.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
+- **Give binary voting a path back to `cap50`, inside the fallback regime.** On
+  the whole vote range the fused cut was at best a dead heat with the `cap50`
+  blend on binary voting (−0.0004 n.s. at `κ=0.3, mid`). Re-measure only on the
+  steps the gate item finds the fallback deciding, on F-beta. A voting-mode split
+  (mirroring #2841) or the positive-count gate below are the candidate fixes.
 
 <!-- item-sep -->
 
-- **Explain the k=0 loss on `coco_val × dinov3_patch`.** `rate` is worse than
-  `mid` there by 0.015±0.002 — five times its inclusion-0 gap in the other three
-  environments, and the single reason `rate` did not ship in #2865. If the
-  variance-asymmetry mechanism in [`docs/ML.md`](../ML.md#threshold-calibration)
-  is right, that environment should show the widest component-width asymmetry of
-  the four, which is checkable from the `__cutdiag` frame the run already wrote.
+- **Gate fusion on positive-anchor count.** The fusion gain scaled with
+  positives (24 → −0.093, 8 → −0.019, 3 → −0.002). The fallback regime has few
+  positives by construction, so this may simply say "use the blend there".
+  Estimate k (fusion once the fold anchors hold ≥ k positives) on F-beta within
+  that regime.
 
 <!-- item-sep -->
 
-- **Gate fusion on positive-anchor count.** The effect scales with positives
-  (24 → −0.093, 8 → −0.019, 3 → −0.002), not with dataset size. "Use fusion
-  once the fold anchors hold ≥ k positives, else the blend" is directly
-  supported by the six-environment data; k is not yet estimated.
-
-<!-- item-sep -->
-
-- **Test `κ ∝ 1/n` before pinning any constant.** The per-window argmin falls
-  3 → 0.1 from 20 to 300 votes, so a fixed κ is a compromise costing ~0.008 at
-  each end. A fixed *total* anchor mass (κ = M/n, or M/n_good) is a one-line
-  change to the caller.
-
-<!-- item-sep -->
+- **Test `κ ∝ 1/n` at small n only.** The per-window argmin fell 3 → 0.1 from 20
+  to 300 votes. Only the low-vote end now matters, so test a fixed total anchor
+  mass (κ = M/n, or M/n_good) over the fallback's vote range, not the full curve.
 
 <!-- item-sep -->
 
 ## Relation to other plans
 
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
-  is orthogonal: it filters *which labels* enter calibration; this plan changed
-  *what the labels are fused with*. Both can ship.
+  is orthogonal: it filters *which labels* enter calibration; this plan is about
+  *what the labels are fused with*.
+- [`region-vs-binary-kappa-mechanism.md`](region-vs-binary-kappa-mechanism.md)
+  explains *why* κ\* differs by voting mode; it waits on this plan's gate item.

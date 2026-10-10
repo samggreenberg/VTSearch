@@ -2,6 +2,17 @@
 
 [← Back to API index](../API.md)
 
+> The plugin-backed routes here (exporters, label importers, settings
+> importers/exporters) take the fields the named plugin declares; see
+> [Routes with no typed schema](../API.md#routes-with-no-typed-schema). Every
+> `field-options` route takes `{"field_key": "...", "values": {...}}` (`values`
+> is a snapshot of the form's current field values), answers
+> `{options: [{value, label}]}` (`value` to submit, `label` to display; they
+> differ only for `(value, label)` tuples), and fails 400 (unknown or
+> non-dynamic field key), 404 (unknown plugin), 501 (the plugin does not
+> implement `get_field_options`) or 502 (the remote service behind the options
+> failed).
+
 ---
 
 ## Exporters
@@ -25,27 +36,17 @@ with the flag set.
 POST /api/exporters/export
 ```
 
-**Body:**
-
-```json
-{
-  "exporter_name": "server_json_file",
-  "field_values": {"filepath": "/home/user/results.json"},
-  "payload_kind": "find_results",
-  "results": {}
-}
-```
+**Body:** `{"exporter_name": "server_json_file", "field_values": {"filepath": "/data/results.json"}, "payload_kind": "find_results", "results": {...}}`
 
 `payload_kind` says what `results` is: `find_results` (a scored run, e.g. the
 `POST /api/auto-detect` response) or `labelset` (a serialised labelset, e.g.
 the `GET /api/labels/export` response). When omitted it is inferred — a dict
-with a top-level `labels` key is a labelset — which exists only for older
-clients. A kind the exporter doesn't list in `supported_payloads` is a 400.
+with a top-level `labels` key is a labelset. A kind the exporter doesn't list in `supported_payloads` is a 400.
 `detector_bundles` is refused with a 422: it is the trained classifiers
 themselves, which only the CLI pipeline has, so this route cannot build one.
 
-→ `{"success": true, "message": "...", "open_url": "...", "display_results": ...}`
-— `success` always; the rest only when the exporter returns them
+→ `{success, message, open_url, display_results}`: `success` always, the rest
+only when the exporter returns them
 (`display_results` is what the `gui` exporter hands back for in-app display).
 400 (missing plugin field, invalid file path, unsupported payload kind, or the
 exporter rejected its input), 404 (unknown exporter), 422 (unknown or
@@ -82,20 +83,10 @@ export already happened and the scored results must survive it.
 POST /api/exporters/field-options/{exporter_name}
 ```
 
-**Body:** `{"field_key": "...", "values": {...}}` (`values` is a snapshot of
-the form's current field values)
-
-Returns the dropdown options for a `dynamic_options` field on a results
-exporter, for an exporter whose destinations are only knowable at runtime.
-Both surfaces that render exporter fields use it: the Export modal and the
-Settings › AutoFind results exporter.
-
-→ `{"options": [{"value": "...", "label": "..."}, ...]}` (same shape as the
-label-importer route below).
-
-Errors: 400 (unknown/non-dynamic field key), 404 (unknown exporter),
-501 (exporter does not implement `get_field_options`),
-502 (remote service backing dynamic options failed).
+Options for a `dynamic_options` field, for an exporter whose destinations are
+only knowable at runtime (contract in the note at the top). Both surfaces that
+render exporter fields use it: the Export modal and the Settings › AutoFind
+results exporter.
 
 **Streaming support** (CLI `--autodetect --tempimport --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
@@ -125,19 +116,8 @@ route below accepts.
 POST /api/label-importers/field-options/{importer_name}
 ```
 
-**Body:** `{"field_key": "...", "values": {...}}` (`values` is a snapshot of
-the form's current field values)
-
-Returns the dropdown options for a dynamic-options field on a label importer
-(used to populate dependent selects in the importer form).
-
-→ `{"options": [{"value": "...", "label": "..."}, ...]}` (each option carries a
-`value` to submit and a `label` to display; they coincide for plain-string
-options and differ for `(value, label)` tuples).
-
-Errors: 400 (unknown/non-dynamic field key), 404 (unknown importer),
-501 (importer does not implement `get_field_options`),
-502 (remote service backing dynamic options failed).
+Options for a dynamic-options field on a label importer (dependent selects in
+the importer form).
 
 ### Run label import
 
@@ -147,20 +127,8 @@ POST /api/label-importers/import/{importer_name}
 
 **Form or Body:** importer-specific fields.
 
-→
-```json
-{
-  "applied": 8,
-  "skipped": 2,
-  "missing_count": 0,
-  "missing": [],
-  "ingest_task_id": "_labelingest_<detector_id>",
-  "ingest_pending_count": 3,
-  "failed_count": 0,
-  "failed": [],
-  "message": "Applied 8 label(s), skipped 2. Resolving 3 missing element(s) from their sources in the background…"
-}
-```
+→ `{applied, skipped, missing_count, missing, ingest_task_id,
+ingest_pending_count, failed_count, failed, message}`.
 
 `applied` / `skipped` describe only the entries that matched media already in
 the active dataset. Entries that matched nothing are auto-resolved from their
@@ -171,13 +139,8 @@ channel; `missing_count` / `missing` stay empty because nothing is known to be
 unresolvable until that task finishes. Both are `""` / `0` when every entry
 matched.
 
-Watch the task on `/api/events`; its terminal frame carries
-
-```json
-"ingest_result": {"ingested": 3, "applied": 3, "unresolved": 0, "failed": 0}
-```
-
-The task re-applies the labels of whatever it ingested and re-syncs the loaded
+Watch the task on `/api/events`; its terminal frame carries `ingest_result`
+(`{ingested, applied, unresolved, failed}`). The task re-applies the labels of whatever it ingested and re-syncs the loaded
 detector, so no follow-up call is needed. Cancel it with
 `POST /api/detectors/cancel/{task_id}`.
 
@@ -195,7 +158,7 @@ Synchronously re-ingests medias from their recorded origins into the active
 dataset and applies their labels. Entries are label-export entries (`origin`,
 `origin_name`, `md5`, `label`, …).
 
-→ `{"ingested": 3, "applied": 3, "failed_count": 0, "failed": [], "message": "Ingested 3 media(s), applied 3 label(s)."}`
+→ `{ingested, applied, failed_count, failed, message}`
 
 ---
 
@@ -214,7 +177,7 @@ create detectors.
 GET /api/pregen-processors
 ```
 
-→ `{"processors": [{"name": "OCR (PaddleOCR)", "kind": "extractor", "processor_type": "ocr", "media_type": "image", "config": {...}}, ...]}`
+→ `{processors: [{name, kind, processor_type, media_type, config}]}`
 
 ### Add all pregen processors
 
@@ -225,7 +188,7 @@ POST /api/pregen-processors/add
 Registers every bundled pregen processor (OCR extractor, Speech extractor,
 Face localizer) into the autorun extractor / localizer stores.
 
-→ `{"success": true, "added": ["OCR (PaddleOCR)", "Speech (Whisper Tiny)", "Face (MTCNN)"]}`
+→ `{success, added}`, `added` naming the processors registered.
 
 ---
 
@@ -341,17 +304,8 @@ One-off run of a single processor built from the body:
 **Body:** `{"extractor_type": "ocr", "config": {...}, "name": "optional"}`
 (`localizer_type` for `/api/localize`).
 
-→
-```json
-{
-  "extractor_name": "adhoc",
-  "media_type": "image",
-  "total_medias_with_hits": 1,
-  "results": [{"id": 4, "filename": "sign.png", "...": "...", "extractions": [...]}]
-}
-```
-
-`/api/localize` answers `localizer_name` and per-media `localizations`
+→ `{extractor_name, media_type, total_medias_with_hits, results}`, each result
+row carrying `extractions`. `/api/localize` answers `localizer_name` and per-media `localizations`
 instead. Each result row is the media's display info plus the hits. 400 if no
 medias are loaded, the config can't be built, or the processor's media type
 differs from the dataset's.
@@ -364,8 +318,8 @@ POST /api/auto-localize
 No body. Runs every stored autorun extractor (or localizer) whose media type
 matches the loaded dataset, in parallel.
 
-→ `{"media_type": "image", "extractors_run": 2, "results": {"<name>": {"extractor_name": ..., "total_medias_with_hits": ..., "results": [...]}}}`
-(`localizers_run` / `localizer_name` for `/api/auto-localize`). A stored
+→ `{media_type, extractors_run, results}`, `results` keyed by extractor name
+with one `/api/extract`-shaped body each (`localizers_run` / `localizer_name` for `/api/auto-localize`). A stored
 processor whose config no longer builds is skipped silently, so
 `extractors_run` can be smaller than the number stored. 400 if no medias are
 loaded or none are registered for the media type.
@@ -388,19 +342,8 @@ GET /api/settings-importers
 POST /api/settings-importers/field-options/{importer_name}
 ```
 
-**Body:** `{"field_key": "...", "values": {...}}` (`values` is a snapshot of
-the form's current field values)
-
-Returns the dropdown options for a `dynamic_options` field on a settings
-importer, for an importer whose option list is only knowable at runtime.
-Used by the Import Settings modal.
-
-→ `{"options": [{"value": "...", "label": "..."}, ...]}` (same shape as the
-results-exporter and label-importer routes above).
-
-Errors: 400 (unknown/non-dynamic field key), 404 (unknown importer),
-501 (importer does not implement `get_field_options`),
-502 (remote service backing dynamic options failed).
+Options for a `dynamic_options` field on a settings importer, used by the
+Import Settings modal.
 
 ### Run settings import
 
@@ -412,7 +355,7 @@ POST /api/settings-importers/import/{importer_name}
 
 Applies the imported settings through the same setters as `PUT /api/settings`.
 
-→ `{"success": true, "message": "Imported 5 setting(s) via ...", "keys": ["volume", ...]}`
+→ `{success, message, keys}`, `keys` naming the settings applied.
 
 ### List settings exporters
 
@@ -428,8 +371,7 @@ GET /api/settings-exporters
 POST /api/settings-exporters/field-options/{exporter_name}
 ```
 
-Same contract as the settings-importer route above, for the Export Settings
-modal's field form. Note that the exporter is named in the **path** here even
+The same, for the Export Settings modal's field form. Note that the exporter is named in the **path** here even
 though `POST /api/settings-exporters/export` names it in the body.
 
 ### Run settings export
@@ -440,7 +382,7 @@ POST /api/settings-exporters/export
 
 **Body:** `{"exporter_name": "...", "field_values": {...}}`
 
-→ `{"success": true, "message": "...", ...}` plus whatever the exporter returns —
+→ `{success, message}` plus whatever the exporter returns —
 e.g. `filepath` for a server-file exporter, or `data` + `filename` +
 `download: true` when the browser should save the file. 400 (missing field or
 invalid path), 404 (unknown exporter), 500 (exporter error).

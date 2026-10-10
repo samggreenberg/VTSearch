@@ -11,6 +11,7 @@ right `pyproject.toml` block. Subclass
 (`vtscore/datasets/importers/base/` is a **package**, not a module:
 `core.py` holds `ImporterBase`, `dataset_importer.py` the
 `DatasetImporter` subclass, `specs.py` the `SourceSpec` dataclass,
+`outputs.py` the `OutputSpec` multi-dataset helpers,
 `origin.py` the origin builders, and `naming.py` the display-name
 helpers; `base/__init__.py` re-exports all of them, so
 `from vtscore.datasets.importers.base import DatasetImporter, PluginField`
@@ -128,10 +129,13 @@ Every media should carry an `origin` dict that identifies the importer
 and parameters needed to refetch the same content. The framework
 automatically calls `build_origin(field_values)` after `run()` and
 applies the result to every media whose `origin` is `None`, so the
-common case requires no work. Override `build_origin()` only when the
-default (importer name + stringified field values) is too coarse;
-e.g. when the importer fans out across multiple sources within a
-single dataset.
+common case requires no work. The default (importer name + stringified
+field values) is tuned declaratively: `PluginField.include_in_origin`
+(off by default for `file` and `password` fields),
+`PluginField.origin_serializer`, and the class attributes
+`extra_origin_keys` / `origin_suppressed`. Override `build_origin()`
+only when those can't express what you need; e.g. when the importer
+fans out across multiple sources within a single dataset.
 
 `origin` flows through the registry, through dataset pickle export /
 import, and is what `vtscore.datasets.sources.get_source_for_origin`
@@ -197,9 +201,12 @@ The first three hooks all hand back raw source-type media; the
 framework runs converters and ingests.  Only `run()` gives up that
 help in exchange for full control.  The built-in `server_folder`
 importer is the canonical `run()`-shaped example; the per-source-type
-hooks have no in-tree user, so read the ABC in
-`vtscore/datasets/importers/base/dataset_importer.py` for their exact
-contract.
+hooks have no in-tree user. The full decision tree and a worked example
+of each hook are in
+[`docs/EXTENDING-plugins.md` § Choosing your override point](../../../docs/EXTENDING-plugins.md#choosing-your-override-point)
+and [§ Multi-media imports](../../../docs/EXTENDING-plugins.md#multi-media-imports);
+the ABC in `vtscore/datasets/importers/base/dataset_importer.py` is the
+exact contract.
 
 The default `fetch_source_media()` delegates to `list_records()` +
 `fetch_record()`, and the default `fetch_all_source_media()`
@@ -226,27 +233,16 @@ media the row stands for, which names the dataset), and the
 per-dataset embedder / clipper / cleaners the pipeline applies.
 
 The base class handles it with no change on your side:
-`run_outputs(field_values, outputs, thin)` yields `(output, medias)`
-by running `run()` once per output on `output.narrow(field_values)`
-(the shared values with that output's `media_type` and `source_specs`
-folded in), and `run_outputs_chunked(field_values, outputs,
-chunk_size, thin)` does the same through `run_chunked()`. The host
-drives the chunked hook when `supports_chunked` is `True`, the plain
-one otherwise. `parse_output_specs(raw)` turns a request's `outputs`
-list (or its JSON) into validated `OutputSpec`s, and
-`output_dataset_name(base, output)` is the `"<base> – <Category>"`
-naming rule.
-
-Override the hook your importer's loading mode uses when acquiring
-the source is the expensive part and can be shared: acquire once,
-yield each output from the acquired copy (the very `OutputSpec`
-objects you were given), and clean up in a `finally` around the loop.
-Set the class attribute `multi_output = False` on an importer whose
-run is fixed to one dataset; `to_dict()` then reports
-`supports_multi_output: false` and the app offers no multi-dataset
-mode for it. [`docs/EXTENDING-plugins.md` § Multi-dataset
-imports](../../../docs/EXTENDING-plugins.md#multi-dataset-imports)
-has the worked override and what the app's pipeline does per output.
+`run_outputs()` / `run_outputs_chunked()` run `run()` / `run_chunked()`
+once per output on `output.narrow(field_values)`, and
+`parse_output_specs(raw)` / `output_dataset_name(base, output)` parse a
+request's `outputs` and name each dataset. Override the hook your
+loading mode uses only when acquiring the source is expensive and can
+be shared across outputs; set `multi_output = False` on an importer
+whose run is fixed to one dataset (`to_dict()` then reports
+`supports_multi_output: false`). The worked override and what the
+app's pipeline does per output are in
+[`docs/EXTENDING-plugins.md` § Multi-dataset imports](../../../docs/EXTENDING-plugins.md#multi-dataset-imports).
 
 ## Reporting progress
 
@@ -265,11 +261,9 @@ module returns it; both come from the same per-thread lookup, and both
 are inert when no load is in flight (a unit test calling your importer
 directly, say).
 
-There is no process-wide progress sink to fall back to. Reporting from a
-thread that bound nothing discards the tick rather than publishing it
-somewhere nobody is watching — a channel with no owner cannot say when
-its work ended, which is what made a finished import indistinguishable
-from a wedged one (#3167).
+There is no process-wide progress sink to fall back to: reporting from a
+thread that bound nothing discards the tick, so a worker thread you
+spawn yourself must bind the parent's callback (`set_thread_progress(resolve_progress_callback())`, captured in the parent) before it reports.
 
 Status strings are conventional, not enforced: `"downloading"`,
 `"embedding"`, `"importing"`. The dataset-loading pipeline keys on the

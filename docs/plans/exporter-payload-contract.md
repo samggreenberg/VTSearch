@@ -1,7 +1,7 @@
 # Design: the exporter payload contract
 
 Open follow-ups from the results-exporter payload-kind rework
-([#3219](https://github.com/samggreenberg/VTSearch/issues/3219)).
+(#3219).
 
 ## Background
 
@@ -46,7 +46,7 @@ Two constraints shaped it, and both still bind anything built on top:
 <!-- item-sep -->
 
 - **Per-AutoFind exporter selection.** The second half of
-  [#3219](https://github.com/samggreenberg/VTSearch/issues/3219): let a detector
+  #3219: let a detector
   moved to AutoFind carry its own exporter choice, falling back to the global
   AutoFind setting when unset. Not designed here. The open design question is
   the one the issue thread raises — whether an exporter preference is really

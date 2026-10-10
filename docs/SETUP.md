@@ -375,15 +375,12 @@ server flags — login providers, admin restrictions, logging verbosity — are 
 If the first model download or dataset import fails behind a proxy or on an
 offline host, see [DEPLOYMENT.md § Network dependencies](DEPLOYMENT.md#network-dependencies).
 
-`python app.py` uses Flask's built-in dev server (fine for development but **not recommended for production**). For production, run under gunicorn using the bundled config:
-
-```bash
-VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
-```
-
-`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, embedder preloading) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
-
-The Docker images already use this configuration (see [Docker](#docker) below).
+`python app.py` uses Flask's built-in dev server, which is fine for development
+but **not for production**. For production, run under gunicorn
+(`VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app`); why the
+variable is needed, the single-worker config and tuning are in
+[DEPLOYMENT.md § Running under gunicorn](DEPLOYMENT.md#running-under-gunicorn).
+The Docker images below already run that way.
 
 ## Docker
 
@@ -415,7 +412,11 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 > `Dockerfile.image-embedders.gpu`) includes a Node.js `frontend` build
 > stage that runs `npm ci` and `npm run build:prod` inside the image, so
 > you do **not** need to build the Angular app on the host first; any
-> stale checked-in `static/` is overwritten with the freshly built bundle.
+> stale build already in the host's `static/` is overwritten with the
+> freshly built bundle.
+>
+> Which image to pick, and what each one is for, is tabled in
+> [DEPLOYMENT.md § Choosing an image](DEPLOYMENT.md#choosing-an-image).
 
 ### GPU
 
@@ -433,6 +434,12 @@ Or with plain Docker:
 docker build -f docker/Dockerfile.gpu -t vtsearch:gpu .
 docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 ```
+
+The GPU images ship torch's `cu129` build, so the host driver must accept
+CUDA 12.9 and the GPU must be Turing or newer: a V100 (Volta) host needs a
+local `bash scripts/install.sh cu124` instead. See
+[DEPLOYMENT.md § Choosing an image](DEPLOYMENT.md#choosing-an-image) for the
+accepted driver branches.
 
 ### LabBench (SigLIP-only image search)
 
@@ -459,9 +466,11 @@ so the baked weights are not masked when `/app/data` is mounted as a volume.
 ### All image embedders
 
 `docker/Dockerfile.image-embedders` (CPU) and
-`docker/Dockerfile.image-embedders.gpu` (CUDA) are image-only builds that bundle
-every supported image embedder — SigLIP (the default), SigLIP 2, CLIP, DINOv2,
-DINOv3 and EUPE — with their weights baked in. DINOv3 is gated on Hugging Face,
+`docker/Dockerfile.image-embedders.gpu` (CUDA) are image-only builds that install
+every image embedder and bake in the weights of SigLIP (the default), SigLIP 2,
+CLIP, DINOv2, DINOv3 and EUPE. The two larger SO400M embedders (SigLIP-L and
+SigLIP2-L) are installed but not baked: they download into the `/app/data`
+volume the first time someone picks one. DINOv3 is gated on Hugging Face,
 so to bake it, run the cache script once on the host with your own token before
 building; no token enters the build. Without it the build still succeeds and
 DINOv3 simply stays unavailable. (EUPE's license forbids commercial use; see the
@@ -778,13 +787,10 @@ dependencies automatically and supports grouped test subsets:
 ./run-tests.sh sorting api  # multiple groups
 ```
 
-Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `detectors`,
-`downloads`, `integration`, `cli`, `converters`, `projection`, `meta`,
-`frontend`, `slides`, `docs` (plus `gpu` and `vtscore-clean`, which run
-separately). A bare `./run-tests.sh` on a branch that changes only markdown
-narrows itself to the `docs` gate automatically. See
-[`docs/TESTING.md`](TESTING.md#test-groups) for what each group covers and which
-gates a group run skips.
+The group list, what each covers, and which gates a group run skips are in
+[TESTING.md § Test Groups](TESTING.md#test-groups). A full `./run-tests.sh` is
+the merge gate; a bare run on a branch that changes only markdown narrows itself
+to the `docs` gate automatically.
 
 You can also run pytest directly:
 

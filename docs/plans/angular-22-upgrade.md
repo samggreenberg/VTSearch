@@ -20,7 +20,7 @@ v22 breaking change is a no-op here (see the audit below).
 ## The upgrade (required work)
 
 - **TypeScript 5.9.3 → 6.0 is the hard gate.** v22 drops support for TS ≤ 5.9.
-  Bump `frontend/tsconfig.json` (`typescript: ~5.9.3` → `~6.0`) and expect a
+  Bump `frontend/package.json` (`typescript: ~5.9.3` → `~6.0`) and expect a
   handful of TS-6.0 strictness/deprecation fixes across the ~90-component app
   and the generated OpenAPI client types.
 - **Node:** v22's floor is Node 22 (drops Node 20). The container is already on
@@ -58,7 +58,7 @@ v22 breaking change is a no-op here (see the audit below).
 
 - **Angular Aria (now stable)** — headless, styleable a11y components. Directly
   relevant: `vt-modal` hand-rolls focus management via CDK's `CdkTrapFocus`
-  across ~24 dialogs (the ~9 kB eager cost noted in the `angular.json` budget
+  across ~22 dialogs (the ~9 kB eager cost noted in the `angular.json` budget
   comment). Evaluate whether Aria can replace some of that.
 
 <!-- item-sep -->

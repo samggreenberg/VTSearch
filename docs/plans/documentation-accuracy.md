@@ -49,30 +49,10 @@ separately.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-- **CHANGELOG.md has readers but no release step.** It is maintained (29 commits since
-  2026-07-20) and linked from `CLAUDE.md`, but `docs/RELEASE.md` never mentions it, so nothing
-  closes an `Unreleased` section at a release: everything since the library extraction sits under
-  one `## Unreleased`, which repeats `### Fixed` / `### Changed` / `### Added` several times over
-  (merge residue from parallel PRs appending their own subsections). Decide whether the release
-  runbook cuts a dated section; if so, add the step and fold the repeated subsections then.
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
+- **CHANGELOG.md has readers but no release step.** It is maintained and linked from
+  `CLAUDE.md`, but `docs/RELEASE.md` never mentions it, so nothing closes an `Unreleased` section
+  at a release: everything since the library extraction sits under one `## Unreleased`. Decide
+  whether the release runbook cuts a dated section; if so, add the step.
 
 <!-- item-sep -->
 
@@ -85,14 +65,6 @@ separately.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
 - **`patch-embedder.md` is a shipped plan kept alive as a spec.** Everything it owes has
   shipped or is explicitly out of scope, but its "living spec" (the V3 trio, score precedence,
   per-detector embedder type) is cited by ~20 source docstrings and exists nowhere in the permanent
@@ -100,13 +72,6 @@ separately.
   then delete the plan. `structural-embedder.md`'s design spec (two-stage VLAD + RANSAC, the
   match-statistics classifier, why 4-DoF) wants the same treatment once its open work ships, and
   `user-docs-screenshots.md` is the de-facto reference for the screenshot system.
-
-<!-- item-sep -->
-
-- **Hand-restated API schemas.** `docs/api/medias.md` and `docs/api/datasets.md` still restate long
-  response schemas that `frontend/openapi.json` already carries. Accurate as of the 2026-09-28
-  audit, but they will drift; slim them to purpose, non-obvious semantics and a pointer to the spec,
-  as `settings.md` now does.
 
 <!-- item-sep -->
 

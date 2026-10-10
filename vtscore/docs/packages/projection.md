@@ -28,8 +28,8 @@ for the background-job runner the builds ride on.
 | `vtscore/projection/umap_projection.py` | Stage 1 - `fit_projection`, the `Projection` dataclass, `remove_ids` |
 | `vtscore/projection/compaction.py` | Stage 1.5 - `compact_layout`, slide clusters together to close the empty oceans |
 | `vtscore/projection/pyramid.py` | Stage 2 - `build_pyramid`, `Pyramid` / `Tile` / `HexCell` / `LevelMeta`, `rebin_like`, `tile_member_ids` |
-| `vtscore/projection/hexbin.py` | Vectorised d3-style hexagonal binning (no d3 dependency) |
-| `vtscore/projection/squarebin.py` | Vectorised square-grid binning |
+| `vtscore/projection/hexbin.py` | Vectorised d3-style hexagonal binning (no d3 dependency): `hexbin_assign(points, radius)` -> per-point `(q, r)` cells, `hex_center(q, r, radius)` |
+| `vtscore/projection/squarebin.py` | Vectorised square-grid binning, same shape: `squarebin_assign`, `square_center` |
 | `vtscore/projection/persistence.py` | Serialisation helpers shared with the ZIP container |
 | `vtscore/projection/params.py` | `resolve_projection_params` / `ProjectionParams` / `projection_embedder_for` - the one resolver for the knobs a layout is fit under |
 

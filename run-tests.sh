@@ -62,12 +62,13 @@
 #
 # Group runs (`./run-tests.sh <group>`) run stage 1 and their own tests, and
 # skip the stage-3 gates that are not about the code you just changed —
-# pyright, pip-audit, the vulture whitelist check, and the frontend suite. That
-# keeps the edit/test loop in
+# pyright, pip-audit and the vulture whitelist check (and the frontend gates,
+# except on the `core` and `frontend` groups). That keeps the edit/test loop in
 # the seconds it should be instead of paying ~105s of whole-repo checks to run
 # a five-second group. The skip is announced on every group run, because the
 # full run is what actually gates a push. Set VTSEARCH_FULL_GATES=1 to force
-# the complete chain on a group run.
+# pyright, pip-audit and the vulture check back on for a group run; the
+# frontend gates still follow the group.
 #
 # `slides` goes further and is the one group that also gates a push, because a
 # change confined to slides/ cannot reach anything else in the repo: nothing

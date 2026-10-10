@@ -193,7 +193,7 @@ a value that appears out of nowhere on submit.
 ## Server-path and URL validation
 
 **A declared field is already validated.** Because a field typed
-`url` is passed through `vtscore.security.validate_url` and a field
+`url` is passed through `vtscore.security.url_validation.validate_url` and a field
 typed `server_path` (or `folder`) through `confine_server_filepath()`
 before your `export()` runs — see [Framework-side
 normalization](README.md#framework-side-normalization) — the correct
