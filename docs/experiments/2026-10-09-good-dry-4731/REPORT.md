@@ -229,6 +229,10 @@ runs 16 picks dry with a Good in hand. Blue is the app before #4731; orange is t
   Over all 720 runs, D's area would be about +0.0029 against the app's +0.0010. At beta 1 and below the head wins:
   #4738's old-opening D was +0.0005 behind Q at beta 1, and FHIBE's few-photo gain is all the head.
 
+**Ruling (owner, 2026-10-10): keep both rules.** No preset's session area drops. The beta 4 early loss goes to
+#4736, which shows the typed query's set until the detector beats it, and should cover the exit's hand-over at one or
+two Goods as well.
+
 **FHIBE on today's opening** (same people, `ctl` = the app before #4731, `app` = today). Mean F-beta over clicks
 1–150, gain with one SE:
 
