@@ -681,6 +681,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **`--pipeline` honours `--user`, `--progress-format`, `-v` and the admin overrides**
+  (issue #4753). A pipeline run started before those flags were applied, so
+  `--pipeline p.yaml --user bob` ran as the `default` user without asking for
+  `--api-key`, and `--progress-format json` still printed prose. The flags now
+  apply exactly as they do to `--autodetect`. `--stream-results`,
+  `--keep-negatives` and `--label-importer`, which the YAML file declares, are
+  refused beside `--pipeline` rather than ignored. The `⏳ Initializing
+  VTSearch…` banner now goes to stderr, so a `--progress-format json` run's
+  stdout (`--autodetect` or `--pipeline`) is NDJSON from its first line, and
+  piping it into `jq` no longer fails on that banner.
 - **Changing the balance during Autopilot no longer knocks Stable off green**
   (issue #4745). Stable counts the items that cross the line between one
   detector and the next. A balance change moves the line without any detector
