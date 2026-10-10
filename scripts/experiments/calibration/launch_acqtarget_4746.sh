@@ -16,8 +16,8 @@
 # WHY.  #3546 shipped target pick precision 0.5 at every preset (ACQUISITION_TARGET_PRECISION): Boundary picks and
 # the atlas probe sample where the labels line's corpus posterior falls below 1/2.  Its grid priced only 0.5 and
 # 0.25, each the same at all three presets.  Re-scoring its cells (step 1 of #4746) settles the low end at beta 4;
-# nothing above ~0.55 (the line itself at beta 1/4) was ever run.  This prices 0.75 where a precision-leaning
-# preset might want it.
+# nothing above 0.5 was ever run (its "at the line" arm at beta 1/4 sat at about even odds).  This prices 0.75
+# where a precision-leaning preset might want it.
 #
 # THE ARMS, each preset on its own sessions (`_b025`, `_b1`):
 #
@@ -78,7 +78,7 @@ export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}"
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
 export CALIB_CPUS=1
-export CALIB_MEM="${CALIB_MEM:-4G}"
+export CALIB_MEM="${CALIB_MEM:-2G}"  # a cell peaks at ~1 GB; under the memory cap 4G halved the slots (#4746)
 export CALIB_TIME="${CALIB_TIME:-1:30:00}"
 export CALIB_ANALYZE=noop.py
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"

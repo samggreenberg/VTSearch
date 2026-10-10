@@ -14,7 +14,7 @@ pairs each test arm with the control at its preset on (category, seed), the SE c
   1-150; Goods by vote 150; the share of Boundary (``hard``) and New picks that are Good; the returned set's size
   and precision after the check.
 * ``paired_curve.csv`` - the paired difference in the objective at every vote, with its clustered SE.
-* ``levels.csv`` - each arm's own level on the same reads.
+* ``levels.csv`` - each arm's own level on the same reads; ``per_run.csv`` - every run's reads, per arm.
 * ``REPORT_acqtarget.md`` - the machine summary; ``provenance.json``; ``figures/``.
 
 **Every run counts at every vote** (#4631): until a run shows a detector, Find returns the typed query's own set
@@ -118,7 +118,8 @@ def arm_reads(frame: pd.DataFrame, cells: pd.DataFrame, anchors: dict, beta: flo
     h = harvest(frame, cells_dir)
     for col in ("goods", "hard_good_share", "hard_picks", "acq_pct", "line_pct"):
         got[col] = h[col] if col in h else pd.Series(dtype=float)
-    got["new_good_share"] = new_pick_share(cells_dir)
+    # The side frames hold every run on disk; keep the ones the frame does (an interim read's --seeds).
+    got["new_good_share"] = new_pick_share(cells_dir).reindex(h.index)
     return got
 
 
@@ -191,7 +192,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     grid = grid.reset_index(drop=True)
     lines += [f"Grid: {len(grid)} runs.", ""]
 
-    curve_rows, pair_rows, pcurve_rows, level_rows = [], [], [], []
+    curve_rows, pair_rows, pcurve_rows, level_rows, run_rows = [], [], [], [], []
     for p in presets:
         beta = PRESETS[p]
         tag = beta_tag(beta)
@@ -233,9 +234,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
                     }
                 ).assign(preset=p, beta=beta, arm=stem)
             )
-            for read, s in scalar_reads(g, H).items():
+            per_run = scalar_reads(g, H)
+            for read, s in per_run.items():
                 s = s.dropna()
                 level_rows.append({"preset": p, "beta": beta, "arm": stem, "read": read, "n": len(s), "mean": s.mean()})
+            run_rows.append(pd.DataFrame(per_run).rename_axis(RUN).reset_index().assign(preset=p, beta=beta, arm=stem))
         if args.control not in reads:
             continue
         ctl = reads[args.control]
@@ -275,6 +278,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     pairs.to_csv(out / "paired.csv", index=False, float_format="%.6g")
     pcurve.to_csv(out / "paired_curve.csv", index=False, float_format="%.6g")
     levels.to_csv(out / "levels.csv", index=False, float_format="%.6g")
+    runs = pd.concat(run_rows, ignore_index=True) if run_rows else pd.DataFrame()
+    runs.to_csv(out / "per_run.csv", index=False, float_format="%.6g")
 
     if not levels.empty:
         lines += ["## Levels", ""]
@@ -307,6 +312,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
 
     if not args.no_figures and not curve.empty:
         figures(curve, pcurve, out / "figures", args.control)
+        per_run_figure(runs, out / "figures", args.control, H)
     return 1 if failures else 0
 
 
@@ -317,28 +323,73 @@ def figures(curve: pd.DataFrame, pcurve: pd.DataFrame, figdir: Path, control: st
     import matplotlib.pyplot as plt  # noqa: PLC0415
 
     figdir.mkdir(parents=True, exist_ok=True)
+    # Categorical slots 1-3 of the dataviz reference palette (validated: CVD dE 24.7 for the first pair).
     colours = {"ctl": "#2a78d6", "tp75": "#eb6834", "tp25": "#1baf7a"}
     presets = list(dict.fromkeys(curve["preset"]))
+    ctl_name = "target 0.5" if control == "ctl" else control
     fig, axes = plt.subplots(2, len(presets), figsize=(5.4 * len(presets), 7.2), squeeze=False)
     for j, p in enumerate(presets):
         ax = axes[0][j]
         for arm, c in curve[curve["preset"] == p].groupby("arm", sort=False):
-            ax.plot(c["t"], c["objective"], color=colours.get(arm, "#777"), lw=1.6, label=LABELS.get(arm, arm))
-        ax.set_title(f"objective at beta {PRESETS[p]:g}")
-        ax.grid(alpha=0.3)
+            ax.plot(c["t"], c["objective"], color=colours.get(arm, "#777"), lw=2, label=LABELS.get(arm, arm))
+        ax.set_title(f"objective at beta {PRESETS[p]:g}", fontsize=10)
+        if j == 0:
+            ax.set_ylabel("F-beta of the withheld half above the line")
         ax = axes[1][j]
-        ax.axhline(0, color="#888", lw=1)
+        ax.axhline(0, color="#8a8a86", lw=1)
         for arm, c in pcurve[pcurve["preset"] == p].groupby("arm", sort=False):
             col = colours.get(arm, "#777")
-            ax.plot(c["t"], c["delta"], color=col, lw=1.6, label=f"{LABELS.get(arm, arm)} - {control}")
-            ax.fill_between(c["t"], c["delta"] - 2 * c["se"], c["delta"] + 2 * c["se"], color=col, alpha=0.15)
-        ax.set_title(f"paired difference, beta {PRESETS[p]:g} (±2 SE)")
+            ax.plot(c["t"], c["delta"], color=col, lw=2, label=f"{LABELS.get(arm, arm)} minus {ctl_name}")
+            ax.fill_between(c["t"], c["delta"] - 2 * c["se"], c["delta"] + 2 * c["se"], color=col, alpha=0.15, lw=0)
+        ax.set_title(f"paired difference at beta {PRESETS[p]:g}, ±2 SE (clustered)", fontsize=10)
         ax.set_xlabel("votes")
-        ax.grid(alpha=0.3)
-    axes[0][0].legend(fontsize=8, loc="lower right")
-    axes[1][0].legend(fontsize=8, loc="lower right")
+        if j == 0:
+            ax.set_ylabel("difference in the objective")
+    for ax in axes.flat:
+        ax.grid(alpha=0.25, lw=0.6)
+        ax.spines[["top", "right"]].set_visible(False)
+    axes[0][0].legend(fontsize=8, loc="lower right", frameon=False)
+    axes[1][0].legend(fontsize=8, loc="lower right", frameon=False)
     fig.tight_layout()
     fig.savefig(figdir / "acqtarget_curves.png", dpi=110)
+    plt.close(fig)
+
+
+def per_run_figure(runs: pd.DataFrame, figdir: Path, control: str, H: int) -> None:
+    """Each run's paired difference in the session mean, per preset and test arm: how a mean of ~0 is spread."""
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    read = f"objective, mean 1-{H}"
+    if runs.empty or read not in runs:
+        return
+    ctl = runs[runs["arm"] == control].set_index(["preset", *RUN])[read]
+    tests = [a for a in dict.fromkeys(runs["arm"]) if a != control]
+    presets = list(dict.fromkeys(runs["preset"]))
+    fig, axes = plt.subplots(len(tests), len(presets), figsize=(5.4 * len(presets), 3.2 * len(tests)), squeeze=False)
+    bins = np.linspace(-0.12, 0.12, 49)
+    for i, arm in enumerate(tests):
+        t = runs[runs["arm"] == arm].set_index(["preset", *RUN])[read]
+        for j, p in enumerate(presets):
+            d = (t.xs(p, level="preset") - ctl.xs(p, level="preset")).dropna()
+            ax = axes[i][j]
+            ax.hist(d.clip(bins[0], bins[-1]), bins=bins, color="#eb6834", edgecolor="#fcfcfb", lw=0.5)
+            ax.axvline(0, color="#8a8a86", lw=1)
+            better, worse = float((d > 0.02).mean()), float((d < -0.02).mean())
+            ax.set_title(
+                f"beta {PRESETS[p]:g}: {LABELS.get(arm, arm)} minus target 0.5, per run\n"
+                f"{len(d)} runs, {better:.0%} gain over 0.02, {worse:.0%} lose over 0.02",
+                fontsize=9,
+            )
+            ax.set_xlabel(f"difference in the session mean of the objective, votes 1-{H}")
+            if j == 0:
+                ax.set_ylabel("runs")
+            ax.grid(alpha=0.25, lw=0.6, axis="y")
+            ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(figdir / "acqtarget_per_run.png", dpi=110)
     plt.close(fig)
 
 
