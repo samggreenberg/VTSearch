@@ -194,3 +194,63 @@ class TestRedraw:
         cache.redraw(t1, 1.0)  # touch t1
         cache.store(_ranking(1), 0.5)  # t3 evicts t2, not t1
         assert cache.page(t1, 0, 10) is not None
+
+
+class TestDerived:
+    """A view built once over a stored ranking and evicted with it (#4751)."""
+
+    def test_builds_once_per_token_and_key(self):
+        cache = SortResultsCache()
+        token = cache.store(_ranking(4), 0.5)
+        calls: list[int] = []
+
+        def build(results: list[dict]) -> list[int]:
+            calls.append(len(results))
+            return [r["id"] for r in results]
+
+        assert cache.derived(token, "ids", build) == (True, [0, 1, 2, 3])
+        assert cache.derived(token, "ids", build) == (True, [0, 1, 2, 3])
+        assert calls == [4]
+        cache.derived(token, "other", build)
+        assert calls == [4, 4]
+
+    def test_a_new_sort_builds_afresh(self):
+        cache = SortResultsCache()
+        t1 = cache.store(_ranking(2), 0.5)
+        t2 = cache.store(_ranking(3), 0.5)
+        assert cache.derived(t1, "n", len) == (True, 2)
+        assert cache.derived(t2, "n", len) == (True, 3)
+
+    def test_a_failed_build_keeps_nothing(self):
+        cache = SortResultsCache()
+        token = cache.store(_ranking(2), 0.5)
+
+        def boom(results: list[dict]) -> int:
+            raise LookupError("not yet")
+
+        try:
+            cache.derived(token, "n", boom)
+        except LookupError:
+            pass
+        assert cache.derived(token, "n", len) == (True, 2)
+
+    def test_forget_drops_the_view(self):
+        cache = SortResultsCache()
+        token = cache.store(_ranking(2), 0.5)
+        cache.derived(token, "n", lambda results: "first")
+        cache.forget_derived(token, "n")
+        assert cache.derived(token, "n", lambda results: "second") == (True, "second")
+
+    def test_unknown_token_and_the_dataset_gate(self):
+        cache = SortResultsCache()
+        token = cache.store(_ranking(2), 0.5, dataset_id="ds-A")
+        assert cache.derived("does-not-exist", "n", len) == (False, None)
+        assert cache.derived(token, "n", len, dataset_id="ds-B") == (False, None)
+        assert cache.derived(token, "n", len, dataset_id="ds-A") == (True, 2)
+
+    def test_evicted_with_its_ranking(self):
+        cache = SortResultsCache(max_entries=1)
+        t1 = cache.store(_ranking(2), 0.5)
+        cache.derived(t1, "n", len)
+        cache.store(_ranking(1), 0.5)  # evicts t1
+        assert cache.derived(t1, "n", len) == (False, None)

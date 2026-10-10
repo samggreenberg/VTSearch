@@ -49,6 +49,17 @@ def _windowed_sort_extras(
     }
 
 
+def register_ranking(results: list[dict], threshold: float | None) -> str:
+    """Register a ranking that is sent whole and return its ``sort_token``.
+
+    For ``/api/find-label``, which transmits its whole ranking (Find is not
+    windowed) but still needs a token for the views built over a stored
+    ranking: Collapse to photos groups it by photo through
+    ``GET /api/sort/collapsed`` (#4751).
+    """
+    return _windowed_sort_extras(results, threshold)["sort_token"]
+
+
 def windowed_sort_response(
     results: list[dict],
     threshold: float | None,

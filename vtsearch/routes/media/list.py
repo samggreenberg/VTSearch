@@ -31,6 +31,7 @@ from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
 from vtscore.datasets.vote_provenance import normalize_provenance
 from vtscore.utils.hits import hit_custom_metadata
+from vtsearch.routes._source import abort_source_not_loaded, source_locator
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
     MediaBatchRequestSchema,
@@ -52,7 +53,6 @@ from vtsearch.state import (
     _state_lock,
     apply_label,
     cached_md5_lookup,
-    get_active_context,
     get_media,
     medias,
     next_media_id,
@@ -659,22 +659,6 @@ _SOURCE_NOT_FOUND_REPLIES = {
 }
 
 
-def _source_locator() -> source_item.SourceLocator:
-    """A locator for the requesting dataset, confined to what the current user may read."""
-    from vtsearch.auth import get_current_user  # noqa: PLC0415
-
-    return source_item.SourceLocator(get_active_context().dataset_id, user=get_current_user())
-
-
-def _abort_source_not_loaded(dataset_id: str | None) -> None:
-    abort(
-        409,
-        message="Load the source dataset to resolve this item's source.",
-        error_code="source_not_loaded",
-        dataset_id=dataset_id,
-    )
-
-
 @medias_bp.route("/api/medias/<int:media_id>/source")
 @medias_bp.response(200, MediaSourceResponseSchema)
 @medias_bp.alt_response(
@@ -707,9 +691,9 @@ def media_source(media_id: int):
     media = get_media(media_id)
     if media is None:
         abort(404, message="not found")
-    found = _source_locator().locate(media)
+    found = source_locator().locate(media)
     if found.status == source_item.SIBLING_NOT_LOADED:
-        _abort_source_not_loaded(found.dataset_id)
+        abort_source_not_loaded(found.dataset_id)
     if found.status != source_item.RESOLVED:
         error_code, message = _SOURCE_NOT_FOUND_REPLIES[found.status]
         abort(404, message=message, error_code=error_code)
@@ -737,7 +721,7 @@ def media_source_batch(body: dict):
     load it and ask again.
     """
     snap = snapshot_medias()
-    locator = _source_locator()
+    locator = source_locator()
     result: list[dict[str, Any]] = []
     for media_id in body["ids"]:
         media = snap.get(media_id)
@@ -745,7 +729,7 @@ def media_source_batch(body: dict):
             continue
         found = locator.locate(media)
         if found.status == source_item.SIBLING_NOT_LOADED:
-            _abort_source_not_loaded(found.dataset_id)
+            abort_source_not_loaded(found.dataset_id)
         if found.status == source_item.RESOLVED:
             result.append(
                 {"id": media_id, "dataset_id": found.dataset_id, "media_id": found.media_id, "box": found.box}

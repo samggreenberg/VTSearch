@@ -164,6 +164,7 @@ everywhere except those held votes.
 {
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
+  "sort_token": "9f1c…",
   "threshold": 0.5,
   "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
   "good_count": 42,
@@ -172,6 +173,11 @@ everywhere except those held votes.
   "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4}
 }
 ```
+
+`results` is the whole ranking: Find is not windowed. `sort_token` names it
+for the views over a stored ranking, which today is
+[`GET /api/sort/collapsed`](medias.md#sort-collapsed-to-photos) (Collapse to
+photos, #4751).
 
 `label_quota.tier` is `centroid` for the Goods' centroid, `trained` for the
 trained head; `n_good` / `n_bad` are the detector's labels and `goods_owed` /

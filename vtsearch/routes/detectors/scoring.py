@@ -399,10 +399,14 @@ def find_label(body: dict):
         from vtsearch.state import get_beta  # noqa: PLC0415
 
         from vtscore.detectors.label_quota import served_quota  # noqa: PLC0415
+        from vtsearch.routes._sort_window import register_ranking  # noqa: PLC0415
 
         return {
             "ok": True,
             "results": results,
+            # A handle on this ranking for the views over it, though it is
+            # sent whole: Collapse to photos pages it grouped by photo (#4751).
+            "sort_token": register_ranking(results, threshold),
             "threshold": round(threshold, 4),
             # What the balance says about the line (#4272, #4413).
             "balance": detector_balance_state(det_ctx, get_beta()),

@@ -393,7 +393,7 @@ it; see [example sort by id](#example-sort-by-loaded-media-id)):
 | `results` | The transmitted ranking rows, **descending by score**. May be a *head window* of the full ranking (see below), not the whole thing. |
 | `threshold` | The decision line (see [learned sort](#learned-sort) for `threshold` vs `acq_threshold`). |
 | `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Carried by the learned sort, the text sort since #4136 and the example sorts since #4732; `null` on the label-file sort, where a client falls back to `threshold`. |
-| `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page) and, on a text or example sort, [`GET /api/sort/line`](#sort-line). Also the sort-generation token: a re-sort mints a new one. |
+| `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page), [`GET /api/sort/collapsed`](#sort-collapsed-to-photos) and, on a text or example sort, [`GET /api/sort/line`](#sort-line). Also the sort-generation token: a re-sort mints a new one. |
 | `total` | Length of the **full** ranking — `>= results.length`. |
 | `above_threshold` | Rows at or above `threshold` across the full ranking (not just the window). |
 | `has_more_below` | `true` when `results` is a head window and more rows follow. |
@@ -443,6 +443,71 @@ deep into a large sort without receiving the whole list up front.
 404 when the token is unknown, has been evicted from the cache, or belongs to
 a different dataset than the active `X-Dataset-Id` — in every case the client
 should re-run the sort and start from the new token.
+
+### Sort collapsed to photos
+
+```
+GET /api/sort/collapsed?token=<sort_token>&offset=0&limit=200
+X-Dataset-Id: <the face dataset's id>
+```
+
+One window of a ranking of face crops **grouped by the photo each face was cut
+from** (issue #4751): the server half of Train and Test's **Collapse to photos**.
+The photo is found as an item of the Image dataset the same multi-dataset
+import produced, as [`GET /api/medias/<id>/source`](#resolve-a-derived-items-source)
+finds it. Takes the `sort_token` of any sort, including
+[`/api/find-label`](find.md#find-label-score--label-the-active-dataset)'s; the
+query is as for [`/api/sort/page`](#sort-page), with `offset` / `limit` counting
+rows of the grouped list.
+
+→
+```json
+{
+  "results": [
+    {
+      "source_dataset_id": "9f2c…",
+      "source_media_id": 412,
+      "score": 0.9412,
+      "faces": [
+        {"media_id": 3, "score": 0.9412, "box": [0.12, 0.30, 0.25, 0.48], "vote": "good"},
+        {"media_id": 8, "score": 0.2210, "box": [0.61, 0.28, 0.70, 0.41], "vote": null}
+      ]
+    },
+    {
+      "source_dataset_id": null,
+      "source_media_id": null,
+      "score": 0.8120,
+      "faces": [{"media_id": 5, "score": 0.8120, "box": null, "vote": null}]
+    }
+  ],
+  "offset": 0,
+  "limit": 200,
+  "total": 2,
+  "face_total": 3,
+  "has_more": false
+}
+```
+
+- **A row is a photo**, scored as its best face; rows keep the order of their
+  best faces. `faces` are every face of the ranking cut from that photo, best
+  first, each with its `box` in the photo (normalised `[x0, y0, x1, y1]`, the
+  face's `source_box`) and its `vote` under the active detector, read at
+  request time. Votes stay on the faces: there is no vote on a photo.
+- **A face whose photo cannot be named** (not a converter output, no Image
+  dataset you can read, no matching photo) is a row of its own, with
+  `source_dataset_id` / `source_media_id` `null`.
+- **Every face is in exactly one row**, so the sort response's `total` and
+  `above_threshold` are counts of faces; `face_total` here is the same number,
+  and `total` counts rows.
+- **Grouped before windowing.** The whole ranking is grouped once per token and
+  kept with it in the sort cache, so a photo whose faces straddle a window edge
+  is still one row, and paging never regroups.
+
+404 as for the page route. **409** with `error_code: source_not_loaded` and
+`dataset_id` when the Image dataset is registered but not loaded, as for
+`/api/medias/<id>/source`: load it with
+`POST /api/datasets/registry/<id>/load` and ask again. A 409 also answers a
+window whose Image dataset was unloaded after the grouping was built.
 
 ### Sort line
 

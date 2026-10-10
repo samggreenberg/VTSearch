@@ -22,7 +22,7 @@ from pathlib import Path
 from flask import request
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._context import require_detector_header
+from vtsearch.routes._context import require_dataset_header, require_detector_header
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._progress import sort_idle
 from vtsearch.routes._sort_window import windowed_sort_response
@@ -39,6 +39,7 @@ from vtsearch.schemas.sorting import (
     BalanceRequestSchema,
     BalanceResponseSchema,
     OkResponseSchema,
+    SortCollapsedResponseSchema,
     SortLineQuerySchema,
     SortLineResponseSchema,
     SortPageQuerySchema,
@@ -277,6 +278,96 @@ def sort_page(query: dict):
     if page is None:
         abort(404, message="Unknown or expired sort token; re-run the sort.")
     return page
+
+
+@sorting_bp.route("/api/sort/collapsed", methods=["GET"])
+@sorting_bp.arguments(SortPageQuerySchema, location="query")
+@sorting_bp.response(200, SortCollapsedResponseSchema)
+@sorting_bp.alt_response(404, description="Unknown or expired sort token; re-run the sort.")
+@sorting_bp.alt_response(
+    409,
+    description=(
+        "A ranked face's photo dataset is registered but not loaded (``error_code: source_not_loaded``); "
+        "``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+    ),
+)
+@require_dataset_header
+def sort_collapsed(query: dict):
+    """Return one window of a ranking grouped by source photo: Collapse to photos (#4751).
+
+    Takes the ``sort_token`` of any sort (``/api/sort``, the example sorts,
+    ``/api/label-file-sort``, ``/api/learned-sort``, ``/api/find-label``) and
+    groups the whole stored ranking by the photo each face was cut from, in
+    the Image dataset the same import produced: a row per photo, scored as its
+    best face, with every ranked face of it and its box.  A face whose photo
+    cannot be named is a row of its own.  The grouping is built once per token
+    and windowed after, so a photo whose faces straddle a window edge is still
+    one row.  Votes are read at request time and stay on the faces.
+
+    Every face is in exactly one row, so the ranking's counts (``total`` /
+    ``above_threshold`` on the sort response) are counts of faces;
+    ``face_total`` here is the same number, and ``total`` counts rows.
+    """
+    from vtscore.datasets.source_groups import SourceNotLoadedError, group_by_source  # noqa: PLC0415
+    from vtscore.state.core import get_active_context, get_context  # noqa: PLC0415
+    from vtscore.state.sort_results_cache import sort_results_cache  # noqa: PLC0415
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtsearch.routes._source import abort_source_not_loaded, source_locator  # noqa: PLC0415
+
+    dataset_id = getattr(get_active_context(), "dataset_id", "") or None
+    token = query["token"]
+    # Keyed by user: the locator only resolves into siblings this user may read.
+    key = ("collapsed", get_current_user())
+
+    def _group(results: list[dict]):
+        groups = group_by_source(results, snapshot_medias(), source_locator().locate)
+        return groups, len(results)
+
+    try:
+        found, view = sort_results_cache.derived(token, key, _group, dataset_id=dataset_id)
+    except SourceNotLoadedError as exc:
+        abort_source_not_loaded(exc.dataset_id)
+    if not found:
+        abort(404, message="Unknown or expired sort token; re-run the sort.")
+    groups, face_total = view
+
+    total = len(groups)
+    start = query["offset"]
+    end = min(total, start + query["limit"])
+    window = groups[start:end]
+    # A photo dataset unloaded since the grouping was built: its ids name
+    # nothing now, so ask for it again rather than serve dead thumbnails.
+    for sibling_id in dict.fromkeys(g.source_dataset_id for g in window if g.source_dataset_id):
+        if get_context(sibling_id) is None:
+            sort_results_cache.forget_derived(token, key)
+            abort_source_not_loaded(sibling_id)
+
+    def _vote(media_id: int) -> str | None:
+        if media_id in good_votes:
+            return "good"
+        if media_id in bad_votes:
+            return "bad"
+        return None
+
+    return {
+        "results": [
+            {
+                "source_dataset_id": g.source_dataset_id,
+                "source_media_id": g.source_media_id,
+                "score": g.score,
+                "faces": [
+                    {"media_id": m.media_id, "score": m.score, "box": m.box, "vote": _vote(m.media_id)}
+                    for m in g.members
+                ],
+            }
+            for g in window
+        ],
+        "offset": start,
+        "limit": query["limit"],
+        "total": total,
+        "face_total": face_total,
+        "has_more": end < total,
+    }
 
 
 @sorting_bp.route("/api/sort/line", methods=["GET"])

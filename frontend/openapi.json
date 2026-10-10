@@ -1425,6 +1425,77 @@
         ],
         "type": "object"
       },
+      "CollapsedFace": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the face sits in its photo, normalised ``[x0, y0, x1, y1]`` (its ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "media_id": {
+            "description": "The face's media id in the ranked dataset.",
+            "type": "integer"
+          },
+          "score": {
+            "description": "The face's score in the ranking.",
+            "type": "number"
+          },
+          "vote": {
+            "description": "The face's vote under the active detector now, or null.",
+            "enum": [
+              "good",
+              "bad",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "box",
+          "media_id",
+          "score",
+          "vote"
+        ],
+        "type": "object"
+      },
+      "CollapsedPhoto": {
+        "additionalProperties": false,
+        "properties": {
+          "faces": {
+            "description": "The row's faces in ranking order, best first.",
+            "items": {
+              "$ref": "#/components/schemas/CollapsedFace"
+            },
+            "type": "array"
+          },
+          "score": {
+            "description": "The best score among the row's faces.",
+            "type": "number"
+          },
+          "source_dataset_id": {
+            "description": "The photo's dataset (the Image sibling of the same import), or null for a face whose photo cannot be named, which is then the row's only face.",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_media_id": {
+            "description": "The photo's media id in that dataset, or null as above.",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "faces",
+          "score",
+          "source_dataset_id",
+          "source_media_id"
+        ],
+        "type": "object"
+      },
       "ConverterInfo": {
         "additionalProperties": false,
         "properties": {
@@ -4096,6 +4167,9 @@
             },
             "type": "array"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
           }
@@ -4108,6 +4182,7 @@
           "label_quota",
           "ok",
           "results",
+          "sort_token",
           "threshold"
         ],
         "type": "object"
@@ -7141,6 +7216,43 @@
             "type": "number"
           }
         },
+        "type": "object"
+      },
+      "SortCollapsedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "face_total": {
+            "description": "Faces in the ranking: every one is in exactly one row.",
+            "type": "integer"
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/CollapsedPhoto"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Rows (photos) in the grouped ranking.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "face_total",
+          "has_more",
+          "limit",
+          "offset",
+          "results",
+          "total"
+        ],
         "type": "object"
       },
       "SortLineResponse": {
@@ -16116,6 +16228,71 @@
           }
         },
         "summary": "Return medias sorted by cosine similarity to a text query.",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
+    "/api/sort/collapsed": {
+      "get": {
+        "description": "Takes the ``sort_token`` of any sort (``/api/sort``, the example sorts,\n``/api/label-file-sort``, ``/api/learned-sort``, ``/api/find-label``) and\ngroups the whole stored ranking by the photo each face was cut from, in\nthe Image dataset the same import produced: a row per photo, scored as its\nbest face, with every ranked face of it and its box.  A face whose photo\ncannot be named is a row of its own.  The grouping is built once per token\nand windowed after, so a photo whose faces straddle a window edge is still\none row.  Votes are read at request time and stay on the faces.\n\nEvery face is in exactly one row, so the ranking's counts (``total`` /\n``above_threshold`` on the sort response) are counts of faces;\n``face_total`` here is the same number, and ``total`` counts rows.",
+        "operationId": "sort_collapsed",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortCollapsedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown or expired sort token; re-run the sort."
+          },
+          "409": {
+            "description": "A ranked face's photo dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return one window of a ranking grouped by source photo: Collapse to photos (#4751).",
         "tags": [
           "sorting"
         ]
