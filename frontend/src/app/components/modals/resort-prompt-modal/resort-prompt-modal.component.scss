@@ -1,7 +1,17 @@
-// The prompt is a full sentence plus two side-by-side answers; left to size
-// to its content, the sentence alone stretches the dialog to 90vw.
+// Status line and two side-by-side answers; left to size to its content, the
+// sort's name alone could stretch the dialog to 90vw.
 :host ::ng-deep .modal-content {
   width: var(--modal-w-md);
+}
+
+// Room for the keyboard focus ring: the Keep button and the right-hand
+// buttons sit flush with the body's edges, and the body scrolls, so it clips
+// whatever crosses them. A negative margin takes the inset back, so the
+// content stays level with the title.
+:host ::ng-deep .modal-body {
+  padding: var(--space-xs);
+  margin: calc(-1 * var(--space-xs));
+  margin-bottom: calc(var(--space-xl) - var(--space-xs));
 }
 
 .resort-prompt {
@@ -10,19 +20,58 @@
   gap: var(--space-lg);
 }
 
-.prompt-text {
+// How the current sort has gone, as read-only fields on one line (#4721): the
+// explaining is Toasty's job, below the dialog.
+.sort-status {
+  display: flex;
+  gap: var(--space-xl);
   margin: 0;
-  font-size: var(--font-lg);
+  font-size: var(--font-md);
   color: var(--text-primary);
 }
 
-// Two answers to the prompt, side by side: keep the current sort (left) or
-// supply a different one (right), divided by a rule.
+.sort-status__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+
+  dt {
+    font-weight: var(--weight-medium);
+  }
+
+  dd {
+    margin: 0;
+  }
+}
+
+// The sort's name takes what room is left and ends in an ellipsis past it;
+// its `title` has the whole of it.
+.sort-status__field--sort {
+  flex: 1;
+  min-width: 0;
+
+  .sort-status__value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// A read-only well: the input well's frame without the input.
+.sort-status__value {
+  padding: var(--space-2xs) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+// Two answers, side by side: keep the current sort (left) or supply a
+// different one (right), divided by a rule. Each opens on a heading.
 .choice-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-xl);
-  margin-top: var(--space-xs);
 }
 
 .choice-col {
@@ -36,17 +85,11 @@
   border-left: 1px solid var(--border);
 }
 
-// The keep option is the whole left-hand answer, so it fills its column and
-// takes the right-hand heading's size to stand level with it. Its label is a
-// sentence naming the sort, so it wraps, and it sits in one `<span>`: `.btn`
-// is a gapped flex row, which would otherwise pull the `<strong>` out as its
-// own item.
+// The keep option is the whole left-hand answer, so it fills its column
+// beside the right-hand one's fields.
 .keep-btn {
   flex: 1;
   width: 100%;
-  font-size: var(--font-lg);
-  white-space: normal;
-  word-break: break-word;
 }
 
 .example-group {
@@ -66,9 +109,11 @@
   }
 }
 
-.media-btn {
-  width: 100%;
-  text-align: center;
+// Browse and Upload share a line, halves of it.
+.media-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
 }
 
 .hidden-file-input {

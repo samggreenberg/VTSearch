@@ -1,27 +1,42 @@
-<vt-modal [open]="true" [title]="view === 'prompt' ? 'Update Sort Example?' : 'Select Media Example'" [showCloseButton]="false" (closed)="closed.emit()">
+<vt-modal
+  #modal
+  [open]="true"
+  [title]="view === 'prompt' ? 'Update Sort Example?' : 'Select Media Example'"
+  [showCloseButton]="false"
+  initialFocus="dialog"
+  (closed)="closed.emit()"
+>
   @if (view === 'prompt') {
     <div class="resort-prompt">
-      <p class="prompt-text">
-        You've clicked {{ clicksPhrase() }} and only found {{ positivesPhrase() }}
-        while sorting based on <strong>{{ currentSortLabel() }}</strong>.
-        You could keep clicking, or supply a different sort. Which would you like to do?
-      </p>
+      <dl class="sort-status">
+        <div class="sort-status__field">
+          <dt>Clicked:</dt>
+          <dd class="sort-status__value">{{ clicksSoFar() }}</dd>
+        </div>
+        <div class="sort-status__field">
+          <dt>Positives:</dt>
+          <dd class="sort-status__value">{{ positivesSoFar() }}</dd>
+        </div>
+        <div class="sort-status__field sort-status__field--sort">
+          <dt>Sort:</dt>
+          <dd class="sort-status__value" [title]="currentSortLabel()">{{ currentSortLabel() }}</dd>
+        </div>
+      </dl>
 
       <div class="choice-columns">
         <div class="choice-col">
-          <button type="button" class="btn btn--secondary keep-btn" (click)="onKeep()" title="Continue sorting with the current example">
-            <span>Keep clicking <strong>{{ currentSortLabel() }}</strong>@if (keepLabelsCount()) { for {{ keepLabelsCount() }} more labels}.</span>
-          </button>
+          <h4 class="choice-heading">Keep clicking:</h4>
+          <button type="button" class="btn btn--secondary keep-btn" (click)="onKeep()" title="Keep sorting by the current example">Continue</button>
         </div>
         <div class="choice-col choice-col--alt">
-          <h4 class="choice-heading">Supply a different sort</h4>
+          <h4 class="choice-heading">Supply a different sort:</h4>
           <div class="example-group">
-            <label class="form-label">Text example</label>
+            <label class="form-label">Text example:</label>
             <div class="text-input-row">
               <input
                 class="form-input"
                 [(ngModel)]="pendingText"
-                placeholder="e.g. large books"
+                placeholder="Describe what to sort by"
                 title="Enter a text description to sort by"
                 (keydown.enter)="$event.preventDefault(); submitText()"
               />
@@ -29,21 +44,32 @@
             </div>
           </div>
           <div class="example-group">
-            <label class="form-label">Media example</label>
-            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media…</button>
-            <input
-              #fileInput
-              type="file"
-              class="hidden-file-input"
-              (change)="onLocalFileSelected($event)"
-            />
-            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" title="Upload a media file from your computer">Upload File…</button>
+            <label class="form-label">Media example:</label>
+            <div class="media-btn-row">
+              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media…</button>
+              <input
+                #fileInput
+                type="file"
+                class="hidden-file-input"
+                (change)="onLocalFileSelected($event)"
+              />
+              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" title="Upload a media file from your computer">Upload File…</button>
+            </div>
           </div>
         </div>
       </div>
 
       @if (error()) {
         <p class="error-text">{{ error() }}</p>
+      }
+
+      <!-- Toasty stands below the dialog box, on the backdrop: the box clips
+           its overflow, but the hint's containing block is the backdrop. -->
+      @if (modal.box(); as box) {
+        <vt-toasty-hint hintId="resort-prompt" [anchor]="box.nativeElement" reach="right">
+          We need {{ positivesNeededPhrase() }} before Autopilot can move on. This is an opportunity to try a
+          different example sort, or just keep clicking with the original sort.
+        </vt-toasty-hint>
       }
     </div>
   }

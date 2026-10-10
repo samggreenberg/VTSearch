@@ -37,6 +37,8 @@ from vtscore.concurrency.stalls import (
     gc_warn_threshold_ms,
     install_gc_pause_logging,
     slow_phase_threshold_ms,
+    startup_grace,
+    startup_threshold_ms,
     timed_lock,
     uninstall_gc_pause_logging,
 )
@@ -73,6 +75,12 @@ class TestThresholds:
         """Bad configuration must not fault the vote path."""
         monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "soon")
         assert slow_phase_threshold_ms() == stalls._DEFAULT_SLOW_PHASE_MS
+
+    def test_startup_bar_default_and_env(self, monkeypatch):
+        monkeypatch.delenv(stalls.STARTUP_MS_ENV, raising=False)
+        assert startup_threshold_ms() == stalls._DEFAULT_STARTUP_MS
+        monkeypatch.setenv(stalls.STARTUP_MS_ENV, "2500")
+        assert startup_threshold_ms() == 2500.0
 
 
 class TestGcThresholdTracksPhaseThreshold:
@@ -528,6 +536,48 @@ class TestStallWatchdog:
         assert wd.stalls == 0
         assert not _messages(caplog, "stall:")
 
+    def test_relaxed_bar_hides_what_it_covers_then_restores(self, caplog):
+        """A cold-cache import holds the GIL for a second and has exactly a
+        stall's signature; under the startup bar it is not one, and what still
+        is gets reported with the bar it was measured against."""
+        samples = iter([_sample({1: 1.0}, 1.0) for _ in range(5)])
+        wd = StallWatchdog(1000, sampler=lambda: next(samples), logger=logging.getLogger(LOGGER))
+        wd._prime()
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            with wd.relaxed(5000) as bar:
+                assert bar == 5000.0 and wd.threshold_s == 5.0
+                assert wd.beat(now=_beat_base(wd) + wd.interval_s + 2.0) is None
+                assert wd.beat(now=_beat_base(wd) + wd.interval_s + 6.0) is not None
+            assert wd.threshold_s == 1.0
+            assert wd.beat(now=_beat_base(wd) + wd.interval_s + 2.0) is not None
+        msgs = [r.getMessage() for r in _messages(caplog, "stall: heartbeat late by")]
+        assert len(msgs) == 2 and wd.stalls == 2
+        assert msgs[0].startswith("stall: heartbeat late by 6000ms; bar 5000ms;")
+        assert "bar " not in msgs[1]
+
+    def test_relaxed_never_lowers_the_bar_and_rearms_the_live_dump(self):
+        armed: list[float] = []
+        wd = StallWatchdog(1000, arm=armed.append, sampler=lambda: _sample({1: 1.0}, 1.0))
+        wd._prime()
+        with wd.relaxed(100) as bar:
+            assert bar == 1000.0 and wd.threshold_s == 1.0
+            with wd.relaxed(3000):
+                assert wd.threshold_s == 3.0
+            assert wd.threshold_s == 1.0
+        assert wd.threshold_s == wd.base_threshold_s == 1.0
+        assert armed == [1.0, 1.0, 3.0, 1.0, 1.0]
+
+    def test_relaxed_leaves_a_stopped_watchdog_unarmed(self):
+        """stop() cancels the live dump; a block that outlives the watchdog
+        must not arm it again."""
+        armed: list[float] = []
+        wd = StallWatchdog(1000, arm=armed.append, sampler=lambda: _sample({1: 1.0}, 1.0))
+        wd._prime()
+        wd.stop()
+        with wd.relaxed(3000):
+            pass
+        assert armed == [1.0]
+
     def test_thread_lifecycle_and_real_sampler(self):
         """The thread starts, beats with the real /proc sampler, and stops."""
         beats: list[float] = []
@@ -699,6 +749,33 @@ class TestWiring:
         assert stalls.start_stall_diagnostics_from_env() is wd
         stalls.stop_stall_diagnostics()
         assert not wd.running
+
+    def test_startup_grace_raises_the_running_watchdogs_bar(self, monkeypatch):
+        monkeypatch.setenv(stalls.WATCHDOG_MS_ENV, "1000")
+        monkeypatch.setenv(stalls.STARTUP_MS_ENV, "4000")
+        wd = stalls.start_stall_diagnostics_from_env()
+        assert wd is not None
+        with startup_grace() as bar:
+            assert bar == 4000.0 and wd.threshold_s == 4.0
+        assert wd.threshold_s == 1.0
+
+    def test_startup_grace_never_lowers_a_diagnostic_sessions_bar(self, monkeypatch):
+        monkeypatch.setenv(stalls.WATCHDOG_MS_ENV, "8000")
+        monkeypatch.setenv(stalls.STARTUP_MS_ENV, "4000")
+        wd = stalls.start_stall_diagnostics_from_env()
+        assert wd is not None
+        with startup_grace() as bar:
+            assert bar == 8000.0 and wd.threshold_s == 8.0
+
+    @pytest.mark.parametrize("watchdog_ms, startup_ms", [("0", "4000"), ("1000", "0")])
+    def test_startup_grace_noop_without_watchdog_or_startup_bar(self, monkeypatch, watchdog_ms, startup_ms):
+        monkeypatch.setenv(stalls.WATCHDOG_MS_ENV, watchdog_ms)
+        monkeypatch.setenv(stalls.STARTUP_MS_ENV, startup_ms)
+        wd = stalls.start_stall_diagnostics_from_env()
+        with startup_grace() as bar:
+            assert bar is None
+            if wd is not None:
+                assert wd.threshold_s == 1.0
 
     def test_dump_file_env_wins(self, monkeypatch, tmp_path):
         monkeypatch.setenv("VTSEARCH_LOG_FILE", str(tmp_path / "app.log"))

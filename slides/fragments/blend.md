@@ -27,9 +27,9 @@
      θ_X* — reads nothing but labels, and so starves early. -->
 
 <!-- **d** — The move, which is embarrassingly simple. Do not choose. Average
-     them. That shipped as "safe thresholds". Scored in F-beta it beat the
-     midpoint alone, by 0.016, 0.021 and 0.044 at β ¼, 1 and 4, and
-     stayed 0.28 to 0.38 under cross-calibration alone (#4582): an average
+     them. That shipped as "safe thresholds". Scored in F-beta over the
+     session it beat the midpoint alone, by 0.010, 0.014 and 0.036 at β ¼, 1
+     and 4, and stayed 0.25 to 0.35 under cross-calibration alone (#4582): an average
      with a cut that keeps far too much still keeps too much. -->
 
 <!-- Say what the figure does not: the average is **weighted**. How the

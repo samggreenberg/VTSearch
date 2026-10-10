@@ -90,19 +90,19 @@ from dataclasses import dataclass, replace
 from typing import Literal, Optional, Sequence
 
 #: Today's opening, in the grammar above: the top of the seed sort until three
-#: positives, then that sort's midpoint cut until four negatives, then the top of
-#: the sort again until twenty positives or sixteen picks in a row without one
-#: (the ``more`` walk, #4282; measured by #4222's dry-stop study).  Equal by
-#: construction to ``GOOD_TARGET`` / ``BAD_TARGET`` / ``MORE_TARGET`` /
-#: ``MORE_DRY_RUN`` and the Sort+Select pairing in
+#: positives, then that sort's midpoint cut until four negatives, then Hard.
+#: Equal by construction to ``GOOD_TARGET`` / ``BAD_TARGET`` / ``MORE_TARGET``
+#: and the Sort+Select pairing in
 #: :func:`vtscore.eval.al_strategies._select_phase_faithful`; pinned against all
 #: of them by ``tests_lib/detectors/test_startup_schedule.py`` and by
 #: ``scripts/check-eval-app-sync.py``'s ``autopilot.startup_default`` mirror.
-#: Until #4282 it was ``g3@top,b4@mid``.  It does not spell the Good walk's dry
-#: run (#4731), which the grammar cannot: a session whose Good walk runs 16 picks
-#: dry with a Good in hand leaves it in the app and on the default arm, but not
-#: under this schedule (``autopilot.startup_default``'s declared divergence).
-PRODUCTION_STARTUP = "g3@top,b4@mid,g20+dry1/16@top"
+#: From #4282 to #4740 it was ``g3@top,b4@mid,g20+dry1/16@top``, the ``more``
+#: walk; #4671 found it lost after vote 23 on the objective.  It does not spell
+#: the Good walk's dry run (#4731), which the grammar cannot: a session whose
+#: Good walk runs 16 picks dry with a Good in hand leaves it in the app and on
+#: the default arm, but not under this schedule (``autopilot.startup_default``'s
+#: declared divergence).
+PRODUCTION_STARTUP = "g3@top,b4@mid"
 
 StopKind = Literal["good", "bad", "clicks"]
 CutKind = Literal["top", "mid", "rate", "quantile"]

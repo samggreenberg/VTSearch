@@ -34,6 +34,8 @@ from flask_smorest import Blueprint, abort
 import vtscore.security.path_validation as _paths
 from vtscore.config import DATA_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
+from vtscore.datasets.importers.base import OutputSpec, parse_output_specs
+from vtscore.datasets.load_multi import _run_multi_output_load_in_background
 from vtscore.datasets.load_pipeline import (
     _parse_embedder_list,
     _run_importer_in_background,
@@ -150,6 +152,65 @@ def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[
     return clipper_name, clipper_params, chain_steps
 
 
+def _parse_form_outputs(form) -> list[OutputSpec]:
+    """Parse the multipart ``outputs`` field (a JSON array string) of a multi-dataset upload.
+
+    Absent or empty means a single-dataset upload, the pre-#4703 shape.  A
+    malformed list aborts 400 with the validator's message.
+    """
+    try:
+        return parse_output_specs(form.get("outputs"))
+    except ValueError as exc:
+        abort(400, message=f"Invalid outputs: {exc}")
+
+
+def _start_local_multi_import(
+    importer,
+    field_values: dict,
+    outputs: list[OutputSpec],
+    *,
+    upload_dir: Path,
+    form,
+    origin_importer: str,
+    origin_key: str,
+    default_name: str,
+) -> list[str]:
+    """Run a browser upload as a multi-dataset import; return its task ids.
+
+    The upload has already been staged into *upload_dir*; the shared importer
+    walks it once and every output becomes its own dataset.  The origins are
+    the same synthetic ``<browser_upload>`` the single-dataset path records
+    (the staged files are deleted as soon as the importer is done, so a real
+    path would be misleading), one per output with that output's media type.
+    """
+    for output in outputs:
+        abort_if_semantic_only_embedders([output.embedder, *(output.embedders or [])])
+    field_values["dataset_name"] = (form.get("dataset_name") or "").strip() or default_name
+    field_values["build_projection"] = form.get("build_projection") or ""
+    field_values["merge_near_duplicates"] = form.get("merge_near_duplicates") or ""
+
+    def _origin(_output: OutputSpec, narrowed: dict) -> dict:
+        return {
+            "importer": origin_importer,
+            "params": {origin_key: "<browser_upload>", "media_type": narrowed.get("media_type", "")},
+        }
+
+    return _run_multi_output_load_in_background(
+        importer,
+        field_values,
+        outputs,
+        post_load=import_post_load(form.get("autofind")),
+        on_finished=fire_dataset_imported,
+        origin_for=_origin,
+        cleanup=lambda: shutil.rmtree(upload_dir, ignore_errors=True),
+    )
+
+
+def _started(task_ids: list[str]) -> dict:
+    """The ``DatasetLoadStartedResponseSchema`` body for *task_ids* (first one as ``task_id``)."""
+    return {"ok": True, "message": "Loading started", "task_id": task_ids[0] if task_ids else "", "task_ids": task_ids}
+
+
 def _make_local_folder_loader(importer, field_values: dict, upload_dir: Path, media_type: str):
     """Build the ``target_medias -> None`` task that the importer will run."""
     from vtscore.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
@@ -190,6 +251,11 @@ def import_local_folder():
     delegate to the regular folder importer to do the actual scanning,
     embedding, and dataset registration.  The temp directory is removed
     once the importer finishes (success or failure).
+
+    An ``outputs`` form field (a JSON array, one object per dataset) makes
+    this a multi-dataset import (#4703): the upload is walked once and every
+    output lands as its own dataset; ``task_ids`` then lists one task per
+    dataset and ``media_type`` is optional.
     """
     files = request.files.getlist("files")
     if not files:
@@ -199,8 +265,9 @@ def import_local_folder():
     if importer is None:
         abort(500, message="server_folder importer not available")
 
+    outputs = _parse_form_outputs(request.form)
     media_type = (request.form.get("media_type") or "").strip()
-    if not media_type:
+    if not media_type and not outputs:
         abort(400, message="Missing required field: 'media_type'")
 
     clipper_params = _parse_clipper_params(request.form.get("clipper_params") or "")
@@ -218,6 +285,19 @@ def import_local_folder():
         abort(400, message="No valid files in upload")
 
     field_values = _build_local_folder_field_values(request.form, upload_dir, clipper_params)
+
+    if outputs:
+        task_ids = _start_local_multi_import(
+            importer,
+            field_values,
+            outputs,
+            upload_dir=upload_dir,
+            form=request.form,
+            origin_importer="server_folder",
+            origin_key="path",
+            default_name="Local folder upload",
+        )
+        return _started(task_ids)
 
     # Origin is intentionally synthetic; the on-disk path is a temp dir we
     # are about to delete, so storing it on each media would be misleading
@@ -250,7 +330,7 @@ def import_local_folder():
         post_load=import_post_load(request.form.get("autofind")),
         on_finished=fire_dataset_imported,
     )
-    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
+    return _started([str(task_id)] if task_id else [])
 
 
 @datasets_load_bp.route("/api/dataset/import-local-files", methods=["POST"])
@@ -274,6 +354,9 @@ def import_local_files():
     :mod:`server_files` importer for resolution and embedding.  The
     temp directory is removed once the importer finishes (success or
     failure).
+
+    Accepts the same ``outputs`` form field as ``import-local-folder`` for a
+    multi-dataset import (#4703).
     """
     storage = request.files.get("paths_file")
     if not storage or not storage.filename:
@@ -283,8 +366,9 @@ def import_local_files():
     if importer is None:
         abort(500, message="server_files importer not available")
 
+    outputs = _parse_form_outputs(request.form)
     media_type = (request.form.get("media_type") or "").strip()
-    if not media_type:
+    if not media_type and not outputs:
         abort(400, message="Missing required field: 'media_type'")
 
     clipper_params = _parse_clipper_params(request.form.get("clipper_params") or "")
@@ -313,6 +397,19 @@ def import_local_files():
         field_values["clipper"] = clipper
         if clipper_params is not None:
             field_values["clipper_params"] = clipper_params
+
+    if outputs:
+        task_ids = _start_local_multi_import(
+            importer,
+            field_values,
+            outputs,
+            upload_dir=upload_dir,
+            form=request.form,
+            origin_importer="server_files",
+            origin_key="paths_file",
+            default_name="Local files upload",
+        )
+        return _started(task_ids)
 
     # Origin is intentionally synthetic; the on-disk paths file is in a temp
     # dir we are about to delete, so storing it on each media would be
@@ -346,7 +443,7 @@ def import_local_files():
         post_load=import_post_load(request.form.get("autofind")),
         on_finished=fire_dataset_imported,
     )
-    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
+    return _started([str(task_id)] if task_id else [])
 
 
 def _apply_demo_clip_fields(

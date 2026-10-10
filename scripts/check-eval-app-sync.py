@@ -174,7 +174,8 @@ MIRRORS: list[Mirror] = [
             "simulated by scripts/experiments/fullmarks/sota_documents.py, which clicks the top of "
             "the retrained structural ranking at every step. The harness's more_walk='detector' (#4637) "
             "is an experiment arm that walks a photo dataset's 'more' on the detector's top; the "
-            "default, 'seed', is the app's row."
+            "default, 'seed', is the app's row. Likewise new_walk='hard' (#4671) is an arm that takes "
+            "the Hard pick in 'new' instead of the atlas's; the default, 'atlas', is the app's row."
         ),
     ),
     Mirror(
@@ -341,8 +342,8 @@ MIRRORS: list[Mirror] = [
         kind="default",
         note=(
             "issue #3267 made the Autopilot opening a parameter, so the harness now has a "
-            "spelling of the app's own opening - 'g3@top,b4@mid,g20+dry1/16@top' since #4282 "
-            "(it was 'g3@top,b4@mid') - that a study's control arm "
+            "spelling of the app's own opening - 'g3@top,b4@mid' again since #4740 (from #4282 "
+            "to #4740 it was 'g3@top,b4@mid,g20+dry1/16@top', the More walk) - that a study's control arm "
             "runs. If goodToStart/badToStart move, or the opening stops being 'top of the "
             "seed sort then its cutoff', this constant has to move with them or every #3267 "
             "study measures its deviations from an opening nobody ships. "

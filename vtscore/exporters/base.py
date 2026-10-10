@@ -595,7 +595,11 @@ class ResultsExporter(PluginBase):
                 ``{"detector_name": str, "threshold": float, "balance": dict}``
                 dicts; ``balance`` as in :meth:`export_find_results`), and
                 ``"keep_negatives"`` (bool — whether below-threshold hits are
-                included in *records*).
+                included in *records*).  A run that makes several datasets
+                from one import (#4707) calls this once per dataset and adds
+                ``"dataset"`` (``{"name", "media_type", "category", "id"}``)
+                naming the one these records belong to; exporters that write
+                a metadata header should carry it.
             records: Yields ``(detector_name, hit)`` tuples in chunk order
                 (NOT globally sorted by score).  Each *hit* is the dict from
                 :func:`vtscore.utils.hits.build_media_hit` plus a ``"label"``

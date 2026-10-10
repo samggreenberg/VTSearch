@@ -5,7 +5,7 @@ Run from the repo root:
 
     python slides/figs/src/make-autopilot-figs.py
 
-Autopilot picks every item a user is shown in the Train window, in six steps,
+Autopilot picks every item a user is shown in the Train window, in five steps,
 and it tells them when they can stop. The steps are
 `AutopilotStateService.checkPhaseTransition`; the stop is three lights the
 labeling status computes, Smart (`vtscore/detectors/cost_trend.py`), Stable
@@ -15,7 +15,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 * `autopilot-steps` walks the harness's port of the phase machine
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
-  `scripts/check-eval-app-sync.py`) through the six steps, and every target it
+  `scripts/check-eval-app-sync.py`) through the five steps, and every target it
   prints is that module's constant.
 * `autopilot-smart` runs the shipped `smart_status_from_costs` on a planted
   session's error costs, and asserts the lights the slide draws.
@@ -81,7 +81,6 @@ from vtscore.eval.autopilot_flow import (  # noqa: E402
     BAD_TARGET,
     GOOD_TARGET,
     MORE_DRY_RUN,
-    MORE_TARGET,
     SPAN_GREEN_DEFAULT,
     SPAN_YELLOW,
     next_phase,
@@ -201,7 +200,7 @@ def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
     ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
 
 
-# ── Flight Plan: the six steps ───────────────────────────────────────────────
+# ── Flight Plan: the five steps ──────────────────────────────────────────────
 
 STEPS_STAGES = 4
 
@@ -209,7 +208,7 @@ STEPS_STAGES = 4
 #: it, what it asks about, the drawing in the middle column, and what ends it.
 #: The targets are the harness's constants, which mirror the app's.
 STEPS = (
-    # The Good walk can also run dry once a Good is in (#4731), as the More walk does.
+    # The Good walk can also run dry once a Good is in (#4731).
     (
         "good",
         "Good",
@@ -218,15 +217,16 @@ STEPS = (
         f"{GOOD_TARGET} Goods, or {MORE_DRY_RUN} in a row without one",
     ),
     ("bad", "Bad", "at your query's line", "query-line", f"{BAD_TARGET} Bads"),
-    ("more", "More", "the top, again", "query-top", f"{MORE_TARGET} Goods, or {MORE_DRY_RUN} in a row without one"),
     ("hard", "Boundary", "at even odds", "detector-odds", "Smart and Stable both green"),
     ("new", "Diversity", "a cell nobody voted in", "atlas", "Span green as well"),
     ("done", "Done", "every light green", "lights", "you say: keep going, or leave"),
 )
-STEP_ROWS_Y = (4.95, 4.1, 3.25, 2.4, 1.55, 0.7)
+#: No More walk on photos since #4740 (``MORE_TARGET`` 0): the opening is Good and
+#: Bad on the query, then the detector takes over.
+STEP_ROWS_Y = (4.95, 3.9, 2.85, 1.8, 0.75)
 #: Which row each build stage reveals up to: the opening on the query, then
 #: one step a stage.
-STEP_STAGE_ROWS = {1: 3, 2: 4, 3: 5, 4: 6}
+STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5}
 NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 4.3, 7.6, 7.95
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
@@ -238,7 +238,7 @@ DETECTOR_ODDS = 0.80
 
 
 def _check_step_order() -> None:
-    """The six steps in the order the phase machine takes them, from its own rule.
+    """The five steps in the order the phase machine takes them, from its own rule.
 
     A session walked the way the slide narrates it: the counts reach each
     target in turn, then Smart and Stable go green, then Span.
@@ -248,18 +248,17 @@ def _check_step_order() -> None:
         dict(good_count=0, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=BAD_TARGET, smart="red", stable="red", span="red"),
-        dict(good_count=MORE_TARGET, bad_count=9, smart="yellow", stable="red", span="red", more_done=True),
-        dict(good_count=24, bad_count=30, smart="green", stable="green", span="yellow", more_done=True),
-        dict(good_count=30, bad_count=50, smart="green", stable="green", span="green", more_done=True),
+        dict(good_count=24, bad_count=30, smart="green", stable="green", span="yellow"),
+        dict(good_count=30, bad_count=50, smart="green", stable="green", span="green"),
     )
     phases = tuple(next_phase(remaining_unlabeled=many, **state) for state in walk)
     assert phases == tuple(step[0] for step in STEPS), phases
 
 
 def steps_fig() -> None:
-    """The six steps: what each asks about, and what ends it.
+    """The five steps: what each asks about, and what ends it.
 
-    Four stages: the opening three steps, all on the query's own ranking, with
+    Four stages: the opening's two steps, both on the query's own ranking, with
     no detector shown yet; then Boundary, the first step on the detector's
     ranking; then Diversity, off the atlas; then Done.
     """
@@ -335,7 +334,15 @@ def _steps_stage(stage: int) -> Figure:
                 x = PICTURE_X0 + 0.2 + k * 1.13
                 _light(ax, x, y, "green")
                 ax.text(x + 0.2, y, word, ha="left", va="center", fontsize=16)
-        ax.text(ENDS_X, y, ends, ha="left", va="center", fontsize=16, fontweight="bold" if row == 5 else "normal")
+        ax.text(
+            ENDS_X,
+            y,
+            ends,
+            ha="left",
+            va="center",
+            fontsize=16,
+            fontweight="bold" if row == len(STEPS) - 1 else "normal",
+        )
     return fig
 
 

@@ -83,6 +83,16 @@ class TestSpec:
 
 
 class TestInTheHarness:
+    @pytest.fixture
+    def walk(self, monkeypatch):
+        """#4282's More walk (20 Goods), which the diversity pass acts on: off on photos since #4740."""
+        from functools import partial
+
+        from vtscore.eval import voting_iterations as VI
+        from vtscore.eval.autopilot_flow import AutopilotFlow
+
+        monkeypatch.setattr(VI, "AutopilotFlow", partial(AutopilotFlow, more_target=20))
+
     def _run(self, spec):
         from tests_lib.detectors.test_startup_schedule import _seeded_dataset
         from vtscore.eval.voting_iterations import simulate_voting_iterations
@@ -102,8 +112,13 @@ class TestInTheHarness:
         )
         return picks
 
-    def test_the_knob_reaches_the_opening_walk(self):
-        """A loose tau on the synthetic pool moves a pick inside the opening."""
+    def test_the_knob_is_inert_without_a_walk(self):
+        """Today's opening takes its Goods before any Bad, so there is no Bad for the pass to steer by (#4740)."""
+        plain, diverse = self._run(None), self._run("0.3/1")
+        assert [p["picked_id"] for p in plain] == [p["picked_id"] for p in diverse]
+
+    def test_the_knob_reaches_the_opening_walk(self, walk):
+        """A loose tau on the synthetic pool moves a pick inside the opening's walk."""
         plain, diverse = self._run(None), self._run("0.3/1")
         diffs = [(a["phase"], a["picked_id"], b["picked_id"]) for a, b in zip(plain, diverse)]
         first = next(d for d in diffs if d[1] != d[2])

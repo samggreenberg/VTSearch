@@ -27,6 +27,8 @@ import {
 } from '../../../../../models/api.models';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { availableConvertersFor, composeEmbedders, mediaTypeLabels, mediaTypeOptionIcons, mediaTypeOptionLabels, toFolderName, toTypeId } from '../shared/media-type.util';
+import { OutputDraft, buildOutputDrafts, convertersByTypeOf, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
+import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { PluginCheckboxComponent } from '../../../../plugin-checkbox/plugin-checkbox.component';
 
 /** How long the form settles before asking the importer to name the dataset.
@@ -48,7 +50,7 @@ const SUGGESTED_NAME_DEBOUNCE_MS = 250;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-generic-form-picker',
   standalone: true,
-  imports: [FormsModule, ImportAdvancedComponent, ImportConfigComponent, ClipperChooserComponent, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ImportAdvancedComponent, ImportConfigComponent, MultiOutputConfigComponent, ClipperChooserComponent, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent],
   templateUrl: './generic-form-picker.component.html',
   styleUrl: './generic-form-picker.component.scss',
 })
@@ -61,6 +63,9 @@ export class GenericFormPickerComponent {
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
   readonly importAdvanced = viewChild(ImportAdvancedComponent);
+  /** The Multi-Dataset editor, mounted in place of the Advanced block while
+   *  :prop:`multiDataset` is on (#4703). */
+  readonly multiOutputConfig = viewChild(MultiOutputConfigComponent);
 
   /** Every registered importer (used to resolve the active importer's
    *  ``available_converters_by_media_type`` for the source-specs picker). */
@@ -108,6 +113,14 @@ export class GenericFormPickerComponent {
   readonly selectedStructuralEmbedder = signal('');
 
   sourceSpecs: SourceSpec[] = [];
+
+  /** Multi-Dataset mode (#4703): several datasets from one run of the
+   *  importer, one per ticked category in :prop:`outputDrafts`. */
+  readonly multiDataset = signal(false);
+  readonly outputDrafts = signal<OutputDraft[]>([]);
+  /** The category whose row opened the clipper chooser, or ``null`` when the
+   *  single-dataset Advanced block did. */
+  private clipperChooserCategory: string | null = null;
 
   /** Option lists for the selected importer's ``dynamic_options`` fields.
    *  Auto-selecting an option is a form change like any other, and it is
@@ -200,6 +213,8 @@ export class GenericFormPickerComponent {
     this.selectedImporter.set(importer);
     this.formValues = {};
     this.error.set('');
+    this.multiDataset.set(false);
+    this.outputDrafts.set([]);
     this.selectedClipper.set('');
     this.availableClippers.set([]);
     this.clipperParamValues.set({});
@@ -392,6 +407,36 @@ export class GenericFormPickerComponent {
     return toTypeId(this.mediaTypes(), String(this.formValues['media_type'] || ''));
   }
 
+  /** Whether the Multi-Dataset box is offered for the active importer. */
+  get supportsMultiOutput(): boolean {
+    return isMultiOutputImporter(this.selectedImporter());
+  }
+
+  get convertersByType(): Record<string, ConverterInfo[]> {
+    return convertersByTypeOf(this.selectedImporter());
+  }
+
+  /** Switch between the single-dataset form and the Multi-Dataset editor.
+   *  Entering multi mode seeds one row per category and ticks the type the
+   *  dropdown had picked, so the user starts from the dataset they were
+   *  already about to make. */
+  setMultiDataset(on: boolean): void {
+    this.multiDataset.set(on);
+    if (on && this.outputDrafts().length === 0) {
+      this.outputDrafts.set(tickCategory(buildOutputDrafts(this.mediaTypes(), this.convertersByType), this.outputTypeId));
+    }
+  }
+
+  onOutputDraftsChange(drafts: OutputDraft[]): void {
+    this.outputDrafts.set(drafts);
+  }
+
+  /** Whether the import has something to make: always in single mode, at
+   *  least one ticked category in multi mode. */
+  get hasOutputs(): boolean {
+    return !this.multiDataset() || this.outputDrafts().some((d) => d.checked);
+  }
+
   get availableConverters(): ConverterInfo[] {
     if (!this.selectedImporter()) return [];
     return availableConvertersFor(this.importers(), this.selectedImporter()!.name, this.outputTypeId);
@@ -407,9 +452,11 @@ export class GenericFormPickerComponent {
 
   /** True when every required field on the active importer has a value. */
   get canSubmit(): boolean {
+    if (!this.hasOutputs) return false;
     const fields = this.selectedImporter()?.fields ?? [];
     for (const f of fields) {
       if (!f.required) continue;
+      if (f.key === 'media_type' && this.multiDataset()) continue;
       if (f.field_type === 'file') {
         if (!this.selectedFile) return false;
       } else {
@@ -421,18 +468,36 @@ export class GenericFormPickerComponent {
   }
 
   openClipperChooser(): void {
+    this.clipperChooserCategory = null;
     this.clipperChooserClippers = this.availableClippers();
+    this.clipperChooserOpen = true;
+  }
+
+  /** A Multi-Dataset row asked for the chooser: open it on that row's clippers. */
+  openClipperChooserFor(request: { category: string; clippers: ClipperInfo[] }): void {
+    this.clipperChooserCategory = request.category;
+    this.clipperChooserClippers = request.clippers;
     this.clipperChooserOpen = true;
   }
 
   onClipperChooserSelected(selection: ClipperSelection): void {
     this.clipperChooserOpen = false;
+    if (this.clipperChooserCategory !== null) {
+      this.multiOutputConfig()?.setClipper(this.clipperChooserCategory, selection.name, selection.params);
+      this.clipperChooserCategory = null;
+      return;
+    }
     this.selectedClipper.set(selection.name);
     this.clipperParamValues.set({ ...selection.params });
   }
 
   onClipperChooserCancelled(): void {
     this.clipperChooserOpen = false;
+    if (this.clipperChooserCategory !== null) {
+      // The row keeps the clipper it had.
+      this.clipperChooserCategory = null;
+      return;
+    }
     const clippers = this.clipperChooserClippers;
     const defaultClipper = clippers.find((c) => c.name.endsWith('_default')) || clippers[0];
     this.selectedClipper.set(defaultClipper?.name || '');
@@ -446,24 +511,34 @@ export class GenericFormPickerComponent {
     this.error.set('');
 
     const submitValues = { ...this.formValues };
-    if (this.selectedClipper()) {
-      submitValues['clipper'] = this.selectedClipper();
-      if (this.selectedClipperParams.length > 0 && Object.keys(this.clipperParamValues()).length > 0) {
-        submitValues['clipper_params'] = { ...this.clipperParamValues() };
+    if (this.multiDataset()) {
+      // One dataset per ticked category; each row carries its own embedders,
+      // clipper, cleanup and include rows, so none of the single-dataset
+      // settings ride along.  ``media_type`` still names the first output's
+      // type for importers whose field requires a value.
+      const outputs = outputsFromDrafts(this.outputDrafts());
+      submitValues['outputs'] = outputs;
+      submitValues['media_type'] = toFolderName(this.mediaTypes(), outputs[0]?.media_type || '') || this.formValues['media_type'];
+    } else {
+      if (this.selectedClipper()) {
+        submitValues['clipper'] = this.selectedClipper();
+        if (this.selectedClipperParams.length > 0 && Object.keys(this.clipperParamValues()).length > 0) {
+          submitValues['clipper_params'] = { ...this.clipperParamValues() };
+        }
       }
-    }
-    if (this.selectedEmbedder()) {
-      submitValues['embedder'] = this.selectedEmbedder();
-    }
-    const embedders = composeEmbedders(this.selectedEmbedder(), this.selectedPatchEmbedder(), this.selectedStructuralEmbedder());
-    if (embedders) {
-      submitValues['embedders'] = embedders;
-    }
-    if (this.selectedCleaners().length > 0) {
-      submitValues['cleaners'] = this.selectedCleaners();
-    }
-    if (this.sourceSpecs.length > 0) {
-      submitValues['source_specs'] = this.sourceSpecs;
+      if (this.selectedEmbedder()) {
+        submitValues['embedder'] = this.selectedEmbedder();
+      }
+      const embedders = composeEmbedders(this.selectedEmbedder(), this.selectedPatchEmbedder(), this.selectedStructuralEmbedder());
+      if (embedders) {
+        submitValues['embedders'] = embedders;
+      }
+      if (this.selectedCleaners().length > 0) {
+        submitValues['cleaners'] = this.selectedCleaners();
+      }
+      if (this.sourceSpecs.length > 0) {
+        submitValues['source_specs'] = this.sourceSpecs;
+      }
     }
     submitValues['build_projection'] = this.buildProjection() ? 'true' : 'false';
     submitValues['merge_near_duplicates'] = this.mergeNearDuplicates() ? 'true' : 'false';
@@ -499,6 +574,9 @@ export class GenericFormPickerComponent {
   }
 
   private offerSaveImportDefaults(): void {
+    // A multi-dataset import has no single configuration to offer as the
+    // type's default.
+    if (this.multiDataset()) return;
     const typeId = this.outputTypeId;
     const cfg = this.importDefaults.snapshotImportConfig(
       typeId,

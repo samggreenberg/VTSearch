@@ -15,8 +15,10 @@ what exhaustive annotation means.
 
 Media come from `dataset_samples.py` (Caltech-101, COCO val2017) and
 `fullmarks_media.py` (the FullMarks sources), both of which download into the
-gitignored `data/` and never into the tree. The selections are pinned by id, so
-re-running redraws the same frames.
+gitignored `data/` and never into the tree, and from `fhibe_media.py` (FHIBE),
+which downloads nothing: FHIBE may not be passed on, so that card reads the
+owner's copy on the GRID and is rendered there. The selections are pinned by
+id, so re-running redraws the same frames.
 """
 
 from __future__ import annotations
@@ -1022,6 +1024,154 @@ def frame_fullmarks_zoom() -> Any:
 
 
 # --------------------------------------------------------------------------
+# FHIBE: the face benchmark's source, drawn where it lives
+# --------------------------------------------------------------------------
+
+#: Six one-person photos for the 3x2 grid, by FHIBE `uid`, in `FHIBE_BANDS`
+#: order: the zoom's first, so the picture grows out of its own cell as
+#: `COCO_GRID`'s does. Chosen where FHIBE is — the GRID, see `fhibe_media.py`
+#: — because nothing else can open the release: an unpinned run (empty this
+#: tuple) draws them by `_fhibe_pick`, which is deterministic for a release, and
+#: prints the six uids to paste here. Pinned, later renders redraw the same
+#: card, the way every other card's pinned picks do, and a re-release with one
+#: subject withdrawn is a visible change to this tuple rather than a silent
+#: reshuffle.
+#:
+#: Drawn on the GRID for #4714, with one swap: the draw's sixth photo had the
+#: subject in front of a gate under a legible house number and street name,
+#: which a slide has no reason to carry. Its replacement is the first later draw
+#: from the same Small pool (same seed, a subject with as many photos) whose
+#: frame holds nothing that says where it was taken.
+FHIBE_GRID: tuple[str, ...] = (
+    "3d3e0b3e-a283-427a-a079-d684354ad65a",
+    "6d905b97-f40f-403f-9538-019063eaac11",
+    "dff5ee0e-4dbd-4657-9137-1f5ec58fde0c",
+    "a18eb395-4201-45fb-b39f-905a88790355",
+    "3f6ebf5f-951b-4569-ad47-4e6a09c74e76",
+    "4be5cf9c-d6e3-40a7-ba32-22fdbe946bd3",
+)
+#: The size band of each grid cell under the shipped `BOX_BANDS` rule, so a
+#: Small face is a COCO Better Small: under 1/196 of the frame. Checked against
+#: the release when the frame is drawn, as `COCO_BETTER_GRID`'s bands are.
+FHIBE_BANDS = ("large", "medium", "small", "large", "medium", "small")
+#: How many of the zoom subject's other photos the strip beside it shows.
+FHIBE_STRIP = 4
+#: Sony's terms allow up to twenty of FHIBE's photos in a publication and the
+#: talks about it (Terms of Use 2.1(d), read 2026-10-09). The two frames show
+#: the grid's six and the strip's four, and the zoom is one of the six: ten.
+FHIBE_PHOTO_LIMIT = 20
+FHIBE_URL = "https://fairnessbenchmark.ai.sony"
+#: The draw for an unpinned grid, seeded by the issue that asked for the card.
+FHIBE_SEED = 4713
+
+
+@functools.cache
+def _fhibe() -> Any:
+    import fhibe_media as fm
+
+    pc = _pile_config()
+    return fm.read_release(fm.release_dir(getattr(pc, "FHIBE_ROOT", None), getattr(pc, "FHIBE_RELEASE", None)))
+
+
+@functools.cache
+def _fhibe_pick(release: Any) -> list[Any]:
+    """The grid's photos: `FHIBE_GRID` when pinned, else a deterministic draw, reported for pinning.
+
+    A draw takes one photo per `FHIBE_BANDS` cell from a subject not yet on the
+    grid, and the first — the zoom's — from a subject with enough other
+    one-person photos to fill the strip. Pinned or drawn, every pick is checked
+    against the release: its band, and that no person appears twice.
+    """
+    import random
+
+    photos = {p.uid: p for p in release.photos}
+    if FHIBE_GRID:
+        missing = [uid for uid in FHIBE_GRID if uid not in photos]
+        if missing:
+            raise SystemExit(f"fhibe grid: {missing} are not one-person photos of this release")
+        picks = [photos[uid] for uid in FHIBE_GRID]
+    else:
+        rng = random.Random(FHIBE_SEED)  # noqa: S311 — a reproducible draw, not a secret
+        per_subject = release.by_subject()
+        used: set[str] = set()
+        picks = []
+        for i, band in enumerate(FHIBE_BANDS):
+            pool = [
+                p
+                for p in release.photos
+                if _band(p.fraction) == band
+                and p.subject not in used
+                and (i > 0 or len(per_subject[p.subject]) > FHIBE_STRIP)
+            ]
+            if not pool:
+                raise SystemExit(f"fhibe grid: no {band}-band photo left to draw for cell {i + 1}")
+            pick = rng.choice(pool)
+            used.add(pick.subject)
+            picks.append(pick)
+        print("fhibe grid: unpinned; drew these, in order — pin them as FHIBE_GRID:")
+        for pick in picks:
+            print(f'    "{pick.uid}",')
+    if len({p.subject for p in picks}) != len(picks):
+        raise SystemExit("fhibe grid: two cells show the same person")
+    for pick, band in zip(picks, FHIBE_BANDS, strict=True):
+        if _band(pick.fraction) != band:
+            raise SystemExit(f"fhibe grid: {pick.uid} is a {_band(pick.fraction)}-band face, not {band}")
+    return picks
+
+
+def _fhibe_left(fig: Any, release: Any) -> None:
+    # Counted from the release the card is drawn from, so a re-release moves the
+    # numbers with the pictures. Somebody else's set, so it carries its url.
+    dc.left_column(
+        fig,
+        "FHIBE",
+        [
+            (dc.nice(release.images), "photos, 1–2 people in each"),
+            (dc.nice(len(release.subjects)), "people, consented and paid"),
+            (f"{release.median_photos()}", "photos per person, max 10"),
+        ],
+        FHIBE_URL,
+    )
+
+
+def frame_fhibe_grid() -> Any:
+    import fhibe_media as fm
+
+    release = _fhibe()
+    fig = dc.blank()
+    _fhibe_left(fig, release)
+    tiles = []
+    for photo, band in zip(_fhibe_pick(release), FHIBE_BANDS, strict=True):
+        image, box = fm.face_tile(photo)
+        tiles.append(dc.Tile(image, [box], caption=f"Face@{band.capitalize()}"))
+    dc.grid(fig, tiles, cols=3, rows=2)
+    return fig
+
+
+def frame_fhibe_zoom() -> Any:
+    """The grid's first photo blown up, and the same person's other photos down the side."""
+    import fhibe_media as fm
+
+    release = _fhibe()
+    fig = dc.blank()
+    _fhibe_left(fig, release)
+    zoom = _fhibe_pick(release)[0]
+    # Largest face first, so the column reads as the same person coming closer.
+    others = sorted(release.others(zoom), key=lambda p: -p.fraction)[:FHIBE_STRIP]
+    if not others:
+        raise SystemExit(f"fhibe zoom: {zoom.uid}'s subject has no other one-person photo to show")
+    if len(FHIBE_BANDS) + len(others) > FHIBE_PHOTO_LIMIT:
+        raise SystemExit(f"fhibe: the card would show more than the {FHIBE_PHOTO_LIMIT} photos FHIBE's terms allow")
+    image, box = fm.face_tile(zoom)
+    strip = []
+    for other in others:
+        other_image, other_box = fm.face_tile(other)
+        strip.append(dc.Tile(other_image, [other_box]))
+    dc.zoom_strip(fig, dc.Tile(image, [box]), strip)
+    return fig
+
+
+# --------------------------------------------------------------------------
 
 
 FRAMES = {
@@ -1044,6 +1194,7 @@ FRAMES = {
         ("fullmarks-problems-needle", frame_fullmarks_needle),
     ],
     "fullmarks": [("data-set-fullmarks-grid", frame_fullmarks_grid), ("data-set-fullmarks-zoom", frame_fullmarks_zoom)],
+    "fhibe": [("data-set-fhibe-grid", frame_fhibe_grid), ("data-set-fhibe-zoom", frame_fhibe_zoom)],
     "coco-problems": [
         ("coco-problems-blank", frame_problem_blank),
         ("coco-problems-merge", frame_problem_merge),

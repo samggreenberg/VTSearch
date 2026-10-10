@@ -7,13 +7,22 @@ imported dataset is discarded rather than saved to the dashboard).  This module 
 validates the shape against the active plugin registries, and dispatches
 to the shared ``_run_pipeline`` in :mod:`vtscore.cli`.
 
+An ``importer:`` block may carry an ``outputs:`` list (#4707): one mapping
+per dataset the single importer run should produce, in the shape the web
+API's ``outputs`` entries take.  It is parsed with
+:func:`~vtscore.datasets.importers.base.parse_output_specs` and dispatched
+as the source's ``outputs``.
+
 See ``docs/CLI.md`` for the user-facing schema and examples.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from vtscore.datasets.importers.base import OutputSpec
 
 
 _TOP_LEVEL_KEYS = {
@@ -30,6 +39,22 @@ _TOP_LEVEL_KEYS = {
 }
 
 _IMPORT_LABELS_KEYS = {"detector", "importer", "file", "create", "media_type"}
+
+#: Keys an entry of ``importer.outputs`` may carry: the two the importer reads
+#: (``media_type``, ``source_specs``), the category that names the dataset,
+#: and the per-dataset load options - the same set the web ``outputs`` take.
+_OUTPUT_KEYS = {
+    "media_type",
+    "source_specs",
+    "category",
+    "dataset_name",
+    "embedder",
+    "embedders",
+    "clipper",
+    "clipper_params",
+    "clipper_chain",
+    "cleaners",
+}
 
 
 def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
@@ -69,10 +94,17 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
 
     importer_name: str | None = None
     importer_fields: dict[str, Any] = {}
+    importer_outputs: list[OutputSpec] = []
     if importer is not None:
+        outputs_raw = None
+        if isinstance(importer, dict) and "outputs" in importer:
+            importer = dict(importer)
+            outputs_raw = importer.pop("outputs")
         importer_name, importer_fields = _parse_plugin_section(importer, "importer")
         _validate_importer_name(importer_name)
         _validate_field_keys(importer_name, importer_fields, "importer", _list_importer_field_keys)
+        if outputs_raw is not None:
+            importer_outputs = _parse_importer_outputs(importer_name, importer_fields, outputs_raw)
 
     settings = raw.get("settings")
     if settings is not None and not isinstance(settings, str):
@@ -125,6 +157,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "dataset": dataset,
         "importer": importer_name,
         "importer_fields": importer_fields,
+        "importer_outputs": importer_outputs,
         "settings": settings,
         "detectors": list(detectors) if detectors else None,
         "chunk_size": chunk_size,
@@ -138,7 +171,12 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
 
 
 def _parse_plugin_section(value: Any, section: str) -> tuple[str, dict[str, Any]]:
-    """Parse an ``importer:`` or ``exporter:`` block into ``(name, fields)``."""
+    """Parse an ``importer:`` or ``exporter:`` block into ``(name, fields)``.
+
+    The ``importer:`` block's ``outputs`` key is taken off before this runs
+    (see :func:`_parse_importer_outputs`), so it is named in the error only
+    for the block that accepts it.
+    """
     if not isinstance(value, dict):
         raise ValueError(f"'{section}:' must be a mapping with a 'name:' key.")
     name = value.get("name")
@@ -147,12 +185,61 @@ def _parse_plugin_section(value: Any, section: str) -> tuple[str, dict[str, Any]
 
     unknown = set(value.keys()) - {"name", "fields"}
     if unknown:
-        raise ValueError(f"'{section}' has unknown key(s): {', '.join(sorted(unknown))}. Allowed: name, fields.")
+        allowed = "name, fields, outputs" if section == "importer" else "name, fields"
+        raise ValueError(f"'{section}' has unknown key(s): {', '.join(sorted(unknown))}. Allowed: {allowed}.")
 
     fields = value.get("fields") or {}
     if not isinstance(fields, dict):
         raise ValueError(f"'{section}.fields' must be a mapping of field key → value.")
     return name, dict(fields)
+
+
+def _parse_importer_outputs(importer_name: str, fields: dict[str, Any], raw: Any) -> list[OutputSpec]:
+    """Parse ``importer.outputs`` into the datasets the one importer run should produce.
+
+    A list of mappings, one per dataset, each carrying the keys a web
+    ``outputs`` entry takes (:data:`_OUTPUT_KEYS`); every mapping needs a
+    ``media_type``.  The list and ``importer.fields.media_type`` /
+    ``importer.fields.source_specs`` are mutually exclusive - each output names
+    its own - and the importer has to make several datasets per run (the demo
+    importer does not).  The entries themselves go through the web API's own
+    validator, :func:`~vtscore.datasets.importers.base.parse_output_specs`,
+    so an unknown media type or a converter that does not produce the output's
+    type fails here with that validator's message.
+    """
+    from vtscore.datasets.importers import get_importer  # noqa: PLC0415
+    from vtscore.datasets.importers.base import parse_output_specs  # noqa: PLC0415
+
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("'importer.outputs' must be a non-empty list, one mapping per dataset to make.")
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ValueError(f"'importer.outputs[{index}]' must be a mapping, got {type(item).__name__}.")
+        unknown = set(item.keys()) - _OUTPUT_KEYS
+        if unknown:
+            raise ValueError(
+                f"'importer.outputs[{index}]' has unknown key(s): {', '.join(sorted(unknown))}. "
+                f"Allowed: {', '.join(sorted(_OUTPUT_KEYS))}."
+            )
+        if not item.get("media_type"):
+            raise ValueError(f"'importer.outputs[{index}]' needs a 'media_type' (the dataset's type).")
+    for key in ("media_type", "source_specs"):
+        if key in fields:
+            raise ValueError(
+                f"'importer.outputs' and 'importer.fields.{key}' both set; with 'outputs:' each entry names its own."
+            )
+
+    importer = get_importer(importer_name)
+    if importer is not None and (
+        not getattr(importer, "multi_output", True) or not any(f.key == "media_type" for f in importer.fields)
+    ):
+        raise ValueError(
+            f"'importer.outputs': importer {importer_name!r} produces one dataset per run; use 'fields.media_type'."
+        )
+    try:
+        return parse_output_specs(raw)
+    except ValueError as exc:
+        raise ValueError(f"'importer.outputs': {exc}") from exc
 
 
 def _parse_import_labels(value: Any) -> dict[str, Any]:
@@ -352,6 +439,7 @@ def _dispatch(config: dict[str, Any]) -> None:
             importer_name=config["importer"],
             field_values=config["importer_fields"],
             chunk_size=config["chunk_size"],
+            outputs=tuple(config.get("importer_outputs") or ()),
         )
     else:
         spec = _SourceSpec(kind="pickle", dataset_path=config["dataset"], chunk_size=config["chunk_size"])

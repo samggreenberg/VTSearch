@@ -26,6 +26,11 @@ The right-hand side comes in two shapes:
   *checked* absence, not an unmentioned one. The zoom is not held to the size
   of the grid cells it came from: the picture is the point of the frame, so it
   takes every pixel the category column does not need.
+* **A zoom with a strip** — the same blown-up frame, with a column of frames
+  beside it instead of names: the other pictures that carry its label. For a
+  dataset whose categories are identities rather than classes, the other
+  photographs of the same person *are* the category, and a column of names
+  would be a column of ids.
 """
 
 from __future__ import annotations
@@ -418,3 +423,41 @@ def zoom(
         y -= pitch
     if more:
         overlay.text(col_x, y, "…", fontsize=FLOOR_PT + 1, color=ABSENT, va="center", ha="left")
+
+
+#: The gap between the strip's frames, in figure fractions.
+STRIP_GAP = 0.012
+
+
+def zoom_strip(fig: plt.Figure, tile: Tile, strip: list[Tile], *, aspect: float = 4 / 3) -> None:
+    """One frame as large as the strip beside it allows, and the strip: frames sharing its label.
+
+    The strip runs down the column `zoom` gives to names, top to bottom in the
+    order given, each frame with its own boxes drawn. Its width is not fixed:
+    the column is exactly as tall as the picture, with `n` frames and `n - 1`
+    gaps in it, so the two are solved together and the picture takes every
+    pixel the strip does not need, as `zoom`'s takes every pixel the names
+    leave. More frames in the strip means a smaller strip frame and a wider
+    picture, never a strip that outgrows the picture beside it.
+    """
+    n = max(len(strip), 1)
+    # A frame's height per unit of width, in figure fractions: the figure is 16:9.
+    k = FIG_W / FIG_H / aspect
+    area_h = AREA_Y1 - AREA_Y0
+    span = ZOOM_X1 - AREA_X0 - ZOOM_COL_GAP
+    # pic_w + thumb_w = span, with thumb_h = (pic_h - (n - 1) * gap) / n and thumb_w = thumb_h / k.
+    pic_w = (span + (n - 1) * STRIP_GAP / (n * k)) / (1 + 1 / n)
+    pic_h = pic_w * k
+    if pic_h > area_h:
+        pic_w, pic_h = area_h / k, area_h
+    thumb_h = (pic_h - (n - 1) * STRIP_GAP) / n
+    thumb_w = thumb_h / k
+    y0 = AREA_Y0 + (area_h - pic_h) / 2
+    rect = [AREA_X0, y0, pic_w, pic_h]
+    width, height = tile.image.size
+    half = ZOOM_BOX_LW / 2 / 72 * width / (rect[2] * FIG_W)
+    _draw_tile(fig, rect, Tile(tile.image, [_inset(b, half, width, height) for b in tile.boxes]), lw=ZOOM_BOX_LW)
+    x = rect[0] + rect[2] + ZOOM_COL_GAP
+    top = y0 + pic_h
+    for i, frame in enumerate(strip):
+        _draw_tile(fig, [x, top - (i + 1) * thumb_h - i * STRIP_GAP, thumb_w, thumb_h], frame)

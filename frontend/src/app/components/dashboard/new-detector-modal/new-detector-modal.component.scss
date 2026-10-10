@@ -52,20 +52,28 @@
 
 // `.form-group`, `.info-text`, `.error-text`, `.required` come from `_components.scss`.
 
+// The fields the footer's Advanced toggle reveals, spaced like the form's own.
+.advanced-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
 // Text vs media example input, behind a nested tab. The two are mutually
 // exclusive, so only one panel shows at a time.
 .example-group {
   gap: var(--space-sm);
 }
 
-// Nested tab bar (Text / Image) under the "Example" label. Tighter than the
-// top-level Blank/Trained tabs since it sits inside a form group.
+// Nested tab bar (Text / Image) under the "Example:" label. Tighter and in
+// smaller type than the top-level Blank/Trained tabs: it sits inside a form
+// group, and its tabs must not outweigh the label heading them (#4718).
 .example-tab-bar {
   margin-bottom: var(--space-sm);
 
   .tab {
-    padding: var(--space-sm) var(--space-lg);
-    font-size: var(--font-md);
+    padding: var(--space-xs) var(--space-lg);
+    font-size: var(--font-sm);
   }
 }
 

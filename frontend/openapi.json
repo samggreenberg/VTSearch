@@ -1842,6 +1842,13 @@
           },
           "task_id": {
             "type": "string"
+          },
+          "task_ids": {
+            "description": "One task id per dataset a multi-dataset import started, in the request's ``outputs`` order (a single-dataset request lists its one ``task_id``).  Only the importer / local-folder / local-files routes set it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -4521,6 +4528,10 @@
           "picker_view": {
             "description": "Which view the dataset-importer modal opens for this card: ``form`` (default), ``demo``, ``server_folder``, ``local_folder``, or ``local_files``.",
             "type": "string"
+          },
+          "supports_multi_output": {
+            "description": "Whether one run of this importer may produce several datasets (the Add Dataset dialog's Multi-Dataset mode; ``POST /api/dataset/import/{importer_name}`` with ``outputs``). True when the importer declares a ``media_type`` field and has not opted out.",
+            "type": "boolean"
           },
           "ui_mode": {
             "type": "string"
@@ -9898,7 +9909,7 @@
     },
     "/api/dataset/import-local-files": {
       "post": {
-        "description": "The browser picks a single file (a ``.txt`` / ``.list`` with one\nserver-side media path per line, or a ``.npz`` archive that also\nsupplies pre-computed embedding vectors) and POSTs it as the\nmultipart field ``paths_file``.  We stream it to a server-side\ntemporary directory and then delegate to the regular\n:mod:`server_files` importer for resolution and embedding.  The\ntemp directory is removed once the importer finishes (success or\nfailure).",
+        "description": "The browser picks a single file (a ``.txt`` / ``.list`` with one\nserver-side media path per line, or a ``.npz`` archive that also\nsupplies pre-computed embedding vectors) and POSTs it as the\nmultipart field ``paths_file``.  We stream it to a server-side\ntemporary directory and then delegate to the regular\n:mod:`server_files` importer for resolution and embedding.  The\ntemp directory is removed once the importer finishes (success or\nfailure).\n\nAccepts the same ``outputs`` form field as ``import-local-folder`` for a\nmulti-dataset import (#4703).",
         "operationId": "import_local_files",
         "responses": {
           "200": {
@@ -9929,7 +9940,7 @@
     },
     "/api/dataset/import-local-folder": {
       "post": {
-        "description": "The browser uses ``<input type=\"file\" webkitdirectory>`` to let the\nuser pick a directory; each selected ``File`` is appended to the\nmultipart body under the key ``\"files\"`` with its ``webkitRelativePath``\nas the multipart filename.  We stream each file to a temporary\ndirectory on the server (preserving sub-directory structure) and then\ndelegate to the regular folder importer to do the actual scanning,\nembedding, and dataset registration.  The temp directory is removed\nonce the importer finishes (success or failure).",
+        "description": "The browser uses ``<input type=\"file\" webkitdirectory>`` to let the\nuser pick a directory; each selected ``File`` is appended to the\nmultipart body under the key ``\"files\"`` with its ``webkitRelativePath``\nas the multipart filename.  We stream each file to a temporary\ndirectory on the server (preserving sub-directory structure) and then\ndelegate to the regular folder importer to do the actual scanning,\nembedding, and dataset registration.  The temp directory is removed\nonce the importer finishes (success or failure).\n\nAn ``outputs`` form field (a JSON array, one object per dataset) makes\nthis a multi-dataset import (#4703): the upload is walked once and every\noutput lands as its own dataset; ``task_ids`` then lists one task per\ndataset and ``media_type`` is optional.",
         "operationId": "import_local_folder",
         "responses": {
           "200": {
@@ -9971,7 +9982,7 @@
         }
       ],
       "post": {
-        "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
+        "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.\n\nAn ``outputs`` list (one ``{media_type, source_specs, embedder, clipper,\n\u2026}`` object per dataset) turns the request into a **multi-dataset**\nimport (#4703): the importer runs once and every output lands as its own\ndataset, each with its own task id in ``task_ids``.  Without it the body's\n``media_type`` / ``source_specs`` describe the one dataset to build and\n``task_ids`` holds that single task.",
         "operationId": "import_dataset",
         "responses": {
           "default": {

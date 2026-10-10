@@ -1,0 +1,109 @@
+preset,arm,label,metric,at,n,mean,se,resolvable,share_better_005,share_worse_005
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=10,720,-0.112223,0.00787551,True,0.115278,0.434722
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=25,720,0.0238317,0.00769643,True,0.3125,0.241667
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=50,720,0.0381763,0.00645149,True,0.330556,0.184722
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=100,720,0.0170099,0.00468038,True,0.227778,0.166667
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=150,720,0.00472008,0.00347845,False,0.176389,0.156944
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-25,720,-0.0457948,0.0046349,True,0.134722,0.369444
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-50,720,-0.00506285,0.00438205,False,0.213889,0.279167
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 51-150,720,0.0160705,0.00286928,True,0.181944,0.105556
+b025,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-150,720,0.00902602,0.00284459,True,0.190278,0.151389
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=10,720,-0.0560926,0.00424411,True,0.0861111,0.402778
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=25,720,0.0234485,0.0037107,True,0.273611,0.140278
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=50,720,0.0347826,0.00361708,True,0.247222,0.0694444
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=100,720,0.0101173,0.00206911,True,0.130556,0.0444444
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=150,720,0.00326808,0.00118889,True,0.0486111,0.0305556
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-25,720,-0.0242795,0.00270953,True,0.0888889,0.290278
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-50,720,0.00265788,0.0025523,False,0.141667,0.1625
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 51-150,720,0.0128627,0.00160559,True,0.120833,0.0236111
+b025,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-150,720,0.0094611,0.00164589,True,0.123611,0.0333333
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=10,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=50,720,0.00185061,0.0026703,False,0.0930556,0.102778
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=100,720,0.0168917,0.00327592,True,0.2,0.0972222
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=150,720,0.000457683,0.0028052,False,0.154167,0.134722
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-50,720,0.00166647,0.000644288,True,0.025,0.0111111
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 51-150,720,0.0129122,0.00129673,True,0.116667,0.0277778
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-150,720,0.00916364,0.000898517,True,0.0625,0.00555556
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=10,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=50,720,-0.0016717,0.00107834,False,0.0263889,0.0402778
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=100,720,0.00437526,0.00092409,True,0.0458333,0.0138889
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=150,720,0.0034698,0.000783641,True,0.0347222,0.0166667
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-50,720,-0.000807161,0.000382059,True,0.00416667,0.00277778
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 51-150,720,0.00371142,0.000484181,True,0.00833333,0.00277778
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-150,720,0.00220523,0.00036235,True,0.00416667,0
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=10,720,-0.0917305,0.00676934,True,0.109722,0.455556
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=25,720,0.00920558,0.00514375,False,0.272222,0.240278
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=50,720,0.0250443,0.00438416,True,0.305556,0.154167
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=100,720,0.0133468,0.00285804,True,0.197222,0.125
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=150,720,0.00730697,0.00190419,True,0.1375,0.0763889
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-25,720,-0.0353507,0.00369876,True,0.0958333,0.336111
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-50,720,-0.00730452,0.00288783,True,0.156944,0.223611
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 51-150,720,0.0131119,0.00176142,True,0.144444,0.0430556
+b1,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-150,720,0.0063064,0.00174922,True,0.126389,0.0861111
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=10,720,-0.0560926,0.00424411,True,0.0861111,0.402778
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=25,720,0.0230469,0.00372497,True,0.270833,0.143056
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=50,720,0.0354115,0.00363561,True,0.245833,0.0625
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=100,720,0.0100086,0.00196087,True,0.129167,0.0486111
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=150,720,0.00323613,0.00115854,True,0.0444444,0.0208333
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-25,720,-0.0242112,0.00270509,True,0.0888889,0.291667
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-50,720,0.00252763,0.00256208,False,0.143056,0.158333
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 51-150,720,0.0132931,0.0015726,True,0.126389,0.0180556
+b1,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-150,720,0.00970462,0.00161904,True,0.130556,0.0305556
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=10,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=50,720,-0.00154051,0.00194403,False,0.0708333,0.0875
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=100,720,0.0122382,0.00199106,True,0.154167,0.0597222
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=150,720,0.000832045,0.00147581,False,0.0736111,0.0791667
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-50,720,0.00129541,0.000658198,False,0.0277778,0.00694444
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 51-150,720,0.00940949,0.000889577,True,0.0625,0.00138889
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-150,720,0.0067048,0.000650201,True,0.0319444,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=10,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=50,720,-0.00200278,0.00103229,False,0.025,0.0388889
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=100,720,0.00459291,0.000866262,True,0.0416667,0.00972222
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=150,720,0.002975,0.000741701,True,0.0277778,0.00833333
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-50,720,-0.000922305,0.00037693,True,0.00416667,0.00277778
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 51-150,720,0.00340779,0.000449699,True,0.00555556,0.00138889
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-150,720,0.00196443,0.00033944,True,0.00277778,0
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=10,720,-0.098659,0.00698191,True,0.104167,0.445833
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=25,720,-0.011052,0.00489663,True,0.226389,0.286111
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=50,720,0.0232223,0.00392401,True,0.284722,0.148611
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=100,720,0.0178076,0.00304102,True,0.220833,0.119444
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,t=150,720,0.0109294,0.0023272,True,0.152778,0.0708333
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-25,720,-0.0444637,0.00387067,True,0.0791667,0.375
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-50,720,-0.0182081,0.00293188,True,0.131944,0.279167
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 51-150,720,0.0139796,0.00186622,True,0.175,0.0430556
+b4,open,"the opening before #4288 (g3@top,b4@mid)",objective,mean 1-150,720,0.00325039,0.00180858,False,0.133333,0.0888889
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=10,720,-0.0560926,0.00424411,True,0.0861111,0.402778
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=25,720,0.0224101,0.00377237,True,0.268056,0.144444
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=50,720,0.0309349,0.0036867,True,0.227778,0.0666667
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=100,720,0.00896796,0.00186581,True,0.113889,0.0472222
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,t=150,720,0.00173887,0.00137233,False,0.0472222,0.0402778
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-25,720,-0.0243121,0.00270472,True,0.0875,0.290278
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-50,720,0.000497688,0.00256336,False,0.1375,0.170833
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 51-150,720,0.0121273,0.0016273,True,0.1125,0.0180556
+b4,open,"the opening before #4288 (g3@top,b4@mid)",ap,mean 1-150,720,0.00825077,0.0016594,True,0.113889,0.0388889
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=10,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=50,720,-0.00222236,0.00125629,False,0.0416667,0.0625
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=100,720,0.00713945,0.00125592,True,0.0958333,0.0194444
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=150,720,0.00480623,0.001337,True,0.0791667,0.0430556
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-50,720,-0.000740479,0.000455451,False,0.00277778,0.00555556
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 51-150,720,0.00439633,0.000559011,True,0.0152778,0
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-150,720,0.00268406,0.000415797,True,0.00416667,0
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=10,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=50,720,-0.00164568,0.000852144,False,0.0194444,0.0319444
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=100,720,0.00392936,0.00075482,True,0.0375,0.00972222
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=150,720,0.00249213,0.000689294,True,0.0208333,0.00416667
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-50,720,-0.000833673,0.00034579,True,0.00277778,0.00277778
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 51-150,720,0.00253331,0.00040099,True,0.00416667,0.00138889
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-150,720,0.00141098,0.000301471,True,0.00138889,0

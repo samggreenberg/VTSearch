@@ -31,7 +31,7 @@ def _clean_detectors_dir():
         shutil.rmtree(d)
 
 
-def _write_detector(name: str, labelset: dict) -> Path:
+def _write_detector(name: str, labelset: dict, media_type: str = "audio") -> Path:
     from vtscore.detectors.store import _detector_path, _write_detector
 
     path = _detector_path(name)
@@ -40,7 +40,7 @@ def _write_detector(name: str, labelset: dict) -> Path:
         {
             "name": name,
             "text_query": "",
-            "media_type": "audio",
+            "media_type": media_type,
             "examples": [],
             "labelset": labelset,
         },
@@ -78,6 +78,21 @@ def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
     return out
 
 
+def _make_image_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
+    import io
+
+    from PIL import Image
+
+    out: dict[str, Path] = {}
+    for i, name in enumerate(names):
+        buf = io.BytesIO()
+        Image.new("RGB", (8, 8), (40 * i, 200, 90)).save(buf, format="PNG")
+        path = tmp_path / name
+        path.write_bytes(buf.getvalue())
+        out[name] = path
+    return out
+
+
 def _settings_file(tmp_path: Path, autofind: list[str]) -> Path:
     settings = {
         "autofind_detectors": list(autofind),
@@ -88,26 +103,26 @@ def _settings_file(tmp_path: Path, autofind: list[str]) -> Path:
     return p
 
 
-def _trained_labelset() -> dict:
+def _trained_labelset(ext: str = "wav") -> dict:
     return {
         "labels": [
             {
                 "md5": "a" * 32,
                 "label": "good",
                 "origin": {"importer": "ds_a", "params": {}},
-                "origin_name": "alpha.wav",
+                "origin_name": f"alpha.{ext}",
             },
             {
                 "md5": "b" * 32,
                 "label": "good",
                 "origin": {"importer": "ds_a", "params": {}},
-                "origin_name": "beta.wav",
+                "origin_name": f"beta.{ext}",
             },
             {
                 "md5": "c" * 32,
                 "label": "bad",
                 "origin": {"importer": "ds_a", "params": {}},
-                "origin_name": "gamma.wav",
+                "origin_name": f"gamma.{ext}",
             },
         ]
     }
@@ -469,11 +484,111 @@ class TestLoadPipelineFile:
         cfg = load_pipeline_file(p)
         assert cfg["dataset"] == "data/sounds.pkl"
         assert cfg["importer"] is None
+        assert cfg["importer_outputs"] == []
         assert cfg["detectors"] is None
         assert cfg["chunk_size"] is None
         assert cfg["import_labels"] is None
         assert cfg["exporter"] is None
         assert cfg["exporter_fields"] == {}
+
+
+def _outputs_yaml(outputs, fields=None, importer="server_folder") -> dict:
+    return {"importer": {"name": importer, "fields": fields or {"path": "/d"}, "outputs": outputs}}
+
+
+class TestImporterOutputs:
+    """``importer.outputs``: several datasets from the one importer run (#4707)."""
+
+    def _load(self, tmp_path, config: dict):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump(config))
+        return load_pipeline_file(p)
+
+    def test_outputs_round_trip_as_output_specs(self, tmp_path):
+        from vtscore.datasets.importers.base import OutputSpec
+
+        cfg = self._load(
+            tmp_path,
+            _outputs_yaml(
+                [
+                    {"media_type": "audio", "embedder": "clap"},
+                    {
+                        "media_type": "image",
+                        "category": "document",
+                        "source_specs": [{"source_type": "document", "converter": "document2image"}],
+                        "dataset_name": "scans",
+                        "clipper_params": {"grid": 2},
+                    },
+                ]
+            ),
+        )
+        assert cfg["importer"] == "server_folder"
+        assert cfg["importer_fields"] == {"path": "/d"}, "the list is its own key, not a field"
+        audio, image = cfg["importer_outputs"]
+        assert isinstance(audio, OutputSpec)
+        assert (audio.media_type, audio.category, audio.embedder) == ("audio", "audio", "clap")
+        assert (image.media_type, image.category, image.dataset_name) == ("image", "document", "scans")
+        assert [(s.source_type, s.converter) for s in image.source_specs] == [("document", "document2image")]
+        assert image.clipper_params == {"grid": 2}
+
+    def test_without_outputs_the_config_lists_none(self, tmp_path):
+        cfg = self._load(tmp_path, {"importer": {"name": "server_folder", "fields": {"path": "/d"}}})
+        assert cfg["importer_outputs"] == []
+
+    @pytest.mark.parametrize("outputs", [[], "audio", {"media_type": "audio"}])
+    def test_outputs_must_be_a_non_empty_list(self, tmp_path, outputs):
+        with pytest.raises(ValueError, match="'importer.outputs' must be a non-empty list"):
+            self._load(tmp_path, _outputs_yaml(outputs))
+
+    def test_every_entry_must_be_a_mapping(self, tmp_path):
+        with pytest.raises(ValueError, match=r"'importer.outputs\[1\]' must be a mapping, got str"):
+            self._load(tmp_path, _outputs_yaml([{"media_type": "audio"}, "image"]))
+
+    def test_unknown_entry_key_names_the_allowed_ones(self, tmp_path):
+        with pytest.raises(
+            ValueError, match=r"'importer.outputs\[0\]' has unknown key\(s\): recursive\. Allowed: .*media_type"
+        ):
+            self._load(tmp_path, _outputs_yaml([{"media_type": "audio", "recursive": True}]))
+
+    def test_every_entry_needs_a_media_type(self, tmp_path):
+        with pytest.raises(ValueError, match=r"'importer.outputs\[1\]' needs a 'media_type'"):
+            self._load(tmp_path, _outputs_yaml([{"media_type": "audio"}, {"embedder": "siglip"}]))
+
+    def test_conflicts_with_a_top_level_media_type(self, tmp_path):
+        with pytest.raises(ValueError, match="'importer.outputs' and 'importer.fields.media_type' both set"):
+            self._load(tmp_path, _outputs_yaml([{"media_type": "audio"}], fields={"path": "/d", "media_type": "audio"}))
+
+    def test_refused_for_an_importer_that_makes_one_dataset(self, tmp_path):
+        with pytest.raises(ValueError, match="importer 'demo' produces one dataset per run"):
+            self._load(tmp_path, _outputs_yaml([{"media_type": "audio"}], fields={"name": "x"}, importer="demo"))
+
+    def test_the_web_validator_s_message_is_prefixed(self, tmp_path):
+        with pytest.raises(ValueError, match="'importer.outputs': Unknown media type: 'hologram'"):
+            self._load(tmp_path, _outputs_yaml([{"media_type": "hologram"}]))
+
+    def test_a_converter_must_produce_the_output_s_type(self, tmp_path):
+        with pytest.raises(ValueError, match="'importer.outputs':"):
+            self._load(
+                tmp_path,
+                _outputs_yaml(
+                    [
+                        {
+                            "media_type": "face",
+                            "source_specs": [{"source_type": "document", "converter": "document2image"}],
+                        }
+                    ]
+                ),
+            )
+
+    def test_outputs_is_not_an_exporter_key(self, tmp_path):
+        with pytest.raises(ValueError, match=r"'exporter' has unknown key\(s\): outputs. Allowed: name, fields."):
+            self._load(tmp_path, {"dataset": "x.pkl", "exporter": {"name": "gui", "outputs": []}})
+
+    def test_the_importer_error_names_outputs_among_the_allowed_keys(self, tmp_path):
+        with pytest.raises(ValueError, match="Allowed: name, fields, outputs."):
+            self._load(tmp_path, {"importer": {"name": "server_folder", "fields": {"path": "/d"}, "chunks": 1}})
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +668,71 @@ class TestRunPipelineFile:
         # The settings file itself must not have been rewritten.
         on_disk = json.loads(settings_path.read_text())
         assert on_disk["autofind_detectors"] == ["nonexistent-detector"]
+
+    @pytest.mark.parametrize("tempimport", [True, False])
+    def test_two_output_pipeline_makes_two_datasets_from_one_synthetic_run(
+        self, client, tmp_path, monkeypatch, tempimport
+    ):
+        """``importer.outputs`` (#4707): the synthetic importer runs once for an image and an
+        audio dataset; each is scored by the detectors that reach its type and exported to
+        its own ``{dataset_name}`` file; a saving run registers both."""
+        from vtscore.datasets.registry import list_datasets
+        from vtscore.media import all_embedders
+
+        # The session stub covers ``embed_media``; the image embedder's own bulk
+        # path would decline a real PNG without its model.
+        for emb in all_embedders():
+            monkeypatch.setattr(emb, "embed_media_bulk", lambda items, _e=emb: [_e.embed_media(m) for m in items])
+        files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
+        files.update(_make_image_files(tmp_path, ["alpha.png", "beta.png", "gamma.png"]))
+        _stub_resolve(monkeypatch, files)
+        _write_detector("ears", _trained_labelset("wav"), media_type="audio")
+        _write_detector("eyes", _trained_labelset("png"), media_type="image")
+        settings_path = _settings_file(tmp_path, ["ears", "eyes"])
+
+        pipeline_path = tmp_path / "pipeline.yaml"
+        pipeline_path.write_text(
+            yaml.safe_dump(
+                {
+                    "importer": {
+                        "name": "synthetic",
+                        "fields": {"size": 3},
+                        "outputs": [
+                            {"media_type": "image", "dataset_name": "fake-pics"},
+                            {"media_type": "audio", "dataset_name": "fake-sounds"},
+                        ],
+                    },
+                    "settings": str(settings_path),
+                    "tempimport": tempimport,
+                    "exporter": {
+                        "name": "server_json_file",
+                        "fields": {"filepath": str(tmp_path / "hits-{dataset_name}.json")},
+                    },
+                }
+            )
+        )
+
+        from vtscore.cli_pipeline import run_pipeline_file
+
+        run_pipeline_file(pipeline_path)
+
+        pics = json.loads((tmp_path / "hits-fake-pics.json").read_text())
+        sounds = json.loads((tmp_path / "hits-fake-sounds.json").read_text())
+        assert pics["media_type"] == "image" and pics["dataset"]["name"] == "fake-pics"
+        assert sounds["media_type"] == "audio" and sounds["dataset"]["name"] == "fake-sounds"
+        assert set(pics["results"]) == {"eyes"}, "no route from images to the audio detector"
+        assert "ears" in sounds["results"]
+
+        entries = {e["name"]: e for e in list_datasets()}
+        if tempimport:
+            assert entries == {}
+            assert pics["dataset"]["id"] is None
+        else:
+            assert set(entries) == {"fake-pics", "fake-sounds"}
+            assert entries["fake-pics"]["media_type"] == "image"
+            assert entries["fake-pics"]["num_items"] == 3
+            assert entries["fake-sounds"]["media_type"] == "audio"
+            assert pics["dataset"]["id"] == entries["fake-pics"]["id"]
 
     def test_missing_file_exits_with_nonzero_status(self, tmp_path):
         from vtscore.cli_pipeline import run_pipeline_file

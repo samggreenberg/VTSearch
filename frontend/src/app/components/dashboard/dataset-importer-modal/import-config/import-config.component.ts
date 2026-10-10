@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
+import { FieldHintIconComponent } from '../../../field-hint-icon/field-hint-icon.component';
 import { IconComponent } from '../../../icon/icon.component';
 
 /** Output-media-type select + auto-detection hint chip shared by the
@@ -26,7 +27,7 @@ import { IconComponent } from '../../../icon/icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-import-config',
   standalone: true,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent, FieldHintIconComponent],
   templateUrl: './import-config.component.html',
   styleUrl: './import-config.component.scss',
 })
@@ -61,6 +62,26 @@ export class ImportConfigComponent {
    *  :meth:`DatasetImporterModalComponent.detectionHint`.  Empty hides
    *  the chip entirely. */
   readonly detectionHint = input('');
+
+  /** Whether to offer the **Multi-Dataset** box above the dropdown (#4703).
+   *  On for the importers that can make several datasets from one run
+   *  (``supports_multi_output``); off for the demo flow, whose dataset is a
+   *  named download. */
+  readonly showMultiToggle = input(false);
+  /** Two-way bound Multi-Dataset mode.  While on, the single media-type
+   *  dropdown gives way to the picker's per-category editor
+   *  (``<vt-multi-output-config>``), so this component shows only the box. */
+  readonly multiDataset = input(false);
+  readonly multiDatasetChange = output<boolean>();
+
+  /** ``id`` for the Multi-Dataset box, derived like :prop:`listboxId`. */
+  get multiToggleId(): string {
+    return `${this.mediaTypeFieldId()}-multi`;
+  }
+
+  onMultiToggle(checked: boolean): void {
+    if (checked !== this.multiDataset()) this.multiDatasetChange.emit(checked);
+  }
 
   /** Whether the custom dropdown is currently expanded. */
   open = false;

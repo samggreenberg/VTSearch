@@ -6,7 +6,7 @@ Replays ``sota_documents.py``'s closed loop for a few classes and times every re
 * ``stage1``: ``vote_queries`` + ``tiled_stage1`` (the tiled VLAD scoring);
 * ``ratio_test``: ``ratio_test_matches`` (descriptor prep, the batched distance, top-2), with the
   GPU synchronised before the clock stops;
-* ``ransac``: ``SiftMatcher._fit_similarity``, per pair, on the CPU;
+* ``ransac``: ``SiftMatcher._fit_similarity_many``, the per-pair fits on a CPU thread pool (#4516);
 * ``other``: the rest of the retrain.
 
 It also writes a ``cProfile`` of the Good steps, the top functions by cumulative time. Tier
@@ -106,7 +106,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if hasattr(ss, name):
             timers.wrap(ss, name, "stage1", sync=True)
     timers.wrap(structural, "ratio_test_matches", "ratio_test", sync=True)
-    timers.wrap(structural.SiftMatcher, "_fit_similarity", "ransac")
+    # Wall time of each batch: the per-pair fits run on threads, so timing them one by one would add up CPU time.
+    timers.wrap(structural.SiftMatcher, "_fit_similarity_many", "ransac")
 
     args.out.mkdir(parents=True, exist_ok=True)
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))

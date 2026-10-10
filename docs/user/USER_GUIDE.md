@@ -576,6 +576,36 @@ If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.
 
+### Multi-Dataset import: several datasets from one folder
+
+A folder (or archive) often holds more than one kind of media: photos, the
+PDFs that go with them, a few recordings. Each kind needs its own dataset,
+and importing the folder once per kind means reading it once per kind. Tick
+**Multi-Dataset**, the box above the *Dataset media type* dropdown on the
+**Folder**, **Manifest**, **Local Folder** and **Local Files** importers (and
+on any Services importer that lists a media type), and the dropdown gives way
+to a **Datasets to make** list: one row per kind of media, each a dataset of
+its own. The folder is read once; every ticked row becomes a dataset named
+after the import and the kind (`holiday – Image`, `holiday – Document`), with
+its own row on the Dashboard while it loads, its own **Cancel**, and its own
+AutoFind run.
+
+- Rows are pre-ticked from what the folder scan finds; tick or untick as you
+  like. **Document** makes an image dataset of the rendered pages (or, under
+  its **Details ▾**, extracted text); **Face** makes a dataset of the faces
+  cropped out of the images, so it has no files of its own to find.
+- Each ticked row's **Details ▾** opens that dataset's own Advanced settings
+  (*Include media*, embedders, clipper, cleanup), in place of the dialog's
+  single **Advanced ▾** toggle. *Build Browse map now* and *Merge
+  near-duplicates* apply to every dataset of the import and sit once, under
+  the list.
+- **Dataset name** becomes the shared base name; leave it blank for the
+  folder's name.
+
+Cancelling one row while the folder is still being read stops that dataset
+alone; the others carry on. The **Downloaded Media** importer has no
+Multi-Dataset box: a demo is one dataset of one kind.
+
 ### Running AutoFind on a new dataset
 
 Once you have a detector on the Dashboard's **AutoFind** tab, every
@@ -753,7 +783,7 @@ that reaches **Done!** opens its result panel on its own.
 Most users should never need Manual mode.
 
 Click the **Autopilot** tab in the left panel. Autopilot breaks
-labeling into five phases and tells you what to do at each step.
+labeling into four phases and tells you what to do at each step.
 You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
@@ -762,7 +792,7 @@ just picks *which* items to show you and *when* each phase ends.
   <img src="assets/autopilot-vote.light.webp" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
 </picture>
 
-### The five phases
+### The four phases
 
 The phase panel labels them, in order:
 
@@ -777,18 +807,12 @@ The phase panel labels them, in order:
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
    is usually quick.
-3. **Find More Goods.** - Autopilot goes back to the best text matches
-   and keeps offering them while they keep turning up goods: until you
-   have 20 goods, or until 16 matches in a row were not good. More goods
-   early make a noticeably better detector later. While this phase runs
-   the detector is still learning, so it catches up with (and then
-   passes) the old, shorter opening after about 50 votes.
-4. **Refine Boundary.** - Autopilot serves items the detector is
+3. **Refine Boundary.** - Autopilot serves items the detector is
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
    and "stable" indicators in the status bar both turn green).
-5. **Explore Diversity.** - Autopilot serves items from parts of the
+4. **Explore Diversity.** - Autopilot serves items from parts of the
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
@@ -797,13 +821,13 @@ The current phase carries one light that shows how close it is to done.
 It starts as a **red** circle, turns **yellow** once the phase is past
 halfway, and becomes a **green check** when the phase is finished, at
 which point Autopilot moves on to the next one; every finished phase
-keeps its check. For the three Find phases, halfway is half the
-vote target (2 of 3 goods, 10 of 20); for Refine Boundary the light
+keeps its check. For the two Find phases, halfway is half the
+vote target (2 of 3 goods, 2 of 4 bads); for Refine Boundary the light
 shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal. Hover the light for
 the details.
 
-When all five phases are done, Autopilot shows **Done!** and Toasty
+When all four phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
 trained: keep voting and it keeps improving (your next vote sends Toasty
 away), or click **Dashboard** to export it or run it over another dataset.
@@ -827,8 +851,8 @@ Boundary.
 ### Document collections stop on a dry run
 
 On a collection of document pages, where a detector finds logos and
-stamps by matching their shape, Autopilot has four phases instead of
-five. After the initial goods and bads, **Find More Goods.** offers the
+stamps by matching their shape, Autopilot has a different four phases.
+After the initial goods and bads, **Find More Goods.** offers the
 detector's own best matches, re-ranked after every vote, with no
 20-good target. It ends when **16 of them in a row were not good**:
 the top of the ranking has run dry, and the documents the detector can
@@ -857,7 +881,7 @@ full phase list, and its ◀ collapses it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
-  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the five phases (Find Initial Goods, Find Initial Bads, Find More Goods, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
@@ -927,7 +951,7 @@ Picks *which unlabeled item* the app highlights next.
 - **New** - Pick an item from a part of the dataset you haven't
   covered yet. Ensures a broad mix.
 
-Autopilot cycles through these automatically in its five phases,
+Autopilot cycles through these automatically in its four phases,
 but in Manual mode you choose directly.
 
 ### 3. Threshold
@@ -1102,11 +1126,15 @@ It has two tabs:
 </picture>
 
 - **Blank** - start a fresh detector that learns from your votes as you
-  label. Pick its **Media type** (locked to the active dataset's type
-  when you have one selected; hidden entirely on a solo-media-type
-  server), give it a **Detector name**, and seed it under **Example**
-  one of two ways: the **Text** tab takes a short description ("e.g.
-  large books"), and the media tab next to it (named for the media
+  label. Pick its **Media type** at the top of the form (hidden entirely
+  on a solo-media-type server). When you have a dataset selected, the type
+  is already set to that dataset's and locked, so the field moves out of the
+  way, under **Advanced ▾** (the toggle at the bottom left, beside
+  **Cancel**; collapsed by default), with an unlock button beside it if you
+  do want another type. Give the detector a **Detector name**, or leave
+  it blank to name it after its example, and seed it
+  under **Example** one of two ways: the **Text** tab takes a short description (such as
+  "large books"), and the media tab next to it (named for the media
   type, e.g. **Image**) takes one or more **media examples**. A typed
   description also fills in the name: your words as typed, with the first
   letter capitalised and "detector" on the end ("large books" becomes
@@ -1132,22 +1160,25 @@ It has two tabs:
   *average* - it surfaces items resembling what the examples have in
   common, and each example is seeded as a Good vote when the detector
   loads. When the active dataset offers more than one kind of embedder, a
-  **Detector Embedder Type** picker sits under **Advanced ▾** (the toggle at
-  the bottom left, beside **Cancel**; collapsed by default) so you can
-  choose which one this detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
+  **Detector Embedder Type** picker sits under **Advanced ▾** too, so you
+  can choose which one this detector uses: **Semantic**, **Patch Semantic**,
+  or **Structural**.
   That choice fixes what the detector is compatible with later. If the
   dataset's embedder can't search by text, a text description has nothing to
-  rank by there, so **Create** stays disabled until you add an example item.
-- **Threshold** (both tabs) - which mistake this detector leans toward, the
-  same three radios as the [Threshold](#3-threshold) in Manual mode. The
-  detector keeps it, and Autopilot draws its line there. It starts on your
-  last pick; you can change it later in Manual or Test.
+  rank by there, so the **Text** box says so and **Create** stays disabled
+  until you add an example item.
+- **Threshold** (both tabs, under **Advanced ▾**) - which mistake this
+  detector leans toward, the same three radios as the [Threshold](#3-threshold)
+  in Manual mode. The detector keeps it, and Autopilot draws its line there.
+  It starts on your last pick, so most detectors never need it opened; you
+  can change it later in Manual or Test.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server
   (**Server JSON File** / **Server CSV File**), and plugins can add other
   sources. Pick one, fill its form, and VTSearch trains the detector on
-  the imported labels (the button reads **Create & Import**). It takes files
+  the imported labels (the button reads **Create & Import**). A name left
+  blank comes from the imported file's name. It takes files
   exported from VTSearch, which record where each item came from (see
   [Move a detector to another VTSearch](howto/move-a-detector.md)); to add
   labels made elsewhere, use **Import Labels** on an existing detector
@@ -1561,7 +1592,9 @@ On the Dashboard he shows one step at a time:
   dataset, and **Test** or **Find** once the selected detector is trained.
 
 In the Train view he asks for your first vote over **Good** / **Bad** while
-Autopilot runs on a detector with no labels, and when Autopilot finishes he
+Autopilot runs on a detector with no labels, explains the **Update Sort
+Example?** prompt from just below it (see [Get Autopilot
+unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he
 stands under the top bar's **Dashboard** button (see [Autopilot: the guided
 workflow](#autopilot-the-guided-workflow)).
 
@@ -1914,11 +1947,15 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   audio span before using the item as a sort example or detector seed.
 - **The Autopilot resort prompt.** While Autopilot is looking for
   positives by sorting on an example, VTSearch periodically stops to say
-  how that sort is going (**Update Sort Example?**): how many items you
-  have labelled with it and how few positives it has turned up. On the
-  left, **Keep clicking** carries on with the same sort for a set number
-  of labels (the interval grows each time you keep it); on the right,
-  **Supply a different sort** swaps in a new example. A new example
+  how that sort is going (**Update Sort Example?**): one line of
+  read-only fields gives how many items you have labelled with it
+  (**Clicked**), how many were positive (**Positives**) and the sort
+  itself (**Sort**), and Toasty, below the dialog, says how many
+  positives Autopilot needs before it can move on. On the left,
+  **Continue** (under **Keep clicking:**) carries on with the same sort
+  for a set number of labels (the interval grows each time you keep
+  it); on the right, **Supply a different sort:** swaps in a new
+  example. A new example
   can be typed as text, uploaded from your computer (**Upload File…**), or
   picked with **Browse Media…**, which offers the same single-item sources
   as the New Detector modal - a path on the server, a URL, a file inside a

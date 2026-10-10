@@ -154,14 +154,18 @@
     font-size: var(--font-sm);
 
     // No detectors yet: both tabs are locked (Drafts stays the active one)
-    // and drop their accent colour until the first detector arrives.
+    // and read as plain inactive tabs, accent edge and all, until the first
+    // detector arrives.
     &:disabled,
     &:disabled:hover {
       color: var(--text-secondary);
       font-weight: var(--weight-regular);
-      background: none;
+      background: var(--bg-subtle);
+      border-bottom-color: var(--border);
       opacity: var(--opacity-disabled);
       cursor: not-allowed;
+
+      &::after { transform: scaleX(0); }
     }
   }
 }

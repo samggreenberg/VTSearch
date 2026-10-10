@@ -78,8 +78,9 @@ class TestFlow:
         flow = AutopilotFlow(good_dry_run=2)
         assert _walk(flow, "gbb") == ["good", "good", "bad"]
 
-    def test_the_third_good_ends_it_as_before(self):
-        assert _walk(AutopilotFlow(), "g" * GOOD_TARGET + "b" * BAD_TARGET)[-1] == "more"
+    def test_the_third_good_ends_it_as_in_the_app(self):
+        votes = "g" * GOOD_TARGET + "b" * BAD_TARGET
+        assert _walk(AutopilotFlow(good_dry_run=8), votes) == _walk(AutopilotFlow(good_dry_run=None), votes)
 
     def test_a_startup_schedule_owns_the_opening(self):
         from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule
