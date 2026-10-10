@@ -6,13 +6,13 @@
 # `max_patch` patch style plus a `whole_image` single-vector control, 30 voting
 # steps (the GMM has authority only below ~20 votes), 8 seeds (cells are ~5x
 # cheaper than the 150-step #2781 cells, and the small-vote regime is noisy).
-# Results land under /exp/$USER/calibration-safe so the #2781 outputs are
+# Results land under /expscratch/$USER/calibration-safe so the #2781 outputs are
 # untouched; the shared Max-Patch pickles/crops are reused in place.
 #
 # Usage: bash launch_safe.sh
 set -uo pipefail
 
-export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration-safe}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/calibration-safe}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_SAFE_THRESHOLDS=1

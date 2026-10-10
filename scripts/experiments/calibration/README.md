@@ -223,7 +223,7 @@ formats them into one line so two reports mean the same thing by "N of M cells".
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
 embeddings pickles and demo data are read in place (the `siglip_l` pickles land
 alongside them harmlessly), and writes all study output under
-`/exp/$USER/calibration`.
+`/expscratch/$USER/calibration`.
 
 ## Fixed config (pre-registered)
 
@@ -255,7 +255,7 @@ bash launch_safe.sh      # safe_thresholds ON, VG only, 30 votes, 8 seeds
 every step then emits one extra row per safe-threshold GMM variant
 (`gmm_variant` column — fit geometry x cut rule x fit space, plus an
 `xcal_only` control), and the analyze stage runs `analyze_safe.py` instead of
-`analyze.py`. Results land under `/exp/$USER/calibration-safe`, reusing the
+`analyze.py`. Results land under `/expscratch/$USER/calibration-safe`, reusing the
 shared Max-Patch pickles/crops in place.
 
 ## Anchored-mixture study (issue #2852)
@@ -277,7 +277,7 @@ scale), and the `rank_transfer` attribution arm — all step-paired against the
 `CALIB_ANCHORED_FOLD_COMBINES` (see `experiment_config.py`). Analyzer:
 `analyze_anchored.py` (H1–H4 verdicts + paired tables); self-test:
 `python selftest_analyze_anchored.py`. Results land under
-`/exp/$USER/calibration-anchored`. Design and pre-registered decision rules:
+`/expscratch/$USER/calibration-anchored`. Design and pre-registered decision rules:
 `docs/plans/population-anchored-calibration.md`.
 
 Cost note: the fold-anchored arms score the sim set once per calibration fold
@@ -370,7 +370,7 @@ What the screen cannot see is acquisition feedback — K also steers the rank
 position Autopilot's Hard pick samples around — which is why
 `launch_folds_2897_ab.sh` runs one full simulation per fold count, each living
 at its own K. Pass those arm dirs to the analyzer
-(`python analyze_folds_2897.py /exp/$USER/calibration-folds-2897-ab-k8`) to get
+(`python analyze_folds_2897.py /expscratch/$USER/calibration-folds-2897-ab-k8`) to get
 the `screen_agrees` check. Analyzer: `analyze_folds_2897.py`; design and
 pre-registered decision rules: `docs/experiments/2026-08-12-calibration-fold-count/REPORT.md`.
 

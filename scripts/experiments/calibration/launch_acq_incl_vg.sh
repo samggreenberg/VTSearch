@@ -40,7 +40,7 @@ export VTS_REPO=${VTS_REPO:-/exp/$USER/projects/vts-acq-vg}
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="/exp/$USER/acq-vg"
+export CALIB_EXP="/expscratch/$USER/acq-vg"
 
 # --- environment: VG region voting, one embedder ---
 # region_voting is implied by the dataset (REGION_VOTING_BY_DATASET), and siglip
