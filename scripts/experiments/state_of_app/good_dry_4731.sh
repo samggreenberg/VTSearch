@@ -7,9 +7,12 @@
 #   D  CALIB_QUOTA_DRY_BADS=off: the phase change without the quota's second tier
 # The rule fires in ~19% of Binary sessions at beta 1 (2026-10-08-b1's picks), so FHIBE alone cannot clear it.
 #
-#   good_dry_4731.sh dirs SEEDS                  run dirs <root>/<date>-gooddry4731{C,Q,D}-b1 on the 2026-10-08 grid
+#   good_dry_4731.sh dirs SEEDS                  run dirs <root>/<date>-gooddry4731{C,Q,D}[-region]-b<tag> on the 2026-10-08 grid
 #   good_dry_4731.sh launch ARM SEEDS [FIRST [LAST]]
-#                                                queue one arm's Binary sessions, seeds FIRST..LAST, at beta 1
+#                                                queue one arm's sessions, seeds FIRST..LAST
+#
+# GOODDRY_BETA (0.25 | 1 | 4, default 1) is the preset and GOODDRY_PATH (binary | region, default binary) the
+# production path; #4743 re-ran the guard on the opening without the More walk (#4740) at all three presets.
 #
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it).
 # Env: GOODDRY_DATE (default 2026-10-09), SOTA_ROOT, and anything launch.sh reads (CALIB_MEM, CALIB_PARTITION).
@@ -19,13 +22,23 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 D="${GOODDRY_DATE:-2026-10-09}"
 GRID_SRC="${GOODDRY_GRID:-$S/2026-10-08-b1/results}"  # prepare_data.py unchanged since this grid was prepared
+BETA="${GOODDRY_BETA:-1}"
+declare -A TAGB=([0.25]=b025 [1]=b1 [4]=b4)
+TAG="${TAGB[$BETA]:?GOODDRY_BETA must be 0.25, 1 or 4}"
+P="${GOODDRY_PATH:-binary}"
+case $P in
+  binary) PSUF=""; OFF=0; MEM_DEFAULT=4G ;;
+  region) PSUF="-region"; OFF=144; MEM_DEFAULT=24G ;;
+  *) echo "GOODDRY_PATH must be binary or region" >&2; exit 2 ;;
+esac
 
-dir_of() { echo "$S/$D-gooddry4731$1-b1"; }
+dir_of() { echo "$S/$D-gooddry4731$1$PSUF-$TAG"; }
 
-indices() {  # FIRST LAST: the Binary block of each seed (seed-major blocks of 144 binary then 144 region cells)
-  python3 - "$1" "$2" <<'PY'
+indices() {  # FIRST LAST: the path's block of each seed (seed-major blocks of 144 binary then 144 region cells)
+  python3 - "$1" "$2" "$OFF" <<'PY'
 import sys
-print(",".join(f"{s * 288}-{s * 288 + 143}" for s in range(int(sys.argv[1]), int(sys.argv[2]) + 1)))
+off = int(sys.argv[3])
+print(",".join(f"{s * 288 + off}-{s * 288 + off + 143}" for s in range(int(sys.argv[1]), int(sys.argv[2]) + 1)))
 PY
 }
 
@@ -39,8 +52,8 @@ dirs)
     ln -sfn "$GRID_SRC/crops" "$r/crops"
     cat >"$r/grid_shape.json" <<EOF
 {"n_cells": 288, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $SEEDS,
- "max_steps": 150, "cell_order": "seed", "test_bands": "all", "job_name": "gooddry4731$arm-b1",
- "note": "#4731 arm $arm, beta 1, Binary only, trajectory pass; grid symlinked from $GRID_SRC"}
+ "max_steps": 150, "cell_order": "seed", "test_bands": "all", "job_name": "gooddry4731$arm-$P-$TAG",
+ "note": "#4731 arm $arm, beta $BETA, $P path only, trajectory pass; grid symlinked from $GRID_SRC"}
 EOF
   done
   ls -d "$S/$D"-gooddry4731*
@@ -57,9 +70,9 @@ launch)
        export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}quota_dry_bads" ;;
     *) echo "ARM must be C, Q or D" >&2; exit 2 ;;
   esac
-  export CALIB_MEM="${CALIB_MEM:-4G}"
-  export SOTA_BETA=1 SOTA_DATE="$D-gooddry4731$ARM-b1" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS"
-  export CALIB_JOB_NAME="gooddry4731$ARM-binary-b1"
+  export CALIB_MEM="${CALIB_MEM:-$MEM_DEFAULT}"
+  export SOTA_BETA="$BETA" SOTA_DATE="$D-gooddry4731$ARM$PSUF-$TAG" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS"
+  export CALIB_JOB_NAME="gooddry4731$ARM-$P-$TAG"
   idx="$(indices "$FIRST" "$LAST")"
   if [[ "${GOODDRY_PACK:-0}" == 1 ]]; then
     # The cpu cap is full: one multi-CPU job on a V100 node (launch_bands.sh pack, #4490).
