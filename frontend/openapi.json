@@ -9576,7 +9576,7 @@
     },
     "/api/dataset/cancel": {
       "post": {
-        "description": "Cancels all active loading tasks and the legacy global tracker, then waits\nbriefly for one of them to act on the flag.  Cancellation is cooperative,\nso a flag set with no worker left to observe it stops nothing; answering\n``ok`` in that case is what let a *finished* import keep looking like a\nwedged one (#3167).  A cancel that reached nothing answers ``409``, and any\nstale progress it found is cleared on the way out.",
+        "description": "Cancels every active loading task, then waits briefly for one of them to\nact on the flag.  Cancellation is cooperative, so a flag set with no worker\nleft to observe it stops nothing.  A cancel that reached nothing answers\n``409``, and any stale progress it found is cleared on the way out.",
         "operationId": "cancel_dataset_load",
         "responses": {
           "200": {
@@ -11525,6 +11525,9 @@
           },
           "404": {
             "description": "Detector not found."
+          },
+          "409": {
+            "description": "The detector has no positive labels to browse."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

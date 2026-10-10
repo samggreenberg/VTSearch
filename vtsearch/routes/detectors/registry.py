@@ -1346,6 +1346,7 @@ def _run_positives_browse_build(
 @detectors_registry_bp.response(200, DetectorBrowsePositivesResponseSchema)
 @detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
+@detectors_registry_bp.alt_response(409, description="The detector has no positive labels to browse.")
 def browse_detector_positives(detector_id: str):
     """Prepare an in-memory VTSBrowse map of just this detector's positives.
 
