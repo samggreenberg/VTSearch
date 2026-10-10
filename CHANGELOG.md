@@ -122,6 +122,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A face crop knows where it sat in its photo** (issue #4748). Every face the **Images → Faces**
+  converter cuts out now records its box in the source photo, kept with the dataset, and the
+  face's details show it as **Source Box** (fractions of the photo's width and height). Faces from
+  a folder or demo import also show their **Detection Confidence** now; that row was being dropped
+  on the way in. This is the groundwork for opening a face's photo with the face outlined.
 - **The Dashboard keeps a multi-dataset import's datasets together** (issue #4747). The datasets
   one import produced (say "Photos – Image" and "Photos – Face") now sit next to each other in the
   dataset table and the top bar's dataset menu, whichever column you sort by, placed where the

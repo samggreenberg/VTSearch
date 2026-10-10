@@ -1191,6 +1191,14 @@ callers who invoke `convert()` by hand (they should call
 `convert(self, media)` — without the second parameter — raises
 `TypeError` on the first conversion.
 
+Besides `filename` and the data fields, an output dict may carry
+`custom_metadata` (per-item metadata rows) and `source_box` (where the
+output sat in its source image, normalised `[x0, y0, x1, y1]`); both reach
+the media on every ingest path and persist with the dataset. The library
+guide,
+[`vtscore/docs/extending/converters.md`](../vtscore/docs/extending/converters.md#what-convert-returns),
+has the details.
+
 Use `resolve_media_bytes(media)` (also in `vtscore.converters.base`)
 rather than reading `media["media_bytes"]` directly: reference (*thin*)
 imports hand the converter only `{filename, media_path}`, so a converter

@@ -80,12 +80,13 @@ The `custom_metadata` dict is the media type's display fields — e.g.
 `duration`/`frequency` for audio, `width`/`height` for images, `word_count`
 for text — with any importer-supplied `custom_metadata` layered on top.
 
-It also carries up to three curated **provenance** lines distilled from the
-media's `origin.params`:
+It also carries up to four curated **provenance** lines distilled from the
+media's `origin.params` (and, for `Source Box`, its top-level `source_box`):
 
 | Field | Present on | Example |
 |-------|-----------|---------|
 | `Source` | Converter / clipper output | `/data/videos/movie.mp4` |
+| `Source Box` | Converter output that recorded where it sat in its source (every `image2face` crop) | `0.120,0.300,0.250,0.480` |
 | `Derived Via` | Converter / clipper output | `Video → Images (n_clips=2)` |
 | `Imported Via` | Any media whose origin names an importer | `Manifest (paths_file=/data/list.txt)` |
 

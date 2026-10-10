@@ -172,7 +172,7 @@ class TestFaceEmbedder:
         with patch.object(emb, "load_models"):
             assert emb.embed_media({"media_path": "/nonexistent.jpg"}) is None
 
-    def test_weight_load_does_not_leak_progress_bar_to_console(self, capsys):
+    def test_weight_load_does_not_leak_progress_bar_to_console(self, capsys, monkeypatch):
         """facenet-pytorch downloads VGGFace2 weights via torch.hub, printing a
         tqdm bar. The embedder must wrap that in intercept_tqdm_progress so the
         bar is forwarded to the progress callback and never leaks to the console.
@@ -208,8 +208,13 @@ class TestFaceEmbedder:
         emb = FaceEmbedder()
         emb._on_progress = lambda status, message, current, total: calls.append((status, message, current, total))
 
-        with patch.dict(sys.modules, {"facenet_pytorch": fake_module}):
-            emb._load_models_impl()
+        # ``setitem`` undoes only this one key.  ``patch.dict(sys.modules, …)``
+        # restored the whole table on exit, so it also evicted the real
+        # ``torch`` that ``_load_models_impl`` imports when this test was the
+        # first to load it, and the next ``import torch`` re-initialised
+        # ``torch._C`` and segfaulted the run.
+        monkeypatch.setitem(sys.modules, "facenet_pytorch", fake_module)
+        emb._load_models_impl()
 
         captured = capsys.readouterr()
         assert "vggface2" not in captured.out
@@ -336,3 +341,98 @@ class TestImage2FaceConverter:
         media = {"filename": "gone.png", "media_path": str(tmp_path / "gone.png")}
         out = conv.convert_normalized(media, {})
         assert out == []
+
+
+class TestImage2FaceSourceBox:
+    """Each crop records where it sat in its photo, as a fraction of the frame (#4748)."""
+
+    def test_each_crop_records_its_box_normalised_to_the_photo(self):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        conv = Image2FaceMediaConverter()
+        # A wide photo, so x and y normalise against different sides.
+        detector = _fake_mtcnn(boxes=[[20, 10, 80, 40], [100, 50, 160, 90]], probs=[0.9, 0.8])
+        media = {"filename": "group.png", "media_bytes": _png_bytes(200, 100)}
+        with patch.object(conv, "_make_detector", return_value=detector):
+            out = conv.convert_normalized(media, {"padding": "0", "min_size": "1"})
+
+        assert [o["source_box"] for o in out] == [[0.1, 0.1, 0.4, 0.4], [0.5, 0.5, 0.8, 0.9]]
+
+    def test_the_box_is_the_padded_crop(self):
+        """The box outlines what the crop shows, padding included, clamped to the photo."""
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        conv = Image2FaceMediaConverter()
+        detector = _fake_mtcnn(boxes=[[10, 40, 30, 60]], probs=[0.9])
+        media = {"filename": "edge.png", "media_bytes": _png_bytes(100, 100)}
+        with patch.object(conv, "_make_detector", return_value=detector):
+            (face,) = conv.convert_normalized(media, {"padding": "0.75", "min_size": "1"})
+
+        # 20 px face + 15 px a side: x runs -5..45 and clamps to 0..45.
+        assert face["source_box"] == [0.0, 0.25, 0.45, 0.75]
+        assert (face["width"], face["height"]) == (45, 50)
+
+    def test_a_downsampled_decode_still_gives_the_photo_fraction(self, monkeypatch):
+        """Detection runs on a bounded decode, so the box must not be read as original pixels."""
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+        from vtscore.media.image import decode
+
+        monkeypatch.setattr(decode, "MAX_DECODE_PIXELS", 200 * 100)
+        seen: dict[str, tuple[int, int]] = {}
+
+        def detect(img):
+            seen["size"] = img.size
+            return [[20, 10, 60, 50]], [0.9]
+
+        detector = MagicMock()
+        detector.detect.side_effect = detect
+        conv = Image2FaceMediaConverter()
+        media = {"filename": "big.png", "media_bytes": _png_bytes(400, 200)}
+        with patch.object(conv, "_make_detector", return_value=detector):
+            (face,) = conv.convert_normalized(media, {"padding": "0", "min_size": "1"})
+
+        assert seen["size"] == (200, 100)
+        # Over the 400x200 original these pixels would read 0.05..0.15 wide.
+        assert face["source_box"] == [0.1, 0.1, 0.3, 0.5]
+
+
+class TestImage2FaceThroughTheRunner:
+    """A folder conversion keeps the crop's box and its confidence row (#4748).
+
+    The runner copies converter output through a named field list, unlike the
+    importer-hook and clipper-chain paths, which keep the whole dict.
+    """
+
+    def test_folder_conversion_keeps_source_box_and_confidence(self, tmp_path):
+        from vtscore.converters.image2face import CONVERTER
+        from vtscore.converters.runner import run_converters_on_folder
+
+        (tmp_path / "group.png").write_bytes(_png_bytes(200, 100))
+        detector = _fake_mtcnn(boxes=[[20, 10, 80, 40]], probs=[0.9])
+        medias: dict[int, dict] = {}
+        with patch.object(CONVERTER, "_make_detector", return_value=detector):
+            run_converters_on_folder(
+                tmp_path,
+                target_media_type="face",
+                medias=medias,
+                converter_specs=[{"converter": "image2face", "params": {"padding": "0", "min_size": "1"}}],
+            )
+
+        (face,) = medias.values()
+        assert face["media_type"] == "face"
+        assert face["source_box"] == [0.1, 0.1, 0.4, 0.4]
+        assert face["custom_metadata"] == {"Detection Confidence": 0.9}
+
+    def test_demo_conversion_keeps_source_box(self):
+        from vtscore.converters.image2face import CONVERTER
+        from vtscore.converters.runner import apply_converter_to_demo
+
+        medias = {1: {"id": 1, "filename": "photo.png", "media_bytes": _png_bytes(200, 100), "category": "c"}}
+        detector = _fake_mtcnn(boxes=[[20, 10, 80, 40]], probs=[0.9])
+        with patch.object(CONVERTER, "_make_detector", return_value=detector):
+            apply_converter_to_demo("image2face", "demo_photos", medias)
+
+        (face,) = medias.values()
+        # The demo path runs at the converter's defaults, so the 0.25 padding
+        # applies: 15 px a side on x and 7.5 on y (rounded) of a 200x100 photo.
+        assert face["source_box"] == [0.025, 0.02, 0.475, 0.48]
