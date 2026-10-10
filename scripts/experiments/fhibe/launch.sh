@@ -7,6 +7,7 @@
 #   bash launch.sh size 0,<N>          # time a photo cell and a face cell before sizing the array
 #   bash launch.sh cells               # the array: every identity x dataset x seed
 #   bash launch.sh pack                # the same cells packed into one job on a V100 node (cpu cap full)
+#   bash launch.sh shape               # the grid shape and the preflight only, for a driver that packs its own jobs
 #   bash launch.sh redo <idx,...>
 #   bash launch.sh status
 #
@@ -176,7 +177,7 @@ size)
   echo "read Elapsed and MaxRSS off 'sacct -j <id> --format=Elapsed,MaxRSS,State' before sizing the array"
   ;;
 
-cells|pack)
+cells|pack|shape)
   [[ -s "$CALIB_RESULTS/prepare_info.json" ]] || { echo "no prepared grid at $CALIB_RESULTS (run prepare first)" >&2; exit 3; }
   N=$(cd "$CALIB" && python run_cells.py --print-cells 2>/dev/null | tail -1)
   if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
@@ -214,7 +215,11 @@ PYSHAPE
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" --diverges "$DIVERGES" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
-  if [[ "$1" == pack ]]; then
+  if [[ "$1" == shape ]]; then
+    # The grid shape and the preflight only: a driver that packs several runs' cells into one
+    # job (sota_face.sh) submits them itself.
+    echo "shape written: $CALIB_RESULTS/grid_shape.json"
+  elif [[ "$1" == pack ]]; then
     # The cpu partition's per-user cap is full: every cell in one multi-CPU job on a V100 node,
     # GPU hidden, CALIB_PACK_PAR cells at a time on 2 threads each (as launch_bands.sh pack, #4490).
     PAR="${CALIB_PACK_PAR:-30}"
@@ -248,5 +253,5 @@ status)
   echo "cells written: $(ls "$CALIB_RESULTS/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv' || true)"
   ;;
 *)
-  echo "usage: launch.sh {identities|prepare|size <idx>|cells|pack|redo <idx-list>|status}" >&2; exit 1 ;;
+  echo "usage: launch.sh {identities|prepare|size <idx>|cells|pack|shape|redo <idx-list>|status}" >&2; exit 1 ;;
 esac

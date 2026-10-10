@@ -1,6 +1,6 @@
 ---
 name: state-of-the-app
-description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
+description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence; and the face path (FaceNet crops) on FHIBE. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
 ---
 
 # State of the App
@@ -323,6 +323,34 @@ differs from the photo paths, and the owner settled how its review works:
 - **No spot check:** the structural path has none, so that section is omitted.
 - Everything else (two significant digits, a figure per claim, literal
   examples, the "app as it is now" framing) is as for the photo reports.
+
+## Face (FHIBE): standing decisions (owner, 2026-10-10, #4762)
+
+The face path is FaceNet on `image2face` crops, benchmarked on FHIBE (#4699). The owner set it up as
+follows:
+
+- **Bench:** the #4699 baseline's 562 people (`<release>-derived/runs/2026-10-09-k4/identities.txt`),
+  all of whom can start from 4 photos on every arm. People are the replication; one seed.
+- **Opening:** the example sort, from **1 and from 4** starting photos (`CALIB_SEED_EXAMPLES`), as two
+  session sets. There is no typed query. Click 0 is the example sort at its own display line
+  (the Goods' centroid's count line since #4732), scored by `fhibe/example_baseline.py` in
+  `text_baseline.py`'s columns, so `analyze.py --baseline` reads it where a photo review reads the
+  typed query. The report's opening rule is the same: the session shows the example sort until
+  Autopilot shows a detector.
+- **Paths:** both stored sizes, `fhibe_faces_1024` and `fhibe_faces_640`. They share one path
+  (`--path face`), so each analysis also names its `--dataset`.
+- **Presets:** one session set per beta (1/4, 1, 4), as for the photo reviews: six run dirs
+  (`<date>-sota-k<K>-b<beta>`) and 6,744 runs a seed. Run them with `fhibe/sota_face.sh`
+  (`dirs`, `tasks`, `pack`; claiming V100 pack jobs, since FHIBE cells take a few minutes each)
+  and analyse with `fhibe/sota_face_analyze.sh`.
+- **Publishing:** the report may name FHIBE subject IDs, to point at hard or glitched cases (the
+  owner: the report does not distribute the dataset). The viewer shows aggregates only: one page
+  holds every session set, the starting photos folded into the dataset name
+  (`viewer.py --beta-run BETA=DIR::DATASET`), and people shown as strata
+  (`viewer.py --category-map`, from `fhibe/person_strata.py`).
+- **Strata replace classes and bands:** FHIBE's subject annotations (age, pronoun, natural skin
+  colour, ancestry) and the census's face-size band. Report across them; the data is still the
+  bench, not the subject.
 
 ## How to run it
 

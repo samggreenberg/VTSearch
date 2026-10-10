@@ -94,9 +94,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--run", action="append", required=True, help="beta=analysis dir (curves.csv, cells.csv)")
     ap.add_argument("--baseline", required=True, help="the text baseline the typed query is scored from")
     ap.add_argument("--embedder", required=True, help="the baseline rows the review's arm opens on")
+    ap.add_argument(
+        "--dataset", default=None, help="keep one dataset's baseline rows (a face review's sizes share a path, #4762)"
+    )
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
     baseline = pd.read_csv(args.baseline)
+    if args.dataset:
+        # The baseline is keyed on (category, seed) below; two datasets of one path share both.
+        baseline = baseline[baseline["dataset"] == args.dataset]
     rows = []
     for spec in args.run:
         beta_s, d = spec.split("=", 1)
