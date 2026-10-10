@@ -10,6 +10,8 @@
 #   good_dry_4731.sh dirs SEEDS                  run dirs <root>/<date>-gooddry4731{C,Q,D}[-region]-b<tag> on the 2026-10-08 grid
 #   good_dry_4731.sh launch ARM SEEDS [FIRST [LAST]]
 #                                                queue one arm's sessions, seeds FIRST..LAST
+#   good_dry_4731.sh price OUT SEEDS [DOCS]      extract and price every arm that ran (handoff_extract/price_4604.py),
+#                                                then compare them (compare_good_dry_4731.py), for this path and preset
 #
 # GOODDRY_BETA (0.25 | 1 | 4, default 1) is the preset and GOODDRY_PATH (binary | region, default binary) the
 # production path; #4743 re-ran the guard on the opening without the More walk (#4740) at all three presets.
@@ -82,6 +84,23 @@ launch)
   fi
   exec bash "$HERE/launch.sh" redo "$idx"
   ;;
+price)
+  OUT="${2:?out}"; SEEDS="${3:?seeds}"; DOCS="${4:-}"
+  # The typed query's set, with its line at every preset: #4738's for Binary, #4637's two-seed file for Region.
+  BASE_DEFAULT="$S/2026-10-08-b1/text_baseline.csv"
+  [[ $P == region ]] && BASE_DEFAULT=/expscratch/sgreenberg/notch-4599/text_baseline-count-region2.csv
+  BASE="${GOODDRY_BASELINE:-$BASE_DEFAULT}"
+  declare -A EMB=([binary]=siglip [region]=siglip+dinov3_patch)
+  mkdir -p "$OUT"
+  for arm in C Q D; do
+    e="$(dir_of "$arm")"
+    [[ -n "$(ls "$e/results/cells" 2>/dev/null | head -1)" ]] || continue
+    python "$HERE/handoff_extract_4604.py" --exp "$e" --embedder "${EMB[$P]}" --seeds "$SEEDS" --tag "${arm}_${P}_$TAG" --out "$OUT" --procs "${GOODDRY_PROCS:-8}"
+    python "$HERE/handoff_price_4604.py" --steps "$OUT/steps_${arm}_${P}_$TAG.csv.gz" --picks "$OUT/picks_${arm}_${P}_$TAG.csv.gz" \
+      --baseline "$BASE" --beta "$BETA" --tag "${arm}_${P}_$TAG" --out "$OUT" >"$OUT/price_${arm}_${P}_$TAG.log"
+  done
+  python "$HERE/compare_good_dry_4731.py" --dir "$OUT" --tag "${P}_$TAG" ${DOCS:+--docs "$DOCS"}
+  ;;
 *)
-  echo "usage: good_dry_4731.sh {dirs SEEDS | launch ARM SEEDS [FIRST [LAST]]}" >&2; exit 1 ;;
+  echo "usage: good_dry_4731.sh {dirs SEEDS | launch ARM SEEDS [FIRST [LAST]] | price OUT SEEDS [DOCS]}" >&2; exit 1 ;;
 esac

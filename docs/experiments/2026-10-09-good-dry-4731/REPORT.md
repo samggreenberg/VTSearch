@@ -176,6 +176,71 @@ gives at one or two Goods.*
 Only the Binary path at beta 1 was run. Region voting and beta 1/4 and 4 were not; at 1/4 and 4 the
 Good walk and the line both move.
 
+## Re-priced on today's opening (#4743, 2026-10-10)
+
+On the day #4731 shipped, #4740 dropped the photo opening's More walk, so the control above no longer exists. The
+pair was re-run against the app before #4731 (`CALIB_GOOD_DRY_RUN=off CALIB_QUOTA_DRY_BADS=off`) on today's opening,
+`g3@top,b4@mid`, at commit b85a70dc3 (dev with #4741 merged). The same 5 seeds of COCO Better Binary were used, now at
+all three presets, plus Region at beta 1 over 2 seeds and the same 300 FHIBE people.
+
+**Over a session it still does not lose, and the gain is smaller.** COCO Binary at beta 1 gains +0.0017 ±
+0.0009 over clicks 1–150, against #4738's +0.0038, and is flat over 1–50. At beta 1/4 it gains +0.0042. At beta 4
+it is flat over 1–150 but loses −0.0018 ± 0.0007 over clicks 1–50, and that loss is the trained-head tier's, not
+the exit's (below). Medium objects lean slightly negative, by about 0.1% of
+their F-beta. FHIBE does not move: the gain for 2–4-photo people is the same, and every band with 5 or more photos
+still gains.
+
+| COCO, paired gain in mean F-beta | runs | all, 1–150 | all, 1–50 | exit fires, 1–150 | small | medium | large |
+|---|---|---|---|---|---|---|---|
+| Binary, beta 1/4 | 720 | **+0.0042** ± 0.0016 | +0.0016 ± 0.0010 | +0.021 ± 0.009 | +0.015 ± 0.005 | −0.0014 ± 0.0015 | 0 |
+| Binary, beta 1 | 720 | **+0.0017** ± 0.0009 | +0.0000 ± 0.0004 | +0.0087 ± 0.0039 | +0.0066 ± 0.0029 | −0.0011 ± 0.0006 | 0 |
+| Binary, beta 4 | 720 | +0.0010 ± 0.0015 | **−0.0018** ± 0.0007 | +0.0049 ± 0.0064 | +0.0054 ± 0.0048 | −0.0021 ± 0.0012 | 0 |
+REGION_ROW
+
+*Small / medium / large are gains over clicks 1–150 by object band. The exit fires in the same 144 of 720 Binary
+runs at every preset (20%), and its picks match the control's up to that click.*
+
+![COCO Better Binary at beta 1 on today's opening: mean F-beta of the set shown over clicks](fig_coco_guard_binary_b1.png)
+
+*Figure 3. COCO Better Binary, beta 1, on today's opening. Left: all 720 runs. Right: the 144 where the Good walk
+runs 16 picks dry with a Good in hand. Blue is the app before #4731; orange is the app.*
+
+- **Why the gain halved at beta 1.** The exit's own sessions are unchanged by #4740: it already spent the walk. The
+  control changed. Before #4740, a slow walk that found its third Good walked More next. That walk is now gone, and
+  the Hard phase it goes to instead does better later on (#4671). So the runs where the exit fires gain +0.0087
+  rather than +0.019. The control's own mean over 1–150 on those runs is 0.065, up from 0.055.
+- **Medium objects.** Over 1–150 the gain is −0.0011 ± 0.0006 at beta 1 and −0.0014 ± 0.0015 at beta 1/4. 21 of
+  245 medium runs lose and 11 gain at beta 1. These are runs whose walk would have found its third Good late. It is
+  the cost #4738 saw on FHIBE's 5+ photo faces.
+- **Small objects carry the gain**, at +0.0066 (beta 1) and +0.015 (beta 1/4). The rule is for rare targets, and
+  small objects are COCO's rare ones.
+- **At beta 4 the second quota costs short sessions.** Over clicks 1–50 the app loses −0.0018 ± 0.0007 overall
+  and −0.0092 ± 0.0032 where the exit fires. Over 1–150 it is flat (+0.0010 ± 0.0015). The exit is not the cause.
+  An extra arm D (exit alone, the centroid shown at one or two Goods) was run on the 144 fired runs at beta 4. Its
+  picks are Q's, pick for pick:
+
+  | beta 4, the 144 fired runs | 1–150 | 1–50 | 17–60 |
+  |---|---|---|---|
+  | Q − C (the app: exit + trained head) | +0.0049 ± 0.0064 | **−0.0092** ± 0.0032 | −0.0104 ± 0.0049 |
+  | D − C (exit, centroid shown) | **+0.0144** ± 0.0055 | +0.0020 ± 0.0028 | +0.0063 ± 0.0046 |
+
+  At beta 4 a set's recall dominates. The centroid's beta-blind midpoint line keeps a large set, while the trained
+  head's line, drawn at beta 4 from one or two Goods, is tight. So before a third Good the centroid scores better.
+  Over all 720 runs, D's area would be about +0.0029 against the app's +0.0010. At beta 1 and below the head wins:
+  #4738's old-opening D was +0.0005 behind Q at beta 1, and FHIBE's few-photo gain is all the head.
+
+**FHIBE on today's opening** (same people, `ctl` = the app before #4731, `app` = today). Mean F-beta over clicks
+1–150, gain with one SE:
+
+| photos | whole photo | face 1024 | face 640 |
+|---|---|---|---|
+| 2–4 | +0.057 ± 0.015 | **+0.46** ± 0.036 | **+0.45** ± 0.035 |
+| 5–6 | +0.039 ± 0.010 | +0.086 ± 0.020 | +0.16 ± 0.027 |
+| 7+ | +0.056 ± 0.012 | +0.013 ± 0.007 | +0.027 ± 0.013 |
+
+The 2–4 row is identical to #4738's, as it must be: those sessions never reach a third Good. The 5+ rows are within
+an SE of #4738's. The app's curves are in `fig_fhibe_curves_4743.png`.
+
 ## What shipping would change
 
 Two rules change together, and the harness's default arm moves with them, so every later study's
