@@ -111,8 +111,8 @@ class _Exploding(_MultiImporter):
     name = "test_multi_boom"
 
     def run_outputs(self, field_values, outputs, thin=False):
+        yield from ()  # a generator, so it raises on the first ``next`` like a real importer
         raise RuntimeError("archive corrupt")
-        yield  # pragma: no cover - makes this a generator
 
 
 def _run(importer, outputs, field_values=None, *, post_load=None, on_finished=None, **kwargs) -> list[str]:

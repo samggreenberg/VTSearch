@@ -128,6 +128,29 @@ def _embed_batch_size(embedder: str):
         os.environ.pop("VTSEARCH_EMBED_BATCH_SIZE", None)
 
 
+def _link_private(dataset: str, embedder: str) -> None:
+    """Point the pile's names for this cell at its private home, if it has one (#4699).
+
+    ``dump_medias`` and ``write_provenance`` open the pile path and write through
+    the link, so the bytes land owner-only and nothing else in the pile changes.
+    """
+    home = pc.private_cell_dir(dataset)
+    if home is None:
+        return
+    home.mkdir(parents=True, exist_ok=True)
+    home.chmod(0o700)
+    for link in (pc.cell_path(dataset, embedder), pc.provenance_path(dataset, embedder)):
+        target = home / link.name
+        if link.is_symlink() and link.resolve() == target.resolve():
+            continue
+        if link.exists() or link.is_symlink():
+            raise SystemExit(f"{link} exists and is not a link to {target}; move it there by hand")
+        # Dangling until written: opening it for writing creates the target, and
+        # until then `out.exists()` is False, so a build that dies first is retried
+        # rather than skipped as an empty cell that "exists".
+        link.symlink_to(target)
+
+
 def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     """Build one cell, returning a summary record."""
     out = pc.cell_path(dataset, embedder)
@@ -160,6 +183,7 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     embed_s = time.time() - t1
 
     n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)
+    _link_private(dataset, embedder)
     nbytes = cells_io().dump_medias(medias, out)
     total_s = time.time() - t0
     log(
@@ -300,17 +324,23 @@ def main() -> int:
         log(f"including {', '.join(derived)}: derived from vg_scale, and stale the moment it is rebuilt")
         datasets += derived
 
+    # A face dataset is embedded by FaceNet and nothing else, and an image dataset
+    # by everything but FaceNet (#4699): a pair across media types is no cell.
+    pairs = [(ds, emb) for ds in datasets for emb in embedders if pc.embeds(emb, ds)]
+    if len(pairs) < len(datasets) * len(embedders):
+        log(
+            f"skipping {len(datasets) * len(embedders) - len(pairs)} pair(s) whose embedder cannot embed that media type"
+        )
+
     summaries = []
     if args.relabel:
-        for ds in datasets:
-            for emb in embedders:
-                summaries.append(relabel_cell(ds, emb))
+        for ds, emb in pairs:
+            summaries.append(relabel_cell(ds, emb))
         done = [s for s in summaries if s["status"] == "relabelled"]
         log(f"done: {len(done)} relabelled, {len(summaries) - len(done)} without a cell")
         return 0
-    for ds in datasets:
-        for emb in embedders:
-            summaries.append(build_cell(ds, emb, force=args.force))
+    for ds, emb in pairs:
+        summaries.append(build_cell(ds, emb, force=args.force))
 
     built = [s for s in summaries if s["status"] == "built"]
     log(f"done: {len(built)} built, {len(summaries) - len(built)} skipped")

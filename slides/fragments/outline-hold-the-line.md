@@ -11,14 +11,15 @@
 7. Examination
 8. Region
 9. Document(ation)
-10. Instruction
-11. <span class="closing">Conclusion</span>
+10. Person(ification)
+11. Instruction
+12. <span class="closing">Conclusion</span>
 
-<!-- **a** — Ten stops, in order. Promise the room the shape: the first
+<!-- **a** — Eleven stops, in order. Promise the room the shape: the first
      third builds the tool, the next two sections are the same machinery walked
      twice, and the rest is what else the loop has to get right — where it asks,
      when it stops, what it was measured on, how a user can test it, regions,
-     and documents — then how to do it yourself. -->
+     documents and faces — then how to do it yourself. -->
 
 <!-- **b** — Section I is the tool's mission: what it is for, and the tool
      itself, from nothing — nobody needs to have seen it before. The last of
@@ -56,8 +57,13 @@
      spec sheet, the document set we built to find them in, how we find them,
      where the line goes on a page, and how well it all does. -->
 
-<!-- **k** — Section X is the tool again, as a how-to: five slides, every
+<!-- **k** — Section X is faces: the consented benchmark the app's face
+     path is measured on, where the face has to be found before the person
+     can be matched. One slide for now; the rest arrives with the first
+     study. -->
+
+<!-- **l** — Section XI is the tool again, as a how-to: five slides, every
      click numbered, from an empty app to a detector finding books in photos
      it never saw. It is the one to leave on screen, or hand out. -->
 
-<!-- **l** — Conclusion. The last line appears only now. Take questions. -->
+<!-- **m** — Conclusion. The last line appears only now. Take questions. -->

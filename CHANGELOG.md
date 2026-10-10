@@ -17,6 +17,44 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
+  Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
+  another on one CPU core, and most of each fit's time went to statistics over a few dozen
+  points. The fits now run on 4 threads and the statistics take less time. On a V100 a Good
+  takes ~1.4 s at 5,000 pages (was 1.9 s) and ~1.6 s at 50,000 (was 2.1 s). Rankings are unchanged.
+
+- **A plainer Update Sort Example? prompt** (issue #4721). Autopilot's resort prompt no longer
+  opens with a focus ring on its big Keep button (it took focus when you were voting with the
+  arrow keys, so it read as the recommended answer, and the next Space or Enter chose it); focus
+  goes to the dialog itself, and Tab still reaches every control. The paragraph at the top is now
+  one line of read-only fields, **Clicked**, **Positives** and **Sort**, and Toasty, below the
+  dialog, explains: how many positives Autopilot needs before it can move on, and that you can
+  keep going or try a different sort. The left side has a **Keep clicking:** heading over a
+  **Continue** button, which no longer names the sort or the number of labels before the next
+  prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
+  **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
+- **Tabs look like tabs, and form labels read alike** (issues #4718, #4726). Every horizontal tab
+  strip (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
+  Keyboard Shortcuts, and the left panel's **Manual** / **Autopilot** in Train and **Autopilot** /
+  **Review** in Test) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
+  the active one open into the content below with an accent edge on top. New Detector's
+  **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
+  labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
+  **Threshold:** label matches them. The text boxes now carry their instructions (**Describe what
+  this detector should find**) in place of a faint example and a line under the box, and
+  **Detector name** can be left blank: the detector is named after its example (or, on the
+  Trained tab, the imported file), numbered past any detector that already has that name.
+- **No stall report for a slow import at startup.** On a cold page cache the scikit-learn import
+  (through pandas, pyarrow's shared library) held the GIL for just over a second, and the stall watchdog
+  wrote every thread's stack to the terminal of a routine `python app.py`. The watchdog's bar is now
+  `VTSEARCH_STALL_STARTUP_MS` (5 s) from the ML imports until **VTSearch is ready**, so a startup that
+  takes minutes is still reported and a routine import is not; the `diagnostics config` line reports it
+  as `watchdog_startup=`, and a `stall:` line from that window says `bar 5000ms`.
+- **New Detector keeps a preset media type and the Threshold under Advanced** (issue #4717).
+  When a selected dataset has already set and locked the detector's **Media type**, the field
+  moves from the top of the Blank form to **Advanced ▾**, unlock button and all, and stays there
+  if you unlock it. The **Threshold** moves under **Advanced ▾** on both tabs; it still starts on
+  your last pick. A media type nothing has set stays at the top of the form.
 - **Toasty's hints, and Toasty is now searching** (issue #4680). The logo, favicons and every
   King Toasty are now Toasty with a magnifying glass. He also stands beside the next thing to
   click, with a speech bubble saying what to do and why, in place of the Dashboard's long dotted
@@ -84,6 +122,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **The command line makes several datasets from one importer run** (issue #4707). The
+  Multi-Dataset import has a headless form: `--autodetect --importer <name> --outputs '<json>'` (a
+  list with one object per dataset, in the shape the web API's `outputs` entries take) and an
+  `outputs:` list under a pipeline file's `importer:` block. The importer runs once and every
+  entry becomes its own dataset, named `"<name> – <Category>"` unless the entry names it: saved to
+  the dashboard (unless `--tempimport`), scored by the AutoFind detectors that reach its media
+  type, and exported on its own, each results set carrying a `dataset` block; `{dataset_name}` in
+  an exporter field is the dataset's name, and a `--filepath` without it gains the name before the
+  extension so the files stay apart. A dataset no detector applies to is skipped with a note and a
+  dataset whose import failed is reported while the others still run (the run then exits
+  non-zero). The dry-run plan lists the datasets; `--progress-format json` gains `dataset_start`
+  and `dataset_failed` events. See [`docs/CLI.md`](docs/CLI.md).
 - **Multi-Dataset import: several datasets from one folder** (issue #4703). A **Multi-Dataset** box
   above the *Dataset media type* dropdown on the Folder, Manifest, Local Folder and Local Files
   importers (and on any importer with a media-type field) replaces the dropdown with a

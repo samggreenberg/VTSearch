@@ -259,6 +259,13 @@ def probe(C: Any) -> list[str]:
             rows.append(("band_share", str(C.BAND_SHARE), "<unset> = the app's own picks, no band picks"))
         else:
             refuse("band_share", "CALIB_BAND_SHARE", "must be a positive integer, one pick in N")
+    # #4699's example opening and stratified split: the app's example sort, but
+    # not the opening a dataset with a typed query takes, and an eval protocol
+    # rather than an app setting. Declared, so a study cannot take either silently.
+    if C.SEED_EXAMPLES is not None:
+        rows.append(("seed_examples", str(C.SEED_EXAMPLES), "<unset> = the text or known-good opening"))
+    if C.STRATIFY_TARGET:
+        rows.append(("stratify_target", "1", "<unset> = the plain random split"))
     # #4668's spread floor before #4492: a retired piece of the labels line.
     if C.SIGMA_FLOOR not in SIGMA_FLOORS:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))

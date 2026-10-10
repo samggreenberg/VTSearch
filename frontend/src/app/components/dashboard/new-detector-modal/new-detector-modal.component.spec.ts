@@ -8,6 +8,7 @@ import type { LoadingTask } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -61,11 +62,48 @@ describe('NewDetectorModalComponent', () => {
     expect(component.mediaTypes()).toEqual(['audio', 'image']);
   });
 
-  it('should show error when name is empty', () => {
-    component.name.set('');
-    component.pendingText.set('test');
+  // "Enter a new name or leave blank" (#4718): a blank name is not a blocker.
+  it('names a detector after its text example when the name is left blank', () => {
+    component.onNameInput('');
+    component.pendingText.set('large books');
+    expect(component.canSubmitBlank).toBe(true);
     component.submit();
-    expect(component.error()).toBe('Name is required');
+
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.name).toBe('Large books detector');
+    req.flush({ ok: true, detector: { id: '1' } });
+  });
+
+  it('names a blank-named detector after its first picked media example', () => {
+    component.onNameInput('');
+    component.mediaExamples.set([
+      { value: 'ex/dog.wav', display: 'Dog Bark.wav', mediaType: 'audio', thumbFailed: false },
+    ]);
+    expect(component.effectiveName).toBe('Dog Bark');
+  });
+
+  it('numbers a blank name past a detector that already has it', () => {
+    vi.spyOn(TestBed.inject(DatasetStateService), 'detectors', 'get').mockReturnValue([
+      { id: 'a', name: 'Large books detector' },
+      { id: 'b', name: 'large books detector 2' },
+    ] as any);
+    component.onNameInput('');
+    component.pendingText.set('large books');
+    expect(component.effectiveName).toBe('Large books detector 3');
+  });
+
+  it('falls back to a generic name when nothing suggests one', () => {
+    component.onNameInput('');
+    component.mediaExamples.set([
+      { value: 'ex/near.jpg', display: 'near.jpg', mediaType: 'image', thumbFailed: false, seed: true },
+    ]);
+    expect(component.effectiveName).toBe('New detector');
+  });
+
+  it('sends a typed name as typed, not the default', () => {
+    component.onNameInput('  My cats  ');
+    component.pendingText.set('cats');
+    expect(component.effectiveName).toBe('My cats');
   });
 
   it('should show error when no example provided', () => {
@@ -110,15 +148,11 @@ describe('NewDetectorModalComponent', () => {
     component.name.set('');
     component.pendingText.set('');
     component.mediaExamples.set([]);
-    // Missing example takes precedence in the hint.
+    // A missing example is the blocker.
     expect(component.blankSubmitTitle).toBe('Provide a text description to start the detector.');
 
-    // With an example but no name, the blocker becomes the name.
+    // An example is all it needs: a blank name falls back to a default (#4718).
     component.pendingText.set('query');
-    expect(component.blankSubmitTitle).toContain('Enter a detector name');
-
-    // Fully ready → success-oriented title.
-    component.name.set('Test');
     expect(component.blankSubmitTitle).toContain('Create the detector with the example');
   });
 
@@ -144,22 +178,19 @@ describe('NewDetectorModalComponent', () => {
     expect(component.exampleHint).toBe('Provide an example audio clip to start the detector.');
   });
 
-  it('renders the tab-specific hint under the example tabs', async () => {
+  // The instructions sit in the boxes, not in a line under them (#4718).
+  it('puts the instructions in the text and name placeholders, with no hint line', async () => {
     component.mediaType.set('image');
     await fixture.whenStable();
-    const hint = (): string =>
-      (fixture.nativeElement as HTMLElement).querySelector('.example-empty-hint')?.textContent?.trim() ?? '';
-    expect(hint()).toBe('Provide a text description to start the detector.');
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('input[name="pendingText"]')?.getAttribute('placeholder')).toBe(
+      'Describe what this detector should find',
+    );
+    expect(el.querySelector('#detector-name')?.getAttribute('placeholder')).toBe('Enter a new name or leave blank');
+    expect(el.textContent).not.toContain('Provide a text description');
     component.setExampleTab('media');
     await fixture.whenStable();
-    expect(hint()).toBe('Provide an example image to start the detector.');
-  });
-
-  it('uses non-audio placeholders for the text example and the name (#4227)', async () => {
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('input[name="pendingText"]')?.getAttribute('placeholder')).toBe('e.g. large books');
-    expect(el.querySelector('#detector-name')?.getAttribute('placeholder')).toBe('e.g. Large book detector');
+    expect(el.textContent).not.toContain('Provide an example image');
   });
 
   it('should label the media tab from the detector media type', () => {
@@ -376,11 +407,11 @@ describe('NewDetectorModalComponent', () => {
       httpMock.expectNone('/api/detectors/registry');
     });
 
-    it('names the example it needs in the hint', async () => {
-      component.pendingText.set('a red car');
+    it('points the text box at the media tab', async () => {
+      component.mediaType.set('image');
       await fixture.whenStable();
-      const hint = (fixture.nativeElement as HTMLElement).querySelector('.example-empty-hint');
-      expect(hint?.textContent).toContain("This dataset can't search by text");
+      const input = (fixture.nativeElement as HTMLElement).querySelector('input[name="pendingText"]');
+      expect(input?.getAttribute('placeholder')).toBe("This dataset can't search by text; use the Image tab");
     });
 
     it('accepts a media example', () => {
@@ -802,6 +833,17 @@ describe('NewDetectorModalComponent', () => {
     component.submit();
   }
 
+  it('names a blank-named Trained detector after the imported file, else the importer (#4718)', () => {
+    component.tab = 'trained';
+    component.trainedView = 'form';
+    component.selectedLabelImporter = { name: 'server_json_file', display_name: 'JSON file' } as any;
+    component.onNameInput('');
+    expect(component.canSubmitTrained).toBe(true);
+    expect(component.effectiveName).toBe('JSON file detector');
+    component.labelImporterFile = new File(['{}'], 'barking dogs.json');
+    expect(component.effectiveName).toBe('barking dogs');
+  });
+
   it('waits for the labelset-media ingest before loading the new detector', () => {
     const feed = new Subject<LoadingTask>();
     const spy = vi
@@ -858,9 +900,23 @@ describe('NewDetectorModalComponent', () => {
     component.submit();
   }
 
-  it('shows the Threshold control on the form', () => {
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('vt-balance')).not.toBeNull();
+  it('keeps the Threshold control under Advanced (#4717)', async () => {
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('vt-balance')).toBeNull();
+
+    component.toggleAdvanced();
+    await fixture.whenStable();
+    expect(el.querySelector('#new-detector-advanced vt-balance')).not.toBeNull();
+  });
+
+  it('keeps an unset media type at the top of the form, not under Advanced (#4717)', async () => {
+    component.toggleAdvanced();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(component.mediaTypePreset).toBe(false);
+    expect(el.querySelector('.new-detector-form .media-type-row')).not.toBeNull();
+    expect(el.querySelector('#new-detector-advanced .media-type-row')).toBeNull();
   });
 
   it('sends the balance the form starts on: the balanced default with no setting', () => {
@@ -977,6 +1033,25 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
     expect(component.mediaType()).toBe('image');
     expect(component.mediaTypeLocked).toBe(true);
   });
+
+  it('moves the preset media type under Advanced, and keeps it there once unlocked (#4717)', async () => {
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(component.mediaTypePreset).toBe(true);
+    expect(el.querySelector('.media-type-row')).toBeNull();
+    expect(component.advancedToggleTitle).toContain('the media type');
+
+    component.toggleAdvanced();
+    await fixture.whenStable();
+    expect(el.querySelector('#new-detector-advanced .media-type-row')).not.toBeNull();
+
+    (el.querySelector('#new-detector-advanced .lock-toggle') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(component.mediaTypeLocked).toBe(false);
+    expect(el.querySelectorAll('.media-type-row').length).toBe(1);
+    const trigger = el.querySelector('#new-detector-advanced .custom-select-trigger') as HTMLButtonElement;
+    expect(trigger.disabled).toBe(false);
+  });
 });
 
 describe('NewDetectorModalComponent (semantic_only server)', () => {
@@ -1010,22 +1085,24 @@ describe('NewDetectorModalComponent (semantic_only server)', () => {
     httpMock.verify();
   });
 
-  it('offers all three types and shows the Advanced toggle when unlocked', async () => {
+  it('offers all three types when unlocked', async () => {
     await setup(false);
     expect(component.embedderTypeOptions).toEqual(['semantic', 'patch_semantic', 'structural']);
     expect(component.showEmbedderTypePicker).toBe(true);
-    expect(component.showAdvancedToggle).toBe(true);
   });
 
-  it('drops the one-option type picker (and the Advanced toggle) when locked', async () => {
+  it('drops the one-option type picker when locked, but keeps Advanced for the Threshold', async () => {
     await setup(true);
     expect(component.embedderTypeOptions).toEqual(['semantic']);
     expect(component.showEmbedderTypePicker).toBe(false);
-    // Nothing else lives under Advanced for this dataset, so the toggle goes too.
     expect(component.primaryLicenseNotice).toBeNull();
-    expect(component.showAdvancedToggle).toBe(false);
+    expect(component.advancedToggleTitle).not.toContain('embedder');
     await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('.advanced-toggle')).toBeNull();
+    const el = fixture.nativeElement as HTMLElement;
+    (el.querySelector('.advanced-toggle') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(el.querySelector('#new-detector-advanced #detector-embedder-type')).toBeNull();
+    expect(el.querySelector('#new-detector-advanced vt-balance')).not.toBeNull();
   });
 
   it('puts the Advanced toggle on the Cancel / Create row, and opens the options in the form (#4305)', async () => {

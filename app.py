@@ -413,9 +413,10 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat
     # watchdog that writes every thread's stack when the interpreter freezes.
-    # Started before the model loads so a stall during startup is caught too;
-    # ``VTSEARCH_STALL_WATCHDOG_MS=0`` turns the watchdog off.
-    from vtscore.concurrency.stalls import start_stall_diagnostics_from_env
+    # Started before the model loads so a stall during startup is caught too,
+    # at the startup bar applied below; ``VTSEARCH_STALL_WATCHDOG_MS=0`` turns
+    # the watchdog off.
+    from vtscore.concurrency.stalls import start_stall_diagnostics_from_env, startup_grace
 
     start_stall_diagnostics_from_env()
     # Record the bars this process will report at. A log that cannot say what
@@ -426,36 +427,44 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
 
     log_effective_settings()
 
-    print("\U0001f4da Loading ML libraries...", flush=True)
-    initialize_models(on_progress=lambda *a, **k: None)
-    # The solo-mediaType restriction (the flag, the env var, or the persisted
-    # server setting) tells us which mediaType's default embedder to warm even
-    # if no datasets or detectors are registered yet. It is server-tier, so it
-    # resolves without a current user at startup.
-    from vtsearch.settings import get_cli_solo_embedders, get_effective_solo_media_type
+    # The ML imports and the embedder preload hold the GIL across disk reads
+    # that take a second or more on a cold page cache (one ``dlopen`` of
+    # pyarrow's shared library did, with the process at 5% CPU), and the
+    # watchdog cannot tell that from a stall. Its bar is raised to
+    # ``VTSEARCH_STALL_STARTUP_MS`` (5 s) until the server is ready: a startup
+    # that takes minutes (issue #3715) is still reported, a routine import is
+    # not.
+    with startup_grace():
+        print("\U0001f4da Loading ML libraries...", flush=True)
+        initialize_models(on_progress=lambda *a, **k: None)
+        # The solo-mediaType restriction (the flag, the env var, or the persisted
+        # server setting) tells us which mediaType's default embedder to warm even
+        # if no datasets or detectors are registered yet. It is server-tier, so it
+        # resolves without a current user at startup.
+        from vtsearch.settings import get_cli_solo_embedders, get_effective_solo_media_type
 
-    solo = get_effective_solo_media_type()
-    extra_types = [solo] if solo else None
-    cli_solo_embedders = get_cli_solo_embedders()
-    extra_embedders = list(cli_solo_embedders.values()) if cli_solo_embedders else None
-    preloaded = preload_predicted_embedders(
-        extra_media_types=extra_types,
-        extra_embedders=extra_embedders,
-    )
-    if preloaded:
-        print(f"✅ Preloaded embedders: {', '.join(preloaded)}", flush=True)
+        solo = get_effective_solo_media_type()
+        extra_types = [solo] if solo else None
+        cli_solo_embedders = get_cli_solo_embedders()
+        extra_embedders = list(cli_solo_embedders.values()) if cli_solo_embedders else None
+        preloaded = preload_predicted_embedders(
+            extra_media_types=extra_types,
+            extra_embedders=extra_embedders,
+        )
+        if preloaded:
+            print(f"✅ Preloaded embedders: {', '.join(preloaded)}", flush=True)
 
-    # Everything alive now - the ML libraries and the preloaded embedders -
-    # lives for the process, so move it out of the generations a full
-    # collection traverses (issue #3870: ~300ms gen-2 pauses every ~2 min,
-    # each freezing whatever request was in flight). After the preload and
-    # before serving on purpose; datasets and detectors load lazily later
-    # and stay collectable. ``VTSEARCH_GC_FREEZE=0`` skips it.
-    from vtscore.concurrency.stalls import freeze_gc_after_preload
+        # Everything alive now - the ML libraries and the preloaded embedders -
+        # lives for the process, so move it out of the generations a full
+        # collection traverses (issue #3870: ~300ms gen-2 pauses every ~2 min,
+        # each freezing whatever request was in flight). After the preload and
+        # before serving on purpose; datasets and detectors load lazily later
+        # and stay collectable. ``VTSEARCH_GC_FREEZE=0`` skips it.
+        from vtscore.concurrency.stalls import freeze_gc_after_preload
 
-    frozen = freeze_gc_after_preload()
-    if frozen is not None:
-        print(f"🧊 Froze {frozen[0]} objects for GC in {frozen[1]:.0f}ms", flush=True)
+        frozen = freeze_gc_after_preload()
+        if frozen is not None:
+            print(f"🧊 Froze {frozen[0]} objects for GC in {frozen[1]:.0f}ms", flush=True)
 
     print("✅ VTSearch is ready!", flush=True)
 
