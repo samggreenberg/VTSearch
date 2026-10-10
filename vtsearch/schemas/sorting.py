@@ -168,8 +168,9 @@ _WINDOW_META_FIELDS = {
     # cuts do different jobs.  On a learned sort it sits *above* the reporting
     # ``threshold`` since #2876 (vtscore.state.core.detector_acquisition_threshold);
     # on a text sort it is the mixture midpoint under the guarded display line
-    # since #4136 (vtscore.training.thresholds.text_sort_cuts).  ``None`` on
-    # the example and label-file sorts; the client falls back to ``threshold``.
+    # since #4136 (vtscore.training.thresholds.text_sort_cuts), and on an
+    # example sort the midpoint under the Goods' centroid's line since #4732.
+    # ``None`` on the label-file sort; the client falls back to ``threshold``.
     "acq_threshold": fields.Float(required=False, allow_none=True),
 }
 
@@ -209,6 +210,28 @@ class SortPageResponseSchema(Schema):
     total = fields.Integer(required=True)
     threshold = fields.Float(required=True, allow_none=True)
     has_more = fields.Boolean(required=True)
+
+
+class SortLineQuerySchema(Schema):
+    """Query for ``GET /api/sort/line``."""
+
+    token = fields.String(required=True)
+
+    class Meta:
+        # Request-context params smuggled in as query args, as on /api/sort/page.
+        unknown = "exclude"
+
+
+class SortLineResponseSchema(Schema):
+    """Response for ``GET /api/sort/line``: a text or example sort's line, redrawn at the balance (#4760)."""
+
+    # The display line at the balance now set.  The acquisition cut does not
+    # move with the balance, so it is not here.
+    threshold = fields.Float(required=True)
+    # Rows of the whole ranking at or above ``threshold``.
+    above_threshold = fields.Integer(required=True)
+    # Full ranking length.
+    total = fields.Integer(required=True)
 
 
 # ---------------------------------------------------------------------------

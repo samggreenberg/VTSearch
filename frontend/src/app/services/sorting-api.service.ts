@@ -41,6 +41,8 @@ import { learnedSortResult } from '../generated/api-client/fn/sorting/learned-so
 import { sortClips } from '../generated/api-client/fn/sorting/sort-clips';
 import { sortPage } from '../generated/api-client/fn/sorting/sort-page';
 import type { SortPageResponse } from '../generated/api-client/models/sort-page-response';
+import { sortLine } from '../generated/api-client/fn/sorting/sort-line';
+import type { SortLineResponse } from '../generated/api-client/models/sort-line-response';
 import { getTextsortSuggestionsRoute } from '../generated/api-client/fn/sorting/get-textsort-suggestions-route';
 import { addTextsortSuggestionRoute } from '../generated/api-client/fn/sorting/add-textsort-suggestion-route';
 import { clearVotesRoute } from '../generated/api-client/fn/sorting/clear-votes-route';
@@ -100,6 +102,18 @@ export class SortingApiService {
    */
   getSortPage(token: string, offset: number, limit: number): Observable<SortPageResponse> {
     return sortPage(this.http, this.config.rootUrl, { token, offset, limit }).pipe(map((r) => r.body));
+  }
+
+  /**
+   * Redraw the display line of the text or example sort under `token` at the
+   * balance now set (#4760). A 404 is an answer, not a failure: the token names
+   * a sort whose line is not redrawn there (a learned or label-file sort), or
+   * one evicted since. So no global toast; the caller leaves the line alone.
+   */
+  getSortLine(token: string): Observable<SortLineResponse> {
+    return sortLine(this.http, this.config.rootUrl, { token }, new HttpContext().set(SKIP_ERROR_TOAST, true)).pipe(
+      map((r) => r.body),
+    );
   }
 
   /** Kick off a learned-sort training job.  The response will be ``done``

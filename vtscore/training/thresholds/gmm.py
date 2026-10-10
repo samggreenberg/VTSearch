@@ -14,11 +14,15 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from vtscore.utils.scores import scored_mask
+
+if TYPE_CHECKING:
+    from vtscore.training.query_sort import SortLine
 
 # Above this many scores, fit the GMM on a random subsample instead of the full
 # set. A 2-component, 1-D GMM only needs to recover the two clusters' means and
@@ -1480,11 +1484,17 @@ class TextSortCuts:
             :func:`guarded_text_sort_threshold`), ``"count"`` when a balance
             at or below :data:`TEXT_SORT_COUNT_MAX_BETA` drew it
             (:func:`_count_line`), ``"midpoint"`` under ``gmm_midpoint``.
+        line: How to redraw ``threshold`` at another balance without a
+            re-score (#4760), when the sort that drew it kept one
+            (:class:`~vtscore.training.query_sort.SortLine`); ``None``
+            otherwise.  Left out of equality and ``repr``: it carries the
+            sort's scores.
     """
 
     threshold: float
     acq_threshold: float
     branch: str
+    line: SortLine | None = field(default=None, compare=False, repr=False)
 
 
 #: The count line (issue #4603): at a balance of beta 1 or below, a typed-query

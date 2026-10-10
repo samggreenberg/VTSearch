@@ -136,3 +136,61 @@ class TestSortResultsCache:
         token = cache.store(_ranking(3), 0.5)
         cache.reset_for_tests()
         assert cache.page(token, 0, 10) is None
+
+
+class _Line:
+    """A stand-in for a sort's line: at *beta* it sits at ``beta / 10``."""
+
+    def __init__(self) -> None:
+        self.asked: list[float | None] = []
+
+    def threshold_at(self, beta: float | None) -> float:
+        self.asked.append(beta)
+        return (beta or 0.0) / 10
+
+
+class TestRedraw:
+    """A text or example sort's line, redrawn over the stored ranking at another balance (#4760)."""
+
+    def test_redraws_the_stored_line_at_the_balance(self):
+        cache = SortResultsCache()
+        line = _Line()
+        token = cache.store(_ranking(10), 0.9, line=line)
+        drawn = cache.redraw(token, 5.0)
+        # Scores run 1.0, 0.9, ... 0.1: six sit at or above 0.5.
+        assert drawn == {"threshold": 0.5, "above_threshold": 6, "total": 10}
+        assert line.asked == [5.0]
+
+    def test_a_page_reports_the_redrawn_line_over_the_same_ranking(self):
+        cache = SortResultsCache()
+        token = cache.store(_ranking(10), 0.9, line=_Line())
+        cache.redraw(token, 3.0)
+        page = cache.page(token, offset=0, limit=10)
+        assert page is not None
+        assert page["threshold"] == 0.3
+        assert [r["id"] for r in page["results"]] == list(range(10))
+
+    def test_a_sort_stored_without_a_line_is_not_redrawn(self):
+        cache = SortResultsCache()
+        token = cache.store(_ranking(3), 0.5)
+        assert cache.redraw(token, 1.0) is None
+        page = cache.page(token, 0, 10)
+        assert page is not None
+        assert page["threshold"] == 0.5
+
+    def test_unknown_token_is_not_redrawn(self):
+        assert SortResultsCache().redraw("does-not-exist", 1.0) is None
+
+    def test_dataset_gate_blocks_a_cross_dataset_redraw(self):
+        cache = SortResultsCache()
+        token = cache.store(_ranking(3), 0.5, dataset_id="ds-A", line=_Line())
+        assert cache.redraw(token, 1.0, dataset_id="ds-B") is None
+        assert cache.redraw(token, 1.0, dataset_id="ds-A") is not None
+
+    def test_redrawing_keeps_the_entry_warm_against_eviction(self):
+        cache = SortResultsCache(max_entries=2)
+        t1 = cache.store(_ranking(1), 0.5, line=_Line())
+        cache.store(_ranking(1), 0.5)  # t2
+        cache.redraw(t1, 1.0)  # touch t1
+        cache.store(_ranking(1), 0.5)  # t3 evicts t2, not t1
+        assert cache.page(t1, 0, 10) is not None

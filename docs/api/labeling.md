@@ -65,7 +65,10 @@ votes, one class) keeps its retrain's fallback cut, never a count.
 A `POST` is a pure cutoff move: the active detector's line moves to the new
 beta's cut of the same labels' line without retraining and, in Find mode, the
 unverified items re-split. Both verbs return the new line in the same round
-trip, so the app's control moves its line without re-scoring. The same value
+trip, so the app's control moves its line without re-scoring. A text or
+example sort draws its own line at the balance too, and a client redraws it
+over the ranking on screen with
+[`GET /api/sort/line`](medias.md#sort-line) (#4760). The same value
 is settable as `beta` on `PUT /api/settings`, which also sets the active
 detector's.
 

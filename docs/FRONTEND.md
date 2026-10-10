@@ -248,7 +248,13 @@ only from the POST's response: the learned sort reads the balance server-side
 and caches by it, so a re-sort that beat the POST would come back at the old
 balance. When the balance keeps the same count of items before and after, the
 line stays put and only its state is swapped: the count, not the state,
-decides where the line sits. The control is a False Positives - False
+decides where the line sits. A text or example ranking draws its own line at
+the balance too (#4603, #4732) but keeps its ranking, so Label does not re-run
+it: from the POST's response it sends the ranking's `sort_token` to
+`GET /api/sort/line` (#4760), `switchMap`-ed the same way, and moves only the
+line and its count; the acquisition cut and the selection stay. A sort still
+in flight when the balance lands is redrawn once it lands, since the server
+may have drawn it at the old balance. The control is a False Positives - False
 Negatives spectrum with three radios under its thirds (`BALANCE_PRESETS` in
 `utils/line-balance.ts`: beta 4 toward false positives, 1 balanced, 1/4 toward
 false negatives; #4448), and never shows a balance as a word or a number: each

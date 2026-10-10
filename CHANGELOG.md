@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Moving the Threshold redraws a text or example sort's line on the spot** (issue #4760).
+  A typed query's line has followed the balance since #4603, and an example sort's since #4732,
+  but both were drawn only when the sort ran: moving the Threshold afterwards left the old line,
+  and the count above it, on screen until you sorted again. The line and its count now move as
+  soon as the server has the new balance, over the same ranking, without re-scoring. The
+  selection, the loaded rows and Autopilot's picks stay as they were. New route
+  `GET /api/sort/line`; the three `example-sort-{by-id,server,origin}` routes now return a
+  `sort_token` (still with the whole ranking).
+
 - **A detector with too few labels returns the images that stand out, not half the collection**
   (issue #4732). Below 3 Goods and 4 Bads, Test, Find and AutoFind rank everything by the Goods'
   centroid. Its line used to sit where the scores split into two groups, which on a rare target

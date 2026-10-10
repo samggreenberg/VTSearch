@@ -315,7 +315,9 @@ not found or bytes unavailable.
 The sorts that rank the whole dataset — [text sort](#text-sort),
 [learned sort](#learned-sort), [example sort (upload)](#example-sort-upload)
 and [label-file sort](#label-file-sort) — do **not** return a bare
-`{results, threshold}` pair. They return a windowed envelope:
+`{results, threshold}` pair. They return a windowed envelope (the three
+`example-sort-{by-id,server,origin}` routes return it too, but never window
+it; see [example sort by id](#example-sort-by-loaded-media-id)):
 
 ```json
 {
@@ -333,8 +335,8 @@ and [label-file sort](#label-file-sort) — do **not** return a bare
 |-------|---------|
 | `results` | The transmitted ranking rows, **descending by score**. May be a *head window* of the full ranking (see below), not the whole thing. |
 | `threshold` | The decision line (see [learned sort](#learned-sort) for `threshold` vs `acq_threshold`). |
-| `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Carried by the learned sort and, since #4136, the text sort; `null` on the example and label-file sorts, where a client falls back to `threshold`. |
-| `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page). Also the sort-generation token: a re-sort mints a new one. |
+| `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Carried by the learned sort, the text sort since #4136 and the example sorts since #4732; `null` on the label-file sort, where a client falls back to `threshold`. |
+| `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page) and, on a text or example sort, [`GET /api/sort/line`](#sort-line). Also the sort-generation token: a re-sort mints a new one. |
 | `total` | Length of the **full** ranking — `>= results.length`. |
 | `above_threshold` | Rows at or above `threshold` across the full ranking (not just the window). |
 | `has_more_below` | `true` when `results` is a head window and more rows follow. |
@@ -384,6 +386,36 @@ deep into a large sort without receiving the whole list up front.
 404 when the token is unknown, has been evicted from the cache, or belongs to
 a different dataset than the active `X-Dataset-Id` — in every case the client
 should re-run the sort and start from the new token.
+
+### Sort line
+
+```
+GET /api/sort/line?token=<sort_token>
+```
+
+Redraws the display line of a text or example sort at the balance now set
+(issue #4760), over the ranking the token names. The ranking does not depend on
+the balance, but the line does: a typed query's is the count line at beta 1 or
+below (#4603), an example sort's is the Goods' centroid's count line at every
+balance (#4732), and a tiled structural example's rises at the precision end
+(#4479). So after [`POST /api/balance`](labeling.md#get--set-the-balance) a client sends the token of
+the text or example sort on screen, rather than re-running it:
+
+→
+```json
+{"threshold": 0.4127, "above_threshold": 38, "total": 250000}
+```
+
+`threshold` is the line the sort would have drawn at this balance, drawn on the
+scores it was first drawn on, so nothing is re-scored; `above_threshold`
+counts the rows at or above it across the whole ranking. The acquisition cut
+does not move with the balance, so it is not returned. A later
+[`/api/sort/page`](#sort-page) reports the redrawn line.
+
+404 when the token is unknown, evicted or another dataset's (as for the page
+route), and when it names a sort whose line is not redrawn here: a learned
+sort's line moves with its detector through `POST /api/balance` and a re-sort,
+and a label-file sort's takes no balance.
 
 ### Text sort
 
@@ -543,10 +575,11 @@ and re-embedded before sorting. Powers the right-click "sort by similarity" /
 
 → `{"results": [...], "threshold": 0.5123}`
 
-The three `example-sort-{by-id,server,origin}` routes are the exception to
-the [windowed sort response](#sort-response-shape-windowing): they return the
-plain `{results, threshold}` pair with the full ranking and mint no
-`sort_token`, so there is nothing to page.
+The three `example-sort-{by-id,server,origin}` routes return the
+[sort envelope](#sort-response-shape-windowing) but never window it: `results`
+is always the full ranking and `has_more_below` is `false`. They mint a
+`sort_token` all the same, since #4760, so a balance change can redraw their
+line through [`GET /api/sort/line`](#sort-line).
 
 400 if no medias loaded or `media_id` not in the loaded snapshot. 404 if the
 media's bytes are unavailable when cropping is requested.

@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 from vtscore.config import DATA_DIR
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._media_response import image_thumbnail_response
+from vtsearch.routes._sort_window import windowed_sort_response
 from vtsearch.schemas.media import (
     ExampleSortByIdRequestSchema,
     ExampleSortOriginRequestSchema,
@@ -299,7 +300,7 @@ def example_sort_server(body: dict):
                 tmp.unlink(missing_ok=True)
         else:
             results, cuts = example_sort_cuts_from_paths(file_paths)
-        return {"results": results, "threshold": cuts.threshold, "acq_threshold": cuts.acq_threshold}
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
     except HTTPException:
         raise
     except Exception as exc:
@@ -386,7 +387,7 @@ def example_sort_origin(body: dict):
             from vtscore.training.query_sort import cosine_sort_cuts
 
             results, cuts = cosine_sort_cuts(fetched.embedding)
-            return {"results": results, "threshold": cuts.threshold, "acq_threshold": cuts.acq_threshold}
+            return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
 
         file_path = fetched.path
         if file_path is None:
@@ -409,7 +410,7 @@ def example_sort_origin(body: dict):
                 tmp.unlink(missing_ok=True)
         else:
             results, cuts = example_sort_cuts_from_paths([file_path])
-        return {"results": results, "threshold": cuts.threshold, "acq_threshold": cuts.acq_threshold}
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
     except HTTPException:
         raise
     except Exception as exc:
@@ -539,7 +540,7 @@ def example_sort_by_id(body: dict):
             if embedding is None:
                 abort(400, message="Media has no embedding (cannot sort)")
             results, cuts = cosine_sort_cuts(embedding)
-        return {"results": results, "threshold": cuts.threshold, "acq_threshold": cuts.acq_threshold}
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
     except HTTPException:
         raise
     except Exception as exc:
