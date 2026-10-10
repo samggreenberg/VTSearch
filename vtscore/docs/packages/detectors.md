@@ -523,8 +523,9 @@ build `(X, y)`, store a detector on `det_ctx.model` / `det_ctx.threshold`,
 and stamp `det_ctx.model_labels_sig` with the labelset's signature.
 Which detector follows the **label quota** (#4643, below): with no Good
 that resolved it returns `False`; under `GOOD_QUOTA` Goods or
-`BAD_QUOTA` Bads it stores the Goods' centroid head
-(`install_centroid_head`); with both met it runs `train_and_threshold`.
+`BAD_QUOTA` Bads, and under a Good with `DRY_BAD_QUOTA` Bads, it stores the
+Goods' centroid head (`install_centroid_head`); with either quota met it runs
+`train_and_threshold`.
 `haystack_for(embedder_name)` may return a `Haystack` to
 fit the line's corpus side on a different population than *snap* (the
 CLI uses it for converted / re-clipped scoring sets); the class model the
@@ -546,9 +547,12 @@ does not, so it defaults to `False`.
 `vtscore/detectors/label_quota.py` and `vtscore/detectors/centroid_head.py`.
 A labelset gives a detector by its counts alone: `TIER_NONE` with no Good,
 `TIER_CENTROID` under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads -
-Autopilot's own quorum - and `TIER_TRAINED` once both are met.
-`label_quota(n_good, n_bad)` and `labelset_quota(labelset)` return a
-`LabelQuota` (`tier`, `goods_owed`, `bads_owed`, `as_dict()`);
+Autopilot's own quorum - and `TIER_TRAINED` once both are met, or once a Good
+has `DRY_BAD_QUOTA` (16) Bads beside it (#4731: what Autopilot's Good walk leaves
+when it runs dry). `label_quota(n_good, n_bad, *, dry_bad_quota=DRY_BAD_QUOTA)`
+and `labelset_quota(labelset)` return a `LabelQuota` (`tier`, `goods_owed`,
+`bads_owed`, `as_dict()`, which reports `dry_bad_quota` too; `dry_bad_quota=None`
+is the pre-#4731 rule, for the eval harness);
 `served_quota(model, labelset)` is what the app's responses report.
 
 The centroid is `fit_centroid_head(goods, score)`: the unit mean of the

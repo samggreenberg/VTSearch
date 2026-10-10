@@ -102,6 +102,7 @@ describe('AutoDetectResultsModalComponent', () => {
       bads_owed: bads,
       good_quota: 3,
       bad_quota: 4,
+      dry_bad_quota: 16,
     });
     fixture.componentRef.setInput('data', {
       ...mockData,

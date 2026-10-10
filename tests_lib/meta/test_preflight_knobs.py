@@ -87,6 +87,12 @@ def test_a_clean_environment_matches(check):
     assert not _tagged(out, "DIVERGES") and not _tagged(out, "REFUSED")
 
 
+def test_the_apps_own_dry_runs_match(check):
+    """#4731: spelling out the app's 16 is the app, not an arm."""
+    out = check(CALIB_GOOD_DRY_RUN="16", CALIB_QUOTA_DRY_BADS="16")
+    assert not _tagged(out, "DIVERGES") and not _tagged(out, "REFUSED")
+
+
 # One off-production value per session knob, and the knob name a launcher
 # declares for it.  The names the launchers already used (`startup_schedule`,
 # `spot_check`, `opening_diversity`) are kept exactly.
@@ -99,8 +105,9 @@ _DIVERGENT = [
     ({"CALIB_SIGMA_FLOOR": "absolute"}, "sigma_floor"),
     ({"CALIB_SEED_EXAMPLES": "1"}, "seed_examples"),
     ({"CALIB_STRATIFY_TARGET": "1"}, "stratify_target"),
-    ({"CALIB_GOOD_DRY_RUN": "16"}, "good_dry_run"),
-    ({"CALIB_QUOTA_DRY_BADS": "16"}, "quota_dry_bads"),
+    ({"CALIB_GOOD_DRY_RUN": "off"}, "good_dry_run"),
+    ({"CALIB_GOOD_DRY_RUN": "8"}, "good_dry_run"),
+    ({"CALIB_QUOTA_DRY_BADS": "off"}, "quota_dry_bads"),
     ({"CALIB_BETA": "off"}, "beta"),
     ({"CALIB_BETA": "4"}, "beta"),
     ({"CALIB_WALK_SHAPE": "walk"}, "walk_shape"),
@@ -182,6 +189,7 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_SIGMA_FLOOR": "abs"}, "sigma_floor"),
         ({"CALIB_GOOD_DRY_RUN": "0"}, "good_dry_run"),
         ({"CALIB_QUOTA_DRY_BADS": "sixteen"}, "quota_dry_bads"),
+        ({"CALIB_GOOD_DRY_RUN": "on"}, "good_dry_run"),
     ],
 )
 def test_a_value_the_harness_refuses_is_refused(check, env, knob):

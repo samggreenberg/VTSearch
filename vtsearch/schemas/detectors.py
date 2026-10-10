@@ -585,9 +585,10 @@ class LabelQuotaSchema(Schema):
     """Which detector a labelset gave, and the labels it still owes (#4643).
 
     Built by :func:`vtscore.detectors.label_quota.served_quota`.  Under the
-    label quota (``good_quota`` Goods and ``bad_quota`` Bads) a labelset gives
-    the Goods' centroid, not a trained head; ``goods_owed`` / ``bads_owed`` are
-    what it takes to get one.
+    label quota (``good_quota`` Goods and ``bad_quota`` Bads, or a Good and
+    ``dry_bad_quota`` Bads, #4731) a labelset gives the Goods' centroid, not a
+    trained head; ``goods_owed`` / ``bads_owed`` are what the first quota still
+    takes (both 0 once a head is given).
     """
 
     tier = fields.String(
@@ -606,6 +607,10 @@ class LabelQuotaSchema(Schema):
     bads_owed = fields.Integer(required=True)
     good_quota = fields.Integer(required=True)
     bad_quota = fields.Integer(required=True)
+    dry_bad_quota = fields.Integer(
+        required=True,
+        metadata={"description": "Bads that give a single Good the trained head (#4731)."},
+    )
 
 
 class FindLabelResponseSchema(Schema):

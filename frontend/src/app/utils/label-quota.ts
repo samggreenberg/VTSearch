@@ -26,9 +26,14 @@ export function labelsOwed(quota: Pick<LabelQuota, 'goods_owed' | 'bads_owed'>):
 export function centroidNote(quota: LabelQuota | null | undefined): string {
   if (!quota || quota.tier !== 'centroid') return '';
   const owed = labelsOwed(quota);
+  // The second quota (#4731): with a Good in hand, Bads alone get there too. Nothing is owed by
+  // either route when the counts already meet the first (an unresolved label kept the head away).
+  const dryOwed = owed && quota.n_good >= 1 ? Math.max(0, quota.dry_bad_quota - quota.n_bad) : 0;
+  const routes = [owed, dryOwed > 0 ? plural(dryOwed, 'Bad') : ''].filter(Boolean).join(', or ');
   return (
-    `Too few labels for a trained detector (it takes ${quota.good_quota} Goods and ${quota.bad_quota} Bads), ` +
+    `Too few labels for a trained detector (it takes ${quota.good_quota} Goods and ${quota.bad_quota} Bads, ` +
+    `or a Good and ${quota.dry_bad_quota} Bads), ` +
     `so this is the Goods' centroid, cut where its scores split; the Threshold doesn't move it.` +
-    (owed ? ` ${owed} in Train give a trained one.` : '')
+    (routes ? ` ${routes} in Train give a trained one.` : '')
   );
 }

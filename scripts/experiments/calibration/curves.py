@@ -93,7 +93,7 @@ The app shows the text sort until the Hard phase (``app_trained``), but the
 user can export the labels or run Test at any click, and either retrains from
 them, so a row is what the user can take away at that click.  Since #4643 that
 is what the label quota gives: from the first Good the Goods' centroid, until
-the labels hold 3 Goods and 4 Bads, and the trained head from there - the
+the labels hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731), and the trained head from there - the
 harness writes the row as that detector and says which in ``detector_tier``.
 Nothing here reads ``app_trained`` or ``detector_tier``: a row is drawn the
 same whichever detector made it, and an analyzer about the session filters on

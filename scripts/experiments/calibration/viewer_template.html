@@ -1209,7 +1209,7 @@
           `returns the same empty set, so its precision counts as 0 too. So every run is in the mean at every ` +
           `click, the failing ones included. From its first Good on, a run is drawn at the detector its labels ` +
           `give, which is what Test or an import of the exported labels gives at that click: <b>the Goods' ` +
-          `centroid</b> until the labels hold 3 Goods and 4 Bads, the trained detector from there (#4643), ` +
+          `centroid</b> until the labels hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731), the trained detector from there (#4643), ` +
           `<b>through Autopilot's opening too</b>, where the session itself still shows the text sort (#4640). ` +
           `A dip below the notch there is what exporting would get, not what the session shows. Results run ` +
           `before #4643 start at the first Good and Bad, with a trained detector from there, as the app did.`

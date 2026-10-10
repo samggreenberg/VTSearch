@@ -23,6 +23,19 @@ export interface AutopilotState {
   /** The walk has ended (target met, ran dry, or skipped) and never resumes. */
   moreDone: boolean;
   /**
+   * Good-phase picks in a row without a positive, counted once a Good is in
+   * hand, toward ``moreDryRun`` (#4731).
+   */
+  goodMisses: number;
+  /**
+   * The Good walk ran dry (#4731): ``moreDryRun`` picks in a row held no
+   * Good, with a Good in hand. The Goods found so far then meet the Good
+   * target, and the More walk down the same sort is spent. A target with one
+   * or two Goods the sort can reach used to walk it for the whole session.
+   * Latched for the run, like ``moreDone``.
+   */
+  goodRanDry: boolean;
+  /**
    * The dataset's labeling stops on the dry run, not the lights (#4488): a
    * document (tiled structural) dataset, whose labeling status says
    * ``stop_rule: 'dry_run'``. There the walk draws off the detector's own
@@ -95,6 +108,8 @@ const INITIAL_STATE: AutopilotState = {
   moreDryRun: 16,
   moreMisses: 0,
   moreDone: false,
+  goodMisses: 0,
+  goodRanDry: false,
   dryRunStop: false,
   smartStatus: '',
   stableStatus: '',
@@ -235,6 +250,8 @@ export class AutopilotStateService {
       ...this.stateSubject.value,
       phase: 'good',
       moreMisses: 0,
+      goodMisses: 0,
+      goodRanDry: false,
       // A detector that already had labels starts in retrain mode, where every
       // phase draws off the learned sort: there is no seed sort to walk.
       moreDone: retrainMode,
@@ -297,6 +314,18 @@ export class AutopilotStateService {
     // in Bads alone is a miss. Repeated checks with unchanged counts are no-ops.
     const prev = this.lastCounts;
     this.lastCounts = { good: goodCount, bad: badCount };
+    // The Good walk's run of misses (#4731), read the same way. A miss counts
+    // only with a Good already in hand, so the run is the misses since the
+    // latest Good, and a walk that has found nothing never runs dry.
+    if (prev && st.phase === 'good' && !st.goodRanDry) {
+      if (goodCount > prev.good) {
+        st = { ...st, goodMisses: 0 };
+      } else if (badCount > prev.bad && prev.good >= 1) {
+        const goodMisses = st.goodMisses + 1;
+        const goodRanDry = goodMisses >= st.moreDryRun;
+        st = { ...st, goodMisses, goodRanDry, moreDone: st.moreDone || goodRanDry };
+      }
+    }
     if (prev && st.phase === 'more' && (st.dryRunStop || !st.moreDone)) {
       if (goodCount > prev.good) {
         st = { ...st, moreMisses: 0 };
@@ -319,7 +348,9 @@ export class AutopilotStateService {
     // Cap each phase target at the most votes of that class the dataset could
     // still yield (current votes of that class + everything unlabeled), so a
     // tiny dataset can still satisfy — and advance past — the initial phases.
-    const effGoodTarget = Math.min(st.goodToStart, goodCount + remainingUnlabeled);
+    let effGoodTarget = Math.min(st.goodToStart, goodCount + remainingUnlabeled);
+    // A Good walk that ran dry has met its target with the Goods it found (#4731).
+    if (st.goodRanDry && goodCount >= 1) effGoodTarget = Math.min(effGoodTarget, goodCount);
     const effBadTarget = Math.min(st.badToStart, badCount + remainingUnlabeled);
     const effMoreTarget = Math.min(st.moreToStart, goodCount + remainingUnlabeled);
 

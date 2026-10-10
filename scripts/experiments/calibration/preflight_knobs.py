@@ -266,22 +266,33 @@ def probe(C: Any) -> list[str]:
         rows.append(("seed_examples", str(C.SEED_EXAMPLES), "<unset> = the text or known-good opening"))
     if C.STRATIFY_TARGET:
         rows.append(("stratify_target", "1", "<unset> = the plain random split"))
-    # #4731's Good-phase dry run and the quota tier it leaves: arms the app does not take.
-    for knob, var, val, app in (
+    # #4731's Good-walk dry run and the quota's second tier: unset is the app's, ``off`` the
+    # pre-#4731 arm, another count an arm.
+    from vtscore.detectors.label_quota import DRY_BAD_QUOTA  # noqa: PLC0415
+    from vtscore.eval.autopilot_flow import MORE_DRY_RUN  # noqa: PLC0415
+
+    for knob, var, val, app, app_text in (
         (
             "good_dry_run",
             "CALIB_GOOD_DRY_RUN",
             C.GOOD_DRY_RUN,
-            "<unset> = the app's Good phase, which waits for 3 Goods",
+            MORE_DRY_RUN,
+            f"<unset> = the app's: the Good phase also ends after {MORE_DRY_RUN} misses with a Good in hand",
         ),
-        ("quota_dry_bads", "CALIB_QUOTA_DRY_BADS", C.QUOTA_DRY_BADS, "<unset> = the app's quota, 3 Goods and 4 Bads"),
+        (
+            "quota_dry_bads",
+            "CALIB_QUOTA_DRY_BADS",
+            C.QUOTA_DRY_BADS,
+            DRY_BAD_QUOTA,
+            f"<unset> = the app's: a Good and {DRY_BAD_QUOTA} Bads get the trained head",
+        ),
     ):
-        if val is None:
+        if val is None or val == app:
             continue
-        if isinstance(val, int) and val >= 1:
-            rows.append((knob, str(val), app))
+        if val == "off" or (isinstance(val, int) and val >= 1):
+            rows.append((knob, str(val), app_text))
         else:
-            refuse(knob, var, "must be a positive integer")
+            refuse(knob, var, "must be a positive integer or 'off'")
     # #4668's spread floor before #4492: a retired piece of the labels line.
     if C.SIGMA_FLOOR not in SIGMA_FLOORS:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))
@@ -356,7 +367,13 @@ def probe(C: Any) -> list[str]:
     if C.SMART_GATE != "app":
         rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
     if C.LABEL_QUOTA is not None:
-        rows.append(("label_quota", "off", "app (the Goods' centroid under 3 Goods and 4 Bads, #4643)"))
+        rows.append(
+            (
+                "label_quota",
+                "off",
+                "app (the Goods' centroid under 3 Goods and 4 Bads, or a Good and 16 Bads; #4643, #4731)",
+            )
+        )
     if C.ACQ_ORIGIN != "line":
         rows.append(("acq_origin", C.ACQ_ORIGIN, "line (the app counts the offset from the line)"))
     from vtscore.eval.voting_iterations import resolve_acquisition_target  # noqa: PLC0415

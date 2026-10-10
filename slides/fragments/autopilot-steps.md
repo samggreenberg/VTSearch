@@ -17,7 +17,10 @@
 
 <!-- **a** — The opening, both steps on the ranking the user's own query
      gives, typed words or example pictures: no detector is on screen yet.
-     Three Goods off the top. Four Bads from right at the query's own line,
+     Three Goods off the top, or, once one is in, until sixteen in a row are
+     not Good (#4731): a target the query can reach only once or twice used
+     to walk it for the whole session, and a Good with those sixteen Bads now
+     trains a detector. Four Bads from right at the query's own line,
      where its mistakes are. Then the detector takes over. Until #4740 a third
      step went back to the top for more Goods; scored on F-beta over the
      session it won the first 25 votes and lost every vote after the 23rd

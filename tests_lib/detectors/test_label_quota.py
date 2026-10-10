@@ -1,6 +1,6 @@
-"""The label quota and the Goods' centroid (#4643), in the library tier.
+"""The label quota and the Goods' centroid (#4643, #4731), in the library tier.
 
-Under 3 Goods or 4 Bads a labelset gives the Goods' centroid, not a trained
+Under 3 Goods or 4 Bads, and under a Good with 16 Bads, a labelset gives the Goods' centroid, not a trained
 head: the unit mean of the Goods, everything ranked by its cosine to it, cut
 at the two-Gaussian midpoint of those cosines on the scored corpus.  These
 tests pin the rule's numbers to Autopilot's, the tiers, the centroid against
@@ -27,6 +27,7 @@ from vtscore.detectors.centroid_head import (
 )
 from vtscore.detectors.label_quota import (
     BAD_QUOTA,
+    DRY_BAD_QUOTA,
     GOOD_QUOTA,
     TIER_CENTROID,
     TIER_NONE,
@@ -70,6 +71,15 @@ class TestTheQuotaIsAutopilotsQuorum:
         assert good is not None and bad is not None, "Autopilot's INITIAL_STATE no longer names its quorum"
         assert (GOOD_QUOTA, BAD_QUOTA) == (int(good.group(1)), int(bad.group(1)))
 
+    def test_the_second_quota_is_the_good_walks_dry_run(self):
+        """#4731: a Good walk that ran dry leaves a Good and ``moreDryRun`` Bads, which is the second quota."""
+        from vtscore.eval.autopilot_flow import MORE_DRY_RUN
+
+        ts = (REPO / "frontend/src/app/services/autopilot-state.service.ts").read_text()
+        dry = re.search(r"moreDryRun:\s*(\d+)", ts[ts.index("const INITIAL_STATE") :])
+        assert dry is not None, "Autopilot's INITIAL_STATE no longer names its dry run"
+        assert DRY_BAD_QUOTA == MORE_DRY_RUN == int(dry.group(1)) == 16
+
 
 class TestTheTiers:
     @pytest.mark.parametrize(
@@ -83,15 +93,27 @@ class TestTheTiers:
             (10, 1, TIER_CENTROID),
             (3, 4, TIER_TRAINED),
             (20, 40, TIER_TRAINED),
+            (1, 15, TIER_CENTROID),
+            (1, 16, TIER_TRAINED),
+            (2, 30, TIER_TRAINED),
+            (0, 16, TIER_NONE),
         ],
     )
     def test_the_counts_decide(self, n_good, n_bad, tier):
         assert label_quota(n_good, n_bad).tier == tier
 
+    def test_an_eval_arm_can_drop_the_second_quota(self):
+        """``dry_bad_quota=None`` is the rule before #4731, for the harness's pre-#4731 arm."""
+        assert label_quota(1, 16, dry_bad_quota=None).tier == TIER_CENTROID
+        assert label_quota(3, 4, dry_bad_quota=None).tier == TIER_TRAINED
+        assert label_quota(1, 8, dry_bad_quota=8).tier == TIER_TRAINED
+
     def test_what_is_owed(self):
         q = label_quota(1, 3)
         assert (q.goods_owed, q.bads_owed) == (2, 1)
         assert label_quota(5, 9).goods_owed == label_quota(5, 9).bads_owed == 0
+        # A head from the second quota owes nothing either.
+        assert (label_quota(1, 16).goods_owed, label_quota(1, 16).bads_owed) == (0, 0)
         assert q.as_dict() == {
             "tier": TIER_CENTROID,
             "n_good": 1,
@@ -100,6 +122,7 @@ class TestTheTiers:
             "bads_owed": 1,
             "good_quota": GOOD_QUOTA,
             "bad_quota": BAD_QUOTA,
+            "dry_bad_quota": DRY_BAD_QUOTA,
         }
 
     def test_a_flooded_bad_is_one_label(self):

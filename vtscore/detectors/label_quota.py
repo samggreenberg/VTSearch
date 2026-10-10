@@ -11,9 +11,10 @@ where it came from, not on whether an Autopilot session made it:
 Labels                                   What Test, AutoFind and a load give
 ======================================  =========================================
 no Goods                                 nothing to sort toward (:data:`TIER_NONE`)
-a Good, but under either quota           the Goods' centroid (:data:`TIER_CENTROID`)
+a Good, but under both quotas below      the Goods' centroid (:data:`TIER_CENTROID`)
 :data:`GOOD_QUOTA` Goods and             the trained head (:data:`TIER_TRAINED`)
 :data:`BAD_QUOTA` Bads
+a Good and :data:`DRY_BAD_QUOTA` Bads    the trained head (:data:`TIER_TRAINED`)
 ======================================  =========================================
 
 The centroid is :mod:`vtscore.detectors.centroid_head`.  There is no tier keyed
@@ -38,6 +39,19 @@ The counts are of labels the detector can actually use: a Good or Bad that
 resolves to a vector.  On the active dataset that is every one of them; an
 element whose origin cannot be resolved does not count toward the quota, so a
 head is never fitted to fewer labels than the quota names.
+
+**Why a Good and 16 Bads (#4731).**  A target with one or two Goods the sort can
+reach never met the first quota, so it never got a trained head, and the
+centroid's midpoint line keeps thousands of images on a rare target (#4732).
+Autopilot's Good phase now also ends once its walk runs dry, ``moreDryRun``
+(16) picks in a row without a Good, with a Good in hand.  A labelset that left
+such a walk holds a Good and at least that many Bads, which is the second
+quota: :data:`DRY_BAD_QUOTA` is ``moreDryRun`` (``MORE_DRY_RUN`` in
+:mod:`vtscore.eval.autopilot_flow`).  On FHIBE's face crops, a person with 2-4
+photos then gets a head that keeps a median of one image, and mean F-beta over a
+session goes from 0.001 to 0.47; on COCO Better it moves +0.004
+(``docs/experiments/2026-10-09-good-dry-4731``).  Counts only, as the first
+quota is, so a Good and 16 Bads labelled by hand get the head too.
 """
 
 from __future__ import annotations
@@ -53,6 +67,10 @@ GOOD_QUOTA = 3
 
 #: Bads a labelset needs before it gets a trained head: Autopilot's ``badToStart``.
 BAD_QUOTA = 4
+
+#: Bads that give a single Good the trained head (#4731): Autopilot's ``moreDryRun``,
+#: the run of misses that ends a Good walk that has run dry.
+DRY_BAD_QUOTA = 16
 
 #: No Goods: there is nothing to sort toward, so Test is refused.
 TIER_NONE = "none"
@@ -72,6 +90,9 @@ class LabelQuota:
 
     n_good: int
     n_bad: int
+    #: The second quota's Bads.  :data:`DRY_BAD_QUOTA` is the app's; ``None``
+    #: drops the second quota, the rule before #4731 (an eval arm, never the app).
+    dry_bad_quota: int | None = DRY_BAD_QUOTA
 
     @property
     def tier(self) -> DetectorTier:
@@ -80,17 +101,19 @@ class LabelQuota:
             return TIER_NONE
         if self.n_good >= GOOD_QUOTA and self.n_bad >= BAD_QUOTA:
             return TIER_TRAINED
+        if self.dry_bad_quota is not None and self.n_bad >= self.dry_bad_quota:
+            return TIER_TRAINED
         return TIER_CENTROID
 
     @property
     def goods_owed(self) -> int:
-        """Goods still needed before the trained head (0 once met)."""
-        return max(0, GOOD_QUOTA - self.n_good)
+        """Goods still needed for the first quota's trained head (0 once a head is given)."""
+        return 0 if self.tier == TIER_TRAINED else max(0, GOOD_QUOTA - self.n_good)
 
     @property
     def bads_owed(self) -> int:
-        """Bads still needed before the trained head (0 once met)."""
-        return max(0, BAD_QUOTA - self.n_bad)
+        """Bads still needed for the first quota's trained head (0 once a head is given)."""
+        return 0 if self.tier == TIER_TRAINED else max(0, BAD_QUOTA - self.n_bad)
 
     def as_dict(self) -> dict[str, Any]:
         """The JSON shape every response that reports a tier carries."""
@@ -102,12 +125,16 @@ class LabelQuota:
             "bads_owed": self.bads_owed,
             "good_quota": GOOD_QUOTA,
             "bad_quota": BAD_QUOTA,
+            "dry_bad_quota": self.dry_bad_quota,
         }
 
 
-def label_quota(n_good: int, n_bad: int) -> LabelQuota:
-    """The :class:`LabelQuota` for *n_good* Goods and *n_bad* Bads."""
-    return LabelQuota(int(n_good), int(n_bad))
+def label_quota(n_good: int, n_bad: int, *, dry_bad_quota: int | None = DRY_BAD_QUOTA) -> LabelQuota:
+    """The :class:`LabelQuota` for *n_good* Goods and *n_bad* Bads.
+
+    *dry_bad_quota* is the second quota's Bads; leave it to the app's except in an eval arm.
+    """
+    return LabelQuota(int(n_good), int(n_bad), dry_bad_quota)
 
 
 def labelset_quota(labelset: "LabelSet | None") -> LabelQuota:

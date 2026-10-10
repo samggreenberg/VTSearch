@@ -208,7 +208,14 @@ STEPS_STAGES = 4
 #: it, what it asks about, the drawing in the middle column, and what ends it.
 #: The targets are the harness's constants, which mirror the app's.
 STEPS = (
-    ("good", "Good", "the top of your query", "query-top", f"{GOOD_TARGET} Goods"),
+    # The Good walk can also run dry once a Good is in (#4731).
+    (
+        "good",
+        "Good",
+        "the top of your query",
+        "query-top",
+        f"{GOOD_TARGET} Goods, or {MORE_DRY_RUN} in a row without one",
+    ),
     ("bad", "Bad", "at your query's line", "query-line", f"{BAD_TARGET} Bads"),
     ("hard", "Boundary", "at even odds", "detector-odds", "Smart and Stable both green"),
     ("new", "Diversity", "a cell nobody voted in", "atlas", "Span green as well"),

@@ -445,6 +445,10 @@ def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
         for n, kind in ((quota.goods_owed, "Good"), (quota.bads_owed, "Bad"))
         if n
     ]
+    # The second quota (#4731): with a Good in hand, Bads alone get there too.
+    dry_owed = max(0, quota.dry_bad_quota - quota.n_bad) if owed and quota.n_good and quota.dry_bad_quota else 0
+    if dry_owed:
+        owed = [" and ".join(owed) + f", or {dry_owed} more Bad{'' if dry_owed == 1 else 's'}"]
     cli_progress.emit(
         "detector_centroid",
         text=(

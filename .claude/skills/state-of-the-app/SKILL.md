@@ -230,7 +230,7 @@ same edit.
   Before a run's first Good they draw the empty set (Test is refused, #4629),
   and from there on the harness's detector, which is what Test gives: since
   #4643 the app no longer hands out a head fitted to too few labels, so under
-  the label quota (3 Goods and 4 Bads, Autopilot's own quorum) that is the
+  the label quota (3 Goods and 4 Bads, Autopilot's own quorum, or a Good and 16 Bads since #4731) that is the
   Goods' centroid, cut at its midpoint on the withheld half, and from the
   quota the trained head, whose line is Find's there. The report is the
   session, the viewer is the export, so the two still differ through the

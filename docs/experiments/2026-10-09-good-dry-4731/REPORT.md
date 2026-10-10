@@ -23,7 +23,8 @@ down. Where the exit fires it gains +0.019 ± 0.006, with 88 sessions better and
 exit alone gains about as much on COCO (+0.0033), so there the head adds little. For FHIBE's
 few-photo people the head is the whole gain.
 
-**Recommendation: ship the pair at 16.** The owner rules. The trade is a few sessions that
+**Recommendation: ship the pair at 16.** The owner ruled to ship it (2026-10-09), so both rules are
+now the app's, and the study's "dry run + head" arm is today's default arm. The trade is a few sessions that
 leave a slow walk too early: 3–4 per 100 face sessions at 5 or more photos, and 54 of 144 fired
 COCO sessions. The worst lose 0.22 and 0.11.
 
@@ -202,6 +203,11 @@ session, which would keep walking the example sort. Shipping the pair needs:
 - `make-autopilot-figs.py`.
 
 Things this does not settle:
+- **The opening changed under it (#4740).** The study ran on the photo opening with the More walk
+  (`g3@top,b4@mid,g20+dry1/16@top`); #4740 dropped the walk the same day. Sessions where the exit
+  fires are unchanged by that, because the exit already spent the walk. The control is not: a slow
+  walk that found its third Good used to walk More, and now goes straight to Hard. Re-pricing on
+  today's opening is #4743.
 - **A longer dry run.** 32 would leave fewer slow walks early (table above). It would also hold
   2–4-photo people 16 clicks longer, and 2–4-photo people are the point.
 - **Region voting and the other presets.** The COCO guard is Binary at beta 1 only.
@@ -217,7 +223,12 @@ W=/expscratch/$USER/worktrees/vts-4731-run          # a FROZEN worktree at the b
 cd $W/scripts/experiments/fhibe
 FHIBE_RUN=2026-10-09-4731-ctl FHIBE_EXAMPLES=1 FHIBE_N_IDENTITIES=100 FHIBE_STRATA=2-4,5-6,7- \
   bash launch.sh identities                         # 100 per band, + identities.txt.strata.tsv
-# then per arm (ctl; CALIB_GOOD_DRY_RUN=16; CALIB_GOOD_DRY_RUN=16 CALIB_QUOTA_DRY_BADS=16), with
+# then per arm, spelled as the harness reads them since the pair shipped (the run itself used
+# unset / CALIB_GOOD_DRY_RUN=16 / both =16 at commit c735f4127):
+#   ctl       CALIB_GOOD_DRY_RUN=off CALIB_QUOTA_DRY_BADS=off   (the app before #4731)
+#   dry16     CALIB_QUOTA_DRY_BADS=off
+#   dry16q16  unset                                             (the app)
+# with
 # FHIBE_RUN=2026-10-09-4731-<arm>, FHIBE_IDENTITIES=<the ctl run's identities.txt> and
 # FHIBE_DATASETS=fhibe_1024,fhibe_faces_1024,fhibe_faces_640:
 bash launch.sh prepare && bash launch.sh cells      # 900 cells per arm, ~1-4 min each
@@ -229,6 +240,7 @@ python figures_good_dry_4731.py --analysis <analysis dir> --out docs/experiments
 cd $W/scripts/experiments/state_of_app
 bash good_dry_4731.sh dirs 5
 for arm in C Q D; do bash good_dry_4731.sh launch $arm 5; done   # GOODDRY_PACK=1 when the cpu cap is full
+# (C is now the pre-#4731 app, Q the app; the run used C = unset, Q = both 16, D = dry run 16)
 ```
 
 The cpu partition's cap was held by other arrays, so both studies ran as pack jobs on V100 nodes,

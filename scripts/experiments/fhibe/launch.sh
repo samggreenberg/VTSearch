@@ -27,9 +27,10 @@
 #   * shipped defaults for everything else, the full-label ceiling on, and the
 #     rank frames and pick log the State of the App reads.
 #
-# #4731's arms ride on the same launcher: CALIB_GOOD_DRY_RUN=<n> ends the Good
-# phase after n misses in a row with a Good in hand, CALIB_QUOTA_DRY_BADS=<n>
-# gives a Good and n Bads the trained head. Set either and preflight declares it.
+# #4731's two rules are the app's (the Good phase also ends after 16 misses in a
+# row with a Good in hand; a Good and 16 Bads get the trained head).
+# CALIB_GOOD_DRY_RUN / CALIB_QUOTA_DRY_BADS set them to another count, or to
+# `off` for the app before #4731. Set either and preflight declares it.
 # FHIBE_STRATA=2-4,5-6,7- makes `identities` draw FHIBE_N_IDENTITIES from each
 # band of photo counts and write <identities>.strata.tsv beside the file.
 #
