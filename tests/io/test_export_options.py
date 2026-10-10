@@ -716,3 +716,29 @@ class TestEnrichedFileSizeFormatting:
         media = {"media_type": "image", "file_size": 8192, "width": 4, "height": 4}
         meta = get_media_type("image").display_metadata(media)
         assert meta["File Size"] == 8192
+
+
+class TestEnrichedExportOfAFace:
+    """A face's photo rides the enriched export's opt-in columns (#4751).
+
+    Collapse to photos keeps Test's Export on faces, since the detector's
+    labels are face crops; the photo each face came from and where it sat
+    are columns a user can tick: ``source_file`` from the converter recipe,
+    ``Source Box`` from the face's details.
+    """
+
+    def test_source_file_and_box_are_columns(self):
+        from vtsearch.routes.labels.vote import _build_entry_metadata
+
+        face = {
+            "media_type": "face",
+            "file_size": 512,
+            "origin": {
+                "importer": "converter",
+                "params": {"converter": "image2face", "source_file": "party.jpg", "source_path": "/p/party.jpg"},
+            },
+            "source_box": [0.1, 0.2, 0.3, 0.4],
+        }
+        meta = _build_entry_metadata(face)
+        assert meta["source_file"] == "party.jpg"
+        assert meta["Source Box"] == "0.100,0.200,0.300,0.400"

@@ -670,6 +670,18 @@ dataset other than the one they were derived for
 (`ensure_votes_match_active_dataset`), so one such request clears the session
 the user is in.
 
+Collapse to photos (#4751) follows the same rule for a whole grid: the left
+panel swaps `vt-media-list` for `vt-photo-grid` while `CollapsePhotosService`
+is active (switched on, on a dataset where Show in photo is offered), and the
+grid draws each photo with `mediaUrlIn(photoDatasetId, …)`. The grouping is the
+server's (`GET /api/sort/collapsed`, keyed by `SortStateService.sortToken`, so
+Test's `setSortResults` keeps find-label's token); the grid only pages rows and
+leaves out the faces it is told to hide. A face on a photo emits the same
+`mediaSelect` / `mediaVote` / `mediaContextRequest` a card does, so the host's
+vote flow is unchanged. The Show in photo overlay and the grid both answer the
+409 for an unloaded Image dataset with `SiblingLoadService`
+(component-provided), which loads it and calls back.
+
 ### Routes and guards — the URL is the source of truth
 
 `/label/:datasetId/:detectorId` and `/test/:datasetId/:detectorId` carry the

@@ -139,6 +139,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Collapse to photos** (issue #4751). In Train and Test, a Face dataset whose import also made an
+  Image dataset has a **Show: Faces | Photos** switch under the list's header. **Photos** shows the
+  ranking as the photos the faces were cut from: each photo once, in the place of its best face,
+  with every ranked face of it outlined (faces under the line drawn faint) and a small chip of each
+  face below it. A face on a photo works like its card in the list, so clicking it selects it (or,
+  with hover focus, votes it), and votes stay on faces. So do the counts and Test's **Browse**,
+  **To Dataset** and **Export**: the list says so while it shows photos. If the Image dataset isn't
+  loaded, the list offers to load it. The server groups the whole ranking before paging it
+  (`GET /api/sort/collapsed`), so a photo is never split across pages, and `/api/find-label` now
+  hands back a `sort_token` for its ranking too.
+
 - **Show in photo** (issue #4750). In Train and Test, a face from a multi-dataset import that
   also made an Image dataset has a **Show in photo** button under it, and in Train its
   right-click menu has the same entry. Either one opens the photo the face was cut from over the

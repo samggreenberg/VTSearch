@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.source_groups`: group a ranking of converter outputs by source item** (issue #4751).
+  `group_by_source(results, medias, locate) -> list[SourceGroup]` turns a descending ranking of
+  outputs into one of their sources: each output whose source resolves (`locate` is
+  `SourceLocator.locate`) joins its source item's group, a group scores as its best member and keeps
+  that member's place, and an output whose source cannot be named is a group of its own, so every
+  output is in exactly one group. `SourceGroup` carries `source_dataset_id`, `source_media_id`,
+  `score` and `members` (`SourceGroupMember`: `media_id`, `score`, `box`). It raises
+  `SourceNotLoadedError` (with `dataset_id`) when any output's source dataset is registered but not
+  loaded. `SortResultsCache.derived(token, key, build, *, dataset_id=None) -> (found, view)` keeps a
+  view built once over a stored ranking, evicted with it, and `forget_derived(token, key)` drops one.
+  Additive.
 - **`vtscore.datasets.source_item`: find a converter output's source item in its sibling dataset**
   (issue #4749). `resolve_source_item(media, sibling_medias, *, name_lookup=None) -> int | None`
   joins the output's `origin.params.source_file` to the sibling's `origin_name`, settles a shared
