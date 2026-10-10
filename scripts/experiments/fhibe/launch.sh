@@ -27,6 +27,12 @@
 #   * shipped defaults for everything else, the full-label ceiling on, and the
 #     rank frames and pick log the State of the App reads.
 #
+# #4731's arms ride on the same launcher: CALIB_GOOD_DRY_RUN=<n> ends the Good
+# phase after n misses in a row with a Good in hand, CALIB_QUOTA_DRY_BADS=<n>
+# gives a Good and n Bads the trained head. Set either and preflight declares it.
+# FHIBE_STRATA=2-4,5-6,7- makes `identities` draw FHIBE_N_IDENTITIES from each
+# band of photo counts and write <identities>.strata.tsv beside the file.
+#
 # One run directory per (date, K, balance), owner-only under the release's
 # derived directory: FHIBE may not be redistributed, prepare stores image
 # vectors as exemplar crops, and everything derived goes when a consent
@@ -112,6 +118,7 @@ ENVX="$ENVX CALIB_CELL_ORDER=$CALIB_CELL_ORDER CALIB_SKYLINE_ARMS=$CALIB_SKYLINE
 ENVX="$ENVX CALIB_SAFE_THRESHOLDS=$CALIB_SAFE_THRESHOLDS CALIB_EMIT_PICKS=$CALIB_EMIT_PICKS"
 ENVX="$ENVX CALIB_RANK_FRAME_STEPS=$CALIB_RANK_FRAME_STEPS CALIB_BETA=${CALIB_BETA:-}"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
+ENVX="$ENVX CALIB_GOOD_DRY_RUN=${CALIB_GOOD_DRY_RUN:-} CALIB_QUOTA_DRY_BADS=${CALIB_QUOTA_DRY_BADS:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
@@ -136,7 +143,8 @@ identities)
   submit identities --job-name=fhibe-ids --mem=8G --cpus-per-task=2 --time=1:00:00 \
     --partition="$PARTITION" --export=ALL --output="$LOGS/identities-%j.out" \
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python identities.py --examples $FHIBE_MAX_EXAMPLES \
-${FHIBE_N_IDENTITIES:+--n $FHIBE_N_IDENTITIES} --out $FHIBE_IDENTITIES && chmod 600 $FHIBE_IDENTITIES"
+${FHIBE_N_IDENTITIES:+--n $FHIBE_N_IDENTITIES} ${FHIBE_STRATA:+--strata $FHIBE_STRATA} --out $FHIBE_IDENTITIES \
+&& chmod 600 $FHIBE_IDENTITIES ${FHIBE_STRATA:+$FHIBE_IDENTITIES.strata.tsv}"
   ;;
 
 prepare)
@@ -184,6 +192,8 @@ json.dump(
         "stratify_target": True,
         "identities": "$FHIBE_IDENTITIES",
         "beta": "${CALIB_BETA:-}",
+        "good_dry_run": "${CALIB_GOOD_DRY_RUN:-}",
+        "quota_dry_bads": "${CALIB_QUOTA_DRY_BADS:-}",
         "job_name": "$JOB_NAME",
     },
     open(sys.argv[1], "w"),
@@ -191,6 +201,7 @@ json.dump(
 )
 PYSHAPE
   DIVERGES="seed_examples,stratify_target${CALIB_BETA:+,beta}"
+  DIVERGES="$DIVERGES${CALIB_GOOD_DRY_RUN:+,good_dry_run}${CALIB_QUOTA_DRY_BADS:+,quota_dry_bads}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" --diverges "$DIVERGES" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }

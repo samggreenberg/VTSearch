@@ -1149,6 +1149,17 @@ if SEED_EXAMPLES is not None and SEED_EXAMPLES < 1:
 #: keeps one on each side.  Off (the default) is the plain random split.
 STRATIFY_TARGET = os.environ.get("CALIB_STRATIFY_TARGET", "0") == "1"
 
+#: Issue #4731's arms, neither the app.  ``CALIB_GOOD_DRY_RUN=<n>`` ends
+#: Autopilot's Good phase once n of its picks in a row held no positive, with a
+#: Good in hand.  ``CALIB_QUOTA_DRY_BADS=<n>`` gives the trained head to a
+#: labelset with a Good and n Bads, under the label quota.  Unset (the default)
+#: is the app.  A value that is not a positive integer is kept as given, for
+#: preflight to refuse.
+_GOOD_DRY_RUN = os.environ.get("CALIB_GOOD_DRY_RUN", "").strip()
+GOOD_DRY_RUN: "int | str | None" = int(_GOOD_DRY_RUN) if _GOOD_DRY_RUN.isdigit() else (_GOOD_DRY_RUN or None)
+_QUOTA_DRY_BADS = os.environ.get("CALIB_QUOTA_DRY_BADS", "").strip()
+QUOTA_DRY_BADS: "int | str | None" = int(_QUOTA_DRY_BADS) if _QUOTA_DRY_BADS.isdigit() else (_QUOTA_DRY_BADS or None)
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive

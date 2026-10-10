@@ -2235,6 +2235,17 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
+def _quota_centroid(n_good: int, n_bad: int, quota_dry_bads: Optional[int]) -> bool:
+    """Whether Test gives the Goods' centroid at these counts: the label quota (#4643), with #4731's dry tier.
+
+    *quota_dry_bads* set: a Good and that many Bads also get the trained head, which is what a Good
+    walk that ran dry leaves (``good_dry_run``).  Counts only, as the quota is.
+    """
+    if quota_dry_bads is not None and n_good >= 1 and n_bad >= quota_dry_bads:
+        return False
+    return label_quota_tier(n_good, n_bad).tier == TIER_CENTROID
+
+
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -2320,6 +2331,8 @@ def simulate_voting_iterations(  # noqa: C901
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
+    good_dry_run: Optional[int] = None,
+    quota_dry_bads: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2453,6 +2466,18 @@ def simulate_voting_iterations(  # noqa: C901
             (:func:`~vtscore.eval.example_opening.stratified_split`).  ``False``
             - the default - is the plain random split, which can leave a
             few-positive class with nothing withheld.
+        good_dry_run: An experiment knob (#4731), not the app: Autopilot's Good
+            phase also ends once this many of its picks in a row held no
+            positive, with a Good in hand, and the ``more`` walk down the same
+            sort is then spent (:class:`~vtscore.eval.autopilot_flow.AutopilotFlow`).
+            ``None`` - the default - is the app, whose Good phase waits for
+            three Goods, so a target with fewer findable never leaves it.
+            Needs the phase machine and the app's own opening.
+        quota_dry_bads: An experiment knob (#4731), not the app: under the
+            label quota a labelset with a Good and at least this many Bads
+            also gets the trained head, the counts a Good walk that ran dry
+            leaves behind.  ``None`` - the default - is the app's quota
+            (:mod:`vtscore.detectors.label_quota`).  Inert without the quota.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -2868,6 +2893,11 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
         )
+    for _name, _val in (("good_dry_run", good_dry_run), ("quota_dry_bads", quota_dry_bads)):
+        if _val is not None and (isinstance(_val, bool) or not isinstance(_val, int) or _val < 1):
+            raise ValueError(f"{_name} must be an integer >= 1 or None; got {_val!r}")
+    if good_dry_run is not None and startup_schedule is not None:
+        raise ValueError("good_dry_run ends the app's own Good phase; drop startup_schedule")
     knobs = _resolve_run_knobs(
         fold_count_schedule=fold_count_schedule,
         calibrate_count=calibrate_count,
@@ -3185,11 +3215,13 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
-        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate)
+        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate, good_dry_run=good_dry_run)
     elif more_walk != "seed":
         raise ValueError(
             "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
         )
+    elif good_dry_run is not None:
+        raise ValueError("good_dry_run needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     elif new_walk != "atlas":
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
@@ -3782,7 +3814,7 @@ def simulate_voting_iterations(  # noqa: C901
         details.pop("find_on_test", None)
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
-        centroid = quota_on and label_quota_tier(len(good_votes), len(bad_votes)).tier == TIER_CENTROID
+        centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), quota_dry_bads)
         centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
