@@ -203,6 +203,11 @@ session, which would keep walking the example sort. Shipping the pair needs:
 - `make-autopilot-figs.py`.
 
 Things this does not settle:
+- **The opening changed under it (#4740).** The study ran on the photo opening with the More walk
+  (`g3@top,b4@mid,g20+dry1/16@top`); #4740 dropped the walk the same day. Sessions where the exit
+  fires are unchanged by that, because the exit already spent the walk. The control is not: a slow
+  walk that found its third Good used to walk More, and now goes straight to Hard. Re-pricing on
+  today's opening is #4743.
 - **A longer dry run.** 32 would leave fewer slow walks early (table above). It would also hold
   2–4-photo people 16 clicks longer, and 2–4-photo people are the point.
 - **Region voting and the other presets.** The COCO guard is Binary at beta 1 only.
