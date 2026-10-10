@@ -464,6 +464,8 @@ def _centroid_step(
     *,
     region_voting: bool,
     style_obj: Any = None,
+    line_rule: str | None = None,
+    line_beta: float | None = None,
 ) -> StepModel:
     """The Goods' centroid the app gives under the label quota (#4643), as a step.
 
@@ -474,7 +476,9 @@ def _centroid_step(
     app itself calls, so the only thing ported here is which vectors it is
     handed.  *score* maps a step to its scores on the corpus the line is cut
     on, in the run's own test geometry: the harness cuts it on the withheld
-    half, the corpus a Test there searches.
+    half, the corpus a Test there searches.  *line_rule* and *line_beta* are
+    :func:`~vtscore.detectors.centroid_head.centroid_cut`'s rule and balance
+    (#4732); ``None`` is the app's rule.
     """
     import torch  # noqa: PLC0415
 
@@ -496,7 +500,7 @@ def _centroid_step(
 
         return StepModel(predict=predict, torch_model=head, backend="centroid", device="cpu")
 
-    head, _threshold = fit_centroid_head(goods, lambda h: score(_as_step(h)))
+    head, _threshold = fit_centroid_head(goods, lambda h: score(_as_step(h)), rule=line_rule, beta=line_beta)
     return _as_step(head)
 
 

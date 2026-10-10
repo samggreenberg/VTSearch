@@ -293,6 +293,20 @@ def probe(C: Any) -> list[str]:
             rows.append((knob, str(val), app_text))
         else:
             refuse(knob, var, "must be a positive integer or 'off'")
+    # #4732's centroid line: unset is the app's rule, another rule an arm. The variants add
+    # tagged rows only (no production read takes them), so they are checked, not declared.
+    from vtscore.detectors.centroid_head import CENTROID_LINE_RULE, CENTROID_LINE_RULES  # noqa: PLC0415
+    from vtscore.eval.voting_iterations import parse_centroid_line_variants  # noqa: PLC0415
+
+    if C.CENTROID_LINE is not None and C.CENTROID_LINE != CENTROID_LINE_RULE:
+        if C.CENTROID_LINE in CENTROID_LINE_RULES:
+            rows.append(("centroid_line", C.CENTROID_LINE, f"<unset> = {CENTROID_LINE_RULE}, the app's centroid line"))
+        else:
+            refuse("centroid_line", "CALIB_CENTROID_LINE", "must be one of %s" % ", ".join(CENTROID_LINE_RULES))
+    try:
+        parse_centroid_line_variants(C.CENTROID_LINE_VARIANTS)
+    except ValueError as exc:
+        refuse("centroid_line_variants", "CALIB_CENTROID_LINE_VARIANTS", exc)
     # #4668's spread floor before #4492: a retired piece of the labels line.
     if C.SIGMA_FLOOR not in SIGMA_FLOORS:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))

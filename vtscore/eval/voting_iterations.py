@@ -32,6 +32,7 @@ one.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -69,7 +70,7 @@ from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_co
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
-from vtscore.detectors.centroid_head import CENTROID_THRESHOLD
+from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
 from vtscore.detectors.label_quota import DRY_BAD_QUOTA, TIER_CENTROID
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
@@ -1381,15 +1382,18 @@ def _centroid_test(
     style_obj: Any,
     beta: float | None,
     calibration_rows: bool,
+    line_rule: str | None = None,
+    line_beta: float | None = None,
 ) -> tuple[StepModel, list[dict[str, Any]], "tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None"]:
     """What a Test on the withheld half gives under the label quota (#4643): the Goods' centroid.
 
     The centroid is cut where Test cuts it, on the corpus it searches - here
     the withheld half - so the step is built (:func:`_centroid_step`) with that
     half's scorer, in the run's own geometry, and scored on it at
-    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  Its line
-    does not take the balance, so there is no Find line to re-draw: *beta*
-    only weights the F-beta columns.
+    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  *beta*
+    weights the F-beta columns.  The line is drawn by *line_rule* at
+    *line_beta* (:func:`~vtscore.detectors.centroid_head.centroid_cut`, #4732);
+    ``None`` is the app's rule.
 
     Returns the step, its metric rows (one, from :func:`_calibration_metric_rows`
     when *calibration_rows*, else :func:`_evaluate_on_test`'s), and the
@@ -1401,7 +1405,14 @@ def _centroid_test(
         return _score_media_ids(step, clips_dict, list(test_ids), region_aware=region_aware, style_obj=style_obj)
 
     step = _centroid_step(
-        good_votes, clips_dict, target_category, _score, region_voting=region_voting, style_obj=style_obj
+        good_votes,
+        clips_dict,
+        target_category,
+        _score,
+        region_voting=region_voting,
+        style_obj=style_obj,
+        line_rule=line_rule,
+        line_beta=line_beta,
     )
     if calibration_rows:
         calibration = _calibration_metric_rows(
@@ -2235,6 +2246,46 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
+def _centroid_line_variant_rows(
+    variants: list[tuple[str, float]],
+    ident: dict[str, Any],
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+) -> list[dict[str, Any]]:
+    """#4732's priced lines: the same Test at each ``(rule, beta)`` of *variants*, as tagged rows.
+
+    Each row is *ident* (the click's own identity and timing) with the centroid's
+    metrics when its line is drawn by *rule* at *beta* and F-beta is weighted at
+    *beta*, tagged :func:`centroid_line_tag` so a production read skips it.
+    Band-free: the bands price the detector, which these rows share.
+    """
+    out: list[dict[str, Any]] = []
+    for rule, beta in variants:
+        _step, metric_rows, _cal = _centroid_test(
+            good_votes,
+            clips_dict,
+            test_ids,
+            target_category,
+            inclusion,
+            region_voting=region_voting,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            beta=beta,
+            calibration_rows=False,
+            line_rule=rule,
+            line_beta=beta,
+        )
+        out.extend({**ident, **mr, "beta": beta, "gmm_variant": centroid_line_tag(rule, beta)} for mr in metric_rows)
+    return out
+
+
 def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bool:
     """Whether Test gives the Goods' centroid at these counts: the label quota (#4643, #4731).
 
@@ -2243,6 +2294,39 @@ def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bo
     pre-#4731 rule.
     """
     return label_quota_tier(n_good, n_bad, dry_bad_quota=dry_bad_quota).tier == TIER_CENTROID
+
+
+def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
+    """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
+
+    Raises:
+        ValueError: On a rule outside
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, a
+            balance that is not a positive number, or a repeated variant.
+    """
+    if spec is None:
+        return []
+    items = [x.strip() for x in spec.split(",")] if isinstance(spec, str) else [str(x).strip() for x in spec]
+    out: list[tuple[str, float]] = []
+    for item in (x for x in items if x):
+        rule, sep, beta_text = item.partition("@")
+        try:
+            beta = float(beta_text)
+        except ValueError:
+            beta = float("nan")
+        if not sep or rule not in CENTROID_LINE_RULES or not (math.isfinite(beta) and beta > 0):
+            raise ValueError(
+                f"a centroid line variant is '<rule>@<beta>' with rule in {CENTROID_LINE_RULES}; got {item!r}"
+            )
+        if (rule, beta) in out:
+            raise ValueError(f"centroid line variant {item!r} is repeated")
+        out.append((rule, beta))
+    return out
+
+
+def centroid_line_tag(rule: str, beta: float) -> str:
+    """The ``gmm_variant`` tag of a #4732 centroid line variant's rows."""
+    return f"centroid_line:{rule}@{beta:g}"
 
 
 def _resolve_dry_knob(name: str, value: "int | str | None", app: int) -> Optional[int]:
@@ -2347,6 +2431,8 @@ def simulate_voting_iterations(  # noqa: C901
     stratify_target: bool = False,
     good_dry_run: "int | str | None" = None,
     quota_dry_bads: "int | str | None" = None,
+    centroid_line: Optional[str] = None,
+    centroid_line_variants: "Sequence[str] | None" = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2495,6 +2581,20 @@ def simulate_voting_iterations(  # noqa: C901
             (:data:`~vtscore.detectors.label_quota.DRY_BAD_QUOTA`); ``"off"``
             is the pre-#4731 quota (3 Goods and 4 Bads only); another integer
             is an arm.  Inert without the quota.
+        centroid_line: The rule the Goods' centroid's line is drawn by under
+            the quota (#4732), one of
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, at
+            the run's *beta*.  ``None`` - the default - is the app's
+            (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
+            Inert without the quota.
+        centroid_line_variants: Extra centroid rows to price other lines on
+            the same session (#4732): each ``"<rule>@<beta>"`` adds, at every
+            click Test gives the centroid, a row scored at that balance with
+            the line *rule* draws there, tagged ``gmm_variant =
+            "centroid_line:<rule>@<beta>"`` so a production read skips it.
+            The centroid never picks, so these rows change nothing else, and
+            Autopilot's opening reads no balance, so a variant's balance prices
+            the line a user at that balance would see on these clicks.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -2912,6 +3012,9 @@ def simulate_voting_iterations(  # noqa: C901
         )
     flow_good_dry_run = _resolve_dry_knob("good_dry_run", good_dry_run, MORE_DRY_RUN)
     dry_bad_quota = _resolve_dry_knob("quota_dry_bads", quota_dry_bads, DRY_BAD_QUOTA)
+    line_variants = parse_centroid_line_variants(centroid_line_variants)
+    if centroid_line is not None and centroid_line not in CENTROID_LINE_RULES:
+        raise ValueError(f"centroid_line must be one of {CENTROID_LINE_RULES} or None; got {centroid_line!r}")
     if good_dry_run is not None and startup_schedule is not None:
         raise ValueError("good_dry_run sets the app's own Good phase; a startup schedule owns the opening")
     knobs = _resolve_run_knobs(
@@ -3615,6 +3718,8 @@ def simulate_voting_iterations(  # noqa: C901
                     style_obj=style_obj,
                     beta=row_beta,
                     calibration_rows=emit_calibration_metrics and style_obj is not None,
+                    line_rule=centroid_line,
+                    line_beta=beta,
                 )
                 c_seconds = time.monotonic() - t_test
                 c_bands = _band_metrics(
@@ -3649,6 +3754,20 @@ def simulate_voting_iterations(  # noqa: C901
                 }
                 for mr in c_rows:
                     rows.append({**c_ident, **mr, **c_bands, **c_timing})
+                rows.extend(
+                    _centroid_line_variant_rows(
+                        line_variants,
+                        {**c_ident, **c_timing},
+                        good_votes,
+                        clips_dict,
+                        test_ids,
+                        target_category,
+                        inclusion,
+                        region_voting=region_voting,
+                        region_aware=region_aware,
+                        style_obj=style_obj,
+                    )
+                )
             continue
 
         # The live fold count for THIS step.  Constant unless #3314's schedule
@@ -3850,6 +3969,8 @@ def simulate_voting_iterations(  # noqa: C901
                 style_obj=style_obj,
                 beta=details.get("beta"),
                 calibration_rows=emit_calibration_metrics and style_obj is not None,
+                line_rule=centroid_line,
+                line_beta=beta,
             )
             if calibration is None:
                 metrics = c_rows[0]
@@ -4253,6 +4374,21 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
+        if centroid and line_variants:
+            rows.extend(
+                _centroid_line_variant_rows(
+                    line_variants,
+                    {**base_row, **timing_cols},
+                    good_votes,
+                    clips_dict,
+                    test_ids,
+                    target_category,
+                    inclusion,
+                    region_voting=region_voting,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                )
+            )
 
     if rank_frame_sink is not None and last_ordinary is not None:
         rank_frame_sink.append({**rank_ident, **_rank_frame("last", **last_ordinary)})

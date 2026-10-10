@@ -336,6 +336,7 @@ def main(argv: list[str] | None = None) -> int:
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
+        f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -486,6 +487,8 @@ def main(argv: list[str] | None = None) -> int:
                 stratify_target=cfg.STRATIFY_TARGET,
                 good_dry_run=cfg.GOOD_DRY_RUN,
                 quota_dry_bads=cfg.QUOTA_DRY_BADS,
+                centroid_line=cfg.CENTROID_LINE,
+                centroid_line_variants=cfg.CENTROID_LINE_VARIANTS,
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
@@ -518,6 +521,10 @@ def main(argv: list[str] | None = None) -> int:
         # "shipped" on the default arm, so a pooled frame never reads a blank as
         # a rule.
         live_threshold = cfg.LIVE_THRESHOLD or "shipped"
+        # The centroid's line rule (#4732), named on the default arm too.
+        from vtscore.detectors.centroid_head import CENTROID_LINE_RULE
+
+        centroid_line = cfg.CENTROID_LINE or CENTROID_LINE_RULE
         for r in rows:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
@@ -528,6 +535,7 @@ def main(argv: list[str] | None = None) -> int:
             r["stratify_target"] = cfg.STRATIFY_TARGET
             r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""
             r["quota_dry_bads"] = cfg.QUOTA_DRY_BADS or ""
+            r["centroid_line"] = centroid_line
             r["exclusion_arm"] = exclusion_arm
             r["exclusion_min_remainder"] = exclusion_floor
             r["live_cut_rule"] = live_cut_rule
@@ -603,6 +611,7 @@ def main(argv: list[str] | None = None) -> int:
         "live_cut_rule",
         "live_threshold",
         "standalone_cut",
+        "centroid_line",
     ]
     out = cell_file(outdir / f"task_{idx:04d}.csv")
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)

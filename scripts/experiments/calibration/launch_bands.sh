@@ -156,6 +156,8 @@ ENVX="$ENVX CALIB_LINE_TEST=${CALIB_LINE_TEST:-}"
 # When the simulated user checks (#4496): empty is the end-of-run check; `weak` adds the prompt on weak separation.
 ENVX="$ENVX CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} CALIB_WEAK_D=${CALIB_WEAK_D:-} CALIB_WEAK_MIN_T=${CALIB_WEAK_MIN_T:-}"
 ENVX="$ENVX CALIB_WEAK_REPEAT=${CALIB_WEAK_REPEAT:-} CALIB_WEAK_PHASE=${CALIB_WEAK_PHASE:-}"
+# The Goods' centroid's line (#4732): empty is the app's rule; the variants add tagged rows only.
+ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VARIANTS=${CALIB_CENTROID_LINE_VARIANTS:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).

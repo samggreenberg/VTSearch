@@ -86,16 +86,57 @@ def is_centroid_head(model: object) -> bool:
     return bool(getattr(model, _MARK, False))
 
 
-def centroid_cut(cosines: "Sequence[float] | np.ndarray") -> float:
-    """The line through the centroid's cosines: the two-Gaussian midpoint every cosine sort draws."""
-    from vtscore.training.thresholds import calculate_gmm_threshold  # noqa: PLC0415
+#: The rules a centroid's line can be drawn by (#4732), each over the corpus cosines:
+#:
+#: * ``midpoint`` - the two-Gaussian midpoint, the example sort's line since before #4643;
+#: * ``text`` - the typed query's display line at the balance
+#:   (:func:`~vtscore.training.thresholds.text_sort_cuts`: the count line at beta 1 or
+#:   below, #4603, else the guarded line);
+#: * ``guarded`` - the guarded line alone, which takes no balance (#3826);
+#: * ``count`` - the count line at every balance, ``beta ** 0.708`` times the bulk's excess
+#:   (#4603), the guarded line where the count has nothing to measure.
+CENTROID_LINE_RULES = ("midpoint", "text", "guarded", "count")
 
-    return float(calculate_gmm_threshold([float(c) for c in cosines]))
+#: The rule the app draws a centroid's line by.
+CENTROID_LINE_RULE = "midpoint"
+
+
+def centroid_cut(
+    cosines: "Sequence[float] | np.ndarray", *, rule: str | None = None, beta: float | None = None
+) -> float:
+    """The line through the centroid's cosines, drawn by *rule* (default :data:`CENTROID_LINE_RULE`) at *beta*.
+
+    *beta* is the balance (F-beta's beta); the ``midpoint`` and ``guarded`` rules
+    ignore it, and ``text`` and ``count`` keep the guarded line without one.
+    """
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        _count_line,
+        calculate_gmm_threshold,
+        guarded_text_sort_threshold,
+        text_sort_cuts,
+    )
+
+    chosen = CENTROID_LINE_RULE if rule is None else rule
+    if chosen not in CENTROID_LINE_RULES:
+        raise ValueError(f"unknown centroid line rule {chosen!r}; expected one of {CENTROID_LINE_RULES}")
+    scores = [float(c) for c in cosines]
+    if chosen == "midpoint":
+        return float(calculate_gmm_threshold(scores))
+    if chosen == "text":
+        return float(text_sort_cuts(scores, beta=beta).threshold)
+    if chosen == "count" and beta is not None:
+        counted = _count_line(np.asarray(scores, dtype=np.float64), float(beta))
+        if counted is not None:
+            return float(counted)
+    return float(guarded_text_sort_threshold(scores)[0])
 
 
 def fit_centroid_head(
     goods: Sequence[np.ndarray],
     score: Callable[["nn.Sequential"], Sequence[float]],
+    *,
+    rule: str | None = None,
+    beta: float | None = None,
 ) -> tuple["nn.Sequential", float]:
     """The Goods' centroid head and its threshold, cut on the corpus *score* scores.
 
@@ -109,10 +150,11 @@ def fit_centroid_head(
     :func:`~vtscore.training.query_sort.cosine_sort_active` draws for the same
     centroid on the same corpus.  Media the scorer could not score (the
     non-finite sentinel, outside ``(0, 1)``) are left out of the fit.
+    *rule* and *beta* are :func:`centroid_cut`'s.
     """
     centroid = goods_centroid(goods)
     probe = centroid_head(centroid, 0.0, scale=1.0)
     s = np.asarray(score(probe), dtype=np.float64)
     s = s[(s > 0.0) & (s < 1.0)]
     cosines = np.log(s) - np.log1p(-s)
-    return centroid_head(centroid, centroid_cut(cosines)), CENTROID_THRESHOLD
+    return centroid_head(centroid, centroid_cut(cosines, rule=rule, beta=beta)), CENTROID_THRESHOLD
