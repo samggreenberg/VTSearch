@@ -1118,6 +1118,10 @@ class DetectorContext:
         # new dataset re-estimates it there).  A balance change re-cuts it.
         # Goes with the head.
         "labels_line",  # LabelsLine | None
+        # The Goods' centroid's line (``CentroidLine``, #4732): the corpus
+        # cosines it was drawn on, so a balance change redraws it on the same
+        # scores.  Read only while the model is a centroid head.
+        "centroid_line",  # CentroidLine | None
     )
 
     def __init__(
@@ -1196,6 +1200,7 @@ class DetectorContext:
         self.line_test: Any = None  # LineTest | None
         self.check_ended_votes: int | None = None
         self.labels_line: Any = None  # LabelsLine | None
+        self.centroid_line: Any = None  # CentroidLine | None
 
 
 # ---------------------------------------------------------------------------
@@ -1629,10 +1634,14 @@ def _recut_balance(ctx: "DetectorContext", beta: float) -> float | None:
     fallbacks answer, as the retrain's did.  Only a context with no head at
     all still reads the count rule over its ranking (#4413).
     """
+    from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
     from vtscore.training.thresholds import balance_line  # noqa: PLC0415
 
     if ctx.labels_line is not None:
         return float(ctx.labels_line.threshold(beta))
+    if ctx.centroid_line is not None and is_centroid_head(ctx.model):
+        # The Goods' centroid's line at this balance, on the cosines it was drawn on (#4732).
+        return ctx.centroid_line.threshold_at(beta)
     if ctx.model is not None:
         return None
     return balance_line(
@@ -1902,6 +1911,12 @@ def detector_acquisition_threshold(
     threshold is not on the estimator's scale) - the two jobs coincide there,
     exactly as they did everywhere before #2876.
     """
+    from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
+
+    if ctx.centroid_line is not None and is_centroid_head(ctx.model):
+        # The Goods' centroid samples at its cosines' midpoint whatever line it shows,
+        # as a typed query's sort does (#4136, #4732).
+        return ctx.centroid_line.acquisition_threshold()
     if beta is not None:
         from vtscore.training.thresholds import (
             ACQUISITION_TARGET_PRECISION,

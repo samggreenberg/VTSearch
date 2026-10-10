@@ -53,7 +53,8 @@ python app.py --autodetect --dataset data.pkl --user alice --api-key "$ALICE_KEY
 The key is checked against `data/api_keys.json` (the same file the server's
 `--login api_key` uses); on success the run reads `alice`'s AutoFind list and
 results exporter, and the imported dataset is saved to `alice`'s dashboard.
-Without `--user`, the `default` user (and the `--settings` file) applies.
+Without `--user`, the `default` user (and the `--settings` file) applies. A
+[pipeline file](#pipeline-file) run takes the same two flags.
 
 ### Saving the dataset to the dashboard (`--tempimport`)
 
@@ -543,7 +544,8 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --progres
 ```
 
 The two choices are `text` (default, prose) and `json` (NDJSON events). The
-event schema is defined in `vtscore.cli_progress`.
+event schema is defined in `vtscore.cli_progress`. A [pipeline
+file](#pipeline-file) run emits the same events.
 
 A plugin can also raise a **notification** — a message it wants the user to
 see about something it decided not to fail on ("skipped 3 unreadable files").
@@ -617,10 +619,22 @@ file and pass it via `--pipeline`:
 python app.py --pipeline pipeline.yaml
 ```
 
-The YAML supports every knob the `--autodetect` flag set does. It cannot be
-combined with the other autodetect flags; declare everything inline. Like the
+The YAML covers the source, settings file, detectors, chunking, streaming,
+label import and exporter. The flags for those cannot be combined with
+`--pipeline`: the run is refused with an error naming the flag, so declare them
+in the file. `--dry-run` has no pipeline form and is refused too. Like the
 flags, a pipeline run saves its dataset to the dashboard unless the file sets
 `tempimport: true`.
+
+The flags that configure the process rather than describe the run apply to a
+pipeline run as they do to `--autodetect`: `--user` / `--api-key` (see [Which
+user's AutoFind list runs](#which-users-autofind-list-runs)),
+`--progress-format`, `-v`, and the admin overrides under [Web server
+modes](#web-server-modes) (`--solo-media-type`, `--hide-plugin`, …):
+
+```bash
+python app.py --pipeline nightly.yaml --user alice --api-key "$ALICE_KEY" --progress-format json
+```
 
 ```yaml
 # Pick exactly one source.
@@ -735,8 +749,8 @@ keeps the console quiet — including the per-request access log. Pass `-v` to
 raise the level to `INFO`, which turns on the dev-server access log (one
 `GET /api/... 200` line per request) plus VTSearch's own INFO records; `-vv`
 raises it to `DEBUG`. The flag only raises verbosity, so `-v` on top of
-`VTSEARCH_LOG_LEVEL=debug` stays at DEBUG. It applies to both the web server and
-`--autodetect`:
+`VTSEARCH_LOG_LEVEL=debug` stays at DEBUG. It applies to the web server,
+`--autodetect` and `--pipeline`:
 
 ```bash
 python app.py -v             # INFO + access log

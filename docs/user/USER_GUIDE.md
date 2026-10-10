@@ -1221,10 +1221,11 @@ the Dashboard's **Find** button instead (see
 has 3 Goods and 4 Bads, or one Good and 16 Bads, VTSearch does not train a
 detector from its labels:
 Test, Find and AutoFind rank everything by how close it is to the average of
-its Goods instead, and draw the line where those scores split. One Good is
-enough to test it. The Test view says so under its tabs, with how many more
-Goods and Bads a trained detector needs, and the Threshold does not move that
-line. A detector with no Good at all can't be tested.
+its Goods instead, and keep the images that stand out from the rest: fewer
+toward the false-negative end of the Threshold, more toward the false-positive
+end. One Good is enough to test it. The Test view says so under its tabs, with
+how many more Goods and Bads a trained detector needs. A detector with no Good
+at all can't be tested.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />

@@ -3661,14 +3661,30 @@
       "ExampleSortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
+          "acq_threshold": {
+            "nullable": true,
+            "type": "number"
+          },
+          "has_more_below": {
+            "type": "boolean"
+          },
           "results": {
             "items": {
               "$ref": "#/components/schemas/_SortResultEntry"
             },
             "type": "array"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "required": [
@@ -7127,6 +7143,26 @@
         },
         "type": "object"
       },
+      "SortLineResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "above_threshold",
+          "threshold",
+          "total"
+        ],
+        "type": "object"
+      },
       "SortPageResponse": {
         "additionalProperties": false,
         "properties": {
@@ -9647,7 +9683,7 @@
     },
     "/api/dataset/cancel": {
       "post": {
-        "description": "Cancels all active loading tasks and the legacy global tracker, then waits\nbriefly for one of them to act on the flag.  Cancellation is cooperative,\nso a flag set with no worker left to observe it stops nothing; answering\n``ok`` in that case is what let a *finished* import keep looking like a\nwedged one (#3167).  A cancel that reached nothing answers ``409``, and any\nstale progress it found is cleared on the way out.",
+        "description": "Cancels every active loading task, then waits briefly for one of them to\nact on the flag.  Cancellation is cooperative, so a flag set with no worker\nleft to observe it stops nothing.  A cancel that reached nothing answers\n``409``, and any stale progress it found is cleared on the way out.",
         "operationId": "cancel_dataset_load",
         "responses": {
           "200": {
@@ -11596,6 +11632,9 @@
           },
           "404": {
             "description": "Detector not found."
+          },
+          "409": {
+            "description": "The detector has no positive labels to browse."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -16082,9 +16121,50 @@
         ]
       }
     },
+    "/api/sort/line": {
+      "get": {
+        "description": "A typed query's line moves with the balance at beta 1 or below (#4603), and\nan example sort's, the Goods' centroid's, at every balance (#4732), but the\nranking under it does not.  So after ``POST /api/balance`` a client sends the\n``sort_token`` of the text or example sort on screen, and the line comes\nback redrawn on the scores it was first drawn on, with how many rows of the\nwhole ranking it keeps; nothing is re-scored.  The acquisition cut does not\nmove with the balance and is not returned.",
+        "operationId": "sort_line",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortLineResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown or expired sort token, or a sort whose line is not redrawn here (a learned sort's moves with its detector; a label-file sort's takes no balance)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Redraw a text or example sort's display line at the balance now set (#4760).",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
     "/api/sort/page": {
       "get": {
-        "description": "A sort route (``/api/sort``, ``/api/example-sort``, ``/api/label-file-sort``)\nstores its full descending ``results`` list and hands back a ``sort_token``;\nthis endpoint slices ``[offset, offset + limit)`` out of that cached list so\nthe client can scroll deep into a large ranking without receiving the whole\nthing up front (``docs/plans/scalability.md`` S3/S17/S19).\n\nThe token doubles as a sort-generation guard: a re-sort mints a new token,\nand an evicted/unknown token 404s so the client refetches from the top.",
+        "description": "A sort route (``/api/sort``, the example sorts, ``/api/label-file-sort``,\n``/api/learned-sort``) stores its full descending ``results`` list and hands\nback a ``sort_token``;\nthis endpoint slices ``[offset, offset + limit)`` out of that cached list so\nthe client can scroll deep into a large ranking without receiving the whole\nthing up front (``docs/plans/scalability.md`` S3/S17/S19).\n\nThe token doubles as a sort-generation guard: a re-sort mints a new token,\nand an evicted/unknown token 404s so the client refetches from the top.",
         "operationId": "sort_page",
         "parameters": [
           {

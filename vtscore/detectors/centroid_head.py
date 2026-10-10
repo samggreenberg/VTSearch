@@ -6,16 +6,24 @@ app already draws for several uploaded examples
 (:func:`vtscore.training.query_sort.example_sort_from_paths`): the mean of the
 L2-normalised Good vectors, every media ranked by its cosine to that centroid
 (max-pooled over a patch media's rows, as every scorer here pools), and the line
-the two-Gaussian midpoint of those cosines
-(:func:`~vtscore.training.thresholds.calculate_gmm_threshold`).
+:func:`centroid_cut` draws over those cosines.
 
-**The line does not take the balance.**  It is the example sort's cut, the one
-every non-text cosine sort draws.  The typed query's balance-aware rules
-(#4603) were measured on typed queries only, and the trained head's labels line
-needs held-out Bads the centroid does not have.  A balance change leaves it
-where it is (:func:`~vtscore.state.core.recut_detector_threshold` finds nothing
-to re-cut), and a Find on another corpus refits the midpoint there, as a cold
-Find refits a trained head's line.
+**The line is the typed query's count line, at the balance (#4732).**  It keeps
+``beta ** 0.708`` times the count of media standing out of the cosines' bulk
+(#4603's ``_count_line``), the guarded line where there is nothing to count.  It
+was the two-Gaussian midpoint until #4732, and on a rare target that midpoint
+splits the negatives' own bulk: on FHIBE's face crops the centroid ranked a
+person's withheld photos first of 5,439 and its line kept about 2,300.  Priced on
+the FHIBE cells and the State of the App's Binary opening, the count line won at
+every balance there; the guarded line, the typed query's own at beta 4, lost to
+it by 0.21 F-beta on faces, where its separated branch falls back to the
+midpoint (``docs/experiments/2026-10-10-centroid-line-4732``).  The trained
+head's labels line needs held-out Bads the centroid does not have.  A balance
+change redraws the line on the cosines it was drawn on
+(:class:`CentroidLine`, :func:`~vtscore.state.core.recut_detector_threshold`),
+Autopilot's Hard select still samples at the cosines' midpoint
+(:meth:`CentroidLine.acquisition_threshold`), and a Find on another corpus
+redraws the line there, as a cold Find refits a trained head's line.
 
 **It is a ``Linear(D, 1)``, so it travels where a head travels.**  The weight is
 :data:`CENTROID_LOGIT_SCALE` times the unit centroid and the bias puts the
@@ -28,6 +36,7 @@ they take the linear SVM.  :func:`is_centroid_head` tells the two apart.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Sequence
 
 import numpy as np
@@ -86,18 +95,104 @@ def is_centroid_head(model: object) -> bool:
     return bool(getattr(model, _MARK, False))
 
 
-def centroid_cut(cosines: "Sequence[float] | np.ndarray") -> float:
-    """The line through the centroid's cosines: the two-Gaussian midpoint every cosine sort draws."""
-    from vtscore.training.thresholds import calculate_gmm_threshold  # noqa: PLC0415
+#: The rules a centroid's line can be drawn by (#4732), each over the corpus cosines:
+#:
+#: * ``midpoint`` - the two-Gaussian midpoint, the centroid's and the example sort's line until #4732;
+#: * ``text`` - the typed query's display line at the balance
+#:   (:func:`~vtscore.training.thresholds.text_sort_cuts`: the count line at beta 1 or
+#:   below, #4603, else the guarded line);
+#: * ``guarded`` - the guarded line alone, which takes no balance (#3826);
+#: * ``count`` - the count line at every balance, ``beta ** 0.708`` times the bulk's excess
+#:   (#4603), the guarded line where the count has nothing to measure.  The app's (#4732).
+CENTROID_LINE_RULES = ("midpoint", "text", "guarded", "count")
 
-    return float(calculate_gmm_threshold([float(c) for c in cosines]))
+#: The rule the app draws a centroid's line by: the count line at every balance (#4732).
+CENTROID_LINE_RULE = "count"
 
 
-def fit_centroid_head(
+def centroid_cut(
+    cosines: "Sequence[float] | np.ndarray", *, rule: str | None = None, beta: float | None = None
+) -> float:
+    """The line through the centroid's cosines, drawn by *rule* (default :data:`CENTROID_LINE_RULE`) at *beta*.
+
+    *beta* is the balance (F-beta's beta); the ``midpoint`` and ``guarded`` rules
+    ignore it, and ``text`` and ``count`` keep the guarded line without one.
+    """
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        _count_line,
+        calculate_gmm_threshold,
+        guarded_text_sort_threshold,
+        text_sort_cuts,
+    )
+
+    chosen = CENTROID_LINE_RULE if rule is None else rule
+    if chosen not in CENTROID_LINE_RULES:
+        raise ValueError(f"unknown centroid line rule {chosen!r}; expected one of {CENTROID_LINE_RULES}")
+    scores = [float(c) for c in cosines]
+    if chosen == "midpoint":
+        return float(calculate_gmm_threshold(scores))
+    if chosen == "text":
+        return float(text_sort_cuts(scores, beta=beta).threshold)
+    if chosen == "count" and beta is not None:
+        counted = _count_line(np.asarray(scores, dtype=np.float64), float(beta))
+        if counted is not None:
+            return float(counted)
+    return float(guarded_text_sort_threshold(scores)[0])
+
+
+def _gap_centre(cosines: np.ndarray, line: float) -> float:
+    """*line* moved to the middle of the gap it falls in, keeping the same media (``cosine >= line``).
+
+    The count line sits exactly on a media's cosine (#4603's ``_count_line``), and a
+    float32 head computes ``scale * (cosine - cut)`` with rounding either side of 0, so
+    the media on the line could fall out of the set.  The gap's middle keeps exactly
+    the media the line keeps, with the widest margin either side.  A line above or
+    below every cosine is returned as it is.
+    """
+    s = np.sort(np.asarray(cosines, dtype=np.float64))
+    i = int(np.searchsorted(s, line, side="left"))
+    if 0 < i < s.size:
+        return float((s[i - 1] + s[i]) / 2.0)
+    return float(line)
+
+
+@dataclass(frozen=True)
+class CentroidLine:
+    """A fitted centroid head's line, kept so a balance change can redraw it without a re-score (#4732).
+
+    *cosines* are the corpus cosines the line was drawn on, in the order it was
+    drawn on them (the mixture fit subsamples by position); *cut* is the
+    cosine the head's bias puts at logit 0; *rule* is the rule that drew it.  The
+    head is never rebuilt: a new line is a new threshold on its scores,
+    ``sigmoid(scale * (new_cut - cut))``, which keeps exactly the media whose
+    cosine clears *new_cut*.
+    """
+
+    cosines: np.ndarray
+    cut: float
+    rule: str
+    scale: float = CENTROID_LOGIT_SCALE
+
+    def _threshold_for(self, cut: float) -> float:
+        return float(1.0 / (1.0 + np.exp(-self.scale * (cut - self.cut))))
+
+    def threshold_at(self, beta: float | None) -> float:
+        """The head's threshold for the line *rule* draws at *beta*, on the same corpus."""
+        return self._threshold_for(_gap_centre(self.cosines, centroid_cut(self.cosines, rule=self.rule, beta=beta)))
+
+    def acquisition_threshold(self) -> float:
+        """The head's threshold at the cosines' midpoint: where Hard picks sample, whatever the line (#4136)."""
+        return self._threshold_for(_gap_centre(self.cosines, centroid_cut(self.cosines, rule="midpoint")))
+
+
+def fit_centroid(
     goods: Sequence[np.ndarray],
     score: Callable[["nn.Sequential"], Sequence[float]],
-) -> tuple["nn.Sequential", float]:
-    """The Goods' centroid head and its threshold, cut on the corpus *score* scores.
+    *,
+    rule: str | None = None,
+    beta: float | None = None,
+) -> tuple["nn.Sequential", float, CentroidLine]:
+    """The Goods' centroid head, its threshold, and its :class:`CentroidLine`, cut on the corpus *score* scores.
 
     *score* runs a head over the corpus the line decides and returns one score
     per media, in whatever geometry the caller scores in - the app's
@@ -105,14 +200,31 @@ def fit_centroid_head(
     :func:`~vtscore.detectors.training.scoring_rows_for_snap`'s rows, or the
     eval harness's test-half scorer.  It is called once, with a probe head at
     unit scale and no cut, whose ``sigmoid(cosine)`` is inverted back to the
-    max-pooled cosine; the midpoint is fitted on those, so the cut is the one
+    max-pooled cosine; the line is drawn on those, so the cut is the one
     :func:`~vtscore.training.query_sort.cosine_sort_active` draws for the same
     centroid on the same corpus.  Media the scorer could not score (the
     non-finite sentinel, outside ``(0, 1)``) are left out of the fit.
+    *rule* and *beta* are :func:`centroid_cut`'s; the cut is centred in the gap
+    the line falls in (:func:`_gap_centre`), so the head keeps exactly what the
+    line keeps.
     """
+    chosen = CENTROID_LINE_RULE if rule is None else rule
     centroid = goods_centroid(goods)
     probe = centroid_head(centroid, 0.0, scale=1.0)
     s = np.asarray(score(probe), dtype=np.float64)
     s = s[(s > 0.0) & (s < 1.0)]
     cosines = np.log(s) - np.log1p(-s)
-    return centroid_head(centroid, centroid_cut(cosines)), CENTROID_THRESHOLD
+    cut = _gap_centre(cosines, centroid_cut(cosines, rule=chosen, beta=beta))
+    return centroid_head(centroid, cut), CENTROID_THRESHOLD, CentroidLine(cosines, cut, chosen)
+
+
+def fit_centroid_head(
+    goods: Sequence[np.ndarray],
+    score: Callable[["nn.Sequential"], Sequence[float]],
+    *,
+    rule: str | None = None,
+    beta: float | None = None,
+) -> tuple["nn.Sequential", float]:
+    """The Goods' centroid head and its threshold: :func:`fit_centroid` without the line."""
+    head, threshold, _line = fit_centroid(goods, score, rule=rule, beta=beta)
+    return head, threshold

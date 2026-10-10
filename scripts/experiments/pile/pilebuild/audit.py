@@ -19,7 +19,7 @@ import numpy as np
 import pile_config as pc
 
 from pilebuild.env import cells_io, experiment_config, log
-from pilebuild.geometry import region_geometry_problems, scale_label_digest
+from pilebuild.geometry import region_geometry_problems
 from pilebuild.loaders import loader_for
 
 
@@ -358,33 +358,6 @@ def verify() -> int:
             problems += provable_pool_problems(ds, pool_medias, held_by)
             n_pool, n_checked, dirty = pool_coco_counts(pool_medias, held_by)
             log(f"{ds}: pool vs COCO -- {n_checked}/{n_pool} negatives answerable, {len(dirty)} hold a class of C")
-
-    # A derived cell that no longer matches its parent. `vg_scale_any` is a
-    # relabel of the built `vg_scale` pickle and shares its vectors, so it
-    # survives a parent rebuild looking perfect while carrying the parent's
-    # PREVIOUS labels, boxes and bands -- which is how a box repair ships to one
-    # study and not the other.
-    live_digest: dict[Path, str] = {}  # one parent serves every derived cell built from it
-    for ds, emb in pc.cells():
-        if pc.DATASETS.get(ds, {}).get("kind") != "vg_scale_any":
-            continue
-        path, parent = pc.cell_path(ds, emb), pc.cell_path("vg_scale", emb)
-        if not path.exists() or not parent.exists():
-            continue
-        medias = io.load_medias(path)
-        problems += [f"{ds} x {emb}: {g}" for g in region_geometry_problems(medias)]
-        first = next(iter(medias.values()), None)
-        stamped = ((first or {}).get("origin") or {}).get("params", {}).get("parent_labels")
-        if parent not in live_digest:
-            live_digest[parent] = scale_label_digest(io.load_medias(parent))
-        live = live_digest[parent]
-        if stamped is None:
-            problems.append(f"{ds} x {emb}: no parent_labels stamp -- built before the staleness check, rebuild it")
-        elif stamped != live:
-            problems.append(
-                f"{ds} x {emb}: derived from a {parent.name} that has since changed "
-                f"({stamped[:12]} != {live[:12]}) -- rebuild it, --force on the parent alone leaves it stale"
-            )
 
     # A dataset's cells must all cover the same medias, or cross-embedder
     # comparisons silently compare different populations. This is not

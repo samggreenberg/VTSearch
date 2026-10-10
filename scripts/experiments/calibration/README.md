@@ -113,6 +113,7 @@ produced.
 | **#4583 The calibration split and fold count under the labels line, at the three presets** (closed-loop: fraction {0.3, 0.5} x count {2, 4} x beta {1/4, 1, 4}, 1% pool; one fold and a region arm added) — [report](../../../docs/experiments/2026-10-07-calsplit-4583/REPORT.md) | `launch_calsplit_4583.sh` (twelve arms, eight cells per array task to stay under the submit cap), `analyze_calsplit_4583.py` (the paired contrasts per beta, and the per-run σ of the Δ-objective #4584 sizes with), `selftest_analyze_calsplit_4583.py` (planted answers), `figures_4583.py` (the report's three figures) |
 | **#4668 The F-beta era as a cumulative build-up, at the three presets** (cross-calibration, then the labels line, the relative floor, the weak check, even-odds asking and the detector walk, each added to the rung before; 1% pool; for the deck's "Up and Up") — [report](../../../docs/experiments/2026-10-08-fbeta-buildup-4668/REPORT.md) | `launch_buildup_4668.sh` (sixteen run-level arms; the pre-#4492 floor is `CALIB_SIGMA_FLOOR=absolute`, `vtscore/eval/live_threshold_rules.sigma_floor`), `analyze_buildup_4668.py` (each preset scored at its own beta, the typed query's set at the line of the rung's era; `--seeds` for an interim read). Whole 720-task arrays hit the cluster's 10,000-job MaxJobCount, so the run went through a chunking driver. The slide is `slides/figs/src/make-up-and-up-fig.py`, from the study's `buildup_curve.csv` |
 | **#4671 Two Autopilot pieces priced on the objective** (the dry-stop opening against the one before #4288, and the Coverage Atlas walk against the Hard pick in New; each against today's app at the three presets, 1% pool) | `launch_autopilot_4671.sh` (nine run-level arms; the atlas arm is `CALIB_NEW_WALK=hard`, `vtscore/eval/al_strategies.ALContext.new_walk`), `analyze_autopilot_4671.py` (each arm minus the control at its preset, every run at every vote, session means), `goods_4671.py` (Goods found by votes 25, 50 and 150). Its arms run through `drive_chunks.sh`, the shared chunking driver: an arm's missing cells go in 48-task chunks, a few running at a time, so the queue stays far under the cluster's MaxJobCount (#4701) |
+| **#4732 The Goods' centroid's line below the label quota** (the two-Gaussian midpoint kept about half the corpus on a rare target; the midpoint, the guarded line and the count line priced as tagged rows on the same sessions, FHIBE K=1/4 and COCO Better's Binary opening, at beta 1/4, 1 and 4) — [report](../../../docs/experiments/2026-10-10-centroid-line-4732/REPORT.md) | `analyze_centroid_line_4732.py` (each rule minus the midpoint at its balance, every run at every vote, session means over votes 1-10/50/150, count minus guarded, the typed query's set as a COCO reference), `figures_centroid_line_4732.py`. The rows come from `CALIB_CENTROID_LINE_VARIANTS`; the launchers are `../fhibe/centroid_line_4732.sh` and `../state_of_app/centroid_line_4732.sh` |
 | **#4584 The objective's σ per cell, by preset** (what `preflight.sh --resolve-delta` sizes a balance A/B with) — [note](../../../docs/experiments/2026-10-07-objective-sigma-4584/README.md) | `sigma_objective_4584.py` (per-cell sd of the paired Δ-objective in `analyze_ab`'s all-steps window) |
 | **#3546 What should Autopilot's acquisition cut be?** (today's line - 4 is a rank pin near the 98.5th percentile; eight rules at three presets) — [report](../../../docs/experiments/2026-10-07-acquisition-cut-3546/REPORT.md) | `launch_acqcut_3546.sh` (24 arms: today's cut, at the line, offsets -2 and -6, a 98.5th-percentile pin, the old Inclusion 0 - 4 origin, target pick precision 0.5 and 0.25), `analyze_acqcut_3546.py` (each rule against today's cut: objective, Goods, Hard picks, where the cut sits), `figures_3546.py` |
 | **#4359 How much could a later Smart light buy?** (Smart is preset-blind and goes green at vote 42; the bound: a session that never leaves Hard) — [report](../../../docs/experiments/2026-10-07-smart-bound-4359/REPORT.md) | `launch_smartgate_4359.sh` (today's app vs `CALIB_SMART_GATE=never` at three presets; analyzed with `analyze_acqcut_3546.py --rules app,never --control app`) |
@@ -222,7 +223,7 @@ formats them into one line so two reports mean the same thing by "N of M cells".
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
 embeddings pickles and demo data are read in place (the `siglip_l` pickles land
 alongside them harmlessly), and writes all study output under
-`/exp/$USER/calibration`.
+`/expscratch/$USER/calibration`.
 
 ## Fixed config (pre-registered)
 
@@ -254,7 +255,7 @@ bash launch_safe.sh      # safe_thresholds ON, VG only, 30 votes, 8 seeds
 every step then emits one extra row per safe-threshold GMM variant
 (`gmm_variant` column — fit geometry x cut rule x fit space, plus an
 `xcal_only` control), and the analyze stage runs `analyze_safe.py` instead of
-`analyze.py`. Results land under `/exp/$USER/calibration-safe`, reusing the
+`analyze.py`. Results land under `/expscratch/$USER/calibration-safe`, reusing the
 shared Max-Patch pickles/crops in place.
 
 ## Anchored-mixture study (issue #2852)
@@ -276,7 +277,7 @@ scale), and the `rank_transfer` attribution arm — all step-paired against the
 `CALIB_ANCHORED_FOLD_COMBINES` (see `experiment_config.py`). Analyzer:
 `analyze_anchored.py` (H1–H4 verdicts + paired tables); self-test:
 `python selftest_analyze_anchored.py`. Results land under
-`/exp/$USER/calibration-anchored`. Design and pre-registered decision rules:
+`/expscratch/$USER/calibration-anchored`. Design and pre-registered decision rules:
 `docs/plans/population-anchored-calibration.md`.
 
 Cost note: the fold-anchored arms score the sim set once per calibration fold
@@ -369,7 +370,7 @@ What the screen cannot see is acquisition feedback — K also steers the rank
 position Autopilot's Hard pick samples around — which is why
 `launch_folds_2897_ab.sh` runs one full simulation per fold count, each living
 at its own K. Pass those arm dirs to the analyzer
-(`python analyze_folds_2897.py /exp/$USER/calibration-folds-2897-ab-k8`) to get
+(`python analyze_folds_2897.py /expscratch/$USER/calibration-folds-2897-ab-k8`) to get
 the `screen_agrees` check. Analyzer: `analyze_folds_2897.py`; design and
 pre-registered decision rules: `docs/experiments/2026-08-12-calibration-fold-count/REPORT.md`.
 

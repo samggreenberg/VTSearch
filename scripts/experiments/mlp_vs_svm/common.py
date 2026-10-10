@@ -2,7 +2,7 @@
 
 Every stage script imports this and calls :func:`setup_env` **before** importing
 anything under ``vtscore`` (the data-dir env vars have to be set first).  The
-experiment keeps its embeddings, models, and results under ``/exp/$USER/mlp-svm``
+experiment keeps its embeddings, models, and results under ``/expscratch/$USER/mlp-svm``
 so the demo pickle cache is shared across all SLURM array tasks (embed once,
 reuse everywhere).
 
@@ -31,7 +31,7 @@ __all__ = ["DATADIR", "EXP", "REPO", "RESULTS", "USER", "WARM_HF", "log", "setup
 
 USER = os.environ.get("USER", "sgreenberg")
 REPO = Path(os.environ.get("VTS_REPO", f"/exp/{USER}/projects/vts-mlpsvm"))
-EXP = Path(os.environ.get("MLPSVM_EXP", f"/exp/{USER}/mlp-svm"))
+EXP = Path(os.environ.get("MLPSVM_EXP", f"/expscratch/{USER}/mlp-svm"))
 DATADIR = EXP / "datadir"
 RESULTS = Path(os.environ.get("MLPSVM_RESULTS", str(EXP / "results")))
 WARM_HF = f"/exp/{USER}/.cache/huggingface"

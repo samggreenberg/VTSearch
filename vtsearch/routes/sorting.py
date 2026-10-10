@@ -39,6 +39,8 @@ from vtsearch.schemas.sorting import (
     BalanceRequestSchema,
     BalanceResponseSchema,
     OkResponseSchema,
+    SortLineQuerySchema,
+    SortLineResponseSchema,
     SortPageQuerySchema,
     SortPageResponseSchema,
     SortRequestSchema,
@@ -50,7 +52,7 @@ from vtsearch.schemas.sorting import (
 from vtscore.training.query_sort import (
     apply_crop_or_keep,
     embed_external_labels,
-    example_sort_from_paths,
+    example_sort_cuts_from_paths,
     parse_label_file,
     score_embedder_for_active,
     text_sort_active,
@@ -232,10 +234,11 @@ def sort_clips(body: dict):
         update_sort_progress("sorting", "Computing similarities…", 0, 0, step=3, total_steps=_SORT_STEPS)
         # Two lines (#4136): the display line as ``threshold`` and the midpoint
         # as ``acq_threshold``, so the Hard select samples where it always has
-        # whatever rule paints the green region.
+        # whatever rule paints the green region.  The display line moves with
+        # the balance (#4603), so its rule rides with the ranking (#4760).
         results, cuts = text_sort_active(text_vec, snap=snap)
         sort_idle()
-        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold)
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line)
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
 
@@ -256,8 +259,9 @@ def sort_clips(body: dict):
 def sort_page(query: dict):
     """Return one window of a previously-computed ranking.
 
-    A sort route (``/api/sort``, ``/api/example-sort``, ``/api/label-file-sort``)
-    stores its full descending ``results`` list and hands back a ``sort_token``;
+    A sort route (``/api/sort``, the example sorts, ``/api/label-file-sort``,
+    ``/api/learned-sort``) stores its full descending ``results`` list and hands
+    back a ``sort_token``;
     this endpoint slices ``[offset, offset + limit)`` out of that cached list so
     the client can scroll deep into a large ranking without receiving the whole
     thing up front (``docs/plans/scalability.md`` S3/S17/S19).
@@ -273,6 +277,37 @@ def sort_page(query: dict):
     if page is None:
         abort(404, message="Unknown or expired sort token; re-run the sort.")
     return page
+
+
+@sorting_bp.route("/api/sort/line", methods=["GET"])
+@sorting_bp.arguments(SortLineQuerySchema, location="query")
+@sorting_bp.response(200, SortLineResponseSchema)
+@sorting_bp.alt_response(
+    404,
+    description=(
+        "Unknown or expired sort token, or a sort whose line is not redrawn here "
+        "(a learned sort's moves with its detector; a label-file sort's takes no balance)."
+    ),
+)
+def sort_line(query: dict):
+    """Redraw a text or example sort's display line at the balance now set (#4760).
+
+    A typed query's line moves with the balance at beta 1 or below (#4603), and
+    an example sort's, the Goods' centroid's, at every balance (#4732), but the
+    ranking under it does not.  So after ``POST /api/balance`` a client sends the
+    ``sort_token`` of the text or example sort on screen, and the line comes
+    back redrawn on the scores it was first drawn on, with how many rows of the
+    whole ranking it keeps; nothing is re-scored.  The acquisition cut does not
+    move with the balance and is not returned.
+    """
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+    from vtscore.state.sort_results_cache import sort_results_cache  # noqa: PLC0415
+
+    dataset_id = getattr(get_active_context(), "dataset_id", "") or None
+    line = sort_results_cache.redraw(query["token"], get_beta(), dataset_id=dataset_id)
+    if line is None:
+        abort(404, message="No text or example sort under this token; re-run the sort.")
+    return line
 
 
 def _learned_sort_done_payload(job) -> dict:
@@ -684,12 +719,13 @@ def example_sort():
         try:
             crop_params = _parse_crop_params(request.form.get("crop_params"))
             apply_crop_or_keep(temp_path, crop_params)
-            results, thresh = example_sort_from_paths([temp_path])
+            results, cuts = example_sort_cuts_from_paths([temp_path])
         finally:
             # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)
 
-        return windowed_sort_response(results, thresh)
+        # The display line is the Goods' centroid's (#4732); the Hard select samples at the midpoint.
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line)
 
     except Exception as exc:
         from werkzeug.exceptions import HTTPException

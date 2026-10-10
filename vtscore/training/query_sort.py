@@ -23,12 +23,62 @@ media snapshot against a query vector, and
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from vtscore.media.embedder import MediaEmbedder
     from vtscore.training.thresholds import TextSortCuts
+
+
+@dataclass(frozen=True, eq=False)
+class SortLine:
+    """A text or example sort's display line, kept so a balance change can redraw it (#4760).
+
+    A cosine sort's ranking does not depend on the balance, but its display line
+    does: a typed query's is the count line at beta 1 or below (#4603), the
+    Goods' centroid's is the count line at every balance (#4732), and a tiled
+    structural example's rises at the precision end (#4479).  The sort cache
+    keeps this beside the ranking, so ``GET /api/sort/line`` redraws the line at
+    the balance set now instead of re-scoring the haystack, the move
+    :class:`~vtscore.detectors.centroid_head.CentroidLine` makes for a centroid
+    detector.  The acquisition cut does not move with the balance, so it is not
+    here.
+
+    *rule* names what draws the line: ``"text"``, a typed query's
+    (:func:`~vtscore.training.thresholds.text_sort_cuts`); ``"centroid"``, an
+    example's or several examples' centroid's
+    (:func:`~vtscore.detectors.centroid_head.centroid_cut`); ``"structural"``, a
+    geometrically verified example sort's inlier gate.  *scores* are the cosines
+    the first two are drawn on, as float64 in the order the sort drew on them
+    (the mixture fit subsamples by position): every rule reads them as float64,
+    so :meth:`threshold_at` draws the sort's own number at the sort's own
+    balance, bit for bit, while the cache holds 8 bytes a media rather than a
+    list's 32.  *tiled* is whether a structural sort's dataset is tiled.
+    """
+
+    rule: Literal["text", "centroid", "structural"]
+    scores: np.ndarray | None = None
+    tiled: bool = False
+
+    def threshold_at(self, beta: float | None) -> float:
+        """The display line at *beta*, rounded to 4 decimals as the sort rounds it."""
+        if self.rule == "structural":
+            from vtscore.training.structural_similarity import _example_line
+
+            return _example_line(self.tiled, beta)
+        if self.scores is None:
+            raise ValueError(f"a {self.rule!r} sort line needs the scores it was drawn on")
+        if self.rule == "text":
+            from vtscore.training.thresholds import text_sort_cuts
+
+            return round(text_sort_cuts(self.scores.tolist(), beta=beta).threshold, 4)
+        from vtscore.detectors.centroid_head import centroid_cut
+
+        return round(centroid_cut(self.scores, beta=beta), 4)
 
 
 def _cosine_sort_scored(query_vec, *, role: str, snap) -> tuple[list[dict], list[float]]:
@@ -85,9 +135,12 @@ def text_sort_active(query_vec, *, snap=None, beta: float | None = None) -> tupl
     (``role="text"``).  *snap* as in :func:`cosine_sort_active`.  *beta* is the
     balance the display line is drawn at (#4603); ``None`` reads the active one
     (:func:`vtscore.state.get_beta`), which is the user's setting before any
-    detector exists.
+    detector exists.  *cuts* carries the display line's :class:`SortLine`, to
+    redraw it at another balance (#4760).
     """
     from dataclasses import replace
+
+    import numpy as np
 
     from vtscore.training.thresholds import text_sort_cuts
 
@@ -97,7 +150,48 @@ def text_sort_active(query_vec, *, snap=None, beta: float | None = None) -> tupl
         beta = get_beta()
     results, sims_list = _cosine_sort_scored(query_vec, role="text", snap=snap)
     cuts = text_sort_cuts(sims_list, beta=beta)
-    return results, replace(cuts, threshold=round(cuts.threshold, 4), acq_threshold=round(cuts.acq_threshold, 4))
+    return results, replace(
+        cuts,
+        threshold=round(cuts.threshold, 4),
+        acq_threshold=round(cuts.acq_threshold, 4),
+        line=SortLine("text", np.asarray(sims_list, dtype=np.float64)),
+    )
+
+
+def cosine_sort_cuts(
+    query_vec, *, role: str = "score", snap=None, beta: float | None = None
+) -> tuple[list[dict], TextSortCuts]:
+    """Sort every media in the active dataset by cosine similarity to *query_vec*, with both its lines.
+
+    Returns ``(results, cuts)`` as :func:`text_sort_active` does: *results* as
+    :func:`cosine_sort_active` gives them, and *cuts* the sort's display line
+    (``threshold``) and acquisition cut (``acq_threshold``), each rounded to 4
+    decimals.  A ``"text"`` query draws them by the typed query's rules (#3826,
+    #4136, #4603).  Any other query - an example's vector, several examples'
+    centroid - is the Goods' centroid's sort, so its display line is the one
+    :func:`~vtscore.detectors.centroid_head.centroid_cut` draws for a centroid
+    head on the same corpus (#4732), and its acquisition cut stays the
+    two-Gaussian midpoint, where Autopilot's Hard select has always sampled an
+    example sort.  *beta* is the balance the display line is drawn at; ``None``
+    reads the active one (:func:`vtscore.state.get_beta`).  *cuts* carries the
+    display line's :class:`SortLine`, which draws it, to redraw it at another
+    balance (#4760).
+    """
+    if beta is None:
+        from vtscore.state import get_beta
+
+        beta = get_beta()
+    if role == "text":
+        return text_sort_active(query_vec, snap=snap, beta=beta)
+    import numpy as np
+
+    from vtscore.detectors.centroid_head import CENTROID_LINE_RULE
+    from vtscore.training.thresholds import TextSortCuts, calculate_gmm_threshold
+
+    results, sims_list = _cosine_sort_scored(query_vec, role=role, snap=snap)
+    acq = calculate_gmm_threshold(sims_list)
+    line = SortLine("centroid", np.asarray(sims_list, dtype=np.float64))
+    return results, TextSortCuts(line.threshold_at(beta), round(acq, 4), CENTROID_LINE_RULE, line)
 
 
 def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[list[dict], float]:
@@ -105,10 +199,9 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
 
     Returns ``(results, threshold)`` where *results* is a list of
     ``{"id": …, "similarity": …}`` dicts sorted descending, and
-    *threshold* is the sort's display line (rounded to 4 decimals): for a
-    ``"text"`` query, :func:`text_sort_active`'s ``threshold``; for any
-    other, the GMM midpoint.  A caller that also needs a text sort's
-    acquisition cut calls :func:`text_sort_active` instead.
+    *threshold* is the sort's display line (rounded to 4 decimals):
+    :func:`cosine_sort_cuts`'s ``threshold``.  A caller that also needs the
+    acquisition cut calls :func:`cosine_sort_cuts` instead.
 
     *role* selects which bound embedder the haystack is scored against (the
     v3 routing table, see :meth:`DatasetContext.routed_embedder`): ``"text"``
@@ -127,16 +220,8 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
     single handler doesn't copy the full medias dict under ``_state_lock`` more
     than once per request; when ``None`` a fresh snapshot is taken.
     """
-    # A typed query draws its lines with the text-sort rules (#3826, #4136).
-    # Example and label-file sorts keep the midpoint: the guarded rule was
-    # measured on typed queries only.
-    if role == "text":
-        results, cuts = text_sort_active(query_vec, snap=snap)
-        return results, cuts.threshold
-    from vtscore.training.thresholds import calculate_gmm_threshold
-
-    results, sims_list = _cosine_sort_scored(query_vec, role=role, snap=snap)
-    return results, round(calculate_gmm_threshold(sims_list), 4)
+    results, cuts = cosine_sort_cuts(query_vec, role=role, snap=snap)
+    return results, cuts.threshold
 
 
 def score_embedder_for_active(snap=None) -> tuple[MediaEmbedder | None, str | None]:
@@ -169,9 +254,16 @@ def score_embedder_for_active(snap=None) -> tuple[MediaEmbedder | None, str | No
 
 
 def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
+    """:func:`example_sort_cuts_from_paths` with the display line alone: ``(results_list, threshold)``."""
+    results, cuts = example_sort_cuts_from_paths(file_paths)
+    return results, cuts.threshold
+
+
+def example_sort_cuts_from_paths(file_paths: list[Path]) -> tuple[list[dict], TextSortCuts]:
     """Embed one or more media files and sort all loaded medias by similarity.
 
-    Returns ``(results_list, threshold)`` on success, or raises
+    Returns ``(results_list, cuts)`` on success - *cuts* the display line and
+    the acquisition cut, as :func:`cosine_sort_cuts` draws them - or raises
     :class:`ValueError` when there are no example files, no medias loaded, no
     embedder for the dataset, or a file that the embedder cannot embed.
 
@@ -216,7 +308,7 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
         normed = [v / n if (n := float(np.linalg.norm(v))) > 0 else v for v in embeddings]
         query_vec = np.mean(np.stack(normed), axis=0)
 
-    results, threshold = cosine_sort_active(query_vec, snap=snap)
+    results, cuts = cosine_sort_cuts(query_vec, snap=snap)
 
     # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
     # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
@@ -232,11 +324,21 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
         from vtscore.training.structural_similarity import maybe_structural_rerank_example
 
         example_features = [emb.local_features_forward(m) for m in medias]
-        results, threshold = maybe_structural_rerank_example(
-            results, threshold, snap, example_features, score_key="similarity", beta=get_beta()
+        reranked, threshold = maybe_structural_rerank_example(
+            results, cuts.threshold, snap, example_features, score_key="similarity", beta=get_beta()
         )
+        # The verified ranking draws one line, which the Hard select reads too.
+        # A rerank that ran hands back a new list; one that could not (no usable
+        # template, no matcher) hands back the cosine ranking and its line, which
+        # still redraws as the centroid's.
+        from vtscore.training.structural_stage1 import snapshot_has_tiles
+        from vtscore.training.thresholds import TextSortCuts
 
-    return results, threshold
+        line = cuts.line if reranked is results else SortLine("structural", tiled=snapshot_has_tiles(snap))
+        results = reranked
+        cuts = TextSortCuts(threshold, threshold, "structural", line)
+
+    return results, cuts
 
 
 def apply_crop_or_keep(temp_path: Path, crop_params: dict | None) -> Path:

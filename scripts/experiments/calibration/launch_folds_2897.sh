@@ -27,7 +27,7 @@
 # Usage: bash launch_folds_2897.sh
 set -uo pipefail
 
-export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration-folds-2897}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/calibration-folds-2897}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 # The shipped path: safe thresholds on, the production head.  The fold count

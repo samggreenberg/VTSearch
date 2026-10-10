@@ -35,7 +35,7 @@ export VTS_REPO=${VTS_REPO:-/exp/$USER/projects/vts-spike-2847}
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="/exp/$USER/spike-2847"
+export CALIB_EXP="/expscratch/$USER/spike-2847"
 
 # --- environment: the issue's own arm ---
 export CALIB_DATASETS=coco_val

@@ -62,12 +62,10 @@ def dataset_status():
 def cancel_dataset_load():
     """Cancel dataset load/import operations.
 
-    Cancels all active loading tasks and the legacy global tracker, then waits
-    briefly for one of them to act on the flag.  Cancellation is cooperative,
-    so a flag set with no worker left to observe it stops nothing; answering
-    ``ok`` in that case is what let a *finished* import keep looking like a
-    wedged one (#3167).  A cancel that reached nothing answers ``409``, and any
-    stale progress it found is cleared on the way out.
+    Cancels every active loading task, then waits briefly for one of them to
+    act on the flag.  Cancellation is cooperative, so a flag set with no worker
+    left to observe it stops nothing.  A cancel that reached nothing answers
+    ``409``, and any stale progress it found is cleared on the way out.
     """
     report = cancel_dataset_progress()
     return (report, 409) if not report["ok"] else report

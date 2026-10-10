@@ -888,11 +888,16 @@ def maybe_structural_rerank_example(
         top_k=top_k,
         score_key=score_key,
     )
-    return reranked, _example_line(snap, beta)
+    return reranked, _example_line(snapshot_has_tiles(snap), beta)
 
 
-def _example_line(snap: dict[Any, dict], beta: Optional[float]) -> float:
-    """The example sort's line: the 8-inlier gate, or at the precision end on a tiled dataset 16 (#4479)."""
-    if beta is not None and beta <= PRECISION_BETA and snapshot_has_tiles(snap):
+def _example_line(tiled: bool, beta: Optional[float]) -> float:
+    """The example sort's line: the 8-inlier gate, or at the precision end on a tiled dataset 16 (#4479).
+
+    Takes whether the dataset is *tiled* rather than its snapshot, so a sort on
+    screen can redraw its line at another balance without one (#4760,
+    :class:`~vtscore.training.query_sort.SortLine`).
+    """
+    if beta is not None and beta <= PRECISION_BETA and tiled:
         return round(VerificationScorer().threshold_for(PRECISION_MIN_INLIERS), SCORE_DECIMALS)
     return STRUCTURAL_DECISION_THRESHOLD

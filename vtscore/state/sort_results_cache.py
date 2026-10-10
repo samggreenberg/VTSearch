@@ -19,6 +19,11 @@ token from one ranking cannot accidentally page into a newer ranking, because a
 re-sort mints a fresh token and the old one either still points at its own
 (now-stale-but-consistent) list or has been evicted (→ 404, refetch from the
 top).
+
+A text or example sort also leaves its display line's rule here
+(:class:`~vtscore.training.query_sort.SortLine`), so a balance change can redraw
+that line over the ranking already on screen (:meth:`SortResultsCache.redraw`,
+``GET /api/sort/line``, #4760) rather than re-scoring the haystack.
 """
 
 from __future__ import annotations
@@ -26,7 +31,13 @@ from __future__ import annotations
 import threading
 import uuid
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Protocol
+
+
+class RedrawableLine(Protocol):
+    """A sort's display line that can be drawn again at another balance (#4760)."""
+
+    def threshold_at(self, beta: float | None) -> float: ...
 
 
 # Window shape for the *initial* sort response (scalability.md S3/S17/S19).
@@ -96,12 +107,15 @@ class SortResultsCache:
         *,
         dataset_id: str = "",
         detector_id: str = "",
+        line: RedrawableLine | None = None,
     ) -> str:
         """Store *results* under a fresh token and return it.
 
         Evicts the least-recently-used entries beyond ``max_entries``.  The
         stored list is held by reference (not copied): callers must not mutate a
-        results list after handing it off.
+        results list after handing it off.  *line* is how to redraw *threshold*
+        at another balance (see :meth:`redraw`); ``None`` for a sort whose line
+        is not redrawn here.
         """
         token = uuid.uuid4().hex
         with self._lock:
@@ -110,6 +124,7 @@ class SortResultsCache:
                 "threshold": threshold,
                 "dataset_id": dataset_id,
                 "detector_id": detector_id,
+                "line": line,
             }
             self._entries.move_to_end(token)
             while len(self._entries) > self._max_entries:
@@ -152,6 +167,45 @@ class SortResultsCache:
             "total": total,
             "threshold": threshold,
             "has_more": end < total,
+        }
+
+    def redraw(
+        self,
+        token: str,
+        beta: float | None,
+        *,
+        dataset_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Redraw a stored sort's display line at *beta* (#4760).
+
+        Returns ``{"threshold", "above_threshold", "total"}``: the line its
+        :class:`RedrawableLine` draws at *beta*, and how many rows of the whole
+        ranking sit at or above it.  The entry keeps the new line, so a later
+        :meth:`page` reports it.  The ranking does not move.
+
+        ``None`` when the token is unknown, belongs to another dataset (as in
+        :meth:`page`), or names a sort stored without a line - a learned sort,
+        whose line moves with its detector instead, or one whose line takes no
+        balance.
+        """
+        with self._lock:
+            entry = self._entries.get(token)
+            if entry is None or entry["line"] is None:
+                return None
+            if dataset_id is not None and entry["dataset_id"] and entry["dataset_id"] != dataset_id:
+                return None
+            self._entries.move_to_end(token)
+            line: RedrawableLine = entry["line"]
+            results: list[dict] = entry["results"]
+
+        # Outside the lock: a text line refits the score mixture.
+        threshold = line.threshold_at(beta)
+        with self._lock:
+            entry["threshold"] = threshold
+        return {
+            "threshold": threshold,
+            "above_threshold": count_above_threshold(results, threshold),
+            "total": len(results),
         }
 
     def reset_for_tests(self) -> None:

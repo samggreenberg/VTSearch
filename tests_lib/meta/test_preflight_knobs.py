@@ -108,6 +108,7 @@ _DIVERGENT = [
     ({"CALIB_GOOD_DRY_RUN": "off"}, "good_dry_run"),
     ({"CALIB_GOOD_DRY_RUN": "8"}, "good_dry_run"),
     ({"CALIB_QUOTA_DRY_BADS": "off"}, "quota_dry_bads"),
+    ({"CALIB_CENTROID_LINE": "midpoint"}, "centroid_line"),
     ({"CALIB_BETA": "off"}, "beta"),
     ({"CALIB_BETA": "4"}, "beta"),
     ({"CALIB_WALK_SHAPE": "walk"}, "walk_shape"),
@@ -190,6 +191,9 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_GOOD_DRY_RUN": "0"}, "good_dry_run"),
         ({"CALIB_QUOTA_DRY_BADS": "sixteen"}, "quota_dry_bads"),
         ({"CALIB_GOOD_DRY_RUN": "on"}, "good_dry_run"),
+        ({"CALIB_CENTROID_LINE": "tail"}, "centroid_line"),
+        ({"CALIB_CENTROID_LINE_VARIANTS": "count"}, "centroid_line_variants"),
+        ({"CALIB_CENTROID_LINE_VARIANTS": "count@0"}, "centroid_line_variants"),
     ],
 )
 def test_a_value_the_harness_refuses_is_refused(check, env, knob):

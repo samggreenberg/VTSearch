@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "Increase log verbosity. -v turns on INFO logging, which includes "
             "the dev-server access log (one line per HTTP request); -vv turns "
             "on DEBUG. Only raises the level set by VTSEARCH_LOG_LEVEL, never "
-            "lowers it. Applies to both the web server and --autodetect."
+            "lowers it. Applies to the web server, --autodetect and --pipeline."
         ),
     )
     parser.add_argument(
@@ -99,7 +99,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help=(
-            "Run --autodetect as this user, so their per-user AutoFind list "
+            "Run --autodetect or --pipeline as this user, so their per-user AutoFind list "
             "(autofind_detectors) and results exporter apply. Requires --api-key "
             "to authenticate against data/api_keys.json (same credentials as the "
             "server's api_key login). Without --user the run uses the built-in "
@@ -316,7 +316,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "Format for CLI status output. 'text' (default) prints "
             "human-readable prose; 'json' emits NDJSON on stdout, one event "
             "per line, for scripted callers and CI. See vtscore.cli_progress "
-            "for the event schema. Applies to --autodetect."
+            "for the event schema. Applies to --autodetect and --pipeline."
         ),
     )
     # The process-level admin overrides (--solo-media-type, --solo-embedder,
@@ -371,43 +371,61 @@ def _maybe_list_plugins(args, parser) -> None:
         sys.exit(0)
 
 
-def _maybe_run_pipeline(args, parser, remaining) -> None:
-    """Handle ``--pipeline FILE`` (mutually exclusive with autodetect flags), then exit."""
-    # ---- Pipeline file ---------------------------------------------------
-    # `--pipeline pipeline.yaml` declares an autodetect run in YAML instead
-    # of flags. It is mutually exclusive with the rest of the autodetect
-    # CLI: any extra autodetect flag (importer/dataset/exporter/settings/
-    # chunk-size/import-labels-into) belongs in the YAML, not on the command
-    # line.
-    if args.pipeline:
-        for conflicting in (
-            "autodetect",
-            "dataset",
-            "importer",
-            "outputs",
-            "exporter",
-            "settings",
-            "chunk_size",
-            "import_labels_into",
-            "label_importer_file",
-            "label_importer_fields",
-            "create_detector",
-            "detector_media_type",
-            "dry_run",
-            "tempimport",
-        ):
-            if getattr(args, conflicting, None):
-                cli_flag = f"--{conflicting.replace('_', '-')}"
-                parser.error(f"--pipeline cannot be combined with {cli_flag}; declare it in the YAML file instead.")
-        if remaining:
-            parser.error(
-                f"--pipeline does not accept extra flags ({' '.join(remaining)}); "
-                "declare plugin field values in the YAML file instead."
-            )
-        from vtscore.cli_pipeline import run_pipeline_file
+def _check_pipeline_flags(args, parser, remaining) -> None:
+    """Refuse ``--pipeline FILE`` beside a flag the YAML file declares instead.
 
-        run_pipeline_file(args.pipeline)
-        sys.exit(0)
+    A pipeline file declares a whole autodetect run, so every flag with a YAML
+    key (source, settings, detectors, chunking, streaming, label import,
+    exporter) is refused rather than silently dropped: the file is the one
+    place those live. ``--dry-run`` has no YAML form and is refused too.
+
+    The process-level flags - ``-v``, the admin overrides,
+    ``--on-dataset-imported``, ``--progress-format`` and ``--user`` /
+    ``--api-key`` - are not part of the run's declaration; :func:`main`
+    applies them to a pipeline run exactly as it does to ``--autodetect``.
+    """
+    if not args.pipeline:
+        return
+    for conflicting in (
+        "autodetect",
+        "dataset",
+        "importer",
+        "outputs",
+        "exporter",
+        "settings",
+        "chunk_size",
+        "stream_results",
+        "keep_negatives",
+        "import_labels_into",
+        "label_importer_file",
+        "label_importer_fields",
+        "create_detector",
+        "detector_media_type",
+        "dry_run",
+        "tempimport",
+    ):
+        if getattr(args, conflicting, None):
+            cli_flag = f"--{conflicting.replace('_', '-')}"
+            parser.error(f"--pipeline cannot be combined with {cli_flag}; declare it in the YAML file instead.")
+    # --label-importer always has a value (its default), so test for a change.
+    if args.label_importer != parser.get_default("label_importer"):
+        parser.error(
+            "--pipeline cannot be combined with --label-importer; declare it in the YAML file instead "
+            "(import_labels.importer)."
+        )
+    if remaining:
+        parser.error(
+            f"--pipeline does not accept extra flags ({' '.join(remaining)}); "
+            "declare plugin field values in the YAML file instead."
+        )
+
+
+def _run_pipeline(args, parser) -> None:
+    """Run the ``--pipeline FILE`` the user named, as the ``--user`` they authenticated as."""
+    from vtscore.cli_pipeline import run_pipeline_file
+
+    _start_headless_run(args, parser)
+    run_pipeline_file(args.pipeline)
 
 
 def _register_plugin_cli_args(args, parser: argparse.ArgumentParser):
@@ -472,8 +490,8 @@ def _apply_verbosity(args) -> None:
     # higher level so the dev-server access log (werkzeug INFO) and our own
     # INFO/DEBUG records start showing. Only raise verbosity, never lower it
     # below an explicit VTSEARCH_LOG_LEVEL=debug, so -v on top of a debug env
-    # doesn't quiet things back down. Applies before both the autodetect CLI
-    # and server branches below.
+    # doesn't quiet things back down. Applies before the pipeline, autodetect
+    # and server branches alike.
     verbose = getattr(args, "verbose", 0) or 0
     if verbose:
         target = logging.DEBUG if verbose >= 2 else logging.INFO
@@ -492,7 +510,7 @@ def _apply_admin_overrides(args, parser) -> None:
     that type* -- but the same validator now runs for the env-var form, so the
     two entry paths can no longer disagree.
 
-    Runs for both the autodetect CLI path and the server path, before any
+    Runs for the pipeline, autodetect and server paths alike, before any
     media is loaded or any listing endpoint is served: a typo here would
     otherwise silently no-op the restriction and the user would only notice
     when the picker reappeared.
@@ -795,9 +813,10 @@ def _dispatch_autodetect(
     )
 
 
-def _run_autodetect(args, parser, importer, exporter) -> None:
-    """Drive the ``--autodetect`` flow: progress wiring, auth, optional label
-    import, then dispatch to the importer/pickle code path."""
+def _start_headless_run(args, parser) -> None:
+    """Wire progress output and authenticate ``--user``: the setup a headless
+    run needs before it produces any output, shared by ``--autodetect`` and
+    ``--pipeline`` so the two honour the same flags."""
     # Wire the CLI progress format (text/json) before any pipeline call
     # produces output. In JSON mode we also re-route the process-wide media
     # progress callback from update_progress (which resolves per-thread, so
@@ -815,6 +834,12 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
     notifications.subscribe(cli_progress.notification_subscriber)
 
     _authenticate_cli_user(args, parser)
+
+
+def _run_autodetect(args, parser, importer, exporter) -> None:
+    """Drive the ``--autodetect`` flow: progress wiring, auth, optional label
+    import, then dispatch to the importer/pickle code path."""
+    _start_headless_run(args, parser)
 
     # Collect exporter field values if an exporter was specified
     exporter_field_values = None
@@ -915,7 +940,7 @@ def main(app, initialize_server) -> None:
 
     _maybe_print_help(args, parser)
     _maybe_list_plugins(args, parser)
-    _maybe_run_pipeline(args, parser, remaining)
+    _check_pipeline_flags(args, parser, remaining)
     args, importer, exporter = _resolve_plugins(args, parser, remaining)
     # A temporary import only means something for a detect run, so the flag
     # alone selects one rather than falling through to the web server. Set
@@ -927,7 +952,9 @@ def main(app, initialize_server) -> None:
     _apply_admin_overrides(args, parser)
     _apply_import_hooks(args, parser)
 
-    if args.autodetect:
+    if args.pipeline:
+        _run_pipeline(args, parser)
+    elif args.autodetect:
         _run_autodetect(args, parser, importer, exporter)
     else:
         _run_server(args, app, initialize_server)

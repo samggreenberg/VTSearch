@@ -6,6 +6,7 @@
 #   bash launch.sh prepare             # select cells from the identity file (one CPU job)
 #   bash launch.sh size 0,<N>          # time a photo cell and a face cell before sizing the array
 #   bash launch.sh cells               # the array: every identity x dataset x seed
+#   bash launch.sh pack                # the same cells packed into one job on a V100 node (cpu cap full)
 #   bash launch.sh redo <idx,...>
 #   bash launch.sh status
 #
@@ -31,6 +32,9 @@
 # row with a Good in hand; a Good and 16 Bads get the trained head).
 # CALIB_GOOD_DRY_RUN / CALIB_QUOTA_DRY_BADS set them to another count, or to
 # `off` for the app before #4731. Set either and preflight declares it.
+# CALIB_CENTROID_LINE draws the Goods' centroid's line by another rule (#4732);
+# CALIB_CENTROID_LINE_VARIANTS="<rule>@<beta>,..." adds tagged rows pricing other
+# lines on the same sessions.
 # FHIBE_STRATA=2-4,5-6,7- makes `identities` draw FHIBE_N_IDENTITIES from each
 # band of photo counts and write <identities>.strata.tsv beside the file.
 #
@@ -120,6 +124,7 @@ ENVX="$ENVX CALIB_SAFE_THRESHOLDS=$CALIB_SAFE_THRESHOLDS CALIB_EMIT_PICKS=$CALIB
 ENVX="$ENVX CALIB_RANK_FRAME_STEPS=$CALIB_RANK_FRAME_STEPS CALIB_BETA=${CALIB_BETA:-}"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX CALIB_GOOD_DRY_RUN=${CALIB_GOOD_DRY_RUN:-} CALIB_QUOTA_DRY_BADS=${CALIB_QUOTA_DRY_BADS:-}"
+ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VARIANTS=${CALIB_CENTROID_LINE_VARIANTS:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
@@ -171,7 +176,7 @@ size)
   echo "read Elapsed and MaxRSS off 'sacct -j <id> --format=Elapsed,MaxRSS,State' before sizing the array"
   ;;
 
-cells)
+cells|pack)
   [[ -s "$CALIB_RESULTS/prepare_info.json" ]] || { echo "no prepared grid at $CALIB_RESULTS (run prepare first)" >&2; exit 3; }
   N=$(cd "$CALIB" && python run_cells.py --print-cells 2>/dev/null | tail -1)
   if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
@@ -195,6 +200,8 @@ json.dump(
         "beta": "${CALIB_BETA:-}",
         "good_dry_run": "${CALIB_GOOD_DRY_RUN:-}",
         "quota_dry_bads": "${CALIB_QUOTA_DRY_BADS:-}",
+        "centroid_line": "${CALIB_CENTROID_LINE:-}",
+        "centroid_line_variants": "${CALIB_CENTROID_LINE_VARIANTS:-}",
         "job_name": "$JOB_NAME",
     },
     open(sys.argv[1], "w"),
@@ -203,13 +210,26 @@ json.dump(
 PYSHAPE
   DIVERGES="seed_examples,stratify_target${CALIB_BETA:+,beta}"
   DIVERGES="$DIVERGES${CALIB_GOOD_DRY_RUN:+,good_dry_run}${CALIB_QUOTA_DRY_BADS:+,quota_dry_bads}"
+  DIVERGES="$DIVERGES${CALIB_CENTROID_LINE:+,centroid_line}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" --diverges "$DIVERGES" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
-  submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
-    --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
-    --partition="$PARTITION" --export=ALL --output="$LOGS/cells-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
+  if [[ "$1" == pack ]]; then
+    # The cpu partition's per-user cap is full: every cell in one multi-CPU job on a V100 node,
+    # GPU hidden, CALIB_PACK_PAR cells at a time on 2 threads each (as launch_bands.sh pack, #4490).
+    PAR="${CALIB_PACK_PAR:-30}"
+    THREADS="OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2"
+    submit pack --job-name="$JOB_NAME-pack" --partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}" \
+      --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-8:00:00}" \
+      --export=ALL --output="$LOGS/pack-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $CALIB && \
+seq 0 $((N - 1)) | xargs -P $PAR -I{} sh -c 'python run_cells.py --index {} > $LOGS/cell-{}.out 2>&1 || echo FAILED {}'; echo pack done"
+  else
+    submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
+      --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
+      --partition="$PARTITION" --export=ALL --output="$LOGS/cells-%A_%a.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
+  fi
   ;;
 
 redo)
@@ -228,5 +248,5 @@ status)
   echo "cells written: $(ls "$CALIB_RESULTS/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv' || true)"
   ;;
 *)
-  echo "usage: launch.sh {identities|prepare|size <idx>|cells|redo <idx-list>|status}" >&2; exit 1 ;;
+  echo "usage: launch.sh {identities|prepare|size <idx>|cells|pack|redo <idx-list>|status}" >&2; exit 1 ;;
 esac

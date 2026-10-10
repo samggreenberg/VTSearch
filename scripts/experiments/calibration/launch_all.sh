@@ -13,7 +13,7 @@ set -uo pipefail
 WT="${VTS_REPO:-/exp/$USER/projects/vts-calib}"
 HERE="$WT/scripts/experiments/calibration"
 MAXPATCH="/exp/$USER/max-patch"
-export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/calibration}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 # --- the opening every arm of this chain takes (#3278) -----------------------

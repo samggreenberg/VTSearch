@@ -2,7 +2,7 @@
 
 Under 3 Goods or 4 Bads, and under a Good with 16 Bads, a labelset gives the Goods' centroid, not a trained
 head: the unit mean of the Goods, everything ranked by its cosine to it, cut
-at the two-Gaussian midpoint of those cosines on the scored corpus.  These
+by the count line over those cosines on the scored corpus (#4732).  These
 tests pin the rule's numbers to Autopilot's, the tiers, the centroid against
 the example sort it is, and ``train_from_labelset`` / ``labelset_train_and_score``
 / ``cached_head_is_current`` at each tier.
@@ -20,6 +20,7 @@ import vtscore.detectors.labelset_training as lt
 from vtscore.datasets.labelset import LabeledElement, LabelSet
 from vtscore.detectors.centroid_head import (
     CENTROID_THRESHOLD,
+    centroid_cut,
     centroid_head,
     fit_centroid_head,
     goods_centroid,
@@ -40,7 +41,6 @@ from vtscore.detectors.label_quota import (
 from vtscore.detectors.labelset_elements import stable_element_id
 from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
 from vtscore.state.core import DetectorContext
-from vtscore.training.thresholds import calculate_gmm_threshold
 
 REPO = Path(__file__).resolve().parents[2]
 DIM = 8
@@ -184,8 +184,8 @@ class TestTheCentroid:
 
         assert not is_centroid_head(build_model(DIM, hidden_dim=LINEAR_SVM_HEAD))
 
-    def test_its_cut_is_the_example_sorts_midpoint_and_it_ranks_by_cosine(self):
-        """The planted answer: cosine to the unit mean of the Goods, cut at the GMM midpoint of those cosines."""
+    def test_its_cut_is_the_centroid_line_and_it_ranks_by_cosine(self):
+        """The planted answer: cosine to the unit mean of the Goods, cut at ``centroid_cut``'s line over those cosines."""
         snap, _proto = _corpus()
         goods = [snap[cid]["embeddings"][EMBEDDER] for cid in (1, 2, 3)]
         rows = scoring_rows_for_snap(snap, EMBEDDER)
@@ -194,7 +194,7 @@ class TestTheCentroid:
 
         centroid = goods_centroid(goods)
         cosines = rows.matrix.astype(np.float64) @ centroid.astype(np.float64)
-        cut = calculate_gmm_threshold(cosines.tolist())
+        cut = centroid_cut(cosines)
         scores = np.asarray(score_rows_with_model(head, rows)[0])
         # The same media on either side of the line, and the same order.
         assert np.array_equal(scores >= threshold, cosines >= cut + 1e-6) or np.array_equal(
@@ -306,8 +306,8 @@ class TestLabelsetTrainAndScore:
 
 
 class TestTheBalanceCountsTheCentroidsLine:
-    def test_the_state_counts_what_the_midpoint_keeps(self, labels):
-        """The centroid's line does not take the balance, so its state counts that line, not a proposal."""
+    def test_the_state_counts_what_the_line_keeps(self, labels):
+        """The centroid draws its own line (#4732), so its state counts that line, not a proposal."""
         from vtscore.state.core import detector_balance_state
         from vtscore.training.thresholds import LineRanking
 

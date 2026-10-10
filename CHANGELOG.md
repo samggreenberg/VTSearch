@@ -17,6 +17,23 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Moving the Threshold redraws a text or example sort's line on the spot** (issue #4760).
+  A typed query's line has followed the balance since #4603, and an example sort's since #4732,
+  but both were drawn only when the sort ran: moving the Threshold afterwards left the old line,
+  and the count above it, on screen until you sorted again. The line and its count now move as
+  soon as the server has the new balance, over the same ranking, without re-scoring. The
+  selection, the loaded rows and Autopilot's picks stay as they were. New route
+  `GET /api/sort/line`; the three `example-sort-{by-id,server,origin}` routes now return a
+  `sort_token` (still with the whole ranking).
+
+- **A detector with too few labels returns the images that stand out, not half the collection**
+  (issue #4732). Below 3 Goods and 4 Bads, Test, Find and AutoFind rank everything by the Goods'
+  centroid. Its line used to sit where the scores split into two groups, which on a rare target
+  splits the non-matches: with one photo of a person in a 5,400-face collection, the person's other
+  photos ranked first and the line still kept about 2,300 faces. It now keeps about as many images as
+  stand out from the rest, the rule a typed query's line uses, so the same Test keeps one to three
+  faces. The Threshold moves it: more toward false positives, fewer toward false negatives. An
+  example sort draws the same line. Autopilot's picks on an example sort are unchanged.
 - **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
   Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
   another on one CPU core, and most of each fit's time went to statistics over a few dozen
@@ -681,6 +698,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **`--pipeline` honours `--user`, `--progress-format`, `-v` and the admin overrides**
+  (issue #4753). A pipeline run started before those flags were applied, so
+  `--pipeline p.yaml --user bob` ran as the `default` user without asking for
+  `--api-key`, and `--progress-format json` still printed prose. The flags now
+  apply exactly as they do to `--autodetect`. `--stream-results`,
+  `--keep-negatives` and `--label-importer`, which the YAML file declares, are
+  refused beside `--pipeline` rather than ignored. The `⏳ Initializing
+  VTSearch…` banner now goes to stderr, so a `--progress-format json` run's
+  stdout (`--autodetect` or `--pipeline`) is NDJSON from its first line, and
+  piping it into `jq` no longer fails on that banner.
 - **Changing the balance during Autopilot no longer knocks Stable off green**
   (issue #4745). Stable counts the items that cross the line between one
   detector and the next. A balance change moves the line without any detector

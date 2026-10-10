@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 from vtscore.config import DATA_DIR
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._media_response import image_thumbnail_response
+from vtsearch.routes._sort_window import windowed_sort_response
 from vtsearch.schemas.media import (
     ExampleSortByIdRequestSchema,
     ExampleSortOriginRequestSchema,
@@ -280,7 +281,7 @@ def example_sort_server(body: dict):
         abort(400, message="crop_params applies to a single example; omit it when passing multiple filenames")
 
     try:
-        from vtscore.training.query_sort import apply_crop_or_keep, example_sort_from_paths
+        from vtscore.training.query_sort import apply_crop_or_keep, example_sort_cuts_from_paths
 
         if crop_params:
             # Crop into a temp file so the saved server-side example is unchanged.
@@ -294,12 +295,12 @@ def example_sort_server(body: dict):
             tmp.write_bytes(file_path.read_bytes())
             try:
                 apply_crop_or_keep(tmp, crop_params)
-                results, thresh = example_sort_from_paths([tmp])
+                results, cuts = example_sort_cuts_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
-            results, thresh = example_sort_from_paths(file_paths)
-        return {"results": results, "threshold": thresh}
+            results, cuts = example_sort_cuts_from_paths(file_paths)
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
     except HTTPException:
         raise
     except Exception as exc:
@@ -383,16 +384,16 @@ def example_sort_origin(body: dict):
         if fetched.path is None and fetched.embedding is not None:
             if crop_params:
                 abort(400, message="Cannot crop an archive-member example (no extracted bytes)")
-            from vtscore.training.query_sort import cosine_sort_active
+            from vtscore.training.query_sort import cosine_sort_cuts
 
-            results, thresh = cosine_sort_active(fetched.embedding)
-            return {"results": results, "threshold": thresh}
+            results, cuts = cosine_sort_cuts(fetched.embedding)
+            return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
 
         file_path = fetched.path
         if file_path is None:
             abort(404, message=f"File not found: {key}")
 
-        from vtscore.training.query_sort import apply_crop_or_keep, example_sort_from_paths
+        from vtscore.training.query_sort import apply_crop_or_keep, example_sort_cuts_from_paths
 
         if crop_params:
             import uuid
@@ -404,12 +405,12 @@ def example_sort_origin(body: dict):
             tmp.write_bytes(file_path.read_bytes())
             try:
                 apply_crop_or_keep(tmp, crop_params)
-                results, thresh = example_sort_from_paths([tmp])
+                results, cuts = example_sort_cuts_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
-            results, thresh = example_sort_from_paths([file_path])
-        return {"results": results, "threshold": thresh}
+            results, cuts = example_sort_cuts_from_paths([file_path])
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
     except HTTPException:
         raise
     except Exception as exc:
@@ -508,8 +509,8 @@ def example_sort_by_id(body: dict):
     try:
         from vtscore.training.query_sort import (
             apply_crop_or_keep,
-            cosine_sort_active,
-            example_sort_from_paths,
+            cosine_sort_cuts,
+            example_sort_cuts_from_paths,
         )
 
         if crop_params:
@@ -524,7 +525,7 @@ def example_sort_by_id(body: dict):
             tmp.write_bytes(media_bytes)
             try:
                 apply_crop_or_keep(tmp, crop_params)
-                results, thresh = example_sort_from_paths([tmp])
+                results, cuts = example_sort_cuts_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
@@ -538,8 +539,8 @@ def example_sort_by_id(body: dict):
             embedding = media_embedding(media, score_name)
             if embedding is None:
                 abort(400, message="Media has no embedding (cannot sort)")
-            results, thresh = cosine_sort_active(embedding)
-        return {"results": results, "threshold": thresh}
+            results, cuts = cosine_sort_cuts(embedding)
+        return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
     except HTTPException:
         raise
     except Exception as exc:

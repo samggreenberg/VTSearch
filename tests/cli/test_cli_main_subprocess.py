@@ -6,11 +6,12 @@ the autodetect/pipeline/server wiring — is covered in-process (and far
 faster) by ``test_cli_main.py``, which calls ``cli_main.main`` directly with
 the heavy stages mocked.
 
-This one ``slow`` subprocess test remains to guard the single thing an
-in-process test can't reach: the real seam between ``app.py``'s ``__main__``
-block and ``cli_main.main(app, initialize_server)`` when a fresh interpreter
-actually imports the whole app and runs a full ``--autodetect`` dispatch.
-``--dry-run`` keeps it model-free.
+These ``slow`` subprocess tests remain to guard what an in-process test
+can't reach: the real seam between ``app.py``'s ``__main__`` block and
+``cli_main.main(app, initialize_server)`` when a fresh interpreter actually
+imports the whole app and runs a full ``--autodetect`` dispatch (``--dry-run``
+keeps it model-free), and what that import writes to stdout before argv is
+parsed.
 """
 
 from __future__ import annotations
@@ -66,3 +67,16 @@ def test_app_autodetect_dry_run_via_subprocess(tmp_path):
     assert "Exporter: server_json_file" in result.stdout
     # Critical: dry-run must not actually run the exporter.
     assert not out_path.exists()
+
+
+@pytest.mark.slow
+def test_app_pipeline_json_progress_is_ndjson_on_stdout(tmp_path):
+    """``--pipeline … --progress-format json`` (#4753): every stdout line is an
+    NDJSON event, including those written before argv is parsed (the startup
+    banner goes to stderr), so a ``| jq`` consumer never meets bare prose."""
+    result = _run_app("--pipeline", str(tmp_path / "missing.yaml"), "--progress-format", "json")
+
+    assert result.returncode == 1, result.stderr
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    assert [e["event"] for e in events] == ["error"]
+    assert "Pipeline file not found" in events[0]["message"]

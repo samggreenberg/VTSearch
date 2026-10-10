@@ -52,6 +52,7 @@ from marshmallow import Schema, fields, validate
 from vtscore.datasets import vote_provenance
 
 from vtsearch.schemas.datasets import ImporterPickerTabSchema
+from vtsearch.schemas.sorting import _WINDOW_META_FIELDS
 
 
 class OriginSchema(Schema):
@@ -602,10 +603,22 @@ class _SortResultEntrySchema(Schema):
 
 
 class ExampleSortResponseSchema(Schema):
-    """Response for ``POST /api/example-sort-server`` and ``/api/example-sort-origin``."""
+    """Response for ``POST /api/example-sort-server``, ``/api/example-sort-origin`` and ``/api/example-sort-by-id``.
+
+    ``threshold`` is the display line, the Goods' centroid's (#4732); ``acq_threshold``
+    is where Autopilot's Hard select samples, the two-Gaussian midpoint.  The
+    whole ranking is always sent (``has_more_below`` is false), but it is
+    registered like every other sort's, so ``sort_token`` pages it and redraws
+    its line at another balance (``GET /api/sort/line``, #4760).
+    """
 
     results = fields.List(fields.Nested(_SortResultEntrySchema), required=True)
     threshold = fields.Float(required=True)
+    acq_threshold = fields.Float(required=False, allow_none=True)
+    sort_token = _WINDOW_META_FIELDS["sort_token"]
+    total = _WINDOW_META_FIELDS["total"]
+    above_threshold = _WINDOW_META_FIELDS["above_threshold"]
+    has_more_below = _WINDOW_META_FIELDS["has_more_below"]
 
 
 class DatasourceImporterEntrySchema(Schema):

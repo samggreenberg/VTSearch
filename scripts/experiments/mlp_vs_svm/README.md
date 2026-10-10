@@ -50,4 +50,4 @@ sbatch --array=0-$((N-1))%24 ... --wrap "... python stage_b_autopilot.py"
   everywhere set `VTSEARCH_DISABLE_CUML=1`.
 - Rare-arm cells for low-prevalence categories are skipped (they'd leave < 15
   positives); those tasks write a 0-row CSV, which `summarize.py` drops.
-- Results live under `/exp/$USER/mlp-svm/results`.
+- Results live under `/expscratch/$USER/mlp-svm/results`.

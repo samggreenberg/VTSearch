@@ -8,10 +8,15 @@ ranking is large enough to be worth paging.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from vtscore.state.sort_results_cache import RedrawableLine
 
 
-def _windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[str, Any]:
+def _windowed_sort_extras(
+    results: list[dict], threshold: float | None, line: RedrawableLine | None = None
+) -> dict[str, Any]:
     """Register a full sorted ``results`` list and return the windowing extras.
 
     Stores *results* in the process-global :data:`sort_results_cache` keyed to
@@ -26,13 +31,17 @@ def _windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[
     Additive: the caller still returns the full ``results`` today (the frontend
     windowed model lands in a later slice, see ``docs/plans/scalability.md``
     S3/S17/S19), so wiring this in never changes existing behaviour.
+
+    *line* is the sort's :class:`~vtscore.training.query_sort.SortLine`, kept
+    with the ranking so ``GET /api/sort/line`` can redraw *threshold* at another
+    balance (#4760).
     """
     from vtscore.state.core import get_active_context, get_active_detector_context  # noqa: PLC0415
     from vtscore.state.sort_results_cache import count_above_threshold, sort_results_cache  # noqa: PLC0415
 
     dataset_id = getattr(get_active_context(), "dataset_id", "") or ""
     detector_id = getattr(get_active_detector_context(), "detector_id", "") or ""
-    token = sort_results_cache.store(results, threshold, dataset_id=dataset_id, detector_id=detector_id)
+    token = sort_results_cache.store(results, threshold, dataset_id=dataset_id, detector_id=detector_id, line=line)
     return {
         "sort_token": token,
         "total": len(results),
@@ -45,6 +54,9 @@ def windowed_sort_response(
     threshold: float | None,
     acq_threshold: float | None = None,
     balance: dict[str, Any] | None = None,
+    *,
+    line: RedrawableLine | None = None,
+    window: bool = True,
 ) -> dict[str, Any]:
     """Build a sort-response body, windowing the transmitted ``results``.
 
@@ -53,13 +65,20 @@ def windowed_sort_response(
     reporting ``threshold`` since #2876 (see
     :func:`vtscore.state.core.detector_acquisition_threshold`); on a text sort
     it is the mixture midpoint, with the guarded rule drawing ``threshold``
-    since #4136 (see :func:`vtscore.training.thresholds.text_sort_cuts`).  The
-    example and label-file sorts draw one line and leave it ``None``, and the
-    client falls back to ``threshold``.  It is deliberately *not* fed to ``_windowed_sort_extras``:
+    since #4136 (see :func:`vtscore.training.thresholds.text_sort_cuts`); on an
+    example sort it is the midpoint too, with the Goods' centroid's rule drawing
+    ``threshold`` since #4732 (:func:`vtscore.training.query_sort.cosine_sort_cuts`).
+    The label-file sort draws one line and leaves it ``None``, and the client
+    falls back to ``threshold``.  It is deliberately *not* fed to ``_windowed_sort_extras``:
     ``above_threshold`` counts what the user is told matched, which is the
     reporting cut's job.  *balance* is what the balance says about
     ``threshold`` (#4413, :func:`vtscore.state.core.detector_balance_state`);
-    likewise a detector sort's alone.
+    likewise a detector sort's alone.  *line* is a text or example sort's
+    :class:`~vtscore.training.query_sort.SortLine`, so a balance change can
+    redraw ``threshold`` over this ranking (``GET /api/sort/line``, #4760).
+    *window* ``False`` transmits the whole ranking at any size: the three
+    ``example-sort-{by-id,server,origin}`` routes register theirs for the redraw
+    and the page route, but have never windowed what they send.
 
     Stores the full ranking (so ``/api/sort/page`` can serve any window) and
     returns ``{results, threshold, acq_threshold, sort_token, total,
@@ -73,17 +92,17 @@ def windowed_sort_response(
     """
     from vtscore.state import sort_results_cache as _cache_mod  # noqa: PLC0415
 
-    extras = _windowed_sort_extras(results, threshold)
+    extras = _windowed_sort_extras(results, threshold, line)
     total = extras["total"]
-    if total < _cache_mod.SORT_WINDOW_THRESHOLD:
-        window = results
+    if not window or total < _cache_mod.SORT_WINDOW_THRESHOLD:
+        sent = results
         has_more = False
     else:
         end = _cache_mod.initial_window_end(total, extras["above_threshold"])
-        window = results[:end]
+        sent = results[:end]
         has_more = end < total
     return {
-        "results": window,
+        "results": sent,
         "threshold": threshold,
         "acq_threshold": acq_threshold,
         "balance": balance,

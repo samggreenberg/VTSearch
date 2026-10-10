@@ -20,7 +20,6 @@ data/
 # Only hand-crafted assets (favicons, logos) are tracked.
 static/index.html
 static/main.js
-static/polyfills.js
 static/styles.css
 static/chunk-*.js
 static/3rdpartylicenses.txt

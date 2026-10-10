@@ -891,3 +891,61 @@ class TestImportLabelsCreate:
                 monkeypatch,
                 {"detector": "No Such Det", "importer": "server_json_file", "fields": {"filepath": str(labels)}},
             )
+
+
+class TestProgressFormat:
+    """#4753: a pipeline run honours ``--progress-format json``, so nothing it
+    prints may land on stdout as bare prose between the NDJSON events."""
+
+    @staticmethod
+    def _events(out: str) -> list[dict]:
+        return [json.loads(line) for line in out.splitlines()]
+
+    def test_label_import_is_a_labels_imported_event(self, monkeypatch, capsys):
+        import vtscore.cli as vtcli
+        from vtscore import cli_progress
+        from vtscore.cli_pipeline import _dispatch
+
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a, **k: (3, 1))
+        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: None)
+        cli_progress.set_format("json")
+        _dispatch(
+            {
+                "dataset": "foo.pkl",
+                "importer": None,
+                "importer_fields": {},
+                "settings": None,
+                "detectors": None,
+                "chunk_size": None,
+                "import_labels": {"detector": "Dogs", "importer": "server_json_file", "fields": {"filepath": "x"}},
+                "exporter": None,
+                "exporter_fields": {},
+                "tempimport": True,
+            }
+        )
+        (event,) = self._events(capsys.readouterr().out)
+        assert event["event"] == "labels_imported"
+        assert (event["detector"], event["applied"], event["skipped"], event["created"]) == ("Dogs", 3, 1, False)
+
+    def test_error_is_an_error_event_on_stdout(self, tmp_path, capsys):
+        from vtscore import cli_progress
+        from vtscore.cli_pipeline import run_pipeline_file
+
+        cli_progress.set_format("json")
+        with pytest.raises(SystemExit) as exc:
+            run_pipeline_file(tmp_path / "nope.yaml")
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        (event,) = self._events(captured.out)
+        assert event["event"] == "error"
+        assert "Pipeline file not found" in event["message"]
+        assert captured.err == ""
+
+    def test_text_error_stays_on_stderr(self, tmp_path, capsys):
+        from vtscore.cli_pipeline import run_pipeline_file
+
+        with pytest.raises(SystemExit):
+            run_pipeline_file(tmp_path / "nope.yaml")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err.startswith("Error: Pipeline file not found")
