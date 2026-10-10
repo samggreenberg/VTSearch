@@ -175,7 +175,7 @@
   }
 }
 
-.badge-ready, .badge-embedding, .badge-download {
+.badge-ready, .badge-embedding, .badge-download, .badge-category {
   display: inline-block;
   padding: var(--space-2xs) var(--space-sm);
   font-size: var(--font-2xs);
@@ -191,6 +191,9 @@
 // mode; the previous --border + --text-muted pairing layered two near-equal
 // shades of grey and was effectively invisible against the table row.
 .badge-download { background: var(--bg-secondary-btn); color: var(--text-secondary); }
+// Neutral info pill: the category a Dashboard dataset stands for within its
+// multi-dataset import (#4747). Same quiet pairing as `.badge-download`.
+.badge-category { background: var(--bg-secondary-btn); color: var(--text-secondary); }
 
 // (The server folder browser chrome - breadcrumbs, list, items, path footer -
 // now lives in `vt-folder-browser`. See

@@ -461,6 +461,25 @@ describe('DashboardComponent', () => {
     expect(component.sortedDatasets[0].name).toBe('Alpha');
   });
 
+  it('keeps the datasets of one multi-dataset import together whatever the sort (#4747)', () => {
+    const datasets = [
+      { id: 'd1', name: 'Photos – Face', num_items: 40, import_group: 'g1', output_category: 'face' },
+      { id: 'd2', name: 'Pets', num_items: 20 },
+      { id: 'd3', name: 'Photos – Image', num_items: 10, import_group: 'g1', output_category: 'image' },
+    ];
+    flushInitialRequests(datasets);
+
+    // By name, "Pets" would sit between the two siblings.
+    expect(component.sortedDatasets.map((d) => d.id)).toEqual(['d2', 'd1', 'd3']);
+
+    // By item count the group follows its first member (Image, 10 items).
+    component.datasetCols.sortBy('num_items');
+    expect(component.sortedDatasets.map((d) => d.id)).toEqual(['d3', 'd1', 'd2']);
+
+    expect(component.importSiblings().get('d1')).toEqual(['Photos – Image']);
+    expect(component.importSiblings().has('d2')).toBe(false);
+  });
+
   it('should sort models by column', () => {
     const models = [
       { id: 'm1', name: 'Zeta', num_training: 5 },

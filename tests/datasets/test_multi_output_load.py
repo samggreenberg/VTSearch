@@ -217,6 +217,60 @@ class TestHappyPath:
             _run(_MultiImporter(), [])
 
 
+class TestImportGroup:
+    """Every dataset of one run records the run's group id and its own category (#4747)."""
+
+    def test_every_output_of_a_run_shares_one_group(self, isolated_settings):
+        _run(_MultiImporter(), [OutputSpec("audio"), OutputSpec("image", category="document")])
+
+        registered = _registered()
+        audio, document = registered["holiday – Audio"], registered["holiday – Document"]
+        assert audio["import_group"], "a multi-dataset import mints a group id"
+        assert audio["import_group"] == document["import_group"]
+        assert audio["output_category"] == "audio"
+        assert document["output_category"] == "document"
+        assert document["media_type"] == "image", "the category is recorded beside the type, not instead of it"
+
+    def test_each_run_mints_its_own_group(self, isolated_settings):
+        _run(_MultiImporter(), [OutputSpec("audio"), OutputSpec("image")])
+        _run(
+            _MultiImporter(),
+            [OutputSpec("audio"), OutputSpec("image")],
+            field_values={"url": "http://example.com/trip.zip", "dataset_name": "trip"},
+        )
+
+        registered = _registered()
+        holiday = {registered[f"holiday – {c}"]["import_group"] for c in ("Audio", "Image")}
+        trip = {registered[f"trip – {c}"]["import_group"] for c in ("Audio", "Image")}
+        assert len(holiday) == 1 and len(trip) == 1
+        assert holiday != trip
+
+    def test_a_single_dataset_import_has_no_group(self, isolated_settings):
+        from vtscore.datasets.load_pipeline import _run_importer_in_background
+
+        with mock.patch("vtscore.datasets.load_pipeline.threading.Thread", side_effect=_sync_thread_factory()):
+            _run_importer_in_background(
+                _MultiImporter(),
+                {"url": "http://example.com/solo.zip", "dataset_name": "solo", "media_type": "audio"},
+            )
+
+        entry = _registered()["solo"]
+        assert entry["import_group"] is None
+        assert entry["output_category"] == ""
+
+    def test_deleting_one_sibling_leaves_the_others(self, isolated_settings):
+        from vtscore.datasets.registry import unregister_dataset
+
+        _run(_MultiImporter(), [OutputSpec("audio"), OutputSpec("image")])
+        before = _registered()
+
+        assert unregister_dataset(before["holiday – Audio"]["id"])
+
+        after = _registered()
+        assert set(after) == {"holiday – Image"}
+        assert after["holiday – Image"] == before["holiday – Image"], "the group is informational"
+
+
 class TestIsolation:
     def test_an_empty_output_fails_alone(self, isolated_settings):
         events: list[DatasetImported] = []

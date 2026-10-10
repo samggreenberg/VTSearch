@@ -216,6 +216,18 @@ class TestSavingRun:
         }
         assert image["dataset"]["id"] == entries["field_kit – Image"]["id"]
 
+    def test_the_saved_datasets_share_an_import_group(self, client, tmp_path, monkeypatch):
+        """The CLI goes through the GUI's pipeline, so its datasets are linked the same way (#4747)."""
+        _stub_resolve(monkeypatch, tmp_path)
+        _write_detector("ears", "audio")
+
+        _run(tmp_path, save=True, autofind=["ears"])
+
+        entries = {e["name"]: e for e in list_datasets()}
+        audio, image = entries["field_kit – Audio"], entries["field_kit – Image"]
+        assert audio["import_group"] and audio["import_group"] == image["import_group"]
+        assert (audio["output_category"], image["output_category"]) == ("audio", "image")
+
     def test_file_name_comes_from_the_dataset_name_template(self, client, tmp_path, monkeypatch):
         """``{dataset_name}`` anywhere in the path is the user's own naming; nothing is inserted."""
         _stub_resolve(monkeypatch, tmp_path)

@@ -39,11 +39,15 @@ def _auto_register_dataset(
     ingest_started_at: float | None = None,
     on_stage: Callable[[str], None] | None = None,
     extra_pickle_keys: dict | None = None,
+    import_group: str | None = None,
+    output_category: str = "",
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
     Unlike the old version, this accepts an explicit *media_dict* instead
     of reading from the global ``medias`` proxy, enabling parallel loads.
+    *import_group* / *output_category* go to the registry entry as given (see
+    :func:`~vtscore.datasets.registry.register_dataset`).
 
     Returns the registry entry dict on success, or ``None`` on failure/skip.
     """
@@ -138,6 +142,8 @@ def _auto_register_dataset(
             file_type_counts=file_type_counts,
             ingest_started_at=ingest_started_at,
             expires_at=expires_at,
+            import_group=import_group,
+            output_category=output_category,
         )
     except Exception:
         # Registry write failed; clean up the orphaned pkl so we don't
@@ -159,6 +165,9 @@ def _register_and_migrate(
     embedder: str,
     created_by: str,
     ingest_started_at: float,
+    *,
+    import_group: str | None = None,
+    output_category: str = "",
 ) -> tuple[str, str | None]:
     """Save to registry, migrate the context from task_id to its real id.
 
@@ -217,6 +226,8 @@ def _register_and_migrate(
         ingest_started_at=ingest_started_at,
         on_stage=_on_stage,
         extra_pickle_keys=extra_pickle_keys,
+        import_group=import_group,
+        output_category=output_category,
     )
     if entry is None:
         return task_id, None

@@ -127,7 +127,14 @@ not list every commit. Use `git log` for the full history.
   face's details show it as **Source Box** (fractions of the photo's width and height). Faces from
   a folder or demo import also show their **Detection Confidence** now; that row was being dropped
   on the way in. This is the groundwork for opening a face's photo with the face outlined.
-
+- **The Dashboard keeps a multi-dataset import's datasets together** (issue #4747). The datasets
+  one import produced (say "Photos – Image" and "Photos – Face") now sit next to each other in the
+  dataset table and the top bar's dataset menu, whichever column you sort by, placed where the
+  first of them would sort. Each shows a small badge with the kind of media it holds (Image, Face,
+  Document…); hover it to see the datasets it was imported with. Behind it, every dataset's entry
+  in the registry records which import it came from (`import_group`) and its category
+  (`output_category`), and `GET /api/datasets/registry` returns both. Datasets imported before
+  this change show no grouping.
 - **The command line makes several datasets from one importer run** (issue #4707). The
   Multi-Dataset import has a headless form: `--autodetect --importer <name> --outputs '<json>'` (a
   list with one object per dataset, in the shape the web API's `outputs` entries take) and an

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
@@ -34,6 +34,7 @@ import {
   progressBarState,
 } from '../../utils/format-progress';
 import { sortRowsByColumn } from '../../utils/sort-rows';
+import { clusterImportSiblings, importSiblingNames } from '../../utils/import-siblings';
 import {
   DashboardColumnsService,
   DatasetColumn,
@@ -1238,9 +1239,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Sorting ---
 
+  /** Datasets from one multi-dataset import sit together, placed by
+   *  whichever of them sorts first (#4747). */
   get sortedDatasets(): DatasetRegistryEntry[] {
-    return sortRowsByColumn(this.datasets, this.datasetCols.sortColumn, this.datasetCols.sortAsc);
+    return clusterImportSiblings(
+      sortRowsByColumn(this.datasets, this.datasetCols.sortColumn, this.datasetCols.sortAsc),
+    );
   }
+
+  /** Each dataset's import siblings by name, keyed by dataset id; memoized on
+   *  the registry list so every row gets a stable array between refreshes. */
+  readonly importSiblings = computed(() => importSiblingNames(this.datasetState.datasets));
 
   get sortedDetectors(): DetectorRegistryEntry[] {
     const col = this.detectorCols.sortColumn;

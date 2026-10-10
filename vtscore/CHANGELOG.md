@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The dataset registry links the datasets of one multi-dataset import** (issue #4747).
+  `vtscore.datasets.registry.register_dataset` takes `import_group: str | None = None` and
+  `output_category: str = ""` and stores both on the entry; the multi-dataset load
+  (`vtscore.datasets.load_multi`) mints one group id per run and stamps every output's entry with
+  it and with the output's `OutputSpec.category`. Entries saved earlier lack the keys; read them
+  as `None` / `""`. Additive.
 - **`vtscore.concurrency.stalls`: a startup bar for the watchdog.** `StallWatchdog.relaxed(threshold_ms)`
   raises the heartbeat-miss bar for a block (never lowers it, re-arms the opt-in live dump at it, and a stall
   reported under it carries `bar …ms`); `startup_threshold_ms()` reads `VTSEARCH_STALL_STARTUP_MS` (default

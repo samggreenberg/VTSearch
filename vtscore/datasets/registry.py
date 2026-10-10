@@ -196,6 +196,8 @@ def register_dataset(
     file_type_counts: dict[str, int] | None = None,
     ingest_started_at: float | None = None,
     expires_at: float | None = None,
+    import_group: str | None = None,
+    output_category: str = "",
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
 
@@ -208,6 +210,15 @@ def register_dataset(
         ingest_started_at: Unix timestamp when ingest began.
         expires_at: Unix timestamp when the dataset expires.  ``None``
             means the dataset never expires.
+        import_group: Id shared by every dataset one multi-dataset import
+            produced (minted once per run by
+            :mod:`vtscore.datasets.load_multi`), so its siblings can be found
+            from any one of them.  ``None`` for a single-dataset import.
+            Informational: :func:`unregister_dataset` leaves siblings alone.
+        output_category: The ``OutputSpec.category`` this dataset stands for
+            within its import group (``"face"``, ``"document"``…), which can
+            differ from *media_type* (a Document output holds rendered page
+            *images*).  Empty for a single-dataset import.
 
     Returns the newly created entry (with a generated ``id``).
     """
@@ -249,6 +260,8 @@ def register_dataset(
         "ingest_started_at": ingest_started_at,
         "ingest_finished_at": now,
         "expires_at": expires_at,
+        "import_group": import_group,
+        "output_category": output_category,
     }
     _read_modify_write(lambda entries: entries.append(entry))
 

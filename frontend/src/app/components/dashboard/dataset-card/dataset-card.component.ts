@@ -43,6 +43,9 @@ export class DatasetCardComponent {
   /** How many of the user's AutoFind detectors are for this dataset's media
    *  type; enables the menu's "Run AutoFind" when non-zero. */
   readonly autofindDetectorCount = input(0);
+  /** Names of the other datasets this one's multi-dataset import produced
+   *  (#4747); undefined when it has none left. Shows the category badge. */
+  readonly importSiblings = input<readonly string[] | undefined>(undefined);
 
   /** True while this row's delete-confirm dialog is open (driven by the
    *  dashboard's `deletingDatasetId`). Spins the trash icon to 90° while open;
@@ -229,6 +232,12 @@ export class DatasetCardComponent {
 
   formatDate(timestamp: number | null): string {
     return formatTimestamp(timestamp);
+  }
+
+  /** Tooltip for the category badge: which datasets came from the same import. */
+  get importSiblingsTitle(): string {
+    const siblings = this.importSiblings() ?? [];
+    return `Imported together with ${siblings.join(', ')}`;
   }
 
   capitalizeType(type: string | undefined): string {

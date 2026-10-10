@@ -1950,6 +1950,11 @@
           "id": {
             "type": "string"
           },
+          "import_group": {
+            "description": "Id shared by every dataset one multi-dataset import produced, so siblings can be found from any one of them; ``null`` for a single-dataset import.",
+            "nullable": true,
+            "type": "string"
+          },
           "ingest_finished_at": {
             "nullable": true,
             "type": "number"
@@ -1978,6 +1983,10 @@
           },
           "origin": {
             "description": "Name of the importer that produced this dataset.",
+            "type": "string"
+          },
+          "output_category": {
+            "description": "The ingestion category (a media type id) this dataset stands for within its import group, e.g. ``\"face\"`` or ``\"document\"``; it can differ from ``media_type`` (a Document dataset holds rendered page images). Empty for a single-dataset import.",
             "type": "string"
           },
           "pkl_path": {
