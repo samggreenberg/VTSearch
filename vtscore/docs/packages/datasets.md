@@ -486,7 +486,9 @@ without being loaded, and a context can exist for a one-shot in-memory
 load that was never registered.
 
 Per-entry fields include `created_by`, `readers` (list of usernames or
-`"*"`), and `file_type_counts`. Access-control helpers
+`"*"`), `file_type_counts`, and `import_group` / `output_category`: the id
+every dataset of one multi-dataset import shares and the output category each
+stands for (`None` / `""` for a single-dataset import). Access-control helpers
 (`can_user_access`, `is_owner`, `list_datasets_for_user`,
 `set_readers`) implement multi-user visibility rules; library-only
 consumers without users can ignore them and treat every dataset as

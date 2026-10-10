@@ -435,7 +435,7 @@ Compose them in the template, base first:
 
 ### 2.8 Badges
 
-Use the shared `.badge-ready` / `.badge-embedding` / `.badge-download` classes (`_picker-shared.scss`) for status badges. They share padding, font-size, and radius. If you need a new badge variant, add it next to those rules and reuse the same dimensions.
+Use the shared `.badge-ready` / `.badge-embedding` / `.badge-download` / `.badge-category` classes (`_picker-shared.scss`) for status badges. They share padding, font-size, and radius. If you need a new badge variant, add it next to those rules and reuse the same dimensions.
 
 ### 2.9 Layout
 

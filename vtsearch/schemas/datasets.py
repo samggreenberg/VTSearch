@@ -1155,7 +1155,7 @@ class DatasetRegistryEntrySchema(Schema):
             "description": (
                 "The ingestion category (a media type id) this dataset stands for within its import group, e.g. "
                 '``"face"`` or ``"document"``; it can differ from ``media_type`` (a Document dataset holds '
-                'rendered page images). Empty for a single-dataset import.'
+                "rendered page images). Empty for a single-dataset import."
             )
         },
     )
