@@ -40,7 +40,7 @@ describe('label-quota (#4643, #4731)', () => {
       expect(note).toContain("Goods' centroid");
       expect(note).toContain('3 Goods and 4 Bads, or a Good and 16 Bads');
       expect(note).toContain('2 more Goods and 4 more Bads, or 16 more Bads in Train');
-      expect(note).toContain("Threshold doesn't move it");
+      expect(note).toContain('the Threshold moves it');
     });
 
     it('offers the second quota, Bads alone, once a Good is in hand (#4731)', () => {

@@ -2,7 +2,7 @@ import type { LabelQuota } from '../generated/api-client/models/label-quota';
 
 /**
  * The label quota (#4643; `vtscore/detectors/label_quota.py`): under it a
- * detector's labels give the Goods' centroid, cut where its scores split,
+ * detector's labels give the Goods' centroid, cut by the count line at the balance (#4732),
  * rather than a trained detector. These are the words the Test view and
  * AutoFind's results put on it.
  */
@@ -33,7 +33,7 @@ export function centroidNote(quota: LabelQuota | null | undefined): string {
   return (
     `Too few labels for a trained detector (it takes ${quota.good_quota} Goods and ${quota.bad_quota} Bads, ` +
     `or a Good and ${quota.dry_bad_quota} Bads), ` +
-    `so this is the Goods' centroid, cut where its scores split; the Threshold doesn't move it.` +
+    `so this is the Goods' centroid, keeping the images that stand out from the rest; the Threshold moves it.` +
     (routes ? ` ${routes} in Train give a trained one.` : '')
   );
 }

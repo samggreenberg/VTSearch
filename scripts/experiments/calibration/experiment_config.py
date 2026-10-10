@@ -1161,6 +1161,15 @@ GOOD_DRY_RUN: "int | str | None" = int(_GOOD_DRY_RUN) if _GOOD_DRY_RUN.isdigit()
 _QUOTA_DRY_BADS = os.environ.get("CALIB_QUOTA_DRY_BADS", "").strip()
 QUOTA_DRY_BADS: "int | str | None" = int(_QUOTA_DRY_BADS) if _QUOTA_DRY_BADS.isdigit() else (_QUOTA_DRY_BADS or None)
 
+#: Issue #4732's centroid line.  ``CALIB_CENTROID_LINE`` is the rule the Goods'
+#: centroid's line is drawn by under the label quota (one of
+#: ``vtscore.detectors.centroid_head.CENTROID_LINE_RULES``); unset is the app's.
+#: ``CALIB_CENTROID_LINE_VARIANTS`` (``"<rule>@<beta>,..."``) adds tagged rows
+#: pricing other lines on the same sessions, which no production read takes.
+#: Both are kept as given, for the harness and preflight to refuse.
+CENTROID_LINE: str | None = os.environ.get("CALIB_CENTROID_LINE", "").strip() or None
+CENTROID_LINE_VARIANTS: str | None = os.environ.get("CALIB_CENTROID_LINE_VARIANTS", "").strip() or None
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive

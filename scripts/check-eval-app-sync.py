@@ -809,9 +809,11 @@ MIRRORS: list[Mirror] = [
             "haystack it scores (scoring_rows_for_snap's rows: the active dataset in Test, the "
             "searched one in a cold Find); the harness hands it each Good vote's training "
             "vector (the style's good_vec, else good_training_vec - the vectors its trained "
-            "head fits on) and the withheld half's scorer (_centroid_test). If the app changes "
-            "which vectors average, or which corpus the midpoint is cut on, or gives the line a "
-            "balance, change the harness to match."
+            "head fits on) and the withheld half's scorer (_centroid_test). Both draw the line by "
+            "CENTROID_LINE_RULE at a balance (#4732): the app at the detector's own "
+            "(_centroid_beta), the harness at the run's beta. If the app changes which vectors "
+            "average, which corpus the line is cut on, or which balance draws it, change the "
+            "harness to match."
         ),
     ),
     Mirror(

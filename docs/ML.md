@@ -62,13 +62,22 @@ resolved to a vector.
 The centroid (`vtscore/detectors/centroid_head.py`) is the example sort the app
 draws for several uploaded examples, built from the Goods: the unit mean of the
 L2-normalised Good vectors, every item ranked by its cosine to it (max-pooled
-over a patch item's rows), cut at the midpoint of a two-Gaussian fit to those
-cosines on the corpus being scored. It ships as a `Linear(D, 1)` whose weight is
-the centroid scaled by `CENTROID_LOGIT_SCALE` and whose bias puts the cut at
-logit 0, so its threshold is 0.5 and every scorer, the weight export and an
-ONNX consumer take it as they take the SVM. Its line does not take the balance:
-the typed query's balance-aware rules (#4603) were measured on typed queries
-only, and the labels' line needs held-out Bads it does not have. No typed-query
+over a patch item's rows), cut by the typed query's count line (#4603) over those
+cosines on the corpus being scored, at the detector's balance: it keeps
+`beta ** 0.708` times the count of items standing out of the cosines' bulk. It
+ships as a `Linear(D, 1)` whose weight is the centroid scaled by
+`CENTROID_LOGIT_SCALE` and whose bias puts the cut at logit 0, so its threshold
+is 0.5 and every scorer, the weight export and an ONNX consumer take it as they
+take the SVM. Until #4732 the cut was the two-Gaussian midpoint, which on a rare
+target splits the negatives' own bulk: on FHIBE's face crops it kept a median of
+2,300 of 5,439 images with the person's photos ranked first. The count line took
+a Find's F-beta over votes 1-10 up by 0.34 at beta 1 on faces, 0.08 on FHIBE's
+photos and 0.13 in COCO Better's Binary opening. It beat the guarded line by
+0.21 to 0.40 on faces at every balance and lost to it only at beta 4 on COCO, by
+0.02 (`docs/experiments/2026-10-10-centroid-line-4732`). A
+balance change redraws the line on the cosines it was drawn on, and Autopilot's
+Hard select still samples at their midpoint. The labels' line needs held-out
+Bads the centroid does not have. No typed-query
 tier sits below it, because a labelset does not carry the query: an exported, an
 imported and a CLI-made labelset have none.
 

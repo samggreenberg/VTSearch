@@ -53,9 +53,11 @@ def windowed_sort_response(
     reporting ``threshold`` since #2876 (see
     :func:`vtscore.state.core.detector_acquisition_threshold`); on a text sort
     it is the mixture midpoint, with the guarded rule drawing ``threshold``
-    since #4136 (see :func:`vtscore.training.thresholds.text_sort_cuts`).  The
-    example and label-file sorts draw one line and leave it ``None``, and the
-    client falls back to ``threshold``.  It is deliberately *not* fed to ``_windowed_sort_extras``:
+    since #4136 (see :func:`vtscore.training.thresholds.text_sort_cuts`); on an
+    example sort it is the midpoint too, with the Goods' centroid's rule drawing
+    ``threshold`` since #4732 (:func:`vtscore.training.query_sort.cosine_sort_cuts`).
+    The label-file sort draws one line and leaves it ``None``, and the client
+    falls back to ``threshold``.  It is deliberately *not* fed to ``_windowed_sort_extras``:
     ``above_threshold`` counts what the user is told matched, which is the
     reporting cut's job.  *balance* is what the balance says about
     ``threshold`` (#4413, :func:`vtscore.state.core.detector_balance_state`);
