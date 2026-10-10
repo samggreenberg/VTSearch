@@ -364,8 +364,11 @@ run_pipeline_file("pipeline.yaml")
 dispatches to `_run_pipeline` with
 `override_detectors=config["detectors"]` so the YAML file can declare
 a detector list inline without mutating `settings.json`. A
-`FileNotFoundError` / `ValueError` becomes `Error: ...` on stderr and
-`sys.exit(1)`.
+`FileNotFoundError` / `ValueError` goes through `cli_progress.emit_error`
+(`Error: ...` on stderr, or an `error` event in JSON mode) and
+`sys.exit(1)`. Its output follows the `cli_progress` format, so call
+`cli_progress.set_format("json")` first for an NDJSON stream; the label
+import is a `labels_imported` event, as it is for `--import-labels-into`.
 
 ## `vtscore.cli_progress` - format-aware output
 
