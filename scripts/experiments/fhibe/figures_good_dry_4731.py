@@ -18,10 +18,13 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
 #: Categorical slots 1-3 of the reference palette, in fixed order; checked with the dataviz validator.
+#: Each arm's end label and legend line. #4731 shipped dry run + head, so ``app`` (#4743's run of the
+#: shipped app) is the same rule and wears its colour; ``ctl`` is the app before #4731 in both studies.
 ARMS = {
-    "ctl": ("today", "#2a78d6"),
-    "dry16": ("dry run", "#1baf7a"),
-    "dry16q16": ("dry run + head", "#eb6834"),
+    "ctl": ("before #4731", "#2a78d6", "before #4731 (the Good phase waits for 3 Goods)"),
+    "dry16": ("dry run", "#1baf7a", "dry run: the Good phase also ends after 16 misses with a Good in hand"),
+    "dry16q16": ("dry run + head", "#eb6834", "dry run + head: and 1 Good with 16 Bads gets the trained head"),
+    "app": ("today", "#eb6834", "today: the dry run and the trained head at 1 Good + 16 Bads, shipped by #4731"),
 }
 DATASETS = {
     "fhibe_1024": "whole photo (SigLIP)",
@@ -36,14 +39,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--analysis", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--name", default="fig_fhibe_curves.png")
     a = ap.parse_args()
     cur = pd.read_csv(a.analysis / "curves.csv")
+    arms = {k: v for k, v in ARMS.items() if k in set(cur["arm"])}
     fig, axes = plt.subplots(3, 3, figsize=(12, 9.5), sharex=True, sharey=True)
     for i, (st, st_name) in enumerate(STRATA.items()):
         for j, (ds, ds_name) in enumerate(DATASETS.items()):
             ax = axes[i, j]
             ends = []
-            for arm, (name, color) in ARMS.items():
+            for arm, (name, color, _) in arms.items():
                 g = cur[(cur["arm"] == arm) & (cur["stratum"] == st) & (cur["dataset"] == ds)]
                 if g.empty:
                     continue
@@ -73,12 +78,8 @@ def main() -> int:
             if i == 2:
                 ax.set_xlabel("click (the example is click 1)", fontsize=9, color=MUTED)
     fig.legend(
-        handles=[plt.Line2D([], [], color=c, lw=2) for _, c in ARMS.values()],
-        labels=[
-            "today (the Good phase waits for 3 Goods)",
-            "dry run: the Good phase also ends after 16 misses with a Good in hand",
-            "dry run + head: and 1 Good with 16 Bads gets the trained head",
-        ],
+        handles=[plt.Line2D([], [], color=c, lw=2) for _, c, _ in arms.values()],
+        labels=[legend for _, _, legend in arms.values()],
         loc="upper center",
         ncol=1,
         frameon=False,
@@ -87,8 +88,8 @@ def main() -> int:
     )
     fig.subplots_adjust(right=0.88, wspace=0.12, hspace=0.18, top=0.9)
     a.out.mkdir(parents=True, exist_ok=True)
-    fig.savefig(a.out / "fig_fhibe_curves.png", dpi=150, bbox_inches="tight")
-    print(f"wrote {a.out / 'fig_fhibe_curves.png'}")
+    fig.savefig(a.out / a.name, dpi=150, bbox_inches="tight")
+    print(f"wrote {a.out / a.name}")
     return 0
 
 
