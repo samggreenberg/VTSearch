@@ -418,25 +418,23 @@ region arm.
 ## Boxes arrive in two spaces, and the file has to say which
 
 VG's and COCO's boxes are in **pixels**. A correction box is the reviewer's
-`region_box` from the app, already **normalised** to [0, 1]. The builder merges
-all three and normalises on the way into the pickle, so a correction box merged
-unconverted is normalised *twice*: divided by ~500 a second time and parked on
-the frame origin. That is #3281 — 130 boxes, and with them 97 images filed into
-`@small` whose object is medium or large, on the one axis `vg_scale` exists to
-measure.
+`region_box` from the app, already **normalised** to [0, 1]. The VG builder
+merged all three and normalised on the way into the pickle, so a correction box
+merged unconverted was normalised *twice*: divided by ~500 a second time and
+parked on the frame origin. That is #3281 — 130 boxes, and with them 97 images
+filed into `@small` whose object is medium or large, on the one axis `vg_scale`
+existed to measure.
 
-Two things stop it:
+One guard is still live: `corrections.json` rows carry `box_space`, and
+`load_corrections()` refuses a row whose boxes contradict it. Inference cannot do
+this job: a normalised box and a pixel box are the same numbers for a box in the
+top-left corner of a 1×1 image, which is precisely the shape the bug produced.
 
-- `corrections.json` rows carry `box_space`, and `build_pile.py` refuses a row
-  whose boxes contradict it. Inference cannot do this job: a normalised box and
-  a pixel box are the same numbers for a box in the top-left corner of a 1×1
-  image, which is precisely the shape the bug produced.
-- The conversion happens **once**, against the same `(W, H)` the region write
-  divides by, so the round trip is exact rather than close.
-
-A third guard checked every stored box against the frame, at build time and in
-`--verify`. It went with the VG loaders: no loader left in the pile merges a
-correction box into its regions.
+Two more went with the VG loaders, because no loader left in the pile merges a
+correction box into its regions: the merge converted each box to pixels once,
+against the same `(W, H)` the region write divides by, so the round trip was
+exact; and a check compared every stored box against the frame, at build time
+and in `--verify`.
 
 ## A row records the rule it was answered under
 

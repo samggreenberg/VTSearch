@@ -1,17 +1,18 @@
-"""Human verdicts on ``(image, class)`` pairs, and the one box-space crossing.
+"""Human verdicts on ``(image, class)`` pairs, and the space their boxes are in.
 
 Two things about a verdict have to survive the trip to disk, and this module owns
 both. They are the two halves of the same sentence: *what* a reviewer answered,
 and *which question* they were shown.
 
-The box space is the first, and it is made to happen exactly once.
-A correction's boxes arrive normalised (they come from the app's ``region_box``);
-every other box in the scale build is in pixels. Converting here, on the way in,
-is what keeps the rest of the loader in a single space -- and #3281 is what the
-other arrangement costs: a normalised box merged unconverted is normalised a
-second time by the region write, which divides it by ~500 and parks it on the
-frame origin, with the band derived from the same corrupted box so that nothing
-downstream can see the disagreement.
+The box space is the first. A correction's boxes arrive normalised (they come
+from the app's ``region_box``), while VG's and COCO's are in pixels, so the file
+*declares* its space and :func:`assert_correction_box_space` refuses a row that
+contradicts it. #3281 is what a wrong space cost: a normalised box merged
+unconverted was normalised a second time by the region write, which divided it
+by ~500 and parked it on the frame origin, with the band derived from the same
+corrupted box so that nothing downstream could see the disagreement. The VG
+loaders that merged correction boxes are gone, and no live loader merges one,
+but the declaration is still checked on every read.
 
 The **rule** is the second (#3814). A class rule is not a constant: three rulings
 landed in September on classes with rows already on disk, and a row that records
@@ -112,9 +113,10 @@ def load_corrections() -> dict[tuple[int, str], dict]:
     is why this returns empty rather than failing.
 
     **Boxes here are NORMALISED, unlike VG's and COCO's** -- they come from the
-    app's ``region_box``. The space is validated on the way in and converted to
-    pixels once, by :func:`correction_boxes_px`, so that everything downstream
-    of this function is in one space. See ``pile_config.CORRECTION_BOX_SPACE``.
+    app's ``region_box``. The space is validated on the way in, by
+    :func:`assert_correction_box_space`, and the boxes are returned as stored:
+    no live loader merges a correction box into its regions, so nothing
+    converts them. See ``pile_config.CORRECTION_BOX_SPACE``.
 
     **It names, but does not refuse, rows whose rule has been ruled away.** A
     superseded row is not malformed -- the reviewer answered honestly, and the
@@ -229,15 +231,3 @@ def superseded_rows(rows: Iterable[dict], stamps: dict[str, dict[str, str]] | No
     full four-state breakdown belongs to `rule_drift.py`, which is asked.
     """
     return [row for row, state in rule_states(rows, stamps) if state == RULE_SUPERSEDED]
-
-
-def correction_boxes_px(row: dict, W: int, H: int) -> list[list[float]]:
-    """A verdict's boxes in the pixel space of ``(W, H)``.
-
-    ``(W, H)`` is the space the image's *other* boxes were measured in -- the
-    COCO original for an anchored image, the VG copy otherwise -- because that
-    is what the region write later divides by. Scaling up here and dividing down
-    there is an exact round trip, so the stored box is the reviewer's box to the
-    last bit rather than merely close to it.
-    """
-    return [[float(b[0]) * W, float(b[1]) * H, float(b[2]) * W, float(b[3]) * H] for b in (row.get("boxes") or [])]

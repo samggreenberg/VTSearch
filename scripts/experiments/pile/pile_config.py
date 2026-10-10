@@ -3189,14 +3189,14 @@ def aspect_transferable(vg_wh: tuple[int, int], coco_wh: tuple[int, int]) -> boo
 
 #: The coordinate space a correction box is recorded in. VG's and COCO's boxes
 #: arrive in **pixels**; a correction box comes from the app's ``region_box``,
-#: which is already **normalised** to [0, 1]. The builder divides every box by
+#: which is already **normalised** to [0, 1]. The VG builder divided every box by
 #: (W, H) on the way into the pickle, so a correction box merged in unconverted
-#: is normalised twice: it lands on the frame origin, sub-pixel, and takes its
+#: was normalised twice: it landed on the frame origin, sub-pixel, and took its
 #: band with it (#3281 -- 130 boxes, and 97 images filed in ``@small`` whose
 #: object is medium or large). The space is therefore *declared* in the file and
-#: converted once at read, never inferred: the two spaces are indistinguishable
-#: for a box in the top-left corner of a 1x1 image, which is exactly the shape
-#: the bug produced.
+#: checked at read, never inferred: the two spaces are indistinguishable for a
+#: box in the top-left corner of a 1x1 image, which is exactly the shape the bug
+#: produced.
 CORRECTION_BOX_SPACE = "normalised"
 
 
