@@ -5865,6 +5865,81 @@
         ],
         "type": "object"
       },
+      "MediaSourceBatchEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the output sat in its source: a normalised ``[x0, y0, x1, y1]`` (the media's ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "dataset_id": {
+            "description": "Registry id of the sibling dataset holding the source item.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The requested media id.",
+            "type": "integer"
+          },
+          "media_id": {
+            "description": "The source item's media id within that dataset.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "box",
+          "dataset_id",
+          "id",
+          "media_id"
+        ],
+        "type": "object"
+      },
+      "MediaSourceBatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Media IDs (of the requesting dataset) to resolve to their source items.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
+      "MediaSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the output sat in its source: a normalised ``[x0, y0, x1, y1]`` (the media's ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "dataset_id": {
+            "description": "Registry id of the sibling dataset holding the source item.",
+            "type": "string"
+          },
+          "media_id": {
+            "description": "The source item's media id within that dataset.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "box",
+          "dataset_id",
+          "media_id"
+        ],
+        "type": "object"
+      },
       "MediaTypeInfo": {
         "additionalProperties": false,
         "properties": {
@@ -14338,6 +14413,50 @@
         ]
       }
     },
+    "/api/medias/source-batch": {
+      "post": {
+        "description": "Returns one entry per id that resolved, in request order; ids that do not\n(unknown, not a converter output, no source dataset, no matching item) are\nomitted, as ``POST /api/medias/batch`` omits unknown ids.  If any id needs\na source dataset that is not loaded the whole request is a 409 naming it:\nload it and ask again.",
+        "operationId": "media_source_batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaSourceBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaSourceBatchEntry"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "A requested id's source dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Batch form of ``GET /api/medias/<id>/source``, for a whole results page.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/vote-bulk": {
       "post": {
         "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics (including Find-mode\nverification \u2014 a good/bad target marks the item verified), then the\ndetector labelset is persisted **once** rather than per id.  Bulk votes\nare image-level (no region boxes).  Powers the Browser's \"Verified Good\" /\n\"Verified Bad\" actions, which mark a hand-selected set good/bad, verify\nthem, and drop them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
@@ -14574,6 +14693,48 @@
           }
         },
         "summary": "Return the text content and statistics for a single text media item.",
+        "tags": [
+          "medias"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "media_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
+    },
+    "/api/medias/{media_id}/source": {
+      "get": {
+        "description": "A face crop's photo, a video frame's video: found as a **media item** in\nthe dataset the same multi-dataset import produced for the source type\n(the shared ``import_group``), since the source file itself is usually\ngone.  ``box`` is where the output sat in its source (``source_box``), for\noutlining it.  The sibling must be loaded; when it is not, the 409 names\nit so the client can offer to load it.  Only siblings the current user may\nread are considered.  See :mod:`vtscore.datasets.source_item`.",
+        "operationId": "media_source",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSourceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Media not found; or it is no converter output (``error_code: not_derived``); or no readable dataset of its import holds its source type (``no_source_dataset``); or the source dataset has no matching item (``source_not_found``)."
+          },
+          "409": {
+            "description": "The source dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Resolve a converter output to the item it was made from, in its sibling dataset.",
         "tags": [
           "medias"
         ]

@@ -420,6 +420,51 @@ class MediaVoteBulkResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
+# /api/medias/<id>/source and /api/medias/source-batch
+# ---------------------------------------------------------------------------
+
+
+class MediaSourceResponseSchema(Schema):
+    """Response for ``GET /api/medias/<id>/source``: the item a converter output was made from."""
+
+    dataset_id = fields.String(
+        required=True,
+        metadata={"description": "Registry id of the sibling dataset holding the source item."},
+    )
+    media_id = fields.Integer(
+        required=True,
+        metadata={"description": "The source item's media id within that dataset."},
+    )
+    box = fields.List(
+        fields.Float(),
+        required=True,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Where the output sat in its source: a normalised ``[x0, y0, x1, y1]`` "
+                "(the media's ``source_box``), or null when its converter records none."
+            ),
+        },
+    )
+
+
+class MediaSourceBatchRequestSchema(Schema):
+    """Body for ``POST /api/medias/source-batch``."""
+
+    ids = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={"description": "Media IDs (of the requesting dataset) to resolve to their source items."},
+    )
+
+
+class MediaSourceBatchEntrySchema(MediaSourceResponseSchema):
+    """One resolved id in ``POST /api/medias/source-batch``'s response."""
+
+    id = fields.Integer(required=True, metadata={"description": "The requested media id."})
+
+
+# ---------------------------------------------------------------------------
 # /api/medias/<id>/paragraph and /api/medias/<id>/text
 # ---------------------------------------------------------------------------
 

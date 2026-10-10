@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.source_item`: find a converter output's source item in its sibling dataset**
+  (issue #4749). `resolve_source_item(media, sibling_medias, *, name_lookup=None) -> int | None`
+  joins the output's `origin.params.source_file` to the sibling's `origin_name`, settles a shared
+  name by `source_path` against `media_path` (else `None`, never a guess), and follows `dupe_set`
+  members on either side; `SourceResolver` is the same, built once for many outputs.
+  `find_source_sibling(dataset_id, source_type, *, readable_by=None, entries=None)` picks the other
+  registry entry of the dataset's `import_group` whose `output_category` is the converter's
+  `source_type` (the Image output for faces, not the Document output beside it).
+  `SourceLocator(dataset_id, *, user=None)` / `locate_source(media, dataset_id, *, user=None)`
+  do both against the live contexts and return a `SourceLocation` (`status`, `dataset_id`,
+  `media_id`, `box`). Additive.
 - **A text or example sort keeps its display line, to redraw it at another balance** (issue #4760).
   `vtscore.training.query_sort.SortLine` holds the rule that drew a cosine sort's line (`"text"`,
   `"centroid"` or `"structural"`) and the scores it was drawn on; `threshold_at(beta)` draws the

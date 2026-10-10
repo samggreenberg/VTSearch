@@ -296,16 +296,6 @@ _isolated_example_media_dir  # noqa: F821
 readable  # noqa: F821 - vtscore.datasets.container.StreamProgress, io.IOBase override
 
 # ---------------------------------------------------------------------------
-# ``ErrorSchema.error_code`` is a marshmallow field on the flask-smorest error
-# schema that documents the ``error_code`` slug we surface (``dataset_not_loaded``,
-# ``auth_required``, …). Marshmallow collects fields via metaclass at class-
-# creation time, so vulture cannot see the linkage. The blanket ``vtsearch/schemas/*``
-# exclude does not cover this file — the schema lives in ``vtsearch/errors.py``
-# alongside the handlers that populate the field.
-# ---------------------------------------------------------------------------
-error_code  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # ``VTSearchApi.ERROR_SCHEMA`` overrides flask-smorest's ``Api.ERROR_SCHEMA``
 # so ``/api/openapi.json`` documents *our* error envelope, not the library's.
 # flask-smorest reads ``self.ERROR_SCHEMA`` reflectively in

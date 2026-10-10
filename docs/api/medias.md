@@ -103,6 +103,63 @@ The enriched label export (`GET /api/labels/export?enrich=true`) does
 flatten the *full* `origin.params` key-by-key — an export is a machine-facing
 artifact with opt-in columns, where the raw recipe is the point.
 
+### Resolve a derived item's source
+
+```
+GET /api/medias/<id>/source
+X-Dataset-Id: <the face dataset's id>
+```
+
+→ the item a converter output was made from, as a media item of its
+**sibling dataset**: the dataset the same multi-dataset import produced for
+the converter's source type (they share an `import_group`; see
+[List registered datasets](datasets.md#list-registered-datasets)).  A face
+crop's photo is in the "– Image" sibling; a video frame's video in the
+"– Video" one.
+
+```json
+{ "dataset_id": "9f2c…", "media_id": 412, "box": [0.12, 0.30, 0.25, 0.48] }
+```
+
+`box` is the item's `source_box`, where it sat in its source as a normalised
+`[x0, y0, x1, y1]`, or `null` when its converter records none.  The source
+file itself is usually gone (an archive's extract dir, an upload's staging
+dir), which is why the source is found as an item: the output's
+`origin.params.source_file` names the sibling item's `origin_name`, and
+`source_path` settles a name two items share.
+
+| Status | `error_code` | When |
+|--------|--------------|------|
+| 404 | — | No media with that id in the requesting dataset |
+| 404 | `not_derived` | The item is no converter output |
+| 404 | `no_source_dataset` | Its dataset has no import group, or no dataset of the group *that you can read* holds the source type |
+| 404 | `source_not_found` | The sibling is loaded but no item in it matches |
+| 409 | `source_not_loaded` | The sibling is registered but not loaded; `dataset_id` names it — load it with `POST /api/datasets/registry/<id>/load` and ask again |
+
+A rendered document page has no source item: its source category is the
+Document dataset it sits in.  A sibling you cannot read is reported exactly
+as no sibling, so the reply says nothing about it.
+
+```
+POST /api/medias/source-batch
+X-Dataset-Id: <the face dataset's id>
+Content-Type: application/json
+
+{ "ids": [3, 7, 11] }
+```
+
+→ the batch form, for a whole results page in one round trip: a JSON array
+with one entry per id that resolved, in request order, each the triple above
+plus the requested `id`:
+
+```json
+[{ "id": 3, "dataset_id": "9f2c…", "media_id": 412, "box": [0.12, 0.30, 0.25, 0.48] }]
+```
+
+Ids that do not resolve (unknown, not derived, no sibling, no match) are
+omitted, as `POST /api/medias/batch` omits unknown ids.  If any id needs a
+sibling that is not loaded, the whole request is the 409 above.
+
 ### Payload variants (`?variant=original`)
 
 Every per-media payload route below — `/audio`, `/video`, `/image`,
