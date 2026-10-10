@@ -222,7 +222,7 @@ def summarize(cells: pd.DataFrame, horizon: int) -> str:
             d = {s: _mean_se(h[f"d_fbeta_{s}"], cl) for s in SPANS}
             lines.append(
                 f"| {rule} | {beta:g} | {len(h)} | {h['n_tier'].mean():.1f} | {h['tier_n_median'].median():.0f} "
-                f"| {h['tier_precision'].mean():.3f} | {h['tier_recall'].mean():.3f} | {h['tier_fbeta'].mean():.3f} "
+                f"| {h['tier_precision'].mean():.3f} | {h['tier_recall'].mean():.3f} | {h['tier_fbeta'].mean():.3f} | "
                 + " | ".join(f"{m:+.4f} ± {se:.4f}" for m, se, _ in d.values())
                 + " |"
             )
