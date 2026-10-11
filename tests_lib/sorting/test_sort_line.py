@@ -186,12 +186,14 @@ class TestAnExampleSortCountsTheUnvoted:
         assert cuts.line is not None and cuts.line.scores is not None
         assert cuts.line.scores.size == len(medias) - 1  # the example's own cosine, 1.0, is not counted
         _r, with_query = cosine_sort_cuts(query, beta=1.0, exclude_ids=set())
+        assert with_query.line is not None and with_query.line.scores is not None
         assert with_query.line.scores.size == len(medias)
 
     def test_voted_media_are_left_out(self):
         query = _fill_shoulder_medias()
         n = len(get_active_context().medias)
         _r, cuts = cosine_sort_cuts(query, beta=1.0, exclude_ids={1, 2, 3})
+        assert cuts.line is not None and cuts.line.scores is not None
         assert cuts.line.scores.size == n - 3
         # The acquisition cut still reads every media, so Autopilot's picks do not move.
         _r, every = cosine_sort_cuts(query, beta=1.0, exclude_ids=set())

@@ -456,6 +456,7 @@ class TestTheLineCountsTheUnvoted:
 
         _vecs, rows = self._rows()
         mask = _unvoted_mask(rows, {0, 3003})
+        assert mask is not None
         assert len(mask) == len(rows.ids) and sum(not m for m in mask) == 2
         assert _unvoted_mask(None, {1}) is None
 

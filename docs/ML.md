@@ -69,7 +69,11 @@ the items above the widest drop between neighbours in the top 11, and never
 fewer than that drop's count (`count_gap_floor`, #4759). From beta 1 up, when
 the widest drop is the first one, the line looks past that standout to the
 widest drop below the second item, if it is at least a quarter as wide
-(`count_gap_floor_skip25_b1`, #4783). It
+(`count_gap_floor_skip25_b1`, #4783). The line counts the unvoted media only
+(#4779): on the collection the user labelled, the Goods the centroid is built from
+sit at the top of their own ranking, and counted with the rest they were what
+stood out (`fit_centroid`'s `line_mask`; an example sort leaves out the voted media
+and the example itself). It
 ships as a `Linear(D, 1)` whose weight is the centroid scaled by
 `CENTROID_LOGIT_SCALE` and whose bias puts the cut at logit 0, so its threshold
 is 0.5 and every scorer, the weight export and an ONNX consumer take it as they
