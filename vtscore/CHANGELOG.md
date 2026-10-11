@@ -96,6 +96,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The Goods' centroid's line counts the widest drop too, and never cuts through it** (issue #4759).
+  `CENTROID_LINE_RULE` is now `count_gap_floor`: `beta ** 0.708` times the larger of #4603's bulk excess
+  and the number of cosines above the widest drop between neighbours in the top 11
+  (`CENTROID_GAP_TOP` = 10), never keeping fewer than that drop's count. `CENTROID_LINE_RULES` gains the
+  candidates priced beside it (`count_z3`, `count_z3.5`, `mirror_z3.5`, `gap`, `count_gap`, `gap_floor`,
+  `count_gap_floor`; `CENTROID_COUNTS` lists the counts). `thresholds._count_line` splits into
+  `_count_estimate(scores, z=, bulk=)` (n-hat, now at any bar and with a `"mirror"` bulk) and
+  `_count_keep_line(scores, beta, n_hat)`; the typed query's line is unchanged. `count` stays available
+  as the #4732 line, and `CALIB_CENTROID_LINE=count` is the harness arm before this change.
 - **The Goods' centroid's line is the count line, at the balance** (issue #4732). `centroid_cut` takes
   `rule` (`CENTROID_LINE_RULES`: `midpoint`, the line before #4732; `text`; `guarded`; `count`, the
   app's `CENTROID_LINE_RULE`) and `beta`. `fit_centroid` returns the head, its threshold and a
