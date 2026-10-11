@@ -104,10 +104,53 @@ def is_centroid_head(model: object) -> bool:
 #: * ``guarded`` - the guarded line alone, which takes no balance (#3826);
 #: * ``count`` - the count line at every balance, ``beta ** 0.708`` times the bulk's excess
 #:   (#4603), the guarded line where the count has nothing to measure.  The app's (#4732).
-CENTROID_LINE_RULES = ("midpoint", "text", "guarded", "count")
+#:
+#: and #4759's candidates, each ``beta ** 0.708`` times another count of what stands out
+#: (:data:`CENTROID_COUNTS`), the guarded line where it has nothing to measure:
+#:
+#: * ``count_z3`` / ``count_z3.5`` - the Gaussian bulk's excess above a lower bar;
+#: * ``mirror_z3.5`` - the excess above the bar over the count as far below the median;
+#: * ``gap`` - the cosines above the widest drop between neighbours in the top
+#:   :data:`CENTROID_GAP_TOP` + 1;
+#: * ``count_gap`` - the larger of ``count``'s and ``gap``'s;
+#: * ``gap_floor`` - ``count``'s line, lowered to the widest drop when that keeps more: the gap
+#:   as a floor on the set at every balance, not a count scaled by it.
+CENTROID_COUNTS = ("count", "count_z3", "count_z3.5", "mirror_z3.5", "gap", "count_gap", "gap_floor")
+CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS)
 
 #: The rule the app draws a centroid's line by: the count line at every balance (#4732).
 CENTROID_LINE_RULE = "count"
+
+#: How deep ``gap`` looks for the widest drop: the top this many + 1 cosines (#4759).
+CENTROID_GAP_TOP = 10
+
+
+def _top_gap_count(cosines: np.ndarray, top: int = CENTROID_GAP_TOP) -> int:
+    """How many of the top ``top + 1`` *cosines* sit above the widest drop between neighbours."""
+    head = -np.sort(-cosines)[: top + 1]
+    if head.size < 2:
+        return int(head.size)
+    return int(np.argmax(head[:-1] - head[1:])) + 1
+
+
+def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
+    """*rule*'s count of the cosines that stand out (:data:`CENTROID_COUNTS`), or ``None`` with nothing to measure.
+
+    ``gap_floor`` counts as ``count`` does; :func:`centroid_cut` lowers its line to the gap.
+    """
+    from vtscore.training.thresholds import _count_estimate  # noqa: PLC0415
+
+    if rule == "count_z3":
+        return _count_estimate(cosines, z=3.0)
+    if rule == "count_z3.5":
+        return _count_estimate(cosines, z=3.5)
+    if rule == "mirror_z3.5":
+        return _count_estimate(cosines, z=3.5, bulk="mirror")
+    counted = _count_estimate(cosines)
+    if rule in ("count", "gap_floor") or counted is None:
+        return counted
+    gap = float(_top_gap_count(cosines))
+    return gap if rule == "gap" else max(gap, counted)
 
 
 def centroid_cut(
@@ -116,10 +159,10 @@ def centroid_cut(
     """The line through the centroid's cosines, drawn by *rule* (default :data:`CENTROID_LINE_RULE`) at *beta*.
 
     *beta* is the balance (F-beta's beta); the ``midpoint`` and ``guarded`` rules
-    ignore it, and ``text`` and ``count`` keep the guarded line without one.
+    ignore it, and ``text`` and the counts keep the guarded line without one.
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
-        _count_line,
+        _count_keep_line,
         calculate_gmm_threshold,
         guarded_text_sort_threshold,
         text_sort_cuts,
@@ -133,10 +176,14 @@ def centroid_cut(
         return float(calculate_gmm_threshold(scores))
     if chosen == "text":
         return float(text_sort_cuts(scores, beta=beta).threshold)
-    if chosen == "count" and beta is not None:
-        counted = _count_line(np.asarray(scores, dtype=np.float64), float(beta))
+    if chosen in CENTROID_COUNTS and beta is not None:
+        arr = np.asarray(scores, dtype=np.float64)
+        counted = _centroid_count(arr, chosen)
         if counted is not None:
-            return float(counted)
+            line = _count_keep_line(arr, float(beta), counted)
+            if chosen == "gap_floor":
+                line = min(line, float(-np.sort(-arr)[_top_gap_count(arr) - 1]))
+            return line
     return float(guarded_text_sort_threshold(scores)[0])
 
 

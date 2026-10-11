@@ -1517,15 +1517,26 @@ TEXT_SORT_COUNT_EXPONENT = math.log(3 / 8) / math.log(1 / 4)
 TEXT_SORT_COUNT_MIN_SCORES = 50
 
 
-def _count_line(scores: np.ndarray, beta: float) -> float | None:
+def _count_line(scores: np.ndarray, beta: float, *, z: float | None = None, bulk: str = "gauss") -> float | None:
     """The count line at *beta* (#4603), or ``None`` when the bulk has no spread to measure.
 
     ``n_hat`` is the excess over a Gaussian bulk above ``median + z * sigma``
-    (:data:`TEXT_SORT_COUNT_Z`), clamped to ``[1, n]``; the line is the score of the
-    ``round(c(beta) * n_hat)``-th highest, so it keeps that many (ties keep more).
-    Priced against today's guarded line on COCO Better (SigLIP, 144 classes, 10
-    seeds): +0.13 to +0.30 F-beta at beta 1/4 and +0.01 to +0.13 at beta 1, at 0.1%,
-    0.44% and 2% prevalence.
+    (:data:`TEXT_SORT_COUNT_Z`), clamped to ``[1, n]`` (:func:`_count_estimate`); the
+    line is the score of the ``round(c(beta) * n_hat)``-th highest, so it keeps that
+    many (ties keep more, :func:`_count_keep_line`).  Priced against today's guarded
+    line on COCO Better (SigLIP, 144 classes, 10 seeds): +0.13 to +0.30 F-beta at
+    beta 1/4 and +0.01 to +0.13 at beta 1, at 0.1%, 0.44% and 2% prevalence.
+    """
+    n_hat = _count_estimate(scores, z=z, bulk=bulk)
+    return None if n_hat is None else _count_keep_line(scores, beta, n_hat)
+
+
+def _count_estimate(scores: np.ndarray, *, z: float | None = None, bulk: str = "gauss") -> float | None:
+    """The count line's ``n_hat`` (#4603), clamped to ``[1, n]``; ``None`` below 50 scores or with no spread.
+
+    *z* and *bulk* draw the other counts #4603 compared, for the centroid's
+    candidates (#4759): another bar, and ``bulk="mirror"``, which takes the bulk's
+    share above ``median + z * sigma`` to be its count below ``median - z * sigma``.
     """
     n = scores.size
     if n < TEXT_SORT_COUNT_MIN_SCORES:
@@ -1534,10 +1545,20 @@ def _count_line(scores: np.ndarray, beta: float) -> float | None:
     sigma = 1.4826 * float(np.median(np.abs(scores - med)))
     if not sigma > 0.0:
         return None
-    z = TEXT_SORT_COUNT_Z
+    z = TEXT_SORT_COUNT_Z if z is None else float(z)
     above = float(np.count_nonzero(scores > med + z * sigma))
-    bulk_above = n * 0.5 * math.erfc(z / math.sqrt(2.0))
-    n_hat = min(max(above - bulk_above, 1.0), float(n))
+    if bulk == "gauss":
+        bulk_above = n * 0.5 * math.erfc(z / math.sqrt(2.0))
+    elif bulk == "mirror":
+        bulk_above = float(np.count_nonzero(scores < med - z * sigma))
+    else:
+        raise ValueError(f"unknown bulk {bulk!r}; expected 'gauss' or 'mirror'")
+    return min(max(above - bulk_above, 1.0), float(n))
+
+
+def _count_keep_line(scores: np.ndarray, beta: float, n_hat: float) -> float:
+    """The score of the ``round(c(beta) * n_hat)``-th highest of *scores*, at least the top one (#4603)."""
+    n = scores.size
     keep = min(max(1, round(beta**TEXT_SORT_COUNT_EXPONENT * n_hat)), n)
     return float(np.partition(scores, n - keep)[n - keep])
 
