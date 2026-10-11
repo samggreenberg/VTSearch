@@ -960,6 +960,13 @@ def _centroid_beta(det_ctx) -> float | None:
     return detector_beta(det_ctx) if isinstance(det_ctx, DetectorContext) else line_knobs()["beta"]
 
 
+def _unvoted_mask(rows: Any, labelled: set[int]) -> list[bool] | None:
+    """One flag per scored media in *rows*: whether it is not among the *labelled* (#4779)."""
+    if rows is None:
+        return None
+    return [rid not in labelled for rid in rows.ids]
+
+
 def install_centroid_head(
     det_ctx,
     goods: list[np.ndarray],
@@ -967,6 +974,7 @@ def install_centroid_head(
     labelset: LabelSet | None,
     *,
     beta: float | None = None,
+    line_mask: Any = None,
 ) -> tuple[Any, float]:
     """Store the Goods' centroid head on *det_ctx* as its detector, and return ``(head, threshold)``.
 
@@ -974,7 +982,8 @@ def install_centroid_head(
     :mod:`~vtscore.detectors.centroid_head`.  *score* scores a head over the
     corpus the line is cut on (:func:`~vtscore.detectors.centroid_head.fit_centroid`),
     and *beta* is the balance the line is drawn at (#4732): the detector's own,
-    as a trained head's is.
+    as a trained head's is.  *line_mask* flags the scored media the line counts:
+    the unvoted ones (#4779, :func:`_unvoted_mask`).
 
     Every cache a trained head's retrain leaves for a later re-cut is dropped:
     the centroid has no calibration folds, no fitted cut and no labels line.  It
@@ -986,7 +995,7 @@ def install_centroid_head(
     from vtscore.detectors.centroid_head import fit_centroid
     from vtscore.detectors.model_loading import labelset_signature
 
-    head, threshold, line = fit_centroid(goods, score, beta=beta)
+    head, threshold, line = fit_centroid(goods, score, beta=beta, line_mask=line_mask)
     det_ctx.model = head
     det_ctx.model_labels_sig = labelset_signature(labelset)
     det_ctx.threshold = threshold
@@ -1049,12 +1058,17 @@ def train_from_labelset(
 
         hay = haystack.medias if haystack is not None else snap
         rows = scoring_rows_for_snap(hay, det_ctx.embedder or None) if hay else None
+        # The line counts the unvoted media (#4779); a haystack names them in its own ids.
+        labelled = set(labeled_media_labels(labelset, snap))
+        if haystack is not None:
+            labelled = {hid for hid, src in haystack.to_source.items() if src in labelled}
         install_centroid_head(
             det_ctx,
             [x for x, y in zip(X_list, y_list, strict=True) if y == 1.0],
             (lambda head: score_rows_with_model(head, rows)[0]) if rows is not None else (lambda _head: []),
             labelset,
             beta=_centroid_beta(det_ctx),
+            line_mask=_unvoted_mask(rows, labelled),
         )
         return True
     if tier != TIER_TRAINED:
@@ -1170,6 +1184,7 @@ def labelset_train_and_score(
                 lambda h: score_rows_with_model(h, centroid_rows)[0],
                 labelset,
                 beta=beta,
+                line_mask=_unvoted_mask(centroid_rows, set(labeled_media_labels(labelset, clips_dict))),
             )
             scores, best_region = score_rows_with_model(head, centroid_rows)
             results = _format_results(centroid_rows.ids, scores, best_region, clips_dict)

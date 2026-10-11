@@ -539,7 +539,10 @@ def example_sort_by_id(body: dict):
             embedding = media_embedding(media, score_name)
             if embedding is None:
                 abort(400, message="Media has no embedding (cannot sort)")
-            results, cuts = cosine_sort_cuts(embedding)
+            from vtscore.training.query_sort import _voted_media_ids
+
+            # The line leaves the example out of its count, with the voted media (#4779).
+            results, cuts = cosine_sort_cuts(embedding, exclude_ids=_voted_media_ids() | {media_id})
         return windowed_sort_response(results, cuts.threshold, cuts.acq_threshold, line=cuts.line, window=False)
     except HTTPException:
         raise

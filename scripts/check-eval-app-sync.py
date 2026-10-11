@@ -811,9 +811,11 @@ MIRRORS: list[Mirror] = [
             "vector (the style's good_vec, else good_training_vec - the vectors its trained "
             "head fits on) and the withheld half's scorer (_centroid_test). Both draw the line by "
             "CENTROID_LINE_RULE at a balance (#4732): the app at the detector's own "
-            "(_centroid_beta), the harness at the run's beta. If the app changes which vectors "
-            "average, which corpus the line is cut on, or which balance draws it, change the "
-            "harness to match."
+            "(_centroid_beta), the harness at the run's beta. Both count unvoted media only "
+            "(#4779): the app masks the labelset's labelled media out of the line's count "
+            "(fit_centroid's line_mask), and the harness's withheld half holds no voted media. "
+            "If the app changes which vectors average, which corpus the line is cut on, or "
+            "which balance draws it, change the harness to match."
         ),
     ),
     Mirror(

@@ -173,3 +173,26 @@ class TestAStructuralExampleSortsLine:
         structural(lambda results, threshold, *a, **k: (results, threshold))
         _results, cuts = example_sort_cuts_from_paths([tmp_path / "crop.png"])
         assert cuts.line is not None and cuts.line.rule == "centroid"
+
+
+class TestAnExampleSortCountsTheUnvoted:
+    """#4779: an example sort's line leaves the voted media and the example itself out of its count."""
+
+    def test_the_example_itself_is_left_out(self):
+        query = _fill_shoulder_medias()
+        medias = get_active_context().medias
+        example = medias[1]["embeddings"]["test_emb"]
+        _r, cuts = cosine_sort_cuts(example, beta=1.0, exclude_ids=set())
+        assert cuts.line is not None and cuts.line.scores is not None
+        assert cuts.line.scores.size == len(medias) - 1  # the example's own cosine, 1.0, is not counted
+        _r, with_query = cosine_sort_cuts(query, beta=1.0, exclude_ids=set())
+        assert with_query.line.scores.size == len(medias)
+
+    def test_voted_media_are_left_out(self):
+        query = _fill_shoulder_medias()
+        n = len(get_active_context().medias)
+        _r, cuts = cosine_sort_cuts(query, beta=1.0, exclude_ids={1, 2, 3})
+        assert cuts.line.scores.size == n - 3
+        # The acquisition cut still reads every media, so Autopilot's picks do not move.
+        _r, every = cosine_sort_cuts(query, beta=1.0, exclude_ids=set())
+        assert cuts.acq_threshold == every.acq_threshold
