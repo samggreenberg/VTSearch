@@ -333,7 +333,7 @@ class TestJoinThroughTheRealLoaders:
         load_dataset_from_folder(tmp_path, "image", photos)
         faces: dict[int, dict[str, Any]] = {}
         detector = MagicMock()
-        detector.detect.return_value = ([[10, 10, 60, 60]], [0.9])
+        detector.detect.return_value = ([[10, 10, 60, 60]], [0.9], None)
         with patch.object(CONVERTER, "_make_detector", return_value=detector):
             run_converters_on_folder(
                 tmp_path,

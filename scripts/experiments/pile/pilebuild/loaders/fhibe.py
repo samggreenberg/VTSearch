@@ -29,6 +29,12 @@ detector's raw box (padding is applied after, exactly as ``image2face`` does):
 * anything between is dropped: it may be part of the subject's own face, and
   scoring it as a negative would be wrong.
 
+**Alignment is a dataset parameter too** (#4777): ``align`` in the spec is
+``image2face``'s own ``align`` (``none`` when unset), so ``fhibe_faces_roll_*``
+and ``fhibe_faces_sim_*`` are the same detections, ids and labels as
+``fhibe_faces_*``, cropped turned upright. Only the pixels differ, so the arms
+pair cell for cell.
+
 A photo whose subject MTCNN missed yields no subject crop, so the crop arm's
 identity scores are conditional on finding the face. The census's per-band hit
 rate is the localization stage; the two multiply to end-to-end.
@@ -235,34 +241,37 @@ def photo_media(p: Photo, data: bytes, size: tuple[int, int], embedder_name: str
     }
 
 
-def face_crops(converter, img, p: Photo, scale: float) -> tuple[dict | None, list[tuple[bytes, int, int]], int]:
+def face_crops(
+    converter, img, p: Photo, scale: float, align: str = "none"
+) -> tuple[dict | None, list[tuple[bytes, int, int]], int]:
     """``(subject_crop, extra_crops, n_dropped)`` from the app's ``image2face`` on *img*.
 
-    Each crop is ``(png_bytes, width, height)``. Detection, threshold, padding
-    and minimum size are the converter's own (its private helpers, so a change to
-    the shipped rule is a change here); only the labelling is this loader's.
+    Each crop is ``(png_bytes, width, height)``. Detection, threshold, padding,
+    minimum size and the crop itself (turned as *align* says) are the
+    converter's own (its private helpers, so a change to the shipped rule is a
+    change here); only the labelling is this loader's. MTCNN is called here
+    rather than through the converter's ``_detect_faces``, which returns no faces
+    on an error: a build must fail loudly instead.
     """
-    threshold, padding, min_size = converter._resolve_params(None)
+    from vtscore.converters.image2face import crop_face  # noqa: PLC0415
+
+    threshold, padding, min_size, align = converter._resolve_params({"align": align})
     detector = converter._make_detector()
     if detector is None:
         raise SystemExit("fhibe: image2face has no MTCNN (facenet-pytorch missing); refusing to build an empty arm")
     w, h = img.size
-    boxes, probs = detector.detect(img)
-    if boxes is None:
+    kept = converter._kept_faces(detector.detect(img, landmarks=True), w, h, threshold, padding, min_size)
+    if not kept:
         return None, [], 0
     face = [c * scale for c in p.face]
-    scored = []
-    for raw, prob in zip(boxes, probs):
-        kept = converter._box_from_detection(raw, prob, w, h, threshold, padding, min_size)
-        if kept is not None:
-            scored.append((iou(face, [float(v) for v in raw]), kept))
-    scored.sort(key=lambda t: (-t[0], -t[1][4]))
+    scored = [(iou(face, list(k.raw)), k) for k in kept]
+    scored.sort(key=lambda t: (-t[0], -t[1].conf))
 
     def crop(k) -> tuple[bytes, int, int]:
-        x0, y0, x1, y1, _conf = k
+        im = crop_face(img, k, align, padding)
         buf = io.BytesIO()
-        img.crop((x0, y0, x1, y1)).save(buf, format="PNG")  # image2face saves a decoded image as PNG
-        return buf.getvalue(), x1 - x0, y1 - y0
+        im.save(buf, format="PNG")  # image2face saves a decoded image as PNG
+        return buf.getvalue(), im.width, im.height
 
     subject = None
     if scored and scored[0][0] >= SUBJECT_IOU:
@@ -295,6 +304,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     photos = read_photos(root)
     copies = stage(root, photos, long_side)
     faces = spec.get("media_type") == "face"
+    align = spec.get("align", "none")
     converter = None
     if faces:
         from vtscore.converters.image2face import CONVERTER as converter  # noqa: PLC0415, N811
@@ -308,7 +318,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
             if not faces:
                 medias[p.pid] = photo_media(p, data, size, embedder_name)
                 continue
-            subject, extras, n_drop = face_crops(converter, im, p, size[0] / p.width)
+            subject, extras, n_drop = face_crops(converter, im, p, size[0] / p.width, align)
         if subject is not None:
             medias[p.pid] = face_media(p.pid, subject, p.subject, p, embedder_name)
             found += 1
@@ -320,7 +330,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         dropped += n_drop
     if faces:
         log(
-            f"  fhibe: {dataset}: subject found in {found:,} of {len(photos):,} photos "
+            f"  fhibe: {dataset} (align {align}): subject found in {found:,} of {len(photos):,} photos "
             f"({missed:,} missed), {extra:,} other faces kept as negatives, {dropped:,} ambiguous dropped"
         )
     else:

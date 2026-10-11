@@ -40,7 +40,8 @@ class SortLine:
 
     A cosine sort's ranking does not depend on the balance, but its display line
     does: a typed query's is the count line at beta 1 or below (#4603), the
-    Goods' centroid's is the count line at every balance (#4732), and a tiled
+    Goods' centroid's is a count at every balance, floored at the top's widest
+    drop (#4732, #4759), and a tiled
     structural example's rises at the precision end (#4479).  The sort cache
     keeps this beside the ranking, so ``GET /api/sort/line`` redraws the line at
     the balance set now instead of re-scoring the haystack, the move

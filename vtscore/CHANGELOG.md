@@ -30,6 +30,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   `gmm_variant="handover:centroid"` and one `vtscore.eval.arms_handover.HANDOVER_COLUMNS` row per
   click (held-out Goods' ranks in the unvoted pool under the centroid and under the head, and the
   centroid-prior heads' AP). Additive; off by default.
+- **`image2face` aligns each crop by its landmarks** (issue #4777). A new `align` field
+  (`"none"`, `"roll"`, `"similarity"`; **default `"roll"`**) fits MTCNN's five landmarks to
+  `FACE_TEMPLATE` with `fit_similarity(src, dst) -> (a, b, tx, ty)` and crops through
+  `crop_face(img, detection, align, padding)`: `roll` turns the padded box upright about its
+  centre at the box's size, `similarity` also re-centres and re-scales it to the template on a
+  square. Detection, the kept faces and each crop's `source_box` do not depend on `align`; a
+  detection without landmarks is cropped plain. `FaceDetection` (`box`, `conf`, `raw`,
+  `landmarks`) is what `_detect_faces` / `_kept_faces` now return, and the stubbed MTCNN must
+  answer `detect(img, landmarks=True)` with `(boxes, probs, points)`. **Behaviour change:** a
+  conversion at the defaults now emits turned-upright crops, so its face vectors differ from a
+  conversion before this change; pass `align="none"` for the old crops. Priced on the FHIBE face
+  bench (`docs/experiments/2026-10-10-face-align-4777`): the face review's session mean rose in
+  every session set, and failed one-photo sessions fell from 12 to 7.
 - **`vtscore.datasets.source_groups`: group a ranking of converter outputs by source item** (issue #4751).
   `group_by_source(results, medias, locate) -> list[SourceGroup]` turns a descending ranking of
   outputs into one of their sources: each output whose source resolves (`locate` is
@@ -103,6 +116,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The Goods' centroid's line counts the widest drop too, and never cuts through it** (issue #4759).
+  `CENTROID_LINE_RULE` is now `count_gap_floor`: `beta ** 0.708` times the larger of #4603's bulk excess
+  and the number of cosines above the widest drop between neighbours in the top 11
+  (`CENTROID_GAP_TOP` = 10), never keeping fewer than that drop's count. `CENTROID_LINE_RULES` gains the
+  candidates priced beside it (`count_z3`, `count_z3.5`, `mirror_z3.5`, `gap`, `count_gap`, `gap_floor`,
+  `count_gap_floor`; `CENTROID_COUNTS` lists the counts). `thresholds._count_line` splits into
+  `_count_estimate(scores, z=, bulk=)` (n-hat, now at any bar and with a `"mirror"` bulk) and
+  `_count_keep_line(scores, beta, n_hat)`; the typed query's line is unchanged. `count` stays available
+  as the #4732 line, and `CALIB_CENTROID_LINE=count` is the harness arm before this change.
 - **The Goods' centroid's line is the count line, at the balance** (issue #4732). `centroid_cut` takes
   `rule` (`CENTROID_LINE_RULES`: `midpoint`, the line before #4732; `text`; `guarded`; `count`, the
   app's `CENTROID_LINE_RULE`) and `beta`. `fit_centroid` returns the head, its threshold and a

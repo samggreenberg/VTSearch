@@ -34,6 +34,14 @@ not list every commit. Use `git log` for the full history.
   `GET /api/sort/line`; the three `example-sort-{by-id,server,origin}` routes now return a
   `sort_token` (still with the whole ranking).
 
+- **A detector with too few labels keeps all of a clear match, not just its top image** (issue #4759).
+  Below 3 Goods and 4 Bads, Test, Find and AutoFind keep about as many images as stand out from the
+  rest (#4732). On faces that kept one of a person's three or four other photos, because their photos
+  stand out from the crowd by little more than the crowd's own closest faces do. The line now also
+  looks for the clearest break at the top of the ranking and never cuts above it, so the same Find
+  keeps about three. A Find over another collection gets this now. On the collection you labelled, your
+  own Goods top the ranking and the break usually falls just below them, so there the line mostly keeps
+  what it kept before (#4779).
 - **A detector with too few labels returns the images that stand out, not half the collection**
   (issue #4732). Below 3 Goods and 4 Bads, Test, Find and AutoFind rank everything by the Goods'
   centroid. Its line used to sit where the scores split into two groups, which on a rare target
