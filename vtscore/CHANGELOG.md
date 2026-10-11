@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **An eval head started from the Goods' centroid, and a hand-over shadow for the harness** (issue #4776).
+  `vtscore.training.svm_prior` (`centroid_prior_direction`, `fit_linear_svm_prior_head`) fits the
+  shipped linear SVM's objective with one extra feature, `CENTROID_PRIOR_SCALE` (10) times the dot
+  with the unit Goods' centroid, and folds it back into a `Linear(D, 1)`; `train_model` reaches it by
+  the new `LINEAR_SVM_PRIOR_HEAD` sentinel (`-3`), the harness by `head="linear_svm_prior"`. Eval
+  only: no production fit passes the sentinel. `simulate_voting_iterations(handover_shadow=True,
+  handover_sink=[...])` adds, past the label quota, the Goods' centroid's Test as rows tagged
+  `gmm_variant="handover:centroid"` and one `vtscore.eval.arms_handover.HANDOVER_COLUMNS` row per
+  click (held-out Goods' ranks in the unvoted pool under the centroid and under the head, and the
+  centroid-prior heads' AP). Additive; off by default.
 - **`vtscore.datasets.source_groups`: group a ranking of converter outputs by source item** (issue #4751).
   `group_by_source(results, medias, locate) -> list[SourceGroup]` turns a descending ranking of
   outputs into one of their sources: each output whose source resolves (`locate` is

@@ -58,6 +58,7 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/timing_benchmark.py`      | GPU microbenchmark: MLP (torch) vs SVM (cuML)            |
 | `vtscore/eval/trainers.py`              | Deprecated alias for `sweep_trainers`                     |
 | `vtscore/eval/arms_anchored.py`, `arms_fit_quality.py`, `arms_fold_count.py`, `arms_inclusion.py`, `arms_safe_gmm.py`, `arms_schedule.py` | Per-study threshold arms run inside the voting simulation |
+| `vtscore/eval/arms_handover.py` | #4776's hand-over shadow: past the label quota, the Goods' centroid's Test as tagged rows (`handover:centroid`) and `HandoverJudge`, the evidence a centroid-to-head hand-over rule may read (held-out Goods' ranks in the unvoted pool under each detector) |
 | `vtscore/eval/fit_quality.py`           | Goodness-of-fit diagnostics for the score-mixture fits    |
 | `vtscore/eval/live_threshold_rules.py`  | Retired app threshold rules, kept as live arms            |
 | `vtscore/eval/scale_bands.py`           | Scale-banded cells: test across sizes, train on a size mix |
