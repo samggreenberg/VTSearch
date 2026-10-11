@@ -16,7 +16,9 @@ instead, since every commit on `dev` is effectively a new app release.)
   confident of, so `roll` alignment can turn a face lying on its side upright. The faces kept, their
   boxes, confidences and `source_box` are the plain pass's. `_resolve_params` now returns a
   `FaceParams` named tuple (`threshold`, `padding`, `min_size`, `align`, `sideways`);
-  `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Additive.
+  `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Off by default: on the FHIBE
+  face bench it fixed both sideways failures but moved the session mean about +0.004, for about 2.8x
+  MTCNN time (`docs/experiments/2026-10-11-face-sideways-4788`). Additive.
 - **`image2face` aligns each crop by its landmarks** (issue #4777). A new `align` field
   (`"none"`, `"roll"`, `"similarity"`; **default `"roll"`**) fits MTCNN's five landmarks to
   `FACE_TEMPLATE` with `fit_similarity(src, dst) -> (a, b, tx, ty)` and crops through

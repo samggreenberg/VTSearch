@@ -21,7 +21,9 @@ angle and ``roll`` turns nothing. With ``sideways`` on, each face MTCNN finds is
 looked for again in the photo turned a quarter each way, and its landmarks come
 from whichever of the three MTCNN is most confident of. The faces found, their
 boxes and confidences stay the plain pass's own; only the landmarks, and so the
-turn, can change.
+turn, can change. It is off by default: on the FHIBE face bench it fixed both
+sideways failures but moved the session mean only about +0.004, for about 2.8x
+the detection time (``docs/experiments/2026-10-11-face-sideways-4788``).
 
 ``roll`` is the default. On the FHIBE face bench it raised the face review's
 session mean of the objective in every session set (+0.02 to +0.03 from one
