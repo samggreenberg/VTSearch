@@ -62,9 +62,11 @@ resolved to a vector.
 The centroid (`vtscore/detectors/centroid_head.py`) is the example sort the app
 draws for several uploaded examples, built from the Goods: the unit mean of the
 L2-normalised Good vectors, every item ranked by its cosine to it (max-pooled
-over a patch item's rows), cut by the typed query's count line (#4603) over those
-cosines on the corpus being scored, at the detector's balance: it keeps
-`beta ** 0.708` times the count of items standing out of the cosines' bulk. It
+over a patch item's rows), cut by a count over those cosines on the corpus being
+scored, at the detector's balance: it keeps `beta ** 0.708` times the larger of
+the typed query's count (#4603, the items standing out of the cosines' bulk) and
+the items above the widest drop between neighbours in the top 11, and never
+fewer than that drop's count (`count_gap_floor`, #4759). It
 ships as a `Linear(D, 1)` whose weight is the centroid scaled by
 `CENTROID_LOGIT_SCALE` and whose bias puts the cut at logit 0, so its threshold
 is 0.5 and every scorer, the weight export and an ONNX consumer take it as they
@@ -74,7 +76,13 @@ target splits the negatives' own bulk: on FHIBE's face crops it kept a median of
 a Find's F-beta over votes 1-10 up by 0.34 at beta 1 on faces, 0.08 on FHIBE's
 photos and 0.13 in COCO Better's Binary opening. It beat the guarded line by
 0.21 to 0.40 on faces at every balance and lost to it only at beta 4 on COCO, by
-0.02 (`docs/experiments/2026-10-10-centroid-line-4732`). A
+0.02 (`docs/experiments/2026-10-10-centroid-line-4732`). The count alone kept one
+of a person's three or four withheld face crops: they sit 3 to 4 bulk sigmas
+above the median, among the bulk's own top, so a lower bar (z 3 or 3.5) or a
+mirrored bulk only loses (by up to 0.10). The drop just below the person's last
+photo separates them, and flooring the line there took votes 1-10 up by about
+0.09-0.10 at beta 1 on faces, 0.01-0.02 on whole photos and 0.002 on COCO, and never
+lost by more than its SE (`docs/experiments/2026-10-10-centroid-count-4759`). A
 balance change redraws the line on the cosines it was drawn on, and Autopilot's
 Hard select still samples at their midpoint. The labels' line needs held-out
 Bads the centroid does not have. No typed-query
@@ -325,6 +333,8 @@ Embedders carry capability flags consumed by the routes layer and the frontend:
 - `license_notice: Optional[str]`: non-None for embedders with usage restrictions (e.g. EUPE's FAIR Noncommercial Research Licence). Surfaced as a warning chip on the embedder picker.
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtscore/converters/` before embedding.
+
+The **face** media type is never imported either: the `image2face` converter crops each face MTCNN finds in an image, and FaceNet embeds the crop. **Each crop is turned upright first** (#4777): MTCNN's five landmarks are fitted to a template of where an upright face's landmarks sit in its box, and the photo is turned about the box's centre by the fit's angle before the same box is cropped (`align="roll"`, the default; `similarity` also re-centres and re-scales to the template; `none` is the plain box). On the FHIBE face bench it raised the face review's session mean of the objective in every session set (+0.020 to +0.029 from one starting photo, +0.012 to +0.025 from four) and cut failed one-photo sessions from 12 to 7. `similarity` gained less, because it zooms in on faces in profile ([`REPORT.md`](experiments/2026-10-10-face-align-4777/REPORT.md)).
 
 Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_grid"` (`H × W × D` fp16 ndarray, re-derived at load — never persisted). The detector head trains on these pre-computed vectors, so training is fast (the liblinear head fit is milliseconds on a few hundred labeled examples; scoring the dataset dominates a retrain).
 
