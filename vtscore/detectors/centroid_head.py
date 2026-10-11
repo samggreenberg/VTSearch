@@ -303,6 +303,7 @@ def fit_centroid(
     *,
     rule: str | None = None,
     beta: float | None = None,
+    line_mask: "Sequence[bool] | np.ndarray | None" = None,
 ) -> tuple["nn.Sequential", float, CentroidLine]:
     """The Goods' centroid head, its threshold, and its :class:`CentroidLine`, cut on the corpus *score* scores.
 
@@ -319,11 +320,21 @@ def fit_centroid(
     *rule* and *beta* are :func:`centroid_cut`'s; the cut is centred in the gap
     the line falls in (:func:`_gap_centre`), so the head keeps exactly what the
     line keeps.
+
+    *line_mask*, one flag per score, keeps only the flagged media in the line's
+    count (#4779): the app passes the unvoted ones, since the Goods it was built
+    from sit at the top of their own ranking and would otherwise be counted as
+    what stands out.  The head still scores every media.
     """
     chosen = CENTROID_LINE_RULE if rule is None else rule
     centroid = goods_centroid(goods)
     probe = centroid_head(centroid, 0.0, scale=1.0)
     s = np.asarray(score(probe), dtype=np.float64)
+    if line_mask is not None:
+        mask = np.asarray(line_mask, dtype=bool)
+        if mask.shape != s.shape:
+            raise ValueError(f"line_mask has {mask.size} flags for {s.size} scores")
+        s = s[mask]
     s = s[(s > 0.0) & (s < 1.0)]
     cosines = np.log(s) - np.log1p(-s)
     cut = _gap_centre(cosines, centroid_cut(cosines, rule=chosen, beta=beta))
@@ -336,7 +347,8 @@ def fit_centroid_head(
     *,
     rule: str | None = None,
     beta: float | None = None,
+    line_mask: "Sequence[bool] | np.ndarray | None" = None,
 ) -> tuple["nn.Sequential", float]:
     """The Goods' centroid head and its threshold: :func:`fit_centroid` without the line."""
-    head, threshold, _line = fit_centroid(goods, score, rule=rule, beta=beta)
+    head, threshold, _line = fit_centroid(goods, score, rule=rule, beta=beta, line_mask=line_mask)
     return head, threshold
