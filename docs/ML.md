@@ -66,7 +66,10 @@ over a patch item's rows), cut by a count over those cosines on the corpus being
 scored, at the detector's balance: it keeps `beta ** 0.708` times the larger of
 the typed query's count (#4603, the items standing out of the cosines' bulk) and
 the items above the widest drop between neighbours in the top 11, and never
-fewer than that drop's count (`count_gap_floor`, #4759). It
+fewer than that drop's count (`count_gap_floor`, #4759). From beta 1 up, when
+the widest drop is the first one, the line looks past that standout to the
+widest drop below the second item, if it is at least a quarter as wide
+(`count_gap_floor_skip25_b1`, #4783). It
 ships as a `Linear(D, 1)` whose weight is the centroid scaled by
 `CENTROID_LOGIT_SCALE` and whose bias puts the cut at logit 0, so its threshold
 is 0.5 and every scorer, the weight export and an ONNX consumer take it as they
@@ -82,7 +85,12 @@ above the median, among the bulk's own top, so a lower bar (z 3 or 3.5) or a
 mirrored bulk only loses (by up to 0.10). The drop just below the person's last
 photo separates them, and flooring the line there took votes 1-10 up by about
 0.09-0.10 at beta 1 on faces, 0.01-0.02 on whole photos and 0.002 on COCO, and never
-lost by more than its SE (`docs/experiments/2026-10-10-centroid-count-4759`). A
+lost by more than its SE (`docs/experiments/2026-10-10-centroid-count-4759`). When a
+person's best photo stands far above their others, the widest drop is right after
+it; looking past it from beta 1 up added 0.02-0.03 on faces and 0.01-0.02 on photos
+and lost nowhere. Below beta 1 the lone standout is the better set, since the
+images past it include strangers that precision pays for
+(`docs/experiments/2026-10-11-centroid-drop-4783`). A
 balance change redraws the line on the cosines it was drawn on, and Autopilot's
 Hard select still samples at their midpoint. The labels' line needs held-out
 Bads the centroid does not have. No typed-query

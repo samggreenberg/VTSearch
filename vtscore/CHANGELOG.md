@@ -96,6 +96,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The Goods' centroid's line looks past a standout first cosine from beta 1 up** (issue #4783).
+  `CENTROID_LINE_RULE` is now `count_gap_floor_skip25_b1`: `count_gap_floor` below beta 1, and from
+  beta 1 up the same composition with the drop `skip25` (when the widest drop is the first, the widest
+  one below the second cosine if at least a quarter as wide). New: `CENTROID_DROPS` (each candidate's
+  drop: `skip25`, `skip50`, `rank5`), `_top_gap_count(..., drop=)`, and `CENTROID_GATED` (a rule gated on
+  beta 1, resolved by `centroid_cut` at the line's beta, so `CentroidLine.threshold_at` redraws the right
+  one). Candidates `count_gap_floor_skip25`, `_skip50` and `_rank5` join `CENTROID_LINE_RULES`.
+  `CALIB_CENTROID_LINE=count_gap_floor` is the harness arm before this change.
 - **The Goods' centroid's line counts the widest drop too, and never cuts through it** (issue #4759).
   `CENTROID_LINE_RULE` is now `count_gap_floor`: `beta ** 0.708` times the larger of #4603's bulk excess
   and the number of cosines above the widest drop between neighbours in the top 11

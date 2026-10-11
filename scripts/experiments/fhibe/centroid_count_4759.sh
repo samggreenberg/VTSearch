@@ -14,8 +14,9 @@
 #   centroid_count_4759.sh size K IDX   time one cell first
 #
 # Launch from a FROZEN worktree: every task imports the worktree this script sits in.
-# Env: CC4759_DATE (default 2026-10-10), CC4759_RULES (the candidates), and anything fhibe/launch.sh
-# reads (CALIB_PARTITION, CALIB_CONC).
+# Env: CC4759_DATE (default 2026-10-10), CC4759_RULES (the candidates), CC_STUDY (the issue the run dir and
+# job names carry, default 4759; centroid_drop_4783.sh sets it), and anything fhibe/launch.sh reads
+# (CALIB_PARTITION, CALIB_CONC).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
@@ -23,6 +24,7 @@ RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/r
 D="${CC4759_DATE:-2026-10-10}"
 BASE="${CC4759_BASE:-2026-10-09}"  # the #4699 baseline: identities sampled at K=4, one prepared grid per K
 RULES="${CC4759_RULES:-midpoint count count_z3 count_z3.5 mirror_z3.5 gap count_gap gap_floor}"
+STUDY="${CC_STUDY:-4759}"
 
 variants() {
   local out=() r b
@@ -35,13 +37,13 @@ variants() {
 
 K="${2:?K (1 or 4)}"
 export FHIBE_EXAMPLES="$K" FHIBE_MAX_EXAMPLES=4
-export FHIBE_RUN="$D-4759"
+export FHIBE_RUN="$D-$STUDY"
 export FHIBE_IDENTITIES="$RUNS/$BASE-k4/identities.txt"
 export FHIBE_MAX_STEPS="${FHIBE_MAX_STEPS:-40}"
 export CALIB_SKYLINE_ARMS=""  # no ceiling: the study reads the opening only
 export CALIB_RANK_FRAME_STEPS="${CALIB_RANK_FRAME_STEPS:-10,25}"
 export CALIB_CENTROID_LINE_VARIANTS="${CALIB_CENTROID_LINE_VARIANTS:-$(variants)}"
-export CALIB_JOB_NAME="${CALIB_JOB_NAME:-cc4759-k$K}"
+export CALIB_JOB_NAME="${CALIB_JOB_NAME:-cc$STUDY-k$K}"
 SRC="$RUNS/$BASE-k$K/results"
 RES="$RUNS/$FHIBE_RUN-k$K/results"
 

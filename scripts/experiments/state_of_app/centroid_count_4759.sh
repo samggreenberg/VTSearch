@@ -11,15 +11,16 @@
 #                                                     queue the Binary sessions of seeds FIRST..LAST
 #
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it).
-# Env: CC4759_DATE (default 2026-10-10), CC4759_RULES, SOTA_ROOT, and anything launch.sh reads (CALIB_MEM,
-# CALIB_PARTITION). CC4759_PACK=1 packs the cells into one job on a V100 node instead of an array.
+# Env: CC4759_DATE (default 2026-10-10), CC4759_RULES, CC_STUDY (default 4759), SOTA_ROOT, and anything launch.sh
+# reads (CALIB_MEM, CALIB_PARTITION). CC4759_PACK=1 packs the cells into one job on a V100 node instead of an array.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 D="${CC4759_DATE:-2026-10-10}"
 GRID_SRC="${CC4759_GRID:-$S/2026-10-08-b1/results}"  # prepare_data.py unchanged since this grid was prepared
 STEPS="${SOTA_MAX_STEPS:-40}"
-DIR="$S/$D-centroid4759-b1"
+STUDY="${CC_STUDY:-4759}"
+DIR="$S/$D-centroid$STUDY-b1"
 
 indices() {  # FIRST LAST: the Binary block of each seed (seed-major blocks of 144 binary then 144 region cells)
   python3 - "$1" "$2" <<'PY'
@@ -37,8 +38,8 @@ dirs)
   ln -sfn "$GRID_SRC/crops" "$r/crops"
   cat >"$r/grid_shape.json" <<EOF
 {"n_cells": 288, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $SEEDS,
- "max_steps": $STEPS, "cell_order": "seed", "test_bands": "all", "job_name": "cc4759-binary-b1",
- "note": "#4759 centroid count variants, beta 1, Binary only, trajectory pass to $STEPS; grid symlinked from $GRID_SRC"}
+ "max_steps": $STEPS, "cell_order": "seed", "test_bands": "all", "job_name": "cc$STUDY-binary-b1",
+ "note": "#$STUDY centroid line variants, beta 1, Binary only, trajectory pass to $STEPS; grid symlinked from $GRID_SRC"}
 EOF
   ls -la "$r"
   ;;
@@ -47,8 +48,8 @@ launch)
   (( FIRST >= 0 && FIRST <= LAST && LAST < SEEDS )) || { echo "seeds must satisfy 0 <= FIRST <= LAST < SEEDS" >&2; exit 2; }
   export CALIB_CENTROID_LINE_VARIANTS="${CALIB_CENTROID_LINE_VARIANTS:-$(bash "$HERE/../fhibe/centroid_count_4759.sh" variants 1)}"
   export CALIB_MEM="${CALIB_MEM:-4G}"
-  export SOTA_BETA=1 SOTA_DATE="$D-centroid4759-b1" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS" SOTA_MAX_STEPS="$STEPS"
-  export CALIB_JOB_NAME="cc4759-binary-b1"
+  export SOTA_BETA=1 SOTA_DATE="$D-centroid$STUDY-b1" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS" SOTA_MAX_STEPS="$STEPS"
+  export CALIB_JOB_NAME="cc$STUDY-binary-b1"
   idx="$(indices "$FIRST" "$LAST")"
   if [[ "${CC4759_PACK:-0}" == 1 ]]; then
     # The cpu cap is full: one multi-CPU job on a V100 node (launch_bands.sh pack, #4490).
