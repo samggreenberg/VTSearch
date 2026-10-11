@@ -82,14 +82,18 @@ def query_aps(vecs: np.ndarray, cats: list[str], queries: list[int], chunk: int 
     return out
 
 
-def session_starts(cells: Path) -> set[int]:
-    """The photo each session in *cells* started from: its vote-1 ``example`` pick."""
+def session_starts(cells: Path, dataset: str) -> set[int]:
+    """The photo each session of *dataset* in *cells* started from: its vote-1 ``example`` pick.
+
+    A run dir holds both sizes' sessions, and a photo keeps its id at both, so the dataset is named.
+    """
     import pandas as pd  # noqa: PLC0415
 
     starts = set()
     for f in sorted(cells.glob("task_*__picks.csv")):
-        df = pd.read_csv(f, usecols=["t", "phase", "picked_id"])
-        starts.update(int(v) for v in df.loc[(df["t"] == 1) & (df["phase"] == "example"), "picked_id"])
+        df = pd.read_csv(f, usecols=["dataset", "t", "phase", "picked_id"])
+        first = df[(df["dataset"] == dataset) & (df["t"] == 1) & (df["phase"] == "example")]
+        starts.update(int(v) for v in first["picked_id"])
     return starts
 
 
@@ -109,7 +113,9 @@ def main() -> int:
     ap.add_argument("--arms", default="faces,faces_roll,faces_sim")
     ap.add_argument("--starts", action="append", default=[], help="size=<cells dir of a one-photo run>")
     args = ap.parse_args()
-    starts = {int(k): session_starts(Path(v)) for k, v in (spec.split("=", 1) for spec in args.starts)}
+    starts = {
+        int(k): session_starts(Path(v), f"fhibe_faces_{k}") for k, v in (spec.split("=", 1) for spec in args.starts)
+    }
 
     bench = {
         ln.strip() for ln in Path(args.identities).read_text().splitlines() if ln.strip() and not ln.startswith("#")
