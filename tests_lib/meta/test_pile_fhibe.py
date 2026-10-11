@@ -21,6 +21,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 _PILE_DIR = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "pile"
@@ -144,8 +145,8 @@ class _Detector:
     def __init__(self, boxes, probs):
         self.boxes, self.probs = boxes, probs
 
-    def detect(self, img):
-        return self.boxes, self.probs
+    def detect(self, img, landmarks=False):
+        return self.boxes, self.probs, None
 
 
 class TestFaceLabels:
@@ -214,9 +215,9 @@ class TestFaceLabels:
         class _EachPhoto:
             """Finds the annotated face of the photo being read, plus one stray face at the edge."""
 
-            def detect(self, img):
+            def detect(self, img, landmarks=False):
                 p = order.pop(0)  # the loader reads photos in id order
-                return [list(p.face), [150, 100, 190, 140]], [0.99, 0.9]
+                return [list(p.face), [150, 100, 190, 140]], [0.99, 0.9], None
 
         det = _EachPhoto()
         monkeypatch.setattr(converter, "_make_detector", lambda: det)
@@ -228,6 +229,53 @@ class TestFaceLabels:
         assert all(m["media_type"] == "face" and m["categories"] == [m["category"]] for m in subjects.values())
         assert len(extras) == 3 and all(m["categories"] == [] for m in extras.values())
         assert all(m["source_photo_id"] in subjects for m in extras.values())
+
+    def test_an_aligned_arm_pairs_with_the_plain_one(self, mod, pc, release, converter, monkeypatch):
+        """``align`` turns the crops (#4777): the same media ids, labels and sources, other pixels."""
+        from vtscore.converters.image2face import FACE_TEMPLATE
+
+        photos = sorted(mod.read_photos(release), key=lambda p: p.pid)
+
+        class _Tilted:
+            """The annotated face, its landmarks turned 30 degrees, plus a stray face at the edge."""
+
+            def __init__(self):
+                self.order = list(photos)
+
+            def detect(self, img, landmarks=False):
+                p = self.order.pop(0)
+                x0, y0, x1, y1 = p.face
+                th = np.radians(30.0)
+                rot = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+                pts = ((np.asarray(FACE_TEMPLATE) - 0.5) * (x1 - x0)) @ rot.T + [(x0 + x1) / 2, (y0 + y1) / 2]
+                stray = (np.asarray(FACE_TEMPLATE) * 40) + [150, 100]
+                return [list(p.face), [150, 100, 190, 140]], [0.99, 0.9], np.stack([pts, stray])
+
+        built = {}
+        for name, align in (("fhibe_faces_t", None), ("fhibe_faces_t_roll", "roll")):
+            spec = {"boxed": False, "kind": "fhibe", "long_side": 200, "media_type": "face"}
+            if align:
+                spec["align"] = align
+            monkeypatch.setitem(pc.DATASETS, name, spec)
+            det = _Tilted()
+            monkeypatch.setattr(converter, "_make_detector", lambda det=det: det)
+            built[name] = {}
+            mod.load(name, built[name], "face")
+        plain, rolled = built["fhibe_faces_t"], built["fhibe_faces_t_roll"]
+        assert set(plain) == set(rolled)
+        for k in plain:
+            assert plain[k]["categories"] == rolled[k]["categories"]
+            assert plain[k]["source_photo_id"] == rolled[k]["source_photo_id"]
+        subject = next(k for k in plain if not k & mod.EXTRA_BIT)
+        assert plain[subject]["media_bytes"] != rolled[subject]["media_bytes"]
+
+    def test_every_aligned_dataset_names_a_mode_image2face_has(self, pc):
+        from vtscore.converters.image2face import ALIGN_MODES
+
+        aligned = {ds: spec["align"] for ds, spec in pc.DATASETS.items() if "align" in spec}
+        assert aligned, "no aligned FHIBE arm is declared"
+        assert set(aligned.values()) <= set(ALIGN_MODES)
+        assert all(pc.DATASETS[ds]["media_type"] == "face" for ds in aligned)
 
 
 class TestPairing:

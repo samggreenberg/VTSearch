@@ -10,6 +10,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`image2face` can align each crop by its landmarks** (issue #4777). A new `align` field
+  (`"none"`, `"roll"`, `"similarity"`; default `"none"`) fits MTCNN's five landmarks to
+  `FACE_TEMPLATE` with `fit_similarity(src, dst) -> (a, b, tx, ty)` and crops through
+  `crop_face(img, detection, align, padding)`: `roll` turns the padded box upright about its
+  centre at the box's size, `similarity` also re-centres and re-scales it to the template on a
+  square. Detection, the kept faces and each crop's `source_box` do not depend on `align`; a
+  detection without landmarks is cropped plain. `FaceDetection` (`box`, `conf`, `raw`,
+  `landmarks`) is what `_detect_faces` / `_kept_faces` now return, and the stubbed MTCNN must
+  answer `detect(img, landmarks=True)` with `(boxes, probs, points)`. Additive.
 - **`vtscore.datasets.source_groups`: group a ranking of converter outputs by source item** (issue #4751).
   `group_by_source(results, medias, locate) -> list[SourceGroup]` turns a descending ranking of
   outputs into one of their sources: each output whose source resolves (`locate` is

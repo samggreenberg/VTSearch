@@ -405,6 +405,12 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     "fhibe_640": os.environ.get("CALIB_FHIBE_EMBEDDERS", "siglip").split(","),
     "fhibe_faces_1024": os.environ.get("CALIB_FHIBE_FACE_EMBEDDERS", "face").split(","),
     "fhibe_faces_640": os.environ.get("CALIB_FHIBE_FACE_EMBEDDERS", "face").split(","),
+    # The same crops turned upright by their landmarks (#4777).
+    **{
+        f"fhibe_faces_{tag}_{size}": os.environ.get("CALIB_FHIBE_FACE_EMBEDDERS", "face").split(",")
+        for tag in ("roll", "sim")
+        for size in (1024, 640)
+    },
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -471,6 +477,7 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "fhibe_640": True,
     "fhibe_faces_1024": False,
     "fhibe_faces_640": False,
+    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim") for size in (1024, 640)},
 }
 
 

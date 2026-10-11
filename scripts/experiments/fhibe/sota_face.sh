@@ -11,26 +11,39 @@
 # and 6,744 runs a seed. Each run dir is an ordinary fhibe/launch.sh run (its grid symlinked
 # from the baseline's prepared grid for that K), but the cells of all six go through one pool.
 #
+#   sota_face.sh prepare                  an arm's own prepared grids, one per K (SOTA_FACE_ARM only)
 #   sota_face.sh dirs                     the six run dirs, their grid shapes and preflights
 #   sota_face.sh tasks [N]                write the task list (K beta index); N = the first N
 #                                         people of each size only (a smoke run), else all
 #   sota_face.sh pack [JOBS]              submit the task list as JOBS (default 1) V100 pack jobs
-#                                         of CALIB_PACK_PAR (default 38) cells at a time
+#                                         of CALIB_PACK_PAR (default 38) cells at a time;
+#                                         CALIB_PARTITION=cpu packs them on the cpu partition instead
 #   sota_face.sh baseline                 click 0: the example sort at K = 1 and 4 (example_baseline.py)
 #   sota_face.sh status                   cells written per run dir
 #
 # Launch from a FROZEN worktree: every task imports the worktree this script sits in.
 # Env: SOTA_FACE_DATE (default today), SOTA_FACE_TASKS (the task list's path).
+#
+# SOTA_FACE_ARM=<tag> runs the same review on another face arm, fhibe_faces_<tag>_{1024,640}
+# (#4777: roll, sim, the crops turned upright). Its run dirs are <date>-sota-<tag>-k<K>-b<beta>,
+# its grids are prepared on its own cells (`prepare`, then `dirs`), and it keeps the review's
+# identity file, so every session pairs with the plain arm's by person, size, K and beta.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
 RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/runs"
 D="${SOTA_FACE_DATE:-$(date +%Y-%m-%d)}"
-BASE="${SOTA_FACE_BASE:-2026-10-09}"
+ARM="${SOTA_FACE_ARM:-}"
+SET="$D-sota${ARM:+-$ARM}"  # the run dirs' common prefix
+# The prepared grids the run dirs link to: the #4699 baseline's for the plain arm, the arm's own otherwise.
+BASE="${SOTA_FACE_BASE:-${ARM:+$D-prep-$ARM}}"
+BASE="${BASE:-2026-10-09}"
+IDENTITIES="${SOTA_FACE_IDENTITIES:-$RUNS/2026-10-09-k4/identities.txt}"
+DATASETS="fhibe_faces${ARM:+_$ARM}_1024,fhibe_faces${ARM:+_$ARM}_640"
 KS=(1 4)
 BETAS=(0.25 1 4)
 N_PEOPLE=562
-TASKS="${SOTA_FACE_TASKS:-$RUNS/$D-sota-tasks.txt}"
+TASKS="${SOTA_FACE_TASKS:-$RUNS/$SET-tasks.txt}"
 
 # The run dir's balance tag, as launch.sh writes it (0.25 -> 025, 1 -> 1, 4 -> 4). A lookup, not a
 # python call: the task list asks for it 6,744 times.
@@ -46,14 +59,21 @@ btag() {
 # The settings one run dir takes, for launch.sh: K and beta vary, the rest is the recipe.
 run_env() {  # K BETA
   export FHIBE_EXAMPLES="$1" FHIBE_MAX_EXAMPLES=4 FHIBE_BETA="$2"
-  export FHIBE_RUN="$D-sota" FHIBE_IDENTITIES="$RUNS/$BASE-k4/identities.txt"
-  export FHIBE_DATASETS=fhibe_faces_1024,fhibe_faces_640 FHIBE_MAX_STEPS=150
+  export FHIBE_RUN="$SET" FHIBE_IDENTITIES="$IDENTITIES"
+  export FHIBE_DATASETS="$DATASETS" FHIBE_MAX_STEPS=150
   # Dense rank frames: every vote to 10, every 5 after (the skill's F1/F-beta curve recipe).
   export CALIB_RANK_FRAME_STEPS="1,2,3,4,5,6,7,8,9,10,$(seq -s, 15 5 150)"
-  export CALIB_JOB_NAME="sotaface-k$1-b$(btag "$2")"
+  export CALIB_JOB_NAME="sotaface${ARM:+-$ARM}-k$1-b$(btag "$2")"
 }
 
 case "${1:-}" in
+prepare)
+  [[ -n "$ARM" ]] || { echo "the plain arm links the #4699 baseline's grids; prepare is for SOTA_FACE_ARM" >&2; exit 2; }
+  for k in "${KS[@]}"; do
+    FHIBE_EXAMPLES="$k" FHIBE_MAX_EXAMPLES=4 FHIBE_RUN="$D-prep-$ARM" FHIBE_IDENTITIES="$IDENTITIES" \
+      FHIBE_DATASETS="$DATASETS" bash "$HERE/launch.sh" prepare
+  done
+  ;;
 dirs)
   for k in "${KS[@]}"; do
     for b in "${BETAS[@]}"; do
@@ -62,6 +82,7 @@ dirs)
         dir="$RUNS/$FHIBE_RUN-k$k-b$(btag "$b")"
         mkdir -p "$dir/results/cells" "$dir/logs"
         chmod 700 "$dir"
+        [[ -s "$RUNS/$BASE-k$k/results/prepare_info.json" ]] || { echo "no prepared grid at $RUNS/$BASE-k$k" >&2; exit 3; }
         ln -sfn "$RUNS/$BASE-k$k/results/prepare_info.json" "$dir/results/prepare_info.json"
         ln -sfn "$RUNS/$BASE-k$k/results/crops" "$dir/results/crops"
         bash "$HERE/launch.sh" shape | tail -2
@@ -80,7 +101,7 @@ tasks)
       for k in "${KS[@]}"; do
         for b in "${BETAS[@]}"; do
           idx=$((size * N_PEOPLE + i))
-          if [[ -s "$RUNS/$D-sota-k$k-b$(btag "$b")/results/cells/$(printf 'task_%04d.csv' "$idx")" ]]; then
+          if [[ -s "$RUNS/$SET-k$k-b$(btag "$b")/results/cells/$(printf 'task_%04d.csv' "$idx")" ]]; then
             skipped=$((skipped + 1))
           else
             echo "$k $b $idx" >>"$TASKS"
@@ -96,7 +117,7 @@ pack)
   jobs="${2:-1}"
   [[ -s "$TASKS" ]] || { echo "no task list at $TASKS (run tasks first)" >&2; exit 3; }
   PAR="${CALIB_PACK_PAR:-38}"
-  LOGS="$RUNS/$D-sota-logs"
+  LOGS="$RUNS/$SET-logs"
   mkdir -p "$LOGS" && chmod 700 "$LOGS"
   THREADS="OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2"
   # Every job reads the whole list and claims each task before running it (an atomic mkdir), so a
@@ -105,11 +126,18 @@ pack)
   mkdir -p "$claims"
   shard="$LOGS/tasks.txt"
   cp "$TASKS" "$shard"
+  # The V100 nodes by default (#4762), the GPU hidden; on the cpu partition, the per-user cap applies.
+  if [[ "${CALIB_PARTITION:-gpu}" == gpu ]]; then
+    WHERE=(--partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}")
+  else
+    WHERE=(--partition="$CALIB_PARTITION")
+  fi
   for ((j = 0; j < jobs; j++)); do
-    J=$(sbatch --parsable --job-name="sotaface-pack$j" --partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}" \
+    J=$(sbatch --parsable --job-name="sotaface${ARM:+-$ARM}-pack$j" "${WHERE[@]}" \
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
-      --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_CLAIMS=$claims && \
+      --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_ARM=$ARM SOTA_FACE_BASE=$BASE \
+SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims && \
 xargs -P $PAR -L 1 bash $HERE/sota_face.sh cell <$shard; echo pack done") || { echo "pack $j SUBMIT FAILED" >&2; exit 1; }
     [[ "$J" =~ ^[0-9]+$ ]] || { echo "pack $j SUBMIT FAILED (empty job id)" >&2; exit 1; }
     echo "pack $j -> job $J (claims from $(wc -l <"$shard") cells, $PAR at a time)"
@@ -133,20 +161,20 @@ baseline)  # click 0: the example sort at K = 1 and 4, in the K=1 beta-1 run's e
   ENVX=$(bash -c "source $HERE/launch.sh status >/dev/null 2>&1; echo \"\$ENVX\"")
   source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
   eval "$ENVX"
-  out="$RUNS/$D-sota-baseline"
+  out="$RUNS/$SET-baseline"
   mkdir -p "$out" && chmod 700 "$out"
   cd "$HERE"
-  python example_baseline.py --results "$RUNS/$D-sota-k1-b1/results" --ks 1,4 --out-dir "$out" \
-    --check "$RUNS/$D-sota-k{k}-b1/results/cells"
+  python example_baseline.py --results "$RUNS/$SET-k1-b1/results" --ks 1,4 --out-dir "$out" \
+    --check "$RUNS/$SET-k{k}-b1/results/cells"
   ;;
 status)
   for k in "${KS[@]}"; do
     for b in "${BETAS[@]}"; do
-      dir="$RUNS/$D-sota-k$k-b$(btag "$b")"
+      dir="$RUNS/$SET-k$k-b$(btag "$b")"
       echo "k$k b$(btag "$b"): $(ls "$dir/results/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv$' || true) cells"
     done
   done
   ;;
 *)
-  echo "usage: sota_face.sh {dirs | tasks [N] | pack [JOBS] | baseline | status}" >&2; exit 1 ;;
+  echo "usage: sota_face.sh {prepare | dirs | tasks [N] | pack [JOBS] | baseline | status}" >&2; exit 1 ;;
 esac
