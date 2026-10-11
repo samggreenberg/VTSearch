@@ -64,7 +64,9 @@ LINEAR_LOGREG_HEAD = -2
 #: direction made cheap, so a head fitted to a few labels starts at the centroid
 #: rather than at the origin.  Same ``Linear(input_dim, 1)`` architecture;
 #: :func:`train_model` routes it to
-#: :func:`vtscore.training.svm_prior.fit_linear_svm_prior_head`.  An eval arm only.
+#: :func:`vtscore.training.svm_prior.fit_linear_svm_prior_head`.  The production
+#: head in a single-vector space since #4785
+#: (:func:`vtscore.detectors.training.production_head_for`).
 LINEAR_SVM_PRIOR_HEAD = -3
 
 #: Every ``hidden_dim`` that builds a single ``Linear(D, 1)`` rather than an MLP.

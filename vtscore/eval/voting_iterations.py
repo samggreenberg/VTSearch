@@ -78,7 +78,8 @@ from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
     APP_TRAINER,
     HEADS,
-    PRODUCTION_HEAD,
+    PRODUCTION_HEAD,  # noqa: F401 - re-exported; preflight_knobs imports it from here
+    production_head_name,
     StepModel,
     good_training_vec,
     resolve_trainer_name,
@@ -139,8 +140,7 @@ from vtscore.training.thresholds import (
 #: unspecified ``style=`` resolves to below.  Named rather than inlined so that
 #: "is this run measuring the shipped geometry?" is a question something can
 #: *ask*: `scripts/experiments/preflight.sh` compares a study's configured
-#: styles against it, the way it compares a study's head against
-#: :data:`PRODUCTION_HEAD`.  The HAC hybrids in
+#: styles against it, the way it flags a study that pins a head.  The HAC hybrids in
 #: :mod:`vtscore.eval.patch_styles` are experiment-only arms; #2886 removed the
 #: region tree from ingest.
 PRODUCTION_PATCH_STYLE: str = "max_patch"
@@ -1882,11 +1882,13 @@ class _RunKnobs:
     calibration_seed: int
 
 
-def _resolve_head(head: Optional[str], trainer: str) -> str:
-    """Validate an explicit head name, or resolve ``None`` to the app's.
+def _resolve_head(head: Optional[str], trainer: str, *, patch_space: bool = False) -> str:
+    """Validate an explicit head name, or resolve ``None`` to the app's for the run's space.
 
     *trainer* must already be normalised by
-    :func:`~vtscore.eval.step_model.resolve_trainer_name`.
+    :func:`~vtscore.eval.step_model.resolve_trainer_name`.  *patch_space* is the
+    run's ``region_aware`` (#4785: the app trains the centroid-started SVM in a
+    single-vector space, the plain one in a patch space).
 
     Raises:
         ValueError: If *head* is not a known head, or is given for a trainer
@@ -1902,18 +1904,19 @@ def _resolve_head(head: Optional[str], trainer: str) -> str:
                 f"pipeline, whose head this selects); got trainer={trainer!r}, which fits "
                 f"its own standalone estimator and has no head to choose"
             )
-    # **The default arm must be the app's default.**  Production pins the linear
-    # SVM head on every fit (``hidden_dim = LINEAR_SVM_HEAD`` in
-    # ``vtscore.detectors.training.train_and_threshold``), so an unspecified head
-    # resolves to it — the same way *style* and *blend_schedule* resolve to the
-    # app's geometry and schedule below.  The head fits the final model *and*
+    # **The default arm must be the app's default.**  Production picks the head
+    # per space on every fit (``hidden_dim = production_head_for(...)`` in
+    # ``vtscore.detectors.training.train_and_threshold``: the centroid-started
+    # SVM in a single-vector space, the plain SVM in a patch space, #4785), so an
+    # unspecified head resolves the same way — as *style* and *blend_schedule*
+    # resolve to the app's geometry and schedule below.  The head fits the final model *and*
     # the calibration folds, so it moves the thresholds and, through the vote
     # order, the whole trajectory: defaulting to a retired head would make every
     # unqualified run measure a detector nobody ships.  ``head="linear"`` (the
     # logistic head) and ``head="mlp"`` stay available as named legacy arms.
     # (This is the *head* knob, not the ``trainer`` knob beside it: the trainer
     # picks the pipeline, the head picks what that pipeline fits — issue #3764.)
-    head = head or PRODUCTION_HEAD
+    head = head or production_head_name(patch_space=patch_space)
     return head
 
 
@@ -2101,6 +2104,7 @@ def _resolve_run_knobs(
     trainer: str,
     style: Optional[str],
     calibration_seed: Optional[int],
+    patch_space: bool = False,
 ) -> _RunKnobs:
     """Validate a cell's pre-registered knobs and resolve the defaults among them.
 
@@ -2146,7 +2150,7 @@ def _resolve_run_knobs(
     _check_acquisition_arm(acq_inclusion_offset, acq_rank_percentile, acq_p_crossing, acq_origin, acq_target_p)
 
     trainer = resolve_trainer_name(trainer)
-    head = _resolve_head(head, trainer)
+    head = _resolve_head(head, trainer, patch_space=patch_space)
 
     if style is not None and trainer != APP_TRAINER:
         raise ValueError(
@@ -2504,9 +2508,12 @@ def simulate_voting_iterations(  # noqa: C901
             better, and VTSearch's vote order depends on the model).
         head: Which classifier head the ``"app"`` pipeline fits at each step
             (see :data:`HEADS`).  ``None`` (default) resolves to the **app's**
-            head, :data:`PRODUCTION_HEAD` — the linear SVM a live VTSearch
-            detector actually has, so a default run's thresholds and costs are
-            the ones users see.  ``"linear"`` (the logistic head the SVM
+            head for the run's space (:func:`~vtscore.eval.step_model.production_head_name`):
+            the linear SVM started from the Goods' centroid (``"linear_svm_prior"``)
+            on single-vector data, the plain linear SVM (:data:`PRODUCTION_HEAD`)
+            on patch data, as a live VTSearch detector has them since #4785, so a
+            default run's thresholds and costs are the ones users see.
+            ``"linear_svm"`` on single-vector data is the arm before #4785.  ``"linear"`` (the logistic head the SVM
             replaced) and ``"mlp"`` (the harness's auto-sized hidden layer,
             #2781) are the explicitly-named legacy arms.  The head is threaded
             into the calibration folds as well, mirroring how production threads
@@ -3091,6 +3098,8 @@ def simulate_voting_iterations(  # noqa: C901
         trainer=trainer,
         style=style,
         calibration_seed=calibration_seed,
+        # The app's head follows the space (#4785); the harness's spelling of it.
+        patch_space=any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict),
     )
     _fold_schedule = knobs.fold_schedule
     startup_state = knobs.startup_state

@@ -72,16 +72,22 @@ def test_resolve_trainer_name_normalises_the_retired_mlp_spelling():
     assert step_model.resolve_trainer_name("svm_rbf@C=3") == "svm_rbf@C=3"
 
 
-def test_the_default_head_is_the_head_the_app_trains(monkeypatch):
-    """#2916: ``PRODUCTION_HEAD`` must track ``train_and_threshold``'s own width.
+@pytest.mark.parametrize("patch_space", [False, True, None])
+def test_the_default_head_is_the_head_the_app_trains(monkeypatch, patch_space):
+    """#2916, #4785: the harness's default head must track ``train_and_threshold``'s own width, per space.
 
     Pinned by *running* the app's pipeline rather than by restating its
     constant: if the shipped detector ever changes head, this fails and the
     harness default has to move with it, instead of the default arm quietly
-    measuring a detector nobody ships.
+    measuring a detector nobody ships.  The space is the embedder's capability
+    (``_patch_space_for``); unknown takes the patch space's head, as the
+    harness has no spelling for it.
     """
+    import vtscore.detectors.training as app_detectors_training
     import vtscore.training as app_training_pkg
     from vtscore.detectors.training import train_and_threshold
+
+    monkeypatch.setattr(app_detectors_training, "_patch_space_for", lambda _name: patch_space)
 
     seen: list = []
     real_train = app_training_pkg.train_model
@@ -100,7 +106,8 @@ def test_the_default_head_is_the_head_the_app_trains(monkeypatch):
     train_and_threshold(X_list, y_list)
 
     assert seen, "the app never trained a model"
-    assert set(seen) == {step_model.resolve_hidden_dim(step_model.PRODUCTION_HEAD, len(y_list))}
+    want = step_model.production_head_name(patch_space=patch_space is not False)
+    assert set(seen) == {step_model.resolve_hidden_dim(want, len(y_list))}
 
 
 def test_unknown_head_is_rejected_early():
@@ -230,12 +237,18 @@ def test_the_mlp_arm_is_still_reachable_by_name():
     assert layers[0].out_features == _auto_hidden_dim(n_labels)
 
 
-def test_default_runs_record_the_production_head():
-    """A run that names no head must report — and train — the shipped one."""
+@pytest.mark.parametrize("patch_grid", [True, False])
+def test_default_runs_record_the_production_head(patch_grid):
+    """A run that names no head must report — and train — the shipped one for its space (#4785)."""
     medias, _ = _planted_dataset(n_per_cat=20, seed=0)
+    if not patch_grid:
+        medias = {k: {f: v for f, v in m.items() if f != "patch_grid"} for k, m in medias.items()}
+    region_aware = any(m.get("patch_grid") is not None for m in medias.values())
     rows = vi.simulate_voting_iterations(medias, target_category="cat0", seed=0, max_steps=8)
     assert rows, "no rows produced"
-    assert {r["head"] for r in rows} == {step_model.PRODUCTION_HEAD}
+    assert {r["head"] for r in rows} == {step_model.production_head_name(patch_space=region_aware)}
+    if not patch_grid:
+        assert {r["head"] for r in rows} == {step_model.PRODUCTION_VECTOR_HEAD}
 
 
 def test_rows_record_the_head_and_linear_runs_end_to_end():

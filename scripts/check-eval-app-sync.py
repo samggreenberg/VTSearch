@@ -532,10 +532,12 @@ MIRRORS: list[Mirror] = [
             "here - or a changed fold rule or ordering - has to reach the harness or its "
             "default arm trains a detector the app no longer ships. Note "
             "_app_train_and_calibrate is the single-vector path and reproduces the same shape. "
-            "The head is the one knob mirrored by name: this function's `hidden_dim` must equal "
-            "`resolve_hidden_dim(step_model.PRODUCTION_HEAD, ...)`, which "
-            "tests_lib/detectors/test_harness_linear_head.py pins by training this pipeline for "
-            "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
+            "The head is the one knob mirrored by name: this function's `hidden_dim` is "
+            "production_head_for(embedder_name), which must equal "
+            "`resolve_hidden_dim(step_model.production_head_name(patch_space=...), ...)` (the "
+            "training.production_head mirror); tests_lib/detectors/test_harness_linear_head.py pins "
+            "that by training this pipeline for real - so a head change fails the suite as well as "
+            "tripping this digest. Since #4269 "
             "the app reads no stored Inclusion: its conformal cut is at "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
             "whose default, 0, is that cut. Since #4413 the app draws the line at the detector's "
@@ -675,6 +677,22 @@ MIRRORS: list[Mirror] = [
             "the *predicate*: if the app's choice starts depending on something patch_grid "
             "presence can't see (the voting mode, the dataset, a per-user knob), that condition "
             "has to reach the harness too."
+        ),
+    ),
+    Mirror(
+        id="training.production_head",
+        app="py:vtscore.detectors.training.production_head_for",
+        harness="vtscore/eval/step_model.py::production_head_name",
+        kind="default",
+        note=(
+            "Which head the app trains (#4785): the linear SVM started from the Goods' centroid "
+            "(LINEAR_SVM_PRIOR_HEAD) when the detector's embedder is a single-vector one, the plain "
+            "linear SVM (LINEAR_SVM_HEAD) in a patch space and when the space is unknown - keyed on "
+            "the embedder's supports_patch_regions capability, as the calibration split is. The "
+            "harness resolves head=None through production_head_name(patch_space=region_aware) "
+            "(_resolve_head), the same predicate as training.split_fraction_default. If the app's "
+            "choice comes to depend on anything else (the Region pricing of #4785, a per-dataset "
+            "switch), the harness's default arm has to follow."
         ),
     ),
     Mirror(

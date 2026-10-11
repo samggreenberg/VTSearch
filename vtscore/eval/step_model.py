@@ -114,17 +114,33 @@ def resolve_trainer_name(trainer: str) -> str:
     return APP_TRAINER if trainer == LEGACY_APP_TRAINER else trainer
 
 
-#: The head the **app** trains, and therefore the harness's default arm:
-#: ``vtscore.detectors.training.train_and_threshold`` pins ``hidden_dim =
-#: LINEAR_SVM_HEAD`` on every production fit.  ``head=None`` resolves to this,
-#: the way ``style=None`` and ``blend_schedule=None`` resolve to the app's
-#: geometry and blend schedule — an eval default that isn't the app default
-#: measures a detector nobody ships (see the "Eval Default Arm IS the App"
-#: rule).  If the shipped head ever changes, move this with it:
+#: The plain linear SVM: the head the **app** trains in a patch space (the
+#: Region path), and in every space before #4785.  With
+#: :data:`PRODUCTION_VECTOR_HEAD` it is the harness's default arm:
+#: :func:`production_head_name` resolves ``head=None`` per space, as
+#: ``vtscore.detectors.training.production_head_for`` resolves the app's
+#: ``hidden_dim``, the way ``style=None`` and ``blend_schedule=None`` resolve to
+#: the app's geometry and blend schedule — an eval default that isn't the app
+#: default measures a detector nobody ships (see the "Eval Default Arm IS the
+#: App" rule).  If the shipped head ever changes, move these with it:
 #: ``test_harness_linear_head`` pins the two against each other by training the
 #: real app pipeline, so the suite fails rather than letting the default arm
 #: drift silently.
 PRODUCTION_HEAD: str = "linear_svm"
+
+#: The head the app trains in a single-vector space since #4785: the linear SVM
+#: started from the Goods' centroid (:data:`~vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD`).
+PRODUCTION_VECTOR_HEAD: str = "linear_svm_prior"
+
+
+def production_head_name(*, patch_space: bool) -> str:
+    """The app's head for a run in a patch space or a single-vector one (#4785).
+
+    The harness's spelling of the space is ``region_aware``: whether any media
+    carries a ``patch_grid``, the same predicate the calibration split's default
+    reads (``vtscore.training.thresholds.production_split_for``).
+    """
+    return PRODUCTION_HEAD if patch_space else PRODUCTION_VECTOR_HEAD
 
 
 def resolve_hidden_dim(head: str, n_votes: int) -> int:

@@ -487,6 +487,33 @@ def _patch_space_for(embedder_name: str | None) -> bool | None:
     return bool(getattr(embedder, "supports_patch_regions", False))
 
 
+def production_head_for(embedder_name: str | None) -> int:
+    """The ``hidden_dim`` sentinel of the head a detector on *embedder_name* trains (#4785).
+
+    **In a single-vector space it is the linear SVM started from the Goods'
+    centroid** (:data:`~vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD`,
+    :mod:`vtscore.training.svm_prior`): the plain SVM's objective with the
+    centroid made a cheap direction, so the head fitted at the label quota starts
+    at the centroid Test showed below it rather than at the origin, and leaves it
+    as far as the labels pay for.  Priced as full sessions against the plain SVM
+    (#4776), mean F-beta of what a Find returns over votes 1-50 went up by 0.037
+    to 0.073 on FHIBE's face crops and by 0.004 to 0.007 on COCO Better's Binary
+    Photo opening, at every preset, and the AP dip at the quota on faces went
+    from about -0.2 to -0.03
+    (``docs/experiments/2026-10-11-face-handover-4776``).
+
+    **In a patch space, and where the space is unknown, it is the plain linear
+    SVM** (:data:`~vtscore.training.mlp.LINEAR_SVM_HEAD`) until the Region path
+    is priced (#4785).  Keyed on the embedder's capability, as the calibration
+    split is (:func:`_patch_space_for`); the eval harness resolves its default
+    head by the same rule (:func:`vtscore.eval.step_model.production_head_name`,
+    the ``training.production_head`` mirror in ``scripts/check-eval-app-sync.py``).
+    """
+    from vtscore.training.mlp import LINEAR_SVM_HEAD, LINEAR_SVM_PRIOR_HEAD  # noqa: PLC0415
+
+    return LINEAR_SVM_PRIOR_HEAD if _patch_space_for(embedder_name) is False else LINEAR_SVM_HEAD
+
+
 def resolve_calibration_fraction(calibration_fraction: float | None, embedder_name: str | None) -> float:
     """Resolve the Train/Calibrate split for a detector on *embedder_name*.
 
@@ -644,7 +671,6 @@ def train_and_threshold(
     )
     from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
     from vtscore.training.blend_schedules import BlendContext
-    from vtscore.training.mlp import LINEAR_SVM_HEAD
 
     X = torch.from_numpy(stack_vectors(X_list, label="training vector"))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -656,15 +682,16 @@ def train_and_threshold(
     _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
 
-    # The production detector head is the **linear SVM**: one Linear(d, 1) fitted
+    # The production detector head is a **linear SVM**: one Linear(d, 1) fitted
     # to the maximum-margin boundary (hinge + L2) rather than to balanced BCE.
     # Like the logistic head it replaced it has no capacity to wobble under
     # sparse positives (the threshold-stability #2790 finding); unlike it, it
-    # ranks measurably better.  The same head fits the final model and the
-    # calibration fold models on *both* branches below (cached and uncached), so
-    # the calibrated threshold is always measured on the head the final model
-    # actually has.
-    hidden_dim = LINEAR_SVM_HEAD
+    # ranks measurably better.  In a single-vector space it starts from the
+    # Goods' centroid (#4785, see production_head_for).  The same head fits the
+    # final model and the calibration fold models on *both* branches below
+    # (cached and uncached), so the calibrated threshold is always measured on
+    # the head the final model actually has.
+    hidden_dim = production_head_for(embedder_name)
 
     # Which preference draws the line (#4413): the detector's own (#4665).  A
     # caller's duck-typed context carries no balance, and takes the active one's.
@@ -1351,7 +1378,7 @@ def _train_and_score_xy(
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model  # noqa: PLC0415
+    from vtscore.training.mlp import train_model  # noqa: PLC0415
     from vtscore.training.blend_schedules import BlendContext  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
         PRECISION_FLOOR_FALLBACK_INCLUSION,
@@ -1387,8 +1414,8 @@ def _train_and_score_xy(
     _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
-    # Linear SVM production head - see train_and_threshold for why.
-    hidden_dim = LINEAR_SVM_HEAD
+    # The production head for the space this detector scores in - see train_and_threshold.
+    hidden_dim = production_head_for(score_emb)
 
     # K-fold calibration runs at every label count: the fold-anchored estimator
     # anchors on the fold models' held-out scores, so their models are an input
@@ -1637,7 +1664,7 @@ def train_detector_from_origins(
     import torch  # noqa: PLC0415
 
     from vtscore.detectors.resolver import embed_file, resolve_file_context
-    from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model
+    from vtscore.training.mlp import train_model
     from vtscore.training.thresholds import calculate_cross_calibration_threshold
 
     X_list: list = []
@@ -1692,9 +1719,9 @@ def train_detector_from_origins(
         inclusion,
         calibrate_count=calibrate_count,
         calibration_fraction=resolve_calibration_fraction(calibration_fraction, embedder_name),
-        hidden_dim=LINEAR_SVM_HEAD,
+        hidden_dim=production_head_for(embedder_name),
     )
-    model = train_model(X, y, input_dim, hidden_dim=LINEAR_SVM_HEAD)
+    model = train_model(X, y, input_dim, hidden_dim=production_head_for(embedder_name))
 
     state_dict = model.state_dict()
     weights = {k: v.cpu().tolist() for k, v in state_dict.items()}
