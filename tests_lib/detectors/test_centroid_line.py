@@ -92,11 +92,11 @@ class TestTheCandidateCounts:
         from vtscore.training.thresholds import _count_estimate, _count_keep_line
 
         cos = _rare_target(n_pos=40)
+        gauss, mirror = _count_estimate(cos), _count_estimate(cos, z=3.5, bulk="mirror")
+        assert gauss is not None and mirror is not None
         for beta in (0.25, 1.0, 4.0):
-            assert _count_line(cos, beta) == _count_keep_line(cos, beta, _count_estimate(cos))
-            assert _count_line(cos, beta, z=3.5, bulk="mirror") == _count_keep_line(
-                cos, beta, _count_estimate(cos, z=3.5, bulk="mirror")
-            )
+            assert _count_line(cos, beta) == _count_keep_line(cos, beta, gauss)
+            assert _count_line(cos, beta, z=3.5, bulk="mirror") == _count_keep_line(cos, beta, mirror)
         with pytest.raises(ValueError, match="bulk"):
             _count_estimate(cos, bulk="pareto")
 
