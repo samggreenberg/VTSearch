@@ -130,9 +130,19 @@ class TestCocoBetterIsRunnable:
 
 
 class TestFhibeIsRunnable:
-    """#4699: the four FHIBE cells are a roster the harness can enumerate."""
+    """#4699: every FHIBE cell is a roster the harness can enumerate.
 
-    FHIBE = ("fhibe_1024", "fhibe_640", "fhibe_faces_1024", "fhibe_faces_640")
+    The photos and the face crops at both sizes (#4699), and the crops turned upright by their
+    landmarks, `roll` and `similarity` (#4777).
+    """
+
+    FHIBE = (
+        "fhibe_1024",
+        "fhibe_640",
+        "fhibe_faces_1024",
+        "fhibe_faces_640",
+        *(f"fhibe_faces_{tag}_{size}" for tag in ("roll", "sim") for size in (1024, 640)),
+    )
 
     def test_every_fhibe_pile_dataset_has_a_roster(self, cfg, pc):
         built = {ds for ds, spec in pc.DATASETS.items() if spec.get("kind") == "fhibe"}
