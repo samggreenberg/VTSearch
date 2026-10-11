@@ -29,11 +29,11 @@ def _rare_target(n_neg: int = 5000, n_pos: int = 4, seed: int = 0) -> np.ndarray
 
 
 class TestTheRules:
-    def test_the_app_draws_the_gap_floored_count(self):
-        assert CENTROID_LINE_RULE == "count_gap_floor"
-        for cos in (_rare_target(), _light_tailed_person()):
+    def test_the_app_draws_the_gated_standout_drop(self):
+        assert CENTROID_LINE_RULE == "count_gap_floor_skip25_b1"
+        for cos in (_rare_target(), _light_tailed_person(), _standout_person()):
             for beta in (0.25, 1.0, 4.0):
-                assert centroid_cut(cos, beta=beta) == centroid_cut(cos, rule="count_gap_floor", beta=beta)
+                assert centroid_cut(cos, beta=beta) == centroid_cut(cos, rule="count_gap_floor_skip25_b1", beta=beta)
 
     def test_each_rule_is_the_typed_querys_line_it_names(self):
         cos = _rare_target()
@@ -188,6 +188,28 @@ class TestTheStandoutDrops:
 
         cos = _light_tailed_person()
         assert _top_gap_count(cos, drop="skip25") == _top_gap_count(cos) == 3
+
+    @pytest.mark.parametrize("seed", range(8))
+    def test_the_gated_rule_is_the_floor_below_beta_1_and_the_skip_above(self, seed):
+        """The identity #4783 reads its shipped rule's rows by: the runs carried the two halves."""
+        rng = np.random.default_rng(seed)
+        cos = _rare_target(n_pos=int(rng.integers(1, 60)), seed=seed) if seed % 2 else _standout_person(seed=seed)
+        for beta in (0.25, 0.5, 0.99):
+            assert centroid_cut(cos, rule="count_gap_floor_skip25_b1", beta=beta) == centroid_cut(
+                cos, rule="count_gap_floor", beta=beta
+            )
+        for beta in (1.0, 2.0, 4.0):
+            assert centroid_cut(cos, rule="count_gap_floor_skip25_b1", beta=beta) == centroid_cut(
+                cos, rule="count_gap_floor_skip25", beta=beta
+            )
+
+    def test_the_gated_rule_keeps_the_standout_alone_at_a_precision_balance(self):
+        cos = _standout_person()
+        kept = {
+            b: int((cos >= centroid_cut(cos, rule="count_gap_floor_skip25_b1", beta=b)).sum()) for b in (0.25, 1.0, 4.0)
+        }
+        assert kept[0.25] == 1
+        assert kept[1.0] >= 4 and kept[4.0] >= 4
 
     def test_refuses_an_unknown_drop(self):
         from vtscore.detectors.centroid_head import _top_gap_count

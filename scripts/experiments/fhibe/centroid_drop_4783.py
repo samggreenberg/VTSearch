@@ -24,6 +24,12 @@ Usage::
 
     python centroid_drop_4783.py price --dumps <explore>/dumps --out <dir>
     python centroid_drop_4783.py examples --dumps <explore>/dumps --dataset fhibe_faces_1024 --k 1 --rule R --out <md>
+    python centroid_drop_4783.py labelled --dumps <explore>/dumps --out <dir>   # the app's labelled collection
+
+``labelled`` prices the app's rules (``centroid_cut``) where the app's Test and example sort draw them on the
+collection the user labelled: the one example photo is in the corpus, at cosine 1.0 to its own centroid. The line
+is drawn over the example and the withheld half, and scored on the withheld half (the unvoted media), K = 1 only:
+the dumps do not hold the K = 4 examples' own cosines.
 """
 
 from __future__ import annotations
@@ -202,6 +208,52 @@ def examples(dumps: Path, dataset: str, k: int, rule: str, out: Path, n_each: in
     print(out.read_text())
 
 
+LABELLED_RULES = ("count", "count_gap_floor", "count_gap_floor_skip25", "count_gap_floor_skip25_b1")
+
+
+def labelled(dumps: Path, out: Path) -> None:
+    import pandas as pd  # noqa: PLC0415
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from vtscore.detectors.centroid_head import centroid_cut  # noqa: PLC0415
+
+    rows = []
+    for path in sorted(dumps.glob("cosines_*_k1.npz")):
+        z = np.load(path)
+        off = z["offsets"]
+        for i in range(len(off) - 1):
+            s = z["scores"][off[i] : off[i + 1]].astype(np.float64)
+            y = z["labels"][off[i] : off[i + 1]].astype(np.int64)
+            corpus = np.concatenate([[1.0], s])  # the example, as the labelled collection holds it
+            for rule in LABELLED_RULES:
+                for beta in BETAS:
+                    kept = s >= centroid_cut(corpus, rule=rule, beta=beta)
+                    tp, k = int((kept & (y == 1)).sum()), int(kept.sum())
+                    p = tp / k if k else 0.0
+                    r = tp / int(y.sum())
+                    b2 = beta * beta
+                    f = 0.0 if not (p > 0 or r > 0) else (1 + b2) * p * r / (b2 * p + r)
+                    rows.append({"dataset": str(z["dataset"]), "category": str(z["category"][i]), "rule": rule,
+                                 "beta": beta, "kept_new": k, "fbeta": f})  # fmt: skip
+        print(f"{path.name}: {len(off) - 1} cells", file=sys.stderr)
+    cells = pd.DataFrame(rows)
+    out.mkdir(parents=True, exist_ok=True)
+    agg = (
+        cells.assign(nothing_new=cells["kept_new"] == 0)
+        .groupby(["dataset", "rule", "beta"], sort=False)
+        .agg(
+            people=("category", "nunique"),
+            fbeta=("fbeta", "mean"),
+            nothing_new=("nothing_new", "mean"),
+            kept_new_median=("kept_new", "median"),
+        )  # fmt: skip
+        .reset_index()
+        .round(4)
+    )
+    agg.to_csv(out / "labelled_summary.csv", index=False)
+    print(agg.pivot_table(index=["dataset", "rule"], columns="beta", values="fbeta").round(3).to_string())
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -214,9 +266,14 @@ def main() -> int:
     e.add_argument("--k", type=int, required=True)
     e.add_argument("--rule", required=True)
     e.add_argument("--out", type=Path, required=True)
+    lab = sub.add_parser("labelled")
+    lab.add_argument("--dumps", type=Path, required=True)
+    lab.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     if args.cmd == "price":
         price(args.dumps, args.out)
+    elif args.cmd == "labelled":
+        labelled(args.dumps, args.out)
     else:
         examples(args.dumps, args.dataset, args.k, args.rule, args.out)
     return 0

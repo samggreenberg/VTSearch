@@ -128,7 +128,13 @@ def is_centroid_head(model: object) -> bool:
 #: * ``count_gap_floor_skip25`` / ``_skip50`` - when the widest drop is the first, the widest one
 #:   below the second cosine, if it is at least 1/4 (1/2) as wide;
 #: * ``count_gap_floor_rank5`` - the drop that is widest once each is weighted by its rank
-#:   (``i * d_i``, which evens out a bulk tail's spacings), over the top 6.
+#:   (``i * d_i``, which evens out a bulk tail's spacings), over the top 6;
+#:
+#: and one rule gated on the balance (:data:`CENTROID_GATED`):
+#:
+#: * ``count_gap_floor_skip25_b1`` - ``count_gap_floor`` below beta 1, ``count_gap_floor_skip25``
+#:   from beta 1 up.  At a precision balance a lone standout is the set; from beta 1 up the
+#:   line looks past it.  The app's (#4783).
 CENTROID_COUNTS = (
     "count",
     "count_z3",
@@ -150,10 +156,13 @@ CENTROID_DROPS = {
 }
 #: The counts whose line never sits above their drop (:func:`centroid_cut`).
 _GAP_FLOORED = ("gap_floor", "count_gap_floor", *CENTROID_DROPS)
-CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS)
+#: Rules gated on the balance: ``rule -> (below beta 1, from beta 1 up)`` (#4783).
+CENTROID_GATED = {"count_gap_floor_skip25_b1": ("count_gap_floor", "count_gap_floor_skip25")}
+CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS, *CENTROID_GATED)
 
-#: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759).
-CENTROID_LINE_RULE = "count_gap_floor"
+#: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759),
+#: and from beta 1 up at the drop below a standout first cosine (#4783).
+CENTROID_LINE_RULE = "count_gap_floor_skip25_b1"
 
 #: How deep ``gap`` looks for the widest drop: the top this many + 1 cosines (#4759).
 CENTROID_GAP_TOP = 10
@@ -223,6 +232,9 @@ def centroid_cut(
     chosen = CENTROID_LINE_RULE if rule is None else rule
     if chosen not in CENTROID_LINE_RULES:
         raise ValueError(f"unknown centroid line rule {chosen!r}; expected one of {CENTROID_LINE_RULES}")
+    if chosen in CENTROID_GATED:
+        below, above = CENTROID_GATED[chosen]
+        chosen = above if beta is not None and beta >= 1.0 else below
     scores = [float(c) for c in cosines]
     if chosen == "midpoint":
         return float(calculate_gmm_threshold(scores))
