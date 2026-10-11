@@ -14,6 +14,31 @@ Before deleting a directory, the checks (`GRID-PLAYBOOK.md`, and the
 3. no running job writes or reads it;
 4. the owner approves the list.
 
+## 2026-10-11: 62 GB (`/expscratch/sgreenberg` was at 100%)
+
+At 10:49 the volume had 2.8 G free and a #4777/#4788 run needed 25 G. The owner
+approved deleting #4776's raw cells (its issue is `solved`; its report, with every
+aggregate the analysis wrote, is in PR #4787, not yet merged). Only each run's
+`results/cells` went; `logs/`, `grid_shape.json` and the `prepare_info.json` /
+`crops` symlinks stay, and the analyses (`…-4776-analysis`, `…-4776prior-analysis`,
+`/expscratch/sgreenberg/handover-4776/coco-*`) were kept. The only code references
+are `handover_4776.sh`'s default **output** names. 980 G used after (96%).
+
+| directory (each `results/cells`) | GB | what |
+|---|---:|---|
+| `fhibe/<release>-derived/runs/2026-10-10-4776-k{1,4}-b{025,1,4}` | 23.3 | #4776 shadow: today's face sessions with the centroid's Test past the quota |
+| `fhibe/<release>-derived/runs/2026-10-10-4776prior-k{1,4}-b{025,1,4}` | 23.8 | #4776 arm: the head started from the Goods' centroid |
+| `state-of-the-app/2026-10-10-handover4776-b{025,1,4}` | 7.5 | #4776 shadow, COCO Better Binary |
+| `state-of-the-app/2026-10-10-prior4776-b{025,1,4}` | 7.5 | #4776 arm, COCO Better Binary |
+
+Rebuild with the report's *Reproduce* block
+(`docs/experiments/2026-10-11-face-handover-4776/REPORT.md`): the face runs are
+`sota_face.sh` with `SOTA_FACE_TAG=4776` (`CALIB_HANDOVER_SHADOW=1`) or `4776prior`
+(`CALIB_HEAD=linear_svm_prior`), ~4 h on four V100 packs; the COCO runs are
+`state_of_app/handover_4776.sh`, ~6 h at 66 cells. Before #4785 the shadow ran on
+the plain SVM's head; re-running today on single-vector data needs
+`CALIB_HEAD=linear_svm` to reproduce it.
+
 ## 2026-10-01: 91 GB (`/expscratch/sgreenberg` was at 100%)
 
 The volume filled at about 09:00 and killed a running job (#4415's arm C). The
