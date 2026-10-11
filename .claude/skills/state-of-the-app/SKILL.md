@@ -337,12 +337,20 @@ follows:
   `text_baseline.py`'s columns, so `analyze.py --baseline` reads it where a photo review reads the
   typed query. The report's opening rule is the same: the session shows the example sort until
   Autopilot shows a detector.
-- **Paths:** both stored sizes, `fhibe_faces_1024` and `fhibe_faces_640`. They share one path
-  (`--path face`), so each analysis also names its `--dataset`.
+- **Paths:** both stored sizes. They share one path (`--path face`), so each analysis also names its
+  `--dataset`. **Since #4777 the app aligns its face crops (`image2face` `align="roll"`), so the
+  review runs `fhibe_faces_roll_1024` and `fhibe_faces_roll_640`:** pass `SOTA_FACE_ARM=roll` to
+  `sota_face.sh` and `sota_face_analyze.sh` (run dirs `<date>-sota-roll-k<K>-b<beta>`; `sota_face.sh
+  prepare` first, since the arm has its own prepared grids). The plain `fhibe_faces_*` cells are the
+  app before #4777 (#4762's review). #4777's roll sessions (`2026-10-10-sota-roll-*`) are the last
+  review's numbers for the shipped crops.
 - **Presets:** one session set per beta (1/4, 1, 4), as for the photo reviews: six run dirs
   (`<date>-sota-k<K>-b<beta>`) and 6,744 runs a seed. Run them with `fhibe/sota_face.sh`
-  (`dirs`, `tasks`, `pack`; claiming V100 pack jobs, since FHIBE cells take a few minutes each)
-  and analyse with `fhibe/sota_face_analyze.sh`.
+  (`dirs`, `tasks`, `pack`; claiming V100 pack jobs, since FHIBE cells take a few minutes each;
+  `CALIB_PARTITION=cpu` packs them on the cpu partition instead, about 3.7 min a cell there) and
+  analyse with `fhibe/sota_face_analyze.sh`. **To add workers to a running review, submit them on
+  the SAME claims dir** (`<set>-logs/claims-*`, as `pack` wraps them): a second `pack` opens a new
+  claims dir and runs every task again.
 - **Publishing:** the report may name FHIBE subject IDs, to point at hard or glitched cases (the
   owner: the report does not distribute the dataset). The viewer shows aggregates only: one page
   holds every session set, the starting photos folded into the dataset name

@@ -326,6 +326,8 @@ Embedders carry capability flags consumed by the routes layer and the frontend:
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtscore/converters/` before embedding.
 
+The **face** media type is never imported either: the `image2face` converter crops each face MTCNN finds in an image, and FaceNet embeds the crop. **Each crop is turned upright first** (#4777): MTCNN's five landmarks are fitted to a template of where an upright face's landmarks sit in its box, and the photo is turned about the box's centre by the fit's angle before the same box is cropped (`align="roll"`, the default; `similarity` also re-centres and re-scales to the template; `none` is the plain box). On the FHIBE face bench it raised the face review's session mean of the objective in every session set (+0.020 to +0.029 from one starting photo, +0.012 to +0.025 from four) and cut failed one-photo sessions from 12 to 7. `similarity` gained less, because it zooms in on faces in profile ([`REPORT.md`](experiments/2026-10-10-face-align-4777/REPORT.md)).
+
 Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_grid"` (`H × W × D` fp16 ndarray, re-derived at load — never persisted). The detector head trains on these pre-computed vectors, so training is fast (the liblinear head fit is milliseconds on a few hundred labeled examples; scoring the dataset dominates a retrain).
 
 ### Description enrichment

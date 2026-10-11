@@ -541,10 +541,11 @@ class TestImage2FaceAlign:
         )
         assert (out["similarity"][0]["width"], out["similarity"][0]["height"]) == (120, 120)
 
-    def test_the_default_is_no_alignment(self):
+    def test_the_default_is_roll(self):
+        """``roll`` won on the FHIBE face bench (#4777), so it is what a conversion gets unasked."""
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        assert Image2FaceMediaConverter()._resolve_params(None)[3] == "none"
+        assert Image2FaceMediaConverter()._resolve_params(None)[3] == "roll"
 
     def test_an_unknown_mode_is_refused(self):
         import pytest

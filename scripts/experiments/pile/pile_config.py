@@ -162,7 +162,9 @@ DATASETS: dict[str, dict] = {
     "fhibe_faces_1024": {"boxed": False, "kind": "fhibe", "long_side": 1024, "media_type": "face", "on_request": True},
     "fhibe_faces_640": {"boxed": False, "kind": "fhibe", "long_side": 640, "media_type": "face", "on_request": True},
     # The same crops turned upright by their landmarks (#4777): `align` is image2face's own.
-    # Same detections, ids and labels as `fhibe_faces_*`, so they pair cell for cell.
+    # Same detections, ids and labels as `fhibe_faces_*`, so they pair cell for cell. Since #4777
+    # the app's default is `roll`, so `fhibe_faces_roll_*` is the face path as it ships and the
+    # plain `fhibe_faces_*` (no `align`: "none") is the app before it, kept so #4762 reproduces.
     **{
         f"fhibe_faces_{tag}_{size}": {
             "boxed": False,

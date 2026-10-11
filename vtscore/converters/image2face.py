@@ -15,6 +15,12 @@ crop so the face is upright, about the box's centre and at the box's own size;
 plain box crop. Alignment changes a crop's pixels only: which faces are found
 and kept, and the ``source_box`` each records, do not depend on it.
 
+``roll`` is the default. On the FHIBE face bench it raised the face review's
+session mean of the objective in every session set (+0.02 to +0.03 from one
+starting photo) and cut failed one-photo sessions from 12 to 7; ``similarity``
+gained less, since it zooms in on faces in profile
+(``docs/experiments/2026-10-10-face-align-4777``).
+
 ``facenet-pytorch`` is an opt-in dependency (declared in pyproject's ``DEP001``
 ignore-list, installed ``--no-deps`` by the install scripts because its pins
 would downgrade the app's torch/numpy stack); when it is missing the converter
@@ -194,7 +200,7 @@ class Image2FaceMediaConverter(MediaConverter):
                 "roll turns the box so the eyes are level; similarity also centres and scales the face."
             ),
             options=list(ALIGN_MODES),
-            default="none",
+            default="roll",
             required=False,
         ),
     ]
@@ -277,7 +283,7 @@ class Image2FaceMediaConverter(MediaConverter):
         threshold = float(self.get_param(params, "threshold") or 0.5)
         padding = float(self.get_param(params, "padding") or 0.0)
         min_size = int(self.get_param(params, "min_size") or 32)
-        align = str(self.get_param(params, "align") or "none")
+        align = str(self.get_param(params, "align") or "roll")
         if align not in ALIGN_MODES:
             raise ValueError(f"image2face: align must be one of {ALIGN_MODES}, not {align!r}")
         return threshold, max(0.0, padding), max(1, min_size), align
