@@ -35,7 +35,7 @@ import numpy as np
 
 #: How much cheaper the centroid direction is than any other, as a feature
 #: scale (the penalty ratio is its square).  10 ranked the withheld half best of
-#: 1, 3 and 10 in #4776's shadow pricing, on faces and on COCO alike.
+#: 1, 3 and 10 over votes 1-50 in #4776's shadow pricing, on faces and on COCO.
 CENTROID_PRIOR_SCALE: float = 10.0
 
 
@@ -65,7 +65,9 @@ def centroid_prior_direction(
     clf = LinearSVC(
         C=config.SVM_HEAD_C,
         class_weight=None if sample_weight is not None else "balanced",
-        dual=False,
+        # The primal solver (see the module docstring).  The stubs type ``dual`` as a
+        # string, but scikit-learn takes ``False``; ``"auto"`` would pick the dual here.
+        dual=False,  # pyright: ignore[reportArgumentType]
         max_iter=5000,
         random_state=seed,
     )

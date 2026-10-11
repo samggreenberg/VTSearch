@@ -30,7 +30,7 @@ ranks are empty.
 **The diagnostic: a head that starts from the centroid.**  The issue's second
 candidate.  ``prior_ap_s<S>`` is the withheld half's AP under the linear SVM fitted
 to every label with one extra feature, ``S`` times the vector's dot with the unit
-Goods' centroid.  The L2 penalty then costs ``1/S**2`` as much along the centroid
+Goods' centroid (:func:`vtscore.training.svm_prior.centroid_prior_direction`).  The L2 penalty then costs ``1/S**2`` as much along the centroid
 as along any other direction, so the head starts at the centroid and leaves it as
 the labels pay for.  Ranking only: such a head has no line of its own yet.
 
@@ -91,22 +91,6 @@ def _svm(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float]:
         backend="sklearn",
     )
     return np.asarray(clf.base.coef_, dtype=np.float64).ravel(), float(np.asarray(clf.base.intercept_).ravel()[0])
-
-
-def _svm_primal(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float]:
-    """:func:`_svm`'s objective solved in the primal, for the centroid-prior heads.
-
-    The scaled centroid feature makes the dual coordinate descent ``train_svm``
-    picks (``dual="auto"`` with fewer labels than dimensions) crawl to its
-    iteration cap; the primal Newton solver reaches the same optimum in a few steps.
-    """
-    from sklearn.svm import LinearSVC  # noqa: PLC0415
-
-    from vtscore import config  # noqa: PLC0415
-
-    clf = LinearSVC(C=config.SVM_HEAD_C, class_weight="balanced", dual=False, max_iter=5000, random_state=42)
-    clf.fit(X, y)
-    return np.asarray(clf.coef_, dtype=np.float64).ravel(), float(np.asarray(clf.intercept_).ravel()[0])
 
 
 def _unit_mean(rows: np.ndarray) -> np.ndarray:
@@ -192,12 +176,12 @@ class HandoverJudge:
         keys = [f"prior_ap_s{s:g}" for s in PRIOR_SCALES]
         if self._X_test is None or not len(X_bad) or not self._y_test.any():
             return dict.fromkeys(keys, float("nan"))
-        centroid = _unit_mean(X_good)
+        from vtscore.training.svm_prior import centroid_prior_direction  # noqa: PLC0415
+
         X = np.vstack([X_good, X_bad])
         y = np.concatenate([np.ones(len(X_good)), np.zeros(len(X_bad))])
         out: dict[str, float] = {}
         for key, scale in zip(keys, PRIOR_SCALES, strict=True):
-            w, _b = _svm_primal(np.hstack([X, scale * (X @ centroid)[:, None]]), y)
-            direction = w[:-1] + scale * w[-1] * centroid
+            direction, _b = centroid_prior_direction(X, y, scale=scale)
             out[key] = round(float(_average_precision(self._X_test.astype(np.float64) @ direction, self._y_test)), 6)
         return out
