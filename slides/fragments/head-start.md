@@ -38,6 +38,5 @@
      costs it a hundredth of what any other direction costs, so it starts out
      facing the average and turns only where the Bads pay for it. It keeps
      every photo of the person and no stranger. Same objective, same line
-     machinery, one extra feature. The app trains it for photos, faces, audio
-     and text since #4785; region detectors keep the plain SVM until theirs is
-     measured. -->
+     machinery, one extra feature. Every detector the app trains has started
+     there since #4785. -->

@@ -465,20 +465,18 @@ class TestProductionCalibrationFidelity:
 
     @pytest.mark.parametrize("head", [None, "mlp"])
     def test_folds_forced_to_full_data_hidden_dim(self, head, monkeypatch):
-        from vtscore.eval.step_model import production_head_name, resolve_hidden_dim
+        from vtscore.eval.step_model import PRODUCTION_HEAD, resolve_hidden_dim
 
         captured = self._spy_calibration(monkeypatch)
         medias = _make_separable_clips(n_per_cat=10)
         simulate_voting_iterations(medias, "alpha", seed=42, head=head)
-        # The default arm is the app's head for the run's space (#4785).
-        default = production_head_name(patch_space=any(m.get("patch_grid") is not None for m in medias.values()))
 
         assert captured  # at least one calibrated step
         for c in captured:
             # The fold models must be sized from the full label count for the
             # step, not auto-sized per fold (hidden_dim=None) - on the default
             # (production) arm and on the legacy MLP arm alike.
-            assert c["hidden_dim"] == resolve_hidden_dim(head or default, c["n"])
+            assert c["hidden_dim"] == resolve_hidden_dim(head or PRODUCTION_HEAD, c["n"])
 
     def test_folds_calibrate_with_fixed_random_state_42(self, monkeypatch):
         captured = self._spy_calibration(monkeypatch)

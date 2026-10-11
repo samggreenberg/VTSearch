@@ -1,12 +1,12 @@
 # Machine Learning Details
 
-VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (L2-regularised squared hinge, class-balanced). On single-vector embeddings (photos, faces, audio, text) the SVM **starts from the Goods' centroid** (#4785, [below](#the-svm-started-from-the-goods-centroid-4785)). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
+VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (L2-regularised squared hinge, class-balanced), **started from the Goods' centroid** (#4785, [below](#the-svm-started-from-the-goods-centroid-4785)). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
 Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides typicality ranks for domain-shift detection.
 
 ## Architecture
 
-The head's *architecture* is defined in `vtscore/training/mlp.py` via `build_model()`, and its *fit* in `vtscore/training/svm.py` via `fit_linear_svm_head()` (and `vtscore/training/svm_prior.py` via `fit_linear_svm_prior_head()`, the centroid-started fit). Production always builds a linear head, selected per embedding space by `vtscore.detectors.training.production_head_for`: the `hidden_dim=LINEAR_SVM_PRIOR_HEAD` (`-3`) sentinel in a single-vector space, `LINEAR_SVM_HEAD` (`-1`) in a patch space and where the space is unknown:
+The head's *architecture* is defined in `vtscore/training/mlp.py` via `build_model()`, and its *fit* in `vtscore/training/svm.py` via `fit_linear_svm_head()` (and `vtscore/training/svm_prior.py` via `fit_linear_svm_prior_head()`, the centroid-started fit). Production always builds the linear head, selected by the `hidden_dim=LINEAR_SVM_PRIOR_HEAD` (`-3`) sentinel, the centroid-started SVM (`LINEAR_SVM_HEAD`, `-1`, is the plain SVM it replaced):
 
 ```
 Linear(input_dim, 1)
@@ -24,8 +24,8 @@ The head is fitted by liblinear (scikit-learn's `LinearSVC`, `C=1.0`, `class_wei
 
 | Sentinel | Architecture | Fitted by | Status |
 |---|---|---|---|
-| `LINEAR_SVM_PRIOR_HEAD` (`-3`) | `Linear(D, 1)` | liblinear (primal), squared hinge + L2, class-balanced, the Goods' centroid a cheap direction | **shipped**, single-vector spaces (#4785) |
-| `LINEAR_SVM_HEAD` (`-1`) | `Linear(D, 1)` | liblinear, squared hinge + L2, class-balanced | **shipped**, patch spaces (Region) |
+| `LINEAR_SVM_PRIOR_HEAD` (`-3`) | `Linear(D, 1)` | liblinear (primal), squared hinge + L2, class-balanced, the Goods' centroid a cheap direction | **shipped** (#4785) |
+| `LINEAR_SVM_HEAD` (`-1`) | `Linear(D, 1)` | liblinear, squared hinge + L2, class-balanced | shipped until #4785; eval arm |
 | `LINEAR_HEAD` (`0`) | `Linear(D, 1)` | balanced BCE gradient loop = logistic regression | eval arm, tests |
 | `hidden_dim > 0` | `Linear(D, H) -> ReLU -> Dropout -> Linear(H, 1)` | balanced BCE gradient loop | eval arm, tests |
 
@@ -39,7 +39,7 @@ The move from there to the SVM keeps that same linear boundary and changes only 
 
 **After.** `LINEAR_SVM_PRIOR_HEAD` fits the same objective on the votes plus one feature: 10 times each vector's dot with the unit Goods' centroid `ĉ` of the rows being fitted. With weight `w'` on the original features and `v` on the new one, the head is `w = w' + 10·v·ĉ` with penalty `½(‖w'‖² + v²)`, so moving the hyperplane along `ĉ` costs 1/100 of moving it any other way — a prior on `w` stretched along the centroid. With few labels the cheapest separation is nearly the centroid; as labels accumulate the head leaves it wherever the Bads pay for it. It folds back into one `Linear(D, 1)`, so folds, the line, scoring, max-pooling and export take it unchanged, and each fit (every calibration fold included) computes `ĉ` from its own Goods. It is solved in liblinear's primal (the scaled feature stalls the dual solver at the same optimum).
 
-**Priced** as full sessions against the plain SVM, paired run for run (#4776, `docs/experiments/2026-10-11-face-handover-4776`): mean F-beta of what a Find returns over votes 1–50 went up **+0.037 to +0.073** on FHIBE's face crops (all 12 sets: 1 and 4 starting photos, 1024 and 640 px, β ¼ / 1 / 4) and **+0.004 to +0.007** on COCO Better's Binary Photo opening; over votes 1–150, +0.017 to +0.033 and +0.002 to +0.004. The AP dip at the quota on faces went from −0.21 / −0.17 to −0.03 / −0.01. The Region path (a patch space) keeps the plain SVM until its own pricing (#4785).
+**Priced** as full sessions against the plain SVM, paired run for run (#4776, `docs/experiments/2026-10-11-face-handover-4776`): mean F-beta of what a Find returns over votes 1–50 went up **+0.037 to +0.073** on FHIBE's face crops (all 12 sets: 1 and 4 starting photos, 1024 and 640 px, β ¼ / 1 / 4) and **+0.004 to +0.007** on COCO Better's Binary Photo opening; over votes 1–150, +0.017 to +0.033 and +0.002 to +0.004. The AP dip at the quota on faces went from −0.21 / −0.17 to −0.03 / −0.01. On the Region path (DINOv3 patches, `docs/experiments/2026-10-11-head-start-region-4785`) it ranked a little better (AP +0.005) at a hair's cost in F-beta (−0.002 ± 0.002, β 1); the owner chose one head everywhere.
 
 Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `head="mlp"`; see [`docs/EVAL.md`](EVAL.md)) and in unit tests; neither is reachable from the app. Structural search's Stage 2 (`vtscore/training/structural_similarity.py`) is a separate feature and trains no scorer: since #4169 it ranks a shortlisted page by the inliers its best template verifies.
 

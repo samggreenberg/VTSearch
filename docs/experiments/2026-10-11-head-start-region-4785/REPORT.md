@@ -27,6 +27,10 @@ over 288 runs (2 seeds × 144 classes) at β 1:
   Bad floods its whole patch stack, so the "Goods' average" is an average of patch vectors. That may be
   a weaker prior for a class of objects than a face embedding's average is for one person.
 
+**Decision (owner, 2026-10-11): Region switches too.** One head everywhere, so the app and the eval
+harness carry no per-space rule. On this bench that trades about 0.002 of F-beta, within one SE, for
++0.005 AP.
+
 ![Find's F-beta and AP at every vote, Region path](fig_region_by_vote.png)
 
 *Figure 1. Region path, β 1, 288 runs a head. F-beta of what a Find returns (left; every run counted,

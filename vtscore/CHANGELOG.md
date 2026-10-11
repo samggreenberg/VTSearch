@@ -10,15 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
-- **The trained head starts from the Goods' centroid in a single-vector space** (issue #4785).
-  `vtscore.detectors.training.production_head_for(embedder_name)` picks the head every production
-  fit trains: `LINEAR_SVM_PRIOR_HEAD` when the detector's embedder is single-vector, `LINEAR_SVM_HEAD`
-  in a patch space and when the space is unknown (the Region path keeps the plain SVM until it is
-  priced). `train_and_threshold`, the vote path and the saved-origins path all call it. The eval
-  harness resolves `head=None` the same way (`vtscore.eval.step_model.production_head_name`,
-  `PRODUCTION_VECTOR_HEAD`), so a default run on single-vector data now trains the new head;
-  `head="linear_svm"` is the arm before. Priced in #4776: Find's mean F-beta over votes 1-50
-  +0.037 to +0.073 on FHIBE face crops, +0.004 to +0.007 on COCO Better's Binary opening.
+- **The trained head starts from the Goods' centroid** (issue #4785). Every production fit in
+  `vtscore.detectors.training` (`train_and_threshold`, the vote path, the saved-origins path) now
+  passes `LINEAR_SVM_PRIOR_HEAD` instead of `LINEAR_SVM_HEAD`, in every space. The eval harness's
+  default head follows (`vtscore.eval.step_model.PRODUCTION_HEAD = "linear_svm_prior"`), so every
+  study's default arm changes; `head="linear_svm"` is the arm before. Priced in #4776 and #4785:
+  Find's mean F-beta over votes 1-50 +0.037 to +0.073 on FHIBE face crops, +0.004 to +0.007 on COCO
+  Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
 
 ### Added
 

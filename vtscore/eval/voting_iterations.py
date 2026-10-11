@@ -78,8 +78,7 @@ from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
     APP_TRAINER,
     HEADS,
-    PRODUCTION_HEAD,  # noqa: F401 - re-exported; preflight_knobs imports it from here
-    production_head_name,
+    PRODUCTION_HEAD,
     StepModel,
     good_training_vec,
     resolve_trainer_name,
@@ -1882,13 +1881,11 @@ class _RunKnobs:
     calibration_seed: int
 
 
-def _resolve_head(head: Optional[str], trainer: str, *, patch_space: bool = False) -> str:
-    """Validate an explicit head name, or resolve ``None`` to the app's for the run's space.
+def _resolve_head(head: Optional[str], trainer: str) -> str:
+    """Validate an explicit head name, or resolve ``None`` to the app's.
 
     *trainer* must already be normalised by
-    :func:`~vtscore.eval.step_model.resolve_trainer_name`.  *patch_space* is the
-    run's ``region_aware`` (#4785: the app trains the centroid-started SVM in a
-    single-vector space, the plain one in a patch space).
+    :func:`~vtscore.eval.step_model.resolve_trainer_name`.
 
     Raises:
         ValueError: If *head* is not a known head, or is given for a trainer
@@ -1904,19 +1901,18 @@ def _resolve_head(head: Optional[str], trainer: str, *, patch_space: bool = Fals
                 f"pipeline, whose head this selects); got trainer={trainer!r}, which fits "
                 f"its own standalone estimator and has no head to choose"
             )
-    # **The default arm must be the app's default.**  Production picks the head
-    # per space on every fit (``hidden_dim = production_head_for(...)`` in
-    # ``vtscore.detectors.training.train_and_threshold``: the centroid-started
-    # SVM in a single-vector space, the plain SVM in a patch space, #4785), so an
-    # unspecified head resolves the same way — as *style* and *blend_schedule*
-    # resolve to the app's geometry and schedule below.  The head fits the final model *and*
+    # **The default arm must be the app's default.**  Production pins the linear
+    # SVM started from the Goods' centroid on every fit (``hidden_dim =
+    # LINEAR_SVM_PRIOR_HEAD`` in ``vtscore.detectors.training.train_and_threshold``,
+    # #4785), so an unspecified head resolves to it — the same way *style* and
+    # *blend_schedule* resolve to the app's geometry and schedule below.  The head fits the final model *and*
     # the calibration folds, so it moves the thresholds and, through the vote
     # order, the whole trajectory: defaulting to a retired head would make every
     # unqualified run measure a detector nobody ships.  ``head="linear"`` (the
     # logistic head) and ``head="mlp"`` stay available as named legacy arms.
     # (This is the *head* knob, not the ``trainer`` knob beside it: the trainer
     # picks the pipeline, the head picks what that pipeline fits — issue #3764.)
-    head = head or production_head_name(patch_space=patch_space)
+    head = head or PRODUCTION_HEAD
     return head
 
 
@@ -2104,7 +2100,6 @@ def _resolve_run_knobs(
     trainer: str,
     style: Optional[str],
     calibration_seed: Optional[int],
-    patch_space: bool = False,
 ) -> _RunKnobs:
     """Validate a cell's pre-registered knobs and resolve the defaults among them.
 
@@ -2150,7 +2145,7 @@ def _resolve_run_knobs(
     _check_acquisition_arm(acq_inclusion_offset, acq_rank_percentile, acq_p_crossing, acq_origin, acq_target_p)
 
     trainer = resolve_trainer_name(trainer)
-    head = _resolve_head(head, trainer, patch_space=patch_space)
+    head = _resolve_head(head, trainer)
 
     if style is not None and trainer != APP_TRAINER:
         raise ValueError(
@@ -2508,12 +2503,10 @@ def simulate_voting_iterations(  # noqa: C901
             better, and VTSearch's vote order depends on the model).
         head: Which classifier head the ``"app"`` pipeline fits at each step
             (see :data:`HEADS`).  ``None`` (default) resolves to the **app's**
-            head for the run's space (:func:`~vtscore.eval.step_model.production_head_name`):
-            the linear SVM started from the Goods' centroid (``"linear_svm_prior"``)
-            on single-vector data, the plain linear SVM (:data:`PRODUCTION_HEAD`)
-            on patch data, as a live VTSearch detector has them since #4785, so a
-            default run's thresholds and costs are the ones users see.
-            ``"linear_svm"`` on single-vector data is the arm before #4785.  ``"linear"`` (the logistic head the SVM
+            head, :data:`PRODUCTION_HEAD` — the linear SVM started from the Goods'
+            centroid (``"linear_svm_prior"``) a live VTSearch detector has since
+            #4785, so a default run's thresholds and costs are the ones users
+            see.  ``"linear_svm"``, the plain SVM, is the arm before it.  ``"linear"`` (the logistic head the SVM
             replaced) and ``"mlp"`` (the harness's auto-sized hidden layer,
             #2781) are the explicitly-named legacy arms.  The head is threaded
             into the calibration folds as well, mirroring how production threads
@@ -3098,8 +3091,6 @@ def simulate_voting_iterations(  # noqa: C901
         trainer=trainer,
         style=style,
         calibration_seed=calibration_seed,
-        # The app's head follows the space (#4785); the harness's spelling of it.
-        patch_space=any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict),
     )
     _fold_schedule = knobs.fold_schedule
     startup_state = knobs.startup_state

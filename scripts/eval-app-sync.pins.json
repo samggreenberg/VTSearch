@@ -99,16 +99,12 @@
   "training.fused_threshold": {
     "app": "7f6f1d6bbc35d0e3462aa9fd1feed6597e7f7a4abe748e1df225c9a911969a9a"
   },
-  "training.production_head": {
-    "app": "861bc7f58d50608c6b50b217777dbb4dbbb6fa86123a5bb88214c881b1853b73",
-    "harness": "a2e4c3edbca16b8204161c53fc356bad0c7128311264d6f9e9a898e380256b18"
-  },
   "training.split_fraction_default": {
     "app": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "69b72835579c0f4aba8d49031774bdeb9b36547b7d567c3a1106f3f82c70da9a",
+    "app": "33d2a307330e428d5fdd90e22dce24d4bb998a1533dd341a08ca578118c0375f",
     "harness": "9673e37fce15a5fccc1ecbec181807bc4a8367309130b9e952a8799db1d9d651"
   }
 }

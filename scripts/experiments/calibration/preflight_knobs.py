@@ -51,7 +51,6 @@ def probe(C: Any) -> list[str]:
         resolve_walk_shape,
         simulate_voting_iterations,
     )
-    from vtscore.eval.step_model import PRODUCTION_VECTOR_HEAD
     from vtscore.training import thresholds as T
 
     rows: list[tuple[str, str, str]] = []
@@ -97,17 +96,7 @@ def probe(C: Any) -> list[str]:
         """What the harness runs when ``run_cells.py`` leaves *param* out (it does when the knob is unset)."""
         return inspect.signature(simulate_voting_iterations).parameters[param].default
 
-    # The head follows the space (#4785: the centroid-started SVM on single-vector data, the plain
-    # SVM on patch data), which the probe cannot see, so any pinned head is an arm to declare.
-    head = env("CALIB_HEAD")
-    if head is not None:
-        rows.append(
-            (
-                "head",
-                head,
-                "<unset> = the app's head for the run's space (%s / %s)" % (PRODUCTION_VECTOR_HEAD, PRODUCTION_HEAD),
-            )
-        )
+    pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
     # The pipeline, the vote order and the standalone cut (#3959): unset is the app's
     # own on all three, so any value is a run-level arm the study must declare.
     pinned("trainer", "CALIB_TRAINER", "app")

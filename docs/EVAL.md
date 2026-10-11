@@ -590,11 +590,11 @@ The voting simulation takes two knobs that both sound like "which model?". They 
 
 | `head` | What is fitted |
 |---|---|
-| `linear_svm` | `Linear(d, 1)` fitted by liblinear. **The shipped head in a patch space** (the Region path), where `head=None` resolves here; on single-vector data it is the arm before #4785. |
+| `linear_svm` | `Linear(d, 1)` fitted by liblinear, the plain SVM: the shipped head until #4785, now the arm before it. |
 | `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced (#2790/#2809). |
 | `mlp` | An auto-sized hidden layer, BCE — the head shipped before #2790 (#2781). |
 | `linear_logreg` | The same `Linear(d, 1)` fitted by converged, balanced logistic regression (scikit-learn), the in-loop test of #3197 (#4114). |
-| `linear_svm_prior` | The SVM's objective with the Goods' centroid made a cheap direction: one extra feature, 10 x the dot with the unit centroid of the rows being fitted, folded back into a `Linear(d, 1)`, so a head on a few labels starts at the centroid (#4776). **The shipped head on single-vector data** since #4785, where `head=None` resolves here (`step_model.production_head_name`, keyed on whether any media carries a `patch_grid`). Every fit takes it: Test, the picks, the folds and the line. |
+| `linear_svm_prior` | The SVM's objective with the Goods' centroid made a cheap direction: one extra feature, 10 x the dot with the unit centroid of the rows being fitted, folded back into a `Linear(d, 1)`, so a head on a few labels starts at the centroid (#4776). **The shipped detector head** since #4785; `head=None` resolves here. Every fit takes it: Test, the picks, the folds and the line. |
 
 Passing `head=` alongside an `svm_*` or `gp_*` trainer is an error: those arms fit their own estimator and have no head to choose, which is why their rows carry an empty `head` column.
 
