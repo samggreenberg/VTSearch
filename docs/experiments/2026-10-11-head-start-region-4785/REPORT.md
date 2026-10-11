@@ -24,8 +24,8 @@ over 288 runs (2 seeds × 144 classes) at β 1:
 - **The line does not use it.** At vote 10 the head start keeps a median of 53 images against 58; at
   vote 50, 43 against 45. What a Find returns scores the same, a hair lower.
 - **Why the face gain does not carry over** is not tested here. A Region Good is a box's patch row and a
-  Bad floods its whole patch stack, so the "Goods' average" is an average of patch vectors. It is a
-  much weaker prior for a class of objects than for one person's face.
+  Bad floods its whole patch stack, so the "Goods' average" is an average of patch vectors. That may be
+  a weaker prior for a class of objects than a face embedding's average is for one person.
 
 ![Find's F-beta and AP at every vote, Region path](fig_region_by_vote.png)
 
