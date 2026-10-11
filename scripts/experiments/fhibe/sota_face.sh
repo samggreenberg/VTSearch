@@ -16,6 +16,7 @@
 #                                         people of each size only (a smoke run), else all
 #   sota_face.sh pack [JOBS]              submit the task list as JOBS (default 1) V100 pack jobs
 #                                         of CALIB_PACK_PAR (default 38) cells at a time
+#                                         (CALIB_PACK_PARTITION=cpu: on the cpu partition)
 #   sota_face.sh baseline                 click 0: the example sort at K = 1 and 4 (example_baseline.py)
 #   sota_face.sh status                   cells written per run dir
 #
@@ -98,17 +99,25 @@ pack)
   jobs="${2:-1}"
   [[ -s "$TASKS" ]] || { echo "no task list at $TASKS (run tasks first)" >&2; exit 3; }
   PAR="${CALIB_PACK_PAR:-38}"
+  # V100 nodes by default (the GPU hidden); CALIB_PACK_PARTITION=cpu packs onto the cpu partition instead,
+  # where the per-user CPU cap, not the GPU limit, bounds how many run.
+  PART="${CALIB_PACK_PARTITION:-gpu}"
+  PART_ARGS=(--partition="$PART")
+  [[ "$PART" == gpu ]] && PART_ARGS+=(--gres="${CALIB_PACK_GRES:-gpu:v100:1}")
   LOGS="$RUNS/$D-$TAG-logs"
   mkdir -p "$LOGS" && chmod 700 "$LOGS"
   THREADS="OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2"
   # Every job reads the whole list and claims each task before running it (an atomic mkdir), so a
   # job that starts late, behind the per-user GPU limit, takes what is left rather than a fixed shard.
-  claims="$LOGS/claims-$(date +%s)"
+  # SOTA_FACE_CLAIMS_DIR joins an earlier submission's pool (say, cpu packs beside the V100 ones), so the
+  # two never run the same cell.
+  claims="${SOTA_FACE_CLAIMS_DIR:-$LOGS/claims-$(date +%s)}"
   mkdir -p "$claims"
   shard="$LOGS/tasks.txt"
-  cp "$TASKS" "$shard"
+  [[ -n "${SOTA_FACE_CLAIMS_DIR:-}" && -s "$shard" ]] || cp "$TASKS" "$shard"
+  echo "claims: $claims"
   for ((j = 0; j < jobs; j++)); do
-    J=$(sbatch --parsable --job-name="${TAG}face-pack$j" --partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}" \
+    J=$(sbatch --parsable --job-name="${TAG}face-pack$j" "${PART_ARGS[@]}" \
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
       --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_TAG=$TAG SOTA_FACE_CLAIMS=$claims && \

@@ -93,6 +93,22 @@ def _svm(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float]:
     return np.asarray(clf.base.coef_, dtype=np.float64).ravel(), float(np.asarray(clf.base.intercept_).ravel()[0])
 
 
+def _svm_primal(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float]:
+    """:func:`_svm`'s objective solved in the primal, for the centroid-prior heads.
+
+    The scaled centroid feature makes the dual coordinate descent ``train_svm``
+    picks (``dual="auto"`` with fewer labels than dimensions) crawl to its
+    iteration cap; the primal Newton solver reaches the same optimum in a few steps.
+    """
+    from sklearn.svm import LinearSVC  # noqa: PLC0415
+
+    from vtscore import config  # noqa: PLC0415
+
+    clf = LinearSVC(C=config.SVM_HEAD_C, class_weight="balanced", dual=False, max_iter=5000, random_state=42)
+    clf.fit(X, y)
+    return np.asarray(clf.coef_, dtype=np.float64).ravel(), float(np.asarray(clf.intercept_).ravel()[0])
+
+
 def _unit_mean(rows: np.ndarray) -> np.ndarray:
     """:func:`~vtscore.detectors.centroid_head.goods_centroid` on a stacked array."""
     from vtscore.detectors.centroid_head import goods_centroid  # noqa: PLC0415
@@ -181,7 +197,7 @@ class HandoverJudge:
         y = np.concatenate([np.ones(len(X_good)), np.zeros(len(X_bad))])
         out: dict[str, float] = {}
         for key, scale in zip(keys, PRIOR_SCALES, strict=True):
-            w, _b = _svm(np.hstack([X, scale * (X @ centroid)[:, None]]), y)
+            w, _b = _svm_primal(np.hstack([X, scale * (X @ centroid)[:, None]]), y)
             direction = w[:-1] + scale * w[-1] * centroid
             out[key] = round(float(_average_precision(self._X_test.astype(np.float64) @ direction, self._y_test)), 6)
         return out
