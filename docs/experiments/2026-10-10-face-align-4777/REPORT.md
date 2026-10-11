@@ -25,7 +25,7 @@ sideways or tilted reached FaceNet sideways or tilted. MTCNN also returns five l
 - **`none`**: the plain box crop, as before.
 - **`roll`**: a least-squares similarity fit of the five landmarks to a template gives the face's
   angle in the photo. The photo is turned about the box's centre by that angle, then the same
-  padded box is cropped. An upright face's crop is unchanged.
+  padded box is cropped. At a turn of zero it is exactly the plain crop.
 - **`similarity`**: the same fit, but the crop is a square at the fit's own scale, centred on the
   template: the usual 5-point alignment.
 
@@ -60,6 +60,10 @@ were re-run at `c74d31dde` on Intel nodes, as the review's were, and compared va
   (last-digit rounding of the thresholds, from the different Intel CPU);
 - the only columns that moved are six `*_honest` cost diagnostics and some threshold-variant rows
   (`pooled_sim_oracle_*` and the like). The analyzer reads none of them.
+
+The roll sessions ran on the cpu partition, on its Intel and AMD nodes; the control ran on Intel.
+Vendor drift between paired sessions is noise without bias (measured on #4496), and the arm's
+sessions part from the control's at the first trained head anyway, since the vectors differ.
 
 MTCNN's detections are also reproducible across V100 nodes: a pass on rack8n06 gave the same media
 ids and the same crop size for every subject crop as the cells built on rack7n03 and on an SXM2
