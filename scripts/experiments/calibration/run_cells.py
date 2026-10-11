@@ -337,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
+        f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -352,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         PICK_COLUMNS,
         RANK_FRAME_COLUMNS,
     )
+    from vtscore.eval.arms_handover import HANDOVER_COLUMNS
     from vtscore.eval.live_threshold_rules import sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
@@ -391,6 +393,7 @@ def main(argv: list[str] | None = None) -> int:
     all_pframes: list[dict] = []
     all_rankframes: list[dict] = []
     all_linetests: list[dict] = []
+    all_handover: list[dict] = []
     all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
@@ -403,6 +406,7 @@ def main(argv: list[str] | None = None) -> int:
         rankframes_local: list[dict] | None = [] if cfg.RANK_FRAME_STEPS else None
         testscores_local: list[dict] | None = [] if cfg.SAVE_TEST_SCORES else None
         linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
+        handover_local: list[dict] | None = [] if cfg.HANDOVER_SHADOW else None
         with sigma_floor(cfg.SIGMA_FLOOR):
             rows = simulate_voting_iterations(
                 medias,
@@ -489,6 +493,8 @@ def main(argv: list[str] | None = None) -> int:
                 quota_dry_bads=cfg.QUOTA_DRY_BADS,
                 centroid_line=cfg.CENTROID_LINE,
                 centroid_line_variants=cfg.CENTROID_LINE_VARIANTS,
+                handover_shadow=cfg.HANDOVER_SHADOW,
+                handover_sink=handover_local,
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
@@ -564,6 +570,9 @@ def main(argv: list[str] | None = None) -> int:
         for lt in linetest_local or []:
             lt["embedder"] = emb
         all_linetests.extend(linetest_local or [])
+        for hr in handover_local or []:
+            hr["embedder"] = emb
+        all_handover.extend(handover_local or [])
         if testscores_local:
             # The last ordinary step and the last row (after the check): what Train left and what Find applies.
             # The full-label ceiling's snapshot (#4490) is kept apart, never read as a session's step; and
@@ -650,6 +659,11 @@ def main(argv: list[str] | None = None) -> int:
     linetest_cols = [*LINE_TEST_COLUMNS, "embedder"]
     linetest_out = cell_file(outdir / f"task_{idx:04d}__linetest.csv")
     pd.DataFrame(all_linetests, columns=pd.Index(linetest_cols)).to_csv(linetest_out, index=False)
+    # The #4776 hand-over evidence: one row per click Test gave the trained head.  Same
+    # unconditional-write rule: an empty file with the header says the shadow was off.
+    handover_cols = [*HANDOVER_COLUMNS, "embedder"]
+    handover_out = cell_file(outdir / f"task_{idx:04d}__handover.csv")
+    pd.DataFrame(all_handover, columns=pd.Index(handover_cols)).to_csv(handover_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means

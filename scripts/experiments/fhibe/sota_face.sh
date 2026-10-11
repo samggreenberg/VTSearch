@@ -20,7 +20,8 @@
 #   sota_face.sh status                   cells written per run dir
 #
 # Launch from a FROZEN worktree: every task imports the worktree this script sits in.
-# Env: SOTA_FACE_DATE (default today), SOTA_FACE_TASKS (the task list's path).
+# Env: SOTA_FACE_DATE (default today), SOTA_FACE_TASKS (the task list's path), SOTA_FACE_TAG (the run
+# dirs' tag, default `sota`: <date>-<tag>-k<K>-b<beta>; a study on the same recipe takes its own).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
@@ -30,7 +31,8 @@ BASE="${SOTA_FACE_BASE:-2026-10-09}"
 KS=(1 4)
 BETAS=(0.25 1 4)
 N_PEOPLE=562
-TASKS="${SOTA_FACE_TASKS:-$RUNS/$D-sota-tasks.txt}"
+TAG="${SOTA_FACE_TAG:-sota}"
+TASKS="${SOTA_FACE_TASKS:-$RUNS/$D-$TAG-tasks.txt}"
 
 # The run dir's balance tag, as launch.sh writes it (0.25 -> 025, 1 -> 1, 4 -> 4). A lookup, not a
 # python call: the task list asks for it 6,744 times.
@@ -46,11 +48,11 @@ btag() {
 # The settings one run dir takes, for launch.sh: K and beta vary, the rest is the recipe.
 run_env() {  # K BETA
   export FHIBE_EXAMPLES="$1" FHIBE_MAX_EXAMPLES=4 FHIBE_BETA="$2"
-  export FHIBE_RUN="$D-sota" FHIBE_IDENTITIES="$RUNS/$BASE-k4/identities.txt"
+  export FHIBE_RUN="$D-$TAG" FHIBE_IDENTITIES="$RUNS/$BASE-k4/identities.txt"
   export FHIBE_DATASETS=fhibe_faces_1024,fhibe_faces_640 FHIBE_MAX_STEPS=150
   # Dense rank frames: every vote to 10, every 5 after (the skill's F1/F-beta curve recipe).
   export CALIB_RANK_FRAME_STEPS="1,2,3,4,5,6,7,8,9,10,$(seq -s, 15 5 150)"
-  export CALIB_JOB_NAME="sotaface-k$1-b$(btag "$2")"
+  export CALIB_JOB_NAME="${TAG}face-k$1-b$(btag "$2")"
 }
 
 case "${1:-}" in
@@ -80,7 +82,7 @@ tasks)
       for k in "${KS[@]}"; do
         for b in "${BETAS[@]}"; do
           idx=$((size * N_PEOPLE + i))
-          if [[ -s "$RUNS/$D-sota-k$k-b$(btag "$b")/results/cells/$(printf 'task_%04d.csv' "$idx")" ]]; then
+          if [[ -s "$RUNS/$D-$TAG-k$k-b$(btag "$b")/results/cells/$(printf 'task_%04d.csv' "$idx")" ]]; then
             skipped=$((skipped + 1))
           else
             echo "$k $b $idx" >>"$TASKS"
@@ -96,7 +98,7 @@ pack)
   jobs="${2:-1}"
   [[ -s "$TASKS" ]] || { echo "no task list at $TASKS (run tasks first)" >&2; exit 3; }
   PAR="${CALIB_PACK_PAR:-38}"
-  LOGS="$RUNS/$D-sota-logs"
+  LOGS="$RUNS/$D-$TAG-logs"
   mkdir -p "$LOGS" && chmod 700 "$LOGS"
   THREADS="OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2"
   # Every job reads the whole list and claims each task before running it (an atomic mkdir), so a
@@ -106,10 +108,10 @@ pack)
   shard="$LOGS/tasks.txt"
   cp "$TASKS" "$shard"
   for ((j = 0; j < jobs; j++)); do
-    J=$(sbatch --parsable --job-name="sotaface-pack$j" --partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}" \
+    J=$(sbatch --parsable --job-name="${TAG}face-pack$j" --partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}" \
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
-      --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_CLAIMS=$claims && \
+      --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_TAG=$TAG SOTA_FACE_CLAIMS=$claims && \
 xargs -P $PAR -L 1 bash $HERE/sota_face.sh cell <$shard; echo pack done") || { echo "pack $j SUBMIT FAILED" >&2; exit 1; }
     [[ "$J" =~ ^[0-9]+$ ]] || { echo "pack $j SUBMIT FAILED (empty job id)" >&2; exit 1; }
     echo "pack $j -> job $J (claims from $(wc -l <"$shard") cells, $PAR at a time)"
@@ -133,16 +135,16 @@ baseline)  # click 0: the example sort at K = 1 and 4, in the K=1 beta-1 run's e
   ENVX=$(bash -c "source $HERE/launch.sh status >/dev/null 2>&1; echo \"\$ENVX\"")
   source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
   eval "$ENVX"
-  out="$RUNS/$D-sota-baseline"
+  out="$RUNS/$D-$TAG-baseline"
   mkdir -p "$out" && chmod 700 "$out"
   cd "$HERE"
-  python example_baseline.py --results "$RUNS/$D-sota-k1-b1/results" --ks 1,4 --out-dir "$out" \
-    --check "$RUNS/$D-sota-k{k}-b1/results/cells"
+  python example_baseline.py --results "$RUNS/$D-$TAG-k1-b1/results" --ks 1,4 --out-dir "$out" \
+    --check "$RUNS/$D-$TAG-k{k}-b1/results/cells"
   ;;
 status)
   for k in "${KS[@]}"; do
     for b in "${BETAS[@]}"; do
-      dir="$RUNS/$D-sota-k$k-b$(btag "$b")"
+      dir="$RUNS/$D-$TAG-k$k-b$(btag "$b")"
       echo "k$k b$(btag "$b"): $(ls "$dir/results/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv$' || true) cells"
     done
   done
