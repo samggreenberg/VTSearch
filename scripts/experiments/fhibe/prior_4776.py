@@ -11,7 +11,8 @@ What a Find returns at every vote 1..150 is read as the face review reads it
 (``sota_face_tables.read_find``): Test's untagged rows, the end-of-run check's left out, carried
 between rows, 0 before the first. Every run is in every average (#4631). Per set: the session mean
 of Find's F-beta and of AP over votes 1-50, 51-150 and 1-150, arm minus control, mean and SE over
-runs, the share of runs it wins and loses, and the curves.
+runs (``_se_cat``: clustered on category, for COCO's seeds of one class), the share of runs it wins
+and loses, and the curves. ``prior_per_run.csv`` names FHIBE subject ids: keep it owner-only.
 
 Usage::
 
@@ -105,7 +106,7 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=16)
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    rows, curves = [], []
+    rows, curves, per_run = [], [], []
     for spec in args.pair:
         name, _, rest = spec.partition("=")
         parts = rest.split("::")
@@ -121,6 +122,7 @@ def main() -> int:
             "arm_only": len(set(arm) - set(ctl)),
             "control_only": len(set(ctl) - set(arm)),
         }
+        runs = [{"set": name, "dataset": k[0], "category": k[1], "seed": k[2]} for k in keys]
         for metric in ("F", "AP"):
             A = np.stack([arm[k][metric] for k in keys])
             C = np.stack([ctl[k][metric] for k in keys])
@@ -131,6 +133,10 @@ def main() -> int:
                 row[f"{metric}_arm_{lo}_{hi}"] = float(np.nanmean(a))
                 row[f"d{metric}_{lo}_{hi}"] = float(np.nanmean(d))
                 row[f"d{metric}_{lo}_{hi}_se"] = _se(d)
+                # Seeds of one category share it, so the SE is also given clustered on category.
+                row[f"d{metric}_{lo}_{hi}_se_cat"] = _se(pd.Series(d).groupby([k[1] for k in keys]).mean().to_numpy())
+                for rr, v in zip(runs, d, strict=True):
+                    rr[f"d{metric}_{lo}_{hi}"] = float(v)
                 if metric == "F":
                     row[f"win_{lo}_{hi}"] = float((d > 1e-9).mean())
                     row[f"loss_{lo}_{hi}"] = float((d < -1e-9).mean())
@@ -151,9 +157,12 @@ def main() -> int:
             row[f"kept_arm_median_{t}"] = float(np.nanmedian(K[0][:, t - 1]))
             row[f"kept_ctl_median_{t}"] = float(np.nanmedian(K[1][:, t - 1]))
         rows.append(row)
+        per_run += runs
         print(f"{name}: {len(keys)} paired runs", file=sys.stderr)
     pd.DataFrame(rows).round(5).to_csv(args.out / "prior_ab.csv", index=False)
     pd.DataFrame(curves).round(5).to_csv(args.out / "prior_curves.csv", index=False)
+    # Per run: names FHIBE subject ids, so it stays in the owner-only analysis directory.
+    pd.DataFrame(per_run).round(5).to_csv(args.out / "prior_per_run.csv", index=False)
     print(f"wrote prior_ab.csv, prior_curves.csv -> {args.out}", file=sys.stderr)
     return 0
 

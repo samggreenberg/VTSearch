@@ -75,7 +75,7 @@ def _draw(ax, series: list[Series]) -> None:
     ax.set_xlim(0, 150)
     ax.grid(axis="y", color="#e4e3df", lw=0.8)
     lo, hi = ax.get_ylim()
-    for (_y, label, color), yy in zip(ends, _spread([e[0] for e in ends], 0.06 * (hi - lo))):
+    for (_y, label, color), yy in zip(ends, _spread([e[0] for e in ends], 0.075 * (hi - lo))):
         ax.text(153, yy, label, color=color, va="center", fontsize=8, clip_on=False)
 
 

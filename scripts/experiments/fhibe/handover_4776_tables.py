@@ -41,9 +41,9 @@ COCO_SETS = ["coco-b025", "coco-b1", "coco-b4"]
 BETA = {"025": "β ¼", "1": "β 1", "4": "β 4"}
 
 
-def _label(s: str) -> str:
+def _label(s: str, bench: bool = False) -> str:
     if s.startswith("coco"):
-        return BETA[s.split("-b")[1]]
+        return ("COCO, " if bench else "") + BETA[s.split("-b")[1]]
     k, b, size = s.split("-")
     return f"{k[1]} photo{'s' if k != 'k1' else ''}, {BETA[b[1:]]}" + ("" if size == "1024" else f", {size}")
 
@@ -93,13 +93,13 @@ def prior_ap_table(r: pd.DataFrame, sets: list[str]) -> str:
         n = r[(r["set"] == s) & (r["rule"] == "never")].iloc[0]
         p = r[(r["set"] == s) & (r["rule"] == "prior_ap_s10")].iloc[0]
         lines.append(
-            f"| {_label(s)} | {_pm(n['dAP_1_50'], n['dAP_1_50_se'])} | {_pm(p['dAP_1_50'], p['dAP_1_50_se'])} "
+            f"| {_label(s, True)} | {_pm(n['dAP_1_50'], n['dAP_1_50_se'])} | {_pm(p['dAP_1_50'], p['dAP_1_50_se'])} "
             f"| {_pm(n['dAP_1_150'], n['dAP_1_150_se'])} | {_pm(p['dAP_1_150'], p['dAP_1_150_se'])} |"
         )
     return "\n".join(lines)
 
 
-def ab_table(a: pd.DataFrame, sets: list[str]) -> str:
+def ab_table(a: pd.DataFrame, sets: list[str], runs_of: dict[str, int]) -> str:
     sets = [s for s in sets if (a["set"] == s).any()]
     lines = [
         "| set | runs | today, 1-50 | Δ 1-50 | today, 1-150 | Δ 1-150 | Δ 51-150 | wins / losses (1-150) | ΔAP 1-50 | ΔAP 1-150 |",
@@ -107,8 +107,10 @@ def ab_table(a: pd.DataFrame, sets: list[str]) -> str:
     ]
     for s in sets:
         x = a[a["set"] == s].iloc[0]
+        n = int(x["runs"])
+        runs = f"{runs_of[s]} ({n} with a Good)" if s in runs_of and runs_of[s] != n else str(n)
         lines.append(
-            f"| {_label(s)} | {int(x['runs'])} | {x['F_ctl_1_50']:.3f} | {_pm(x['dF_1_50'], x['dF_1_50_se'])} "
+            f"| {_label(s, True)} | {runs} | {x['F_ctl_1_50']:.3f} | {_pm(x['dF_1_50'], x['dF_1_50_se'])} "
             f"| {x['F_ctl_1_150']:.3f} | {_pm(x['dF_1_150'], x['dF_1_150_se'])} | {_pm(x['dF_51_150'], x['dF_51_150_se'])} "
             f"| {x['win_1_150']:.0%} / {x['loss_1_150']:.0%} | {_pm(x['dAP_1_50'], x['dAP_1_50_se'])} "
             f"| {_pm(x['dAP_1_150'], x['dAP_1_150_se'])} |"
@@ -139,7 +141,7 @@ def main() -> int:
         out.append(prior_ap_table(r, [*FACE_SETS, *COCO_SETS]) + "\n")
     if a is not None:
         out.append("## The arm: head started from the centroid, minus today, run for run\n")
-        out.append(ab_table(a, [*FACE_SETS, *COCO_SETS]) + "\n")
+        out.append(ab_table(a, [*FACE_SETS, *COCO_SETS], runs_of) + "\n")
     args.out.write_text("\n".join(out))
     print(f"wrote {args.out}")
     return 0
