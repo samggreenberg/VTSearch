@@ -8,22 +8,24 @@ L2-normalised Good vectors, every media ranked by its cosine to that centroid
 (max-pooled over a patch media's rows, as every scorer here pools), and the line
 :func:`centroid_cut` draws over those cosines.
 
-**The line is the typed query's count line, at the balance (#4732).**  It keeps
-``beta ** 0.708`` times the count of media standing out of the cosines' bulk
-(#4603's ``_count_line``), the guarded line where there is nothing to count.  It
-was the two-Gaussian midpoint until #4732, and on a rare target that midpoint
-splits the negatives' own bulk: on FHIBE's face crops the centroid ranked a
-person's withheld photos first of 5,439 and its line kept about 2,300.  Priced on
-the FHIBE cells and the State of the App's Binary opening, the count line won at
-every balance there; the guarded line, the typed query's own at beta 4, lost to
-it by 0.21 F-beta on faces, where its separated branch falls back to the
-midpoint (``docs/experiments/2026-10-10-centroid-line-4732``).  The trained
-head's labels line needs held-out Bads the centroid does not have.  A balance
-change redraws the line on the cosines it was drawn on
-(:class:`CentroidLine`, :func:`~vtscore.state.core.recut_detector_threshold`),
-Autopilot's Hard select still samples at the cosines' midpoint
-(:meth:`CentroidLine.acquisition_threshold`), and a Find on another corpus
-redraws the line there, as a cold Find refits a trained head's line.
+**The line is a count of what stands out, at the balance (#4732, #4759).**  It
+keeps ``beta ** 0.708`` times the larger of two counts: the media standing out of
+the cosines' bulk (#4603's count) and the media above the widest drop between
+neighbours in the top 11.  It never keeps fewer than that drop's count, whatever the
+balance; the guarded line stays where there is nothing to count.  The midpoint it
+replaced (#4732) split a rare target's negatives: on FHIBE's face crops the centroid
+ranked a person's withheld photos first of 5,439, and the midpoint kept about 2,300.
+The typed query's count alone (#4732's line) kept one of a person's ~4, because
+their photos sit 3 to 4 bulk sigmas up, among the bulk's own top; a lower bar or a
+mirrored bulk only subtracts more.  The drop just below the person's last photo is
+what separates them.  Priced on the FHIBE cells and the State of the App's Binary
+opening (``docs/experiments/2026-10-10-centroid-count-4759``).  The trained head's
+labels line needs held-out Bads the centroid does not have.  A balance change
+redraws the line on the cosines it was drawn on (:class:`CentroidLine`,
+:func:`~vtscore.state.core.recut_detector_threshold`), Autopilot's Hard select
+still samples at the cosines' midpoint (:meth:`CentroidLine.acquisition_threshold`),
+and a Find on another corpus redraws the line there, as a cold Find refits a
+trained head's line.
 
 **It is a ``Linear(D, 1)``, so it travels where a head travels.**  The weight is
 :data:`CENTROID_LOGIT_SCALE` times the unit centroid and the bias puts the
@@ -103,7 +105,8 @@ def is_centroid_head(model: object) -> bool:
 #:   below, #4603, else the guarded line);
 #: * ``guarded`` - the guarded line alone, which takes no balance (#3826);
 #: * ``count`` - the count line at every balance, ``beta ** 0.708`` times the bulk's excess
-#:   (#4603), the guarded line where the count has nothing to measure.  The app's (#4732).
+#:   (#4603), the guarded line where the count has nothing to measure.  The app's from #4732
+#:   to #4759.
 #:
 #: and #4759's candidates, each ``beta ** 0.708`` times another count of what stands out
 #: (:data:`CENTROID_COUNTS`), the guarded line where it has nothing to measure:
@@ -114,12 +117,26 @@ def is_centroid_head(model: object) -> bool:
 #:   :data:`CENTROID_GAP_TOP` + 1;
 #: * ``count_gap`` - the larger of ``count``'s and ``gap``'s;
 #: * ``gap_floor`` - ``count``'s line, lowered to the widest drop when that keeps more: the gap
-#:   as a floor on the set at every balance, not a count scaled by it.
-CENTROID_COUNTS = ("count", "count_z3", "count_z3.5", "mirror_z3.5", "gap", "count_gap", "gap_floor")
+#:   as a floor on the set at every balance, not a count scaled by it;
+#: * ``count_gap_floor`` - ``count_gap``'s line, lowered to the widest drop when that keeps more.
+#:   It keeps exactly what ``gap_floor`` keeps at beta 1 or below and what ``count_gap`` keeps
+#:   from beta 1 up, since ``beta ** 0.708`` is at least 1 there.  The app's (#4759).
+CENTROID_COUNTS = (
+    "count",
+    "count_z3",
+    "count_z3.5",
+    "mirror_z3.5",
+    "gap",
+    "count_gap",
+    "gap_floor",
+    "count_gap_floor",
+)
+#: The counts whose line never sits above the widest drop (:func:`centroid_cut`).
+_GAP_FLOORED = ("gap_floor", "count_gap_floor")
 CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS)
 
-#: The rule the app draws a centroid's line by: the count line at every balance (#4732).
-CENTROID_LINE_RULE = "count"
+#: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759).
+CENTROID_LINE_RULE = "count_gap_floor"
 
 #: How deep ``gap`` looks for the widest drop: the top this many + 1 cosines (#4759).
 CENTROID_GAP_TOP = 10
@@ -136,7 +153,8 @@ def _top_gap_count(cosines: np.ndarray, top: int = CENTROID_GAP_TOP) -> int:
 def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
     """*rule*'s count of the cosines that stand out (:data:`CENTROID_COUNTS`), or ``None`` with nothing to measure.
 
-    ``gap_floor`` counts as ``count`` does; :func:`centroid_cut` lowers its line to the gap.
+    ``gap_floor`` counts as ``count`` does and ``count_gap_floor`` as ``count_gap``;
+    :func:`centroid_cut` lowers their lines to the gap.
     """
     from vtscore.training.thresholds import _count_estimate  # noqa: PLC0415
 
@@ -181,7 +199,7 @@ def centroid_cut(
         counted = _centroid_count(arr, chosen)
         if counted is not None:
             line = _count_keep_line(arr, float(beta), counted)
-            if chosen == "gap_floor":
+            if chosen in _GAP_FLOORED:
                 line = min(line, float(-np.sort(-arr)[_top_gap_count(arr) - 1]))
             return line
     return float(guarded_text_sort_threshold(scores)[0])

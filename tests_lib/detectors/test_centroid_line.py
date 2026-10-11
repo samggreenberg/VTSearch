@@ -29,11 +29,11 @@ def _rare_target(n_neg: int = 5000, n_pos: int = 4, seed: int = 0) -> np.ndarray
 
 
 class TestTheRules:
-    def test_the_app_draws_the_count_line(self):
-        assert CENTROID_LINE_RULE == "count"
-        cos = _rare_target()
-        for beta in (0.25, 1.0, 4.0):
-            assert centroid_cut(cos, beta=beta) == pytest.approx(_count_line(cos, beta))
+    def test_the_app_draws_the_gap_floored_count(self):
+        assert CENTROID_LINE_RULE == "count_gap_floor"
+        for cos in (_rare_target(), _light_tailed_person()):
+            for beta in (0.25, 1.0, 4.0):
+                assert centroid_cut(cos, beta=beta) == centroid_cut(cos, rule="count_gap_floor", beta=beta)
 
     def test_each_rule_is_the_typed_querys_line_it_names(self):
         cos = _rare_target()
@@ -107,7 +107,7 @@ class TestTheCandidateCounts:
         assert kept["count"] == 1
         assert kept["count_z3"] == 1
         assert kept["count_z3.5"] < 3
-        assert kept["gap"] == kept["count_gap"] == kept["gap_floor"] == 3
+        assert kept["gap"] == kept["count_gap"] == kept["gap_floor"] == kept["count_gap_floor"] == 3
 
     def test_the_gap_floor_keeps_the_gap_at_every_balance(self):
         """A gap is a line: the floor keeps the 3 matches at beta 1/4 and 4 too, where a count is scaled."""
@@ -120,7 +120,22 @@ class TestTheCandidateCounts:
         assert kept[("gap_floor", 0.25)] == 3 and kept[("gap", 0.25)] == 1
         assert kept[("gap_floor", 4.0)] == 3 and kept[("gap", 4.0)] == 8
 
-    @pytest.mark.parametrize("rule", ["count_gap", "gap_floor"])
+    @pytest.mark.parametrize("seed", range(8))
+    def test_count_gap_floor_is_gap_floor_below_beta_1_and_count_gap_above(self, seed):
+        """The identity #4759 reads count_gap_floor's rows by: the tagged runs never drew it."""
+        rng = np.random.default_rng(seed)
+        n_pos = int(rng.integers(1, 60))
+        cos = _rare_target(n_pos=n_pos, seed=seed) if seed % 2 else _light_tailed_person(n_pos=min(n_pos, 8), seed=seed)
+        for beta in (0.25, 0.5, 1.0):
+            assert centroid_cut(cos, rule="count_gap_floor", beta=beta) == centroid_cut(
+                cos, rule="gap_floor", beta=beta
+            )
+        for beta in (1.0, 2.0, 4.0):
+            assert centroid_cut(cos, rule="count_gap_floor", beta=beta) == centroid_cut(
+                cos, rule="count_gap", beta=beta
+            )
+
+    @pytest.mark.parametrize("rule", ["count_gap", "gap_floor", "count_gap_floor"])
     def test_the_gap_hybrids_never_keep_less_than_count(self, rule):
         for seed in range(5):
             cos = _rare_target(n_pos=40, seed=seed)

@@ -43,7 +43,7 @@ head is never fitted to fewer labels than the quota names.
 **Why a Good and 16 Bads (#4731).**  A target with one or two Goods the sort can
 reach never met the first quota, so it never got a trained head, and the
 centroid's midpoint line kept thousands of images on a rare target (#4732, now
-the count line).
+a count floored at the top's widest drop, #4759).
 Autopilot's Good phase now also ends once its walk runs dry, ``moreDryRun``
 (16) picks in a row without a Good, with a Good in hand.  A labelset that left
 such a walk holds a Good and at least that many Bads, which is the second

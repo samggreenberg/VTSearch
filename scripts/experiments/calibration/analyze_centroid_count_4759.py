@@ -44,6 +44,25 @@ from analyze_centroid_line_4732 import SPANS, _mean_se, load_run  # noqa: E402
 KEY = ["run", "dataset", "category", "seed", "beta"]
 
 
+def derived_rule(beta: float) -> str:
+    """Whose rows ``count_gap_floor`` takes at *beta*: it keeps exactly what ``gap_floor`` keeps at beta 1 or
+    below and what ``count_gap`` keeps above (pinned by ``test_centroid_line.py``), so runs priced before it
+    existed read it off those rows, as #4732 read ``text`` off ``count`` and ``guarded``."""
+    return "gap_floor" if beta <= 1 else "count_gap"
+
+
+def add_derived(cells: pd.DataFrame, curves: dict) -> pd.DataFrame:
+    """``count_gap_floor``'s rows and curves from ``gap_floor``'s and ``count_gap``'s, where the runs lack them."""
+    if "count_gap_floor" in set(cells["rule"]) or not {"gap_floor", "count_gap"} <= set(cells["rule"]):
+        return cells
+    pick = cells["rule"] == cells["beta"].map(derived_rule)
+    cells = pd.concat([cells, cells[pick].assign(rule="count_gap_floor")], ignore_index=True)
+    for (label, ds, rule, beta), c in list(curves.items()):
+        if rule == derived_rule(beta):
+            curves[(label, ds, "count_gap_floor", beta)] = c
+    return cells
+
+
 def paired(cells: pd.DataFrame, reference: str) -> pd.DataFrame:
     """Each rule's per-run difference to *reference*, over every span: ``dd_<span>``."""
     ref = cells[cells["rule"] == reference].set_index(KEY)
@@ -128,7 +147,7 @@ def main() -> None:
         df, cv = load_run(label, Path(run), args.horizon, args.workers, variants, args.run_beta)
         frames.append(df)
         curves.update(cv)
-    cells = paired(pd.concat(frames, ignore_index=True), args.reference)
+    cells = paired(add_derived(pd.concat(frames, ignore_index=True), curves), args.reference)
     cells.to_csv(args.out / "cells.csv", index=False)
     summary = summary_table(cells, args.horizon)
     summary.to_csv(args.out / "summary.csv", index=False)
