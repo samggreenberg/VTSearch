@@ -556,3 +556,120 @@ class TestImage2FaceAlign:
             Image2FaceMediaConverter().convert_normalized(
                 {"filename": "x.png", "media_bytes": _png_bytes()}, {"align": "tilt"}
             )
+
+
+class TestImage2FaceSideways:
+    """``sideways`` takes each face's landmarks from the quarter turn MTCNN is most confident of (#4788)."""
+
+    COLOURS = TestImage2FaceAlign.COLOURS
+
+    def _scene(self):
+        """A 200x160 photo holding a face turned 90 degrees clockwise (y down), coloured dots at its landmarks.
+
+        Returns ``(img, true_points, wrong_points, template)``: the landmarks where they are, where an
+        MTCNN that took the face for upright would put them (in the same box), and the template.
+        """
+        from vtscore.converters.image2face import FACE_TEMPLATE
+
+        helper = TestImage2FaceAlign()
+        true_pts = helper._landmarks(80, 90, (100, 80))
+        wrong_pts = helper._landmarks(80, 0, (100, 80))
+        return helper._face(true_pts, size=(200, 160)), true_pts, wrong_pts, np.asarray(FACE_TEMPLATE)
+
+    def _detector(self, img, true_pts, wrong_pts, turned_conf=0.999, fail_turns=False):
+        """Plain pass: the box with upright-looking landmarks at 0.8. The 90-degree copy: the same face, its
+        true landmarks in that copy's frame, at *turned_conf*. The 270-degree copy: nothing."""
+        w, h = img.size
+        box = [60.0, 40.0, 140.0, 120.0]
+        calls = []
+
+        def to_turned_90(pts):  # stored -> turned 90 CCW: (x, y) -> (y, w - x)
+            pts = np.asarray(pts, dtype=float)
+            return np.stack([pts[:, 1], w - pts[:, 0]], axis=1)
+
+        def detect(im, landmarks=False):
+            calls.append(im.size)
+            if im.size == (w, h):
+                return [box], [0.8], [wrong_pts]
+            if fail_turns:
+                raise RuntimeError("no turned pass")
+            if len(calls) == 2:  # the 90-degree copy (h x w)
+                corners = to_turned_90([[box[0], box[1]], [box[2], box[3]]])
+                tbox = [*corners.min(axis=0), *corners.max(axis=0)]
+                return [tbox], [turned_conf], [to_turned_90(true_pts)]
+            return None, [None], None
+
+        det = MagicMock()
+        det.detect.side_effect = detect
+        det.calls = calls
+        return det
+
+    def test_the_frame_mapping_matches_pil_transposes(self):
+        from vtscore.converters.image2face import to_stored_frame
+
+        img = Image.new("L", (40, 30))
+        img.putpixel((7, 3), 255)  # centre (7.5, 3.5)
+        ops = {90: Image.Transpose.ROTATE_90, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_270}
+        for turn, op in ops.items():
+            y, x = np.argwhere(np.asarray(img.transpose(op)) == 255)[0]
+            assert np.allclose(to_stored_frame([[x + 0.5, y + 0.5]], turn, 40, 30), [[7.5, 3.5]])
+
+    def test_a_sideways_face_is_turned_upright(self):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        img, true_pts, wrong_pts, tmpl = self._scene()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        media = {"filename": "lying.png", "media_bytes": buf.getvalue()}
+        conv = Image2FaceMediaConverter()
+        out = {}
+        for sideways in ("false", "true"):
+            with patch.object(conv, "_make_detector", return_value=self._detector(img, true_pts, wrong_pts)):
+                out[sideways] = conv.convert_normalized(
+                    media, {"align": "roll", "sideways": sideways, "padding": "0", "min_size": "1"}
+                )
+        (plain,), (turned,) = out["false"], out["true"]
+        crop = Image.open(io.BytesIO(turned["media_bytes"])).convert("RGB")
+        TestImage2FaceAlign()._assert_dots_at(crop, tmpl * 80)
+        assert plain["media_bytes"] != turned["media_bytes"]
+        # The face, its box and its confidence are the plain pass's either way.
+        assert plain["source_box"] == turned["source_box"]
+        assert plain["custom_metadata"] == turned["custom_metadata"] == {"Detection Confidence": 0.8}
+
+    def test_a_less_confident_turn_changes_nothing(self):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        img, true_pts, wrong_pts, _ = self._scene()
+        conv = Image2FaceMediaConverter()
+        detector = self._detector(img, true_pts, wrong_pts, turned_conf=0.7)
+        faces = conv._kept_faces(detector.detect(img, landmarks=True), *img.size, 0.5, 0.0, 1)
+        again = conv._sideways_landmarks(detector, img, faces)
+        assert np.array_equal(again[0].landmarks, faces[0].landmarks)
+
+    def test_only_quarter_turns_are_searched(self):
+        from vtscore.converters.image2face import SIDEWAYS_TURNS, Image2FaceMediaConverter
+
+        assert SIDEWAYS_TURNS == (90, 270)
+        img, true_pts, wrong_pts, _ = self._scene()
+        detector = self._detector(img, true_pts, wrong_pts)
+        conv = Image2FaceMediaConverter()
+        with patch.object(conv, "_make_detector", return_value=detector):
+            conv._detect_faces(img, 0.5, 0.0, 1, sideways=True)
+        # The plain photo, then one copy turned each quarter way: (200, 160), (160, 200), (160, 200).
+        assert detector.calls == [(200, 160), (160, 200), (160, 200)]
+
+    def test_a_failed_search_keeps_the_plain_landmarks(self):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        img, true_pts, wrong_pts, _ = self._scene()
+        conv = Image2FaceMediaConverter()
+        with patch.object(
+            conv, "_make_detector", return_value=self._detector(img, true_pts, wrong_pts, fail_turns=True)
+        ):
+            (face,) = conv._detect_faces(img, 0.5, 0.0, 1, sideways=True)
+        assert np.allclose(face.landmarks, wrong_pts)
+
+    def test_the_search_is_off_by_default(self):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        assert Image2FaceMediaConverter()._resolve_params(None).sideways is False

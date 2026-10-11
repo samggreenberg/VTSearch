@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
+  looks for each face MTCNN finds again in the photo turned a quarter each way
+  (`SIDEWAYS_TURNS = (90, 270)`) and takes its landmarks from whichever turn MTCNN is most
+  confident of, so `roll` alignment can turn a face lying on its side upright. The faces kept, their
+  boxes, confidences and `source_box` are the plain pass's. `_resolve_params` now returns a
+  `FaceParams` named tuple (`threshold`, `padding`, `min_size`, `align`, `sideways`);
+  `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Additive.
 - **`image2face` aligns each crop by its landmarks** (issue #4777). A new `align` field
   (`"none"`, `"roll"`, `"similarity"`; **default `"roll"`**) fits MTCNN's five landmarks to
   `FACE_TEMPLATE` with `fit_similarity(src, dst) -> (a, b, tx, ty)` and crops through

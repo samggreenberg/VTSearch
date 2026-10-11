@@ -15,6 +15,14 @@ crop so the face is upright, about the box's centre and at the box's own size;
 plain box crop. Alignment changes a crop's pixels only: which faces are found
 and kept, and the ``source_box`` each records, do not depend on it.
 
+**Sideways faces** (``sideways``, #4788). MTCNN finds many a face lying on its
+side but places its landmarks as if it were upright, so the fit reads a small
+angle and ``roll`` turns nothing. With ``sideways`` on, each face MTCNN finds is
+looked for again in the photo turned a quarter each way, and its landmarks come
+from whichever of the three MTCNN is most confident of. The faces found, their
+boxes and confidences stay the plain pass's own; only the landmarks, and so the
+turn, can change.
+
 ``roll`` is the default. On the FHIBE face bench it raised the face review's
 session mean of the objective in every session set (+0.02 to +0.03 from one
 starting photo) and cut failed one-photo sessions from 12 to 7; ``similarity``
@@ -38,7 +46,7 @@ import numpy as np
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.media.provenance import SOURCE_BOX_FIELD
-from vtscore.plugins import PluginField
+from vtscore.plugins import PluginField, parse_checkbox
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +69,26 @@ FACE_TEMPLATE: tuple[tuple[float, float], ...] = (
     (0.311, 0.764),
     (0.720, 0.763),
 )
+
+
+#: The turns, in degrees counter-clockwise, a ``sideways`` search looks at besides
+#: the photo as stored. Not 180: MTCNN finds an upright face in the upside-down copy
+#: with high confidence and places its landmarks upside down, so a half turn only
+#: ever flipped an upright face over (#4788: 15 of 15 such picks on FHIBE).
+SIDEWAYS_TURNS = (90, 270)
+
+#: IoU, in the stored frame, at which a turned copy's detection is the same face.
+SIDEWAYS_IOU = 0.5
+
+
+class FaceParams(NamedTuple):
+    """The converter's settings, resolved from a params dict."""
+
+    threshold: float
+    padding: float
+    min_size: int
+    align: str
+    sideways: bool
 
 
 class FaceDetection(NamedTuple):
@@ -87,6 +115,32 @@ def fit_similarity(src: Any, dst: Any) -> tuple[float, float, float, float]:
     sol, *_ = np.linalg.lstsq(m, d.reshape(-1), rcond=None)
     a, b, tx, ty = (float(v) for v in sol)
     return a, b, tx, ty
+
+
+def to_stored_frame(points: Any, turn: int, w: int, h: int) -> np.ndarray:
+    """Points ``(..., 2)`` found in a ``w`` x ``h`` photo turned *turn* degrees counter-clockwise
+    (PIL's ``Transpose.ROTATE_<turn>``), back in the photo's own frame."""
+    pts = np.asarray(points, dtype=np.float64)
+    u, v = pts[..., 0], pts[..., 1]
+    if turn == 90:
+        x, y = w - v, u
+    elif turn == 180:
+        x, y = w - u, h - v
+    elif turn == 270:
+        x, y = v, h - u
+    elif turn == 0:
+        x, y = u, v
+    else:
+        raise ValueError(f"turn must be a multiple of 90, not {turn}")
+    return np.stack([x, y], axis=-1)
+
+
+def _box_iou(a: Any, b: Any) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
 
 
 def _usable_landmarks(points: Any) -> Optional[np.ndarray]:
@@ -203,6 +257,17 @@ class Image2FaceMediaConverter(MediaConverter):
             default="roll",
             required=False,
         ),
+        PluginField(
+            key="sideways",
+            label="Find sideways faces",
+            field_type="checkbox",
+            description=(
+                "Also look for each face in the photo turned a quarter each way, so a face lying on "
+                "its side is aligned upright. Detection takes about three times as long."
+            ),
+            default="false",
+            required=False,
+        ),
     ]
 
     def __init__(self) -> None:
@@ -279,20 +344,25 @@ class Image2FaceMediaConverter(MediaConverter):
             return None
         return (x1, y1, x2, y2, conf)
 
-    def _resolve_params(self, params: dict[str, Any] | None) -> tuple[float, float, int, str]:
+    def _resolve_params(self, params: dict[str, Any] | None) -> FaceParams:
         threshold = float(self.get_param(params, "threshold") or 0.5)
         padding = float(self.get_param(params, "padding") or 0.0)
         min_size = int(self.get_param(params, "min_size") or 32)
         align = str(self.get_param(params, "align") or "roll")
         if align not in ALIGN_MODES:
             raise ValueError(f"image2face: align must be one of {ALIGN_MODES}, not {align!r}")
-        return threshold, max(0.0, padding), max(1, min_size), align
+        sideways = parse_checkbox(self.get_param(params, "sideways"))
+        return FaceParams(threshold, max(0.0, padding), max(1, min_size), align, sideways)
 
-    def _detect_faces(self, img: Any, threshold: float, padding: float, min_size: int) -> list[FaceDetection]:
+    def _detect_faces(
+        self, img: Any, threshold: float, padding: float, min_size: int, sideways: bool = False
+    ) -> list[FaceDetection]:
         """Run MTCNN on *img* and return the kept detections, highest-confidence first.
 
         The landmarks come from the same pass as the boxes (MTCNN computes them
-        either way), so asking for them changes no box.
+        either way), so asking for them changes no box. With *sideways*, each
+        face's landmarks may come from a quarter-turned copy instead
+        (:meth:`_sideways_landmarks`); if that search fails, the plain pass's stand.
         """
         detector = self._make_detector()
         if detector is None:
@@ -302,7 +372,47 @@ class Image2FaceMediaConverter(MediaConverter):
         except Exception:
             return []
         w, h = img.size
-        return self._kept_faces(detected, w, h, threshold, padding, min_size)
+        faces = self._kept_faces(detected, w, h, threshold, padding, min_size)
+        if sideways and faces:
+            try:
+                faces = self._sideways_landmarks(detector, img, faces)
+            except Exception:
+                logger.warning("image2face: the sideways search failed; keeping the plain landmarks", exc_info=True)
+        return faces
+
+    def _sideways_landmarks(self, detector: Any, img: Any, faces: list[FaceDetection]) -> list[FaceDetection]:
+        """*faces* with each one's landmarks from the turn MTCNN is most confident of it.
+
+        MTCNN runs on *img* turned by each of :data:`SIDEWAYS_TURNS`; a detection
+        there is the same face when its box, mapped back, overlaps the face's own
+        box by :data:`SIDEWAYS_IOU`. A turned copy's landmarks replace the plain
+        pass's only when MTCNN is more confident of the face there. Boxes and
+        confidences are the plain pass's, so the faces kept and the boxes cropped
+        do not change. Errors propagate, for a caller that must fail loudly.
+        """
+        from PIL import Image  # noqa: PLC0415
+
+        transpose = {90: Image.Transpose.ROTATE_90, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_270}
+        w, h = img.size
+        best = [(face.conf, face.landmarks) for face in faces]
+        for turn in SIDEWAYS_TURNS:
+            boxes, probs, points = detector.detect(img.transpose(transpose[turn]), landmarks=True)
+            if boxes is None or points is None:
+                continue
+            for box, prob, pts in zip(boxes, probs, points):
+                try:
+                    conf = float(prob)
+                    corners = to_stored_frame([[box[0], box[1]], [box[2], box[3]]], turn, w, h)
+                except (TypeError, ValueError):
+                    continue
+                mapped = (*corners.min(axis=0), *corners.max(axis=0))
+                landmarks = _usable_landmarks(to_stored_frame(pts, turn, w, h) if pts is not None else None)
+                if landmarks is None:
+                    continue
+                for i, face in enumerate(faces):
+                    if conf > best[i][0] and _box_iou(face.raw, mapped) >= SIDEWAYS_IOU:
+                        best[i] = (conf, landmarks)
+        return [face._replace(landmarks=lm) for face, (_, lm) in zip(faces, best)]
 
     def _kept_faces(
         self, detected: Any, w: int, h: int, threshold: float, padding: float, min_size: int
@@ -332,7 +442,7 @@ class Image2FaceMediaConverter(MediaConverter):
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
 
-        threshold, padding, min_size, align = self._resolve_params(params)
+        threshold, padding, min_size, align, sideways = self._resolve_params(params)
 
         media_bytes = resolve_media_bytes(media)
         if not media_bytes:
@@ -347,7 +457,7 @@ class Image2FaceMediaConverter(MediaConverter):
         img_w, img_h = img.size
         fmt = img.format or "PNG"
 
-        faces = self._detect_faces(img, threshold, padding, min_size)
+        faces = self._detect_faces(img, threshold, padding, min_size, sideways)
 
         stem = (media.get("filename") or "image").rsplit(".", 1)[0]
         out_ext = "png" if fmt.upper() == "PNG" else fmt.lower()
