@@ -155,6 +155,47 @@ class TestTheCandidateCounts:
         assert parse_centroid_line_variants("count_gap@1,mirror_z3.5@4") == [("count_gap", 1.0), ("mirror_z3.5", 4.0)]
 
 
+def _standout_person(n_neg: int = 5000, seed: int = 0) -> np.ndarray:
+    """A person whose best photo stands far above their other three, all above the crowd (#4783)."""
+    rng = np.random.default_rng(seed)
+    bulk = rng.uniform(-0.3, 0.70, n_neg)
+    return np.concatenate([bulk, [0.95, 0.80, 0.79, 0.78]])
+
+
+class TestTheStandoutDrops:
+    """#4783: the widest drop stops after a standout first photo; the candidates look past it."""
+
+    def test_the_widest_drop_keeps_only_the_standout(self):
+        from vtscore.detectors.centroid_head import _top_gap_count
+
+        assert _top_gap_count(_standout_person()) == 1
+
+    @pytest.mark.parametrize("drop", ["skip25", "skip50", "rank5"])
+    def test_each_candidate_keeps_the_whole_person(self, drop):
+        from vtscore.detectors.centroid_head import _top_gap_count
+
+        assert _top_gap_count(_standout_person(), drop=drop) == 4
+
+    @pytest.mark.parametrize("rule", ["count_gap_floor_skip25", "count_gap_floor_skip50", "count_gap_floor_rank5"])
+    def test_the_rules_keep_the_person_at_every_balance(self, rule):
+        cos = _standout_person()
+        for beta in (0.25, 1.0, 4.0):
+            assert int((cos >= centroid_cut(cos, rule=rule, beta=beta)).sum()) >= 4
+        assert int((cos >= centroid_cut(cos, rule="count_gap_floor", beta=0.25)).sum()) == 1
+
+    def test_a_skip_keeps_the_widest_drop_when_it_is_not_the_first(self):
+        from vtscore.detectors.centroid_head import _top_gap_count
+
+        cos = _light_tailed_person()
+        assert _top_gap_count(cos, drop="skip25") == _top_gap_count(cos) == 3
+
+    def test_refuses_an_unknown_drop(self):
+        from vtscore.detectors.centroid_head import _top_gap_count
+
+        with pytest.raises(ValueError, match="drop"):
+            _top_gap_count(_rare_target(), drop="steepest")
+
+
 class TestTheHeadKeepsWhatTheLineKeeps:
     """The count line sits on a media's cosine; the float32 head must still keep that media."""
 
