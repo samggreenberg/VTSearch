@@ -17,10 +17,13 @@ a Good, but under both quotas below      the Goods' centroid (:data:`TIER_CENTRO
 a Good and :data:`DRY_BAD_QUOTA` Bads    the trained head (:data:`TIER_TRAINED`)
 ======================================  =========================================
 
-The centroid is :mod:`vtscore.detectors.centroid_head`.  There is no tier keyed
-on the typed query: a labelset does not carry it (an exported, an imported and
-a CLI-made labelset have none), so a tier that read it would not travel with
-the labels.
+The centroid is :mod:`vtscore.detectors.centroid_head`.  The counts alone never
+read the typed query: a labelset does not carry it (an exported, an imported and
+a CLI-made labelset have none).  A detector made from a typed query keeps it
+instead, and until its labels give the trained head, every row above but the
+last gives that query's own set (:data:`TIER_QUERY`,
+:mod:`vtscore.detectors.query_head`, #4758): the set the opening shows on
+screen, which beat the centroid by 0.13 to 0.20 F-beta on its votes.
 
 **Why 3 and 4.**  They are Autopilot's own quorum, ``goodToStart`` /
 ``badToStart`` in ``frontend/src/app/services/autopilot-state.service.ts``
@@ -82,7 +85,11 @@ TIER_CENTROID = "centroid"
 #: Both quotas met: the trained head (the linear SVM).
 TIER_TRAINED = "trained"
 
-DetectorTier = Literal["none", "centroid", "trained"]
+#: Under the quota, on a detector made from a typed query: the typed query's own set (#4758).
+#: Read off the detector, never the counts: :class:`LabelQuota` gives the other three.
+TIER_QUERY = "query"
+
+DetectorTier = Literal["none", "centroid", "trained", "query"]
 
 
 @dataclass(frozen=True)
@@ -157,13 +164,18 @@ def served_quota(model: object, labelset: "LabelSet | None") -> dict[str, Any]:
 
     ``tier`` is read off *model* rather than the counts, because it is what was
     served: a Good or Bad whose origin did not resolve counts in *labelset* but
-    not toward the quota, so the two can differ.  ``None`` model, ``none`` tier.
+    not toward the quota, so the two can differ, and a typed query's head
+    (:data:`TIER_QUERY`) is the detector's, not the labels'.  ``None`` model,
+    ``none`` tier.
     """
     from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
+    from vtscore.detectors.query_head import is_query_head  # noqa: PLC0415
 
     out = labelset_quota(labelset).as_dict()
     if model is None:
         out["tier"] = TIER_NONE
+    elif is_query_head(model):
+        out["tier"] = TIER_QUERY
     else:
         out["tier"] = TIER_CENTROID if is_centroid_head(model) else TIER_TRAINED
     return out

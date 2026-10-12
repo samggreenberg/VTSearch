@@ -338,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
         f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
+        f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -495,6 +496,7 @@ def main(argv: list[str] | None = None) -> int:
                 centroid_line_variants=cfg.CENTROID_LINE_VARIANTS,
                 handover_shadow=cfg.HANDOVER_SHADOW,
                 handover_sink=handover_local,
+                query_tier=cfg.QUERY_TIER,
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default

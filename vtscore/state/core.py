@@ -1634,13 +1634,14 @@ def _recut_balance(ctx: "DetectorContext", beta: float) -> float | None:
     fallbacks answer, as the retrain's did.  Only a context with no head at
     all still reads the count rule over its ranking (#4413).
     """
-    from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
+    from vtscore.detectors.query_head import is_quota_head  # noqa: PLC0415
     from vtscore.training.thresholds import balance_line  # noqa: PLC0415
 
     if ctx.labels_line is not None:
         return float(ctx.labels_line.threshold(beta))
-    if ctx.centroid_line is not None and is_centroid_head(ctx.model):
-        # The Goods' centroid's line at this balance, on the cosines it was drawn on (#4732).
+    if ctx.centroid_line is not None and is_quota_head(ctx.model):
+        # The Goods' centroid's line, or a typed query's (#4758), at this balance, on the
+        # cosines it was drawn on (#4732).
         return ctx.centroid_line.threshold_at(beta)
     if ctx.model is not None:
         return None
@@ -1810,7 +1811,7 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
     ``None`` when no balance is set (a library caller's choice; the app
     always sets one).
     """
-    from vtscore.detectors.centroid_head import is_centroid_head
+    from vtscore.detectors.query_head import is_quota_head
     from vtscore.training.thresholds import balance_state, gate_balance_state
 
     if beta is None:
@@ -1822,9 +1823,9 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
     else:
         # Under the labelset's line (#4452) the count is what the threshold keeps
         # of the ranking scored last - possibly none - not the count rule's.  So
-        # it is under the Goods' centroid (#4643), whose midpoint the balance
-        # does not move: the count is what that line keeps.
-        drawn = ctx.labels_line is not None or is_centroid_head(ctx.model)
+        # it is under the Goods' centroid (#4643) or a typed query's head (#4758),
+        # each with its own line: the count is what that line keeps.
+        drawn = ctx.labels_line is not None or is_quota_head(ctx.model)
         state = balance_state(
             beta,
             ctx.precision_check,
@@ -1914,11 +1915,11 @@ def detector_acquisition_threshold(
     threshold is not on the estimator's scale) - the two jobs coincide there,
     exactly as they did everywhere before #2876.
     """
-    from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
+    from vtscore.detectors.query_head import is_quota_head  # noqa: PLC0415
 
-    if ctx.centroid_line is not None and is_centroid_head(ctx.model):
-        # The Goods' centroid samples at its cosines' midpoint whatever line it shows,
-        # as a typed query's sort does (#4136, #4732).
+    if ctx.centroid_line is not None and is_quota_head(ctx.model):
+        # The Goods' centroid (and a typed query's head, #4758) samples at its cosines'
+        # midpoint whatever line it shows, as a typed query's sort does (#4136, #4732).
         return ctx.centroid_line.acquisition_threshold()
     if beta is not None:
         from vtscore.training.thresholds import (

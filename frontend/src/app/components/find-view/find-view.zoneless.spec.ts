@@ -318,6 +318,28 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(note?.textContent).toContain("Goods' centroid");
   });
 
+  // #4758: a detector made from a typed query is that query's own set under the
+  // quota, from before its first label, and the left panel says so.
+  it('says when the pass was the typed query', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+
+    httpMock.expectOne('/api/find-label').flush({
+      results: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      label_quota: {
+        tier: 'query', n_good: 0, n_bad: 0, goods_owed: 3, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16,
+      },
+    });
+    httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));
+    await settleZoneless(fixture);
+
+    expect(fixture.componentInstance.detectorNote()).toContain('3 more Goods and 4 more Bads');
+    const note = fixture.nativeElement.querySelector('.find-detector-note');
+    expect(note?.textContent).toContain("the detector's typed query");
+    expect(note?.textContent).not.toContain('centroid');
+  });
+
   // The balance POST is deferred until the picker settles (issue #2973), and
   // that settle window is inside the pair scope too: a pick the user abandons
   // by switching pair must never be written into the pair they switched *to*,

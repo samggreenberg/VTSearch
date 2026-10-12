@@ -285,7 +285,14 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
    it keeps the balance's unchecked set (the mixture's F-beta argmax
    under the balance's cap) and is announced with a
    `detector_unchecked` event; every result it produces carries the
-   same state under `balance`.
+   same state under `balance`. Under the label quota (3 Goods and 4
+   Bads, or a Good and 16 Bads) there is no trained head: a detector
+   made from a typed query scores as that query's own set, in the
+   dataset's text embedder, from before its first label (a
+   `detector_query` event, #4758), and one with no typed query as the
+   Goods' centroid from its first Good (a `detector_centroid` event,
+   #4643). The event's fields are the quota's
+   (`vtscore.detectors.label_quota.served_quota`).
 5. Score each chunk via `_score_medias_with_detectors`, merging hits
    into the accumulated results in place.
 6. Hand the merged `{media_type, detectors_run, results}` dict to
@@ -298,7 +305,10 @@ Detectors whose label origins cannot be resolved from the CLI
 environment (e.g. labels collected through the browser's `local_folder`
 importer have no `resolve_file()` path) raise `ValueError` - that's a
 hard error, not a skip, because it indicates the run cannot be
-reproduced as the user expects.
+reproduced as the user expects. A detector made from a typed query
+scores as its query only while its labels are under the quota both as
+written and as resolved (#4758): one whose labels meet the quota but
+fail to resolve still raises.
 
 ## `vtscore.cli_pipeline` - YAML pipeline files
 
@@ -450,6 +460,8 @@ event includes `event` and `ts`; each row lists the extra fields.
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
 | `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
 | `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |
+| `detector_centroid` | `detector`, `tier` (`centroid`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4643) | `_report_centroid` in `cli.py` |
+| `detector_query`   | `detector`, `query` (the typed query), `tier` (`query`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4758) | `_report_centroid` in `cli.py` |
 | `medias_skipped`   | `skipped: int`, `skipped_ids` (first 100), `embedder`             | `_emit_skipped_medias` in `cli.py`    |
 | `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli.py`    |
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |

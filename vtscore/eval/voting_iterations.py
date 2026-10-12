@@ -88,6 +88,7 @@ from vtscore.eval.step_trainers import (
     _build_eval_atlas,
     _centroid_step,
     _labelset_error_costs,
+    _query_step,
     _score_pool,
     _train_and_calibrate,
 )
@@ -823,6 +824,9 @@ def _score_media_ids(
 
     if not ids:
         return []
+    if step.id_scores is not None:
+        # A typed query's set (#4758): its scores live in the text space, fixed per media.
+        return [step.id_scores[cid] for cid in ids]
     if style_obj is not None:
         # Explicit detection style (see vtscore.eval.patch_styles): the style
         # owns the whole image-scoring rule (whole-image / region max-pool /
@@ -1447,6 +1451,50 @@ def _centroid_test(
         beta=beta,
     )
     return step, [metrics], None
+
+
+def _query_test(
+    seed_scores: dict[int, float],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    beta: float | None,
+    calibration_rows: bool,
+    line_beta: float | None = None,
+) -> tuple[StepModel, list[dict[str, Any]]]:
+    """What a Test on the withheld half gives a typed-query run until the quota (#4758): the typed query's own set.
+
+    The step is :func:`~vtscore.eval.step_trainers._query_step` over the
+    opening's text sort, its line drawn on the withheld half (the corpus a Test
+    there searches) at *line_beta*, and scored there at
+    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  *beta* weights
+    the F-beta columns.  With *calibration_rows* the calibration study's base
+    columns are filled from the same pass (:func:`_standalone_calibration_row`),
+    since the style's node scores are in the run's learning space, not the
+    query's.  Returns the step and its one metric row.
+    """
+    from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
+
+    step = _query_step(seed_scores, test_ids, line_beta=line_beta)
+    scored: list[Any] = []
+    metrics = _evaluate_on_test(
+        step,
+        CENTROID_THRESHOLD,
+        clips_dict,
+        test_ids,
+        target_category,
+        inclusion,
+        scored_sink=scored,
+        beta=beta,
+    )
+    if calibration_rows and scored:
+        metrics = {
+            **metrics,
+            **_standalone_calibration_row(CENTROID_THRESHOLD, {"provenance": "query", "beta": beta}, scored, inclusion),
+        }
+    return step, [metrics]
 
 
 # ------------------------------------------------------------------
@@ -2522,6 +2570,7 @@ def simulate_voting_iterations(  # noqa: C901
     centroid_line_variants: "Sequence[str] | None" = None,
     handover_shadow: bool = False,
     handover_sink: Optional[list[dict[str, Any]]] = None,
+    query_tier: bool = True,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2697,6 +2746,14 @@ def simulate_voting_iterations(  # noqa: C901
             (:data:`~vtscore.eval.arms_handover.HANDOVER_COLUMNS`): held-out
             Goods' ranks in the unvoted pool under each detector, and the
             centroid-prior heads' AP.  Single-vector runs only.
+        query_tier: Whether a run that opens on a typed query (*seed_scores*
+            from the caller, no *seed_examples*) is a typed-query detector, as
+            the app's is (#4758): until the quota, a Test on the withheld half
+            gives the typed query's own set (:func:`_query_test`), from the
+            first vote, rows tagged ``detector_tier = "query"``.  ``True`` - the
+            default - is the app; ``False`` is the arm before (the Goods'
+            centroid from the first Good, no row before it).  Inert without the
+            quota, and on an example or known-good opening.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -3233,6 +3290,13 @@ def simulate_voting_iterations(  # noqa: C901
     # The example opening (#4699): the photos the user starts from, and the sort
     # they make.  After the split and every thinning, so the examples are drawn
     # from the voting half the run actually walks.
+    # A typed-query run is a typed-query detector (#4758): until the quota, its
+    # Test gives the typed query's own set, from the first vote.  Read before the
+    # example opening below builds its own sort into ``seed_scores``.
+    query_scores: Optional[dict[int, float]] = (
+        seed_scores if bool(query_tier) and quota_on and seed_examples is None else None
+    )
+    query_on = query_scores is not None
     pending_examples: list[int] = []
     if seed_examples is not None:
         pending_examples = choose_examples(sim_ids, clips_dict, target_category, seed_examples, seed)
@@ -3821,28 +3885,42 @@ def simulate_voting_iterations(  # noqa: C901
                     span=atlas.span_info() if atlas is not None else None,
                     last_vote_good=is_positive,
                 )
-            if quota_on and good_votes:
+            if quota_on and (good_votes or query_on):
                 # No head without a Bad, but Test gives the Goods' centroid
-                # from the first Good (#4643), so this click has a row.  The
-                # Train side has nothing to record: no line, no pool scores.
-                # The row's balance is the one a trained step records, which
-                # only the safe-threshold path draws a line at.
+                # from the first Good (#4643), and a typed-query run's Test
+                # gives the typed query's own set from the first vote (#4758),
+                # so this click has a row.  The Train side has nothing to
+                # record: no line, no pool scores.  The row's balance is the one
+                # a trained step records, which only the safe-threshold path
+                # draws a line at.
                 row_beta = beta if safe_thresholds else None
                 t_test = time.monotonic()
-                c_step, c_rows, _c_cal = _centroid_test(
-                    good_votes,
-                    clips_dict,
-                    test_ids,
-                    target_category,
-                    inclusion,
-                    region_voting=region_voting,
-                    region_aware=region_aware,
-                    style_obj=style_obj,
-                    beta=row_beta,
-                    calibration_rows=emit_calibration_metrics and style_obj is not None,
-                    line_rule=centroid_line,
-                    line_beta=beta,
-                )
+                if query_scores is not None:
+                    c_step, c_rows = _query_test(
+                        query_scores,
+                        clips_dict,
+                        test_ids,
+                        target_category,
+                        inclusion,
+                        beta=row_beta,
+                        calibration_rows=emit_calibration_metrics and style_obj is not None,
+                        line_beta=beta,
+                    )
+                else:
+                    c_step, c_rows, _c_cal = _centroid_test(
+                        good_votes,
+                        clips_dict,
+                        test_ids,
+                        target_category,
+                        inclusion,
+                        region_voting=region_voting,
+                        region_aware=region_aware,
+                        style_obj=style_obj,
+                        beta=row_beta,
+                        calibration_rows=emit_calibration_metrics and style_obj is not None,
+                        line_rule=centroid_line,
+                        line_beta=beta,
+                    )
                 c_seconds = time.monotonic() - t_test
                 c_bands = _band_metrics(
                     c_step,
@@ -3861,7 +3939,7 @@ def simulate_voting_iterations(  # noqa: C901
                     float("nan"),
                     {},
                     {"beta": row_beta},
-                    "centroid",
+                    "query" if query_on else "centroid",
                 )
                 c_timing = {
                     "calibrate_count": 0,
@@ -3876,6 +3954,9 @@ def simulate_voting_iterations(  # noqa: C901
                 }
                 for mr in c_rows:
                     rows.append({**c_ident, **mr, **c_bands, **c_timing})
+                if query_on:
+                    # The centroid is not what Test gives here, so its lines are not priced.
+                    continue
                 rows.extend(
                     _centroid_line_variant_rows(
                         line_variants,
@@ -4073,6 +4154,8 @@ def simulate_voting_iterations(  # noqa: C901
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
         centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
+        # ... and a typed-query run's Test gives the typed query's own set (#4758).
+        query = centroid and query_on
         centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
@@ -4080,7 +4163,19 @@ def simulate_voting_iterations(  # noqa: C901
         calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None = None
         metrics: dict[str, float] = {}
         t_test = time.monotonic()
-        if centroid:
+        if centroid and query_scores is not None:
+            centroid_step, c_rows = _query_test(
+                query_scores,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                beta=details.get("beta"),
+                calibration_rows=emit_calibration_metrics and style_obj is not None,
+                line_beta=beta,
+            )
+            metrics = c_rows[0]
+        elif centroid:
             centroid_step, c_rows, calibration = _centroid_test(
                 good_votes,
                 clips_dict,
@@ -4242,7 +4337,7 @@ def simulate_voting_iterations(  # noqa: C901
             threshold,
             pool_scores,
             details,
-            "centroid" if centroid else "trained",
+            "query" if query else "centroid" if centroid else "trained",
         )
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
@@ -4497,7 +4592,7 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
-        if centroid and line_variants:
+        if centroid and line_variants and not query:
             rows.extend(
                 _centroid_line_variant_rows(
                     line_variants,

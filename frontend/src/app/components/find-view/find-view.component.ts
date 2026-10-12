@@ -52,7 +52,7 @@ import {
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { lineBalanceFrom } from '../../utils/line-balance';
 import { testLineState } from '../../utils/line-test';
-import { centroidNote } from '../../utils/label-quota';
+import { quotaNote } from '../../utils/label-quota';
 import type { LabelQuota } from '../../generated/api-client/models/label-quota';
 import {
   coerceFocusMode,
@@ -229,11 +229,12 @@ export class FindViewComponent implements OnInit, OnDestroy {
   );
   /**
    * Which detector the last scoring pass was given (#4643): under the label
-   * quota the Goods' centroid, which the left panel says, with the labels it
-   * still owes. Null before a pass, or while one runs.
+   * quota a typed-query detector's own query (#4758) or the Goods' centroid,
+   * which the left panel says, with the labels it still owes. Null before a
+   * pass, or while one runs.
    */
   readonly labelQuota = signal<LabelQuota | null>(null);
-  readonly detectorNote = computed(() => centroidNote(this.labelQuota()));
+  readonly detectorNote = computed(() => quotaNote(this.labelQuota()));
   /** Bumped when the session's checks changed under a finished test, so the result pane re-reads them. */
   readonly resultRefresh = signal(0);
 

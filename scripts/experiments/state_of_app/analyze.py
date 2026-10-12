@@ -84,12 +84,13 @@ a detector that flags nothing) scores precision 0 beside its recall and F-beta
 of 0, never an undefined precision that leaves the mean (``curves.EMPTY_SET``).
 
 **The report is the session, not Test (#4643).**  The harness scores the test
-split as Test would at each click: from the first Good, the Goods' centroid
-until the labels meet the label quota (3 Goods and 4 Bads, or a Good and 16
-Bads), the trained head from there (``detector_tier``).  The session shows neither until the Hard phase
-(``app_trained``, #4605): Autopilot's opening is the text sort, so Test differs
-from the session through the whole opening - the centroid before the quota, the
-trained head between the quota and the Hard phase.  This report follows the
+split as Test would at each click: until the labels meet the label quota (3
+Goods and 4 Bads, or a Good and 16 Bads) the typed query's own set from the first
+vote (#4758; the Goods' centroid from the first Good in a run before it), the
+trained head from there (``detector_tier``).  The session shows the trained head
+only from the Hard phase (``app_trained``, #4605): Autopilot's opening is the
+text sort, so Test and the session agree before the quota and differ between the
+quota and the Hard phase.  This report follows the
 session there (:func:`_shown_from`): every user-facing number before the hand-off
 is the typed query's set.  The viewer draws what Test gives instead
 (``calibration/viewer.py``), so the two differ through the opening on purpose.

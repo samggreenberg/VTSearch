@@ -56,6 +56,7 @@ import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/dete
 import { IconComponent } from '../icon/icon.component';
 import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { HintId } from '../../services/hints.service';
+import { typedQuery } from '../../utils/label-quota';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 /** What a dataset of each media type holds, for Toasty's "add a dataset" hint. */
@@ -1388,8 +1389,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return types.size === 1;
   }
 
+  /** Whether a ticked detector has nothing to score with: no labels, and no
+   *  typed query, which a detector made from one is until it has a trained
+   *  head (#4758). */
   private hasUntrainedModel(): boolean {
-    return this.resolvedSelectedModels.some((m) => (m.num_training ?? 0) === 0);
+    return this.resolvedSelectedModels.some((m) => (m.num_training ?? 0) === 0 && !typedQuery(m));
   }
 
   private get resolvedSelectedDatasets(): DatasetRegistryEntry[] {
@@ -1402,10 +1406,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Why the selection cannot be scored, or `''` when it can: at least one
    *  dataset and one detector, one media type across every ticked row, and
-   *  every ticked detector trained. Test and Find share this rule, except that
-   *  Test (*onePair*) opens one view on one pair and so takes exactly one of
-   *  each, as Train does; Find runs AutoFind on every ticked dataset with every
-   *  ticked detector.
+   *  every ticked detector with labels or a typed query (#4758). Test and Find
+   *  share this rule, except that Test (*onePair*) opens one view on one pair
+   *  and so takes exactly one of each, as Train does; Find runs AutoFind on
+   *  every ticked dataset with every ticked detector.
    *
    *  Each reason is shown under its button as well as in the tooltip, so it
    *  must fit the fixed-width `.action-btn-group` (about 36 characters at the

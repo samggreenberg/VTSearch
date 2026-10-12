@@ -4877,10 +4877,11 @@
             "type": "integer"
           },
           "tier": {
-            "description": "``centroid``: the Goods' centroid cut with a GMM, given under the quota; ``trained``: the trained head; ``none``: no Good to sort toward.",
+            "description": "``query``: under the quota, on a detector made from a typed query, the text sort's own set for that query at the detector's balance (#4758); ``centroid``: under the quota, on a detector with no typed query, the Goods' centroid, keeping the unvoted media that stand out at the balance; ``trained``: the trained head; ``none``: no Good and no typed query to sort toward.",
             "enum": [
               "none",
               "centroid",
+              "query",
               "trained"
             ],
             "type": "string"
