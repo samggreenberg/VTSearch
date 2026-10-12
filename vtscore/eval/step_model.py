@@ -114,17 +114,18 @@ def resolve_trainer_name(trainer: str) -> str:
     return APP_TRAINER if trainer == LEGACY_APP_TRAINER else trainer
 
 
-#: The head the **app** trains, and therefore the harness's default arm:
-#: ``vtscore.detectors.training.train_and_threshold`` pins ``hidden_dim =
-#: LINEAR_SVM_HEAD`` on every production fit.  ``head=None`` resolves to this,
-#: the way ``style=None`` and ``blend_schedule=None`` resolve to the app's
-#: geometry and blend schedule — an eval default that isn't the app default
-#: measures a detector nobody ships (see the "Eval Default Arm IS the App"
-#: rule).  If the shipped head ever changes, move this with it:
-#: ``test_harness_linear_head`` pins the two against each other by training the
-#: real app pipeline, so the suite fails rather than letting the default arm
-#: drift silently.
-PRODUCTION_HEAD: str = "linear_svm"
+#: The head the **app** trains, and therefore the harness's default arm: since
+#: #4785 ``vtscore.detectors.training`` pins ``hidden_dim = LINEAR_SVM_PRIOR_HEAD``
+#: (the linear SVM started from the Goods' centroid) on every production fit,
+#: in every space.  ``head=None`` resolves to this, the way ``style=None`` and
+#: ``blend_schedule=None`` resolve to the app's geometry and blend schedule — an
+#: eval default that isn't the app default measures a detector nobody ships (see
+#: the "Eval Default Arm IS the App" rule).  If the shipped head ever changes,
+#: move this with it: ``test_harness_linear_head`` pins the two against each
+#: other by training the real app pipeline, so the suite fails rather than
+#: letting the default arm drift silently.  ``"linear_svm"``, the plain SVM, is
+#: the arm before #4785.
+PRODUCTION_HEAD: str = "linear_svm_prior"
 
 
 def resolve_hidden_dim(head: str, n_votes: int) -> int:

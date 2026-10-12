@@ -139,8 +139,7 @@ from vtscore.training.thresholds import (
 #: unspecified ``style=`` resolves to below.  Named rather than inlined so that
 #: "is this run measuring the shipped geometry?" is a question something can
 #: *ask*: `scripts/experiments/preflight.sh` compares a study's configured
-#: styles against it, the way it compares a study's head against
-#: :data:`PRODUCTION_HEAD`.  The HAC hybrids in
+#: styles against it, the way it flags a study that pins a head.  The HAC hybrids in
 #: :mod:`vtscore.eval.patch_styles` are experiment-only arms; #2886 removed the
 #: region tree from ingest.
 PRODUCTION_PATCH_STYLE: str = "max_patch"
@@ -1908,10 +1907,10 @@ def _resolve_head(head: Optional[str], trainer: str) -> str:
                 f"its own standalone estimator and has no head to choose"
             )
     # **The default arm must be the app's default.**  Production pins the linear
-    # SVM head on every fit (``hidden_dim = LINEAR_SVM_HEAD`` in
-    # ``vtscore.detectors.training.train_and_threshold``), so an unspecified head
-    # resolves to it — the same way *style* and *blend_schedule* resolve to the
-    # app's geometry and schedule below.  The head fits the final model *and*
+    # SVM started from the Goods' centroid on every fit (``hidden_dim =
+    # LINEAR_SVM_PRIOR_HEAD`` in ``vtscore.detectors.training.train_and_threshold``,
+    # #4785), so an unspecified head resolves to it — the same way *style* and
+    # *blend_schedule* resolve to the app's geometry and schedule below.  The head fits the final model *and*
     # the calibration folds, so it moves the thresholds and, through the vote
     # order, the whole trajectory: defaulting to a retired head would make every
     # unqualified run measure a detector nobody ships.  ``head="linear"`` (the
@@ -2535,9 +2534,10 @@ def simulate_voting_iterations(  # noqa: C901
             better, and VTSearch's vote order depends on the model).
         head: Which classifier head the ``"app"`` pipeline fits at each step
             (see :data:`HEADS`).  ``None`` (default) resolves to the **app's**
-            head, :data:`PRODUCTION_HEAD` — the linear SVM a live VTSearch
-            detector actually has, so a default run's thresholds and costs are
-            the ones users see.  ``"linear"`` (the logistic head the SVM
+            head, :data:`PRODUCTION_HEAD` — the linear SVM started from the Goods'
+            centroid (``"linear_svm_prior"``) a live VTSearch detector has since
+            #4785, so a default run's thresholds and costs are the ones users
+            see.  ``"linear_svm"``, the plain SVM, is the arm before it.  ``"linear"`` (the logistic head the SVM
             replaced) and ``"mlp"`` (the harness's auto-sized hidden layer,
             #2781) are the explicitly-named legacy arms.  The head is threaded
             into the calibration folds as well, mirroring how production threads

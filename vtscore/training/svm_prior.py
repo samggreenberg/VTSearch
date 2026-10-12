@@ -1,4 +1,4 @@
-"""The linear SVM started from the Goods' centroid, an eval arm (issue #4776).
+"""The linear SVM started from the Goods' centroid: the app's detector head (#4776, #4785).
 
 Below the label quota Test gives the Goods' centroid; at the quota it hands over
 to the trained head, a linear SVM on 3 Goods and 4 Bads.  On FHIBE's face crops
@@ -23,8 +23,12 @@ descent crawling to its iteration cap, at the same optimum (#4776's harness
 check: direction cosine 1.00000, 5 ms against up to 2.5 s).
 
 It is reached through :func:`vtscore.training.mlp.train_model` via the
-:data:`~vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD` sentinel, from the eval
-harness's ``head="linear_svm_prior"``.  It is not reachable from the app.
+:data:`~vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD` sentinel, which every
+production fit passes since #4785, in every space: priced as full sessions it
+gained on FHIBE's faces and COCO Better's Binary opening, and on the Region path
+it ranked slightly better at a hair's cost in F-beta (−0.002 ± 0.002), and the
+owner chose one head everywhere.  The eval harness names it
+``head="linear_svm_prior"``; ``head="linear_svm"`` is the plain SVM before it.
 """
 
 from __future__ import annotations

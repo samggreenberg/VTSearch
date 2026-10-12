@@ -256,7 +256,7 @@ def test_rows_record_the_head_and_linear_runs_end_to_end():
     assert rows, "no rows produced"
     assert {r["head"] for r in rows} == {"linear_svm"}
     assert "head" in IDENT_COLUMNS
-    assert step_model.PRODUCTION_HEAD == "linear_svm"
+    assert step_model.PRODUCTION_HEAD == "linear_svm_prior"
     # The #2799 variant rows still ride along under safe_thresholds.
     assert {r["gmm_variant"] for r in rows} >= {"", "xcal_only", "pooled_cross"}
     for r in rows:

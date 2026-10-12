@@ -84,14 +84,16 @@ class TestRepoIsClean:
     def test_runs_fast_enough_to_gate(self):
         """It runs on every `./run-tests.sh`, so it must stay cheap.
 
-        The bound is deliberately loose: this asserts on wall clock, and the
-        suite runs under ``pytest -n auto`` on whatever machine is free. It is
-        here to catch an order-of-magnitude regression (an accidental import of
-        the package under test, a quadratic sweep), not to police tenths.
+        The bound is deliberately loose. It is here to catch an
+        order-of-magnitude regression (an accidental import of the package under
+        test, a quadratic sweep), not to police tenths. It times this process's
+        CPU, not the wall clock: under ``pytest -n auto`` the wall clock measures
+        the node's load, and a gate that takes 3.5 s alone failed at 20-27 s
+        (#4795).
         """
-        start = time.monotonic()
+        start = time.process_time()
         gate._check_sections(gate._index_classes(), gate._index_module_level())
-        assert time.monotonic() - start < 20.0
+        assert time.process_time() - start < 20.0
 
     def test_every_section_is_reachable(self):
         """Each configured section resolves to a real heading in a real file."""

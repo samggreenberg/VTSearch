@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector no longer gets worse the moment it starts learning** (issue #4785). Until you have 3 Goods and 4 Bads, Test ranks by the average of your Goods; after
+  that a trained detector takes over. On faces that first detector used to rank the person you are
+  looking for noticeably worse than the average it replaced, and Find dipped for the next few votes.
+  The trained detector now starts from that average and moves away from it only as your votes give
+  it reason to. On FHIBE's faces what Find returns over the first 50 votes improves at every
+  Threshold preset (mean F-beta +0.04 to +0.07), and on COCO photos slightly (+0.004 to +0.007).
+  Region detectors (DINOv3 patches) rank slightly better and return about the same.
+
 - **Moving the Threshold redraws a text or example sort's line on the spot** (issue #4760).
   A typed query's line has followed the balance since #4603, and an example sort's since #4732,
   but both were drawn only when the sort ran: moving the Threshold afterwards left the old line,
