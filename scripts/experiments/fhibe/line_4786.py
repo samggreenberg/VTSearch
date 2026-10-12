@@ -268,6 +268,8 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
                     "f_oracle": f["oracle"][i],
                     "f_carry": fk["carry"],
                     "f_headcount": fk["headcount"],
+                    "k_headcountb1": counts["headcountb1"],
+                    "f_headcountb1": fk["headcountb1"],
                     "f_centroid": float(rec["centroid_fbeta"]),
                 }
             )

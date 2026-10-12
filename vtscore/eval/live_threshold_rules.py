@@ -233,7 +233,7 @@ def head_count_bads(bads: "int | str | None") -> Iterator[None]:
     """Hold the labels line's head-count gate at *bads* while the block runs (#4786).
 
     Until the class model holds :data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_BADS`
-    Bads, a balance above beta 1 keeps the head's count line
+    Bads (and fewer than its ``HEAD_COUNT_GOODS`` Goods), the line keeps the head's count
     (:func:`~vtscore.training.thresholds.labels_line.head_count_cut`).  *bads* replaces that
     gate: ``0`` is the line before #4786, another count prices another gate, and ``None``
     changes nothing (the app's).  Every line reads the module's constant when it cuts,

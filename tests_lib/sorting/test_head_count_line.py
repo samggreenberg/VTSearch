@@ -1,9 +1,10 @@
-"""The head's count line (#4786): while the class model holds few Bads, a recall-leaning line counts what stands out.
+"""The head's count line (#4786): while the class model is thin, the line counts what stands out.
 
-At beta 4 the labels line's cut on a class model fitted to a handful of held-out
-Bads reached deep into its tail.  Until the model holds ``HEAD_COUNT_BADS`` Bads, a
-balance above beta 1 keeps instead what the Goods' centroid's count rule finds
-standing out in the head's own scores.
+At the hand-over the labels line's cut on a class model fitted to a handful of
+held-out votes went wrong both ways (one face, or thousands).  While the model holds
+fewer than ``HEAD_COUNT_BADS`` Bads and ``HEAD_COUNT_GOODS`` Goods, the line at every
+balance keeps instead what the Goods' centroid's count rule finds standing out in the
+head's own scores.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ from vtscore.eval.live_threshold_rules import head_count_bads
 from vtscore.training.thresholds import (
     HEAD_COUNT_BADS,
     HEAD_COUNT_GOODS,
-    HEAD_COUNT_MIN_BETA,
     corpus_cut,
     fit_labels_line,
     head_count_cut,
@@ -66,45 +66,44 @@ class TestTheCut:
 
 
 class TestTheGate:
-    def test_few_bads_and_a_recall_lean(self):
+    def test_few_bads_and_few_goods(self):
         line = fit_labels_line(_orderings(4, 4), _corpus())
         assert line is not None and line.model.n_neg == 4
-        assert head_count_serves(line.model, 4.0)
-        assert not head_count_serves(line.model, HEAD_COUNT_MIN_BETA)
-        assert not head_count_serves(line.model, 0.25)
+        assert head_count_serves(line.model)
 
     def test_the_class_model_takes_over_at_the_bads(self):
         line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS), _corpus())
-        assert line is not None and not head_count_serves(line.model, 4.0)
+        assert line is not None and not head_count_serves(line.model)
         line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS - 1), _corpus())
-        assert line is not None and head_count_serves(line.model, 4.0)
+        assert line is not None and head_count_serves(line.model)
 
     def test_and_at_the_goods(self):
         line = fit_labels_line(_orderings(HEAD_COUNT_GOODS, 4), _corpus())
-        assert line is not None and not head_count_serves(line.model, 4.0)
+        assert line is not None and not head_count_serves(line.model)
         line = fit_labels_line(_orderings(HEAD_COUNT_GOODS - 1, 4), _corpus())
-        assert line is not None and head_count_serves(line.model, 4.0)
+        assert line is not None and head_count_serves(line.model)
 
 
 class TestTheLine:
-    def test_at_beta_4_with_few_bads_the_line_is_the_heads_count(self):
+    def test_with_a_thin_model_the_line_is_the_heads_count_at_every_balance(self):
         line = fit_labels_line(_orderings(4, 4), _corpus())
         assert line is not None and line.unvoted_scores is not None
-        assert line.threshold(4.0) == min(head_count_cut(line.unvoted_scores, 4.0), line.threshold(1.0))
+        for beta in (0.25, 1.0, 4.0):
+            assert line.threshold(beta) == head_count_cut(line.unvoted_scores, beta)
 
-    def test_it_never_keeps_fewer_than_the_balanced_line(self):
-        """A recall-leaning balance returns at least the balanced set: the count is floored at beta 1's cut."""
+    def test_a_recall_lean_keeps_at_least_a_precision_lean(self):
+        """The count is beta ** 0.708 times what stands out, so the line keeps more as the balance leans to recall."""
         for seed in range(12):
             line = fit_labels_line(_orderings(4, 4, seed=seed), _corpus(seed + 1))
             assert line is not None and line.unvoted_scores is not None
             kept = [_kept(line.unvoted_scores, line.threshold(b)) for b in (0.25, 0.5, 1.0, 1.5, 2.0, 4.0)]
             assert kept == sorted(kept), kept
 
-    def test_at_beta_1_and_below_it_is_the_class_models_cut(self):
-        line = fit_labels_line(_orderings(4, 4), _corpus())
+    def test_a_model_with_the_labels_cuts_on_them(self):
+        line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS), _corpus())
         assert line is not None and line.unvoted_scores is not None and line.unvoted_posteriors is not None
         total = float(line.unvoted_share or 0.0) * line.unvoted_scores.size
-        for beta in (0.25, 1.0):
+        for beta in (0.25, 1.0, 4.0):
             assert line.threshold(beta) == corpus_cut(line.unvoted_posteriors, line.unvoted_scores, total, beta)
 
     def test_find_on_another_corpus_draws_it_there(self):
@@ -113,7 +112,7 @@ class TestTheLine:
         other = _corpus(2)
         on = line.on_corpus(other)
         assert on.unvoted_scores is not None
-        assert on.threshold(4.0) == min(head_count_cut(on.unvoted_scores, 4.0), on.threshold(1.0))
+        assert on.threshold(4.0) == head_count_cut(on.unvoted_scores, 4.0)
 
     def test_gate_zero_is_the_line_before_4786(self):
         line = fit_labels_line(_orderings(4, 4), _corpus())
@@ -121,7 +120,7 @@ class TestTheLine:
         total = float(line.unvoted_share or 0.0) * line.unvoted_scores.size
         with head_count_bads(0):
             assert line.threshold(4.0) == corpus_cut(line.unvoted_posteriors, line.unvoted_scores, total, 4.0)
-        assert line.threshold(4.0) == min(head_count_cut(line.unvoted_scores, 4.0), line.threshold(1.0))
+        assert line.threshold(4.0) == head_count_cut(line.unvoted_scores, 4.0)
 
 
 class TestTheKnob:

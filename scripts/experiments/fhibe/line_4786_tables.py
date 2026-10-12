@@ -29,6 +29,7 @@ from pathlib import Path
 import pandas as pd
 
 RULES = [
+    ("headcountb1", "the head's count, never fewer than the beta-1 line's (shipped)"),
     ("headcount", "the head's count (the centroid's rule on the head's scores)"),
     ("headcountmin", "the fewer of today's and the head's count"),
     ("carry", "the centroid's count carried"),
@@ -118,11 +119,16 @@ def main() -> int:
         out += _table(rules, b4, names, span) + [""]
     for span, title in (("1_50", "votes 1-50"), ("1_150", "votes 1-150")):
         out += [f"### The head's count under each gate, beta 4, {title}", ""]
-        out += _table(rules, b4, [(f"headcount@{x}", label) for x, label in GATES], span) + [""]
+        out += _table(rules, b4, [(f"headcountb1@{x}", label) for x, label in GATES], span) + [""]
     if low:
         for span, title in (("1_50", "votes 1-50"), ("1_150", "votes 1-150")):
             out += [f"### Were it drawn at beta 1/4 and 1 ({g}), {title}", ""]
-            out += _table(rules, low, [(f"headcount@{g}", "the head's count"), ("oracle", "per-click oracle")], span)
+            out += _table(
+                rules,
+                low,
+                [(f"headcountb1@{g}", "the head's count, floored at beta 1"), ("oracle", "per-click oracle")],
+                span,
+            )
             out += [""]
     if args.ab:
         ab = pd.concat([pd.read_csv(p) for p in args.ab], ignore_index=True)
@@ -154,8 +160,8 @@ def main() -> int:
         for s, d in fc.groupby("set", sort=False):
             out.append(
                 f"| {s} | {len(d)} | {d['n_test_pos'].median():g} | {d['k_test'].median():g} / {d['k_test'].quantile(0.9):.0f} | "
-                f"{d['k_head_count'].median():g} / {d['k_head_count'].quantile(0.9):.0f} | "
-                f"{d['last_centroid_f'].mean():.2f} → {d['f_today'].mean():.2f} | {d['f_headcount'].mean():.2f} |"
+                f"{d['k_headcountb1'].median():g} / {d['k_headcountb1'].quantile(0.9):.0f} | "
+                f"{d['last_centroid_f'].mean():.2f} → {d['f_today'].mean():.2f} | {d['f_headcountb1'].mean():.2f} |"
             )
         out.append("")
     args.out.write_text("\n".join(out))

@@ -17,7 +17,7 @@ takes a legend in its empty corner; the report's tables carry every number.
 Usage::
 
     python line_4786_figures.py --curves <curves.csv> ... --first <first_clicks.csv> ... \
-        [--arm <prior_curves.csv> ...] [--per-run <prior_per_run.csv> ...] [--rule headcount@neg32pos6] --out <dir>
+        [--arm <prior_curves.csv> ...] [--per-run <prior_per_run.csv> ...] [--rule headcountb1@neg32pos6] --out <dir>
 """
 
 from __future__ import annotations
@@ -120,7 +120,7 @@ def fig_first(fc: pd.DataFrame, out: Path) -> None:
         for col, label, color in (
             ("n_test_pos", "the person's withheld photos", INK2),
             ("k_test", "today's line keeps", SLOTS[0]),
-            ("k_head_count", "the head's count keeps", SLOTS[1]),
+            ("k_headcountb1", "the head's count keeps", SLOTS[1]),
         ):
             v = np.sort(np.clip(d[col].to_numpy(float), 1, None))
             y = np.arange(1, v.size + 1) / v.size
@@ -166,7 +166,7 @@ def main() -> int:
     ap.add_argument("--first", type=Path, action="append", default=[], help="line_4786.py first_clicks.csv")
     ap.add_argument("--arm", type=Path, action="append", default=[], help="prior_4776.py prior_curves.csv")
     ap.add_argument("--per-run", type=Path, action="append", default=[], help="prior_4776.py prior_per_run.csv")
-    ap.add_argument("--rule", default="headcount@neg32pos6")
+    ap.add_argument("--rule", default="headcountb1@neg32pos6")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     _style()

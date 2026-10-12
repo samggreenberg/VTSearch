@@ -115,7 +115,7 @@ class TestTheHeadCountLine:
             and s["model_n_pos"] < HEAD_COUNT_GOODS
         ]
         assert gated, "the run should reach a trained click with few Bads"
-        assert all(s["k_test"] == max(s["k_head_count"], s["k_labels_b1"]) for s in gated)
+        assert all(s["k_test"] == s["k_head_count"] for s in gated)
 
     def test_gate_zero_draws_the_class_models_cut(self):
         from vtscore.eval.live_threshold_rules import head_count_bads
