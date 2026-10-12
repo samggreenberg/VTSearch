@@ -59,11 +59,8 @@
       @switch (session.phase()) {
         @case ('done') {
           <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
+          <!-- What to do next is Toasty's to say (test-done, below; #4807). -->
           <p class="stage-heading">Test done</p>
-          <p class="stage-body">
-            The picks have said what they can about the line. Read the result on the right, or open the Review tab to
-            walk the list yourself.
-          </p>
         }
         @case ('nothing') {
           <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>

@@ -37,7 +37,8 @@ At most one at a time: the first row, top to bottom, whose condition holds
 (`dashboardHint` in `dashboard.component.ts`). So each row also means "and no
 row above it fires". None shows while Add Dataset or New Detector is open, or
 while the Dashboard is switching context. While one is on show, the reason
-under a disabled Train / Test / Find button is hidden: Toasty is saying it.
+under a disabled Train / Test / Find button is hidden, and so is an empty
+table's "Click **+** to add one": Toasty is saying it.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
@@ -95,7 +96,7 @@ dry-run length, 16.
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
 | `test-vote` | happy | Test shows you picks from both sides of your detector's line, in random order. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
-| `test-done` | happy | The test is done. Read the verdict on the right, or open the **Review** tab to check the list yourself. | The test reached Done. Stands under the stage's **Test done** note. |
+| `test-done` | happy | The test is done. Read the verdict on the right, or open the **Review** tab to check the list yourself. | The test reached Done. Stands under the stage's **Test done** heading, which says nothing more. |
 | `review` | happy | Every item is here, best match first. Click one to check it with Good or Bad, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
 
 ## Dialogs
@@ -106,7 +107,7 @@ Each fires while its dialog is open and on top.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `import-dataset` | happy | Pick where your {media} come from, fill in the form, and click **Import**. | **Add Dataset** is open. |
+| `import-dataset` | happy | Pick where your {media} come from, fill in the form, and click **Import**. | **Add Dataset** is open. Its picker's "Select what type of dataset to add." line hides while this is up. |
 | `new-detector` | happy | Describe what you're looking for in a few words, or give an example, then click **Create**. | **New Detector** is open on its main view (not its media picker). |
 | `use-example` | happy | **OK** uses the whole file as the example; **OK but Crop** lets you mark just the part you mean. | **Use This Example?** is open; the crop view carries its own instructions. |
 | `find-results` | happy | These are the detector's matches in {dataset}. **Export** sends them on; **Browse** lays them out as a map. | **Find Results** is open. |

@@ -15,6 +15,7 @@ import { ImportDefaultsService } from './pickers/shared/import-defaults.service'
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { HintsService } from '../../../services/hints.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { EmbedderInfo, ImporterInfo, ImporterPickerTab, MediaTypeInfo } from '../../../models/api.models';
 import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
@@ -61,6 +62,8 @@ export class DatasetImporterModalComponent implements OnInit {
   private datasetsCrudApi = inject(DatasetsCrudApiService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private settingsState = inject(SettingsStateService);
+  /** Toasty's import-dataset hint, which stands in for the picker's "Select…" line. */
+  readonly hints = inject(HintsService);
   private datasetState = inject(DatasetStateService);
   private importDefaults = inject(ImportDefaultsService);
 

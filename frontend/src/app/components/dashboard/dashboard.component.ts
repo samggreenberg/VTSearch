@@ -1352,6 +1352,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return id !== null && this.hints.isShown(id) && topOpenModal() === null;
   }
 
+  /** Whether hint `id` is the one on show (#4807): the empty tables' own
+   *  "Click + to add one" steps aside for it. */
+  isHintOnShow(id: DashboardHintId): boolean {
+    return this.dashboardHint === id && this.hintOnShow;
+  }
+
   /** What Toasty's "add a dataset" hint says a dataset holds: the server's one
    *  media type when it is locked to one (`solo_media_type`), else a mix. */
   get addDatasetMedia(): string {

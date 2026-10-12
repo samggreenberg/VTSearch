@@ -1635,8 +1635,9 @@ time:
   dataset, and **Test** or **Find** once the selected detector is trained.
 
 While one of his hints is up, the reason under a disabled **Train**, **Test**
-or **Find** button is hidden, since the hint says the same thing at more
-length; it comes back if you hide the hint.
+or **Find** button is hidden, and so is an empty table's "Click **+** to add
+one", since the hint says the same thing; both come back if you hide the
+hint.
 
 In the Train view he asks for your first vote over **Good** / **Bad** while
 Autopilot runs on a detector with no labels, then stays there through the

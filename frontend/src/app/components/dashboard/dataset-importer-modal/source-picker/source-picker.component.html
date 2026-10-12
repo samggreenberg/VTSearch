@@ -11,7 +11,7 @@
       }
     </div>
   }
-  @if (!activeTab()) {
+  @if (!activeTab() && showPickHints()) {
     <p class="tab-bar-hint">{{ noTabHint() }}</p>
   }
 
@@ -33,7 +33,7 @@
           >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
         }
       </div>
-      @if (!selectedImporter()) {
+      @if (!selectedImporter() && showPickHints()) {
         <p class="tab-bar-hint">{{ noImporterHint }}</p>
       }
     }
