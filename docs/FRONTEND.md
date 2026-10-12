@@ -1062,7 +1062,12 @@ even though runtime behaviour is unaffected:
 `src/test-setup.ts` installs the inert jsdom stubs (`EventSource`,
 `ResizeObserver`, `scrollIntoView`, `CSS.escape`, media element methods,
 canvas `getContext`) and resets the `TestBed` before each test so a throwing
-teardown cannot cascade — that per-test reset *is* the cascade guard.
+teardown cannot cascade — that per-test reset *is* the cascade guard. It also
+installs the real-XHR guard (`src/app/testing/real-xhr-guard.ts`). `HttpClient`
+is provided in root, so a spec without `provideHttpTesting()` gets no missing
+provider error, and its requests would go to jsdom's `localhost:3000`. The
+guard stops every real `XMLHttpRequest` before it reaches the network and fails
+the test that sent it, naming the request.
 `vitest.config.ts` deliberately leaves `isolate: false` (the builder's
 default): per-file isolation cost 3–4× the runtime and the guard in
 `test-setup.ts` covers the same failure mode. No spec uses
