@@ -155,10 +155,13 @@ class TestColdFindCutsOnTheCorpusItDecides:
 
         Guard the guard: pin the corpus's estimate to a common target and the
         same labels admit more of the same corpus - so handing the estimator
-        this corpus (the assertion above) is what sets the verdicts.
+        this corpus (the assertion above) is what sets the verdicts.  The
+        labelset is small enough that the app draws the head's count there
+        (#4786); the estimate is the class model's, so that count is held off.
         """
         import vtscore.training.thresholds.labels_line as labels_line_mod
 
+        monkeypatch.setattr(labels_line_mod, "HEAD_COUNT_BADS", 0)
         corpus = _cold_corpus()
         shipped, _neg = _run_find(corpus, _cold_config(), monkeypatch)
         # Every image a sure positive: the counted cut keeps the whole corpus.
