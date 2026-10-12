@@ -193,7 +193,9 @@ def _labels_line(
     cut where the expected F-beta peaks at the prevalence that model estimates
     on the corpus this retrain scored - the Train dataset in Train, the
     searched one in Find, AutoFind and the CLI.  The same labels and embedder
-    give the same model everywhere; no count is drawn on any corpus.  ``None``
+    give the same model everywhere; no count is drawn on any corpus, except the
+    head's count line while the class model is thin above beta 1 (#4786,
+    :func:`~vtscore.training.thresholds.labels_line.head_count_cut`).  ``None``
     (too few votes, one class) leaves the caller's fallbacks, which admit
     nothing when the folds never split.
     """

@@ -32,8 +32,9 @@ The threshold is the cut at which the expected F-beta of the kept set peaks
 fit (the labels' Good and Bad components and the corpus's bulk), the total
 positives from the 2-part estimate, the returned size counted on the corpus
 itself.  No count is
-drawn on any corpus: a corpus with no positives returns at most its own few
-high-scoring negatives.
+drawn on any corpus once the class model stands (before that, above beta 1, the
+head's count line serves; see below): a corpus with no positives returns at most
+its own few high-scoring negatives.
 
 **Known weakness.**  The votes are not a random sample: active learning picks
 near the line and from the top, so the Bads' held-out scores sit higher than

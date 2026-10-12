@@ -39,7 +39,22 @@ RULES = [
     ("b1line", "the beta-1 labels line"),
     ("centroid", "the centroid's own Test (#4776's hand-over)"),
 ]
-GATES = ["neg4", "neg8", "neg12", "neg16", "neg20", "neg24", "neg32", "16", "32", "48", "inf", "sep1.5", "sep2"]
+GATES = [
+    ("16", "fewer than 16 Bads in hand"),
+    ("32", "fewer than 32 Bads in hand"),
+    ("48", "fewer than 48 Bads in hand"),
+    ("inf", "every trained click"),
+    ("neg12", "fewer than 12 held-out Bads"),
+    ("neg20", "fewer than 20 held-out Bads"),
+    ("neg32", "fewer than 32 held-out Bads"),
+    ("neg20pos6", "thin: fewer than 20 held-out Bads and 6 held-out Goods"),
+    ("neg32pos4", "thin: fewer than 32 held-out Bads and 4 held-out Goods"),
+    ("neg32pos6", "thin: fewer than 32 held-out Bads and 6 held-out Goods (shipped)"),
+    ("neg32pos8", "thin: fewer than 32 held-out Bads and 8 held-out Goods"),
+    ("neg1000pos6", "fewer than 6 held-out Goods, any Bads"),
+    ("sep1.5", "d' below 1.5"),
+    ("sep2", "d' below 2"),
+]
 FACE_B4 = [f"k{k}-b4-{s}" for s in ("1024", "640") for k in (1, 4)]
 
 
@@ -103,7 +118,7 @@ def main() -> int:
         out += _table(rules, b4, names, span) + [""]
     for span, title in (("1_50", "votes 1-50"), ("1_150", "votes 1-150")):
         out += [f"### The head's count under each gate, beta 4, {title}", ""]
-        out += _table(rules, b4, [(f"headcount@{x}", f"until {x}") for x in GATES], span) + [""]
+        out += _table(rules, b4, [(f"headcount@{x}", label) for x, label in GATES], span) + [""]
     if low:
         for span, title in (("1_50", "votes 1-50"), ("1_150", "votes 1-150")):
             out += [f"### Were it drawn at beta 1/4 and 1 ({g}), {title}", ""]
@@ -111,14 +126,21 @@ def main() -> int:
             out += [""]
     if args.ab:
         ab = pd.concat([pd.read_csv(p) for p in args.ab], ignore_index=True)
-        out += ["### The arm against today, run for run (full sessions)", ""]
-        cols = [c for c in ab.columns if c not in ("set",)]
-        out += ["| set | " + " | ".join(cols) + " |", "|---|" + "---|" * len(cols)]
+        out += [
+            "### The arm against today, run for run (full sessions)",
+            "",
+            "| set | runs | today, 1-50 | Δ 1-50 | today, 1-150 | Δ 1-150 | Δ 51-150 | wins / losses (1-150) | ΔAP 1-50 | kept at vote 8, today → arm (median) |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
         for _, r in ab.iterrows():
+            n = runs_of.get(str(r["set"]), int(r["runs"]))
+            f = float(r["runs"]) / n  # runs with no row differ by zero (#4631)
             out.append(
-                "| "
-                + " | ".join([str(r["set"])] + [f"{r[c]:.4g}" if isinstance(r[c], float) else str(r[c]) for c in cols])
-                + " |"
+                f"| {r['set']} | {n} | {r['F_ctl_1_50']:.3f} | {_fmt(r['dF_1_50'] * f, r['dF_1_50_se'] * f)} | "
+                f"{r['F_ctl_1_150']:.3f} | {_fmt(r['dF_1_150'] * f, r['dF_1_150_se'] * f)} | "
+                f"{_fmt(r['dF_51_150'] * f, r['dF_51_150_se'] * f)} | "
+                f"{r['win_1_150'] * f:.0%} / {r['loss_1_150'] * f:.0%} | {_fmt(r['dAP_1_50'] * f, r['dAP_1_50_se'] * f)} | "
+                f"{r['kept_ctl_median_8']:g} → {r['kept_arm_median_8']:g} |"
             )
         out.append("")
     if args.first:

@@ -131,3 +131,15 @@ class TestTheKnob:
         with pytest.raises(ValueError):
             with head_count_bads(bad):
                 pass
+
+
+class TestACorpusWithNoPositives:
+    def test_it_keeps_a_handful_whatever_the_corpus_size(self):
+        """A Gaussian bulk alone: the widest drop in its top still keeps a few, times beta ** 0.708 (#4786's cost)."""
+        for n in (200, 5_000, 20_000):
+            kept = []
+            for seed in range(20):
+                s = np.sort(_sig(np.random.default_rng(seed).normal(-3, 1.0, n)))[::-1]
+                kept.append(_kept(s, head_count_cut(s, 4.0)))
+            assert 1 <= int(np.median(kept)) <= 12
+            assert max(kept) <= 30

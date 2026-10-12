@@ -7,6 +7,8 @@
   today's) and the per-click oracle (the best count on the withheld half; a bound, not a rule).
 * ``fig_first_click.png`` - what each line keeps at the first trained click on faces at beta 4, as
   the share of runs keeping at most k (log k), beside the person's withheld photos.
+* ``fig_per_run.png`` - every run's paired difference, the arm minus today, in Find's session mean
+  over votes 1-150, sorted: faces (four sets) and COCO.
 
 Colours are the validated categorical slots 1-4 in fixed order; every line is labelled at its end
 (slides/STYLE.md: no leader lines) except on the step plot, whose steps cross any direct label, so it
@@ -15,7 +17,7 @@ takes a legend in its empty corner; the report's tables carry every number.
 Usage::
 
     python line_4786_figures.py --curves <curves.csv> ... --first <first_clicks.csv> ... \
-        [--arm <prior_curves.csv> ...] [--rule headcount@neg32pos6] --out <dir>
+        [--arm <prior_curves.csv> ...] [--per-run <prior_per_run.csv> ...] [--rule headcount@neg32pos6] --out <dir>
 """
 
 from __future__ import annotations
@@ -136,11 +138,34 @@ def fig_first(fc: pd.DataFrame, out: Path) -> None:
     plt.close(fig)
 
 
+def fig_per_run(pr: pd.DataFrame, out: Path) -> None:
+    face = [s for s in ("k1-b4-1024", "k1-b4-640", "k4-b4-1024", "k4-b4-640") if (pr["set"] == s).any()]
+    coco = [s for s in ("coco-b4",) if (pr["set"] == s).any()]
+    panels = [(face, "faces, β 4"), (coco, "COCO Better, Binary opening, β 4")]
+    panels = [p for p in panels if p[0]]
+    fig, axes = plt.subplots(1, len(panels), figsize=(5.6 * len(panels), 3.8), squeeze=False, sharey=True)
+    for ax, (sets, title) in zip(axes[0], panels):
+        for i, s in enumerate(sets):
+            d = np.sort(pr.loc[pr["set"] == s, "dF_1_150"].to_numpy(float))
+            ax.plot(np.linspace(0, 1, d.size), d, color=SLOTS[i], lw=2, label=s)
+        ax.axhline(0, color=INK2, lw=0.8)
+        ax.grid(axis="y", color=GRID, lw=0.8)
+        ax.set_title(title, fontsize=10)
+        ax.set_xlabel("runs, sorted by the difference (share)")
+        ax.legend(loc="upper left", frameon=False, fontsize=8, labelcolor="linecolor")
+    axes[0][0].set_ylabel("arm minus today, F-beta over votes 1-150")
+    fig.suptitle("Every run: the head's count line against today's, paired run for run")
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(out / "fig_per_run.png", dpi=150)
+    plt.close(fig)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--curves", type=Path, action="append", required=True, help="line_4786.py curves.csv")
     ap.add_argument("--first", type=Path, action="append", default=[], help="line_4786.py first_clicks.csv")
     ap.add_argument("--arm", type=Path, action="append", default=[], help="prior_4776.py prior_curves.csv")
+    ap.add_argument("--per-run", type=Path, action="append", default=[], help="prior_4776.py prior_per_run.csv")
     ap.add_argument("--rule", default="headcount@neg32pos6")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
@@ -151,6 +176,8 @@ def main() -> int:
     fig_find(c, p, args.rule, args.out)
     if args.first:
         fig_first(pd.concat([pd.read_csv(x) for x in args.first], ignore_index=True), args.out)
+    if args.per_run:
+        fig_per_run(pd.concat([pd.read_csv(x) for x in args.per_run], ignore_index=True), args.out)
     print(f"figures -> {args.out}")
     return 0
 

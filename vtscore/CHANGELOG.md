@@ -10,6 +10,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Above beta 1, while the class model is thin, the labels line is the head's count** (issue #4786).
+  `LabelsLine.threshold` keeps what the Goods' centroid's count rule finds standing out in the head's
+  own logit scores (`head_count_cut`) while the class model holds fewer than `HEAD_COUNT_BADS` (32)
+  held-out Bads and fewer than `HEAD_COUNT_GOODS` (6) held-out Goods, at a balance above
+  `HEAD_COUNT_MIN_BETA` (1); `head_count_serves` is the gate. Train, Find, the no-refit re-cut and the
+  eval harness all take it. Priced as full sessions at beta 4: Find's mean F-beta over votes 1-50
+  +0.029 to +0.065 on FHIBE faces, +0.003 on COCO Better's Binary opening. The harness's
+  `vtscore.eval.live_threshold_rules.head_count_bads(0)` (`CALIB_HEAD_COUNT_BADS=0`) is the line before.
+
 - **The trained head starts from the Goods' centroid** (issue #4785). Every production fit in
   `vtscore.detectors.training` (`train_and_threshold`, the vote path, the saved-origins path) now
   passes `LINEAR_SVM_PRIOR_HEAD` instead of `LINEAR_SVM_HEAD`, in every space. The eval harness's
@@ -19,6 +28,12 @@ instead, since every commit on `dev` is effectively a new app release.)
   Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
 
 ### Added
+
+- **Line counts for the harness** (issue #4786). `simulate_voting_iterations(line_count_sink=[...])`
+  records, at every click Test gives the trained head under a balance, one
+  `vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS` row: where the withheld half's positives sit in
+  the head's ranking, and what the labels line (each preset), the Goods' centroid's count line and the
+  count rule on the head's scores keep there. Recorded only; the session is unchanged.
 
 - **An eval head started from the Goods' centroid, and a hand-over shadow for the harness** (issue #4776).
   `vtscore.training.svm_prior` (`centroid_prior_direction`, `fit_linear_svm_prior_head`) fits the
