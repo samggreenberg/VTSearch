@@ -196,6 +196,7 @@ def person_covariates(covariates: Path, landmarks: Path | None, people: set[str]
     """Each person's photos summarised: the shares and means :data:`CONDITIONS` and :data:`APPEARANCE` name."""
     ph = pd.read_csv(covariates)
     ph = ph[ph["subject"].isin(people)].copy()
+    ph["hairstyle"] = ph["hairstyle"].fillna("None")
     if landmarks is not None:
         ph = ph.merge(subject_roll(landmarks), left_on="pid", right_index=True, how="left")
     else:
@@ -221,7 +222,7 @@ def person_covariates(covariates: Path, landmarks: Path | None, people: set[str]
             "facial_hair",
         ]
     ].mean()
-    agg["hairstyles"] = g["hairstyle"].nunique()
+    agg["hairstyles"] = g["hairstyle"].nunique()  # "None" (no hair) is a hairstyle: read_csv makes it NaN
     agg["months"] = g["captured"].nunique()
     agg["phones"] = g["phone"].nunique()
     return agg.rename_axis("category").reset_index()

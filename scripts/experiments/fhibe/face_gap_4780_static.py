@@ -14,9 +14,13 @@ the cell:
 * ``margin`` - ``genuine_mean - impostor_top1``; ``impostors_above`` - how many other people's faces
   score above the photo's median genuine cosine.
 
+and, for matching photo pairs on how they were taken, the cosine of every **genuine pair** (two
+subject photos of one person, ``static_pairs.csv``; ``id_a``/``id_b`` are photo ids, so they join
+``face_gap_4780_covariates.py``'s ``pid``).
+
 Each ``--cell NAME=PATH`` is read on its own, so two embedders on the same faces (FaceNet, ArcFace)
 pair photo for photo. Writes ``static_photos.csv`` (one row per cell x subject photo; names people,
-so owner-only) and ``static_people.csv`` (per person, the mean over their photos).
+so owner-only), ``static_pairs.csv`` and ``static_people.csv`` (per person, the mean over their photos).
 
     python face_gap_4780_static.py --cell facenet=<cells>/fhibe_faces_roll_1024__face.pkl \\
         --cell arcface=<cells-4780>/fhibe_faces_roll_1024__arcface_r50.pkl \\
@@ -84,6 +88,26 @@ def per_photo(name: str, ids, vecs, cats, people: set[str], pronoun: dict[str, s
     return pd.DataFrame(rows)
 
 
+def genuine_pairs(name: str, ids, vecs, cats, people: set[str]) -> pd.DataFrame:
+    """Every pair of one person's subject photos, with its cosine."""
+    rows = []
+    for cat in sorted(people):
+        idx = np.flatnonzero(cats == cat)
+        sims = vecs[idx] @ vecs[idx].T
+        for a in range(len(idx)):
+            for b in range(a + 1, len(idx)):
+                rows.append(
+                    {
+                        "cell": name,
+                        "category": cat,
+                        "id_a": int(ids[idx[a]]),
+                        "id_b": int(ids[idx[b]]),
+                        "cos": float(sims[a, b]),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--cell", action="append", required=True, help="NAME=PATH, repeatable")
@@ -98,7 +122,7 @@ def main() -> int:
     if args.covariates:
         cov = pd.read_csv(args.covariates, usecols=["subject", "pronoun"])
         pronoun = {**cov.groupby("subject")["pronoun"].agg(lambda s: s.mode().iloc[0]).to_dict(), **pronoun}
-    frames = []
+    frames, pairs = [], []
     for spec in args.cell:
         name, path = spec.split("=", 1)
         ids, vecs, cats = load_cell(Path(path))
@@ -106,11 +130,13 @@ def main() -> int:
         comp = pd.Series([pronoun.get(c, "nobody") if c else "nobody" for c in cats]).value_counts().to_dict()
         print(f"{name}: {len(ids):,} faces ({comp}); {len(df):,} subject photos of {df['category'].nunique()} people")
         frames.append(df)
+        pairs.append(genuine_pairs(name, ids, vecs, cats, people))
     photos = pd.concat(frames, ignore_index=True)
     args.out.mkdir(parents=True, exist_ok=True)
     old = os.umask(0o077)
     try:
         photos.to_csv(args.out / "static_photos.csv", index=False)
+        pd.concat(pairs, ignore_index=True).to_csv(args.out / "static_pairs.csv", index=False)
         num = ["loo_ap", "genuine_mean", "genuine_min", "impostor_top1", "impostor_top10", "margin", "impostors_above"]
         ppl = photos.groupby(["cell", "category"])[num].mean().reset_index().merge(strata, on="category", how="left")
         ppl.to_csv(args.out / "static_people.csv", index=False)
