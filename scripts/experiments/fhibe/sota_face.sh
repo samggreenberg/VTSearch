@@ -35,6 +35,10 @@
 #
 # CALIB_SPOT_CHECK (end | off) runs a study's arm without the app's weak-separation check (#4778);
 # `dirs` declares it to the preflight and `pack` pins it in every cell's environment.
+#
+# SOTA_FACE_BETAS="1" runs fewer presets than the three (#4780). SOTA_FACE_BASE names the prepared
+# grids (<base>-k<K>) that `prepare` writes and `dirs` links, so an arm on other vectors under the same
+# dataset names (VTS_PILE=<a private pile>, #4780's ArcFace) prepares its own instead of sharing one.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
@@ -49,7 +53,7 @@ BASE="${BASE:-2026-10-09}"
 IDENTITIES="${SOTA_FACE_IDENTITIES:-$RUNS/2026-10-09-k4/identities.txt}"
 DATASETS="fhibe_faces${ARM:+_$ARM}_1024,fhibe_faces${ARM:+_$ARM}_640"
 KS=(1 4)
-BETAS=(0.25 1 4)
+read -r -a BETAS <<<"${SOTA_FACE_BETAS:-0.25 1 4}"  # a study may run fewer presets (#4780: beta 1)
 N_PEOPLE=562
 # The task index runs size-major in the datasets' order: 0..561 the 1024 px crops, 562..1123 the 640 px.
 SIZE_NAMES=(1024 640)
@@ -80,7 +84,7 @@ case "${1:-}" in
 prepare)
   [[ -n "$ARM" ]] || { echo "the plain arm links the #4699 baseline's grids; prepare is for SOTA_FACE_ARM" >&2; exit 2; }
   for k in "${KS[@]}"; do
-    FHIBE_EXAMPLES="$k" FHIBE_MAX_EXAMPLES=4 FHIBE_RUN="$D-prep-$ARM" FHIBE_IDENTITIES="$IDENTITIES" \
+    FHIBE_EXAMPLES="$k" FHIBE_MAX_EXAMPLES=4 FHIBE_RUN="$BASE" FHIBE_IDENTITIES="$IDENTITIES" \
       FHIBE_DATASETS="$DATASETS" bash "$HERE/launch.sh" prepare
   done
   ;;

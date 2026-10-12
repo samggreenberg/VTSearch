@@ -14,7 +14,7 @@
 # Run on a compute node (srun ... -c 8): analyze.py reads every cell of a session set.
 # Env: SOTA_FACE_DATE (default today), SOTA_FACE_SIZES (default "1024 640"), SOTA_FACE_ARM
 # (an arm sota_face.sh ran under the same variable, #4777) and SOTA_FACE_TAG (the run dirs' tag,
-# as sota_face.sh took it; default `sota`).
+# as sota_face.sh took it; default `sota`) and SOTA_FACE_BETAS (the presets it ran; default "0.25 1 4").
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOTA="$HERE/../state_of_app"
@@ -29,7 +29,7 @@ shift
 KS=("${@:-1 4}")
 read -r -a KS <<<"${KS[*]}"
 read -r -a SIZES <<<"${SOTA_FACE_SIZES:-1024 640}"
-BETAS=(0.25 1 4)
+read -r -a BETAS <<<"${SOTA_FACE_BETAS:-0.25 1 4}"
 BASELINES="$RUNS/$SET-baseline"
 mkdir -p "$OUT" && chmod 700 "$OUT"
 
