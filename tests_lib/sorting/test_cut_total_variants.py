@@ -28,7 +28,7 @@ class TestTheDiffuseCase:
 
     # Not ``capsum``: its cap is the counted bound, which an evenly spread toy corpus never tightens
     # (it needs a bulk concentrated below the Goods); the sessions price it.
-    @pytest.mark.parametrize("name", ["ptotal", "captotal", "ncap"])
+    @pytest.mark.parametrize("name", ["ptotal", "pmin", "captotal", "ncap"])
     def test_each_candidate_keeps_the_standouts(self, name):
         line, s = _diffuse_line()
         k = variant_counts(line, s, 4.0)[name]
@@ -62,3 +62,22 @@ class TestWhereTheTotalHolds:
         with pytest.raises(ValueError, match="cut variant"):
             variant_threshold("nope", line, 4.0)
         assert "class" in CUT_VARIANTS
+
+
+class TestARunawayTotal:
+    """The other way round: a 2-part total of hundreds over chances that sum to a few."""
+
+    def _line(self):
+        s = np.linspace(0.99, 0.01, 5003)
+        p = np.r_[[0.9, 0.8, 0.7], np.full(5000, 0.0007)]
+        return LabelsLine(ClassScoreModel(2.0, -1.0, 1.0, 10, 60), 0.1, None, 500.0 / s.size, s, p, 1.0), s
+
+    def test_todays_cut_runs_deep_and_ptotal_with_it(self):
+        line, s = self._line()
+        counts = variant_counts(line, s, 4.0)
+        assert counts["class"] > 1000 and counts["ptotal"] > 1000, counts
+
+    @pytest.mark.parametrize("name", ["pchances", "pmin"])
+    def test_the_fits_own_total_keeps_the_standouts(self, name):
+        line, s = self._line()
+        assert 1 <= variant_counts(line, s, 4.0)[name] <= 20

@@ -3,11 +3,14 @@
 At beta 4 the labels line sometimes keeps a whole corpus.  ``corpus_cut`` scores each
 cut ``k`` (the corpus's unvoted items, best first) as ``F = (1 + b^2) TP_k / (b^2 P + k)``,
 with ``TP_k`` the sum of the 3-part chances of the kept items and
-``P = max(the 2-part total, the sum of every chance)``.  Under a thin or weakly
-separated class model the 3-part fit gives the bulk diffuse chances, a few hundredths
-each.  Their sum then sets ``P``, and at beta 4 every such item clears the cut's
-marginal bar (``(1 + b^2) p > F``), so the cut runs to the corpus's end whatever the
-2-part total says (#4786's report: 0.0 positives estimated, 3,925 faces kept).
+``P = max(the 2-part total, the sum of every chance)``.  The two counts of the corpus's
+positives can disagree by orders of magnitude, and ``P`` takes the larger.  Then ``F``
+is small at every cut, the cut's marginal bar (an item stays while ``(1 + b^2) p > F``)
+falls with it, and at beta 4 the cut runs to the corpus's end.  Either count can be the
+large one: diffuse chances under a thin class model (#4786's report: a 2-part total of
+0.0, chances summing to hundreds, 3,925 faces kept), or a 2-part total that runs away on
+a weakly separated broad target (562 positives estimated, 50 withheld, chances summing
+to 6).
 
 Each candidate below reads only what the line holds - the unvoted scores best first,
 their chances, the 2-part total - so a winner moves into
@@ -16,6 +19,10 @@ their chances, the 2-part total - so a winner moves into
 * ``class`` - today's cut (:func:`~vtscore.training.thresholds.labels_line.corpus_cut`);
 * ``ptotal`` - ``P`` is the 2-part total, never less than the kept set's own chances
   (``P_k = max(total, TP_k)``): the sum of every chance no longer sets it;
+* ``pchances`` - ``P`` is the 3-part fit's own total, the sum of its chances: one model
+  for both the chances and the count;
+* ``pmin`` - ``P`` is the smaller of the two counts, never less than the kept set's
+  chances (``P_k = max(min(total, sum), TP_k)``);
 * ``capsum`` - the chances scaled down, together, until their sum is at most the
   counted bound the 2-part total already respects (twice the bound, as there);
 * ``captotal`` - the chances scaled down until their sum is at most the 2-part total;
@@ -34,7 +41,7 @@ from typing import Any
 import numpy as np
 
 #: The candidates, in the order the side frame records them.
-CUT_VARIANTS: tuple[str, ...] = ("class", "ptotal", "capsum", "captotal", "ncap")
+CUT_VARIANTS: tuple[str, ...] = ("class", "ptotal", "pchances", "pmin", "capsum", "captotal", "ncap")
 
 
 def _parts(line: Any) -> tuple[np.ndarray, np.ndarray, float] | None:
@@ -58,6 +65,7 @@ def _cut_at(scores_desc: np.ndarray, k: int) -> float:
 
 
 def _ptotal_cut(post: np.ndarray, s: np.ndarray, total: float, beta: float) -> float:
+    """The F-beta argmax with ``P_k = max(total, TP_k)``: *total* the positives count, never below the kept set's chances."""
     b2 = float(beta) * float(beta)
     tp = np.cumsum(post)
     r = np.arange(1, s.size + 1, dtype=np.float64)
@@ -82,6 +90,10 @@ def variant_threshold(name: str, line: Any, beta: float) -> float | None:
         return corpus_cut(p, s, total, beta)
     if name == "ptotal":
         return _ptotal_cut(p, s, total, beta)
+    if name == "pchances":
+        return _ptotal_cut(p, s, float(p.sum()), beta)
+    if name == "pmin":
+        return _ptotal_cut(p, s, min(total, float(p.sum())), beta)
     if name in ("capsum", "captotal"):
         if name == "capsum":
             fitted = line.model.floored(line.spread) if line.spread is not None else line.model
