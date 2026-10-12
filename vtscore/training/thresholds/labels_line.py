@@ -32,13 +32,30 @@ The threshold is the cut at which the expected F-beta of the kept set peaks
 fit (the labels' Good and Bad components and the corpus's bulk), the total
 positives from the 2-part estimate, the returned size counted on the corpus
 itself.  No count is
-drawn on any corpus: a corpus with no positives returns at most its own few
-high-scoring negatives.
+drawn on any corpus once the class model stands (while it is thin, the head's
+count line serves; see below): a corpus with no positives returns at most its own
+few high-scoring negatives.
 
 **Known weakness.**  The votes are not a random sample: active learning picks
 near the line and from the top, so the Bads' held-out scores sit higher than
 the true negatives' and the negative tail is extrapolated by the normal.  The
 pricing in ``docs/experiments`` measures what that costs on the objective.
+
+**While the labels are few** (#4786), the class model has almost nothing to fit -
+at the hand-over to the trained head a session holds four Bads - and its cut goes
+wrong both ways: at beta 4 the line kept a median of 5 of a FHIBE person's faces at
+the first trained click, one face in a fifth of sessions and thousands in the
+weakly separated ones.  While the class model is thin (fewer than
+:data:`HEAD_COUNT_BADS` Bads and :data:`HEAD_COUNT_GOODS` Goods), the line at every
+balance keeps instead what stands out in the head's own scores, counted by the rule
+that draws the Goods' centroid's line (:func:`head_count_cut`): the line Test gave
+until the hand-over, now drawn on the head.  That count is ``beta ** 0.708`` times
+what stands out, so the line keeps more as the balance leans to recall.  Like the
+centroid's it is a count on the corpus being decided, not a cut the labels imply;
+the class model takes over once it has the labels to stand on.  The Goods half
+matters for a broad target: with many Goods its labels line is sound, while a count
+of what stands out keeps several times the positives (COCO Better's Binary opening
+lost F-beta there).
 
 **When the Bads are a random sample** (#4490: a labelset imported from an
 exhaustively labelled dataset; every label of the review's ceiling), one normal
@@ -120,6 +137,16 @@ _SEARCH_SPREADS = 8.0
 _SEARCH_POINTS = 4001
 #: The prevalence range an estimate is held to: never a certainty either way.
 PREVALENCE_MIN, PREVALENCE_MAX = 1e-6, 0.5
+#: While the class model is thin - fewer than this many Bads (its held-out ones, about 0.6 of
+#: the Bads in hand) and fewer than :data:`HEAD_COUNT_GOODS` Goods - the line at every balance
+#: keeps the head's count (:func:`head_count_cut`, #4786) rather than the class model's cut.
+#: ``0`` is the line before #4786.
+HEAD_COUNT_BADS = 32
+#: The Goods half of the thin-model gate (#4786): with this many held-out Goods the class
+#: model's Good component stands on its own, and a broad target's labels line keeps what its
+#: many positives need where the head's count, a count of what stands out, keeps several
+#: times too many.
+HEAD_COUNT_GOODS = 6
 
 
 def _logit(scores: Any) -> np.ndarray:
@@ -469,6 +496,8 @@ class LabelsLine:
 
     def threshold(self, beta: float) -> float:
         if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
+            if head_count_serves(self.model):
+                return head_count_cut(self.unvoted_scores, beta)
             total = self.unvoted_share * self.unvoted_scores.size
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
@@ -479,6 +508,34 @@ class LabelsLine:
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
         line = _line_on(self.model, scores, ids, labels)
         return self if line is None else line
+
+
+def head_count_serves(model: ClassScoreModel) -> bool:
+    """Whether the line is the head's count line (#4786): a class model too thin to cut on."""
+    return model.n_neg < HEAD_COUNT_BADS and model.n_pos < HEAD_COUNT_GOODS
+
+
+def head_count_cut(scores_desc: Any, beta: float) -> float:
+    """The cut that keeps what stands out in the head's own scores at *beta* (#4786).
+
+    *scores_desc* are a corpus's unvoted scores, best first.  On their logits the
+    rule that draws the Goods' centroid's line
+    (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`: ``beta ** 0.708``
+    times the larger of the Gaussian bulk's excess and the top's widest drop, never
+    fewer than that drop) counts what stands out; the cut keeps exactly those items,
+    placed between the last kept and the first dropped as :func:`corpus_cut` places
+    its own.  An empty corpus keeps nothing.
+    """
+    from vtscore.detectors.centroid_head import centroid_cut  # noqa: PLC0415
+
+    s = np.asarray(scores_desc, dtype=np.float64)
+    if s.size == 0:
+        return 1.0 + 1e-9
+    x = _logit(s)
+    k = int(np.count_nonzero(x >= centroid_cut(x, beta=float(beta))))
+    if k <= 0:
+        return 1.0 + 1e-9
+    return float(s[k - 1]) if k >= s.size else float((s[k - 1] + s[k]) / 2.0)
 
 
 def weak_check_prompts(media_type: str | None) -> bool:
@@ -746,6 +803,8 @@ def fit_labels_line(
 
 
 __all__ = [
+    "HEAD_COUNT_BADS",
+    "HEAD_COUNT_GOODS",
     "MIN_LOGIT_SIGMA",
     "RELATIVE_SIGMA_FLOOR",
     "RANDOM_BADS_MAX_ENRICHMENT",
@@ -770,5 +829,7 @@ __all__ = [
     "corpus_sigma_floor",
     "estimate_positives",
     "fit_labels_line",
+    "head_count_cut",
+    "head_count_serves",
     "labels_line_threshold",
 ]

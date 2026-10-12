@@ -1184,6 +1184,12 @@ CENTROID_LINE_VARIANTS: str | None = os.environ.get("CALIB_CENTROID_LINE_VARIANT
 #: picks, so the session is the app's; ``CALIB_HANDOVER_SHADOW=1`` turns it on.
 HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not in ("", "0")
 
+#: Issue #4786's line counts: at every click Test gives the trained head, what
+#: each candidate line would keep on the withheld half and where its positives
+#: sit in the head's ranking (``task_NNNN__linecounts.csv``), so a count rule for
+#: the line is priced on the same sessions.  Recorded only, so the session is the
+#: app's; ``CALIB_LINE_COUNTS=1`` turns it on.
+LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", "0")
 #: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
 #: Test gives the typed query's own set until the label quota (rows tagged
 #: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the
@@ -1202,6 +1208,16 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
+
+#: Issue #4786's gate: until the labels line's class model holds this many Bads (and
+#: while it holds few Goods), the line keeps the head's count (``vtscore.eval.
+#: live_threshold_rules.head_count_bads``).  Unset is the app's; ``0`` is the line
+#: before #4786.  A value that is not a non-negative integer is kept as given, for
+#: the harness to refuse.
+_HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
+HEAD_COUNT_BADS: "int | str | None" = (
+    int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)
+)
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the

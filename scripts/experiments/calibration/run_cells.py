@@ -338,6 +338,8 @@ def main(argv: list[str] | None = None) -> int:
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
         f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
+        f"line_counts={'on' if cfg.LINE_COUNTS else 'off'} "
+        f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
@@ -355,7 +357,8 @@ def main(argv: list[str] | None = None) -> int:
         RANK_FRAME_COLUMNS,
     )
     from vtscore.eval.arms_handover import HANDOVER_COLUMNS
-    from vtscore.eval.live_threshold_rules import sigma_floor
+    from vtscore.eval.arms_line_counts import LINE_COUNT_COLUMNS
+    from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -395,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
     all_rankframes: list[dict] = []
     all_linetests: list[dict] = []
     all_handover: list[dict] = []
+    all_linecounts: list[dict] = []
     all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
@@ -408,7 +412,8 @@ def main(argv: list[str] | None = None) -> int:
         testscores_local: list[dict] | None = [] if cfg.SAVE_TEST_SCORES else None
         linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
         handover_local: list[dict] | None = [] if cfg.HANDOVER_SHADOW else None
-        with sigma_floor(cfg.SIGMA_FLOOR):
+        linecounts_local: list[dict] | None = [] if cfg.LINE_COUNTS else None
+        with sigma_floor(cfg.SIGMA_FLOOR), head_count_bads(cfg.HEAD_COUNT_BADS):
             rows = simulate_voting_iterations(
                 medias,
                 target_category=cat,
@@ -496,6 +501,7 @@ def main(argv: list[str] | None = None) -> int:
                 centroid_line_variants=cfg.CENTROID_LINE_VARIANTS,
                 handover_shadow=cfg.HANDOVER_SHADOW,
                 handover_sink=handover_local,
+                line_count_sink=linecounts_local,
                 query_tier=cfg.QUERY_TIER,
             )
         # The recorded fraction is the one the run actually used: an explicit
@@ -575,6 +581,9 @@ def main(argv: list[str] | None = None) -> int:
         for hr in handover_local or []:
             hr["embedder"] = emb
         all_handover.extend(handover_local or [])
+        for lc in linecounts_local or []:
+            lc["embedder"] = emb
+        all_linecounts.extend(linecounts_local or [])
         if testscores_local:
             # The last ordinary step and the last row (after the check): what Train left and what Find applies.
             # The full-label ceiling's snapshot (#4490) is kept apart, never read as a session's step; and
@@ -666,6 +675,11 @@ def main(argv: list[str] | None = None) -> int:
     handover_cols = [*HANDOVER_COLUMNS, "embedder"]
     handover_out = cell_file(outdir / f"task_{idx:04d}__handover.csv")
     pd.DataFrame(all_handover, columns=pd.Index(handover_cols)).to_csv(handover_out, index=False)
+    # The #4786 line counts: one row per click Test gave the trained head under a balance.  Same
+    # unconditional-write rule: an empty file with the header says they were off.
+    linecounts_cols = [*LINE_COUNT_COLUMNS, "embedder"]
+    linecounts_out = cell_file(outdir / f"task_{idx:04d}__linecounts.csv")
+    pd.DataFrame(all_linecounts, columns=pd.Index(linecounts_cols)).to_csv(linecounts_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means
