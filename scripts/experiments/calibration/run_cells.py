@@ -340,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
         f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
         f"line_counts={'on' if cfg.LINE_COUNTS else 'off'} "
         f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
+        f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -501,6 +502,7 @@ def main(argv: list[str] | None = None) -> int:
                 handover_shadow=cfg.HANDOVER_SHADOW,
                 handover_sink=handover_local,
                 line_count_sink=linecounts_local,
+                query_tier=cfg.QUERY_TIER,
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default

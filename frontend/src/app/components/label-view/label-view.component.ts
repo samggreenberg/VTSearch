@@ -20,6 +20,7 @@ import { SortingApiService } from '../../services/sorting-api.service';
 import { PairScopeService } from '../../services/pair-scope.service';
 import { SortRunnerService } from '../../services/sort-runner.service';
 import { adaptivePoll } from '../../services/adaptive-poll';
+import { DetectorsCrudApiService } from '../../services/detectors-crud-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
@@ -83,6 +84,7 @@ const AUTOPILOT_CHECK_INTRO =
 })
 export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private sortingApi = inject(SortingApiService);
+  private detectorsCrudApi = inject(DetectorsCrudApiService);
   private detectorsFindApi = inject(DetectorsFindApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private labelSession = inject(LabelSessionService);
@@ -1512,13 +1514,35 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.triggerAutopilotTextSort();
     } else {
       // The re-sort prompt swaps in a single fresh example, replacing any
-      // multi-example seed stack the detector started with.
+      // multi-example seed stack the detector started with. It steers the
+      // sort, as a seed importer's example does, without being a Good the
+      // user voted.
       this.labelSession.mediaExample = result.value;
       this.labelSession.textQuery = '';
-      this.labelSession.examples = [{ type: 'media', value: result.value }];
+      this.labelSession.examples = [{ type: 'media', value: result.value, labeled: false }];
       this.sortState.setSelectMode('top');
       this.triggerAutopilotMediaSort();
     }
+    this.saveResortExample();
+  }
+
+  /**
+   * Save the re-sort's example to the detector (#4801). Under the label quota
+   * a typed-query detector's Find gives its stored query's own set (#4758),
+   * and the next Train session opens on it, so a re-sort kept only here would
+   * leave Find, and the next opening, on the old query. The Manual sort bar
+   * saves nothing: it is a browse, not the detector's query.
+   */
+  private saveResortExample(): void {
+    const name = this.trainableModelName();
+    if (!name) return;
+    this.detectorsCrudApi.setExamples(name, this.labelSession.examples).subscribe({
+      error: () =>
+        this.toast.error({
+          message: "Couldn't save the new example to the detector",
+          detail: 'Find keeps the example it had until it is saved.',
+        }),
+    });
   }
 
   private resetResortSortTally(): void {

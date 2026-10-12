@@ -30,7 +30,7 @@ while the Dashboard is switching context.
 | `mismatch` | surprised | This detector is for a different kind of media than your dataset, so they can't work together. Select ones that match, or click **+** to make a detector for this dataset. | The selected datasets and detectors are not all one media type. |
 | `train` | happy | Click **Train** to teach your new detector. Mark examples Good or Bad for it to learn. | One detector with no training labels is selected, beside one dataset, so Train is enabled. |
 | `test-or-find` | happy | Click **Test** to eval or improve this detector. Or **Find** to collect its matches. | One trained detector and one dataset are selected, so Test is enabled. |
-| `find` | happy | Click **Find** to run these detectors on this dataset. | Several datasets or detectors are selected, all trained, so Find is enabled but Test is not. |
+| `find` | happy | Click **Find** to run these detectors on this dataset. | Several datasets or detectors are selected, each detector with labels or a typed description (#4758), so Find is enabled but Test is not. |
 
 `{media}` is "images, sounds or other media", or the one media type's plural
 ("images", "audio clips", …) when the server is locked to one

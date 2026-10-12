@@ -105,6 +105,15 @@ WEAK_CHECK_MIN_VOTES = 10
 #: Priced against prompting once: +0.013 to +0.027 at click 150 against +0.007
 #: to +0.010, for 28-35% of a prompted session's clicks spent checking.
 WEAK_CHECK_COOLDOWN = 25
+#: Media types whose sessions never get a prompted weak check (#4778, #4799).  A
+#: face search's opening finds the person's few photos before the check could
+#: start (a median of 4 Goods at vote 11), so a check's votes find nothing and
+#: only pick which Bads get labelled, worse than acquisition does: without it
+#: the face review's sessions gained +0.007 to +0.018 over votes 1-50, with the
+#: objective after the end-of-run check and final AP unchanged.  On COCO the
+#: check pays most where it starts with fewest Goods, so a Good count cannot
+#: stand in for the media type.  The end-of-run check and the Check button stay.
+WEAK_CHECK_OFF_MEDIA_TYPES: frozenset[str] = frozenset({"face"})
 #: The fewest Bads whose own scores model the negatives (#4490): a kernel density of a
 #: random 30 cannot see the upper tail (it lost 0.09 F at beta 1/4 on the review's
 #: ceiling), of 100 it gains.  A model keeps its Bads' scores only from this many.
@@ -529,6 +538,17 @@ def head_count_cut(scores_desc: Any, beta: float) -> float:
     return float(s[k - 1]) if k >= s.size else float((s[k - 1] + s[k]) / 2.0)
 
 
+def weak_check_prompts(media_type: str | None) -> bool:
+    """Whether weak separation may prompt a spot check on *media_type*'s detectors (#4799).
+
+    False on :data:`WEAK_CHECK_OFF_MEDIA_TYPES` (face crops); true elsewhere,
+    including an unknown type.  The app's :func:`vtscore.state.core.detector_check_prompt`
+    and the eval harness's default ``spot_check`` both read it, so the default
+    arm stays the app.
+    """
+    return media_type not in WEAK_CHECK_OFF_MEDIA_TYPES
+
+
 def weak_check_due(
     separation: float | None,
     n_votes: int,
@@ -793,7 +813,9 @@ __all__ = [
     "WEAK_CHECK_COOLDOWN",
     "WEAK_CHECK_MIN_VOTES",
     "WEAK_SEPARATION_D",
+    "WEAK_CHECK_OFF_MEDIA_TYPES",
     "weak_check_due",
+    "weak_check_prompts",
     "PREVALENCE_MAX",
     "PREVALENCE_MIN",
     "ClassScoreModel",

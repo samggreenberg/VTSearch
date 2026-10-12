@@ -48,7 +48,7 @@ def _train(monkeypatch, n_ranked: int | None) -> dict[str, dict[str, Any]]:
     monkeypatch.setattr(store_mod, "_read_detector", lambda _p: det)
     monkeypatch.setattr("vtscore.detectors.input_spec.extract_input_spec_from_medias", lambda _m: None)
 
-    def _fake_train(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None):
+    def _fake_train(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None, text_query=""):
         det_ctx.embedder = "fake"
         det_ctx.model = torch.nn.Sequential(torch.nn.Linear(4, 1))
         det_ctx.threshold = 0.5

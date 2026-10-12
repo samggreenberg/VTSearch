@@ -1057,10 +1057,11 @@ WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true
 #: count line); ``walk`` the full walk whose end moves the line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
-#: When the simulated user checks (#4496): unset is the harness's default, the app's (``weak``: the end-of-run check
-#: plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate weakly, d' below
-#: ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's constants);
-#: ``end`` (the end-of-run check only, the pre-#4496 harness) or ``off``.
+#: When the simulated user checks (#4496): unset is the harness's default, the app's for the cell's medias (``weak``:
+#: the end-of-run check plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate
+#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's
+#: constants - but ``end`` on face crops, where the app never prompts, #4799); ``end`` (the end-of-run check only,
+#: the pre-#4496 harness and the face path's), ``weak`` or ``off``.
 SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None
 WEAK_D = _opt_float("CALIB_WEAK_D")
 _weak_min_t = _opt_float("CALIB_WEAK_MIN_T")
@@ -1189,6 +1190,12 @@ HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not 
 #: the line is priced on the same sessions.  Recorded only, so the session is the
 #: app's; ``CALIB_LINE_COUNTS=1`` turns it on.
 LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", "0")
+#: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
+#: Test gives the typed query's own set until the label quota (rows tagged
+#: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the
+#: default) is the app; ``CALIB_QUERY_TIER=0`` is the arm before (the Goods'
+#: centroid from the first Good, no row before it).
+QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", "off", "false")
 
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check

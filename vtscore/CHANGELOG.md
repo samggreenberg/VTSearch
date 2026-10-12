@@ -19,6 +19,34 @@ instead, since every commit on `dev` is effectively a new app release.)
   on FHIBE faces and +0.003 to +0.011 on COCO Better's Binary opening, positive in every set. The harness's
   `vtscore.eval.live_threshold_rules.head_count_bads(0)` (`CALIB_HEAD_COUNT_BADS=0`) is the line before.
 
+- **A detector made from a typed query gives that query's own set until it has a trained head** (issue
+  #4758). Under the label quota, and before the first Good, `train_from_labelset(..., text_query=)` and
+  `labelset_train_and_score(..., label_quota=True, text_query=)` install the typed query's head
+  (`labelset_training.install_query_head`, new module `vtscore.detectors.query_head`) in place of the
+  Goods' centroid or nothing: the query's unit vector as a `Linear(D, 1)` in the snapshot's text slot,
+  cut at `text_sort_cuts`' display line at the detector's balance. `resolve_or_train_detector` reads the
+  query off the detector's data (`detector_text_query`: `text_query`, else its first text example) and now
+  returns a head for a detector with a query and no labels; `cached_head_is_current(det_ctx, labelset,
+  text_query=None)` refuses a query head built from another query, and a centroid cached for a detector
+  that now has one. `label_quota.TIER_QUERY` (`"query"`) is the tier `served_quota` reports for it.
+  `is_quota_head` (the centroid or a query's head) replaces `is_centroid_head` where a head's own line
+  is redrawn (`state.core`, `labels.sync`), and every scorer asks `head_score_embedder` for the space.
+  The CLI scores such a detector as its query and emits `detector_query`. A detector without a query,
+  or a snapshot with no text slot, gives the centroid and nothing as before. The eval harness follows:
+  a run that opens on a typed query writes a row from its first vote, `detector_tier="query"` until
+  the quota (`_query_test`, `step_trainers._query_step`, `StepModel.id_scores`);
+  `simulate_voting_iterations(query_tier=False)` is the arm before. Priced on COCO Better's Binary
+  opening: Find's F-beta over votes 1-10 +0.08 / +0.09 / +0.14 at beta 1/4, 1, 4.
+- **No prompted spot check on face crops** (issue #4799). `detector_check_prompt` never reports
+  `check_due` on a detector whose `media_type` is in the new
+  `vtscore.training.thresholds.WEAK_CHECK_OFF_MEDIA_TYPES` (`{"face"}`, read by `weak_check_prompts`), so
+  Autopilot runs no weak-separation check there and the Train tab does not call for one; `separation` is
+  still reported, and the end-of-run check and the Check button stay. The eval harness's `spot_check`
+  now defaults to `None`, resolved per run by `vtscore.eval.voting_iterations.production_spot_check`
+  from the medias' `media_type`: `"weak"`, or `"end"` on faces, so a face study's default arm changes and
+  `spot_check="weak"` is the arm before. Priced in #4778: on FHIBE's faces the prompt cost +0.007 to
+  +0.018 of the objective's mean over votes 1-50 and nothing after the check; on COCO it pays, and most
+  where it starts with fewest Goods, so no Good-count gate replaces the media type.
 - **The trained head starts from the Goods' centroid** (issue #4785). Every production fit in
   `vtscore.detectors.training` (`train_and_threshold`, the vote path, the saved-origins path) now
   passes `LINEAR_SVM_PRIOR_HEAD` instead of `LINEAR_SVM_HEAD`, in every space. The eval harness's

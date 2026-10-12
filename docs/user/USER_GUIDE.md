@@ -643,7 +643,10 @@ The run shows on the new dataset's Dashboard row while it works, and its
 it found; its **View results** button opens the **Find Results**
 dialog, which lists every item each detector called Good (switch to
 **Bad** or **Both** to see the rest), copies the list to the clipboard,
-and **Export**s the listed rows to any exporter. If you picked a results
+and **Export**s the listed rows to any exporter. A detector with too few
+labels for a trained one runs as its typed description, or as the Goods'
+centroid, as in [Test](#testing-a-detector), and the dialog names it, with the
+labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
 results there too. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
@@ -665,8 +668,8 @@ moving them to the AutoFind tab - tick them and the datasets to run them
 on, and click the big **Find** button in the Dashboard's action bar,
 beside **Train** and **Test**. It is enabled once at least one dataset
 and one detector are ticked, all of one media type, and every ticked
-detector is trained. Unlike Test, which takes exactly one dataset and one
-detector, it uses every ticked row:
+detector has labels or was made from a typed description. Unlike Test,
+which takes exactly one dataset and one detector, it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the Find Results dialog; any that finish while the
@@ -1239,15 +1242,24 @@ already trust and collect what they match, with no view to work through, use
 the Dashboard's **Find** button instead (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
-**A detector with too few labels is tested as the Goods' centroid.** Until it
-has 3 Goods and 4 Bads, or one Good and 16 Bads, VTSearch does not train a
-detector from its labels:
-Test, Find and AutoFind rank everything by how close it is to the average of
-its Goods instead, and keep the images that stand out from the rest: fewer
-toward the false-negative end of the Threshold, more toward the false-positive
-end. One Good is enough to test it. The Test view says so under its tabs, with
-how many more Goods and Bads a trained detector needs. A detector with no Good
-at all can't be tested.
+**A detector with too few labels is tested as its typed description, or as the
+Goods' centroid.** Until it has 3 Goods and 4 Bads, or one Good and 16 Bads,
+VTSearch does not train a detector from its labels.
+
+- **A detector made from a typed description** (the **Text** tab of New
+  Detector) is that description instead. Test, Find and AutoFind keep the
+  images its text sort keeps in Train, at the detector's Threshold, so you can
+  test it before your first vote. Those are the matches Autopilot shows you
+  while it gathers the first labels, and on those first votes they are better
+  than the Goods' centroid's.
+- **A detector with no typed description** (made from media examples, or from
+  a labels file) ranks everything by how close it is to the average of its
+  Goods, and keeps the images that stand out from the rest. One Good is enough
+  to test it; with no Good at all it can't be tested.
+
+Either way the Threshold moves the line (fewer toward the false-negative end,
+more toward the false-positive end), and the Test view says so under its tabs,
+with how many more Goods and Bads a trained detector needs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
@@ -1844,7 +1856,8 @@ it loads - so exporting the labels and making a detector from them there
 Opened this way the modal's **Categories** filter starts on **All**,
 which is what you want: the negatives are half of what the ranker learns
 from, and a good-only or bad-only file can't rebuild the detector at the
-other end (a good-only one gives only the Goods' centroid, below, and a
+other end (a labels file carries no typed description, so a good-only one
+gives only the Goods' centroid, as in [Test](#testing-a-detector), and a
 bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
@@ -1878,7 +1891,10 @@ bundle contains **no media and no fingerprints**, just the small trained
 ranker, but a trained ranker can still reveal something about the data it
 was trained on, so share it only with people you'd trust with the labels
 themselves. A compatible dataset must be loaded, since the ranker is
-trained against that dataset's embedder. Pattern-matching (structural)
+trained against that dataset's embedder. A detector made from a typed
+description that has too few labels for a trained ranker exports its
+description instead, which scores with the dataset's text embedder; the
+manifest names that embedder. Pattern-matching (structural)
 detectors can't be exported this way - their second verification stage
 has no ONNX equivalent - and region (patch) detectors export in a
 whole-item-only scoring mode.

@@ -30,8 +30,10 @@ from vtscore.training.thresholds.labels_line import (
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
+    WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
     weak_check_due,
+    weak_check_prompts,
 )
 
 
@@ -351,6 +353,16 @@ class TestWeakCheckDue:
     def test_no_cooldown_makes_it_due_once(self):
         assert weak_check_due(1.0, 20, None, cooldown=None)
         assert not weak_check_due(1.0, 500, 20, cooldown=None)
+
+
+class TestWeakCheckPrompts:
+    """#4799: the media types the check never prompts on - face crops, where it cost every session (#4778)."""
+
+    def test_faces_are_never_prompted_and_everything_else_is(self):
+        assert WEAK_CHECK_OFF_MEDIA_TYPES == frozenset({"face"})
+        assert not weak_check_prompts("face")
+        for media_type in ("image", "audio", "video", "text", "document", "", None):
+            assert weak_check_prompts(media_type), media_type
 
 
 # ---------------------------------------------------------------------------

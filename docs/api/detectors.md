@@ -97,7 +97,16 @@ PUT /api/detectors/{name}/examples
 Replaces the `examples` list (on the detector JSON and the registry entry) and
 **adds** a `good` label for each media example not already in the labelset.
 The labelset edit is additive only: no existing label is dropped, and an
-exemplar the user has since voted Bad keeps that label.
+exemplar the user has since voted Bad keeps that label. An unlabeled seed
+(`"labeled": false`) adds none.
+
+`text_query` and `media_example` follow the new list, on both records: each is
+the value of its first text / media example, or `""` when there is none. So
+replacing a typed query with a media example drops the query. Under the label
+quota a typed-query detector gives its query's own set, so this is the query
+Test, AutoFind and Find use. The Train view's re-sort prompt saves its new
+example here, as a text example or as an unlabeled media seed. The Manual sort
+bar saves nothing: it is a browse.
 
 ### Save labels
 

@@ -616,12 +616,16 @@ def _run_detector_load_task(
                                 total_steps=_LOAD_STEPS,
                             )
 
+                        from vtscore.detectors.query_head import detector_text_query
+
                         train_from_labelset(
                             det_ctx,
                             labelset,
                             media_type=media_type,
                             snap=snap,
                             on_progress=_embed_progress,
+                            # Under the quota a typed-query detector is its query's set (#4758).
+                            text_query=detector_text_query(det_data),
                         )
 
                 # Stamp the dataset whose medias the cid-keyed vote dicts were

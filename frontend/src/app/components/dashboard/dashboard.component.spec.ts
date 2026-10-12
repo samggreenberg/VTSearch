@@ -741,6 +741,27 @@ describe('DashboardComponent', () => {
       expect(component.findHint).toBe('Detector has no training labels');
     });
 
+    // #4758: a detector made from a typed query is that query's own set until
+    // it has a trained head, so it can be tested before its first label.
+    it('enables Test on a detector with no labels but a typed query', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0, text_query: 'a dog barking' }];
+      flushInitialRequests(datasets, models);
+      expect(component.findEnabled).toBe(true);
+      expect(component.findHint).toBe(
+        "Open the Test view to score the selected dataset and test the selected detector's line on it",
+      );
+    });
+
+    it('reads a first text example as the typed query', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [
+        { id: 'm1', name: 'M', media_type: 'audio', num_training: 0, text_query: '', examples: [{ type: 'text', value: 'rain' }] },
+      ];
+      flushInitialRequests(datasets, models);
+      expect(component.findEnabled).toBe(true);
+    });
+
     // Test opens one view on one pair, so it takes exactly one of each, as
     // Train does, rather than quietly testing the first ticked pair; Find
     // takes any number.
@@ -837,6 +858,16 @@ describe('DashboardComponent', () => {
       selection.selectOnly('detector', ['m1', 'm3']);
       expect(component.autofindEnabled).toBe(false);
       expect(component.autofindHint).toBe('Detector has no training labels');
+    });
+
+    it('runs a ticked detector with no labels but a typed query (#4758)', () => {
+      flushInitialRequests(audioDatasets, [
+        ...audioDetectors,
+        { id: 'm3', name: 'New', media_type: 'audio', num_training: 0, text_query: 'a dog barking' },
+      ]);
+      selection.selectOnly('dataset', ['d1']);
+      selection.selectOnly('detector', ['m1', 'm3']);
+      expect(component.autofindEnabled).toBe(true);
     });
 
     it('starts one run per ticked dataset, restricted to the ticked detectors', () => {

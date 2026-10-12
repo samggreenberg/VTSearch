@@ -179,9 +179,10 @@ same edit.
 - **The opening is the text sort (#4605).** The app stays on the text sort
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
   the Hard phase on, a median ~40 clicks in. The harness scores the detector
-  Test would give during the opening anyway (from the first Good: the Goods'
-  centroid under the label quota, then the trained head; #4643,
-  `detector_tier`) and flags the steps the app would show as
+  Test would give during the opening anyway (from the first vote, the typed
+  query's own set under the label quota since #4758 - the Goods' centroid from
+  the first Good before it - then the trained head; #4643, `detector_tier`)
+  and flags the steps the app would show as
   `app_trained == 1`. Every number the report reads off the session before a
   run's first such step (AP, the line at P, the balance, the objective,
   `curves.csv`, `by_click.py`) is the text sort's, at its own line. Never read
@@ -227,19 +228,23 @@ same edit.
   written to the detector as it is cast, Export labels and Test have no phase
   gate, and Test or an import builds a detector from the labelset. So
   `viewer.py` and `curves.py` read neither `app_trained` nor `detector_tier`.
-  Before a run's first Good they draw the empty set (Test is refused, #4629),
+  Before a run's first row they draw the empty set (Test is refused, #4629),
   and from there on the harness's detector, which is what Test gives: since
   #4643 the app no longer hands out a head fitted to too few labels, so under
   the label quota (3 Goods and 4 Bads, Autopilot's own quorum, or a Good and 16 Bads since #4731) that is the
-  Goods' centroid, cut at its midpoint on the withheld half, and from the
+  typed query's own set, from the first vote, on a run that opens on one
+  (#4758; the Goods' centroid from the first Good before it, and still on any
+  other opening), cut by its line on the withheld half, and from the
   quota the trained head, whose line is Find's there. The report is the
   session, the viewer is the export, so the two still differ through the
   opening; the click-4 dip the head on 3 Goods and 1 Bad drew (#4640) went
   with the app, not with a viewer rule. A review run before #4643 starts its
   rows at the first Good and Bad and draws that head; the committed pages
   change only at the next review's run. The page says so in its reading
-  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (A typed-query
-  tier was dropped: a labelset does not carry the query.)
+  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (The typed
+  query lives on the detector, not the labelset, since #4758: an exported
+  labelset, which carries no query, still imports as the centroid. The page
+  draws Test's.)
 - **The viewer's dotted line is the best cut (owner, 2026-10-08, #4654).** On
   an F metric it is the best that F any cut of the same ranking reaches, the
   report's "best cut", so it never sits below the line; precision, recall and
@@ -252,7 +257,7 @@ same edit.
   2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
   reskin cannot add the best cut: the next review's run draws it.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
-  The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
+  The default arm (`spot_check="weak"`, the app's since 2026-10-05; `"end"` on faces) checks the
   line once the voting steps are spent, so every run ends with
   `phase == "check"` rows past `max_steps`. "Final" is the last ordinary step;
   the end check's rows and picks feed only the check's own columns, never a
@@ -260,6 +265,8 @@ same edit.
   the check when the labels separate weakly (`weak_check_due`, past its
   text-sort opening): those rows carry `phase == "prompt"`, count in `t` and
   the 150-vote budget, and read as ordinary clicks in every curve and credit.
+  Never on face crops (#4799): the face review's default arm is the end check
+  only, as the app's is.
 - **Rank frames:** the line at every P is read off where the positives sit in
   each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
   checkpoints (`CALIB_RANK_FRAME_STEPS`). For an F1 curve, record them densely:
@@ -540,9 +547,10 @@ things keep a report on its link:
   never got one; before its first Good and Bad in a review run before #4643)
   is scored as the empty returned set, the nothing Test gives that labelset,
   so the runs that never trained are in its mean as losses
-  (`curves.score_empty_sets`); from the first Good on, Autopilot's opening
-  included, it draws the harness's detector, the Goods' centroid under the
-  label quota (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
+  (`curves.score_empty_sets`); from a run's first row on, Autopilot's opening
+  included, it draws the harness's detector: under the label quota, the typed
+  query's own set from the first vote since #4758, else the Goods' centroid
+  from the first Good (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
   undefined; a page built before that is rebuilt with `analyze.sh`, since a
   reskin has no prevalence to put AP at.
   The report's own tables score a run with no detector at the typed query its
