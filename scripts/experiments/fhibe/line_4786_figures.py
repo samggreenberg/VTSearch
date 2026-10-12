@@ -5,6 +5,7 @@
   1 and 4 starting photos) and on COCO Better's Binary opening: today's line, the head's count line
   priced on today's sessions, the arm (the rule in every fit's line, its own sessions, paired with
   today's) and the per-click oracle (the best count on the withheld half; a bound, not a rule).
+* ``fig_find_low.png`` - the same at beta 1/4 and 1: faces from four photos at 1024 px, and COCO.
 * ``fig_first_click.png`` - what each line keeps at the first trained click on faces at beta 4, as
   the share of runs keeping at most k (log k), beside the person's withheld photos.
 * ``fig_per_run.png`` - every run's paired difference, the arm minus today, in Find's session mean
@@ -17,7 +18,7 @@ takes a legend in its empty corner; the report's tables carry every number.
 Usage::
 
     python line_4786_figures.py --curves <curves.csv> ... --first <first_clicks.csv> ... \
-        [--arm <prior_curves.csv> ...] [--per-run <prior_per_run.csv> ...] [--rule headcountb1@neg32pos6] --out <dir>
+        [--arm <prior_curves.csv> ...] [--per-run <prior_per_run.csv> ...] [--rule headcount@neg32pos6] --out <dir>
 """
 
 from __future__ import annotations
@@ -111,6 +112,38 @@ def fig_find(c: pd.DataFrame, p: pd.DataFrame | None, rule: str, out: Path) -> N
     plt.close(fig)
 
 
+def fig_low(c: pd.DataFrame, p: pd.DataFrame | None, rule: str, out: Path) -> None:
+    panels = [
+        ("k4-b025-1024", "faces, 4 starting photos, β ¼"),
+        ("k4-b1-1024", "faces, 4 starting photos, β 1"),
+        ("coco-b025", "COCO Binary opening, β ¼"),
+        ("coco-b1", "COCO Binary opening, β 1"),
+    ]
+    panels = [x for x in panels if (c["set"] == x[0]).any()]
+    if not panels:
+        return
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.4 * len(panels), 4.0), squeeze=False)
+    for ax, (setname, title) in zip(axes[0], panels):
+        cs = c[c["set"] == setname]
+        arm = p[(p["set"] == setname) & (p["metric"] == "F")] if p is not None else pd.DataFrame()
+        _draw(
+            ax,
+            [
+                (cs[cs["rule"] == "today"], "F", "today", SLOTS[0], "-"),
+                (cs[cs["rule"] == rule], "F", "head's count (priced)", SLOTS[1], "-"),
+                (arm, "arm", "head's count (arm)", SLOTS[2], "-"),
+                (cs[cs["rule"] == "oracle"], "F", "per-click oracle", SLOTS[3], "--"),
+            ],
+        )
+        ax.set_title(title, fontsize=10)
+        ax.set_xlabel("vote")
+    axes[0][0].set_ylabel("Find's F-beta (withheld half)")
+    fig.suptitle("β ¼ and β 1: what a Find returns at every vote, today's line and the head's count line")
+    fig.tight_layout(rect=(0, 0, 0.93, 0.93))
+    fig.savefig(out / "fig_find_low.png", dpi=150)
+    plt.close(fig)
+
+
 def fig_first(fc: pd.DataFrame, out: Path) -> None:
     panels = [("k1-b4-1024", "1 starting photo"), ("k4-b4-1024", "4 starting photos")]
     panels = [x for x in panels if (fc["set"] == x[0]).any()]
@@ -120,7 +153,7 @@ def fig_first(fc: pd.DataFrame, out: Path) -> None:
         for col, label, color in (
             ("n_test_pos", "the person's withheld photos", INK2),
             ("k_test", "today's line keeps", SLOTS[0]),
-            ("k_headcountb1", "the head's count keeps", SLOTS[1]),
+            ("k_head_count", "the head's count keeps", SLOTS[1]),
         ):
             v = np.sort(np.clip(d[col].to_numpy(float), 1, None))
             y = np.arange(1, v.size + 1) / v.size
@@ -166,14 +199,16 @@ def main() -> int:
     ap.add_argument("--first", type=Path, action="append", default=[], help="line_4786.py first_clicks.csv")
     ap.add_argument("--arm", type=Path, action="append", default=[], help="prior_4776.py prior_curves.csv")
     ap.add_argument("--per-run", type=Path, action="append", default=[], help="prior_4776.py prior_per_run.csv")
-    ap.add_argument("--rule", default="headcountb1@neg32pos6")
+    ap.add_argument("--rule", default="headcount@neg32pos6")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     _style()
     c = pd.concat([pd.read_csv(x) for x in args.curves], ignore_index=True)
     p = pd.concat([pd.read_csv(x) for x in args.arm], ignore_index=True) if args.arm else None
     args.out.mkdir(parents=True, exist_ok=True)
-    fig_find(c, p, args.rule, args.out)
+    if (c["set"].str.contains("-b4")).any():
+        fig_find(c, p, args.rule, args.out)
+    fig_low(c, p, args.rule, args.out)
     if args.first:
         fig_first(pd.concat([pd.read_csv(x) for x in args.first], ignore_index=True), args.out)
     if args.per_run:

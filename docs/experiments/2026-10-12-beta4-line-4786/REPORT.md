@@ -1,4 +1,4 @@
-# β 4's line at the first trained clicks: the head's own count while the class model is thin (#4786)
+# The line at the first trained clicks: the head's own count while the class model is thin (#4786)
 
 **2026-10-12.** Below the label quota Test gives the Goods' centroid. At the quota it hands over to
 the trained head, and since #4785 that head starts from the centroid, so it ranks a person almost
@@ -9,22 +9,27 @@ Bads and two to four Goods to stand on. A recall-leaning cut reaches deep into i
 asked for a rule for the first trained clicks at β 4, priced on the FHIBE face sessions (1 and 4
 starting photos, 1024 and 640 px) and guarded on COCO Better's Binary opening.
 
-**The rule: while the class model is thin, a recall-leaning line keeps what stands out in the
-head's own scores.** Above β 1, until the class model holds 32 held-out Bads (about 50 in hand)
-and while it holds fewer than 6 held-out Goods, the line keeps what the Goods' centroid's count
-rule finds standing out in the head's logit scores (`head_count_cut`). That rule is the count line
-Test showed until the hand-over (#4732, #4759, #4783), now drawn on the head. Priced on today's
-sessions (every click's line re-cut from the recorded ranking, exact to the last digit), mean
-F-beta of what a Find returns at β 4 goes up:
+**The rule: while the class model is thin, the line keeps what stands out in the head's own
+scores.** Until the class model holds 32 held-out Bads (about 50 in hand), and while it holds
+fewer than 6 held-out Goods, the line at every balance keeps what the Goods' centroid's count rule
+finds standing out in the head's logit scores (`head_count_cut`). That rule is the count line Test
+showed until the hand-over (#4732, #4759, #4783), now drawn on the head. It is β^0.708 times what
+stands out, so the line keeps more as the balance leans to recall.
 
-- **+0.029 to +0.065** over votes 1–50 on faces, in all four sets (SE ≤ 0.006);
-- **+0.010 to +0.023** over votes 1–150;
-- **+0.001 ± 0.001 and +0.000 ± 0.000** on COCO's Binary opening (720 runs).
+Run as full sessions, with the rule in every fit's line and paired with today run for run on the
+same people, classes and seeds, mean F-beta of what a Find returns goes up at every preset, on
+both benches:
 
-Run as full sessions, with the rule in every fit's line and paired with today run for run, the
-numbers hold to the third decimal. Faces gain +0.029 to +0.065 over votes 1–50 and +0.010 to
-+0.023 over 1–150, and give nothing back over votes 51–150. COCO gains +0.003 ± 0.002 and +0.001 ±
-0.001. The ranking does not move (ΔAP 0.000).
+| | faces, votes 1–50 | faces, votes 1–150 | COCO, votes 1–50 | COCO, votes 1–150 |
+|---|---|---|---|---|
+| β ¼ | +0.016 to +0.020 | +0.006 to +0.008 | +0.011 ± 0.002 | +0.004 ± 0.001 |
+| β 1 | +0.044 to +0.066 | +0.016 to +0.025 | +0.006 ± 0.001 | +0.002 ± 0.001 |
+| β 4 | +0.029 to +0.065 | +0.010 to +0.023 | +0.003 ± 0.002 | +0.001 ± 0.001 |
+
+Faces are four sets a preset: 1 and 4 starting photos, 1024 and 640 px, 562 people each. Every set
+is positive (SE ≤ 0.006 over votes 1–50), and nothing is given back over votes 51–150. COCO counts
+all 720 runs a preset. The ranking does not move (ΔAP 0.000). Re-cut offline on today's sessions
+from their recorded rankings, the rule gives the same numbers on faces to the third decimal.
 
 At the first trained click, today's line keeps a median of 5 of a person's faces, against 4
 withheld. In the worst tenth of sessions it keeps 44 to 189. The head's count keeps 8, and 16 in
@@ -32,8 +37,9 @@ the worst tenth. The F-beta drop at the hand-over goes from −0.12 to −0.19 t
 
 **Rejected:** both of the issue's candidates and every gate that reads separation. Carrying the
 centroid's count, capping today's line at a multiple of the Goods in hand, and a cut at β 1 scaled
-up all help faces, but each loses on COCO, by 0.008 to 0.072 over votes 1–50. COCO's broad
-targets have many positives for each Good found.
+up all help faces at β 4, but each loses on COCO, by 0.008 to 0.072 over votes 1–50. COCO's broad
+targets have many positives for each Good found. The issue asked for β 4 only; why the rule
+serves every balance is below (β ¼ and β 1).
 
 ![What a Find returns at every vote at β 4](fig_find_by_vote.png)
 
@@ -98,7 +104,8 @@ started from the centroid, faces aligned by roll (#4777), every centroid line ru
 
 | rule | k1-b4-1024 | k1-b4-640 | k4-b4-1024 | k4-b4-640 | coco-b4 |
 |---|---|---|---|---|---|
-| the head's count (the centroid's rule on the head's scores) | +0.029 ± 0.005 | +0.039 ± 0.005 | +0.054 ± 0.006 | +0.065 ± 0.006 | +0.001 ± 0.001 |
+| the head's count (the centroid's rule on the head's scores; shipped) | +0.029 ± 0.005 | +0.039 ± 0.005 | +0.054 ± 0.006 | +0.065 ± 0.006 | +0.001 ± 0.001 |
+| the head's count, never fewer than the beta-1 labels line's | +0.028 ± 0.005 | +0.037 ± 0.005 | +0.050 ± 0.005 | +0.059 ± 0.005 | +0.006 ± 0.001 |
 | the fewer of today's and the head's count | +0.017 ± 0.002 | +0.018 ± 0.002 | +0.026 ± 0.003 | +0.030 ± 0.003 | -0.009 ± 0.001 |
 | the centroid's count carried | +0.022 ± 0.005 | +0.035 ± 0.005 | +0.047 ± 0.006 | +0.060 ± 0.006 | -0.009 ± 0.002 |
 | the fewer of today's and the centroid's count | +0.016 ± 0.002 | +0.017 ± 0.002 | +0.026 ± 0.003 | +0.029 ± 0.003 | -0.021 ± 0.001 |
@@ -115,7 +122,8 @@ started from the centroid, faces aligned by roll (#4777), every centroid line ru
 
 | rule | k1-b4-1024 | k1-b4-640 | k4-b4-1024 | k4-b4-640 | coco-b4 |
 |---|---|---|---|---|---|
-| the head's count (the centroid's rule on the head's scores) | +0.010 ± 0.002 | +0.014 ± 0.002 | +0.019 ± 0.002 | +0.023 ± 0.002 | +0.000 ± 0.000 |
+| the head's count (the centroid's rule on the head's scores; shipped) | +0.010 ± 0.002 | +0.014 ± 0.002 | +0.019 ± 0.002 | +0.023 ± 0.002 | +0.000 ± 0.000 |
+| the head's count, never fewer than the beta-1 labels line's | +0.010 ± 0.002 | +0.013 ± 0.002 | +0.018 ± 0.002 | +0.021 ± 0.002 | +0.002 ± 0.000 |
 | the fewer of today's and the head's count | +0.006 ± 0.001 | +0.007 ± 0.001 | +0.010 ± 0.001 | +0.011 ± 0.001 | -0.004 ± 0.000 |
 | the centroid's count carried | +0.008 ± 0.002 | +0.012 ± 0.002 | +0.017 ± 0.002 | +0.021 ± 0.002 | -0.004 ± 0.001 |
 | the fewer of today's and the centroid's count | +0.006 ± 0.001 | +0.006 ± 0.001 | +0.010 ± 0.001 | +0.011 ± 0.001 | -0.008 ± 0.001 |
@@ -128,7 +136,8 @@ started from the centroid, faces aligned by roll (#4777), every centroid line ru
 | *today, for scale (F-beta)* | 0.814 | 0.787 | 0.810 | 0.790 | 0.514 |
 | *runs* | 562 | 562 | 562 | 562 | 720 |
 
-*k1 / k4: one / four starting photos; 1024 / 640: the face crop's size in pixels. Each cell is the rule minus today's line, mean ± SE over runs; COCO's 18 runs with no Good count as zeros.*
+*k1 / k4: one / four starting photos; 1024 / 640: the face crop's size in pixels. Each cell is the
+rule minus today's line, mean ± SE over runs; COCO's 18 runs with no Good count as zeros.*
 
 **Why the head's count and not the centroid's.** On faces the two count lines are close: the
 head ranks a person almost as the centroid does, and the same count rule reads either one's
@@ -137,8 +146,8 @@ its count loses 0.009 over votes 1–50. The head's count reads the ranking Test
 
 **Why a count and not a cap on today's line.** Today's line goes wrong in both directions at the
 first clicks (Figure 2). In 30% of face sessions it keeps fewer images than the person has
-withheld, and in 22% exactly one. In the worst tenth it keeps from 44 to thousands. A cap fixes only the second
-failure, and the capped rules gain about half as much.
+withheld, and in 22% exactly one. In the worst tenth it keeps from 44 to thousands. A cap fixes
+only the second failure, and the capped rules gain about half as much.
 
 ![The first trained click](fig_first_click.png)
 
@@ -246,8 +255,10 @@ other rule lost more.
 
 Test is not the only reader of the line. Autopilot's Stable light counts the predictions that flip
 across it, and Smart prices the labelset at it, so a rule for the line can move the picks. The arm
-runs the rule as the app runs it (`4131eef90`: `LabelsLine.threshold`) on the same people, classes
-and seeds, and today's sessions are its control, run for run.
+runs the rule as the app runs it (`LabelsLine.threshold`) on the same people, classes and seeds,
+and today's sessions are its control, run for run. The β 4 arm ran at `4131eef90`, which served
+the head's count above β 1 only; its β 4 line is the shipped one's, line for line. The β ¼ and β 1
+arms ran at the shipped `8338a115c`.
 
 | set | runs | today, 1-50 | Δ 1-50 | today, 1-150 | Δ 1-150 | Δ 51-150 | wins / losses (1-150) | ΔAP 1-50 | kept at vote 8, today → arm (median) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -256,15 +267,25 @@ and seeds, and today's sessions are its control, run for run.
 | k4-b4-1024 | 562 | 0.771 | +0.053 ± 0.006 | 0.810 | +0.019 ± 0.002 | +0.001 ± 0.000 | 52% / 48% | -0.000 ± 0.000 | 5 → 8 |
 | k4-b4-640 | 562 | 0.750 | +0.065 ± 0.006 | 0.790 | +0.023 ± 0.002 | +0.002 ± 0.000 | 58% / 42% | -0.000 ± 0.000 | 5 → 8 |
 | coco-b4 | 720 | 0.409 | +0.003 ± 0.002 | 0.514 | +0.001 ± 0.001 | -0.000 ± 0.001 | 45% / 45% | +0.000 ± 0.001 | 54 → 87 |
+| k1-b1-1024 | 562 | 0.761 | +0.044 ± 0.004 | 0.798 | +0.016 ± 0.001 | +0.002 ± 0.000 | 66% / 22% | +0.000 ± 0.000 | 3 → 3 |
+| k1-b1-640 | 562 | 0.729 | +0.055 ± 0.004 | 0.766 | +0.020 ± 0.001 | +0.003 ± 0.000 | 68% / 20% | -0.000 ± 0.000 | 3 → 3 |
+| k4-b1-1024 | 562 | 0.765 | +0.063 ± 0.004 | 0.795 | +0.024 ± 0.002 | +0.004 ± 0.000 | 70% / 18% | -0.001 ± 0.000 | 3 → 3 |
+| k4-b1-640 | 562 | 0.740 | +0.066 ± 0.004 | 0.772 | +0.025 ± 0.002 | +0.004 ± 0.000 | 73% / 18% | -0.001 ± 0.000 | 3 → 3 |
+| coco-b1 | 720 | 0.344 | +0.006 ± 0.001 | 0.441 | +0.002 ± 0.001 | -0.000 ± 0.001 | 52% / 37% | -0.001 ± 0.001 | 22 → 33 |
+| k1-b025-1024 | 562 | 0.868 | +0.016 ± 0.002 | 0.898 | +0.006 ± 0.001 | +0.001 ± 0.000 | 74% / 19% | +0.000 ± 0.000 | 2 → 3 |
+| k1-b025-640 | 562 | 0.855 | +0.016 ± 0.002 | 0.884 | +0.006 ± 0.001 | +0.001 ± 0.000 | 73% / 20% | +0.000 ± 0.000 | 2 → 3 |
+| k4-b025-1024 | 562 | 0.892 | +0.020 ± 0.002 | 0.910 | +0.008 ± 0.001 | +0.001 ± 0.000 | 76% / 18% | -0.000 ± 0.000 | 3 → 3 |
+| k4-b025-640 | 562 | 0.879 | +0.020 ± 0.003 | 0.898 | +0.008 ± 0.001 | +0.001 ± 0.000 | 75% / 20% | -0.000 ± 0.000 | 2 → 3 |
+| coco-b025 | 720 | 0.456 | +0.011 ± 0.002 | 0.547 | +0.004 ± 0.001 | -0.000 ± 0.001 | 57% / 31% | -0.001 ± 0.000 | 7 → 12 |
 
 *Medians of the images Test keeps at vote 8. Every run is in every average; COCO's 18 runs with no
 Good count as zeros.*
 
-The picks are identical in 98% of face runs from one photo and 95% from four. Where they part,
-they part late: the first differing pick falls at a median vote of 41–42, past the gate. On COCO
-they are identical in 57% of runs, and the rest part at a median vote of 21. The rule changes what
-a Find returns, not the votes a session collects. Figure 3 shows every run. On faces the losses are
-small and bounded: about 45% of runs lose 0.02 to 0.03, and none more than 0.07. That is a person
+The picks are identical in 95% to 99% of face runs at every preset. Where they part, they part
+late, at a median vote of 31 to 42. On COCO they are identical in 57%, 63% and 76% of runs at β 4,
+1 and ¼, and the rest part at a median vote of 14 to 24. The rule changes what a Find returns,
+not the votes a session collects. Figure 3 shows every run at β 4. On faces the losses are small
+and bounded: about 45% of runs lose 0.02 to 0.03, and none more than 0.07. That is a person
 whose photos today's line already kept, where the count keeps about twice as many. The gains run
 to +0.23, where today's line kept one face or thousands. On COCO the spread is small both ways.
 
@@ -275,18 +296,73 @@ sorted. Faces at β 4 (four sets) and COCO's Binary opening at β 4.*
 
 ## β ¼ and β 1
 
-The rule serves only above β 1, so sessions at β ¼ and β 1 are unchanged. Today's sessions at
-those presets, with the line counts, are still running; what the head's count would do there is
-priced here once they finish.
+**Why every balance.** The first build served the head's count above β 1 only, as the issue framed
+it. The GRID suite caught what that does to the balance: at β 4 the count could keep fewer than
+the labels line at β 1 (5 against 39 in one test session), so leaning toward recall shrank the
+returned set. Flooring the count at the β 1 line's restored the order. At β 4 the floor cost faces
+0.001 to 0.006 over votes 1–50 and gained COCO 0.005 (the β 4 tables above), but it left β ¼ and
+β 1 on today's line. Priced there, the head's count beats today's line too, in every set on both
+benches. It is β^0.708 times what stands out, so serving it at every balance keeps the order by
+construction, with no floor.
+
+Today's sessions at β ¼ and β 1, re-cut offline (the rule minus today), **votes 1–50**:
+
+| rule | k1-b1-1024 | k1-b1-640 | k4-b1-1024 | k4-b1-640 | coco-b1 | k1-b025-1024 | k1-b025-640 | k4-b025-1024 | k4-b025-640 | coco-b025 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| the head's count (the centroid's rule on the head's scores; shipped) | +0.044 ± 0.004 | +0.055 ± 0.004 | +0.063 ± 0.004 | +0.066 ± 0.004 | +0.007 ± 0.001 | +0.017 ± 0.002 | +0.016 ± 0.002 | +0.020 ± 0.002 | +0.021 ± 0.003 | +0.014 ± 0.001 |
+| the fewer of today's and the head's count | +0.011 ± 0.002 | +0.016 ± 0.002 | +0.019 ± 0.002 | +0.020 ± 0.003 | -0.001 ± 0.000 | +0.005 ± 0.001 | +0.007 ± 0.002 | +0.008 ± 0.001 | +0.011 ± 0.002 | +0.004 ± 0.001 |
+| the centroid's count carried | +0.011 ± 0.006 | +0.023 ± 0.006 | +0.032 ± 0.006 | +0.037 ± 0.006 | -0.000 ± 0.001 | +0.001 ± 0.004 | +0.000 ± 0.004 | +0.007 ± 0.004 | +0.003 ± 0.004 | +0.009 ± 0.002 |
+| the fewer of today's and the centroid's count | -0.002 ± 0.003 | +0.003 ± 0.003 | +0.008 ± 0.003 | +0.010 ± 0.003 | -0.012 ± 0.001 | +0.003 ± 0.001 | +0.005 ± 0.001 | +0.007 ± 0.001 | +0.008 ± 0.002 | -0.005 ± 0.001 |
+| today's, at most 2 x the Goods in hand | +0.006 ± 0.001 | +0.009 ± 0.001 | +0.009 ± 0.001 | +0.011 ± 0.001 | -0.027 ± 0.002 | +0.002 ± 0.000 | +0.003 ± 0.001 | +0.002 ± 0.000 | +0.003 ± 0.000 | +0.004 ± 0.001 |
+| today's, at most 3 x the Goods in hand | +0.003 ± 0.001 | +0.005 ± 0.001 | +0.005 ± 0.001 | +0.006 ± 0.001 | -0.016 ± 0.001 | +0.001 ± 0.000 | +0.002 ± 0.000 | +0.001 ± 0.000 | +0.002 ± 0.000 | +0.006 ± 0.001 |
+| the centroid's own Test (#4776's hand-over) | +0.015 ± 0.006 | +0.031 ± 0.006 | +0.039 ± 0.007 | +0.048 ± 0.007 | -0.007 ± 0.002 | +0.008 ± 0.004 | +0.009 ± 0.004 | +0.018 ± 0.005 | +0.017 ± 0.005 | -0.001 ± 0.002 |
+| per-click oracle (a bound, not a rule) | +0.105 ± 0.004 | +0.117 ± 0.005 | +0.126 ± 0.005 | +0.136 ± 0.005 | +0.080 ± 0.002 | +0.059 ± 0.003 | +0.063 ± 0.003 | +0.064 ± 0.003 | +0.072 ± 0.003 | +0.110 ± 0.003 |
+| *today, for scale (F-beta)* | 0.761 | 0.729 | 0.765 | 0.740 | 0.344 | 0.868 | 0.855 | 0.892 | 0.879 | 0.456 |
+| *runs* | 562 | 562 | 562 | 562 | 720 | 562 | 562 | 562 | 562 | 720 |
+
+**Votes 1–150:**
+
+| rule | k1-b1-1024 | k1-b1-640 | k4-b1-1024 | k4-b1-640 | coco-b1 | k1-b025-1024 | k1-b025-640 | k4-b025-1024 | k4-b025-640 | coco-b025 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| the head's count (the centroid's rule on the head's scores; shipped) | +0.016 ± 0.001 | +0.020 ± 0.001 | +0.024 ± 0.002 | +0.024 ± 0.002 | +0.002 ± 0.000 | +0.006 ± 0.001 | +0.006 ± 0.001 | +0.007 ± 0.001 | +0.007 ± 0.001 | +0.005 ± 0.000 |
+| the fewer of today's and the head's count | +0.004 ± 0.001 | +0.006 ± 0.001 | +0.007 ± 0.001 | +0.007 ± 0.001 | -0.000 ± 0.000 | +0.002 ± 0.000 | +0.003 ± 0.001 | +0.003 ± 0.000 | +0.004 ± 0.001 | +0.001 ± 0.000 |
+| the centroid's count carried | +0.004 ± 0.002 | +0.008 ± 0.002 | +0.011 ± 0.002 | +0.013 ± 0.002 | -0.000 ± 0.001 | +0.000 ± 0.001 | -0.000 ± 0.001 | +0.002 ± 0.001 | +0.001 ± 0.001 | +0.003 ± 0.001 |
+| the fewer of today's and the centroid's count | -0.001 ± 0.001 | +0.001 ± 0.001 | +0.003 ± 0.001 | +0.003 ± 0.001 | -0.004 ± 0.000 | +0.001 ± 0.000 | +0.002 ± 0.001 | +0.002 ± 0.001 | +0.003 ± 0.001 | -0.002 ± 0.000 |
+| today's, at most 2 x the Goods in hand | +0.002 ± 0.000 | +0.003 ± 0.001 | +0.004 ± 0.000 | +0.004 ± 0.001 | -0.009 ± 0.001 | +0.001 ± 0.000 | +0.001 ± 0.000 | +0.001 ± 0.000 | +0.001 ± 0.000 | +0.001 ± 0.000 |
+| today's, at most 3 x the Goods in hand | +0.001 ± 0.000 | +0.002 ± 0.000 | +0.002 ± 0.000 | +0.002 ± 0.000 | -0.006 ± 0.000 | +0.000 ± 0.000 | +0.001 ± 0.000 | +0.000 ± 0.000 | +0.001 ± 0.000 | +0.002 ± 0.000 |
+| the centroid's own Test (#4776's hand-over) | +0.005 ± 0.002 | +0.010 ± 0.002 | +0.014 ± 0.003 | +0.017 ± 0.003 | -0.003 ± 0.001 | +0.002 ± 0.002 | +0.003 ± 0.002 | +0.006 ± 0.002 | +0.005 ± 0.002 | -0.001 ± 0.001 |
+| per-click oracle (a bound, not a rule) | +0.103 ± 0.005 | +0.118 ± 0.005 | +0.122 ± 0.006 | +0.131 ± 0.006 | +0.068 ± 0.002 | +0.055 ± 0.003 | +0.062 ± 0.004 | +0.061 ± 0.003 | +0.068 ± 0.003 | +0.103 ± 0.002 |
+| *today, for scale (F-beta)* | 0.798 | 0.766 | 0.795 | 0.772 | 0.441 | 0.898 | 0.884 | 0.910 | 0.898 | 0.547 |
+| *runs* | 562 | 562 | 562 | 562 | 720 | 562 | 562 | 562 | 562 | 720 |
+
+At β 1 the labels line's trouble at the hand-over is the same as at β 4, only shallower. It keeps a
+median of 3 faces at vote 8, against 4 withheld, and Find's F-beta falls 0.81 → 0.63 from four
+photos (Figure 4). The head's count also keeps 3, and dips only to 0.78. At β ¼ today's line is
+closer to right, and the gain is about a third of β 1's. The full-session arm, in the arm's table above, matches
+these to within 0.001 on faces.
+
+![What a Find returns at every vote at β ¼ and β 1](fig_find_low.png)
+
+*Figure 4. What a Find returns at every vote at β ¼ and β 1: faces from four starting photos at
+1024 px, and COCO's Binary opening. Same lines as Figure 1. On faces the head's count runs above
+today's until the class model holds 32 Bads (about vote 55), then hands back to today's line.*
 
 ## The cost: a corpus with none of the target
 
 The head's count is a count on the corpus it cuts, which the labels line otherwise never draws
 (#4452). On a corpus with none of the target it still keeps the widest drop among the top's
-scores, times β^0.708. On a Gaussian bulk alone at β 4 that is a median of 8 images, never more than
-27 in 200 draws, at any corpus size from 200 to 20,000. At β 2 the median is 5. That is
-exactly what the centroid's count line already returns before the label quota. The rule extends it
-by about 25 votes, while the class model is thin. The test `TestACorpusWithNoPositives` pins it.
+scores, times β^0.708. On a Gaussian bulk alone, 300 draws at corpus sizes 200, 5,439 and 20,000:
+
+| balance | kept (median) | 90th percentile | most |
+|---|---|---|---|
+| β ¼ | 2 | 5 | 10 |
+| β 1 | 3 | 6 | 10 |
+| β 4 | 8 | 16 | 27 |
+
+The labels line returned a median of 1 on a 200-image corpus with none of the target (#4452). The
+head's count is exactly what the centroid's count line already returns before the label quota. The
+rule extends that by about 25 votes, while the class model is thin. The test
+`TestACorpusWithNoPositives` pins it.
 
 ## What this does not settle
 
@@ -298,6 +374,11 @@ by about 25 votes, while the class model is thin. The test `TestACorpusWithNoPos
   and kept 3,925. Past the gate, weakly separated sessions still do it: 2% of face clicks there
   keep more than ten times the person's withheld photos, at most 798, in 113 of 2,248 runs. Filed
   as #4798.
+- **The hand-back.** When the gate closes (votes 54–60 on faces at β 1) Find's F-beta drops back
+  to today's line, by about 0.06 (Figure 4). On faces the head's count would still beat the
+  class model there. A gate on Goods alone gains more on faces (+0.014 to +0.044 at β 4 over votes
+  1–150), but costs COCO 0.003 and leaves small targets on the count for the whole session. The
+  later clicks are better fixed at the cause (#4798).
 - **The per-click oracle is far above every rule:** +0.11 to +0.15 on faces over votes 1–50.
   Most of it is the line, not the ranking.
 - **Region path.** Priced on single-vector sessions only (FHIBE faces, COCO's Binary opening).
@@ -307,11 +388,11 @@ by about 25 votes, while the class model is thin. The test `TestACorpusWithNoPos
 
 | | |
 |---|---|
-| Code | branch `claude/beta4-line-4786`, stacked on #4790: today's sessions at `cb26dcfae` (frozen worktree `vts-4786-run`), the arm at `4131eef90` (`vts-4786-arm2`) |
+| Code | branch `claude/beta4-line-4786`, stacked on #4790: today's sessions at `cb26dcfae` (frozen worktree `vts-4786-run`); the β 4 arm at `4131eef90` (`vts-4786-arm2`; its β 4 line is the shipped one's), the β ¼ and β 1 arms at `8338a115c` (`vts-4786-arm4`) |
 | FHIBE release | `fhibe-full-resolution-674a7dcf`, faces aligned by roll (#4777), the #4699 baseline's 562 people |
-| Run dirs (owner-only) | `<release>-derived/runs/2026-10-11-4786-roll-k{1,4}-b{025,1,4}` (today, with line counts), `…/2026-10-11-4786thin-roll-k{1,4}-b4` (the arm); analyses `…/2026-10-11-4786-analysis` |
-| COCO | `state-of-the-app/2026-10-11-line4786-b{025,1,4}` (today, with line counts), `…/2026-10-11-line4786thin-b4` (the arm), on the 2026-10-08 grid |
-| Files here | `rules_b4.csv`, `rules_low.csv` (every rule and gate), `ab.csv` (the arm), `curves_*.csv`, `tables.md`, figures |
+| Run dirs (owner-only) | `<release>-derived/runs/2026-10-11-4786-roll-k{1,4}-b{025,1,4}` (today, with line counts), `…/2026-10-11-4786thin-roll-k{1,4}-b4` and `…/2026-10-11-4786all-roll-k{1,4}-b{025,1}` (the arm); analyses `…/2026-10-11-4786-analysis` |
+| COCO | `state-of-the-app/2026-10-11-line4786-b{025,1,4}` (today, with line counts), `…/2026-10-11-line4786thin-b4` and `…/2026-10-11-line4786all-b{025,1}` (the arm), on the 2026-10-08 grid |
+| Files here | `rules_b4.csv`, `rules_low.csv` (every rule and gate, today's sessions re-cut), `ab.csv`, `ab_curves.csv` (the arm against today), `curves_*.csv` (today, the oracle and every rule at the shipped gate, per vote), `tables.md`, figures |
 
 Reproduce:
 
@@ -319,12 +400,12 @@ Reproduce:
 # today's sessions, with the line counts (from a frozen worktree)
 SOTA_FACE_TAG=4786 SOTA_FACE_ARM=roll CALIB_LINE_COUNTS=1 bash scripts/experiments/fhibe/sota_face.sh dirs   # then tasks, pack
 bash scripts/experiments/state_of_app/line_4786.sh dirs && bash scripts/experiments/state_of_app/line_4786.sh launch 4   # and 1, 0.25
-# the arm: the shipped rule (the default from 4131eef90 on)
-SOTA_FACE_TAG=4786thin SOTA_FACE_ARM=roll CALIB_LINE_COUNTS=1 bash scripts/experiments/fhibe/sota_face.sh dirs   # beta 4 tasks, pack
-LINE4786_ARM=thin CALIB_LINE_COUNTS=1 bash scripts/experiments/state_of_app/line_4786.sh launch 4
+# the arm: the shipped rule (the default from 8338a115c on; at beta 4 the same line from 4131eef90)
+SOTA_FACE_TAG=4786all SOTA_FACE_ARM=roll CALIB_LINE_COUNTS=1 bash scripts/experiments/fhibe/sota_face.sh dirs   # tasks, pack
+LINE4786_ARM=all CALIB_LINE_COUNTS=1 bash scripts/experiments/state_of_app/line_4786.sh launch 1   # and 0.25, 4
 # analysis
 python scripts/experiments/fhibe/line_4786.py --set k4-b4-1024=<cells>::fhibe_faces_roll_1024 ... --set coco-b4=<cells> --out <dir>
 python scripts/experiments/fhibe/prior_4776.py --pair k4-b4-1024=<arm cells>::<today's cells>::fhibe_faces_roll_1024 ... --out <dir>
-python scripts/experiments/fhibe/line_4786_tables.py --rules <rules.csv> --first <first_clicks.csv> --ab <prior_ab.csv> --runs-of coco-b4=720 --gate neg32pos6 --out tables.md
+python scripts/experiments/fhibe/line_4786_tables.py --rules <rules.csv> ... --first <first_clicks.csv> --ab <prior_ab.csv> ... --runs-of coco-b4=720 --runs-of coco-b1=720 --runs-of coco-b025=720 --gate neg32pos6 --out tables.md
 python scripts/experiments/fhibe/line_4786_figures.py --curves <curves.csv> --first <first_clicks.csv> --arm <prior_curves.csv> --out <dir>
 ```

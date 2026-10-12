@@ -7,7 +7,7 @@ both) and ``prior_4776.py``'s ``prior_ab.csv`` for the full-session arm, and wri
 * the count rules at beta 4, each at the shipped gate: Find's F-beta, session mean over votes
   1-50 and 1-150, each rule minus today, mean +- SE over runs;
 * the head's count line under every gate;
-* the head's count line at beta 1/4 and 1, where it does not ship;
+* the count rules at beta 1/4 and 1, at the shipped gate;
 * the arm (the rule in every fit's line, full sessions) against today, run for run;
 * the first trained click: what each line keeps and what it scores there.
 
@@ -29,8 +29,8 @@ from pathlib import Path
 import pandas as pd
 
 RULES = [
-    ("headcountb1", "the head's count, never fewer than the beta-1 line's (shipped)"),
-    ("headcount", "the head's count (the centroid's rule on the head's scores)"),
+    ("headcount", "the head's count (the centroid's rule on the head's scores; shipped)"),
+    ("headcountb1", "the head's count, never fewer than the beta-1 labels line's"),
     ("headcountmin", "the fewer of today's and the head's count"),
     ("carry", "the centroid's count carried"),
     ("carrymin", "the fewer of today's and the centroid's count"),
@@ -40,6 +40,9 @@ RULES = [
     ("b1line", "the beta-1 labels line"),
     ("centroid", "the centroid's own Test (#4776's hand-over)"),
 ]
+#: At beta 1/4 and 1 the rules that read the beta-1 line (``scaled``, ``b1line``, ``headcountb1``) are that line itself
+#: or nothing a build ran, so those tables leave them out.
+LOW_RULES = [r for r in RULES if r[0] not in ("scaled", "b1line", "headcountb1")]
 GATES = [
     ("16", "fewer than 16 Bads in hand"),
     ("32", "fewer than 32 Bads in hand"),
@@ -119,14 +122,15 @@ def main() -> int:
         out += _table(rules, b4, names, span) + [""]
     for span, title in (("1_50", "votes 1-50"), ("1_150", "votes 1-150")):
         out += [f"### The head's count under each gate, beta 4, {title}", ""]
-        out += _table(rules, b4, [(f"headcountb1@{x}", label) for x, label in GATES], span) + [""]
+        out += _table(rules, b4, [(f"headcount@{x}", label) for x, label in GATES], span) + [""]
     if low:
         for span, title in (("1_50", "votes 1-50"), ("1_150", "votes 1-150")):
-            out += [f"### Were it drawn at beta 1/4 and 1 ({g}), {title}", ""]
+            out += [f"### The count rules at beta 1/4 and 1, until the gate ({g}), {title}", ""]
             out += _table(
                 rules,
                 low,
-                [(f"headcountb1@{g}", "the head's count, floored at beta 1"), ("oracle", "per-click oracle")],
+                [(f"{r}@{g}", label) for r, label in LOW_RULES]
+                + [("oracle", "per-click oracle (a bound, not a rule)")],
                 span,
             )
             out += [""]
@@ -160,8 +164,8 @@ def main() -> int:
         for s, d in fc.groupby("set", sort=False):
             out.append(
                 f"| {s} | {len(d)} | {d['n_test_pos'].median():g} | {d['k_test'].median():g} / {d['k_test'].quantile(0.9):.0f} | "
-                f"{d['k_headcountb1'].median():g} / {d['k_headcountb1'].quantile(0.9):.0f} | "
-                f"{d['last_centroid_f'].mean():.2f} → {d['f_today'].mean():.2f} | {d['f_headcountb1'].mean():.2f} |"
+                f"{d['k_head_count'].median():g} / {d['k_head_count'].quantile(0.9):.0f} | "
+                f"{d['last_centroid_f'].mean():.2f} → {d['f_today'].mean():.2f} | {d['f_headcount'].mean():.2f} |"
             )
         out.append("")
     args.out.write_text("\n".join(out))
