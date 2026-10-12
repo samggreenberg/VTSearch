@@ -14,7 +14,8 @@ Per K x beta (one size):
   example sort until the app shows a detector, then the last value carried); arm minus control, mean, SE over
   people, and the share of people the arm wins and loses;
 * the objective after the end-of-run check, final AP, Goods found, and failed sessions (final AP below 0.1
-  while the person's full-label ceiling reaches 0.5, the #4777 bar);
+  while the person's full-label ceiling reaches 0.5, the #4777 bar); precision, recall and the count Find
+  returns at votes 25 and 50, where a check's picks would move the line;
 * what the check does in each set, from the pick log: the share of sessions prompted, the first prompted vote,
   the prompted votes cast inside the 150, and the Goods those votes found;
 * a drift check: a pair's picks must agree up to the control's first prompt (or to vote 150 when it never
@@ -176,6 +177,12 @@ def main() -> int:
                 ("positives_found", "goods_found"),
                 ("goods_25", "goods_25"),
                 ("goods_50", "goods_50"),
+                ("thr_precision_25", "precision_25"),
+                ("thr_recall_25", "recall_25"),
+                ("thr_returned_25", "returned_25"),
+                ("thr_precision_50", "precision_50"),
+                ("thr_recall_50", "recall_50"),
+                ("thr_returned_50", "returned_50"),
                 ("check_votes", "end_check_votes"),
             ):
                 c, a = cc.loc[runs, col].to_numpy(float), ac.loc[runs, col].to_numpy(float)
