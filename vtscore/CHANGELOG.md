@@ -106,6 +106,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The Goods' centroid's line counts the unvoted media only** (issue #4779). `fit_centroid` and
+  `fit_centroid_head` take `line_mask` (one flag per score: which media the line counts); the app's
+  `install_centroid_head` passes the media the labelset does not label (`_unvoted_mask`).
+  `query_sort.cosine_sort_cuts` takes `exclude_ids` (default: the active detector's voted media) and leaves
+  them, and any media at `EXAMPLE_SELF_COSINE` (0.9999) or above, out of an example sort's display line;
+  the acquisition cut still reads every media. The harness's priced lines take a corpus,
+  `<rule>~pool@<beta>` or `<rule>~unvoted@<beta>` (`CENTROID_LINE_CORPORA`), drawn over every media of
+  the cell with the voted ones in or out.
+- **The Goods' centroid's line looks past a standout first cosine from beta 1 up** (issue #4783).
+  `CENTROID_LINE_RULE` is now `count_gap_floor_skip25_b1`: `count_gap_floor` below beta 1, and from
+  beta 1 up the same composition with the drop `skip25` (when the widest drop is the first, the widest
+  one below the second cosine if at least a quarter as wide). New: `CENTROID_DROPS` (each candidate's
+  drop: `skip25`, `skip50`, `rank5`), `_top_gap_count(..., drop=)`, and `CENTROID_GATED` (a rule gated on
+  beta 1, resolved by `centroid_cut` at the line's beta, so `CentroidLine.threshold_at` redraws the right
+  one). Candidates `count_gap_floor_skip25`, `_skip50` and `_rank5` join `CENTROID_LINE_RULES`.
+  `CALIB_CENTROID_LINE=count_gap_floor` is the harness arm before this change.
 - **The Goods' centroid's line counts the widest drop too, and never cuts through it** (issue #4759).
   `CENTROID_LINE_RULE` is now `count_gap_floor`: `beta ** 0.708` times the larger of #4603's bulk excess
   and the number of cosines above the widest drop between neighbours in the top 11

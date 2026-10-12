@@ -1386,6 +1386,7 @@ def _centroid_test(
     calibration_rows: bool,
     line_rule: str | None = None,
     line_beta: float | None = None,
+    line_ids: "list[int] | None" = None,
 ) -> tuple[StepModel, list[dict[str, Any]], "tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None"]:
     """What a Test on the withheld half gives under the label quota (#4643): the Goods' centroid.
 
@@ -1395,7 +1396,9 @@ def _centroid_test(
     :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  *beta*
     weights the F-beta columns.  The line is drawn by *line_rule* at
     *line_beta* (:func:`~vtscore.detectors.centroid_head.centroid_cut`, #4732);
-    ``None`` is the app's rule.
+    ``None`` is the app's rule.  *line_ids* draws the line over other media than
+    the withheld half (#4779: the whole pool, voted media in or out, as the app's
+    labelled collection holds them); the metrics stay the withheld half's.
 
     Returns the step, its metric rows (one, from :func:`_calibration_metric_rows`
     when *calibration_rows*, else :func:`_evaluate_on_test`'s), and the
@@ -1403,8 +1406,10 @@ def _centroid_test(
     """
     from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
 
+    corpus = list(test_ids) if line_ids is None else list(line_ids)
+
     def _score(step: StepModel) -> list[float]:
-        return _score_media_ids(step, clips_dict, list(test_ids), region_aware=region_aware, style_obj=style_obj)
+        return _score_media_ids(step, clips_dict, corpus, region_aware=region_aware, style_obj=style_obj)
 
     step = _centroid_step(
         good_votes,
@@ -2260,16 +2265,27 @@ def _centroid_line_variant_rows(
     region_voting: bool,
     region_aware: bool,
     style_obj: Any,
+    voted: "set[int] | None" = None,
 ) -> list[dict[str, Any]]:
     """#4732's priced lines: the same Test at each ``(rule, beta)`` of *variants*, as tagged rows.
 
     Each row is *ident* (the click's own identity and timing) with the centroid's
     metrics when its line is drawn by *rule* at *beta* and F-beta is weighted at
     *beta*, tagged :func:`centroid_line_tag` so a production read skips it.
-    Band-free: the bands price the detector, which these rows share.
+    Band-free: the bands price the detector, which these rows share.  A rule
+    written ``<rule>~<corpus>`` draws its line over another corpus
+    (:data:`CENTROID_LINE_CORPORA`, #4779): ``pool`` is every media of the cell,
+    the voted ones included, as the app's labelled collection holds them;
+    ``unvoted`` leaves out *voted*.
     """
     out: list[dict[str, Any]] = []
-    for rule, beta in variants:
+    for spec, beta in variants:
+        rule, _, corpus = spec.partition("~")
+        line_ids = None
+        if corpus == "pool":
+            line_ids = list(clips_dict)
+        elif corpus == "unvoted":
+            line_ids = [i for i in clips_dict if i not in (voted or set())]
         _step, metric_rows, _cal = _centroid_test(
             good_votes,
             clips_dict,
@@ -2283,8 +2299,9 @@ def _centroid_line_variant_rows(
             calibration_rows=False,
             line_rule=rule,
             line_beta=beta,
+            line_ids=line_ids,
         )
-        out.extend({**ident, **mr, "beta": beta, "gmm_variant": centroid_line_tag(rule, beta)} for mr in metric_rows)
+        out.extend({**ident, **mr, "beta": beta, "gmm_variant": centroid_line_tag(spec, beta)} for mr in metric_rows)
     return out
 
 
@@ -2338,6 +2355,12 @@ def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bo
     return label_quota_tier(n_good, n_bad, dry_bad_quota=dry_bad_quota).tier == TIER_CENTROID
 
 
+#: The corpora a priced centroid line can be drawn over (#4779): the withheld half (the
+#: default, a Find on another collection), every media of the cell (``pool``, the app's
+#: labelled collection today) and the cell's media less the voted ones (``unvoted``).
+CENTROID_LINE_CORPORA = ("withheld", "pool", "unvoted")
+
+
 def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
     """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
 
@@ -2351,15 +2374,23 @@ def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tup
     items = [x.strip() for x in spec.split(",")] if isinstance(spec, str) else [str(x).strip() for x in spec]
     out: list[tuple[str, float]] = []
     for item in (x for x in items if x):
-        rule, sep, beta_text = item.partition("@")
+        spec, sep, beta_text = item.partition("@")
+        rule, tilde, corpus = spec.partition("~")
         try:
             beta = float(beta_text)
         except ValueError:
             beta = float("nan")
-        if not sep or rule not in CENTROID_LINE_RULES or not (math.isfinite(beta) and beta > 0):
+        if (
+            not sep
+            or rule not in CENTROID_LINE_RULES
+            or (tilde and corpus not in CENTROID_LINE_CORPORA)
+            or not (math.isfinite(beta) and beta > 0)
+        ):
             raise ValueError(
-                f"a centroid line variant is '<rule>@<beta>' with rule in {CENTROID_LINE_RULES}; got {item!r}"
+                f"a centroid line variant is '<rule>[~<corpus>]@<beta>' with rule in {CENTROID_LINE_RULES} "
+                f"and corpus in {CENTROID_LINE_CORPORA}; got {item!r}"
             )
+        rule = spec
         if (rule, beta) in out:
             raise ValueError(f"centroid line variant {item!r} is repeated")
         out.append((rule, beta))
@@ -3838,6 +3869,7 @@ def simulate_voting_iterations(  # noqa: C901
                         region_voting=region_voting,
                         region_aware=region_aware,
                         style_obj=style_obj,
+                        voted=set(good_votes) | set(bad_votes),
                     )
                 )
             continue
@@ -4459,6 +4491,7 @@ def simulate_voting_iterations(  # noqa: C901
                     region_voting=region_voting,
                     region_aware=region_aware,
                     style_obj=style_obj,
+                    voted=set(good_votes) | set(bad_votes),
                 )
             )
         if handover_shadow and quota_on and good_votes and not centroid:
