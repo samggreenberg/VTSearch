@@ -69,6 +69,7 @@ from vtscore.eval.live_threshold_rules import live_threshold as retired_live_thr
 from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_count_schedule
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_handover import HANDOVER_CENTROID_TAG, HandoverJudge
+from vtscore.eval.arms_line_counts import line_count_row
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
@@ -2507,6 +2508,7 @@ def simulate_voting_iterations(  # noqa: C901
     centroid_line_variants: "Sequence[str] | None" = None,
     handover_shadow: bool = False,
     handover_sink: Optional[list[dict[str, Any]]] = None,
+    line_count_sink: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2682,6 +2684,12 @@ def simulate_voting_iterations(  # noqa: C901
             (:data:`~vtscore.eval.arms_handover.HANDOVER_COLUMNS`): held-out
             Goods' ranks in the unvoted pool under each detector, and the
             centroid-prior heads' AP.  Single-vector runs only.
+        line_count_sink: Receives, at every click Test gives the trained head
+            under a balance, what each candidate line keeps on the withheld
+            half and where its positives sit in the head's ranking (#4786,
+            :data:`~vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS`), so a
+            count rule for the line is priced on the same session.  Recorded
+            only: the session is the app's.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -4060,6 +4068,8 @@ def simulate_voting_iterations(  # noqa: C901
         # metrics row, but both paths score the same test set here.
         calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None = None
         metrics: dict[str, float] = {}
+        # The trained head's scores of the withheld half, their truth and ids, for #4786's line counts.
+        scored_test: tuple[Any, Any, list[int]] | None = None
         t_test = time.monotonic()
         if centroid:
             centroid_step, c_rows, calibration = _centroid_test(
@@ -4128,6 +4138,8 @@ def simulate_voting_iterations(  # noqa: C901
                 beta=details.get("beta"),
                 out=details,
             )
+            if scored:
+                scored_test = (scored[0], scored[1], list(test_ids))
             if emit_calibration_metrics and trainer != APP_TRAINER and scored:
                 # A standalone trainer has no style, so it never reaches the
                 # calibration rows above - which is where the oracle cut, the
@@ -4521,6 +4533,46 @@ def simulate_voting_iterations(  # noqa: C901
                         "phase": base_row["phase"],
                         **handover_judge.row(good_votes, bad_votes, pool),
                     }
+                )
+        if line_count_sink is not None and not centroid and good_votes and beta is not None:
+            if calibration is not None:
+                scored_test = (calibration[1], calibration[2], list(calibration[3]))
+            if scored_test is not None:
+                # #4786: what each candidate line would keep on the withheld half at this click.
+                lc_scores, lc_labels, lc_ids = scored_test
+                on_test = details.get("find_on_test")
+                if on_test is None and details.get("find_line") is not None:
+                    on_test = details["find_line"].on_corpus(np.asarray(lc_scores, dtype=np.float64))
+
+                def _lc_score(st: StepModel, ids: list[int] = lc_ids) -> list[float]:
+                    return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+
+                lc_centroid = _centroid_step(
+                    good_votes,
+                    clips_dict,
+                    target_category,
+                    _lc_score,
+                    region_voting=region_voting,
+                    style_obj=style_obj,
+                    line_rule=centroid_line,
+                    line_beta=beta,
+                )
+                line_count_sink.append(
+                    line_count_row(
+                        rank_ident,
+                        t,
+                        base_row["phase"],
+                        len(good_votes),
+                        len(bad_votes),
+                        float(beta),
+                        lc_ids,
+                        lc_scores,
+                        lc_labels,
+                        float(details.get("find_threshold", threshold)),
+                        on_test,
+                        _lc_score(lc_centroid),
+                        CENTROID_THRESHOLD,
+                    )
                 )
 
     if rank_frame_sink is not None and last_ordinary is not None:

@@ -1183,6 +1183,13 @@ CENTROID_LINE_VARIANTS: str | None = os.environ.get("CALIB_CENTROID_LINE_VARIANT
 #: picks, so the session is the app's; ``CALIB_HANDOVER_SHADOW=1`` turns it on.
 HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not in ("", "0")
 
+#: Issue #4786's line counts: at every click Test gives the trained head, what
+#: each candidate line would keep on the withheld half and where its positives
+#: sit in the head's ranking (``task_NNNN__linecounts.csv``), so a count rule for
+#: the line is priced on the same sessions.  Recorded only, so the session is the
+#: app's; ``CALIB_LINE_COUNTS=1`` turns it on.
+LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", "0")
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive

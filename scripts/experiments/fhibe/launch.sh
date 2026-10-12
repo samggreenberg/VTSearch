@@ -37,6 +37,8 @@
 # CALIB_CENTROID_LINE_VARIANTS="<rule>@<beta>,..." adds tagged rows pricing other
 # lines on the same sessions. CALIB_HANDOVER_SHADOW=1 adds, past the label quota, the
 # centroid's Test as tagged rows and a hand-over rule's evidence (__handover.csv, #4776).
+# CALIB_LINE_COUNTS=1 adds, at every click Test gives the trained head, what each candidate
+# line keeps on the withheld half (__linecounts.csv, #4786).
 # FHIBE_STRATA=2-4,5-6,7- makes `identities` draw FHIBE_N_IDENTITIES from each
 # band of photo counts and write <identities>.strata.tsv beside the file.
 #
@@ -128,6 +130,8 @@ ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX CALIB_GOOD_DRY_RUN=${CALIB_GOOD_DRY_RUN:-} CALIB_QUOTA_DRY_BADS=${CALIB_QUOTA_DRY_BADS:-}"
 ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VARIANTS=${CALIB_CENTROID_LINE_VARIANTS:-}"
 ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
+# The line counts (#4786): a side frame of what each candidate line keeps; the session is unchanged.
+ENVX="$ENVX CALIB_LINE_COUNTS=${CALIB_LINE_COUNTS:-}"
 # An eval head (CALIB_HEAD, e.g. #4776's linear_svm_prior): unset is the shipped linear SVM; preflight declares it.
 ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
 
@@ -208,6 +212,7 @@ json.dump(
         "centroid_line": "${CALIB_CENTROID_LINE:-}",
         "centroid_line_variants": "${CALIB_CENTROID_LINE_VARIANTS:-}",
         "handover_shadow": "${CALIB_HANDOVER_SHADOW:-}",
+        "line_counts": "${CALIB_LINE_COUNTS:-}",
         "head": "${CALIB_HEAD:-}",
         "job_name": "$JOB_NAME",
     },

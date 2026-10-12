@@ -41,6 +41,7 @@ SIDE_FRAME_SUFFIXES = (
     "__rankframes",
     "__linetest",
     "__handover",
+    "__linecounts",
 )
 
 
