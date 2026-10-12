@@ -938,6 +938,34 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedMedia!.id).toBe(2);
   });
 
+  it("walks Toasty's vote hint through Autopilot's phases (#4807)", async () => {
+    const medias = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    flushInitialRequests(undefined, medias);
+    await settleResource();
+    component.onMediaSelect(2);
+    TestBed.tick();
+    // Autopilot runs (the left panel starts it) on a detector with no labels.
+    expect(component.voteHint()).toBe('start-voting');
+
+    const votes = (good: number[], bad: number[]) => {
+      component.voteState.loadVotes();
+      httpMock.match('/api/votes').forEach((req) => req.flush({ good, bad, click_times: {}, learned_scores: {} }));
+      TestBed.tick();
+      component.onMediaSelect(2);
+      TestBed.tick();
+    };
+    votes([1], []);
+    expect(component.voteHint()).toBe('find-goods');
+    expect(component.voteHintCounts()).toEqual({ goods: 1, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
+
+    votes([1, 3, 4], []);
+    expect(component.voteHint()).toBe('find-bads');
+    expect(component.voteHintCounts()).toEqual({ goods: 3, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
+
+    votes([1, 3, 4], [5, 6, 7, 8]);
+    expect(component.voteHint()).toBe('keep-voting');
+  });
+
   it('should return null selectedMedia when no selection', () => {
     flushInitialRequests();
     expect(component.mediaState.selectedMedia).toBeNull();
@@ -1431,6 +1459,39 @@ describe('LabelViewComponent', () => {
     component.onResortNewExample({ action: 'new-example', type: 'text', value: 'new query' });
     expect(component.resortSortClicks).toBe(0);
     expect(component.resortSortPositives).toBe(0);
+  });
+
+  describe('saving the re-sort to the detector (#4801)', () => {
+    /** Train on `det1`, whose registry name is `my-det`. */
+    function openOnDetector(): void {
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'det1');
+      TestBed.inject(LabelSessionService).textQuery = 'old query';
+      flushInitialRequests();
+      httpMock
+        .match((req) => req.url === '/api/detectors/registry')
+        .forEach((req) => req.flush({ detectors: [{ id: 'det1', name: 'my-det' }] }));
+    }
+
+    it('saves a new typed query as the detector example', () => {
+      openOnDetector();
+
+      component.onResortNewExample({ action: 'new-example', type: 'text', value: 'new query' });
+
+      const put = httpMock.expectOne('/api/detectors/my-det/examples');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ examples: [{ type: 'text', value: 'new query' }] });
+      put.flush({ success: true, name: 'my-det', examples: put.request.body.examples });
+    });
+
+    it('saves a new media example as an unlabeled seed, not a Good', () => {
+      openOnDetector();
+
+      component.onResortNewExample({ action: 'new-example', type: 'media', value: 'x.png' });
+
+      const put = httpMock.expectOne('/api/detectors/my-det/examples');
+      expect(put.request.body).toEqual({ examples: [{ type: 'media', value: 'x.png', labeled: false }] });
+      put.flush({ success: true, name: 'my-det', examples: put.request.body.examples });
+    });
   });
 
   it('does not count a click that toggled a positive off', () => {

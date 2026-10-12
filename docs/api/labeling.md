@@ -65,7 +65,10 @@ votes, one class) keeps its retrain's fallback cut, never a count.
 A `POST` is a pure cutoff move: the active detector's line moves to the new
 beta's cut of the same labels' line without retraining and, in Find mode, the
 unverified items re-split. Both verbs return the new line in the same round
-trip, so the app's control moves its line without re-scoring. The same value
+trip, so the app's control moves its line without re-scoring. A text or
+example sort draws its own line at the balance too, and a client redraws it
+over the ranking on screen with
+[`GET /api/sort/line`](medias.md#sort-line) (#4760). The same value
 is settable as `beta` on `PUT /api/settings`, which also sets the active
 detector's.
 
@@ -81,7 +84,7 @@ detector's.
 | `fbeta` | The walk's F-beta estimate for the kept set - `(1 + beta²) · tp / (beta² · n_pos + count)`, `tp` the band-weighted positives among the picks, `n_pos` the mixture's - or `null` while unchecked. |
 | `checkable` | Whether a spot check can start on this line (#4489): `false` with no ranking to walk - a structural (`sift_vlad` / `sift_vlad_doc`) detector, whose line is the verification gate's boundary rather than a cut on a ranking, or a detector not yet trained on this dataset - or with nothing in it left unvoted. `POST /api/precision-check/start` refuses those with a **409**, so the app offers no check there. |
 | `separation` | The labels' d' (#4496): how many spreads apart the labels line's Good and Bad score components sit, the spread the line was cut with. `null` before a retrain has drawn the labels' line. |
-| `check_due` | `true` when the labels separate weakly enough that a spot check is due (#4496, `weak_check_due`): `separation` below 1.5, at least 10 votes, and 25 votes since the last check ended (finished or closed). Autopilot runs the check; the Train tab's Check button calls for one. Never `true` in Find or while a check runs. |
+| `check_due` | `true` when the labels separate weakly enough that a spot check is due (#4496, `weak_check_due`): `separation` below 1.5, at least 10 votes, and 25 votes since the last check ended (finished or closed). Autopilot runs the check; the Train tab's Check button calls for one. Never `true` in Find, while a check runs, or on a face detector (`media_type` `face`, #4799: there the check costs the session and finds nothing); `separation` is still reported. |
 | `schedule` | Where a walk starts and what it costs: `candidate` (32 at beta ≤ 1, 128 above: the bands a walk audits first; no longer a cap on the line), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
 | `threshold` | The line: the labels' cut at this beta. `null` when no detector is active or none has computed a threshold yet. |
 | `n_returned` | Items at or above `threshold` in the ranking the detector last scored, voted items included. `null` before a retrain has scored one. |

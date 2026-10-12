@@ -2,9 +2,7 @@
 // Check (and fix) where a full-bleed slide's headline breaks.
 //
 //     cd slides
-//     ./build.py hold-the-line
-//     npx @marp-team/marp-cli@4 _build/hold-the-line.md --theme-set themes/ \
-//         --allow-local-files --html -o _out/hold-the-line.html
+//     ./render.sh hold-the-line html                             # -> _out/hold-the-line.html
 //     node balance-titles.mjs _out/hold-the-line.html            # report
 //     node balance-titles.mjs _out/hold-the-line.html --write    # apply
 //
@@ -115,10 +113,16 @@ for (const row of measured) {
   // `Average` is a choice about the slide, not a wrap. What is never the
   // author's call is *where* a two-line headline breaks.
   const hasBreak = frag ? /<br\s*\/?>/i.test(frag.raw) : false;
+  const asMarkdown = (at) =>
+    at === 0 ? row.flat : row.words.slice(0, at).join(' ') + '<br>' + row.words.slice(at).join(' ');
+  const gap = (c) => Math.abs(c.lines[0] - c.lines[1]);
   const oneLine = row.candidates.find((c) => c.at === 0 && c.lines.length === 1);
-  const twoLine = row.candidates
-    .filter((c) => c.at > 0 && c.lines.length === 2)
-    .sort((a, b) => Math.abs(a.lines[0] - a.lines[1]) - Math.abs(b.lines[0] - b.lines[1]))[0];
+  const balanced = row.candidates.filter((c) => c.at > 0 && c.lines.length === 2).sort((a, b) => gap(a) - gap(b));
+  // Two breaks can balance exactly as well as each other — `Up and` over `Up`
+  // is the mirror of `Up` over `and Up` — and then both satisfy the rule, so
+  // the one the author wrote stands rather than whichever the sort met first.
+  const twoLine =
+    balanced.find((c) => gap(c) === gap(balanced[0]) && frag && asMarkdown(c.at) === frag.raw) ?? balanced[0];
 
   let want;
   if (oneLine && !hasBreak) want = { at: 0, lines: oneLine.lines };
@@ -130,10 +134,7 @@ for (const row of measured) {
     continue;
   }
 
-  const wanted =
-    want.at === 0
-      ? row.flat
-      : row.words.slice(0, want.at).join(' ') + '<br>' + row.words.slice(want.at).join(' ');
+  const wanted = asMarkdown(want.at);
   const have = frag ? frag.raw : null;
   const shape = want.lines.join(' / ') + 'px';
 

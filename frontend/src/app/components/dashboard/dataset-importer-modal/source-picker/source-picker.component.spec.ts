@@ -175,6 +175,19 @@ describe('SourcePickerComponent', () => {
       expect(fixture.nativeElement.querySelector('.tab-bar-hint').textContent).toContain('Choose a category.');
     });
 
+    it("drops the pick lines when the host says Toasty is saying them (#4807)", async () => {
+      fixture.componentRef.setInput('visibleImporterTabs', tabs);
+      fixture.componentRef.setInput('noTabHint', 'Choose a category.');
+      fixture.componentRef.setInput('showPickHints', false);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.tab-bar-hint')).toBeNull();
+
+      fixture.componentRef.setInput('activeTab', 'server');
+      fixture.componentRef.setInput('importersForActiveTab', importers);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.tab-bar-hint')).toBeNull();
+    });
+
     it('renders sub-tabs for the active category and emits importerSelected on click', async () => {
       fixture.componentRef.setInput('visibleImporterTabs', tabs);
       fixture.componentRef.setInput('activeTab', 'server');

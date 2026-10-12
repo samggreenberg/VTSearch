@@ -59,8 +59,18 @@ LINEAR_SVM_HEAD = -1
 #: :func:`vtscore.training.logreg.fit_linear_logreg_head`.  An eval arm only.
 LINEAR_LOGREG_HEAD = -2
 
+#: ``hidden_dim`` sentinel selecting the **linear SVM started from the Goods'
+#: centroid** (issue #4776): the SVM head's objective with the centroid
+#: direction made cheap, so a head fitted to a few labels starts at the centroid
+#: rather than at the origin.  Same ``Linear(input_dim, 1)`` architecture;
+#: :func:`train_model` routes it to
+#: :func:`vtscore.training.svm_prior.fit_linear_svm_prior_head`.  The production
+#: head since #4785: every production fit in ``vtscore.detectors.training``
+#: passes it.
+LINEAR_SVM_PRIOR_HEAD = -3
+
 #: Every ``hidden_dim`` that builds a single ``Linear(D, 1)`` rather than an MLP.
-LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD, LINEAR_LOGREG_HEAD)
+LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD, LINEAR_LOGREG_HEAD, LINEAR_SVM_PRIOR_HEAD)
 
 
 def _auto_hidden_dim(n_train: int) -> int:
@@ -245,9 +255,36 @@ def _train_logreg_head(
     )
 
 
+def _train_svm_prior_head(
+    X_train: torch.Tensor,
+    y_train: torch.Tensor,
+    input_dim: int,
+    seed: int,
+    sample_weights: torch.Tensor | None,
+) -> nn.Sequential:
+    """Fit the :data:`LINEAR_SVM_PRIOR_HEAD` branch of :func:`train_model`, as :func:`_train_svm_head` fits the SVM."""
+    check_job_cancelled()
+    from vtscore.training.svm_prior import fit_linear_svm_prior_head  # noqa: PLC0415
+
+    weights_np = None if sample_weights is None else sample_weights.reshape(-1).detach().cpu().numpy()
+    if weights_np is not None and weights_np.shape[0] != len(y_train):
+        raise ValueError(f"sample_weights length {weights_np.shape[0]} does not match training-set size {len(y_train)}")
+    return fit_linear_svm_prior_head(
+        X_train.detach().cpu().numpy(),
+        y_train.reshape(-1).detach().cpu().numpy(),
+        input_dim,
+        seed=seed,
+        sample_weight=weights_np,
+    )
+
+
 #: The linear heads fitted outright by a scikit-learn solver rather than by the
 #: torch epoch loop in :func:`train_model`, by sentinel.
-_SOLVER_HEADS = {LINEAR_SVM_HEAD: _train_svm_head, LINEAR_LOGREG_HEAD: _train_logreg_head}
+_SOLVER_HEADS = {
+    LINEAR_SVM_HEAD: _train_svm_head,
+    LINEAR_LOGREG_HEAD: _train_logreg_head,
+    LINEAR_SVM_PRIOR_HEAD: _train_svm_prior_head,
+}
 
 
 def train_model(

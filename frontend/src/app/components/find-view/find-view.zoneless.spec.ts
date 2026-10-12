@@ -307,7 +307,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       results: [{ id: 1, score: 0.9 }],
       threshold: 0.5,
       label_quota: {
-        tier: 'centroid', n_good: 1, n_bad: 0, goods_owed: 2, bads_owed: 4, good_quota: 3, bad_quota: 4,
+        tier: 'centroid', n_good: 1, n_bad: 0, goods_owed: 2, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16,
       },
     });
     httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));
@@ -316,6 +316,28 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(fixture.componentInstance.detectorNote()).toContain('2 more Goods and 4 more Bads');
     const note = fixture.nativeElement.querySelector('.find-detector-note');
     expect(note?.textContent).toContain("Goods' centroid");
+  });
+
+  // #4758: a detector made from a typed query is that query's own set under the
+  // quota, from before its first label, and the left panel says so.
+  it('says when the pass was the typed query', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+
+    httpMock.expectOne('/api/find-label').flush({
+      results: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      label_quota: {
+        tier: 'query', n_good: 0, n_bad: 0, goods_owed: 3, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16,
+      },
+    });
+    httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));
+    await settleZoneless(fixture);
+
+    expect(fixture.componentInstance.detectorNote()).toContain('3 more Goods and 4 more Bads');
+    const note = fixture.nativeElement.querySelector('.find-detector-note');
+    expect(note?.textContent).toContain("the detector's typed query");
+    expect(note?.textContent).not.toContain('centroid');
   });
 
   // The balance POST is deferred until the picker settles (issue #2973), and
@@ -462,6 +484,20 @@ describe('FindViewComponent (balance supersession)', () => {
     expect(fresh.request.body).toEqual({ beta: 0.5 });
     fresh.flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.9, n_returned: 1 });
     expect(sortState.threshold).toBe(0.9);
+  });
+
+  it('keeps the ranking\'s token under the new line, for Collapse to photos (#4751)', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, null, 'find-tok');
+
+    vi.useFakeTimers();
+    fixture.componentInstance.onBetaChange(0.5);
+    vi.advanceTimersByTime(200);
+    httpMock.expectOne('/api/balance').flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.7, n_returned: 1 });
+    expect(sortState.threshold).toBe(0.7);
+    expect(sortState.sortToken).toBe('find-tok');
   });
 
   it('keeps posting after a failed pick', async () => {
@@ -745,6 +781,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       httpMock.expectOne('/api/find-label').flush({
         ok: true,
         results: [{ id: 1, score: 0.9 }],
+        sort_token: 'find-tok',
         threshold: 0.5,
         balance: wireBalance(status),
         good_count: 1,
@@ -756,6 +793,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
 
       expect(sortState.threshold).toBe(0.5);
       expect(sortState.balance?.status).toBe(status);
+      expect(sortState.sortToken).toBe('find-tok');
       // The walk still seeds on the marginal positive. (One result draws no
       // line - nothing falls below it - so the label is pinned further down.)
       expect(TestBed.inject(MediaStateService).selectedId()).toBe(1);
@@ -869,6 +907,48 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(el.querySelector('vt-line-test-stage')).toBeNull();
       // The Stats modal is retired into the result pane (#4524).
       expect(el.querySelector('button[aria-label="Stats"]')).toBeNull();
+    });
+
+    it("has Toasty explain the first pick, then the verdict once the test is done (#4807)", async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
+      expect(hint()?.getAttribute('hintId')).toBe('test-vote');
+      expect(hint()?.textContent).toContain('picks from both sides of your detector');
+
+      // The first pick voted: the explanation has done its job.
+      fixture.componentInstance.lineTest.response.set(
+        wireLineTest(wireTest({ picks: [1, 2], labelled: 1 })),
+      );
+      await settleZoneless(fixture);
+      expect(hint()).toBeNull();
+
+      fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
+      await settleZoneless(fixture);
+      expect(hint()?.getAttribute('hintId')).toBe('test-done');
+      expect(hint()?.textContent).toContain('Read the verdict on the right');
+    });
+
+    it("has Toasty explain the Review tab until an item is checked (#4807)", async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(false);
+
+      fixture.componentInstance.onFindTabChange('review');
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(true);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('vt-left-panel vt-toasty-hint')?.getAttribute('hintId')).toBe('review');
+
+      fixture.componentInstance.voteState.setOptimisticVerified(1, true);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(false);
     });
 
     // #4555: Test opens on Autopilot, which has no centre panel, so the one

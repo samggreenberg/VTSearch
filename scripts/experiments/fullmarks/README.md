@@ -644,7 +644,7 @@ ruled both ways is refused rather than resolved by whichever is applied last.
 file `build_corpus.py` replays, and it is the *only* one: a rebuild re-clusters
 from the sources and writes `classes.json` from scratch. So a verdict recorded
 only in `classes.json` is applied exactly until the next build, which is a
-documented step of the pipeline — stage 3 rebuilds the corpus to stamp the
+documented step of the pipeline — stage 2 rebuilds the corpus to stamp the
 roster — and not an accident someone might avoid. Until #3343 that was true of
 two passes:
 

@@ -3,7 +3,7 @@
 Every stage script imports this and calls :func:`setup_env` **before** importing
 anything under ``vtscore`` (the data-dir env vars have to be set first).  The
 experiment keeps its embeddings, models, and results under
-``/exp/$USER/max-patch`` so the per-(dataset, embedder) pickles are shared
+``/expscratch/$USER/max-patch`` so the per-(dataset, embedder) pickles are shared
 across all SLURM array tasks (embed once, reuse everywhere).
 
 The worktree is put on ``sys.path`` and the main venv's editable-install
@@ -31,7 +31,7 @@ __all__ = ["DATADIR", "EXP", "REPO", "RESULTS", "USER", "WARM_HF", "log", "setup
 
 USER = os.environ.get("USER", "sgreenberg")
 REPO = Path(os.environ.get("VTS_REPO", f"/exp/{USER}/projects/vts-maxpatch"))
-EXP = Path(os.environ.get("MAXPATCH_EXP", f"/exp/{USER}/max-patch"))
+EXP = Path(os.environ.get("MAXPATCH_EXP", f"/expscratch/{USER}/max-patch"))
 DATADIR = EXP / "datadir"
 RESULTS = Path(os.environ.get("MAXPATCH_RESULTS", str(EXP / "results")))
 WARM_HF = f"/exp/{USER}/.cache/huggingface"

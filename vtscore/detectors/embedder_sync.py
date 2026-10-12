@@ -112,6 +112,8 @@ def maybe_start_label_reembed(det_ctx, entry: dict, *, spawn: SpawnFn) -> str | 
                 # inside ``populate_label_embeddings``.
                 from vtscore.state import snapshot_medias
 
+                from vtscore.detectors.query_head import detector_text_query
+
                 try:
                     train_from_labelset(
                         det_ctx,
@@ -119,6 +121,8 @@ def maybe_start_label_reembed(det_ctx, entry: dict, *, spawn: SpawnFn) -> str | 
                         media_type=media_type,
                         snap=snapshot_medias(),
                         on_progress=_embed_progress,
+                        # Under the quota a typed-query detector is its query's set (#4758).
+                        text_query=detector_text_query(entry),
                     )
                     tracker.update("idle", "", 0, 0, step=None, total_steps=None)
                 except CancelledError:

@@ -84,12 +84,13 @@ a detector that flags nothing) scores precision 0 beside its recall and F-beta
 of 0, never an undefined precision that leaves the mean (``curves.EMPTY_SET``).
 
 **The report is the session, not Test (#4643).**  The harness scores the test
-split as Test would at each click: from the first Good, the Goods' centroid
-until the labels hold 3 Goods and 4 Bads (the label quota), the trained head
-from there (``detector_tier``).  The session shows neither until the Hard phase
-(``app_trained``, #4605): Autopilot's opening is the text sort, so Test differs
-from the session through the whole opening - the centroid before the quota, the
-trained head between the quota and the Hard phase.  This report follows the
+split as Test would at each click: until the labels meet the label quota (3
+Goods and 4 Bads, or a Good and 16 Bads) the typed query's own set from the first
+vote (#4758; the Goods' centroid from the first Good in a run before it), the
+trained head from there (``detector_tier``).  The session shows the trained head
+only from the Hard phase (``app_trained``, #4605): Autopilot's opening is the
+text sort, so Test and the session agree before the quota and differ between the
+quota and the Hard phase.  This report follows the
 session there (:func:`_shown_from`): every user-facing number before the hand-off
 is the typed query's set.  The viewer draws what Test gives instead
 (``calibration/viewer.py``), so the two differ through the opening on purpose.
@@ -148,11 +149,21 @@ from _rank_metrics import (  # noqa: E402
 import objective  # noqa: E402
 import stopping  # noqa: E402
 
-#: The two production paths, as the harness names them.
-ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max_patch"): "DINOv3 region"}
+#: The production paths, as the harness names them.
+ARMS = {
+    ("siglip", "whole_image"): "SigLIP binary",
+    ("siglip+dinov3_patch", "max_patch"): "DINOv3 region",
+    ("face", "whole_image"): "FaceNet face crop",
+}
 #: The State of the App reports are one per production path (owner, 2026-09-24):
-#: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo").
-PATHS = {"binary": ("siglip", "whole_image"), "region": ("siglip+dinov3_patch", "max_patch")}
+#: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo"). "Face" is FaceNet on
+#: FHIBE's face crops (#4762), opened on the example sort; its two stored sizes share the path,
+#: so a face analysis also names its dataset (``--dataset``).
+PATHS = {
+    "binary": ("siglip", "whole_image"),
+    "region": ("siglip+dinov3_patch", "max_patch"),
+    "face": ("face", "whole_image"),
+}
 #: A spot check's round of picks (``vtscore.training.thresholds.spot_check.CHECK_MIN_PICKS``, which a test pins):
 #: how far past a checkpoint a run's next rank frame may be read when the run handed over inside a check round
 #: and has no frame on screen by the checkpoint (#4631).
@@ -1696,6 +1707,9 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--path", choices=["all", *PATHS], default="all", help="one production path per report")
     ap.add_argument("--seeds", type=int, default=0, help="keep seeds 0..N-1 only (0 = all); for a snapshot mid-run")
+    ap.add_argument(
+        "--dataset", default=None, help="keep one dataset's cells (a face review's two sizes share one path, #4762)"
+    )
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -1712,6 +1726,9 @@ def main() -> int:
         emb, style = PATHS[args.path]
         keep = lambda df: df[(df["embedder"] == emb) & (df["style"] == style)] if not df.empty else df  # noqa: E731
         base, sky, picks, frames = keep(base), keep(sky), keep(picks), keep(frames)
+    if args.dataset:
+        only = lambda df: df[df["dataset"] == args.dataset] if not df.empty else df  # noqa: E731
+        base, sky, picks, frames = only(base), only(sky), only(picks), only(frames)
     if args.seeds:
         within = lambda df: df[df["seed"] < args.seeds] if not df.empty else df  # noqa: E731
         base, sky, picks, frames = within(base), within(sky), within(picks), within(frames)

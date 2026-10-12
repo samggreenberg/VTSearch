@@ -516,48 +516,72 @@ elements (filtering to `good` / `bad`), look up each cached embedding,
 and return `(X_list, y_list, groups, score_rows)` - the same shape
 `_build_vote_xy` produces for live votes.
 
-### `train_from_labelset(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None)`
+### `train_from_labelset(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None, text_query="")`
 
 `vtscore/detectors/labelset_training.py`. Populate the cache,
 build `(X, y)`, store a detector on `det_ctx.model` / `det_ctx.threshold`,
 and stamp `det_ctx.model_labels_sig` with the labelset's signature.
 Which detector follows the **label quota** (#4643, below): with no Good
 that resolved it returns `False`; under `GOOD_QUOTA` Goods or
-`BAD_QUOTA` Bads it stores the Goods' centroid head
-(`install_centroid_head`); with both met it runs `train_and_threshold`.
+`BAD_QUOTA` Bads, and under a Good with `DRY_BAD_QUOTA` Bads, it stores the
+Goods' centroid head (`install_centroid_head`); with either quota met it runs
+`train_and_threshold`.  With *text_query* (the detector's typed query,
+`detector_text_query`), it stores that query's head instead of nothing or the
+centroid until a quota is met (`install_query_head`, #4758), its line drawn
+on the haystack; a haystack with no text slot falls back to those.
 `haystack_for(embedder_name)` may return a `Haystack` to
 fit the line's corpus side on a different population than *snap* (the
 CLI uses it for converted / re-clipped scoring sets); the class model the
 line is cut from comes from the labels either way (#4452), and the
-centroid's midpoint is cut on that population.
+centroid's line (or a typed query's) is cut on that population.
 
-### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, beta=None, label_quota=False)`
+### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, beta=None, label_quota=False, text_query="")`
 
 `vtscore/detectors/labelset_training.py`. Like `train_and_score`
 but trains on the full labelset (cross-dataset labels) and scores only
 the active `clips_dict`. Returns the same `(results, threshold, model)`
 tuple. *inclusion_value* is deprecated the same way. `label_quota=True`
 applies the label quota as `train_from_labelset` does - a cold Find
-passes it; the Train view's learned sort, the sort the user labels on,
-does not, so it defaults to `False`.
+passes it, with the detector's *text_query*, which gives that query's head
+under the quota (#4758); the Train view's learned sort, the sort the user
+labels on, does not, so it defaults to `False`.
 
 ### The label quota and the Goods' centroid (#4643)
 
 `vtscore/detectors/label_quota.py` and `vtscore/detectors/centroid_head.py`.
 A labelset gives a detector by its counts alone: `TIER_NONE` with no Good,
 `TIER_CENTROID` under `GOOD_QUOTA` (3) Goods or `BAD_QUOTA` (4) Bads -
-Autopilot's own quorum - and `TIER_TRAINED` once both are met.
-`label_quota(n_good, n_bad)` and `labelset_quota(labelset)` return a
-`LabelQuota` (`tier`, `goods_owed`, `bads_owed`, `as_dict()`);
-`served_quota(model, labelset)` is what the app's responses report.
+Autopilot's own quorum - and `TIER_TRAINED` once both are met, or once a Good
+has `DRY_BAD_QUOTA` (16) Bads beside it (#4731: what Autopilot's Good walk leaves
+when it runs dry). `label_quota(n_good, n_bad, *, dry_bad_quota=DRY_BAD_QUOTA)`
+and `labelset_quota(labelset)` return a `LabelQuota` (`tier`, `goods_owed`,
+`bads_owed`, `as_dict()`, which reports `dry_bad_quota` too; `dry_bad_quota=None`
+is the pre-#4731 rule, for the eval harness);
+`served_quota(model, labelset)` is what the app's responses report; it reads
+the tier off the model, so it also reports `TIER_QUERY` (`"query"`, #4758)
+for a typed query's head, which the counts alone never give.
 
-The centroid is `fit_centroid_head(goods, score)`: the unit mean of the
-L2-normalised Good vectors, as a `Linear(D, 1)` scoring
-`CENTROID_LOGIT_SCALE * (cosine - cut)`, where the cut is the
-two-Gaussian midpoint of the max-pooled cosines on the corpus `score`
-scores - the line `cosine_sort_active` draws for several uploaded
-examples. The threshold is `CENTROID_THRESHOLD` (0.5) and does not take
-the balance. `is_centroid_head(model)` tells it from a trained head.
+The centroid is `fit_centroid_head(goods, score, *, rule=None, beta=None,
+line_mask=None)`: the unit mean of the L2-normalised Good vectors, as a
+`Linear(D, 1)` scoring `CENTROID_LOGIT_SCALE * (cosine - cut)`, where the cut
+is `centroid_cut`'s line over the max-pooled cosines on the corpus `score`
+scores, at the balance (`CENTROID_LINE_RULE`, #4732/#4759/#4783), counting
+the media `line_mask` flags (the unvoted ones in the app, #4779). The
+threshold is `CENTROID_THRESHOLD` (0.5); `fit_centroid` also returns the
+`CentroidLine` a balance change redraws. `is_centroid_head(model)` tells it
+from a trained head.
+
+`vtscore/detectors/query_head.py` (#4758) is a typed-query detector's head:
+`fit_query_head(query_vec, score, *, beta, embedder, text)` builds the same
+`Linear(D, 1)` over the query's unit vector with the text sort's own line
+(`centroid_cut(rule="text")`, which is `text_sort_cuts`' display line) over
+every media scored, in the snapshot's text slot (`text_embedder_for_snap`).
+`is_query_head`, `query_head_embedder` and `query_head_text` read it;
+`is_quota_head` is true of either quota head; `head_score_embedder(model,
+default)` is the space a scorer builds rows in; `detector_text_query(det_data)`
+is the query a detector was made from (the Train view's re-sort prompt replaces
+it, #4801); `embed_detector_query` embeds it as the
+text sort does.
 
 ---
 
@@ -710,7 +734,7 @@ Every entry point resolves its cache through the active
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
-| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`) |
+| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`); `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines |
 | `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR + FNR on current votes, at each model's Smart cut          |
 | `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
@@ -741,7 +765,10 @@ Every entry point resolves its cache through the active
   the pool, no single step reached 1%, and the raw flip rate has stopped
   falling. Green with the raw rate still above 0.5% sets `plateau: true`:
   the detector has stopped improving but the pool has an ambiguous fringe
-  the embedding cannot resolve. The arithmetic lives
+  the embedding cannot resolve. Each detector is read at the line it was
+  served with, so the first detector served at a new balance starts the
+  comparison afresh: a balance change moves the line with no detector
+  changing its mind (issue #4745). The arithmetic lives
   in `vtscore.detectors.stability`, which the eval harness calls too.
 - **Span** - coverage-atlas coverage: the number of consecutive
   evidence-bearing nodes in BFS order. Green at

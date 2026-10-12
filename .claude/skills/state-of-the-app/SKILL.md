@@ -1,6 +1,6 @@
 ---
 name: state-of-the-app
-description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
+description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence; and the face path (FaceNet crops) on FHIBE. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
 ---
 
 # State of the App
@@ -179,9 +179,10 @@ same edit.
 - **The opening is the text sort (#4605).** The app stays on the text sort
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
   the Hard phase on, a median ~40 clicks in. The harness scores the detector
-  Test would give during the opening anyway (from the first Good: the Goods'
-  centroid under the label quota, then the trained head; #4643,
-  `detector_tier`) and flags the steps the app would show as
+  Test would give during the opening anyway (from the first vote, the typed
+  query's own set under the label quota since #4758 - the Goods' centroid from
+  the first Good before it - then the trained head; #4643, `detector_tier`)
+  and flags the steps the app would show as
   `app_trained == 1`. Every number the report reads off the session before a
   run's first such step (AP, the line at P, the balance, the objective,
   `curves.csv`, `by_click.py`) is the text sort's, at its own line. Never read
@@ -227,19 +228,23 @@ same edit.
   written to the detector as it is cast, Export labels and Test have no phase
   gate, and Test or an import builds a detector from the labelset. So
   `viewer.py` and `curves.py` read neither `app_trained` nor `detector_tier`.
-  Before a run's first Good they draw the empty set (Test is refused, #4629),
+  Before a run's first row they draw the empty set (Test is refused, #4629),
   and from there on the harness's detector, which is what Test gives: since
   #4643 the app no longer hands out a head fitted to too few labels, so under
-  the label quota (3 Goods and 4 Bads, Autopilot's own quorum) that is the
-  Goods' centroid, cut at its midpoint on the withheld half, and from the
+  the label quota (3 Goods and 4 Bads, Autopilot's own quorum, or a Good and 16 Bads since #4731) that is the
+  typed query's own set, from the first vote, on a run that opens on one
+  (#4758; the Goods' centroid from the first Good before it, and still on any
+  other opening), cut by its line on the withheld half, and from the
   quota the trained head, whose line is Find's there. The report is the
   session, the viewer is the export, so the two still differ through the
   opening; the click-4 dip the head on 3 Goods and 1 Bad drew (#4640) went
   with the app, not with a viewer rule. A review run before #4643 starts its
   rows at the first Good and Bad and draws that head; the committed pages
   change only at the next review's run. The page says so in its reading
-  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (A typed-query
-  tier was dropped: a labelset does not carry the query.)
+  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (The typed
+  query lives on the detector, not the labelset, since #4758: an exported
+  labelset, which carries no query, still imports as the centroid. The page
+  draws Test's.)
 - **The viewer's dotted line is the best cut (owner, 2026-10-08, #4654).** On
   an F metric it is the best that F any cut of the same ranking reaches, the
   report's "best cut", so it never sits below the line; precision, recall and
@@ -252,7 +257,7 @@ same edit.
   2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
   reskin cannot add the best cut: the next review's run draws it.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
-  The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
+  The default arm (`spot_check="weak"`, the app's since 2026-10-05; `"end"` on faces) checks the
   line once the voting steps are spent, so every run ends with
   `phase == "check"` rows past `max_steps`. "Final" is the last ordinary step;
   the end check's rows and picks feed only the check's own columns, never a
@@ -260,6 +265,8 @@ same edit.
   the check when the labels separate weakly (`weak_check_due`, past its
   text-sort opening): those rows carry `phase == "prompt"`, count in `t` and
   the 150-vote budget, and read as ordinary clicks in every curve and credit.
+  Never on face crops (#4799): the face review's default arm is the end check
+  only, as the app's is.
 - **Rank frames:** the line at every P is read off where the positives sit in
   each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
   checkpoints (`CALIB_RANK_FRAME_STEPS`). For an F1 curve, record them densely:
@@ -323,6 +330,42 @@ differs from the photo paths, and the owner settled how its review works:
 - **No spot check:** the structural path has none, so that section is omitted.
 - Everything else (two significant digits, a figure per claim, literal
   examples, the "app as it is now" framing) is as for the photo reports.
+
+## Face (FHIBE): standing decisions (owner, 2026-10-10, #4762)
+
+The face path is FaceNet on `image2face` crops, benchmarked on FHIBE (#4699). The owner set it up as
+follows:
+
+- **Bench:** the #4699 baseline's 562 people (`<release>-derived/runs/2026-10-09-k4/identities.txt`),
+  all of whom can start from 4 photos on every arm. People are the replication; one seed.
+- **Opening:** the example sort, from **1 and from 4** starting photos (`CALIB_SEED_EXAMPLES`), as two
+  session sets. There is no typed query. Click 0 is the example sort at its own display line
+  (the Goods' centroid's count line since #4732), scored by `fhibe/example_baseline.py` in
+  `text_baseline.py`'s columns, so `analyze.py --baseline` reads it where a photo review reads the
+  typed query. The report's opening rule is the same: the session shows the example sort until
+  Autopilot shows a detector.
+- **Paths:** both stored sizes. They share one path (`--path face`), so each analysis also names its
+  `--dataset`. **Since #4777 the app aligns its face crops (`image2face` `align="roll"`), so the
+  review runs `fhibe_faces_roll_1024` and `fhibe_faces_roll_640`:** pass `SOTA_FACE_ARM=roll` to
+  `sota_face.sh` and `sota_face_analyze.sh` (run dirs `<date>-sota-roll-k<K>-b<beta>`; `sota_face.sh
+  prepare` first, since the arm has its own prepared grids). The plain `fhibe_faces_*` cells are the
+  app before #4777 (#4762's review). #4777's roll sessions (`2026-10-10-sota-roll-*`) are the last
+  review's numbers for the shipped crops.
+- **Presets:** one session set per beta (1/4, 1, 4), as for the photo reviews: six run dirs
+  (`<date>-sota-k<K>-b<beta>`) and 6,744 runs a seed. Run them with `fhibe/sota_face.sh`
+  (`dirs`, `tasks`, `pack`; claiming V100 pack jobs, since FHIBE cells take a few minutes each;
+  `CALIB_PARTITION=cpu` packs them on the cpu partition instead, about 3.7 min a cell there) and
+  analyse with `fhibe/sota_face_analyze.sh`. **To add workers to a running review, submit them on
+  the SAME claims dir** (`<set>-logs/claims-*`, as `pack` wraps them): a second `pack` opens a new
+  claims dir and runs every task again.
+- **Publishing:** the report may name FHIBE subject IDs, to point at hard or glitched cases (the
+  owner: the report does not distribute the dataset). The viewer shows aggregates only: one page
+  holds every session set, the starting photos folded into the dataset name
+  (`viewer.py --beta-run BETA=DIR::DATASET`), and people shown as strata
+  (`viewer.py --category-map`, from `fhibe/person_strata.py`).
+- **Strata replace classes and bands:** FHIBE's subject annotations (age, pronoun, natural skin
+  colour, ancestry) and the census's face-size band. Report across them; the data is still the
+  bench, not the subject.
 
 ## How to run it
 
@@ -504,9 +547,10 @@ things keep a report on its link:
   never got one; before its first Good and Bad in a review run before #4643)
   is scored as the empty returned set, the nothing Test gives that labelset,
   so the runs that never trained are in its mean as losses
-  (`curves.score_empty_sets`); from the first Good on, Autopilot's opening
-  included, it draws the harness's detector, the Goods' centroid under the
-  label quota (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
+  (`curves.score_empty_sets`); from a run's first row on, Autopilot's opening
+  included, it draws the harness's detector: under the label quota, the typed
+  query's own set from the first vote since #4758, else the Goods' centroid
+  from the first Good (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
   undefined; a page built before that is rebuilt with `analyze.sh`, since a
   reskin has no prevalence to put AP at.
   The report's own tables score a run with no detector at the typed query its

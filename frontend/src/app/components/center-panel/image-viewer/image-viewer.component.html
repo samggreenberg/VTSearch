@@ -34,6 +34,16 @@
       ></div>
     </div>
   }
+  @if (outlineBoxStyle && renderedW() > 0 && renderedH() > 0) {
+    <div
+      class="region-stage"
+      [style.width.px]="renderedW()"
+      [style.height.px]="renderedH()"
+      [style.transform]="'translate(-50%, -50%) ' + imageTransform"
+    >
+      <div class="highlight-box outline-box" [ngStyle]="outlineBoxStyle!" aria-hidden="true"></div>
+    </div>
+  }
   @if (regionBox() && renderedW() > 0 && renderedH() > 0) {
     <div
       class="region-stage"

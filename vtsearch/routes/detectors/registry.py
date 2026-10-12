@@ -616,12 +616,16 @@ def _run_detector_load_task(
                                 total_steps=_LOAD_STEPS,
                             )
 
+                        from vtscore.detectors.query_head import detector_text_query
+
                         train_from_labelset(
                             det_ctx,
                             labelset,
                             media_type=media_type,
                             snap=snap,
                             on_progress=_embed_progress,
+                            # Under the quota a typed-query detector is its query's set (#4758).
+                            text_query=detector_text_query(det_data),
                         )
 
                 # Stamp the dataset whose medias the cid-keyed vote dicts were
@@ -1346,6 +1350,7 @@ def _run_positives_browse_build(
 @detectors_registry_bp.response(200, DetectorBrowsePositivesResponseSchema)
 @detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
+@detectors_registry_bp.alt_response(409, description="The detector has no positive labels to browse.")
 def browse_detector_positives(detector_id: str):
     """Prepare an in-memory VTSBrowse map of just this detector's positives.
 

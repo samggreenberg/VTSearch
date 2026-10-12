@@ -339,8 +339,15 @@ class TestTheOpeningReadsTheAcquisitionCut:
         query = _fill_active_medias()
         monkeypatch.setattr(T, "text_sort_cuts", lambda s, beta=None: TextSortCuts(0.123, 0.0456, "tail"))
         monkeypatch.setattr(T, "calculate_gmm_threshold", lambda s: 0.456)
+        import vtscore.detectors.centroid_head as CH
+
+        monkeypatch.setattr(CH, "centroid_cut", lambda s, rule=None, beta=None: 0.789)
         assert cosine_sort_active(query, role="text")[1] == 0.123
-        assert cosine_sort_active(query, role="score")[1] == 0.456
+        # Any other query is the Goods' centroid's sort (#4732): its line, and the midpoint to sample at.
+        assert cosine_sort_active(query, role="score")[1] == 0.789
+        from vtscore.training.query_sort import cosine_sort_cuts
+
+        assert cosine_sort_cuts(query, role="score")[1].acq_threshold == 0.456
         _results, cuts = text_sort_active(query)
         assert cuts == TextSortCuts(0.123, 0.0456, "tail")
 

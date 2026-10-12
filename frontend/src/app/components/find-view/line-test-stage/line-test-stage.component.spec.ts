@@ -109,12 +109,15 @@ describe('LineTestStageComponent (#4524)', () => {
     expect(dots()[2].classList.contains('current')).toBe(true);
   });
 
-  it('says the test is done, and points at the result and the Review tab', async () => {
+  it('says the test is done, and leaves pointing at the result and the Review tab to Toasty (#4807)', async () => {
     session.load();
     httpMock.expectOne('/api/line-test').flush(wireLineTest(wireDone()));
     await settleZoneless(fixture);
     expect(el().querySelector('.stage-heading')!.textContent).toContain('Test done');
-    expect(el().querySelector('.stage-body')!.textContent).toContain('Review tab');
+    expect(el().querySelector('.stage-body')).toBeNull();
+    const hint = el().querySelector('vt-toasty-hint');
+    expect(hint?.getAttribute('hintId')).toBe('test-done');
+    expect(hint?.textContent).toContain('Review');
   });
 
   it('says there is nothing to test', async () => {

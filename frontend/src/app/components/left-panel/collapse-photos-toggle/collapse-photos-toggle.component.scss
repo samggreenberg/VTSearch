@@ -1,0 +1,12 @@
+.collapse-photos-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0 var(--space-xs) var(--space-2xs);
+}
+
+.collapse-photos-label {
+  font-size: var(--font-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+}

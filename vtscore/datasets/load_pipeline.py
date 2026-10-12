@@ -599,6 +599,11 @@ class _DatasetLoadSpec:
     media_type: str
     build_projection: bool
     ingest_started_at: float
+    #: The id every dataset of one multi-dataset import shares, and the
+    #: ``OutputSpec.category`` this one stands for; ``None`` / ``""`` for a
+    #: single-dataset load.  Recorded on the registry entry.
+    import_group: str | None = None
+    output_category: str = ""
 
 
 @dataclass
@@ -667,6 +672,8 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
         spec.embedder,
         spec.created_by,
         spec.ingest_started_at,
+        import_group=spec.import_group,
+        output_category=spec.output_category,
     )
     # Opt-in: compute + persist the 2-D Browse projection now,
     # so the Browse canvas opens instantly instead of building

@@ -2,7 +2,7 @@
 
 Every stage imports this and calls :func:`setup_env` **before** importing
 anything under ``vtscore`` (the data-dir env vars have to be set first).  The
-experiment keeps its embeddings, models, and results under ``/exp/$USER/calibration``
+experiment keeps its embeddings, models, and results under ``/expscratch/$USER/calibration``
 so the per-``(dataset, embedder)`` pickles are shared across all SLURM array
 tasks; the reusable Max-Patch pickles are symlinked into that datadir by
 ``setup_reuse.sh`` (embed once, reuse everywhere).
@@ -29,7 +29,7 @@ __all__ = ["DATADIR", "EXP", "REPO", "RESULTS", "USER", "WARM_HF", "log", "setup
 
 USER = os.environ.get("USER", "sgreenberg")
 REPO = Path(os.environ.get("VTS_REPO", f"/exp/{USER}/projects/vts-calib"))
-EXP = Path(os.environ.get("CALIB_EXP", f"/exp/{USER}/calibration"))
+EXP = Path(os.environ.get("CALIB_EXP", f"/expscratch/{USER}/calibration"))
 DATADIR = EXP / "datadir"
 RESULTS = Path(os.environ.get("CALIB_RESULTS", str(EXP / "results")))
 WARM_HF = f"/exp/{USER}/.cache/huggingface"

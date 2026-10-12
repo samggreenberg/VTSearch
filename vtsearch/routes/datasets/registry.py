@@ -111,6 +111,8 @@ def list_registered_datasets():
         entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
         entry.setdefault("readers", [])
+        entry.setdefault("import_group", None)
+        entry.setdefault("output_category", "")
         # The concrete embedders this dataset binds.  Legacy entries (registered
         # before the field existed) fall back to their single primary embedder.
         bound = entry.get("bound_embedders")

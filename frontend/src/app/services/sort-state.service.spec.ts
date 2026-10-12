@@ -62,6 +62,14 @@ describe('SortStateService', () => {
     expect(service.aboveThreshold).toBe(2); // 0.9, 0.5 >= 0.4
   });
 
+  it('setSortResults keeps a whole ranking\'s token, for the views over it (#4751)', () => {
+    service.setSortResults([{ id: 1, score: 0.9 }], 0.4, null, 'find-tok');
+    expect(service.sortToken).toBe('find-tok');
+    expect(service.sortHasMore).toBe(false);
+    service.setSortResults([{ id: 1, score: 0.9 }], 0.4);
+    expect(service.sortToken).toBeNull();
+  });
+
   it('setSortWindow installs a windowed first page', () => {
     service.setSortWindow({
       items: [

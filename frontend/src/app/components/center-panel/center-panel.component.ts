@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
 import { Router } from '@angular/router';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService, NavDirection } from '../../services/keyboard.service';
@@ -9,16 +9,31 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
+import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { SourcePhotoService } from '../../services/source-photo.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
+import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
-import { VotingOverlayComponent } from './voting-overlay/voting-overlay.component';
+import {
+  NO_VOTE_HINT_COUNTS,
+  VoteHintCounts,
+  VoteHintId,
+  VotingOverlayComponent,
+} from './voting-overlay/voting-overlay.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { IconComponent } from '../icon/icon.component';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
+
+/** The viewers the pane can show an item in. */
+export type CenterViewer = 'audio' | 'image' | 'video' | 'text' | 'document';
+
+/** The media types with a viewer of their own, named after the type. */
+const OWN_VIEWER_TYPES: ReadonlySet<string> = new Set<CenterViewer>(['audio', 'image', 'video', 'text', 'document']);
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,6 +50,7 @@ import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/form
     VotingOverlayComponent,
     CopyDetailButtonComponent,
     IconComponent,
+    SourcePhotoModalComponent,
   ],
   templateUrl: './center-panel.component.html',
   styleUrl: './center-panel.component.scss',
@@ -48,6 +64,9 @@ export class CenterPanelComponent implements OnDestroy {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
+  private activeDataset = inject(ActiveDatasetService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  readonly sourcePhoto = inject(SourcePhotoService);
 
   readonly media = input<Media | null>(null);
   readonly disabled = input(false);
@@ -88,11 +107,13 @@ export class CenterPanelComponent implements OnDestroy {
    */
   readonly advancePending = input(false);
   /**
-   * Show Toasty's "start voting" hint over the Good / Bad buttons (#4680). The
-   * host decides: Train shows it while Autopilot runs on a detector with no
-   * labels yet, and it goes with the first vote.
+   * Which of Toasty's hints stands over the Good / Bad buttons (#4680, #4807),
+   * if any. The host decides: Train asks for a first vote while Autopilot runs
+   * on a detector with no labels yet, then says what each phase is after.
    */
-  readonly startVotingHint = input(false);
+  readonly voteHint = input<VoteHintId | null>(null);
+  /** The counts the Train phase hints fill in. */
+  readonly voteHintCounts = input<VoteHintCounts>(NO_VOTE_HINT_COUNTS);
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
@@ -162,6 +183,37 @@ export class CenterPanelComponent implements OnDestroy {
 
   private _pausedByVisibility = false;
 
+  /**
+   * The focused item to ask Show in photo about (#4750), or undefined when the
+   * active dataset's import produced no Image dataset to find a photo in.
+   * Keyed on the dataset too, since media ids are per dataset; compared by
+   * value so a metadata hydration of the same item asks nothing new.
+   */
+  private readonly sourceKey = computed(
+    () => {
+      const media = this.media();
+      if (!media || !this.sourcePhoto.offered()) return undefined;
+      return { datasetId: this.activeDataset.activeId(), mediaId: media.id };
+    },
+    { equal: (a, b) => a?.datasetId === b?.datasetId && a?.mediaId === b?.mediaId },
+  );
+
+  private readonly sourceLookup = rxResource({
+    params: () => this.sourceKey(),
+    stream: ({ params }) => this.sourcePhoto.lookup(params.mediaId),
+  });
+
+  /**
+   * Offer Show in photo on the focused item: its dataset has a photo sibling,
+   * and the item's own lookup has not come back saying it has no source. An
+   * unloaded sibling (409) still offers it; the overlay offers the load.
+   */
+  readonly showInPhotoOffered = computed(() => {
+    if (!this.sourceKey()) return false;
+    const kind = this.sourceLookup.value()?.kind;
+    return kind !== 'none' && kind !== 'error';
+  });
+
   constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
@@ -210,11 +262,20 @@ export class CenterPanelComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // The overlay is rendered here; leaving the view must not leave it armed
+    // to reopen over the next one.
+    this.sourcePhoto.close();
     this.stopPlayback();
     this.keyboard.stop();
     if (this.spinTimer) clearTimeout(this.spinTimer);
     if (this.undoToastTimer) clearTimeout(this.undoToastTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  /** Open the focused item's source photo (Show in photo, #4750). */
+  openSourcePhoto(): void {
+    const media = this.media();
+    if (media) this.sourcePhoto.open(media.id);
   }
 
   /** Stop all media playback (used on navigation away). */
@@ -233,6 +294,9 @@ export class CenterPanelComponent implements OnDestroy {
   init(): void {
     this.loadSettings();
     this.keyboard.start();
+    // Show in photo is offered on convert-in datasets only, which the
+    // media-type registry names (`SourcePhotoService.offered`).
+    this.mediaTypeCaps.ensureLoaded();
     this.datasetsListingsApi
       .getEmbedders()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -315,6 +379,21 @@ export class CenterPanelComponent implements OnDestroy {
     return this.media()?.media_type || 'audio';
   }
 
+  /**
+   * The viewer the focused item is shown in. A type with no viewer of its own
+   * goes to the image viewer when it has a still to paint (the served
+   * `has_thumbnail`, which `/api/medias/<id>/image` serves through the type's
+   * `image_response`), and to the document viewer's raw embed otherwise. So a
+   * face crop gets zoom, rotate and the full pane instead of the `<object>`'s
+   * 300×150 default box (#4771), and the next convert-in still type does too,
+   * with no edit here.
+   */
+  get viewer(): CenterViewer {
+    const type = this.mediaType;
+    if (OWN_VIEWER_TYPES.has(type)) return type as CenterViewer;
+    return this.mediaTypeCaps.usesThumbnails(type) ? 'image' : 'document';
+  }
+
   /** The embedder names bound to the focused media (the v3 trio).  Prefers the
    *  full ``embeddings`` key set the backend now ships under ``embedders``;
    *  falls back to the singular primary for older payloads. */
@@ -344,6 +423,17 @@ export class CenterPanelComponent implements OnDestroy {
       const info = this.infoFor(n);
       return info?.supports_patch_regions === true || info?.supports_geometric_verification === true;
     });
+  }
+
+  /** Whether a box drawn on the focused item would mean anything, which decides
+   *  whether the image viewer draws one (Marquee, Shift-drag). An image always
+   *  offers it: the box is kept on the label, and a patch embedder trains on
+   *  it, even one on another dataset the labels later go to. Any other still
+   *  type offers it only when a bound embedder reads regions; a face's FaceNet
+   *  embeds the whole crop, so a box there would only crop its Good-pile tile
+   *  and train nothing (#4771). */
+  get regionDrawOffered(): boolean {
+    return this.mediaType === 'image' || this.regionOverlayCapable;
   }
 
   /** Whether the active dataset binds a structural embedder (instance matching).
@@ -489,7 +579,7 @@ export class CenterPanelComponent implements OnDestroy {
    *  Drives the panel-wide crosshair, which is the only affordance saying the
    *  gesture reaches past the image into the space below it. */
   get regionDrawActive(): boolean {
-    return this.mediaType === 'image' && (this.imageViewer()?.regionDrawActive ?? false);
+    return this.viewer === 'image' && (this.imageViewer()?.regionDrawActive ?? false);
   }
 
   /** Off-canvas region-draw start: a Shift-drag begun on the toolbar strip, the
@@ -499,7 +589,7 @@ export class CenterPanelComponent implements OnDestroy {
    *  ignores anything begun on an interactive control, so every click down here
    *  keeps its current behaviour. */
   onPanelMouseDown(event: MouseEvent): void {
-    if (this.mediaType !== 'image') return;
+    if (this.viewer !== 'image') return;
     this.imageViewer()?.tryStartOffCanvasDraw(event);
   }
 

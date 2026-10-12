@@ -219,14 +219,24 @@ class TestListPlugins:
 
 
 class TestPipeline:
-    def test_pipeline_runs_file_and_exits(self, monkeypatch):
+    @staticmethod
+    def _record_run(monkeypatch, probe=None):
+        """Patch the pipeline runner to record its path, plus *probe()* taken at run time."""
         import vtscore.cli_pipeline as pipe
 
         seen = {}
-        monkeypatch.setattr(pipe, "run_pipeline_file", lambda p: seen.setdefault("path", p))
-        with pytest.raises(SystemExit) as exc:
-            _run_main(monkeypatch, ["--pipeline", "flow.yaml"])
-        assert exc.value.code == 0
+
+        def _run(path):
+            seen["path"] = path
+            if probe is not None:
+                seen["probe"] = probe()
+
+        monkeypatch.setattr(pipe, "run_pipeline_file", _run)
+        return seen
+
+    def test_pipeline_runs_file(self, monkeypatch):
+        seen = self._record_run(monkeypatch)
+        _run_main(monkeypatch, ["--pipeline", "flow.yaml"])
         assert seen["path"] == "flow.yaml"
 
     def test_pipeline_conflicts_with_autodetect_flag(self, monkeypatch, capsys):
@@ -234,6 +244,93 @@ class TestPipeline:
             _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--dataset", "x.pkl"])
         assert exc.value.code == 2
         assert "--pipeline cannot be combined with --dataset" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        ("flags", "named"),
+        [
+            (["--stream-results"], "--stream-results"),
+            (["--keep-negatives"], "--keep-negatives"),
+            (["--label-importer", "server_csv_file"], "--label-importer"),
+        ],
+    )
+    def test_pipeline_refuses_flags_the_yaml_declares(self, monkeypatch, capsys, flags, named):
+        """#4753: these have YAML keys, so beside --pipeline they are refused, not dropped."""
+        seen = self._record_run(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--pipeline", "flow.yaml", *flags])
+        assert exc.value.code == 2
+        assert f"--pipeline cannot be combined with {named}" in capsys.readouterr().err
+        assert seen == {}
+
+    def test_pipeline_user_without_api_key_errors(self, monkeypatch, capsys):
+        """#4753: --user is authenticated on a pipeline run, not silently dropped."""
+        seen = self._record_run(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--user", "bob"])
+        assert exc.value.code == 2
+        assert "--user requires --api-key" in capsys.readouterr().err
+        assert seen == {}
+
+    def test_pipeline_api_key_without_user_errors(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--api-key", "secret"])
+        assert exc.value.code == 2
+        assert "--api-key requires --user" in capsys.readouterr().err
+
+    def test_pipeline_runs_as_the_authenticated_user(self, monkeypatch):
+        import vtsearch.auth as auth_mod
+
+        class _FakeProvider:
+            def __init__(self, keys_file=None):
+                pass
+
+            def is_authenticated(self, req):
+                return req.headers["Authorization"] == "Bearer alice-key"
+
+            def get_user(self, req):
+                return "alice"
+
+        users = []
+        monkeypatch.setattr(auth_mod, "ApiKeyLoginProvider", _FakeProvider)
+        monkeypatch.setattr(auth_mod, "set_thread_user", users.append)
+        monkeypatch.setattr(auth_mod, "set_login_provider", lambda p: None)
+        seen = self._record_run(monkeypatch, probe=lambda: list(users))
+        _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--user", "alice", "--api-key", "alice-key"])
+        assert seen["probe"] == ["alice"], "the user must be active before the pipeline runs"
+
+    def test_pipeline_honours_json_progress_format(self, monkeypatch):
+        from vtscore import cli_progress
+
+        callbacks = []
+        monkeypatch.setattr(cli_main, "set_progress_callback", callbacks.append)
+        seen = self._record_run(monkeypatch, probe=cli_progress.get_format)
+        _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--progress-format", "json"])
+        assert seen["probe"] == "json"
+        assert callbacks == [cli_progress.progress_callback]
+
+    def test_pipeline_applies_verbosity(self, monkeypatch):
+        root = logging.getLogger()
+        saved_level = root.level
+        try:
+            root.setLevel(logging.WARNING)
+            seen = self._record_run(monkeypatch, probe=lambda: logging.getLogger().level)
+            _run_main(monkeypatch, ["--pipeline", "flow.yaml", "-v"])
+            assert seen["probe"] <= logging.INFO
+        finally:
+            root.setLevel(saved_level)
+
+    def test_pipeline_applies_admin_overrides(self, monkeypatch):
+        seen = self._record_run(monkeypatch, probe=settings_mod.get_cli_solo_media_type)
+        _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--solo-media-type", "audio"])
+        assert seen["probe"] == "audio"
+
+    def test_pipeline_invalid_admin_override_errors(self, monkeypatch, capsys):
+        seen = self._record_run(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--solo-media-type", "not_a_type"])
+        assert exc.value.code == 2
+        assert "Unknown --solo-media-type" in capsys.readouterr().err
+        assert seen == {}
 
     def test_pipeline_rejects_extra_flags(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:

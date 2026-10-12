@@ -9,7 +9,7 @@
 # linear head, Visual Genome region voting with the production max_patch arm
 # plus a whole_image single-vector control, and 300 voting steps - the deep
 # regime where the ongoing owner-side experiment found the naive GMM still
-# competitive with x-cal.  Results land under /exp/$USER/calibration-anchored
+# competitive with x-cal.  Results land under /expscratch/$USER/calibration-anchored
 # so the #2781/#2799 outputs are untouched; the shared Max-Patch pickles/crops
 # are reused in place.
 #
@@ -20,7 +20,7 @@
 # Usage: bash launch_anchored.sh
 set -uo pipefail
 
-export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration-anchored}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/calibration-anchored}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_SAFE_THRESHOLDS=1

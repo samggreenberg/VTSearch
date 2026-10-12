@@ -30,8 +30,10 @@ from vtscore.training.thresholds.labels_line import (
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
+    WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
     weak_check_due,
+    weak_check_prompts,
 )
 
 
@@ -261,9 +263,18 @@ def test_a_model_floors_afresh_on_each_corpus():
 
 
 def test_the_absolute_floor_is_the_line_before_4492():
-    """#4668's harness switch: ``sigma_floor("absolute")`` draws the line as it was before #4492, inside the block only."""
-    from vtscore.eval.live_threshold_rules import sigma_floor
+    """#4668's harness switch: ``sigma_floor("absolute")`` draws the line as it was before #4492, inside the block only.
 
+    The session's class model holds four Goods and four Bads, so the app draws the head's count there (#4786);
+    the floors are the class model's, so its cut is read with that count held off.
+    """
+    from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
+
+    with head_count_bads(0):
+        _absolute_floor_checks(sigma_floor)
+
+
+def _absolute_floor_checks(sigma_floor):
     model, scores, _ = _compressed_session(1.0)
     assert model is not None and model.sigma_raw is not None and model.sigma_raw < MIN_LOGIT_SIGMA
     relative = _line_on(model, scores, None, {})
@@ -342,6 +353,16 @@ class TestWeakCheckDue:
     def test_no_cooldown_makes_it_due_once(self):
         assert weak_check_due(1.0, 20, None, cooldown=None)
         assert not weak_check_due(1.0, 500, 20, cooldown=None)
+
+
+class TestWeakCheckPrompts:
+    """#4799: the media types the check never prompts on - face crops, where it cost every session (#4778)."""
+
+    def test_faces_are_never_prompted_and_everything_else_is(self):
+        assert WEAK_CHECK_OFF_MEDIA_TYPES == frozenset({"face"})
+        assert not weak_check_prompts("face")
+        for media_type in ("image", "audio", "video", "text", "document", "", None):
+            assert weak_check_prompts(media_type), media_type
 
 
 # ---------------------------------------------------------------------------

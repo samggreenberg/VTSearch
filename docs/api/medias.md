@@ -80,12 +80,13 @@ The `custom_metadata` dict is the media type's display fields — e.g.
 `duration`/`frequency` for audio, `width`/`height` for images, `word_count`
 for text — with any importer-supplied `custom_metadata` layered on top.
 
-It also carries up to three curated **provenance** lines distilled from the
-media's `origin.params`:
+It also carries up to four curated **provenance** lines distilled from the
+media's `origin.params` (and, for `Source Box`, its top-level `source_box`):
 
 | Field | Present on | Example |
 |-------|-----------|---------|
 | `Source` | Converter / clipper output | `/data/videos/movie.mp4` |
+| `Source Box` | Converter output that recorded where it sat in its source (every `image2face` crop) | `0.120,0.300,0.250,0.480` |
 | `Derived Via` | Converter / clipper output | `Video → Images (n_clips=2)` |
 | `Imported Via` | Any media whose origin names an importer | `Manifest (paths_file=/data/list.txt)` |
 
@@ -101,6 +102,63 @@ wrong in a per-item grid.  The machine-only replay recipe
 The enriched label export (`GET /api/labels/export?enrich=true`) does
 flatten the *full* `origin.params` key-by-key — an export is a machine-facing
 artifact with opt-in columns, where the raw recipe is the point.
+
+### Resolve a derived item's source
+
+```
+GET /api/medias/<id>/source
+X-Dataset-Id: <the face dataset's id>
+```
+
+→ the item a converter output was made from, as a media item of its
+**sibling dataset**: the dataset the same multi-dataset import produced for
+the converter's source type (they share an `import_group`; see
+[List registered datasets](datasets.md#list-registered-datasets)).  A face
+crop's photo is in the "– Image" sibling; a video frame's video in the
+"– Video" one.
+
+```json
+{ "dataset_id": "9f2c…", "media_id": 412, "box": [0.12, 0.30, 0.25, 0.48] }
+```
+
+`box` is the item's `source_box`, where it sat in its source as a normalised
+`[x0, y0, x1, y1]`, or `null` when its converter records none.  The source
+file itself is usually gone (an archive's extract dir, an upload's staging
+dir), which is why the source is found as an item: the output's
+`origin.params.source_file` names the sibling item's `origin_name`, and
+`source_path` settles a name two items share.
+
+| Status | `error_code` | When |
+|--------|--------------|------|
+| 404 | — | No media with that id in the requesting dataset |
+| 404 | `not_derived` | The item is no converter output |
+| 404 | `no_source_dataset` | Its dataset has no import group, or no dataset of the group *that you can read* holds the source type |
+| 404 | `source_not_found` | The sibling is loaded but no item in it matches |
+| 409 | `source_not_loaded` | The sibling is registered but not loaded; `dataset_id` names it — load it with `POST /api/datasets/registry/<id>/load` and ask again |
+
+A rendered document page has no source item: its source category is the
+Document dataset it sits in.  A sibling you cannot read is reported exactly
+as no sibling, so the reply says nothing about it.
+
+```
+POST /api/medias/source-batch
+X-Dataset-Id: <the face dataset's id>
+Content-Type: application/json
+
+{ "ids": [3, 7, 11] }
+```
+
+→ the batch form, for a whole results page in one round trip: a JSON array
+with one entry per id that resolved, in request order, each the triple above
+plus the requested `id`:
+
+```json
+[{ "id": 3, "dataset_id": "9f2c…", "media_id": 412, "box": [0.12, 0.30, 0.25, 0.48] }]
+```
+
+Ids that do not resolve (unknown, not derived, no sibling, no match) are
+omitted, as `POST /api/medias/batch` omits unknown ids.  If any id needs a
+sibling that is not loaded, the whole request is the 409 above.
 
 ### Payload variants (`?variant=original`)
 
@@ -314,7 +372,9 @@ not found or bytes unavailable.
 The sorts that rank the whole dataset — [text sort](#text-sort),
 [learned sort](#learned-sort), [example sort (upload)](#example-sort-upload)
 and [label-file sort](#label-file-sort) — do **not** return a bare
-`{results, threshold}` pair. They return a windowed envelope:
+`{results, threshold}` pair. They return a windowed envelope (the three
+`example-sort-{by-id,server,origin}` routes return it too, but never window
+it; see [example sort by id](#example-sort-by-loaded-media-id)):
 
 ```json
 {
@@ -332,8 +392,8 @@ and [label-file sort](#label-file-sort) — do **not** return a bare
 |-------|---------|
 | `results` | The transmitted ranking rows, **descending by score**. May be a *head window* of the full ranking (see below), not the whole thing. |
 | `threshold` | The decision line (see [learned sort](#learned-sort) for `threshold` vs `acq_threshold`). |
-| `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Carried by the learned sort and, since #4136, the text sort; `null` on the example and label-file sorts, where a client falls back to `threshold`. |
-| `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page). Also the sort-generation token: a re-sort mints a new one. |
+| `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Carried by the learned sort, the text sort since #4136 and the example sorts since #4732; `null` on the label-file sort, where a client falls back to `threshold`. |
+| `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page), [`GET /api/sort/collapsed`](#sort-collapsed-to-photos) and, on a text or example sort, [`GET /api/sort/line`](#sort-line). Also the sort-generation token: a re-sort mints a new one. |
 | `total` | Length of the **full** ranking — `>= results.length`. |
 | `above_threshold` | Rows at or above `threshold` across the full ranking (not just the window). |
 | `has_more_below` | `true` when `results` is a head window and more rows follow. |
@@ -383,6 +443,101 @@ deep into a large sort without receiving the whole list up front.
 404 when the token is unknown, has been evicted from the cache, or belongs to
 a different dataset than the active `X-Dataset-Id` — in every case the client
 should re-run the sort and start from the new token.
+
+### Sort collapsed to photos
+
+```
+GET /api/sort/collapsed?token=<sort_token>&offset=0&limit=200
+X-Dataset-Id: <the face dataset's id>
+```
+
+One window of a ranking of face crops **grouped by the photo each face was cut
+from** (issue #4751): the server half of Train and Test's **Collapse to photos**.
+The photo is found as an item of the Image dataset the same multi-dataset
+import produced, as [`GET /api/medias/<id>/source`](#resolve-a-derived-items-source)
+finds it. Takes the `sort_token` of any sort, including
+[`/api/find-label`](find.md#find-label-score--label-the-active-dataset)'s; the
+query is as for [`/api/sort/page`](#sort-page), with `offset` / `limit` counting
+rows of the grouped list.
+
+→
+```json
+{
+  "results": [
+    {
+      "source_dataset_id": "9f2c…",
+      "source_media_id": 412,
+      "score": 0.9412,
+      "faces": [
+        {"media_id": 3, "score": 0.9412, "box": [0.12, 0.30, 0.25, 0.48], "vote": "good"},
+        {"media_id": 8, "score": 0.2210, "box": [0.61, 0.28, 0.70, 0.41], "vote": null}
+      ]
+    },
+    {
+      "source_dataset_id": null,
+      "source_media_id": null,
+      "score": 0.8120,
+      "faces": [{"media_id": 5, "score": 0.8120, "box": null, "vote": null}]
+    }
+  ],
+  "offset": 0,
+  "limit": 200,
+  "total": 2,
+  "face_total": 3,
+  "has_more": false
+}
+```
+
+- **A row is a photo**, scored as its best face; rows keep the order of their
+  best faces. `faces` are every face of the ranking cut from that photo, best
+  first, each with its `box` in the photo (normalised `[x0, y0, x1, y1]`, the
+  face's `source_box`) and its `vote` under the active detector, read at
+  request time. Votes stay on the faces: there is no vote on a photo.
+- **A face whose photo cannot be named** (not a converter output, no Image
+  dataset you can read, no matching photo) is a row of its own, with
+  `source_dataset_id` / `source_media_id` `null`.
+- **Every face is in exactly one row**, so the sort response's `total` and
+  `above_threshold` are counts of faces; `face_total` here is the same number,
+  and `total` counts rows.
+- **Grouped before windowing.** The whole ranking is grouped once per token and
+  kept with it in the sort cache, so a photo whose faces straddle a window edge
+  is still one row, and paging never regroups.
+
+404 as for the page route. **409** with `error_code: source_not_loaded` and
+`dataset_id` when the Image dataset is registered but not loaded, as for
+`/api/medias/<id>/source`: load it with
+`POST /api/datasets/registry/<id>/load` and ask again. A 409 also answers a
+window whose Image dataset was unloaded after the grouping was built.
+
+### Sort line
+
+```
+GET /api/sort/line?token=<sort_token>
+```
+
+Redraws the display line of a text or example sort at the balance now set
+(issue #4760), over the ranking the token names. The ranking does not depend on
+the balance, but the line does: a typed query's is the count line at beta 1 or
+below (#4603), an example sort's is the Goods' centroid's count line at every
+balance (#4732), and a tiled structural example's rises at the precision end
+(#4479). So after [`POST /api/balance`](labeling.md#get--set-the-balance) a client sends the token of
+the text or example sort on screen, rather than re-running it:
+
+→
+```json
+{"threshold": 0.4127, "above_threshold": 38, "total": 250000}
+```
+
+`threshold` is the line the sort would have drawn at this balance, drawn on the
+scores it was first drawn on, so nothing is re-scored; `above_threshold`
+counts the rows at or above it across the whole ranking. The acquisition cut
+does not move with the balance, so it is not returned. A later
+[`/api/sort/page`](#sort-page) reports the redrawn line.
+
+404 when the token is unknown, evicted or another dataset's (as for the page
+route), and when it names a sort whose line is not redrawn here: a learned
+sort's line moves with its detector through `POST /api/balance` and a re-sort,
+and a label-file sort's takes no balance.
 
 ### Text sort
 
@@ -542,10 +697,11 @@ and re-embedded before sorting. Powers the right-click "sort by similarity" /
 
 → `{"results": [...], "threshold": 0.5123}`
 
-The three `example-sort-{by-id,server,origin}` routes are the exception to
-the [windowed sort response](#sort-response-shape-windowing): they return the
-plain `{results, threshold}` pair with the full ranking and mint no
-`sort_token`, so there is nothing to page.
+The three `example-sort-{by-id,server,origin}` routes return the
+[sort envelope](#sort-response-shape-windowing) but never window it: `results`
+is always the full ranking and `has_more_below` is `false`. They mint a
+`sort_token` all the same, since #4760, so a balance change can redraw their
+line through [`GET /api/sort/line`](#sort-line).
 
 400 if no medias loaded or `media_id` not in the loaded snapshot. 404 if the
 media's bytes are unavailable when cropping is requested.

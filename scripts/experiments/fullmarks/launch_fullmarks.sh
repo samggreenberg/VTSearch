@@ -3,10 +3,10 @@
 #
 #   bash launch_fullmarks.sh probe          # can I reach every source?
 #   bash launch_fullmarks.sh build          # stage 1: sources + clustering (CPU)
-#   bash launch_fullmarks.sh slate          # stage 2: the human audit bundle (CPU)
-#   bash launch_fullmarks.sh siglip         # stage 2b: the audit's second opinion (GPU)
+#   bash launch_fullmarks.sh slate          # stage 3: the human audit bundle (CPU)
+#   bash launch_fullmarks.sh siglip         # stage 3b: the audit's second opinion (GPU)
 #   bash launch_fullmarks.sh status         # queue + the real signal on disk
-#   bash launch_fullmarks.sh embed s        # stage 5: cells for one tier (GPU)
+#   bash launch_fullmarks.sh embed s        # stage 4: cells for one tier (GPU)
 #
 # WHY ONE LONG CPU JOB.  The binding cost is not compute, it is wall-clock
 # against a shared public API: UCSF fetch+render measured 0.75 pages/s, so

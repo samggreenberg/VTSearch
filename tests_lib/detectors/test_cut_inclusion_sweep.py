@@ -330,6 +330,10 @@ def test_live_cut_rule_moves_the_live_threshold_onto_that_rule():
             # Reporting at inclusion -8 is the Inclusion arm: a set balance
             # (the default arm's, #4413) would draw the line instead.
             beta="off",
+            # The plain SVM: on this planted fixture its fits separate the rules
+            # below the hinge's seam, which is the mechanism under test; the
+            # head itself is not (#4785 changed the default).
+            head="linear_svm",
         )
         return rows, sink
 

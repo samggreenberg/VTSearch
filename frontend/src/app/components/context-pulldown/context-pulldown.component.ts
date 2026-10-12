@@ -14,6 +14,7 @@ import { DashboardSortService } from '../../services/dashboard-sort.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
 import { SortState, sortRowsByColumn } from '../../utils/sort-rows';
+import { clusterImportSiblings } from '../../utils/import-siblings';
 import { DatasetRegistryEntry } from '../../models/api.models';
 import { IconComponent } from '../icon/icon.component';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -447,7 +448,8 @@ export class ContextPulldownComponent implements OnInit {
   /** Sort registry entries the same way the Dashboard's tables sort them
    *  (column + direction read from `DashboardSortService`). Mirrors
    *  the comparator in `DashboardComponent.sortedDatasets` /
-   *  `sortedDetectors`. */
+   *  `sortedDetectors`; the dataset list then clusters import siblings, as
+   *  `sortedDatasets` does. */
   private applySort<T>(arr: T[]): T[] {
     const { column, asc } = this.sortState;
     return sortRowsByColumn(arr, column, asc);
@@ -522,7 +524,7 @@ export class ContextPulldownComponent implements OnInit {
     if (this.isDataset) {
       const activeDetId = singleId(detIds);
       const activeDetector = activeDetId ? detectorById.get(activeDetId) ?? null : null;
-      const sorted = this.applySort(datasets);
+      const sorted = clusterImportSiblings(this.applySort(datasets));
       this.rows = sorted.map((d) => this.datasetRow(d, selected, activeDetector));
     } else {
       const activeDsId = singleId(dsIds);

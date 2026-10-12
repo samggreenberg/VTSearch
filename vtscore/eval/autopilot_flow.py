@@ -34,7 +34,9 @@ that measures a flow nobody takes.  ``scripts/check-eval-app-sync.py`` — a
 
 The phase ordering the app implements, and the harness therefore reproduces:
 
-1. ``good`` until ``good_target`` positives exist (text sort, take the top).
+1. ``good`` until ``good_target`` positives exist (text sort, take the top), or
+   until the walk runs dry: :data:`MORE_DRY_RUN` of its picks in a row held no
+   positive, with one in hand (issue #4731).  The ``more`` walk is then spent.
 2. ``bad`` until ``bad_target`` negatives exist — still on the **text/example
    sort**, taking the item nearest that sort's cutoff.  No detector is trained
    in this phase, which is why the app never computes a threshold from a
@@ -88,9 +90,13 @@ BAD_TARGET = 4
 # The ``more`` walk (``INITIAL_STATE.moreToStart`` / ``moreDryRun``, issue #4282):
 # after the Good and Bad quorum, keep taking the top of the seed sort until this
 # many positives exist in total, or until this many walk picks in a row held no
-# positive.  #4222 measured the opening `g3@top,b4@mid,g20+dry1/16@top` (+0.051
-# AP at vote 150 on COCO Better's 0.44% pool, +0.030 at 0.1%).
-MORE_TARGET = 20
+# positive.  On photos the walk is OFF since #4740: ``MORE_TARGET = 0``, so the
+# opening is Good, Bad, then Hard again (``g3@top,b4@mid``).  #4222 had shipped it
+# at 20 on AP at vote 150; #4671 scored it on the objective against today's app
+# and the walk lost after vote 23 at every preset (the old opening +0.016 /
+# +0.013 / +0.014 over votes 51-150, AP +0.009 / +0.010 / +0.008), winning only
+# votes 1-25.  ``MORE_DRY_RUN`` still ends a document dataset's walk (#4488).
+MORE_TARGET = 0
 MORE_DRY_RUN = 16
 
 # ``_compute_smart_status`` / ``_compute_stable_status``: both indicators stay
@@ -223,7 +229,7 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
 SMART_GATES = ("app", "never")
 
 
-def next_phase(
+def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, kept diffable by eye
     good_count: int,
     bad_count: int,
     *,
@@ -237,6 +243,7 @@ def next_phase(
     more_done: bool = False,
     dry_run_stop: bool = False,
     ran_dry: bool = False,
+    good_ran_dry: bool = False,
 ) -> Phase:
     """Port of ``AutopilotStateService.checkPhaseTransition``.
 
@@ -254,11 +261,19 @@ def next_phase(
     ``stop_rule == "dry_run"``, #4488): the walk has no Good target, runs in
     retrain mode too, and *ran_dry* (its run of misses complete) is ``done``.
     The indicators are not read.
+
+    *good_ran_dry* is the Good walk's dry run (#4731): :data:`MORE_DRY_RUN` of
+    its picks in a row held no Good, with a Good in hand, so the Goods found so
+    far meet its target.  History, like *more_done*: the caller holds it
+    (:class:`AutopilotFlow`), and the walk down the same sort is then spent.
     """
     # Cap each target at the most votes of that class the collection could still
     # yield, so a tiny dataset can still advance past the initial phases instead
     # of stranding in ``good`` forever.
     eff_good_target = min(good_target, good_count + remaining_unlabeled)
+    # A Good walk that ran dry has met its target with the Goods it found (#4731).
+    if good_ran_dry and good_count >= 1:
+        eff_good_target = min(eff_good_target, good_count)
     eff_bad_target = min(bad_target, bad_count + remaining_unlabeled)
 
     if good_count < eff_good_target:
@@ -421,11 +436,27 @@ class AutopilotFlow:
         startup: Optional[StartupState] = None,
         dry_run_stop: bool = False,
         smart_gate: str = "app",
+        good_dry_run: int | None = MORE_DRY_RUN,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
         self.more_target = more_target
         self.more_dry_run = more_dry_run
+        #: The Good walk's dry run (#4731, the app's ``moreDryRun``): the Good
+        #: phase also ends once this many of its picks in a row held no positive,
+        #: with a Good in hand, and the ``more`` walk down the same sort is then
+        #: spent.  ``None`` is the pre-#4731 arm, which waits for ``good_target``
+        #: Goods however long the walk.  A startup schedule owns its own opening,
+        #: so the run is off under one.
+        if good_dry_run is not None and (
+            isinstance(good_dry_run, bool) or not isinstance(good_dry_run, int) or good_dry_run < 1
+        ):
+            raise ValueError(f"good_dry_run must be an integer >= 1 or None, got {good_dry_run!r}")
+        self.good_dry_run = None if startup is not None else good_dry_run
+        #: The Good walk's misses since its latest Good, and whether it has run
+        #: dry (latched, as the ``more`` walk's end is).
+        self.good_misses = 0
+        self.good_dry = False
         #: A document dataset (#4488): the walk is the rest of the run and its
         #: dry run is ``done`` (see :func:`next_phase`).
         self.dry_run_stop = dry_run_stop
@@ -606,6 +637,7 @@ class AutopilotFlow:
             more_done=self.more_done,
             dry_run_stop=self.dry_run_stop,
             ran_dry=self.more_misses >= self.more_dry_run,
+            good_ran_dry=self.good_dry,
         )
         if self.phase not in ("good", "bad", "more"):
             # The walk ends once the machine has moved past it - its target met
@@ -624,6 +656,18 @@ class AutopilotFlow:
         """
         prev_good, prev_bad = self._counts
         self._counts = (good_count, bad_count)
+        if self.phase == "good" and self.good_dry_run is not None and not self.good_dry:
+            # #4731: the same reading for the Good walk, as checkPhaseTransition takes it.  A miss counts only
+            # with a Good already in hand, so the run is the misses since the
+            # latest Good, and a walk that has found nothing never runs dry.
+            if good_count > prev_good:
+                self.good_misses = 0
+            elif bad_count > prev_bad and prev_good >= 1:
+                self.good_misses += 1
+                if self.good_misses >= self.good_dry_run:
+                    self.good_dry = True
+                    self.more_done = True
+            return
         if self.phase != "more" or (self.more_done and not self.dry_run_stop):
             return
         if good_count > prev_good:

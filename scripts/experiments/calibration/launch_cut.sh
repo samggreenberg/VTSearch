@@ -21,7 +21,7 @@ set -uo pipefail
 WT="${VTS_REPO:-/exp/$USER/projects/vts-calib}"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration-cut}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/calibration-cut}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_SAFE_THRESHOLDS=1

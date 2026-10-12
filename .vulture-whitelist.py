@@ -80,7 +80,6 @@ surface of a module.
 # discovery happens at import time through ``getattr``.
 # ---------------------------------------------------------------------------
 EXPORTER  # noqa: F821
-CONVERTER  # noqa: F821
 SETTINGS_SOURCE  # noqa: F821
 LABELSET_SOURCE  # noqa: F821
 DATASOURCE_IMPORTER  # noqa: F821 - vtscore.datasource_importers, sentinel= in its registry
@@ -258,6 +257,7 @@ restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via
 schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
 old_switch_off  # noqa: F821 - installs a CoreConfig with the retired hide_ingest_eta switch off
 scratch_dir  # noqa: F821 - points the detector registry at a per-test scratch directory
+tenth_of_the_balance  # noqa: F821 - pins every sort line to a tenth of the balance
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
@@ -295,16 +295,6 @@ _isolated_example_media_dir  # noqa: F821
 # is no in-repo caller by design.
 # ---------------------------------------------------------------------------
 readable  # noqa: F821 - vtscore.datasets.container.StreamProgress, io.IOBase override
-
-# ---------------------------------------------------------------------------
-# ``ErrorSchema.error_code`` is a marshmallow field on the flask-smorest error
-# schema that documents the ``error_code`` slug we surface (``dataset_not_loaded``,
-# ``auth_required``, …). Marshmallow collects fields via metaclass at class-
-# creation time, so vulture cannot see the linkage. The blanket ``vtsearch/schemas/*``
-# exclude does not cover this file — the schema lives in ``vtsearch/errors.py``
-# alongside the handlers that populate the field.
-# ---------------------------------------------------------------------------
-error_code  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``VTSearchApi.ERROR_SCHEMA`` overrides flask-smorest's ``Api.ERROR_SCHEMA``

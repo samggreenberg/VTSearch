@@ -60,6 +60,25 @@ def filled_curve(curves: pd.DataFrame, runs: pd.DataFrame, text: pd.Series, col:
     ``thr_precision`` / ``thr_recall`` behind it (the right panel's path); the column is named ``fbeta``
     whichever it is.
     """
+    filled, started = filled_runs(curves, runs, text, col)
+    return pd.DataFrame(
+        {
+            "t": filled.columns.astype(int),
+            "fbeta": filled.mean(axis=0).to_numpy(),
+            "runs": filled.notna().sum(axis=0).to_numpy(),
+            "with_detector": started.sum(axis=0).to_numpy(),
+        }
+    )
+
+
+def filled_runs(
+    curves: pd.DataFrame, runs: pd.DataFrame, text: pd.Series, col: str = "thr_fbeta"
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """``(filled, started)``: each run's filled *col* at every click, as :func:`filled_curve` averages it.
+
+    Rows are runs (indexed by category and seed), columns clicks; ``started`` says where the app shows the
+    run's detector. A paired comparison of two arms reads a run's own curve from here (#4777).
+    """
     c = curves.merge(runs[RUN], on=RUN)
 
     # unstack, not pivot_table(dropna=False): the latter rebuilds every category x seed pair, runs no review
@@ -79,14 +98,7 @@ def filled_curve(curves: pd.DataFrame, runs: pd.DataFrame, text: pd.Series, col:
     carried = wide.ffill(axis=1)
     tq = pd.Series([text.get((cat, int(seed)), np.nan) for cat, seed in wide.index], index=wide.index)
     filled = carried.where(started, other=tq.to_numpy()[:, None] * np.ones(wide.shape))
-    return pd.DataFrame(
-        {
-            "t": wide.columns.astype(int),
-            "fbeta": filled.mean(axis=0).to_numpy(),
-            "runs": filled.notna().sum(axis=0).to_numpy(),
-            "with_detector": started.sum(axis=0).to_numpy(),
-        }
-    )
+    return filled, started
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -94,9 +106,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--run", action="append", required=True, help="beta=analysis dir (curves.csv, cells.csv)")
     ap.add_argument("--baseline", required=True, help="the text baseline the typed query is scored from")
     ap.add_argument("--embedder", required=True, help="the baseline rows the review's arm opens on")
+    ap.add_argument(
+        "--dataset", default=None, help="keep one dataset's baseline rows (a face review's sizes share a path, #4762)"
+    )
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
     baseline = pd.read_csv(args.baseline)
+    if args.dataset:
+        # The baseline is keyed on (category, seed) below; two datasets of one path share both.
+        baseline = baseline[baseline["dataset"] == args.dataset]
     rows = []
     for spec in args.run:
         beta_s, d = spec.split("=", 1)

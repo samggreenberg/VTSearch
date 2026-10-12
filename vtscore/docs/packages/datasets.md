@@ -23,6 +23,8 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
 | `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
 | `vtscore/datasets/demo_counts.py` | Exact demo-dataset media counts, measured once and written down |
+| `vtscore/datasets/source_item.py` | Find a converter output's source item (a face's photo) in the sibling dataset of the same multi-dataset import |
+| `vtscore/datasets/source_groups.py` | Group a ranking of converter outputs by source item (faces by photo), each group scored as its best member |
 | `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded only; nothing reads it back yet) |
 
 **Loading and persistence**
@@ -486,7 +488,18 @@ without being loaded, and a context can exist for a one-shot in-memory
 load that was never registered.
 
 Per-entry fields include `created_by`, `readers` (list of usernames or
-`"*"`), and `file_type_counts`. Access-control helpers
+`"*"`), `file_type_counts`, and `import_group` / `output_category`: the id
+every dataset of one multi-dataset import shares and the output category each
+stands for (`None` / `""` for a single-dataset import).
+`vtscore.datasets.source_item` reads them to find a converter output's source
+item: `find_source_sibling` picks the group's entry whose `output_category` is
+the converter's `source_type`, and `resolve_source_item` joins the output's
+`source_file` to that sibling's `origin_name`. `vtscore.datasets.source_groups`
+builds on it: `group_by_source` turns a descending ranking of outputs into one
+of their source items (a group per photo, scored as its best face; an output
+whose source cannot be named is a group of its own), and raises
+`SourceNotLoadedError` naming a sibling that is registered but not loaded.
+Access-control helpers
 (`can_user_access`, `is_owner`, `list_datasets_for_user`,
 `set_readers`) implement multi-user visibility rules; library-only
 consumers without users can ignore them and treat every dataset as

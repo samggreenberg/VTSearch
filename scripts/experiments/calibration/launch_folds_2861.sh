@@ -20,7 +20,7 @@ export VTS_REPO=/exp/sgreenberg/projects/vts-rate-2861
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="/exp/$USER/anchor-folds-2861"
+export CALIB_EXP="/expscratch/$USER/anchor-folds-2861"
 export CALIB_RESULTS="$CALIB_EXP/results"
 
 export CALIB_SAFE_THRESHOLDS=1

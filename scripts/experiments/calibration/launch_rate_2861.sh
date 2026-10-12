@@ -24,7 +24,7 @@ export VTS_REPO=/exp/sgreenberg/projects/vts-rate-2861
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="/exp/$USER/anchor-rate-2861"
+export CALIB_EXP="/expscratch/$USER/anchor-rate-2861"
 export CALIB_RESULTS="$CALIB_EXP/results"
 
 # --- science knobs ---

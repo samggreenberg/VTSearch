@@ -1425,6 +1425,77 @@
         ],
         "type": "object"
       },
+      "CollapsedFace": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the face sits in its photo, normalised ``[x0, y0, x1, y1]`` (its ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "media_id": {
+            "description": "The face's media id in the ranked dataset.",
+            "type": "integer"
+          },
+          "score": {
+            "description": "The face's score in the ranking.",
+            "type": "number"
+          },
+          "vote": {
+            "description": "The face's vote under the active detector now, or null.",
+            "enum": [
+              "good",
+              "bad",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "box",
+          "media_id",
+          "score",
+          "vote"
+        ],
+        "type": "object"
+      },
+      "CollapsedPhoto": {
+        "additionalProperties": false,
+        "properties": {
+          "faces": {
+            "description": "The row's faces in ranking order, best first.",
+            "items": {
+              "$ref": "#/components/schemas/CollapsedFace"
+            },
+            "type": "array"
+          },
+          "score": {
+            "description": "The best score among the row's faces.",
+            "type": "number"
+          },
+          "source_dataset_id": {
+            "description": "The photo's dataset (the Image sibling of the same import), or null for a face whose photo cannot be named, which is then the row's only face.",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_media_id": {
+            "description": "The photo's media id in that dataset, or null as above.",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "faces",
+          "score",
+          "source_dataset_id",
+          "source_media_id"
+        ],
+        "type": "object"
+      },
       "ConverterInfo": {
         "additionalProperties": false,
         "properties": {
@@ -1950,6 +2021,11 @@
           "id": {
             "type": "string"
           },
+          "import_group": {
+            "description": "Id shared by every dataset one multi-dataset import produced, so siblings can be found from any one of them; ``null`` for a single-dataset import.",
+            "nullable": true,
+            "type": "string"
+          },
           "ingest_finished_at": {
             "nullable": true,
             "type": "number"
@@ -1978,6 +2054,10 @@
           },
           "origin": {
             "description": "Name of the importer that produced this dataset.",
+            "type": "string"
+          },
+          "output_category": {
+            "description": "The ingestion category (a media type id) this dataset stands for within its import group, e.g. ``\"face\"`` or ``\"document\"``; it can differ from ``media_type`` (a Document dataset holds rendered page images). Empty for a single-dataset import.",
             "type": "string"
           },
           "pkl_path": {
@@ -3652,14 +3732,30 @@
       "ExampleSortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
+          "acq_threshold": {
+            "nullable": true,
+            "type": "number"
+          },
+          "has_more_below": {
+            "type": "boolean"
+          },
           "results": {
             "items": {
               "$ref": "#/components/schemas/_SortResultEntry"
             },
             "type": "array"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "required": [
@@ -4071,6 +4167,9 @@
             },
             "type": "array"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
           }
@@ -4083,6 +4182,7 @@
           "label_quota",
           "ok",
           "results",
+          "sort_token",
           "threshold"
         ],
         "type": "object"
@@ -4760,6 +4860,10 @@
           "bads_owed": {
             "type": "integer"
           },
+          "dry_bad_quota": {
+            "description": "Bads that give a single Good the trained head (#4731).",
+            "type": "integer"
+          },
           "good_quota": {
             "type": "integer"
           },
@@ -4773,10 +4877,11 @@
             "type": "integer"
           },
           "tier": {
-            "description": "``centroid``: the Goods' centroid cut with a GMM, given under the quota; ``trained``: the trained head; ``none``: no Good to sort toward.",
+            "description": "``query``: under the quota, on a detector made from a typed query, the text sort's own set for that query at the detector's balance (#4758); ``centroid``: under the quota, on a detector with no typed query, the Goods' centroid, keeping the unvoted media that stand out at the balance; ``trained``: the trained head; ``none``: no Good and no typed query to sort toward.",
             "enum": [
               "none",
               "centroid",
+              "query",
               "trained"
             ],
             "type": "string"
@@ -4785,6 +4890,7 @@
         "required": [
           "bad_quota",
           "bads_owed",
+          "dry_bad_quota",
           "good_quota",
           "goods_owed",
           "n_bad",
@@ -5832,6 +5938,81 @@
           "character_count",
           "content",
           "word_count"
+        ],
+        "type": "object"
+      },
+      "MediaSourceBatchEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the output sat in its source: a normalised ``[x0, y0, x1, y1]`` (the media's ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "dataset_id": {
+            "description": "Registry id of the sibling dataset holding the source item.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The requested media id.",
+            "type": "integer"
+          },
+          "media_id": {
+            "description": "The source item's media id within that dataset.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "box",
+          "dataset_id",
+          "id",
+          "media_id"
+        ],
+        "type": "object"
+      },
+      "MediaSourceBatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Media IDs (of the requesting dataset) to resolve to their source items.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
+      "MediaSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the output sat in its source: a normalised ``[x0, y0, x1, y1]`` (the media's ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "dataset_id": {
+            "description": "Registry id of the sibling dataset holding the source item.",
+            "type": "string"
+          },
+          "media_id": {
+            "description": "The source item's media id within that dataset.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "box",
+          "dataset_id",
+          "media_id"
         ],
         "type": "object"
       },
@@ -7036,6 +7217,63 @@
             "type": "number"
           }
         },
+        "type": "object"
+      },
+      "SortCollapsedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "face_total": {
+            "description": "Faces in the ranking: every one is in exactly one row.",
+            "type": "integer"
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/CollapsedPhoto"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Rows (photos) in the grouped ranking.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "face_total",
+          "has_more",
+          "limit",
+          "offset",
+          "results",
+          "total"
+        ],
+        "type": "object"
+      },
+      "SortLineResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "above_threshold",
+          "threshold",
+          "total"
+        ],
         "type": "object"
       },
       "SortPageResponse": {
@@ -9558,7 +9796,7 @@
     },
     "/api/dataset/cancel": {
       "post": {
-        "description": "Cancels all active loading tasks and the legacy global tracker, then waits\nbriefly for one of them to act on the flag.  Cancellation is cooperative,\nso a flag set with no worker left to observe it stops nothing; answering\n``ok`` in that case is what let a *finished* import keep looking like a\nwedged one (#3167).  A cancel that reached nothing answers ``409``, and any\nstale progress it found is cleared on the way out.",
+        "description": "Cancels every active loading task, then waits briefly for one of them to\nact on the flag.  Cancellation is cooperative, so a flag set with no worker\nleft to observe it stops nothing.  A cancel that reached nothing answers\n``409``, and any stale progress it found is cleared on the way out.",
         "operationId": "cancel_dataset_load",
         "responses": {
           "200": {
@@ -11508,6 +11746,9 @@
           "404": {
             "description": "Detector not found."
           },
+          "409": {
+            "description": "The detector has no positive labels to browse."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -12033,6 +12274,7 @@
         }
       ],
       "put": {
+        "description": "The Train view's re-sort prompt saves its new example here (#4801).  The\ndetector's ``text_query`` and ``media_example`` follow the new list - its\nfirst text example and its first media example, each ``\"\"`` when there is\nnone - in the detector file and the registry entry alike: under the label\nquota a typed-query detector gives its query's own set (#4758), and the\nnext Train session opens on the registry entry's.  A re-sort to a media\nexample therefore drops the query.",
         "operationId": "set_detector_examples",
         "requestBody": {
           "content": {
@@ -14285,6 +14527,50 @@
         ]
       }
     },
+    "/api/medias/source-batch": {
+      "post": {
+        "description": "Returns one entry per id that resolved, in request order; ids that do not\n(unknown, not a converter output, no source dataset, no matching item) are\nomitted, as ``POST /api/medias/batch`` omits unknown ids.  If any id needs\na source dataset that is not loaded the whole request is a 409 naming it:\nload it and ask again.",
+        "operationId": "media_source_batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaSourceBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaSourceBatchEntry"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "A requested id's source dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Batch form of ``GET /api/medias/<id>/source``, for a whole results page.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/vote-bulk": {
       "post": {
         "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics (including Find-mode\nverification \u2014 a good/bad target marks the item verified), then the\ndetector labelset is persisted **once** rather than per id.  Bulk votes\nare image-level (no region boxes).  Powers the Browser's \"Verified Good\" /\n\"Verified Bad\" actions, which mark a hand-selected set good/bad, verify\nthem, and drop them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
@@ -14521,6 +14807,48 @@
           }
         },
         "summary": "Return the text content and statistics for a single text media item.",
+        "tags": [
+          "medias"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "media_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
+    },
+    "/api/medias/{media_id}/source": {
+      "get": {
+        "description": "A face crop's photo, a video frame's video: found as a **media item** in\nthe dataset the same multi-dataset import produced for the source type\n(the shared ``import_group``), since the source file itself is usually\ngone.  ``box`` is where the output sat in its source (``source_box``), for\noutlining it.  The sibling must be loaded; when it is not, the 409 names\nit so the client can offer to load it.  Only siblings the current user may\nread are considered.  See :mod:`vtscore.datasets.source_item`.",
+        "operationId": "media_source",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSourceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Media not found; or it is no converter output (``error_code: not_derived``); or no readable dataset of its import holds its source type (``no_source_dataset``); or the source dataset has no matching item (``source_not_found``)."
+          },
+          "409": {
+            "description": "The source dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Resolve a converter output to the item it was made from, in its sibling dataset.",
         "tags": [
           "medias"
         ]
@@ -15907,9 +16235,115 @@
         ]
       }
     },
+    "/api/sort/collapsed": {
+      "get": {
+        "description": "Takes the ``sort_token`` of any sort (``/api/sort``, the example sorts,\n``/api/label-file-sort``, ``/api/learned-sort``, ``/api/find-label``) and\ngroups the whole stored ranking by the photo each face was cut from, in\nthe Image dataset the same import produced: a row per photo, scored as its\nbest face, with every ranked face of it and its box.  A face whose photo\ncannot be named is a row of its own.  The grouping is built once per token\nand windowed after, so a photo whose faces straddle a window edge is still\none row.  Votes are read at request time and stay on the faces.\n\nEvery face is in exactly one row, so the ranking's counts (``total`` /\n``above_threshold`` on the sort response) are counts of faces;\n``face_total`` here is the same number, and ``total`` counts rows.",
+        "operationId": "sort_collapsed",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortCollapsedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown or expired sort token; re-run the sort."
+          },
+          "409": {
+            "description": "A ranked face's photo dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return one window of a ranking grouped by source photo: Collapse to photos (#4751).",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
+    "/api/sort/line": {
+      "get": {
+        "description": "A typed query's line moves with the balance at beta 1 or below (#4603), and\nan example sort's, the Goods' centroid's, at every balance (#4732), but the\nranking under it does not.  So after ``POST /api/balance`` a client sends the\n``sort_token`` of the text or example sort on screen, and the line comes\nback redrawn on the scores it was first drawn on, with how many rows of the\nwhole ranking it keeps; nothing is re-scored.  The acquisition cut does not\nmove with the balance and is not returned.",
+        "operationId": "sort_line",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortLineResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown or expired sort token, or a sort whose line is not redrawn here (a learned sort's moves with its detector; a label-file sort's takes no balance)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Redraw a text or example sort's display line at the balance now set (#4760).",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
     "/api/sort/page": {
       "get": {
-        "description": "A sort route (``/api/sort``, ``/api/example-sort``, ``/api/label-file-sort``)\nstores its full descending ``results`` list and hands back a ``sort_token``;\nthis endpoint slices ``[offset, offset + limit)`` out of that cached list so\nthe client can scroll deep into a large ranking without receiving the whole\nthing up front (``docs/plans/scalability.md`` S3/S17/S19).\n\nThe token doubles as a sort-generation guard: a re-sort mints a new token,\nand an evicted/unknown token 404s so the client refetches from the top.",
+        "description": "A sort route (``/api/sort``, the example sorts, ``/api/label-file-sort``,\n``/api/learned-sort``) stores its full descending ``results`` list and hands\nback a ``sort_token``;\nthis endpoint slices ``[offset, offset + limit)`` out of that cached list so\nthe client can scroll deep into a large ranking without receiving the whole\nthing up front (``docs/plans/scalability.md`` S3/S17/S19).\n\nThe token doubles as a sort-generation guard: a re-sort mints a new token,\nand an evicted/unknown token 404s so the client refetches from the top.",
         "operationId": "sort_page",
         "parameters": [
           {

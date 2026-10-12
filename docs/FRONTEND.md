@@ -248,7 +248,13 @@ only from the POST's response: the learned sort reads the balance server-side
 and caches by it, so a re-sort that beat the POST would come back at the old
 balance. When the balance keeps the same count of items before and after, the
 line stays put and only its state is swapped: the count, not the state,
-decides where the line sits. The control is a False Positives - False
+decides where the line sits. A text or example ranking draws its own line at
+the balance too (#4603, #4732) but keeps its ranking, so Label does not re-run
+it: from the POST's response it sends the ranking's `sort_token` to
+`GET /api/sort/line` (#4760), `switchMap`-ed the same way, and moves only the
+line and its count; the acquisition cut and the selection stay. A sort still
+in flight when the balance lands is redrawn once it lands, since the server
+may have drawn it at the old balance. The control is a False Positives - False
 Negatives spectrum with three radios under its thirds (`BALANCE_PRESETS` in
 `utils/line-balance.ts`: beta 4 toward false positives, 1 balanced, 1/4 toward
 false negatives; #4448), and never shows a balance as a word or a number: each
@@ -276,7 +282,8 @@ is the Test autopilot (below), and the control's state line there is the
 host's (`lineState`: this corpus's result, or untested) with the radios
 `locked` while a phase runs.
 **When a check is due** (#4496): the balance's `checkDue` (the server's
-`check_due`, `weak_check_due` on the labels line's `separation`) turns the
+`check_due`, `weak_check_due` on the labels line's `separation`; never on a
+face detector, #4799) turns the
 control's button `btn--primary` and adds a `.balance-due` note. The label view
 runs the check itself under Autopilot: an effect on the balance and
 `sortBusy` calls `runDueCheck()`, which opens the modal with an `intro` line
@@ -651,6 +658,31 @@ intent/active split.
 headers. Build those URLs with `ActiveContextService.mediaUrl(path, extra?)`,
 which appends `dataset_id` / `detector_id` query params from the active layer.
 
+**Reading an item of another dataset.** Show in photo (#4750) shows a face
+crop's photo out of the Image dataset the same import produced, in an overlay,
+while the Face pair stays active: switching the pair would land on the
+incompatible-pair explainer (a face detector cannot pair with an Image dataset)
+and reset the face ranking. Such a request names the other dataset **and no
+detector**: `DATASET_OVERRIDE` on an `HttpClient` request (the interceptor sets
+`X-Dataset-Id` to it and drops `X-Detector-Id`), `mediaUrlIn(datasetId, path)`
+for an `<img src>`. Never send the active detector with another dataset's id.
+The backend rehydrates a detector's votes whenever a request pairs it with a
+dataset other than the one they were derived for
+(`ensure_votes_match_active_dataset`), so one such request clears the session
+the user is in.
+
+Collapse to photos (#4751) follows the same rule for a whole grid: the left
+panel swaps `vt-media-list` for `vt-photo-grid` while `CollapsePhotosService`
+is active (switched on, on a dataset where Show in photo is offered), and the
+grid draws each photo with `mediaUrlIn(photoDatasetId, …)`. The grouping is the
+server's (`GET /api/sort/collapsed`, keyed by `SortStateService.sortToken`, so
+Test's `setSortResults` keeps find-label's token); the grid only pages rows and
+leaves out the faces it is told to hide. A face on a photo emits the same
+`mediaSelect` / `mediaVote` / `mediaContextRequest` a card does, so the host's
+vote flow is unchanged. The Show in photo overlay and the grid both answer the
+409 for an unloaded Image dataset with `SiblingLoadService`
+(component-provided), which loads it and calls back.
+
 ### Routes and guards — the URL is the source of truth
 
 `/label/:datasetId/:detectorId` and `/test/:datasetId/:detectorId` carry the
@@ -936,7 +968,14 @@ shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
 speech bubble beside the control to click next, with "Hide this hint" / "Hide
 all hints" boxes that `HintsService` keeps in the user's settings. Drop it
 under any positioned container; it measures itself against its anchor and
-flips the bubble to the other side when it would run off the edge. Its `face`
+flips the bubble to the other side when it would run off the edge. Inside a
+`vt-modal` (however deep) the anchor may be left out: the hint is then about
+the dialog box, below it or beside its top corner when the box fills the
+window. At most one hint is on screen (#4807): the component shows a hint in
+a dialog only while that dialog is the topmost open one (`topOpenModal` in
+`modal/modal.component.ts`), and a hint on a view only while no dialog is
+open; within a view the host picks one (the Dashboard's `dashboardHint`
+ladder, the voting overlay's `hint` input). Its `face`
 (happy / sad / surprised, `utils/toasty-faces.ts`) is the same set the toasts
 use. [`hints.md`](hints.md) charts every hint: its face, its text and when it fires;
 a new hint adds a row there. `directives/no-focus-steal.directive.ts` stops toolbar buttons
@@ -1023,7 +1062,12 @@ even though runtime behaviour is unaffected:
 `src/test-setup.ts` installs the inert jsdom stubs (`EventSource`,
 `ResizeObserver`, `scrollIntoView`, `CSS.escape`, media element methods,
 canvas `getContext`) and resets the `TestBed` before each test so a throwing
-teardown cannot cascade — that per-test reset *is* the cascade guard.
+teardown cannot cascade — that per-test reset *is* the cascade guard. It also
+installs the real-XHR guard (`src/app/testing/real-xhr-guard.ts`). `HttpClient`
+is provided in root, so a spec without `provideHttpTesting()` gets no missing
+provider error, and its requests would go to jsdom's `localhost:3000`. The
+guard stops every real `XMLHttpRequest` before it reaches the network and fails
+the test that sent it, naming the request.
 `vitest.config.ts` deliberately leaves `isolate: false` (the builder's
 default): per-file isolation cost 3–4× the runtime and the guard in
 `test-setup.ts` covers the same failure mode. No spec uses

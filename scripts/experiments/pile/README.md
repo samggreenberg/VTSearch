@@ -69,7 +69,6 @@ any other worktree it embedded the pile out of a checkout 1,420 commits behind
 | `pilebuild/loaders/<kind>.py` | how a `DATASETS[ds]["kind"]` is built (`load`) **and** what a rebuild of it reads (`check`) |
 | `pilebuild/vgsource.py`, `boxscan.py` | reading the VG source; choosing a band's categories from the box scan |
 | `pilebuild/corrections.py` | human verdicts, and the one place their boxes cross from normalised into pixel space |
-| `pilebuild/geometry.py` | geometry no honest region box can have; the derived-label digest |
 | `pilebuild/provenance.py` | which machine **and which checkout** produced a cell, and its vector hash |
 | `pilebuild/audit.py`, `manifest.py`, `provenance_report.py` | the read-only modes |
 
@@ -419,33 +418,23 @@ region arm.
 ## Boxes arrive in two spaces, and the file has to say which
 
 VG's and COCO's boxes are in **pixels**. A correction box is the reviewer's
-`region_box` from the app, already **normalised** to [0, 1]. The builder merges
-all three and normalises on the way into the pickle, so a correction box merged
-unconverted is normalised *twice*: divided by ~500 a second time and parked on
-the frame origin. That is #3281 — 130 boxes, and with them 97 images filed into
-`@small` whose object is medium or large, on the one axis `vg_scale` exists to
-measure.
+`region_box` from the app, already **normalised** to [0, 1]. The VG builder
+merged all three and normalised on the way into the pickle, so a correction box
+merged unconverted was normalised *twice*: divided by ~500 a second time and
+parked on the frame origin. That is #3281 — 130 boxes, and with them 97 images
+filed into `@small` whose object is medium or large, on the one axis `vg_scale`
+existed to measure.
 
-Three things now stop it, because none of them alone would have:
+One guard is still live: `corrections.json` rows carry `box_space`, and
+`load_corrections()` refuses a row whose boxes contradict it. Inference cannot do
+this job: a normalised box and a pixel box are the same numbers for a box in the
+top-left corner of a 1×1 image, which is precisely the shape the bug produced.
 
-- `corrections.json` rows carry `box_space`, and `build_pile.py` refuses a row
-  whose boxes contradict it. Inference cannot do this job: a normalised box and
-  a pixel box are the same numbers for a box in the top-left corner of a 1×1
-  image, which is precisely the shape the bug produced.
-- The conversion happens **once**, against the same `(W, H)` the region write
-  divides by, so the round trip is exact rather than close.
-- `--verify` (and the build, before the GPU hours) checks boxes against the
-  **frame**: a sub-pixel side is a failure outright, and the share crushed into
-  the top-left 1% of the frame is a failure as a rate. The older check — box
-  against the band its cell name claims — passed happily through all of this,
-  because the band is *derived from* the box and moved with it. A consistency
-  check between two values computed from one source is not a check.
-
-`vg_scale_any` is a relabel of the built `vg_scale` pickle and shares its
-vectors, so a parent rebuild used to leave it holding the parent's previous
-labels with a perfectly healthy media count. It now stamps a digest of the
-parent's labels, `--verify` compares that against the live parent, and a run
-that rebuilds `vg_scale` pulls the derived dataset in with it.
+Two more went with the VG loaders, because no loader left in the pile merges a
+correction box into its regions: the merge converted each box to pixels once,
+against the same `(W, H)` the region write divides by, so the round trip was
+exact; and a check compared every stored box against the frame, at build time
+and in `--verify`.
 
 ## A row records the rule it was answered under
 

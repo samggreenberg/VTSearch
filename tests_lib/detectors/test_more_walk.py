@@ -81,20 +81,13 @@ class TestInTheHarness:
         )
         return rows, picks
 
-    def test_the_arms_agree_until_the_walk_and_part_there(self):
-        _, seed = self._run("seed")
-        _, det = self._run("detector")
-        first_more = next(i for i, p in enumerate(seed) if p["phase"] == "more")
-        assert [p["picked_id"] for p in seed[:first_more]] == [p["picked_id"] for p in det[:first_more]]
-        assert det[first_more]["phase"] == "more"
-        assert any(a["picked_id"] != b["picked_id"] for a, b in zip(seed[first_more:], det[first_more:]))
-
-    def test_the_detector_walk_is_shown(self):
-        rows, _ = self._run("detector")
-        more = [r for r in rows if r.get("phase") == "more"]
-        assert more and all(r["app_trained"] == 1 for r in more)
-        rows, _ = self._run("seed")
-        assert all(r["app_trained"] == 0 for r in rows if r.get("phase") == "more")
+    def test_the_arm_is_inert_without_a_more_walk(self):
+        """#4740 took the More walk off photos, so there is no walk for the arm to move."""
+        seed_rows, seed = self._run("seed")
+        det_rows, det = self._run("detector")
+        assert not any(p["phase"] == "more" for p in seed)
+        assert [p["picked_id"] for p in det] == [p["picked_id"] for p in seed]
+        assert [r["app_trained"] for r in det_rows] == [r["app_trained"] for r in seed_rows]
 
     @pytest.mark.parametrize(
         ("more_walk", "kw"),

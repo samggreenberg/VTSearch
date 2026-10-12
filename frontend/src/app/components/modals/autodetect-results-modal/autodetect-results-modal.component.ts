@@ -18,6 +18,7 @@ import { catchError, finalize, take, takeWhile } from 'rxjs/operators';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import {
   ClipboardColumn,
   ClipboardCopyComponent,
@@ -56,7 +57,7 @@ import { ProgressBarComponent } from '../../progress-bar/progress-bar.component'
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, ProgressBarComponent],
+  imports: [FormsModule, ModalComponent, ToastyHintComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, ProgressBarComponent],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })
@@ -160,14 +161,27 @@ export class AutoDetectResultsModalComponent implements OnInit {
 
   /**
    * The detectors that ran as the Goods' centroid (#4643): too few labels for
-   * a trained detector, so their hits are the centroid's. One line each, with
-   * the labels still owed.
+   * a trained detector and no typed query, so their hits are the centroid's.
+   * One line each, with the labels still owed.
    */
   get centroidDetectors(): string[] {
+    return this.detectorsServedAs('centroid');
+  }
+
+  /**
+   * The detectors that ran as their typed query (#4758): too few labels for a
+   * trained detector, so their hits are the set their query's text sort keeps.
+   * One line each, with the labels still owed.
+   */
+  get queryDetectors(): string[] {
+    return this.detectorsServedAs('query');
+  }
+
+  private detectorsServedAs(tier: 'centroid' | 'query'): string[] {
     const lines: string[] = [];
     for (const [name, result] of Object.entries(this.data().results || {})) {
       const quota = result.label_quota;
-      if (quota?.tier !== 'centroid') continue;
+      if (quota?.tier !== tier) continue;
       const owed = labelsOwed(quota);
       lines.push(owed ? `${result.detector_name || name} (${owed})` : result.detector_name || name);
     }

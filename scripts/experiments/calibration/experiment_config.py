@@ -393,6 +393,24 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # seeding difference inside the voting-mode axis (#3276, #3278). Both halves
     # are built for this dataset, so the pair is available rather than aspirational.
     "coco_better": os.environ.get("CALIB_COCO_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    # FHIBE (#4699): one identity per cell, the person's one-person photos as
+    # its positives. The photo arms are whole images at two stored sizes; the
+    # face arms are `image2face` crops of those copies, embedded by FaceNet. The
+    # pile pairs embedders with datasets by media type, so a face roster names
+    # face embedders only. No region arm: no patch cell is built.
+    #
+    # FHIBE has no names to type, so these cells open on example photos
+    # (`CALIB_SEED_EXAMPLES`), never on a text sort.
+    "fhibe_1024": os.environ.get("CALIB_FHIBE_EMBEDDERS", "siglip").split(","),
+    "fhibe_640": os.environ.get("CALIB_FHIBE_EMBEDDERS", "siglip").split(","),
+    "fhibe_faces_1024": os.environ.get("CALIB_FHIBE_FACE_EMBEDDERS", "face").split(","),
+    "fhibe_faces_640": os.environ.get("CALIB_FHIBE_FACE_EMBEDDERS", "face").split(","),
+    # The same crops turned upright by their landmarks (#4777).
+    **{
+        f"fhibe_faces_{tag}_{size}": os.environ.get("CALIB_FHIBE_FACE_EMBEDDERS", "face").split(",")
+        for tag in ("roll", "sim")
+        for size in (1024, 640)
+    },
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -451,6 +469,15 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # `test_pile_boxed_datasets_are_registered` is now the guard rather than this
     # comment.
     "coco_better": True,
+    # FHIBE's photos carry the subject's annotated face box (#4699). Only a
+    # whole-image embedder is built for them, so they binary-vote; the entry
+    # keeps a future patch arm from silently doing the same. The face crops
+    # are the box already, and carry none.
+    "fhibe_1024": True,
+    "fhibe_640": True,
+    "fhibe_faces_1024": False,
+    "fhibe_faces_640": False,
+    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim") for size in (1024, 640)},
 }
 
 
@@ -1030,10 +1057,11 @@ WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true
 #: count line); ``walk`` the full walk whose end moves the line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
-#: When the simulated user checks (#4496): unset is the harness's default, the app's (``weak``: the end-of-run check
-#: plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate weakly, d' below
-#: ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's constants);
-#: ``end`` (the end-of-run check only, the pre-#4496 harness) or ``off``.
+#: When the simulated user checks (#4496): unset is the harness's default, the app's for the cell's medias (``weak``:
+#: the end-of-run check plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate
+#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's
+#: constants - but ``end`` on face crops, where the app never prompts, #4799); ``end`` (the end-of-run check only,
+#: the pre-#4496 harness and the face path's), ``weak`` or ``off``.
 SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None
 WEAK_D = _opt_float("CALIB_WEAK_D")
 _weak_min_t = _opt_float("CALIB_WEAK_MIN_T")
@@ -1076,7 +1104,7 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
 #: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
-#: the first Good until 3 Goods and 4 Bads); ``CALIB_LABEL_QUOTA=off`` is the
+#: the first Good until 3 Goods and 4 Bads, or a Good and 16 Bads); ``CALIB_LABEL_QUOTA=off`` is the
 #: pre-#4643 arm, a trained head from the first Good and Bad, which the study
 #: extras that vary its cut need at every such step.
 LABEL_QUOTA: bool | None = False if os.environ.get("CALIB_LABEL_QUOTA", "").strip().lower() == "off" else None
@@ -1108,6 +1136,67 @@ OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or Non
 #: default, ``seed``) is the app: the top of the text sort.
 MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
 
+#: Issue #4671's New-phase knob: ``hard`` takes the Hard pick where Autopilot's
+#: New phase would walk the Coverage Atlas, the phase machine unchanged.  Unset
+#: (the default, ``atlas``) is the app.
+NEW_WALK = os.environ.get("CALIB_NEW_WALK", "").strip() or "atlas"
+
+#: Issue #4699's **example opening**: each cell starts from this many photos of
+#: its target, drawn from the voting half, voted Good as the run's first votes,
+#: and ranked against as the app's example sort ranks (cosine to their
+#: centroid).  The opening for a dataset with no text to type, such as FHIBE's
+#: identities.  Unset (the default) keeps the text or known-good start.  See
+#: :mod:`vtscore.eval.example_opening`.
+_SEED_EXAMPLES = os.environ.get("CALIB_SEED_EXAMPLES", "").strip()
+SEED_EXAMPLES: int | None = int(_SEED_EXAMPLES) if _SEED_EXAMPLES else None
+if SEED_EXAMPLES is not None and SEED_EXAMPLES < 1:
+    raise ValueError(f"CALIB_SEED_EXAMPLES={_SEED_EXAMPLES!r} must be a whole number >= 1")
+
+#: Issue #4699's stratified split, ``CALIB_STRATIFY_TARGET=1``: the target's
+#: positives are split apart from the negatives, so a class with two or more
+#: keeps one on each side.  Off (the default) is the plain random split.
+STRATIFY_TARGET = os.environ.get("CALIB_STRATIFY_TARGET", "0") == "1"
+
+#: Issue #4731's two rules, both the app's since #4731 shipped.
+#: ``CALIB_GOOD_DRY_RUN`` is the Good walk's dry run (the app's 16): the Good
+#: phase also ends once that many picks in a row held no positive, with a Good
+#: in hand.  ``CALIB_QUOTA_DRY_BADS`` is the label quota's second tier (the
+#: app's 16): a Good and that many Bads get the trained head.  Unset is the
+#: app; ``off`` is the pre-#4731 arm; another count is an arm.  Any other value
+#: is kept as given, for preflight to refuse.
+_GOOD_DRY_RUN = os.environ.get("CALIB_GOOD_DRY_RUN", "").strip()
+GOOD_DRY_RUN: "int | str | None" = int(_GOOD_DRY_RUN) if _GOOD_DRY_RUN.isdigit() else (_GOOD_DRY_RUN or None)
+_QUOTA_DRY_BADS = os.environ.get("CALIB_QUOTA_DRY_BADS", "").strip()
+QUOTA_DRY_BADS: "int | str | None" = int(_QUOTA_DRY_BADS) if _QUOTA_DRY_BADS.isdigit() else (_QUOTA_DRY_BADS or None)
+
+#: Issue #4732's centroid line.  ``CALIB_CENTROID_LINE`` is the rule the Goods'
+#: centroid's line is drawn by under the label quota (one of
+#: ``vtscore.detectors.centroid_head.CENTROID_LINE_RULES``); unset is the app's.
+#: ``CALIB_CENTROID_LINE_VARIANTS`` (``"<rule>@<beta>,..."``) adds tagged rows
+#: pricing other lines on the same sessions, which no production read takes.
+#: Both are kept as given, for the harness and preflight to refuse.
+CENTROID_LINE: str | None = os.environ.get("CALIB_CENTROID_LINE", "").strip() or None
+CENTROID_LINE_VARIANTS: str | None = os.environ.get("CALIB_CENTROID_LINE_VARIANTS", "").strip() or None
+
+#: Issue #4776's hand-over shadow: at every click Test gives the trained head,
+#: also the Goods' centroid's Test (rows tagged ``handover:centroid``) and the
+#: evidence a hand-over rule may read (``task_NNNN__handover.csv``).  Neither
+#: picks, so the session is the app's; ``CALIB_HANDOVER_SHADOW=1`` turns it on.
+HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not in ("", "0")
+
+#: Issue #4786's line counts: at every click Test gives the trained head, what
+#: each candidate line would keep on the withheld half and where its positives
+#: sit in the head's ranking (``task_NNNN__linecounts.csv``), so a count rule for
+#: the line is priced on the same sessions.  Recorded only, so the session is the
+#: app's; ``CALIB_LINE_COUNTS=1`` turns it on.
+LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", "0")
+#: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
+#: Test gives the typed query's own set until the label quota (rows tagged
+#: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the
+#: default) is the app; ``CALIB_QUERY_TIER=0`` is the arm before (the Goods'
+#: centroid from the first Good, no row before it).
+QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", "off", "false")
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive
@@ -1119,6 +1208,16 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
+
+#: Issue #4786's gate: until the labels line's class model holds this many Bads (and
+#: while it holds few Goods), the line keeps the head's count (``vtscore.eval.
+#: live_threshold_rules.head_count_bads``).  Unset is the app's; ``0`` is the line
+#: before #4786.  A value that is not a non-negative integer is kept as given, for
+#: the harness to refuse.
+_HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
+HEAD_COUNT_BADS: "int | str | None" = (
+    int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)
+)
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
@@ -1433,6 +1532,9 @@ REQUIRE_SEED_QUERY = os.environ.get("CALIB_REQUIRE_SEED_QUERY", "0") == "1"
 #:   is the pin for a study whose subject *is* that flow (or one re-running a
 #:   finished grid that took it), and it fails if an arm silently gains a text
 #:   tower or a query.
+#: * ``"example"`` - every cell must open on :data:`SEED_EXAMPLES` photos of its
+#:   target (#4699).  That opening *is* chosen by a knob, so this declaration
+#:   is what fails a grid launched without the knob set.
 #: * ``"mixed"`` - the grid deliberately holds both openings, e.g. a re-runner
 #:   mirroring a completed study's arms.  Nothing is asserted per cell; the
 #:   declaration is what stops the mix reading as an oversight, and the analyzer
@@ -1440,7 +1542,7 @@ REQUIRE_SEED_QUERY = os.environ.get("CALIB_REQUIRE_SEED_QUERY", "0") == "1"
 #:   pooled into one number.
 #: * ``""`` (unset) - no assertion, the behaviour of every run before #3278.
 REQUIRE_OPENING = os.environ.get("CALIB_REQUIRE_OPENING", "").strip().lower()
-_OPENINGS = ("", "text", "known_good", "mixed")
+_OPENINGS = ("", "text", "known_good", "example", "mixed")
 if REQUIRE_OPENING not in _OPENINGS:
     raise ValueError(f"CALIB_REQUIRE_OPENING={REQUIRE_OPENING!r} is not one of {_OPENINGS[1:]}")
 

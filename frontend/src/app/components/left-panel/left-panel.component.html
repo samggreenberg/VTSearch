@@ -23,6 +23,7 @@
         title="Autopilot tests the line: it picks items at random from both sides of it, you vote each one, and the picks say how much of what the line keeps is right and how many of the real matches it found."
       ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
       <button
+        #reviewTab
         class="left-tab"
         role="tab"
         [class.active]="findTab() === 'review'"
@@ -31,10 +32,18 @@
         title="Review the ranked list under the line yourself: walk the boundary, verify items into the Good and Bad piles, and send the matches on."
       >Review</button>
     </div>
+    <!-- Toasty under the Review tab (#4807), reaching over the list; the host
+         says when (the tab is open and nothing is checked yet). -->
+    @if (reviewHint()) {
+      <vt-toasty-hint hintId="review" [anchor]="reviewTab" reach="right">
+        Every item is here, best match first. Click one to check it with Good or Bad, or
+        <strong>Export</strong> to send the matches on.
+      </vt-toasty-hint>
+    }
     }
     @if (findDetectorNote()) {
-      <!-- Under the label quota the detector is the Goods' centroid (#4643):
-           said on both tabs, since both read its line. -->
+      <!-- Under the label quota the detector is its typed query (#4758) or the
+           Goods' centroid (#4643): said on both tabs, since both read its line. -->
       <p class="info-text find-detector-note" role="note">{{ findDetectorNote() }}</p>
     }
 
@@ -84,7 +93,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="browse.emit()"
               aria-label="Browse unverified positives"
-              title="Browse the likely matches you haven't reviewed yet as their own map"
+              [title]="'Browse the likely matches you haven\'t reviewed yet as their own map' + queueFacesNote()"
             >
               <vt-icon type="eye" [size]="14"></vt-icon>
             </button>
@@ -93,7 +102,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="toDataset.emit()"
               aria-label="Unverified positives to dataset"
-              title="Promote the likely matches you haven't reviewed yet into their own dataset"
+              [title]="'Promote the likely matches you haven\'t reviewed yet into their own dataset' + queueFacesNote()"
             >
               <vt-icon type="cubes" [size]="14"></vt-icon>
             </button>
@@ -102,7 +111,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="unverifiedExport.emit()"
               aria-label="Export unverified positives"
-              title="Export the likely matches you haven't reviewed yet — e.g. to re-import as a dataset"
+              [title]="'Export the likely matches you haven\'t reviewed yet — e.g. to re-import as a dataset' + queueFacesNote()"
             >
               <vt-icon type="export" [size]="14"></vt-icon>
             </button>
@@ -118,8 +127,8 @@
           side="left"
           [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
           class="view-controls-slot" />
-
       </div>
+      <vt-collapse-photos-toggle />
 
       @if (sortBusy()) {
         <vt-progress-indicators
@@ -136,6 +145,22 @@
       }
 
       <div class="media-list-container">
+        @if (collapse.active()) {
+          <vt-photo-grid
+            [token]="sortToken()"
+            [threshold]="threshold()"
+            [selectedId]="selectedId()"
+            [goodVotes]="goodVotes()"
+            [badVotes]="badVotes()"
+            [hiddenIds]="hiddenIds()"
+            [gridGoalWidth]="gridGoalWidth()"
+            [focusMode]="focusMode()"
+            [emptyNote]="'All verified — nothing left to review.'"
+            [scopeNote]="'counts, votes and Browse / To Dataset / Export are per face'"
+            (mediaSelect)="mediaSelect.emit($event)"
+            (mediaVote)="mediaVote.emit($event)"
+          />
+        } @else {
         <vt-media-list
           [medias]="medias()"
           [sortOrder]="sortOrder()"
@@ -164,6 +189,7 @@
           [totalCount]="medias().length"
           (stripeClick)="onStripeClick($event)"
         />
+        }
       </div>
     </div>
     }
@@ -249,6 +275,7 @@
             [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
             class="view-controls-slot" />
         </div>
+        <vt-collapse-photos-toggle />
 
         @if (allLabeled()) {
           <p
@@ -259,6 +286,20 @@
         }
 
         <div class="media-list-container">
+          @if (collapse.active()) {
+            <vt-photo-grid
+              [token]="sortToken()"
+              [threshold]="threshold()"
+              [selectedId]="selectedId()"
+              [goodVotes]="goodVotes()"
+              [badVotes]="badVotes()"
+              [gridGoalWidth]="gridGoalWidth()"
+              [focusMode]="focusMode()"
+              (mediaSelect)="mediaSelect.emit($event)"
+              (mediaVote)="mediaVote.emit($event)"
+              (mediaContextRequest)="mediaContextRequest.emit($event)"
+            />
+          } @else {
           <vt-media-list
             [medias]="medias()"
             [sortOrder]="sortOrder()"
@@ -288,6 +329,7 @@
             [totalCount]="medias().length"
             (stripeClick)="onStripeClick($event)"
           />
+          }
         </div>
       </div>
     } @else {

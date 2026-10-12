@@ -1,6 +1,28 @@
-import { ChangeDetectionStrategy, Component, input, OnDestroy, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, OnDestroy, output, signal } from '@angular/core';
 import { IconComponent } from '../../icon/icon.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
+import { HintId } from '../../../services/hints.service';
+import { countPhrase } from '../../../utils/count-phrase';
+
+/**
+ * The hints that stand over the Good / Bad buttons (#4680, #4807). The host
+ * picks one: Train's label view walks `start-voting` and the Autopilot phase
+ * hints, the Test view's stage shows `test-vote`.
+ */
+export type VoteHintId = Extract<
+  HintId,
+  'start-voting' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'test-vote'
+>;
+
+/** What the Train phase hints count: the Goods and Bads so far, against Autopilot's targets. */
+export interface VoteHintCounts {
+  goods: number;
+  goodsNeeded: number;
+  bads: number;
+  badsNeeded: number;
+}
+
+export const NO_VOTE_HINT_COUNTS: VoteHintCounts = { goods: 0, goodsNeeded: 0, bads: 0, badsNeeded: 0 };
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,10 +46,15 @@ export class VotingOverlayComponent implements OnDestroy {
    *  taking hover, and drop out of the tab order. */
   readonly unavailable = input(false);
   readonly spinningVote = input<'good' | 'bad' | null>(null);
-  /** When true, Toasty stands over the buttons asking for a first vote
-   *  (#4680). The parent decides when, and drops it on the first vote. */
-  readonly showHint = input(false);
+  /** Which of Toasty's hints stands over the buttons, if any (#4680, #4807).
+   *  The host decides when, and swaps or drops it as the user votes. */
+  readonly hint = input<VoteHintId | null>(null);
+  /** The counts the Train phase hints fill in. */
+  readonly hintCounts = input<VoteHintCounts>(NO_VOTE_HINT_COUNTS);
   readonly voted = output<'good' | 'bad'>();
+
+  readonly goodsNeededPhrase = computed(() => countPhrase(this.hintCounts().goodsNeeded, 'Good', 'Goods'));
+  readonly badsNeededPhrase = computed(() => countPhrase(this.hintCounts().badsNeeded, 'Bad', 'Bads'));
 
   /** Transient flash classes; signals so the `setTimeout` reset repaints under
    *  zoneless change detection. */

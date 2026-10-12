@@ -285,7 +285,10 @@ def find_label(body: dict):
         # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
         # cold path and the learned-sort cache-space marker.
         _abort_if_find_cancelled()
-        score_emb = keying_embedder_for_type(_detector_type(det_data), snap)
+        from vtscore.detectors.query_head import head_score_embedder
+
+        # A typed query's head scores in the text space, as the sort does (#4758).
+        score_emb = head_score_embedder(mlp, keying_embedder_for_type(_detector_type(det_data), snap) or None)
         results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
         update_find_progress(
             "running",
@@ -399,10 +402,14 @@ def find_label(body: dict):
         from vtsearch.state import get_beta  # noqa: PLC0415
 
         from vtscore.detectors.label_quota import served_quota  # noqa: PLC0415
+        from vtsearch.routes._sort_window import register_ranking  # noqa: PLC0415
 
         return {
             "ok": True,
             "results": results,
+            # A handle on this ranking for the views over it, though it is
+            # sent whole: Collapse to photos pages it grouped by photo (#4751).
+            "sort_token": register_ranking(results, threshold),
             "threshold": round(threshold, 4),
             # What the balance says about the line (#4272, #4413).
             "balance": detector_balance_state(det_ctx, get_beta()),

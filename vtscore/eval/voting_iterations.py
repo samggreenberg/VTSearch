@@ -32,6 +32,7 @@ one.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -47,7 +48,14 @@ if TYPE_CHECKING:
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, band_pick, is_autopilot_strategy, select_next
-from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.example_opening import (
+    EXAMPLE_PHASE,
+    check_example_opening,
+    choose_examples,
+    example_sort,
+    stratified_split,
+)
+from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -60,10 +68,12 @@ from vtscore.eval.live_threshold_rules import check_live_threshold
 from vtscore.eval.live_threshold_rules import live_threshold as retired_live_threshold
 from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_count_schedule
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
+from vtscore.eval.arms_handover import HANDOVER_CENTROID_TAG, HandoverJudge
+from vtscore.eval.arms_line_counts import line_count_row
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
-from vtscore.detectors.centroid_head import CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import TIER_CENTROID
+from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, TIER_CENTROID
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -71,6 +81,7 @@ from vtscore.eval.step_model import (
     HEADS,
     PRODUCTION_HEAD,
     StepModel,
+    good_training_vec,
     resolve_trainer_name,
     score_sim_set_with_model,
 )
@@ -78,6 +89,7 @@ from vtscore.eval.step_trainers import (
     _build_eval_atlas,
     _centroid_step,
     _labelset_error_costs,
+    _query_step,
     _score_pool,
     _train_and_calibrate,
 )
@@ -104,6 +116,7 @@ from vtscore.training.thresholds import (
     fbeta_count,
     fit_labels_line,
     weak_check_due,
+    weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -129,8 +142,7 @@ from vtscore.training.thresholds import (
 #: unspecified ``style=`` resolves to below.  Named rather than inlined so that
 #: "is this run measuring the shipped geometry?" is a question something can
 #: *ask*: `scripts/experiments/preflight.sh` compares a study's configured
-#: styles against it, the way it compares a study's head against
-#: :data:`PRODUCTION_HEAD`.  The HAC hybrids in
+#: styles against it, the way it flags a study that pins a head.  The HAC hybrids in
 #: :mod:`vtscore.eval.patch_styles` are experiment-only arms; #2886 removed the
 #: region tree from ingest.
 PRODUCTION_PATCH_STYLE: str = "max_patch"
@@ -420,6 +432,10 @@ _OPENING_PHASES = frozenset({"good", "bad", "more"})
 #: Where Autopilot's ``more`` walk can draw (#4637): ``"seed"`` is the app, the
 #: top of the text sort; ``"detector"`` the top of the step's detector ranking.
 MORE_WALKS = ("seed", "detector")
+
+#: What Autopilot's ``new`` phase can pick (#4671): ``"atlas"`` is the app, the
+#: Coverage Atlas's walk; ``"hard"`` the Hard pick, the phase machine unchanged.
+NEW_WALKS = ("atlas", "hard")
 
 #: The pick-log phase of a band pick (#4482): an ordinary click, past the opening,
 #: drawn the way the spot check draws (:func:`~vtscore.eval.al_strategies.band_pick`).
@@ -809,6 +825,9 @@ def _score_media_ids(
 
     if not ids:
         return []
+    if step.id_scores is not None:
+        # A typed query's set (#4758): its scores live in the text space, fixed per media.
+        return [step.id_scores[cid] for cid in ids]
     if style_obj is not None:
         # Explicit detection style (see vtscore.eval.patch_styles): the style
         # owns the whole image-scoring rule (whole-image / region max-pool /
@@ -1370,15 +1389,21 @@ def _centroid_test(
     style_obj: Any,
     beta: float | None,
     calibration_rows: bool,
+    line_rule: str | None = None,
+    line_beta: float | None = None,
+    line_ids: "list[int] | None" = None,
 ) -> tuple[StepModel, list[dict[str, Any]], "tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None"]:
     """What a Test on the withheld half gives under the label quota (#4643): the Goods' centroid.
 
     The centroid is cut where Test cuts it, on the corpus it searches - here
     the withheld half - so the step is built (:func:`_centroid_step`) with that
     half's scorer, in the run's own geometry, and scored on it at
-    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  Its line
-    does not take the balance, so there is no Find line to re-draw: *beta*
-    only weights the F-beta columns.
+    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  *beta*
+    weights the F-beta columns.  The line is drawn by *line_rule* at
+    *line_beta* (:func:`~vtscore.detectors.centroid_head.centroid_cut`, #4732);
+    ``None`` is the app's rule.  *line_ids* draws the line over other media than
+    the withheld half (#4779: the whole pool, voted media in or out, as the app's
+    labelled collection holds them); the metrics stay the withheld half's.
 
     Returns the step, its metric rows (one, from :func:`_calibration_metric_rows`
     when *calibration_rows*, else :func:`_evaluate_on_test`'s), and the
@@ -1386,11 +1411,20 @@ def _centroid_test(
     """
     from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
 
+    corpus = list(test_ids) if line_ids is None else list(line_ids)
+
     def _score(step: StepModel) -> list[float]:
-        return _score_media_ids(step, clips_dict, list(test_ids), region_aware=region_aware, style_obj=style_obj)
+        return _score_media_ids(step, clips_dict, corpus, region_aware=region_aware, style_obj=style_obj)
 
     step = _centroid_step(
-        good_votes, clips_dict, target_category, _score, region_voting=region_voting, style_obj=style_obj
+        good_votes,
+        clips_dict,
+        target_category,
+        _score,
+        region_voting=region_voting,
+        style_obj=style_obj,
+        line_rule=line_rule,
+        line_beta=line_beta,
     )
     if calibration_rows:
         calibration = _calibration_metric_rows(
@@ -1418,6 +1452,50 @@ def _centroid_test(
         beta=beta,
     )
     return step, [metrics], None
+
+
+def _query_test(
+    seed_scores: dict[int, float],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    beta: float | None,
+    calibration_rows: bool,
+    line_beta: float | None = None,
+) -> tuple[StepModel, list[dict[str, Any]]]:
+    """What a Test on the withheld half gives a typed-query run until the quota (#4758): the typed query's own set.
+
+    The step is :func:`~vtscore.eval.step_trainers._query_step` over the
+    opening's text sort, its line drawn on the withheld half (the corpus a Test
+    there searches) at *line_beta*, and scored there at
+    :data:`~vtscore.detectors.centroid_head.CENTROID_THRESHOLD`.  *beta* weights
+    the F-beta columns.  With *calibration_rows* the calibration study's base
+    columns are filled from the same pass (:func:`_standalone_calibration_row`),
+    since the style's node scores are in the run's learning space, not the
+    query's.  Returns the step and its one metric row.
+    """
+    from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
+
+    step = _query_step(seed_scores, test_ids, line_beta=line_beta)
+    scored: list[Any] = []
+    metrics = _evaluate_on_test(
+        step,
+        CENTROID_THRESHOLD,
+        clips_dict,
+        test_ids,
+        target_category,
+        inclusion,
+        scored_sink=scored,
+        beta=beta,
+    )
+    if calibration_rows and scored:
+        metrics = {
+            **metrics,
+            **_standalone_calibration_row(CENTROID_THRESHOLD, {"provenance": "query", "beta": beta}, scored, inclusion),
+        }
+    return step, [metrics]
 
 
 # ------------------------------------------------------------------
@@ -1879,10 +1957,10 @@ def _resolve_head(head: Optional[str], trainer: str) -> str:
                 f"its own standalone estimator and has no head to choose"
             )
     # **The default arm must be the app's default.**  Production pins the linear
-    # SVM head on every fit (``hidden_dim = LINEAR_SVM_HEAD`` in
-    # ``vtscore.detectors.training.train_and_threshold``), so an unspecified head
-    # resolves to it — the same way *style* and *blend_schedule* resolve to the
-    # app's geometry and schedule below.  The head fits the final model *and*
+    # SVM started from the Goods' centroid on every fit (``hidden_dim =
+    # LINEAR_SVM_PRIOR_HEAD`` in ``vtscore.detectors.training.train_and_threshold``,
+    # #4785), so an unspecified head resolves to it — the same way *style* and
+    # *blend_schedule* resolve to the app's geometry and schedule below.  The head fits the final model *and*
     # the calibration folds, so it moves the thresholds and, through the vote
     # order, the whole trajectory: defaulting to a retired head would make every
     # unqualified run measure a detector nobody ships.  ``head="linear"`` (the
@@ -2224,6 +2302,184 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
+def _centroid_line_variant_rows(
+    variants: list[tuple[str, float]],
+    ident: dict[str, Any],
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+    voted: "set[int] | None" = None,
+) -> list[dict[str, Any]]:
+    """#4732's priced lines: the same Test at each ``(rule, beta)`` of *variants*, as tagged rows.
+
+    Each row is *ident* (the click's own identity and timing) with the centroid's
+    metrics when its line is drawn by *rule* at *beta* and F-beta is weighted at
+    *beta*, tagged :func:`centroid_line_tag` so a production read skips it.
+    Band-free: the bands price the detector, which these rows share.  A rule
+    written ``<rule>~<corpus>`` draws its line over another corpus
+    (:data:`CENTROID_LINE_CORPORA`, #4779): ``pool`` is every media of the cell,
+    the voted ones included, as the app's labelled collection holds them;
+    ``unvoted`` leaves out *voted*.
+    """
+    out: list[dict[str, Any]] = []
+    for spec, beta in variants:
+        rule, _, corpus = spec.partition("~")
+        line_ids = None
+        if corpus == "pool":
+            line_ids = list(clips_dict)
+        elif corpus == "unvoted":
+            line_ids = [i for i in clips_dict if i not in (voted or set())]
+        _step, metric_rows, _cal = _centroid_test(
+            good_votes,
+            clips_dict,
+            test_ids,
+            target_category,
+            inclusion,
+            region_voting=region_voting,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            beta=beta,
+            calibration_rows=False,
+            line_rule=rule,
+            line_beta=beta,
+            line_ids=line_ids,
+        )
+        out.extend({**ident, **mr, "beta": beta, "gmm_variant": centroid_line_tag(spec, beta)} for mr in metric_rows)
+    return out
+
+
+def _handover_centroid_rows(
+    ident: dict[str, Any],
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+    beta: float | None,
+    calibration_rows: bool,
+    line_rule: str | None,
+    line_beta: float | None,
+) -> list[dict[str, Any]]:
+    """#4776's shadow: the Goods' centroid's Test at a click Test gave the trained head, as tagged rows.
+
+    Scored by the call that scores the centroid's rows under the quota, with the
+    same arguments, so the centroid's series runs on unbroken past the hand-over;
+    tagged :data:`~vtscore.eval.arms_handover.HANDOVER_CENTROID_TAG` so a
+    production read skips it.  Band-free, as #4732's variant rows are.
+    """
+    _step, metric_rows, _cal = _centroid_test(
+        good_votes,
+        clips_dict,
+        test_ids,
+        target_category,
+        inclusion,
+        region_voting=region_voting,
+        region_aware=region_aware,
+        style_obj=style_obj,
+        beta=beta,
+        calibration_rows=calibration_rows,
+        line_rule=line_rule,
+        line_beta=line_beta,
+    )
+    return [{**ident, **mr, "detector_tier": "centroid", "gmm_variant": HANDOVER_CENTROID_TAG} for mr in metric_rows]
+
+
+def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bool:
+    """Whether Test gives the Goods' centroid at these counts: the label quota (#4643, #4731).
+
+    *dry_bad_quota* is the second quota's Bads (a Good and that many get the trained head):
+    the app's :data:`~vtscore.detectors.label_quota.DRY_BAD_QUOTA`, or ``None`` for the
+    pre-#4731 rule.
+    """
+    return label_quota_tier(n_good, n_bad, dry_bad_quota=dry_bad_quota).tier == TIER_CENTROID
+
+
+#: The corpora a priced centroid line can be drawn over (#4779): the withheld half (the
+#: default, a Find on another collection), every media of the cell (``pool``, the app's
+#: labelled collection today) and the cell's media less the voted ones (``unvoted``).
+CENTROID_LINE_CORPORA = ("withheld", "pool", "unvoted")
+
+
+def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
+    """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
+
+    Raises:
+        ValueError: On a rule outside
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, a
+            balance that is not a positive number, or a repeated variant.
+    """
+    if spec is None:
+        return []
+    items = [x.strip() for x in spec.split(",")] if isinstance(spec, str) else [str(x).strip() for x in spec]
+    out: list[tuple[str, float]] = []
+    for item in (x for x in items if x):
+        spec, sep, beta_text = item.partition("@")
+        rule, tilde, corpus = spec.partition("~")
+        try:
+            beta = float(beta_text)
+        except ValueError:
+            beta = float("nan")
+        if (
+            not sep
+            or rule not in CENTROID_LINE_RULES
+            or (tilde and corpus not in CENTROID_LINE_CORPORA)
+            or not (math.isfinite(beta) and beta > 0)
+        ):
+            raise ValueError(
+                f"a centroid line variant is '<rule>[~<corpus>]@<beta>' with rule in {CENTROID_LINE_RULES} "
+                f"and corpus in {CENTROID_LINE_CORPORA}; got {item!r}"
+            )
+        rule = spec
+        if (rule, beta) in out:
+            raise ValueError(f"centroid line variant {item!r} is repeated")
+        out.append((rule, beta))
+    return out
+
+
+def centroid_line_tag(rule: str, beta: float) -> str:
+    """The ``gmm_variant`` tag of a #4732 centroid line variant's rows."""
+    return f"centroid_line:{rule}@{beta:g}"
+
+
+def _resolve_dry_knob(name: str, value: "int | str | None", app: int) -> Optional[int]:
+    """A #4731 knob as the run uses it: ``None`` is the app's *app*, ``"off"`` the pre-#4731 arm.
+
+    Raises:
+        ValueError: If *value* is neither of those nor an integer >= 1.
+    """
+    if value is None:
+        return app
+    if value == "off":
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be an integer >= 1, 'off' or None (the app's {app}); got {value!r}")
+    return value
+
+
+def production_spot_check(clips_dict: dict[int, dict[str, Any]]) -> str:
+    """The spot check the app's Autopilot runs on these medias, as a ``spot_check`` value (#4799).
+
+    ``"weak"`` - the end-of-run check plus the prompted one (#4496) - except on a
+    media type the app never prompts on
+    (:func:`~vtscore.training.thresholds.weak_check_prompts`: face crops), where
+    it is ``"end"``.  Read off the first media's ``media_type``, as the app reads
+    its detector's; medias without one are prompted on.
+    """
+    first = next(iter(clips_dict.values()), None) if clips_dict else None
+    media_type = first.get("media_type") if isinstance(first, dict) else None
+    return "weak" if weak_check_prompts(media_type) else "end"
+
+
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -2275,6 +2531,7 @@ def simulate_voting_iterations(  # noqa: C901
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
+    new_walk: str = "atlas",
     band_share: Optional[int] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
@@ -2300,12 +2557,22 @@ def simulate_voting_iterations(  # noqa: C901
     walk_fine: bool = False,
     walk_guard: Optional[float] = None,
     walk_shape: Optional[str] = None,
-    spot_check: str = "weak",
+    spot_check: Optional[str] = None,
     weak_separation: float = WEAK_SEPARATION_D,
     weak_min_t: int = WEAK_CHECK_MIN_VOTES,
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
     label_quota: Optional[bool] = None,
+    seed_examples: Optional[int] = None,
+    stratify_target: bool = False,
+    good_dry_run: "int | str | None" = None,
+    quota_dry_bads: "int | str | None" = None,
+    centroid_line: Optional[str] = None,
+    centroid_line_variants: "Sequence[str] | None" = None,
+    handover_shadow: bool = False,
+    handover_sink: Optional[list[dict[str, Any]]] = None,
+    line_count_sink: Optional[list[dict[str, Any]]] = None,
+    query_tier: bool = True,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2333,9 +2600,10 @@ def simulate_voting_iterations(  # noqa: C901
             better, and VTSearch's vote order depends on the model).
         head: Which classifier head the ``"app"`` pipeline fits at each step
             (see :data:`HEADS`).  ``None`` (default) resolves to the **app's**
-            head, :data:`PRODUCTION_HEAD` — the linear SVM a live VTSearch
-            detector actually has, so a default run's thresholds and costs are
-            the ones users see.  ``"linear"`` (the logistic head the SVM
+            head, :data:`PRODUCTION_HEAD` — the linear SVM started from the Goods'
+            centroid (``"linear_svm_prior"``) a live VTSearch detector has since
+            #4785, so a default run's thresholds and costs are the ones users
+            see.  ``"linear_svm"``, the plain SVM, is the arm before it.  ``"linear"`` (the logistic head the SVM
             replaced) and ``"mlp"`` (the harness's auto-sized hidden layer,
             #2781) are the explicitly-named legacy arms.  The head is threaded
             into the calibration folds as well, mirroring how production threads
@@ -2425,6 +2693,75 @@ def simulate_voting_iterations(  # noqa: C901
             follows the text sort (top items for the initial goods, the sort's
             cutoff for the initial bads); ``None`` (default) means the dataset
             has no text sort, so autopilot seeds from random known-good examples.
+        seed_examples: The **example opening** (#4699): the session starts from
+            this many of the voting half's positives, the photos a user loads
+            into the app's example sort.  They are the run's first votes, all
+            Good, logged with phase ``"example"``, and the seed sort is the
+            cosine to their centroid, so a run that starts with fewer than three
+            walks down it for the rest.  Nested in the count under one *seed*.
+            Replaces *seed_scores*; whole-image datasets only.  ``None`` - the
+            default - keeps the openings above.  See
+            :mod:`vtscore.eval.example_opening`.
+        stratify_target: Split the target's positives on their own (#4699), so
+            a class with two or more keeps at least one on each side
+            (:func:`~vtscore.eval.example_opening.stratified_split`).  ``False``
+            - the default - is the plain random split, which can leave a
+            few-positive class with nothing withheld.
+        good_dry_run: The Good walk's dry run (#4731): Autopilot's Good phase
+            also ends once this many of its picks in a row held no positive,
+            with a Good in hand, and the ``more`` walk down the same sort is
+            then spent (:class:`~vtscore.eval.autopilot_flow.AutopilotFlow`).
+            ``None`` - the default - is the app's ``moreDryRun``
+            (:data:`~vtscore.eval.autopilot_flow.MORE_DRY_RUN`); ``"off"`` is
+            the pre-#4731 arm, whose Good phase waits for three Goods however
+            long the walk; another integer is an arm.  A set value needs the
+            phase machine and the app's own opening.
+        quota_dry_bads: The label quota's second tier (#4731): a labelset with
+            a Good and this many Bads gets the trained head.  ``None`` - the
+            default - is the app's
+            (:data:`~vtscore.detectors.label_quota.DRY_BAD_QUOTA`); ``"off"``
+            is the pre-#4731 quota (3 Goods and 4 Bads only); another integer
+            is an arm.  Inert without the quota.
+        centroid_line: The rule the Goods' centroid's line is drawn by under
+            the quota (#4732), one of
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, at
+            the run's *beta*.  ``None`` - the default - is the app's
+            (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
+            Inert without the quota.
+        centroid_line_variants: Extra centroid rows to price other lines on
+            the same session (#4732): each ``"<rule>@<beta>"`` adds, at every
+            click Test gives the centroid, a row scored at that balance with
+            the line *rule* draws there, tagged ``gmm_variant =
+            "centroid_line:<rule>@<beta>"`` so a production read skips it.
+            The centroid never picks, so these rows change nothing else, and
+            Autopilot's opening reads no balance, so a variant's balance prices
+            the line a user at that balance would see on these clicks.
+        handover_shadow: Price a hand-over rule on the same session (#4776):
+            at every click Test gives the trained head, also a row of what the
+            Goods' centroid would give there, scored as the centroid's rows
+            under the quota are and tagged ``gmm_variant =
+            "handover:centroid"`` (:mod:`vtscore.eval.arms_handover`).  Neither
+            detector picks, so the rows change nothing else.  Inert without the
+            quota.
+        handover_sink: With *handover_shadow*, receives the evidence a rule may
+            read at each of those clicks
+            (:data:`~vtscore.eval.arms_handover.HANDOVER_COLUMNS`): held-out
+            Goods' ranks in the unvoted pool under each detector, and the
+            centroid-prior heads' AP.  Single-vector runs only.
+        line_count_sink: Receives, at every click Test gives the trained head
+            under a balance, what each candidate line keeps on the withheld
+            half and where its positives sit in the head's ranking (#4786,
+            :data:`~vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS`), so a
+            count rule for the line is priced on the same session.  Recorded
+            only: the session is the app's.
+        query_tier: Whether a run that opens on a typed query (*seed_scores*
+            from the caller, no *seed_examples*) is a typed-query detector, as
+            the app's is (#4758): until the quota, a Test on the withheld half
+            gives the typed query's own set (:func:`_query_test`), from the
+            first vote, rows tagged ``detector_tier = "query"``.  ``True`` - the
+            default - is the app; ``False`` is the arm before (the Goods'
+            centroid from the first Good, no row before it).  Inert without the
+            quota, and on an example or known-good opening.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -2508,6 +2845,11 @@ def simulate_voting_iterations(  # noqa: C901
             (``app_trained``): the app showing the opening's detector from the
             end of the Bad phase (#4604).  Needs the app's own opening (no
             *startup_schedule*, no *opening_diversity*) and the phase machine.
+        new_walk: What Autopilot's ``new`` phase picks (issue #4671), an
+            experiment knob.  ``"atlas"`` - the default - is the app: the
+            Coverage Atlas's walk.  ``"hard"`` takes the Hard pick in ``new``
+            instead, with the phase machine (and so when Span gates ``done``)
+            unchanged.  Needs the phase machine.
         band_share: An experiment knob (issue #4482): one in *band_share* of
             Autopilot's picks past the opening (the phases where the app shows
             a detector) is a **band pick** instead of the phase's own, a draw
@@ -2722,9 +3064,11 @@ def simulate_voting_iterations(  # noqa: C901
             makes of it, its ranges flagged ``check_stale`` where the retrain
             moved them.  Until then every row reports the ``unchecked`` line,
             which is exactly what a headless run exports.  ``"off"`` never
-            checks: the whole run is the unchecked line.  ``"weak"`` (#4496,
-            the default since the owner's ruling of 2026-10-05: the app's
-            Autopilot checks where
+            checks: the whole run is the unchecked line.  ``None`` (default)
+            is the app's choice for these medias, :func:`production_spot_check`:
+            ``"weak"``, or ``"end"`` on face crops, where the app never prompts
+            (#4799).  ``"weak"`` (#4496, the owner's ruling of 2026-10-05: the
+            app's Autopilot checks where
             :func:`~vtscore.training.thresholds.weak_check_due` says) is
             ``"end"`` plus the check the app runs mid-session: at the first
             ordinary step from *weak_min_t* votes on whose labels line
@@ -2788,6 +3132,14 @@ def simulate_voting_iterations(  # noqa: C901
     # SLURM array slot spent to learn nothing (#4044).
     _check_test_bands(test_bands, target_category, target_prevalence)
     _check_train_mix(train_mix, target_category, target_prevalence)
+    check_example_opening(
+        seed_examples,
+        stratify_target=stratify_target,
+        seed_scores=seed_scores,
+        startup_schedule=startup_schedule,
+        train_mix=train_mix,
+        target_prevalence=target_prevalence,
+    )
     if target_prevalence is not None and haystack_prevalence is not None:
         raise ValueError("target_prevalence and haystack_prevalence are two different arms; set one")
     check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
@@ -2821,10 +3173,19 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"band_share must be an integer >= 1 (one pick in band_share) or None; got {band_share!r}")
     if more_walk not in MORE_WALKS:
         raise ValueError(f"more_walk must be one of {MORE_WALKS}; got {more_walk!r}")
+    if new_walk not in NEW_WALKS:
+        raise ValueError(f"new_walk must be one of {NEW_WALKS}; got {new_walk!r}")
     if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
         )
+    flow_good_dry_run = _resolve_dry_knob("good_dry_run", good_dry_run, MORE_DRY_RUN)
+    dry_bad_quota = _resolve_dry_knob("quota_dry_bads", quota_dry_bads, DRY_BAD_QUOTA)
+    line_variants = parse_centroid_line_variants(centroid_line_variants)
+    if centroid_line is not None and centroid_line not in CENTROID_LINE_RULES:
+        raise ValueError(f"centroid_line must be one of {CENTROID_LINE_RULES} or None; got {centroid_line!r}")
+    if good_dry_run is not None and startup_schedule is not None:
+        raise ValueError("good_dry_run sets the app's own Good phase; a startup schedule owns the opening")
     knobs = _resolve_run_knobs(
         fold_count_schedule=fold_count_schedule,
         calibrate_count=calibrate_count,
@@ -2885,7 +3246,10 @@ def simulate_voting_iterations(  # noqa: C901
     realized_prevalence = round(_prevalence(clips_dict, target_category), 6)
 
     if mix_split is None:
-        sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
+        if stratify_target:
+            sim_ids, test_ids = stratified_split(clips_dict, target_category, sim_fraction, rng)
+        else:
+            sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
         band_cohorts = _resolve_band_cohorts(
             unfiltered,
             target_category,
@@ -2930,6 +3294,21 @@ def simulate_voting_iterations(  # noqa: C901
     if not test_pos or not test_neg:
         return []
     band_neg_ids = test_neg if (test_bands and test_band_auroc) else None
+
+    # The example opening (#4699): the photos the user starts from, and the sort
+    # they make.  After the split and every thinning, so the examples are drawn
+    # from the voting half the run actually walks.
+    # A typed-query run is a typed-query detector (#4758): until the quota, its
+    # Test gives the typed query's own set, from the first vote.  Read before the
+    # example opening below builds its own sort into ``seed_scores``.
+    query_scores: Optional[dict[int, float]] = (
+        seed_scores if bool(query_tier) and quota_on and seed_examples is None else None
+    )
+    query_on = query_scores is not None
+    pending_examples: list[int] = []
+    if seed_examples is not None:
+        pending_examples = choose_examples(sim_ids, clips_dict, target_category, seed_examples, seed)
+        seed_scores = example_sort(clips_dict, pending_examples)
 
     # A patch dataset exposes a ``patch_grid`` per media; such datasets are
     # scored region-aware (max-pool over the image's score rows) the same way
@@ -3112,6 +3491,22 @@ def simulate_voting_iterations(  # noqa: C901
     # examples from the positives here when no text sort is available.  Cheap to
     # build once up front.
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
+    # #4776's hand-over evidence, on a single-vector run (the region path's geometry is its own).
+    handover_judge: HandoverJudge | None = None
+    if (
+        handover_shadow
+        and handover_sink is not None
+        and quota_on
+        and not region_aware
+        and (style_obj is None or style_obj.name == _WHOLE_IMAGE_STYLE)
+    ):
+        handover_judge = HandoverJudge(
+            clips_dict,
+            sim_ids,
+            test_ids,
+            target_category,
+            lambda media: good_training_vec(media, target_category, region_voting),
+        )
     step: StepModel | None = None
     threshold = 0.5
     #: The selector's threshold - cut ``acq_inclusion_offset`` steps below the
@@ -3131,11 +3526,15 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
-        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate)
+        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate, good_dry_run=flow_good_dry_run)
     elif more_walk != "seed":
         raise ValueError(
             "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
         )
+    elif good_dry_run is not None:
+        raise ValueError("good_dry_run needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
+    elif new_walk != "atlas":
+        raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
     # #4482's band picks: how many picks past the opening, and how many of them were band picks.
@@ -3215,6 +3614,8 @@ def simulate_voting_iterations(  # noqa: C901
             }
         )
 
+    if spot_check is None:
+        spot_check = production_spot_check(clips_dict)
     if spot_check not in ("end", "off", "weak"):
         raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
     if weak_phase not in ("any", "learned"):
@@ -3429,7 +3830,12 @@ def simulate_voting_iterations(  # noqa: C901
             startup_cut = startup_cuts[startup_round] if startup_round >= 0 else None
             cid = None
             pick_phase = phase
-            if band_share is not None and phase is not None and app_has_detector(phase) and pool_scores:
+            if pending_examples:
+                # The example opening (#4699): the user's own photos are the first
+                # votes, whatever the phase machine would pick.
+                cid = pending_examples.pop(0)
+                pick_phase = EXAMPLE_PHASE
+            if cid is None and band_share is not None and phase is not None and app_has_detector(phase) and pool_scores:
                 # #4482: every band_share-th pick past the opening is a band pick, on its
                 # own generator so the rest of the run's draws are the arm-free run's.
                 learned_picks += 1
@@ -3464,6 +3870,7 @@ def simulate_voting_iterations(  # noqa: C901
                     uncertainty=pool_uncertainty,
                     opening_diversity=diversity,
                     more_walk=more_walk,
+                    new_walk=new_walk,
                 )
                 cid = select_next(strategy, ctx)
             is_positive = _cast(cid, pick_phase)
@@ -3486,26 +3893,42 @@ def simulate_voting_iterations(  # noqa: C901
                     span=atlas.span_info() if atlas is not None else None,
                     last_vote_good=is_positive,
                 )
-            if quota_on and good_votes:
+            if quota_on and (good_votes or query_on):
                 # No head without a Bad, but Test gives the Goods' centroid
-                # from the first Good (#4643), so this click has a row.  The
-                # Train side has nothing to record: no line, no pool scores.
-                # The row's balance is the one a trained step records, which
-                # only the safe-threshold path draws a line at.
+                # from the first Good (#4643), and a typed-query run's Test
+                # gives the typed query's own set from the first vote (#4758),
+                # so this click has a row.  The Train side has nothing to
+                # record: no line, no pool scores.  The row's balance is the one
+                # a trained step records, which only the safe-threshold path
+                # draws a line at.
                 row_beta = beta if safe_thresholds else None
                 t_test = time.monotonic()
-                c_step, c_rows, _c_cal = _centroid_test(
-                    good_votes,
-                    clips_dict,
-                    test_ids,
-                    target_category,
-                    inclusion,
-                    region_voting=region_voting,
-                    region_aware=region_aware,
-                    style_obj=style_obj,
-                    beta=row_beta,
-                    calibration_rows=emit_calibration_metrics and style_obj is not None,
-                )
+                if query_scores is not None:
+                    c_step, c_rows = _query_test(
+                        query_scores,
+                        clips_dict,
+                        test_ids,
+                        target_category,
+                        inclusion,
+                        beta=row_beta,
+                        calibration_rows=emit_calibration_metrics and style_obj is not None,
+                        line_beta=beta,
+                    )
+                else:
+                    c_step, c_rows, _c_cal = _centroid_test(
+                        good_votes,
+                        clips_dict,
+                        test_ids,
+                        target_category,
+                        inclusion,
+                        region_voting=region_voting,
+                        region_aware=region_aware,
+                        style_obj=style_obj,
+                        beta=row_beta,
+                        calibration_rows=emit_calibration_metrics and style_obj is not None,
+                        line_rule=centroid_line,
+                        line_beta=beta,
+                    )
                 c_seconds = time.monotonic() - t_test
                 c_bands = _band_metrics(
                     c_step,
@@ -3524,7 +3947,7 @@ def simulate_voting_iterations(  # noqa: C901
                     float("nan"),
                     {},
                     {"beta": row_beta},
-                    "centroid",
+                    "query" if query_on else "centroid",
                 )
                 c_timing = {
                     "calibrate_count": 0,
@@ -3539,6 +3962,24 @@ def simulate_voting_iterations(  # noqa: C901
                 }
                 for mr in c_rows:
                     rows.append({**c_ident, **mr, **c_bands, **c_timing})
+                if query_on:
+                    # The centroid is not what Test gives here, so its lines are not priced.
+                    continue
+                rows.extend(
+                    _centroid_line_variant_rows(
+                        line_variants,
+                        {**c_ident, **c_timing},
+                        good_votes,
+                        clips_dict,
+                        test_ids,
+                        target_category,
+                        inclusion,
+                        region_voting=region_voting,
+                        region_aware=region_aware,
+                        style_obj=style_obj,
+                        voted=set(good_votes) | set(bad_votes),
+                    )
+                )
             continue
 
         # The live fold count for THIS step.  Constant unless #3314's schedule
@@ -3720,15 +4161,31 @@ def simulate_voting_iterations(  # noqa: C901
         details.pop("find_on_test", None)
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
-        centroid = quota_on and label_quota_tier(len(good_votes), len(bad_votes)).tier == TIER_CENTROID
+        centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
+        # ... and a typed-query run's Test gives the typed query's own set (#4758).
+        query = centroid and query_on
         centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
         # metrics row, but both paths score the same test set here.
         calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None = None
         metrics: dict[str, float] = {}
+        # The trained head's scores of the withheld half, their truth and ids, for #4786's line counts.
+        scored_test: tuple[Any, Any, list[int]] | None = None
         t_test = time.monotonic()
-        if centroid:
+        if centroid and query_scores is not None:
+            centroid_step, c_rows = _query_test(
+                query_scores,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                beta=details.get("beta"),
+                calibration_rows=emit_calibration_metrics and style_obj is not None,
+                line_beta=beta,
+            )
+            metrics = c_rows[0]
+        elif centroid:
             centroid_step, c_rows, calibration = _centroid_test(
                 good_votes,
                 clips_dict,
@@ -3740,6 +4197,8 @@ def simulate_voting_iterations(  # noqa: C901
                 style_obj=style_obj,
                 beta=details.get("beta"),
                 calibration_rows=emit_calibration_metrics and style_obj is not None,
+                line_rule=centroid_line,
+                line_beta=beta,
             )
             if calibration is None:
                 metrics = c_rows[0]
@@ -3793,6 +4252,8 @@ def simulate_voting_iterations(  # noqa: C901
                 beta=details.get("beta"),
                 out=details,
             )
+            if scored:
+                scored_test = (scored[0], scored[1], list(test_ids))
             if emit_calibration_metrics and trainer != APP_TRAINER and scored:
                 # A standalone trainer has no style, so it never reaches the
                 # calibration rows above - which is where the oracle cut, the
@@ -3888,7 +4349,7 @@ def simulate_voting_iterations(  # noqa: C901
             threshold,
             pool_scores,
             details,
-            "centroid" if centroid else "trained",
+            "query" if query else "centroid" if centroid else "trained",
         )
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
@@ -4143,6 +4604,90 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
+        if centroid and line_variants and not query:
+            rows.extend(
+                _centroid_line_variant_rows(
+                    line_variants,
+                    {**base_row, **timing_cols},
+                    good_votes,
+                    clips_dict,
+                    test_ids,
+                    target_category,
+                    inclusion,
+                    region_voting=region_voting,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                    voted=set(good_votes) | set(bad_votes),
+                )
+            )
+        if handover_shadow and quota_on and good_votes and not centroid:
+            # #4776: what the centroid would give at this click, had Test not handed over.
+            rows.extend(
+                _handover_centroid_rows(
+                    {**base_row, **timing_cols},
+                    good_votes,
+                    clips_dict,
+                    test_ids,
+                    target_category,
+                    inclusion,
+                    region_voting=region_voting,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                    beta=details.get("beta"),
+                    calibration_rows=emit_calibration_metrics and style_obj is not None,
+                    line_rule=centroid_line,
+                    line_beta=beta,
+                )
+            )
+            if handover_judge is not None and handover_sink is not None:
+                handover_sink.append(
+                    {
+                        **rank_ident,
+                        "t": t,
+                        "phase": base_row["phase"],
+                        **handover_judge.row(good_votes, bad_votes, pool),
+                    }
+                )
+        if line_count_sink is not None and not centroid and good_votes and beta is not None:
+            if calibration is not None:
+                scored_test = (calibration[1], calibration[2], list(calibration[3]))
+            if scored_test is not None:
+                # #4786: what each candidate line would keep on the withheld half at this click.
+                lc_scores, lc_labels, lc_ids = scored_test
+                on_test = details.get("find_on_test")
+                if on_test is None and details.get("find_line") is not None:
+                    on_test = details["find_line"].on_corpus(np.asarray(lc_scores, dtype=np.float64))
+
+                def _lc_score(st: StepModel, ids: list[int] = lc_ids) -> list[float]:
+                    return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+
+                lc_centroid = _centroid_step(
+                    good_votes,
+                    clips_dict,
+                    target_category,
+                    _lc_score,
+                    region_voting=region_voting,
+                    style_obj=style_obj,
+                    line_rule=centroid_line,
+                    line_beta=beta,
+                )
+                line_count_sink.append(
+                    line_count_row(
+                        rank_ident,
+                        t,
+                        base_row["phase"],
+                        len(good_votes),
+                        len(bad_votes),
+                        float(beta),
+                        lc_ids,
+                        lc_scores,
+                        lc_labels,
+                        float(details.get("find_threshold", threshold)),
+                        on_test,
+                        _lc_score(lc_centroid),
+                        CENTROID_THRESHOLD,
+                    )
+                )
 
     if rank_frame_sink is not None and last_ordinary is not None:
         rank_frame_sink.append({**rank_ident, **_rank_frame("last", **last_ordinary)})

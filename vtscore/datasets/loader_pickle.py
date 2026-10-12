@@ -278,6 +278,20 @@ def _restore_clip_window(media_data: dict[str, Any], media_info: dict[str, Any])
             media_data[field] = value
 
 
+def _restore_source_box(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry a pickled ``source_box`` onto the media when one is recorded.
+
+    Where a converter output sat in its source (a face crop's box in its
+    photo, #4748); see :data:`vtscore.media.provenance.SOURCE_BOX_FIELD`.  Set
+    only when present, so other media keep the shape they had before.
+    """
+    from vtscore.media.provenance import SOURCE_BOX_FIELD  # noqa: PLC0415
+
+    value = media_info.get(SOURCE_BOX_FIELD)
+    if value is not None:
+        media_data[SOURCE_BOX_FIELD] = value
+
+
 def _restore_ground_truth(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
     """Carry pickled ground-truth labels (``GROUND_TRUTH_FIELDS``) onto the media.
 
@@ -326,6 +340,7 @@ def _build_pickle_thin_media(
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
     _restore_clip_window(media_data, media_info)
+    _restore_source_box(media_data, media_info)
     _restore_ground_truth(media_data, media_info)
     return media_data
 
@@ -366,6 +381,7 @@ def _build_pickle_full_media(
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
     _restore_clip_window(media_data, media_info)
+    _restore_source_box(media_data, media_info)
     _restore_ground_truth(media_data, media_info)
     return media_data
 

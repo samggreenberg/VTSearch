@@ -91,6 +91,19 @@ output). Each dict must contain at minimum:
 - any extras the target media type's `pickle_extra_fields` declares
   (e.g. `width`, `height` for images).
 
+Two optional keys every target type keeps:
+
+- `"custom_metadata"` - a dict of per-item rows for the labeling UI's
+  metadata grid (e.g. `{"Detection Confidence": 0.98}`).
+  `convert_normalized()` also copies the source media's own
+  `custom_metadata` onto each output that doesn't set one.
+- `"source_box"` - where the output sat in its source image, as a
+  normalised `[x0, y0, x1, y1]` in `[0, 1]` of the upright frame
+  (`vtscore.media.provenance.SOURCE_BOX_FIELD`). Normalise against the
+  image you detected on, so a downsampled decode needs no rescaling.
+  `image2face` sets it on every face crop. It persists with the dataset
+  and renders as a **Source Box** row.
+
 `convert()` does **not** populate `id`, `embeddings`, or `md5` - those
 are filled in by the caller. Don't compute embeddings inside
 `convert()`; the loader pipeline embeds the produced media afterwards.

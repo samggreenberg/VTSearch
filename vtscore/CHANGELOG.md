@@ -8,8 +8,121 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+### Changed
+
+- **While the class model is thin, the labels line is the head's count** (issue #4786).
+  `LabelsLine.threshold` keeps, at every balance, what the Goods' centroid's count rule finds standing
+  out in the head's own logit scores (`head_count_cut`) while the class model holds fewer than
+  `HEAD_COUNT_BADS` (32) held-out Bads and fewer than `HEAD_COUNT_GOODS` (6) held-out Goods;
+  `head_count_serves` is the gate. Train, Find, the no-refit re-cut and the eval harness all take it.
+  Priced as full sessions at beta 1/4, 1 and 4: Find's mean F-beta over votes 1-50 +0.016 to +0.066
+  on FHIBE faces and +0.003 to +0.011 on COCO Better's Binary opening, positive in every set. The harness's
+  `vtscore.eval.live_threshold_rules.head_count_bads(0)` (`CALIB_HEAD_COUNT_BADS=0`) is the line before.
+
+- **A detector made from a typed query gives that query's own set until it has a trained head** (issue
+  #4758). Under the label quota, and before the first Good, `train_from_labelset(..., text_query=)` and
+  `labelset_train_and_score(..., label_quota=True, text_query=)` install the typed query's head
+  (`labelset_training.install_query_head`, new module `vtscore.detectors.query_head`) in place of the
+  Goods' centroid or nothing: the query's unit vector as a `Linear(D, 1)` in the snapshot's text slot,
+  cut at `text_sort_cuts`' display line at the detector's balance. `resolve_or_train_detector` reads the
+  query off the detector's data (`detector_text_query`: `text_query`, else its first text example) and now
+  returns a head for a detector with a query and no labels; `cached_head_is_current(det_ctx, labelset,
+  text_query=None)` refuses a query head built from another query, and a centroid cached for a detector
+  that now has one. `label_quota.TIER_QUERY` (`"query"`) is the tier `served_quota` reports for it.
+  `is_quota_head` (the centroid or a query's head) replaces `is_centroid_head` where a head's own line
+  is redrawn (`state.core`, `labels.sync`), and every scorer asks `head_score_embedder` for the space.
+  The CLI scores such a detector as its query and emits `detector_query`. A detector without a query,
+  or a snapshot with no text slot, gives the centroid and nothing as before. The eval harness follows:
+  a run that opens on a typed query writes a row from its first vote, `detector_tier="query"` until
+  the quota (`_query_test`, `step_trainers._query_step`, `StepModel.id_scores`);
+  `simulate_voting_iterations(query_tier=False)` is the arm before. Priced on COCO Better's Binary
+  opening: Find's F-beta over votes 1-10 +0.08 / +0.09 / +0.14 at beta 1/4, 1, 4.
+- **No prompted spot check on face crops** (issue #4799). `detector_check_prompt` never reports
+  `check_due` on a detector whose `media_type` is in the new
+  `vtscore.training.thresholds.WEAK_CHECK_OFF_MEDIA_TYPES` (`{"face"}`, read by `weak_check_prompts`), so
+  Autopilot runs no weak-separation check there and the Train tab does not call for one; `separation` is
+  still reported, and the end-of-run check and the Check button stay. The eval harness's `spot_check`
+  now defaults to `None`, resolved per run by `vtscore.eval.voting_iterations.production_spot_check`
+  from the medias' `media_type`: `"weak"`, or `"end"` on faces, so a face study's default arm changes and
+  `spot_check="weak"` is the arm before. Priced in #4778: on FHIBE's faces the prompt cost +0.007 to
+  +0.018 of the objective's mean over votes 1-50 and nothing after the check; on COCO it pays, and most
+  where it starts with fewest Goods, so no Good-count gate replaces the media type.
+- **The trained head starts from the Goods' centroid** (issue #4785). Every production fit in
+  `vtscore.detectors.training` (`train_and_threshold`, the vote path, the saved-origins path) now
+  passes `LINEAR_SVM_PRIOR_HEAD` instead of `LINEAR_SVM_HEAD`, in every space. The eval harness's
+  default head follows (`vtscore.eval.step_model.PRODUCTION_HEAD = "linear_svm_prior"`), so every
+  study's default arm changes; `head="linear_svm"` is the arm before. Priced in #4776 and #4785:
+  Find's mean F-beta over votes 1-50 +0.037 to +0.073 on FHIBE face crops, +0.004 to +0.007 on COCO
+  Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
+
 ### Added
 
+- **Line counts for the harness** (issue #4786). `simulate_voting_iterations(line_count_sink=[...])`
+  records, at every click Test gives the trained head under a balance, one
+  `vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS` row: where the withheld half's positives sit in
+  the head's ranking, and what the labels line (each preset), the Goods' centroid's count line and the
+  count rule on the head's scores keep there. Recorded only; the session is unchanged.
+
+- **An eval head started from the Goods' centroid, and a hand-over shadow for the harness** (issue #4776).
+  `vtscore.training.svm_prior` (`centroid_prior_direction`, `fit_linear_svm_prior_head`) fits the
+  shipped linear SVM's objective with one extra feature, `CENTROID_PRIOR_SCALE` (10) times the dot
+  with the unit Goods' centroid, and folds it back into a `Linear(D, 1)`; `train_model` reaches it by
+  the new `LINEAR_SVM_PRIOR_HEAD` sentinel (`-3`), the harness by `head="linear_svm_prior"`. Eval
+  only: no production fit passes the sentinel. `simulate_voting_iterations(handover_shadow=True,
+  handover_sink=[...])` adds, past the label quota, the Goods' centroid's Test as rows tagged
+  `gmm_variant="handover:centroid"` and one `vtscore.eval.arms_handover.HANDOVER_COLUMNS` row per
+  click (held-out Goods' ranks in the unvoted pool under the centroid and under the head, and the
+  centroid-prior heads' AP). Additive; off by default.
+- **`image2face` aligns each crop by its landmarks** (issue #4777). A new `align` field
+  (`"none"`, `"roll"`, `"similarity"`; **default `"roll"`**) fits MTCNN's five landmarks to
+  `FACE_TEMPLATE` with `fit_similarity(src, dst) -> (a, b, tx, ty)` and crops through
+  `crop_face(img, detection, align, padding)`: `roll` turns the padded box upright about its
+  centre at the box's size, `similarity` also re-centres and re-scales it to the template on a
+  square. Detection, the kept faces and each crop's `source_box` do not depend on `align`; a
+  detection without landmarks is cropped plain. `FaceDetection` (`box`, `conf`, `raw`,
+  `landmarks`) is what `_detect_faces` / `_kept_faces` now return, and the stubbed MTCNN must
+  answer `detect(img, landmarks=True)` with `(boxes, probs, points)`. **Behaviour change:** a
+  conversion at the defaults now emits turned-upright crops, so its face vectors differ from a
+  conversion before this change; pass `align="none"` for the old crops. Priced on the FHIBE face
+  bench (`docs/experiments/2026-10-10-face-align-4777`): the face review's session mean rose in
+  every session set, and failed one-photo sessions fell from 12 to 7.
+- **`vtscore.datasets.source_groups`: group a ranking of converter outputs by source item** (issue #4751).
+  `group_by_source(results, medias, locate) -> list[SourceGroup]` turns a descending ranking of
+  outputs into one of their sources: each output whose source resolves (`locate` is
+  `SourceLocator.locate`) joins its source item's group, a group scores as its best member and keeps
+  that member's place, and an output whose source cannot be named is a group of its own, so every
+  output is in exactly one group. `SourceGroup` carries `source_dataset_id`, `source_media_id`,
+  `score` and `members` (`SourceGroupMember`: `media_id`, `score`, `box`). It raises
+  `SourceNotLoadedError` (with `dataset_id`) when any output's source dataset is registered but not
+  loaded. `SortResultsCache.derived(token, key, build, *, dataset_id=None) -> (found, view)` keeps a
+  view built once over a stored ranking, evicted with it, and `forget_derived(token, key)` drops one.
+  Additive.
+- **`vtscore.datasets.source_item`: find a converter output's source item in its sibling dataset**
+  (issue #4749). `resolve_source_item(media, sibling_medias, *, name_lookup=None) -> int | None`
+  joins the output's `origin.params.source_file` to the sibling's `origin_name`, settles a shared
+  name by `source_path` against `media_path` (else `None`, never a guess), and follows `dupe_set`
+  members on either side; `SourceResolver` is the same, built once for many outputs.
+  `find_source_sibling(dataset_id, source_type, *, readable_by=None, entries=None)` picks the other
+  registry entry of the dataset's `import_group` whose `output_category` is the converter's
+  `source_type` (the Image output for faces, not the Document output beside it).
+  `SourceLocator(dataset_id, *, user=None)` / `locate_source(media, dataset_id, *, user=None)`
+  do both against the live contexts and return a `SourceLocation` (`status`, `dataset_id`,
+  `media_id`, `box`). Additive.
+- **A text or example sort keeps its display line, to redraw it at another balance** (issue #4760).
+  `vtscore.training.query_sort.SortLine` holds the rule that drew a cosine sort's line (`"text"`,
+  `"centroid"` or `"structural"`) and the scores it was drawn on; `threshold_at(beta)` draws the
+  sort's own number at that balance. `TextSortCuts` gains an optional `line` field (default `None`,
+  left out of equality and `repr`), which `text_sort_active`, `cosine_sort_cuts` and
+  `example_sort_cuts_from_paths` fill. `SortResultsCache.store` takes `line=`, and
+  `SortResultsCache.redraw(token, beta, *, dataset_id=None)` returns
+  `{"threshold", "above_threshold", "total"}` for a stored sort with a line, else `None`.
+  Additive.
+- **The dataset registry links the datasets of one multi-dataset import** (issue #4747).
+  `vtscore.datasets.registry.register_dataset` takes `import_group: str | None = None` and
+  `output_category: str = ""` and stores both on the entry; the multi-dataset load
+  (`vtscore.datasets.load_multi`) mints one group id per run and stamps every output's entry with
+  it and with the output's `OutputSpec.category`. Entries saved earlier lack the keys; read them
+  as `None` / `""`. Additive.
 - **`vtscore.concurrency.stalls`: a startup bar for the watchdog.** `StallWatchdog.relaxed(threshold_ms)`
   raises the heartbeat-miss bar for a block (never lowers it, re-arms the opt-in live dump at it, and a stall
   reported under it carries `bar …ms`); `startup_threshold_ms()` reads `VTSEARCH_STALL_STARTUP_MS` (default
@@ -36,8 +149,74 @@ instead, since every commit on `dev` is effectively a new app release.)
   `supports_multi_output`. The new `vtscore.datasets.load_multi` runs the fan-out: one loading task,
   context, registry entry, `DatasetImported` event and post-load hook per output, under the same
   download / embed gates as a single load. Additive: no existing member changes.
+- **A converter output can say where it sat in its source** (issue #4748). A dict `convert()`
+  returns may carry `source_box`, a normalised `[x0, y0, x1, y1]` box in `[0, 1]` of the upright
+  source image (`vtscore.media.provenance.SOURCE_BOX_FIELD`). It reaches the media on every ingest
+  path, survives the dataset pickle, and renders as one **Source Box** row
+  (`provenance.describe_source_box`). `image2face` sets it on every face crop. The folder and demo
+  conversion path (`vtscore.converters.runner`) also now keeps a converter's `custom_metadata`,
+  as the importer-hook and clipper-chain paths already did. Additive.
 
 ### Changed
+
+- **The Goods' centroid's line counts the unvoted media only** (issue #4779). `fit_centroid` and
+  `fit_centroid_head` take `line_mask` (one flag per score: which media the line counts); the app's
+  `install_centroid_head` passes the media the labelset does not label (`_unvoted_mask`).
+  `query_sort.cosine_sort_cuts` takes `exclude_ids` (default: the active detector's voted media) and leaves
+  them, and any media at `EXAMPLE_SELF_COSINE` (0.9999) or above, out of an example sort's display line;
+  the acquisition cut still reads every media. The harness's priced lines take a corpus,
+  `<rule>~pool@<beta>` or `<rule>~unvoted@<beta>` (`CENTROID_LINE_CORPORA`), drawn over every media of
+  the cell with the voted ones in or out.
+- **The Goods' centroid's line looks past a standout first cosine from beta 1 up** (issue #4783).
+  `CENTROID_LINE_RULE` is now `count_gap_floor_skip25_b1`: `count_gap_floor` below beta 1, and from
+  beta 1 up the same composition with the drop `skip25` (when the widest drop is the first, the widest
+  one below the second cosine if at least a quarter as wide). New: `CENTROID_DROPS` (each candidate's
+  drop: `skip25`, `skip50`, `rank5`), `_top_gap_count(..., drop=)`, and `CENTROID_GATED` (a rule gated on
+  beta 1, resolved by `centroid_cut` at the line's beta, so `CentroidLine.threshold_at` redraws the right
+  one). Candidates `count_gap_floor_skip25`, `_skip50` and `_rank5` join `CENTROID_LINE_RULES`.
+  `CALIB_CENTROID_LINE=count_gap_floor` is the harness arm before this change.
+- **The Goods' centroid's line counts the widest drop too, and never cuts through it** (issue #4759).
+  `CENTROID_LINE_RULE` is now `count_gap_floor`: `beta ** 0.708` times the larger of #4603's bulk excess
+  and the number of cosines above the widest drop between neighbours in the top 11
+  (`CENTROID_GAP_TOP` = 10), never keeping fewer than that drop's count. `CENTROID_LINE_RULES` gains the
+  candidates priced beside it (`count_z3`, `count_z3.5`, `mirror_z3.5`, `gap`, `count_gap`, `gap_floor`,
+  `count_gap_floor`; `CENTROID_COUNTS` lists the counts). `thresholds._count_line` splits into
+  `_count_estimate(scores, z=, bulk=)` (n-hat, now at any bar and with a `"mirror"` bulk) and
+  `_count_keep_line(scores, beta, n_hat)`; the typed query's line is unchanged. `count` stays available
+  as the #4732 line, and `CALIB_CENTROID_LINE=count` is the harness arm before this change.
+- **The Goods' centroid's line is the count line, at the balance** (issue #4732). `centroid_cut` takes
+  `rule` (`CENTROID_LINE_RULES`: `midpoint`, the line before #4732; `text`; `guarded`; `count`, the
+  app's `CENTROID_LINE_RULE`) and `beta`. `fit_centroid` returns the head, its threshold and a
+  `CentroidLine` (the corpus cosines the line was drawn on: `threshold_at(beta)` redraws it,
+  `acquisition_threshold()` is their midpoint); `fit_centroid_head` keeps its signature and gains
+  `rule` / `beta`. The cut sits in the middle of the gap the line falls in, so a float32 head keeps
+  exactly what the line keeps. `install_centroid_head` draws at the detector's own balance and keeps
+  the line on `DetectorContext.centroid_line`, which `recut_detector_threshold` redraws and
+  `detector_acquisition_threshold` samples at the midpoint of. `query_sort.cosine_sort_cuts` and
+  `example_sort_cuts_from_paths` return an example sort's two lines (`TextSortCuts`: the centroid's
+  display line and the midpoint). `simulate_voting_iterations` takes `centroid_line` (`None` the app,
+  `"midpoint"` the line before) and `centroid_line_variants` (`"<rule>@<beta>"` rows tagged
+  `gmm_variant="centroid_line:<rule>@<beta>"`). Behaviour change: a centroid head keeps far fewer
+  media on a rare target.
+- **A Good and 16 Bads get the trained head, and Autopilot's Good walk can run dry** (issue #4731).
+  `vtscore.detectors.label_quota` gains a second quota, `DRY_BAD_QUOTA` (16, Autopilot's
+  `moreDryRun`): a labelset with a Good and that many Bads is `TIER_TRAINED`. `LabelQuota` takes
+  `dry_bad_quota` (default `DRY_BAD_QUOTA`; `None` is the pre-#4731 rule), `label_quota()` takes it
+  as a keyword, `as_dict()` reports it, and `goods_owed` / `bads_owed` are 0 whenever a head is
+  given. Behaviour change for a library caller: `train_from_labelset` trains the head for 1-2 Goods
+  with 16 or more Bads, where it stored the centroid. The eval harness ports Autopilot's new Good-phase
+  exit - `moreDryRun` picks in a row without a Good, with a Good in hand, end the Good phase and spend
+  the More walk - as `autopilot_flow.next_phase(good_ran_dry=)` and `AutopilotFlow(good_dry_run=)`
+  (default `MORE_DRY_RUN`, `None` the pre-#4731 arm), and `simulate_voting_iterations` takes
+  `good_dry_run` / `quota_dry_bads` (`None` the app, `"off"` the pre-#4731 arm, or a count).
+
+- **Autopilot's photo opening drops the More walk** (issue #4740, from #4671). `vtscore.eval.autopilot_flow.MORE_TARGET`
+  is `0` (was `20`) and `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is `"g3@top,b4@mid"` (was
+  `"g3@top,b4@mid,g20+dry1/16@top"`), mirroring the app's `moreToStart: 0`: on a photo dataset the phase machine goes
+  Good, Bad, then Hard. #4671 scored the walk against the opening without it on the objective, every run at every
+  vote: the walk won votes 1-25 and lost from vote 23 on, at every preset. `MORE_DRY_RUN` still ends a document
+  dataset's walk (#4488), and an explicit `more_target` still runs one. A study whose control arm should keep the
+  walk passes `CALIB_STARTUP_SCHEDULE=g3@top,b4@mid,g20+dry1/16@top`.
 
 - **`SiftMatcher.verify_many` fits a batch's RANSAC pairs on a thread pool** (issue #4516).
   `_fit_similarity` is now `_ransac` (the `cv2.estimateAffinePartial2D` call) followed by
@@ -1497,6 +1676,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **Stable no longer counts a balance change as flips** (issue #4745).
+  `vtscore.detectors.labeling_progress.inject_live_model` takes `beta=`, the
+  balance its `threshold` was drawn at (default `None`, for a caller with
+  none). The Stable chain compared each detector with the last one, each read
+  at its own line, so after a balance change every item between the two
+  balances' lines counted as a flip although no detector changed its mind.
+  A detector served at another balance now becomes the baseline instead, as
+  after a gap. The line moving with the labels under one balance still
+  counts. Additive: a caller that never passes `beta=` behaves as before.
 - **A balance walk on a small ranking no longer keeps all of it whatever
   its audits say** (issue #4424). `SpotCheck` started a balance walk on the
   band holding the cap and stepped shallower only after a deeper step fell,

@@ -1197,7 +1197,11 @@ recoverable long after the import job ended:
   scanned folder is a staging area of symlinks — the `server_files`
   (Manifest) importer links listed paths into a temp dir under their
   basenames, disambiguating collisions as `name__1.ext` — so `source_path` is
-  the authoritative pointer back at the original media.
+  the authoritative pointer back at the original media.  A converter that
+  cuts its output out of a region of the source also sets the top-level
+  `source_box` (normalised `[x0, y0, x1, y1]` of the upright source;
+  `image2face` does, per face), which persists beside the clip window and
+  renders as the **Source Box** row.
 - **Clipper-chain output**
   (`vtscore/datasets/clipper_chain.py::_stamp_origin`) inherits the parent's
   `origin` and `origin_name` and adds the full `clipper_chain` JSON trail plus
@@ -1217,7 +1221,8 @@ to reproduce the bytes on demand, which is what makes reference-mode derived
 media possible (no duplicated clip/page bytes in the dataset).
 
 `vtscore/media/provenance.py` renders the same recipe for humans, as up to
-three curated lines: **Source** (the file the item was derived from),
+four curated lines: **Source** (the file the item was derived from),
+**Source Box** (where in it, when the converter recorded a `source_box`),
 **Derived Via** (the chain that derived it, e.g.
 `"Video → Images (n_clips=2) → Object (threshold=0.4)"`), and **Imported
 Via** (the importer that brought the corpus in, e.g.
@@ -1227,6 +1232,32 @@ converter" says nothing about where the corpus came from).
 `MediaType.display_metadata` includes them, so they reach both the labeling
 UI's metadata grid and the enriched label export.  A plainly imported file
 gets no `Source` / `Derived Via` — it is its own source.
+
+The source **file** is usually gone once the import ends (an archive's
+extract dir, an upload's staging dir), so the way back to it is the source
+**item**, in the dataset a multi-dataset import produced beside the outputs.
+`vtscore/datasets/source_item.py` makes that link: the sibling is the entry
+of the same `import_group` whose `output_category` is the converter's
+`source_type` (by category, not media type, because a Document output is an
+image dataset too), and the item is the one whose `origin_name` is the
+output's `source_file`, which holds because both datasets come from one scan
+of one folder.  `GET /api/medias/<id>/source` and
+`POST /api/medias/source-batch` serve it
+([API](api/medias.md#resolve-a-derived-items-source)); they read the sibling
+through `get_context(sibling_id)`, never the request's proxies, and only
+resolve into a sibling the user may read.
+
+**Collapse to photos** (#4751) shows a face ranking as its photos without a
+second ranking: `GET /api/sort/collapsed` groups the ranking stored under a
+sort token with `vtscore/datasets/source_groups.py` (a group per photo, scored
+as its best face, every face in exactly one group) and windows the grouped
+list, so a photo never straddles a page. The grouping is built once per token
+and kept on the sort cache's entry (`SortResultsCache.derived`), so it is
+evicted with the ranking and a re-sort regroups; votes are read per request.
+Votes, counts and Find's bulk actions stay on faces: the detector is a face
+detector and its labels are face crops, so the photo is presentation only.
+`/api/find-label` registers its ranking for a token too, though it sends it
+whole.
 
 Each is deliberately **one line**, not a key per `origin.params` entry:
 flattening the params into a per-item grid reads as if every key were a

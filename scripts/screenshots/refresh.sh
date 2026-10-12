@@ -122,9 +122,14 @@ else
         sleep 2
     done
     curl -sf -o /dev/null "$APP/" 2>/dev/null || { echo "The app at $APP never came up; see $APP_LOG" >&2; exit 1; }
+    # Show Animations follows the OS (the harness turns motion off), and Toasty's
+    # hints are hidden the way a user hides them (#4807): the app then shows
+    # what it shows a user who ticked Hide all hints, the reasons under the
+    # Dashboard's disabled buttons included. capture.ts's CSS hides Toasty too,
+    # for an app the caller pointed this at, whose settings are left alone.
     curl -sf -o /dev/null -X PUT -H 'content-type: application/json' \
-        -d '{"show_animations": "os"}' "$APP/api/settings" \
-        || { echo "Could not set Show Animations to OS Setting on the app at $APP" >&2; exit 1; }
+        -d '{"show_animations": "os", "hide_all_hints": true}' "$APP/api/settings" \
+        || { echo "Could not set Show Animations to OS Setting and hide Toasty's hints on the app at $APP" >&2; exit 1; }
 fi
 
 # How long each phase took, printed at the end so a slow run says where (#4341).

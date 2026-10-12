@@ -24,6 +24,7 @@
       [sortStepEnd]="sortState.sortStepEnd"
       [sortEtaSeconds]="sortState.sortEtaSeconds"
       [sortHasMore]="sortState.sortHasMore"
+      [sortToken]="sortState.sortToken"
       [loadingMore]="loadingMoreSort()"
       [labelingStatus]="labelingStatus()"
       [gridGoalWidth]="gridGoalWidthLeft"
@@ -80,7 +81,8 @@
       [exhaustedHeading]="exhaustedHeading()"
       [exhaustedDetail]="exhaustedDetail()"
       [advancePending]="advancePending()"
-      [startVotingHint]="startVotingHint()"
+      [voteHint]="voteHint()"
+      [voteHintCounts]="voteHintCounts()"
       (mediaVoted)="onMediaVoted($event)"
       (navigateRequested)="onNavigate($event)"
     />

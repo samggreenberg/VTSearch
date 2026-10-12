@@ -147,64 +147,65 @@ DATASETS: dict[str, dict] = {
         }
         for i in range(COCO_BETTER_SHARDS)
     },
-    # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
-    # free-text vocabulary) rather than the demo pipeline's 100 curated
-    # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a
-    # dataset *size* tier and says nothing about boxes; these are the box bands.
-    # The same-class-across-bands set (#3156). One pickle, one class list, one
-    # negative pool; the band lives on the category name (`bus@small`). Not a
-    # replacement for `vg_box_*` -- those measured what they measured and stay
-    # reproducible -- but the two are not comparable: disjoint vocabularies
-    # against a fixed one.
-    #
-    # Drawn from the half of VG that COCO sourced, and labelled from COCO's
-    # exhaustive annotation rather than VG's free text, because VG's own labels
-    # cannot support the construction: measured on this pool its recall over C
-    # is 0.76, and 1.4% of the images it calls negative actually hold the object
-    # (`coco_anchor.py`). At 80 positives per cell that would be ~54 hidden
-    # positives sitting in the negatives.
-    # `vg_scale` with the box-size band collapsed away (#3115): the same images,
-    # boxes and corrections, keyed on the bare class.  A calibration study wants
-    # uniform prevalence across cells and does not care how big the box is;
-    # `visual_genome_m` gives neither (25 to 1645 positives, and its thin
-    # categories produce cells with no trainable step at all).
-    #
-    # DERIVED from the built `vg_scale` pickle, so it must be listed AFTER it -
-    # and so it inherits whatever that cell currently holds.  #3252 changed how
-    # `vg_scale` selects and corrects its cells, which means a `vg_scale_any`
-    # built before that commit is NOT the same dataset as one built after it.
-    # Rebuild it whenever `vg_scale` is rebuilt.  That used to be a rule nobody
-    # could check: `--force` on `vg_scale` alone left this cell holding the old
-    # labels with the right media count and the right vectors, so it looked
-    # healthy (#3281 shipped a box repair to one study and not the other).  It
-    # is now enforced twice -- `build_pile.py` pulls this dataset into any run
-    # that rebuilds its parent, and `--verify` compares the parent-label digest
-    # stamped on each derived media against the parent's live one.
-    # `vg_scale_any`'s construction with the BAND DROPPED FROM SELECTION rather
-    # than from the key, and sized for a long labelling session (#3547).
-    #
-    # `vg_scale_any` collapses `class@band` after the fact, so it inherits
-    # `vg_scale`'s per-band designation and is capped by the THINNEST band:
-    # `bus@small` has 138 candidates, which is why 100/band was the ceiling and
-    # 300 positives per class the result.  A study that never asks about box
-    # size does not need that cap.  Designating band-free off the same
-    # COCO-anchored labels takes the binding class from 414 candidates to 1006
-    # (`stop sign`), which is what makes a 400-click horizon measurable at all:
-    # #3319's deep wave harvested 82-85% of its ~150 sim positives.
-    #
-    # Prevalence is held at `vg_scale`'s designed 7.14% BY CONSTRUCTION rather
-    # than inherited by accident -- `SCALE_DEEP_N_NEG` is derived from
-    # `SCALE_DEEP_N_POS`, not set beside it.  That is the whole point: the
-    # optimum this dataset exists to locate is `k* = -log2((1-pi)/pi)`, so
-    # adding positives against a FIXED negative pool would move the answer
-    # (300->900 against 3900 shifts pi to 18.8% and k* by a full bit) while
-    # appearing to be nothing but "a deeper haystack".
-    #
-    # `on_request`: this one is 3x `vg_scale`'s media count, so it stays OUT of
-    # the default sweep. A bare `build_pile.py` would otherwise quietly add five
-    # cells nobody asked for, one of them a ~7 GB `dinov3_patch` grid. Name it
-    # to build it: `--datasets vg_scale_deep --embedders siglip`.
+    # FHIBE (#4699): Sony's consented face benchmark. One media per one-person
+    # photo, `category` = FHIBE's subject id, read from a copy whose long side is
+    # `long_side` px -- the census (docs/experiments/2026-10-09-fhibe-supply-4699)
+    # found MTCNN's recall is a pixel cliff at 24 px, so the stored size IS the
+    # localization difficulty, and the owner chose to build both sizes. The
+    # `fhibe_faces_*` datasets are the `image2face` crops of the same copy,
+    # embedded with FaceNet; they are separate datasets because a photo yields
+    # zero, one or several crops, and `--verify` requires one media count per
+    # dataset. All four are `on_request`: FHIBE is downloaded per user under
+    # Sony's terms and is not in every checkout's pile.
+    "fhibe_1024": {"boxed": True, "kind": "fhibe", "long_side": 1024, "on_request": True},
+    "fhibe_640": {"boxed": True, "kind": "fhibe", "long_side": 640, "on_request": True},
+    "fhibe_faces_1024": {"boxed": False, "kind": "fhibe", "long_side": 1024, "media_type": "face", "on_request": True},
+    "fhibe_faces_640": {"boxed": False, "kind": "fhibe", "long_side": 640, "media_type": "face", "on_request": True},
+    # The same crops turned upright by their landmarks (#4777): `align` is image2face's own.
+    # Same detections, ids and labels as `fhibe_faces_*`, so they pair cell for cell. Since #4777
+    # the app's default is `roll`, so `fhibe_faces_roll_*` is the face path as it ships and the
+    # plain `fhibe_faces_*` (no `align`: "none") is the app before it, kept so #4762 reproduces.
+    **{
+        f"fhibe_faces_{tag}_{size}": {
+            "boxed": False,
+            "kind": "fhibe",
+            "long_side": size,
+            "media_type": "face",
+            "align": align,
+            "on_request": True,
+        }
+        for tag, align in (("roll", "roll"), ("sim", "similarity"))
+        for size in (1024, 640)
+    },
 }
+
+#: FHIBE's release, as downloaded by ``scripts/experiments/pile/fhibe/download.sbatch``.
+#: Owner-only on scratch and never redistributed: each user registers with Sony
+#: and downloads their own copy. The release name carries the archive's hash, so
+#: a consent-revocation re-release is a NEW directory and a new value here, and
+#: the derived copies (``fhibe_derived_dir``) live beside it to be deleted with it.
+FHIBE_ROOT = Path(os.environ.get("VTS_FHIBE_ROOT", f"/expscratch/{USER}/fhibe"))
+FHIBE_RELEASE = os.environ.get("VTS_FHIBE_RELEASE", "fhibe-full-resolution-674a7dcf")
+
+
+def fhibe_derived_dir(long_side: int) -> Path:
+    """Where the build stages FHIBE's downscaled copies: beside the release, deleted with it."""
+    return FHIBE_ROOT / f"{FHIBE_RELEASE}-derived" / f"long{long_side}"
+
+
+def private_cell_dir(dataset: str) -> Path | None:
+    """Where a dataset's cells must really live, when the shared pile is the wrong place.
+
+    The pile is world-readable, and FHIBE's terms forbid passing it on: its cells
+    are vectors of photos other GRID users may not have. They are written here,
+    owner-only and beside the release so they are deleted with it, and the pile
+    holds a symlink -- which the harness opens as it opens any cell, and nobody
+    else can follow into a mode-700 directory.
+    """
+    if DATASETS.get(dataset, {}).get("kind") == "fhibe":
+        return FHIBE_ROOT / f"{FHIBE_RELEASE}-derived" / "cells"
+    return None
+
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
 #: embedder's geometry (the same anchors the calibration harness bands on):
@@ -3153,41 +3154,6 @@ SCALE_NEG_COMPOSITION = os.environ.get("VTS_SCALE_NEG_COMPOSITION", "provable")
 #: `docs/experiments/2026-09-06-cross-class-negatives-3667/REPORT.md`.
 SCALE_PREVALENCE = (3 * SCALE_N_POS) / (3 * SCALE_N_POS + SCALE_N_NEG)
 
-#: `vg_scale_deep`'s positives per class (#3547). 900 is the deepest value all
-#: twenty-five classes support band-free -- `stop sign`, the thinnest, has 1006
-#: candidates (`measure_supply.py`) -- and it is chosen against `preflight.sh`
-#: check 16b, which clears only when the sim half holds MORE positives than the
-#: horizon has steps: at `SIM_FRACTION` 0.5 that is 450 against 400.
-#:
-#: **The #3588 promotion did not move it, which was not a foregone conclusion.**
-#: Thirteen classes joined *C* and the binding constraint stayed exactly where it
-#: was: the thinnest of the thirteen band-free is `fire hydrant` at 1138, still
-#: clear of `stop sign`'s 1006, so depth and class list did not have to trade
-#: against each other. Had one of the thirteen come in under 900, the choice
-#: would have been between a deep set that carries fewer classes than the shallow
-#: one and a depth change that restates #3547's published optimum.
-#:
-#: Going deeper costs classes, not money: 1200 drops `kite`, `stop sign` and
-#: `fire hydrant`, and a class list that differs from #3319's would confound the
-#: horizon axis with a vocabulary axis in the one comparison this dataset exists
-#: to make.
-SCALE_DEEP_N_POS = int(os.environ.get("VTS_SCALE_DEEP_N_POS", "900"))
-#: `vg_scale_deep` does NOT follow #3670's expansion, and the pin is deliberate.
-#: Deriving its pool from the live `SCALE_PREVALENCE` would have taken it from
-#: 11,700 negatives to 29,700 as a silent side effect of a change to a DIFFERENT
-#: dataset. Deep exists for one comparison -- the #3319/#3547 acquisition horizon
-#: -- and moving its prevalence mid-stream would confound that axis with a
-#: prevalence axis, which is the argument `SCALE_DEEP_N_POS` already makes about
-#: holding the class list fixed. Whether deep should follow is #3690.
-#:
-#: Still DERIVED, never set: a negative pool written as a literal beside a
-#: positive count is how prevalence drifts. What is pinned is the `vg_scale`
-#: pool size deep's prevalence refers to, not the pool itself.
-SCALE_DEEP_PIN_N_NEG = int(os.environ.get("VTS_SCALE_DEEP_PIN_N_NEG", "3900"))
-SCALE_DEEP_PREVALENCE = (3 * SCALE_N_POS) / (3 * SCALE_N_POS + SCALE_DEEP_PIN_N_NEG)
-SCALE_DEEP_N_NEG = round(SCALE_DEEP_N_POS * (1 - SCALE_DEEP_PREVALENCE) / SCALE_DEEP_PREVALENCE)
-SCALE_DEEP_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_DEEP_N_NEG_SPARE", "300"))
-
 
 #: How far a VG copy's aspect ratio may drift from the COCO original before its
 #: boxes are considered untransferable, as a fraction of the COCO ratio.
@@ -3239,32 +3205,15 @@ def aspect_transferable(vg_wh: tuple[int, int], coco_wh: tuple[int, int]) -> boo
 
 #: The coordinate space a correction box is recorded in. VG's and COCO's boxes
 #: arrive in **pixels**; a correction box comes from the app's ``region_box``,
-#: which is already **normalised** to [0, 1]. The builder divides every box by
+#: which is already **normalised** to [0, 1]. The VG builder divided every box by
 #: (W, H) on the way into the pickle, so a correction box merged in unconverted
-#: is normalised twice: it lands on the frame origin, sub-pixel, and takes its
+#: was normalised twice: it landed on the frame origin, sub-pixel, and took its
 #: band with it (#3281 -- 130 boxes, and 97 images filed in ``@small`` whose
 #: object is medium or large). The space is therefore *declared* in the file and
-#: converted once at read, never inferred: the two spaces are indistinguishable
-#: for a box in the top-left corner of a 1x1 image, which is exactly the shape
-#: the bug produced.
+#: checked at read, never inferred: the two spaces are indistinguishable for a
+#: box in the top-left corner of a 1x1 image, which is exactly the shape the bug
+#: produced.
 CORRECTION_BOX_SPACE = "normalised"
-
-#: Below this normalised side length a box is sub-pixel on any image the pile
-#: holds -- VG's largest copy is 1280 px wide -- so it cannot describe anything
-#: that was observed. Zero legitimate boxes are anywhere near it; the 130
-#: double-normalised ones were all under 1e-3.
-MIN_BOX_SIDE = float(os.environ.get("VTS_MIN_BOX_SIDE", "0.000244"))  # 1/4096
-
-#: "Crushed to the origin": both corners inside the top-left square holding this
-#: fraction of the frame area. Unlike the sub-pixel rule this one has genuine
-#: hits -- a small object really can sit in the top-left corner, 43 of 3470
-#: healthy boxes do -- so it gates on the *rate*, not on any single box.
-CORNER_AREA_FRAC = float(os.environ.get("VTS_CORNER_AREA_FRAC", "0.01"))
-
-#: The share of a cell's boxes that may be crushed to the origin before the
-#: build is refused. The measured healthy rate is 1.2% and the defect put it at
-#: 100% of the affected images, so anything in between separates them.
-MAX_CORNER_RATE = float(os.environ.get("VTS_MAX_CORNER_RATE", "0.05"))
 
 
 #: Which images each cell currently holds. Selection is hash-stable, but a
@@ -3272,12 +3221,6 @@ MAX_CORNER_RATE = float(os.environ.get("VTS_MAX_CORNER_RATE", "0.05"))
 #: across the corrections that are the whole point of the review, since a review
 #: is only worth what it still covers after the next rebuild.
 ROSTER = Path(os.environ.get("VTS_SCALE_ROSTER", str(PILE / "vg_scale_roster.json")))
-
-#: `vg_scale_deep`'s own roster. Separate from `ROSTER` on purpose: the two
-#: datasets designate different cells from the same candidates, and one file
-#: holding both would let a `vg_scale_deep` rebuild retire images `vg_scale`'s
-#: review is pinned to.
-DEEP_ROSTER = Path(os.environ.get("VTS_SCALE_DEEP_ROSTER", str(PILE / "vg_scale_deep_roster.json")))
 
 
 #: Where the `vg_scale` review has always kept its slates, verdict files and
@@ -3515,7 +3458,25 @@ EMBEDDERS: dict[str, dict] = {
     # they carry far more activation memory per item than their backbone size
     # alone suggests.
     "dinov3_patch": {"patch": True, "gated": True, "batch": 64},
+    # FaceNet over `image2face` crops (#4699). The only embedder of `face` media,
+    # so it pairs only with datasets whose `media_type` is "face" -- see `cells`.
+    "face": {"patch": False, "batch": 128, "media_type": "face"},
 }
+
+
+def media_type_of(dataset: str) -> str:
+    """The media type a dataset's cells hold; ``image`` unless it says otherwise."""
+    return DATASETS[dataset].get("media_type", "image")
+
+
+def embeds(embedder: str, dataset: str) -> bool:
+    """Whether *embedder* can embed *dataset*'s media at all.
+
+    Every embedder used to embed every dataset, because every dataset was images.
+    FaceNet embeds only face crops and SigLIP no face crops, so a pair whose
+    media types differ is not a missing cell but no cell.
+    """
+    return EMBEDDERS.get(embedder, {}).get("media_type", "image") == media_type_of(dataset)
 
 
 def embed_batch_size(embedder: str) -> int | None:
@@ -3525,8 +3486,8 @@ def embed_batch_size(embedder: str) -> int | None:
 
 
 def cells() -> list[tuple[str, str]]:
-    """Every ``(dataset, embedder)`` cell in the full grid."""
-    return [(ds, emb) for ds in DATASETS for emb in EMBEDDERS]
+    """Every ``(dataset, embedder)`` cell in the full grid: each dataset with each embedder of its media type."""
+    return [(ds, emb) for ds in DATASETS for emb in EMBEDDERS if embeds(emb, ds)]
 
 
 def pickle_name(dataset: str, embedder: str) -> str:

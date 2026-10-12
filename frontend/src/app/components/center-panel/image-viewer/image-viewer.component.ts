@@ -64,6 +64,26 @@ export class ImageViewerComponent implements OnDestroy {
    * interactive (no drag/resize, no vote semantics).
    */
   readonly highlightBox = input<RegionBox | null>(null);
+  /**
+   * A normalised ``[x0, y0, x1, y1]`` box drawn whatever the Highlight toggle
+   * says, in the Highlight overlay's style: where a face crop sat in the photo
+   * Show in photo opened (#4750), which has to show on a dataset with no patch
+   * embedder, where there is no Highlight toggle to turn on.
+   */
+  readonly outlineBox = input<RegionBox | null>(null);
+  /**
+   * Show the item out of this dataset rather than the active one (`''`, the
+   * default, is the active one). Show in photo's photo lives in the Image
+   * dataset of the face's import, while the Face pair stays active; see
+   * `ActiveContextService.mediaUrlIn`.
+   */
+  readonly datasetId = input('');
+  /**
+   * Whether a Shift- or Marquee-drag draws a region box. Off where a box would
+   * mean nothing, so a drag only pans: the Show in photo overlay, where there
+   * is nothing to vote on, and a face, whose embedder reads the whole crop.
+   */
+  readonly regionDraw = input(true);
   readonly regionBoxChange = output<RegionBox | null>();
   /**
    * Fired when the user does something that cancels the armed bad-vote-confirm without
@@ -101,6 +121,9 @@ export class ImageViewerComponent implements OnDestroy {
   // Same guard for the payload variant: flipping Clean/Original keeps the media
   // id, so the effect has to notice the variant changed to refetch the image.
   private lastVariant: PayloadVariant = '';
+  // And for the dataset: media ids are per dataset, so the same id out of
+  // another one is another image.
+  private lastDatasetId = '';
   /** The network URL whose in-flight prefetch this viewer is waiting on, or
    *  `null`. See {@link showImage}. */
   private claimedSrc: string | null = null;
@@ -164,12 +187,17 @@ export class ImageViewerComponent implements OnDestroy {
     effect(() => {
       const media = this.media();
       const variant = this.variant();
-      if (media.id === this.lastMediaId && variant === this.lastVariant) return;
-      const sameMedia = media.id === this.lastMediaId;
+      const datasetId = this.datasetId();
+      if (media.id === this.lastMediaId && variant === this.lastVariant && datasetId === this.lastDatasetId) return;
+      const sameMedia = media.id === this.lastMediaId && datasetId === this.lastDatasetId;
       this.lastMediaId = media.id;
       this.lastVariant = variant;
+      this.lastDatasetId = datasetId;
       this.imageReady.set(false);
-      const src = this.activeContext.mediaUrl(`/api/medias/${media.id}/image`, { variant });
+      const path = `/api/medias/${media.id}/image`;
+      const src = datasetId
+        ? this.activeContext.mediaUrlIn(datasetId, path, { variant })
+        : this.activeContext.mediaUrl(path, { variant });
       this.showImage(src);
       // A variant flip is the same item shown differently: keep the user's
       // zoom / pan and their voting box instead of resetting as for a new item.
@@ -340,7 +368,7 @@ export class ImageViewerComponent implements OnDestroy {
 
   /** True when a drag should draw a region (either Shift-held or Marquee toggle on). */
   get regionDrawActive(): boolean {
-    return this.shiftHeld() || this.marqueeMode();
+    return this.regionDraw() && (this.shiftHeld() || this.marqueeMode());
   }
 
   toggleMarqueeMode(): void {
@@ -365,20 +393,14 @@ export class ImageViewerComponent implements OnDestroy {
    *  the only place a best-match region is drawn - thumbnails never render a
    *  best-region outline.) */
   get highlightBoxStyle(): { [k: string]: string } | null {
-    const box = this.highlightBox();
-    if (!box || box.length !== 4) return null;
-    const [x0, y0, x1, y1] = box;
-    if (![x0, y0, x1, y1].every((v) => Number.isFinite(v))) return null;
-    const w = x1 - x0;
-    const h = y1 - y0;
-    if (w <= 0 || h <= 0) return null;
-    if (w >= 0.99 && h >= 0.99) return null;
-    return {
-      left: pct(x0),
-      top: pct(y0),
-      width: pct(w),
-      height: pct(h),
-    };
+    return overlayBoxStyle(this.highlightBox(), { dropWholeImage: true });
+  }
+
+  /** Percent-position style for {@link outlineBox}, or null when there is none
+   *  to draw. Unlike the highlight, a box round (nearly) the whole image still
+   *  draws: a face that fills its photo is still the face the user came from. */
+  get outlineBoxStyle(): { [k: string]: string } | null {
+    return overlayBoxStyle(this.outlineBox(), { dropWholeImage: false });
   }
 
   onMouseDown(event: MouseEvent): void {
@@ -792,4 +814,26 @@ function clamp01(v: number): number {
 
 function pct(v: number): string {
   return (v * 100).toFixed(3) + '%';
+}
+
+/** Percent-position style for a normalised overlay box, or null when the box
+ *  is missing, malformed or degenerate (or, with *dropWholeImage*, covers
+ *  effectively the whole image). */
+function overlayBoxStyle(
+  box: RegionBox | null,
+  { dropWholeImage }: { dropWholeImage: boolean },
+): { [k: string]: string } | null {
+  if (!box || box.length !== 4) return null;
+  const [x0, y0, x1, y1] = box;
+  if (![x0, y0, x1, y1].every((v) => Number.isFinite(v))) return null;
+  const w = x1 - x0;
+  const h = y1 - y0;
+  if (w <= 0 || h <= 0) return null;
+  if (dropWholeImage && w >= 0.99 && h >= 0.99) return null;
+  return {
+    left: pct(x0),
+    top: pct(y0),
+    width: pct(w),
+    height: pct(h),
+  };
 }

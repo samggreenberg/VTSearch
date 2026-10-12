@@ -10,7 +10,7 @@ SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 WT="${VTS_REPO:-/exp/$USER/projects/vts-calib}"
 HERE="$WT/scripts/experiments/calibration"
-export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/calibration}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS"

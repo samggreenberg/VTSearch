@@ -1231,9 +1231,11 @@ the shared acquire mirrored onto every row, then each dataset's own clip →
 embed → finalize → register under the embed gate, its own
 `DatasetImported` event and AutoFind run. Each output's origin is
 `build_origin()` of its narrowed values, so a reload from origin rebuilds
-that one dataset through the ordinary single-dataset path. A cancel on one
-row during the acquire drops that output alone; a failure in one output's
-stages is that output's alone.
+that one dataset through the ordinary single-dataset path. Every output's
+registry entry records the run's `import_group` (one id per run) and its
+`output_category`, so the datasets can find each other afterwards. A cancel
+on one row during the acquire drops that output alone; a failure in one
+output's stages is that output's alone.
 
 ---
 

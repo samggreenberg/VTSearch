@@ -285,9 +285,7 @@ measures it in the browser Marp rasterises with, on the real deck, by trying
 every word break and reading the line boxes back:
 
 ```bash
-./build.py hold-the-line
-npx @marp-team/marp-cli@4 _build/hold-the-line.md --theme-set themes/ \
-    --allow-local-files --html -o _out/hold-the-line.html
+./render.sh hold-the-line html                             # -> _out/hold-the-line.html
 node balance-titles.mjs _out/hold-the-line.html            # report
 node balance-titles.mjs _out/hold-the-line.html --write    # apply
 ```

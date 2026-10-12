@@ -17,6 +17,93 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Toasty's hints say where you are, and cover the whole path from an empty Dashboard to results**
+  (issue #4807). Each hint now opens with the state that raised it and ends with the one step to
+  take, in a sentence or two ("You have detectors, but none is selected. Click one to select it, or
+  click **+** to make a new one."), rather than an instruction out of the blue. The Dashboard gained
+  hints for the detours on the way to Train, Test or Find: the only dataset still importing, the open
+  detector tab empty while the other has detectors, a new detector ticked under several datasets, and
+  a detector with no labels ticked among others. While a hint is up, what it says steps aside: the
+  reason under a disabled **Train** / **Test** / **Find** button, an empty table's "Click **+** to add
+  one", and **Add Dataset**'s "Select what type of dataset to add." line. The Test view's **Test
+  done** note is now just its heading, with Toasty saying what to do next. In the Train view Toasty stays
+  over **Good** / **Bad** through the run that trains a detector, saying what each Autopilot phase
+  needs, and the **Update Sort Example?** hint counts the clicks and positives so far. The Test view
+  has hints for its first pick, its verdict, and the **Review** tab. The dialogs on the path have
+  hints too (**Add Dataset**, **New Detector**, **Use This Example?**, **Find Results**, **Export
+  Results**), standing below the box or beside its top corner when the box fills the window; dialogs
+  off the path have none. Only one hint shows at a time: a dialog's only while it is the topmost
+  dialog, and a view's only while no dialog is open. New ids in `hidden_hints`: `empty-detector-tab`,
+  `wait-for-import`, `train-one-dataset`, `untrained-detector`, `find-goods`, `find-bads`,
+  `find-more`, `keep-voting`, `test-vote`, `test-done`, `review`, `import-dataset`, `new-detector`,
+  `use-example`, `find-results` and `export-results` (the chart is `docs/hints.md`).
+- **A detector made from a typed description is tested as that description until it has enough labels**
+  (issue #4758). Below 3 Goods and 4 Bads (or a Good and 16 Bads), Test, Find and AutoFind ranked by
+  the average of the detector's Goods, and before its first Good gave nothing: Test refused it and
+  AutoFind left it out. Autopilot meanwhile showed the typed description's own matches, which were
+  better. Now a detector made from a typed description gives those same matches, its text sort at its
+  Threshold, from before its first vote until a trained detector takes over. On COCO photos (720
+  sessions), on those first votes, what it returns scores 0.56 / 0.44 / 0.54 F-beta at beta 1/4, 1 and
+  4, against the average's 0.43 / 0.28 / 0.35; over votes 1-10 that is +0.08 / +0.09 / +0.14. A
+  detector made from media examples or a labels file still gives the average of its Goods. The Test
+  view and the Find Results dialog say which one ran, and the Dashboard's Test and Find buttons now
+  take a detector with no labels when it was made from a typed description. `label_quota.tier` has a
+  new value, `query`, and the command line a new `detector_query` event, beside the
+  `detector_centroid` event it already emitted.
+- **A new sort example in Autopilot's "Update Sort Example?" prompt now changes the detector, not
+  just the screen** (issue #4801). When you supplied a different sort there, only the Train view
+  sorted by it: the detector kept its old description, so Test, Find, AutoFind and the next Train
+  session still used that one. A new description is now saved to the detector. A media example
+  picked there is saved too, as an example that steers the sort without counting as a Good, and the
+  detector stops using its old description. Typing in the Manual tab's sort bar still only sorts
+  the view.
+- **A detector no longer gets worse the moment it starts learning** (issue #4785). Until you have 3 Goods and 4 Bads, Test ranks by the average of your Goods; after
+  that a trained detector takes over. On faces that first detector used to rank the person you are
+  looking for noticeably worse than the average it replaced, and Find dipped for the next few votes.
+  The trained detector now starts from that average and moves away from it only as your votes give
+  it reason to. On FHIBE's faces what Find returns over the first 50 votes improves at every
+  Threshold preset (mean F-beta +0.04 to +0.07), and on COCO photos slightly (+0.004 to +0.007).
+  Region detectors (DINOv3 patches) rank slightly better and return about the same.
+
+- **Moving the Threshold redraws a text or example sort's line on the spot** (issue #4760).
+  A typed query's line has followed the balance since #4603, and an example sort's since #4732,
+  but both were drawn only when the sort ran: moving the Threshold afterwards left the old line,
+  and the count above it, on screen until you sorted again. The line and its count now move as
+  soon as the server has the new balance, over the same ranking, without re-scoring. The
+  selection, the loaded rows and Autopilot's picks stay as they were. New route
+  `GET /api/sort/line`; the three `example-sort-{by-id,server,origin}` routes now return a
+  `sort_token` (still with the whole ranking).
+
+- **An example sort and a detector with too few labels no longer count your own examples as what stands out**
+  (issue #4779). Their line keeps about as many images as stand out from the rest, and it counted the
+  whole collection: your starting photos and every image you had voted on, which sit at the top of
+  their own ranking. With one example of a face toward the false-negative end of the Threshold, the
+  example sort kept your photo and nothing new in 63% of sessions; it now leaves your examples and
+  votes out of its count and keeps something new in all but 14%. Autopilot's picks are unchanged.
+- **A detector with too few labels no longer stops at one standout image** (issue #4783). Below 3 Goods
+  and 4 Bads, the line keeps everything above the clearest break at the top of the ranking (#4759). When
+  one image stands far above the rest of the match, the clearest break is right after it, and the line
+  kept only that image. From the middle of the Threshold toward the false-positive end, the line now
+  looks past a standout to the next clear break. On the collection you labelled that standout is
+  usually your own example, so this is where it shows most: with one example of a face, sessions where
+  the line keeps nothing new fall from 45% to 22%. Toward the false-negative end the
+  line still keeps the standout alone.
+- **A detector with too few labels keeps all of a clear match, not just its top image** (issue #4759).
+  Below 3 Goods and 4 Bads, Test, Find and AutoFind keep about as many images as stand out from the
+  rest (#4732). On faces that kept one of a person's three or four other photos, because their photos
+  stand out from the crowd by little more than the crowd's own closest faces do. The line now also
+  looks for the clearest break at the top of the ranking and never cuts above it, so the same Find
+  keeps about three. A Find over another collection gets this now. On the collection you labelled, your
+  own Goods top the ranking and the break usually falls just below them, so there the line mostly keeps
+  what it kept before (#4779).
+- **A detector with too few labels returns the images that stand out, not half the collection**
+  (issue #4732). Below 3 Goods and 4 Bads, Test, Find and AutoFind rank everything by the Goods'
+  centroid. Its line used to sit where the scores split into two groups, which on a rare target
+  splits the non-matches: with one photo of a person in a 5,400-face collection, the person's other
+  photos ranked first and the line still kept about 2,300 faces. It now keeps about as many images as
+  stand out from the rest, the rule a typed query's line uses, so the same Test keeps one to three
+  faces. The Threshold moves it: more toward false positives, fewer toward false negatives. An
+  example sort draws the same line. Autopilot's picks on an example sort are unchanged.
 - **A Good on a document collection is ~0.5 s faster on a GPU server** (issue #4516). After a
   Good, the server checks the geometry of ~2,500 (mark, page) pairs. Those fits ran one after
   another on one CPU core, and most of each fit's time went to statistics over a few dozen
@@ -33,9 +120,10 @@ not list every commit. Use `git log` for the full history.
   **Continue** button, which no longer names the sort or the number of labels before the next
   prompt; the right side's heading is **Supply a different sort:**, and **Browse Media…** and
   **Upload File…** share a line. The hint is `resort-prompt` in the `hidden_hints` setting.
-- **Tabs look like tabs, and form labels read alike** (issue #4718). Every horizontal tab strip
-  (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
-  Keyboard Shortcuts) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
+- **Tabs look like tabs, and form labels read alike** (issues #4718, #4726). Every horizontal tab
+  strip (New Detector, Add Dataset, the Dashboard's Drafts / AutoFind, Export, Choose MediaClipper,
+  Keyboard Shortcuts, and the left panel's **Manual** / **Autopilot** in Train and **Autopilot** /
+  **Review** in Test) now draws folder tabs: each tab an outlined box, the inactive ones shaded,
   the active one open into the content below with an accent edge on top. New Detector's
   **Text** / **Image** tabs sit in smaller type than the **Example:** label above them. Field
   labels across the app end in a colon (**Media type:**, **Dataset name:**), and New Detector's
@@ -121,6 +209,45 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Collapse to photos** (issue #4751). In Train and Test, a Face dataset whose import also made an
+  Image dataset has a **Show: Faces | Photos** switch under the list's header. **Photos** shows the
+  ranking as the photos the faces were cut from: each photo once, in the place of its best face,
+  with every ranked face of it outlined (faces under the line drawn faint) and a small chip of each
+  face below it. A face on a photo works like its card in the list, so clicking it selects it (or,
+  with hover focus, votes it), and votes stay on faces. So do the counts and Test's **Browse**,
+  **To Dataset** and **Export**: the list says so while it shows photos. If the Image dataset isn't
+  loaded, the list offers to load it. The server groups the whole ranking before paging it
+  (`GET /api/sort/collapsed`), so a photo is never split across pages, and `/api/find-label` now
+  hands back a `sort_token` for its ranking too.
+
+- **Show in photo** (issue #4750). In Train and Test, a face from a multi-dataset import that
+  also made an Image dataset has a **Show in photo** button under it, and in Train its
+  right-click menu has the same entry. Either one opens the photo the face was cut from over the
+  ranking, with the face outlined. **← Back** or Esc returns to the face, with the ranking and
+  selection as they were: the window reads the photo out of the Image dataset without switching
+  the active dataset. If the Image dataset isn't loaded, the window offers to load it.
+
+- **The server can find a face's photo** (issue #4749). For a face crop imported in the same
+  multi-dataset import as its photos, `GET /api/medias/<id>/source` returns the photo as an item
+  of the "– Image" dataset beside it, with the face's box in it; `POST /api/medias/source-batch`
+  does a whole page in one request. It works the same for any converter output whose source
+  dataset came in with it (a video frame and its video). The photos' dataset has to be loaded; if
+  it is not, the reply names it so it can be loaded first. Only a dataset you can read is
+  searched. Nothing in the app calls these yet: they are the server half of opening a face's photo
+  and of grouping faces by photo.
+- **A face crop knows where it sat in its photo** (issue #4748). Every face the **Images → Faces**
+  converter cuts out now records its box in the source photo, kept with the dataset, and the
+  face's details show it as **Source Box** (fractions of the photo's width and height). Faces from
+  a folder or demo import also show their **Detection Confidence** now; that row was being dropped
+  on the way in. This is the groundwork for opening a face's photo with the face outlined.
+- **The Dashboard keeps a multi-dataset import's datasets together** (issue #4747). The datasets
+  one import produced (say "Photos – Image" and "Photos – Face") now sit next to each other in the
+  dataset table and the top bar's dataset menu, whichever column you sort by, placed where the
+  first of them would sort. Each shows a small badge with the kind of media it holds (Image, Face,
+  Document…); hover it to see the datasets it was imported with. Behind it, every dataset's entry
+  in the registry records which import it came from (`import_group`) and its category
+  (`output_category`), and `GET /api/datasets/registry` returns both. Datasets imported before
+  this change show no grouping.
 - **The command line makes several datasets from one importer run** (issue #4707). The
   Multi-Dataset import has a headless form: `--autodetect --importer <name> --outputs '<json>'` (a
   list with one object per dataset, in the shape the web API's `outputs` entries take) and an
@@ -659,6 +786,30 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A face in Train or Test fills the pane and can be zoomed** (issue #4771). A face crop was
+  shown through the document viewer, which clipped it to a 300×150 box and offered no image
+  toolbar. It now opens in the image viewer, with zoom and rotate, as does any media type that
+  has a thumbnail and no viewer of its own. The Marquee is not offered on a face: its embedder
+  reads the whole crop, so a drawn box would train nothing.
+
+- **`--pipeline` honours `--user`, `--progress-format`, `-v` and the admin overrides**
+  (issue #4753). A pipeline run started before those flags were applied, so
+  `--pipeline p.yaml --user bob` ran as the `default` user without asking for
+  `--api-key`, and `--progress-format json` still printed prose. The flags now
+  apply exactly as they do to `--autodetect`. `--stream-results`,
+  `--keep-negatives` and `--label-importer`, which the YAML file declares, are
+  refused beside `--pipeline` rather than ignored. The `⏳ Initializing
+  VTSearch…` banner now goes to stderr, so a `--progress-format json` run's
+  stdout (`--autodetect` or `--pipeline`) is NDJSON from its first line, and
+  piping it into `jq` no longer fails on that banner.
+- **Changing the balance during Autopilot no longer knocks Stable off green**
+  (issue #4745). Stable counts the items that cross the line between one
+  detector and the next. A balance change moves the line without any detector
+  changing its mind, but the next vote's detector was compared, at the new
+  line, with one read at the old line, so every item between them counted as
+  a change of mind. That could hold Stable yellow and send Autopilot back to
+  Refine Boundary. The first detector after a balance change is now the one
+  the next is compared with.
 - **A structural detector's Threshold line says how many pass its gate**
   (issue #4505). On a `sift_vlad` / `sift_vlad_doc` collection the line is
   the verification gate's boundary, but the state under the Threshold control

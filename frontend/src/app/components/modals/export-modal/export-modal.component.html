@@ -1,4 +1,9 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
+  @if (scope() === 'results') {
+  <vt-toasty-hint hintId="export-results">
+    Pick which items and columns to include, then where they go.
+  </vt-toasty-hint>
+  }
   <!-- Category Filter -->
   <div class="export-section">
     <h3 id="export-categories-label" title="Filter which labeled items to include in the export">Categories</h3>

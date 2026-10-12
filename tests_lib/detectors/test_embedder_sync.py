@@ -274,7 +274,7 @@ class TestReembedWorkerBody:
 
         seen: dict = {}
 
-        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress):
+        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress, text_query=""):
             seen["det_ctx"] = det_ctx
             seen["labelset"] = labelset
             seen["media_type"] = media_type
@@ -303,7 +303,7 @@ class TestReembedWorkerBody:
     def test_worker_records_training_error(self, monkeypatch):
         from vtscore.concurrency.progress import detector_loading_tasks
 
-        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress):
+        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress, text_query=""):
             raise ValueError("embedder blew up")
 
         task_id, worker, _ = self._schedule(monkeypatch, train_stub)
@@ -318,7 +318,7 @@ class TestReembedWorkerBody:
     def test_worker_records_cancellation(self, monkeypatch):
         from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
 
-        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress):
+        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress, text_query=""):
             raise CancelledError("cancelled by user")
 
         task_id, worker, _ = self._schedule(monkeypatch, train_stub)
@@ -336,7 +336,7 @@ class TestReembedWorkerBody:
             def __str__(self):
                 return ""
 
-        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress):
+        def train_stub(det_ctx, labelset, *, media_type, snap, on_progress, text_query=""):
             raise _Blank()
 
         task_id, worker, _ = self._schedule(monkeypatch, train_stub)

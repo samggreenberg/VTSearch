@@ -111,6 +111,10 @@ export class SourcePickerComponent {
    *  Dataset modal does; the New Detector media picker opens with no tab
    *  selected and leaves this off. */
   readonly hideSoloTabBar = input(false);
+  /** Whether the "Select what type of dataset to add." / "Select how to add
+   *  a … dataset." lines show. Add Dataset turns them off while Toasty's
+   *  import-dataset hint is up, which says the same (#4807). */
+  readonly showPickHints = input(true);
 
   /** Whether the top-level category bar renders.  Never hidden while the
    *  lone tab is unselected, so a caller can't strand the user with

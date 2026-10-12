@@ -1,0 +1,69 @@
+preset,beta,arm,read,n,mean
+b025,0.25,ctl,"objective, mean 1-150",720,0.557867
+b025,0.25,ctl,"objective, mean 1-50",720,0.475706
+b025,0.25,ctl,"objective, mean 1-25",720,0.427382
+b025,0.25,ctl,"objective, mean 51-150",720,0.598948
+b025,0.25,ctl,"objective, vote 25",720,0.474867
+b025,0.25,ctl,"objective, vote 50",720,0.55125
+b025,0.25,ctl,"objective, vote 100",720,0.606408
+b025,0.25,ctl,"objective, vote 150",720,0.63799
+b025,0.25,ctl,"objective, after the check",720,0.644053
+b025,0.25,ctl,"AP, vote 150",720,0.555308
+b025,0.25,ctl,"AP, mean 1-150",720,0.495753
+b025,0.25,ctl,Goods by vote 150,717,31.7113
+b025,0.25,ctl,Boundary picks Good,712,0.432495
+b025,0.25,ctl,New picks Good,695,0.00850454
+b025,0.25,ctl,"returned, after the check",720,28.7583
+b025,0.25,ctl,"precision, after the check",720,0.704055
+b025,0.25,ctl,"cut's pool percentile, vote 150",717,0.998895
+b025,0.25,tp75,"objective, mean 1-150",720,0.557876
+b025,0.25,tp75,"objective, mean 1-50",720,0.472455
+b025,0.25,tp75,"objective, mean 1-25",720,0.425702
+b025,0.25,tp75,"objective, mean 51-150",720,0.600586
+b025,0.25,tp75,"objective, vote 25",720,0.464436
+b025,0.25,tp75,"objective, vote 50",720,0.545342
+b025,0.25,tp75,"objective, vote 100",720,0.603548
+b025,0.25,tp75,"objective, vote 150",720,0.643947
+b025,0.25,tp75,"objective, after the check",720,0.645028
+b025,0.25,tp75,"AP, vote 150",720,0.555762
+b025,0.25,tp75,"AP, mean 1-150",720,0.494232
+b025,0.25,tp75,Goods by vote 150,717,32.8842
+b025,0.25,tp75,Boundary picks Good,712,0.473666
+b025,0.25,tp75,New picks Good,697,0.00890568
+b025,0.25,tp75,"returned, after the check",720,28.2569
+b025,0.25,tp75,"precision, after the check",720,0.707095
+b025,0.25,tp75,"cut's pool percentile, vote 150",717,0.999257
+b1,1,ctl,"objective, mean 1-150",720,0.456419
+b1,1,ctl,"objective, mean 1-50",720,0.372631
+b1,1,ctl,"objective, mean 1-25",720,0.329869
+b1,1,ctl,"objective, mean 51-150",720,0.498313
+b1,1,ctl,"objective, vote 25",720,0.366307
+b1,1,ctl,"objective, vote 50",720,0.447651
+b1,1,ctl,"objective, vote 100",720,0.507843
+b1,1,ctl,"objective, vote 150",720,0.535169
+b1,1,ctl,"objective, after the check",720,0.532093
+b1,1,ctl,"AP, vote 150",720,0.55543
+b1,1,ctl,"AP, mean 1-150",720,0.495694
+b1,1,ctl,Goods by vote 150,717,31.4073
+b1,1,ctl,Boundary picks Good,712,0.423405
+b1,1,ctl,New picks Good,695,0.00840642
+b1,1,ctl,"returned, after the check",720,79.2403
+b1,1,ctl,"precision, after the check",720,0.539402
+b1,1,ctl,"cut's pool percentile, vote 150",717,0.998836
+b1,1,tp75,"objective, mean 1-150",720,0.454839
+b1,1,tp75,"objective, mean 1-50",720,0.368616
+b1,1,tp75,"objective, mean 1-25",720,0.325987
+b1,1,tp75,"objective, mean 51-150",720,0.49795
+b1,1,tp75,"objective, vote 25",720,0.358792
+b1,1,tp75,"objective, vote 50",720,0.441717
+b1,1,tp75,"objective, vote 100",720,0.507963
+b1,1,tp75,"objective, vote 150",720,0.534271
+b1,1,tp75,"objective, after the check",720,0.531249
+b1,1,tp75,"AP, vote 150",720,0.556257
+b1,1,tp75,"AP, mean 1-150",720,0.49407
+b1,1,tp75,Goods by vote 150,717,32.7127
+b1,1,tp75,Boundary picks Good,712,0.469458
+b1,1,tp75,New picks Good,697,0.00871677
+b1,1,tp75,"returned, after the check",720,76.9847
+b1,1,tp75,"precision, after the check",720,0.539912
+b1,1,tp75,"cut's pool percentile, vote 150",717,0.999216

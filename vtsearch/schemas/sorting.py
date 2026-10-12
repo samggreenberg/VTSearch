@@ -8,6 +8,10 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
                                                 :class:`LearnedSortResponseSchema`
 * ``GET  /api/learned-sort/result``           -> :class:`LearnedSortResultQuerySchema` ->
                                                 :class:`LearnedSortResponseSchema`
+* ``GET  /api/sort/page``                     -> :class:`SortPageQuerySchema` ->
+                                                :class:`SortPageResponseSchema`
+* ``GET  /api/sort/collapsed``                -> :class:`SortPageQuerySchema` ->
+                                                :class:`SortCollapsedResponseSchema`
 * ``GET  /api/votes``                         -> :class:`VotesResponseSchema`
 * ``POST /api/votes/clear``                   -> :class:`OkResponseSchema`
 * ``GET  /api/textsort-suggestions``          -> :class:`TextsortSuggestionsResponseSchema`
@@ -168,8 +172,9 @@ _WINDOW_META_FIELDS = {
     # cuts do different jobs.  On a learned sort it sits *above* the reporting
     # ``threshold`` since #2876 (vtscore.state.core.detector_acquisition_threshold);
     # on a text sort it is the mixture midpoint under the guarded display line
-    # since #4136 (vtscore.training.thresholds.text_sort_cuts).  ``None`` on
-    # the example and label-file sorts; the client falls back to ``threshold``.
+    # since #4136 (vtscore.training.thresholds.text_sort_cuts), and on an
+    # example sort the midpoint under the Goods' centroid's line since #4732.
+    # ``None`` on the label-file sort; the client falls back to ``threshold``.
     "acq_threshold": fields.Float(required=False, allow_none=True),
 }
 
@@ -209,6 +214,92 @@ class SortPageResponseSchema(Schema):
     total = fields.Integer(required=True)
     threshold = fields.Float(required=True, allow_none=True)
     has_more = fields.Boolean(required=True)
+
+
+class CollapsedFaceSchema(Schema):
+    """One output (a face) of the ranking inside its photo, in ``GET /api/sort/collapsed``."""
+
+    media_id = fields.Integer(required=True, metadata={"description": "The face's media id in the ranked dataset."})
+    score = fields.Float(required=True, metadata={"description": "The face's score in the ranking."})
+    box = fields.List(
+        fields.Float(),
+        required=True,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Where the face sits in its photo, normalised ``[x0, y0, x1, y1]`` "
+                "(its ``source_box``), or null when its converter records none."
+            )
+        },
+    )
+    vote = fields.String(
+        required=True,
+        allow_none=True,
+        validate=validate.OneOf(["good", "bad"]),
+        metadata={"description": "The face's vote under the active detector now, or null."},
+    )
+
+
+class CollapsedPhotoSchema(Schema):
+    """One row of ``GET /api/sort/collapsed``: a photo and the ranked faces cut from it."""
+
+    source_dataset_id = fields.String(
+        required=True,
+        allow_none=True,
+        metadata={
+            "description": (
+                "The photo's dataset (the Image sibling of the same import), or null for a face "
+                "whose photo cannot be named, which is then the row's only face."
+            )
+        },
+    )
+    source_media_id = fields.Integer(
+        required=True,
+        allow_none=True,
+        metadata={"description": "The photo's media id in that dataset, or null as above."},
+    )
+    score = fields.Float(required=True, metadata={"description": "The best score among the row's faces."})
+    faces = fields.List(
+        fields.Nested(CollapsedFaceSchema),
+        required=True,
+        metadata={"description": "The row's faces in ranking order, best first."},
+    )
+
+
+class SortCollapsedResponseSchema(Schema):
+    """Response for ``GET /api/sort/collapsed``: one window of a ranking grouped by photo (#4751)."""
+
+    results = fields.List(fields.Nested(CollapsedPhotoSchema), required=True)
+    offset = fields.Integer(required=True)
+    limit = fields.Integer(required=True)
+    total = fields.Integer(required=True, metadata={"description": "Rows (photos) in the grouped ranking."})
+    face_total = fields.Integer(
+        required=True,
+        metadata={"description": "Faces in the ranking: every one is in exactly one row."},
+    )
+    has_more = fields.Boolean(required=True)
+
+
+class SortLineQuerySchema(Schema):
+    """Query for ``GET /api/sort/line``."""
+
+    token = fields.String(required=True)
+
+    class Meta:
+        # Request-context params smuggled in as query args, as on /api/sort/page.
+        unknown = "exclude"
+
+
+class SortLineResponseSchema(Schema):
+    """Response for ``GET /api/sort/line``: a text or example sort's line, redrawn at the balance (#4760)."""
+
+    # The display line at the balance now set.  The acquisition cut does not
+    # move with the balance, so it is not here.
+    threshold = fields.Float(required=True)
+    # Rows of the whole ranking at or above ``threshold``.
+    above_threshold = fields.Integer(required=True)
+    # Full ranking length.
+    total = fields.Integer(required=True)
 
 
 # ---------------------------------------------------------------------------

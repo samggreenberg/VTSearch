@@ -384,22 +384,26 @@ def _validate_field_keys(
 def run_pipeline_file(path: str | Path) -> None:
     """Load *path* and execute the pipeline it declares.
 
-    Errors are converted to a one-line ``Error: ...`` on stderr followed by
-    ``sys.exit(1)`` - same convention as the other CLI entry points in
-    :mod:`vtscore.cli`.
+    Errors are reported through :func:`vtscore.cli_progress.emit_error` (a
+    one-line ``Error: ...`` on stderr, or an ``error`` event under
+    ``--progress-format json``) followed by ``sys.exit(1)`` - same convention
+    as the other CLI entry points in :mod:`vtscore.cli`.
     """
     import sys  # noqa: PLC0415
+
+    from vtscore import cli_progress  # noqa: PLC0415
 
     try:
         config = load_pipeline_file(path)
         _dispatch(config)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        cli_progress.emit_error(str(exc))
         sys.exit(1)
 
 
 def _import_labels(il: dict[str, Any], spec: Any) -> None:
     """Run the ``import_labels:`` block, creating the detector when ``create:`` asks."""
+    from vtscore import cli_progress  # noqa: PLC0415
     from vtscore.cli import (  # noqa: PLC0415
         DetectorNotFoundError,
         _label_import_media_type,
@@ -423,7 +427,16 @@ def _import_labels(il: dict[str, Any], spec: Any) -> None:
         done = f"Created detector '{il['detector']}' (media_type={create_media_type}) with {applied} label(s)"
     else:
         done = f"Imported {applied} label(s) into detector '{il['detector']}'"
-    print(f"{done} (skipped {skipped} duplicate/invalid).", flush=True)
+    # The same event --import-labels-into emits, so a --progress-format json
+    # caller reads one schema whichever way the run was declared.
+    cli_progress.emit(
+        "labels_imported",
+        text=f"{done} (skipped {skipped} duplicate/invalid).",
+        detector=il["detector"],
+        applied=applied,
+        skipped=skipped,
+        created=bool(create_media_type),
+    )
 
 
 def _dispatch(config: dict[str, Any]) -> None:

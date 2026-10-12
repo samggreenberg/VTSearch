@@ -120,4 +120,4 @@ object rather than a union over scattered instances.
   Across embedders the split and exemplar image are also identical (both are
   derived from seeds/ids, not vectors), so arm comparisons are paired
   everywhere.
-- Results live under `/exp/$USER/max-patch/results`.
+- Results live under `/expscratch/$USER/max-patch/results`.

@@ -129,6 +129,10 @@ class _ProgressCache:
     #: its cut and ambiguity band - the baseline the next step's detector is
     #: compared against for the Stable indicator.
     prev_snapshot: Optional[ScoredSnapshot] = None
+    #: The balance ``prev_snapshot``'s cut was drawn at (F-beta's beta; ``None``
+    #: for a caller with no balance).  A detector served at another balance
+    #: restarts the chain instead of being compared across two lines (#4745).
+    prev_beta: Optional[float] = None
     coverage_atlas: Any = None  # CoverageAtlas | None
 
     #: Last fully-computed ``/api/labeling-status`` payload (minus the transient
@@ -148,10 +152,13 @@ class _ProgressCache:
     #: set never had a sort run against it stays modelless rather than being
     #: filled with a locally-trained stand-in (see the module docstring).
     #:
-    #: Each value is ``(model, threshold, smart_threshold)``: the line the model
-    #: was served with, and the cut the Smart indicator scores it at
-    #: (:func:`vtscore.detectors.cost_trend.smart_cut`, issue #4243).
-    live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float, float]] = field(default_factory=dict)
+    #: Each value is ``(model, threshold, smart_threshold, beta)``: the line the
+    #: model was served with, the cut the Smart indicator scores it at
+    #: (:func:`vtscore.detectors.cost_trend.smart_cut`, issue #4243), and the
+    #: balance the line was drawn at (#4745).
+    live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float, float, Optional[float]]] = field(
+        default_factory=dict
+    )
 
     #: Memoised Smart status, as ``(key, status)``.  ``_compute_smart_status``
     #: re-scores the whole recent-model window against the current labelset -
@@ -355,6 +362,7 @@ def inject_live_model(
     threshold: float,
     *,
     smart_threshold: Optional[float] = None,
+    beta: Optional[float] = None,
 ) -> None:
     """Register a live model from ``train_and_score`` for progress-cache reuse.
 
@@ -368,6 +376,13 @@ def inject_live_model(
     :func:`~vtscore.detectors.cost_trend.smart_cut` (issue #4243).  ``None``
     means the two are the same line, which they are whenever the model was
     served at that inclusion.
+
+    *beta* is the balance *threshold* was drawn at (F-beta's beta; ``None``
+    for a caller with no balance).  Stable compares successive detectors only
+    at one balance: a balance change moves the line with no detector changing
+    its mind, so the first detector served at a new balance restarts the
+    comparison rather than counting every item between the two lines as a
+    flip (#4745).
     """
     from vtscore.concurrency.stalls import timed_lock  # noqa: PLC0415
 
@@ -376,7 +391,7 @@ def inject_live_model(
     # worker is mid-replay the sort result waits on it (issue #3853).
     with timed_lock(_progress_lock, "_progress_lock/inject_live_model"):
         smart = threshold if smart_threshold is None else smart_threshold
-        _active_cache().live_models[key] = (model, threshold, smart)
+        _active_cache().live_models[key] = (model, threshold, smart, beta)
 
 
 def _active_context_atlas() -> Any:
@@ -580,6 +595,7 @@ def _compute_step_stability(
     pool: Optional[_ScoredPool],
     t: int,
     num_labels: int,
+    beta: Optional[float] = None,
 ) -> Optional[dict[str, Any]]:
     """Compute prediction stability by comparing to the previous step's scores.
 
@@ -600,6 +616,14 @@ def _compute_step_stability(
     and a sort injected one in the meantime.  There is then nothing to score, so
     the chain is dropped and restarted at the next step rather than comparing
     against a baseline this step cannot itself refresh.
+
+    *beta* is the balance *threshold* was drawn at.  A baseline drawn at
+    another balance is not compared against: each snapshot reads its items at
+    its own line, so every item between the two balances' lines would count as
+    a flip although no detector changed its mind (#4745).  This snapshot
+    becomes the baseline instead, as after a gap.  A line moving with the
+    labels under one balance still counts, since that is movement the user
+    sees.
     """
     from vtscore.detectors.training import score_rows_with_model  # noqa: PLC0415
 
@@ -633,15 +657,17 @@ def _compute_step_stability(
     )
 
     stability: Optional[dict[str, Any]] = None
-    if cache.prev_snapshot is not None:
+    if cache.prev_snapshot is not None and cache.prev_beta == beta:
         stability = {
             "time_index": t,
             "num_labels": num_labels,
             **stability_entry(cache.prev_snapshot, snapshot, num_pool),
         }
-    # else: no prior scores to compare - leave stability as None.
+    # else: no prior scores to compare, or a baseline drawn at another
+    # balance - leave stability as None.
 
     cache.prev_snapshot = snapshot
+    cache.prev_beta = beta
     return stability
 
 
@@ -695,8 +721,8 @@ def _resolve_step_model(
         # enough history" forever, which also stops Autopilot ever finishing.
         return None, None, None, None
 
-    model, threshold, smart_threshold = live
-    stability = _compute_step_stability(cache, model, threshold, pool, t, num_labels)
+    model, threshold, smart_threshold, beta = live
+    stability = _compute_step_stability(cache, model, threshold, pool, t, num_labels, beta)
     return model, threshold, smart_threshold, stability
 
 

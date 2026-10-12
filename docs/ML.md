@@ -1,12 +1,12 @@
 # Machine Learning Details
 
-VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (L2-regularised squared hinge, class-balanced). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
+VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (L2-regularised squared hinge, class-balanced), **started from the Goods' centroid** (#4785, [below](#the-svm-started-from-the-goods-centroid-4785)). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
 Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides typicality ranks for domain-shift detection.
 
 ## Architecture
 
-The head's *architecture* is defined in `vtscore/training/mlp.py` via `build_model()`, and its *fit* in `vtscore/training/svm.py` via `fit_linear_svm_head()`. Production always builds the linear head, selected by the `hidden_dim=LINEAR_SVM_HEAD` (`-1`) sentinel:
+The head's *architecture* is defined in `vtscore/training/mlp.py` via `build_model()`, and its *fit* in `vtscore/training/svm.py` via `fit_linear_svm_head()` (and `vtscore/training/svm_prior.py` via `fit_linear_svm_prior_head()`, the centroid-started fit). Production always builds the linear head, selected by the `hidden_dim=LINEAR_SVM_PRIOR_HEAD` (`-3`) sentinel, the centroid-started SVM (`LINEAR_SVM_HEAD`, `-1`, is the plain SVM it replaced):
 
 ```
 Linear(input_dim, 1)
@@ -24,13 +24,22 @@ The head is fitted by liblinear (scikit-learn's `LinearSVC`, `C=1.0`, `class_wei
 
 | Sentinel | Architecture | Fitted by | Status |
 |---|---|---|---|
-| `LINEAR_SVM_HEAD` (`-1`) | `Linear(D, 1)` | liblinear, squared hinge + L2, class-balanced | **shipped** |
+| `LINEAR_SVM_PRIOR_HEAD` (`-3`) | `Linear(D, 1)` | liblinear (primal), squared hinge + L2, class-balanced, the Goods' centroid a cheap direction | **shipped** (#4785) |
+| `LINEAR_SVM_HEAD` (`-1`) | `Linear(D, 1)` | liblinear, squared hinge + L2, class-balanced | shipped until #4785; eval arm |
 | `LINEAR_HEAD` (`0`) | `Linear(D, 1)` | balanced BCE gradient loop = logistic regression | eval arm, tests |
 | `hidden_dim > 0` | `Linear(D, H) -> ReLU -> Dropout -> Linear(H, 1)` | balanced BCE gradient loop | eval arm, tests |
 
 The head used to be a small MLP with its width auto-sized by `_auto_hidden_dim(n_train)`. With only ~3–5 labeled positives that MLP is under-determined: each retrain wobbles the scores, and the calibrated cut lurches over the unlabeled positives — the threshold-stability spikes tracked in issue #2790. A linear boundary has no such freedom, and measurements on COCO/SigLIP2 and VG/SigLIP1+2 put the deep-spike rate roughly 55–73% lower at equal or better FNR and cost. That finding moved the head to `LINEAR_HEAD`.
 
 The move from there to the SVM keeps that same linear boundary and changes only the objective that places it. A maximum-margin fit is decided by the votes nearest the boundary and is indifferent to how far the easy ones sit beyond it, whereas logistic regression keeps paying attention to every example — which is why the two place a visibly different line on the same handful of votes. Measurements in a separate environment put the SVM's ranking clearly ahead of the logistic head's; **why** it wins (better-behaved scores near the cut? more tolerance of a mis-vote?) is still open, and is the subject of follow-up sweeps. Until those land, the shipped head is the one that measures best.
+
+### The SVM started from the Goods' centroid (#4785)
+
+**Before.** The plain SVM minimises `½‖w‖² + C·Σ loss` over the votes: the `½‖w‖²` term pulls the weight vector toward zero equally in every direction. At the label quota (3 Goods and 4 Bads) the votes pin down almost none of a 512- or 1152-dimensional space, so the fitted `w` is roughly the Goods' mean minus the Bads' mean. The Bads' share of that is noise: on FHIBE's face crops the 4 Bads are 4 other people, and subtracting their mean promotes faces that merely point away from them. The first trained head ranked a person's withheld photos worse than the Goods' centroid it replaced (AP 0.88 → 0.70 from four photos, #4762).
+
+**After.** `LINEAR_SVM_PRIOR_HEAD` fits the same objective on the votes plus one feature: 10 times each vector's dot with the unit Goods' centroid `ĉ` of the rows being fitted. With weight `w'` on the original features and `v` on the new one, the head is `w = w' + 10·v·ĉ` with penalty `½(‖w'‖² + v²)`, so moving the hyperplane along `ĉ` costs 1/100 of moving it any other way — a prior on `w` stretched along the centroid. With few labels the cheapest separation is nearly the centroid; as labels accumulate the head leaves it wherever the Bads pay for it. It folds back into one `Linear(D, 1)`, so folds, the line, scoring, max-pooling and export take it unchanged, and each fit (every calibration fold included) computes `ĉ` from its own Goods. It is solved in liblinear's primal (the scaled feature stalls the dual solver at the same optimum).
+
+**Priced** as full sessions against the plain SVM, paired run for run (#4776, `docs/experiments/2026-10-11-face-handover-4776`): mean F-beta of what a Find returns over votes 1–50 went up **+0.037 to +0.073** on FHIBE's face crops (all 12 sets: 1 and 4 starting photos, 1024 and 640 px, β ¼ / 1 / 4) and **+0.004 to +0.007** on COCO Better's Binary Photo opening; over votes 1–150, +0.017 to +0.033 and +0.002 to +0.004. The AP dip at the quota on faces went from −0.21 / −0.17 to −0.03 / −0.01. On the Region path (DINOv3 patches, `docs/experiments/2026-10-11-head-start-region-4785`) it ranked a little better (AP +0.005) at a hair's cost in F-beta (−0.002 ± 0.002, β 1); the owner chose one head everywhere.
 
 Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `head="mlp"`; see [`docs/EVAL.md`](EVAL.md)) and in unit tests; neither is reachable from the app. Structural search's Stage 2 (`vtscore/training/structural_similarity.py`) is a separate feature and trains no scorer: since #4169 it ranks a shortlisted page by the inliers its best template verifies.
 
@@ -41,34 +50,90 @@ vote is saved as it is cast, so Test, AutoFind, a load or an import of the
 labels could hand one out at any click. So what a labelset gives depends on its
 counts (#4643, `vtscore/detectors/label_quota.py`):
 
-| Labels | Detector |
-|---|---|
-| no Good | none: Test is refused, there is nothing to sort toward |
-| a Good, but under 3 Goods or 4 Bads | **the Goods' centroid** |
-| 3 Goods and 4 Bads | the trained head above |
+| Labels | Detector | Detector made from a typed query (#4758) |
+|---|---|---|
+| no Good | none: Test is refused, there is nothing to sort toward | **the typed query's own set** |
+| a Good, but under both quotas below | **the Goods' centroid** | **the typed query's own set** |
+| 3 Goods and 4 Bads | the trained head above | the trained head above |
+| a Good and 16 Bads | the trained head above (#4731) | the trained head above |
 
-The quota is Autopilot's own quorum (`goodToStart` / `badToStart`), the counts
-its opening has always judged enough to train on; its "more" walk mines
+The first quota is Autopilot's own quorum (`goodToStart` / `badToStart`), the
+counts its opening has always judged enough to train on; its "more" walk mines
 positives because the typed query is still paying, not because the head is
 unready, and a quota of its 20 Goods would leave a rare class with no head at
-all. The counts are of labels that resolved to a vector.
+all. The second is what Autopilot's Good walk leaves when it runs dry
+(`moreDryRun`, 16 picks in a row without a Good, with a Good in hand), so a
+target with one or two Goods the sort can reach still gets a head; on FHIBE's
+face crops that took a 2-4-photo person's session from F-beta 0.001 to 0.47
+(`docs/experiments/2026-10-09-good-dry-4731`). The counts are of labels that
+resolved to a vector.
 
 The centroid (`vtscore/detectors/centroid_head.py`) is the example sort the app
 draws for several uploaded examples, built from the Goods: the unit mean of the
 L2-normalised Good vectors, every item ranked by its cosine to it (max-pooled
-over a patch item's rows), cut at the midpoint of a two-Gaussian fit to those
-cosines on the corpus being scored. It ships as a `Linear(D, 1)` whose weight is
-the centroid scaled by `CENTROID_LOGIT_SCALE` and whose bias puts the cut at
-logit 0, so its threshold is 0.5 and every scorer, the weight export and an
-ONNX consumer take it as they take the SVM. Its line does not take the balance:
-the typed query's balance-aware rules (#4603) were measured on typed queries
-only, and the labels' line needs held-out Bads it does not have. No typed-query
-tier sits below it, because a labelset does not carry the query: an exported, an
-imported and a CLI-made labelset have none.
+over a patch item's rows), cut by a count over those cosines on the corpus being
+scored, at the detector's balance: it keeps `beta ** 0.708` times the larger of
+the typed query's count (#4603, the items standing out of the cosines' bulk) and
+the items above the widest drop between neighbours in the top 11, and never
+fewer than that drop's count (`count_gap_floor`, #4759). From beta 1 up, when
+the widest drop is the first one, the line looks past that standout to the
+widest drop below the second item, if it is at least a quarter as wide
+(`count_gap_floor_skip25_b1`, #4783). The line counts the unvoted media only
+(#4779): on the collection the user labelled, the Goods the centroid is built from
+sit at the top of their own ranking, and counted with the rest they were what
+stood out (`fit_centroid`'s `line_mask`; an example sort leaves out the voted media
+and the example itself). It
+ships as a `Linear(D, 1)` whose weight is the centroid scaled by
+`CENTROID_LOGIT_SCALE` and whose bias puts the cut at logit 0, so its threshold
+is 0.5 and every scorer, the weight export and an ONNX consumer take it as they
+take the SVM. Until #4732 the cut was the two-Gaussian midpoint, which on a rare
+target splits the negatives' own bulk: on FHIBE's face crops it kept a median of
+2,300 of 5,439 images with the person's photos ranked first. The count line took
+a Find's F-beta over votes 1-10 up by 0.34 at beta 1 on faces, 0.08 on FHIBE's
+photos and 0.13 in COCO Better's Binary opening. It beat the guarded line by
+0.21 to 0.40 on faces at every balance and lost to it only at beta 4 on COCO, by
+0.02 (`docs/experiments/2026-10-10-centroid-line-4732`). The count alone kept one
+of a person's three or four withheld face crops: they sit 3 to 4 bulk sigmas
+above the median, among the bulk's own top, so a lower bar (z 3 or 3.5) or a
+mirrored bulk only loses (by up to 0.10). The drop just below the person's last
+photo separates them, and flooring the line there took votes 1-10 up by about
+0.09-0.10 at beta 1 on faces, 0.01-0.02 on whole photos and 0.002 on COCO, and never
+lost by more than its SE (`docs/experiments/2026-10-10-centroid-count-4759`). When a
+person's best photo stands far above their others, the widest drop is right after
+it; looking past it from beta 1 up added 0.02-0.03 on faces and 0.01-0.02 on photos
+and lost nowhere. Below beta 1 the lone standout is the better set, since the
+images past it include strangers that precision pays for
+(`docs/experiments/2026-10-11-centroid-drop-4783`). A
+balance change redraws the line on the cosines it was drawn on, and Autopilot's
+Hard select still samples at their midpoint. The labels' line needs held-out
+Bads the centroid does not have.
+
+**A detector made from a typed query gives that query's own set instead (#4758).**
+Through Autopilot's opening the screen shows the typed query's sort at its line,
+and that set is better than the centroid's: on the State of the App's Binary
+opening (COCO Better, 720 sessions), on the votes under the quota, it scored
+0.56 / 0.44 / 0.54 F-beta at beta 1/4, 1 and 4 against the centroid's 0.43 /
+0.28 / 0.35. The centroid was better only at beta 1/4, on small-instance
+categories and on the late votes of runs whose typed query met the Bads quota
+before 3 Goods; a rule that fell back to it there gained under 0.001. So the detector's
+`text_query` (which its file and registry entry already hold) decides: from the
+first vote until the trained head, Test, AutoFind, a load, a cold Find, an export
+and the CLI give the typed query's set (`vtscore/detectors/query_head.py`), worth
++0.08 / +0.09 / +0.14 over votes 1-10 and +0.006 / +0.008 / +0.017 over 1-150
+(`docs/experiments/2026-10-12-find-typed-query-4758`). It is the text sort as a
+head: the query's unit vector as a `Linear(D, 1)` in the dataset's **text**
+space, which on a dual-embedder dataset is not the space the detector learns in
+(every scorer asks `head_score_embedder`), cut where `text_sort_cuts` draws the
+display line at the detector's balance, over every item scored, voted ones
+included, as the sort counts them. A balance change redraws it as it redraws the
+centroid's. The query lives on the detector, not the labelset: an exported, an
+imported and a CLI-made labelset carry none, and a detector with no query, or a
+dataset with no text slot, gives the centroid and nothing as before.
 
 The rule is on the labels, wherever they came from: `train_from_labelset`
 (Test, AutoFind, a detector load, the CLI) and a cold Find
-(`labelset_train_and_score(label_quota=True)`) apply it, and a trained head the
+(`labelset_train_and_score(label_quota=True)`) apply it, each handed the
+detector's typed query (`detector_text_query`), and a trained head the
 Train view's learned sort cached is not reused under it. The Train view's own
 learned sort is not a detector anyone takes away and still trains from the
 first Good and Bad. The eval harness's default arm scores the withheld half the
@@ -136,7 +201,7 @@ Degeneracy policy, per fold and then globally: a fold whose anchored fit degener
 
 The fitted mixtures are cached on the detector context and **re-cut** at another inclusion — the acquisition cut, Smart's pricing — with no refit and no re-scoring, so a re-cut lands on exactly what a retrain at that inclusion would have stored.
 
-**Under the balance Autopilot samples at a target pick precision (#3546).** `detector_acquisition_threshold` reads `ctx.labels_line` and returns the score where the labels line's corpus posterior — the same 3-part fit the line is cut on — falls below `ACQUISITION_TARGET_PRECISION` (0.5; `target_precision_threshold`): the items the line's own model thinks are even odds. The line − 4 re-cut below is its fallback for a detector with no labels line. It replaced that re-cut because, under the balance, the re-cut had saturated into a rank pin nobody chose (near the 98.5th pool percentile at every preset, flat from vote 50 to 150). Priced on today's app (coco_better, 1% pool, three seeds, eight rules × three presets; [`REPORT.md`](experiments/2026-10-07-acquisition-cut-3546/REPORT.md)), it found +3.0 / +3.0 / +3.8 more Goods by vote 150 at beta 1/4 / 1 / 4, its Hard picks were 38% Good at every preset (the re-cut's 19–24%), AP rose 0.012–0.016, and the objective rose +0.012 to +0.019 at vote 150 and +0.000 / +0.003 / +0.008 after the check, never resolvably worse. The rank cut at a share of the mixture's F-beta argmax (`ACQUISITION_ARGMAX_FACTOR`, #4409) shipped at 0.5 on 2026-10-01 and was reverted the next day (#4427): it harvested the user's unvoted top, so the kept set's edge score climbed and few fresh images cleared it; the factor is `None`, and the harness keeps it as the `acq_p_crossing` arm. The target precision does not have that failure, because it samples where the class model is unsure rather than at the top. The harness's default arm resolves to the same constant (`resolve_acquisition_target`, the `acquisition.target_precision` mirror); `acq_target_p="off"` restores the offset cut.
+**Under the balance Autopilot samples at a target pick precision (#3546).** `detector_acquisition_threshold` reads `ctx.labels_line` and returns the score where the labels line's corpus posterior — the same 3-part fit the line is cut on — falls below `ACQUISITION_TARGET_PRECISION` (0.5; `target_precision_threshold`): the items the line's own model thinks are even odds. The line − 4 re-cut below is its fallback for a detector with no labels line. It replaced that re-cut because, under the balance, the re-cut had saturated into a rank pin nobody chose (near the 98.5th pool percentile at every preset, flat from vote 50 to 150). Priced on today's app (coco_better, 1% pool, three seeds, eight rules × three presets; [`REPORT.md`](experiments/2026-10-07-acquisition-cut-3546/REPORT.md)), it found +3.0 / +3.0 / +3.8 more Goods by vote 150 at beta 1/4 / 1 / 4, its Hard picks were 38% Good at every preset (the re-cut's 19–24%), AP rose 0.012–0.016, and the objective rose +0.012 to +0.019 at vote 150 and +0.000 / +0.003 / +0.008 after the check, never resolvably worse. The rank cut at a share of the mixture's F-beta argmax (`ACQUISITION_ARGMAX_FACTOR`, #4409) shipped at 0.5 on 2026-10-01 and was reverted the next day (#4427): it harvested the user's unvoted top, so the kept set's edge score climbed and few fresh images cleared it; the factor is `None`, and the harness keeps it as the `acq_p_crossing` arm. The target precision does not have that failure, because it samples where the class model is unsure rather than at the top. The harness's default arm resolves to the same constant (`resolve_acquisition_target`, the `acquisition.target_precision` mirror); `acq_target_p="off"` restores the offset cut. A target that moves with the preset was priced as well (#4746, [`REPORT.md`](experiments/2026-10-10-acq-target-4746/REPORT.md)): 0.75 at beta 1/4 and 1, on today's app with five seeds, and 0.25 at beta 4, on #3546's cells, are level with 0.5 on the session mean of the objective. 0.75 finds about one more Good and costs short sessions about 0.004 at beta 1, so 0.5 holds at every preset.
 
 **The line is drawn at the balance, from the labels alone (#4224, #4245, #4269, #4272, #4413, #4452).** Each detector carries a **balance** *beta* (F-beta's beta) — per detector, seeded from the user's `beta` setting, `1` until they change it. The presets are 1/4 (precision-leaning), 1 (balanced) and 4 (recall-leaning); any beta in [0.25, 4] is accepted (the owner's ruling of 2026-10-01 on #4413, priced by #4411 in [`REPORT.md`](experiments/2026-10-01-fbeta-line-4411/REPORT.md)). The ends were 0.5 and 2 until the owner's pick of 2026-10-03 on #4448: re-cut on the same heads under #4452's line, beta 1/4, 1/3, 1/2, 1, 2, 3 and 4 keep a median 26, 30, 38, 47, 58, 69 and 81 images at precision 0.68 to 0.41 and recall 0.41 to 0.67, so the range's own ends give the most distinct choices, and past 1/3 and 3 each end buys at most 0.02 more of what it leans toward. Since #4452 (the owner's rulings of 2026-10-02) the line is **derived from the labels**, so an exported labelset is enough to draw it again later, on another corpus and with another embedder (`vtscore.training.thresholds.labels_line`):
 
@@ -144,8 +209,9 @@ The fitted mixtures are cached on the detector context and **re-cut** at another
 - **The corpus side, fitted on the corpus being decided** — the Train dataset in Train, the searched one in Find, AutoFind and the CLI. Two fits of that corpus's unvoted scores (Saerens, Latinne & Decaestecker 2002). A **2-part** fit — the labels' Good component held fixed, a normal for the corpus's own bulk of negatives fitted with its share — gives how many positives the corpus holds, its Good votes counted as they are (`fit_corpus`, `estimate_positives`, `corpus_prevalence`). A **counted bound** guards it: a cut that returns *R* items holds at most *R* positives, and the labels say a share *S1* of all positives clear it, so the unvoted share is held to twice the tightest *R* / (*N* · *S1*) over the cuts that hold at least 5% of the Good component — a heavy upper tail of negatives is not read as positives. A **3-part** fit — the labels' Good and Bad components with their shapes fixed, the bulk fitted — gives each unvoted item's chance of being a positive (`corpus_posteriors`). Only the labels travel — the labelset is the evidence, never a number derived from it (owner, 2026-10-02). The working assumption is that a Find corpus has the Train corpus's properties, so the two estimates and the two lines agree; on a corpus with no positives the estimate falls to about zero.
 - **The cut** maximises the expected F-beta of what it would really return from that corpus (`corpus_cut`): items best first, the cut after the *k*-th returns *R* = *k* (counted), holds *TP* = the sum of their chances, out of *P* = the 2-part total (or the chances' sum, if larger), and `F = (1 + β²) TP / (β² P + R)`. Each piece is the model that is right about it: the 3-part chances are honest about precision near the top, where the Bads sit; the 2-part total is honest about the positives deeper down, which the Goods a session found — its easiest — under-represent. Priced offline on 900 saved heads, the combination beat either alone at every preset and on a smaller Train pool (#4452). The cut sits halfway between the last kept item and the first dropped one, so an image re-scored by another path, differing in the last bits, does not flip sides. A cut that returns nothing scores 0; with nothing worth keeping the threshold sits above every item. (A line built with no corpus scores falls back to the parametric cut at a prevalence *p*: with `S1` and `S0` the shares of positives and negatives at or above a cut, `F = (1 + β²) p S1 / (p S1 + β² p + (1 − p) S0)`, `labels_line_threshold`.)
 - **When the Bads are a random sample, the negatives take their shape (#4490).** One normal fitted to every label of an exhaustively labelled dataset describes the negatives' bulk, while their upper tail, where the cut is decided, runs 4.5× the normal's at 3 spreads and 27× at 4 (the review's full-label ceiling, 720 cells). The line read those negatives as positives and cut deep: F-beta 0.47 / 0.44 / 0.61 at 1/4, 1, 4 against best cuts of 0.71 / 0.58 / 0.69. So when the class model holds at least `RANDOM_BADS_MIN` (100) Bads and they are at most `RANDOM_BADS_MAX_ENRICHMENT` (2) times over-represented in the corpus's top `RANDOM_BADS_TOP_SHARE` (5%), the negatives' density is a kernel density of the Bads' held-out logit scores, the positives' share is fitted by EM on the corpus, and the cut is the same counted cut over those chances (`LabelsLine.bads_shape`). The ceiling gains +0.155 / +0.085 / +0.039. A session's Bads, picked from the top, are many times over-represented there (a median 14× at click 150), so no session within 150 clicks changes; a test on the Bads' median instead let a spot check's mix of near-line and uniform Bads through and collapsed those lines to one image ([`REPORT.md`](experiments/2026-10-07-ceiling-line-4490/REPORT.md)). The model keeps the Bads' scores (`ClassScoreModel.neg_logits`) only from 100 and never from the in-sample fallback, whose head saw them.
+- **While the class model is thin, the line is the head's count (#4786).** At the hand-over to the trained head the class model has four Bads and two to four Goods to stand on, and its cut went wrong both ways: at β 4 the line kept a median of 5 of a FHIBE person's faces at the first trained click (4 withheld), one face in a fifth of sessions, and thousands in the weakly separated ones. While the class model holds fewer than `HEAD_COUNT_BADS` (32) held-out Bads (about 50 in hand) and fewer than `HEAD_COUNT_GOODS` (6) held-out Goods (`head_count_serves`), `LabelsLine.threshold` keeps instead, at every balance, what the Goods' centroid's count rule (`CENTROID_LINE_RULE`) finds standing out in the head's own logit scores of the corpus being decided (`head_count_cut`): the line Test showed until the hand-over, drawn on the head. The count is β^0.708 times what stands out, so the line keeps more as the balance leans to recall. It is the one place the labels line draws a count on a corpus, so a corpus with none of the target keeps a median of 8 images at β 4 (never more than 27 in 200 draws, at any size), as the centroid's line already does before the quota. The Goods half keeps a broad target on its labels line: with 6 or more held-out Goods a count of what stands out kept three to four times COCO's positives. Priced as full sessions, paired run for run ([`REPORT.md`](experiments/2026-10-12-beta4-line-4786/REPORT.md)): at β 4 Find's mean F-beta rose +0.029 to +0.065 over votes 1–50 and +0.010 to +0.023 over 1–150 on FHIBE's faces (1 and 4 starting photos, 1024 and 640 px), and +0.003 ± 0.002 / +0.001 ± 0.001 on COCO Better's Binary opening; the F-beta drop at the hand-over went from −0.12…−0.19 to −0.02. At β 1 the gain was +0.044 to +0.066 (1–50) and +0.016 to +0.025 (1–150) on faces, +0.006 / +0.002 on COCO; at β ¼, +0.016 to +0.020 and +0.006 to +0.008 on faces, +0.011 / +0.004 on COCO: positive in every set; on the app after #4799 (no prompted check on faces) the face gains held, +0.015 to +0.061 over votes 1–50 at 1024 px. Carrying the centroid's own count, capping the line at a multiple of the Goods in hand, and gating on d′ all lost on COCO. `CALIB_HEAD_COUNT_BADS=0` is the line before.
 
-No count is drawn on any corpus and nothing caps the line: it keeps every unvoted item at or above the threshold, possibly none. (The count line it replaced — the mixture's F-beta argmax over the ranking, capped at 32 or 128 — kept the top 26–128 of a 200-image corpus with no positives in it.) A head whose folds support no class model (too few votes, one class, or held-out Goods scoring below the Bads on average) takes the retrain's fallbacks — the fold-anchored cut at Inclusion 0, else the blend, which admits nothing when the folds never split — never a count. **Known weakness**: the votes are not a random sample (active learning picks near the line and from the top), so the Bads' held-out scores sit higher than the true negatives' and the 3-part fit leans on them near the line. Priced end to end on COCO Better (5 seeds, Binary, #4452), the line beat the count line's Find by +0.010, +0.050 and +0.017 F-beta at beta 0.5, 1 and 2, and held F1 0.52–0.54 on Find corpora of 200 to 10,900 images where the count line fell to 0.11 on 200; a 200-image corpus with no positives returned a median of 1 image, against the count line's 32. What it does not yet handle: weak sessions (1–8 Goods) over-return, more than 200 images in 3%, 6% and 16% of sessions at beta 0.5, 1 and 2 (#4466). Every retrain fits the line and parks it on the detector (`DetectorContext.labels_line`), so a balance change re-cuts it without a retrain, and a Find over a new dataset re-fits only the corpus side there (`LabelsLine.on_corpus`), exactly as a cold Find over the same corpus computes it. The ranking the last retrain or Find pass scored is still parked (`line_ranking`), for the line's state — how many it keeps there — and for the spot check's bands. Every detector has a balance: the Inclusion knob is retired as a user preference (#4269) and survives only as the internal unit the acquisition cut and Smart's pricing are measured in. Which line a balance draws is one function, `fit_labels_line` (through the retrain's `_labels_line`), shared by the retrain, the no-refit re-cut and the eval harness's default arm. `vtscore.state.line_knobs()` — `{"beta": b}` — is what every retrain and re-cut passes on, so one setting moves every line.
+Past the head's count line's window (above), no count is drawn on any corpus and nothing caps the line: it keeps every unvoted item at or above the threshold, possibly none. (The count line it replaced — the mixture's F-beta argmax over the ranking, capped at 32 or 128 — kept the top 26–128 of a 200-image corpus with no positives in it.) A head whose folds support no class model (too few votes, one class, or held-out Goods scoring below the Bads on average) takes the retrain's fallbacks — the fold-anchored cut at Inclusion 0, else the blend, which admits nothing when the folds never split — never a count. **Known weakness**: the votes are not a random sample (active learning picks near the line and from the top), so the Bads' held-out scores sit higher than the true negatives' and the 3-part fit leans on them near the line. Priced end to end on COCO Better (5 seeds, Binary, #4452), the line beat the count line's Find by +0.010, +0.050 and +0.017 F-beta at beta 0.5, 1 and 2, and held F1 0.52–0.54 on Find corpora of 200 to 10,900 images where the count line fell to 0.11 on 200; a 200-image corpus with no positives returned a median of 1 image, against the count line's 32. What it does not yet handle: weak sessions (1–8 Goods) over-return, more than 200 images in 3%, 6% and 16% of sessions at beta 0.5, 1 and 2 (#4466). Every retrain fits the line and parks it on the detector (`DetectorContext.labels_line`), so a balance change re-cuts it without a retrain, and a Find over a new dataset re-fits only the corpus side there (`LabelsLine.on_corpus`), exactly as a cold Find over the same corpus computes it. The ranking the last retrain or Find pass scored is still parked (`line_ranking`), for the line's state — how many it keeps there — and for the spot check's bands. Every detector has a balance: the Inclusion knob is retired as a user preference (#4269) and survives only as the internal unit the acquisition cut and Smart's pricing are measured in. Which line a balance draws is one function, `fit_labels_line` (through the retrain's `_labels_line`), shared by the retrain, the no-refit re-cut and the eval harness's default arm. `vtscore.state.line_knobs()` — `{"beta": b}` — is what every retrain and re-cut passes on, so one setting moves every line.
 
 **Why a balance and not a floor (#4413).** From 2026-09-28 the preference was a precision floor: the share of the returned set that should be right. The owner replaced it on 2026-10-01, and #4421 removed it. A floor was "just one way to record the users' preference", and everyone would take perfect precision *and* perfect recall if they could, so the question became which balance of the two the line should maximise. #4411 priced the switch ([`REPORT.md`](experiments/2026-10-01-fbeta-line-4411/REPORT.md)). No single beta lands on a precision target: an F1 cut sits at 91% precision on large objects and 22% on small ones. So the floor's presets never were an F-beta, and nothing maps a floor to a beta. F-beta also needs something the floor's cut never did, the number of positives in the corpus. A vote-anchored mixture over-counts it 10–28× at 0.1% prevalence (#3827), which is why the count line was capped and audited; the labels' line guards its own count with the counted bound above. Three things are given up on purpose. The first is the checkable promise "at least *P* of what you see is right": a check now says what it estimated and how sure it is, and nothing is met or missed. The second is about a third more votes for a check. The third is a recall estimate that leans on the model's count of the positives, so its range is wider than the precision one.
 
@@ -310,6 +376,8 @@ Embedders carry capability flags consumed by the routes layer and the frontend:
 - `license_notice: Optional[str]`: non-None for embedders with usage restrictions (e.g. EUPE's FAIR Noncommercial Research Licence). Surfaced as a warning chip on the embedder picker.
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtscore/converters/` before embedding.
+
+The **face** media type is never imported either: the `image2face` converter crops each face MTCNN finds in an image, and FaceNet embeds the crop. **Each crop is turned upright first** (#4777): MTCNN's five landmarks are fitted to a template of where an upright face's landmarks sit in its box, and the photo is turned about the box's centre by the fit's angle before the same box is cropped (`align="roll"`, the default; `similarity` also re-centres and re-scales to the template; `none` is the plain box). On the FHIBE face bench it raised the face review's session mean of the objective in every session set (+0.020 to +0.029 from one starting photo, +0.012 to +0.025 from four) and cut failed one-photo sessions from 12 to 7. `similarity` gained less, because it zooms in on faces in profile ([`REPORT.md`](experiments/2026-10-10-face-align-4777/REPORT.md)).
 
 Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_grid"` (`H × W × D` fp16 ndarray, re-derived at load — never persisted). The detector head trains on these pre-computed vectors, so training is fast (the liblinear head fit is milliseconds on a few hundred labeled examples; scoring the dataset dominates a retrain).
 

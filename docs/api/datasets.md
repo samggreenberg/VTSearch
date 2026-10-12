@@ -384,8 +384,10 @@ name; an entry without its own is named `"<base> – <Category>"`.
 its source once (the URL-archive importer downloads and extracts once) and
 every dataset gets its own row, task id (listed in `task_ids`, in `outputs`
 order), import-finished event and AutoFind run; a cancel on one row stops
-that dataset alone. Only importers whose `GET /api/dataset/all-importers`
-entry reports `supports_multi_output: true` accept it (400 otherwise).
+that dataset alone. The registry entries they land as share one
+`import_group` id (see [List registered datasets](#list-registered-datasets)).
+Only importers whose `GET /api/dataset/all-importers` entry reports
+`supports_multi_output: true` accept it (400 otherwise).
 
 **From source origin:**
 
@@ -664,6 +666,13 @@ Entries also carry provenance and embedder fields (`created_by`, `readers`,
 `expires_at`, `embedder`, `bound_embedders`, `embedders_by_type`, `clipper`,
 `num_dupes`, `file_type_counts`, …); see the `DatasetsRegistryListResponse` schema in
 the spec for the full list.
+
+`import_group` and `output_category` link the datasets of one
+[multi-dataset import](#loading-datasets): every dataset the run produced
+carries the same `import_group` id and the `category` of the output it stands
+for (`"face"`, `"document"`…, which can differ from `media_type`). A
+single-dataset import has `import_group: null` and `output_category: ""`.
+Deleting one sibling leaves the others as they are.
 
 ### Load registered dataset
 

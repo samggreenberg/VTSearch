@@ -193,7 +193,9 @@ def _labels_line(
     cut where the expected F-beta peaks at the prevalence that model estimates
     on the corpus this retrain scored - the Train dataset in Train, the
     searched one in Find, AutoFind and the CLI.  The same labels and embedder
-    give the same model everywhere; no count is drawn on any corpus.  ``None``
+    give the same model everywhere; no count is drawn on any corpus, except the
+    head's count line while the class model is thin (#4786,
+    :func:`~vtscore.training.thresholds.labels_line.head_count_cut`).  ``None``
     (too few votes, one class) leaves the caller's fallbacks, which admit
     nothing when the folds never split.
     """
@@ -644,7 +646,7 @@ def train_and_threshold(
     )
     from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
     from vtscore.training.blend_schedules import BlendContext
-    from vtscore.training.mlp import LINEAR_SVM_HEAD
+    from vtscore.training.mlp import LINEAR_SVM_PRIOR_HEAD
 
     X = torch.from_numpy(stack_vectors(X_list, label="training vector"))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -656,15 +658,17 @@ def train_and_threshold(
     _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
 
-    # The production detector head is the **linear SVM**: one Linear(d, 1) fitted
-    # to the maximum-margin boundary (hinge + L2) rather than to balanced BCE.
-    # Like the logistic head it replaced it has no capacity to wobble under
-    # sparse positives (the threshold-stability #2790 finding); unlike it, it
-    # ranks measurably better.  The same head fits the final model and the
-    # calibration fold models on *both* branches below (cached and uncached), so
-    # the calibrated threshold is always measured on the head the final model
-    # actually has.
-    hidden_dim = LINEAR_SVM_HEAD
+    # The production detector head is a **linear SVM started from the Goods'
+    # centroid** (#4785, vtscore.training.svm_prior): one Linear(d, 1) fitted to
+    # the maximum-margin boundary (hinge + L2) rather than to balanced BCE, with
+    # the Goods' average a cheap direction, so the head fitted at the label quota
+    # starts where Test's centroid ranked and leaves it as the labels pay for.
+    # Like the logistic head it has no capacity to wobble under sparse positives
+    # (the threshold-stability #2790 finding); unlike it, it ranks measurably
+    # better.  The same head fits the final model and the calibration fold models
+    # on *both* branches below (cached and uncached), so the calibrated threshold
+    # is always measured on the head the final model actually has.
+    hidden_dim = LINEAR_SVM_PRIOR_HEAD
 
     # Which preference draws the line (#4413): the detector's own (#4665).  A
     # caller's duck-typed context carries no balance, and takes the active one's.
@@ -1351,7 +1355,7 @@ def _train_and_score_xy(
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model  # noqa: PLC0415
+    from vtscore.training.mlp import LINEAR_SVM_PRIOR_HEAD, train_model  # noqa: PLC0415
     from vtscore.training.blend_schedules import BlendContext  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
         PRECISION_FLOOR_FALLBACK_INCLUSION,
@@ -1387,8 +1391,8 @@ def _train_and_score_xy(
     _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
-    # Linear SVM production head - see train_and_threshold for why.
-    hidden_dim = LINEAR_SVM_HEAD
+    # The production head (the SVM started from the Goods' centroid) - see train_and_threshold.
+    hidden_dim = LINEAR_SVM_PRIOR_HEAD
 
     # K-fold calibration runs at every label count: the fold-anchored estimator
     # anchors on the fold models' held-out scores, so their models are an input
@@ -1637,7 +1641,7 @@ def train_detector_from_origins(
     import torch  # noqa: PLC0415
 
     from vtscore.detectors.resolver import embed_file, resolve_file_context
-    from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model
+    from vtscore.training.mlp import LINEAR_SVM_PRIOR_HEAD, train_model
     from vtscore.training.thresholds import calculate_cross_calibration_threshold
 
     X_list: list = []
@@ -1692,9 +1696,9 @@ def train_detector_from_origins(
         inclusion,
         calibrate_count=calibrate_count,
         calibration_fraction=resolve_calibration_fraction(calibration_fraction, embedder_name),
-        hidden_dim=LINEAR_SVM_HEAD,
+        hidden_dim=LINEAR_SVM_PRIOR_HEAD,
     )
-    model = train_model(X, y, input_dim, hidden_dim=LINEAR_SVM_HEAD)
+    model = train_model(X, y, input_dim, hidden_dim=LINEAR_SVM_PRIOR_HEAD)
 
     state_dict = model.state_dict()
     weights = {k: v.cpu().tolist() for k, v in state_dict.items()}

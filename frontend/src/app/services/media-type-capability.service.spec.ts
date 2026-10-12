@@ -21,6 +21,7 @@ describe('MediaTypeCapabilityService', () => {
     { type_id: 'text', name: 'Text', has_thumbnail: false },
     { type_id: 'point_cloud', name: 'Point Cloud', has_thumbnail: true }, // a new thumbnail type
     { type_id: 'legacy', name: 'Legacy' }, // has_thumbnail undefined ⇒ no thumbnail
+    { type_id: 'face', name: 'Face', has_thumbnail: true, importable: false }, // convert-in
   ];
 
   beforeEach(() => {
@@ -63,6 +64,14 @@ describe('MediaTypeCapabilityService', () => {
     expect(service.usesThumbnails('text')).toBe(false);
     expect(service.usesThumbnails('legacy')).toBe(false);
     expect(service.usesThumbnails('mystery')).toBe(false);
+  });
+
+  it('isConvertIn reads the served importable: false, and is false until loaded', () => {
+    expect(service.isConvertIn('face')).toBe(false);
+    service.ensureLoaded();
+    expect(service.isConvertIn('face')).toBe(true);
+    expect(service.isConvertIn('image')).toBe(false); // importable unset
+    expect(service.isConvertIn('mystery')).toBe(false);
   });
 
   it('ensureLoaded is idempotent (fetches at most once)', () => {

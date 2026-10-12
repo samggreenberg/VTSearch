@@ -585,18 +585,24 @@ class LabelQuotaSchema(Schema):
     """Which detector a labelset gave, and the labels it still owes (#4643).
 
     Built by :func:`vtscore.detectors.label_quota.served_quota`.  Under the
-    label quota (``good_quota`` Goods and ``bad_quota`` Bads) a labelset gives
-    the Goods' centroid, not a trained head; ``goods_owed`` / ``bads_owed`` are
-    what it takes to get one.
+    label quota (``good_quota`` Goods and ``bad_quota`` Bads, or a Good and
+    ``dry_bad_quota`` Bads, #4731) a labelset gives the Goods' centroid, not a
+    trained head, and a detector made from a typed query gives that query's own
+    set instead, from before its first label (#4758); ``goods_owed`` /
+    ``bads_owed`` are what the first quota still takes (both 0 once a head is
+    given).
     """
 
     tier = fields.String(
         required=True,
-        validate=validate.OneOf(["none", "centroid", "trained"]),
+        validate=validate.OneOf(["none", "centroid", "query", "trained"]),
         metadata={
             "description": (
-                "``centroid``: the Goods' centroid cut with a GMM, given under the quota; "
-                "``trained``: the trained head; ``none``: no Good to sort toward."
+                "``query``: under the quota, on a detector made from a typed query, the text sort's own "
+                "set for that query at the detector's balance (#4758); "
+                "``centroid``: under the quota, on a detector with no typed query, the Goods' centroid, "
+                "keeping the unvoted media that stand out at the balance; "
+                "``trained``: the trained head; ``none``: no Good and no typed query to sort toward."
             )
         },
     )
@@ -606,6 +612,10 @@ class LabelQuotaSchema(Schema):
     bads_owed = fields.Integer(required=True)
     good_quota = fields.Integer(required=True)
     bad_quota = fields.Integer(required=True)
+    dry_bad_quota = fields.Integer(
+        required=True,
+        metadata={"description": "Bads that give a single Good the trained head (#4731)."},
+    )
 
 
 class FindLabelResponseSchema(Schema):
@@ -613,6 +623,9 @@ class FindLabelResponseSchema(Schema):
 
     ok = fields.Boolean(required=True)
     results = fields.List(fields.Nested(_FindLabelResultSchema), required=True)
+    # The ranking's handle for ``GET /api/sort/collapsed`` (#4751).  Find sends
+    # the whole ranking, so nothing pages it through ``/api/sort/page``.
+    sort_token = fields.String(required=True)
     threshold = fields.Float(required=True)
     # What the balance says about ``threshold`` (#4247, #4272, #4413).
     balance = fields.Nested(BalanceStateSchema, required=True)
@@ -620,7 +633,8 @@ class FindLabelResponseSchema(Schema):
     bad_count = fields.Integer(required=True)
     detector_name = fields.String(required=True)
     # Which detector the labels gave: the trained head, or under the quota the
-    # Goods' centroid, with the labels still owed (#4643).
+    # Goods' centroid (#4643) or a typed-query detector's own query (#4758),
+    # with the labels still owed.
     label_quota = fields.Nested(LabelQuotaSchema, required=True)
 
 
@@ -719,7 +733,8 @@ class _AutoDetectResultSchema(Schema):
     # detector with no trained context to ask.
     balance = fields.Nested(BalanceStateSchema, allow_none=True)
     # Which detector the labels gave (#4643): under the quota, the Goods'
-    # centroid; ``null`` from a caller that does not report it.
+    # centroid, or a typed-query detector's own query (#4758); ``null`` from a
+    # caller that does not report it.
     label_quota = fields.Nested(LabelQuotaSchema, allow_none=True)
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)

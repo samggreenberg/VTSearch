@@ -187,6 +187,24 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     return {ids[k]: float(cos[k]) for k in range(len(ids))}
 
 
+def cell_opening(ds: str, emb: str, cat: str, medias: dict) -> "tuple[dict[int, float] | None, str, str, str]":
+    """``(seed_scores, seed_mode, seed_query, seed_embedder)``: how this cell opens.
+
+    ``CALIB_SEED_EXAMPLES`` (#4699) wins: the cell starts from that many photos
+    of its target, and the simulator builds the example sort itself, after the
+    split, so ``seed_scores`` is ``None``.  ``seed_query`` names the count, the
+    one thing that tells two example arms apart in a pooled frame, and
+    ``seed_embedder`` is the space the example sort ranks in.  Otherwise a
+    typed query's text sort where there is one, else the known-good start.
+    """
+    if cfg.SEED_EXAMPLES is not None:
+        return None, "example", f"examples={cfg.SEED_EXAMPLES}", cfg.learn_embedder(emb)
+    seed_scores = _text_seed_scores(ds, emb, cat, medias)
+    if seed_scores is None:
+        return None, "known_good", "", ""
+    return seed_scores, "text", _seed_query_text(ds, cat), cfg.text_embedder(emb)
+
+
 def check_declared_opening(ds: str, emb: str, cat: str, seed_mode: str) -> None:
     """Raise unless this cell opened the way the study said it would (#3278).
 
@@ -204,7 +222,7 @@ def check_declared_opening(ds: str, emb: str, cat: str, seed_mode: str) -> None:
     it, and a cell that ran under the wrong opening is not.  ``mixed`` (and unset) assert
     nothing -- a re-runner mirroring a completed grid legitimately holds both.
     """
-    if cfg.REQUIRE_OPENING not in ("text", "known_good") or seed_mode == cfg.REQUIRE_OPENING:
+    if cfg.REQUIRE_OPENING not in ("text", "known_good", "example") or seed_mode == cfg.REQUIRE_OPENING:
         return
     raise RuntimeError(
         f"cell {ds}x{emb}:{cat} opened on {seed_mode!r} but this study declares "
@@ -315,7 +333,14 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
+        f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
+        f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
+        f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
+        f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
+        f"line_counts={'on' if cfg.LINE_COUNTS else 'off'} "
+        f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
+        f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -331,7 +356,9 @@ def main(argv: list[str] | None = None) -> int:
         PICK_COLUMNS,
         RANK_FRAME_COLUMNS,
     )
-    from vtscore.eval.live_threshold_rules import sigma_floor
+    from vtscore.eval.arms_handover import HANDOVER_COLUMNS
+    from vtscore.eval.arms_line_counts import LINE_COUNT_COLUMNS
+    from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -342,10 +369,7 @@ def main(argv: list[str] | None = None) -> int:
     medias: dict[int, dict] = load_medias(pkl, repair=True)  # as the app holds them (#4095)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 
-    seed_scores = _text_seed_scores(ds, emb, cat, medias)
-    seed_mode = "text" if seed_scores is not None else "known_good"
-    seed_query = _seed_query_text(ds, cat) if seed_scores is not None else ""
-    seed_embedder = cfg.text_embedder(emb) if seed_scores is not None else ""
+    seed_scores, seed_mode, seed_query, seed_embedder = cell_opening(ds, emb, cat, medias)
     if cfg.is_paired(emb) and seed_mode != "text":
         # A pair exists FOR the text sort.  Falling back to known-goods here
         # would run an arm that is identical to the bare learn embedder while
@@ -353,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         # experiment and is not it.  Fail the cell instead: a missing cell is
         # visible and a mislabelled one is not.
         raise RuntimeError(
-            f"paired embedder {emb!r} fell back to the known-good start for {ds}:{cat} "
+            f"paired embedder {emb!r} opened on {seed_mode!r}, not its text sort, for {ds}:{cat} "
             f"(query={_seed_query_text(ds, cat)!r}); the pair exists to take the text sort"
         )
     # After the pair guard, which says the same thing about a paired arm in more
@@ -373,6 +397,8 @@ def main(argv: list[str] | None = None) -> int:
     all_pframes: list[dict] = []
     all_rankframes: list[dict] = []
     all_linetests: list[dict] = []
+    all_handover: list[dict] = []
+    all_linecounts: list[dict] = []
     all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
@@ -385,7 +411,9 @@ def main(argv: list[str] | None = None) -> int:
         rankframes_local: list[dict] | None = [] if cfg.RANK_FRAME_STEPS else None
         testscores_local: list[dict] | None = [] if cfg.SAVE_TEST_SCORES else None
         linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
-        with sigma_floor(cfg.SIGMA_FLOOR):
+        handover_local: list[dict] | None = [] if cfg.HANDOVER_SHADOW else None
+        linecounts_local: list[dict] | None = [] if cfg.LINE_COUNTS else None
+        with sigma_floor(cfg.SIGMA_FLOOR), head_count_bads(cfg.HEAD_COUNT_BADS):
             rows = simulate_voting_iterations(
                 medias,
                 target_category=cat,
@@ -454,6 +482,7 @@ def main(argv: list[str] | None = None) -> int:
                 startup_schedule=cfg.STARTUP_SCHEDULE,
                 opening_diversity=cfg.OPENING_DIVERSITY,
                 more_walk=cfg.MORE_WALK,
+                new_walk=cfg.NEW_WALK,
                 band_share=cfg.BAND_SHARE,
                 pick_sink=picks_local,
                 precision_frame_sink=pframes_local,
@@ -464,6 +493,16 @@ def main(argv: list[str] | None = None) -> int:
                 sim_size=cfg.SIM_SIZE,
                 rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
                 calibration_seed=cal_seed,
+                seed_examples=cfg.SEED_EXAMPLES,
+                stratify_target=cfg.STRATIFY_TARGET,
+                good_dry_run=cfg.GOOD_DRY_RUN,
+                quota_dry_bads=cfg.QUOTA_DRY_BADS,
+                centroid_line=cfg.CENTROID_LINE,
+                centroid_line_variants=cfg.CENTROID_LINE_VARIANTS,
+                handover_shadow=cfg.HANDOVER_SHADOW,
+                handover_sink=handover_local,
+                line_count_sink=linecounts_local,
+                query_tier=cfg.QUERY_TIER,
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
@@ -496,6 +535,10 @@ def main(argv: list[str] | None = None) -> int:
         # "shipped" on the default arm, so a pooled frame never reads a blank as
         # a rule.
         live_threshold = cfg.LIVE_THRESHOLD or "shipped"
+        # The centroid's line rule (#4732), named on the default arm too.
+        from vtscore.detectors.centroid_head import CENTROID_LINE_RULE
+
+        centroid_line = cfg.CENTROID_LINE or CENTROID_LINE_RULE
         for r in rows:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
@@ -503,6 +546,10 @@ def main(argv: list[str] | None = None) -> int:
             r["seed_embedder"] = seed_embedder
             r["calibration_fraction"] = cell_calibration_fraction
             r["sim_fraction"] = cfg.SIM_FRACTION
+            r["stratify_target"] = cfg.STRATIFY_TARGET
+            r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""
+            r["quota_dry_bads"] = cfg.QUOTA_DRY_BADS or ""
+            r["centroid_line"] = centroid_line
             r["exclusion_arm"] = exclusion_arm
             r["exclusion_min_remainder"] = exclusion_floor
             r["live_cut_rule"] = live_cut_rule
@@ -531,6 +578,12 @@ def main(argv: list[str] | None = None) -> int:
         for lt in linetest_local or []:
             lt["embedder"] = emb
         all_linetests.extend(linetest_local or [])
+        for hr in handover_local or []:
+            hr["embedder"] = emb
+        all_handover.extend(handover_local or [])
+        for lc in linecounts_local or []:
+            lc["embedder"] = emb
+        all_linecounts.extend(linecounts_local or [])
         if testscores_local:
             # The last ordinary step and the last row (after the check): what Train left and what Find applies.
             # The full-label ceiling's snapshot (#4490) is kept apart, never read as a session's step; and
@@ -572,11 +625,13 @@ def main(argv: list[str] | None = None) -> int:
         "seed_embedder",
         "calibration_fraction",
         "sim_fraction",
+        "stratify_target",
         "exclusion_arm",
         "exclusion_min_remainder",
         "live_cut_rule",
         "live_threshold",
         "standalone_cut",
+        "centroid_line",
     ]
     out = cell_file(outdir / f"task_{idx:04d}.csv")
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)
@@ -615,6 +670,16 @@ def main(argv: list[str] | None = None) -> int:
     linetest_cols = [*LINE_TEST_COLUMNS, "embedder"]
     linetest_out = cell_file(outdir / f"task_{idx:04d}__linetest.csv")
     pd.DataFrame(all_linetests, columns=pd.Index(linetest_cols)).to_csv(linetest_out, index=False)
+    # The #4776 hand-over evidence: one row per click Test gave the trained head.  Same
+    # unconditional-write rule: an empty file with the header says the shadow was off.
+    handover_cols = [*HANDOVER_COLUMNS, "embedder"]
+    handover_out = cell_file(outdir / f"task_{idx:04d}__handover.csv")
+    pd.DataFrame(all_handover, columns=pd.Index(handover_cols)).to_csv(handover_out, index=False)
+    # The #4786 line counts: one row per click Test gave the trained head under a balance.  Same
+    # unconditional-write rule: an empty file with the header says they were off.
+    linecounts_cols = [*LINE_COUNT_COLUMNS, "embedder"]
+    linecounts_out = cell_file(outdir / f"task_{idx:04d}__linecounts.csv")
+    pd.DataFrame(all_linecounts, columns=pd.Index(linecounts_cols)).to_csv(linecounts_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means

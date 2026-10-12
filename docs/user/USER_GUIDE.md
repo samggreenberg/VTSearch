@@ -606,6 +606,28 @@ Cancelling one row while the folder is still being read stops that dataset
 alone; the others carry on. The **Downloaded Media** importer has no
 Multi-Dataset box: a demo is one dataset of one kind.
 
+**Show in photo.** When an import made both a Face and an Image dataset, a
+face in Train or Test is one click from the photo it was cut out of. Click
+**Show in photo** under the face, or, in Train, right-click it in the list. The photo
+opens over the ranking with the face outlined, and **← Back** (or Esc) returns
+you to the face you were on, with the ranking as you left it. If the Image
+dataset isn't loaded, the window offers to load it first. A face whose photo
+isn't in the Image dataset (you left that image out, say) has no button.
+
+**Collapse to photos.** On the same kind of Face dataset, the list in Train's
+**Manual** tab and Test's **Review** tab has a **Show: Faces | Photos** switch
+under its header. **Photos** shows the ranking as the photos the faces came
+from: each photo once, where its best face ranks, with every ranked face in it
+outlined and a small picture of each face underneath. Faces below the line are
+outlined faintly; the others are the matches. An outlined face (or its small
+picture) works just like that face's card in the list: click it to show it in
+the middle, or, with hover focus, click and right-click to vote it Bad and
+Good. Votes always go on the face, never the photo, and the counts and Test's
+**Browse**, **To Dataset** and **Export** still count and send faces, as the
+line above the photos reminds you. A face whose photo isn't in the Image
+dataset shows on its own, marked "photo not found". If the Image dataset isn't
+loaded, the list offers to load it.
+
 ### Running AutoFind on a new dataset
 
 Once you have a detector on the Dashboard's **AutoFind** tab, every
@@ -621,7 +643,10 @@ The run shows on the new dataset's Dashboard row while it works, and its
 it found; its **View results** button opens the **Find Results**
 dialog, which lists every item each detector called Good (switch to
 **Bad** or **Both** to see the rest), copies the list to the clipboard,
-and **Export**s the listed rows to any exporter. If you picked a results
+and **Export**s the listed rows to any exporter. A detector with too few
+labels for a trained one runs as its typed description, or as the Goods'
+centroid, as in [Test](#testing-a-detector), and the dialog names it, with the
+labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
 results there too. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
@@ -643,8 +668,8 @@ moving them to the AutoFind tab - tick them and the datasets to run them
 on, and click the big **Find** button in the Dashboard's action bar,
 beside **Train** and **Test**. It is enabled once at least one dataset
 and one detector are ticked, all of one media type, and every ticked
-detector is trained. Unlike Test, which takes exactly one dataset and one
-detector, it uses every ticked row:
+detector has labels or was made from a typed description. Unlike Test,
+which takes exactly one dataset and one detector, it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the Find Results dialog; any that finish while the
@@ -783,7 +808,7 @@ that reaches **Done!** opens its result panel on its own.
 Most users should never need Manual mode.
 
 Click the **Autopilot** tab in the left panel. Autopilot breaks
-labeling into five phases and tells you what to do at each step.
+labeling into four phases and tells you what to do at each step.
 You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
@@ -792,7 +817,7 @@ just picks *which* items to show you and *when* each phase ends.
   <img src="assets/autopilot-vote.light.webp" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
 </picture>
 
-### The five phases
+### The four phases
 
 The phase panel labels them, in order:
 
@@ -807,18 +832,12 @@ The phase panel labels them, in order:
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
    is usually quick.
-3. **Find More Goods.** - Autopilot goes back to the best text matches
-   and keeps offering them while they keep turning up goods: until you
-   have 20 goods, or until 16 matches in a row were not good. More goods
-   early make a noticeably better detector later. While this phase runs
-   the detector is still learning, so it catches up with (and then
-   passes) the old, shorter opening after about 50 votes.
-4. **Refine Boundary.** - Autopilot serves items the detector is
+3. **Refine Boundary.** - Autopilot serves items the detector is
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
    and "stable" indicators in the status bar both turn green).
-5. **Explore Diversity.** - Autopilot serves items from parts of the
+4. **Explore Diversity.** - Autopilot serves items from parts of the
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
@@ -827,13 +846,13 @@ The current phase carries one light that shows how close it is to done.
 It starts as a **red** circle, turns **yellow** once the phase is past
 halfway, and becomes a **green check** when the phase is finished, at
 which point Autopilot moves on to the next one; every finished phase
-keeps its check. For the three Find phases, halfway is half the
-vote target (2 of 3 goods, 10 of 20); for Refine Boundary the light
+keeps its check. For the two Find phases, halfway is half the
+vote target (2 of 3 goods, 2 of 4 bads); for Refine Boundary the light
 shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal. Hover the light for
 the details.
 
-When all five phases are done, Autopilot shows **Done!** and Toasty
+When all four phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
 trained: keep voting and it keeps improving (your next vote sends Toasty
 away), or click **Dashboard** to export it or run it over another dataset.
@@ -842,7 +861,9 @@ trained the detector - coming back later to refine it further will not
 raise it again. If you label every item before then, Toasty says so instead
 and points you back to the Dashboard. When you open the Train view on a
 detector with no labels yet, Toasty also stands over the **Good** / **Bad**
-buttons until your first vote. See [Toasty's hints](#toastys-hints).
+buttons: asking for your first vote, then, through the run that trains the
+detector, saying what the current phase is after and how many Goods or Bads
+it still needs. See [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays checked, and a seventh step, **Keep
 Improving.**, takes over for as long as you keep labeling. It is
@@ -857,8 +878,8 @@ Boundary.
 ### Document collections stop on a dry run
 
 On a collection of document pages, where a detector finds logos and
-stamps by matching their shape, Autopilot has four phases instead of
-five. After the initial goods and bads, **Find More Goods.** offers the
+stamps by matching their shape, Autopilot has a different four phases.
+After the initial goods and bads, **Find More Goods.** offers the
 detector's own best matches, re-ranked after every vote, with no
 20-good target. It ends when **16 of them in a row were not good**:
 the top of the ranking has run dry, and the documents the detector can
@@ -887,7 +908,7 @@ full phase list, and its ◀ collapses it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
-  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the five phases (Find Initial Goods, Find Initial Bads, Find More Goods, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
@@ -957,7 +978,7 @@ Picks *which unlabeled item* the app highlights next.
 - **New** - Pick an item from a part of the dataset you haven't
   covered yet. Ensures a broad mix.
 
-Autopilot cycles through these automatically in its five phases,
+Autopilot cycles through these automatically in its four phases,
 but in Manual mode you choose directly.
 
 ### 3. Threshold
@@ -1223,13 +1244,24 @@ already trust and collect what they match, with no view to work through, use
 the Dashboard's **Find** button instead (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
-**A detector with too few labels is tested as the Goods' centroid.** Until it
-has 3 Goods and 4 Bads, VTSearch does not train a detector from its labels:
-Test, Find and AutoFind rank everything by how close it is to the average of
-its Goods instead, and draw the line where those scores split. One Good is
-enough to test it. The Test view says so under its tabs, with how many more
-Goods and Bads a trained detector needs, and the Threshold does not move that
-line. A detector with no Good at all can't be tested.
+**A detector with too few labels is tested as its typed description, or as the
+Goods' centroid.** Until it has 3 Goods and 4 Bads, or one Good and 16 Bads,
+VTSearch does not train a detector from its labels.
+
+- **A detector made from a typed description** (the **Text** tab of New
+  Detector) is that description instead. Test, Find and AutoFind keep the
+  images its text sort keeps in Train, at the detector's Threshold, so you can
+  test it before your first vote. Those are the matches Autopilot shows you
+  while it gathers the first labels, and on those first votes they are better
+  than the Goods' centroid's.
+- **A detector with no typed description** (made from media examples, or from
+  a labels file) ranks everything by how close it is to the average of its
+  Goods, and keeps the images that stand out from the rest. One Good is enough
+  to test it; with no Good at all it can't be tested.
+
+Either way the Threshold moves the line (fewer toward the false-negative end,
+more toward the false-positive end), and the Test view says so under its tabs,
+with how many more Goods and Bads a trained detector needs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
@@ -1582,26 +1614,50 @@ work on whichever rows you currently have selected.
 ### Toasty's hints
 
 King Toasty (the toast with the magnifying glass in the logo) stands beside
-the next thing to click, with a speech bubble that says what to do and why.
-On the Dashboard he shows one step at a time:
+the next thing to click, with a speech bubble that says where you are and what
+to do about it. There is one hint at a time, all the way from an empty
+Dashboard to a detector's matches. On the Dashboard he shows one step at a
+time:
 
-- the **Datasets** card's **+** while you have no datasets, or a nudge to
-  select one when you have some but none is selected;
+- the **Datasets** card's **+** while you have no datasets, a nudge to select
+  one when you have some but none is selected, and a note to wait while your
+  only dataset is still importing;
 - a warning (he looks surprised) when the selected datasets hold different
   kinds of media;
-- the **Detectors** card's **+** once a dataset is in, or a nudge to select a
-  detector when you have some but none is selected;
+- the **Detectors** card's **+** once a dataset is in, a nudge to select a
+  detector when you have some but none is selected, and a pointer to the
+  other tab (**Drafts** or **AutoFind**) when the open one is empty;
 - a warning when the selected dataset and detector are for different kinds of
-  media;
+  media, when a new detector is ticked under several datasets (it trains on
+  one at a time), or when a detector with no labels is ticked among others
+  (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, and **Test** or **Find** once the selected detector is trained.
 
+While one of his hints is up, the reason under a disabled **Train**, **Test**
+or **Find** button is hidden, and so is an empty table's "Click **+** to add
+one", since the hint says the same thing; both come back if you hide the
+hint.
+
 In the Train view he asks for your first vote over **Good** / **Bad** while
-Autopilot runs on a detector with no labels, explains the **Update Sort
+Autopilot runs on a detector with no labels, then stays there through the
+run that trains it, saying what each phase is after and how far along it is
+(how many Goods and Bads it still needs, then that the detector retrains on
+every vote until the lights go green). He explains the **Update Sort
 Example?** prompt from just below it (see [Get Autopilot
-unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he
-stands under the top bar's **Dashboard** button (see [Autopilot: the guided
-workflow](#autopilot-the-guided-workflow)).
+unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he stands
+under the top bar's **Dashboard** button (see [Autopilot: the guided
+workflow](#autopilot-the-guided-workflow)). In the Test view he explains the
+first pick, the verdict once the test is done, and the **Review** tab the
+first time you open it.
+
+The dialogs on that path have hints too: **Add Dataset**, **New Detector**,
+**Use This Example?**, **Find Results** and **Export Results**. Toasty stands
+below the dialog box, or beside its top corner when the box fills the window.
+Dialogs off the path (Settings, Help, a dataset's Stats, and the like) have
+none; they can always be cancelled. Only one hint shows at a time: opening any
+dialog hides the hint on the view behind it, and a dialog opened over another
+hides the first one's.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
@@ -1826,7 +1882,8 @@ it loads - so exporting the labels and making a detector from them there
 Opened this way the modal's **Categories** filter starts on **All**,
 which is what you want: the negatives are half of what the ranker learns
 from, and a good-only or bad-only file can't rebuild the detector at the
-other end (a good-only one gives only the Goods' centroid, below, and a
+other end (a labels file carries no typed description, so a good-only one
+gives only the Goods' centroid, as in [Test](#testing-a-detector), and a
 bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
@@ -1860,7 +1917,10 @@ bundle contains **no media and no fingerprints**, just the small trained
 ranker, but a trained ranker can still reveal something about the data it
 was trained on, so share it only with people you'd trust with the labels
 themselves. A compatible dataset must be loaded, since the ranker is
-trained against that dataset's embedder. Pattern-matching (structural)
+trained against that dataset's embedder. A detector made from a typed
+description that has too few labels for a trained ranker exports its
+description instead, which scores with the dataset's text embedder; the
+manifest names that embedder. Pattern-matching (structural)
 detectors can't be exported this way - their second verification stage
 has no ONNX equivalent - and region (patch) detectors export in a
 whole-item-only scoring mode.

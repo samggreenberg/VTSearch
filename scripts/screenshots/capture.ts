@@ -94,8 +94,12 @@ function ramFreeMB(): number {
  *
  * Toasty's hints (#4680) are off in every shot: the guide around a screenshot
  * already says what to click, and a speech bubble saying it again inside the
- * picture is a hat on a hat. They float over the page, so hiding one moves
- * nothing else, and it leaves the app's own hint settings alone.
+ * picture is a hat on a hat. An app refresh.sh started has `hide_all_hints`
+ * set, so the page is what a user who ticked Hide all hints sees (#4807: the
+ * reasons under the Dashboard's disabled buttons step aside only while a hint
+ * is on show). The rule here is the backstop for an app the caller pointed
+ * this at, whose own hint settings are left alone; Toasty floats over the
+ * page, so hiding him moves nothing else.
  */
 const STILL_CSS =
   `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +

@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 
@@ -11,9 +11,10 @@ export interface AutopilotState {
   /**
    * The "more" walk (#4282): after the Good and Bad quorum, go back to the top
    * of the seed sort until the labelset holds ``moreToStart`` positives, or
-   * until ``moreDryRun`` walk picks in a row held none. #4222's study measured
-   * it against the old two-round opening on COCO Better: +0.05 AP by vote 150,
-   * with the same share of sessions left without a detector.
+   * until ``moreDryRun`` walk picks in a row held none. Off on photos since
+   * #4740 (``moreToStart`` 0, so Bad goes straight to Boundary): #4671 scored it
+   * against the opening without it and the walk lost from vote 23 on, at every
+   * preset. A document dataset's walk (``dryRunStop``) does not read it.
    */
   moreToStart: number;
   moreDryRun: number;
@@ -21,6 +22,19 @@ export interface AutopilotState {
   moreMisses: number;
   /** The walk has ended (target met, ran dry, or skipped) and never resumes. */
   moreDone: boolean;
+  /**
+   * Good-phase picks in a row without a positive, counted once a Good is in
+   * hand, toward ``moreDryRun`` (#4731).
+   */
+  goodMisses: number;
+  /**
+   * The Good walk ran dry (#4731): ``moreDryRun`` picks in a row held no
+   * Good, with a Good in hand. The Goods found so far then meet the Good
+   * target, and the More walk down the same sort is spent. A target with one
+   * or two Goods the sort can reach used to walk it for the whole session.
+   * Latched for the run, like ``moreDone``.
+   */
+  goodRanDry: boolean;
   /**
    * The dataset's labeling stops on the dry run, not the lights (#4488): a
    * document (tiled structural) dataset, whose labeling status says
@@ -62,7 +76,8 @@ export interface AutopilotState {
    * that knocks Stable off green sends it back to ``hard`` for boundary items.
    * But the user was told the detector is trained, so the panel reads this
    * instead of the phase, keeping Done checked and showing further votes as
-   * an open-ended seventh step rather than bouncing back to step 4. Display
+   * an open-ended last step (Keep Improving) rather than bouncing back to
+   * Boundary. Display
    * only: it never feeds the phase. Cleared only by falling back into the
    * opening (votes un-done below its targets) or by a new run.
    */
@@ -89,10 +104,12 @@ const INITIAL_STATE: AutopilotState = {
   phase: 'idle',
   goodToStart: 3,
   badToStart: 4,
-  moreToStart: 20,
+  moreToStart: 0,
   moreDryRun: 16,
   moreMisses: 0,
   moreDone: false,
+  goodMisses: 0,
+  goodRanDry: false,
   dryRunStop: false,
   smartStatus: '',
   stableStatus: '',
@@ -144,10 +161,18 @@ export class AutopilotStateService {
    * per-run and every re-entry to the Train window is a new run. The labelset
    * is what remembers across runs, so the run's first look at it decides.
    */
-  private startedTrained = false;
+  private readonly startedTrained = signal(false);
 
   /** Whether {@link noteInitialLabelset} has taken its one reading this run. */
-  private initialLabelsetKnown = false;
+  private readonly initialLabelsetKnown = signal(false);
+
+  /**
+   * Whether this run started on a detector with no labels (#4807): the run
+   * that trains it, which Toasty's phase hints are for, as the hand-off is.
+   * False until the labelset has been read, so a run never reads as training
+   * from not-yet-loaded zeroes.
+   */
+  readonly startedUntrained = computed(() => this.initialLabelsetKnown() && !this.startedTrained());
 
   /**
    * The vote counts at the last {@link checkPhaseTransition}. The phase check
@@ -182,9 +207,9 @@ export class AutopilotStateService {
    * untrained and spent its first sort on the text hint (#3535).
    */
   noteInitialLabelset(goodCount: number, badCount: number): void {
-    if (this.initialLabelsetKnown) return;
-    this.initialLabelsetKnown = true;
-    this.startedTrained = goodCount > 0 || badCount > 0;
+    if (this.initialLabelsetKnown()) return;
+    this.initialLabelsetKnown.set(true);
+    this.startedTrained.set(goodCount > 0 || badCount > 0);
     const retrainMode = goodCount > 0 && badCount > 0;
     if (retrainMode !== this.stateSubject.value.retrainMode) {
       this.stateSubject.next({
@@ -202,8 +227,8 @@ export class AutopilotStateService {
    * *previous* detector and says nothing about the one now in front of the user.
    */
   forgetInitialLabelset(): void {
-    this.initialLabelsetKnown = false;
-    this.startedTrained = false;
+    this.initialLabelsetKnown.set(false);
+    this.startedTrained.set(false);
   }
 
   /**
@@ -214,7 +239,7 @@ export class AutopilotStateService {
    * already have been offered.
    */
   get shouldAnnounceCompletion(): boolean {
-    return this.initialLabelsetKnown && !this.startedTrained && !this.completionAnnounced;
+    return this.startedUntrained() && !this.completionAnnounced;
   }
 
   /** Record that the completion hand-off has been offered for this run. */
@@ -226,13 +251,15 @@ export class AutopilotStateService {
     if (this.running) return;
     this.handoff.set(null);
     this.completionAnnounced = false;
-    this.startedTrained = false;
-    this.initialLabelsetKnown = false;
+    this.startedTrained.set(false);
+    this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
     this.stateSubject.next({
       ...this.stateSubject.value,
       phase: 'good',
       moreMisses: 0,
+      goodMisses: 0,
+      goodRanDry: false,
       // A detector that already had labels starts in retrain mode, where every
       // phase draws off the learned sort: there is no seed sort to walk.
       moreDone: retrainMode,
@@ -295,6 +322,18 @@ export class AutopilotStateService {
     // in Bads alone is a miss. Repeated checks with unchanged counts are no-ops.
     const prev = this.lastCounts;
     this.lastCounts = { good: goodCount, bad: badCount };
+    // The Good walk's run of misses (#4731), read the same way. A miss counts
+    // only with a Good already in hand, so the run is the misses since the
+    // latest Good, and a walk that has found nothing never runs dry.
+    if (prev && st.phase === 'good' && !st.goodRanDry) {
+      if (goodCount > prev.good) {
+        st = { ...st, goodMisses: 0 };
+      } else if (badCount > prev.bad && prev.good >= 1) {
+        const goodMisses = st.goodMisses + 1;
+        const goodRanDry = goodMisses >= st.moreDryRun;
+        st = { ...st, goodMisses, goodRanDry, moreDone: st.moreDone || goodRanDry };
+      }
+    }
     if (prev && st.phase === 'more' && (st.dryRunStop || !st.moreDone)) {
       if (goodCount > prev.good) {
         st = { ...st, moreMisses: 0 };
@@ -317,7 +356,9 @@ export class AutopilotStateService {
     // Cap each phase target at the most votes of that class the dataset could
     // still yield (current votes of that class + everything unlabeled), so a
     // tiny dataset can still satisfy — and advance past — the initial phases.
-    const effGoodTarget = Math.min(st.goodToStart, goodCount + remainingUnlabeled);
+    let effGoodTarget = Math.min(st.goodToStart, goodCount + remainingUnlabeled);
+    // A Good walk that ran dry has met its target with the Goods it found (#4731).
+    if (st.goodRanDry && goodCount >= 1) effGoodTarget = Math.min(effGoodTarget, goodCount);
     const effBadTarget = Math.min(st.badToStart, badCount + remainingUnlabeled);
     const effMoreTarget = Math.min(st.moreToStart, goodCount + remainingUnlabeled);
 
@@ -373,8 +414,8 @@ export class AutopilotStateService {
   clear(): void {
     this.handoff.set(null);
     this.completionAnnounced = false;
-    this.startedTrained = false;
-    this.initialLabelsetKnown = false;
+    this.startedTrained.set(false);
+    this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
     this.stateSubject.next({ ...INITIAL_STATE });
   }

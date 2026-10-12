@@ -21,13 +21,14 @@ from __future__ import annotations
 
 from types import ModuleType
 
-from pilebuild.loaders import coco, coco_better, demo
+from pilebuild.loaders import coco, coco_better, demo, fhibe
 
 #: ``DATASETS[ds]["kind"]`` -> the module that owns it.
 LOADERS: dict[str, ModuleType] = {
     "coco": coco,
     "coco_better": coco_better,
     "demo": demo,
+    "fhibe": fhibe,
 }
 
 

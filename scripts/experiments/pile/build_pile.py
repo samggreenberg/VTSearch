@@ -37,11 +37,7 @@ verified clean (#3297). Run it before trusting the pile to be purgeable.
 
 ``--verify`` is the guard the region-voting studies needed: it asserts that
 every cell whose ``(dataset, embedder)`` pair claims region capability actually
-carries ``patch_grid`` on its medias, and that no cell silently holds zero. It
-also checks the *geometry*: boxes against the band their cell name claims, and
-boxes against the frame -- the second because the first cannot see a box
-corrupted before banding, since the band is derived from that same box and moves
-with it (#3281).
+carries ``patch_grid`` on its medias, and that no cell silently holds zero.
 """
 
 from __future__ import annotations
@@ -58,7 +54,6 @@ pc.setup_env()
 from pilebuild.audit import label_problems, list_cells, rebuildable, report_bands, verify  # noqa: E402
 from pilebuild.boxscan import band_categories, load_box_scan_categories  # noqa: E402
 from pilebuild.env import assert_vtscore_is_this_checkout, cells_io, log  # noqa: E402
-from pilebuild.geometry import region_geometry_problems, scale_label_digest  # noqa: E402
 from pilebuild.loaders import loader_for  # noqa: E402
 from pilebuild.manifest import write_manifest  # noqa: E402
 from pilebuild.provenance import (  # noqa: E402
@@ -86,9 +81,7 @@ __all__ = [
     "main",
     "provenance_report",
     "rebuildable",
-    "region_geometry_problems",
     "report_bands",
-    "scale_label_digest",
     "verify",
     "vg_image_paths",
     "write_manifest",
@@ -128,6 +121,29 @@ def _embed_batch_size(embedder: str):
         os.environ.pop("VTSEARCH_EMBED_BATCH_SIZE", None)
 
 
+def _link_private(dataset: str, embedder: str) -> None:
+    """Point the pile's names for this cell at its private home, if it has one (#4699).
+
+    ``dump_medias`` and ``write_provenance`` open the pile path and write through
+    the link, so the bytes land owner-only and nothing else in the pile changes.
+    """
+    home = pc.private_cell_dir(dataset)
+    if home is None:
+        return
+    home.mkdir(parents=True, exist_ok=True)
+    home.chmod(0o700)
+    for link in (pc.cell_path(dataset, embedder), pc.provenance_path(dataset, embedder)):
+        target = home / link.name
+        if link.is_symlink() and link.resolve() == target.resolve():
+            continue
+        if link.exists() or link.is_symlink():
+            raise SystemExit(f"{link} exists and is not a link to {target}; move it there by hand")
+        # Dangling until written: opening it for writing creates the target, and
+        # until then `out.exists()` is False, so a build that dies first is retried
+        # rather than skipped as an empty cell that "exists".
+        link.symlink_to(target)
+
+
 def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     """Build one cell, returning a summary record."""
     out = pc.cell_path(dataset, embedder)
@@ -160,6 +176,7 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     embed_s = time.time() - t1
 
     n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)
+    _link_private(dataset, embedder)
     nbytes = cells_io().dump_medias(medias, out)
     total_s = time.time() - t0
     log(
@@ -273,7 +290,7 @@ def main() -> int:
 
     # `on_request` datasets are built only when NAMED. The pile's default sweep
     # is "everything the shared studies need"; a cell sized for one study is a
-    # cost the sweep should not silently take on (see `vg_scale_deep`).
+    # cost the sweep should not silently take on (see `coco_better_full`).
     datasets = (
         args.datasets.split(",")
         if args.datasets
@@ -285,32 +302,23 @@ def main() -> int:
     for bad in [e for e in embedders if e not in pc.EMBEDDERS]:
         raise SystemExit(f"unknown embedder {bad!r}; known: {sorted(pc.EMBEDDERS)}")
 
-    # A derived dataset joins the run whenever its parent is in it. `vg_scale`
-    # rebuilt without `vg_scale_any` leaves the derived cell holding the
-    # parent's previous labels, boxes and bands -- with the right media count
-    # and the right vectors, so nothing looks wrong (#3281 shipped that way).
-    # Pulling it in costs a relabel and no embedding pass, and `--force` is what
-    # makes it actually happen: the derived cell already exists.
-    derived = [
-        d
-        for d, spec in pc.DATASETS.items()
-        if spec.get("kind") == "vg_scale_any" and d not in datasets and "vg_scale" in datasets
-    ]
-    if derived:
-        log(f"including {', '.join(derived)}: derived from vg_scale, and stale the moment it is rebuilt")
-        datasets += derived
+    # A face dataset is embedded by FaceNet and nothing else, and an image dataset
+    # by everything but FaceNet (#4699): a pair across media types is no cell.
+    pairs = [(ds, emb) for ds in datasets for emb in embedders if pc.embeds(emb, ds)]
+    if len(pairs) < len(datasets) * len(embedders):
+        log(
+            f"skipping {len(datasets) * len(embedders) - len(pairs)} pair(s) whose embedder cannot embed that media type"
+        )
 
     summaries = []
     if args.relabel:
-        for ds in datasets:
-            for emb in embedders:
-                summaries.append(relabel_cell(ds, emb))
+        for ds, emb in pairs:
+            summaries.append(relabel_cell(ds, emb))
         done = [s for s in summaries if s["status"] == "relabelled"]
         log(f"done: {len(done)} relabelled, {len(summaries) - len(done)} without a cell")
         return 0
-    for ds in datasets:
-        for emb in embedders:
-            summaries.append(build_cell(ds, emb, force=args.force))
+    for ds, emb in pairs:
+        summaries.append(build_cell(ds, emb, force=args.force))
 
     built = [s for s in summaries if s["status"] == "built"]
     log(f"done: {len(built)} built, {len(summaries) - len(built)} skipped")

@@ -125,7 +125,10 @@ MIRRORS: list[Mirror] = [
             "in AutopilotFlow._note_more_vote, which next_phase reads as more_done. A document "
             "dataset (stop_rule 'dry_run', #4488) takes its own branch after the opening - the "
             "walk with no Good target, its dry run as done - ported as next_phase(dry_run_stop=, "
-            "ran_dry=) and AutopilotFlow(dry_run_stop=)."
+            "ran_dry=) and AutopilotFlow(dry_run_stop=). The Good walk's dry run (#4731: moreDryRun "
+            "misses with a Good in hand end the Good phase and spend the walk) is the same kind of "
+            "history: the app's goodMisses/goodRanDry, the harness's AutopilotFlow good_misses/"
+            "good_dry, read by next_phase as good_ran_dry."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
@@ -171,7 +174,8 @@ MIRRORS: list[Mirror] = [
             "simulated by scripts/experiments/fullmarks/sota_documents.py, which clicks the top of "
             "the retrained structural ranking at every step. The harness's more_walk='detector' (#4637) "
             "is an experiment arm that walks a photo dataset's 'more' on the detector's top; the "
-            "default, 'seed', is the app's row."
+            "default, 'seed', is the app's row. Likewise new_walk='hard' (#4671) is an arm that takes "
+            "the Hard pick in 'new' instead of the atlas's; the default, 'atlas', is the app's row."
         ),
     ),
     Mirror(
@@ -338,14 +342,24 @@ MIRRORS: list[Mirror] = [
         kind="default",
         note=(
             "issue #3267 made the Autopilot opening a parameter, so the harness now has a "
-            "spelling of the app's own opening - 'g3@top,b4@mid,g20+dry1/16@top' since #4282 "
-            "(it was 'g3@top,b4@mid') - that a study's control arm "
+            "spelling of the app's own opening - 'g3@top,b4@mid' again since #4740 (from #4282 "
+            "to #4740 it was 'g3@top,b4@mid,g20+dry1/16@top', the More walk) - that a study's control arm "
             "runs. If goodToStart/badToStart move, or the opening stops being 'top of the "
             "seed sort then its cutoff', this constant has to move with them or every #3267 "
             "study measures its deviations from an opening nobody ships. "
             "tests_lib/detectors/test_startup_schedule.py pins it two ways: literally against "
             "GOOD_TARGET/BAD_TARGET, and behaviourally by requiring it to reproduce a "
             "default-arm run click for click."
+        ),
+        divergence=(
+            "Since #4731 the app's Good phase also ends when its walk runs dry - moreDryRun picks in "
+            "a row without a Good, with a Good in hand - and the More walk is then spent. The "
+            "schedule grammar cannot say that: a round's '+dry<m>/<w>' stop fires with no Good in "
+            "hand, and a later round never learns an earlier one ran dry. So PRODUCTION_STARTUP is "
+            "the app's opening only for a session whose Good walk finds its third Good before 16 "
+            "misses in a row; the default arm (no schedule) is the app in every session. A #3267 "
+            "study comparing schedules against PRODUCTION_STARTUP compares openings that both lack "
+            "the dry exit."
         ),
     ),
     Mirror(
@@ -518,7 +532,8 @@ MIRRORS: list[Mirror] = [
             "here - or a changed fold rule or ordering - has to reach the harness or its "
             "default arm trains a detector the app no longer ships. Note "
             "_app_train_and_calibrate is the single-vector path and reproduces the same shape. "
-            "The head is the one knob mirrored by name: this function's `hidden_dim` must equal "
+            "The head is the one knob mirrored by name: this function's `hidden_dim` "
+            "(LINEAR_SVM_PRIOR_HEAD since #4785) must equal "
             "`resolve_hidden_dim(step_model.PRODUCTION_HEAD, ...)`, which "
             "tests_lib/detectors/test_harness_linear_head.py pins by training this pipeline for "
             "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
@@ -761,11 +776,17 @@ MIRRORS: list[Mirror] = [
         note=(
             "The label quota (#4643): train_from_labelset - Test, AutoFind, a load and the CLI - "
             "gives the Goods' centroid from the first Good until the resolved labels hold "
-            "GOOD_QUOTA Goods and BAD_QUOTA Bads (label_quota.quota_from_groups), the trained head "
-            "from there, and nothing with no Good. The harness's default arm (label_quota=None on "
+            "GOOD_QUOTA Goods and BAD_QUOTA Bads, or a Good and DRY_BAD_QUOTA Bads (#4731) "
+            "(label_quota.quota_from_groups), the trained head from there, and nothing with no Good. "
+            "A detector made from a typed query (its text_query) gives that query's own set instead "
+            "of the centroid and of nothing, from its first vote until the trained head (#4758, "
+            "install_query_head). The harness's default arm (label_quota=None on "
             "the app trainer) scores the withheld half the same way: a row from the first Good, "
             "the centroid's metrics under the quota (label_quota.label_quota, delegated), the "
-            "head's from it. If the app's tiers move - a new tier, a quota read from somewhere "
+            "head's from it; a run that opens on a typed query (seed_scores, no seed_examples) "
+            "writes a row from the first vote, the typed query's set under the quota "
+            "(_query_test, detector_tier 'query'; query_tier=False is the arm before). "
+            "If the app's tiers move - a new tier, a quota read from somewhere "
             "other than the counts, a tier that needs a Bad - the harness's rows have to move "
             "with them, and so do the notes that describe them (curves.py, viewer.py and its "
             "reading note, the state-of-the-app and grid-experiments skills)."
@@ -795,9 +816,39 @@ MIRRORS: list[Mirror] = [
             "haystack it scores (scoring_rows_for_snap's rows: the active dataset in Test, the "
             "searched one in a cold Find); the harness hands it each Good vote's training "
             "vector (the style's good_vec, else good_training_vec - the vectors its trained "
-            "head fits on) and the withheld half's scorer (_centroid_test). If the app changes "
-            "which vectors average, or which corpus the midpoint is cut on, or gives the line a "
-            "balance, change the harness to match."
+            "head fits on) and the withheld half's scorer (_centroid_test). Both draw the line by "
+            "CENTROID_LINE_RULE at a balance (#4732): the app at the detector's own "
+            "(_centroid_beta), the harness at the run's beta. Both count unvoted media only "
+            "(#4779): the app masks the labelset's labelled media out of the line's count "
+            "(fit_centroid's line_mask), and the harness's withheld half holds no voted media. "
+            "If the app changes which vectors average, which corpus the line is cut on, or "
+            "which balance draws it, change the harness to match."
+        ),
+    ),
+    Mirror(
+        id="detectors.label_quota_query",
+        app="py:vtscore.detectors.labelset_training.install_query_head",
+        harness="vtscore/eval/step_trainers.py::_query_step",
+        kind="ported",
+        note=(
+            "A typed-query detector's head under the label quota (#4758). The app embeds the "
+            "detector's text_query in the searched collection's text slot, scores every media of "
+            "it there and fits query_head.fit_query_head: the query's unit vector as a "
+            "Linear(D, 1), cut by centroid_cut(rule='text') - text_sort_cuts' display line - at the "
+            "detector's balance, over every media scored, centred in its gap (the centroid's "
+            "_gap_centre). The harness reads the same cosines off the opening's text sort "
+            "(seed_scores, the run's typed query embedded in its text space) and builds the same "
+            "logit, CENTROID_LOGIT_SCALE * (cosine - cut), with the cut drawn by the same two "
+            "functions on the withheld half. If the app changes the rule, the balance it draws "
+            "at, the corpus the line counts or the head's logit, change the harness to match."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness never re-embeds the query - seed_scores already holds the "
+            "cosine the app's head computes, and on a paired arm the text space is not the one the "
+            "run's vectors are in, so the step scores by media id (StepModel.id_scores). Its line "
+            "is drawn on the withheld half, the corpus a Test there searches, as the centroid's "
+            "is; on the labelled collection the app's line also counts the voted media, as the "
+            "text sort on screen does."
         ),
     ),
     Mirror(

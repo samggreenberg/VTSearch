@@ -25,7 +25,7 @@
       [isBad]="false"
       [unavailable]="true"
       [spinningVote]="null"
-      [showHint]="false"
+      [hint]="null"
     ></vt-voting-overlay>
   } @else if (!media()) {
     <div class="placeholder-pane empty-state" role="status">
@@ -34,8 +34,8 @@
       <p class="placeholder-hint">{{ placeholderHint() }}</p>
     </div>
   } @else {
-    <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass()">
-      @switch (mediaType) {
+    <div class="media-swipe-wrapper" [class]="viewer === 'audio' ? '' : swipeClass()">
+      @switch (viewer) {
         @case ('audio') {
           <vt-audio-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
         }
@@ -45,6 +45,7 @@
             [variant]="payloadVariant()"
             [pendingBadConfirm]="pendingBadConfirm()"
             [highlightBox]="highlightBox"
+            [regionDraw]="regionDrawOffered"
             (regionBoxChange)="onRegionBoxChange($event)"
             (armedConfirmCanceled)="onArmedConfirmCanceled()"
           ></vt-image-viewer>
@@ -56,9 +57,6 @@
           <vt-text-viewer [media]="media()!" [variant]="payloadVariant()"></vt-text-viewer>
         }
         @case ('document') {
-          <vt-document-viewer [media]="media()!" [variant]="payloadVariant()"></vt-document-viewer>
-        }
-        @default {
           <vt-document-viewer [media]="media()!" [variant]="payloadVariant()"></vt-document-viewer>
         }
       }
@@ -90,18 +88,29 @@
       </div>
     }
 
-    @if (mediaType === 'image' && imageViewer(); as imageViewer) {
+    @if (showInPhotoOffered()) {
+      <button
+        type="button"
+        class="btn btn--toolbar"
+        (click)="openSourcePhoto()"
+        title="Open the photo this item was cut from, with the item outlined"
+      >Show in photo</button>
+    }
+
+    @if (viewer === 'image' && imageViewer(); as imageViewer) {
       <div class="image-view-controls">
-        <button
-          class="btn btn--toolbar ivc-btn ivc-btn-toggle"
-          [class.active]="imageViewer.marqueeMode()"
-          (click)="imageViewer.toggleMarqueeMode()"
-          [title]="marqueeTitle"
-          [attr.aria-label]="marqueeAriaLabel"
-          [attr.aria-pressed]="imageViewer.marqueeMode()"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2.5" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5"/></svg>
-        </button>
+        @if (regionDrawOffered) {
+          <button
+            class="btn btn--toolbar ivc-btn ivc-btn-toggle"
+            [class.active]="imageViewer.marqueeMode()"
+            (click)="imageViewer.toggleMarqueeMode()"
+            [title]="marqueeTitle"
+            [attr.aria-label]="marqueeAriaLabel"
+            [attr.aria-pressed]="imageViewer.marqueeMode()"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2.5" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5"/></svg>
+          </button>
+        }
         @if (regionOverlayCapable) {
           <button
             class="btn btn--toolbar ivc-btn ivc-btn-toggle"
@@ -114,7 +123,9 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4l6 6-8 8-6-6z"/><path d="M6 12l-2.5 6.5L10 16z" fill="currentColor"/></svg>
           </button>
         }
-        <span class="ivc-sep" aria-hidden="true"></span>
+        @if (regionDrawOffered) {
+          <span class="ivc-sep" aria-hidden="true"></span>
+        }
         <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left"><vt-icon type="rotate-ccw" [size]="16"></vt-icon></button>
         <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right (])" aria-label="Rotate image right"><vt-icon type="rotate-cw" [size]="16"></vt-icon></button>
         <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.zoomOut()" title="Zoom out (-)" aria-label="Zoom out"><vt-icon type="zoom-out" [size]="16"></vt-icon></button>
@@ -152,7 +163,8 @@
       [isBad]="isBad"
       [disabled]="isVoting() || disabled()"
       [spinningVote]="spinningVote()"
-      [showHint]="startVotingHint()"
+      [hint]="voteHint()"
+      [hintCounts]="voteHintCounts()"
       (voted)="castVote($event)"
     ></vt-voting-overlay>
 
@@ -198,3 +210,7 @@
     </div>
   }
 </div>
+
+@if (sourcePhoto.request(); as request) {
+  <vt-source-photo-modal [request]="request" (closed)="sourcePhoto.close()" />
+}

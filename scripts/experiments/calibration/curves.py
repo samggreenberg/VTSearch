@@ -51,7 +51,8 @@ into a good-looking curve:
 
 1. **Average over a shrinking denominator.**  The main metric frame starts at
    a run's first Good (#4643; at its first Good *and* Bad in a frame written
-   before it) — before that there is no detector, no threshold and no row.
+   before it; at its first vote in a run that opens on a typed query since
+   #4758) — before that there is no detector, no threshold and no row.
    Left that way, a starved cell is not in the average, and an arm that
    starves on a third of its cells gets its mean computed over the two thirds
    that worked.  But a user at that click has a labelset Test refuses, and
@@ -93,8 +94,10 @@ The app shows the text sort until the Hard phase (``app_trained``), but the
 user can export the labels or run Test at any click, and either retrains from
 them, so a row is what the user can take away at that click.  Since #4643 that
 is what the label quota gives: from the first Good the Goods' centroid, until
-the labels hold 3 Goods and 4 Bads, and the trained head from there - the
-harness writes the row as that detector and says which in ``detector_tier``.
+the labels hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731), and the trained head from there - the
+harness writes the row as that detector and says which in ``detector_tier``.  A
+detector made from a typed query gives that query's own set instead, from the
+first vote until the trained head (#4758, ``detector_tier`` ``query``).
 Nothing here reads ``app_trained`` or ``detector_tier``: a row is drawn the
 same whichever detector made it, and an analyzer about the session filters on
 ``app_trained`` itself.
@@ -568,7 +571,8 @@ NO_DETECTOR = "__no_detector"
 #: toward, and Test on it is refused (a 400 and a toast,
 #: ``vtsearch/routes/detectors/scoring.py``).  One Good is enough since #4643 -
 #: under the label quota Test gives the Goods' centroid - so in a frame written
-#: since then these are the clicks before the first Good.  A frame written
+#: since then these are the clicks before the first Good (a run that opens on a
+#: typed query has none since #4758: its Test gives the query's set from vote 1).  A frame written
 #: before it starts at the first Good *and* Bad, when Test refused a labelset
 #: of one class too, so its earlier clicks are scored the same way: each frame
 #: is read as the app that wrote it behaved.  The rule is the same either way -
@@ -707,7 +711,8 @@ def score_empty_sets(
 
     The rows a run writes start at its first click with a Good vote (#4643:
     from there Test gives the Goods' centroid; in a frame written before it,
-    at its first Good and Bad), so before that, and at every click of a run
+    at its first Good and Bad; at its first vote in a typed-query run since
+    #4758, whose Test gives the query's own set), so before that, and at every click of a run
     that never got one, the mean
     had no value and simply left the run out: the sessions failing hardest
     were the ones missing from the average.  This adds a row for each of those

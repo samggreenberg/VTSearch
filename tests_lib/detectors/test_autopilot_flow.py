@@ -93,20 +93,34 @@ def _phase(
     span: Status = "red",
     remaining: float = 1000,
     more_done: bool = False,
+    more_target: int = MORE_TARGET,
 ) -> str:
     return next_phase(
-        good, bad, remaining_unlabeled=remaining, smart=smart, stable=stable, span=span, more_done=more_done
+        good,
+        bad,
+        remaining_unlabeled=remaining,
+        smart=smart,
+        stable=stable,
+        span=span,
+        more_done=more_done,
+        more_target=more_target,
     )
+
+
+#: A More walk as #4282 shipped it (20 Goods): off on photos since #4740, but the
+#: walk's own rules still run where a target is set, and a document's walk (#4488)
+#: shares its run-of-misses machinery.
+WALK = 20
 
 
 class TestPortedConstants:
     """The app's numbers, asserted literally so a drift fails loudly."""
 
     def test_vote_targets_match_autopilot_initial_state(self):
-        # frontend INITIAL_STATE: goodToStart 3, badToStart 4, moreToStart 20,
-        # moreDryRun 16 (#4282).
+        # frontend INITIAL_STATE: goodToStart 3, badToStart 4, moreToStart 0
+        # (the photo walk is off since #4740), moreDryRun 16 (a document's walk).
         assert (GOOD_TARGET, BAD_TARGET) == (3, 4)
-        assert (MORE_TARGET, MORE_DRY_RUN) == (20, 16)
+        assert (MORE_TARGET, MORE_DRY_RUN) == (0, 16)
 
     def test_indicator_gates_match_labeling_progress(self):
         # _compute_smart_status / _compute_stable_status: "Need at least 5 good
@@ -142,20 +156,24 @@ class TestPhaseMachine:
         assert _phase(GOOD_TARGET, 0) == "bad"
         assert _phase(GOOD_TARGET, BAD_TARGET - 1) == "bad"
 
-    def test_the_more_walk_follows_the_quorum(self):
-        """#4282: back to the top of the seed sort until MORE_TARGET goods."""
-        assert _phase(GOOD_TARGET, BAD_TARGET) == "more"
-        assert _phase(MORE_TARGET - 1, BAD_TARGET) == "more"
+    def test_photos_go_from_bad_straight_to_hard(self):
+        """#4740: the default photo opening has no More walk."""
+        assert _phase(GOOD_TARGET, BAD_TARGET) == "hard"
+
+    def test_a_walk_follows_the_quorum_where_one_is_set(self):
+        """#4282's walk: back to the top of the seed sort until its Good target."""
+        assert _phase(GOOD_TARGET, BAD_TARGET, more_target=WALK) == "more"
+        assert _phase(WALK - 1, BAD_TARGET, more_target=WALK) == "more"
 
     def test_hard_once_the_walk_meets_its_target(self):
-        assert _phase(MORE_TARGET, BAD_TARGET) == "hard"
+        assert _phase(WALK, BAD_TARGET, more_target=WALK) == "hard"
 
     def test_hard_once_the_walk_has_ended(self):
         assert _phase(GOOD_TARGET, BAD_TARGET, more_done=True) == "hard"
 
     def test_the_walk_target_is_capped_by_what_the_collection_can_supply(self):
-        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=2) == "more"
-        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=0) == "exhausted"
+        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=2, more_target=WALK) == "more"
+        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=0, more_target=WALK) == "exhausted"
 
     def test_new_only_once_smart_and_stable_are_green(self):
         """The app switches to diversity on the indicators, never on parity."""
@@ -302,10 +320,10 @@ class TestAutopilotFlow:
     def test_advances_through_the_initial_phases(self):
         flow = AutopilotFlow()
         assert flow.update(GOOD_TARGET, 0, 500, None) == "bad"
-        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "more"
+        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "hard"
 
     def _in_walk(self) -> AutopilotFlow:
-        flow = AutopilotFlow()
+        flow = AutopilotFlow(more_target=WALK)
         flow.update(GOOD_TARGET, 0, 500, None)
         assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "more"
         return flow
@@ -333,13 +351,13 @@ class TestAutopilotFlow:
 
     def test_the_walk_ends_at_its_target(self):
         flow = self._in_walk()
-        assert flow.update(MORE_TARGET, BAD_TARGET, 500, None) == "hard"
+        assert flow.update(WALK, BAD_TARGET, 500, None) == "hard"
 
     def test_the_walk_never_resumes(self):
         """Once it has ended the walk is spent, as a schedule round is."""
         flow = self._in_walk()
-        flow.update(MORE_TARGET, BAD_TARGET, 500, None)
-        assert flow.update(MORE_TARGET - 1, BAD_TARGET, 500, None) == "hard"
+        flow.update(WALK, BAD_TARGET, 500, None)
+        assert flow.update(WALK - 1, BAD_TARGET, 500, None) == "hard"
 
     def test_only_votes_cast_in_the_walk_count(self):
         """The four Bads of the Bad phase are not walk misses."""
@@ -424,7 +442,7 @@ class TestDocumentStop:
         assert _doc_phase(GOOD_TARGET, BAD_TARGET - 1) == "bad"
 
     def test_the_walk_has_no_good_target(self):
-        assert _doc_phase(MORE_TARGET + 50, BAD_TARGET) == "more"
+        assert _doc_phase(WALK + 50, BAD_TARGET) == "more"
 
     def test_running_dry_is_done(self):
         assert _doc_phase(GOOD_TARGET, BAD_TARGET + MORE_DRY_RUN, ran_dry=True) == "done"
@@ -451,7 +469,7 @@ class TestDocumentStop:
 
     def test_the_flow_walks_past_the_good_target(self):
         flow = self._in_walk()
-        assert flow.update(MORE_TARGET + 5, BAD_TARGET, 500, None) == "more"
+        assert flow.update(WALK + 5, BAD_TARGET, 500, None) == "more"
 
     def test_the_walk_counts_after_more_done_latched(self):
         """Retrain mode latches ``more_done``; on documents the walk still runs, and still stops."""

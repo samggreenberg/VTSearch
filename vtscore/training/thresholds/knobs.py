@@ -304,7 +304,11 @@ ACQUISITION_ARGMAX_FACTOR: float | None = None
 #: +0.019 and after the check +0.000 / +0.003 / +0.008; never resolvably worse.
 #: 0.25 was close but behind on every read; sampling at the line itself lost 3.7
 #: Goods at beta 4.  ``None`` restores the line - 4 re-cut, which stays the
-#: fallback for a detector with no labels line.
+#: fallback for a detector with no labels line.  A target that moves with the
+#: preset was priced too (#4746,
+#: ``docs/experiments/2026-10-10-acq-target-4746/REPORT.md``): 0.75 at beta 1/4
+#: and 1 (today's app, 5 seeds) and 0.25 at beta 4 (#3546's cells) are level
+#: with 0.5 on the objective's session mean, so 0.5 holds at every preset.
 ACQUISITION_TARGET_PRECISION: float | None = 0.5
 
 

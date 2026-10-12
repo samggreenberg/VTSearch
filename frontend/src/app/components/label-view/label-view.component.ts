@@ -4,6 +4,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { Subscription, pairwise } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import type { VoteHintCounts, VoteHintId } from '../center-panel/voting-overlay/voting-overlay.component';
 import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import {
@@ -20,6 +21,7 @@ import { SortingApiService } from '../../services/sorting-api.service';
 import { PairScopeService } from '../../services/pair-scope.service';
 import { SortRunnerService } from '../../services/sort-runner.service';
 import { adaptivePoll } from '../../services/adaptive-poll';
+import { DetectorsCrudApiService } from '../../services/detectors-crud-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
@@ -33,6 +35,7 @@ import { PanelHideStateService, type PanelSide } from '../../services/panel-hide
 import { AutopilotStateService, type AutopilotPhase } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { SourcePhotoService } from '../../services/source-photo.service';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
@@ -82,6 +85,7 @@ const AUTOPILOT_CHECK_INTRO =
 })
 export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private sortingApi = inject(SortingApiService);
+  private detectorsCrudApi = inject(DetectorsCrudApiService);
   private detectorsFindApi = inject(DetectorsFindApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private labelSession = inject(LabelSessionService);
@@ -97,6 +101,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private embedderCaps = inject(EmbedderCapabilityService);
   private activeContext = inject(ActiveContextService);
   private newThingFlows = inject(NewThingFlowsService);
+  private sourcePhoto = inject(SourcePhotoService);
   private toast = inject(ToastService);
   panelState = inject(LabelViewPanelStateService);
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
@@ -171,22 +176,51 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly autopilotRun = toSignal(this.autopilotStateService.state$, { requireSync: true });
 
   /**
-   * Toasty's "start voting" hint over the Good / Bad buttons (#4680): Autopilot
-   * is running on a detector that had no labels, nothing has been voted yet,
-   * and there is an item on screen to vote on. The first vote ends it.
+   * Toasty's hint over the Good / Bad buttons (#4680, #4807), or `null`. While
+   * Autopilot runs with an item on screen: `start-voting` on a detector that
+   * has no labels and nothing voted yet (the first vote ends it), then, on the
+   * run that trains the detector (as the hand-off, see
+   * `AutopilotStateService.startedUntrained`), one hint per phase until the
+   * run reaches Done, when the hand-off under the Dashboard button takes over.
    */
-  readonly startVotingHint = computed(() => {
-    if (this.autopilotRun().phase === 'idle') return false;
+  readonly voteHint = computed<VoteHintId | null>(() => {
+    const run = this.autopilotRun();
+    if (run.phase === 'idle') return null;
     const votes = this.voteState;
-    return (
-      votes.votesLoaded &&
+    if (!votes.votesLoaded || this.mediaState.selectedMedia === null || this.centreExhausted()) return null;
+    if (
       votes.labelsetGoodCount === 0 &&
       votes.labelsetBadCount === 0 &&
       votes.goodVotes.size === 0 &&
-      votes.badVotes.size === 0 &&
-      this.mediaState.selectedMedia !== null &&
-      !this.centreExhausted()
-    );
+      votes.badVotes.size === 0
+    ) {
+      return 'start-voting';
+    }
+    if (!this.autopilotStateService.startedUntrained() || run.doneReached) return null;
+    switch (run.phase) {
+      case 'good':
+        return 'find-goods';
+      case 'bad':
+        return 'find-bads';
+      case 'more':
+        return 'find-more';
+      case 'hard':
+      case 'new':
+        return 'keep-voting';
+      default:
+        return null;
+    }
+  });
+
+  /** The counts the phase hints say: Goods and Bads so far against Autopilot's targets. */
+  readonly voteHintCounts = computed<VoteHintCounts>(() => {
+    const run = this.autopilotRun();
+    return {
+      goods: this.voteState.labelsetGoodCount,
+      goodsNeeded: run.goodToStart,
+      bads: this.voteState.labelsetBadCount,
+      badsNeeded: run.badToStart,
+    };
   });
 
   /**
@@ -1134,7 +1168,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaContextRequest(event: { id: number; x: number; y: number }): void {
     const media = this.mediaState.mediasSignal().find((m) => m.id === event.id);
-    this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '');
+    this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '', {
+      showInPhoto: this.sourcePhoto.offered(),
+    });
     this.contextMenuMediaId = event.id;
     this.contextMenuX = event.x;
     this.contextMenuY = event.y;
@@ -1152,6 +1188,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.openSeedNewDetector(mediaId);
     } else if (action === 'crop-sort' || action === 'crop-seed') {
       this.openCropOverlay(mediaId, action === 'crop-sort' ? 'sort' : 'seed');
+    } else if (action === 'show-in-photo') {
+      this.sourcePhoto.open(mediaId);
     }
   }
 
@@ -1506,13 +1544,35 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.triggerAutopilotTextSort();
     } else {
       // The re-sort prompt swaps in a single fresh example, replacing any
-      // multi-example seed stack the detector started with.
+      // multi-example seed stack the detector started with. It steers the
+      // sort, as a seed importer's example does, without being a Good the
+      // user voted.
       this.labelSession.mediaExample = result.value;
       this.labelSession.textQuery = '';
-      this.labelSession.examples = [{ type: 'media', value: result.value }];
+      this.labelSession.examples = [{ type: 'media', value: result.value, labeled: false }];
       this.sortState.setSelectMode('top');
       this.triggerAutopilotMediaSort();
     }
+    this.saveResortExample();
+  }
+
+  /**
+   * Save the re-sort's example to the detector (#4801). Under the label quota
+   * a typed-query detector's Find gives its stored query's own set (#4758),
+   * and the next Train session opens on it, so a re-sort kept only here would
+   * leave Find, and the next opening, on the old query. The Manual sort bar
+   * saves nothing: it is a browse, not the detector's query.
+   */
+  private saveResortExample(): void {
+    const name = this.trainableModelName();
+    if (!name) return;
+    this.detectorsCrudApi.setExamples(name, this.labelSession.examples).subscribe({
+      error: () =>
+        this.toast.error({
+          message: "Couldn't save the new example to the detector",
+          detail: 'Find keeps the example it had until it is saved.',
+        }),
+    });
   }
 
   private resetResortSortTally(): void {

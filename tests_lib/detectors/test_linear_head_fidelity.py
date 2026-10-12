@@ -52,6 +52,7 @@ from vtscore.training.mlp import (
     LINEAR_HEAD,
     LINEAR_LOGREG_HEAD,
     LINEAR_SVM_HEAD,
+    LINEAR_SVM_PRIOR_HEAD,
     build_model,
     build_model_from_weights,
     train_model,
@@ -307,11 +308,12 @@ class TestConvergedLogregFidelity:
 
 
 class TestProductionPathTrainsTheSVMHead:
-    """``train_and_threshold`` (the Find path) hands back a one-layer SVM head.
+    """``train_and_threshold`` (the Find path) hands back a one-layer SVM head, started from the Goods' centroid.
 
     Guards the shipped head end-to-end: a revert to ``_auto_hidden_dim`` here
-    reinstates the MLP, and a revert to ``LINEAR_HEAD`` reinstates the logistic
-    fit - both fail here rather than sliding back in silently.
+    reinstates the MLP, a revert to ``LINEAR_HEAD`` the logistic fit, and a
+    revert to ``LINEAR_SVM_HEAD`` the plain SVM #4785 replaced - all fail here
+    rather than sliding back in silently.
     The vote/labelset path (``_train_and_score_xy``) and the load-time
     re-derivation (``train_detector_from_origins``) are pinned the same way from
     the app tier, where their snapshot fixtures live.
@@ -421,7 +423,7 @@ class TestProductionPathTrainsTheSVMHead:
 
         # At least the calibration folds plus the final fit.
         assert len(seen) >= 2
-        assert all(h == LINEAR_SVM_HEAD for h in seen), f"non-SVM train_model calls: {seen}"
+        assert all(h == LINEAR_SVM_PRIOR_HEAD for h in seen), f"not the shipped head's train_model calls: {seen}"
 
     def test_region_bag_uncached_path_uses_the_svm_head(self, monkeypatch):
         """A flooded region label set calibrates + trains on the SVM head end-to-end (#2824)."""
@@ -432,7 +434,7 @@ class TestProductionPathTrainsTheSVMHead:
         model, _threshold = train_and_threshold(X_list, y_list, groups=groups)
 
         assert len(seen) >= 2
-        assert all(h == LINEAR_SVM_HEAD for h in seen), f"non-SVM train_model calls: {seen}"
+        assert all(h == LINEAR_SVM_PRIOR_HEAD for h in seen), f"not the shipped head's train_model calls: {seen}"
         assert [type(layer) for layer in model] == [torch.nn.Linear]
 
     def test_region_bag_cached_path_uses_the_svm_head(self, monkeypatch):
@@ -447,7 +449,7 @@ class TestProductionPathTrainsTheSVMHead:
         model, _threshold = train_and_threshold(X_list, y_list, det_ctx=det_ctx, groups=groups)
 
         assert len(seen) >= 2
-        assert all(h == LINEAR_SVM_HEAD for h in seen), f"non-SVM train_model calls: {seen}"
+        assert all(h == LINEAR_SVM_PRIOR_HEAD for h in seen), f"not the shipped head's train_model calls: {seen}"
         assert [type(layer) for layer in model] == [torch.nn.Linear]
         # The fold orderings were cached for a later no-retrain Inclusion slide.
         assert det_ctx.calibration_cache is not None

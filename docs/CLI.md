@@ -53,7 +53,8 @@ python app.py --autodetect --dataset data.pkl --user alice --api-key "$ALICE_KEY
 The key is checked against `data/api_keys.json` (the same file the server's
 `--login api_key` uses); on success the run reads `alice`'s AutoFind list and
 results exporter, and the imported dataset is saved to `alice`'s dashboard.
-Without `--user`, the `default` user (and the `--settings` file) applies.
+Without `--user`, the `default` user (and the `--settings` file) applies. A
+[pipeline file](#pipeline-file) run takes the same two flags.
 
 ### Saving the dataset to the dashboard (`--tempimport`)
 
@@ -337,6 +338,27 @@ result the detector produces carries a `balance` object beside its
 `threshold` (`status` `unchecked`, with `count`), which the JSON exporters
 write out with the hits. See [the line state](api/labeling.md#the-line-state).
 
+**A detector with too few labels runs as its typed query, or as the Goods'
+centroid, and the run says so.** Under the label quota (3 Goods and 4 Bads,
+or a Good and 16 Bads) there is no trained head, here as in the app's Test and
+AutoFind (see [find-label](api/find.md#find-label-score--label-the-active-dataset)).
+A detector made from a typed query (its `text_query`, else its first `text`
+example) scores as that query's own set: each item's cosine to the query in
+the dataset's text embedder, cut where the text sort draws its line at the
+detector's balance (#4758). It needs no label, so such a detector runs before
+its first one; until #4758 the run stopped with `Detector '<name>' has no
+labels.` A detector with no typed query scores as the Goods' centroid from its
+first Good, and with no Good it still stops the run. Either way the run prints
+a line naming what the detector scored as and what it still owes -
+`Detector 'Dogs' has 1 Good and 0 Bad labels, under the quota, so it scores as
+its typed query's own set ('a dog'), not a trained detector (2 more Goods and
+4 more Bads, or 16 more Bads for one).` - which is a `detector_query` or a
+`detector_centroid` event under `--progress-format json`, carrying `detector`,
+`tier` and the quota's counts (see the [event
+reference](../vtscore/docs/packages/cli.md#event-reference)). A query's head
+scores in the text embedder, so a `portable_detector` bundle of one names that
+embedder.
+
 **How to get the files:**
 
 - **Dataset file** (only for `--dataset`; `--importer` reads the source media directly): a demo dataset loaded once in the web UI leaves a cached `.pkl` under `data/embeddings/`. The currently active dataset can also be downloaded as a pickle through the API, `GET /api/dataset/export` (see [`docs/api/datasets.md`](api/datasets.md#export-dataset)); the dashboard has no menu item for it.
@@ -543,7 +565,8 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --progres
 ```
 
 The two choices are `text` (default, prose) and `json` (NDJSON events). The
-event schema is defined in `vtscore.cli_progress`.
+event schema is defined in `vtscore.cli_progress`. A [pipeline
+file](#pipeline-file) run emits the same events.
 
 A plugin can also raise a **notification** — a message it wants the user to
 see about something it decided not to fail on ("skipped 3 unreadable files").
@@ -617,10 +640,22 @@ file and pass it via `--pipeline`:
 python app.py --pipeline pipeline.yaml
 ```
 
-The YAML supports every knob the `--autodetect` flag set does. It cannot be
-combined with the other autodetect flags; declare everything inline. Like the
+The YAML covers the source, settings file, detectors, chunking, streaming,
+label import and exporter. The flags for those cannot be combined with
+`--pipeline`: the run is refused with an error naming the flag, so declare them
+in the file. `--dry-run` has no pipeline form and is refused too. Like the
 flags, a pipeline run saves its dataset to the dashboard unless the file sets
 `tempimport: true`.
+
+The flags that configure the process rather than describe the run apply to a
+pipeline run as they do to `--autodetect`: `--user` / `--api-key` (see [Which
+user's AutoFind list runs](#which-users-autofind-list-runs)),
+`--progress-format`, `-v`, and the admin overrides under [Web server
+modes](#web-server-modes) (`--solo-media-type`, `--hide-plugin`, …):
+
+```bash
+python app.py --pipeline nightly.yaml --user alice --api-key "$ALICE_KEY" --progress-format json
+```
 
 ```yaml
 # Pick exactly one source.
@@ -735,8 +770,8 @@ keeps the console quiet — including the per-request access log. Pass `-v` to
 raise the level to `INFO`, which turns on the dev-server access log (one
 `GET /api/... 200` line per request) plus VTSearch's own INFO records; `-vv`
 raises it to `DEBUG`. The flag only raises verbosity, so `-v` on top of
-`VTSEARCH_LOG_LEVEL=debug` stays at DEBUG. It applies to both the web server and
-`--autodetect`:
+`VTSEARCH_LOG_LEVEL=debug` stays at DEBUG. It applies to the web server,
+`--autodetect` and `--pipeline`:
 
 ```bash
 python app.py -v             # INFO + access log

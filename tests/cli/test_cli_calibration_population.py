@@ -194,7 +194,7 @@ class TestTrainingIsHandedTheRoutedSnapshot:
 
         captured: dict[str, Any] = {}
 
-        def _fake_train(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None):
+        def _fake_train(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None, text_query=""):
             det_ctx.embedder = "fake"
             det_ctx.model = _constant_mlp()
             det_ctx.threshold = 0.5
@@ -241,7 +241,7 @@ class TestTrainingIsHandedTheRoutedSnapshot:
         monkeypatch.setattr("vtscore.detectors.input_spec.extract_input_spec_from_medias", lambda _m: None)
         captured: dict[str, Any] = {}
 
-        def _fake_train(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None):
+        def _fake_train(det_ctx, labelset, *, media_type, snap, haystack_for=None, on_progress=None, text_query=""):
             det_ctx.embedder = "fake"
             det_ctx.model = _constant_mlp()
             det_ctx.threshold = 0.5

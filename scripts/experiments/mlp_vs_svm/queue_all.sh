@@ -14,7 +14,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT=/exp/sgreenberg/projects/vts-mlpsvm
-LOGS=/exp/sgreenberg/mlp-svm/logs
+LOGS=/expscratch/sgreenberg/mlp-svm/logs
 mkdir -p "$LOGS"
 
 GRES="${MLPSVM_GRES:-gpu:a100:1}"
@@ -58,4 +58,4 @@ S=$(sbatch --parsable --dependency=afterany:$B:$A:$C --job-name=mlpsvm-sum --mem
   --cpus-per-task=4 --time=0:30:00 --partition=gpu --output="$LOGS/summarize-%j.out" \
   --wrap="$STAGE_WRAP && python summarize.py")
 echo "summarize: $S"
-echo "Report will land at /exp/sgreenberg/mlp-svm/results/REPORT.md"
+echo "Report will land at /expscratch/sgreenberg/mlp-svm/results/REPORT.md"

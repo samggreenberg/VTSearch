@@ -75,18 +75,43 @@ describe('VotingOverlayComponent', () => {
     expect(document.activeElement).not.toBe(good);
   });
 
-  it("has no start-voting hint by default", () => {
+  it('has no hint over the buttons by default', () => {
     expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
   });
 
-  it("puts Toasty's start-voting hint over the buttons when showHint is true (#4680)", async () => {
-    fixture.componentRef.setInput('showHint', true);
+  it("puts Toasty's start-voting hint over the buttons when asked (#4680)", async () => {
+    fixture.componentRef.setInput('hint', 'start-voting');
     await settleZoneless(fixture);
     const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
     expect(hint).toBeTruthy();
     expect(hint.classList).toContain('toasty-hint--above');
-    expect(hint.textContent).toContain('Click Bad / Good');
-    expect(hint.textContent).toContain('Autopilot');
+    expect(hint.textContent).toContain('Autopilot picked this item for you');
+  });
+
+  it("says what each Autopilot phase is after, with its counts, and what a test's pick is (#4807)", async () => {
+    const text = () => (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
+    fixture.componentRef.setInput('hint', 'find-goods');
+    fixture.componentRef.setInput('hintCounts', { goods: 1, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
+    await settleZoneless(fixture);
+    expect(text()).toContain('Autopilot needs 3 Goods to start training');
+    expect(text()).toContain("you've found 1");
+
+    fixture.componentRef.setInput('hint', 'find-bads');
+    fixture.componentRef.setInput('hintCounts', { goods: 3, goodsNeeded: 3, bads: 2, badsNeeded: 4 });
+    await settleZoneless(fixture);
+    expect(text()).toContain('Autopilot needs 4 Bads too, and has 2');
+
+    fixture.componentRef.setInput('hint', 'keep-voting');
+    await settleZoneless(fixture);
+    expect(text()).toContain('retrains on every vote');
+
+    fixture.componentRef.setInput('hint', 'test-vote');
+    await settleZoneless(fixture);
+    expect(text()).toContain("picks from both sides of your detector's line");
+
+    fixture.componentRef.setInput('hint', null);
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
   });
 
   // Zoneless staleness canary: the flash class is added in a bound `(click)`

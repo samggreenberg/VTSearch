@@ -183,14 +183,35 @@ export class ActiveContextService {
    * are skipped, so callers can pass a signal's value without branching.
    */
   mediaUrl(path: string, extra?: Record<string, string>): string {
-    const params: string[] = [];
-    const ds = this.datasetIdSubject.value;
-    if (ds) params.push(`dataset_id=${encodeURIComponent(ds)}`);
-    const model = this.modelIdSubject.value;
-    if (model) params.push(`detector_id=${encodeURIComponent(model)}`);
-    for (const [key, value] of Object.entries(extra || {})) {
-      if (value) params.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-    }
-    return params.length ? `${path}?${params.join('&')}` : path;
+    return withQuery(path, {
+      dataset_id: this.datasetIdSubject.value,
+      detector_id: this.modelIdSubject.value,
+      ...extra,
+    });
   }
+
+  /**
+   * A media URL for an item of *datasetId*, which need not be the active
+   * dataset: Show in photo (#4750) shows a face crop's photo out of the
+   * Image dataset its import produced, with the Face pair still active.
+   *
+   * It names the dataset alone, never the active detector. The backend
+   * rehydrates a detector's votes whenever a request pairs it with a dataset
+   * other than the one they were derived for
+   * (`ensure_votes_match_active_dataset`), so a photo request carrying the
+   * face detector's id would throw away the face session's votes. The
+   * `HttpClient` counterpart is `DATASET_OVERRIDE`.
+   */
+  mediaUrlIn(datasetId: string, path: string, extra?: Record<string, string>): string {
+    return withQuery(path, { dataset_id: datasetId, ...extra });
+  }
+}
+
+/** *path* with the non-empty entries of *params* as its query string. */
+function withQuery(path: string, params: Record<string, string>): string {
+  const pairs: string[] = [];
+  for (const [key, value] of Object.entries(params)) {
+    if (value) pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+  }
+  return pairs.length ? `${path}?${pairs.join('&')}` : path;
 }
