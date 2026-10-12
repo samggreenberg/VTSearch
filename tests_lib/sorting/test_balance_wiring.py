@@ -292,6 +292,17 @@ class TestTheWeakCheckPrompt:
         ctx.check_ended_votes = n - WEAK_CHECK_COOLDOWN
         assert detector_balance_state(ctx, 1.0)["check_due"] is True
 
+    def test_never_due_on_face_crops_but_separation_still_reported(self):
+        """#4799: a face detector never prompts (#4778 priced it a loss); its d' is still shown."""
+        face = self._weak(_ctx("det-weak-face"))
+        face.media_type = "face"
+        state = detector_balance_state(face, 1.0)
+        assert state["separation"] == pytest.approx(0.4)
+        assert state["check_due"] is False
+        image = self._weak(_ctx("det-weak-image"))
+        image.media_type = "image"
+        assert detector_balance_state(image, 1.0)["check_due"] is True
+
 
 def test_the_planted_ranking_is_what_the_tests_assume():
     ranking, labels = _two_populations(n_high=28)

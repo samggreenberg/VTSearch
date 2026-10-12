@@ -1846,14 +1846,17 @@ def detector_check_prompt(ctx: "DetectorContext", n_votes: int) -> dict[str, Any
     Find, which offers no check (#4317), nor while a check is running, nor on
     a line a check cannot walk (#4489): no ranking - a structural detector's
     line is the verification gate's boundary - or nothing in it unvoted, where
-    a check would be refused.
+    a check would be refused.  Never due on face crops either
+    (:func:`weak_check_prompts`, #4799): there the check's votes cost the
+    session and find nothing.  ``separation`` is still reported.
     """
-    from vtscore.training.thresholds import weak_check_due  # noqa: PLC0415
+    from vtscore.training.thresholds import weak_check_due, weak_check_prompts  # noqa: PLC0415
 
     sep = ctx.labels_line.separation if ctx.labels_line is not None else None
     ranking = ctx.line_ranking
     due = (
         not ctx.find_mode
+        and weak_check_prompts(ctx.media_type)
         and ctx.precision_check_run is None
         and ranking is not None
         and ranking.unvoted_ids(human_voted_ids(ctx)).size > 0
