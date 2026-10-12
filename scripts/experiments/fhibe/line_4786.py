@@ -15,8 +15,10 @@ average (#4631). Per session set and rule: the session mean of Find's F-beta ove
 1-150, paired against today's line, mean and SE over runs, wins and losses.
 
 Rules (each reads only what Test could read at that click; ``@N``: while the labels hold fewer
-than N Bads, today's line after; ``@inf``: at every trained click; ``@sepD``: while the labels
-line's separation d' is below D, at any vote):
+than N Bads, today's line after; ``@inf``: at every trained click; ``@negN``: while the labels
+line's class model holds fewer than N Bads (its held-out ones, about half to two thirds of the
+Bads in hand: what a rule inside the line can read, in Train and in Find alike); ``@sepD``: while
+the labels line's separation d' is below D, at any vote):
 
 * ``today``           the labels line (the app);
 * ``oracle``          the best count on the withheld half, per click (a bound, not a rule);
@@ -73,6 +75,8 @@ COLS = [
     "n_bad",
 ]
 GATES: tuple[float, ...] = (8, 12, 16, 24, 32, 48, 64, math.inf)
+#: The class-model gates: a rule applies while the labels line's model holds fewer than N held-out Bads.
+NEG_GATES: tuple[int, ...] = (4, 6, 8, 12, 16, 20, 24, 32)
 #: The separation gates: a rule applies while the labels line's d' is below D (#4496's weak check reads 1.5).
 SEP_GATES: tuple[float, ...] = (1.5, 2.0, 3.0, 4.0)
 CAPS: tuple[float, ...] = (1, 1.5, 2, 3, 4)
@@ -85,13 +89,15 @@ def gate_tag(n: float) -> str:
 
 
 def gate_tags() -> list[str]:
-    return [gate_tag(n) for n in GATES] + [f"sep{d:g}" for d in SEP_GATES]
+    return [gate_tag(n) for n in GATES] + [f"neg{n}" for n in NEG_GATES] + [f"sep{d:g}" for d in SEP_GATES]
 
 
-def gate_open(tag: str, n_bad: int, separation: float) -> bool:
-    """Whether a rule gated by *tag* applies at a click with *n_bad* Bads and the line's *separation*."""
+def gate_open(tag: str, n_bad: int, separation: float, model_n_neg: float = float("nan")) -> bool:
+    """Whether a rule gated by *tag* applies at a click with *n_bad* Bads, the model's Bads and the line's *separation*."""
     if tag.startswith("sep"):
         return bool(np.isfinite(separation)) and separation < float(tag[3:])
+    if tag.startswith("neg"):
+        return bool(np.isfinite(model_n_neg)) and model_n_neg < float(tag[3:])
     return tag == "inf" or n_bad < float(tag)
 
 
@@ -212,7 +218,7 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
             fk = {r: fbeta_at(k, ranks, n_pos, beta) for r, k in counts.items()}
             sep = float(rec["separation"])
             for g in gate_tags():
-                if not gate_open(g, n_bad, sep):
+                if not gate_open(g, n_bad, sep, float(rec["model_n_neg"])):
                     continue
                 for r in COUNT_RULES:
                     f[f"{r}@{g}"][i] = fk[r]
@@ -222,6 +228,7 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
                     "t": int(t),
                     "n_good": int(rec["n_good"]),
                     "n_bad": n_bad,
+                    "model_n_neg": float(rec["model_n_neg"]),
                     "n_test_pos": n_pos,
                     "k_test": int(rec["k_test"]),
                     "k_centroid": int(rec["k_centroid"]),

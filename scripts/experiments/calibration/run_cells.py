@@ -339,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
         f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
         f"line_counts={'on' if cfg.LINE_COUNTS else 'off'} "
+        f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -356,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     from vtscore.eval.arms_handover import HANDOVER_COLUMNS
     from vtscore.eval.arms_line_counts import LINE_COUNT_COLUMNS
-    from vtscore.eval.live_threshold_rules import sigma_floor
+    from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -411,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
         linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
         handover_local: list[dict] | None = [] if cfg.HANDOVER_SHADOW else None
         linecounts_local: list[dict] | None = [] if cfg.LINE_COUNTS else None
-        with sigma_floor(cfg.SIGMA_FLOOR):
+        with sigma_floor(cfg.SIGMA_FLOOR), head_count_bads(cfg.HEAD_COUNT_BADS):
             rows = simulate_voting_iterations(
                 medias,
                 target_category=cat,

@@ -40,6 +40,17 @@ near the line and from the top, so the Bads' held-out scores sit higher than
 the true negatives' and the negative tail is extrapolated by the normal.  The
 pricing in ``docs/experiments`` measures what that costs on the objective.
 
+**While the labels are few, above beta 1** (#4786), the class model has almost
+nothing to fit - at the hand-over to the trained head a session holds four Bads -
+and a recall-leaning cut reaches deep into its tail: at beta 4 the line kept a
+median of 5 of a FHIBE person's faces at the first trained click, and in the
+sessions where it separated weakly, hundreds.  Until the class model holds
+:data:`HEAD_COUNT_BADS` Bads, the line keeps instead what stands out in the head's
+own scores, counted by the rule that draws the Goods' centroid's line
+(:func:`head_count_cut`): the line Test gave until the hand-over, now drawn on the
+head.  Like that line it is a count on the corpus being decided, not a cut the
+labels imply; the class model takes over once it has the Bads to stand on.
+
 **When the Bads are a random sample** (#4490: a labelset imported from an
 exhaustively labelled dataset; every label of the review's ceiling), one normal
 fitted to them describes the negatives' bulk, and their heavy upper tail - where
@@ -111,6 +122,14 @@ _SEARCH_SPREADS = 8.0
 _SEARCH_POINTS = 4001
 #: The prevalence range an estimate is held to: never a certainty either way.
 PREVALENCE_MIN, PREVALENCE_MAX = 1e-6, 0.5
+#: Until the class model holds this many Bads (its held-out ones, about 0.6 of the Bads in
+#: hand), a balance above :data:`HEAD_COUNT_MIN_BETA` keeps the head's count line
+#: (:func:`head_count_cut`, #4786) rather than the class model's cut.  ``0`` is the line
+#: before #4786.
+HEAD_COUNT_BADS = 20
+#: The head's count line serves balances strictly above this one (#4786): beta 4's cut is
+#: the one that reached deep into a thin class model's tail.
+HEAD_COUNT_MIN_BETA = 1.0
 
 
 def _logit(scores: Any) -> np.ndarray:
@@ -460,6 +479,8 @@ class LabelsLine:
 
     def threshold(self, beta: float) -> float:
         if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
+            if head_count_serves(self.model, beta):
+                return head_count_cut(self.unvoted_scores, beta)
             total = self.unvoted_share * self.unvoted_scores.size
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
@@ -470,6 +491,34 @@ class LabelsLine:
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
         line = _line_on(self.model, scores, ids, labels)
         return self if line is None else line
+
+
+def head_count_serves(model: ClassScoreModel, beta: float) -> bool:
+    """Whether the line at *beta* is the head's count line (#4786): few Bads in the class model, a recall-leaning balance."""
+    return float(beta) > HEAD_COUNT_MIN_BETA and model.n_neg < HEAD_COUNT_BADS
+
+
+def head_count_cut(scores_desc: Any, beta: float) -> float:
+    """The cut that keeps what stands out in the head's own scores at *beta* (#4786).
+
+    *scores_desc* are a corpus's unvoted scores, best first.  On their logits the
+    rule that draws the Goods' centroid's line
+    (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`: ``beta ** 0.708``
+    times the larger of the Gaussian bulk's excess and the top's widest drop, never
+    fewer than that drop) counts what stands out; the cut keeps exactly those items,
+    placed between the last kept and the first dropped as :func:`corpus_cut` places
+    its own.  An empty corpus keeps nothing.
+    """
+    from vtscore.detectors.centroid_head import centroid_cut  # noqa: PLC0415
+
+    s = np.asarray(scores_desc, dtype=np.float64)
+    if s.size == 0:
+        return 1.0 + 1e-9
+    x = _logit(s)
+    k = int(np.count_nonzero(x >= centroid_cut(x, beta=float(beta))))
+    if k <= 0:
+        return 1.0 + 1e-9
+    return float(s[k - 1]) if k >= s.size else float((s[k - 1] + s[k]) / 2.0)
 
 
 def weak_check_due(
@@ -726,6 +775,8 @@ def fit_labels_line(
 
 
 __all__ = [
+    "HEAD_COUNT_BADS",
+    "HEAD_COUNT_MIN_BETA",
     "MIN_LOGIT_SIGMA",
     "RELATIVE_SIGMA_FLOOR",
     "RANDOM_BADS_MAX_ENRICHMENT",
@@ -748,5 +799,7 @@ __all__ = [
     "corpus_sigma_floor",
     "estimate_positives",
     "fit_labels_line",
+    "head_count_cut",
+    "head_count_serves",
     "labels_line_threshold",
 ]
