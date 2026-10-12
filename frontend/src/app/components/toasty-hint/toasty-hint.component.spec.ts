@@ -159,26 +159,25 @@ describe('ToastyHintComponent in and under a dialog (#4807)', () => {
     return fixture;
   }
 
-  function hints(fixture: ComponentFixture<DialogHostComponent>): [ToastyHintComponent, ToastyHintComponent] {
-    const [onView, inDialog] = fixture.debugElement.queryAll(By.directive(ToastyHintComponent));
-    return [onView.componentInstance, inDialog.componentInstance];
+  /** The rendered hints: the view's first, then the dialog's once it is open. */
+  function hints(fixture: ComponentFixture<DialogHostComponent>): ToastyHintComponent[] {
+    return fixture.debugElement.queryAll(By.directive(ToastyHintComponent)).map((d) => d.componentInstance);
   }
 
   it('shows the view hint only while no dialog is open, and the dialog hint only on top', async () => {
     const fixture = await render();
-    const [onView, inDialog] = hints(fixture);
+    const [onView] = hints(fixture);
     expect(onView.shown()).toBe(true);
-    expect(inDialog.shown()).toBe(false);
 
     fixture.componentInstance.open.set(true);
     await settleZoneless(fixture);
+    const [, inDialog] = hints(fixture);
     expect(onView.shown()).toBe(false);
     expect(inDialog.shown()).toBe(true);
 
     fixture.componentInstance.open.set(false);
     await settleZoneless(fixture);
     expect(onView.shown()).toBe(true);
-    expect(inDialog.shown()).toBe(false);
   });
 
   it('stands at the dialog box when given no anchor, below it and reaching right', async () => {

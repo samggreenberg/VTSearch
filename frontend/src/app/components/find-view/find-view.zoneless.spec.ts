@@ -946,7 +946,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('vt-left-panel vt-toasty-hint')?.getAttribute('hintId')).toBe('review');
 
-      fixture.componentInstance.voteState.markVerified(1);
+      fixture.componentInstance.voteState.setOptimisticVerified(1, true);
       await settleZoneless(fixture);
       expect(fixture.componentInstance.reviewHint()).toBe(false);
     });

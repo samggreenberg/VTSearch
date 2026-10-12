@@ -1205,7 +1205,7 @@ describe('DashboardComponent', () => {
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
       );
       expect(component.dashboardHint).toBe('mismatch');
-      expect(hintTexts(el)[0]).toContain("This detector is for a different kind of media than your dataset");
+      expect(hintTexts(el)[0]).toContain('The detector you selected is for a different kind of media than your dataset');
     });
 
     it('suggests Test or Find once a trained detector and its dataset are selected (#4680)', () => {
