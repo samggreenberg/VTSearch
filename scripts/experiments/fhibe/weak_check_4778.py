@@ -58,7 +58,11 @@ def _se(x: np.ndarray) -> float:
 
 
 def read_picks(path: str) -> dict | None:
-    """One run's pick log: the vote-by-vote ids, and what its prompted checks did inside the horizon."""
+    """One run's pick log: the pick at every vote, and what its prompted checks did inside the horizon.
+
+    A check's round of picks is logged on one row each at the round's last vote (``t``): votes 11-15 all
+    read ``t = 15``. So the votes a round cast are ``t - n + 1 .. t`` for its *n* rows.
+    """
     try:
         pk = pd.read_csv(
             path, usecols=["dataset", "category", "seed", "t", "phase", "picked_id", "picked_label", "n_good"]
@@ -68,29 +72,28 @@ def read_picks(path: str) -> dict | None:
     if pk.empty:
         return None
     pk["phase"] = pk["phase"].fillna("").astype(str)
-    inside = pk[pk["t"] <= HORIZON]
+    inside = pk[pk["t"] <= HORIZON].copy()
+    inside["vote"] = inside["t"] - inside.groupby("t")["t"].transform("size") + inside.groupby("t").cumcount() + 1
     prompt = inside[inside["phase"] == "prompt"]
-    ts = np.sort(prompt["t"].to_numpy(dtype=int))
-    # A round's picks land on consecutive votes; a gap starts the next round.
-    rounds = int(len(ts) > 0) + int((np.diff(ts) > 1).sum()) if len(ts) else 0
-    first = int(ts[0]) if len(ts) else None
+    votes = np.sort(prompt["vote"].to_numpy(dtype=int))
+    # A check runs rounds back to back until it ends; a gap between prompted votes starts the next check.
+    checks = int(len(votes) > 0) + int((np.diff(votes) > 1).sum()) if len(votes) else 0
+    first = int(votes[0]) if len(votes) else None
     goods_before = None
     if first is not None:
-        before = inside[inside["t"] < first]
-        goods_before = int((before["picked_label"] == 1).sum())
-    ids = inside.drop_duplicates("t").set_index("t")["picked_id"]
+        goods_before = int((inside.loc[inside["vote"] < first, "picked_label"] == 1).sum())
     return {
         "dataset": str(pk["dataset"].iloc[0]),
         "category": str(pk["category"].iloc[0]),
         "seed": int(pk["seed"].iloc[0]),
-        "prompted": bool(len(ts)),
+        "prompted": bool(len(votes)),
         "first_prompt": first,
-        "prompt_votes": int(len(ts)),
-        "prompt_rounds": rounds,
+        "prompt_votes": int(len(votes)),
+        "prompt_checks": checks,
         "prompt_goods": int((prompt["picked_label"] == 1).sum()),
         "goods_before_prompt": goods_before,
-        "prompt_ts": ts.tolist(),
-        "ids": ids.to_dict(),
+        "prompt_vote_list": votes.tolist(),
+        "ids": inside.set_index("vote")["picked_id"].to_dict(),
     }
 
 
@@ -190,7 +193,7 @@ def main() -> int:
                     [
                         {
                             kk: picks[r][kk]
-                            for kk in ("prompted", "first_prompt", "prompt_votes", "prompt_rounds", "prompt_goods")
+                            for kk in ("prompted", "first_prompt", "prompt_votes", "prompt_checks", "prompt_goods")
                         }
                         for r in runs
                     ]
@@ -199,7 +202,7 @@ def main() -> int:
                 row[f"{name}_first_prompt_median"] = float(g["first_prompt"].median()) if g["prompted"].any() else None
                 row[f"{name}_prompt_votes_mean"] = float(g["prompt_votes"].mean())
                 row[f"{name}_prompt_votes_median"] = float(g["prompt_votes"].median())
-                row[f"{name}_prompt_rounds_mean"] = float(g["prompt_rounds"].mean())
+                row[f"{name}_prompt_checks_mean"] = float(g["prompt_checks"].mean())
                 row[f"{name}_prompt_goods_mean"] = float(g["prompt_goods"].mean())
             for r in pr:
                 rk = (r["category"], r["seed"])
@@ -207,7 +210,7 @@ def main() -> int:
                     "prompted",
                     "first_prompt",
                     "prompt_votes",
-                    "prompt_rounds",
+                    "prompt_checks",
                     "prompt_goods",
                     "goods_before_prompt",
                 ):
@@ -238,7 +241,7 @@ def main() -> int:
             # A prompted vote is one the arm spends acquiring instead.
             casting = np.zeros((len(runs), HORIZON), dtype=bool)
             for i, r in enumerate(runs):
-                casting[i, [t - 1 for t in cp[r]["prompt_ts"]]] = True
+                casting[i, [t - 1 for t in cp[r]["prompt_vote_list"]]] = True
             entered = np.maximum.accumulate(casting, axis=1)
             for t in range(HORIZON):
                 d = A[:, t] - C[:, t]
