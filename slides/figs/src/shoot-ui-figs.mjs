@@ -336,8 +336,11 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * it has nothing to do with the application a slide is showing.
  *
  * Toasty's hints (#4680) are hidden too: the slide around a frame already says
- * what to click, and a speech bubble saying it again is a hat on a hat. They
- * float over the page, so hiding one moves nothing else.
+ * what to click, and a speech bubble saying it again is a hat on a hat. An app
+ * this script started has `hide_all_hints` set (`ensureApp`), so a frame is
+ * what a user who ticked Hide all hints sees (#4807); this rule is the backstop
+ * for an app the caller pointed it at. Toasty floats over the page, so hiding
+ * him moves nothing else.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
@@ -1167,6 +1170,11 @@ async function ensureApp() {
       return false;
     }
   }, 300000);
+  // Toasty's hints off, the way a user turns them off (#4807): the frames then
+  // show what the app shows such a user, the reasons under the Dashboard's
+  // disabled buttons included. Only on an app this run started; one the
+  // caller is serving keeps its own settings.
+  await app.api('/api/settings', { method: 'PUT', body: { hide_all_hints: true } });
 }
 
 // The intro shots are one session and are taken together: the datasets `steps`

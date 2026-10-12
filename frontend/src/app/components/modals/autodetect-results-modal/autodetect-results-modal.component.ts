@@ -18,6 +18,7 @@ import { catchError, finalize, take, takeWhile } from 'rxjs/operators';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import {
   ClipboardColumn,
   ClipboardCopyComponent,
@@ -56,7 +57,7 @@ import { ProgressBarComponent } from '../../progress-bar/progress-bar.component'
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, ProgressBarComponent],
+  imports: [FormsModule, ModalComponent, ToastyHintComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, ProgressBarComponent],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })

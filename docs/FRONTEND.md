@@ -968,7 +968,14 @@ shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
 speech bubble beside the control to click next, with "Hide this hint" / "Hide
 all hints" boxes that `HintsService` keeps in the user's settings. Drop it
 under any positioned container; it measures itself against its anchor and
-flips the bubble to the other side when it would run off the edge. Its `face`
+flips the bubble to the other side when it would run off the edge. Inside a
+`vt-modal` (however deep) the anchor may be left out: the hint is then about
+the dialog box, below it or beside its top corner when the box fills the
+window. At most one hint is on screen (#4807): the component shows a hint in
+a dialog only while that dialog is the topmost open one (`topOpenModal` in
+`modal/modal.component.ts`), and a hint on a view only while no dialog is
+open; within a view the host picks one (the Dashboard's `dashboardHint`
+ladder, the voting overlay's `hint` input). Its `face`
 (happy / sad / surprised, `utils/toasty-faces.ts`) is the same set the toasts
 use. [`hints.md`](hints.md) charts every hint: its face, its text and when it fires;
 a new hint adds a row there. `directives/no-focus-steal.directive.ts` stops toolbar buttons

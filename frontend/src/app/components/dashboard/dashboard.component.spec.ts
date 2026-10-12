@@ -1174,7 +1174,9 @@ describe('DashboardComponent', () => {
         { id: 'd2', name: 'B', media_type: 'image' },
       ]);
       expect(component.dashboardHint).toBe('select-dataset');
-      expect(hintTexts(el)).toEqual(['Select a dataset or click + to add a new one.']);
+      expect(hintTexts(el)).toEqual([
+        'You have data, but none is selected. Select the dataset you want to search over, or click + to add a new one.',
+      ]);
     });
 
     it('asks for one kind of media when the selected datasets mix kinds (#4680)', () => {
@@ -1203,7 +1205,7 @@ describe('DashboardComponent', () => {
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
       );
       expect(component.dashboardHint).toBe('mismatch');
-      expect(hintTexts(el)[0]).toContain("This detector is for a different kind of media than your dataset");
+      expect(hintTexts(el)[0]).toContain('The detector you selected is for a different kind of media than your dataset');
     });
 
     it('suggests Test or Find once a trained detector and its dataset are selected (#4680)', () => {
@@ -1213,7 +1215,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.dashboardHint).toBe('test-or-find');
       expect(hintTexts(el)).toEqual([
-        'Click Test to eval or improve this detector. Or Find to collect its matches.',
+        'Your detector is trained. Click Test to measure it on this dataset, or Find to collect its matches.',
       ]);
     });
 
@@ -1230,14 +1232,16 @@ describe('DashboardComponent', () => {
       TestBed.tick();
       expect(component.dashboardHint).toBe('find');
       expect(component.findEnabled).toBe(false);
-      expect(hintTexts(el)).toEqual(['Click Find to run these detectors on this dataset.']);
+      expect(hintTexts(el)).toEqual([
+        'You selected several datasets or detectors, so only Find is on. Click it to run each detector on each dataset.',
+      ]);
     });
 
     it('has Toasty point at the detector + once a dataset exists (#4680)', async () => {
       const el = renderWith([{ id: 'd1', name: 'DS', media_type: 'image' }]);
       await loadSettings({});
       expect(hintTexts(el)).toEqual([
-        "Next, click + to make a detector. Tell it what you're looking for, and it learns to find it in your datasets.",
+        "You need a detector to do the searching. Click + to add one and say what you're looking for.",
       ]);
 
       TestBed.inject(NewThingFlowsService).openNewDetector();
@@ -1282,7 +1286,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.showTrainHint).toBe(true);
       expect(hintTexts(el)).toEqual([
-        'Click Train to teach your new detector. Mark examples Good or Bad for it to learn.',
+        'Your new detector has no training labels yet. Click Train to teach it with Good and Bad examples.',
       ]);
     });
 
@@ -1295,6 +1299,89 @@ describe('DashboardComponent', () => {
       // A trained detector moves Toasty on to Test or Find.
       expect(component.dashboardHint).toBe('test-or-find');
       expect(el.querySelectorAll('vt-toasty-hint').length).toBe(1);
+    });
+
+    it('points at the other detector tab when the open one is empty (#4807)', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [
+          { id: 'm1', name: 'M1', media_type: 'image' },
+          { id: 'm2', name: 'M2', media_type: 'image' },
+        ],
+      );
+      selection.setDetectorTab('autofind');
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      expect(component.dashboardHint).toBe('empty-detector-tab');
+      expect(hintTexts(el)).toEqual([
+        'The AutoFind tab is empty. Click Drafts to select one of your detectors, or click + to make a new one.',
+      ]);
+    });
+
+    it('asks for the import to finish when a detector is selected and the only dataset is on its way (#4807)', () => {
+      renderWith([], [{ id: 'm1', name: 'M', media_type: 'image' }]);
+      vi.spyOn(component.loadingTasksSvc, 'orphanLoadingTasks', 'get').mockReturnValue([
+        { task_id: 't1', name: 'Pile', status: 'loading' } as LoadingTask,
+      ]);
+      expect(component.dashboardHint).toBe('wait-for-import');
+    });
+
+    it('asks for one dataset when a new detector is ticked under several (#4807)', () => {
+      const el = renderWith(
+        [
+          { id: 'd1', name: 'A', media_type: 'image' },
+          { id: 'd2', name: 'B', media_type: 'image' },
+        ],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 0 }],
+      );
+      selection.selectOnly('dataset', ['d1', 'd2']);
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      expect(component.autofindEnabled).toBe(false);
+      expect(component.dashboardHint).toBe('train-one-dataset');
+      expect(hintTexts(el)).toEqual([
+        'You selected 2 datasets, but a new detector trains on one at a time. Select just one, then click Train.',
+      ]);
+    });
+
+    it('names the detector with nothing to search with when it is ticked among others (#4807)', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [
+          { id: 'm1', name: 'Trained', media_type: 'image', num_training: 12 },
+          { id: 'm2', name: 'Blank', media_type: 'image', num_training: 0 },
+        ],
+      );
+      selection.selectOnly('detector', ['m1', 'm2']);
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      expect(component.autofindEnabled).toBe(false);
+      expect(component.dashboardHint).toBe('untrained-detector');
+      expect(hintTexts(el)).toEqual([
+        "Blank has no training labels yet, so it can't search. Deselect it, or select it alone with one dataset and click Train.",
+      ]);
+    });
+
+    it('hides the reason under a disabled button while Toasty is on show, and brings it back when the hints are hidden (#4807)', async () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 0 }],
+      );
+      const reasons = () =>
+        [...el.querySelectorAll('.btn-disabled-reason')].map((r) => (r as HTMLElement).style.visibility);
+      // Train is enabled (its reason never shows); Test and Find are off for
+      // want of labels. Before the settings land no hint shows, so the reasons stand.
+      expect(component.dashboardHint).toBe('train');
+      expect(component.hintOnShow).toBe(false);
+      expect(reasons()).toEqual(['hidden', 'visible', 'visible']);
+
+      await loadSettings({});
+      expect(component.hintOnShow).toBe(true);
+      expect(reasons()).toEqual(['hidden', 'hidden', 'hidden']);
+
+      await loadSettings({ hide_all_hints: true });
+      expect(component.hintOnShow).toBe(false);
+      expect(reasons()).toEqual(['hidden', 'visible', 'visible']);
     });
 
     it('does not point at Train when Train is disabled (media type mismatch)', () => {

@@ -24,6 +24,7 @@ import { StripeOverviewComponent } from './stripe-overview/stripe-overview.compo
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { SidePanelToggleComponent } from '../side-panel-toggle/side-panel-toggle.component';
 import { Media, MediaTypeInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
@@ -55,6 +56,7 @@ export type { SortMode, SelectMode, SortedItem };
     AutopilotPanelComponent,
     ViewControlsComponent,
     IconComponent,
+    ToastyHintComponent,
     SidePanelToggleComponent,
   ],
   templateUrl: './left-panel.component.html',
@@ -142,6 +144,8 @@ export class LeftPanelComponent implements OnInit {
    * right panes switch with it.
    */
   readonly findTab = input<'autopilot' | 'review'>('autopilot');
+  /** Toasty's hint under the Review tab (#4807): the host says when. */
+  readonly reviewHint = input(false);
   /** Find: the balance is frozen while a test phase runs (#4524). */
   readonly balanceLocked = input(false);
   /** Find: the balance control's state line, this corpus's test result or untested (#4524). */

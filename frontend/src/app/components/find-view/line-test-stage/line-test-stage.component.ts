@@ -5,8 +5,9 @@ import { DocumentViewerComponent } from '../../center-panel/document-viewer/docu
 import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
 import { TextViewerComponent } from '../../center-panel/text-viewer/text-viewer.component';
 import { VideoPlayerComponent } from '../../center-panel/video-player/video-player.component';
-import { VotingOverlayComponent } from '../../center-panel/voting-overlay/voting-overlay.component';
+import { VoteHintId, VotingOverlayComponent } from '../../center-panel/voting-overlay/voting-overlay.component';
 import { IconComponent } from '../../icon/icon.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { KeyboardService } from '../../../services/keyboard.service';
 import { LineTestSessionService } from '../../../services/line-test-session.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
@@ -44,6 +45,7 @@ import type { Media } from '../../../models/api.models';
     VideoPlayerComponent,
     VotingOverlayComponent,
     IconComponent,
+    ToastyHintComponent,
   ],
   templateUrl: './line-test-stage.component.html',
   styleUrl: './line-test-stage.component.scss',
@@ -63,6 +65,13 @@ export class LineTestStageComponent {
     return this.mediaState.getMedia(id);
   });
   readonly mediaType = computed(() => this.currentMedia()?.media_type ?? '');
+
+  /** Toasty's hint over Good / Bad (#4807): the test's first pick, before any vote. */
+  readonly voteHint = computed<VoteHintId | null>(() =>
+    this.session.running() && (this.session.test()?.labelled ?? 0) === 0 && this.session.roundVotes().size === 0
+      ? 'test-vote'
+      : null,
+  );
 
   /** The phase's one-line prompt over the pick. */
   readonly prompt = computed(() => {

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
-import { ModalComponent } from './modal.component';
+import { ModalComponent, topOpenModal } from './modal.component';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
 
@@ -232,6 +232,20 @@ describe('ModalComponent stacking', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(host.innerClosed).toBe(true);
     expect(host.outerClosed).toBe(false);
+  });
+
+  it("names the topmost open modal, for Toasty's hints (#4807)", async () => {
+    await settleZoneless(fixture);
+    const modals = () => fixture.debugElement.queryAll(By.directive(ModalComponent)).map((d) => d.componentInstance);
+    expect(topOpenModal()).toBe(modals()[0]);
+    host.innerVisible.set(true);
+    await settleZoneless(fixture);
+    expect(topOpenModal()).toBe(modals()[1]);
+    host.innerVisible.set(false);
+    await settleZoneless(fixture);
+    expect(topOpenModal()).toBe(modals()[0]);
+    fixture.destroy();
+    expect(topOpenModal()).toBeNull();
   });
 
   it('after the inner modal is destroyed, Escape reaches the outer modal', async () => {

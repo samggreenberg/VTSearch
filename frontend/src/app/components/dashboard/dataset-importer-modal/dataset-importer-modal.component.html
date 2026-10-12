@@ -1,4 +1,7 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
+  <vt-toasty-hint hintId="import-dataset">
+    Pick where your {{ datasetMediaWords }} come from, fill in the form, and click <strong>Import</strong>.
+  </vt-toasty-hint>
   <vt-source-picker
     [visibleImporterTabs]="visibleImporterTabs"
     [importersForActiveTab]="importersForActiveTab"

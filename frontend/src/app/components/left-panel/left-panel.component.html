@@ -23,6 +23,7 @@
         title="Autopilot tests the line: it picks items at random from both sides of it, you vote each one, and the picks say how much of what the line keeps is right and how many of the real matches it found."
       ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
       <button
+        #reviewTab
         class="left-tab"
         role="tab"
         [class.active]="findTab() === 'review'"
@@ -31,6 +32,14 @@
         title="Review the ranked list under the line yourself: walk the boundary, verify items into the Good and Bad piles, and send the matches on."
       >Review</button>
     </div>
+    <!-- Toasty under the Review tab (#4807), reaching over the list; the host
+         says when (the tab is open and nothing is checked yet). -->
+    @if (reviewHint()) {
+      <vt-toasty-hint hintId="review" [anchor]="reviewTab" reach="right">
+        Every item is here, best match first. Click one to check it with Good or Bad, or
+        <strong>Export</strong> to send the matches on.
+      </vt-toasty-hint>
+    }
     }
     @if (findDetectorNote()) {
       <!-- Under the label quota the detector is its typed query (#4758) or the

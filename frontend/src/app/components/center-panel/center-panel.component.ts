@@ -18,7 +18,12 @@ import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.com
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
-import { VotingOverlayComponent } from './voting-overlay/voting-overlay.component';
+import {
+  NO_VOTE_HINT_COUNTS,
+  VoteHintCounts,
+  VoteHintId,
+  VotingOverlayComponent,
+} from './voting-overlay/voting-overlay.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { IconComponent } from '../icon/icon.component';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
@@ -102,11 +107,13 @@ export class CenterPanelComponent implements OnDestroy {
    */
   readonly advancePending = input(false);
   /**
-   * Show Toasty's "start voting" hint over the Good / Bad buttons (#4680). The
-   * host decides: Train shows it while Autopilot runs on a detector with no
-   * labels yet, and it goes with the first vote.
+   * Which of Toasty's hints stands over the Good / Bad buttons (#4680, #4807),
+   * if any. The host decides: Train asks for a first vote while Autopilot runs
+   * on a detector with no labels yet, then says what each phase is after.
    */
-  readonly startVotingHint = input(false);
+  readonly voteHint = input<VoteHintId | null>(null);
+  /** The counts the Train phase hints fill in. */
+  readonly voteHintCounts = input<VoteHintCounts>(NO_VOTE_HINT_COUNTS);
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';

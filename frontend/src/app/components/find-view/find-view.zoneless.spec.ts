@@ -909,6 +909,48 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(el.querySelector('button[aria-label="Stats"]')).toBeNull();
     });
 
+    it("has Toasty explain the first pick, then the verdict once the test is done (#4807)", async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
+      expect(hint()?.getAttribute('hintId')).toBe('test-vote');
+      expect(hint()?.textContent).toContain('picks from both sides of your detector');
+
+      // The first pick voted: the explanation has done its job.
+      fixture.componentInstance.lineTest.response.set(
+        wireLineTest(wireTest({ picks: [1, 2], labelled: 1 })),
+      );
+      await settleZoneless(fixture);
+      expect(hint()).toBeNull();
+
+      fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
+      await settleZoneless(fixture);
+      expect(hint()?.getAttribute('hintId')).toBe('test-done');
+      expect(hint()?.textContent).toContain('Read the verdict on the right');
+    });
+
+    it("has Toasty explain the Review tab until an item is checked (#4807)", async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(false);
+
+      fixture.componentInstance.onFindTabChange('review');
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(true);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('vt-left-panel vt-toasty-hint')?.getAttribute('hintId')).toBe('review');
+
+      fixture.componentInstance.voteState.setOptimisticVerified(1, true);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(false);
+    });
+
     // #4555: Test opens on Autopilot, which has no centre panel, so the one
     // Review makes is not the one the view opened with; each must be started
     // (its settings, the shortcuts), or Review's keys do nothing.

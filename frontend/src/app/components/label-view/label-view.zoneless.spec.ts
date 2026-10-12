@@ -938,6 +938,34 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedMedia!.id).toBe(2);
   });
 
+  it("walks Toasty's vote hint through Autopilot's phases (#4807)", async () => {
+    const medias = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    flushInitialRequests(undefined, medias);
+    await settleResource();
+    component.onMediaSelect(2);
+    TestBed.tick();
+    // Autopilot runs (the left panel starts it) on a detector with no labels.
+    expect(component.voteHint()).toBe('start-voting');
+
+    const votes = (good: number[], bad: number[]) => {
+      component.voteState.loadVotes();
+      httpMock.match('/api/votes').forEach((req) => req.flush({ good, bad, click_times: {}, learned_scores: {} }));
+      TestBed.tick();
+      component.onMediaSelect(2);
+      TestBed.tick();
+    };
+    votes([1], []);
+    expect(component.voteHint()).toBe('find-goods');
+    expect(component.voteHintCounts()).toEqual({ goods: 1, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
+
+    votes([1, 3, 4], []);
+    expect(component.voteHint()).toBe('find-bads');
+    expect(component.voteHintCounts()).toEqual({ goods: 3, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
+
+    votes([1, 3, 4], [5, 6, 7, 8]);
+    expect(component.voteHint()).toBe('keep-voting');
+  });
+
   it('should return null selectedMedia when no selection', () => {
     flushInitialRequests();
     expect(component.mediaState.selectedMedia).toBeNull();

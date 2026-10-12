@@ -217,6 +217,11 @@ export class FindViewComponent implements OnInit, OnDestroy {
    * Test: the guided flow is the default, the open one a tab away.
    */
   readonly findTab = signal<'autopilot' | 'review'>('autopilot');
+  /** Toasty's hint under the Review tab (#4807): the tab is open, the list is
+   *  scored, and nothing has been checked yet; the first check ends it. */
+  readonly reviewHint = computed(
+    () => this.findTab() === 'review' && !this.sortState.sortBusy && this.voteState.verifiedIds.size === 0,
+  );
   /** The server's Autopilot-only lock (#4666): Test shows no Review tab. */
   readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
   /**

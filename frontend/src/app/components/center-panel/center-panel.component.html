@@ -25,7 +25,7 @@
       [isBad]="false"
       [unavailable]="true"
       [spinningVote]="null"
-      [showHint]="false"
+      [hint]="null"
     ></vt-voting-overlay>
   } @else if (!media()) {
     <div class="placeholder-pane empty-state" role="status">
@@ -163,7 +163,8 @@
       [isBad]="isBad"
       [disabled]="isVoting() || disabled()"
       [spinningVote]="spinningVote()"
-      [showHint]="startVotingHint()"
+      [hint]="voteHint()"
+      [hintCounts]="voteHintCounts()"
       (voted)="castVote($event)"
     ></vt-voting-overlay>
 

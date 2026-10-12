@@ -6,7 +6,8 @@ import { SettingsStateService } from './settings-state.service';
  * One id is one bubble with one text: a hint that would say something else in
  * another state is a second hint, so hiding one never hides words the user has
  * not read. A new hint adds its id here and a row to `docs/hints.md` (a test
- * holds the two together); the server keeps whatever ids it is sent.
+ * holds the two together); the server keeps whatever ids it is sent. At most
+ * one hint is on screen at a time: see `ToastyHintComponent` (#4807).
  */
 export const HINT_IDS = [
   // Dashboard, in the order a new user meets them.
@@ -14,17 +15,35 @@ export const HINT_IDS = [
   'select-dataset',
   'mixed-datasets',
   'add-detector',
+  'empty-detector-tab',
   'select-detector',
   'mismatch',
+  'wait-for-import',
   'train',
+  'train-one-dataset',
+  'untrained-detector',
   'test-or-find',
   'find',
   // Train view.
   'start-voting',
+  'find-goods',
+  'find-bads',
+  'find-more',
+  'keep-voting',
   'resort-prompt',
   'autopilot-done',
   'autopilot-ran-dry',
   'all-labeled',
+  // Test view.
+  'test-vote',
+  'test-done',
+  'review',
+  // Dialogs on the way: what to do in each.
+  'import-dataset',
+  'new-detector',
+  'use-example',
+  'find-results',
+  'export-results',
 ] as const;
 export type HintId = (typeof HINT_IDS)[number];
 
