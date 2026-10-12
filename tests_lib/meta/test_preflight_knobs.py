@@ -109,6 +109,7 @@ _DIVERGENT = [
     ({"CALIB_GOOD_DRY_RUN": "8"}, "good_dry_run"),
     ({"CALIB_QUOTA_DRY_BADS": "off"}, "quota_dry_bads"),
     ({"CALIB_CENTROID_LINE": "midpoint"}, "centroid_line"),
+    ({"CALIB_HEAD": "linear_svm_prior"}, "head"),
     ({"CALIB_BETA": "off"}, "beta"),
     ({"CALIB_BETA": "4"}, "beta"),
     ({"CALIB_WALK_SHAPE": "walk"}, "walk_shape"),

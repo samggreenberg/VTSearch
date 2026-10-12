@@ -68,6 +68,7 @@ from vtscore.eval.live_threshold_rules import check_live_threshold
 from vtscore.eval.live_threshold_rules import live_threshold as retired_live_threshold
 from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_count_schedule
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
+from vtscore.eval.arms_handover import HANDOVER_CENTROID_TAG, HandoverJudge
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
@@ -79,6 +80,7 @@ from vtscore.eval.step_model import (
     HEADS,
     PRODUCTION_HEAD,
     StepModel,
+    good_training_vec,
     resolve_trainer_name,
     score_sim_set_with_model,
 )
@@ -2303,6 +2305,46 @@ def _centroid_line_variant_rows(
     return out
 
 
+def _handover_centroid_rows(
+    ident: dict[str, Any],
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    *,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+    beta: float | None,
+    calibration_rows: bool,
+    line_rule: str | None,
+    line_beta: float | None,
+) -> list[dict[str, Any]]:
+    """#4776's shadow: the Goods' centroid's Test at a click Test gave the trained head, as tagged rows.
+
+    Scored by the call that scores the centroid's rows under the quota, with the
+    same arguments, so the centroid's series runs on unbroken past the hand-over;
+    tagged :data:`~vtscore.eval.arms_handover.HANDOVER_CENTROID_TAG` so a
+    production read skips it.  Band-free, as #4732's variant rows are.
+    """
+    _step, metric_rows, _cal = _centroid_test(
+        good_votes,
+        clips_dict,
+        test_ids,
+        target_category,
+        inclusion,
+        region_voting=region_voting,
+        region_aware=region_aware,
+        style_obj=style_obj,
+        beta=beta,
+        calibration_rows=calibration_rows,
+        line_rule=line_rule,
+        line_beta=line_beta,
+    )
+    return [{**ident, **mr, "detector_tier": "centroid", "gmm_variant": HANDOVER_CENTROID_TAG} for mr in metric_rows]
+
+
 def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bool:
     """Whether Test gives the Goods' centroid at these counts: the label quota (#4643, #4731).
 
@@ -2464,6 +2506,8 @@ def simulate_voting_iterations(  # noqa: C901
     quota_dry_bads: "int | str | None" = None,
     centroid_line: Optional[str] = None,
     centroid_line_variants: "Sequence[str] | None" = None,
+    handover_shadow: bool = False,
+    handover_sink: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2626,6 +2670,18 @@ def simulate_voting_iterations(  # noqa: C901
             The centroid never picks, so these rows change nothing else, and
             Autopilot's opening reads no balance, so a variant's balance prices
             the line a user at that balance would see on these clicks.
+        handover_shadow: Price a hand-over rule on the same session (#4776):
+            at every click Test gives the trained head, also a row of what the
+            Goods' centroid would give there, scored as the centroid's rows
+            under the quota are and tagged ``gmm_variant =
+            "handover:centroid"`` (:mod:`vtscore.eval.arms_handover`).  Neither
+            detector picks, so the rows change nothing else.  Inert without the
+            quota.
+        handover_sink: With *handover_shadow*, receives the evidence a rule may
+            read at each of those clicks
+            (:data:`~vtscore.eval.arms_handover.HANDOVER_COLUMNS`): held-out
+            Goods' ranks in the unvoted pool under each detector, and the
+            centroid-prior heads' AP.  Single-vector runs only.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -3346,6 +3402,22 @@ def simulate_voting_iterations(  # noqa: C901
     # examples from the positives here when no text sort is available.  Cheap to
     # build once up front.
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
+    # #4776's hand-over evidence, on a single-vector run (the region path's geometry is its own).
+    handover_judge: HandoverJudge | None = None
+    if (
+        handover_shadow
+        and handover_sink is not None
+        and quota_on
+        and not region_aware
+        and (style_obj is None or style_obj.name == _WHOLE_IMAGE_STYLE)
+    ):
+        handover_judge = HandoverJudge(
+            clips_dict,
+            sim_ids,
+            test_ids,
+            target_category,
+            lambda media: good_training_vec(media, target_category, region_voting),
+        )
     step: StepModel | None = None
     threshold = 0.5
     #: The selector's threshold - cut ``acq_inclusion_offset`` steps below the
@@ -4422,6 +4494,34 @@ def simulate_voting_iterations(  # noqa: C901
                     voted=set(good_votes) | set(bad_votes),
                 )
             )
+        if handover_shadow and quota_on and good_votes and not centroid:
+            # #4776: what the centroid would give at this click, had Test not handed over.
+            rows.extend(
+                _handover_centroid_rows(
+                    {**base_row, **timing_cols},
+                    good_votes,
+                    clips_dict,
+                    test_ids,
+                    target_category,
+                    inclusion,
+                    region_voting=region_voting,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                    beta=details.get("beta"),
+                    calibration_rows=emit_calibration_metrics and style_obj is not None,
+                    line_rule=centroid_line,
+                    line_beta=beta,
+                )
+            )
+            if handover_judge is not None and handover_sink is not None:
+                handover_sink.append(
+                    {
+                        **rank_ident,
+                        "t": t,
+                        "phase": base_row["phase"],
+                        **handover_judge.row(good_votes, bad_votes, pool),
+                    }
+                )
 
     if rank_frame_sink is not None and last_ordinary is not None:
         rank_frame_sink.append({**rank_ident, **_rank_frame("last", **last_ordinary)})

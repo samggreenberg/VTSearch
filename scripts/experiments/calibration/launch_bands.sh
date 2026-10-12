@@ -158,6 +158,10 @@ ENVX="$ENVX CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} CALIB_WEAK_D=${CALIB_WEAK_D:-
 ENVX="$ENVX CALIB_WEAK_REPEAT=${CALIB_WEAK_REPEAT:-} CALIB_WEAK_PHASE=${CALIB_WEAK_PHASE:-}"
 # The Goods' centroid's line (#4732): empty is the app's rule; the variants add tagged rows only.
 ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VARIANTS=${CALIB_CENTROID_LINE_VARIANTS:-}"
+# The hand-over shadow (#4776): tagged centroid rows past the quota and a side frame; the session is unchanged.
+ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
+# An eval head (CALIB_HEAD): unset is the shipped linear SVM; a set head is declared to preflight (PREFLIGHT_DIVERGES=head).
+ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).

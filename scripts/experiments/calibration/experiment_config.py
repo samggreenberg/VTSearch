@@ -1177,6 +1177,12 @@ QUOTA_DRY_BADS: "int | str | None" = int(_QUOTA_DRY_BADS) if _QUOTA_DRY_BADS.isd
 CENTROID_LINE: str | None = os.environ.get("CALIB_CENTROID_LINE", "").strip() or None
 CENTROID_LINE_VARIANTS: str | None = os.environ.get("CALIB_CENTROID_LINE_VARIANTS", "").strip() or None
 
+#: Issue #4776's hand-over shadow: at every click Test gives the trained head,
+#: also the Goods' centroid's Test (rows tagged ``handover:centroid``) and the
+#: evidence a hand-over rule may read (``task_NNNN__handover.csv``).  Neither
+#: picks, so the session is the app's; ``CALIB_HANDOVER_SHADOW=1`` turns it on.
+HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not in ("", "0")
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive

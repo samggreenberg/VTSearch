@@ -20,6 +20,7 @@ this package is the underlying ML core.
 | `vtscore/training/thresholds/`                                        | Threshold helpers: `gmm`, `conformal`, `anchored`, `blend`, `costs`, `knobs` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the production head's fit) |
+| `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`, an eval head, #4776) |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
 | `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank: the inlier gate, and the returned-set line on documents (#4367, #4440) |
 | `vtscore/training/structural_stage1.py`                               | The tiled Stage 1 for document pages (best tile per page), the shortlist size and the verification cache |

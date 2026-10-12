@@ -22,7 +22,10 @@
 #   sota_face.sh status                   cells written per run dir
 #
 # Launch from a FROZEN worktree: every task imports the worktree this script sits in.
-# Env: SOTA_FACE_DATE (default today), SOTA_FACE_TASKS (the task list's path).
+# Env: SOTA_FACE_DATE (default today), SOTA_FACE_TASKS (the task list's path), SOTA_FACE_TAG (the run
+# dirs' tag, default `sota`: <date>-<tag>-k<K>-b<beta>; a study on the same recipe takes its own, e.g.
+# #4776's `4776`), SOTA_FACE_CLAIMS_DIR (join an earlier `pack`'s task pool, say cpu packs beside the
+# V100 ones, so the two never run the same cell).
 #
 # SOTA_FACE_ARM=<tag> runs the same review on another face arm, fhibe_faces_<tag>_{1024,640}
 # (#4777: roll, sim, the crops turned upright). Its run dirs are <date>-sota-<tag>-k<K>-b<beta>,
@@ -34,7 +37,8 @@ FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
 RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/runs"
 D="${SOTA_FACE_DATE:-$(date +%Y-%m-%d)}"
 ARM="${SOTA_FACE_ARM:-}"
-SET="$D-sota${ARM:+-$ARM}"  # the run dirs' common prefix
+TAG="${SOTA_FACE_TAG:-sota}"
+SET="$D-$TAG${ARM:+-$ARM}"  # the run dirs' common prefix
 # The prepared grids the run dirs link to: the #4699 baseline's for the plain arm, the arm's own otherwise.
 BASE="${SOTA_FACE_BASE:-${ARM:+$D-prep-$ARM}}"
 BASE="${BASE:-2026-10-09}"
@@ -63,7 +67,7 @@ run_env() {  # K BETA
   export FHIBE_DATASETS="$DATASETS" FHIBE_MAX_STEPS=150
   # Dense rank frames: every vote to 10, every 5 after (the skill's F1/F-beta curve recipe).
   export CALIB_RANK_FRAME_STEPS="1,2,3,4,5,6,7,8,9,10,$(seq -s, 15 5 150)"
-  export CALIB_JOB_NAME="sotaface${ARM:+-$ARM}-k$1-b$(btag "$2")"
+  export CALIB_JOB_NAME="${TAG}face${ARM:+-$ARM}-k$1-b$(btag "$2")"
 }
 
 case "${1:-}" in
@@ -122,10 +126,11 @@ pack)
   THREADS="OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2"
   # Every job reads the whole list and claims each task before running it (an atomic mkdir), so a
   # job that starts late, behind the per-user GPU limit, takes what is left rather than a fixed shard.
-  claims="$LOGS/claims-$(date +%s)"
+  claims="${SOTA_FACE_CLAIMS_DIR:-$LOGS/claims-$(date +%s)}"
   mkdir -p "$claims"
   shard="$LOGS/tasks.txt"
-  cp "$TASKS" "$shard"
+  [[ -n "${SOTA_FACE_CLAIMS_DIR:-}" && -s "$shard" ]] || cp "$TASKS" "$shard"
+  echo "claims: $claims"
   # The V100 nodes by default (#4762), the GPU hidden; on the cpu partition, the per-user cap applies.
   if [[ "${CALIB_PARTITION:-gpu}" == gpu ]]; then
     WHERE=(--partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}")
@@ -133,10 +138,10 @@ pack)
     WHERE=(--partition="$CALIB_PARTITION")
   fi
   for ((j = 0; j < jobs; j++)); do
-    J=$(sbatch --parsable --job-name="sotaface${ARM:+-$ARM}-pack$j" "${WHERE[@]}" \
+    J=$(sbatch --parsable --job-name="${TAG}face${ARM:+-$ARM}-pack$j" "${WHERE[@]}" \
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
-      --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_ARM=$ARM SOTA_FACE_BASE=$BASE \
+      --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_TAG=$TAG SOTA_FACE_ARM=$ARM SOTA_FACE_BASE=$BASE \
 SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims && \
 xargs -P $PAR -L 1 bash $HERE/sota_face.sh cell <$shard; echo pack done") || { echo "pack $j SUBMIT FAILED" >&2; exit 1; }
     [[ "$J" =~ ^[0-9]+$ ]] || { echo "pack $j SUBMIT FAILED (empty job id)" >&2; exit 1; }

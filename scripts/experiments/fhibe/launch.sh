@@ -35,7 +35,8 @@
 # `off` for the app before #4731. Set either and preflight declares it.
 # CALIB_CENTROID_LINE draws the Goods' centroid's line by another rule (#4732);
 # CALIB_CENTROID_LINE_VARIANTS="<rule>@<beta>,..." adds tagged rows pricing other
-# lines on the same sessions.
+# lines on the same sessions. CALIB_HANDOVER_SHADOW=1 adds, past the label quota, the
+# centroid's Test as tagged rows and a hand-over rule's evidence (__handover.csv, #4776).
 # FHIBE_STRATA=2-4,5-6,7- makes `identities` draw FHIBE_N_IDENTITIES from each
 # band of photo counts and write <identities>.strata.tsv beside the file.
 #
@@ -126,6 +127,9 @@ ENVX="$ENVX CALIB_RANK_FRAME_STEPS=$CALIB_RANK_FRAME_STEPS CALIB_BETA=${CALIB_BE
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX CALIB_GOOD_DRY_RUN=${CALIB_GOOD_DRY_RUN:-} CALIB_QUOTA_DRY_BADS=${CALIB_QUOTA_DRY_BADS:-}"
 ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VARIANTS=${CALIB_CENTROID_LINE_VARIANTS:-}"
+ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
+# An eval head (CALIB_HEAD, e.g. #4776's linear_svm_prior): unset is the shipped linear SVM; preflight declares it.
+ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
@@ -203,6 +207,8 @@ json.dump(
         "quota_dry_bads": "${CALIB_QUOTA_DRY_BADS:-}",
         "centroid_line": "${CALIB_CENTROID_LINE:-}",
         "centroid_line_variants": "${CALIB_CENTROID_LINE_VARIANTS:-}",
+        "handover_shadow": "${CALIB_HANDOVER_SHADOW:-}",
+        "head": "${CALIB_HEAD:-}",
         "job_name": "$JOB_NAME",
     },
     open(sys.argv[1], "w"),
@@ -212,6 +218,7 @@ PYSHAPE
   DIVERGES="seed_examples,stratify_target${CALIB_BETA:+,beta}"
   DIVERGES="$DIVERGES${CALIB_GOOD_DRY_RUN:+,good_dry_run}${CALIB_QUOTA_DRY_BADS:+,quota_dry_bads}"
   DIVERGES="$DIVERGES${CALIB_CENTROID_LINE:+,centroid_line}"
+  DIVERGES="$DIVERGES${CALIB_HEAD:+,head}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" --diverges "$DIVERGES" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
