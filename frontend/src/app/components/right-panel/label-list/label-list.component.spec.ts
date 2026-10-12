@@ -1,13 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpTestingController } from '@angular/common/http/testing';
 import { LabelListComponent } from './label-list.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('LabelListComponent', () => {
   let component: LabelListComponent;
   let fixture: ComponentFixture<LabelListComponent>;
+  let httpMock: HttpTestingController;
 
   const sampleMedias: Media[] = [
     { id: 1, media_type: 'audio', filename: 'song.wav', md5: 'aaa', custom_metadata: {} },
@@ -27,11 +30,19 @@ describe('LabelListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LabelListComponent],
-      providers: [...provideZoneless(), ActiveContextService],
+      providers: [...provideZoneless(), ...provideHttpTesting(), ActiveContextService],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LabelListComponent);
     component = fixture.componentInstance;
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    // Setting ids queues a metadata prefetch (POST /api/medias/batch) that goes
+    // out once a spec settles a second time; only the prefetch spec reads it.
+    httpMock.match('/api/medias/batch').forEach((req) => req.flush([]));
+    httpMock.verify();
   });
 
   it('should create', async () => {
@@ -186,6 +197,17 @@ describe('LabelListComponent', () => {
   it('should fallback to Clip #ID when no media found', async () => {
     await setInputs({ ids: [999], medias: sampleMedias });
     expect(component.sortedEntries()[0].name).toBe('Clip #999');
+  });
+
+  it('should prefetch metadata for the shown ids and name entries from it', async () => {
+    await setInputs({ ids: [7] });
+    await settleZoneless(fixture);
+
+    const req = httpMock.expectOne('/api/medias/batch');
+    expect(req.request.body).toEqual({ ids: [7] });
+    req.flush([{ id: 7, media_type: 'image', filename: 'fetched.png', md5: 'ddd', custom_metadata: {} }]);
+
+    expect(component.sortedEntries()[0].name).toBe('fetched.png');
   });
 
   it('should render vote entries in the DOM', async () => {
