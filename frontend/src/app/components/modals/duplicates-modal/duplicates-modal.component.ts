@@ -11,7 +11,6 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import {
   ClipboardColumn,
   ClipboardCopyComponent,
@@ -48,7 +47,7 @@ export interface DupeColumnDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-duplicates-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, ClipboardCopyComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ClipboardCopyComponent],
   templateUrl: './duplicates-modal.component.html',
   styleUrl: './duplicates-modal.component.scss',
 })

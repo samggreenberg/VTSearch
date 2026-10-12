@@ -38,29 +38,12 @@ export const HINT_IDS = [
   'test-vote',
   'test-done',
   'review',
-  // Dialogs, one each: what the user is doing there.
+  // Dialogs on the way: what to do in each.
   'import-dataset',
   'new-detector',
   'use-example',
-  'choose-clipper',
-  'combine-datasets',
-  'combine-detectors',
-  'export-labels',
-  'export-results',
-  'import-labels',
-  'dataset-stats',
-  'detector-stats',
-  'duplicates',
   'find-results',
-  'settings',
-  'import-settings',
-  'export-settings',
-  'achievements',
-  'help',
-  'load-sort',
-  'spot-check',
-  'progress-chart',
-  'source-photo',
+  'export-results',
 ] as const;
 export type HintId = (typeof HINT_IDS)[number];
 

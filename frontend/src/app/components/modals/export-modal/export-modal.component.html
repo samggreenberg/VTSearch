@@ -1,13 +1,7 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
-  @if (scope() === 'detector') {
-  <vt-toasty-hint hintId="export-labels">
-    Export sends this detector's labels out of VTSearch. Pick which labels and which columns to
-    include, then choose where they go.
-  </vt-toasty-hint>
-  } @else {
+  @if (scope() === 'results') {
   <vt-toasty-hint hintId="export-results">
-    Export sends these results out of VTSearch. Pick which items and which columns to include,
-    then choose where they go.
+    Pick which items and columns to include, then where they go.
   </vt-toasty-hint>
   }
   <!-- Category Filter -->

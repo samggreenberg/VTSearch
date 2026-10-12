@@ -123,7 +123,7 @@ class HostComponent {}
       <vt-toasty-hint hintId="add-dataset" [anchor]="target">On the view.</vt-toasty-hint>
     </div>
     <vt-modal [open]="open()" title="Dialog">
-      <vt-toasty-hint hintId="settings">In the dialog.</vt-toasty-hint>
+      <vt-toasty-hint hintId="import-dataset">In the dialog.</vt-toasty-hint>
     </vt-modal>
   `,
 })

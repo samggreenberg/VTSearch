@@ -1,8 +1,4 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
-  <vt-toasty-hint hintId="import-labels">
-    Importing labels gives a detector ready-made Good and Bad examples from a file, a URL or a
-    service. Pick a source and fill in its form.
-  </vt-toasty-hint>
   @if (view === 'picker') {
     <div class="importer-picker">
       @if (loading()) {

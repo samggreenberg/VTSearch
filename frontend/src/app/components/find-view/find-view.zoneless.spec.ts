@@ -917,7 +917,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       const el = fixture.nativeElement as HTMLElement;
       const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
       expect(hint()?.getAttribute('hintId')).toBe('test-vote');
-      expect(hint()?.textContent).toContain('picks from both sides of it');
+      expect(hint()?.textContent).toContain('picks from both sides of your detector');
 
       // The first pick voted: the explanation has done its job.
       fixture.componentInstance.lineTest.response.set(

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ModalComponent } from '../../modal/modal.component';
-import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { AudioPlayerComponent } from '../../center-panel/audio-player/audio-player.component';
 import { DocumentViewerComponent } from '../../center-panel/document-viewer/document-viewer.component';
 import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
@@ -63,7 +62,7 @@ export interface SpotCheckVoted {
   selector: 'vt-spot-check-modal',
   standalone: true,
   imports: [
-    ModalComponent, ToastyHintComponent,
+    ModalComponent,
     AudioPlayerComponent,
     DocumentViewerComponent,
     ImageViewerComponent,

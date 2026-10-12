@@ -4,7 +4,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
-import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
 import { SettingsExporterModalComponent } from '../settings-exporter-modal/settings-exporter-modal.component';
@@ -38,7 +37,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, ToastyHintComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent, FieldHintIconComponent, AutoFindSettingsComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent, FieldHintIconComponent, AutoFindSettingsComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })

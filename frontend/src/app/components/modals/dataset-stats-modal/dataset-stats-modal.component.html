@@ -1,8 +1,4 @@
 <vt-modal [open]="true" [title]="'Stats: ' + datasetName()" (closed)="close()">
-  <vt-toasty-hint hintId="dataset-stats">
-    These are the facts about this dataset: what it holds, how it was imported, and when. Nothing
-    here changes it.
-  </vt-toasty-hint>
   @if (loading()) {
     <p class="loading-text">Loading stats…</p>
   } @else if (error()) {

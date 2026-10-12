@@ -22,6 +22,12 @@
   color: var(--accent);
 }
 
+.achievements-intro {
+  margin: 0 0 var(--space-xl);
+  color: var(--text-muted);
+  font-size: var(--font-lg);
+}
+
 .achievements-list {
   list-style: none;
   margin: 0;

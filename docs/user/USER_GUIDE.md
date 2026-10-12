@@ -1650,11 +1650,13 @@ workflow](#autopilot-the-guided-workflow)). In the Test view he explains the
 first pick, the verdict once the test is done, and the **Review** tab the
 first time you open it.
 
-Every dialog has a hint too, saying what you are doing there: **Add
-Dataset**, **New Detector**, **Export**, **Settings** and the rest. Toasty
-stands below the dialog box, or beside its top corner when the box fills the
-window. Only one hint shows at a time: opening a dialog hides the hint on the
-view behind it, and a dialog opened over another hides the first one's.
+The dialogs on that path have hints too: **Add Dataset**, **New Detector**,
+**Use This Example?**, **Find Results** and **Export Results**. Toasty stands
+below the dialog box, or beside its top corner when the box fills the window.
+Dialogs off the path (Settings, Help, a dataset's Stats, and the like) have
+none; they can always be cancelled. Only one hint shows at a time: opening any
+dialog hides the hint on the view behind it, and a dialog opened over another
+hides the first one's.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;

@@ -8,10 +8,6 @@
 
   @if (view(); as v) {
     @if (v.kind === 'found') {
-  <vt-toasty-hint hintId="source-photo">
-    This is the photo the face was cut from, with the face outlined. <strong>Back</strong> returns
-    you to where you were.
-  </vt-toasty-hint>
       <div class="source-photo-stage">
         <vt-image-viewer
           [media]="v.photo"

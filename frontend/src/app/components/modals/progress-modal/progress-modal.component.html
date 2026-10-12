@@ -1,8 +1,4 @@
 <vt-modal [title]="title" [open]="true" (closed)="onCancel()">
-  <vt-toasty-hint hintId="progress-chart">
-    This chart replays this indicator over your label history, one point for every detector
-    trained along the way, so you can see when it settled.
-  </vt-toasty-hint>
   @if (analyzing()) {
     <div class="analysis-loading">
       @if (!runningJob()) {

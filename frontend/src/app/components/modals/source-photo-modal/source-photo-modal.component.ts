@@ -4,7 +4,6 @@ import { Observable, catchError, map, of, switchMap } from 'rxjs';
 
 import { Media } from '../../../models/api.models';
 import { ModalComponent } from '../../modal/modal.component';
-import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { MediasApiService } from '../../../services/medias-api.service';
@@ -29,7 +28,7 @@ type SourcePhotoView =
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-source-photo-modal',
   standalone: true,
-  imports: [ModalComponent, ToastyHintComponent, ImageViewerComponent],
+  imports: [ModalComponent, ImageViewerComponent],
   providers: [SiblingLoadService],
   templateUrl: './source-photo-modal.component.html',
   styleUrl: './source-photo-modal.component.scss',

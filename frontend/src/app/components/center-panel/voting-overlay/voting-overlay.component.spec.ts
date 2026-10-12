@@ -85,8 +85,7 @@ describe('VotingOverlayComponent', () => {
     const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
     expect(hint).toBeTruthy();
     expect(hint.classList).toContain('toasty-hint--above');
-    expect(hint.textContent).toContain('Autopilot is showing you its first pick');
-    expect(hint.textContent).toContain('Your detector learns from every answer');
+    expect(hint.textContent).toContain('Autopilot picked this item for you');
   });
 
   it("says what each Autopilot phase is after, with its counts, and what a test's pick is (#4807)", async () => {
@@ -94,22 +93,21 @@ describe('VotingOverlayComponent', () => {
     fixture.componentRef.setInput('hint', 'find-goods');
     fixture.componentRef.setInput('hintCounts', { goods: 1, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
     await settleZoneless(fixture);
-    expect(text()).toContain('looking for your first 3 Goods');
-    expect(text()).toContain('1 found so far');
+    expect(text()).toContain('Autopilot needs 3 Goods to start training');
+    expect(text()).toContain("you've found 1");
 
     fixture.componentRef.setInput('hint', 'find-bads');
     fixture.componentRef.setInput('hintCounts', { goods: 3, goodsNeeded: 3, bads: 2, badsNeeded: 4 });
     await settleZoneless(fixture);
-    expect(text()).toContain('Autopilot needs 4 Bads too');
-    expect(text()).toContain('2 so far');
+    expect(text()).toContain('Autopilot needs 4 Bads too, and has 2');
 
     fixture.componentRef.setInput('hint', 'keep-voting');
     await settleZoneless(fixture);
-    expect(text()).toContain('retrains after every vote');
+    expect(text()).toContain('retrains on every vote');
 
     fixture.componentRef.setInput('hint', 'test-vote');
     await settleZoneless(fixture);
-    expect(text()).toContain('picks from both sides of it');
+    expect(text()).toContain("picks from both sides of your detector's line");
 
     fixture.componentRef.setInput('hint', null);
     await settleZoneless(fixture);

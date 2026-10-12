@@ -1,8 +1,4 @@
 <vt-modal title="Load Sort" [open]="true" (closed)="close()">
-  <vt-toasty-hint hintId="load-sort">
-    Load Sort ranks the items on the left by something other than your detector: another detector,
-    or an example item. Pick one to sort by.
-  </vt-toasty-hint>
   @if (loading()) {
     <p class="empty-state">Loading detectors…</p>
   } @else if (showMediaPicker()) {

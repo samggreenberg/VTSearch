@@ -1,8 +1,7 @@
 <vt-modal title="Find Results" [open]="true" (closed)="close()">
   <vt-toasty-hint hintId="find-results">
-    Find has run on {{ data().dataset_name || 'this dataset' }}, and these are its matches.
-    <strong>Export</strong> sends them to a file, the clipboard or a service; <strong>Browse</strong>
-    lays them out as a map.
+    These are the detector's matches in {{ data().dataset_name || 'this dataset' }}. <strong>Export</strong>
+    sends them on; <strong>Browse</strong> lays them out as a map.
   </vt-toasty-hint>
   <!-- Summary -->
   <div class="results-summary">

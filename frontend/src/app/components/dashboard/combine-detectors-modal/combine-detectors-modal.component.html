@@ -1,8 +1,4 @@
 <vt-modal [open]="true" title="Combine Trainable Detectors" [showCloseButton]="false" (closed)="close()">
-  <vt-toasty-hint hintId="combine-detectors">
-    Combining pools the selected detectors' labels into one new detector and leaves the originals
-    as they are. Name it and click <strong>Combine</strong>.
-  </vt-toasty-hint>
   <form class="combine-form" (ngSubmit)="submit()">
     <div class="form-group">
       <label class="form-label" title="Trainable detectors being combined">Sources:</label>

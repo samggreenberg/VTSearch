@@ -1215,7 +1215,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.dashboardHint).toBe('test-or-find');
       expect(hintTexts(el)).toEqual([
-        'Your detector is trained. Click Test to measure it on this dataset, or Find to collect its matches. To search new media, add another dataset with + first.',
+        'Your detector is trained. Click Test to measure it on this dataset, or Find to collect its matches.',
       ]);
     });
 
@@ -1233,7 +1233,7 @@ describe('DashboardComponent', () => {
       expect(component.dashboardHint).toBe('find');
       expect(component.findEnabled).toBe(false);
       expect(hintTexts(el)).toEqual([
-        'You selected several datasets or detectors, so Train and Test (one of each) are off. Click Find to run every selected detector on every selected dataset.',
+        'You selected several datasets or detectors, so only Find is on. Click it to run each detector on each dataset.',
       ]);
     });
 
@@ -1286,7 +1286,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.showTrainHint).toBe(true);
       expect(hintTexts(el)).toEqual([
-        'Your new detector has no training labels yet. Click Train to teach it by marking examples Good or Bad.',
+        'Your new detector has no training labels yet. Click Train to teach it with Good and Bad examples.',
       ]);
     });
 
@@ -1314,7 +1314,7 @@ describe('DashboardComponent', () => {
       TestBed.tick();
       expect(component.dashboardHint).toBe('empty-detector-tab');
       expect(hintTexts(el)).toEqual([
-        'The AutoFind tab is empty, but you have detectors on the Drafts tab. Click Drafts to select one, or click + to make a new one.',
+        'The AutoFind tab is empty. Click Drafts to select one of your detectors, or click + to make a new one.',
       ]);
     });
 
@@ -1340,7 +1340,7 @@ describe('DashboardComponent', () => {
       expect(component.autofindEnabled).toBe(false);
       expect(component.dashboardHint).toBe('train-one-dataset');
       expect(hintTexts(el)).toEqual([
-        'You selected 2 datasets, but a new detector trains on one at a time. Select just one, then click Train to teach it.',
+        'You selected 2 datasets, but a new detector trains on one at a time. Select just one, then click Train.',
       ]);
     });
 

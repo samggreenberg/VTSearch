@@ -411,9 +411,8 @@
     }
     @case ('empty-detector-tab') {
       <vt-toasty-hint hintId="empty-detector-tab" [anchor]="detectorTabBar">
-        The {{ detectorTabLabel }} tab is empty, but you have detectors on the
-        {{ otherDetectorTabLabel }} tab. Click <strong>{{ otherDetectorTabLabel }}</strong> to
-        select one, or click <strong>+</strong> to make a new one.
+        The {{ detectorTabLabel }} tab is empty. Click <strong>{{ otherDetectorTabLabel }}</strong> to select one of your
+        detectors, or click <strong>+</strong> to make a new one.
       </vt-toasty-hint>
     }
     @case ('select-detector') {
@@ -425,26 +424,24 @@
     @case ('mismatch') {
       <vt-toasty-hint hintId="mismatch" [anchor]="detectorAddBtn" face="surprised">
         The detector you selected is for a different kind of media than your dataset, so they
-        can't work together. Select ones that match, or click <strong>+</strong> to make a
-        detector for this dataset.
+        can't work together. Select ones that match, or click <strong>+</strong> to make one that does.
       </vt-toasty-hint>
     }
     @case ('wait-for-import') {
       <vt-toasty-hint hintId="wait-for-import" [anchor]="datasetAddBtn">
-        Your dataset is still importing. It joins the Datasets table when it's done, so select it
-        then.
+        Your dataset is still importing. Select it when it joins the table.
       </vt-toasty-hint>
     }
     @case ('train') {
       <vt-toasty-hint hintId="train" [anchor]="trainBtn" side="above" reach="right">
-        Your new detector has no training labels yet. Click <strong>Train</strong> to teach it by
-        marking examples Good or Bad.
+        Your new detector has no training labels yet. Click <strong>Train</strong> to teach it with Good
+        and Bad examples.
       </vt-toasty-hint>
     }
     @case ('train-one-dataset') {
       <vt-toasty-hint hintId="train-one-dataset" [anchor]="trainBtn" side="above" reach="right" face="surprised">
         You selected {{ selectedDatasetCount }} datasets, but a new detector trains on one at a
-        time. Select just one, then click <strong>Train</strong> to teach it.
+        time. Select just one, then click <strong>Train</strong>.
       </vt-toasty-hint>
     }
     @case ('untrained-detector') {
@@ -456,14 +453,13 @@
     @case ('test-or-find') {
       <vt-toasty-hint hintId="test-or-find" [anchor]="testBtn" side="above" reach="right">
         Your detector is trained. Click <strong>Test</strong> to measure it on this dataset, or
-        <strong>Find</strong> to collect its matches. To search new media, add another dataset
-        with <strong>+</strong> first.
+        <strong>Find</strong> to collect its matches.
       </vt-toasty-hint>
     }
     @case ('find') {
       <vt-toasty-hint hintId="find" [anchor]="findBtn" side="above" reach="left">
-        You selected several datasets or detectors, so Train and Test (one of each) are off. Click
-        <strong>Find</strong> to run every selected detector on every selected dataset.
+        You selected several datasets or detectors, so only <strong>Find</strong> is on. Click it to run
+        each detector on each dataset.
       </vt-toasty-hint>
     }
   }

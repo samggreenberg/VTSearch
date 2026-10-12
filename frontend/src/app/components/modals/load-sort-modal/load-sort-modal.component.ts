@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, output, signal } fr
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LoadSortSource } from '../../../services/sort-state.service';
@@ -29,7 +28,7 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-load-sort-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent],
   templateUrl: './load-sort-modal.component.html',
   styleUrl: './load-sort-modal.component.scss',
 })

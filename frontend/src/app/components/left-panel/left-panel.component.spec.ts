@@ -48,7 +48,7 @@ describe('LeftPanelComponent', () => {
     fixture.componentRef.setInput('reviewHint', true);
     TestBed.tick();
     const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
-    expect(hint?.textContent).toContain('every item, best match first');
+    expect(hint?.textContent).toContain('Every item is here, best match first');
     fixture.componentRef.setInput('reviewHint', false);
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
