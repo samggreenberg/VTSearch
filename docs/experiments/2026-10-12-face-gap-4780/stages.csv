@@ -1,0 +1,385 @@
+set,K,contrast,stage,a_mean,b_mean,gap,se
+fn,1,pronoun,click0_ap,0.6766,0.8393,-0.1626,0.0244
+fn,1,pronoun,click0_f,0.4218,0.6323,-0.2105,0.0323
+fn,1,pronoun,f_25,0.7042,0.8608,-0.1565,0.0223
+fn,1,pronoun,session_mean,0.7254,0.858,-0.1327,0.0183
+fn,1,pronoun,f_line,0.7656,0.8771,-0.1114,0.0182
+fn,1,pronoun,precision_line,0.8846,0.9506,-0.066,0.0168
+fn,1,pronoun,recall_line,0.7489,0.8565,-0.1075,0.0218
+fn,1,pronoun,final_ap,0.8828,0.9367,-0.0538,0.0147
+fn,1,pronoun,final_f_true_count,0.8479,0.9182,-0.0703,0.0161
+fn,1,pronoun,final_f_best,0.8965,0.9443,-0.0478,0.0129
+fn,1,pronoun,ceiling_ap,0.8844,0.9497,-0.0653,0.0124
+fn,1,pronoun,ceiling_f_true_count,0.8452,0.9308,-0.0855,0.0142
+fn,1,pronoun,ceiling_f_best,0.8994,0.9573,-0.0579,0.0099
+fn,1,pronoun,line_loss,-0.0822,-0.0411,-0.0411,0.0118
+fn,1,pronoun,returned,3.8552,3.2662,0.589,0.2658
+fn,1,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+fn,1,age 18-29 vs 45+,click0_ap,0.7372,0.8264,-0.0891,0.0307
+fn,1,age 18-29 vs 45+,click0_f,0.5119,0.5908,-0.0788,0.0441
+fn,1,age 18-29 vs 45+,f_25,0.7454,0.8625,-0.1171,0.028
+fn,1,age 18-29 vs 45+,session_mean,0.7659,0.8546,-0.0887,0.0239
+fn,1,age 18-29 vs 45+,f_line,0.7999,0.8768,-0.0769,0.0233
+fn,1,age 18-29 vs 45+,precision_line,0.908,0.9349,-0.027,0.0214
+fn,1,age 18-29 vs 45+,recall_line,0.7833,0.8596,-0.0763,0.0274
+fn,1,age 18-29 vs 45+,final_ap,0.908,0.9307,-0.0227,0.0195
+fn,1,age 18-29 vs 45+,final_f_true_count,0.8741,0.916,-0.0419,0.0214
+fn,1,age 18-29 vs 45+,final_f_best,0.9159,0.9387,-0.0228,0.0177
+fn,1,age 18-29 vs 45+,ceiling_ap,0.9112,0.9408,-0.0295,0.0154
+fn,1,age 18-29 vs 45+,ceiling_f_true_count,0.8755,0.9248,-0.0494,0.0184
+fn,1,age 18-29 vs 45+,ceiling_f_best,0.9197,0.9527,-0.033,0.0122
+fn,1,age 18-29 vs 45+,line_loss,-0.0742,-0.0392,-0.035,0.0129
+fn,1,age 18-29 vs 45+,returned,3.6298,3.5189,0.1109,0.2847
+fn,1,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+fn,1,skin 2-3 vs 0,click0_ap,0.6896,0.8533,-0.1637,0.031
+fn,1,skin 2-3 vs 0,click0_f,0.4426,0.6148,-0.1723,0.0414
+fn,1,skin 2-3 vs 0,f_25,0.7016,0.8643,-0.1627,0.0284
+fn,1,skin 2-3 vs 0,session_mean,0.7252,0.8575,-0.1323,0.0241
+fn,1,skin 2-3 vs 0,f_line,0.768,0.8704,-0.1024,0.0244
+fn,1,skin 2-3 vs 0,precision_line,0.8577,0.9489,-0.0911,0.0242
+fn,1,skin 2-3 vs 0,recall_line,0.7711,0.8452,-0.0741,0.0279
+fn,1,skin 2-3 vs 0,final_ap,0.8694,0.9374,-0.0681,0.0209
+fn,1,skin 2-3 vs 0,final_f_true_count,0.8337,0.9232,-0.0895,0.0223
+fn,1,skin 2-3 vs 0,final_f_best,0.884,0.9456,-0.0616,0.0185
+fn,1,skin 2-3 vs 0,ceiling_ap,0.8813,0.9534,-0.0721,0.0162
+fn,1,skin 2-3 vs 0,ceiling_f_true_count,0.8444,0.9364,-0.092,0.0182
+fn,1,skin 2-3 vs 0,ceiling_f_best,0.8965,0.9607,-0.0641,0.0129
+fn,1,skin 2-3 vs 0,line_loss,-0.0657,-0.0527,-0.0129,0.0153
+fn,1,skin 2-3 vs 0,returned,4.2612,3.183,1.0782,0.398
+fn,1,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
+fn,4,pronoun,click0_ap,0.8404,0.9398,-0.0995,0.0144
+fn,4,pronoun,click0_f,0.6798,0.8034,-0.1236,0.024
+fn,4,pronoun,f_25,0.7084,0.8791,-0.1707,0.0188
+fn,4,pronoun,session_mean,0.7291,0.8704,-0.1413,0.0167
+fn,4,pronoun,f_line,0.7402,0.8831,-0.1429,0.0189
+fn,4,pronoun,precision_line,0.8588,0.9474,-0.0886,0.0184
+fn,4,pronoun,recall_line,0.7566,0.8781,-0.1215,0.0213
+fn,4,pronoun,final_ap,0.886,0.9499,-0.0639,0.0124
+fn,4,pronoun,final_f_true_count,0.8477,0.9317,-0.084,0.0142
+fn,4,pronoun,final_f_best,0.9011,0.9577,-0.0566,0.0099
+fn,4,pronoun,ceiling_ap,0.8844,0.9497,-0.0653,0.0124
+fn,4,pronoun,ceiling_f_true_count,0.8452,0.9308,-0.0855,0.0142
+fn,4,pronoun,ceiling_f_best,0.8994,0.9573,-0.0579,0.0099
+fn,4,pronoun,line_loss,-0.1075,-0.0485,-0.0589,0.0143
+fn,4,pronoun,returned,5.2863,3.7267,1.5597,0.6457
+fn,4,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+fn,4,age 18-29 vs 45+,click0_ap,0.8714,0.9235,-0.0521,0.0174
+fn,4,age 18-29 vs 45+,click0_f,0.7042,0.812,-0.1078,0.0269
+fn,4,age 18-29 vs 45+,f_25,0.7616,0.8532,-0.0916,0.0257
+fn,4,age 18-29 vs 45+,session_mean,0.7722,0.864,-0.0917,0.022
+fn,4,age 18-29 vs 45+,f_line,0.7789,0.8763,-0.0974,0.0242
+fn,4,age 18-29 vs 45+,precision_line,0.8787,0.9312,-0.0525,0.0231
+fn,4,age 18-29 vs 45+,recall_line,0.7972,0.8759,-0.0787,0.0267
+fn,4,age 18-29 vs 45+,final_ap,0.9119,0.9423,-0.0304,0.0152
+fn,4,age 18-29 vs 45+,final_f_true_count,0.877,0.9248,-0.0478,0.0184
+fn,4,age 18-29 vs 45+,final_f_best,0.9204,0.954,-0.0336,0.012
+fn,4,age 18-29 vs 45+,ceiling_ap,0.9112,0.9408,-0.0295,0.0154
+fn,4,age 18-29 vs 45+,ceiling_f_true_count,0.8755,0.9248,-0.0494,0.0184
+fn,4,age 18-29 vs 45+,ceiling_f_best,0.9197,0.9527,-0.033,0.0122
+fn,4,age 18-29 vs 45+,line_loss,-0.0981,-0.0486,-0.0496,0.0159
+fn,4,age 18-29 vs 45+,returned,5.1801,3.8019,1.3781,0.6492
+fn,4,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+fn,4,skin 2-3 vs 0,click0_ap,0.8534,0.9368,-0.0834,0.0188
+fn,4,skin 2-3 vs 0,click0_f,0.6616,0.8311,-0.1695,0.0297
+fn,4,skin 2-3 vs 0,f_25,0.7361,0.8734,-0.1373,0.0234
+fn,4,skin 2-3 vs 0,session_mean,0.7449,0.8681,-0.1232,0.0209
+fn,4,skin 2-3 vs 0,f_line,0.76,0.8825,-0.1225,0.0233
+fn,4,skin 2-3 vs 0,precision_line,0.8653,0.9623,-0.097,0.0218
+fn,4,skin 2-3 vs 0,recall_line,0.7806,0.8598,-0.0791,0.027
+fn,4,skin 2-3 vs 0,final_ap,0.8835,0.9535,-0.07,0.0161
+fn,4,skin 2-3 vs 0,final_f_true_count,0.8469,0.9379,-0.0911,0.0182
+fn,4,skin 2-3 vs 0,final_f_best,0.8989,0.9613,-0.0624,0.0128
+fn,4,skin 2-3 vs 0,ceiling_ap,0.8813,0.9534,-0.0721,0.0162
+fn,4,skin 2-3 vs 0,ceiling_f_true_count,0.8444,0.9364,-0.092,0.0182
+fn,4,skin 2-3 vs 0,ceiling_f_best,0.8965,0.9607,-0.0641,0.0129
+fn,4,skin 2-3 vs 0,line_loss,-0.0868,-0.0554,-0.0315,0.0166
+fn,4,skin 2-3 vs 0,returned,5.3612,3.2257,2.1355,0.7761
+fn,4,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
+arc,1,pronoun,click0_ap,0.9228,0.9578,-0.035,0.0155
+arc,1,pronoun,click0_f,0.559,0.5807,-0.0217,0.0202
+arc,1,pronoun,f_25,0.9213,0.952,-0.0307,0.0149
+arc,1,pronoun,session_mean,0.9124,0.9379,-0.0255,0.0133
+arc,1,pronoun,f_line,0.9311,0.9543,-0.0232,0.0134
+arc,1,pronoun,precision_line,0.9598,0.9684,-0.0087,0.0134
+arc,1,pronoun,recall_line,0.9211,0.9529,-0.0318,0.0143
+arc,1,pronoun,final_ap,0.9498,0.9705,-0.0207,0.0128
+arc,1,pronoun,final_f_true_count,0.9417,0.9658,-0.0241,0.0137
+arc,1,pronoun,final_f_best,0.9574,0.9742,-0.0168,0.012
+arc,1,pronoun,ceiling_ap,0.9673,0.9839,-0.0166,0.0076
+arc,1,pronoun,ceiling_f_true_count,0.959,0.9796,-0.0207,0.0092
+arc,1,pronoun,ceiling_f_best,0.9761,0.9881,-0.012,0.0055
+arc,1,pronoun,line_loss,-0.0106,-0.0115,0.001,0.0066
+arc,1,pronoun,returned,4.1202,3.5144,0.6057,0.3448
+arc,1,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+arc,1,age 18-29 vs 45+,click0_ap,0.9467,0.9407,0.0061,0.0205
+arc,1,age 18-29 vs 45+,click0_f,0.5441,0.5898,-0.0457,0.0286
+arc,1,age 18-29 vs 45+,f_25,0.9401,0.9337,0.0064,0.0209
+arc,1,age 18-29 vs 45+,session_mean,0.9295,0.9275,0.002,0.0177
+arc,1,age 18-29 vs 45+,f_line,0.9447,0.9474,-0.0027,0.0184
+arc,1,age 18-29 vs 45+,precision_line,0.9593,0.9693,-0.0101,0.0181
+arc,1,age 18-29 vs 45+,recall_line,0.9468,0.9392,0.0077,0.0196
+arc,1,age 18-29 vs 45+,final_ap,0.9691,0.9593,0.0098,0.017
+arc,1,age 18-29 vs 45+,final_f_true_count,0.9616,0.9531,0.0085,0.0184
+arc,1,age 18-29 vs 45+,final_f_best,0.972,0.9641,0.0079,0.0162
+arc,1,age 18-29 vs 45+,ceiling_ap,0.9815,0.9745,0.0071,0.0095
+arc,1,age 18-29 vs 45+,ceiling_f_true_count,0.9749,0.9678,0.0071,0.0117
+arc,1,age 18-29 vs 45+,ceiling_f_best,0.9852,0.9808,0.0044,0.0071
+arc,1,age 18-29 vs 45+,line_loss,-0.017,-0.0058,-0.0112,0.0078
+arc,1,age 18-29 vs 45+,returned,4.0692,3.5943,0.4749,0.3531
+arc,1,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+arc,1,skin 2-3 vs 0,click0_ap,0.9137,0.9528,-0.0391,0.0213
+arc,1,skin 2-3 vs 0,click0_f,0.5709,0.4882,0.0826,0.0244
+arc,1,skin 2-3 vs 0,f_25,0.9075,0.949,-0.0415,0.021
+arc,1,skin 2-3 vs 0,session_mean,0.8954,0.9275,-0.0321,0.0202
+arc,1,skin 2-3 vs 0,f_line,0.9155,0.9485,-0.033,0.0198
+arc,1,skin 2-3 vs 0,precision_line,0.9426,0.9555,-0.0129,0.0205
+arc,1,skin 2-3 vs 0,recall_line,0.9065,0.9553,-0.0488,0.0204
+arc,1,skin 2-3 vs 0,final_ap,0.9386,0.9583,-0.0197,0.0196
+arc,1,skin 2-3 vs 0,final_f_true_count,0.9275,0.9533,-0.0258,0.0208
+arc,1,skin 2-3 vs 0,final_f_best,0.9444,0.9631,-0.0188,0.0187
+arc,1,skin 2-3 vs 0,ceiling_ap,0.9648,0.9802,-0.0154,0.0103
+arc,1,skin 2-3 vs 0,ceiling_f_true_count,0.9514,0.9766,-0.0252,0.0128
+arc,1,skin 2-3 vs 0,ceiling_f_best,0.9721,0.9865,-0.0144,0.0075
+arc,1,skin 2-3 vs 0,line_loss,-0.012,-0.0048,-0.0072,0.008
+arc,1,skin 2-3 vs 0,returned,4.1889,3.5305,0.6584,0.5067
+arc,1,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
+arc,4,pronoun,click0_ap,0.9641,0.9814,-0.0173,0.0077
+arc,4,pronoun,click0_f,0.5193,0.5391,-0.0199,0.0188
+arc,4,pronoun,f_25,0.9447,0.9667,-0.022,0.0086
+arc,4,pronoun,session_mean,0.922,0.9467,-0.0247,0.0083
+arc,4,pronoun,f_line,0.9471,0.9666,-0.0195,0.0088
+arc,4,pronoun,precision_line,0.9678,0.9785,-0.0107,0.0098
+arc,4,pronoun,recall_line,0.9454,0.9676,-0.0222,0.0094
+arc,4,pronoun,final_ap,0.9687,0.9825,-0.0138,0.0073
+arc,4,pronoun,final_f_true_count,0.9607,0.9772,-0.0165,0.009
+arc,4,pronoun,final_f_best,0.9768,0.9868,-0.01,0.0054
+arc,4,pronoun,ceiling_ap,0.9673,0.9839,-0.0166,0.0076
+arc,4,pronoun,ceiling_f_true_count,0.959,0.9796,-0.0207,0.0092
+arc,4,pronoun,ceiling_f_best,0.9761,0.9881,-0.012,0.0055
+arc,4,pronoun,line_loss,-0.0136,-0.0106,-0.003,0.0067
+arc,4,pronoun,returned,3.9117,3.5864,0.3253,0.1105
+arc,4,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+arc,4,age 18-29 vs 45+,click0_ap,0.9777,0.9739,0.0038,0.0093
+arc,4,age 18-29 vs 45+,click0_f,0.4911,0.5604,-0.0693,0.0264
+arc,4,age 18-29 vs 45+,f_25,0.9566,0.9659,-0.0093,0.0098
+arc,4,age 18-29 vs 45+,session_mean,0.9328,0.9463,-0.0135,0.0098
+arc,4,age 18-29 vs 45+,f_line,0.9581,0.9693,-0.0113,0.01
+arc,4,age 18-29 vs 45+,precision_line,0.9706,0.9885,-0.018,0.0106
+arc,4,age 18-29 vs 45+,recall_line,0.9612,0.9618,-0.0005,0.0114
+arc,4,age 18-29 vs 45+,final_ap,0.9807,0.9763,0.0045,0.0091
+arc,4,age 18-29 vs 45+,final_f_true_count,0.9729,0.9701,0.0028,0.0117
+arc,4,age 18-29 vs 45+,final_f_best,0.9842,0.9828,0.0013,0.0067
+arc,4,age 18-29 vs 45+,ceiling_ap,0.9815,0.9745,0.0071,0.0095
+arc,4,age 18-29 vs 45+,ceiling_f_true_count,0.9749,0.9678,0.0071,0.0117
+arc,4,age 18-29 vs 45+,ceiling_f_best,0.9852,0.9808,0.0044,0.0071
+arc,4,age 18-29 vs 45+,line_loss,-0.0148,-0.0008,-0.014,0.0079
+arc,4,age 18-29 vs 45+,returned,3.7474,3.6887,0.0588,0.1428
+arc,4,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+arc,4,skin 2-3 vs 0,click0_ap,0.9632,0.9753,-0.0121,0.0105
+arc,4,skin 2-3 vs 0,click0_f,0.5223,0.4625,0.0598,0.0219
+arc,4,skin 2-3 vs 0,f_25,0.947,0.9671,-0.0201,0.0106
+arc,4,skin 2-3 vs 0,session_mean,0.921,0.9447,-0.0236,0.0107
+arc,4,skin 2-3 vs 0,f_line,0.9437,0.9647,-0.021,0.012
+arc,4,skin 2-3 vs 0,precision_line,0.9648,0.9659,-0.0011,0.0143
+arc,4,skin 2-3 vs 0,recall_line,0.9444,0.9761,-0.0317,0.0112
+arc,4,skin 2-3 vs 0,final_ap,0.9678,0.9776,-0.0098,0.0099
+arc,4,skin 2-3 vs 0,final_f_true_count,0.9556,0.9726,-0.017,0.0125
+arc,4,skin 2-3 vs 0,final_f_best,0.9743,0.984,-0.0097,0.0074
+arc,4,skin 2-3 vs 0,ceiling_ap,0.9648,0.9802,-0.0154,0.0103
+arc,4,skin 2-3 vs 0,ceiling_f_true_count,0.9514,0.9766,-0.0252,0.0128
+arc,4,skin 2-3 vs 0,ceiling_f_best,0.9721,0.9865,-0.0144,0.0075
+arc,4,skin 2-3 vs 0,line_loss,-0.0119,-0.0079,-0.004,0.0087
+arc,4,skin 2-3 vs 0,returned,3.9834,3.6403,0.3431,0.1601
+arc,4,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
+plain@4762,1,pronoun,click0_ap,0.6445,0.8294,-0.1849,0.0254
+plain@4762,1,pronoun,click0_f,0.2779,0.3572,-0.0793,0.0321
+plain@4762,1,pronoun,f_25,0.5477,0.7396,-0.1919,0.026
+plain@4762,1,pronoun,session_mean,0.6531,0.8005,-0.1475,0.0197
+plain@4762,1,pronoun,f_line,0.7311,0.8521,-0.121,0.0198
+plain@4762,1,pronoun,precision_line,0.8397,0.9095,-0.0699,0.0208
+plain@4762,1,pronoun,recall_line,0.7351,0.8488,-0.1137,0.022
+plain@4762,1,pronoun,final_ap,0.8332,0.9245,-0.0913,0.0176
+plain@4762,1,pronoun,final_f_true_count,0.7898,0.9033,-0.1135,0.0189
+plain@4762,1,pronoun,final_f_best,0.8546,0.9346,-0.08,0.0154
+plain@4762,1,pronoun,ceiling_ap,0.8444,0.9378,-0.0934,0.0143
+plain@4762,1,pronoun,ceiling_f_true_count,0.7998,0.915,-0.1152,0.0158
+plain@4762,1,pronoun,ceiling_f_best,0.8666,0.9477,-0.0811,0.0114
+plain@4762,1,pronoun,line_loss,-0.0587,-0.0512,-0.0075,0.0125
+plain@4762,1,pronoun,returned,4.5584,3.5001,1.0584,0.4299
+plain@4762,1,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+plain@4762,1,age 18-29 vs 45+,click0_ap,0.723,0.7968,-0.0738,0.0337
+plain@4762,1,age 18-29 vs 45+,click0_f,0.2901,0.4818,-0.1917,0.0439
+plain@4762,1,age 18-29 vs 45+,f_25,0.6059,0.7447,-0.1388,0.0331
+plain@4762,1,age 18-29 vs 45+,session_mean,0.7013,0.8056,-0.1043,0.0254
+plain@4762,1,age 18-29 vs 45+,f_line,0.7645,0.8664,-0.1019,0.0238
+plain@4762,1,age 18-29 vs 45+,precision_line,0.8638,0.9243,-0.0605,0.024
+plain@4762,1,age 18-29 vs 45+,recall_line,0.7637,0.8621,-0.0984,0.0262
+plain@4762,1,age 18-29 vs 45+,final_ap,0.8731,0.917,-0.0439,0.0202
+plain@4762,1,age 18-29 vs 45+,final_f_true_count,0.8355,0.8932,-0.0577,0.0231
+plain@4762,1,age 18-29 vs 45+,final_f_best,0.8886,0.9292,-0.0406,0.0177
+plain@4762,1,age 18-29 vs 45+,ceiling_ap,0.8833,0.9242,-0.0409,0.0174
+plain@4762,1,age 18-29 vs 45+,ceiling_f_true_count,0.843,0.9042,-0.0612,0.0202
+plain@4762,1,age 18-29 vs 45+,ceiling_f_best,0.8989,0.9362,-0.0373,0.0142
+plain@4762,1,age 18-29 vs 45+,line_loss,-0.071,-0.0268,-0.0442,0.0148
+plain@4762,1,age 18-29 vs 45+,returned,4.0174,3.9812,0.0363,0.5126
+plain@4762,1,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+plain@4762,1,skin 2-3 vs 0,click0_ap,0.6643,0.8314,-0.1671,0.0329
+plain@4762,1,skin 2-3 vs 0,click0_f,0.3508,0.1724,0.1785,0.0371
+plain@4762,1,skin 2-3 vs 0,f_25,0.5588,0.726,-0.1672,0.0341
+plain@4762,1,skin 2-3 vs 0,session_mean,0.6632,0.7922,-0.129,0.0258
+plain@4762,1,skin 2-3 vs 0,f_line,0.7371,0.8568,-0.1196,0.026
+plain@4762,1,skin 2-3 vs 0,precision_line,0.8294,0.9161,-0.0867,0.0272
+plain@4762,1,skin 2-3 vs 0,recall_line,0.7433,0.85,-0.1067,0.0285
+plain@4762,1,skin 2-3 vs 0,final_ap,0.8295,0.9218,-0.0923,0.0239
+plain@4762,1,skin 2-3 vs 0,final_f_true_count,0.7893,0.9034,-0.1141,0.0253
+plain@4762,1,skin 2-3 vs 0,final_f_best,0.8486,0.9332,-0.0846,0.0212
+plain@4762,1,skin 2-3 vs 0,ceiling_ap,0.8547,0.9337,-0.079,0.0187
+plain@4762,1,skin 2-3 vs 0,ceiling_f_true_count,0.814,0.9084,-0.0945,0.021
+plain@4762,1,skin 2-3 vs 0,ceiling_f_best,0.8733,0.9439,-0.0707,0.015
+plain@4762,1,skin 2-3 vs 0,line_loss,-0.0521,-0.0466,-0.0055,0.0152
+plain@4762,1,skin 2-3 vs 0,returned,4.639,3.433,1.206,0.6056
+plain@4762,1,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
+plain@4762,4,pronoun,click0_ap,0.8245,0.929,-0.1046,0.0147
+plain@4762,4,pronoun,click0_f,0.3493,0.4251,-0.0759,0.0337
+plain@4762,4,pronoun,f_25,0.5367,0.7535,-0.2167,0.0243
+plain@4762,4,pronoun,session_mean,0.6542,0.813,-0.1588,0.0172
+plain@4762,4,pronoun,f_line,0.7112,0.8573,-0.1461,0.0197
+plain@4762,4,pronoun,precision_line,0.8231,0.9084,-0.0853,0.0211
+plain@4762,4,pronoun,recall_line,0.7432,0.8721,-0.1289,0.0211
+plain@4762,4,pronoun,final_ap,0.8484,0.94,-0.0916,0.0141
+plain@4762,4,pronoun,final_f_true_count,0.8044,0.9168,-0.1124,0.0158
+plain@4762,4,pronoun,final_f_best,0.8706,0.949,-0.0784,0.0113
+plain@4762,4,pronoun,ceiling_ap,0.8444,0.9378,-0.0934,0.0143
+plain@4762,4,pronoun,ceiling_f_true_count,0.7998,0.915,-0.1152,0.0158
+plain@4762,4,pronoun,ceiling_f_best,0.8666,0.9477,-0.0811,0.0114
+plain@4762,4,pronoun,line_loss,-0.0931,-0.0595,-0.0337,0.015
+plain@4762,4,pronoun,returned,6.3888,3.8958,2.493,0.8705
+plain@4762,4,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+plain@4762,4,age 18-29 vs 45+,click0_ap,0.8595,0.9067,-0.0472,0.0179
+plain@4762,4,age 18-29 vs 45+,click0_f,0.3604,0.5142,-0.1538,0.0445
+plain@4762,4,age 18-29 vs 45+,f_25,0.6111,0.714,-0.1029,0.0348
+plain@4762,4,age 18-29 vs 45+,session_mean,0.7104,0.7961,-0.0857,0.0232
+plain@4762,4,age 18-29 vs 45+,f_line,0.7586,0.8467,-0.0881,0.0253
+plain@4762,4,age 18-29 vs 45+,precision_line,0.8551,0.8937,-0.0386,0.0269
+plain@4762,4,age 18-29 vs 45+,recall_line,0.7864,0.8648,-0.0784,0.0265
+plain@4762,4,age 18-29 vs 45+,final_ap,0.8865,0.9263,-0.0397,0.0172
+plain@4762,4,age 18-29 vs 45+,final_f_true_count,0.8454,0.9074,-0.0619,0.0202
+plain@4762,4,age 18-29 vs 45+,final_f_best,0.9018,0.9389,-0.0372,0.0141
+plain@4762,4,age 18-29 vs 45+,ceiling_ap,0.8833,0.9242,-0.0409,0.0174
+plain@4762,4,age 18-29 vs 45+,ceiling_f_true_count,0.843,0.9042,-0.0612,0.0202
+plain@4762,4,age 18-29 vs 45+,ceiling_f_best,0.8989,0.9362,-0.0373,0.0142
+plain@4762,4,age 18-29 vs 45+,line_loss,-0.0869,-0.0607,-0.0262,0.0195
+plain@4762,4,age 18-29 vs 45+,returned,5.6644,4.1228,1.5417,0.8045
+plain@4762,4,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+plain@4762,4,skin 2-3 vs 0,click0_ap,0.8355,0.9265,-0.091,0.0193
+plain@4762,4,skin 2-3 vs 0,click0_f,0.4268,0.1659,0.2609,0.0373
+plain@4762,4,skin 2-3 vs 0,f_25,0.5695,0.7388,-0.1694,0.0311
+plain@4762,4,skin 2-3 vs 0,session_mean,0.6794,0.7995,-0.1201,0.0216
+plain@4762,4,skin 2-3 vs 0,f_line,0.735,0.8565,-0.1214,0.0239
+plain@4762,4,skin 2-3 vs 0,precision_line,0.8239,0.9288,-0.1049,0.0251
+plain@4762,4,skin 2-3 vs 0,recall_line,0.7751,0.857,-0.0819,0.0266
+plain@4762,4,skin 2-3 vs 0,final_ap,0.8587,0.938,-0.0793,0.0181
+plain@4762,4,skin 2-3 vs 0,final_f_true_count,0.8177,0.9171,-0.0994,0.0205
+plain@4762,4,skin 2-3 vs 0,final_f_best,0.8764,0.9491,-0.0726,0.0146
+plain@4762,4,skin 2-3 vs 0,ceiling_ap,0.8547,0.9337,-0.079,0.0187
+plain@4762,4,skin 2-3 vs 0,ceiling_f_true_count,0.814,0.9084,-0.0945,0.021
+plain@4762,4,skin 2-3 vs 0,ceiling_f_best,0.8733,0.9439,-0.0707,0.015
+plain@4762,4,skin 2-3 vs 0,line_loss,-0.0826,-0.0606,-0.022,0.0187
+plain@4762,4,skin 2-3 vs 0,returned,5.5557,3.6342,1.9215,0.794
+plain@4762,4,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
+roll@c74d,1,pronoun,click0_ap,0.6766,0.8393,-0.1626,0.0244
+roll@c74d,1,pronoun,click0_f,0.2733,0.3758,-0.1025,0.0331
+roll@c74d,1,pronoun,f_25,0.576,0.7675,-0.1916,0.025
+roll@c74d,1,pronoun,session_mean,0.6869,0.8251,-0.1382,0.0182
+roll@c74d,1,pronoun,f_line,0.7638,0.8807,-0.1169,0.0179
+roll@c74d,1,pronoun,precision_line,0.8552,0.9298,-0.0746,0.0183
+roll@c74d,1,pronoun,recall_line,0.7654,0.8707,-0.1053,0.0207
+roll@c74d,1,pronoun,final_ap,0.872,0.9331,-0.061,0.0153
+roll@c74d,1,pronoun,final_f_true_count,0.8317,0.9092,-0.0774,0.017
+roll@c74d,1,pronoun,final_f_best,0.8848,0.9399,-0.0551,0.0134
+roll@c74d,1,pronoun,ceiling_ap,0.8741,0.9448,-0.0707,0.0128
+roll@c74d,1,pronoun,ceiling_f_true_count,0.8313,0.92,-0.0887,0.0151
+roll@c74d,1,pronoun,ceiling_f_best,0.8882,0.9516,-0.0634,0.0105
+roll@c74d,1,pronoun,line_loss,-0.0679,-0.0285,-0.0395,0.0111
+roll@c74d,1,pronoun,returned,4.0566,3.3957,0.6609,0.2121
+roll@c74d,1,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+roll@c74d,1,age 18-29 vs 45+,click0_ap,0.7372,0.8264,-0.0891,0.0307
+roll@c74d,1,age 18-29 vs 45+,click0_f,0.2966,0.4775,-0.1809,0.0457
+roll@c74d,1,age 18-29 vs 45+,f_25,0.6456,0.7313,-0.0857,0.0345
+roll@c74d,1,age 18-29 vs 45+,session_mean,0.7254,0.8291,-0.1037,0.0235
+roll@c74d,1,age 18-29 vs 45+,f_line,0.7967,0.8809,-0.0842,0.0235
+roll@c74d,1,age 18-29 vs 45+,precision_line,0.8711,0.9306,-0.0595,0.0229
+roll@c74d,1,age 18-29 vs 45+,recall_line,0.7984,0.8695,-0.0711,0.0268
+roll@c74d,1,age 18-29 vs 45+,final_ap,0.897,0.9262,-0.0292,0.0204
+roll@c74d,1,age 18-29 vs 45+,final_f_true_count,0.8544,0.9105,-0.0562,0.0224
+roll@c74d,1,age 18-29 vs 45+,final_f_best,0.9041,0.934,-0.0298,0.0184
+roll@c74d,1,age 18-29 vs 45+,ceiling_ap,0.9001,0.9377,-0.0376,0.0163
+roll@c74d,1,age 18-29 vs 45+,ceiling_f_true_count,0.8588,0.9193,-0.0606,0.0193
+roll@c74d,1,age 18-29 vs 45+,ceiling_f_best,0.9074,0.949,-0.0417,0.0129
+roll@c74d,1,age 18-29 vs 45+,line_loss,-0.0577,-0.0296,-0.0281,0.0127
+roll@c74d,1,age 18-29 vs 45+,returned,3.8375,3.5661,0.2714,0.239
+roll@c74d,1,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+roll@c74d,1,skin 2-3 vs 0,click0_ap,0.6896,0.8533,-0.1637,0.031
+roll@c74d,1,skin 2-3 vs 0,click0_f,0.3628,0.1639,0.1989,0.038
+roll@c74d,1,skin 2-3 vs 0,f_25,0.5851,0.7282,-0.1431,0.033
+roll@c74d,1,skin 2-3 vs 0,session_mean,0.6947,0.8127,-0.118,0.0239
+roll@c74d,1,skin 2-3 vs 0,f_line,0.7717,0.8737,-0.102,0.0241
+roll@c74d,1,skin 2-3 vs 0,precision_line,0.8326,0.9292,-0.0966,0.0256
+roll@c74d,1,skin 2-3 vs 0,recall_line,0.7883,0.86,-0.0716,0.0264
+roll@c74d,1,skin 2-3 vs 0,final_ap,0.8574,0.9359,-0.0785,0.0213
+roll@c74d,1,skin 2-3 vs 0,final_f_true_count,0.8196,0.9176,-0.098,0.0227
+roll@c74d,1,skin 2-3 vs 0,final_f_best,0.8716,0.943,-0.0715,0.0189
+roll@c74d,1,skin 2-3 vs 0,ceiling_ap,0.8693,0.9497,-0.0803,0.0165
+roll@c74d,1,skin 2-3 vs 0,ceiling_f_true_count,0.8268,0.9308,-0.104,0.0188
+roll@c74d,1,skin 2-3 vs 0,ceiling_f_best,0.8833,0.9568,-0.0735,0.0133
+roll@c74d,1,skin 2-3 vs 0,line_loss,-0.0479,-0.0439,-0.004,0.0138
+roll@c74d,1,skin 2-3 vs 0,returned,4.3279,3.3476,0.9802,0.3025
+roll@c74d,1,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
+roll@c74d,4,pronoun,click0_ap,0.8404,0.9398,-0.0995,0.0144
+roll@c74d,4,pronoun,click0_f,0.3651,0.4354,-0.0702,0.0345
+roll@c74d,4,pronoun,f_25,0.5524,0.757,-0.2046,0.0245
+roll@c74d,4,pronoun,session_mean,0.6813,0.8308,-0.1495,0.0165
+roll@c74d,4,pronoun,f_line,0.7353,0.8765,-0.1413,0.0187
+roll@c74d,4,pronoun,precision_line,0.846,0.9249,-0.0788,0.0194
+roll@c74d,4,pronoun,recall_line,0.7616,0.8871,-0.1254,0.0201
+roll@c74d,4,pronoun,final_ap,0.8776,0.9463,-0.0687,0.0127
+roll@c74d,4,pronoun,final_f_true_count,0.834,0.9215,-0.0874,0.0153
+roll@c74d,4,pronoun,final_f_best,0.8915,0.9532,-0.0617,0.0103
+roll@c74d,4,pronoun,ceiling_ap,0.8741,0.9448,-0.0707,0.0128
+roll@c74d,4,pronoun,ceiling_f_true_count,0.8313,0.92,-0.0887,0.0151
+roll@c74d,4,pronoun,ceiling_f_best,0.8882,0.9516,-0.0634,0.0105
+roll@c74d,4,pronoun,line_loss,-0.0988,-0.0449,-0.0538,0.0142
+roll@c74d,4,pronoun,returned,6.0213,4.1296,1.8917,0.8639
+roll@c74d,4,pronoun,n_test_pos,3.8375,3.5683,0.2691,0.0515
+roll@c74d,4,age 18-29 vs 45+,click0_ap,0.8714,0.9235,-0.0521,0.0174
+roll@c74d,4,age 18-29 vs 45+,click0_f,0.3647,0.5573,-0.1925,0.0453
+roll@c74d,4,age 18-29 vs 45+,f_25,0.6196,0.7122,-0.0926,0.034
+roll@c74d,4,age 18-29 vs 45+,session_mean,0.7257,0.8243,-0.0986,0.0225
+roll@c74d,4,age 18-29 vs 45+,f_line,0.7719,0.8763,-0.1044,0.0232
+roll@c74d,4,age 18-29 vs 45+,precision_line,0.8656,0.9234,-0.0578,0.0228
+roll@c74d,4,age 18-29 vs 45+,recall_line,0.7969,0.8847,-0.0878,0.0254
+roll@c74d,4,age 18-29 vs 45+,final_ap,0.903,0.938,-0.0349,0.0162
+roll@c74d,4,age 18-29 vs 45+,final_f_true_count,0.8599,0.9193,-0.0594,0.0194
+roll@c74d,4,age 18-29 vs 45+,final_f_best,0.9101,0.9493,-0.0392,0.0127
+roll@c74d,4,age 18-29 vs 45+,ceiling_ap,0.9001,0.9377,-0.0376,0.0163
+roll@c74d,4,age 18-29 vs 45+,ceiling_f_true_count,0.8588,0.9193,-0.0606,0.0193
+roll@c74d,4,age 18-29 vs 45+,ceiling_f_best,0.9074,0.949,-0.0417,0.0129
+roll@c74d,4,age 18-29 vs 45+,line_loss,-0.088,-0.0431,-0.045,0.0155
+roll@c74d,4,age 18-29 vs 45+,returned,5.9101,3.8491,2.061,0.8317
+roll@c74d,4,age 18-29 vs 45+,n_test_pos,3.6886,3.7075,-0.019,0.0744
+roll@c74d,4,skin 2-3 vs 0,click0_ap,0.8534,0.9368,-0.0834,0.0188
+roll@c74d,4,skin 2-3 vs 0,click0_f,0.4364,0.1816,0.2548,0.0384
+roll@c74d,4,skin 2-3 vs 0,f_25,0.568,0.7313,-0.1633,0.0322
+roll@c74d,4,skin 2-3 vs 0,session_mean,0.7049,0.8149,-0.11,0.0206
+roll@c74d,4,skin 2-3 vs 0,f_line,0.7585,0.8779,-0.1193,0.0227
+roll@c74d,4,skin 2-3 vs 0,precision_line,0.8477,0.9381,-0.0904,0.0234
+roll@c74d,4,skin 2-3 vs 0,recall_line,0.7904,0.8722,-0.0818,0.0252
+roll@c74d,4,skin 2-3 vs 0,final_ap,0.8726,0.9519,-0.0793,0.0164
+roll@c74d,4,skin 2-3 vs 0,final_f_true_count,0.8295,0.9338,-0.1043,0.019
+roll@c74d,4,skin 2-3 vs 0,final_f_best,0.8861,0.96,-0.0738,0.0132
+roll@c74d,4,skin 2-3 vs 0,ceiling_ap,0.8693,0.9497,-0.0803,0.0165
+roll@c74d,4,skin 2-3 vs 0,ceiling_f_true_count,0.8268,0.9308,-0.104,0.0188
+roll@c74d,4,skin 2-3 vs 0,ceiling_f_best,0.8833,0.9568,-0.0735,0.0133
+roll@c74d,4,skin 2-3 vs 0,line_loss,-0.071,-0.056,-0.015,0.0163
+roll@c74d,4,skin 2-3 vs 0,returned,5.8334,3.4391,2.3943,0.9012
+roll@c74d,4,skin 2-3 vs 0,n_test_pos,3.8444,3.5122,0.3322,0.063
