@@ -3,6 +3,10 @@
   [title]="view === 'cropping' ? 'Crop Example' : 'Use This Example?'"
   (closed)="onCancel()">
   @if (view === 'confirm') {
+  <vt-toasty-hint hintId="use-example">
+    You picked a file as the example. <strong>OK</strong> uses all of it; <strong>OK but Crop</strong>
+    lets you mark just the part you mean.
+  </vt-toasty-hint>
     <div class="preview">
       @switch (mediaType()) {
         @case ('image') {

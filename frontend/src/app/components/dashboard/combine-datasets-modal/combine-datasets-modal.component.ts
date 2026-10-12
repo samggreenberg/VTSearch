@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, sign
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { IconComponent } from '../../icon/icon.component';
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
@@ -67,7 +68,7 @@ export interface CombineStartedInfo {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-combine-datasets-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, IconComponent],
   templateUrl: './combine-datasets-modal.component.html',
   styleUrl: './combine-datasets-modal.component.scss',
 })

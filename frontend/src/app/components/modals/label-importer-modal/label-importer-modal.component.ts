@@ -14,6 +14,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { Subscription } from 'rxjs';
@@ -45,7 +46,7 @@ interface IngestResult {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-importer-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ModalComponent, ToastyHintComponent, IconComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent],
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })

@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ChartsService } from '../../../services/charts.service';
@@ -21,7 +22,7 @@ export type ProgressMetric = 'smart' | 'stable' | 'diverse';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-progress-modal',
   standalone: true,
-  imports: [ModalComponent, JobProgressComponent],
+  imports: [ModalComponent, ToastyHintComponent, JobProgressComponent],
   templateUrl: './progress-modal.component.html',
   styleUrl: './progress-modal.component.scss',
 })

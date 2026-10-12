@@ -58,6 +58,17 @@ describe('AutopilotStateService', () => {
       expect(service.shouldAnnounceCompletion).toBe(true);
     });
 
+    it('says whether the run started untrained, for the phase hints (#4807)', () => {
+      service.activate();
+      expect(service.startedUntrained()).toBe(false);
+      service.noteInitialLabelset(0, 0);
+      expect(service.startedUntrained()).toBe(true);
+      service.forgetInitialLabelset();
+      expect(service.startedUntrained()).toBe(false);
+      service.noteInitialLabelset(3, 2);
+      expect(service.startedUntrained()).toBe(false);
+    });
+
     it('offers the hand-off once per run', () => {
       service.activate();
       service.noteInitialLabelset(0, 0);

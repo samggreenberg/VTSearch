@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, OnDestroy, OnInit, output } from '@angular/core';
 
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { ImageCropOverlayComponent, ImageCropResult } from './image-crop-overlay.component';
 import { AudioCropOverlayComponent, AudioCropResult } from './audio-crop-overlay.component';
 
@@ -17,7 +18,7 @@ type View = 'confirm' | 'cropping';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-media-crop-modal',
   standalone: true,
-  imports: [ModalComponent, ImageCropOverlayComponent, AudioCropOverlayComponent],
+  imports: [ModalComponent, ToastyHintComponent, ImageCropOverlayComponent, AudioCropOverlayComponent],
   templateUrl: './media-crop-modal.component.html',
   styleUrl: './media-crop-modal.component.scss',
 })

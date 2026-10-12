@@ -7,6 +7,7 @@ import {
   effect,
   input,
   output,
+  signal,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -22,6 +23,17 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
  * state. Only the most-recently-opened modal reacts to Escape.
  */
 const openModalStack: ModalComponent[] = [];
+
+/**
+ * The dialog on top of the open stack, or `null` while none is open. Toasty's
+ * hints read it (#4807): a hint shows only in the topmost dialog, or on the
+ * view behind when no dialog is up, so two are never on screen at once.
+ */
+export const topOpenModal = signal<ModalComponent | null>(null);
+
+function syncTopOpenModal(): void {
+  topOpenModal.set(openModalStack[openModalStack.length - 1] ?? null);
+}
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -65,6 +77,7 @@ export class ModalComponent implements OnDestroy {
         } else if (idx !== -1) {
           openModalStack.splice(idx, 1);
         }
+        syncTopOpenModal();
       });
     });
   }
@@ -72,6 +85,7 @@ export class ModalComponent implements OnDestroy {
   ngOnDestroy(): void {
     const idx = openModalStack.indexOf(this);
     if (idx !== -1) openModalStack.splice(idx, 1);
+    syncTopOpenModal();
   }
 
   onBackdropClick(event: MouseEvent): void {

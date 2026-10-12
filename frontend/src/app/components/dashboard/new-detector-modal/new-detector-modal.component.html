@@ -1,5 +1,9 @@
 <vt-modal [open]="true" [title]="modalTitle" [showCloseButton]="false" (closed)="close()">
   @if (view() === 'main') {
+  <vt-toasty-hint hintId="new-detector">
+    A detector finds one kind of thing. Describe what you're looking for in a few words, or give an
+    example, then click <strong>Create</strong>.
+  </vt-toasty-hint>
     <div class="tab-bar" role="tablist">
       <button type="button" class="tab" role="tab"
         [class.active]="tab === 'blank'"

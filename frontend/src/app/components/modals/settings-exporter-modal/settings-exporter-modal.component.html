@@ -1,4 +1,8 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
+  <vt-toasty-hint hintId="export-settings">
+    Exporting settings saves yours as a set you can bring back later or hand to someone else. Pick
+    where they go and fill in its form.
+  </vt-toasty-hint>
   @if (view === 'picker') {
     <div class="exporter-picker">
       @if (loading()) {

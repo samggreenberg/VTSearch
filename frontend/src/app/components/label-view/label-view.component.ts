@@ -4,6 +4,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { Subscription, pairwise } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import type { VoteHintCounts, VoteHintId } from '../center-panel/voting-overlay/voting-overlay.component';
 import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import {
@@ -175,22 +176,51 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly autopilotRun = toSignal(this.autopilotStateService.state$, { requireSync: true });
 
   /**
-   * Toasty's "start voting" hint over the Good / Bad buttons (#4680): Autopilot
-   * is running on a detector that had no labels, nothing has been voted yet,
-   * and there is an item on screen to vote on. The first vote ends it.
+   * Toasty's hint over the Good / Bad buttons (#4680, #4807), or `null`. While
+   * Autopilot runs with an item on screen: `start-voting` on a detector that
+   * has no labels and nothing voted yet (the first vote ends it), then, on the
+   * run that trains the detector (as the hand-off, see
+   * `AutopilotStateService.startedUntrained`), one hint per phase until the
+   * run reaches Done, when the hand-off under the Dashboard button takes over.
    */
-  readonly startVotingHint = computed(() => {
-    if (this.autopilotRun().phase === 'idle') return false;
+  readonly voteHint = computed<VoteHintId | null>(() => {
+    const run = this.autopilotRun();
+    if (run.phase === 'idle') return null;
     const votes = this.voteState;
-    return (
-      votes.votesLoaded &&
+    if (!votes.votesLoaded || this.mediaState.selectedMedia === null || this.centreExhausted()) return null;
+    if (
       votes.labelsetGoodCount === 0 &&
       votes.labelsetBadCount === 0 &&
       votes.goodVotes.size === 0 &&
-      votes.badVotes.size === 0 &&
-      this.mediaState.selectedMedia !== null &&
-      !this.centreExhausted()
-    );
+      votes.badVotes.size === 0
+    ) {
+      return 'start-voting';
+    }
+    if (!this.autopilotStateService.startedUntrained() || run.doneReached) return null;
+    switch (run.phase) {
+      case 'good':
+        return 'find-goods';
+      case 'bad':
+        return 'find-bads';
+      case 'more':
+        return 'find-more';
+      case 'hard':
+      case 'new':
+        return 'keep-voting';
+      default:
+        return null;
+    }
+  });
+
+  /** The counts the phase hints say: Goods and Bads so far against Autopilot's targets. */
+  readonly voteHintCounts = computed<VoteHintCounts>(() => {
+    const run = this.autopilotRun();
+    return {
+      goods: this.voteState.labelsetGoodCount,
+      goodsNeeded: run.goodToStart,
+      bads: this.voteState.labelsetBadCount,
+      badsNeeded: run.badToStart,
+    };
   });
 
   /**

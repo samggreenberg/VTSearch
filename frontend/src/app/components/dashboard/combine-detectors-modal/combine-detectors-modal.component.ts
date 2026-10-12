@@ -3,6 +3,7 @@ import { TitleCasePipe } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 import type { DetectorCombineResponse } from '../../../generated/api-client/models/detector-combine-response';
 import { DetectorRegistryEntry } from '../../../generated/api-client/models/detector-registry-entry';
@@ -18,7 +19,7 @@ interface SourceRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-combine-detectors-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, TitleCasePipe],
+  imports: [FormsModule, ModalComponent, ToastyHintComponent, TitleCasePipe],
   templateUrl: './combine-detectors-modal.component.html',
   styleUrl: './combine-detectors-modal.component.scss',
 })

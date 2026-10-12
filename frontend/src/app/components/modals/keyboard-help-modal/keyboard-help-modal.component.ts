@@ -17,6 +17,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { marked } from 'marked';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { ThemeService, EffectiveTheme } from '../../../services/theme.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 
@@ -115,7 +116,7 @@ export function resolveDocPath(from: string, href: string): string | null {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-keyboard-help-modal',
   standalone: true,
-  imports: [ModalComponent],
+  imports: [ModalComponent, ToastyHintComponent],
   templateUrl: './keyboard-help-modal.component.html',
   styleUrl: './keyboard-help-modal.component.scss',
 })

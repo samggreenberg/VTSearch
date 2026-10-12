@@ -1,4 +1,8 @@
 <vt-modal [open]="true" [title]="'Stats: ' + detectorName()" (closed)="close()">
+  <vt-toasty-hint hintId="detector-stats">
+    These are the facts about this detector: its labels, what a test measured it to ship, and how
+    it was made. Nothing here changes it.
+  </vt-toasty-hint>
   @if (loading()) {
     <p class="loading-text">Loading stats…</p>
   } @else if (error()) {

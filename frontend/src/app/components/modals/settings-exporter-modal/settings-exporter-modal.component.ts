@@ -3,6 +3,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { SettingsIoApiService } from '../../../services/settings-io-api.service';
@@ -20,7 +21,7 @@ type ModalView = 'picker' | 'form';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-settings-exporter-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ModalComponent, ToastyHintComponent, IconComponent, FieldHintIconComponent, PluginCheckboxComponent],
   templateUrl: './settings-exporter-modal.component.html',
   styleUrl: './settings-exporter-modal.component.scss',
 })

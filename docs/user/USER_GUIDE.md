@@ -861,7 +861,9 @@ trained the detector - coming back later to refine it further will not
 raise it again. If you label every item before then, Toasty says so instead
 and points you back to the Dashboard. When you open the Train view on a
 detector with no labels yet, Toasty also stands over the **Good** / **Bad**
-buttons until your first vote. See [Toasty's hints](#toastys-hints).
+buttons: asking for your first vote, then, through the run that trains the
+detector, saying what the current phase is after and how many Goods or Bads
+it still needs. See [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays checked, and a seventh step, **Keep
 Improving.**, takes over for as long as you keep labeling. It is
@@ -1612,26 +1614,47 @@ work on whichever rows you currently have selected.
 ### Toasty's hints
 
 King Toasty (the toast with the magnifying glass in the logo) stands beside
-the next thing to click, with a speech bubble that says what to do and why.
-On the Dashboard he shows one step at a time:
+the next thing to click, with a speech bubble that says where you are and what
+to do about it. There is one hint at a time, all the way from an empty
+Dashboard to a detector's matches. On the Dashboard he shows one step at a
+time:
 
-- the **Datasets** card's **+** while you have no datasets, or a nudge to
-  select one when you have some but none is selected;
+- the **Datasets** card's **+** while you have no datasets, a nudge to select
+  one when you have some but none is selected, and a note to wait while your
+  only dataset is still importing;
 - a warning (he looks surprised) when the selected datasets hold different
   kinds of media;
-- the **Detectors** card's **+** once a dataset is in, or a nudge to select a
-  detector when you have some but none is selected;
+- the **Detectors** card's **+** once a dataset is in, a nudge to select a
+  detector when you have some but none is selected, and a pointer to the
+  other tab (**Drafts** or **AutoFind**) when the open one is empty;
 - a warning when the selected dataset and detector are for different kinds of
-  media;
+  media, when a new detector is ticked under several datasets (it trains on
+  one at a time), or when a detector with no labels is ticked among others
+  (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, and **Test** or **Find** once the selected detector is trained.
 
+While one of his hints is up, the reason under a disabled **Train**, **Test**
+or **Find** button is hidden, since the hint says the same thing at more
+length; it comes back if you hide the hint.
+
 In the Train view he asks for your first vote over **Good** / **Bad** while
-Autopilot runs on a detector with no labels, explains the **Update Sort
+Autopilot runs on a detector with no labels, then stays there through the
+run that trains it, saying what each phase is after and how far along it is
+(how many Goods and Bads it still needs, then that the detector retrains on
+every vote until the lights go green). He explains the **Update Sort
 Example?** prompt from just below it (see [Get Autopilot
-unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he
-stands under the top bar's **Dashboard** button (see [Autopilot: the guided
-workflow](#autopilot-the-guided-workflow)).
+unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he stands
+under the top bar's **Dashboard** button (see [Autopilot: the guided
+workflow](#autopilot-the-guided-workflow)). In the Test view he explains the
+first pick, the verdict once the test is done, and the **Review** tab the
+first time you open it.
+
+Every dialog has a hint too, saying what you are doing there: **Add
+Dataset**, **New Detector**, **Export**, **Settings** and the rest. Toasty
+stands below the dialog box, or beside its top corner when the box fills the
+window. Only one hint shows at a time: opening a dialog hides the hint on the
+view behind it, and a dialog opened over another hides the first one's.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;

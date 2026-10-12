@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, input, output } from '@angu
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { ClipperInfo, ClipperParameter } from '../../../models/api.models';
 
 export interface ClipperSelection {
@@ -13,7 +14,7 @@ export interface ClipperSelection {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-clipper-chooser',
   standalone: true,
-  imports: [FormsModule, ModalComponent],
+  imports: [FormsModule, ModalComponent, ToastyHintComponent],
   templateUrl: './clipper-chooser.component.html',
   styleUrl: './clipper-chooser.component.scss',
 })

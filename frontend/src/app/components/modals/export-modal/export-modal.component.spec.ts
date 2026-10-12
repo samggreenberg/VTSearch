@@ -204,6 +204,13 @@ describe('ExportModalComponent', () => {
       expect(component.modalTitle).toBe('Export Detector Labels');
     });
 
+    it("has Toasty say it sends the detector's labels (#4807)", async () => {
+      await flushInit();
+      const hint = (fixture.nativeElement as HTMLElement).querySelector('vt-toasty-hint');
+      expect(hint?.getAttribute('hintId')).toBe('export-labels');
+      expect(hint?.textContent).toContain("Export sends this detector's labels out of VTSearch");
+    });
+
     it('flags a one-sided selection, and only a one-sided one', async () => {
       await flushInit();
       expect(component.showPartialLabelsetNote).toBe(false); // opens on All
@@ -227,6 +234,14 @@ describe('ExportModalComponent', () => {
       expect(component.labelFilter).toBe('good');
       expect(component.showPartialLabelsetNote).toBe(false);
       expect(component.modalTitle).toBe('Export Results');
+    });
+
+    it('has Toasty say it sends results (#4807)', async () => {
+      fixture.componentRef.setInput('scope', 'results');
+      await flushInit();
+      const hint = (fixture.nativeElement as HTMLElement).querySelector('vt-toasty-hint');
+      expect(hint?.getAttribute('hintId')).toBe('export-results');
+      expect(hint?.textContent).toContain('Export sends these results out of VTSearch');
     });
 
     // Both scopes share one exporter list, so the words are what tell a Find

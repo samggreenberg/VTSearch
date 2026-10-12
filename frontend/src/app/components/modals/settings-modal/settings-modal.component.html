@@ -1,4 +1,8 @@
 <vt-modal title="Settings" [open]="true" (closed)="close()">
+  <vt-toasty-hint hintId="settings">
+    Settings are yours alone, and every change here saves as you make it. Each tab on the left is
+    one area; <strong>Appearance</strong> is where Toasty's hints are hidden or brought back.
+  </vt-toasty-hint>
   @if (loading()) {
     <p class="empty-state">Loading settings…</p>
   } @else {

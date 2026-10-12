@@ -46,6 +46,7 @@
     <vt-voting-overlay
       [isGood]="session.currentVote() === 'good'"
       [isBad]="session.currentVote() === 'bad'"
+      [hint]="voteHint()"
       (voted)="session.vote($event)"
     ></vt-voting-overlay>
     <p class="stage-keys">&rarr; Good · &larr; Bad · &darr; back a pick (its vote is taken back) · &uarr; next unvoted.</p>
@@ -54,7 +55,7 @@
       <p class="error-text" role="alert">{{ session.error() }}</p>
     }
   } @else {
-    <div class="stage-empty empty-state" role="status">
+    <div #stageEmpty class="stage-empty empty-state" role="status">
       @switch (session.phase()) {
         @case ('done') {
           <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
@@ -80,6 +81,14 @@
       }
       @if (session.error()) {
         <p class="error-text" role="alert">{{ session.error() }}</p>
+      }
+      <!-- Toasty stands under the Test done note (#4807); the hint positions
+           against the centre panel, which is the positioned ancestor. -->
+      @if (session.phase() === 'done') {
+        <vt-toasty-hint hintId="test-done" [anchor]="stageEmpty" reach="right">
+          The picks have said what they can about the line. Read the verdict on the right and take
+          one of its exits, or open the <strong>Review</strong> tab to walk the full list.
+        </vt-toasty-hint>
       }
     </div>
   }

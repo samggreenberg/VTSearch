@@ -1,11 +1,9 @@
 <vt-modal title="Combine Datasets" [open]="true" (closed)="close()">
+  <vt-toasty-hint hintId="combine-datasets">
+    Combining merges the selected datasets into one new dataset, keeping one copy of anything
+    they share and leaving the originals as they are. Name it and click <strong>Combine</strong>.
+  </vt-toasty-hint>
   <div class="combine-modal-body">
-    <p class="combine-intro">
-      Merge the selected datasets into a single new dataset. Entries that
-      appear in more than one source (matched by content hash) are kept only
-      once.
-    </p>
-
     @if (rows.length === 0) {
       <p class="empty-state">
         No datasets to combine. Close this dialog and pick at least two

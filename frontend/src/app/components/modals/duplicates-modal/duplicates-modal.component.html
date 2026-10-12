@@ -1,4 +1,9 @@
 <vt-modal [title]="'Duplicates: ' + datasetName()" [open]="true" (closed)="close()">
+  <vt-toasty-hint hintId="duplicates">
+    These items were collapsed as duplicates when the dataset was imported: each set counts as one
+    item, with every origin it came from. Tick the columns to show, and copy the table if you need
+    it.
+  </vt-toasty-hint>
   <button class="btn btn--secondary btn--sm back-btn" (click)="close()" title="Return to dataset stats">&larr; Back</button>
 
   @if (loading()) {

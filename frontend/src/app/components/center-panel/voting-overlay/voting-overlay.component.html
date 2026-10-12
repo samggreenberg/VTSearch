@@ -22,10 +22,43 @@
     Good
   </button>
 </div>
-@if (showHint()) {
-  <vt-toasty-hint hintId="start-voting" [anchor]="voteButtons" side="above" reach="right">
-    Click <strong>Bad</strong> / <strong>Good</strong> (or &larr; / &rarr;) to vote whether this is
-    what you're looking for. Autopilot picks what to ask next. Your detector learns from every
-    answer.
-  </vt-toasty-hint>
+@switch (hint()) {
+  @case ('start-voting') {
+    <vt-toasty-hint hintId="start-voting" [anchor]="voteButtons" side="above" reach="right">
+      Autopilot is showing you its first pick. Click <strong>Good</strong> (&rarr;) if this is what
+      you're looking for, or <strong>Bad</strong> (&larr;) if it isn't. Your detector learns from every
+      answer.
+    </vt-toasty-hint>
+  }
+  @case ('find-goods') {
+    <vt-toasty-hint hintId="find-goods" [anchor]="voteButtons" side="above" reach="right">
+      Autopilot is looking for your first {{ goodsNeededPhrase() }} so your detector has something to
+      learn from: {{ hintCounts().goods }} found so far. Keep voting.
+    </vt-toasty-hint>
+  }
+  @case ('find-bads') {
+    <vt-toasty-hint hintId="find-bads" [anchor]="voteButtons" side="above" reach="right">
+      You've found your Goods. Autopilot needs {{ badsNeededPhrase() }} too, so the detector learns
+      what you're not looking for: {{ hintCounts().bads }} so far. Keep voting.
+    </vt-toasty-hint>
+  }
+  @case ('find-more') {
+    <vt-toasty-hint hintId="find-more" [anchor]="voteButtons" side="above" reach="right">
+      Your detector has its first Goods and Bads. Autopilot is now walking down the sort for more
+      Goods; keep voting until it moves on.
+    </vt-toasty-hint>
+  }
+  @case ('keep-voting') {
+    <vt-toasty-hint hintId="keep-voting" [anchor]="voteButtons" side="above" reach="right">
+      Your detector now retrains after every vote, and Autopilot asks about the items it's least
+      sure of. Keep voting until the lights on the left all turn green.
+    </vt-toasty-hint>
+  }
+  @case ('test-vote') {
+    <vt-toasty-hint hintId="test-vote" [anchor]="voteButtons" side="above" reach="right">
+      Test is checking your detector's line with picks from both sides of it, in random order. Vote
+      <strong>Good</strong> or <strong>Bad</strong> on each; the result on the right firms up as you
+      go.
+    </vt-toasty-hint>
+  }
 }

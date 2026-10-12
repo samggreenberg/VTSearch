@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 
@@ -161,10 +161,18 @@ export class AutopilotStateService {
    * per-run and every re-entry to the Train window is a new run. The labelset
    * is what remembers across runs, so the run's first look at it decides.
    */
-  private startedTrained = false;
+  private readonly startedTrained = signal(false);
 
   /** Whether {@link noteInitialLabelset} has taken its one reading this run. */
-  private initialLabelsetKnown = false;
+  private readonly initialLabelsetKnown = signal(false);
+
+  /**
+   * Whether this run started on a detector with no labels (#4807): the run
+   * that trains it, which Toasty's phase hints are for, as the hand-off is.
+   * False until the labelset has been read, so a run never reads as training
+   * from not-yet-loaded zeroes.
+   */
+  readonly startedUntrained = computed(() => this.initialLabelsetKnown() && !this.startedTrained());
 
   /**
    * The vote counts at the last {@link checkPhaseTransition}. The phase check
@@ -199,9 +207,9 @@ export class AutopilotStateService {
    * untrained and spent its first sort on the text hint (#3535).
    */
   noteInitialLabelset(goodCount: number, badCount: number): void {
-    if (this.initialLabelsetKnown) return;
-    this.initialLabelsetKnown = true;
-    this.startedTrained = goodCount > 0 || badCount > 0;
+    if (this.initialLabelsetKnown()) return;
+    this.initialLabelsetKnown.set(true);
+    this.startedTrained.set(goodCount > 0 || badCount > 0);
     const retrainMode = goodCount > 0 && badCount > 0;
     if (retrainMode !== this.stateSubject.value.retrainMode) {
       this.stateSubject.next({
@@ -219,8 +227,8 @@ export class AutopilotStateService {
    * *previous* detector and says nothing about the one now in front of the user.
    */
   forgetInitialLabelset(): void {
-    this.initialLabelsetKnown = false;
-    this.startedTrained = false;
+    this.initialLabelsetKnown.set(false);
+    this.startedTrained.set(false);
   }
 
   /**
@@ -231,7 +239,7 @@ export class AutopilotStateService {
    * already have been offered.
    */
   get shouldAnnounceCompletion(): boolean {
-    return this.initialLabelsetKnown && !this.startedTrained && !this.completionAnnounced;
+    return this.startedUntrained() && !this.completionAnnounced;
   }
 
   /** Record that the completion hand-off has been offered for this run. */
@@ -243,8 +251,8 @@ export class AutopilotStateService {
     if (this.running) return;
     this.handoff.set(null);
     this.completionAnnounced = false;
-    this.startedTrained = false;
-    this.initialLabelsetKnown = false;
+    this.startedTrained.set(false);
+    this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
     this.stateSubject.next({
       ...this.stateSubject.value,
@@ -406,8 +414,8 @@ export class AutopilotStateService {
   clear(): void {
     this.handoff.set(null);
     this.completionAnnounced = false;
-    this.startedTrained = false;
-    this.initialLabelsetKnown = false;
+    this.startedTrained.set(false);
+    this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
     this.stateSubject.next({ ...INITIAL_STATE });
   }

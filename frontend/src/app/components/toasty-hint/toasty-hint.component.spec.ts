@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
+import { By } from '@angular/platform-browser';
 
 import { RectLike, ToastyHintComponent, toastyHintPlacement } from './toasty-hint.component';
+import { ModalComponent } from '../modal/modal.component';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -22,6 +24,7 @@ describe('toastyHintPlacement', () => {
     expect(toastyHintPlacement(rect(900, 20, 30, 30), origin, bounds, hint, 64, 'below', 'left')).toEqual({
       left: 915 + 32 - 300,
       top: 54,
+      side: 'below',
       reach: 'left',
     });
   });
@@ -31,6 +34,7 @@ describe('toastyHintPlacement', () => {
     expect(toastyHintPlacement(rect(380, 600, 120, 40), origin, bounds, hint, 64, 'above', 'right')).toEqual({
       left: 440 - 32,
       top: 596 - 100,
+      side: 'above',
       reach: 'right',
     });
   });
@@ -40,22 +44,58 @@ describe('toastyHintPlacement', () => {
     expect(toastyHintPlacement(rect(40, 20, 30, 30), origin, bounds, hint, 64, 'below', 'left')).toEqual({
       left: 55 - 32,
       top: 54,
+      side: 'below',
       reach: 'right',
     });
   });
 
   it('pushes the hint back inside when neither way fits', () => {
     const p = toastyHintPlacement(rect(190, 20, 20, 20), origin, { width: 350 }, hint, 64, 'below', 'right');
-    expect(p).toEqual({ left: 50, top: 44, reach: 'right' });
+    expect(p).toEqual({ left: 50, top: 44, side: 'below', reach: 'right' });
   });
 
   it('translates into the containing block', () => {
     const p = toastyHintPlacement(rect(900, 20, 30, 30), { left: 100, top: 10 }, bounds, hint, 0, 'below', 'left');
-    expect(p).toEqual({ left: 815 - 300, top: 44, reach: 'left' });
+    expect(p).toEqual({ left: 815 - 300, top: 44, side: 'below', reach: 'left' });
   });
 
   it('places nothing for an unrendered control', () => {
     expect(toastyHintPlacement(rect(0, 0, 0, 0), origin, bounds, hint, 64, 'below', 'left')).toBeNull();
+  });
+
+  it('stands beside a dialog box at its top corner, the bubble reaching on outward (#4807)', () => {
+    const box = rect(400, 100, 400, 500);
+    const wide = { width: 1200 };
+    expect(toastyHintPlacement(box, origin, wide, hint, 64, 'beside', 'right')).toEqual({
+      left: 800 + 4,
+      top: 100,
+      side: 'beside',
+      reach: 'right',
+    });
+    expect(toastyHintPlacement(box, origin, wide, hint, 64, 'beside', 'left')).toEqual({
+      left: 400 - 4 - 300,
+      top: 100,
+      side: 'beside',
+      reach: 'left',
+    });
+  });
+
+  it('moves from below a box to beside it when the hint would run off the bottom (#4807)', () => {
+    const window = { width: 1200, height: 600 };
+    // A box 500px tall from y=60: no room for 100px of hint under it.
+    expect(toastyHintPlacement(rect(400, 60, 400, 500), origin, window, hint, 64, 'below', 'right')).toEqual({
+      left: 804,
+      top: 60,
+      side: 'beside',
+      reach: 'right',
+    });
+    // A shorter box: Toasty stays under it, centred.
+    expect(toastyHintPlacement(rect(400, 60, 400, 300), origin, window, hint, 64, 'below', 'right')).toEqual({
+      left: 600 - 32,
+      top: 364,
+      side: 'below',
+      reach: 'right',
+    });
   });
 });
 
@@ -71,6 +111,87 @@ describe('toastyHintPlacement', () => {
   `,
 })
 class HostComponent {}
+
+/** A hint on the view and one inside a dialog, the dialog's with no anchor of its own. */
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: true,
+  imports: [ToastyHintComponent, ModalComponent],
+  template: `
+    <div class="box">
+      <button #target>+</button>
+      <vt-toasty-hint hintId="add-dataset" [anchor]="target">On the view.</vt-toasty-hint>
+    </div>
+    <vt-modal [open]="open()" title="Dialog">
+      <vt-toasty-hint hintId="settings">In the dialog.</vt-toasty-hint>
+    </vt-modal>
+  `,
+})
+class DialogHostComponent {
+  readonly open = signal(false);
+}
+
+describe('ToastyHintComponent in and under a dialog (#4807)', () => {
+  let httpMock: HttpTestingController;
+
+  afterEach(() => {
+    httpMock.verify();
+    vi.restoreAllMocks();
+  });
+
+  async function render(): Promise<ComponentFixture<DialogHostComponent>> {
+    TestBed.configureTestingModule({
+      imports: [DialogHostComponent],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.tagName === 'BUTTON') return rect(900, 20, 30, 30) as DOMRect;
+      if (this.classList.contains('box')) return rect(100, 10, 1000, 700) as DOMRect;
+      return rect(0, 0, 0, 0) as DOMRect;
+    });
+    TestBed.inject(SettingsStateService).load();
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush({});
+    await settleResource();
+    const fixture = TestBed.createComponent(DialogHostComponent);
+    await settleZoneless(fixture);
+    return fixture;
+  }
+
+  function hints(fixture: ComponentFixture<DialogHostComponent>): [ToastyHintComponent, ToastyHintComponent] {
+    const [onView, inDialog] = fixture.debugElement.queryAll(By.directive(ToastyHintComponent));
+    return [onView.componentInstance, inDialog.componentInstance];
+  }
+
+  it('shows the view hint only while no dialog is open, and the dialog hint only on top', async () => {
+    const fixture = await render();
+    const [onView, inDialog] = hints(fixture);
+    expect(onView.shown()).toBe(true);
+    expect(inDialog.shown()).toBe(false);
+
+    fixture.componentInstance.open.set(true);
+    await settleZoneless(fixture);
+    expect(onView.shown()).toBe(false);
+    expect(inDialog.shown()).toBe(true);
+
+    fixture.componentInstance.open.set(false);
+    await settleZoneless(fixture);
+    expect(onView.shown()).toBe(true);
+    expect(inDialog.shown()).toBe(false);
+  });
+
+  it('stands at the dialog box when given no anchor, below it and reaching right', async () => {
+    const fixture = await render();
+    fixture.componentInstance.open.set(true);
+    await settleZoneless(fixture);
+    const [onView, inDialog] = hints(fixture);
+    const box = (fixture.nativeElement as HTMLElement).querySelector('.modal-content');
+    expect(inDialog.target()).toBe(box);
+    expect(inDialog.reachWay()).toBe('right');
+    expect(onView.reachWay()).toBe('left');
+  });
+});
 
 describe('ToastyHintComponent', () => {
   let httpMock: HttpTestingController;

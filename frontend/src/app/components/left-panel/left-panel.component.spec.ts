@@ -42,6 +42,18 @@ describe('LeftPanelComponent', () => {
     expect(comp.autopilotStart.emit).toHaveBeenCalled();
   });
 
+  it("has Toasty explain the Review tab when the host asks (#4807)", () => {
+    fixture.componentRef.setInput('panelMode', 'find');
+    fixture.componentRef.setInput('findTab', 'review');
+    fixture.componentRef.setInput('reviewHint', true);
+    TestBed.tick();
+    const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
+    expect(hint?.textContent).toContain('every item, best match first');
+    fixture.componentRef.setInput('reviewHint', false);
+    TestBed.tick();
+    expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
+  });
+
   it('should switch to manual tab', () => {
     component.setTab('manual');
     expect(component.activeTab()).toBe('manual');

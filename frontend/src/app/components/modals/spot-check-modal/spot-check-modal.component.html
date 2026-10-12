@@ -1,4 +1,9 @@
 <vt-modal [open]="true" title="Spot check" (closed)="close()">
+  <vt-toasty-hint hintId="spot-check">
+    A spot check draws a few picks at random from the list and asks about each, to measure how
+    right the detector's line is. Vote <strong>Good</strong> or <strong>Bad</strong> on every pick;
+    the last one sends the round.
+  </vt-toasty-hint>
   <div class="spot-check">
     @switch (phase()) {
       @case ('starting') {

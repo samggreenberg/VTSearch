@@ -17,6 +17,25 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Toasty's hints say where you are, and there is one for every step and every dialog**
+  (issue #4807). Each hint now opens with the state that raised it and ends with the one step to
+  take ("You have detectors, but none is selected. Click one to select it, or click **+** to make
+  a new one."), rather than an instruction out of the blue, and stops short of the step after that.
+  The Dashboard gained hints for the detours on the way to Train, Test or Find: the only dataset
+  still importing, the open detector tab empty while the other has detectors, a new detector ticked
+  under several datasets, and a detector with no labels ticked among others. The reason under a
+  disabled **Train** / **Test** / **Find** button is hidden while a hint is up, since the hint says
+  it. In the Train view Toasty stays over **Good** / **Bad** through the run that trains a
+  detector, saying what each Autopilot phase is after and how many Goods or Bads it still needs,
+  and the **Update Sort Example?** hint now counts the clicks and positives so far. The Test view
+  has hints for its first pick, its verdict, and the **Review** tab. Every dialog has a hint saying
+  what you are doing there, standing below the box or beside its top corner when the box fills the
+  window; the **Combine Datasets** and **Achievements** intro paragraphs moved into it. Only one
+  hint shows at a time: a dialog's hint shows only while it is the topmost dialog, and a view's
+  only while no dialog is open. New ids in `hidden_hints`: `empty-detector-tab`, `wait-for-import`,
+  `train-one-dataset`, `untrained-detector`, `find-goods`, `find-bads`, `find-more`, `keep-voting`,
+  `test-vote`, `test-done`, `review`, and one per dialog (`import-dataset`, `new-detector`, …; the
+  full list is in `docs/hints.md`).
 - **A detector made from a typed description is tested as that description until it has enough labels**
   (issue #4758). Below 3 Goods and 4 Bads (or a Good and 16 Bads), Test, Find and AutoFind ranked by
   the average of the detector's Goods, and before its first Good gave nothing: Test refused it and

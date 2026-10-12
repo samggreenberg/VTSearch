@@ -1,4 +1,8 @@
 <vt-modal title="Choose MediaClipper" [open]="open()" [showCloseButton]="false" (closed)="cancel()">
+  <vt-toasty-hint hintId="choose-clipper">
+    A clipper cuts each item into pieces before it's analyzed, so one long recording becomes many
+    short clips. Pick one, set its options, and click <strong>OK</strong>.
+  </vt-toasty-hint>
   <button class="btn btn--secondary btn--sm back-btn" (click)="cancel()" title="Return to the importer without changing the clipper">&larr; Back</button>
   @if (clippers().length === 0) {
     <p class="empty-state">No clippers available for this media type.</p>

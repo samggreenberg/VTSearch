@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
 import type { DetectorRegistryStatsResponse } from '../../../generated/api-client/models/detector-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
@@ -17,7 +18,7 @@ import { verdictLine, verdictTitle } from '../../../utils/line-test';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-detector-stats-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent],
+  imports: [CommonModule, ModalComponent, ToastyHintComponent],
   templateUrl: './detector-stats-modal.component.html',
   styleUrl: './detector-stats-modal.component.scss',
 })
