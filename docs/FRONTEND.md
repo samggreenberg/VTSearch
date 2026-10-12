@@ -282,7 +282,8 @@ is the Test autopilot (below), and the control's state line there is the
 host's (`lineState`: this corpus's result, or untested) with the radios
 `locked` while a phase runs.
 **When a check is due** (#4496): the balance's `checkDue` (the server's
-`check_due`, `weak_check_due` on the labels line's `separation`) turns the
+`check_due`, `weak_check_due` on the labels line's `separation`; never on a
+face detector, #4799) turns the
 control's button `btn--primary` and adds a `.balance-due` note. The label view
 runs the check itself under Autopilot: an effect on the balance and
 `sortBusy` calls `runDueCheck()`, which opens the modal with an `intro` line

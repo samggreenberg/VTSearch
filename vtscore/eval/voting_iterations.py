@@ -114,6 +114,7 @@ from vtscore.training.thresholds import (
     fbeta_count,
     fit_labels_line,
     weak_check_due,
+    weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -2416,6 +2417,20 @@ def _resolve_dry_knob(name: str, value: "int | str | None", app: int) -> Optiona
     return value
 
 
+def production_spot_check(clips_dict: dict[int, dict[str, Any]]) -> str:
+    """The spot check the app's Autopilot runs on these medias, as a ``spot_check`` value (#4799).
+
+    ``"weak"`` - the end-of-run check plus the prompted one (#4496) - except on a
+    media type the app never prompts on
+    (:func:`~vtscore.training.thresholds.weak_check_prompts`: face crops), where
+    it is ``"end"``.  Read off the first media's ``media_type``, as the app reads
+    its detector's; medias without one are prompted on.
+    """
+    first = next(iter(clips_dict.values()), None) if clips_dict else None
+    media_type = first.get("media_type") if isinstance(first, dict) else None
+    return "weak" if weak_check_prompts(media_type) else "end"
+
+
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -2493,7 +2508,7 @@ def simulate_voting_iterations(  # noqa: C901
     walk_fine: bool = False,
     walk_guard: Optional[float] = None,
     walk_shape: Optional[str] = None,
-    spot_check: str = "weak",
+    spot_check: Optional[str] = None,
     weak_separation: float = WEAK_SEPARATION_D,
     weak_min_t: int = WEAK_CHECK_MIN_VOTES,
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
@@ -2984,9 +2999,11 @@ def simulate_voting_iterations(  # noqa: C901
             makes of it, its ranges flagged ``check_stale`` where the retrain
             moved them.  Until then every row reports the ``unchecked`` line,
             which is exactly what a headless run exports.  ``"off"`` never
-            checks: the whole run is the unchecked line.  ``"weak"`` (#4496,
-            the default since the owner's ruling of 2026-10-05: the app's
-            Autopilot checks where
+            checks: the whole run is the unchecked line.  ``None`` (default)
+            is the app's choice for these medias, :func:`production_spot_check`:
+            ``"weak"``, or ``"end"`` on face crops, where the app never prompts
+            (#4799).  ``"weak"`` (#4496, the owner's ruling of 2026-10-05: the
+            app's Autopilot checks where
             :func:`~vtscore.training.thresholds.weak_check_due` says) is
             ``"end"`` plus the check the app runs mid-session: at the first
             ordinary step from *weak_min_t* votes on whose labels line
@@ -3525,6 +3542,8 @@ def simulate_voting_iterations(  # noqa: C901
             }
         )
 
+    if spot_check is None:
+        spot_check = production_spot_check(clips_dict)
     if spot_check not in ("end", "off", "weak"):
         raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
     if weak_phase not in ("any", "learned"):
