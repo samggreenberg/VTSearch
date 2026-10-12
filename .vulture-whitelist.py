@@ -257,6 +257,7 @@ restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via
 schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
 old_switch_off  # noqa: F821 - installs a CoreConfig with the retired hide_ingest_eta switch off
 scratch_dir  # noqa: F821 - points the detector registry at a per-test scratch directory
+tenth_of_the_balance  # noqa: F821 - pins every sort line to a tenth of the balance
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
