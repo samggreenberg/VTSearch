@@ -29,7 +29,9 @@ both benches:
 Faces are four sets a preset: 1 and 4 starting photos, 1024 and 640 px, 562 people each. Every set
 is positive (SE ≤ 0.006 over votes 1–50), and nothing is given back over votes 51–150. COCO counts
 all 720 runs a preset. The ranking does not move (ΔAP 0.000). Re-cut offline on today's sessions
-from their recorded rankings, the rule gives the same numbers on faces to the third decimal.
+from their recorded rankings, the rule gives the same numbers on faces to the third decimal. On
+today's dev, where #4799 turned off the prompted check on faces, the face gains hold: +0.015 to
++0.061 over votes 1–50 at 1024 px (below).
 
 At the first trained click, today's line keeps a median of 5 of a person's faces, against 4
 withheld. In the worst tenth of sessions it keeps 44 to 189. The head's count keeps 8, and 16 in
@@ -347,6 +349,31 @@ these to within 0.001 on faces.
 1024 px, and COCO's Binary opening. Same lines as Figure 1. On faces the head's count runs above
 today's until the class model holds 32 Bads (about vote 55), then hands back to today's line.*
 
+## On today's dev: no prompted check on faces (#4799)
+
+While these runs went, dev shipped #4799: Autopilot no longer prompts the weak-separation check on
+face crops, which fired at about vote 15, inside this rule's window. Today's sessions and the
+arm above both ran with the check on, so they pair correctly but describe the app before it. The
+face sessions were run again on the branch merged with dev (`386a4e211`): today's line
+(`CALIB_HEAD_COUNT_BADS=0`) against the rule, full sessions, 1024 px, one and four starting photos,
+every preset, with the line counts on.
+
+| set | runs | today, 1-50 | Δ 1-50 | today, 1-150 | Δ 1-150 | Δ 51-150 | wins / losses (1-150) |
+|---|---|---|---|---|---|---|---|
+| k1-b4-1024 | 562 | 0.782 | +0.025 ± 0.005 | 0.819 | +0.009 ± 0.002 | +0.001 ± 0.000 | 46% / 53% |
+| k4-b4-1024 | 562 | 0.789 | +0.044 ± 0.006 | 0.817 | +0.015 ± 0.002 | +0.001 ± 0.000 | 50% / 50% |
+| k1-b1-1024 | 562 | 0.772 | +0.042 ± 0.003 | 0.802 | +0.015 ± 0.001 | +0.002 ± 0.000 | 66% / 22% |
+| k4-b1-1024 | 562 | 0.780 | +0.061 ± 0.004 | 0.801 | +0.022 ± 0.002 | +0.003 ± 0.000 | 72% / 17% |
+| k1-b025-1024 | 562 | 0.875 | +0.015 ± 0.002 | 0.901 | +0.006 ± 0.001 | +0.001 ± 0.000 | 75% / 20% |
+| k4-b025-1024 | 562 | 0.901 | +0.021 ± 0.002 | 0.913 | +0.008 ± 0.001 | +0.001 ± 0.000 | 79% / 16% |
+
+The rule gains in every set, and the offline re-cut of today's merged sessions gives the same
+numbers to within 0.0003. The β 4 gain is a little smaller than before #4799 (+0.025 and +0.044
+over votes 1–50, against +0.029 and +0.053), since today's line there now starts higher. At β 1
+and β ¼ it is unchanged. COCO is unaffected: #4799 is faces only, and #4758 (a typed-query
+detector's Find gives the query's set until a trained head) changes only the clicks before the
+trained head, the same in both arms.
+
 ## The cost: a corpus with none of the target
 
 The head's count is a count on the corpus it cuts, which the labels line otherwise never draws
@@ -388,11 +415,11 @@ rule extends that by about 25 votes, while the class model is thin. The test
 
 | | |
 |---|---|
-| Code | branch `claude/beta4-line-4786`, stacked on #4790: today's sessions at `cb26dcfae` (frozen worktree `vts-4786-run`); the β 4 arm at `4131eef90` (`vts-4786-arm2`; its β 4 line is the shipped one's), the β ¼ and β 1 arms at `8338a115c` (`vts-4786-arm4`) |
+| Code | branch `claude/beta4-line-4786`, stacked on #4790: today's sessions at `cb26dcfae` (frozen worktree `vts-4786-run`); the β 4 arm at `4131eef90` (`vts-4786-arm2`; its β 4 line is the shipped one's), the β ¼ and β 1 arms at `8338a115c` (`vts-4786-arm4`); both merged-dev face runs at `386a4e211` (`vts-4786-merged`, run dirs `…/2026-10-12-4786{mctl,marm}-roll-k{1,4}-b{025,1,4}`) |
 | FHIBE release | `fhibe-full-resolution-674a7dcf`, faces aligned by roll (#4777), the #4699 baseline's 562 people |
 | Run dirs (owner-only) | `<release>-derived/runs/2026-10-11-4786-roll-k{1,4}-b{025,1,4}` (today, with line counts), `…/2026-10-11-4786thin-roll-k{1,4}-b4` and `…/2026-10-11-4786all-roll-k{1,4}-b{025,1}` (the arm); analyses `…/2026-10-11-4786-analysis` |
 | COCO | `state-of-the-app/2026-10-11-line4786-b{025,1,4}` (today, with line counts), `…/2026-10-11-line4786thin-b4` and `…/2026-10-11-line4786all-b{025,1}` (the arm), on the 2026-10-08 grid |
-| Files here | `rules_b4.csv`, `rules_low.csv` (every rule and gate, today's sessions re-cut), `ab.csv`, `ab_curves.csv` (the arm against today), `curves_*.csv` (today, the oracle and every rule at the shipped gate, per vote), `tables.md`, figures |
+| Files here | `rules_b4.csv`, `rules_low.csv` (every rule and gate, today's sessions re-cut), `ab.csv`, `ab_curves.csv` (the arm against today), `ab_merged.csv` (the same on dev after #4799, faces at 1024 px), `curves_*.csv` (today, the oracle and every rule at the shipped gate, per vote), `tables.md`, figures |
 
 Reproduce:
 
