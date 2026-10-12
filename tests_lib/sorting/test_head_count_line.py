@@ -15,6 +15,7 @@ from vtscore.detectors.centroid_head import centroid_cut
 from vtscore.eval.live_threshold_rules import head_count_bads
 from vtscore.training.thresholds import (
     HEAD_COUNT_BADS,
+    HEAD_COUNT_GOODS,
     HEAD_COUNT_MIN_BETA,
     corpus_cut,
     fit_labels_line,
@@ -76,6 +77,12 @@ class TestTheGate:
         line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS), _corpus())
         assert line is not None and not head_count_serves(line.model, 4.0)
         line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS - 1), _corpus())
+        assert line is not None and head_count_serves(line.model, 4.0)
+
+    def test_and_at_the_goods(self):
+        line = fit_labels_line(_orderings(HEAD_COUNT_GOODS, 4), _corpus())
+        assert line is not None and not head_count_serves(line.model, 4.0)
+        line = fit_labels_line(_orderings(HEAD_COUNT_GOODS - 1, 4), _corpus())
         assert line is not None and head_count_serves(line.model, 4.0)
 
 

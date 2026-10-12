@@ -44,12 +44,15 @@ pricing in ``docs/experiments`` measures what that costs on the objective.
 nothing to fit - at the hand-over to the trained head a session holds four Bads -
 and a recall-leaning cut reaches deep into its tail: at beta 4 the line kept a
 median of 5 of a FHIBE person's faces at the first trained click, and in the
-sessions where it separated weakly, hundreds.  Until the class model holds
-:data:`HEAD_COUNT_BADS` Bads, the line keeps instead what stands out in the head's
-own scores, counted by the rule that draws the Goods' centroid's line
-(:func:`head_count_cut`): the line Test gave until the hand-over, now drawn on the
-head.  Like that line it is a count on the corpus being decided, not a cut the
-labels imply; the class model takes over once it has the Bads to stand on.
+sessions where it separated weakly, hundreds.  While the class model is thin
+(fewer than :data:`HEAD_COUNT_BADS` Bads and :data:`HEAD_COUNT_GOODS` Goods), the line
+keeps instead what stands out in the head's own scores, counted by the rule that
+draws the Goods' centroid's line (:func:`head_count_cut`): the line Test gave until
+the hand-over, now drawn on the head.  Like that line it is a count on the corpus
+being decided, not a cut the labels imply; the class model takes over once it has
+the labels to stand on.  The Goods half matters for a broad target: with many
+Goods its labels line is sound, while a count of what stands out keeps several times
+the positives (COCO Better's Binary opening lost F-beta there).
 
 **When the Bads are a random sample** (#4490: a labelset imported from an
 exhaustively labelled dataset; every label of the review's ceiling), one normal
@@ -122,11 +125,16 @@ _SEARCH_SPREADS = 8.0
 _SEARCH_POINTS = 4001
 #: The prevalence range an estimate is held to: never a certainty either way.
 PREVALENCE_MIN, PREVALENCE_MAX = 1e-6, 0.5
-#: Until the class model holds this many Bads (its held-out ones, about 0.6 of the Bads in
-#: hand), a balance above :data:`HEAD_COUNT_MIN_BETA` keeps the head's count line
-#: (:func:`head_count_cut`, #4786) rather than the class model's cut.  ``0`` is the line
-#: before #4786.
-HEAD_COUNT_BADS = 20
+#: While the class model is thin - fewer than this many Bads (its held-out ones, about 0.6 of
+#: the Bads in hand) and fewer than :data:`HEAD_COUNT_GOODS` Goods - a balance above
+#: :data:`HEAD_COUNT_MIN_BETA` keeps the head's count line (:func:`head_count_cut`, #4786)
+#: rather than the class model's cut.  ``0`` is the line before #4786.
+HEAD_COUNT_BADS = 32
+#: The Goods half of the thin-model gate (#4786): with this many held-out Goods the class
+#: model's Good component stands on its own, and a broad target's labels line keeps what its
+#: many positives need where the head's count, a count of what stands out, keeps several
+#: times too many.
+HEAD_COUNT_GOODS = 6
 #: The head's count line serves balances strictly above this one (#4786): beta 4's cut is
 #: the one that reached deep into a thin class model's tail.
 HEAD_COUNT_MIN_BETA = 1.0
@@ -494,8 +502,8 @@ class LabelsLine:
 
 
 def head_count_serves(model: ClassScoreModel, beta: float) -> bool:
-    """Whether the line at *beta* is the head's count line (#4786): few Bads in the class model, a recall-leaning balance."""
-    return float(beta) > HEAD_COUNT_MIN_BETA and model.n_neg < HEAD_COUNT_BADS
+    """Whether the line at *beta* is the head's count line (#4786): a thin class model and a recall-leaning balance."""
+    return float(beta) > HEAD_COUNT_MIN_BETA and model.n_neg < HEAD_COUNT_BADS and model.n_pos < HEAD_COUNT_GOODS
 
 
 def head_count_cut(scores_desc: Any, beta: float) -> float:
@@ -776,6 +784,7 @@ def fit_labels_line(
 
 __all__ = [
     "HEAD_COUNT_BADS",
+    "HEAD_COUNT_GOODS",
     "HEAD_COUNT_MIN_BETA",
     "MIN_LOGIT_SIGMA",
     "RELATIVE_SIGMA_FLOOR",

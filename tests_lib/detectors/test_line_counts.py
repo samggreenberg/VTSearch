@@ -103,11 +103,17 @@ class TestTheHeadCountLine:
     """#4786 in the harness: while the class model holds few Bads, beta 4's Test keeps the head's count."""
 
     def test_test_keeps_the_heads_count_while_the_gate_is_open(self):
-        from vtscore.training.thresholds import HEAD_COUNT_BADS
+        from vtscore.training.thresholds import HEAD_COUNT_BADS, HEAD_COUNT_GOODS
 
         sink: list[dict] = []
         TestInTheHarness()._run(line_count_sink=sink)
-        gated = [s for s in sink if s["model_n_neg"] == s["model_n_neg"] and s["model_n_neg"] < HEAD_COUNT_BADS]
+        gated = [
+            s
+            for s in sink
+            if s["model_n_neg"] == s["model_n_neg"]
+            and s["model_n_neg"] < HEAD_COUNT_BADS
+            and s["model_n_pos"] < HEAD_COUNT_GOODS
+        ]
         assert gated, "the run should reach a trained click with few Bads"
         assert all(s["k_test"] == s["k_head_count"] for s in gated)
 

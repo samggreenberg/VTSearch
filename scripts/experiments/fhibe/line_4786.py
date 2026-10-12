@@ -18,7 +18,8 @@ Rules (each reads only what Test could read at that click; ``@N``: while the lab
 than N Bads, today's line after; ``@inf``: at every trained click; ``@negN``: while the labels
 line's class model holds fewer than N Bads (its held-out ones, about half to two thirds of the
 Bads in hand: what a rule inside the line can read, in Train and in Find alike); ``@sepD``: while
-the labels line's separation d' is below D, at any vote):
+the labels line's separation d' is below D, at any vote; ``@negNposP``: while the class model holds fewer
+than N Bads and fewer than P Goods, held out):
 
 * ``today``           the labels line (the app);
 * ``oracle``          the best count on the withheld half, per click (a bound, not a rule);
@@ -77,6 +78,8 @@ COLS = [
 GATES: tuple[float, ...] = (8, 12, 16, 24, 32, 48, 64, math.inf)
 #: The class-model gates: a rule applies while the labels line's model holds fewer than N held-out Bads.
 NEG_GATES: tuple[int, ...] = (4, 6, 8, 12, 16, 20, 24, 32)
+#: The thin-model gates: fewer than N held-out Bads and fewer than P held-out Goods.
+THIN_GATES: tuple[tuple[int, int], ...] = tuple((n, p) for n in (12, 20, 32, 1000) for p in (3, 4, 5, 6, 8))
 #: The separation gates: a rule applies while the labels line's d' is below D (#4496's weak check reads 1.5).
 SEP_GATES: tuple[float, ...] = (1.5, 2.0, 3.0, 4.0)
 CAPS: tuple[float, ...] = (1, 1.5, 2, 3, 4)
@@ -89,13 +92,23 @@ def gate_tag(n: float) -> str:
 
 
 def gate_tags() -> list[str]:
-    return [gate_tag(n) for n in GATES] + [f"neg{n}" for n in NEG_GATES] + [f"sep{d:g}" for d in SEP_GATES]
+    return (
+        [gate_tag(n) for n in GATES]
+        + [f"neg{n}" for n in NEG_GATES]
+        + [f"neg{n}pos{p}" for n, p in THIN_GATES]
+        + [f"sep{d:g}" for d in SEP_GATES]
+    )
 
 
-def gate_open(tag: str, n_bad: int, separation: float, model_n_neg: float = float("nan")) -> bool:
-    """Whether a rule gated by *tag* applies at a click with *n_bad* Bads, the model's Bads and the line's *separation*."""
+def gate_open(
+    tag: str, n_bad: int, separation: float, model_n_neg: float = float("nan"), model_n_pos: float = float("nan")
+) -> bool:
+    """Whether a rule gated by *tag* applies at a click: its Bads, the class model's Bads and Goods, the line's d'."""
     if tag.startswith("sep"):
         return bool(np.isfinite(separation)) and separation < float(tag[3:])
+    if tag.startswith("neg") and "pos" in tag:
+        n, p = tag[3:].split("pos")
+        return bool(np.isfinite(model_n_neg)) and model_n_neg < float(n) and model_n_pos < float(p)
     if tag.startswith("neg"):
         return bool(np.isfinite(model_n_neg)) and model_n_neg < float(tag[3:])
     return tag == "inf" or n_bad < float(tag)
@@ -218,7 +231,7 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
             fk = {r: fbeta_at(k, ranks, n_pos, beta) for r, k in counts.items()}
             sep = float(rec["separation"])
             for g in gate_tags():
-                if not gate_open(g, n_bad, sep, float(rec["model_n_neg"])):
+                if not gate_open(g, n_bad, sep, float(rec["model_n_neg"]), float(rec["model_n_pos"])):
                     continue
                 for r in COUNT_RULES:
                     f[f"{r}@{g}"][i] = fk[r]
@@ -229,6 +242,7 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
                     "n_good": int(rec["n_good"]),
                     "n_bad": n_bad,
                     "model_n_neg": float(rec["model_n_neg"]),
+                    "model_n_pos": float(rec["model_n_pos"]),
                     "n_test_pos": n_pos,
                     "k_test": int(rec["k_test"]),
                     "k_centroid": int(rec["k_centroid"]),
@@ -239,6 +253,7 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
                     "f_today": f_today[i],
                     "f_oracle": f["oracle"][i],
                     "f_carry": fk["carry"],
+                    "f_headcount": fk["headcount"],
                     "f_centroid": float(rec["centroid_fbeta"]),
                 }
             )
