@@ -49,7 +49,8 @@ sessions where it separated weakly, hundreds.  While the class model is thin
 (fewer than :data:`HEAD_COUNT_BADS` Bads and :data:`HEAD_COUNT_GOODS` Goods), the line
 keeps instead what stands out in the head's own scores, counted by the rule that
 draws the Goods' centroid's line (:func:`head_count_cut`): the line Test gave until
-the hand-over, now drawn on the head.  Like that line it is a count on the corpus
+the hand-over, now drawn on the head.  It never keeps fewer than the class model's
+cut at beta 1, so a recall-leaning balance returns at least a balanced one's set.  Like that line it is a count on the corpus
 being decided, not a cut the labels imply; the class model takes over once it has
 the labels to stand on.  The Goods half matters for a broad target: with many
 Goods its labels line is sound, while a count of what stands out keeps several times
@@ -129,7 +130,8 @@ PREVALENCE_MIN, PREVALENCE_MAX = 1e-6, 0.5
 #: While the class model is thin - fewer than this many Bads (its held-out ones, about 0.6 of
 #: the Bads in hand) and fewer than :data:`HEAD_COUNT_GOODS` Goods - a balance above
 #: :data:`HEAD_COUNT_MIN_BETA` keeps the head's count line (:func:`head_count_cut`, #4786)
-#: rather than the class model's cut.  ``0`` is the line before #4786.
+#: rather than the class model's cut, never fewer than that cut keeps at
+#: :data:`HEAD_COUNT_MIN_BETA`.  ``0`` is the line before #4786.
 HEAD_COUNT_BADS = 32
 #: The Goods half of the thin-model gate (#4786): with this many held-out Goods the class
 #: model's Good component stands on its own, and a broad target's labels line keeps what its
@@ -137,7 +139,8 @@ HEAD_COUNT_BADS = 32
 #: times too many.
 HEAD_COUNT_GOODS = 6
 #: The head's count line serves balances strictly above this one (#4786): beta 4's cut is
-#: the one that reached deep into a thin class model's tail.
+#: the one that reached deep into a thin class model's tail.  The class model's cut here is
+#: also the head's count line's floor, so the line keeps more as the balance leans to recall.
 HEAD_COUNT_MIN_BETA = 1.0
 
 
@@ -488,9 +491,11 @@ class LabelsLine:
 
     def threshold(self, beta: float) -> float:
         if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
-            if head_count_serves(self.model, beta):
-                return head_count_cut(self.unvoted_scores, beta)
             total = self.unvoted_share * self.unvoted_scores.size
+            if head_count_serves(self.model, beta):
+                # Never fewer than the balanced line keeps: a recall-leaning balance returns at least its set.
+                balanced = corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, HEAD_COUNT_MIN_BETA)
+                return min(head_count_cut(self.unvoted_scores, beta), balanced)
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
 

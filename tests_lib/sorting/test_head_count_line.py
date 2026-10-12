@@ -90,7 +90,15 @@ class TestTheLine:
     def test_at_beta_4_with_few_bads_the_line_is_the_heads_count(self):
         line = fit_labels_line(_orderings(4, 4), _corpus())
         assert line is not None and line.unvoted_scores is not None
-        assert line.threshold(4.0) == head_count_cut(line.unvoted_scores, 4.0)
+        assert line.threshold(4.0) == min(head_count_cut(line.unvoted_scores, 4.0), line.threshold(1.0))
+
+    def test_it_never_keeps_fewer_than_the_balanced_line(self):
+        """A recall-leaning balance returns at least the balanced set: the count is floored at beta 1's cut."""
+        for seed in range(12):
+            line = fit_labels_line(_orderings(4, 4, seed=seed), _corpus(seed + 1))
+            assert line is not None and line.unvoted_scores is not None
+            kept = [_kept(line.unvoted_scores, line.threshold(b)) for b in (0.25, 0.5, 1.0, 1.5, 2.0, 4.0)]
+            assert kept == sorted(kept), kept
 
     def test_at_beta_1_and_below_it_is_the_class_models_cut(self):
         line = fit_labels_line(_orderings(4, 4), _corpus())
@@ -105,7 +113,7 @@ class TestTheLine:
         other = _corpus(2)
         on = line.on_corpus(other)
         assert on.unvoted_scores is not None
-        assert on.threshold(4.0) == head_count_cut(on.unvoted_scores, 4.0)
+        assert on.threshold(4.0) == min(head_count_cut(on.unvoted_scores, 4.0), on.threshold(1.0))
 
     def test_gate_zero_is_the_line_before_4786(self):
         line = fit_labels_line(_orderings(4, 4), _corpus())
@@ -113,7 +121,7 @@ class TestTheLine:
         total = float(line.unvoted_share or 0.0) * line.unvoted_scores.size
         with head_count_bads(0):
             assert line.threshold(4.0) == corpus_cut(line.unvoted_posteriors, line.unvoted_scores, total, 4.0)
-        assert line.threshold(4.0) == head_count_cut(line.unvoted_scores, 4.0)
+        assert line.threshold(4.0) == min(head_count_cut(line.unvoted_scores, 4.0), line.threshold(1.0))
 
 
 class TestTheKnob:

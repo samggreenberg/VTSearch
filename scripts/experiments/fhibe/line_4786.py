@@ -30,7 +30,8 @@ than N Bads and fewer than P Goods, held out):
                       (the count line's own scaling, #4603);
 * ``b1line@N``        the beta-1 labels line;
 * ``headcount@N``     the centroid's count rule drawn on the head's own logit scores;
-                      ``headcountmin@N`` the fewer of that and today's;
+                      ``headcountmin@N`` the fewer of that and today's; ``headcountb1@N`` the more
+                      of that and the beta-1 labels line's, so beta 4 never keeps less than beta 1;
 * ``centroid@N``      the Goods' centroid's own Test (its ranking and line): #4776's "head from
                       N Bads", on today's head.
 
@@ -84,7 +85,16 @@ THIN_GATES: tuple[tuple[int, int], ...] = tuple((n, p) for n in (12, 20, 32, 100
 SEP_GATES: tuple[float, ...] = (1.5, 2.0, 3.0, 4.0)
 CAPS: tuple[float, ...] = (1, 1.5, 2, 3, 4)
 #: The count rules, each a function of one click's record (a row of ``__linecounts.csv``).
-COUNT_RULES = ("carry", "carrymin", *(f"cap{m:g}g" for m in CAPS), "scaled", "b1line", "headcount", "headcountmin")
+COUNT_RULES = (
+    "carry",
+    "carrymin",
+    *(f"cap{m:g}g" for m in CAPS),
+    "scaled",
+    "b1line",
+    "headcount",
+    "headcountmin",
+    "headcountb1",
+)
 
 
 def gate_tag(n: float) -> str:
@@ -142,6 +152,10 @@ def rule_count(rule: str, rec: pd.Series, beta: float) -> int:
     if rule == "headcountmin":
         hc = int(rec["k_head_count"])
         return today if hc < 0 else min(today, hc)
+    if rule == "headcountb1":
+        # Never fewer than the beta-1 line keeps: a recall-leaning balance keeps at least a balanced one's set.
+        hc = int(rec["k_head_count"])
+        return today if hc < 0 else max(hc, int(rec["k_labels_b1"]))
     raise ValueError(rule)
 
 
