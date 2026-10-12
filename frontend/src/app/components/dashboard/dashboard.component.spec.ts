@@ -1113,14 +1113,18 @@ describe('DashboardComponent', () => {
 
     it("drops the empty tables' \"Click + to add one\" while Toasty says it (#4807)", async () => {
       const el = renderWith();
-      const message = () => (el.querySelector('.empty-state__message')?.textContent || '').replace(/\s+/g, ' ').trim();
+      const [datasets, detectors] = el.querySelectorAll('.dashboard-section');
+      const message = (section: Element) =>
+        (section.querySelector('.empty-state__message')?.textContent || '').replace(/\s+/g, ' ').trim();
       await loadSettings({});
       expect(component.isHintOnShow('add-dataset')).toBe(true);
-      expect(message()).toBe('No datasets yet.');
-      expect(el.querySelector('.empty-state .inline-add-btn')).toBeNull();
+      expect(message(datasets)).toBe('No datasets yet.');
+      expect(datasets.querySelector('.inline-add-btn')).toBeNull();
+      // Toasty is on the dataset step, so the detector table keeps its own +.
+      expect(message(detectors)).toBe('No draft detectors. Click + to add one.');
 
       await loadSettings({ hide_all_hints: true });
-      expect(message()).toBe('No datasets yet. Click + to add one.');
+      expect(message(datasets)).toBe('No datasets yet. Click + to add one.');
     });
 
     it('puts a working + in the draft-detector empty state', () => {
