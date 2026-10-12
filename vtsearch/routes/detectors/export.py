@@ -119,7 +119,14 @@ def export_portable_bundle(detector_id: str):
 
     # Score-space embedder: the concrete embedder of the detector's locked type
     # this dataset supplies (matches Find / resolve_or_train_detector's space).
+    # A typed query's head (#4758) scores in the text space, and the bundle says so.
+    from vtscore.detectors.query_head import query_head_embedder  # noqa: PLC0415
+    from vtscore.embedding.binding import embedder_type as _embedder_type  # noqa: PLC0415
+
     score_emb = keying_embedder_for_type(det_type, snap)
+    if query_head_embedder(mlp):
+        score_emb = query_head_embedder(mlp) or ""
+        det_type = _embedder_type(score_emb) or det_type
     embedder_display = score_emb or ""
     embedder_model_id: str | None = None
     if score_emb:

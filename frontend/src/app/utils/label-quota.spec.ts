@@ -1,5 +1,5 @@
 import type { LabelQuota } from '../generated/api-client/models/label-quota';
-import { centroidNote, labelsOwed } from './label-quota';
+import { centroidNote, labelsOwed, queryNote, quotaNote, typedQuery } from './label-quota';
 
 function quota(over: Partial<LabelQuota> = {}): LabelQuota {
   return {
@@ -15,7 +15,7 @@ function quota(over: Partial<LabelQuota> = {}): LabelQuota {
   };
 }
 
-describe('label-quota (#4643, #4731)', () => {
+describe('label-quota (#4643, #4731, #4758)', () => {
   describe('labelsOwed', () => {
     it('names both classes, singular and plural', () => {
       expect(labelsOwed({ goods_owed: 2, bads_owed: 1 })).toBe('2 more Goods and 1 more Bad');
@@ -33,6 +33,7 @@ describe('label-quota (#4643, #4731)', () => {
       expect(centroidNote(null)).toBe('');
       expect(centroidNote(undefined)).toBe('');
       expect(centroidNote(quota({ tier: 'trained', goods_owed: 0, bads_owed: 0 }))).toBe('');
+      expect(centroidNote(quota({ tier: 'query' }))).toBe('');
     });
 
     it("says the detector is the Goods' centroid, the quota, and what is owed", () => {
@@ -52,6 +53,55 @@ describe('label-quota (#4643, #4731)', () => {
       const note = centroidNote(quota({ n_good: 3, n_bad: 4, goods_owed: 0, bads_owed: 0 }));
       expect(note).toContain("Goods' centroid");
       expect(note).not.toContain('more');
+    });
+  });
+
+  describe('queryNote (#4758)', () => {
+    it('says nothing for any other detector', () => {
+      expect(queryNote(null)).toBe('');
+      expect(queryNote(quota())).toBe('');
+      expect(queryNote(quota({ tier: 'trained', goods_owed: 0, bads_owed: 0 }))).toBe('');
+    });
+
+    it("says the detector is its typed query's own set, the quota, and what is owed", () => {
+      const note = queryNote(quota({ tier: 'query' }));
+      expect(note).toContain("the detector's typed query, keeping the images its text sort keeps in Train");
+      expect(note).toContain('3 Goods and 4 Bads, or a Good and 16 Bads');
+      expect(note).toContain('2 more Goods and 4 more Bads, or 16 more Bads in Train give a trained one.');
+      expect(note).toContain('the Threshold moves it');
+      expect(note).not.toContain('centroid');
+    });
+
+    it('owes the first quota only, before the first Good', () => {
+      const note = queryNote(quota({ tier: 'query', n_good: 0, n_bad: 0, goods_owed: 3, bads_owed: 4 }));
+      expect(note).toContain(' 3 more Goods and 4 more Bads in Train give a trained one.');
+    });
+  });
+
+  describe('quotaNote', () => {
+    it('is the note for whichever detector the quota gave', () => {
+      expect(quotaNote(quota({ tier: 'query' }))).toBe(queryNote(quota({ tier: 'query' })));
+      expect(quotaNote(quota())).toBe(centroidNote(quota()));
+      expect(quotaNote(quota({ tier: 'trained', goods_owed: 0, bads_owed: 0 }))).toBe('');
+      expect(quotaNote(null)).toBe('');
+    });
+  });
+
+  describe('typedQuery (#4758)', () => {
+    it("is the detector's text query, else its first text example, as the server reads it", () => {
+      expect(typedQuery({ text_query: '  a dog ' })).toBe('a dog');
+      expect(
+        typedQuery({
+          text_query: '',
+          examples: [
+            { type: 'media', value: 'x.png' },
+            { type: 'text', value: 'a cat' },
+          ],
+        }),
+      ).toBe('a cat');
+      expect(typedQuery({ text_query: '', examples: [{ type: 'media', value: 'x.png' }] })).toBe('');
+      expect(typedQuery({})).toBe('');
+      expect(typedQuery({ text_query: null, examples: null })).toBe('');
     });
   });
 });

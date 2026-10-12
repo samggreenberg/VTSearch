@@ -1183,6 +1183,13 @@ CENTROID_LINE_VARIANTS: str | None = os.environ.get("CALIB_CENTROID_LINE_VARIANT
 #: picks, so the session is the app's; ``CALIB_HANDOVER_SHADOW=1`` turns it on.
 HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not in ("", "0")
 
+#: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
+#: Test gives the typed query's own set until the label quota (rows tagged
+#: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the
+#: default) is the app; ``CALIB_QUERY_TIER=0`` is the arm before (the Goods'
+#: centroid from the first Good, no row before it).
+QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", "off", "false")
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive

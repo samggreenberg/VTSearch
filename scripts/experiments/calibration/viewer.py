@@ -112,10 +112,12 @@ any click, and an import or a Test builds a detector from them.  So from a
 run's first Good the page draws the harness's detector, which is what that
 gives: since #4643, the Goods' centroid until the labels meet the label quota
 (3 Goods and 4 Bads, or since #4731 a Good and 16 Bads), the trained head from
-there.  The harness writes each
+there; since #4758 a run that opens on a typed query is a typed-query detector,
+whose Test gives the query's own set from the first vote until the quota.  The harness writes each
 row as that detector (``detector_tier`` names which); nothing here reads
-``detector_tier`` or ``app_trained``.  Before the first Good, Test is refused
-and the click is the empty set (:func:`curves.score_empty_sets`).  A page built
+``detector_tier`` or ``app_trained``.  Before the first Good of a run with no
+typed query, Test is refused and the click is the empty set
+(:func:`curves.score_empty_sets`).  A page built
 from results written before #4643 starts its rows at the first Good and Bad and
 draws a trained head there, the app as it was.  A report that scores the
 session (``state_of_app/analyze.py``) differs from the page through the opening

@@ -61,7 +61,7 @@ def labelset_signature(labelset: "LabelSet | None") -> tuple | None:
     )
 
 
-def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet") -> bool:
+def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", text_query: str | None = None) -> bool:
     """Whether *det_ctx* holds a head trained from exactly *labelset*.
 
     ``det_ctx.model`` is a cache, and nothing that changes a detector's labels
@@ -80,11 +80,21 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet") -> 
     on, not a detector to hand out: a Find there trains the Goods' centroid
     instead.  The centroid itself is current whenever its signature is, so a
     label whose origin cannot be resolved does not retrain it on every pass.
+
+    A typed query's head (#4758) is current while its signature is and it was
+    built from *text_query*, the detector's query now; ``None`` skips that
+    check.  Any cached head is refused when the detector has a query and the
+    head is the centroid: a centroid cached before the query was there.
     """
     from vtscore.detectors.centroid_head import is_centroid_head
     from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota
+    from vtscore.detectors.query_head import is_query_head, query_head_text
 
     if det_ctx.model is None or det_ctx.model_labels_sig != labelset_signature(labelset):
+        return False
+    if is_query_head(det_ctx.model):
+        return text_query is None or query_head_text(det_ctx.model) == text_query
+    if text_query and is_centroid_head(det_ctx.model):
         return False
     return is_centroid_head(det_ctx.model) or labelset_quota(labelset).tier == TIER_TRAINED
 
@@ -169,8 +179,16 @@ def resolve_or_train_detector(
         # → "Per-detector primary embedder".
         snap_embedder = keying_embedder_for_snap(det_ctx, snap)
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
+    from vtscore.detectors.query_head import detector_text_query, query_head_embedder, text_embedder_for_snap
+
     labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
-    if det_ctx is not None and cached_head_is_current(det_ctx, labelset):
+    # The typed query the detector was made from (#4758): until its labels give
+    # a trained head, the detector is that query's own set.
+    text_query = detector_text_query(det_data)
+    # A typed query's head scores in the text slot it was built in; a dataset
+    # whose text slot is another embedder needs it rebuilt.
+    cached_space_ok = det_ctx is None or query_head_embedder(det_ctx.model) in (None, text_embedder_for_snap(snap))
+    if det_ctx is not None and cached_space_ok and cached_head_is_current(det_ctx, labelset, text_query):
         if ctx_sink is not None:
             ctx_sink.append(det_ctx)
         return det_ctx.model, det_ctx.threshold, None
@@ -178,7 +196,7 @@ def resolve_or_train_detector(
     if det_data is None:
         return None, 0.5, None
 
-    if not labelset.elements:
+    if not labelset.elements and not text_query:
         return None, 0.5, None
 
     report(
@@ -229,7 +247,9 @@ def resolve_or_train_detector(
             total_steps=progress_total_steps,
         )
 
-    if train_from_labelset(train_ctx, labelset, media_type=media_type, snap=snap, on_progress=_on_label):
+    if train_from_labelset(
+        train_ctx, labelset, media_type=media_type, snap=snap, on_progress=_on_label, text_query=text_query
+    ):
         if ctx_sink is not None:
             ctx_sink.append(train_ctx)
         return train_ctx.model, train_ctx.threshold, None
