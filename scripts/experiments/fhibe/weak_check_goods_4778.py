@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Would a minimum Good count fix the weak check (#4778)? Its paired effect by Goods in hand at the first check.
+"""Would a minimum Good count, or a later first check, fix the weak check (#4778)? Its paired effect, split.
 
 #4778 asked, if the check loses on faces, whether d' should need a minimum number of Goods before it can call
 separation weak: face sessions hold about four Goods when it fires, so "weak" might be the label count speaking.
@@ -15,7 +15,10 @@ Two sources of the objective, by the pair's third field:
 * ``thresholds`` (COCO runs from before that column, #4496's): ``analysis-binary/thresholds.csv`` beside the
   cells, ``thr_fbeta`` at each recorded step, as #4496's own comparison read it.
 
-    python weak_check_goods_4778.py NAME=CHECK_CELLS::NO_CHECK_CELLS::DATASET|thresholds ... [--out CSV]
+    python weak_check_goods_4778.py NAME=CHECK_CELLS::NO_CHECK_CELLS::DATASET|thresholds ... [--by vote] [--out CSV]
+
+``--by vote`` splits by the vote the first check started at instead: a later earliest vote
+(``WEAK_CHECK_MIN_VOTES``, ``CALIB_WEAK_MIN_T``) is the other lever, and it only removes the early checks.
 
 A check's round logs its picks at the round's last vote (``weak_check_4778.read_picks``), so the Goods in hand
 are counted over the votes cast before the round's first.
@@ -33,8 +36,12 @@ import pandas as pd
 from prior_4776 import load
 
 HORIZON = 150
-STRATA = (("never prompted", None, None), ("<4", 0, 3), ("4-5", 4, 5), ("6-9", 6, 9), ("10-19", 10, 19),
-          (">=20", 20, 10**9))  # fmt: skip
+STRATA = {
+    "goods": (("never prompted", None, None), ("<4", 0, 3), ("4-5", 4, 5), ("6-9", 6, 9), ("10-19", 10, 19),
+              (">=20", 20, 10**9)),
+    "vote": (("never prompted", None, None), ("11-29", 0, 29), ("30-49", 30, 49), ("50-79", 50, 79),
+             (">=80", 80, 10**9)),
+}  # fmt: skip
 SPANS = ((1, 50), (1, 150))
 
 
@@ -53,7 +60,10 @@ def load_thresholds(cells: str) -> dict:
 
 
 def first_check(path: str) -> list[tuple]:
-    """Per run in a pick log: (key, Goods in hand at the first prompted vote or None, prompted votes)."""
+    """Per run in a pick log: (key, Goods in hand at the first prompted vote, prompted votes, that vote).
+
+    The Goods and the vote are None for a run never prompted.
+    """
     try:
         pk = pd.read_csv(path, usecols=["dataset", "category", "seed", "t", "phase", "picked_label"])
     except (pd.errors.EmptyDataError, OSError, ValueError):
@@ -65,8 +75,10 @@ def first_check(path: str) -> list[tuple]:
         r = r.sort_values("vote", kind="stable")
         good = (r["picked_label"] == 1).to_numpy()
         prompt = (r["phase"].astype(str) == "prompt").to_numpy()
-        goods = int((np.cumsum(good) - good)[int(np.argmax(prompt))]) if prompt.any() else None
-        out.append(((ds, cat, int(seed)), goods, int(prompt.sum())))
+        i = int(np.argmax(prompt))
+        goods = int((np.cumsum(good) - good)[i]) if prompt.any() else None
+        vote = int(r["vote"].iloc[i]) if prompt.any() else None
+        out.append(((ds, cat, int(seed)), goods, int(prompt.sum()), vote))
     return out
 
 
@@ -75,6 +87,12 @@ def main() -> int:
     ap.add_argument("pairs", nargs="+", help="NAME=CHECK_CELLS::NO_CHECK_CELLS::DATASET|thresholds")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument(
+        "--by",
+        choices=tuple(STRATA),
+        default="goods",
+        help="split by Goods in hand, or by the vote, at the first check",
+    )
     args = ap.parse_args()
     rows = []
     for spec in args.pairs:
@@ -86,15 +104,16 @@ def main() -> int:
             A, C = load(chk, src, args.workers), load(nochk, src, args.workers)
         with ProcessPoolExecutor(args.workers) as pool:
             files = glob.glob(f"{chk}/*__picks.csv")
-            fc = {k: (g, n) for got in pool.map(first_check, files, chunksize=16) for k, g, n in got}
+            fc = {k: (g if args.by == "goods" else v, n) for got in pool.map(first_check, files, chunksize=16)
+                  for k, g, n, v in got}  # fmt: skip
         keys = sorted(set(A) & set(C) & set(fc))
-        for label, lo, hi in STRATA:
+        for label, lo, hi in STRATA[args.by]:
             ks = [
                 k for k in keys if (fc[k][0] is None if lo is None else fc[k][0] is not None and lo <= fc[k][0] <= hi)
             ]
             if not ks:
                 continue
-            row = {"set": name, "goods_at_first_check": label, "runs": len(ks), "share": len(ks) / len(keys),
+            row = {"set": name, f"{args.by}_at_first_check": label, "runs": len(ks), "share": len(ks) / len(keys),
                    "prompted_votes_mean": float(np.mean([fc[k][1] for k in ks]))}  # fmt: skip
             for lo_, hi_ in SPANS:
                 d = np.array([A[k]["F"][lo_ - 1 : hi_].mean() - C[k]["F"][lo_ - 1 : hi_].mean() for k in ks])
