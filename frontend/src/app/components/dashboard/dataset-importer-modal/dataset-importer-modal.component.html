@@ -8,6 +8,7 @@
     [activeImporterTabLabel]="activeImporterTabLabel"
     [activeTab]="activeImporterTab()"
     [hideSoloTabBar]="true"
+    [showPickHints]="!hints.isShown('import-dataset')"
     (activeTabChange)="selectImporterTab($event)"
     [selectedImporter]="selectedImporter()"
     (importerSelected)="selectImporter($event)"

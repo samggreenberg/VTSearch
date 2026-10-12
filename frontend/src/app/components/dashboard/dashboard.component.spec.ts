@@ -1111,6 +1111,18 @@ describe('DashboardComponent', () => {
       expect(component.importerModalOpen).toBe(true);
     });
 
+    it("drops the empty tables' \"Click + to add one\" while Toasty says it (#4807)", async () => {
+      const el = renderWith();
+      const message = () => (el.querySelector('.empty-state__message')?.textContent || '').replace(/\s+/g, ' ').trim();
+      await loadSettings({});
+      expect(component.isHintOnShow('add-dataset')).toBe(true);
+      expect(message()).toBe('No datasets yet.');
+      expect(el.querySelector('.empty-state .inline-add-btn')).toBeNull();
+
+      await loadSettings({ hide_all_hints: true });
+      expect(message()).toBe('No datasets yet. Click + to add one.');
+    });
+
     it('puts a working + in the draft-detector empty state', () => {
       const el = renderWith([{ id: 'd1', name: 'DS', media_type: 'image' }]);
       const section = el.querySelectorAll('.dashboard-section')[1];

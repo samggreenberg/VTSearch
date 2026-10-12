@@ -23,8 +23,10 @@ not list every commit. Use `git log` for the full history.
   click **+** to make a new one."), rather than an instruction out of the blue. The Dashboard gained
   hints for the detours on the way to Train, Test or Find: the only dataset still importing, the open
   detector tab empty while the other has detectors, a new detector ticked under several datasets, and
-  a detector with no labels ticked among others. The reason under a disabled **Train** / **Test** /
-  **Find** button is hidden while a hint is up, since the hint says it. In the Train view Toasty stays
+  a detector with no labels ticked among others. While a hint is up, what it says steps aside: the
+  reason under a disabled **Train** / **Test** / **Find** button, an empty table's "Click **+** to add
+  one", and **Add Dataset**'s "Select what type of dataset to add." line. The Test view's **Test
+  done** note is now just its heading, with Toasty saying what to do next. In the Train view Toasty stays
   over **Good** / **Bad** through the run that trains a detector, saying what each Autopilot phase
   needs, and the **Update Sort Example?** hint counts the clicks and positives so far. The Test view
   has hints for its first pick, its verdict, and the **Review** tab. The dialogs on the path have
