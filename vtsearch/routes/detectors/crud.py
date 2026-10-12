@@ -313,37 +313,91 @@ def rename_detector(body: dict, name: str):
 @detectors_crud_bp.response(200, DetectorExamplesResponseSchema)
 @detectors_crud_bp.alt_response(404, description="Detector not found.")
 def set_detector_examples(body: dict, name: str):
-    """Set/replace the examples for a detector."""
+    """Set/replace the examples for a detector.
+
+    The Train view's re-sort prompt saves its new example here (#4801).  The
+    detector's ``text_query`` and ``media_example`` follow the new list - its
+    first text example and its first media example, each ``""`` when there is
+    none - in the detector file and the registry entry alike: under the label
+    quota a typed-query detector gives its query's own set (#4758), and the
+    next Train session opens on the registry entry's.  A re-sort to a media
+    example therefore drops the query.
+    """
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.labelset_ops import label_sync_write_lock
+    from vtscore.detectors.media_seeding import merge_examples_into_labelset
+
     path = _detector_path(name)
-    data = _read_detector(path)
-    if data is None:
+    if _read_detector(path) is None:
         abort(404, message=f"Detector '{name}' not found")
 
     examples = body["examples"]
+    text_query = _first_example_value(examples, "text")
+    media_example = _first_example_value(examples, "media")
 
-    data["examples"] = examples
-    # Update text_query from first text example for backward compat
-    text_examples = [e for e in examples if e.get("type") == "text" and e.get("value")]
-    if text_examples:
-        data["text_query"] = text_examples[0]["value"]
-
-    # Newly-supplied media exemplars become good labels (issue #3045).  The
-    # merge is additive - replacing the examples list must not delete labels
-    # the user voted, nor flip an exemplar the user has since voted Bad.
-    from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.media_seeding import merge_examples_into_labelset
-
-    merged = merge_examples_into_labelset(LabelSet.from_dict(data.get("labelset") or {}), examples)
-    data["labelset"] = merged.to_dict()
-    _write_detector(path, data)
+    # Saved mid-session, so it races the per-vote label sync: read, merge and
+    # write under its lock, as every detector-JSON read-modify-write does.
+    with label_sync_write_lock:
+        data = _read_detector(path)
+        if data is None:
+            abort(404, message=f"Detector '{name}' not found")
+        data["examples"] = examples
+        data["text_query"] = text_query
+        data["media_example"] = media_example
+        # Newly-supplied media exemplars become good labels (issue #3045).  The
+        # merge is additive - replacing the examples list must not delete labels
+        # the user voted, nor flip an exemplar the user has since voted Bad.  An
+        # unlabeled seed (``labeled: false``, the re-sort prompt's) adds none.
+        merged = merge_examples_into_labelset(LabelSet.from_dict(data.get("labelset") or {}), examples)
+        data["labelset"] = merged.to_dict()
+        _write_detector(path, data)
 
     from vtscore.detectors.registry import find_by_name, update_detector
 
     reg_entry = find_by_name(name)
     if reg_entry:
-        update_detector(reg_entry["id"], num_training=len(merged), examples=examples)
+        update_detector(
+            reg_entry["id"],
+            num_training=len(merged),
+            examples=examples,
+            text_query=text_query,
+            media_example=media_example,
+        )
+        _after_examples_write(reg_entry["id"], path, text_query)
 
     return {"success": True, "name": name, "examples": examples}
+
+
+def _first_example_value(examples: list[dict], kind: str) -> str:
+    """The stripped value of the first *kind* (``"text"`` / ``"media"``) example with one; ``""`` for none."""
+    for ex in examples:
+        value = str(ex.get("value") or "").strip()
+        if ex.get("type") == kind and value:
+            return value
+    return ""
+
+
+def _after_examples_write(detector_id: str, path, text_query: str) -> None:
+    """Keep a loaded detector's live session across an examples write.
+
+    The cached labelset is re-pointed at the file, so the write does not read
+    as an outside edit and rehydrate the session (its undo history and vote
+    times with it).  A label-quota head built for another query, or a Goods'
+    centroid where there now is one, is dropped: the next consumer builds the
+    head for the detector's query now (#4801).
+    """
+    from vtscore.detectors.dataset_sync import _repoint_labelset_cache
+    from vtscore.detectors.query_head import is_quota_head, query_head_text
+    from vtscore.state.core import _state_lock, get_detector_context
+
+    det_ctx = get_detector_context(detector_id)
+    if det_ctx is None:
+        return
+    _repoint_labelset_cache(det_ctx, path)
+    with _state_lock:
+        if is_quota_head(det_ctx.model) and (query_head_text(det_ctx.model) or "") != text_query:
+            det_ctx.model = None
+            det_ctx.threshold = 0.5
 
 
 # ---------------------------------------------------------------------------

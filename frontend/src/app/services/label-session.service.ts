@@ -3,6 +3,9 @@ import { Injectable } from '@angular/core';
 export interface ModelExample {
   type: string;
   value: string;
+  /** `false` for an unlabeled seed, which steers the first sort without
+   *  being a Good vote (absent means labeled). */
+  labeled?: boolean;
 }
 
 /**

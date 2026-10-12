@@ -30,6 +30,13 @@ not list every commit. Use `git log` for the full history.
   take a detector with no labels when it was made from a typed description. `label_quota.tier` has a
   new value, `query`, and the command line a new `detector_query` event, beside the
   `detector_centroid` event it already emitted.
+- **A new sort example in Autopilot's "Update Sort Example?" prompt now changes the detector, not
+  just the screen** (issue #4801). When you supplied a different sort there, only the Train view
+  sorted by it: the detector kept its old description, so Test, Find, AutoFind and the next Train
+  session still used that one. A new description is now saved to the detector. A media example
+  picked there is saved too, as an example that steers the sort without counting as a Good, and the
+  detector stops using its old description. Typing in the Manual tab's sort bar still only sorts
+  the view.
 - **A detector no longer gets worse the moment it starts learning** (issue #4785). Until you have 3 Goods and 4 Bads, Test ranks by the average of your Goods; after
   that a trained detector takes over. On faces that first detector used to rank the person you are
   looking for noticeably worse than the average it replaced, and Find dipped for the next few votes.
