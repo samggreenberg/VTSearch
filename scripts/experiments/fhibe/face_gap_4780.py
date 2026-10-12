@@ -546,7 +546,7 @@ def main() -> int:
     # --- what differs between the groups' photos -----------------------------------------------
     one = ppl.drop_duplicates("category")
     diff_rows = []
-    for c in CONDITIONS + APPEARANCE + ["months", "phones", "n_photos"]:
+    for c in dict.fromkeys(CONDITIONS + APPEARANCE + ["months", "phones", "n_photos"]):
         g, se = gap(one.loc[one["pronoun"] == SHE, c], one.loc[one["pronoun"] == HE, c])
         diff_rows.append(
             {

@@ -98,12 +98,14 @@ def fig_curves(curves: pd.DataFrame, sets: list[tuple[str, str, str]], out: Path
     axes = np.atleast_1d(axes)
     for ax, (label, name, _) in zip(axes, sets):
         d = curves[(curves["set"] == name) & (curves["K"] == 1)]
+        ends = []
         for p, (color, short) in PRONOUN.items():
             q = d[d["pronoun"] == p].sort_values("t")
             ax.fill_between(q["t"], q["mean"] - q["se"], q["mean"] + q["se"], color=color, alpha=0.15, lw=0)
             ax.plot(q["t"], q["mean"], color=color, lw=1.8)
             if len(q):
-                ax.text(q["t"].iloc[-1] + 3, q["mean"].iloc[-1], short, color=INK2, va="center", fontsize=8)
+                ends.append((q["t"].iloc[-1] + 3, q["mean"].iloc[-1], short))
+        _end_labels(ax, ends)
         ax.set_xlim(0, 168)
         ax.grid(axis="y", color=GRID, lw=0.8)
         ax.set_title(label, loc="left", fontsize=10)
@@ -115,6 +117,18 @@ def fig_curves(curves: pd.DataFrame, sets: list[tuple[str, str, str]], out: Path
     fig.tight_layout()
     fig.savefig(out / "fig_curves.png", dpi=150, facecolor=SURFACE)
     plt.close(fig)
+
+
+def _end_labels(ax, ends: list[tuple[float, float, str]], gap: float = 0.05) -> None:
+    """Label each series at its line's end, pushed apart when two would overlap (no leader lines)."""
+    lo, hi = ax.get_ylim()
+    step = gap * (hi - lo)
+    ends = sorted(ends, key=lambda e: e[1])
+    ys = [e[1] for e in ends]
+    for i in range(1, len(ys)):
+        ys[i] = max(ys[i], ys[i - 1] + step)
+    for (x, _, text), y in zip(ends, ys):
+        ax.text(x, y, text, color=INK2, va="center", fontsize=8)
 
 
 def _binned(d: pd.DataFrame, x: str, y: str, edges: list[float], labels: list[str]) -> pd.DataFrame:
@@ -140,12 +154,14 @@ def _pronoun_panels(ppl, sets, x, y, edges, labels, xlabel, ylabel, title, path,
                 b = pd.cut(q[xcol], e, labels=False, include_lowest=True).to_numpy(float)
                 off = (i - 0.5) * 0.16
                 ax.scatter(b + off + rng.uniform(-0.05, 0.05, len(b)), q[y], s=5, color=color, alpha=0.18, lw=0)
+        ends = []
         for p, (color, short) in PRONOUN.items():
             q = t[(t["pronoun"] == p) & (t["n"] >= min_n)]
             pos = [labels.index(v) for v in q[xcol]]
             ax.errorbar(pos, q["mean"], yerr=q["se"], fmt="-o", ms=5, lw=1.6, color=color, elinewidth=1.2, capsize=0)
             if len(pos):
-                ax.text(pos[-1] + 0.12, q["mean"].iloc[-1], short, color=INK2, va="center", fontsize=8)
+                ends.append((pos[-1] + 0.12, q["mean"].iloc[-1], short))
+        _end_labels(ax, ends)
         ax.set_xticks(range(len(labels)), labels)
         ax.set_xlim(-0.3, len(labels) - 0.3)
         ax.grid(axis="y", color=GRID, lw=0.8)
