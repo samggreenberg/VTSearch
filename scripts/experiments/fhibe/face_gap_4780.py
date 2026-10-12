@@ -28,8 +28,10 @@ Each ``--set``: the ``sota_face_analyze.sh`` output, the run dirs' common prefix
 read as ``<prefix>-k<K>-b1/results/cells``), the click-0 baseline dir and the dataset prefix
 (``fhibe_faces_roll``). Only beta 1 at 1024 px is read: the review's table and #4780's question.
 Writes ``people.csv`` (per person x set x K; names people, owner-only), and the aggregates
-``stages.csv``, ``matched.csv``, ``regress.csv``, ``photos_by_pronoun.csv``, ``arms.csv`` and, given
-``--pairs``, ``pairs.csv`` (the genuine-pair read, :func:`pair_table`).
+``stages.csv``, ``matched.csv``, ``regress.csv``, ``photos_by_pronoun.csv``, ``arms.csv``,
+``curves_by_group.csv`` (the objective at every click per pronoun, filled as the review fills it) and, given
+``--pairs``, ``pairs.csv`` (the genuine-pair read, :func:`pair_table`); given ``--static``,
+``static_gaps.csv`` (each embedder's static pronoun and age gaps, with the age-balanced impostor pool).
 """
 
 from __future__ import annotations
@@ -167,6 +169,30 @@ def person_rows(analysis: Path, runs_prefix: str, baseline: Path, faces: str, k:
     df = pd.DataFrame(out)
     df["line_loss"] = df["f_line"] - df["final_f_true_count"]
     return df
+
+
+def group_curves(analysis: Path, baseline: Path, faces: str, k: int, strata: pd.DataFrame) -> pd.DataFrame:
+    """The objective at every click, averaged per pronoun: each run's curve filled as the review fills it."""
+    sys.path.insert(0, str(HERE.parent / "state_of_app"))
+    from by_click import RUN, filled_runs, typed_query  # noqa: PLC0415
+
+    d = analysis / f"k{k}-b1-{SIZE}"
+    cells = pd.read_csv(d / "cells.csv")
+    base = pd.read_csv(baseline / f"example_baseline_k{k}.csv")
+    base = base[base["dataset"] == f"{faces}_{SIZE}"]
+    text = typed_query(base, "face", BETA)
+    filled, _ = filled_runs(pd.read_csv(d / "curves.csv"), cells, text)
+    filled[0] = [text.get((cat, int(seed)), np.nan) for cat, seed in filled.index]
+    pron = strata.set_index("category")["pronoun"].reindex(filled.index.get_level_values(RUN[0])).to_numpy()
+    rows = []
+    for who in (SHE, HE):
+        w = filled[pron == who]
+        for t in sorted(c for c in w.columns if 0 <= int(c) <= 150):
+            v = w[t].dropna()
+            rows.append(
+                {"K": k, "pronoun": who, "t": int(t), "mean": v.mean(), "se": v.std() / np.sqrt(len(v)), "n": len(v)}
+            )
+    return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +443,7 @@ def main() -> int:
     strata = pd.read_csv(args.strata, dtype={"skin_tone": str})
     people = set(strata["category"])
     cov = person_covariates(args.covariates, args.landmarks, people)
-    frames_ = []
+    frames_, curves = [], []
     for spec in args.set:
         name, rest = spec.split("=", 1)
         analysis, prefix, baseline, faces = rest.split("::")
@@ -425,6 +451,9 @@ def main() -> int:
             df = person_rows(Path(analysis), prefix, Path(baseline), faces, k)
             df.insert(0, "set", name)
             frames_.append(df)
+            cv = group_curves(Path(analysis), Path(baseline), faces, k, strata)
+            cv.insert(0, "set", name)
+            curves.append(cv)
             print(f"{name} K{k}: {len(df)} people", flush=True)
     ppl = (
         pd.concat(frames_, ignore_index=True)
@@ -433,9 +462,8 @@ def main() -> int:
     )
     if args.static is not None:
         st = pd.read_csv(args.static)
-        wide = st.pivot_table(
-            index="category", columns="cell", values=["loo_ap", "genuine_mean", "impostor_top1", "margin"]
-        )
+        vals = [c for c in ["loo_ap", "loo_ap_balanced", "genuine_mean", "impostor_top1", "margin"] if c in st]
+        wide = st.pivot_table(index="category", columns="cell", values=vals)
         wide.columns = [f"static_{c}_{v}" for v, c in wide.columns]
         ppl = ppl.merge(wide.reset_index(), on="category", how="left")
     args.out.mkdir(parents=True, exist_ok=True)
@@ -444,6 +472,7 @@ def main() -> int:
         ppl.to_csv(args.out / "people.csv", index=False)
     finally:
         os.umask(old)
+    pd.concat(curves, ignore_index=True).round(4).to_csv(args.out / "curves_by_group.csv", index=False)
     chk = (ppl["f_line"] - ppl["f_line_from_ranks"]).abs()
     print(f"F at the line re-read from the ranks: max |diff| {chk.max():.4f}, share > 0.01 {np.mean(chk > 0.01):.3f}")
 
@@ -529,6 +558,31 @@ def main() -> int:
             }
         )
     pd.DataFrame(diff_rows).round(4).to_csv(args.out / "photos_by_pronoun.csv", index=False)
+
+    if args.static is not None:
+        st = pd.read_csv(args.static)
+        rows = []
+        for cell, g in st.groupby("cell", sort=False):
+            young = g["age_bracket"] == "18-29"
+            older = g["age_bracket"].isin(["45-59", "60+"])
+            for c in [v for v in ["loo_ap", "loo_ap_balanced", "genuine_mean", "impostor_top1", "margin"] if v in g]:
+                for cname, a, b in (
+                    ("pronoun", g["pronoun"] == SHE, g["pronoun"] == HE),
+                    ("age 18-29 vs 45+", young, older),
+                ):
+                    gg, se = gap(g.loc[a, c], g.loc[b, c])
+                    rows.append(
+                        {
+                            "cell": cell,
+                            "contrast": cname,
+                            "measure": c,
+                            "a_mean": g.loc[a, c].mean(),
+                            "b_mean": g.loc[b, c].mean(),
+                            "gap": gg,
+                            "se": se,
+                        }
+                    )
+        pd.DataFrame(rows).round(4).to_csv(args.out / "static_gaps.csv", index=False)
 
     if args.pairs is not None:
         pair_table(args.pairs, args.covariates, strata).round(4).to_csv(args.out / "pairs.csv", index=False)

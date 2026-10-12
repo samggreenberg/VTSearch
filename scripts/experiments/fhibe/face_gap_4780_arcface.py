@@ -24,6 +24,10 @@ face's vector replaced by ArcFace's.
   stands in for FaceNet's, and ``VTS_PILE=<pile>`` runs the shipped face path on it. The real file
   and a provenance note stay owner-only beside the release (``--out``).
 
+``--embedder facenet_tight`` is a control for the crop rather than the model: the app's own FaceNet
+on the same tight, aligned crop (ArcFace's template scaled to FaceNet's 160 px), for the static read
+only (no ``--pile``).
+
 Usage (on a compute node)::
 
     python face_gap_4780_arcface.py --size 1024 --model <dir>/w600k_r50.onnx \\
@@ -79,8 +83,8 @@ def detections(row: dict, conv, params: tuple) -> list[tuple[int, object]]:
     return out
 
 
-def aligned(img, det) -> tuple[np.ndarray, bool]:
-    """The 112 x 112 RGB crop ArcFace expects, and whether it came from the landmarks."""
+def aligned(img, det, size: int = INPUT) -> tuple[np.ndarray, bool]:
+    """The *size* x *size* RGB crop ArcFace expects (its template scaled), and whether it came from the landmarks."""
     import cv2  # noqa: PLC0415
 
     from vtscore.converters.image2face import fit_similarity  # noqa: PLC0415
@@ -88,20 +92,26 @@ def aligned(img, det) -> tuple[np.ndarray, bool]:
     arr = np.asarray(img)
     if det.landmarks is None:
         x1, y1, x2, y2 = det.box
-        return cv2.resize(arr[y1:y2, x1:x2], (INPUT, INPUT), interpolation=cv2.INTER_AREA), False
-    a, b, tx, ty = fit_similarity(det.landmarks, ARCFACE_DST)
+        return cv2.resize(arr[y1:y2, x1:x2], (size, size), interpolation=cv2.INTER_AREA), False
+    a, b, tx, ty = fit_similarity(det.landmarks, ARCFACE_DST * size / INPUT)
     m = np.array([[a, -b, tx], [b, a, ty]], dtype=np.float64)
-    return cv2.warpAffine(arr, m, (INPUT, INPUT), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0)), True
+    return cv2.warpAffine(arr, m, (size, size), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0)), True
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--size", type=int, required=True, choices=(1024, 640))
     ap.add_argument("--arm", default="roll", help="the FaceNet cell whose ids and metadata this copies")
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", default=None, help="the ArcFace ONNX file (--embedder arcface)")
+    ap.add_argument(
+        "--embedder",
+        default="arcface",
+        choices=("arcface", "facenet_tight"),
+        help="facenet_tight: the app's FaceNet on ArcFace's tight crop (at 160 px), a control for the crop",
+    )
     ap.add_argument("--landmarks", default=None, help="landmarks_<size>.pkl (default: #4777's)")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--pile", required=True)
+    ap.add_argument("--pile", default=None, help="link the cell into this private pile (the arcface arm's sessions)")
     ap.add_argument("--threads", type=int, default=max(1, len(os.sched_getaffinity(0))))
     args = ap.parse_args()
 
@@ -130,10 +140,27 @@ def main() -> int:
         )
     print(f"{dataset}: {len(plan):,} faces rebuilt id for id from {lm_path.name}", flush=True)
 
-    so = ort.SessionOptions()
-    so.intra_op_num_threads = args.threads
-    sess = ort.InferenceSession(args.model, so, providers=["CPUExecutionProvider"])
-    in_name = sess.get_inputs()[0].name
+    if args.embedder == "arcface":
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = args.threads
+        sess = ort.InferenceSession(args.model, so, providers=["CPUExecutionProvider"])
+        in_name = sess.get_inputs()[0].name
+        size, scale, tag = INPUT, 127.5, "arcface_r50"
+
+        def embed(x: np.ndarray) -> np.ndarray:
+            return sess.run(None, {in_name: x})[0]
+
+    else:
+        import torch  # noqa: PLC0415
+        from facenet_pytorch import InceptionResnetV1  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+        torch.set_num_threads(args.threads)
+        net = InceptionResnetV1(pretrained="vggface2").eval()
+        size, scale, tag = 160, 128.0, "facenet_tight"
+
+        def embed(x: np.ndarray) -> np.ndarray:
+            with torch.no_grad():
+                return net(torch.from_numpy(x)).numpy()
 
     vecs: dict[int, np.ndarray] = {}
     fallback = 0
@@ -141,8 +168,8 @@ def main() -> int:
     batch: list[np.ndarray] = []
 
     def flush() -> None:
-        x = (np.stack(batch).astype(np.float32) - 127.5) / 127.5
-        out = sess.run(None, {in_name: x.transpose(0, 3, 1, 2)})[0]
+        x = (np.stack(batch).astype(np.float32) - 127.5) / scale
+        out = embed(np.ascontiguousarray(x.transpose(0, 3, 1, 2)))
         out /= np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
         vecs.update(zip(batch_ids, out.astype(np.float32)))
         batch_ids.clear()
@@ -156,7 +183,7 @@ def main() -> int:
         with Image.open(io.BytesIO((copies / f"{uid[pid]}.jpg").read_bytes())) as im:
             img = im.convert("RGB")
         for mid, det in dets:
-            crop, used = aligned(img, det)
+            crop, used = aligned(img, det, size)
             fallback += not used
             batch_ids.append(mid)
             batch.append(crop)
@@ -175,7 +202,7 @@ def main() -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_dir.chmod(0o700)
-    real = out_dir / f"{dataset}__arcface_r50.pkl"
+    real = out_dir / f"{dataset}__{tag}.pkl"
     old = os.umask(0o077)
     try:
         real.write_bytes(pickle.dumps(new, protocol=pickle.HIGHEST_PROTOCOL))
@@ -184,10 +211,14 @@ def main() -> int:
         prov = {
             "dataset": dataset,
             "stands_in_for": cell_name,
-            "embedder": "ArcFace R50 (insightface buffalo_l w600k_r50.onnx), under the key 'face'",
-            "model_sha256": hashlib.sha256(Path(args.model).read_bytes()).hexdigest(),
+            "embedder": (
+                "ArcFace R50 (insightface buffalo_l w600k_r50.onnx), under the key 'face'"
+                if tag == "arcface_r50"
+                else "FaceNet (facenet-pytorch InceptionResnetV1, vggface2) on the tight crop, under the key 'face'"
+            ),
+            "model_sha256": hashlib.sha256(Path(args.model).read_bytes()).hexdigest() if args.model else None,
             "landmarks": str(lm_path),
-            "alignment": "5-point similarity onto insightface's arcface_dst, 112 x 112, from the stored copy",
+            "alignment": f"5-point similarity onto insightface's arcface_dst, {size} x {size}, from the stored copy",
             "fallback_box_crops": fallback,
             "n_vectors": len(new),
             "vectors_sha256": sha,
@@ -196,16 +227,18 @@ def main() -> int:
             "code_commit": commit.strip(),
             "seconds": round(time.time() - t0, 1),
         }
-        (out_dir / f"{dataset}__arcface_r50.provenance.json").write_text(json.dumps(prov, indent=2) + "\n")
+        (out_dir / f"{dataset}__{tag}.provenance.json").write_text(json.dumps(prov, indent=2) + "\n")
     finally:
         os.umask(old)
-    emb = Path(args.pile) / "datadir" / "embeddings"
-    emb.mkdir(parents=True, exist_ok=True)
-    link = emb / cell_name
-    if link.is_symlink() or link.exists():
-        link.unlink()
-    link.symlink_to(real)
-    print(f"{dataset}: {len(new):,} ArcFace vectors ({fallback} from plain boxes) -> {real}; {link} -> it")
+    print(f"{dataset}: {len(new):,} {tag} vectors ({fallback} from plain boxes) -> {real}")
+    if args.pile:
+        emb = Path(args.pile) / "datadir" / "embeddings"
+        emb.mkdir(parents=True, exist_ok=True)
+        link = emb / cell_name
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(real)
+        print(f"  {link} -> it")
     print(json.dumps(prov, indent=2))
     return 0
 
