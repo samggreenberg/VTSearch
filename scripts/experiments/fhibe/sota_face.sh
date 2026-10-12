@@ -14,7 +14,8 @@
 #   sota_face.sh prepare                  an arm's own prepared grids, one per K (SOTA_FACE_ARM only)
 #   sota_face.sh dirs                     the six run dirs, their grid shapes and preflights
 #   sota_face.sh tasks [N]                write the task list (K beta index); N = the first N
-#                                         people of each size only (a smoke run), else all
+#                                         people of each size only (a smoke run), else all;
+#                                         SOTA_FACE_SIZES="1024" keeps one size (#4778)
 #   sota_face.sh pack [JOBS]              submit the task list as JOBS (default 1) V100 pack jobs
 #                                         of CALIB_PACK_PAR (default 38) cells at a time;
 #                                         CALIB_PARTITION=cpu packs them on the cpu partition instead
@@ -31,6 +32,9 @@
 # (#4777: roll, sim, the crops turned upright). Its run dirs are <date>-sota-<tag>-k<K>-b<beta>,
 # its grids are prepared on its own cells (`prepare`, then `dirs`), and it keeps the review's
 # identity file, so every session pairs with the plain arm's by person, size, K and beta.
+#
+# CALIB_SPOT_CHECK (end | off) runs a study's arm without the app's weak-separation check (#4778);
+# `dirs` declares it to the preflight and `pack` pins it in every cell's environment.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
@@ -47,6 +51,8 @@ DATASETS="fhibe_faces${ARM:+_$ARM}_1024,fhibe_faces${ARM:+_$ARM}_640"
 KS=(1 4)
 BETAS=(0.25 1 4)
 N_PEOPLE=562
+# The task index runs size-major in the datasets' order: 0..561 the 1024 px crops, 562..1123 the 640 px.
+SIZE_NAMES=(1024 640)
 TASKS="${SOTA_FACE_TASKS:-$RUNS/$SET-tasks.txt}"
 
 # The run dir's balance tag, as launch.sh writes it (0.25 -> 025, 1 -> 1, 4 -> 4). A lookup, not a
@@ -98,10 +104,12 @@ tasks)
   # Person-major, so a grid stopped early holds the same people in every session set; a cell
   # already written is skipped (run_cells does not skip it).
   n="${2:-$N_PEOPLE}"
+  read -r -a sizes <<<"${SOTA_FACE_SIZES:-1024 640}"
   : >"$TASKS"
   skipped=0
   for ((i = 0; i < n; i++)); do
     for size in 0 1; do
+      [[ " ${sizes[*]} " == *" ${SIZE_NAMES[size]} "* ]] || continue
       for k in "${KS[@]}"; do
         for b in "${BETAS[@]}"; do
           idx=$((size * N_PEOPLE + i))
@@ -142,7 +150,7 @@ pack)
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
       --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_TAG=$TAG SOTA_FACE_ARM=$ARM SOTA_FACE_BASE=$BASE \
-SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims && \
+SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} && \
 xargs -P $PAR -L 1 bash $HERE/sota_face.sh cell <$shard; echo pack done") || { echo "pack $j SUBMIT FAILED" >&2; exit 1; }
     [[ "$J" =~ ^[0-9]+$ ]] || { echo "pack $j SUBMIT FAILED (empty job id)" >&2; exit 1; }
     echo "pack $j -> job $J (claims from $(wc -l <"$shard") cells, $PAR at a time)"
