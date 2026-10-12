@@ -51,7 +51,7 @@
     "app": "e1913988795a1d55d9137eff1e9e7d2127a404b38ae61bc0a340fc59a3169e02"
   },
   "detectors.label_quota_query": {
-    "app": "c8c1b1764b2f79521b0664ed346703cda4f992e90201c0a7ee81590ab37725eb",
+    "app": "f3d5f0219139ea33b580900c427f0405d0040b371ebac9e5fac35b28f1c138df",
     "harness": "f2fe62e06191eea6aeab70b1c52281ef276778c4012544803164aed217be9f1b"
   },
   "line_test.budgets_default": {

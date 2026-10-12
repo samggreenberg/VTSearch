@@ -1060,6 +1060,17 @@ def install_query_head(
     rows = scoring_rows_for_snap(snap, embedder)
     if not rows.ids:
         return None
+    if int(np.asarray(vec).size) != int(rows.matrix.shape[1]):
+        # A query that embeds in another width than the snapshot's text-slot
+        # vectors cannot score them: the centroid answers, as with no text slot.
+        log.warning(
+            "Typed query %r embeds to %d dims but %r's vectors have %d: falling back to the centroid",
+            text,
+            int(np.asarray(vec).size),
+            embedder,
+            int(rows.matrix.shape[1]),
+        )
+        return None
     head, threshold, line = fit_query_head(
         vec, lambda h: score_rows_with_model(h, rows)[0], beta=beta, embedder=embedder, text=text
     )

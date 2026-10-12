@@ -195,6 +195,14 @@ class TestTrainFromLabelset:
         assert lt.train_from_labelset(ctx, make([1], [40]), media_type="image", snap=snap, text_query=QUERY)
         assert is_query_head(ctx.model)
 
+    def test_a_query_that_cannot_score_the_text_slot_falls_back_to_the_centroid(self, world, monkeypatch):
+        """A query embedded in another width than the snapshot's text-slot vectors: no crash, the centroid."""
+        snap, _proto, make, _embedded = world
+        monkeypatch.setattr(qh, "embed_detector_query", lambda text, media_type, embedder: np.ones(DIM * 2))
+        ctx = _ctx()
+        assert lt.train_from_labelset(ctx, make([1], [40]), media_type="image", snap=snap, text_query=QUERY)
+        assert is_centroid_head(ctx.model)
+
     def test_a_dataset_with_no_text_slot_falls_back_to_the_centroid(self, world, monkeypatch):
         snap, _proto, make, _embedded = world
         monkeypatch.setattr(qh, "text_embedder_for_snap", lambda s: None)
@@ -264,11 +272,14 @@ class TestResolveOrTrain:
         assert lt.train_from_labelset(ctx, LabelSet([]), media_type="image", snap=snap, text_query=QUERY)
         cached = ctx.model
         monkeypatch.setattr(core, "get_detector_context", lambda _id: ctx)
-        quiet = {"on_progress": lambda *a, **k: None}
-        assert resolve_or_train_detector("q", det_data, "image", snap, **quiet)[0] is cached
+
+        def quiet(*_a: object, **_k: object) -> None:
+            return None
+
+        assert resolve_or_train_detector("q", det_data, "image", snap, on_progress=quiet)[0] is cached
         # Another dataset whose text slot is another embedder: the cached head is not handed out.
         monkeypatch.setattr(qh, "text_embedder_for_snap", lambda s: "another_text_embedder")
-        assert resolve_or_train_detector("q", det_data, "image", snap, **quiet)[0] is not cached
+        assert resolve_or_train_detector("q", det_data, "image", snap, on_progress=quiet)[0] is not cached
 
     def test_a_detector_with_no_query_and_no_label_still_gives_nothing(self, world):
         snap, _proto, _make, _embedded = world
