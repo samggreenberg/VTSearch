@@ -121,6 +121,20 @@ def is_centroid_head(model: object) -> bool:
 #: * ``count_gap_floor`` - ``count_gap``'s line, lowered to the widest drop when that keeps more.
 #:   It keeps exactly what ``gap_floor`` keeps at beta 1 or below and what ``count_gap`` keeps
 #:   from beta 1 up, since ``beta ** 0.708`` is at least 1 there.  The app's (#4759).
+#:
+#: and #4783's, ``count_gap_floor`` with another drop (:data:`CENTROID_DROPS`) where the widest
+#: one stops after a standout first cosine:
+#:
+#: * ``count_gap_floor_skip25`` / ``_skip50`` - when the widest drop is the first, the widest one
+#:   below the second cosine, if it is at least 1/4 (1/2) as wide;
+#: * ``count_gap_floor_rank5`` - the drop that is widest once each is weighted by its rank
+#:   (``i * d_i``, which evens out a bulk tail's spacings), over the top 6;
+#:
+#: and one rule gated on the balance (:data:`CENTROID_GATED`):
+#:
+#: * ``count_gap_floor_skip25_b1`` - ``count_gap_floor`` below beta 1, ``count_gap_floor_skip25``
+#:   from beta 1 up.  At a precision balance a lone standout is the set; from beta 1 up the
+#:   line looks past it.  The app's (#4783).
 CENTROID_COUNTS = (
     "count",
     "count_z3",
@@ -130,31 +144,60 @@ CENTROID_COUNTS = (
     "count_gap",
     "gap_floor",
     "count_gap_floor",
+    "count_gap_floor_skip25",
+    "count_gap_floor_skip50",
+    "count_gap_floor_rank5",
 )
-#: The counts whose line never sits above the widest drop (:func:`centroid_cut`).
-_GAP_FLOORED = ("gap_floor", "count_gap_floor")
-CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS)
+#: The drop each gap-counting rule reads (:func:`_top_gap_count`); ``widest`` unless named here.
+CENTROID_DROPS = {
+    "count_gap_floor_skip25": "skip25",
+    "count_gap_floor_skip50": "skip50",
+    "count_gap_floor_rank5": "rank5",
+}
+#: The counts whose line never sits above their drop (:func:`centroid_cut`).
+_GAP_FLOORED = ("gap_floor", "count_gap_floor", *CENTROID_DROPS)
+#: Rules gated on the balance: ``rule -> (below beta 1, from beta 1 up)`` (#4783).
+CENTROID_GATED = {"count_gap_floor_skip25_b1": ("count_gap_floor", "count_gap_floor_skip25")}
+CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS, *CENTROID_GATED)
 
-#: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759).
-CENTROID_LINE_RULE = "count_gap_floor"
+#: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759),
+#: and from beta 1 up at the drop below a standout first cosine (#4783).
+CENTROID_LINE_RULE = "count_gap_floor_skip25_b1"
 
 #: How deep ``gap`` looks for the widest drop: the top this many + 1 cosines (#4759).
 CENTROID_GAP_TOP = 10
 
 
-def _top_gap_count(cosines: np.ndarray, top: int = CENTROID_GAP_TOP) -> int:
-    """How many of the top ``top + 1`` *cosines* sit above the widest drop between neighbours."""
+def _top_gap_count(cosines: np.ndarray, top: int = CENTROID_GAP_TOP, drop: str = "widest") -> int:
+    """How many of the top ``top + 1`` *cosines* sit above *drop* between neighbours.
+
+    ``widest`` is the widest drop (#4759).  ``skip25`` / ``skip50`` take, when the widest is the
+    first, the widest drop below the second cosine if it is at least 1/4 (1/2) as wide (#4783).
+    ``rank5`` takes the widest of the first five drops once each is weighted by its rank.
+    """
     head = -np.sort(-cosines)[: top + 1]
     if head.size < 2:
         return int(head.size)
-    return int(np.argmax(head[:-1] - head[1:])) + 1
+    d = head[:-1] - head[1:]
+    widest = int(np.argmax(d))
+    if drop == "widest":
+        return widest + 1
+    if drop in ("skip25", "skip50"):
+        if widest != 0 or d.size < 2:
+            return widest + 1
+        below = int(np.argmax(d[1:])) + 1
+        return below + 1 if d[below] >= (0.25 if drop == "skip25" else 0.5) * d[0] else 1
+    if drop == "rank5":
+        first = d[:5]
+        return int(np.argmax(first * np.arange(1, first.size + 1))) + 1
+    raise ValueError(f"unknown drop {drop!r}")
 
 
 def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
     """*rule*'s count of the cosines that stand out (:data:`CENTROID_COUNTS`), or ``None`` with nothing to measure.
 
-    ``gap_floor`` counts as ``count`` does and ``count_gap_floor`` as ``count_gap``;
-    :func:`centroid_cut` lowers their lines to the gap.
+    ``gap_floor`` counts as ``count`` does and ``count_gap_floor`` (and #4783's variants, with
+    their own drop) as ``count_gap``; :func:`centroid_cut` lowers their lines to the gap.
     """
     from vtscore.training.thresholds import _count_estimate  # noqa: PLC0415
 
@@ -167,7 +210,7 @@ def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
     counted = _count_estimate(cosines)
     if rule in ("count", "gap_floor") or counted is None:
         return counted
-    gap = float(_top_gap_count(cosines))
+    gap = float(_top_gap_count(cosines, drop=CENTROID_DROPS.get(rule, "widest")))
     return gap if rule == "gap" else max(gap, counted)
 
 
@@ -189,6 +232,9 @@ def centroid_cut(
     chosen = CENTROID_LINE_RULE if rule is None else rule
     if chosen not in CENTROID_LINE_RULES:
         raise ValueError(f"unknown centroid line rule {chosen!r}; expected one of {CENTROID_LINE_RULES}")
+    if chosen in CENTROID_GATED:
+        below, above = CENTROID_GATED[chosen]
+        chosen = above if beta is not None and beta >= 1.0 else below
     scores = [float(c) for c in cosines]
     if chosen == "midpoint":
         return float(calculate_gmm_threshold(scores))
@@ -200,7 +246,8 @@ def centroid_cut(
         if counted is not None:
             line = _count_keep_line(arr, float(beta), counted)
             if chosen in _GAP_FLOORED:
-                line = min(line, float(-np.sort(-arr)[_top_gap_count(arr) - 1]))
+                drop = CENTROID_DROPS.get(chosen, "widest")
+                line = min(line, float(-np.sort(-arr)[_top_gap_count(arr, drop=drop) - 1]))
             return line
     return float(guarded_text_sort_threshold(scores)[0])
 
@@ -256,6 +303,7 @@ def fit_centroid(
     *,
     rule: str | None = None,
     beta: float | None = None,
+    line_mask: "Sequence[bool] | np.ndarray | None" = None,
 ) -> tuple["nn.Sequential", float, CentroidLine]:
     """The Goods' centroid head, its threshold, and its :class:`CentroidLine`, cut on the corpus *score* scores.
 
@@ -272,11 +320,21 @@ def fit_centroid(
     *rule* and *beta* are :func:`centroid_cut`'s; the cut is centred in the gap
     the line falls in (:func:`_gap_centre`), so the head keeps exactly what the
     line keeps.
+
+    *line_mask*, one flag per score, keeps only the flagged media in the line's
+    count (#4779): the app passes the unvoted ones, since the Goods it was built
+    from sit at the top of their own ranking and would otherwise be counted as
+    what stands out.  The head still scores every media.
     """
     chosen = CENTROID_LINE_RULE if rule is None else rule
     centroid = goods_centroid(goods)
     probe = centroid_head(centroid, 0.0, scale=1.0)
     s = np.asarray(score(probe), dtype=np.float64)
+    if line_mask is not None:
+        mask = np.asarray(line_mask, dtype=bool)
+        if mask.shape != s.shape:
+            raise ValueError(f"line_mask has {mask.size} flags for {s.size} scores")
+        s = s[mask]
     s = s[(s > 0.0) & (s < 1.0)]
     cosines = np.log(s) - np.log1p(-s)
     cut = _gap_centre(cosines, centroid_cut(cosines, rule=chosen, beta=beta))
@@ -289,7 +347,8 @@ def fit_centroid_head(
     *,
     rule: str | None = None,
     beta: float | None = None,
+    line_mask: "Sequence[bool] | np.ndarray | None" = None,
 ) -> tuple["nn.Sequential", float]:
     """The Goods' centroid head and its threshold: :func:`fit_centroid` without the line."""
-    head, threshold, _line = fit_centroid(goods, score, rule=rule, beta=beta)
+    head, threshold, _line = fit_centroid(goods, score, rule=rule, beta=beta, line_mask=line_mask)
     return head, threshold

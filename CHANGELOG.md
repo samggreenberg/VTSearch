@@ -34,6 +34,20 @@ not list every commit. Use `git log` for the full history.
   `GET /api/sort/line`; the three `example-sort-{by-id,server,origin}` routes now return a
   `sort_token` (still with the whole ranking).
 
+- **An example sort and a detector with too few labels no longer count your own examples as what stands out**
+  (issue #4779). Their line keeps about as many images as stand out from the rest, and it counted the
+  whole collection: your starting photos and every image you had voted on, which sit at the top of
+  their own ranking. With one example of a face toward the false-negative end of the Threshold, the
+  example sort kept your photo and nothing new in 63% of sessions; it now leaves your examples and
+  votes out of its count and keeps something new in all but 14%. Autopilot's picks are unchanged.
+- **A detector with too few labels no longer stops at one standout image** (issue #4783). Below 3 Goods
+  and 4 Bads, the line keeps everything above the clearest break at the top of the ranking (#4759). When
+  one image stands far above the rest of the match, the clearest break is right after it, and the line
+  kept only that image. From the middle of the Threshold toward the false-positive end, the line now
+  looks past a standout to the next clear break. On the collection you labelled that standout is
+  usually your own example, so this is where it shows most: with one example of a face, sessions where
+  the line keeps nothing new fall from 45% to 22%. Toward the false-negative end the
+  line still keeps the standout alone.
 - **A detector with too few labels keeps all of a clear match, not just its top image** (issue #4759).
   Below 3 Goods and 4 Bads, Test, Find and AutoFind keep about as many images as stand out from the
   rest (#4732). On faces that kept one of a person's three or four other photos, because their photos
