@@ -145,6 +145,6 @@ class TestTheQueryTestIsThePlantedAnswer:
         cos = np.asarray([seed_scores[c] for c in test_ids])
         line = text_sort_cuts(list(cos), beta=beta).threshold
         kept = cos >= line - 1e-9
-        pos = np.asarray([media_is_positive(clips[c], "alpha") for c in test_ids])
+        pos = np.asarray([media_is_positive(clips[c], "alpha") for c in test_ids], dtype=bool)
         assert rows[0]["n_flagged"] == int(kept.sum())
         assert rows[0]["recall"] == pytest.approx(float((kept & pos).sum() / pos.sum()))

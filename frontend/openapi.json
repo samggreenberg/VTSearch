@@ -12274,6 +12274,7 @@
         }
       ],
       "put": {
+        "description": "The Train view's re-sort prompt saves its new example here (#4801).  The\ndetector's ``text_query`` and ``media_example`` follow the new list - its\nfirst text example and its first media example, each ``\"\"`` when there is\nnone - in the detector file and the registry entry alike: under the label\nquota a typed-query detector gives its query's own set (#4758), and the\nnext Train session opens on the registry entry's.  A re-sort to a media\nexample therefore drops the query.",
         "operationId": "set_detector_examples",
         "requestBody": {
           "content": {

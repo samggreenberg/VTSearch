@@ -579,7 +579,8 @@ every media scored, in the snapshot's text slot (`text_embedder_for_snap`).
 `is_query_head`, `query_head_embedder` and `query_head_text` read it;
 `is_quota_head` is true of either quota head; `head_score_embedder(model,
 default)` is the space a scorer builds rows in; `detector_text_query(det_data)`
-is the query a detector was made from; `embed_detector_query` embeds it as the
+is the query a detector was made from (the Train view's re-sort prompt replaces
+it, #4801); `embed_detector_query` embeds it as the
 text sort does.
 
 ---

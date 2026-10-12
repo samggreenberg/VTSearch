@@ -1433,6 +1433,39 @@ describe('LabelViewComponent', () => {
     expect(component.resortSortPositives).toBe(0);
   });
 
+  describe('saving the re-sort to the detector (#4801)', () => {
+    /** Train on `det1`, whose registry name is `my-det`. */
+    function openOnDetector(): void {
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'det1');
+      TestBed.inject(LabelSessionService).textQuery = 'old query';
+      flushInitialRequests();
+      httpMock
+        .match((req) => req.url === '/api/detectors/registry')
+        .forEach((req) => req.flush({ detectors: [{ id: 'det1', name: 'my-det' }] }));
+    }
+
+    it('saves a new typed query as the detector example', () => {
+      openOnDetector();
+
+      component.onResortNewExample({ action: 'new-example', type: 'text', value: 'new query' });
+
+      const put = httpMock.expectOne('/api/detectors/my-det/examples');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ examples: [{ type: 'text', value: 'new query' }] });
+      put.flush({ success: true, name: 'my-det', examples: put.request.body.examples });
+    });
+
+    it('saves a new media example as an unlabeled seed, not a Good', () => {
+      openOnDetector();
+
+      component.onResortNewExample({ action: 'new-example', type: 'media', value: 'x.png' });
+
+      const put = httpMock.expectOne('/api/detectors/my-det/examples');
+      expect(put.request.body).toEqual({ examples: [{ type: 'media', value: 'x.png', labeled: false }] });
+      put.flush({ success: true, name: 'my-det', examples: put.request.body.examples });
+    });
+  });
+
   it('does not count a click that toggled a positive off', () => {
     const session = TestBed.inject(LabelSessionService);
     session.textQuery = 'test query';

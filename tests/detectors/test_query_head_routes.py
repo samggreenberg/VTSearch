@@ -342,3 +342,125 @@ class TestCli:
         _write_detector("cli-empty", corpus, goods=[], bads=[])
         with pytest.raises(ValueError, match="has no labels"):
             cli._load_and_train_detectors(["cli-empty"], "image", corpus)
+
+
+#: The typed query a re-sort swaps in (#4801), and the media whose text vector it embeds as.
+RESORT_QUERY = "another planted thing"
+RESORT_TARGET = 30
+
+
+@pytest.fixture
+def resort_world(world, monkeypatch):
+    """``world`` with a second typed query, a re-sort's; ``(corpus, query_vec, resort_vec)``."""
+    corpus, query = world
+    resort = corpus[RESORT_TARGET]["embeddings"][TEXT_EMB]
+    vectors = {QUERY: query, RESORT_QUERY: resort}
+    monkeypatch.setattr(qh, "embed_detector_query", lambda text, media_type, embedder: vectors.get(text))
+    return corpus, query, resort
+
+
+def _set_examples(client, name: str, examples: list[dict]) -> None:
+    resp = client.put(f"/api/detectors/{name}/examples", json={"examples": examples})
+    assert resp.status_code == 200, resp.get_json()
+
+
+class TestReSort:
+    """The Train view's re-sort prompt saves its example (#4801), so Find gives what the opening sorts by."""
+
+    def test_a_re_sorted_typed_query_detectors_test_is_the_new_querys_set(self, client, resort_world):
+        corpus, _query, resort = resort_world
+        detector_id = _write_detector("resorted", corpus, goods=[1], bads=[40], text_query=QUERY)
+        assert {r["id"] for r in _find_label(client, detector_id)["results"][:6]} == QUERY_CLUSTER
+
+        _set_examples(client, "resorted", [{"type": "text", "value": RESORT_QUERY}])
+
+        body = _find_label(client, detector_id)
+        assert body["label_quota"]["tier"] == "query"
+        cosine = {c: float(np.dot(m["embeddings"][TEXT_EMB], resort)) for c, m in corpus.items()}
+        assert [r["id"] for r in body["results"]] == sorted(cosine, key=lambda c: -cosine[c])
+        assert body["results"][0]["id"] == RESORT_TARGET
+        kept = {r["id"] for r in body["results"] if r["score"] >= body["threshold"]}
+        _assert_text_sorts_set(kept, corpus, resort, body["balance"]["beta"])
+
+    def test_the_registry_entry_takes_the_new_query_too(self, client, resort_world):
+        """The next Train session opens on the registry entry's query, so it must not keep the old one."""
+        from vtscore.detectors.registry import get_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        corpus, _query, _resort = resort_world
+        detector_id = _write_detector(
+            "resorted-registry",
+            corpus,
+            goods=[],
+            bads=[],
+            text_query=QUERY,
+            examples=[{"type": "text", "value": QUERY}],
+        )
+
+        _set_examples(client, "resorted-registry", [{"type": "text", "value": RESORT_QUERY}])
+
+        entry = get_detector(detector_id)
+        data = _read_detector(_detector_path("resorted-registry"))
+        assert entry is not None and data is not None
+        for record in (entry, data):
+            assert record["text_query"] == RESORT_QUERY
+            assert record["examples"] == [{"type": "text", "value": RESORT_QUERY}]
+
+    def test_a_re_sort_to_a_media_seed_drops_the_query_and_votes_nothing(self, client, resort_world):
+        """A media re-sort steers the sort, as a seed does: no query, and no Good the user did not vote."""
+        from vtscore.detectors.registry import get_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        corpus, _query, _resort = resort_world
+        detector_id = _write_detector("resorted-media", corpus, goods=[1], bads=[40], text_query=QUERY)
+        seed = {"type": "media", "value": "seed.png", "labeled": False}
+
+        _set_examples(client, "resorted-media", [seed])
+
+        entry = get_detector(detector_id)
+        data = _read_detector(_detector_path("resorted-media"))
+        assert entry is not None and data is not None
+        for record in (entry, data):
+            assert (record["text_query"], record["media_example"]) == ("", "seed.png")
+        assert len(data["labelset"]["labels"]) == 2
+        # With no query, the detector is its Goods' centroid under the quota, as before #4758.
+        body = _find_label(client, detector_id)
+        assert body["label_quota"]["tier"] == "centroid"
+        assert {r["id"] for r in body["results"][:6]} == GOOD_CLUSTER
+
+    def test_a_loaded_detector_drops_the_old_querys_head_and_keeps_its_session(self, client, resort_world):
+        """The write re-points the live labelset cache (no rehydrate) and drops the stale query head."""
+        from vtscore.detectors.dataset_sync import _detector_file_mtime
+        from vtscore.detectors.query_head import query_head_text
+        from vtscore.detectors.store import _detector_path
+        from vtscore.state.core import DetectorContext, register_detector_context
+
+        corpus, _query, _resort = resort_world
+        detector_id = _write_detector("resorted-live", corpus, goods=[1], bads=[40], text_query=QUERY)
+        det_ctx = DetectorContext(detector_id, name="resorted-live", media_type="image")
+        register_detector_context(det_ctx)
+        _find_label(client, detector_id)
+        assert query_head_text(det_ctx.model) == QUERY
+
+        _set_examples(client, "resorted-live", [{"type": "text", "value": RESORT_QUERY}])
+
+        assert det_ctx.model is None
+        assert det_ctx.cached_labelset is not None
+        assert det_ctx.cached_labelset_mtime == _detector_file_mtime(_detector_path("resorted-live"))
+        assert _find_label(client, detector_id)["results"][0]["id"] == RESORT_TARGET
+        assert query_head_text(det_ctx.model) == RESORT_QUERY
+
+    def test_re_saving_the_same_query_keeps_its_head(self, client, resort_world):
+        from vtscore.detectors.query_head import query_head_text
+        from vtscore.state.core import DetectorContext, register_detector_context
+
+        corpus, _query, _resort = resort_world
+        detector_id = _write_detector("resaved", corpus, goods=[1], bads=[40], text_query=QUERY)
+        det_ctx = DetectorContext(detector_id, name="resaved", media_type="image")
+        register_detector_context(det_ctx)
+        _find_label(client, detector_id)
+        head = det_ctx.model
+
+        _set_examples(client, "resaved", [{"type": "text", "value": QUERY}])
+
+        assert det_ctx.model is head and query_head_text(head) == QUERY

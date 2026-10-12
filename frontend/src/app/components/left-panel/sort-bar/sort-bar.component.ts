@@ -30,6 +30,9 @@ export class SortBarComponent implements OnInit {
   readonly textSortAvailable = input(true);
 
   readonly sortModeChange = output<SortMode>();
+  /** A browse: the typed text sorts the view and is never saved to the
+   *  detector, whose Find keeps its own query (#4801). Autopilot's re-sort
+   *  prompt is what changes that query. */
   readonly textSort = output<string>();
   readonly learnedSort = output<void>();
   readonly loadSort = output<void>();
