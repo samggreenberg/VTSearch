@@ -21,7 +21,10 @@ withheld half (the corpus Test cuts):
 * what that count rule keeps when it reads the head's own logit scores instead of the
   centroid's cosines (``k_head_count``), a count of what stands out with no class model;
 * the labels line's class model and the positives it estimates in the corpus, which
-  say why a line keeps what it keeps.
+  say why a line keeps what it keeps;
+* what the class model's own cut keeps under each of #4798's candidate fixes to its
+  positives total (``k_cut_<name>``, :mod:`vtscore.eval.arms_cut_total`), whether or
+  not the head's count serves at that click, and the 3-part chances' sum.
 
 The row is recorded only: nothing here picks, trains or moves a line, so the session
 is the app's.  One :data:`LINE_COUNT_COLUMNS` row per such click, in the
@@ -34,6 +37,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from vtscore.eval.arms_cut_total import CUT_VARIANTS, chances_sum, variant_counts
 from vtscore.eval.label_curve import _average_precision
 
 #: The side frame's columns, one row per click Test gives the trained head.
@@ -69,6 +73,9 @@ LINE_COUNT_COLUMNS = [
     "model_n_neg",
     "separation",
     "est_positives",
+    # #4798: the class model's cut under each candidate (the gate aside), and the 3-part chances' sum.
+    *[f"k_cut_{name}" for name in CUT_VARIANTS],
+    "chances_sum",
 ]
 
 
@@ -136,6 +143,8 @@ def line_count_row(
         "model_n_neg": model.n_neg if model is not None else nan,
         "separation": float(find_on_test.separation) if find_on_test is not None else nan,
         "est_positives": est,
+        **{f"k_cut_{name}": k for name, k in variant_counts(find_on_test, s, beta).items()},
+        "chances_sum": chances_sum(find_on_test),
     }
 
 
