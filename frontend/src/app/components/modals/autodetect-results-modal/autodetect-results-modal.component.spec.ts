@@ -116,10 +116,41 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(fixture.nativeElement.querySelector('.centroid-note')?.textContent).toContain("Goods' centroid");
   });
 
+  it('names the detectors that ran as their typed query apart from the centroid ones (#4758)', async () => {
+    const quota = (tier: string, nGood: number, nBad: number) => ({
+      tier,
+      n_good: nGood,
+      n_bad: nBad,
+      goods_owed: Math.max(0, 3 - nGood),
+      bads_owed: Math.max(0, 4 - nBad),
+      good_quota: 3,
+      bad_quota: 4,
+      dry_bad_quota: 16,
+    });
+    fixture.componentRef.setInput('data', {
+      ...mockData,
+      results: {
+        typed: { detector_name: 'Typed', hits: [], label_quota: quota('query', 0, 0) },
+        under: { detector_name: 'Under', hits: [], label_quota: quota('centroid', 2, 1) },
+        trained: { detector_name: 'Trained', hits: [], label_quota: quota('trained', 3, 4) },
+      },
+    } as any);
+    await flushInit();
+    expect(component.queryDetectors).toEqual(['Typed (3 more Goods and 4 more Bads)']);
+    expect(component.centroidDetectors).toEqual(['Under (1 more Good and 3 more Bads)']);
+    const queryNote = fixture.nativeElement.querySelector('.query-note')?.textContent ?? '';
+    expect(queryNote).toContain('ran as their typed query');
+    expect(queryNote).toContain('Typed');
+    expect(queryNote).not.toContain('Under');
+    expect(fixture.nativeElement.querySelector('.centroid-note')?.textContent).not.toContain('Typed');
+  });
+
   it('says nothing about the centroid when every detector trained', async () => {
     await flushInit();
     expect(component.centroidDetectors).toEqual([]);
+    expect(component.queryDetectors).toEqual([]);
     expect(fixture.nativeElement.querySelector('.centroid-note')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.query-note')).toBeNull();
   });
 
   it('should display all hits when both selected', async () => {

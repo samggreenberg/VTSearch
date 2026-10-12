@@ -15,7 +15,14 @@
     }
   </div>
 
-  <!-- Detectors under the label quota ran as the Goods' centroid (#4643). -->
+  <!-- Detectors under the label quota ran as their typed query (#4758), or with
+       no typed query as the Goods' centroid (#4643). -->
+  @if (queryDetectors.length) {
+    <p class="info-text query-note" role="note">
+      Too few labels for a trained detector, so these ran as their typed query:
+      {{ queryDetectors.join('; ') }}.
+    </p>
+  }
   @if (centroidDetectors.length) {
     <p class="info-text centroid-note" role="note">
       Too few labels for a trained detector, so these ran as the Goods' centroid:

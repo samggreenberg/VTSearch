@@ -25,7 +25,7 @@ That is why the app arm is spelled ``"app"`` rather than by a model name
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -502,6 +502,49 @@ def _centroid_step(
 
     head, _threshold = fit_centroid_head(goods, lambda h: score(_as_step(h)), rule=line_rule, beta=line_beta)
     return _as_step(head)
+
+
+def _query_step(
+    seed_scores: dict[int, float],
+    corpus_ids: Sequence[int],
+    *,
+    line_beta: float | None,
+) -> StepModel:
+    """A typed-query detector's head under the label quota (#4758), as a step: the typed query's own set.
+
+    The app's head (:func:`~vtscore.detectors.query_head.fit_query_head`) is the
+    query's unit vector, cut where the text sort draws its display line.  The
+    harness already holds that sort's cosine for every media of the cell
+    (*seed_scores*, the opening's text sort), so the step is those cosines
+    through the head's own logit, ``scale * (cosine - cut)``, with the cut drawn
+    as the app draws it: :func:`~vtscore.detectors.centroid_head.centroid_cut`
+    with the ``text`` rule at *line_beta*, over the cosines of *corpus_ids* (the
+    corpus a Test searches: the withheld half here), centred in its gap.  The
+    scores are looked up by id (:attr:`StepModel.id_scores`): on a paired arm the
+    text space is not the space of the vectors the run learns on.
+    """
+    from vtscore.detectors.centroid_head import (  # noqa: PLC0415
+        CENTROID_LOGIT_SCALE,
+        _gap_centre,
+        centroid_cut,
+    )
+
+    corpus = np.asarray([seed_scores[cid] for cid in corpus_ids], dtype=np.float64)
+    cut = _gap_centre(corpus, centroid_cut(corpus, rule="text", beta=line_beta))
+    ids = list(seed_scores)
+    cos = np.asarray([seed_scores[cid] for cid in ids], dtype=np.float64)
+    scores = 1.0 / (1.0 + np.exp(-CENTROID_LOGIT_SCALE * (cos - cut)))
+
+    def predict(_X: Any) -> np.ndarray:
+        raise RuntimeError("a typed query's step scores media by id (StepModel.id_scores), not by vector")
+
+    return StepModel(
+        predict=predict,
+        torch_model=None,
+        backend="query",
+        device="cpu",
+        id_scores={cid: float(sc) for cid, sc in zip(ids, scores, strict=True)},
+    )
 
 
 def _style_train_and_calibrate(

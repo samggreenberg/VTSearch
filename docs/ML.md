@@ -50,12 +50,12 @@ vote is saved as it is cast, so Test, AutoFind, a load or an import of the
 labels could hand one out at any click. So what a labelset gives depends on its
 counts (#4643, `vtscore/detectors/label_quota.py`):
 
-| Labels | Detector |
-|---|---|
-| no Good | none: Test is refused, there is nothing to sort toward |
-| a Good, but under both quotas below | **the Goods' centroid** |
-| 3 Goods and 4 Bads | the trained head above |
-| a Good and 16 Bads | the trained head above (#4731) |
+| Labels | Detector | Detector made from a typed query (#4758) |
+|---|---|---|
+| no Good | none: Test is refused, there is nothing to sort toward | **the typed query's own set** |
+| a Good, but under both quotas below | **the Goods' centroid** | **the typed query's own set** |
+| 3 Goods and 4 Bads | the trained head above | the trained head above |
+| a Good and 16 Bads | the trained head above (#4731) | the trained head above |
 
 The first quota is Autopilot's own quorum (`goodToStart` / `badToStart`), the
 counts its opening has always judged enough to train on; its "more" walk mines
@@ -106,13 +106,34 @@ images past it include strangers that precision pays for
 (`docs/experiments/2026-10-11-centroid-drop-4783`). A
 balance change redraws the line on the cosines it was drawn on, and Autopilot's
 Hard select still samples at their midpoint. The labels' line needs held-out
-Bads the centroid does not have. No typed-query
-tier sits below it, because a labelset does not carry the query: an exported, an
-imported and a CLI-made labelset have none.
+Bads the centroid does not have.
+
+**A detector made from a typed query gives that query's own set instead (#4758).**
+Through Autopilot's opening the screen shows the typed query's sort at its line,
+and that set is better than the centroid's: on the State of the App's Binary
+opening (COCO Better, 720 sessions), on the votes under the quota, it scored
+0.56 / 0.44 / 0.54 F-beta at beta 1/4, 1 and 4 against the centroid's 0.43 /
+0.28 / 0.35. The centroid was better only at beta 1/4, on small-instance
+categories and on the late votes of runs whose typed query met the Bads quota
+before 3 Goods; a rule that fell back to it there gained under 0.001. So the detector's
+`text_query` (which its file and registry entry already hold) decides: from the
+first vote until the trained head, Test, AutoFind, a load, a cold Find, an export
+and the CLI give the typed query's set (`vtscore/detectors/query_head.py`), worth
++0.08 / +0.09 / +0.14 over votes 1-10 and +0.006 / +0.008 / +0.017 over 1-150
+(`docs/experiments/2026-10-12-find-typed-query-4758`). It is the text sort as a
+head: the query's unit vector as a `Linear(D, 1)` in the dataset's **text**
+space, which on a dual-embedder dataset is not the space the detector learns in
+(every scorer asks `head_score_embedder`), cut where `text_sort_cuts` draws the
+display line at the detector's balance, over every item scored, voted ones
+included, as the sort counts them. A balance change redraws it as it redraws the
+centroid's. The query lives on the detector, not the labelset: an exported, an
+imported and a CLI-made labelset carry none, and a detector with no query, or a
+dataset with no text slot, gives the centroid and nothing as before.
 
 The rule is on the labels, wherever they came from: `train_from_labelset`
 (Test, AutoFind, a detector load, the CLI) and a cold Find
-(`labelset_train_and_score(label_quota=True)`) apply it, and a trained head the
+(`labelset_train_and_score(label_quota=True)`) apply it, each handed the
+detector's typed query (`detector_text_query`), and a trained head the
 Train view's learned sort cached is not reused under it. The Train view's own
 learned sort is not a detector anyone takes away and still trains from the
 first Good and Bad. The eval harness's default arm scores the withheld half the

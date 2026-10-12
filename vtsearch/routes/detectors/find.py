@@ -226,17 +226,27 @@ def _build_detector_config(d: dict) -> dict:
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
     from vtscore.state.core import get_detector_context  # noqa: PLC0415
 
+    from vtscore.detectors.query_head import detector_text_query, is_query_head  # noqa: PLC0415
+
     config: dict = {"name": d["name"], "detector_id": d["id"]}
 
     det_ctx = get_detector_context(d["id"])
     det_data = _read_detector(_detector_path(d["name"]))
     labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
-    if det_ctx is not None and cached_head_is_current(det_ctx, labelset):
+    # Under the quota a typed-query detector is its query's own set (#4758),
+    # drawn on each dataset the Find scores: built there by the cold path, never
+    # carried live from the dataset its cached head was cut on.
+    text_query = detector_text_query(det_data)
+    if (
+        det_ctx is not None
+        and cached_head_is_current(det_ctx, labelset, text_query)
+        and not is_query_head(det_ctx.model)
+    ):
         config["live_mlp"] = det_ctx.model
         config["threshold"] = det_ctx.threshold
         config["live_embedder"] = det_ctx.embedder or ""
 
-    if det_data and det_data.get("labelset", {}).get("labels"):
+    if det_data and (det_data.get("labelset", {}).get("labels") or text_query):
         config["detector_data"] = det_data
         config["cold_labelset"] = labelset
 
@@ -521,6 +531,7 @@ def _score_with_cold_detector(
     """
     from vtscore.config import CoreConfig  # noqa: PLC0415
     from vtscore.detectors.labelset_training import labelset_train_and_score  # noqa: PLC0415
+    from vtscore.detectors.query_head import detector_text_query  # noqa: PLC0415
     from vtscore.state import seed_detector_beta  # noqa: PLC0415
 
     det_ctx = _cold_detector_context(dc)
@@ -565,8 +576,10 @@ def _score_with_cold_detector(
             on_progress=_on_label,
             beta=beta,
             # A Find hands the detector out: under the label quota it is the
-            # Goods' centroid, as Test and AutoFind give (#4643).
+            # Goods' centroid, as Test and AutoFind give (#4643), or a
+            # typed-query detector's own query (#4758).
             label_quota=True,
+            text_query=detector_text_query(dc["detector_data"]),
         )
         if model is None:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")

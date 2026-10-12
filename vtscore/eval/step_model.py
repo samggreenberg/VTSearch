@@ -63,6 +63,11 @@ class StepModel:
     backend: str
     device: str
     predict_std: Optional[Callable[[Any], "np.ndarray"]] = None
+    #: A fixed score per media id, for a step that is not a model over the run's
+    #: vectors: a typed query's set (#4758), whose cosines live in the text space,
+    #: which on a paired arm is not the space the run learns in.  Every scorer
+    #: reads it first (``voting_iterations._score_media_ids``).
+    id_scores: Optional[dict[int, float]] = None
 
 
 #: Head choices for the app-pipeline trainer (:data:`APP_TRAINER`), all three
