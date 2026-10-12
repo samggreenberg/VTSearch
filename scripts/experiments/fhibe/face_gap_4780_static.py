@@ -14,7 +14,12 @@ the cell:
 * ``margin`` - ``genuine_mean - impostor_top1``; ``impostors_above`` - how many other people's faces
   score above the photo's median genuine cosine.
 
-and, for matching photo pairs on how they were taken, the cosine of every **genuine pair** (two
+``--balanced-ages N`` adds ``loo_ap_balanced``: the same AP against an impostor pool redrawn with
+equal faces from each age bracket (the smallest bracket's count, N draws averaged), so a young
+person and an old one face as many look-alikes of their own age. FHIBE's photos are 56% people
+aged 18-29 and 4% aged 60 or more.
+
+And, for matching photo pairs on how they were taken, the cosine of every **genuine pair** (two
 subject photos of one person, ``static_pairs.csv``; ``id_a``/``id_b`` are photo ids, so they join
 ``face_gap_4780_covariates.py``'s ``pid``).
 
@@ -88,6 +93,31 @@ def per_photo(name: str, ids, vecs, cats, people: set[str], pronoun: dict[str, s
     return pd.DataFrame(rows)
 
 
+AGE_EDGES = (0, 29, 44, 59, 200)
+
+
+def balanced_aps(vecs, cats, queries, bracket: np.ndarray, draws: int, seed: int = 4780) -> np.ndarray:
+    """Each query's AP against impostors redrawn to equal counts per age bracket, averaged over *draws*."""
+    rng = np.random.default_rng(seed)
+    labelled = np.flatnonzero(bracket >= 0)
+    per = min(int((bracket[labelled] == b).sum()) for b in np.unique(bracket[labelled]))
+    out = np.zeros(len(queries))
+    for _ in range(draws):
+        pool = np.concatenate(
+            [rng.choice(np.flatnonzero(bracket == b), per, replace=False) for b in np.unique(bracket[labelled])]
+        )
+        for r, qi in enumerate(queries):
+            own = np.flatnonzero((cats == cats[qi]) & (np.arange(len(cats)) != qi))
+            imp = pool[cats[pool] != cats[qi]]
+            s_own, s_imp = vecs[own] @ vecs[qi], vecs[imp] @ vecs[qi]
+            # AP of the own photos among own + impostors: for each own photo, precision at its rank
+            ranks_imp = np.sort(s_imp)[::-1]
+            s_own = np.sort(s_own)[::-1]
+            above = len(ranks_imp) - np.searchsorted(ranks_imp[::-1], s_own, side="right")
+            out[r] += np.mean((np.arange(len(s_own)) + 1) / (np.arange(len(s_own)) + 1 + above)) / draws
+    return out
+
+
 def genuine_pairs(name: str, ids, vecs, cats, people: set[str]) -> pd.DataFrame:
     """Every pair of one person's subject photos, with its cosine."""
     rows = []
@@ -114,6 +144,7 @@ def main() -> int:
     ap.add_argument("--identities", required=True)
     ap.add_argument("--strata", required=True, help="person_strata.csv (pronoun per person)")
     ap.add_argument("--covariates", default=None, help="photo_covariates.csv: every subject's pronoun, for impostors")
+    ap.add_argument("--balanced-ages", type=int, default=0, help="draws of an age-balanced impostor pool (0: off)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     people = {line.strip() for line in open(args.identities) if line.strip() and not line.startswith("#")}
@@ -127,6 +158,16 @@ def main() -> int:
         name, path = spec.split("=", 1)
         ids, vecs, cats = load_cell(Path(path))
         df = per_photo(name, ids, vecs, cats, people, pronoun)
+        if args.balanced_ages and args.covariates:
+            age = pd.read_csv(args.covariates, usecols=["subject", "age"]).groupby("subject")["age"].median()
+            bracket = np.asarray(
+                [
+                    np.searchsorted(AGE_EDGES[1:-1], age[c], side="left") if c in age.index and age[c] == age[c] else -1
+                    for c in cats
+                ]
+            )
+            queries = np.flatnonzero(np.isin(cats, list(people)))
+            df["loo_ap_balanced"] = balanced_aps(vecs, cats, queries, bracket, args.balanced_ages)
         comp = pd.Series([pronoun.get(c, "nobody") if c else "nobody" for c in cats]).value_counts().to_dict()
         print(f"{name}: {len(ids):,} faces ({comp}); {len(df):,} subject photos of {df['category'].nunique()} people")
         frames.append(df)
@@ -137,7 +178,14 @@ def main() -> int:
     try:
         photos.to_csv(args.out / "static_photos.csv", index=False)
         pd.concat(pairs, ignore_index=True).to_csv(args.out / "static_pairs.csv", index=False)
-        num = ["loo_ap", "genuine_mean", "genuine_min", "impostor_top1", "impostor_top10", "margin", "impostors_above"]
+        num = [c for c in ["loo_ap", "loo_ap_balanced"] if c in photos] + [
+            "genuine_mean",
+            "genuine_min",
+            "impostor_top1",
+            "impostor_top10",
+            "margin",
+            "impostors_above",
+        ]
         ppl = photos.groupby(["cell", "category"])[num].mean().reset_index().merge(strata, on="category", how="left")
         ppl.to_csv(args.out / "static_people.csv", index=False)
     finally:

@@ -28,7 +28,8 @@ Each ``--set``: the ``sota_face_analyze.sh`` output, the run dirs' common prefix
 read as ``<prefix>-k<K>-b1/results/cells``), the click-0 baseline dir and the dataset prefix
 (``fhibe_faces_roll``). Only beta 1 at 1024 px is read: the review's table and #4780's question.
 Writes ``people.csv`` (per person x set x K; names people, owner-only), and the aggregates
-``stages.csv``, ``matched.csv``, ``regress.csv``, ``arms.csv``.
+``stages.csv``, ``matched.csv``, ``regress.csv``, ``photos_by_pronoun.csv``, ``arms.csv`` and, given
+``--pairs``, ``pairs.csv`` (the genuine-pair read, :func:`pair_table`).
 """
 
 from __future__ import annotations
@@ -71,7 +72,9 @@ STAGES = [
 ]
 #: How the photos were taken (matched on) and how the person looks in them (added after).
 CONDITIONS = ["face_px", "camera_distance", "head_atypical", "position_atypical", "accessory", "abs_roll", "outdoor"]
-APPEARANCE = ["frac_hair", "frac_skin", "makeup", "facial_hair", "hairstyles"]
+#: Facial hair and make-up are left out: each is (near) zero for one pronoun, so a fit with them cannot
+#: tell them from the pronoun itself.
+APPEARANCE = ["hairstyles", "frac_hair", "frac_skin", "months"]
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +226,7 @@ def person_covariates(covariates: Path, landmarks: Path | None, people: set[str]
         ]
     ].mean()
     agg["hairstyles"] = g["hairstyle"].nunique()  # "None" (no hair) is a hairstyle: read_csv makes it NaN
+    agg["hairstyle_list"] = g["hairstyle"].agg(lambda v: "; ".join(f"{k} x{n}" for k, n in v.value_counts().items()))
     agg["months"] = g["captured"].nunique()
     agg["phones"] = g["phone"].nunique()
     return agg.rename_axis("category").reset_index()
@@ -241,14 +245,19 @@ def gap(a: pd.Series, b: pd.Series) -> tuple[float, float]:
     return float(a.mean() - b.mean()), float(np.sqrt(a.var() / len(a) + b.var() / len(b)))
 
 
-def ols(y: np.ndarray, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Least squares with HC1 (heteroskedasticity-robust) SEs."""
+def ols(y: np.ndarray, X: np.ndarray, clusters: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Least squares with HC1 (heteroskedasticity-robust) SEs, or cluster-robust ones over *clusters*."""
     beta, *_ = np.linalg.lstsq(X, y, rcond=None)
     resid = y - X @ beta
     n, p = X.shape
     bread = np.linalg.pinv(X.T @ X)
-    meat = (X * resid[:, None] ** 2).T @ X
-    cov = bread @ meat @ bread * n / max(n - p, 1)
+    if clusters is None:
+        meat = (X * resid[:, None] ** 2).T @ X
+        cov = bread @ meat @ bread * n / max(n - p, 1)
+    else:
+        u = pd.DataFrame(X * resid[:, None]).groupby(clusters).sum().to_numpy()
+        g = len(u)
+        cov = bread @ (u.T @ u) @ bread * g / max(g - 1, 1) * (n - 1) / max(n - p, 1)
     return beta, np.sqrt(np.diag(cov))
 
 
@@ -301,6 +310,96 @@ def cem(df: pd.DataFrame, outcome: str, treat: pd.Series, bins: dict[str, list[f
     }
 
 
+def pair_table(pairs: Path, covariates: Path, strata: pd.DataFrame) -> pd.DataFrame:
+    """The pronoun gap in genuine-pair cosine, raw, among matched pairs, and adjusted, per embedder.
+
+    A genuine pair is two photos of one person. Matched pairs share a hairstyle and a capture month,
+    and both are typical head poses without headwear, eyewear or a mask: photos taken alike, of a
+    person who looks alike in them. ``gap_sd`` puts each gap in units of the embedder's own spread of
+    genuine cosines, so FaceNet and ArcFace compare. SEs cluster on the person.
+    """
+    pr = pd.read_csv(pairs)
+    ph = pd.read_csv(covariates).set_index("pid")
+    ph["hairstyle"] = ph["hairstyle"].fillna("None")
+    ph["clean"] = (ph["head_pose"] == 0) & (ph["has_headwear"] + ph["has_eyewear"] + ph["has_mask"] == 0)
+    a, b = ph.reindex(pr["id_a"]).reset_index(drop=True), ph.reindex(pr["id_b"]).reset_index(drop=True)
+    pr["same_hairstyle"] = (a["hairstyle"] == b["hairstyle"]).to_numpy(float)
+    pr["same_month"] = (a["captured"] == b["captured"]).to_numpy(float)
+    pr["both_clean"] = (a["clean"] & b["clean"]).to_numpy(float)
+    pr["d_distance"] = (a["camera_distance"] - b["camera_distance"]).abs().to_numpy(float)
+    pr["face_px"] = ((a["face_px_1024"] + b["face_px_1024"]) / 2).to_numpy(float)
+    pr["hair"] = ((a["frac_hair"] + b["frac_hair"]) / 2).to_numpy(float)
+    pr = pr.merge(strata[["category", "pronoun"]], on="category")
+    pr = pr[pr["pronoun"].isin([SHE, HE])].reset_index(drop=True)
+    rows = []
+    for cell, d in pr.groupby("cell", sort=False):
+        d = d.reset_index(drop=True)
+        sd = d["cos"].std()
+        she = (d["pronoun"] == SHE).to_numpy(float)
+        subsets = {
+            "all pairs": np.ones(len(d), bool),
+            "same hairstyle": d["same_hairstyle"].to_numpy() == 1,
+            "different hairstyle": d["same_hairstyle"].to_numpy() == 0,
+            "matched: same hairstyle and month, both clean": (d[["same_hairstyle", "same_month", "both_clean"]] == 1)
+            .all(axis=1)
+            .to_numpy(),
+        }
+        for name, m in subsets.items():
+            x = np.column_stack([np.ones(m.sum()), she[m]])
+            bb, se = ols(d.loc[m, "cos"].to_numpy(float), x, d.loc[m, "category"].to_numpy())
+            rows.append(
+                {
+                    "cell": cell,
+                    "read": name,
+                    "pairs": int(m.sum()),
+                    "she_pairs": int(she[m].sum()),
+                    "gap": bb[1],
+                    "se": se[1],
+                    "gap_sd": bb[1] / sd,
+                }
+            )
+        covs = ["same_hairstyle", "same_month", "both_clean", "d_distance", "face_px", "hair"]
+        x = np.column_stack([np.ones(len(d)), she, _design(d, covs)])
+        bb, se = ols(d["cos"].to_numpy(float), x, d["category"].to_numpy())
+        rows.append(
+            {
+                "cell": cell,
+                "read": "adjusted for the pair's covariates",
+                "pairs": len(d),
+                "she_pairs": int(she.sum()),
+                "gap": bb[1],
+                "se": se[1],
+                "gap_sd": bb[1] / sd,
+            }
+        )
+        for who in (SHE, HE):
+            w = d[d["pronoun"] == who]
+            g, e = gap(w.loc[w["same_hairstyle"] == 1, "cos"], w.loc[w["same_hairstyle"] == 0, "cos"])
+            rows.append(
+                {
+                    "cell": cell,
+                    "read": f"same minus different hairstyle, {who}",
+                    "pairs": len(w),
+                    "she_pairs": np.nan,
+                    "gap": g,
+                    "se": e,
+                    "gap_sd": g / sd,
+                }
+            )
+        rows.append(
+            {
+                "cell": cell,
+                "read": "share of pairs with the same hairstyle, she / he",
+                "pairs": len(d),
+                "she_pairs": np.nan,
+                "gap": d.loc[she == 1, "same_hairstyle"].mean(),
+                "se": d.loc[she == 0, "same_hairstyle"].mean(),
+                "gap_sd": np.nan,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -311,6 +410,7 @@ def main() -> int:
     ap.add_argument("--covariates", type=Path, required=True)
     ap.add_argument("--landmarks", type=Path, default=None)
     ap.add_argument("--static", type=Path, default=None, help="static_people.csv (face_gap_4780_static.py)")
+    ap.add_argument("--pairs", type=Path, default=None, help="static_pairs.csv (face_gap_4780_static.py)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -402,7 +502,12 @@ def main() -> int:
             "age_per_decade": (d["age"].fillna(d["age"].median()) / 10).to_numpy(float),
             **{f"skin_{t}": (d["skin_tone"] == t).to_numpy(float) for t in ("1", "2", "3", "4", "5")},
         }
-        models = {"raw": [], "+conditions": CONDITIONS, "+conditions+appearance": CONDITIONS + APPEARANCE}
+        models = {
+            "raw": [],
+            "+conditions": CONDITIONS,
+            "+conditions+hairstyles": CONDITIONS + ["hairstyles"],
+            "+conditions+appearance": CONDITIONS + APPEARANCE,
+        }
         for o in outcomes:
             for row in regress(d, o, groups, models):
                 reg_rows.append({"set": s, "K": k, **row})
@@ -424,6 +529,9 @@ def main() -> int:
             }
         )
     pd.DataFrame(diff_rows).round(4).to_csv(args.out / "photos_by_pronoun.csv", index=False)
+
+    if args.pairs is not None:
+        pair_table(args.pairs, args.covariates, strata).round(4).to_csv(args.out / "pairs.csv", index=False)
 
     # --- arms: the pronoun gap's change between sets, person for person --------------------------
     sets = list(dict.fromkeys(ppl["set"]))
