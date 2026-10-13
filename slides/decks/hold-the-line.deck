@@ -77,9 +77,12 @@ slides:
   # F-beta's peak and the three-radio balance that sets its beta (#4413,
   # #4448), the line the labels draw at its expected peak (#4452), and why
   # the labels are what it is drawn from: they are all Find has (#4517). Then
+  # the line before the labels can draw one, a count of what stands out, and
+  # who draws it as the labels grow (#4603, #4759, #4786, #4798). Then
   # the question that line cannot answer before anyone checks (how many of
-  # what it keeps are right), Clopper–Pearson on its own, and what a check
-  # says about the line without moving it (#4427, #4452, #4517). Present
+  # what it keeps are right), Clopper–Pearson on its own, what a check
+  # says about the line without moving it (#4427, #4452, #4517), and when
+  # Autopilot runs that check by itself (#4496). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after Conclusion.
   # Second Cut stays last: Autopilot asks where What to Expect's fit puts
@@ -103,6 +106,10 @@ slides:
   floor-ask
   clopper-pearson
   floor-check
+  # Weak Spot: when the labels separate weakly, Autopilot runs Spot Check by
+  # itself (#4496), past the opening and never on faces (#4799). After Spot
+  # Check, which it calls, and before Second Cut, which stays last.
+  weak-spot
   inclusion-acq
 
   # IV — Exploration: the Coverage Atlas, how autopilot decides what to ask

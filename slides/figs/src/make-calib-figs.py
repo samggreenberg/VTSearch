@@ -6035,8 +6035,11 @@ def _so_corpus_row(ax: plt.Axes, d: dict, stage: int) -> None:
     # which the few far-out items barely move, scaled to the corpus's count.
     grid = np.linspace(lo, hi, 700)
     bin_w = (hi - lo) / SO_BINS
-    dens = scores.size * bin_w * np.exp(-0.5 * ((grid - d["med"]) / d["spread"]) ** 2) / (
-        d["spread"] * math.sqrt(2 * math.pi)
+    dens = (
+        scores.size
+        * bin_w
+        * np.exp(-0.5 * ((grid - d["med"]) / d["spread"]) ** 2)
+        / (d["spread"] * math.sqrt(2 * math.pi))
     )
     seen = dens * sy > TAIL_FLOOR
     ax.plot(_so_x(grid[seen]), SO_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=SOFT, linewidth=HUMP_LW, zorder=4)
@@ -6096,7 +6099,9 @@ def _so_rank_row(ax: plt.Axes, d: dict, stage: int) -> None:
             continue
         kept = d["keeps"][beta]
         x = _so_gap_x(kept)
-        style = {"color": BLUE, "linewidth": 2.6} if picked else {"color": INK, "linewidth": 1.4, "linestyle": (0, (4, 3))}
+        style = (
+            {"color": BLUE, "linewidth": 2.6} if picked else {"color": INK, "linewidth": 1.4, "linestyle": (0, (4, 3))}
+        )
         line_top = SO_RANK_Y + SO_RANK_H + 0.55
         ax.plot([x] * 2, [SO_RANK_Y, line_top], zorder=5, **style)
         ax.text(x, SO_RANK_Y - 0.2, f"β {name}", ha="center", va="top", fontsize=16, color=INK)
@@ -6205,6 +6210,177 @@ def _ch_stage(stage: int) -> plt.Figure:
             ax.plot([x0] * 2, [CH_ARROW_Y + 0.55, CH_GATE_Y - 0.15], color=INK, linewidth=1.6,
                     linestyle=(0, (4, 3)), zorder=2)  # fmt: skip
             ax.text(x0, CH_GATE_Y, CH_GATES[i - 1], ha="center", va="bottom", fontsize=16, color=INK)
+    return fig
+
+
+# ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──
+
+#: How many build stages Weak Spot reveals in: two sessions' class models and
+#: their separation; that separation on one axis, with the bar it is held to;
+#: one weak session's votes, and where Autopilot spends some of them checking.
+WS_STAGES = 3
+#: Two sessions' held-out votes, in logit units: (Goods, Bads). The first's
+#: overlap, as a session's do when the target is hard or the first Goods were
+#: its easiest; the second separates well. Weak first, so the panels stand in
+#: the order their dots do on the separation axis under them.
+WS_SESSIONS = (
+    ((-0.2, 0.4, 0.9, 1.3, 1.8, 2.4), (-1.4, -0.8, -0.3, 0.2, 0.7, 1.2)),
+    ((1.0, 1.4, 1.8, 2.2, 2.6, 3.0), (-2.0, -1.6, -1.2, -0.8, -0.3, 0.4)),
+)
+#: Each panel's (left, right) in canvas units, and the logit range it spans.
+WS_PANELS = ((4.0, 10.9), (12.2, 19.1))
+WS_LOGIT = (-2.6, 3.6)
+#: Rows, in canvas units: the panels (baseline, curve height), the separation
+#: axis, the session's votes.
+WS_PANEL_Y, WS_PANEL_H = 6.55, 1.55
+WS_AXIS_Y = 3.55
+WS_TIME_Y = 0.95
+#: The separation axis's range.
+WS_D_MAX = 4.0
+#: One weak session, in votes: where the opening ends (the median session's
+#: first learned step, #4496), and each check's (start, length). A check runs
+#: about twenty picks; the second starts the shipped cooldown after the first
+#: ends, because the labels still separate weakly then.
+WS_SESSION_VOTES = 150
+WS_OPENING_END = 45
+WS_CHECK_LEN = 20
+
+
+def weak_spot_fig() -> None:
+    """Weak Spot: the labels' separation, the bar it is held to, and the checks Autopilot runs below it.
+
+    The separation is d' = (Good mean − Bad mean) / spread of the class model
+    the held-out votes imply, computed by the shipped `class_score_model`; the
+    bar, the first vote a check may come at and the cooldown between checks
+    are `WEAK_SEPARATION_D`, `WEAK_CHECK_MIN_VOTES` and `WEAK_CHECK_COOLDOWN`.
+    The session row is a schematic of one weak session drawn on those
+    constants, not a measured one.
+    """
+    final = _ws_stage(WS_STAGES)
+    box = tight_box(final)
+    for stage in range(1, WS_STAGES):
+        save(_ws_stage(stage), OUT, f"calib-weak-spot.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-weak-spot.png", column=FULL_BLEED, box=box)
+
+
+@functools.lru_cache(maxsize=None)
+def _ws_models() -> tuple["ClassScoreModel", ...]:
+    """Each session's class model, from the shipped estimator; the first must separate weakly and the second must not."""
+    from vtscore.training.thresholds.labels_line import WEAK_SEPARATION_D, class_score_model  # noqa: PLC0415
+
+    models = []
+    for goods, bads in WS_SESSIONS:
+        model = class_score_model([(_ll_sigmoid(np.array(goods + bads)), [1.0] * len(goods) + [0.0] * len(bads))])
+        assert model is not None
+        models.append(model)
+    d = [(m.mu_pos - m.mu_neg) / m.sigma for m in models]
+    assert d[0] < WEAK_SEPARATION_D < d[1], d
+    return tuple(models)
+
+
+def _ws_panel(ax: plt.Axes, i: int) -> None:
+    """One session: its held-out votes, the two normals they imply, and how many spreads apart those sit."""
+    (x0, x1), (goods, bads), model = WS_PANELS[i], WS_SESSIONS[i], _ws_models()[i]
+    lo, hi = WS_LOGIT
+
+    def at(v: float | np.ndarray) -> np.ndarray:
+        return x0 + (np.asarray(v, dtype=float) - lo) / (hi - lo) * (x1 - x0)
+
+    _range_line(ax, x0, x1, WS_PANEL_Y, z=3)
+    for row, (votes, glyph, color) in enumerate(((goods, "✓", GREEN), (bads, "✗", RED))):
+        for v in votes:
+            ax.text(float(at(v)), WS_PANEL_Y - 0.12 - row * 0.5, glyph, ha="center", va="top", fontsize=18,
+                    color=color, fontweight="bold")  # fmt: skip
+    grid = np.linspace(lo, hi, 500)
+    for mu, color in ((model.mu_neg, RED), (model.mu_pos, GREEN)):
+        curve = np.exp(-0.5 * ((grid - mu) / model.sigma) ** 2)
+        seen = curve > 0.012
+        ax.plot(at(grid[seen]), WS_PANEL_Y + curve[seen] * WS_PANEL_H, color=color, linewidth=HUMP_LW, zorder=4)
+    # The two means, joined at the curves' crowns: the distance the ratio reads.
+    crown = WS_PANEL_Y + WS_PANEL_H + 0.22
+    xa, xb = float(at(model.mu_neg)), float(at(model.mu_pos))
+    ax.annotate("", xy=(xb, crown), xytext=(xa, crown),
+                arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.6}, zorder=6)  # fmt: skip
+    d = (model.mu_pos - model.mu_neg) / model.sigma
+    ax.text((xa + xb) / 2, crown + LABEL_GAP, f"d′ = {d:.1f} spreads", ha="center", va="bottom", fontsize=16,
+            color=INK)  # fmt: skip
+
+
+def _ws_axis_row(ax: plt.Axes) -> None:
+    """Stage 2: separation on one axis, the bar at 1.5, and the two sessions on it."""
+    from vtscore.training.thresholds.labels_line import WEAK_SEPARATION_D  # noqa: PLC0415
+
+    x0, x1 = WS_PANELS[0][0], WS_PANELS[1][1]
+
+    def at(d: float) -> float:
+        return x0 + d / WS_D_MAX * (x1 - x0)
+
+    bar = at(WEAK_SEPARATION_D)
+    ax.add_patch(Rectangle((x0, WS_AXIS_Y), bar - x0, 0.9, facecolor=NEUTRAL_FILL, edgecolor="none", zorder=1))
+    ax.text((x0 + bar) / 2, WS_AXIS_Y + 0.45, "weak", ha="center", va="center", fontsize=16, color=INK, zorder=2)
+    _range_line(ax, x0, x1, WS_AXIS_Y, z=3)
+    for d in range(int(WS_D_MAX) + 1):
+        ax.plot([at(d)] * 2, [WS_AXIS_Y - 0.1, WS_AXIS_Y], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(at(d), WS_AXIS_Y - 0.2, str(d), ha="center", va="top", fontsize=16, color=INK)
+    ax.plot([bar] * 2, [WS_AXIS_Y, WS_AXIS_Y + 1.15], color=INK, linewidth=1.6, linestyle=(0, (4, 3)), zorder=3)
+    ax.text(bar, WS_AXIS_Y + 1.15 + LABEL_GAP, f"{WEAK_SEPARATION_D:g}", ha="center", va="bottom", fontsize=16,
+            color=INK)  # fmt: skip
+    _ll_row_name(ax, WS_AXIS_Y + 0.45, "Separation, d′")
+    for model in _ws_models():
+        d = (model.mu_pos - model.mu_neg) / model.sigma
+        ax.plot([at(d)], [WS_AXIS_Y + 0.45], marker="o", markersize=11, color=INK, zorder=5)
+
+
+def _ws_session_row(ax: plt.Axes) -> None:
+    """Stage 3: one weak session's votes, with the checks Autopilot runs and the cooldown between them."""
+    from vtscore.training.thresholds.labels_line import WEAK_CHECK_COOLDOWN, WEAK_CHECK_MIN_VOTES  # noqa: PLC0415
+
+    x0, x1 = WS_PANELS[0][0], WS_PANELS[1][1]
+
+    def at(v: float) -> float:
+        return x0 + v / WS_SESSION_VOTES * (x1 - x0)
+
+    h = 0.75
+    _range_line(ax, x0, x1, WS_TIME_Y, z=3)
+    _ll_row_name(ax, WS_TIME_Y + h / 2, "A weak session")
+    for v in (0, 50, 100, 150):
+        ax.plot([at(v)] * 2, [WS_TIME_Y - 0.1, WS_TIME_Y], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(at(v), WS_TIME_Y - 0.2, f"vote {v}" if v else "0", ha="center", va="top", fontsize=16, color=INK)
+    # The opening: no detector yet, so no separation to read.
+    ax.add_patch(Rectangle((at(0), WS_TIME_Y), at(WS_OPENING_END) - at(0), h, facecolor=NEUTRAL_FILL,
+                           edgecolor=INK, linewidth=1.2, zorder=2))  # fmt: skip
+    ax.text((at(0) + at(WS_OPENING_END)) / 2, WS_TIME_Y + h / 2, "opening", ha="center", va="center", fontsize=16,
+            color=INK, zorder=3)  # fmt: skip
+    first = max(WS_OPENING_END, WEAK_CHECK_MIN_VOTES)
+    second = first + WS_CHECK_LEN + WEAK_CHECK_COOLDOWN
+    for start in (first, second):
+        ax.add_patch(Rectangle((at(start), WS_TIME_Y), at(start + WS_CHECK_LEN) - at(start), h, facecolor="white",
+                               edgecolor=BLUE, linewidth=2.2, zorder=2))  # fmt: skip
+        ax.text((at(start) + at(start + WS_CHECK_LEN)) / 2, WS_TIME_Y + h / 2, "check", ha="center", va="center",
+                fontsize=16, color=INK, zorder=3)  # fmt: skip
+    # The cooldown, as a span from one check's end to the next one's start.
+    a, b = at(first + WS_CHECK_LEN), at(second)
+    y = WS_TIME_Y + h + 0.3
+    ax.annotate("", xy=(b, y), xytext=(a, y), arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.4},
+                zorder=4)  # fmt: skip
+    ax.text((a + b) / 2, y + LABEL_GAP, f"{WEAK_CHECK_COOLDOWN} votes", ha="center", va="bottom", fontsize=16,
+            color=INK)  # fmt: skip
+
+
+def _ws_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Weak Spot."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+    for i in range(len(WS_SESSIONS)):
+        _ws_panel(ax, i)
+    _ll_row_name(ax, WS_PANEL_Y + 0.4, "Held-out\nvotes")
+    if stage >= 2:
+        _ws_axis_row(ax)
+    if stage >= 3:
+        _ws_session_row(ax)
     return fig
 
 

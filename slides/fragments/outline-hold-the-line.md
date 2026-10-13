@@ -32,9 +32,9 @@
      that joins the three. -->
 
 <!-- **d** — Section III is the line the app draws today: F-beta, the three
-     radios that set its β, the line the labels put at its peak, what that
-     line can and cannot claim before anyone checks — and the second job the
-     same fit does. -->
+     radios that set its β, the line the labels put at its peak and the count
+     that stands in until they can, what that line can and cannot claim
+     before anyone checks — and the second job the same fit does. -->
 
 <!-- **e** — Section IV is the half of asking the threshold does not do: the
      places no vote has been, and the atlas that knows where they are. -->
