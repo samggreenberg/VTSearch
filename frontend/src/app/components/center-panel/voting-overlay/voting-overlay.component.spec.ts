@@ -88,13 +88,21 @@ describe('VotingOverlayComponent', () => {
     expect(hint.textContent).toContain('Autopilot picked this item for you');
   });
 
+  it('names the arrow keys in the start-voting hint, not just their glyphs (#4825)', async () => {
+    fixture.componentRef.setInput('hint', 'start-voting');
+    await settleZoneless(fixture);
+    const text = (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Good, or press the right arrow key');
+    expect(text).toContain('Bad, or press the left arrow key');
+  });
+
   it("says what each Autopilot phase is after, with its counts, and what a test's pick is (#4807)", async () => {
     const text = () => (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
     fixture.componentRef.setInput('hint', 'find-goods');
     fixture.componentRef.setInput('hintCounts', { goods: 1, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
     await settleZoneless(fixture);
     expect(text()).toContain('Autopilot needs 3 Goods to start training');
-    expect(text()).toContain("you've found 1");
+    expect(text()).toContain("You've found 1");
 
     fixture.componentRef.setInput('hint', 'find-bads');
     fixture.componentRef.setInput('hintCounts', { goods: 3, goodsNeeded: 3, bads: 2, badsNeeded: 4 });

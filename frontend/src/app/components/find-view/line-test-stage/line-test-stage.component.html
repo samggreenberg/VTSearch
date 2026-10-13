@@ -49,7 +49,7 @@
       [hint]="voteHint()"
       (voted)="session.vote($event)"
     ></vt-voting-overlay>
-    <p class="stage-keys">&rarr; Good · &larr; Bad · &darr; back a pick (its vote is taken back) · &uarr; next unvoted.</p>
+    <p class="stage-keys">Arrow keys: &rarr; Good · &larr; Bad · &darr; back a pick (its vote is taken back) · &uarr; next unvoted.</p>
 
     @if (session.error()) {
       <p class="error-text" role="alert">{{ session.error() }}</p>

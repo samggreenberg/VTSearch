@@ -25,13 +25,13 @@
 @switch (hint()) {
   @case ('start-voting') {
     <vt-toasty-hint hintId="start-voting" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot picked this item for you. Click <strong>Good</strong> (&rarr;) if it's what you're looking
-      for, or <strong>Bad</strong> (&larr;) if not.
+      Autopilot picked this item for you. Click <strong>Good</strong>, or press the right arrow key, if
+      it's what you're looking for. Click <strong>Bad</strong>, or press the left arrow key, if not.
     </vt-toasty-hint>
   }
   @case ('find-goods') {
     <vt-toasty-hint hintId="find-goods" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot needs {{ goodsNeededPhrase() }} to start training; you've found {{ hintCounts().goods }}.
+      Autopilot needs {{ goodsNeededPhrase() }} to start training. You've found {{ hintCounts().goods }}.
       Keep voting.
     </vt-toasty-hint>
   }
