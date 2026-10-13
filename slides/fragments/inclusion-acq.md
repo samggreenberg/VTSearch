@@ -14,42 +14,33 @@
 
 <!-- build: figs/calib-acq-flow.build3.png -->
 
-<!-- The last figure, and it closes the loop back to Pics on a Plane: the
-     threshold decides twice. Everything since has been the first job; this is
-     the second. -->
+<!-- **a** — Last one in this section, and it goes back to the start. Remember
+     this picture: the detector, its looser and tighter cuts, and the question
+     it asked, right on the line, where it couldn't tell. Picking that question
+     was the line's second job. -->
 
-<!-- **a** — Pics on a Plane's last page: the first detector, its looser and
-     tighter cuts, and the question it asked, the item on the line, where the
-     model could not call it. Which item to ask about is the threshold's
-     second job. -->
+<!-- **b** — But here's another answer: ask further in, past the tighter cut.
+     Once there are radios, where the user wants the cut and where the model
+     can't tell aren't the same place anymore. So where should the question go? -->
 
-<!-- **b** — Another answer: further in, past the tighter cut. Since the
-     radios, "on the line" and "where the model cannot call it" are two
-     places: the line is where the user wants the cut. The rest of this slide
-     is where the question goes. -->
+<!-- **c** — Back to our fit, and its other number: every unvoted photo's
+     chance of being a match. Near zero in the bulk, near certain at the top.
+     At the middle radio, the line keeps 221, and it sits where that chance is
+     about 0.43. -->
 
-<!-- **c** — Joint Custody's fit again, ending on its other number: every
-     unvoted item's chance of being a match, from the three-part fit. Near
-     nothing in the bulk, near certain at the top. The line at the middle
-     radio keeps 221, where that chance is 0.43. -->
+<!-- **d** — Autopilot asks where the chance hits even odds: going down from
+     the best, the first photo that's a coin toss, the one the detector is
+     least sure about. Here that's just inside the line. On real photos, the
+     line often sits where only one in four is a match, so even odds lands
+     further in. -->
 
-<!-- **d** — Autopilot asks where the chance falls to even odds: best first,
-     the first item the fit calls a coin toss, the one the detector is least
-     sure about (#3546, #4632). That is Boundary's next question. Here it sits
-     just inside the line; on COCO Better, where one pick in four at the line
-     is a match, it sits further in. -->
+<!-- **e** — The other two radios move the line. Beta of a quarter pulls it up
+     to where the chance is about 0.87, and beta of 4 pushes it down to 0.05,
+     where asking would mean asking about things that almost surely aren't
+     matches. Even odds doesn't move. It's a fact about the fit, not about what
+     you want back. -->
 
-<!-- **e** — The other two radios. β ¼ pulls the line up to where the chance
-     is 0.87; β 4 sends it down to 0.05, where asking would mean asking about
-     near-certain non-matches. Even odds does not move: it is a fact about the
-     fit, not about what the user wants back. -->
-
-<!-- **f** — And the loop closes: the answer goes into the votes, the model
-     retrains, and the fit that chose the question is re-derived from it. -->
-
-<!-- Measured on COCO Better against asking at the line (#3546): 38% of
-     Boundary's picks are matches at every radio, where the line's fall from
-     37% at β ¼ to 24% at β 1 and 10% at β 4. By vote 150 that is 32 Goods at
-     every radio, against 33, 30 and 24. The objective hardly moves: over the
-     session it is within 0.002 of asking at the line at every radio. Its worth
-     is the matches it finds, not the line. -->
+<!-- **f** — And the loop closes. The answer goes into the votes, the model
+     retrains, and the fit that picked the question gets redrawn. Asking here
+     barely changes the line, but it finds more matches, especially at the
+     loose setting. -->

@@ -10,25 +10,22 @@
 
 <!-- build: figs/calib-floor-ask.build3.png -->
 
-<!-- **a** — The problem, first. Under the line, ranked best on the right, is
-     what comes back: the **kept** set, the 32 items nobody has voted on above
-     the <span class="cut">line</span>. 32 is wherever What to Expect's peak
-     fell on this corpus; no cap set it. The question: how many of those 32
-     are right? That is the kept set's precision, and the user should be told
-     it with an honest range. -->
+<!-- **a** — New question. The line keeps 32 photos nobody has voted on. Nobody
+     picked 32; it's just where the peak fell on this corpus. But how many of
+     those 32 are actually right? That's the precision of what we're handing
+     back, and the user deserves an honest answer, with a range on it. -->
 
-<!-- **b** — Where the app tells them: the Threshold control, Beta Max's three
-     radios, has one line of words under it. Before anyone checks, all it can
-     honestly say is how many are kept, and that nobody has checked them. -->
+<!-- **b** — Here's where we'd tell them: the one line of text under the
+     Threshold control. Before anyone checks, all it can honestly say is "Top
+     32 kept, unchecked." -->
 
-<!-- **c** — The obvious source of an answer: the votes the session already
-     holds, at the scores they landed on. A cluster at the top, where
-     Autopilot asked for likely matches, and one round the line, where it
-     asked the hard ones. The model chose every one of them. -->
+<!-- **c** — The obvious place to look is the votes we already have. Here they
+     are at their scores: a cluster at the top, where Autopilot went looking
+     for likely matches, and a bunch around the line, where it asked the hard
+     ones. The model chose every one of them. -->
 
-<!-- **d** — That is the trouble: a sample the model chose is biased toward
-     where the model looked. An estimator that promises a precision from
-     those votes alone breaks **83%** of its 50% promises (#4256). So the
-     answer has to come from picks the model did not choose, drawn uniformly
-     from the kept set, and counted. The next slide turns a count into a
-     range. -->
+<!-- **d** — And that's the trouble. Those votes tell you where the model
+     looked, not how right the kept set is. When we tried estimating precision
+     from them, it broke its promises far more often than it said it would. So
+     instead we pick from the kept set at random, and count. The next slide
+     turns that count into a range. -->
