@@ -4,23 +4,16 @@
 
 ## Drawing<br>the Line
 
-<!-- **a** — Same list, scrolled down to the only thing on this screen nobody
-     asked for: the tool has **drawn a line** through the ranking. Above it is
-     a match, below it is not, and the control at the top says how many landed
-     above. The ranking gets the widest column and the biggest thumbnails,
-     because it is what this screen is for. -->
+<!-- But here's the part nobody asked for. Scroll down the results and there's
+     a line. Everything above it comes back, everything below doesn't. Here it
+     kept the top twenty-five. -->
 
-<!-- Look at what is on either side. Not books and not-books — a dog on a
-     cluttered desk, a vase of tulips, a wrapped sandwich, a black cat beside a
-     laptop, and right at the line *above* it a hand holding a bun, filed under
-     book for the one half-hidden beneath it; a pizza, a plate of chicken and
-     a pan of stir-fry just below. This line came down a long way — 98 kept, in
-     a pile with about forty books in it — so what sits on it is dinner rather
-     than shelves. Out at the ends of the ranking the
-     detector is right and it is boring; here it is neither, and this is the
-     only part of the list a person's opinion could still change. -->
+<!-- And look at what's sitting next to it: a living room with a bookcase in
+     the corner, a cat by a laptop, a desk with lunch on it, a guy asleep with
+     a phone on his face. Not books, not obviously not-books. Out at the ends
+     of the ranking the detector's right and it's boring; here's where it's
+     unsure. -->
 
-<!-- That line is the subject of the rest of the talk. It was placed by a rule
-     working from the votes, the rule is not obviously the right one, and — the
-     part that makes this worth an hour — it decides twice: what comes back
-     *and* what the tool asks you about next. -->
+<!-- That line is the rest of this talk. Some rule put it there from our votes,
+     and that line does two jobs: it decides what comes back, and it decides
+     what the tool asks us about next. -->

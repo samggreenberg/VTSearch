@@ -22,38 +22,37 @@
 
 <!-- build: figs/vote-boundary.build9.png -->
 
-<!-- **a** — One circle per item: a photo, a clip, a document — the last
-     slide's cube with the box taken off. Nothing labelled, and it is a
-     **drawing rather than a plot**: those points live in 768 dimensions. What
-     is true in the drawing is true in the space — near means similar, and the
-     detector is a boundary through it. -->
+<!-- **a** — Here's that space flattened onto the slide. Each circle is a
+     photo. Nothing's labeled yet. Near means similar, and a detector is just a
+     boundary drawn through here. -->
 
-<!-- **b** — Five Good, five Bad: two minutes of clicking. Ten marks against
-     eighty-eight circles — that ratio is the situation. -->
+<!-- **b** — A couple minutes of voting: five Good, five Bad. Ten votes against
+     about ninety photos, and that's the situation we're always in. -->
 
-<!-- **c** — Already enough to fit a detector. The curve is everything the
-     model calls a match: mostly circles, not checks. -->
+<!-- **c** — That's already enough to fit a detector. Everything inside the
+     curve, it calls a match, and most of that is stuff nobody's voted on. -->
 
-<!-- **d** — Two items nobody should be asked about, and the **!** is the
-     argument: the model wins either bet. -->
+<!-- **d** — These two aren't worth asking about. The detector's sure about
+     both, so a vote wouldn't change anything. -->
 
-<!-- **e** — So it asks about *that* one, on the line, where it cannot call
-     it. -->
+<!-- **e** — So it asks about this one, right on the line, where it can't tell.
+     -->
 
-<!-- **f** — The user answers Good, and that is all that has happened: the
-     question mark is a check and every line is where it was. Worth a beat —
-     the click and the retrain are two events; this is the first. -->
+<!-- **f** — We say Good. Nothing else has moved yet; the vote and the retrain
+     are two separate steps. -->
 
-<!-- **g** — Now the retrain: the boundary moves, dashed is where it was.
-     Point at what *didn't* move — the rest of the loop is the line it was a
-     page ago. One answer changed the detector's mind about one neighbourhood,
-     which is the whole shape of learning from a handful of votes. -->
+<!-- **g** — Now it retrains, and the boundary moves. Dashed is where it was.
+     The rest of the boundary hasn't moved: one vote changes its mind about one
+     neighborhood. -->
 
-<!-- **h** — The loop closes: a different item is now on the line. -->
+<!-- **h** — And now there's a new photo on the line, and that's the next
+     question. -->
 
-<!-- **i** — Now the other job. Same detector, cut looser and tighter. Both
-     keep every check in and every cross out, so the votes cannot choose — but
-     the strip between comes back under one and not the other. -->
+<!-- **i** — Now the other job. Same detector, but we could cut it looser or
+     tighter. Both keep all the Goods in and all the Bads out, so the votes
+     can't choose. But that strip between them comes back under one and not the
+     other. -->
 
-<!-- **j** — The twist: those cuts were on offer when it picked the question
-     too. A wrong line costs the next twenty votes, not just the final set. -->
+<!-- **j** — And here's the catch: the line also decided which question to ask.
+     A bad line doesn't just get you the wrong results, it wastes the next
+     twenty votes. -->

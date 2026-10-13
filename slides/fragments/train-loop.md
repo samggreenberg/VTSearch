@@ -15,43 +15,26 @@
 
 <!-- build: figs/ui-train-loop.build5.webp -->
 
-<!-- **a** — Train, one second after opening it, and the interaction is already
-     complete: one item in the middle, **Good** and **Bad** under it, the
-     answers so far — none — on the right. The sliver on the left is autopilot,
-     folded to a rail: it picks what you see, so nobody scrolls a list deciding
-     what to judge. -->
+<!-- **a** — This is training. It shows us one picture, and we hit Good or Bad.
+     Our votes pile up on the right, and right now there aren't any. That strip
+     on the left is Autopilot: it picks what we see next, so we never go
+     hunting for something to label. First up, a suitcase full of books. Good. -->
 
-<!-- **b** — First answer, and it lands in the Good pile. Behind it, the head
-     retrains and all 228 items re-rank. That is a fraction of a second, because
-     it is a small linear model on frozen embeddings — the heavy network ran
-     once, at import, and never runs again. -->
+<!-- **b** — Every vote retrains the detector, and it takes a fraction of a
+     second, so there's no waiting. A stack of books. Good. -->
 
-<!-- **c** — Second. Watch the middle as much as the right: the item changed,
-     because the model that just retrained went looking for what it could least
-     call. Which is why it shows three teddy bears in front of a shelf of DVD
-     box sets — **the frame from slide 2**, the one the room could not agree
-     about. Not an accident: it is the nearest thing this corpus has to the
-     edge of the concept. -->
+<!-- **c** — Now teddy bears in front of a shelf of DVDs, just like the last
+     slide. The dataset these came from actually labels this one "book". I
+     don't think it is, so -->
 
-<!-- **d** — Third, and the first **No**. Box sets are not books to the person
-     doing the asking. Say it out loud — it is the whole argument of slide 2
-     arriving as a click: nothing in the data settled that, COCO's own
-     annotators called those spines books, and nothing had to. The concept ends
-     where this user says it ends, and here is the only place they get to say
-     so. -->
+<!-- **d** — Bad. That's the last slide's argument as one click. The data says
+     book, I say no, and I'm the one asking, so I win. Next, someone reading in
+     bed. Good. -->
 
-<!-- **e** — Fourth, and back to a Good: someone reading in bed, which nobody
-     needs to think about. That is the rhythm — most answers instant, the
-     occasional one the whole point — with no second mode to learn and nothing
-     to configure between answers. -->
+<!-- **e** — A cat watching TV. Bad. Most votes are instant like that; once in
+     a while one makes you think, and those are the ones that matter. -->
 
-<!-- **f** — Forty-eight answers in — twenty-nine Good, nineteen Bad, a few
-     minutes, the whole budget this task was ever going to get. Twenty came
-     from a spot check autopilot ran on its own partway (a later slide). Note
-     what it asks *now*: not a shelf or a stack, but a man beside a rack of
-     bicycles. The easy books are answered; what is left is what the model
-     cannot yet place — the line the rest of the talk is about. -->
-
-<!-- If someone asks where the rest of the corpus went: there is a manual mode
-     with the whole pile in a grid, sort controls and a threshold control — a
-     character in the second half of the talk. -->
+<!-- **f** — Skip ahead to about thirty votes: eighteen Good, thirteen Bad, a
+     few minutes of clicking. Now it's asking things like this: a desk with a
+     laptop, a pile of cables, and one book. The easy ones are done, and what's
+     left is what the detector can't call yet. -->
