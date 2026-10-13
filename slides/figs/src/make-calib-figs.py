@@ -6573,8 +6573,8 @@ def _land_query(ax: plt.Axes) -> None:
 # ── Inside Job: the trained head's line, read off what a fold holds out ─────
 
 #: How many build stages the inside view reveals in: a thin class model,
-#: counting what stands out; the labels line, from three Goods a fold; where
-#: the Bads may shape the negatives, from fifty Bads a fold.
+#: counting what stands out; the labels line, from three Goods per fold; where
+#: the Bads may shape the negatives, from fifty Bads per fold.
 IN_STAGES = 3
 #: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 0..IN_G.
 #: A fold always holds out at least one of each (`_grouped_folds` trains on at
@@ -6619,9 +6619,9 @@ def inside_job_fig() -> None:
     holds: inside a fold the split has already rounded, so the trained head's
     line is a decision tree on two counts, with nothing left to chance. It
     comes before Lay of the Land, which is the band this rule makes once the
-    rounding is unknown. One or two Goods a fold, the head counts what stands out; three
+    rounding is unknown. One or two Goods per fold, the head counts what stands out; three
     (six between the two folds, `HEAD_COUNT_GOODS`), the labels line; fifty
-    Bads a fold (`RANDOM_BADS_MIN` between them), and the line may model the
+    Bads per fold (`RANDOM_BADS_MIN` between them), and the line may model the
     negatives by the Bads' own scores, if they look like a random sample.
     """
     final = _in_stage(IN_STAGES)
@@ -6668,15 +6668,15 @@ def _in_stage(stage: int) -> plt.Figure:
         ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
 
     name(IN_B / 2, 0.5, "no Goods")
-    name(IN_B / 2, 2.0, f"under {good_edge} held-out Goods a fold")
+    name(IN_B / 2, 2.0, f"under {good_edge} held-out Goods per fold")
     if stage >= 2:
         edge_y = _in_cell(1, good_edge)[1]
         ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
-        name(bad_edge / 2, 6.0, f"{good_edge}+ held-out Goods a fold,\n{HEAD_COUNT_GOODS}+ between the two")
+        name(bad_edge / 2, 6.0, f"{good_edge}+ held-out\nGoods per fold,\n{HEAD_COUNT_GOODS}+ between the two")
     if stage >= 3:
         edge_x = _in_cell(bad_edge, 1)[0]
         ax.plot([edge_x, edge_x], [_in_cell(1, good_edge)[1], y1], color=INK, linewidth=2.0, zorder=4)
-        ax.text((edge_x + x1) / 2, y0 + 6.0 * ch, f"{bad_edge}+ Bads\na fold: the\nBads' scores,\nif random",
+        ax.text((edge_x + x1) / 2, y0 + 6.0 * ch, f"{bad_edge}+ Bads\nper fold: the\nBads' scores,\nif random",
                 ha="center", va="center", fontsize=16, color=INK, zorder=6,
                 bbox={"facecolor": LAND_FILL["labels"], "edgecolor": "none", "pad": 3})  # fmt: skip
     return fig

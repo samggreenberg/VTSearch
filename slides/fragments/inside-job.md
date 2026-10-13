@@ -16,15 +16,15 @@
 
 <!-- **a** — No Goods at all, in white: the typed query's text sort. With
      Goods, each fold holds out at least one Good and one Bad. With one or
-     two Goods a fold, in orange, the class model is too thin, and the head's
+     two Goods per fold, in orange, the class model is too thin, and the head's
      ranking is cut by Out Standing's count. -->
 
-<!-- **b** — Three Goods a fold, six between the two (#4798), in purple: the
+<!-- **b** — Three Goods per fold, six between the two (#4798), in purple: the
      same ranking, cut at What to Expect's Fβ peak. One flat edge, with no
      Bads in it. Which side of it a user's labels land on is the next
      slide. -->
 
-<!-- **c** — Fifty Bads a fold, a hundred between them (#4490): from there
+<!-- **c** — Fifty Bads per fold, a hundred between them (#4490): from there
      the labels line may model the negatives by the Bads' own scores rather
      than a normal fitted to the corpus, if the Bads look like a random
      sample of it. An imported, fully labelled set does; a session's never
