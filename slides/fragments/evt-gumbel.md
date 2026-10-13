@@ -14,7 +14,8 @@
      without. -->
 
 <!-- **b** — Score every region for "book" and the photo takes its best. No book
-     on the right, but it still gets a max. -->
+     on the right, but it still gets a max. (These numbers are made up to make
+     the point.) -->
 
 <!-- **c** — Pile up every photo's score: that's what the line's drawn on, every
      one a best-of-twenty. -->

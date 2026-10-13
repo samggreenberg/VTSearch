@@ -12,6 +12,6 @@
      SVM: on faces, Find DIPS the moment the first detector's trained. COCO, no
      dip. -->
 
-<!-- **b** — Head start: no dip, and it stays ahead for thirty-odd votes. On
-     COCO the lines sit on top of each other: fixes faces, costs COCO
-     nothing. -->
+<!-- **b** — Head start: no dip, and it stays ahead for thirty-odd votes, up
+     about 0.06 over the first fifty. On COCO the lines sit on top of each
+     other: fixes faces, costs COCO nothing. -->

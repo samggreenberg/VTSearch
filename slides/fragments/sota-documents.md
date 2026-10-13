@@ -12,4 +12,5 @@
      radios are near 0.9 in a couple of clicks; the middle ends at 0.87. -->
 
 <!-- **b** — Precision against recall, same trade as photos, just a lot higher
-     up. -->
+     up: at fifty clicks a quarter's near precision 0.98, 4's near recall 0.95,
+     and the middle's between. -->
