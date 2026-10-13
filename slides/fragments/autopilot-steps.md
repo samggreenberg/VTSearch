@@ -11,8 +11,8 @@
 <!-- build: figs/autopilot-steps.build3.png -->
 
 <!-- **a** — Autopilot picks every photo we see. It opens on our text query:
-     Goods off the top till we have three, then four Bads at the query's line.
-     -->
+     Goods off the top till we have three, then four Bads at the query's
+     line. -->
 
 <!-- **b** — Then the detector takes over. Boundary asks what it's least sure
      of, till Smart and Stable go green. -->

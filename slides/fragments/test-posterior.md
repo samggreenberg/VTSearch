@@ -10,9 +10,9 @@
 
 <!-- build: figs/test-posterior.build3.png -->
 
-<!-- **a** — One band up close. The app keeps a curve over every share it could
-     have right, high where it's believable. Before any picks, anything goes.
-     -->
+<!-- **a** — One band up close. The app keeps a curve over every share it
+     could have right, high where it's believable. Before any picks, anything
+     goes. -->
 
 <!-- **b** — Two of five right, and the curve gathers in. -->
 

@@ -22,8 +22,8 @@
 
 <!-- **c** — Then each group into three, down to cells of about twenty. -->
 
-<!-- **d** — Every vote marks its cell and every bigger cell around it: visited.
-     -->
+<!-- **d** — Every vote marks its cell and every bigger cell around it:
+     visited. -->
 
 <!-- **e** — So "where haven't I been?" is a walk from the top, biggest first,
      to the first cell with no votes. This one. -->

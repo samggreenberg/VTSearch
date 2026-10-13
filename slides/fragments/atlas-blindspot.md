@@ -10,8 +10,8 @@
 
 <!-- build: figs/atlas-blindspot.build3.png -->
 
-<!-- **a** — Back to our plane: a detector, a few votes, lots of unseen photos.
-     -->
+<!-- **a** — Back to our plane: a detector, a few votes, lots of unseen
+     photos. -->
 
 <!-- **b** — Every question so far came from this strip, on purpose: an answer
      near the line moves the line. -->

@@ -9,8 +9,8 @@
 <!-- build: figs/test-result.build2.png -->
 
 <!-- **a** — Laid out like the result pane. Headline's F-beta at your radio.
-     Found leads with words, because below the line it leans on the detector.
-     -->
+     Found leads with words, because below the line it leans on the
+     detector. -->
 
 <!-- **b** — Dotted is the planted truth, which you'd never have for real. Every
      range holds it. -->

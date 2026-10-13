@@ -10,18 +10,15 @@
 
 <!-- build: figs/logo-balance.build3.png -->
 
-<!-- **a** — The three radios again, on documents, where each gets its own
-     rule. One detector mid-session: votes on top, pages below, placed by
-     inliers, right ones above each line and wrong ones below. The faint real
-     copies sit as low as the hard wrong pages. That's the whole problem. -->
+<!-- **a** — Three radios, three rules. Right pages above the line, wrong below,
+     by inliers. The faint real copies sit as low as the hard wrong pages;
+     that's the whole problem. -->
 
-<!-- **b** — Beta of 1 is the last slide's rule: beat every Bad. Eleven kept,
-     one wrong, and the faint copies are lost. -->
+<!-- **b** — Beta of 1 is last slide's rule, beat every Bad: one wrong, and the
+     faint copies are lost. -->
 
-<!-- **c** — Beta of 4 also keeps any page with a quarter of the Goods' typical
-     count, at least 10. Eighteen kept, five wrong. It's always the middle set
-     plus more. -->
+<!-- **c** — Beta of 4 also keeps anything with a quarter of the Goods' typical
+     count: more kept, more wrong. -->
 
-<!-- **d** — Beta of a quarter keeps only pages that beat every Bad by 5. Nine
-     kept, none wrong, and it's always a piece of the middle set, so the radio
-     stays in order. -->
+<!-- **d** — Beta of a quarter: beat every Bad by a margin, none wrong. The sets
+     nest, so the radios stay in order. -->

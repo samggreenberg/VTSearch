@@ -12,15 +12,14 @@
 
 <!-- build: figs/data-set-staver.webp -->
 
-<!-- **a** — Now, what do we test this on? Four public sets. SPODS: eleven
-     hundred made-up official documents, with masks for logos, stamps and
-     signatures, but no names for the marks. -->
+<!-- **a** — What do we test on? Four public sets. SPODS: made-up documents,
+     masks but no names for the marks. -->
 
-<!-- **b** — Tobacco800: thirteen hundred real business letters from the
-     tobacco lawsuits, 412 with a logo boxed. -->
+<!-- **b** — Tobacco800: real tobacco-lawsuit letters, some with a logo boxed.
+     -->
 
-<!-- **c** — StaVer: four hundred German invoices, stamped by hand, so every
-     impression's a little different. Again, no names. -->
+<!-- **c** — StaVer: German invoices, hand-stamped, so every one's a bit
+     different. -->
 
-<!-- **d** — And UCSF Industry Documents: thirteen million real
-     tobacco-industry documents, no boxes at all. That's the haystack. -->
+<!-- **d** — And UCSF: thirteen million real pages, no boxes. That's the
+     haystack. -->

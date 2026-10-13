@@ -14,5 +14,5 @@
 
 <!-- **b** — Same sessions as precision against recall: clicks mostly buy
      precision. Big things do well, small ones don't: tennis rackets 0.97,
-     chairs 0.04, because to SigLIP the whole photo's "a seat", chair or couch.
-     -->
+     chairs 0.04, because to SigLIP the whole photo's "a seat", chair or
+     couch. -->

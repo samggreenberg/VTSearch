@@ -22,8 +22,8 @@
      the 16, biggest and least sure. That's this half's budget. -->
 
 <!-- **d** — Then the misses: one band deeper a round, eight rounds, even
-     finding nothing, because that's where the detector's guess needs checking.
-     -->
+     finding nothing, because that's where the detector's guess needs
+     checking. -->
 
 <!-- **e** — Done at 60. The 992 band never got reached, so the detector's guess
      stands in. Each half gets a light in the app. -->

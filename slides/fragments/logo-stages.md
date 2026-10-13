@@ -8,13 +8,10 @@
 
 <!-- build: figs/logo-stages.build2.webp -->
 
-<!-- **a** — But checking takes about a tenth of a second a page: way too slow
-     for fifty thousand pages and an answer every vote. So every page also gets
-     boiled down to one vector, like SigLIP makes. -->
+<!-- **a** — But that check's a tenth of a second a page, too slow for fifty
+     thousand pages every vote. So each page gets one vector too. -->
 
-<!-- **b** — Stage 1 compares the crop's vector with every page's, all at once,
-     and keeps a shortlist off the top. -->
+<!-- **b** — Stage 1 compares vectors, all at once, and keeps a shortlist. -->
 
-<!-- **c** — Stage 2 runs the slow check on just that shortlist and ranks by
-     how many agree. A page that misses the shortlist never gets checked, so
-     Stage 1 is the ceiling. -->
+<!-- **c** — Stage 2 does the slow check on just those. Miss the shortlist,
+     never checked: Stage 1's the ceiling. -->

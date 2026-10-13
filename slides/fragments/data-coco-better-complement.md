@@ -31,8 +31,8 @@
      detector that fires on ANY of the three aces all three. -->
 
 <!-- **e** — Complete labels add the equals sign: "an A and a B and nothing
-     else." Seven exact cells. Spotty labels can't say that; silence isn't a no.
-     -->
+     else." Seven exact cells. Spotty labels can't say that; silence isn't a
+     no. -->
 
 <!-- **f** — And exact cells give us not-A, every image without one. You can
      only draw that if absence is labeled. -->

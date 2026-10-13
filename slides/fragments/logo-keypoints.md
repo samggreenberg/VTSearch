@@ -8,14 +8,11 @@
 
 <!-- build: figs/logo-keypoints.build2.webp -->
 
-<!-- **a** — How do we find a logo on a scanned page? SigLIP won't do it: it
-     can tell a page has a crest, not that it's this crest. That's about ink,
-     not meaning. So we start from one crop of the crest. -->
+<!-- **a** — How do we find a logo on a page? SigLIP knows a page HAS a crest,
+     not that it's THIS one. So we start from one crop. -->
 
-<!-- **b** — A classic method, SIFT, finds the spots where the ink does
-     something distinctive, like a corner or a blob. Each circle is one
-     keypoint: a place, a size and a direction. This crop has 1,090. -->
+<!-- **b** — SIFT finds spots where the ink does something distinctive. Each
+     circle's a keypoint: a place, a size, a direction. -->
 
-<!-- **c** — Each keypoint then describes the patch around it as 128 numbers:
-     which way the edges run, cell by cell. It's measured in the keypoint's own
-     frame, so a rescanned, shrunk or crooked copy still matches. -->
+<!-- **c** — Each one describes its patch as 128 numbers, in its own frame, so a
+     shrunk or crooked copy still matches. -->
