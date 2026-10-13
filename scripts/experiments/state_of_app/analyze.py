@@ -132,8 +132,10 @@ credit shrinks over a session, so a raw per-image mean mostly says *when* and
 the mean credit of every click with the same run cell, label and phase.
 ``resid_z`` is that residual's mean over the image's clicks in standard errors.
 The credit is right-skewed (a few clicks move AP a lot, most barely move it), so
-a typical click sits below its bucket's mean: an image is flagged (``flag``)
-only when |z| > ``Z_FLAG`` AND its raw mean agrees, harmful when the AP fell,
+a typical click sits below its bucket's mean, and a Bad the head ignores is
+credited about 0 every time, a steady bucket-mean below its peers. So an image
+is flagged (``flag``) only when |z| > ``Z_FLAG`` AND its raw credit is past
+``Z_FLAG`` the same way (``raw_z``): harmful when the AP fell past chance,
 helpful when it rose. ``summary.md`` compares the flagged counts with the same
 counts after shuffling images within each (cell, label, phase) bucket, which is
 what chance gives.
@@ -1236,21 +1238,36 @@ def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return img, det.reset_index()
 
 
-def _flag(z: pd.Series, raw: pd.Series) -> pd.Series:
-    """+1 helpful, -1 harmful, 0 neither: past ``Z_FLAG`` AND the raw credit moved AP the same way (#4658)."""
-    return pd.Series(np.where((z > Z_FLAG) & (raw > 0), 1, np.where((z < -Z_FLAG) & (raw < 0), -1, 0)), index=z.index)
+def _z(mean: pd.Series, std: pd.Series, size: pd.Series) -> pd.Series:
+    """A mean in standard errors; NaN under ``MIN_OBS_Z`` observations or with no spread."""
+    return (mean / (std / np.sqrt(size))).where((size >= MIN_OBS_Z) & (std > 0))
+
+
+def _flag(z: pd.Series, raw_z: pd.Series) -> pd.Series:
+    """+1 helpful, -1 harmful, 0 neither (#4658).
+
+    Past ``Z_FLAG`` net of the bucket (*z*) AND past it on the raw credit (*raw_z*), the same way: a harmful image
+    lowered the AP, past chance. A Bad the head ignores is credited about 0 every time, which puts it a steady
+    bucket-mean below its peers at a large *z*; its own clicks moved nothing.
+    """
+    help_, harm = (z > Z_FLAG) & (raw_z > Z_FLAG), (z < -Z_FLAG) & (raw_z < -Z_FLAG)
+    return pd.Series(np.where(help_, 1, np.where(harm, -1, 0)), index=z.index)
 
 
 def _resid_z(inf: pd.DataFrame) -> pd.DataFrame:
     g = inf.groupby("image_id").agg(
-        mean=("resid", "mean"), std=("resid", "std"), size=("resid", "size"), raw=("help_ap", "mean")
+        mean=("resid", "mean"),
+        std=("resid", "std"),
+        size=("resid", "size"),
+        raw=("help_ap", "mean"),
+        raw_sd=("help_ap", "std"),
     )
-    z = (g["mean"] / (g["std"] / np.sqrt(g["size"]))).where((g["size"] >= MIN_OBS_Z) & (g["std"] > 0))
-    return pd.DataFrame({"resid": g["mean"], "resid_z": z, "flag": _flag(z, g["raw"])})
+    z, raw_z = _z(g["mean"], g["std"], g["size"]), _z(g["raw"], g["raw_sd"], g["size"])
+    return pd.DataFrame({"resid": g["mean"], "resid_z": z, "raw_z": raw_z, "flag": _flag(z, raw_z)})
 
 
 def harmful_pairs(inf: pd.DataFrame) -> pd.DataFrame:
-    """Per image x class x label, the net credit (``resid``) and its z; the pairs past -``Z_FLAG`` whose AP fell.
+    """Per image x class x label, the net credit (``resid``) and its z; the pairs flagged harmful (:func:`_flag`).
 
     An image hurts particular classes, not everything, so a hand review (#4179)
     works from this list rather than from ``images.csv``: each row is one
@@ -1258,11 +1275,17 @@ def harmful_pairs(inf: pd.DataFrame) -> pd.DataFrame:
     """
     inf = _with_resid(_head_clicks(inf))
     g = inf.groupby(["image_id", "class", "label"]).agg(
-        mean=("resid", "mean"), std=("resid", "std"), size=("resid", "size"), help_ap=("help_ap", "mean")
+        mean=("resid", "mean"),
+        std=("resid", "std"),
+        size=("resid", "size"),
+        help_ap=("help_ap", "mean"),
+        help_sd=("help_ap", "std"),
     )
-    g = g[(g["size"] >= MIN_OBS_Z) & (g["std"] > 0)]
-    g["z"] = g["mean"] / (g["std"] / np.sqrt(g["size"]))
-    out = g[_flag(g["z"], g["help_ap"]) < 0].rename(columns={"mean": "resid", "size": "n_clicks"}).reset_index()
+    g["z"] = _z(g["mean"], g["std"], g["size"])
+    g["raw_z"] = _z(g["help_ap"], g["help_sd"], g["size"])
+    g = g[g["z"].notna()]
+    out = g[_flag(g["z"], g["raw_z"]) < 0].drop(columns="help_sd")
+    out = out.rename(columns={"mean": "resid", "size": "n_clicks"}).reset_index()
     return out.sort_values("z")
 
 
@@ -1745,7 +1768,7 @@ def summary(
         hp, hn, perm = null
         tested = int(img["resid_z"].notna().sum())
         lines_md += [
-            f"## Images with an effect of their own (|resid_z| > {Z_FLAG:g} and the AP moved that way, "
+            f"## Images with an effect of their own (|resid_z| and |raw_z| > {Z_FLAG:g}, the same way, "
             f"{MIN_OBS_Z}+ trained-head clicks)",
             "",
             f"{tested} images tested: **{hp} helpful, {hn} harmful**. With images shuffled within each "

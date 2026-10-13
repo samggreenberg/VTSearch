@@ -1087,17 +1087,20 @@ def test_an_image_is_credited_only_what_it_taught_the_trained_head() -> None:
     assert legacy["head_credit"].to_dict() == {1: 0, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1}
 
 
-def test_an_image_is_flagged_only_when_the_ap_moved_its_way() -> None:
-    """#4658: trained-head credit is right-skewed, so a typical click sits below its bucket's mean. An image whose
-    residual is steadily negative but whose own clicks raised AP did less than its peers; it did not hurt."""
+def test_an_image_is_flagged_only_when_the_ap_moved_its_way_past_chance() -> None:
+    """#4658: trained-head credit is right-skewed, so a typical click sits below its bucket's mean, and a Bad the
+    head ignores is credited about 0 every time, a steady bucket-mean below its peers (the 2026-10-08 runs' top
+    "harmful" pair, 503557, sat at z = -42 on -0.00003 AP a click). Neither hurt: a flag needs the raw credit past
+    the same z, the same way."""
     analyze = _load("_sota_analyze_flag", _SOTA / "analyze.py")
     rng = np.random.default_rng(0)
     n = 20
     rows = []
-    for img, raw in ((1, 0.001), (2, -0.01), (3, 0.05)):
-        for k, d in enumerate(raw + rng.normal(0, 0.0005, n)):
+    for img, raw, sd in ((1, 0.001, 0.0005), (2, -0.01, 0.0005), (3, 0.05, 0.0005), (4, -0.00003, 0.0001)):
+        for k, d in enumerate(raw + rng.normal(0, sd, n)):
             rows.append({"image_id": img, "help_ap": d, "resid": d - 0.01, "k": k})
     got = analyze._resid_z(pd.DataFrame(rows))
     assert got.loc[1, "resid_z"] < -analyze.Z_FLAG and got.loc[1, "flag"] == 0, "below its peers, AP still rose"
-    assert got.loc[2, "flag"] == -1, "past z and the AP fell: harmful"
-    assert got.loc[3, "flag"] == 1, "past z and the AP rose: helpful"
+    assert got.loc[4, "resid_z"] < -analyze.Z_FLAG and got.loc[4, "flag"] == 0, "an ignored Bad moved nothing"
+    assert got.loc[2, "flag"] == -1, "past z and the AP fell past chance: harmful"
+    assert got.loc[3, "flag"] == 1, "past z and the AP rose past chance: helpful"
