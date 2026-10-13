@@ -102,3 +102,9 @@ def test_chart_shows_each_hints_toasty_and_text() -> None:
     charted = dict(_chart_rows())
     for hint_id, (hint, *_) in _template_hints().items():
         assert charted.get(hint_id) == hint, f"docs/hints.md: the {hint_id!r} row differs from its template"
+
+
+def test_no_hint_uses_a_semicolon() -> None:
+    """Each instruction in a hint is its own sentence, never joined by a semicolon (#4825)."""
+    joined = sorted(hint_id for hint_id, tags in _template_hints().items() if any(";" in t.text for t in tags))
+    assert not joined, f"split these hints' semicolons into sentences: {joined}"
