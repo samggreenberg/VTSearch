@@ -10,8 +10,8 @@
 
 <!-- build: figs/calib-lay-of-the-land.build3.png -->
 
-<!-- **a** — Same rule, but from what you actually hold: total Goods up, total
-     Bads across. No Goods, white, that's the text query. Under the quota,
+<!-- **a** — Here's that rule from what you actually hold: total Goods up,
+     total Bads across. No Goods, white, that's the text query. Under the quota,
      yellow, the Goods' average with the outlier cut. -->
 
 <!-- **b** — Past the quota, that's three Goods and four Bads, we've got a

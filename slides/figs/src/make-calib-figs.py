@@ -4007,7 +4007,7 @@ def _fbeta_ranking(ax: plt.Axes, top_reserve: float = FBETA_TOP_RESERVE) -> tupl
 
 #: How many stages F-ing Metrics reveals in: the cut, with F1's definition
 #: already up top; the two rates' names; their definitions; their arithmetic;
-#: F1's value; Fβ beside F1 (owner, 2026-10-13).
+#: F1's value; Fβ right of F1 (owner, 2026-10-13, #4833).
 FMETRICS_STAGES = 6
 #: The cut F-ing Metrics reads, as items kept: one left of the Cutting Room's
 #: middle one, so it is plainly not the best cut, and its two rates differ —
@@ -4108,17 +4108,19 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
 
     # The top row: F1, the score the title plays on, up from the first page in
     # the gap right of the headline and above the ranking; its value is the
-    # fifth reveal, and Fβ, level with it, the last. The row ends where the
-    # ranking does, so F1 sits at its right end from the start and Fβ takes
-    # the room left of it (owner, 2026-10-13).
+    # fifth reveal, and Fβ, level with it, the last. F1 is centred on the
+    # slide, as the rate rows under it are, and Fβ arrives in the gap right of
+    # it, ending where the ranking does (owner, #4833).
     f1_def = _math(r"F1 = \dfrac{2PR}{P + R}")
     f1_val = _math(rf"= {f1:.2f}")
     fbeta = _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")
-    f1_x = x0 + w - width(f1_def) - width(f1_val)
+    f1_x = FBETA_CANVAS[0] / 2 - (width(f1_def) + width(f1_val)) / 2
+    fbeta_x = x0 + w - width(fbeta)
+    assert fbeta_x - (f1_x + width(f1_def) + width(f1_val)) >= FMETRICS_COLUMN_GAP, "Fβ crowds F1's value"
     pieces += [
         (1, f1_x, FMETRICS_TOP_Y, "left", f1_def),
         (5, f1_x + width(f1_def), FMETRICS_TOP_Y, "left", f1_val),
-        (6, f1_x - FMETRICS_COLUMN_GAP - width(fbeta), FMETRICS_TOP_Y, "left", fbeta),
+        (6, fbeta_x, FMETRICS_TOP_Y, "left", fbeta),
     ]
 
     # The two rates under the ranking, a row each, aligned on their `=` rather
@@ -4150,7 +4152,7 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
     return fig
 
 
-#: The formulas' type; the gap between Fβ and F1 on the top row; and the rows'
+#: The formulas' type; the least gap between F1 and Fβ on the top row; and the rows'
 #: baselines, in canvas units — baselines rather than centres because a row is
 #: drawn in pieces and the baseline is the height they share (`_fmetrics_stage`).
 #: The top row sits level with the one-line headline in the notch beside it
@@ -6278,10 +6280,9 @@ def _ch_stage(stage: int) -> plt.Figure:
 #: below the quota; the quota, and the trained head with the outlier cut; the
 #: labels line, with the Goods where the split decides; a text query's hold.
 #: That last page lightens the cells the hold covers instead of adding ink
-#: over them: a deliberate exception to STYLE.md's no-restyle build rule, the
-#: same one Inside Job's third page takes (`IN_STAGES`). Until page 4 each of
-#: those cells is the colour of the line the head draws there, which stays
-#: true; page 4 says the room sees the query's set instead (owner,
+#: over them: a deliberate exception to STYLE.md's no-restyle build rule.
+#: Until page 4 each of those cells is the colour of the line the head draws
+#: there, which stays true; page 4 says the room sees the query's set instead (owner,
 #: 2026-10-13: lighter, not hatched, since the colour's model is computed and
 #: the query's set is what is returned).
 LAND_STAGES = 4
@@ -6307,17 +6308,12 @@ LAND_BOX = (10.0, 1.55, 19.9, 10.9)
 #: ΔE 15.6 and normal-vision 19.4, black text 6.9:1 or better on each. Its
 #: lightness band fails the yellow (L 0.90), a check for thin marks on the
 #: surface; here every region is named and ruled, the yellow's edge with the
-#: white row included. Inside Job's third cut, the labels line's peak on the
-#: Bads' own shape, is the purple darkened (owner, 2026-10-13: a barely
-#: different cut gets a barely different colour, not a hatch): its hue and
-#: chroma at L 0.50, normal-vision ΔE 18.1 from the purple with the other pairs
-#: unchanged, so its name is white (6.4:1).
+#: white row included.
 LAND_FILL = {
     "none": "#ffffff",
     "centroid": "#f9dd73",
     "count": "#f58b4b",
     "labels": "#ad80dd",
-    "bads": "#764aa2",
 }
 #: How far toward white, in OKLab, a cell under the text query's hold is
 #: lightened on the last page: half way, the colour's model under the query's
@@ -6502,7 +6498,7 @@ def _land_stage(stage: int) -> plt.Figure:
     # The Goods' average is a column the quota's Bads wide and the map's full
     # height, so its name reads up it. The no-Goods row goes unnamed: at
     # thirty-three rows it is too thin for type at the floor, and its "0"
-    # tick and the key's white row say what Inside Job's "0 Goods" does.
+    # tick and the key's white row say what it returns.
     _land_name(ax, BAD_QUOTA / 2, (LAND_G + 2) / 2, "under the quota", rotation=90)
     if stage >= 2:
         _land_quota(ax)
@@ -6632,12 +6628,6 @@ LAND_TABLE = (
     # what they return.
     (3, "labels", "Trained head", "Fβ peak"),
 )
-IN_TABLE = (
-    (1, "none", "Text query", "Outlier cut"),
-    (1, "count", "Trained head", "Outlier cut"),
-    (2, "labels", "Trained head", "Fβ peak"),
-    (3, "bads", "Trained head", "Fβ peak,\nBads' shape"),
-)
 
 
 def _map_table(ax: plt.Axes, rows: tuple, stage: int) -> None:
@@ -6666,10 +6656,9 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int) -> None:
 def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None:
     """A map's frame: evenly ticked counts at the cells' centres, plain axis names, and the chart's label.
 
-    Shared by Inside Job and Lay of the Land, so the pair reads as one chart
-    asked twice: the label over each says what the colours are (the Sort/Cut
-    each count returns) and whose counts the regions are, and the axes
-    themselves just say Goods and Bads (owner, 2026-10-13). The decisions' values are where the
+    The label over the map says what the colours are (the Sort/Cut each count
+    returns) and whose counts the regions are, and the axes themselves just
+    say Goods and Bads (owner, 2026-10-13). The decisions' values are where the
     black edges are, so no tick is spent on them. *cell* is the map's
     ``(b, g) -> (x, y, w, h)``.
     """
@@ -6754,146 +6743,6 @@ def _land_query(ax: plt.Axes) -> None:
     ys.append(y0 + (QUERY_HOLD_LABELS - BAD_QUOTA) * ch)
     ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=7)
     _land_name(ax, 13.5, 5.0, f"< {QUERY_HOLD_LABELS} labels,\nwith a query", plate=_lightened(LAND_FILL["count"]))
-
-
-# ── Inside Job: the trained head's line, read off what a fold holds out ─────
-
-#: How many build stages the inside view reveals in: a thin class model,
-#: cutting at the outliers; the labels line, from three Goods per fold; its
-#: cut on the Bads' own shape, from fifty Bads per fold that seem random
-#: (#4490), in dark purple. That last test reads the Bads' scores, not their
-#: count, so its region is named for both, as Lay of the Land's hold is "with
-#: a query"; a session's Bads never pass it (owner, 2026-10-13: a return of its
-#: own). Until page 3 those cells are the purple a session would get there,
-#: and page 3 darkens them: a deliberate exception to STYLE.md's no-restyle
-#: build rule (owner, 2026-10-13), since a blank there would stop page 2's
-#: purple at fifty Bads for no reason the room has yet been given.
-IN_STAGES = 3
-#: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 0..IN_G.
-#: A fold always holds out at least one of each (`_grouped_folds` trains on at
-#: most all but one of a class), so the Bads start at 1; the Goods row at 0 is
-#: the labelset with no Goods at all, white as on Lay of the Land.
-IN_B, IN_G = 80, 8
-
-
-@functools.lru_cache(maxsize=None)
-def _in_grid() -> np.ndarray:
-    """Every cell's line, from the shipped class model and its gates.
-
-    For each count a fold holds out, every fold holding out the same, as
-    `_grouped_folds` makes them: build the folds' held-out scores (Goods high,
-    Bads low, spread), fit `class_score_model` to them, and ask
-    `head_count_serves` and whether the model kept the Bads' scores
-    (`RANDOM_BADS_MIN`), which the cut reads only if they seem random. The
-    scores only have to separate; the counts decide.
-    """
-    from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
-    from vtscore.training.thresholds.labels_line import class_score_model, head_count_serves  # noqa: PLC0415
-
-    kind = np.empty((IN_G + 1, IN_B + 1), dtype=object)
-    kind[0, :] = "none"
-    for g in range(1, IN_G + 1):
-        for b in range(1, IN_B + 1):
-            goods = _ll_sigmoid(1.0 + np.linspace(-0.6, 0.6, g))
-            bads = _ll_sigmoid(-1.0 + np.linspace(-0.6, 0.6, b))
-            fold = (list(goods) + list(bads), [1.0] * g + [0.0] * b)
-            model = class_score_model([fold] * DEFAULT_CALIBRATE_COUNT)
-            assert model is not None
-            if head_count_serves(model):
-                kind[g, b] = "count"
-            else:
-                kind[g, b] = "bads" if model.neg_logits is not None else "labels"
-    return kind
-
-
-def inside_job_fig() -> None:
-    """Inside Job: the trained head's line as a decision tree on what each fold holds out.
-
-    The axes are what each calibration fold holds out, not what the user
-    holds: inside a fold the split has already rounded, so the trained head's
-    line is a decision tree on two counts, with nothing left to chance. It
-    comes before Lay of the Land, which is the band this rule makes once the
-    rounding is unknown. One or two Goods per fold, the head cuts at the outliers; three
-    (six between the two folds, `HEAD_COUNT_GOODS`), the labels line; fifty
-    Bads per fold (`RANDOM_BADS_MIN` between them) that seem a random sample
-    of the corpus, the labels line's cut on the Bads' own shape.
-    """
-    final = _in_stage(IN_STAGES)
-    box = tight_box(final)
-    for stage in range(1, IN_STAGES):
-        save(_in_stage(stage), OUT, f"calib-inside-job.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-inside-job.png", column=FULL_BLEED, box=box)
-
-
-def _in_cell(b: float, g: float) -> tuple[float, float, float, float]:
-    """``(x, y, w, h)`` of the cell for a fold holding out *b* Bads (from 1) and *g* Goods (from 0)."""
-    x0, y0, x1, y1 = LAND_BOX
-    w, h = (x1 - x0) / IN_B, (y1 - y0) / (IN_G + 1)
-    return x0 + (b - 1) * w, y0 + g * h, w, h
-
-
-def _in_edges() -> tuple[int, int]:
-    """``(Goods, Bads)`` a fold must hold out for the labels line, and for its cut on the Bads' own shape."""
-    from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
-    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, RANDOM_BADS_MIN  # noqa: PLC0415
-
-    return HEAD_COUNT_GOODS // DEFAULT_CALIBRATE_COUNT, RANDOM_BADS_MIN // DEFAULT_CALIBRATE_COUNT
-
-
-def _in_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the inside view."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
-    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, LL_CANVAS[0])
-    ax.set_ylim(0, LL_CANVAS[1])
-    ax.set_axis_off()
-    x0, y0, x1, y1 = LAND_BOX
-    _, _, cw, ch = _in_cell(1, 0)
-    edge, bad_edge = _in_edges()
-    _in_cells(ax, stage)
-    _map_table(ax, IN_TABLE, stage)
-    _in_axes(ax)
-    # The no-Goods row's edge, ruled, as on Lay of the Land.
-    ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
-
-    def name(b: float, g: float, text: str) -> None:
-        ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
-
-    # In math, not words (owner, 2026-10-13), and per fold only: the chart's
-    # title says so, and the deck doubles it where it must.
-    name(IN_B / 2, 0.5, "0 Goods")
-    name(IN_B / 2, 2.0, f"< {edge} Goods")
-    edge_y = _in_cell(1, edge)[1]
-    if stage >= 2:
-        ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
-        # Left of where page 3's dark purple starts, so it need not move.
-        name(bad_edge / 2, (edge + IN_G + 1) / 2, f"≥ {edge} Goods")
-    if stage >= 3:
-        edge_x = _in_cell(bad_edge, 1)[0]
-        ax.plot([edge_x, edge_x], [edge_y, y1], color=INK, linewidth=2.0, zorder=7)
-        ax.text((edge_x + x1) / 2, y0 + (edge + IN_G + 1) / 2 * ch, f"≥ {bad_edge} Bads,\nseem random",
-                ha="center", va="center", fontsize=16, color="white", zorder=6)  # fmt: skip
-    return fig
-
-
-def _in_cells(ax: plt.Axes, stage: int) -> None:
-    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2, the Bads' shape's from 3."""
-    kind = _in_grid()
-    for g in range(IN_G + 1):
-        for b in range(1, IN_B + 1):
-            k = kind[g, b]
-            if k in ("labels", "bads") and stage < 2:
-                continue
-            fill = LAND_FILL["labels" if k == "bads" and stage < 3 else k]
-            # Edgeless, each cell edged in its own fill so no seam shows: only
-            # the black edges between decisions are drawn.
-            ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
-                                   linewidth=0.3, zorder=1))  # fmt: skip
-
-
-def _in_axes(ax: plt.Axes) -> None:
-    """Inside Job's frame: every ten Bads, every Goods row, as what each held-out count returns."""
-    _map_axes(ax, _in_cell, range(10, IN_B + 1, 10), range(0, IN_G + 1), "Sort/Cut per Fold Holdout Counts")
 
 
 # ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──
@@ -7890,7 +7739,6 @@ if __name__ == "__main__":
     transfer_fig()
     out_standing_fig()
     changing_hands_fig()
-    inside_job_fig()
     lay_of_the_land_fig()
     weak_spot_fig()
     doc_balance_fig()

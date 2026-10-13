@@ -12,7 +12,8 @@
  *                                                            numbered (#4202)
  *   make-detector  `figs/ui-make-detector[.buildN].webp`  — an empty app, a pile,
  *                                                            then name the concept
- *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly
+ *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly,
+ *                                                            then a staged stop
  *   find           `figs/ui-find*.webp`                    — score unseen media
  *   region-voting  `figs/ui-region-voting.webp`           — vote on a region
  *
@@ -75,6 +76,7 @@
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
 import { clearCallouts, drawCallouts } from '../../../scripts/screenshots/callouts.mjs';
+import { clearStopHint, drawStopHint } from './stop-hint.mjs';
 import {
   appClient,
   BOOK_DETECTOR,
@@ -342,7 +344,8 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * this script started has `hide_all_hints` set (`ensureApp`), so a frame is
  * what a user who ticked Hide all hints sees (#4807); this rule is the backstop
  * for an app the caller pointed it at. Toasty floats over the page, so hiding
- * him moves nothing else.
+ * him moves nothing else. The one Toasty on a slide is the train loop's last
+ * page, where he is the subject, and `stop-hint.mjs` draws him there itself.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
@@ -894,7 +897,14 @@ async function shootTrainLoop(page) {
   log(`train loop: ${cast} votes (${checked} in spot checks) — ${tally.good} good / ${tally.bad} bad`);
   if (!tally.bad) throw new Error('no Bad votes: the detector has nothing to separate');
   await assertVoteColumns(page);
+  await shoot(page, 'ui-train-loop.build6');
+  // The last page is staged: Toasty saying the detector is trained, over the
+  // frame just shot, because the real hand-off waits for far more votes than
+  // this session casts (`stop-hint.mjs`, #4833).
+  await drawStopHint(page);
+  await page.waitForTimeout(200);
   await shoot(page, 'ui-train-loop');
+  await clearStopHint(page);
 }
 
 /** Fail the run unless the vote piles are `TRAIN_VOTE_COLUMNS` wide. */

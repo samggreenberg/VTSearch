@@ -23,16 +23,12 @@
 <!-- **b** — Section one: what the tool is for, and the tool itself, from an
      empty screen. It ends on the line this whole talk is about. -->
 
-<!-- **c** — Section two: the three ideas the line is built from. Honest scores
-     from models that never saw the votes they're scoring, the big pile of
-     unlabeled photos, and fitting a mixture to that pile. And our first,
-     naive try at putting them together. -->
+<!-- **c** — Section two: calibration. How do we threshold a model without
+     reusing the same data that trained it? -->
 
-<!-- **d** — Section three: where the line actually goes. How we score a line,
-     three buttons for which mistake you mind more, the fit that joins the
-     three ideas properly, where the line goes before there are enough votes,
-     what it can promise before anybody checks, and its second job: picking
-     the next question. -->
+<!-- **d** — Section three is about you. First we pin down what you want,
+     which mistake you mind more, and then we use that to put the line in the
+     best place for you. -->
 
 <!-- **e** — Section four: the other half of picking questions. The places
      nobody's voted yet, and the atlas that keeps track of them. -->

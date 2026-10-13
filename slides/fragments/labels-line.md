@@ -8,8 +8,9 @@
 
 <!-- build: figs/calib-labels-line.build2.png -->
 
-<!-- **a** — Same fit: what a match scores, what a near-miss scores, about 210
-     matches in the corpus, and every photo's chance of being one. -->
+<!-- **a** — Back to Joint Custody's fit: what a match scores, what a
+     near-miss scores, about 210 matches in the corpus, and every photo's
+     chance of being one. -->
 
 <!-- **b** — Now score every cut with expected numbers: the Goods that come
      back are the sum of those chances, out of the 210. The peak is the line.

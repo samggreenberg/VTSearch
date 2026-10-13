@@ -7,8 +7,8 @@
 # room that has not seen the tool cannot be told about a threshold inside it.
 #
 # Then the ideas, in order: the three the line is built from — held-out
-# scores, the unlabeled corpus, and the mixture fit — then the axis the *user*
-# sets — F-beta, the three-radio balance that asks which mistake they mind
+# scores, the unlabeled corpus, and the mixture fit — and the fit that joins
+# them, then the axis the *user* sets — F-beta, the three-radio balance that asks which mistake they mind
 # more (#4413, #4448), and the line the labels draw at its peak (#4452). Then
 # the places the loop never asks about, the steps Autopilot takes and when it
 # says stop (#4610), the data the experiments run on and how
@@ -57,15 +57,19 @@ slides:
   embed-flow
   vote-boundary
 
-  # II — Calibration: the three ideas the labels line (section III) is built
-  # from, and only those (#4670), then the first, naive way they were put
-  # together. The folds' held-out scores are its class model; the unlabeled
-  # corpus is where it counts the matches; EM is how it fits that corpus;
-  # Cross Examination averages the folds' cut with the corpus's, which is
-  # shown before the fit that joins them properly (owner, 2026-10-13: show
-  # the naive combining before the nuanced one). That fit, Joint Custody, is
-  # in section III, right before the line it feeds. The other rules that once
-  # stacked on these — the fused cut, rank transfer, the 70/30 split — are in
+  # II — Calibration: how to threshold a model without reusing the data that
+  # trained it. The three ideas the labels line (section III) is built from,
+  # and only those (#4670): the folds' held-out scores are its class model; the
+  # unlabeled corpus is where it counts the matches; EM is how it fits that
+  # corpus. Then three ways of putting them together, naive to nuanced (owner,
+  # 2026-10-13, #4833): Cross Examination averages the folds' cut with the
+  # corpus's; Above Average reads the votes and the corpus's histograms
+  # together, the votes only naming the bumps; Joint Custody lets the votes
+  # shape the Good bump and the corpus say how big it is, ending on the two
+  # numbers the line is drawn from. Joint Custody uses no beta, so it is here
+  # rather than beside the line it feeds: turning it into a line takes the
+  # user's preference, which is section III. The other rules that once
+  # stacked on these — the anchored EM, rank transfer, the 70/30 split — are in
   # the appendix: measured in F-beta, none of them beat cross-calibration
   # (#4582, #4583), and none draws today's line.
   outline-hold-the-line +at2
@@ -73,14 +77,15 @@ slides:
   gmm-idea
   gmm-em
   blend
+  anchored-gmm
+  labels-fit
 
-  # III — Inclination: why a line needs one, what F1 and F-beta are (#4517),
-  # F-beta's peak and the three-radio balance that sets its beta (#4413,
-  # #4448), then Joint Custody — section II's three ideas fitted together,
-  # ending on the two numbers the line is drawn from, before any balance is
-  # set — right before the line the labels draw at its expected peak (#4452):
-  # how it was done without beta, then how it is done with beta (owner,
-  # 2026-10-13). Then why the labels are what the line is drawn from: they
+  # III — Inclination: the user's preference, worked into the line (owner,
+  # #4833: first define the preference, then use it to calibrate). Why a line
+  # needs one, what F1 and F-beta are (#4517), F-beta's peak and the
+  # three-radio balance that sets its beta (#4413, #4448), then the line the
+  # labels draw at its expected peak (#4452), from section II's Joint Custody
+  # fit. Then why the labels are what the line is drawn from: they
   # are all Find has (#4517). Then
   # the line before the labels can draw one, the outlier cut, and
   # who draws it as the labels grow (#4603, #4759, #4786, #4798). Then
@@ -98,7 +103,6 @@ slides:
   fbeta-metrics
   fbeta-maps
   balance-fbeta
-  labels-fit
   labels-line
   transfer-student
   # The line before the labels line can stand: the outlier cut,
@@ -109,15 +113,10 @@ slides:
   # and on What to Expect's fit to say what the count stands in for.
   out-standing
   changing-hands
-  # Inside Job, then Lay of the Land: the rule first, then what it looks like from the counts a user
-  # holds (owner, 2026-10-13: the deterministic version before the random one it creates). Inside
-  # Job is the trained head's line as a decision tree on what each fold holds out: three held-out
-  # Goods per fold (six between the two, #4798) for the labels line, and its cut on the Bads' own shape
-  # from fifty Bads per fold that seem random (#4490), from the shipped class model and its gates.
-  # Lay of the Land is every
-  # labelset in hand, Goods up and Bads across: the quota, the text query's hold, and the band where
-  # the folds' split decides, from the shipped quota, fold split and hold (#4643, #4731, #4736).
-  inside-job
+  # Lay of the Land: every labelset in hand, Goods up and Bads across: the quota, the text query's
+  # hold, and the band where the folds' split decides, from the shipped quota, fold split and hold
+  # (#4643, #4731, #4736). Inside Job, the same rule as a decision tree on what each fold holds out,
+  # was cut: the room can read the cut rules off this map (owner, #4833).
   lay-of-the-land
   floor-ask
   clopper-pearson
@@ -301,14 +300,13 @@ slides:
   # rather than a slide to walk a room through.
   follow-suit
   # Then the line rules that stacked on section II's ideas and did not last,
-  # moved out of Calibration (#4670); the blend itself went back there as the
-  # naive combining (owner, 2026-10-13). Measured in F-beta at the three
-  # presets, none beat cross-calibration (#4582, at the 0.44% pool), and each
-  # slide's notes say what it measured against the rule before it. None draws
-  # today's line; the fused cut and rank transfer survive only as the
-  # fallback for a session whose votes cannot support the labels' model, and
-  # the 70/30 split ships as a null (#4583).
-  anchored-gmm
+  # moved out of Calibration (#4670); the blend went back there as the naive
+  # combining (owner, 2026-10-13), and Above Average after it, as the step to
+  # Joint Custody (owner, #4833), leaving its anchored EM here. Measured in
+  # F-beta at the three presets, none beat cross-calibration (#4582, at the
+  # 0.44% pool). None draws today's line; the fused cut and rank transfer
+  # survive only as the fallback for a session whose votes cannot support the
+  # labels' model, and the 70/30 split ships as a null (#4583).
   anchored-em
   quantile-transfer
   split-fraction

@@ -344,16 +344,19 @@ def _errors(admitted: int) -> str:
 
 
 def rank_fig() -> None:
-    """The ranking, what it got wrong, and three cuts that all look reasonable."""
-    final = _rank_stage(3)
+    """The ranking and what it got wrong, then three cuts that all look reasonable.
+
+    It opens on the photos already labeled (#4833): a bare ranking before the
+    marks was a page spent on something the room has just seen.
+    """
+    final = _rank_stage(2)
     box = tight_box(final)
-    for stage in (1, 2):
-        save(_rank_stage(stage), OUT, f"book-rank.build{stage}.png", column=FULL_BLEED, box=box)
+    save(_rank_stage(1), OUT, "book-rank.build1.png", column=FULL_BLEED, box=box)
     save(final, OUT, "book-rank.png", column=FULL_BLEED, box=box)
 
 
 def _rank_stage(stage: int) -> plt.Figure:
-    """Stage 1 the ranking, 2 adds the truth, 3 adds the cuts anyone could pick."""
+    """Stage 1 the ranking with the truth, 2 adds the cuts anyone could pick."""
     width, height = RANK_CANVAS
     fig, ax = _canvas(width, height, RANK_UNIT)
 
@@ -385,18 +388,17 @@ def _rank_stage(stage: int) -> plt.Figure:
     for index, (name, positive) in enumerate(RANKING):
         x = _rank_x(index)
         _photo(ax, name, x, RANK_TILE_Y, RANK_TILE)
-        if stage >= 2:
-            ax.text(
-                x + RANK_TILE / 2,
-                RANK_MARK_Y,
-                "✓" if positive else "✗",
-                ha="center",
-                va="top",
-                fontsize=RANK_MARK_PT,
-                color=GREEN if positive else RED,
-            )
+        ax.text(
+            x + RANK_TILE / 2,
+            RANK_MARK_Y,
+            "✓" if positive else "✗",
+            ha="center",
+            va="top",
+            fontsize=RANK_MARK_PT,
+            color=GREEN if positive else RED,
+        )
 
-    if stage >= 3:
+    if stage >= 2:
         for admitted in CUTS:
             x = _cut_x(admitted)
             ax.plot(
