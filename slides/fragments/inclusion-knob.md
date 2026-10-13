@@ -10,8 +10,9 @@
 
 <!-- build: figs/calib-knob-flow.build3.png -->
 
-<!-- **a** — Before the radios there was a slider, minus ten to plus ten: each
-     step doubled the price of a miss or a false alarm. Watch it not work. -->
+<!-- **a** — Before the radios there was a slider, Inclusion, minus ten to plus
+     ten: each step doubled the price of a miss or a false alarm. Watch it not
+     work. -->
 
 <!-- **b** — Minus ten: a false alarm's worth a thousand misses. Cost drops at
      every cross, barely moves past the checks. -->

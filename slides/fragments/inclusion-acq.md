@@ -26,9 +26,9 @@
 <!-- **d** — Autopilot asks at even odds: the first photo from the top that's a
      coin toss. Here, just inside the line. -->
 
-<!-- **e** — The other radios move the line, up to 0.87 or down to 0.05,
-     near-certain non-matches. Even odds stays put; it's about the fit, not what
-     you want. -->
+<!-- **e** — The other radios move the line, up to 0.87 or down to 0.05 (that's
+     asking about near-certain non-matches). Even odds stays put; it's about the
+     fit, not what you want. -->
 
 <!-- **f** — And the loop closes: vote, retrain, redraw. Asking here finds more
      matches than asking at the line. -->

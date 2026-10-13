@@ -8,9 +8,9 @@
 
 <!-- build: figs/calib-weak-spot.build2.png -->
 
-<!-- **a** — Spot Check usually waits for you. Two sessions' held-out votes: on
-     the right, Goods and Bads sit apart; on the left they overlap. That gap's
-     d-prime. -->
+<!-- **a** — Spot Check usually waits for you, but some sessions shouldn't. Two
+     sessions' held-out votes: on the right, Goods and Bads sit apart; on the
+     left they overlap. That gap's d-prime. -->
 
 <!-- **b** — Below 1.5 a session hands back way too much, and no cut fixes it.
      What helps is twenty random picks as training votes. -->
