@@ -296,7 +296,8 @@ class Arm:
                 pv = self.p[:, :, k]
                 c = (y + a * 0.5) / (pv + a * 0.5) if a > 0 else np.where(pv > 0, y / np.maximum(pv, 1e-9), 1.0)
                 base = np.where(np.isfinite(post_sum), post_sum, 0.5 * n_k)
-                tp[name] = c * base
+                # A part holds no more positives than media.
+                tp[name] = np.minimum(c * base, np.maximum(n_k, 0.0))
             elif kind.startswith("oracle"):
                 tp[name] = self.ov[f"pos_{name}"]
             else:
@@ -642,7 +643,7 @@ def figures(a: argparse.Namespace) -> None:
         ax.set_ylabel("mean F-beta of the set on screen")
     for ax in list(axes.flat)[n:]:
         ax.set_visible(False)
-    fig.tight_layout(w_pad=12.0, h_pad=1.5)
+    fig.tight_layout(w_pad=10.0, h_pad=1.5)
     fig.savefig(out / "fig_by_vote.png", dpi=130)
     plt.close(fig)
 
@@ -661,7 +662,7 @@ def figures(a: argparse.Namespace) -> None:
         ax.grid(axis="y", color=grid, lw=0.8)
         ax.set_axisbelow(True)
     axes.flat[0].set_ylabel("share Good")
-    axes.flat[0].legend(frameon=False, fontsize=8, loc="upper right")
+    axes.flat[0].legend(frameon=False, fontsize=8, loc="upper left")
     fig.tight_layout()
     fig.savefig(out / "fig_parts.png", dpi=130)
     plt.close(fig)
@@ -690,7 +691,7 @@ def examples(a: argparse.Namespace) -> None:
     """Literal runs: what a judge saw at a vote, against each set's F-beta on the withheld half."""
     arm = Arm(a.npz, picks=a.picks)
     gain = np.where(arm.has_det, arm.det - arm.tq[:, None], 0.0)
-    rd, rq = arm.estimate("rate", 3.0, "head", "model", "pool")
+    rd, rq = arm.estimate(a.kind, a.a, a.prior, a.pmode, a.scope)
     od, oq = arm.estimate("oracle_all", 0.0, "half", "parts")
     rows = []
     seeds = np.load(a.npz)["seed"]
@@ -699,6 +700,9 @@ def examples(a: argparse.Namespace) -> None:
         if a.wrong:
             # Runs where the judge shows the worse set at this vote, the costliest first.
             cost = np.where(np.sign(rd[:, t] - rq[:, t]) != np.sign(gain[:, t]), cost, -1.0)
+        if a.holds:
+            # Runs where today shows the head and the judge keeps the query on screen instead.
+            cost = np.where(arm.today_head[:, t] & (rq[:, t] > rd[:, t]) & arm.has_det[:, t], cost, -1.0)
         order = np.argsort(-cost)
         for i in order[: a.n]:
             rows.append({
@@ -709,7 +713,7 @@ def examples(a: argparse.Namespace) -> None:
                 "votes D only (Good)": f"{arm.m[i, t, 1]:.0f} ({arm.y[i, t, 1]:.0f})",
                 "votes Q only (Good)": f"{arm.m[i, t, 2]:.0f} ({arm.y[i, t, 2]:.0f})",
                 "true Goods D only / Q only": f"{arm.ov['pos_d_only'][i, t]:.0f} / {arm.ov['pos_q_only'][i, t]:.0f}",
-                "rate judge F head/query": f"{rd[i, t]:.2f} / {rq[i, t]:.2f}",
+                "judge's F head/query": f"{rd[i, t]:.2f} / {rq[i, t]:.2f}",
                 "exact on collection head/query": f"{od[i, t]:.2f} / {oq[i, t]:.2f}",
             })  # fmt: skip
     print(md_table(pd.DataFrame(rows)))
@@ -836,7 +840,15 @@ def main() -> None:
     x.add_argument("--npz", required=True)
     x.add_argument("--votes", type=int, nargs="+", default=[20, 40, 100])
     x.add_argument("--n", type=int, default=4)
-    x.add_argument("--wrong", action="store_true", help="only runs where the rate judge shows the worse set")
+    x.add_argument("--wrong", action="store_true", help="only runs where the judge shows the worse set")
+    x.add_argument(
+        "--holds", action="store_true", help="only runs where the judge keeps the query past today's hand-over"
+    )
+    x.add_argument("--kind", default="rate", choices=("rate", "calib"))
+    x.add_argument("--a", type=float, default=3.0)
+    x.add_argument("--prior", default="head", choices=("half", "head"))
+    x.add_argument("--pmode", default="model", choices=("parts", "union", "model"))
+    x.add_argument("--scope", default="pool", choices=("pool", "all", "oos"))
     x.add_argument("--picks", default="all", choices=("all", "past_opening", "past_quota"))
     tb = sub.add_parser("tables")
     tb.add_argument("--priced", required=True)
