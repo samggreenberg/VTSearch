@@ -194,7 +194,9 @@ def test_suite_gets_a_data_dir_of_its_own(grid: dict, tmp_path: Path) -> None:
     scratch.mkdir()
     r = _run(grid["wt"], BRANCH, VTSEARCH_DATA_DIR=str(live), TMPDIR=str(scratch))
     assert r.returncode == 0, r.stdout + r.stderr
-    used = Path(re.search(r"^DATA (.+)$", r.stdout, re.MULTILINE).group(1))
+    m = re.search(r"^DATA (.+)$", r.stdout, re.MULTILINE)
+    assert m, r.stdout
+    used = Path(m.group(1))
     assert used.parent == scratch
     assert f"=== data {used} (inherited VTSEARCH_DATA_DIR: {live}, not used)" in r.stdout
     assert not any(live.iterdir()), "the suite wrote into the inherited data dir"
