@@ -8,10 +8,11 @@
 
 <!-- build: figs/calib-inside-job.build2.png -->
 
-<!-- Lay of the Land's grey band is the view from outside the folds: from
+<!-- Lay of the Land's pale band is the view from outside the folds: from
      the counts in hand nobody can say how the split will round. Inside a
      fold the rounding is done, and what is left is a decision tree on two
-     counts, what each fold holds out. Same greys as the last slide. -->
+     counts, what each fold holds out. Same colours as the last slide, and
+     no pale cells: nothing here is left to chance. -->
 
 <!-- **a** — Each of the two folds holds out at least one Good and one Bad.
      With one or two Goods a fold the class model is too thin, and the head

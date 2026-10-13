@@ -6227,14 +6227,53 @@ LAND_NAME_B = 40.5
 #: The plot's box, in canvas units: left, bottom, right, top. Its left edge
 #: stands right of the title notch, so the Goods axis can run to the top.
 LAND_BOX = (6.3, 1.55, 19.9, 10.9)
-#: Each strategy's fill: light to dark as the labels grow. Grey, not hue: hue is
-#: reserved for Good, Bad and the shipped line, and every region here is shipped.
+#: Each strategy's fill, white for "no Goods" and hues clear of the deck's
+#: three for the rest: red and green are Bad and Good, blue is the line itself.
+#: The two rules that count what stands out are warm and kin, yellow for the
+#: Goods' average and orange for the trained head; the labels line is purple.
+#: Picked as fills in OKLCH (yellow L 0.90, orange L 0.74, purple L 0.70) so
+#: lightness separates them as well as hue, and validated as fills, not as the
+#: hues they were lifted from (tinting a passing set pulled its pairs under the
+#: floors): `validate_palette.js --mode light --pairs all` gives worst CVD
+#: ΔE 15.6 and normal-vision 19.4, black text 6.9:1 or better on each. Its
+#: lightness band fails the yellow (L 0.90), a check for thin marks on the
+#: surface; here every region is named and ruled, the yellow's edge with the
+#: white row included.
 LAND_FILL = {
     "none": "#ffffff",
-    "centroid": "#eef1f4",
-    "count": "#d2d9e2",
-    "labels": "#a7b3c2",
+    "centroid": "#f9dd73",
+    "count": "#f58b4b",
+    "labels": "#ad80dd",
 }
+#: How far a cell whose line the split decides is faded toward white at even
+#: odds (and less as the odds lean either way): uncertainty reads as fading.
+LAND_FADE = 0.55
+
+
+def _oklab(hex_color: str) -> np.ndarray:
+    """*hex_color* in OKLab, where a straight line between two colours stays a clean blend."""
+    rgb = np.array(matplotlib.colors.to_rgb(hex_color))
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    lms = np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566],
+                    [0.0883024619, 0.2817188376, 0.6299787005]]) @ lin  # fmt: skip
+    lms = np.cbrt(lms)
+    return np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099],
+                     [0.0259040371, 0.7827717662, -0.8086757660]]) @ lms  # fmt: skip
+
+
+def _from_oklab(lab: np.ndarray) -> str:
+    """An OKLab colour as hex, clipped to the sRGB gamut."""
+    lms = np.array([[1.0, 0.3963377774, 0.2158037573], [1.0, -0.1055613458, -0.0638541728],
+                    [1.0, -0.0894841775, -1.2914855480]]) @ lab  # fmt: skip
+    lms = lms**3
+    lin = np.array([[4.0767416621, -3.3077115913, 0.2309699292], [-1.2684380046, 2.6097574011, -0.3413193965],
+                    [-0.0041960863, -0.7034186147, 1.7076147010]]) @ lms  # fmt: skip
+    rgb = np.where(lin <= 0.0031308, 12.92 * lin, 1.055 * np.clip(lin, 0, None) ** (1 / 2.4) - 0.055)
+    return matplotlib.colors.to_hex(np.clip(rgb, 0.0, 1.0))
+
+
+def _toward_white(lab: np.ndarray, t: float) -> np.ndarray:
+    return lab + (_oklab("#ffffff") - lab) * t
 
 
 class _Coin:
@@ -6311,9 +6350,10 @@ def lay_of_the_land_fig() -> None:
     One cell per pair of counts, on a single-vector space (the Binary path,
     and faces). Below the quota the Goods' average; past it the trained head,
     counting what stands out until its folds hold out six Goods, then the
-    labels line. Where the folds' split rounds either way, the cell's grey is
-    mixed in proportion to the chance it is the labels line, and the last
-    page fades where a typed query keeps its own set. Binary only: the room
+    labels line. Where the folds' split rounds either way, the cell blends
+    the two fills by the chance it is the labels line, paler the nearer that
+    is to even (`_land_mix`), and the last page hatches where a typed query
+    keeps its own set. Binary only: the room
     meets region voting, whose folds split another way, sections later, so
     the slide never names it. Every boundary is computed
     from the shipped functions and constants (`label_quota`, `query_holds`,
@@ -6334,10 +6374,14 @@ def _land_cell(b: float, g: float) -> tuple[float, float, float, float]:
 
 
 def _land_mix(p: float) -> str:
-    """The count's grey mixed toward the labels line's by *p*."""
-    a = np.array(matplotlib.colors.to_rgb(LAND_FILL["count"]))
-    z = np.array(matplotlib.colors.to_rgb(LAND_FILL["labels"]))
-    return matplotlib.colors.to_hex(a + (z - a) * p)
+    """A cell the split decides: the count's fill blended toward the labels line's by *p*, faded by its doubt.
+
+    The blend is in OKLab, so orange reaches violet through mauve rather than
+    through mud; the fade toward white is greatest at even odds (``4p(1 - p)``)
+    and gone at 0 and 1, where the cell is one of the two decisions outright.
+    """
+    a, z = _oklab(LAND_FILL["count"]), _oklab(LAND_FILL["labels"])
+    return _from_oklab(_toward_white(a + (z - a) * p, LAND_FADE * 4.0 * p * (1.0 - p)))
 
 
 def _land_stage(stage: int) -> plt.Figure:
@@ -6349,10 +6393,15 @@ def _land_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
     _land_cells(ax, stage)
     _land_axes(ax)
+    # The no-Goods row's edge, ruled: the yellow beside it is pale enough that
+    # the edge should not rest on colour alone.
+    x0, y0, x1, _ = LAND_BOX
+    ch = _land_cell(0, 0)[3]
+    ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
     # Every region's name sits where no later page draws over it: the trained
     # head's three to the right of the typed query's staircase.
     _land_name(ax, LAND_B / 2 + 0.5, 0.5, "no Goods: nothing to rank toward")
-    _land_name(ax, 8.0, 2.0, "the Goods' average")
+    _land_name(ax, 8.0, 2.0, "the Goods' average", plate=LAND_FILL["centroid"] if stage >= 4 else None)
     if stage >= 2:
         _land_quota(ax, stage)
     if stage >= 3:
@@ -6398,11 +6447,12 @@ def _land_axes(ax: plt.Axes) -> None:
     ax.text(x0 - 0.75, y0 + 6.5 * ch, "Goods", ha="right", va="center", fontsize=16, color=INK)
 
 
-def _land_name(ax: plt.Axes, b: float, g: float, text: str) -> None:
-    """A region's name, centred at *b* Bads and *g* Goods."""
+def _land_name(ax: plt.Axes, b: float, g: float, text: str, plate: str | None = None) -> None:
+    """A region's name, centred at *b* Bads and *g* Goods, on a *plate* of its region's fill when a hatch runs under it."""
     x0, y0, _, _ = LAND_BOX
     _, _, cw, ch = _land_cell(0, 0)
-    ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
+    box = None if plate is None else {"facecolor": plate, "edgecolor": "none", "pad": 2}
+    ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6, bbox=box)
 
 
 def _land_quota(ax: plt.Axes, stage: int) -> None:
@@ -6423,11 +6473,12 @@ def _land_labels(ax: plt.Axes) -> None:
 
 
 def _land_query(ax: plt.Axes) -> None:
-    """Page 4: where a typed query keeps its own set, faded, and the staircase that bounds it.
+    """Page 4: where a typed query keeps its own set, hatched, and the staircase that bounds it.
 
     Below the quota, and on a single-vector space until its labels number
     `QUERY_HOLD_LABELS`: the head's line is not what such a detector shows
-    there, so its cells fade.
+    there. Hatched rather than faded, because fading already means the split
+    has not decided.
     """
     from vtscore.detectors.label_quota import QUERY_HOLD_LABELS  # noqa: PLC0415
 
@@ -6437,8 +6488,8 @@ def _land_query(ax: plt.Axes) -> None:
     for g in range(1, LAND_G + 1):
         for b in range(LAND_B + 1):
             if held[g, b]:
-                ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor="white",
-                                       edgecolor="none", alpha=0.6, zorder=2))  # fmt: skip
+                ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor="none",
+                                       edgecolor=INK, hatch="//", linewidth=0, zorder=2))  # fmt: skip
     xs: list[float] = []
     ys: list[float] = []
     for g in range(1, LAND_G + 1):
@@ -6446,7 +6497,7 @@ def _land_query(ax: plt.Axes) -> None:
         xs += [x0 + b * cw, x0 + b * cw]
         ys += [y0 + g * ch, y0 + (g + 1) * ch]
     ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, 14.0, 4.5, f"a typed query: its own\nset, to {QUERY_HOLD_LABELS} labels")
+    _land_name(ax, 14.0, 4.5, f"a typed query: its own\nset, to {QUERY_HOLD_LABELS} labels", plate=LAND_FILL["count"])
 
 
 # ── Inside Job: the trained head's line, read off what a fold holds out ─────
@@ -6490,7 +6541,7 @@ def _in_grid() -> np.ndarray:
 
 
 def inside_job_fig() -> None:
-    """Inside Job: Lay of the Land's grey band, seen from inside a fold, where it is a clean edge.
+    """Inside Job: Lay of the Land's pale band, seen from inside a fold, where it is a clean edge.
 
     The axes are what each calibration fold holds out, not what the user
     holds: from inside, the rounding that made Lay of the Land's band is
