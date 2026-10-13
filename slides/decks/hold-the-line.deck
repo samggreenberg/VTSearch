@@ -19,7 +19,8 @@
 # benchmark the app's face path is measured on (#4699).
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
-# behind them live in the reports the presenter notes cite (see #3246, #3265).
+# behind them live in their reports, not on the slides or in the notes (see
+# #3246, #3265, #4827).
 #
 # The outline fragment appears thirteen times: once bare, as the opening list,
 # and then once before each section marked with `+at1` … `+at11`. It is one

@@ -21,8 +21,9 @@
 
   Any HTML comment that is not a Marp directive becomes a presenter note —
   hidden in the audience build, rendered beside a miniature of the slide by
-  the speaker build (./render.sh <deck> pdf --speaker). Write notes as real
-  speaking notes: wordier than the slide, covering what to say.
+  the speaker build (./render.sh <deck> pdf --speaker). Write notes as what
+  you will actually say: a sentence or three per page, in your own voice, no
+  provenance.
 -->
 
 ### Kicker

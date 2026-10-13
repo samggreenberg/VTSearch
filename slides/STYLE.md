@@ -522,6 +522,32 @@ page (see *One slide, one speaker page* in [`README.md`](README.md)).
 
 <!-- item-sep -->
 
+## Presenter notes are what you say
+
+A note is the words the speaker says while that page is on screen, in the
+speaker's own voice. It is not an essay about the slide and not a record of
+where the slide came from (owner, 2026-10-13, #4827: "Each Slide only gets a
+few minutes max; don't make the notes take 15min to read").
+
+- **A sentence or three per page.** One note per letter; a one-page slide gets
+  a short paragraph or two. Say the page's one idea plainly and cut the rest:
+  asides, caveats, and the history of how a rule came to be.
+- **Spoken, first person.** "We", "I", contractions, a question to the room.
+  No stage directions ("say this slowly", "point at the dashed line"): write
+  the words themselves. A note may run straight into the next page's ("so we
+  click that + button and").
+- **No bookkeeping.** No issue numbers, file or script names, report
+  directories or code identifiers; those live in the reports and the git
+  history. A name the room can read on the slide is fine to say.
+- **The figure wins.** A number in a note is one the speaker will say out loud,
+  so it has to match what is on screen. Re-rendering a figure means re-reading
+  its notes.
+
+The one-page fit check is a ceiling, not a target: a note that only just fits
+is already too long.
+
+<!-- item-sep -->
+
 ## A results slide carries its date
 
 The deck does not age evenly. A slide about a mechanism (what the mixture is,

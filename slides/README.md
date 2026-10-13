@@ -187,8 +187,9 @@ per-slide with `<!-- _class: full -->`.
 
 Any HTML comment that isn't a Marp directive becomes a **presenter note** —
 visible in `--preview` and exported into PPTX/HTML notes, not on the slide.
-Write them as real speaking notes: wordier than the slide, covering what to
-say, not just provenance.
+Write them as what you will actually say, a sentence or three per page, and
+leave the provenance out (see *Presenter notes are what you say* in
+[`STYLE.md`](STYLE.md)).
 
 PDF has no native speaker view, so there are two renderers for the same deck.
 The plain build ignores the notes; the **speaker build**

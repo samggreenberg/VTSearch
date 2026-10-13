@@ -799,9 +799,9 @@ def check_speaker_fit(
         where = f" (showing {letters})" if pages != group[name] else ""
         problems.append(
             f"fragments/{name}.md{where}: presenter notes overflow the speaker page by about "
-            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters, or move "
-            f"detail into the report the note cites. A speaker page never continues onto a "
-            f"second one; see slides/README.md."
+            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters. A speaker "
+            f"page never continues onto a second one; see slides/README.md, and slides/STYLE.md "
+            f"on what a note is for."
         )
 
 
