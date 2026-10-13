@@ -102,7 +102,7 @@ describe('VotingOverlayComponent', () => {
     fixture.componentRef.setInput('hintCounts', { goods: 1, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
     await settleZoneless(fixture);
     expect(text()).toContain('Autopilot needs 3 Goods to start training');
-    expect(text()).toContain("you've found 1");
+    expect(text()).toContain("You've found 1");
 
     fixture.componentRef.setInput('hint', 'find-bads');
     fixture.componentRef.setInput('hintCounts', { goods: 3, goodsNeeded: 3, bads: 2, badsNeeded: 4 });
