@@ -1018,16 +1018,24 @@ def _store_quota_head(det_ctx, head: Any, threshold: float, line: Any, labelset:
     det_ctx.gate_passed = None
 
 
-def _query_tier(resolved_tier: str, labelset: LabelSet) -> bool:
-    """Whether a typed-query detector gives its query (#4758): under the quota by what resolved *and* by what is labelled.
+def _query_tier(resolved_tier: str, labelset: LabelSet, embedder: str | None) -> bool:
+    """Whether a typed-query detector gives its query: under the quota, or past it while the query holds.
 
-    The quota counts the labels that resolved; a labelset that meets it as
-    written but whose origins failed to resolve is a resolution failure to
-    report, not a detector under the quota, so it does not get the query.
+    Under the quota (#4758) by what resolved *and* by what is labelled.  The
+    quota counts the labels that resolved; a labelset that meets it as written
+    but whose origins failed to resolve is a resolution failure to report, not
+    a detector under the quota, so it does not get the query.  Past the quota,
+    the query holds on a single-vector space until
+    :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS` labels (#4736, :func:`~vtscore.detectors.label_quota.query_holds`):
+    *embedder* is the space the labels were embedded in.
     """
-    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota
+    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds
+    from vtscore.detectors.training import _patch_space_for
 
-    return resolved_tier != TIER_TRAINED and labelset_quota(labelset).tier != TIER_TRAINED
+    quota = labelset_quota(labelset)
+    if resolved_tier != TIER_TRAINED and quota.tier != TIER_TRAINED:
+        return True
+    return query_holds(quota.n_good, quota.n_bad, patch_space=_patch_space_for(embedder))
 
 
 def install_query_head(
@@ -1114,8 +1122,10 @@ def train_from_labelset(
     (:func:`~vtscore.detectors.query_head.detector_text_query`).  Until the
     quota gives a trained head, a detector with one gets that query's head
     (:func:`install_query_head`, #4758) in place of nothing or the centroid,
-    its line drawn over the haystack.  Where the haystack has no text slot it
-    falls back to those.
+    its line drawn over the haystack, and on a single-vector space it keeps it
+    past the quota until the labels number
+    :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS` (#4736).  Where the
+    haystack has no text slot it falls back to those.
     """
     populate_label_embeddings(
         det_ctx,
@@ -1131,7 +1141,7 @@ def train_from_labelset(
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the threshold's pass in that same space.
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
-    if text_query and _query_tier(tier, labelset):
+    if text_query and _query_tier(tier, labelset, det_ctx.embedder):
         hay = haystack.medias if haystack is not None else snap
         if (
             install_query_head(det_ctx, text_query, hay, labelset, media_type=media_type, beta=_centroid_beta(det_ctx))
@@ -1246,8 +1256,8 @@ def labelset_train_and_score(
     leaves it ``False``: the head it trains is the sort the user labels on, not
     a detector anyone takes away.  With *label_quota*, *text_query* (the
     detector's typed query, #4758) gives that query's head under the quota
-    instead, cut and scored on *clips_dict*'s text space, as
-    :func:`train_from_labelset` does.
+    instead, and past it while the query holds (#4736), cut and scored on
+    *clips_dict*'s text space, as :func:`train_from_labelset` does.
     """
     from vtscore.config.core_config import _retired_inclusion
     from vtscore.detectors.training import _format_results, _train_and_score_xy, score_rows_with_model
@@ -1261,7 +1271,7 @@ def labelset_train_and_score(
         from vtscore.detectors.training import detector_score_embedder, scoring_rows_for_snap
 
         tier = quota_from_groups(groups).tier
-        if text_query and _query_tier(tier, labelset):
+        if text_query and _query_tier(tier, labelset, det_ctx.embedder):
             installed = install_query_head(det_ctx, text_query, clips_dict, labelset, media_type=media_type, beta=beta)
             if installed is not None:
                 head, threshold, query_rows = installed

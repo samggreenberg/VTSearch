@@ -1196,6 +1196,13 @@ LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", 
 #: default) is the app; ``CALIB_QUERY_TIER=0`` is the arm before (the Goods'
 #: centroid from the first Good, no row before it).
 QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", "off", "false")
+#: Issue #4736: past the quota, such a run's Test keeps giving the typed query's set
+#: on a single-vector space until this many votes (rows tagged ``detector_tier =
+#: "query"``; the head's own rows tagged ``hold:head``), as the app's does.  Unset is
+#: the app (:data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS`); ``0`` / ``off``
+#: is the arm before (the head from the quota), any other count an arm.
+_QUERY_HOLD = os.environ.get("CALIB_QUERY_HOLD", "").strip().lower()
+QUERY_HOLD: "int | None" = None if not _QUERY_HOLD else 0 if _QUERY_HOLD in ("off", "false") else int(_QUERY_HOLD)
 
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check

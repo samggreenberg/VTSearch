@@ -56,6 +56,20 @@ photos then gets a head that keeps a median of one image, and mean F-beta over a
 session goes from 0.001 to 0.47; on COCO Better it moves +0.004
 (``docs/experiments/2026-10-09-good-dry-4731``).  Counts only, as the first
 quota is, so a Good and 16 Bads labelled by hand get the head too.
+
+**The typed query's hold (#4736).**  On a single-vector space a typed-query
+detector keeps giving its query's own set past the quota, until its labels
+number :data:`QUERY_HOLD_LABELS` (:func:`query_holds`).  A head trained on the
+quota's 3 Goods and 4 Bads asks good questions, but its set is worse than the
+typed query's: on COCO Better's Binary opening (702 sessions a preset) the
+head's mean F-beta passes the query's only around vote 27 at beta 1/4 and 1,
+and vote 45 at 4.  Keeping the query's set until 30 labels gains +0.026 /
++0.037 / +0.050 over votes 1-25 and +0.004 / +0.006 / +0.009 over votes 1-150,
+in every seed.  The Region path's head (DINOv3 patches) passes the query by
+vote 10, so a patch space has no hold: there the same hold loses -0.035 over
+votes 1-25 (``docs/experiments/2026-10-12-handover-4736``).  The Train view's
+learned sort is the head either way: the hold changes what is shown, never
+what Autopilot asks.
 """
 
 from __future__ import annotations
@@ -75,6 +89,10 @@ BAD_QUOTA = 4
 #: Bads that give a single Good the trained head (#4731): Autopilot's ``moreDryRun``,
 #: the run of misses that ends a Good walk that has run dry.
 DRY_BAD_QUOTA = 16
+
+#: Labels through which a typed-query detector on a single-vector space keeps giving its
+#: query's own set past the quota (#4736): :func:`query_holds`.
+QUERY_HOLD_LABELS = 30
 
 #: No Goods: there is nothing to sort toward, so Test is refused.
 TIER_NONE = "none"
@@ -143,6 +161,19 @@ def label_quota(n_good: int, n_bad: int, *, dry_bad_quota: int | None = DRY_BAD_
     *dry_bad_quota* is the second quota's Bads; leave it to the app's except in an eval arm.
     """
     return LabelQuota(int(n_good), int(n_bad), dry_bad_quota)
+
+
+def query_holds(n_good: int, n_bad: int, *, patch_space: bool | None, hold: int = QUERY_HOLD_LABELS) -> bool:
+    """Whether a typed-query detector still gives its query's own set at these counts (#4736).
+
+    True on a known single-vector space (*patch_space* ``False``) while the
+    labels number fewer than *hold*; a patch space, or one the registry does
+    not know (``None``), has no hold.  It reads the counts only, as the quota
+    does, and says nothing about a detector without a typed query: the caller
+    asks only for one that has.  *hold* is the app's :data:`QUERY_HOLD_LABELS`
+    except in an eval arm.
+    """
+    return patch_space is False and int(n_good) + int(n_bad) < int(hold)
 
 
 def labelset_quota(labelset: "LabelSet | None") -> LabelQuota:

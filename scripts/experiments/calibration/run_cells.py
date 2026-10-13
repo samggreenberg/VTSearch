@@ -341,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
         f"line_counts={'on' if cfg.LINE_COUNTS else 'off'} "
         f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
+        f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -503,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:
                 handover_sink=handover_local,
                 line_count_sink=linecounts_local,
                 query_tier=cfg.QUERY_TIER,
+                **({} if cfg.QUERY_HOLD is None else {"query_hold": cfg.QUERY_HOLD}),
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
