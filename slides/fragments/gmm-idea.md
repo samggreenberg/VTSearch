@@ -12,26 +12,24 @@
 
 <!-- build: figs/calib-gmm-flow.build4.png -->
 
-<!-- **a** — The same votes and the same model as the last slide, rearranged.
-     The new object is the grey bar above: the unlabeled corpus the votes were
-     drawn out of. Far wider, and no Good/Bad hatching, because unlabeled means
-     the classes are unknown, not absent. The labelled sliver is what the last
-     slide starved on, and the grey bar was there the whole time. -->
+<!-- **a** — Here's what that left out: the haystack. Before anybody votes,
+     there's every photo in the dataset, unlabeled. I'll call it the corpus.
+     It's way bigger than our votes, and unlabeled doesn't mean there are no
+     books in it. It means we don't know which ones they are. -->
 
-<!-- **b** — So run the loop the other way round. Train M₀ on the votes as
-     before. **c** — And score the *whole corpus*: fifty thousand scores instead
-     of tens, and their shape is bimodal on its own. -->
+<!-- **b** — Our votes are a little sample pulled out of it, and we train M₀ on
+     them, same as before. -->
 
-<!-- **d** — Fit a two-component Gaussian mixture to it. **e** — And cut at the
-     midpoint between the two means. That is the whole estimator, and nothing
-     in the bottom half of the figure ever looks at a vote. -->
+<!-- **c** — Now run it the other way: M₀ scores the whole corpus. That's
+     thousands of scores instead of a few dozen, and look, they fall into two
+     humps all on their own. -->
 
-<!-- Say which half lasted. Reading the corpus did: Joint Custody, at the
-     end of this section, counts the matches on exactly this grey bar. The
-     midpoint did not.
-     Scored in F-beta over the session, cutting here instead of
-     cross-calibrating lost 0.36, 0.36 and 0.28 at β ¼, 1 and 4 (#4582): where under half a percent
-     of the corpus matches, a cut between the two means keeps far more than
-     there are matches. And the colours are an assumption the fit cannot
-     justify: measured, the high component weighed 0.35 against a true
-     prevalence of 0.09. -->
+<!-- **d** — So fit a bell curve to each hump. See the question marks? We're
+     calling the low one Bad and the high one Good, but nothing here actually
+     checked that. -->
+
+<!-- **e** — Then cut halfway between the two humps. That's the whole method,
+     and the cut never looks at a vote. Half of this idea stuck: reading the
+     whole corpus is how the app counts matches, at the end of this section.
+     The halfway cut didn't. When under half a percent of the photos are
+     matches, cutting halfway keeps way more than there are matches. -->

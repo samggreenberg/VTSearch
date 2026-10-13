@@ -16,29 +16,25 @@
 
 <!-- build: figs/calib-xcal-flow.build6.png -->
 
-<!-- The textbook answer, and the thing everything else is measured against.
-     Land on the property that defines it: with enough labels this estimator
-     converges on the right answer. -->
+<!-- **a** — So where should the line go? Start with the textbook answer. D₀ is
+     every vote so far, and M₀ is the model trained on all of it. That's the
+     model we keep. But we can't pick a cut from M₀'s scores on its own votes:
+     it's grading its own homework, and it'll look better than it really is. -->
 
-<!-- **a** — D₀ is every vote so far and M₀ is the model trained on all of it.
-     M₀ is the model you keep; its scores on its own training votes are
-     optimistically shifted, so you cannot cut on them. -->
+<!-- **b** — So we split the votes in half, D₁ and D₂, and -->
 
-<!-- **b** — So split the votes in half. **c** — And train a model on each half. -->
+<!-- **c** — train a separate model on each half, M₁ and M₂. -->
 
-<!-- **d** — Now cross them: each fold model scores the half it never trained
-     on. Honest scores, at the price of two extra models on half the data. -->
+<!-- **d** — Now cross them over. M₁ scores D₂, the half it never trained on.
+     Those scores are honest: the Bads land low and the Goods land high. -->
 
-<!-- **e** — On each half the Bad pile up low and the Good high, and a cut goes
-     between. **f** — Same on the other half, and note the Bad above θ₂: each
-     cut is a trade-off, not a free gap. -->
+<!-- **e** — So there's a clean place to cut between them: θ₁. -->
 
-<!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, red
-     is Bad. -->
+<!-- **f** — Same thing the other way round: M₂ scores D₁. This time one Bad
+     lands above the cut, so θ₂ is a trade-off, not a free gap. -->
 
-<!-- This is the idea the rest of the deck keeps. Scored in F-beta at each
-     of the app's three radios, no line rule after it beat it until the
-     labels line in section III (#4582, #4519), and that line is built on
-     these folds: the scores each fold gives the votes it never saw are its
-     class model, in Joint Custody. The next slide is what happens *before* "enough
-     labels". -->
+<!-- **g** — Average the two cuts and hand θ₀ to M₀. That's called
+     cross-calibration. With enough votes it lands in the right place, and
+     nothing we tried after it beat it until the line in the next section,
+     which is built on these same honest scores. The catch is that word:
+     enough. -->

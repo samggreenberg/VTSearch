@@ -10,26 +10,23 @@
 
 <!-- build: figs/calib-em-steps.build3.png -->
 
-<!-- An aside, and say so: the last slide said "fit a two-component Gaussian
-     mixture" as though everyone had met that algorithm. It is called EM, and
-     it is two lines long. It earns its minute because the app runs it on
-     the corpus at every retrain: Joint Custody, two slides on. -->
+<!-- **a** — Quick detour, since I just said "fit a bell curve to each hump"
+     like that's obvious. The usual way is called EM, it's two steps, and the
+     app runs it on the corpus every time it retrains. Start by dropping two
+     curves anywhere. This guess is bad on purpose; where you start doesn't
+     matter. -->
 
-<!-- **a** — Two bell curves, put down anywhere. The guess is deliberately
-     terrible — both sit in the valley. Where you start does not matter. -->
+<!-- **b** — The E step: for every score, ask each curve how much of it it
+     claims. Not yes or no, a share. Red takes almost all of the low hump,
+     green takes the high one, and a few bars in between get split. Nothing's
+     moved yet. -->
 
-<!-- **b** — The E step. For every score, ask each curve how much it claims it:
-     not yes or no, a share. Red takes almost all of the low mound, green
-     almost all of the high, and in between the bar is genuinely split. Nothing
-     has moved yet. -->
+<!-- **c** — The M step: forget the old curves and refit each one to what it
+     claimed, where half a claim counts as half. Red tightens up onto the low
+     hump, and green spreads out over the high one. -->
 
-<!-- **c** — The M step. Forget the curves and re-fit each one to the scores
-     that claim it, weighted by how much. Mean, variance and share, computed as
-     you would from a labelled set, except the labels are fractions. -->
-
-<!-- **d** — And that is the algorithm: do those two again. A few dozen rounds
-     and the pair has locked onto the two mounds, having never seen a label. It
-     never asks which mound is which; calling the high one Good is a separate
-     claim entirely. Hold that thought: the next slide answers it by not
-     letting EM choose. The Good curve's shape comes from the votes and stays
-     put, and EM fits only its share and the rest. -->
+<!-- **d** — And that's the whole algorithm: do those two again, and keep going
+     until nothing moves. The curves lock onto the two humps without ever
+     seeing a label. But EM never says which hump is the books. On the next
+     slide we don't let it choose: the votes set the Good curve's shape, and EM
+     only fits the rest. -->
