@@ -5887,6 +5887,327 @@ def _tx_stage(stage: int) -> plt.Figure:
     return fig
 
 
+# ── Out Standing: the line before the labels can draw one (#4603, #4759) ────
+
+#: How many build stages Out Standing's figure reveals in: the corpus; the
+#: bulk's normal and the bar four spreads up, and what stands out past it; the
+#: top of the ranking, in order, and its widest drop; the middle radio's line;
+#: the other two radios' lines, and which items really match.
+SO_STAGES = 5
+#: The planted corpus, in the score's own units: a bulk of non-matches and,
+#: far out, a handful of matches. The matches are where the two counts
+#: disagree on purpose: five clear the bar, but the widest drop in the top 11
+#: falls after three, and two matches sit inside the bulk's tail, where only
+#: the recall radio reaches.
+SO_BULK = (4000, 0)
+SO_MATCHES = (7.2, 6.9, 6.6, 5.0, 4.6, 3.6, 3.3)
+#: The corpus row's score axis, and its bins.
+SO_AXIS = (-4.2, 7.6)
+SO_BINS = 47
+#: How many of the top of the ranking the second row shows, and the score at
+#: its floor: low enough that the 15th still stands clear of it.
+SO_TOP = 15
+SO_TOP_FLOOR = 2.3
+#: The rows, in canvas units: the corpus (baseline, height) and the top of the
+#: ranking (baseline, height).
+SO_CORPUS_Y, SO_CORPUS_H = 6.75, 3.1
+SO_RANK_Y, SO_RANK_H = 1.15, 3.55
+#: A planted item's disc, in canvas units.
+SO_DOT_R = 0.16
+
+
+@functools.lru_cache(maxsize=None)
+def _so_data() -> dict:
+    """The planted corpus and what the **shipped** rule makes of it.
+
+    `centroid_cut` is the line the Goods' centroid draws, and `head_count_cut`
+    draws the trained head's with it while the labels are thin (#4786), so the
+    counts and cuts below are the app's. Its two counts are read through the
+    same private helpers it calls, so the figure can draw each one.
+    """
+    from vtscore.detectors.centroid_head import _top_gap_count, centroid_cut  # noqa: PLC0415
+    from vtscore.training.thresholds import _count_estimate  # noqa: PLC0415
+
+    n, seed = SO_BULK
+    rng = np.random.default_rng(seed)
+    scores = np.concatenate([rng.normal(0.0, 1.0, n), np.array(SO_MATCHES)])
+    med = float(np.median(scores))
+    spread = 1.4826 * float(np.median(np.abs(scores - med)))
+    bar = med + 4.0 * spread
+    keeps = {beta: int(np.sum(scores >= centroid_cut(scores, beta=beta))) for beta, _ in FBETA_ARMS}
+    out = {
+        "scores": scores,
+        "top": np.sort(scores)[::-1][:SO_TOP],
+        "med": med,
+        "spread": spread,
+        "bar": bar,
+        "above": int(np.sum(scores > bar)),
+        "counted": float(_count_estimate(scores)),
+        "drop": int(_top_gap_count(scores)),
+        "keeps": keeps,
+    }
+    # The notes and the labels say these; a re-plant that moves them must move both.
+    assert (out["above"], out["drop"], keeps[0.25], keeps[1.0], keeps[4.0]) == (5, 3, 3, 5, 13), out
+    return out
+
+
+def out_standing_fig() -> None:
+    """Out Standing: the line drawn by counting what stands out, before the labels can draw one.
+
+    Two rows. The corpus on its score axis, best on the right as every axis in
+    the deck runs: the bulk, the normal its median and median absolute
+    deviation imply, the bar four of those spreads up, and the items past it.
+    Then the top of the same ranking in order, each item's height its score,
+    where the widest drop between neighbours in the top 11 can be seen, and
+    the three radios' lines: ``beta ** 0.708`` times the larger count, never
+    fewer than the drop. Schematic inputs, real code (`centroid_cut`).
+    """
+    final = _so_stage(SO_STAGES)
+    box = tight_box(final)
+    for stage in range(1, SO_STAGES):
+        save(_so_stage(stage), OUT, f"calib-out-standing.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-out-standing.png", column=FULL_BLEED, box=box)
+
+
+def _so_x(score: float | np.ndarray) -> np.ndarray:
+    """Canvas x for a score on the corpus row's axis."""
+    lo, hi = SO_AXIS
+    return LL_X0 + (np.asarray(score, dtype=float) - lo) / (hi - lo) * LL_W
+
+
+def _so_slot(rank: int) -> float:
+    """Canvas x of the *rank*-th best item in the ranking row (1 = best), best on the right."""
+    step = LL_W / SO_TOP
+    return LL_X0 + LL_W - (rank - 0.5) * step
+
+
+def _so_height(d: dict, score: float) -> float:
+    """Canvas y of a score in the ranking row."""
+    top = float(d["top"][0])
+    return SO_RANK_Y + (score - SO_TOP_FLOOR) / (top - SO_TOP_FLOOR) * SO_RANK_H
+
+
+def _so_gap_x(rank: int) -> float:
+    """Canvas x of the gap between the *rank*-th and the next item: where a line that keeps *rank* stands."""
+    return _so_slot(rank) - LL_W / SO_TOP / 2
+
+
+def _so_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Out Standing's figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+    d = _so_data()
+    _so_corpus_row(ax, d, stage)
+    if stage >= 3:
+        _so_rank_row(ax, d, stage)
+    return fig
+
+
+def _so_corpus_row(ax: plt.Axes, d: dict, stage: int) -> None:
+    """Stages 1-2: the corpus, then its bulk's normal, the bar, and what stands out past it."""
+    lo, hi = SO_AXIS
+    scores = d["scores"]
+    counts, edges = np.histogram(scores, bins=SO_BINS, range=SO_AXIS)
+    sy = SO_CORPUS_H / float(counts.max())
+    u_edges = (edges - lo) / (hi - lo)
+    bars = _staircase(LL_X0, SO_CORPUS_Y, LL_W, sy, u_edges, counts.astype(float), 0, len(counts) - 1)
+    bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    ax.add_patch(bars)
+    for i in range(1, len(counts)):
+        top = SO_CORPUS_Y + float(min(counts[i - 1], counts[i])) * sy
+        if top > SO_CORPUS_Y:
+            ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [SO_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    _range_line(ax, LL_X0, LL_X0 + LL_W, SO_CORPUS_Y, z=5)
+    _ll_row_name(ax, SO_CORPUS_Y + 0.9, "The corpus")
+    # The items far out: a bar of one is a hairline at this scale, so each is a
+    # disc of its own, standing on the baseline where its score is.
+    for s in scores[scores > d["bar"]]:
+        ax.add_patch(
+            Circle((float(_so_x(s)), SO_CORPUS_Y + SO_DOT_R + 0.04), SO_DOT_R, facecolor=UNLABELED_FILL,
+                   edgecolor=INK, linewidth=1.4, zorder=6)
+        )  # fmt: skip
+    if stage < 2:
+        return
+    # The bulk's normal: the median and 1.4826 x the median absolute deviation,
+    # which the few far-out items barely move, scaled to the corpus's count.
+    grid = np.linspace(lo, hi, 700)
+    bin_w = (hi - lo) / SO_BINS
+    dens = scores.size * bin_w * np.exp(-0.5 * ((grid - d["med"]) / d["spread"]) ** 2) / (
+        d["spread"] * math.sqrt(2 * math.pi)
+    )
+    seen = dens * sy > TAIL_FLOOR
+    ax.plot(_so_x(grid[seen]), SO_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=SOFT, linewidth=HUMP_LW, zorder=4)
+    bar_x = float(_so_x(d["bar"]))
+    bar_top = SO_CORPUS_Y + SO_CORPUS_H * 0.62
+    ax.plot([bar_x] * 2, [SO_CORPUS_Y, bar_top], color=INK, linewidth=1.6, linestyle=(0, (4, 3)), zorder=3)
+    ax.text(bar_x, bar_top + LABEL_GAP, "4 spreads up", ha="center", va="bottom", fontsize=16, color=INK)
+    far = scores[scores > d["bar"]]
+    ax.text(
+        float(_so_x(float(far.mean()))),
+        SO_CORPUS_Y + 2 * SO_DOT_R + 0.04 + OBJECT_GAP,
+        f"{d['above']} stand out",
+        ha="center",
+        va="bottom",
+        fontsize=16,
+        color=INK,
+    )
+
+
+def _so_rank_row(ax: plt.Axes, d: dict, stage: int) -> None:
+    """Stages 3-5: the top of the ranking in order, its widest drop, then the radios' lines."""
+    top = d["top"]
+    right = LL_X0 + LL_W
+    _range_line(ax, LL_X0, right, SO_RANK_Y, z=5)
+    _ll_row_name(ax, SO_RANK_Y + SO_RANK_H / 2, f"The top {SO_TOP},\nin order")
+    matches = set(SO_MATCHES)
+    for rank, s in enumerate(top, start=1):
+        x, y = _so_slot(rank), _so_height(d, float(s))
+        ax.plot([x, x], [SO_RANK_Y, y - SO_DOT_R], color=SOFT, linewidth=1.6, zorder=3)
+        ax.add_patch(Circle((x, y), SO_DOT_R, facecolor=UNLABELED_FILL, edgecolor=INK, linewidth=1.4, zorder=6))
+        if stage >= 5 and float(s) in matches:
+            ax.add_patch(Circle((x, y), SO_DOT_R * 1.75, facecolor="none", edgecolor=GREEN, linewidth=2.6, zorder=7))
+    # The bar again, now level: the same score, read across the ranking.
+    bar_y = _so_height(d, d["bar"])
+    ax.plot([LL_X0, right], [bar_y] * 2, color=INK, linewidth=1.6, linestyle=(0, (4, 3)), zorder=2)
+    # Named over the stretch of the ranking that sits under it: ranks 6-12,
+    # clear of every radio's line (β 4's stands left of rank 13).
+    ax.text(_so_gap_x(12), bar_y + LABEL_GAP, "4 spreads up", ha="left", va="bottom", fontsize=16, color=INK)
+    # The widest drop between neighbours in the top 11: a span from the lower
+    # head up to the higher one's level, in the gap it falls in. That level runs
+    # left as a dotted rule, over heads that all sit below it, to the drop's
+    # name: the only room in the row that no radio's line will cross.
+    k = d["drop"]
+    gx = _so_gap_x(k) - 0.22
+    y_hi, y_lo = _so_height(d, float(top[k - 1])), _so_height(d, float(top[k]))
+    name_x = _so_gap_x(11)
+    ax.plot([name_x, _so_slot(k) - SO_DOT_R - 0.08], [y_hi] * 2, color=INK, linewidth=1.2, linestyle=(0, (1, 2)),
+            zorder=3)  # fmt: skip
+    ax.annotate("", xy=(gx, y_lo + 0.04), xytext=(gx, y_hi - 0.04),
+                arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.6}, zorder=6)  # fmt: skip
+    ax.text(name_x, y_hi + LABEL_GAP, "widest drop in the top 11", ha="left", va="bottom", fontsize=16, color=INK)
+    if stage < 4:
+        return
+    for beta, name in FBETA_ARMS:
+        picked = beta == LL_PICKED
+        if stage < (4 if picked else 5):
+            continue
+        kept = d["keeps"][beta]
+        x = _so_gap_x(kept)
+        style = {"color": BLUE, "linewidth": 2.6} if picked else {"color": INK, "linewidth": 1.4, "linestyle": (0, (4, 3))}
+        line_top = SO_RANK_Y + SO_RANK_H + 0.55
+        ax.plot([x] * 2, [SO_RANK_Y, line_top], zorder=5, **style)
+        ax.text(x, SO_RANK_Y - 0.2, f"β {name}", ha="center", va="top", fontsize=16, color=INK)
+        ax.text(x, line_top + LABEL_GAP, f"keeps {kept}", ha="center", va="bottom", fontsize=16, color=INK)
+
+
+# ── Changing Hands: who draws the line as the labels arrive (#4643, #4798) ──
+
+#: How many build stages Changing Hands reveals in: what draws the line before
+#: a head is trained; the quota, and the trained head counting what stands
+#: out; six held-out Goods, and the labels line.
+CH_STAGES = 3
+#: The band's segments, left to right, in canvas units: (left, right). The
+#: first is the widest because its name is the longest, and its gate stands
+#: right of the title notch so the gate's name above it clears the notch.
+CH_SEGMENTS = ((1.0, 8.4), (8.4, 14.0), (14.0, 19.6))
+#: Each segment: its name (two lines), what its glyph is, and the glyph's
+#: caption. The first two draw the same glyph, because they draw the same line.
+CH_NAMES = (
+    ("The typed query, or\nthe Goods' average", "count", "counts what stands out"),
+    ("The trained head,\nwith few Goods", "count", "counts what stands out"),
+    ("The trained head:\nthe labels line", "labels", "Joint Custody's fit,\ncut at the peak"),
+)
+#: The gates between segments: what the labels must reach.
+CH_GATES = ("3 Goods, 4 Bads", "6 held-out Goods")
+#: Rows, in canvas units: the gates' names, the segments' names, the glyphs
+#: (baseline, height), the captions, the arrow under it all.
+CH_GATE_Y = 8.35
+CH_NAME_Y = 7.45
+CH_GLYPH_Y, CH_GLYPH_H = 3.35, 2.35
+CH_CAPTION_Y = 2.85
+CH_ARROW_Y = 0.75
+#: The glyph's ranking: nine items, best on the right, three standing out.
+CH_RANKING = (0.16, 0.19, 0.21, 0.24, 0.27, 0.31, 0.72, 0.84, 0.97)
+
+
+def changing_hands_fig() -> None:
+    """Changing Hands: what draws the line, as the labels a session holds grow.
+
+    A band in three segments with a gate between each: the typed query's own
+    set or the Goods' average (`label_quota`'s tiers below the quota); the
+    trained head, its line counted by Out Standing's rule while the class
+    model is thin (`head_count_serves`); the labels line. The gates' numbers
+    are the shipped constants (`GOOD_QUOTA`, `BAD_QUOTA`, `HEAD_COUNT_GOODS`),
+    asserted so a change to them fails here before it reaches a slide.
+    """
+    from vtscore.detectors.label_quota import BAD_QUOTA, GOOD_QUOTA  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
+
+    assert CH_GATES == (f"{GOOD_QUOTA} Goods, {BAD_QUOTA} Bads", f"{HEAD_COUNT_GOODS} held-out Goods"), CH_GATES
+    final = _ch_stage(CH_STAGES)
+    box = tight_box(final)
+    for stage in range(1, CH_STAGES):
+        save(_ch_stage(stage), OUT, f"calib-changing-hands.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-changing-hands.png", column=FULL_BLEED, box=box)
+
+
+def _ch_count_glyph(ax: plt.Axes, cx: float) -> None:
+    """A small ranking, best on the right, and the line after the three that stand out."""
+    n, w = len(CH_RANKING), 3.6
+    step = w / n
+    x0 = cx - w / 2
+    _range_line(ax, x0, x0 + w, CH_GLYPH_Y, z=3)
+    for i, h in enumerate(CH_RANKING):
+        x, y = x0 + (i + 0.5) * step, CH_GLYPH_Y + h * CH_GLYPH_H
+        ax.plot([x, x], [CH_GLYPH_Y, y - 0.12], color=SOFT, linewidth=1.4, zorder=3)
+        ax.add_patch(Circle((x, y), 0.12, facecolor=UNLABELED_FILL, edgecolor=INK, linewidth=1.2, zorder=4))
+    cut = x0 + 6 * step
+    ax.plot([cut] * 2, [CH_GLYPH_Y, CH_GLYPH_Y + CH_GLYPH_H + 0.1], color=BLUE, linewidth=2.6, zorder=5)
+
+
+def _ch_labels_glyph(ax: plt.Axes, cx: float) -> None:
+    """Two normals of one spread, the Bad and the Good, and the line between them."""
+    w = 3.6
+    x0 = cx - w / 2
+    _range_line(ax, x0, x0 + w, CH_GLYPH_Y, z=3)
+    grid = np.linspace(-3.4, 3.4, 300)
+    for mu, color in ((-1.0, RED), (1.0, GREEN)):
+        curve = np.exp(-0.5 * ((grid - mu) / 0.75) ** 2)
+        seen = curve > 0.012
+        ax.plot(x0 + (grid[seen] + 3.4) / 6.8 * w, CH_GLYPH_Y + curve[seen] * CH_GLYPH_H * 0.9, color=color,
+                linewidth=HUMP_LW, zorder=4)  # fmt: skip
+    cut = x0 + (0.35 + 3.4) / 6.8 * w
+    ax.plot([cut] * 2, [CH_GLYPH_Y, CH_GLYPH_Y + CH_GLYPH_H + 0.1], color=BLUE, linewidth=2.6, zorder=5)
+
+
+def _ch_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Changing Hands."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+
+    left, right = CH_SEGMENTS[0][0], CH_SEGMENTS[-1][1]
+    _labeled_arrow(ax, (left, CH_ARROW_Y), (right, CH_ARROW_Y), "more labels")
+    for i, ((x0, x1), (name, glyph, caption)) in enumerate(zip(CH_SEGMENTS, CH_NAMES, strict=True)):
+        if i >= stage:
+            break
+        cx = (x0 + x1) / 2
+        ax.text(cx, CH_NAME_Y, name, ha="center", va="top", fontsize=16, fontweight="bold", color=INK)
+        (_ch_count_glyph if glyph == "count" else _ch_labels_glyph)(ax, cx)
+        ax.text(cx, CH_CAPTION_Y, caption, ha="center", va="top", fontsize=16, color=INK)
+        if i:
+            # The gate: a rule the height of the band, named above it.
+            ax.plot([x0] * 2, [CH_ARROW_Y + 0.55, CH_GATE_Y - 0.15], color=INK, linewidth=1.6,
+                    linestyle=(0, (4, 3)), zorder=2)  # fmt: skip
+            ax.text(x0, CH_GATE_Y, CH_GATES[i - 1], ha="center", va="bottom", fontsize=16, color=INK)
+    return fig
+
+
 # ── the document line at the three radios (#4367, #4458, #4479) ─────────────
 
 #: How many build stages the document-balance figure reveals in: the votes and

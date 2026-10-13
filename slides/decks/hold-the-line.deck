@@ -92,6 +92,14 @@ slides:
   balance-fbeta
   labels-line
   transfer-student
+  # The line before the labels line can stand: a count of what stands out,
+  # drawn by one rule for the typed query, the Goods' average and a head with
+  # too few Goods (#4603, #4759, #4786), then who draws the line as the labels
+  # grow, and the six held-out Goods that hand it to What to Expect (#4643,
+  # #4798). After Transfer Student, because both slides lean on the radios
+  # and on What to Expect's fit to say what the count stands in for.
+  out-standing
+  changing-hands
   floor-ask
   clopper-pearson
   floor-check
