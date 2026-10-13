@@ -715,6 +715,77 @@ def examples(a: argparse.Namespace) -> None:
     print(md_table(pd.DataFrame(rows)))
 
 
+def sig2(v: float, se: float | None = None) -> str:
+    """A signed value at its SE's precision (the SE to one significant figure), and the SE."""
+    if not np.isfinite(v):
+        return ""
+    if abs(v) < 1e-12 and (se is None or abs(se) < 1e-12):
+        return "0"
+    # The SE to one significant figure, the value to the same decimals (never fewer than 3).
+    ref = abs(se) if se is not None and np.isfinite(se) and se > 0 else abs(v) / 10
+    dec = max(3, min(5, -int(np.floor(np.log10(ref)))))
+    out = f"{v:+.{dec}f}"
+    return out if se is None else f"{out} ± {se:.{dec}f}"
+
+
+def tables(a: argparse.Namespace) -> None:
+    """The report's tables from the priced CSVs."""
+    d = Path(a.priced)
+    rules, xf = pd.read_csv(d / "rules.csv"), pd.read_csv(d / "crossfit.csv")
+    bias, dg = pd.read_csv(d / "bias.csv"), pd.read_csv(d / "diagnose.csv")
+    presets = list(dict.fromkeys(rules["preset"]))
+    spans = ("1-25", "1-50", "1-150")
+    lines = ["## Headline: every rule against today, cross-fitted where it has parameters", ""]
+    oracle = "oracle_all:switch|None|m+0.00|n0|today"
+    for preset in presets:
+        r = rules[rules["preset"] == preset].set_index("rule")
+        x = xf[xf["preset"] == preset]
+        prac = x[x["family"].str.split(":").str[0].isin(PRACTICAL)]
+        best150 = prac.sort_values("d_1-150", ascending=False).iloc[0]
+        best50 = prac.sort_values("d_1-50", ascending=False).iloc[0]
+        lines += [f"### {preset} (today's F-beta over votes 1-150: {r.loc['today', 'F_1-150']:.2f})", "",
+                  "| | " + " | ".join(f"votes {s}" for s in spans) + " |", "|---|" + "---|" * len(spans)]  # fmt: skip
+        rows = [
+            ("better set at every vote, with hindsight", r.loc["ceiling_switch"]),
+            ("best single hand-over vote, with hindsight", r.loc["ceiling_once"]),
+            ("exact F-beta on the voting collection (a bound)", r.loc[oracle]),
+            (f"best judge over 1-150 ({best150['family']})", best150),
+            (f"best judge over 1-50 ({best50['family']})", best50),
+        ]
+        rows += [
+            (f"fixed: {k.replace('_', ' ')}", r.loc[k])
+            for k in ("at_quota", "vote_20", "vote_40", "vote_50")
+            if k in r.index
+        ]
+        for name, row in rows:
+            lines.append(f"| {name} | " + " | ".join(sig2(row[f"d_{s}"], row[f"se_{s}"]) for s in spans) + " |")
+        lines.append("")
+    lines += ["## Every judge family, cross-fitted (chosen on one class half, scored on the other)", "",
+              "| preset | family | " + " | ".join(f"votes {s}" for s in spans) + " |", "|---|---|" + "---|" * len(spans)]  # fmt: skip
+    for row in xf[xf["family"].str.split(":").str[0].isin(PRACTICAL)].to_dict("records"):
+        lines.append(
+            f"| {row['preset']} | {row['family']} | "
+            + " | ".join(sig2(row[f"d_{s}"], row[f"se_{s}"]) for s in spans)
+            + " |"
+        )
+    lines += ["", "## The votes in each part against the part's truth", "",
+              "| preset | part | votes a run | its votes' Goods | the part's Goods | the head's posterior | part size (median) |",
+              "|---|---|---|---|---|---|---|"]  # fmt: skip
+    names = {"dq": "both", "d_only": "D only", "q_only": "Q only", "none": "neither"}
+    for row in bias[bias["picks"] == "all"].to_dict("records"):
+        lines.append(f"| {row['preset']} | {names[row['part']]} | {row['votes_per_run']:.0f} | {row['vote_good_rate']:.2f} | "
+                     f"{row['part_true_rate']:.3f} | {row['head_posterior']:.2f} | {row['part_size_median']:.0f} |")  # fmt: skip
+    lines += ["", "## Calling the better set: how often each estimator's sign matches the withheld truth, votes 1-150", "",
+              "| preset | estimator | agrees | agrees, weighted by the gap | says head | head is better |", "|---|---|---|---|---|---|"]  # fmt: skip
+    keep = ("oracle_all", "oracle_oos", "oracle_pool", "pv", "rate|3.0|head|model|all", "rate|1.0|half|parts|pool",
+            "calib|3.0|half|model|pool")  # fmt: skip
+    for row in dg[(dg["votes"] == "1-150") & dg["estimator"].isin(keep)].to_dict("records"):
+        lines.append(f"| {row['preset']} | {row['estimator']} | {row['agree']:.2f} | {row['agree_weighted']:.2f} | "
+                     f"{row['says_head']:.2f} | {row['head_better']:.2f} |")  # fmt: skip
+    Path(a.out).write_text("\n".join(lines) + "\n")
+    print(Path(a.out).read_text())
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -740,8 +811,11 @@ def main() -> None:
     x.add_argument("--n", type=int, default=4)
     x.add_argument("--wrong", action="store_true", help="only runs where the rate judge shows the worse set")
     x.add_argument("--picks", default="all", choices=("all", "past_opening", "past_quota"))
+    tb = sub.add_parser("tables")
+    tb.add_argument("--priced", required=True)
+    tb.add_argument("--out", required=True)
     a = ap.parse_args()
-    {"extract": extract, "price": price, "figures": figures, "examples": examples}[a.cmd](a)
+    {"extract": extract, "price": price, "figures": figures, "examples": examples, "tables": tables}[a.cmd](a)
 
 
 if __name__ == "__main__":
