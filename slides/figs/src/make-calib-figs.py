@@ -6444,14 +6444,14 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
 #: (owner, 2026-10-13); the region names inside the plot say the rule.
 MAP_LEGEND_X, MAP_LEGEND_TOP, MAP_LEGEND_STEP, MAP_LEGEND_SWATCH = 0.2, 5.0, 1.15, 0.5
 LAND_LEGEND = (
-    (1, "none", "Return text sort"),
-    (1, "centroid", "Return stand-outs,\nby Goods' average"),
-    (2, "count", "Return stand-outs,\nby trained head"),
-    (3, "labels", "Return Fβ peak,\nby trained head"),
+    (1, "none", "Text sort"),
+    (1, "centroid", "Stand-outs,\nby Goods' average"),
+    (2, "count", "Stand-outs,\nby trained head"),
+    (3, "labels", "Fβ peak,\nby trained head"),
 )
 IN_LEGEND = (
-    (1, "count", "Return stand-outs,\nby trained head"),
-    (2, "labels", "Return Fβ peak,\nby trained head"),
+    (1, "count", "Stand-outs,\nby trained head"),
+    (2, "labels", "Fβ peak,\nby trained head"),
 )
 
 
