@@ -17,6 +17,7 @@ error toasts. **Text** is what the bubble says, with the bold words in bold;
 a sentence or two: "You have detectors, but none is selected. Click one…",
 never "Now click a detector". Nothing about the step after that. Only
 `add-dataset` opens with "Start here!": its state is the app's opening state.
+No semicolons: each instruction is its own sentence.
 
 **Where hints are.** On the path from an empty Dashboard to a detector's
 results, and its detours; not on optional side trips (Settings, Help, a
@@ -75,7 +76,7 @@ back to a trained detector raises none of them.
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
 | `start-voting` | happy | Autopilot picked this item for you. Click **Good**, or press the right arrow key, if it's what you're looking for. Click **Bad**, or press the left arrow key, if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
-| `find-goods` | happy | Autopilot needs {M Goods} to start training; you've found {N}. Keep voting. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
+| `find-goods` | happy | Autopilot needs {M Goods} to start training. You've found {N}. Keep voting. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
 | `find-bads` | happy | Your Goods are in. Autopilot needs {M Bads} too, and has {N}. Keep voting. | As `find-goods`, in **Find Initial Bads**. |
 | `find-more` | happy | Autopilot has its first Goods and Bads, and is walking the sort for more Goods. Keep voting. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
 | `keep-voting` | happy | Your detector now retrains on every vote. Keep voting until the lights on the left are all green. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
@@ -110,8 +111,8 @@ Each fires while its dialog is open and on top.
 |---|---|---|---|
 | `import-dataset` | happy | Pick where your {media} come from, fill in the form, and click **Import**. | **Add Dataset** is open. Its picker's "Select what type of dataset to add." line hides while this is up. |
 | `new-detector` | happy | Describe what you're looking for in a few words, or give an example, then click **Create**. | **New Detector** is open on its main view (not its media picker). |
-| `use-example` | happy | **OK** uses the whole file as the example; **OK but Crop** lets you mark just the part you mean. | **Use This Example?** is open; the crop view carries its own instructions. |
-| `find-results` | happy | These are the detector's matches in {dataset}. **Export** sends them on; **Browse** lays them out as a map. | **Find Results** is open. |
+| `use-example` | happy | **OK** uses the whole file as the example. **OK but Crop** lets you mark just the part you mean. | **Use This Example?** is open; the crop view carries its own instructions. |
+| `find-results` | happy | These are the detector's matches in {dataset}. **Export** sends them on. **Browse** lays them out as a map. | **Find Results** is open. |
 | `export-results` | happy | Pick which items and columns to include, then where they go. | **Export Results** is open (the Test view's export; a detector's own export has no hint). |
 
 `{media}` is as on the Dashboard. `{dataset}` is the dataset Find ran on, by
