@@ -69,7 +69,9 @@ scipy
 umap-learn
 
 # ── PyTorch (index chosen by the caller; see the header) ─────────────
-torch>=2.0.0
+# Floor: transformers >= 5.18 cannot import a model class on torch 2.6 when no
+# GPU is visible (#4838); kept equal to pyproject.toml's.
+torch>=2.7
 # Every image embedder now asks for the torchvision image-processor
 # backend by name rather than inheriting a default (#3173), so torchvision
 # is a hard requirement of the preprocessing path and not just of DINOv2 /

@@ -82,7 +82,7 @@ ARG REQUIREMENTS=gpu.txt
 # cu129 is the tag whose torch pins the CUDA 12.9 libraries the cuML layer
 # below is built on (scripts/install.sh picks the same tag on Turing..Blackwell
 # hosts); it ships no Volta (sm_70) kernels, so a V100 host needs install.sh
-# with cu124 rather than this image.
+# with cu126 rather than this image.
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir --only-binary :all: numpy scipy && \
     pip install --no-cache-dir \

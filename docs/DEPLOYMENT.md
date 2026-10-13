@@ -864,7 +864,7 @@ accepts: one new enough for CUDA 12.9 (driver 575 or later), or one from the
 R535, R550, R560, R565 or R570 branches. Anything else is refused at
 `docker run` with an `unsatisfied condition: cuda>=12.9` error. Check with
 `nvidia-smi`. The images ship torch's `cu129` build, which carries no Volta
-(`sm_70`) kernels: on a V100 host use `scripts/install.sh cu124` instead (see
+(`sm_70`) kernels: on a V100 host use `scripts/install.sh cu126` instead (see
 [SETUP.md § Picking the CUDA tag](SETUP.md#picking-the-cuda-tag)).
 
 ### Resource considerations
@@ -1369,8 +1369,8 @@ it "comes back every time."
 ```bash
 nvidia-smi                                                   # driver visible now?
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-#   2.x+cu124  True   -> both fine
-#   2.x+cu124  False  -> CUDA torch OK, the kernel MODULE broke (kernel update)
+#   2.x+cu126  True   -> both fine
+#   2.x+cu126  False  -> CUDA torch OK, the kernel MODULE broke (kernel update)
 #   2.x+cpu           -> the env got a CPU torch (env-recreation, a separate issue)
 dkms status | grep -i nvidia || echo "NOT dkms-managed -> kernel updates WILL break it"
 uname -r; ls /lib/modules/                                   # >1 kernel = an update happened
@@ -1434,7 +1434,7 @@ box where `dkms` can't be reached and only the precompiled kABI-stream or a plai
 
 ### GPU install's cuML step (skipped on every tag but `cu129`)
 
-**What you see**: on a `cu118`, `cu121`, `cu124` or `cu128` install the step
+**What you see**: on a `cu118`, `cu126` or `cu128` install the step
 prints `(skipped: cuML needs RAPIDS >= 26.8 …)` and the smoke test at the end
 reports `cuML not importable -> GPU UMAP/k-means will use the CPU fallback`.
 
@@ -1442,7 +1442,7 @@ reports `cuML not importable -> GPU UMAP/k-means will use the CPU fallback`.
 which cuML depends on, is the first to take pandas 3 at RAPIDS **26.8**; an
 older RAPIDS would downgrade pandas to 2.x mid-install. RAPIDS 26.x in turn
 requires `nvidia-nvjitlink-cu12 >= 12.9`, which only the `cu129` torch wheel
-pins (`cu124` pins `==12.4.x`, `cu128` `==12.8.x`), so on those tags the two
+pins (`cu126` pins `==12.6.x`, `cu128` `==12.8.x`), so on those tags the two
 cannot share a venv and the installer does not try.
 
 **What to do**: if the GPU is Turing or newer (`sm_75+`; every card since the
@@ -1452,7 +1452,11 @@ already picks that tag on such hosts, so an explicit older tag is usually why
 you got here. A Volta card (V100) has no `cu129` torch, and a driver below CUDA
 12.9 can't run one: those hosts run UMAP / k-means on the CPU. RAPIDS 25 can
 still be assembled on them by hand (`VTS_CUML_CU12_SPEC='cuml-cu12<26'`), at
-the cost of pandas dropping to 2.x in that venv.
+the cost of pandas dropping to 2.x in that venv. On `cu126` that works cleanly:
+RAPIDS 25.12 accepts any CUDA 12 libraries (`cuda-toolkit==12.*`), so it runs on
+the 12.6 set torch pins and pip reports no conflict. The GRID's V100 venvs are
+built this way: torch 2.14.1+cu126 with cuML 25.12, which runs GPU UMAP and
+k-means on a V100S (#4838).
 
 **On `cu129`** the step runs, and torch and RAPIDS share one set of
 `nvidia-*-cu12` wheels (torch pins them at 12.9.x, RAPIDS 26.8 is built on
@@ -1478,7 +1482,7 @@ storage class or type specifier  __NV_SILENCE_DEPRECATION_BEGIN
 pinned**. cuML compiles its cuVS/raft kernels with nvrtc lazily, on the first
 UMAP/k-means `fit`. RAPIDS **26.x** requires `nvidia-nvjitlink-cu12 >= 12.9`
 and is built on CUDA 12.9; a torch from an older tag pins the other CUDA
-libraries lower (`cu124` = 12.4.x, `cu128` = 12.8.x), so pip reports the
+libraries lower (`cu126` = 12.6.x, `cu128` = 12.8.x), so pip reports the
 conflict:
 
 ```
@@ -1493,9 +1497,9 @@ the resident nvrtc doesn't define), producing the `cuda_fp8.hpp` crash above.
 `scripts/install.sh` and `docker/Dockerfile.gpu` install RAPIDS **only
 alongside the `cu129` torch**, whose pins are the 12.9.x libraries RAPIDS is
 built on, so fresh installs are unaffected. A venv built before that move
-(torch `cu124` plus `cuml-cu12<26` and pandas 2) is consistent with itself and
-keeps working; the crash comes from mixing the two eras in one venv, e.g. by
-upgrading cuML there by hand.
+(torch `cu124`, or `cu126` since #4838, plus `cuml-cu12<26` and pandas 2) is
+consistent with itself and keeps working; the crash comes from mixing the two
+eras in one venv, e.g. by upgrading cuML there by hand.
 
 VTSearch also **degrades to the CPU UMAP/k-means path** whenever a cuML fit
 fails for any reason (logging a one-time warning) instead of crashing, so the

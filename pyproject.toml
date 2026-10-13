@@ -80,7 +80,13 @@ dependencies = [
     "pyyaml",
     "matplotlib",
     "scipy",
-    "torch>=2.0.0",
+    # transformers >= 5.18 calls torch.accelerator.current_accelerator() while
+    # importing any model class; torch 2.6 raises there when no GPU is visible
+    # (a CPU node, or a GPU node with CUDA_VISIBLE_DEVICES=), 2.7+ returns None.
+    # transformers itself only asks for torch>=2.5, so the floor lives here
+    # (#4838). Move it together with requirements/image-embedders.txt and
+    # requirements/labbench.txt.
+    "torch>=2.7",
     # Plugin deps that are imported from the codebase
     "sentence-transformers",
     "dnspython>=2.0.0",

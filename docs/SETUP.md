@@ -204,6 +204,7 @@ To override the auto-detection, pass an argument:
 bash scripts/install.sh cpu          # force the CPU-only install
 bash scripts/install.sh gpu          # force the GPU install (auto-detect the CUDA tag)
 bash scripts/install.sh cu118        # force the GPU install with an explicit tag (CUDA 11.8, older drivers)
+bash scripts/install.sh cu126        # ... CUDA 12.6 (Volta through Hopper)
 bash scripts/install.sh cu128        # ... CUDA 12.8 (Blackwell; drops Volta)
 ```
 
@@ -240,22 +241,25 @@ and install problems on GPU boxes are covered in
 When a GPU is visible, `scripts/detect_cuda_tag.py` picks the torch wheel's
 CUDA tag from the GPU's compute capability and the driver's CUDA version; pass
 an explicit `cuXYZ` tag only to override it. If the tag can't be determined it
-falls back to `cu124`, the widest wheel. You can preview the choice without
+falls back to `cu126`, the widest wheel. You can preview the choice without
 installing anything: `python scripts/detect_cuda_tag.py`.
 
 Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
 for certain GPU architectures, so it has to match your hardware. There's a
-**floor** — newer GPUs need newer tags: Ampere/Ada on `cu118`+, Hopper (H100)
-on `cu121`+, Blackwell on `cu128`+ — and a **ceiling**: the newest wheels
+**floor** — newer GPUs need newer tags: Ampere/Ada and Hopper (H100) on
+`cu118`+, Blackwell on `cu128`+ — and a **ceiling**: the newest wheels
 *drop* the oldest architectures, so "just use the latest tag" is wrong for old
 hardware. For example, `cu128` dropped Volta (`sm_70`), so a **Tesla V100 needs
-`cu124`** (or `cu121`/`cu118`), not `cu128` or `cu129`. Rule of thumb: pick the
+`cu126`** (or `cu118`), not `cu128` or `cu129`. `cu121` and `cu124` are
+refused: their indexes stop at torch 2.5.1 and 2.6.0, below the `torch>=2.7`
+floor in `pyproject.toml`. On torch 2.6, transformers 5.18 and later cannot
+import a model class when no GPU is visible (#4838). Rule of thumb: pick the
 newest tag your driver supports that still covers your GPU. `cu129` is what
 the auto-detect picks for Turing through Blackwell on a driver at CUDA 12.9 or
 later, and it is the **only tag that gets cuML** (GPU UMAP / k-means): its
 torch pins the CUDA 12.9 libraries that RAPIDS ≥ 26.8 is built on, and RAPIDS
 ≥ 26.8 is the first whose cudf takes the pandas 3 that `pyproject.toml` pins
-(#4390). A Volta card, or an older driver, steps down to `cu124` (or older),
+(#4390). A Volta card, or an older driver, steps down to `cu126` (or older),
 where the installer skips cuML and the app runs UMAP / k-means on the CPU.
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
@@ -544,14 +548,14 @@ with a shared filesystem.
 
 2. **Create the virtualenv and install the GPU dependencies.** Match the CUDA
    wheel to your cluster's drivers and cards (a node whose driver reports CUDA
-   12.4 takes `cu124`; a Turing-or-newer card on a driver at CUDA 12.9 or
-   later takes `cu129`, the one tag that also gets cuML; a V100 takes `cu124`
-   whatever the driver):
+   12.6 takes `cu126`; a Turing-or-newer card on a driver at CUDA 12.9 or
+   later takes `cu129`, the one tag that also gets cuML; a V100 takes `cu126`
+   on any driver from CUDA 12.6 up):
 
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   bash scripts/install.sh cu129         # or cu118 / cu121 / cu124 / cu128 to match your node's GPU and driver
+   bash scripts/install.sh cu129         # or cu118 / cu126 / cu128 to match your node's GPU and driver
    ```
 
    The scripts default to a venv named `.venv` in the project dir; override with
@@ -570,7 +574,7 @@ with a shared filesystem.
    > python3.12 -m venv .venv
    > source .venv/bin/activate
    > python --version                     # confirm 3.12.x before installing
-   > bash scripts/install.sh cu124
+   > bash scripts/install.sh cu126
    > ```
    >
    > A venv built this way is **not** self-contained — its `python` needs the
