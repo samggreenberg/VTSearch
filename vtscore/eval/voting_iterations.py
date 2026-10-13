@@ -73,7 +73,7 @@ from vtscore.eval.arms_line_counts import line_count_row
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import DRY_BAD_QUOTA, TIER_CENTROID
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -2409,6 +2409,10 @@ def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bo
 #: labelled collection today) and the cell's media less the voted ones (``unvoted``).
 CENTROID_LINE_CORPORA = ("withheld", "pool", "unvoted")
 
+#: The ``gmm_variant`` tag of the head's rows at a click where the typed query holds (#4736):
+#: Test gives the query's set there, so the head's line is what it would have given.
+QUERY_HOLD_HEAD_TAG = "hold:head"
+
 
 def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
     """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
@@ -2573,6 +2577,7 @@ def simulate_voting_iterations(  # noqa: C901
     handover_sink: Optional[list[dict[str, Any]]] = None,
     line_count_sink: Optional[list[dict[str, Any]]] = None,
     query_tier: bool = True,
+    query_hold: int = QUERY_HOLD_LABELS,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2762,6 +2767,16 @@ def simulate_voting_iterations(  # noqa: C901
             default - is the app; ``False`` is the arm before (the Goods'
             centroid from the first Good, no row before it).  Inert without the
             quota, and on an example or known-good opening.
+        query_hold: The votes through which such a run's Test keeps giving the
+            typed query's own set past the quota on a single-vector space, as
+            the app's does (#4736, :func:`~vtscore.detectors.label_quota.query_holds`):
+            :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS` - the
+            default - is the app, ``0`` the arm before.  A held click's
+            untagged row is the typed query's (``detector_tier = "query"``,
+            ``app_trained = 0``), and the head's rows that would have been
+            untagged are kept tagged :data:`QUERY_HOLD_HEAD_TAG`, so the hold is
+            priced on the same session.  Picks never change: the head is
+            trained and asks either way.  Inert where *query_tier* is.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -4162,8 +4177,14 @@ def simulate_voting_iterations(  # noqa: C901
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
         centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
-        # ... and a typed-query run's Test gives the typed query's own set (#4758).
+        # ... and a typed-query run's Test gives the typed query's own set (#4758), past
+        # the quota too while the query holds on a single-vector space (#4736).
         query = centroid and query_on
+        held = (
+            query_on
+            and not centroid
+            and query_holds(len(good_votes), len(bad_votes), patch_space=region_aware, hold=query_hold)
+        )
         centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
@@ -4372,6 +4393,7 @@ def simulate_voting_iterations(  # noqa: C901
             "elapsed_seconds": round(time.monotonic() - start_time, 3),
         }
 
+        step_rows_from = len(rows)
         if calibration is not None and centroid:
             # The Goods' centroid's row (#4643).  The study extras below all
             # vary the trained head's cut, which no Test gives at this click.
@@ -4604,6 +4626,33 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
+        if held and query_scores is not None:
+            # #4736: the typed query's set is what Test gives at this click, so it is the
+            # untagged row; the head's, which the step drew all the same, stay as tagged rows.
+            for row in rows[step_rows_from:]:
+                if not row.get("gmm_variant") and not row.get("schedule"):
+                    row["gmm_variant"] = QUERY_HOLD_HEAD_TAG
+            q_step, q_rows = _query_test(
+                query_scores,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                beta=details.get("beta"),
+                calibration_rows=emit_calibration_metrics and style_obj is not None,
+                line_beta=beta,
+            )
+            q_bands = _band_metrics(
+                q_step,
+                CENTROID_THRESHOLD,
+                unfiltered,
+                band_cohorts if test_bands else None,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                neg_ids=band_neg_ids,
+                target_category=target_category,
+            )
+            rows.append({**base_row, "detector_tier": "query", "app_trained": 0, **q_rows[0], **q_bands, **timing_cols})
         if centroid and line_variants and not query:
             rows.extend(
                 _centroid_line_variant_rows(

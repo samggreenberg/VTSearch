@@ -2000,6 +2000,116 @@ describe('LabelViewComponent', () => {
     });
   });
 
+  /**
+   * #4736: an Autopilot run that opened on a typed query keeps that query's
+   * set on screen while the server marks the learned sort `query_hold`, and
+   * asks its Hard questions from the learned ranking behind it.
+   */
+  describe('the typed query\'s hold (#4736)', () => {
+    const medias = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    const noVotes = { good: [], bad: [], click_times: {}, learned_scores: {}, labelset_good_count: 0, labelset_bad_count: 0 };
+    /** The opening's three Goods and four Bads: Autopilot moves to Hard. */
+    const openingVotes = {
+      good: [1, 2, 3],
+      bad: [4, 5, 6, 7],
+      click_times: {},
+      learned_scores: {},
+      labelset_good_count: 3,
+      labelset_bad_count: 4,
+    };
+    const TEXT_IDS = [9, 10, 8, 1, 2, 3, 4, 5, 6, 7];
+    /** Hard pick 8; with 8 voted, 10. */
+    const textRanking = {
+      results: TEXT_IDS.map((id, i) => ({ id, similarity: 0.9 - i * 0.1 })),
+      threshold: 0.75,
+      sort_token: 'tok-text',
+    };
+    const LEARNED_IDS = [1, 2, 3, 4, 9, 5, 6, 7, 8, 10];
+    /** With 8 voted, Hard pick 9: the cut falls at item 5, and 9 sits just above it. */
+    const learnedRanking = {
+      status: 'done',
+      results: LEARNED_IDS.map((id, i) => ({ id, score: [0.95, 0.9, 0.85, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2][i] })),
+      threshold: 0.7,
+      acq_threshold: 0.65,
+      sort_token: 'tok-learned',
+    };
+
+    /** Enter Train on an unlabelled detector, its seed sort on screen, and label through the opening into Hard. */
+    async function enterHard(seed: 'text' | 'example'): Promise<void> {
+      TestBed.tick();
+      TestBed.tick();
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush(medias));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      await settleResource();
+      TestBed.tick();
+      httpMock.expectOne(seed === 'text' ? '/api/sort' : '/api/example-sort-server').flush(textRanking);
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) => req.flush(noVotes));
+      TestBed.tick();
+      expect(TestBed.inject(AutopilotStateService).state.retrainMode).toBe(false);
+
+      component.voteState.loadVotes();
+      httpMock.match('/api/votes').forEach((req) => req.flush(openingVotes));
+      TestBed.tick();
+      expect(TestBed.inject(AutopilotStateService).state.phase).toBe('hard');
+      TestBed.tick();
+    }
+
+    function landLearnedSort(queryHold: boolean): void {
+      httpMock.expectOne('/api/learned-sort').flush({ ...learnedRanking, query_hold: queryHold });
+      TestBed.tick();
+    }
+
+    it('keeps the typed query\'s set on screen and takes the Hard pick from the learned ranking', async () => {
+      TestBed.inject(LabelSessionService).textQuery = 'the hint';
+      await enterHard('text');
+      expect(component.mediaState.selectedId()).toBe(8);
+
+      landLearnedSort(true);
+      expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(TEXT_IDS);
+      expect(component.sortState.threshold).toBe(0.75);
+      expect(component.sortState.sortMode).toBe('text');
+
+      // The text sort's next pick would be 10.
+      component.onMediaVoted({ id: 8, vote: 'bad' });
+      expect(component.mediaState.selectedId()).toBe(9);
+
+      // The vote re-sorts the learned ranking behind the text sort; the first
+      // one the query no longer holds takes the screen.
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      landLearnedSort(false);
+      expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(LEARNED_IDS);
+      expect(component.sortState.threshold).toBe(0.7);
+      expect(component.sortState.sortMode).toBe('learned');
+    });
+
+    it('puts the held learned ranking on screen when Autopilot stops', async () => {
+      TestBed.inject(LabelSessionService).textQuery = 'the hint';
+      await enterHard('text');
+      landLearnedSort(true);
+      expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(TEXT_IDS);
+
+      component.onAutopilotStop();
+
+      expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(LEARNED_IDS);
+      expect(component.sortState.sortMode).toBe('learned');
+      expect(component.sortState.selectMode).toBe('hard');
+    });
+
+    it('shows the learned ranking as before in a run that opened on an example', async () => {
+      const session = TestBed.inject(LabelSessionService);
+      session.textQuery = '';
+      session.mediaExample = 'example.wav';
+      await enterHard('example');
+
+      landLearnedSort(true);
+
+      expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(LEARNED_IDS);
+      expect(component.sortState.sortMode).toBe('learned');
+    });
+  });
+
   // Issue #3510: a pair switch reloads medias and votes but re-ran no sort, so
   // the pair it landed on kept the empty ranking the reset left behind — an
   // empty work queue and a placeholder in the centre, where a fresh entry to

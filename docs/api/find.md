@@ -91,7 +91,8 @@ POST /api/find
 Each verdict is one of `Good`, `Bad`, `Error`, `N/A`. A detector under the
 label quota is what [find-label](#find-label-score--label-the-active-dataset)
 gives: its typed query's own set (#4758), drawn on each dataset, or the Goods'
-centroid. Errors: **400** (empty id lists, or a detector has neither labels nor
+centroid. On a single-vector space a typed-query detector keeps its query's set
+past the quota until 30 labels (#4736). Errors: **400** (empty id lists, or a detector has neither labels nor
 a typed query), **404** (unknown dataset/detector id),
 **409** (cancelled via `POST /api/find/cancel`), **500** (pickle load failed).
 
@@ -253,7 +254,8 @@ demand, and returns one result column per detector.
 Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
 under the label quota runs as its typed query's own set (`query`, #4758), or
 with no typed query as the Goods' centroid (`centroid`), and its hits are that
-set. A detector with no Good and no typed query is left out of `results`, as
+set. On a single-vector space a typed-query detector runs as its query past the
+quota too, until 30 labels (`query`, #4736). A detector with no Good and no typed query is left out of `results`, as
 one that cannot be scored always was.
 
 Each detector's `balance` is the [line state](labeling.md#the-line-state) of

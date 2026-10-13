@@ -202,6 +202,21 @@ rule: it reads the kind of the sort started last
 (`SortRunnerService.newestSortKind`), not `sortMode`, and gives way only to a
 learned one, so a text seed still in the air cannot hold it off (#4326).
 
+**The typed query's hold** (#4736). A learned ranking is not always the one on
+screen. While an Autopilot run that opened on a typed query has fewer labels
+than the hold, the server marks its learned-sort payload `query_hold`, and
+`SortRunnerService` keeps that ranking behind the text sort (`heldRanking`)
+instead of installing it. Every pick reads `askWindow()`, the held ranking while
+there is one: the Hard pick, New's atlas steer and the weak check's balance
+(`askBalance`). So Autopilot asks what it would with the learned ranking on
+screen, while the user sees the text sort's order, line and count. The first
+payload without the mark takes the screen for good (`queryHandedOver`), and
+stopping Autopilot ends the hold under the Sort `onAutopilotStop` leaves
+selected (`endQueryHold`). Whether a run holds is the view's call
+(`holdsTypedQuery`, label-view's `autopilotHoldsTypedQuery`): a run that opened
+on the typed query's text sort, not an example opening, retrain mode or a
+document dataset's walk.
+
 The three panels are shared with the Test view:
 
 - **Left** — media list (virtual scroller), sort bar, Threshold, stripe
@@ -287,7 +302,8 @@ face detector, #4799) turns the
 control's button `btn--primary` and adds a `.balance-due` note. The label view
 runs the check itself under Autopilot: an effect on the balance and
 `sortBusy` calls `runDueCheck()`, which opens the modal with an `intro` line
-once a learned sort has landed with `checkDue`, never in Autopilot's opening
+once a learned sort has landed with `checkDue` (under the typed query's hold,
+the held ranking's, `SortRunnerService.askBalance`, #4736), never in Autopilot's opening
 (`good`/`bad`/`more`, where no detector is trained) nor over another step;
 closing it advances Autopilot past any item the check voted.
 The modal owns the check's lifecycle against `/api/precision-check` and holds a

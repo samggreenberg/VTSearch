@@ -360,6 +360,10 @@ class LearnedSortResponseSchema(Schema):
     acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
     # What the balance says about ``threshold`` (#4247, #4413), on ``done``.
     balance = fields.Nested(BalanceStateSchema, required=False, allow_none=True)
+    # On ``done``: whether a session opened on a typed query still shows that query's set
+    # rather than this ranking (#4736, ``label_quota.query_holds``).  Autopilot then asks
+    # from this ranking but keeps the text sort on screen.
+    query_hold = fields.Boolean(required=False)
 
 
 class LearnedSortCancelResponseSchema(Schema):

@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **On photos, Autopilot keeps showing a typed description's matches until 30 votes** (issue #4736).
+  From the 8th vote Autopilot asks about the items a trained detector is unsure of, but a detector
+  trained on so few examples finds worse matches than the description does. So in a session started
+  from a typed description, the ranking behind the item stays the description's text ranking until
+  the 30th vote, while Autopilot keeps asking the detector's questions; from the 30th vote the
+  detector's ranking takes over. Test, Find, AutoFind and an export of such a detector give the
+  description's matches until then too. On COCO Better's photos that raised the F-beta of what is on
+  screen by 0.025 / 0.037 / 0.050 over the first 25 votes and 0.004 / 0.006 / 0.009 over 150, at the three balances. Region
+  search (DINOv3) is unchanged: its detector beats the description by about the 10th vote. The
+  learned-sort payload's new `query_hold` says when the description still holds.
 - **Toasty's hints say where you are, and cover the whole path from an empty Dashboard to results**
   (issue #4807). Each hint now opens with the state that raised it and ends with the one step to
   take, in a sentence or two ("You have detectors, but none is selected. Click one to select it, or

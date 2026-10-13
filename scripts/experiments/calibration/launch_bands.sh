@@ -164,6 +164,8 @@ ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
 ENVX="$ENVX CALIB_LINE_COUNTS=${CALIB_LINE_COUNTS:-}"
 # The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
 ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
+# The typed query's hold (#4736): unset is the app's; 0 is the hand-over at the quota, before #4736.
+ENVX="$ENVX CALIB_QUERY_HOLD=${CALIB_QUERY_HOLD:-}"
 # An eval head (CALIB_HEAD): unset is the shipped linear SVM; a set head is declared to preflight (PREFLIGHT_DIVERGES=head).
 ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
 
