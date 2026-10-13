@@ -6341,7 +6341,13 @@ def _land_grid() -> dict:
             else:
                 p_labels[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["single_vector"])
                 kind[g, b] = "trained"
-    return {"kind": kind, "p": p_labels, "held": held}
+    # One shade per Goods row (owner, 2026-10-13): the exact chance wobbles a
+    # few points along a row, with whether 0.3 of G + B is a whole number (at
+    # 10 Goods it is 1.000 with 20 Bads and 0.93 either side), and that speckle
+    # reads as noise. Each row shows the mean of its trained cells' exact chance.
+    trained = kind == "trained"
+    p_row = np.array([p_labels[g, trained[g]].mean() if trained[g].any() else 0.0 for g in range(LAND_G + 1)])
+    return {"kind": kind, "p": p_labels, "p_row": p_row, "held": held}
 
 
 def lay_of_the_land_fig() -> None:
@@ -6350,9 +6356,9 @@ def lay_of_the_land_fig() -> None:
     One cell per pair of counts, on a single-vector space (the Binary path,
     and faces). Below the quota the Goods' average; past it the trained head,
     counting what stands out until its folds hold out six Goods, then the
-    labels line. Where the folds' split rounds either way, the cell blends
-    the two fills by the chance it is the labels line, paler the nearer that
-    is to even (`_land_mix`), and the last page hatches where a typed query
+    labels line. Where the folds' split rounds either way, the row blends
+    the two fills by its mean chance of the labels line, paler the nearer
+    that is to even (`_land_mix`), and the last page hatches where a typed query
     keeps its own set. Binary only: the room
     meets region voting, whose folds split another way, sections later, so
     the slide never names it. Every boundary is computed
@@ -6420,7 +6426,7 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
             if k == "trained":
                 if stage < 2:
                     continue  # the quota arrives on the next page
-                fill = _land_mix(float(grid["p"][g, b])) if stage >= 3 else LAND_FILL["count"]
+                fill = _land_mix(float(grid["p_row"][g])) if stage >= 3 else LAND_FILL["count"]
             else:
                 fill = LAND_FILL[k]
             # Edgeless, each cell edged in its own fill so no seam shows: only
