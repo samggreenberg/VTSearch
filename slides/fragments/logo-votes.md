@@ -8,25 +8,19 @@
 
 <!-- build: figs/logo-votes.build2.webp -->
 
-<!-- Last, what the votes do. The Coke slide said the edge of a concept
-     belongs to whoever asked. This is that, for marks. -->
+<!-- **a** — Last, what the votes do. Remember the Coke logos: where a mark
+     ends is up to whoever's asking. Philip Morris has two crests: the globe
+     one our crop came from, and this one with PM in the middle, on their
+     U.S.A. letters. In our benchmark I counted them as one mark. SIFT can't
+     know that, because it's different ink. Six agree on this letter, under 8,
+     so it's a miss. -->
 
-<!-- **a** — FullMarks' crest class holds two drawings. One is the globe
-     crest the query was cut from; the other is the *PM* monogram crest on
-     Philip Morris U.S.A. letters. The owner ruled them one mark. SIFT cannot
-     know that, because they are different ink. The query gets 6 agreeing
-     keypoints on this U.S.A. letter: under the gate of 8, a miss. -->
+<!-- **b** — So someone votes Good on another U.S.A. letter and draws a box
+     around its crest. The keypoints in that box become a second template, a
+     second picture to look for. -->
 
-<!-- **b** — A user votes Good on another U.S.A. letter and draws a box round
-     its crest. The keypoints inside the box become a second template. -->
-
-<!-- **c** — Every page is now checked against both templates and scores its
-     best, 32 here. One vote taught it the other drawing, and the other
-     U.S.A. letters come with it. -->
-
-<!-- On FullMarks (v5.0, 5,000 pages, the same 10 votes for every rule),
-     scoring by the best template ranks the pages still unlabelled at AP
-     0.87, against 0.74 for the query alone. The app scores exactly this way,
-     and with the tiled Stage 1 its own path scores the same 0.87 in this
-     test (#4378). Bad votes never enter the ranking: they set where its line
-     falls (#4367). -->
+<!-- **c** — Now every page gets checked against both templates and scores its
+     best, 32 here. One vote taught it the other drawing, and the rest of the
+     U.S.A. letters come along with it. Across the benchmark, that's AP 0.87
+     instead of 0.74. Bad votes, though, never touch the ranking. They only
+     decide where the line goes, and that's coming up. -->

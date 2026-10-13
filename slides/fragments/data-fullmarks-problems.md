@@ -9,20 +9,18 @@
 
 <!-- build: figs/fullmarks-problems-mask.webp -->
 
-<!-- Three things these sources do not give you, one per click. -->
+<!-- **a** — But these sources leave out three things. First: which marks are
+     the same? A box is just a box. Here are three tobacco-leaf logos, and two
+     chiefs, one almost a mirror of the other. All five are different marks. A
+     computer can suggest groups, but a person decided every pair. -->
 
-<!-- **a** — A box is a box. No source says which marks are the *same* mark,
-     and the hard cases are exactly the ones that matter: three tobacco-leaf
-     logos, two chief engravings, one a near-mirror of the other. All five
-     are different marks. Hashing proposes groups; a person rules on every
-     pair. -->
+<!-- **b** — Second: masks aren't marks. A stamp's mask comes in pieces, 27 of
+     them here, every letter on its own. Throw out the small pieces first and
+     you've deleted the stamp. Merge them first, then filter, and you get one
+     stamp. -->
 
-<!-- **b** — Masks, not marks. A stamp's mask arrives as pieces — every
-     letter, every broken arc. Filter the small pieces first and you delete
-     the stamp; merge them first, then filter, and you get one mark. -->
-
-<!-- **c** — The haystack holds needles. Tobacco800 and UCSF's tobacco pages
-     come from the same archive, so the Lorillard letterhead that is a
-     Tobacco800 positive is also sitting, unboxed, on UCSF pages. Score those
-     as negatives and a correct find counts as a miss. So an archive never
-     scores against itself. -->
+<!-- **c** — Third: the haystack has needles in it. Tobacco800 and UCSF come
+     from the same archive, so this Lorillard letterhead is a positive in
+     Tobacco800, and it's also sitting, unboxed, on UCSF pages. Count those as
+     negatives and a correct find scores as a miss. So we never score an
+     archive against itself. -->

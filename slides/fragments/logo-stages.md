@@ -8,25 +8,18 @@
 
 <!-- build: figs/logo-stages.build2.webp -->
 
-<!-- Checking is not free. Matching plus RANSAC costs about a tenth of a
-     CPU-second a page. At 50,000 pages that is 100 seconds a query on 40
-     cores, and a user voting in a loop needs an answer every click. -->
+<!-- **a** — But checking is slow: about a tenth of a second of computer time
+     per page. At fifty thousand pages, that's way too slow for someone who
+     wants an answer after every vote. So we don't check the whole pile.
+     Instead, every page gets boiled down to one vector, the same kind of thing
+     SigLIP makes, so the rest of the app works on it unchanged. -->
 
-<!-- **a** — So the pile is not checked. Each page gets one fixed-length
-     vector instead, the same kind of object SigLIP makes, so everything the
-     app does with vectors (the SVM, the atlas, sorting) works on it
-     unchanged. The vector is VLAD. A fixed vocabulary of 64 "visual words",
-     typical keypoints found once by clustering a million of them, files each
-     keypoint under its nearest word. The vector records, word by word, how
-     the page's keypoints differ from it: 64 × 128 = 8,192 numbers. -->
+<!-- **b** — Stage 1 compares the crop's vector with every page's, all at once,
+     which is fast, and keeps a shortlist off the top. On documents it actually
+     compares pieces of pages; more on that in a second. -->
 
-<!-- **b** — Stage 1 compares the query's vector with every page's, all in
-     one matrix multiply, and keeps the top few. (On documents it compares
-     tiles, not whole pages — next slide.) -->
-
-<!-- **c** — Stage 2 checks only those, the slow way, and ranks them by how
-     many agree. These four are the real top of Tobacco800's 1,290 pages for
-     this crop, after the query's own page. The app keeps the top 2,000 on
-     documents (1,000 without a GPU), and 50 on photos. A page
-     Stage 1 does not shortlist is never checked, so Stage 1 is the
-     ceiling. -->
+<!-- **c** — Stage 2 does the slow check from before, only on the shortlist,
+     and ranks those pages by how many matches agree. These four are the real
+     top for this crop, out of about thirteen hundred letters. The app
+     shortlists two thousand pages, and a page that misses the shortlist never
+     gets checked, so Stage 1 is the ceiling. -->

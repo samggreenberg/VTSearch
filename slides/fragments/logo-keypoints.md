@@ -8,28 +8,21 @@
 
 <!-- build: figs/logo-keypoints.build2.webp -->
 
-<!-- How we find one, before the data built to test it. These slides are
-     what SIFT does, and what it took to make it work on a pile of scanned
-     pages. The running example is a Philip Morris crest from a real letter;
-     the benchmark it belongs to, FullMarks, follows these slides. -->
+<!-- **a** — So how do we find a logo on a scanned page? Our running example is
+     this Philip Morris crest, cut from a real letter. Why not SigLIP, like
+     before? It sums up what a whole picture means, and every tobacco
+     letterhead means about the same thing. We don't want a crest, we want this
+     crest. That's a question about ink, not meaning. So all we start with is
+     one crop of it. -->
 
-<!-- Why not SigLIP, which has done everything so far? It turns a whole
-     picture into one point that says what the picture *means*, and every
-     tobacco letterhead means much the same thing. The question here is not
-     "a crest" but *this* crest. That is a question about ink, not meaning. -->
+<!-- **b** — For that there's a classic method called SIFT. It finds the spots
+     where the ink does something distinctive, like a corner or a blob, at
+     whatever size. Each circle is one of these keypoints: a place, a size, and
+     a tick for its direction. This crop has 1,090. Print the crest smaller or
+     turn it, and you get the same keypoints, just smaller and turned. -->
 
-<!-- **a** — The query: one crop of the mark. It is all the user starts
-     with. -->
-
-<!-- **b** — SIFT finds the spots where the ink does something distinctive,
-     such as a corner or a blob, at whatever size it occurs. Each circle is
-     one: a place, a size, and a tick for its direction. This crop has
-     1,090. Each keypoint carries its own size and direction, so a copy
-     printed smaller or turned yields the same keypoints, smaller and
-     turned. -->
-
-<!-- **c** — What each keypoint says about itself. Take the square round it,
-     turn it to the keypoint's direction, cut it 4 × 4, and in each cell
-     count which way the edges run, in 8 directions. That is 128 numbers. It
-     is measured in the keypoint's own frame, which is why two copies of the
-     crest share it through a rescan, a resize or a crooked page. -->
+<!-- **c** — Then each keypoint describes itself. Take the square around it,
+     turn it to match its direction, cut it four by four, and in each cell
+     count which way the edges run, in eight directions. That's 128 numbers.
+     Since it's measured in the keypoint's own frame, two copies of the crest
+     still match after a rescan, a resize or a crooked page. -->
