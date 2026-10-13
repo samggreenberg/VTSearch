@@ -375,6 +375,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private centreProvisional = false;
 
   constructor() {
+    // #4736: the runner asks the view whether this run holds its typed query.
+    this.sortRunner.holdsTypedQuery = () => this.autopilotHoldsTypedQuery;
+
     // Warm the next review image while the reviewer is looking at this one
     // (#3896). The fetch used to be issued only once the vote POST had come
     // back, so its ~300 ms client gap, its transfer and its decode were all
@@ -392,8 +395,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // image: the store hands bytes back only for the URL they were fetched from.
     // #4496: Autopilot checks when the server says one is due. The balance
     // lands with each learned sort, and the check waits for the sort to settle.
+    // Under the typed query's hold it is the held learned ranking's (#4736):
+    // the hold changes what is shown, not what Autopilot asks.
     effect(() => {
-      const due = this.sortState.balance?.checkDue ?? false;
+      const due = this.sortRunner.askBalance?.checkDue ?? false;
       if (!due || this.sortState.sortBusy) return;
       untracked(() => this.runDueCheck());
     });
@@ -619,6 +624,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
+        // Stopped: the hold ends, and the screen follows the Sort
+        // `onAutopilotStop` has just set (#4736).
+        if (curr.phase === 'idle') this.sortRunner.endQueryHold();
         // 'more' (#4282) resumes the Good phase's draw: the top of the seed sort
         // the Bad phase left on screen. On a document dataset it walks the
         // detector's own ranking instead, which is where its dry run was measured
@@ -639,7 +647,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         else if (curr.phase === 'hard') {
           this.sortState.setSelectMode('hard');
-          this.sortState.setSortMode('learned');
+          // Back from New under the typed query's hold, the text sort is still
+          // on screen; the learned sort's result decides the mode (#4736).
+          if (!this.sortRunner.queryHeld) this.sortState.setSortMode('learned');
           this.sortRunner.onLearnedSort(false);
         }
         else if (curr.phase === 'new') this.sortState.setSelectMode('new');
@@ -1326,7 +1336,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // No-op when no detector is being trained (refresh() bails on a null model).
     this.labelsetState.refresh();
     this.sortRunner.autoSelectNext(event.id);
-    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
+    // A learned ranking held behind the typed query's set re-sorts on every
+    // vote too, as Autopilot asks from it (#4736).
+    if ((this.sortState.sortMode === 'learned' || this.sortRunner.queryHeld) && this.voteState.learnedSortAvailable) {
       this.sortRunner.scheduleLearnedSort(false);
     }
     this.checkResortPrompt(event);
@@ -1465,6 +1477,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private get autopilotSeedWanted(): boolean {
     const { phase, retrainMode, dryRunStop } = this.autopilotStateService.state;
     return !retrainMode && (phase === 'good' || phase === 'bad' || (phase === 'more' && !dryRunStop));
+  }
+
+  /**
+   * Whether this Autopilot run keeps its typed query's set on screen while
+   * the learned sort says the query still holds (#4736): a run that opened on
+   * the typed query's text sort. The server's mark is the labels' count and
+   * the space only, so the run has to be one whose screen is that query's: not
+   * an example opening (or one the re-sort prompt moved to an example), not
+   * retrain mode, which never shows a seed sort, and not a document dataset's
+   * walk, which shows the learned sort from its opening (#4488). Autopilot off,
+   * every learned sort is the user's and goes on screen.
+   */
+  private get autopilotHoldsTypedQuery(): boolean {
+    const { retrainMode, dryRunStop } = this.autopilotStateService.state;
+    return this.autopilotStateService.running && !retrainMode && !dryRunStop && !!this.labelSession.textQuery;
   }
 
   private triggerAutopilotTextSort(autoSelect = true): void {
