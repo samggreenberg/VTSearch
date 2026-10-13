@@ -74,7 +74,7 @@ back to a trained detector raises none of them.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `start-voting` | happy | Autopilot picked this item for you. Click **Good** (→) if it's what you're looking for, or **Bad** (←) if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
+| `start-voting` | happy | Autopilot picked this item for you. Click **Good**, or press the right arrow key, if it's what you're looking for; click **Bad**, or press the left arrow key, if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
 | `find-goods` | happy | Autopilot needs {M Goods} to start training; you've found {N}. Keep voting. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
 | `find-bads` | happy | Your Goods are in. Autopilot needs {M Bads} too, and has {N}. Keep voting. | As `find-goods`, in **Find Initial Bads**. |
 | `find-more` | happy | Autopilot has its first Goods and Bads, and is walking the sort for more Goods. Keep voting. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |

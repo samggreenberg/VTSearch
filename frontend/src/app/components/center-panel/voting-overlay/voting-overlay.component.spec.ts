@@ -88,6 +88,14 @@ describe('VotingOverlayComponent', () => {
     expect(hint.textContent).toContain('Autopilot picked this item for you');
   });
 
+  it('names the arrow keys in the start-voting hint, not just their glyphs (#4825)', async () => {
+    fixture.componentRef.setInput('hint', 'start-voting');
+    await settleZoneless(fixture);
+    const text = (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Good, or press the right arrow key');
+    expect(text).toContain('Bad, or press the left arrow key');
+  });
+
   it("says what each Autopilot phase is after, with its counts, and what a test's pick is (#4807)", async () => {
     const text = () => (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
     fixture.componentRef.setInput('hint', 'find-goods');
