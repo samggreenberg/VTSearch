@@ -162,6 +162,8 @@ ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VAR
 ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
 # The line counts (#4786): a side frame of what each candidate line keeps; the session is unchanged.
 ENVX="$ENVX CALIB_LINE_COUNTS=${CALIB_LINE_COUNTS:-}"
+# The set overlap (#4816): a side frame of how the head's set and the typed query's split the pool; the session is unchanged.
+ENVX="$ENVX CALIB_SET_OVERLAP=${CALIB_SET_OVERLAP:-}"
 # The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
 ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
 # The typed query's hold (#4736): unset is the app's; 0 is the hand-over at the quota, before #4736.
