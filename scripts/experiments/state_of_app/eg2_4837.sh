@@ -64,7 +64,8 @@ JSON
   ;;
 launch)
   setup "${2:?beta (0.25, 1 or 4)}"
-  exec bash "$HERE/launch.sh" redo "${3:-$(all_idx)}"
+  # A range, not the list: sbatch refuses a 1,440-index --array list as too long.
+  exec bash "$HERE/launch.sh" redo "${3:-0-$((288 * SEEDS - 1))}"
   ;;
 pack)
   setup "${2:?beta (0.25, 1 or 4)}"
