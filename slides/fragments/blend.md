@@ -10,29 +10,21 @@
 
 <!-- build: figs/calib-blend-flow.build3.png -->
 
-<!-- Appendix: a line rule that no longer draws the line. The left half is
-     the cross-calibration slide, the right half is the mixture slide, and
-     the top row is the spine they share. Nothing here is new machinery; only
-     the last line is new. -->
+<!-- **a** — This is a line rule we don't use anymore. Up top is the part
+     everything shares: the unlabeled pile, the votes we pulled out of it, and
+     M₀, the model trained on those votes. -->
 
-<!-- **a** — The spine: the corpus, the votes drawn out of it, the model trained
-     on them. The room has seen it twice. -->
+<!-- **b** — On the right, the mixture rule from Oops! All Haystack: M₀ scores
+     the whole pile, we fit two bumps, and cut halfway between them. That cut
+     never reads a vote, so it can't run short of them. -->
 
-<!-- **b** — The mixture branch, whole: M₀ scores the corpus, the fit goes on,
-     the midpoint is cut. *Remember how we made θ_G* — the estimator that reads
-     no labels and so cannot starve. -->
+<!-- **c** — On the left, cross-calibration from Grade My Own Homework: split
+     the votes, train a model on each half, let each one score the half it
+     didn't see, cut each, and average. It reads nothing but votes, so early on
+     it's starving. -->
 
-<!-- **c** — The fold branch, whole: split the votes, a model per half, each
-     scores the half it never saw, cut each, average. *Remember how we made
-     θ_X* — reads nothing but labels, and so starves early. -->
-
-<!-- **d** — The move, which is embarrassingly simple. Do not choose. Average
-     them. That shipped as "safe thresholds". Scored in F-beta over the
-     session it beat the midpoint alone, by 0.010, 0.014 and 0.036 at β ¼, 1
-     and 4, and stayed 0.25 to 0.35 under cross-calibration alone (#4582): an average
-     with a cut that keeps far too much still keeps too much. -->
-
-<!-- Say what the figure does not: the average is **weighted**. How the
-     weight moves as votes accumulate is Weight and See, further on, for
-     whoever asks. The first version was one hard-coded line with three
-     unmeasured choices baked into it. -->
+<!-- **d** — And the move is embarrassingly simple: don't choose, average them.
+     It's a weighted average, and how that weight moves is Weight and See,
+     later in the appendix. It beat the midpoint on its own, but only by a
+     hair, and it stayed far below cross-calibration alone. Averaging in a cut
+     that keeps way too much still keeps too much. -->

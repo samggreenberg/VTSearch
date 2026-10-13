@@ -14,28 +14,30 @@
 
 <!-- build: figs/calib-walk-flow.build5.png -->
 
-<!-- **a** — Same panel and same seven votes; only the middle row changed. The
-     fix is a change of kind: stop searching cut points, start reading
-     **quantiles**, which move whenever scores have spread. -->
+<!-- **a** — Same seven votes. The fix is a different kind of rule: stop
+     hunting for the cheapest cut and start reading quantiles, points a set
+     fraction of the way through the votes. Those move whenever the scores have
+     any spread at all. -->
 
-<!-- **b** — The false-positive guard: the cut stays at or above a quantile of
-     the held-out negatives — three quarters of them at inclusion zero, and
-     deliberately not their maximum. -->
+<!-- **b** — First, a guard against false alarms: the cut never drops below
+     three quarters of the Bads. Three quarters, on purpose, not the highest
+     one. -->
 
-<!-- **c** — Between that guard and the lowest check is the band the calibration
-     data cannot resolve: the last slide's flat cost floor. Its top edge is one
-     held-out vote; the midpoint is max-margin. -->
+<!-- **c** — Between that guard and the lowest Good is the stretch the votes
+     can't tell apart, the flat bottom from the last slide. At zero and up, the
+     cut starts right in the middle of it, as far from both sides as it can
+     get. -->
 
-<!-- **d** — The knob. Below inclusion zero the cut walks up from that midpoint
-     toward the positives' 75th percentile at minus ten — "just the surest
-     matches". Every stop is its own quantile, so every stop is its own cut. -->
+<!-- **d** — Turn the slider down and the cut walks up from there, toward the
+     top quarter of the Goods at minus ten: just the surest matches. Every stop
+     is its own quantile, so every stop is its own cut. -->
 
-<!-- **e** — Above inclusion zero the cut never exceeds an α-quantile of the
-     positives, α halving per step: *the fraction of true matches I am willing
-     to miss*. A cap, not a target. -->
+<!-- **e** — Turn it up and there's a cap instead: the cut can't sit so high
+     that it misses more than a set fraction of the Goods, and that fraction
+     halves every step. It's the share of true matches I'm willing to miss. A
+     cap, not a target. -->
 
-<!-- **f** — And what the user saw: three settings, three different sets, where
-     the retired rule returned one answer for the whole slider. -->
-
-<!-- Measured: no flat sweeps at all, ten distinct admitted sizes across eleven
-     stops rather than two, no monotonicity violations. -->
+<!-- **f** — And here's what the user saw: three settings, three different
+     sets, 21, 17 and 7 percent of the pile, each one inside the looser one.
+     Measured, the slider never went flat on real data, and it gave about ten
+     different answers across eleven stops where the old rule gave two. -->

@@ -14,28 +14,29 @@
 
 <!-- build: figs/calib-tilt-flow.build5.png -->
 
-<!-- Where the two halves collide: the fused fit cuts at a midpoint, and a
-     midpoint never reads a cost weight. The slider went inert again. -->
+<!-- **a** — Then the two halves of this story collided. Above Average's
+     combined fit cuts each half at the midpoint between its bumps, and carries
+     that over to M₀ as a share of the pile. But a midpoint never looks at the
+     slider. -->
 
-<!-- **a** — Above Average's conclusion: a fold's anchored mixture cut at the
-     midpoint, and M₀'s distribution where the quantile is realised. -->
+<!-- **b** — So the slider went dead again, and this time we measured it:
+     thirteen stops, one answer, in every one of 65,671 measured steps. And
+     away from zero, it was up to 0.18 worse than the best cut for that
+     setting. -->
 
-<!-- **b** — The failure, and it is a measurement: the bare midpoint admits one
-     set for the whole slider — thirteen stops, one answer, in 65 671 of 65 671
-     cell-steps — and costs 0.18 of regret. -->
+<!-- **c** — But one thing in the fit does listen to the slider: the crossover
+     point between the two bumps, once misses and false alarms are priced. That
+     moves as the price of a miss changes, and that's the dashed fan. -->
 
-<!-- **c** — But something in the fit *does* read the weights: the rate-optimal
-     crossing between the components moves as the price of a miss changes. That
-     is the dashed fan. -->
+<!-- **d** — So the rule: keep the midpoint, and shift it by however far that
+     crossover moves from where it sits at zero, all measured as a share of the
+     pile. At zero the shift is nothing, so the default is exactly the cut we'd
+     already measured. -->
 
-<!-- **d** — The rule, in one line: in fold-quantile space, take the midpoint's
-     own quantile and shift it by however far the rate rule's quantile moves
-     from its inclusion-zero position. **e** — Realise it as before, one notch
-     becoming a comb. **f** — And free: the fold fits do not depend on
-     inclusion, so re-cutting is arithmetic on fitted Gaussians. -->
+<!-- **e** — Carry it over to M₀ the same way as before: each stop is a share,
+     and each share is a cut. One notch becomes a comb. -->
 
-<!-- At inclusion zero the shift is identically zero, so the threshold is
-     bit-for-bit the arm the calibration runs measured. -->
-
-<!-- Close on the pre-registered sweep: 336 cells, four environments, thirteen
-     stops — one that could have replaced this rule and did not. -->
+<!-- **f** — And it's free. The fits don't depend on the slider, so moving it
+     is just arithmetic, no retraining. We planned a sweep in advance to try to
+     beat it, 336 cells across four test setups at thirteen stops each, and
+     nothing did. Then the balance replaced the slider altogether. -->

@@ -18,41 +18,33 @@
 
 <!-- build: figs/calib-fold-anchored-flow.build7.png -->
 
-<!-- Appendix. The blend averaged two answers; this fuses the evidence
-     first. -->
+<!-- **a** — The blend averaged two answers. This one combines the evidence
+     before it answers. Quick recap: the unlabeled pile, the votes, M₀. -->
 
-<!-- **a**, **b** — A recap, so move fast: corpus, votes, model, split,
-     folds. -->
+<!-- **b** — Split the votes, and train a model on each half. -->
 
-<!-- **c** — Where the two lines meet. Each fold model scores the whole corpus,
-     and that is the panel underneath: bare bars with nothing over them. The
-     shape of the data, and all anyone has. -->
+<!-- **c** — Here's where the two ideas meet. Each half's model scores the
+     whole unlabeled pile, and that's these two histograms: bare bars, no
+     labels, just the shape of the data. -->
 
-<!-- **d** — Fit it, and there is Oops! All Haystack again: one low component,
-     one high. But every question mark asks the same thing — *which is the Good
-     one?* — and the fit cannot answer, having read no labels. -->
+<!-- **d** — Fit two bumps to each, like Oops! All Haystack. But every question
+     mark is asking the same thing: which bump is the Goods? The fit can't say,
+     because it never read a vote. -->
 
-<!-- **e** — Now the other evidence: the held-out votes, on each fold's own
-     baseline as in Grade My Own Homework. The crossed strokes say where they
-     came from: fold 1 is read by the votes fold 1 never trained on. Nothing
-     is decided yet. -->
+<!-- **e** — Now bring in the held-out votes, each one scored by the model that
+     didn't train on it, along that model's own axis. Nothing's decided yet. -->
 
-<!-- **f** — Read the two together, and the question marks give way to
-     hatching. The shape did not change; the components are now *identified*.
-     That is the line this slide turns on — labels identify the components,
-     they do not estimate them, and identification is the cheap question. -->
+<!-- **f** — Read the two together and the question marks turn into Good and
+     Bad. The bumps didn't change shape; the votes just told us which is which.
+     That was the idea: votes name the bumps, they don't shape them, and naming
+     is the cheap question. -->
 
-<!-- If asked about the code: one estimator, `fit_anchored_score_gmm`, one
-     EM over the corpus and the votes, each vote weighted κ times. At the
-     shipped κ the votes barely move the shape and settle the identity, which
-     is why e and f split it. The next slide draws it. -->
+<!-- **g** — Each half cuts at the midpoint between its own two bumps, θ₁ and
+     θ₂. -->
 
-<!-- **g** — Each fold cuts at the midpoint of its own two means. **h** —
-     Undercut the last line in the same breath: averaging θ₁ and θ₂ is drawn
-     plainly and production did not do it, because two fold models score on
-     scales that need not agree. -->
-
-<!-- Measured in F-beta: 0.031, 0.042 and 0.076 over the blend at β ¼, 1
-     and 4, and 0.21 to 0.33 under cross-calibration (#4582). Today's line
-     reverses this slide's claim: the labels estimate the Good component, and
-     the corpus fits only its share and the rest. -->
+<!-- **h** — And then average them. That's how it's drawn, but it isn't quite
+     what we shipped, because two models don't have to score on the same scale;
+     that's No Mean Feat, two slides on. This beat the blend by a few
+     hundredths of F-beta and still fell well short of cross-calibration.
+     Today's line does it the other way round: the votes shape the Good bump,
+     and the pile only says how big it is. -->

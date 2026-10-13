@@ -10,24 +10,21 @@
 
 <!-- build: figs/calib-em-anchored.build3.png -->
 
-<!-- Appendix, with Above Average: how its fused fit reads the votes. The
-     same four pictures as Great Expectations with one difference, and that
-     difference is the whole fusion: the only new ink is the row of checks
-     and crosses on each baseline. -->
+<!-- **a** — Here's how that combined fit actually uses the votes. It's the
+     same EM picture as Great Expectations with one difference: the checks and
+     crosses along the bottom. Same terrible starting guess, but now a few of
+     those scores aren't anonymous. Somebody voted on them. -->
 
-<!-- **a** — Same terrible guess. What is new is that a handful of the scores
-     under it are not anonymous any more: somebody voted on them. -->
+<!-- **b** — The E step: each curve claims its share of every score. An unvoted
+     score gets split between them like before, but a voted one belongs
+     entirely to its own side, wherever the curves are. A vote doesn't tell us
+     anything about the shape; it tells us which side that item's on. -->
 
-<!-- **b** — And the E step is where that lands. Every unlabeled score is
-     claimed in shares as before; a **voted** score is claimed entirely by its
-     own side, and the curves get no say. A vote is not evidence about the
-     shape — it says which component that item belongs to. -->
+<!-- **c** — The M step refits each curve, with every vote counted kappa times
+     over. That's the only knob in the whole thing: how loud a handful of votes
+     gets to be against thousands of unlabeled scores. At the setting we
+     shipped, the votes held about two and a half percent of the fit. -->
 
-<!-- **c** — The M step is unchanged except that each vote counts κ times over.
-     That is the only knob in the whole fusion, and it decides how loudly a few
-     dozen votes speak against fifty thousand unlabeled ones. At the shipped κ
-     they hold about two and a half percent of the fit. -->
-
-<!-- **d** — Repeat, and it converges the same way. Two percent is nothing for
-     the *shape*, and that is the point: the votes are there to say which mound
-     is which. -->
+<!-- **d** — Repeat until it settles, same as before. Two and a half percent is
+     nothing for the shape, and that's the point: the votes are only there to
+     say which bump is which. -->
