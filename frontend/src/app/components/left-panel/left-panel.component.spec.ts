@@ -432,20 +432,10 @@ describe('LeftPanelComponent', () => {
       }
     });
 
-    it.each(BALANCE_STATES)('offers the check in Train and never in Find (#4317) when %s', (status) => {
-      const emitted = vi.spyOn(component.check, 'emit');
-      // Find tests the threshold Train set: labelling more to set one is too late there.
-      expect(show('find', lineBalance(status)).querySelector('.balance-check-btn')).toBeNull();
-      const btn = show('label', lineBalance(status)).querySelector('.balance-check-btn') as HTMLButtonElement;
-      expect(btn.textContent!.trim()).toBe('Check 5 picks');
-      btn.click();
-      expect(emitted).toHaveBeenCalledOnce();
-    });
-
-    it('holds the check while a sort is running', () => {
-      fixture.componentRef.setInput('sortBusy', true);
-      const btn = show('label', lineBalance('unchecked')).querySelector('.balance-check-btn') as HTMLButtonElement;
-      expect(btn.disabled).toBe(true);
+    it.each(BALANCE_STATES)('offers no check of its own in Train or Find when %s: only Autopilot runs one', (status) => {
+      for (const mode of ['find', 'label'] as const) {
+        expect(show(mode, lineBalance(status)).querySelector('.balance-check-btn, .balance-state button')).toBeNull();
+      }
     });
   });
 

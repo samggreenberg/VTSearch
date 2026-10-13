@@ -142,7 +142,7 @@ canonical persisted form.
 | `precision_floor_cache` | `None` | Retired (#4362): always `None`. It held the #4220 estimate a retrain parked for the Find Stats curve, which went in #4360 |
 | `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the balance's state counts the unvoted items of it the line keeps, and the spot check draws its bands from it |
 | `precision_check` / `precision_check_run` | `SpotCheck \| None` | The balance's last finished spot check (kept across retrains; its ranges go `stale`) and the one running now |
-| `check_ended_votes` | `int \| None` | The vote total when the last spot check ended, finished or closed: the weak-separation prompt's cooldown counts from it (`weak_check_due`, #4496) |
+| `check_ended_votes` | `int \| None` | The vote total when the last spot check ended, finished or closed: the weak-separation prompt's cooldown counts from it (`weak_check_due`, #4496), and so does whether Autopilot's check before Done runs (`done_check_due`) |
 
 Everything in this table is in-memory only. `model`,
 `label_embeddings`, `label_local_features`

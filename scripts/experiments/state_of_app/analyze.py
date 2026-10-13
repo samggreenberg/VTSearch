@@ -61,10 +61,11 @@ returns while staying at or above P).  A run's sessions aim at one floor
 read off the same sessions, which is exact only while a session ignores P, so
 a review runs one set of sessions per P and reads each at its own.
 
-**The spot check is not a click.**  The default arm checks the line once the
-voting steps are spent (``spot_check="end"``): its rounds are cast as votes and
-emit ``phase == "check"`` rows past ``max_steps``.  They are read for the
-check's own columns only.  "Final" is the last *ordinary* step, the curves stop
+**The end-of-run spot check is not a click.**  The default arm checks the line
+once the voting steps are spent (``spot_check="end"``): its rounds are cast as
+votes and emit ``phase == "check"`` rows past ``max_steps``.  They are read for
+the check's own columns only.  The checks Autopilot runs inside the session (for
+weak separation, and once before Done) are clicks, ``phase == "prompt"``.  "Final" is the last *ordinary* step, the curves stop
 there, and no check pick is credited as a click.  The check's truth is the
 share right of the set its range describes: the top ``check_k`` of the pool's
 unvoted ranking at the last ordinary step (the ``last`` rank frame), which is
@@ -109,14 +110,36 @@ noise. It becomes a statement about an image only in aggregate, over the runs
 and detectors that clicked it; ``images.csv`` carries ``n_obs`` so a reader can
 see how much aggregate there is.
 
-**Is an image's effect its own?** Early positives hurt on average (the first
-detector is worse than the text sort) and some classes are harder than others,
-so a raw per-image mean mostly says *when* and *where* the image was clicked.
-``resid`` removes both: the click's credit minus the mean credit of every click
-with the same run cell, label and phase. ``resid_z`` is that residual's mean
-over the image's clicks in standard errors; ``summary.md`` compares the count
-with |z| > ``Z_FLAG`` to the same count after shuffling images within each
-(cell, label, phase) bucket, which is what chance gives.
+**Only what a click taught the trained head is an image's (owner, 2026-10-13,
+#4658).** ``influence.csv`` keeps every click with the tier of the step that
+credits it and of the step before (``tier``, ``prev_tier``; ``text`` before the
+first scored step, ``trained`` for a row recorded before ``detector_tier``).
+The per-image tables read only the clicks where both are the trained head
+(``head_credit``). Elsewhere the credit says nothing about the image:
+
+* a Bad cannot move the Goods' centroid or the typed query's set, so every Bad
+  under the label quota (or the query hold, #4736) is credited exactly 0;
+* a step where the tier changes - the text sort to the first Good's centroid,
+  the centroid or the query to the head - charges the jump between two kinds of
+  sort to whichever click triggered it, the same image in most seeds.
+
+On the 2026-10-08 Binary review these made the image 454654 "harmful" at z = -45
+on 23 credits of exactly 0, and the first Good of three classes worth -0.3 to
+-0.6 AP a click.
+
+**Is an image's effect its own?** Some classes are harder than others and the
+credit shrinks over a session, so a raw per-image mean mostly says *when* and
+*where* the image was clicked. ``resid`` removes both: the click's credit minus
+the mean credit of every click with the same run cell, label and phase.
+``resid_z`` is that residual's mean over the image's clicks in standard errors.
+The credit is right-skewed (a few clicks move AP a lot, most barely move it), so
+a typical click sits below its bucket's mean, and a Bad the head ignores is
+credited about 0 every time, a steady bucket-mean below its peers. So an image
+is flagged (``flag``) only when |z| > ``Z_FLAG`` AND its raw credit is past
+``Z_FLAG`` the same way (``raw_z``): harmful when the AP fell past chance,
+helpful when it rose. ``summary.md`` compares the flagged counts with the same
+counts after shuffling images within each (cell, label, phase) bucket, which is
+what chance gives.
 
     python analyze.py --exp /expscratch/$USER/state-of-the-app/<date> \\
         --baseline <exp>/text_baseline.csv --out <exp>/analysis
@@ -177,6 +200,8 @@ RUN_KEY = ["dataset", "category", "embedder", "style", "seed"]
 #: The per-image test: an image needs this many clicks, and flags past this |z|.
 MIN_OBS_Z, Z_FLAG = 10, 3.0
 _BUCKET = ["arm", "category", "label", "when"]
+#: The ``detector_tier`` an image's credit is read on (#4658), and the tier before the first scored step.
+HEAD_TIER, TEXT_TIER = "trained", "text"
 #: The ceiling's arm, and the kind its rank frame carries.
 CEILING = "skyline_train_full"
 #: The line's metrics, as ``_rank_metrics.line_metrics`` names them.
@@ -1111,9 +1136,16 @@ def attribute(base: pd.DataFrame, picks: pd.DataFrame, ts: dict) -> pd.DataFrame
 
     The spot check's rows and picks are left out: the check is not a click, and
     its retrains would otherwise hand its picks the credit for moving the line.
+    Each click carries the tier of the step that credits it and of the one
+    before, and ``head_credit`` when both are the trained head (#4658).
     """
     ordinary = base[~_is_check(base)]
-    series = ordinary.groupby(RUN_KEY + ["t"], as_index=False)["average_precision"].mean().sort_values(RUN_KEY + ["t"])
+    ordinary = ordinary.assign(tier=_tier_of(ordinary))
+    series = (
+        ordinary.groupby(RUN_KEY + ["t"], as_index=False)
+        .agg(average_precision=("average_precision", "mean"), tier=("tier", "first"))
+        .sort_values(RUN_KEY + ["t"])
+    )
     out = []
     pk = picks[~_is_check(picks)] if not picks.empty else picks
     pk = pk.sort_values(RUN_KEY + ["t"]) if not pk.empty else pk
@@ -1124,9 +1156,9 @@ def attribute(base: pd.DataFrame, picks: pd.DataFrame, ts: dict) -> pd.DataFrame
             continue
         ds, cat, emb, style, seed = key
         start = _text_for(ts, ds, cat, emb, int(seed))["text_ap"]
-        prev_t, prev = 0, (start if np.isfinite(start) else None)
+        prev_t, prev, prev_tier = 0, (start if np.isfinite(start) else None), TEXT_TIER
         ct = clicks["t"].to_numpy()
-        for t, ap in s[["t", "average_precision"]].itertuples(index=False):
+        for t, ap, tier in s[["t", "average_precision", "tier"]].itertuples(index=False):
             grp = clicks[(ct > prev_t) & (ct <= t)]
             if prev is not None and len(grp):
                 d_ap = (ap - prev) / len(grp)
@@ -1144,9 +1176,11 @@ def attribute(base: pd.DataFrame, picks: pd.DataFrame, ts: dict) -> pd.DataFrame
                             "phase": getattr(r, "phase", ""),
                             "shared_with": len(grp),
                             "d_ap": d_ap,
+                            "prev_tier": prev_tier,
+                            "tier": tier,
                         }
                     )
-            prev_t, prev = int(t), ap
+            prev_t, prev, prev_tier = int(t), ap, tier
     inf = pd.DataFrame(out)
     if not inf.empty:
         inf["arm"] = [ARMS.get((e, s), f"{e}/{s}") for e, s in zip(inf["embedder"], inf["style"], strict=True)]
@@ -1154,7 +1188,21 @@ def attribute(base: pd.DataFrame, picks: pd.DataFrame, ts: dict) -> pd.DataFrame
         inf["band"] = inf["category"].str.split("@").str[1]
         # Positive = helped: a click that RAISED held-out AP.
         inf["help_ap"] = inf["d_ap"]
+        inf["head_credit"] = ((inf["tier"] == HEAD_TIER) & (inf["prev_tier"] == HEAD_TIER)).astype(int)
     return inf
+
+
+def _tier_of(rows: pd.DataFrame) -> pd.Series:
+    """Each row's ``detector_tier``; ``trained`` where the harness recorded none (before #4643 every row was the head)."""
+    if "detector_tier" not in rows.columns:
+        return pd.Series(HEAD_TIER, index=rows.index)
+    tier = rows["detector_tier"].astype("string").str.strip()
+    return tier.mask(tier.isna() | (tier == ""), HEAD_TIER).astype(str)
+
+
+def _head_clicks(inf: pd.DataFrame) -> pd.DataFrame:
+    """The clicks an image is judged on (#4658): both sides of the credited step score the trained head."""
+    return inf[inf["head_credit"] == 1] if "head_credit" in inf.columns else inf
 
 
 def _with_resid(inf: pd.DataFrame) -> pd.DataFrame:
@@ -1164,6 +1212,7 @@ def _with_resid(inf: pd.DataFrame) -> pd.DataFrame:
 
 
 def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    inf = _head_clicks(inf)
     if inf.empty:
         return inf, inf
     inf = _with_resid(inf)
@@ -1190,25 +1239,54 @@ def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return img, det.reset_index()
 
 
+def _z(mean: pd.Series, std: pd.Series, size: pd.Series) -> pd.Series:
+    """A mean in standard errors; NaN under ``MIN_OBS_Z`` observations or with no spread."""
+    return (mean / (std / np.sqrt(size))).where((size >= MIN_OBS_Z) & (std > 0))
+
+
+def _flag(z: pd.Series, raw_z: pd.Series) -> pd.Series:
+    """+1 helpful, -1 harmful, 0 neither (#4658).
+
+    Past ``Z_FLAG`` net of the bucket (*z*) AND past it on the raw credit (*raw_z*), the same way: a harmful image
+    lowered the AP, past chance. A Bad the head ignores is credited about 0 every time, which puts it a steady
+    bucket-mean below its peers at a large *z*; its own clicks moved nothing.
+    """
+    help_, harm = (z > Z_FLAG) & (raw_z > Z_FLAG), (z < -Z_FLAG) & (raw_z < -Z_FLAG)
+    return pd.Series(np.where(help_, 1, np.where(harm, -1, 0)), index=z.index)
+
+
 def _resid_z(inf: pd.DataFrame) -> pd.DataFrame:
-    g = inf.groupby("image_id")["resid"].agg(["mean", "std", "size"])
-    z = g["mean"] / (g["std"] / np.sqrt(g["size"]))
-    ok = (g["size"] >= MIN_OBS_Z) & (g["std"] > 0)
-    return pd.DataFrame({"resid": g["mean"], "resid_z": z.where(ok)})
+    g = inf.groupby("image_id").agg(
+        mean=("resid", "mean"),
+        std=("resid", "std"),
+        size=("resid", "size"),
+        raw=("help_ap", "mean"),
+        raw_sd=("help_ap", "std"),
+    )
+    z, raw_z = _z(g["mean"], g["std"], g["size"]), _z(g["raw"], g["raw_sd"], g["size"])
+    return pd.DataFrame({"resid": g["mean"], "resid_z": z, "raw_z": raw_z, "flag": _flag(z, raw_z)})
 
 
 def harmful_pairs(inf: pd.DataFrame) -> pd.DataFrame:
-    """Per image x class x label, the net credit (``resid``) and its z; the pairs past -``Z_FLAG``.
+    """Per image x class x label, the net credit (``resid``) and its z; the pairs flagged harmful (:func:`_flag`).
 
     An image hurts particular classes, not everything, so a hand review (#4179)
     works from this list rather than from ``images.csv``: each row is one
     question, "is this image really a <label> for <class>?", strongest first.
     """
-    inf = _with_resid(inf)
-    g = inf.groupby(["image_id", "class", "label"])["resid"].agg(["mean", "std", "size"])
-    g = g[(g["size"] >= MIN_OBS_Z) & (g["std"] > 0)]
-    g["z"] = g["mean"] / (g["std"] / np.sqrt(g["size"]))
-    out = g[g["z"] < -Z_FLAG].rename(columns={"mean": "resid", "size": "n_clicks"}).reset_index()
+    inf = _with_resid(_head_clicks(inf))
+    g = inf.groupby(["image_id", "class", "label"]).agg(
+        mean=("resid", "mean"),
+        std=("resid", "std"),
+        size=("resid", "size"),
+        help_ap=("help_ap", "mean"),
+        help_sd=("help_ap", "std"),
+    )
+    g["z"] = _z(g["mean"], g["std"], g["size"])
+    g["raw_z"] = _z(g["help_ap"], g["help_sd"], g["size"])
+    g = g[g["z"].notna()]
+    out = g[_flag(g["z"], g["raw_z"]) < 0].drop(columns="help_sd")
+    out = out.rename(columns={"mean": "resid", "size": "n_clicks"}).reset_index()
     return out.sort_values("z")
 
 
@@ -1216,10 +1294,12 @@ def image_null(inf: pd.DataFrame, reps: int = 5, seed: int = 0) -> tuple[int, in
     """Images flagged helpful / harmful, and the same counts with images shuffled within buckets."""
 
     def count(df: pd.DataFrame) -> tuple[int, int]:
-        z = _resid_z(df)["resid_z"]
-        return int((z > Z_FLAG).sum()), int((z < -Z_FLAG).sum())
+        flag = _resid_z(df)["flag"]
+        return int((flag > 0).sum()), int((flag < 0).sum())
 
-    inf = _with_resid(inf)
+    inf = _with_resid(_head_clicks(inf))
+    if inf.empty:
+        return 0, 0, []
     rng = np.random.default_rng(seed)
     null = []
     for _ in range(reps):
@@ -1673,7 +1753,7 @@ def summary(
             ]
     if not img.empty:
         seen = img[img["n_obs"] >= 3]
-        lines_md += [f"## Images clicked 3+ times ({len(seen)} of {len(img)})", ""]
+        lines_md += [f"## Images clicked 3+ times on the trained head ({len(seen)} of {len(img)}, #4658)", ""]
         lines_md += [
             "### Most helpful (mean held-out AP added per click)",
             "",
@@ -1685,17 +1765,18 @@ def summary(
         flips = both[np.sign(both["help_early"]) != np.sign(both["help_late"])]
         lines_md += [f"### Early/late sign flips ({len(flips)} images seen both early and late)", ""]
         lines_md += [_md(flips.sort_values("n_obs", ascending=False).head(15).round(4), index=False), ""]
-    if null is not None:
+    if null is not None and not img.empty:
         hp, hn, perm = null
         tested = int(img["resid_z"].notna().sum())
         lines_md += [
-            f"## Images with an effect of their own (|resid_z| > {Z_FLAG:g}, {MIN_OBS_Z}+ clicks)",
+            f"## Images with an effect of their own (|resid_z| and |raw_z| > {Z_FLAG:g}, the same way, "
+            f"{MIN_OBS_Z}+ trained-head clicks)",
             "",
             f"{tested} images tested: **{hp} helpful, {hn} harmful**. With images shuffled within each "
             f"(cell, label, phase) bucket: " + ", ".join(f"{a}/{b}" for a, b in perm) + " (helpful/harmful).",
             "",
         ]
-        flagged = img[img["resid_z"].abs() > Z_FLAG].sort_values("resid_z")
+        flagged = img[img["flag"] != 0].sort_values("resid_z")
         lines_md += [_md(flagged.round(4), index=False), ""]
     (out / "summary.md").write_text("\n".join(lines_md))
 
@@ -1754,7 +1835,7 @@ def main() -> int:
     inf.to_csv(args.out / "influence.csv", index=False)
     img.to_csv(args.out / "images.csv", index=False)
     det.to_csv(args.out / "image_detector.csv", index=False)
-    if not inf.empty:
+    if not _head_clicks(inf).empty:
         harmful_pairs(inf).to_csv(args.out / "harmful_pairs.csv", index=False)
     stops, margins = stopping_tables(base, cells)
     stops.to_csv(args.out / "stops.csv", index=False)

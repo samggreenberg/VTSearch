@@ -12,37 +12,15 @@
 
 <!-- build: figs/data-set-coco-grid.webp -->
 
-<!-- One card, and every dataset in the talk arrives on it: its name under
-     the headline, counts, where to get it, and what the pictures look like.
-     Click to the next. -->
+<!-- **a** — Every result from here on is on somebody's photos, and what got
+     labeled decides what the number means. So, one card per dataset. -->
 
-<!-- **a** — The card, empty: data in general, before any set has a name.
-     Every result here is measured on somebody's photographs, and what was
-     labelled decides what the number means. -->
+<!-- **b** — Caltech-101: one object per photo, centered, no boxes. Our control:
+     a result that holds here AND on cluttered scenes isn't about clutter. -->
 
-<!-- **b** — Caltech-101. One object, centred, filling the frame, on a
-     background that is usually nothing; 101 categories, one per picture, and
-     no boxes at all. It is the control: the set where region voting has
-     nothing to point at, so a result that holds here and on cluttered scenes
-     is not a result about clutter. (8,677 images exactly, leaving out the
-     `BACKGROUND_Google` pile the paper shipped as a negative class.) -->
+<!-- **c** — COCO: rooms and streets, lots of things per picture, all boxed. Key
+     word "complete": every photo answers for all eighty classes. -->
 
-<!-- **c** — COCO. Rooms and streets, many things in each, and every one of them
-     boxed. 123,287 images exactly, across train and val, and 80
-     classes. -->
-
-<!-- **d** — The zoom, grown out of its corner cell: a museum case with
-     Mary Poppins' umbrella in it. Blue names are in the picture, each joined
-     to its box — a book, a bowl, the umbrella. Grey names are not, and that is
-     the property the rest of this section leans on: COCO answers for all 80
-     classes on every image, so a grey name is a *checked* absence, not an
-     unmentioned one. There is no cup in this case, and COCO says so. -->
-
-<!-- And look at what has no box: the glass paperweight, the placard, the
-     glass hen. Plainly objects, and none of them is one of the 80 — so as far
-     as the annotation goes they are not there. "Checked" means checked for
-     *these* classes, and only these. -->
-
-<!-- Not a gold standard: two prohibition circles and a school-crossing
-     paddle labelled `stop sign`, a box on a hedge labelled `umbrella`. Better
-     than anything else available, and still made by people. -->
+<!-- **d** — Up close: blue's in the picture, boxed. Gray's checked absent: no
+     cup here. The paperweight and the glass hen get nothing; not among the
+     eighty. -->

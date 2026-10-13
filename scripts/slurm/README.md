@@ -76,5 +76,9 @@ job is not affected by the checkout it performs, or by a later `git pull` of
 the `dev` checkout. Give the suite a worktree of its own (`git worktree add
 --detach`): it moves that worktree's HEAD for the length of the job. Read the
 log's `=== HEAD` and `=== ref` lines to see which commit actually ran.
+The job runs on a fresh `VTSEARCH_DATA_DIR` under `$TMPDIR` and removes it at
+the end, so the data dir your shell exports is never touched. On the HLTCOE
+GRID, `~/.bashrc` names the live app's data there (#4706). The `=== data` line
+names both dirs.
 `tests_lib/meta/test_suite_sbatch.py` runs the real script against a throwaway
 origin to pin the guard's behaviour.

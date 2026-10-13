@@ -1,12 +1,24 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ModalComponent } from '../../modal/modal.component';
 import { AudioPlayerComponent } from '../../center-panel/audio-player/audio-player.component';
 import { DocumentViewerComponent } from '../../center-panel/document-viewer/document-viewer.component';
 import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
 import { TextViewerComponent } from '../../center-panel/text-viewer/text-viewer.component';
 import { VideoPlayerComponent } from '../../center-panel/video-player/video-player.component';
-import { VotingOverlayComponent } from '../../center-panel/voting-overlay/voting-overlay.component';
+import { type VoteHintId, VotingOverlayComponent } from '../../center-panel/voting-overlay/voting-overlay.component';
 import { KeyboardService, type NavDirection, type VoteDirection } from '../../../services/keyboard.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { MediaStateService } from '../../../services/media-state.service';
@@ -28,41 +40,45 @@ export interface SpotCheckVoted {
 }
 
 /**
- * The balance's spot check (#4413; the step is #4273's, walking the ranking
- * in bands since #4388).
+ * Autopilot's Spot Check step in the Train view's centre pane (#4413; the
+ * step is #4273's, walking the ranking in bands since #4388). It used to be a
+ * modal the Threshold's "Check 5 picks" opened; now only Autopilot starts a
+ * check, as one of its steps (`AutopilotStateService` phase `spot`): once
+ * every quality light is green, before Done, and earlier while the labels
+ * separate weakly (#4496). The host renders it in place of the centre panel
+ * while the step runs.
  *
- * Opens from the Threshold control's "Check 5 picks", in Train only: Find
- * tests the balance it was given and offers no check (#4317). The server
- * cuts the unvoted ranking into bands (the top 8, the next 8, then 16, 32, ...)
- * and draws each band's 5 picks uniformly at random; the user votes each one
- * Good or Bad. A band at a time, the check walks: deeper while its estimate
- * of the balance (F-beta) does not fall ("Better so far: checking the next
- * 32"), and back to a shorter list once it does ("Past the peak: checking a
- * shorter list"), ending on the set where the estimate peaked. The result is
- * what the picks say about that set: a likely share right, and how many of
- * all the matches it holds. Nothing is met or fallen short of.
+ * The server cuts the unvoted ranking into bands (the top 8, the next 8, then
+ * 16, 32, ...) and draws each band's 5 picks uniformly at random; the user
+ * votes each one Good or Bad. A band at a time, the check walks: deeper while
+ * its estimate of the balance (F-beta) does not fall ("Better so far: checking
+ * the next 32"), and back to a shorter list once it does ("Past the peak:
+ * checking a shorter list"), ending on the set where the estimate peaked. The
+ * result is what the picks say about that set: a likely share right, and how
+ * many of all the matches it holds. Nothing is met or fallen short of.
  *
  * - **The picks are a check, not the ranking** (owner, 2026-09-29). They show
  *   one at a time in the order they were drawn, which is random, with no rank
- *   and no score: the progress dots say only how many are left.
+ *   and no score: the progress dots say only how many are left. The ranked
+ *   list is not on screen in Autopilot, so nothing shows one's rank.
  * - **The usual keys.** → Good, ← Bad, ↓ back to the previous pick, ↑ on to
  *   the next unvoted one. They reach this step through a
  *   {@link KeyboardService.captureVoteKeys} claim held for its lifetime, so
- *   the ranked list behind the modal never sees them.
+ *   the centre panel hidden behind it never sees them.
  * - **A round is sent whole.** Votes are held here until every pick in the
  *   round has one, so a slip can be taken back with ↓; the last vote sends the
  *   round. The server records them as ordinary votes (provenance `check`).
- * - **Closing leaves the state as it was.** Cancel, Escape or × on a running
- *   check cancels it server-side; the rounds already sent stay votes, and the
- *   balance keeps its last result. The host re-reads the votes and the line
- *   on `closed`, so nothing the step saw is left half-applied.
+ * - **Stopping leaves the state as it was.** Stop check, or the step going
+ *   away under a running check (Autopilot stopped, the view left), cancels it
+ *   server-side; the rounds already sent stay votes, and the balance keeps its
+ *   last result. The host re-reads the votes and the line on `closed`, so
+ *   nothing the step saw is left half-applied.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  selector: 'vt-spot-check-modal',
+  selector: 'vt-spot-check-stage',
   standalone: true,
   imports: [
-    ModalComponent,
     AudioPlayerComponent,
     DocumentViewerComponent,
     ImageViewerComponent,
@@ -70,21 +86,20 @@ export interface SpotCheckVoted {
     VideoPlayerComponent,
     VotingOverlayComponent,
   ],
-  templateUrl: './spot-check-modal.component.html',
-  styleUrl: './spot-check-modal.component.scss',
+  templateUrl: './spot-check-stage.component.html',
+  styleUrl: './spot-check-stage.component.scss',
 })
-export class SpotCheckModalComponent implements OnInit {
+export class SpotCheckStageComponent implements OnInit {
   private readonly sortingApi = inject(SortingApiService);
   private readonly mediaState = inject(MediaStateService);
   private readonly metadataCache = inject(MediaMetadataCacheService);
   private readonly keyboard = inject(KeyboardService);
   private readonly destroyRef = inject(DestroyRef);
 
-  /**
-   * Why the check opened, when the user did not ask for it: Autopilot runs one when the labels
-   * separate weakly (#4496). Shown above the picks until the check ends; null shows nothing.
-   */
+  /** Why Autopilot is checking now: before Done, or while the labels separate weakly (#4496). Shown above the picks. */
   readonly intro = input<string | null>(null);
+  /** Toasty may say what the step is (#4807): the run trains the detector, as for the phase hints. */
+  readonly hintable = input(false);
 
   /** The step closed, however it ended. */
   readonly closed = output<void>();
@@ -119,6 +134,18 @@ export class SpotCheckModalComponent implements OnInit {
     return this.mediaState.getMedia(id);
   });
   readonly mediaType = computed(() => this.currentMedia()?.media_type ?? '');
+
+  /** Toasty's hint over Good / Bad (#4807): the check's first pick, before any vote. */
+  readonly voteHint = computed<VoteHintId | null>(() =>
+    this.hintable() && this.phase() === 'voting' && (this.check()?.labelled ?? 0) === 0 && this.votes().size === 0
+      ? 'spot-check'
+      : null,
+  );
+
+  /** The step has been closed (or cancelled), so its going away cancels nothing more. */
+  private closedOnce = false;
+
+  private readonly continueBtn = viewChild<ElementRef<HTMLButtonElement>>('continueBtn');
 
   /**
    * "5 picks drawn at random from the top 8, checking the top 32." then
@@ -174,6 +201,13 @@ export class SpotCheckModalComponent implements OnInit {
       navigate: (direction) => this.navigate(direction),
     });
     this.destroyRef.onDestroy(release);
+    // Gone from under a running check without Stop check (Autopilot stopped,
+    // the view left): cancel it, as Stop check would.
+    this.destroyRef.onDestroy(() => {
+      if (!this.closedOnce) this.cancelIfRunning();
+    });
+    // On a result or a refusal, Continue takes the focus: Enter carries on.
+    effect(() => this.continueBtn()?.nativeElement.focus());
   }
 
   ngOnInit(): void {
@@ -224,17 +258,24 @@ export class SpotCheckModalComponent implements OnInit {
   }
 
   /**
-   * Close the step. A running check is cancelled so the balance keeps its
-   * last result; the rounds already sent stay votes either way. The cancel
-   * outlives the step on purpose, and the host re-reads the votes and the
-   * line on `closed`, which covers a round that lands after the step has gone.
+   * End the step: Stop check on a running one, Continue on a result or a
+   * refusal. A running check is cancelled so the balance keeps its last
+   * result; the rounds already sent stay votes either way. The cancel outlives
+   * the step on purpose, and the host re-reads the votes and the line on
+   * `closed`, which covers a round that lands after the step has gone.
    */
   close(): void {
+    if (this.closedOnce) return;
+    this.cancelIfRunning();
+    this.closedOnce = true;
+    this.closed.emit();
+  }
+
+  private cancelIfRunning(): void {
     const phase = this.phase();
     if (phase === 'starting' || phase === 'voting' || phase === 'sending') {
       this.sortingApi.cancelPrecisionCheck().subscribe({ error: () => undefined });
     }
-    this.closed.emit();
   }
 
   private send(): void {

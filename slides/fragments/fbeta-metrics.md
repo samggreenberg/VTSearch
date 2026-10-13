@@ -10,27 +10,22 @@
 
 <!-- build: figs/calib-fmetrics.build3.png -->
 
-<!-- The score Beta Max keeps its line at, built up from one cut before it
-     is put to work on all of them. -->
+<!-- build: figs/calib-fmetrics.build4.png -->
 
-<!-- **a** — The Cutting Room's ten items, photographs taken away and the
-     labels left; the axis label has not moved. One cut, Include six: one
-     step left of the Cutting Room's middle cut, and plainly not the best
-     one. Everything right of it comes back, six items, four of them books;
-     one book is left behind. -->
+<!-- build: figs/calib-fmetrics.build5.png -->
 
-<!-- **b** — Two rates, the Goods returned on top of both. Precision: of
-     what came back, how much is right, 4 of 6. Recall: of the Goods there
-     are, how many came back, 4 of 5. Shifting the cut one to the right would
-     improve precision but not recall. Each alone is easy to max: return
-     everything and recall is 1; return one sure book and precision is 1. -->
+<!-- **a** — Same ten, pictures off. Let's score one cut, Include six. The
+     score is F1, up top, and it's built from two numbers, P and R. -->
 
-<!-- **c** — F1 is their harmonic mean. Unlike the plain average, it is high
-     only when both are: precision 1 and recall 0.1 average 0.55, and F1 is
-     0.18. Here 0.67 and 0.80 make 0.73. -->
+<!-- **b** — P is precision, R is recall. -->
 
-<!-- **d** — F-beta is the same mean with recall weighted β times as heavily
-     as precision: β = 1 is F1, β above 1 leans to recall, below 1 to
-     precision. In counts it is (1 + β²)·Goods returned over (1 + β²)·Goods
-     returned + β²·Goods missed + Bads returned, so a miss weighs β² false
-     alarms. -->
+<!-- **c** — Precision: of what came back, how much is right? Recall: of all
+     the books, how many came back? -->
+
+<!-- **d** — Here, four of the six that came back are books, and four of the
+     five books came back. -->
+
+<!-- **e** — Put those in and F1 is 0.73. It's only high when both are. -->
+
+<!-- **f** — F-beta is the same thing with a dial. At β = 1 it's F1; above 1
+     it leans toward recall, below 1 toward precision. -->

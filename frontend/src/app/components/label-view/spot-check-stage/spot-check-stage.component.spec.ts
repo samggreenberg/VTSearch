@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController, type TestRequest } from '@angular/common/http/testing';
-import { SpotCheckModalComponent, type SpotCheckVoted } from './spot-check-modal.component';
+import { SpotCheckStageComponent, type SpotCheckVoted } from './spot-check-stage.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
@@ -69,9 +69,9 @@ function checkedBalance(count: number, range: { lo: number; hi: number; labelled
   });
 }
 
-describe('SpotCheckModalComponent (#4413, #4273)', () => {
-  let fixture: ComponentFixture<SpotCheckModalComponent>;
-  let component: SpotCheckModalComponent;
+describe('SpotCheckStageComponent (#4413, #4273)', () => {
+  let fixture: ComponentFixture<SpotCheckStageComponent>;
+  let component: SpotCheckStageComponent;
   let httpMock: HttpTestingController;
   let keyboard: KeyboardService;
   let voted: SpotCheckVoted[];
@@ -79,7 +79,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
 
   beforeEach(async () => {
     await configureZoneless({
-      imports: [SpotCheckModalComponent],
+      imports: [SpotCheckStageComponent],
       providers: [...provideHttpTesting()],
     }).compileComponents();
     httpMock = TestBed.inject(HttpTestingController);
@@ -91,7 +91,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
     );
     vi.spyOn(TestBed.inject(MediaMetadataCacheService), 'ensureLoaded').mockImplementation(() => undefined);
 
-    fixture = TestBed.createComponent(SpotCheckModalComponent);
+    fixture = TestBed.createComponent(SpotCheckStageComponent);
     component = fixture.componentInstance;
     voted = [];
     closed = 0;
@@ -133,7 +133,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
     it('starts a check on open and shows its picks in the order they were drawn', async () => {
       expect(text()).toContain('Drawing picks');
       await start([17, 4, 29, 8, 11]);
-      expect(text()).toContain('Spot check');
+      expect(el().querySelector('.stage-title')!.textContent).toBe('Spot Check');
       // The balance goes unnamed (#4317): the radio on the Threshold spectrum shows it.
       expect(text()).not.toMatch(/Centered|Complete|Correct|aiming|beta|F1/);
       expect(text()).toContain('5 picks drawn at random from the top 8, checking the top 32. Is each one a match?');
@@ -142,7 +142,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       expect(component.currentId()).toBe(17);
     });
 
-    it('says why it opened when Autopilot ran it, and nothing when the user asked (#4496)', async () => {
+    it('says why Autopilot is checking, when the host gives a reason (#4496)', async () => {
       await start([17, 4, 29, 8, 11]);
       expect(el().querySelector('.check-intro')).toBeNull();
       fixture.componentRef.setInput('intro', 'Your labels still overlap, so Autopilot is checking the line.');
@@ -152,7 +152,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
 
     it('presents them as a check, not the ranking: no rank numbers and no scores', async () => {
       await start([17, 4, 29, 8, 11]);
-      const stage = el().querySelector('.spot-check')!;
+      const stage = el().querySelector('.spot-check-stage')!;
       expect(stage.querySelector('.media-score')).toBeNull();
       expect(stage.textContent).not.toMatch(/#\s*\d|rank|score/i);
       dots().forEach((d) => expect(d.textContent!.trim()).toBe(''));
@@ -217,7 +217,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
   });
 
   describe('the vote keys', () => {
-    it('reach the step and never the ranked list behind it', async () => {
+    it('reach the step and never the centre panel hidden behind it', async () => {
       const actions: KeyboardAction[] = [];
       keyboard.action$.subscribe((a) => actions.push(a));
       await start([17, 4]);
@@ -228,7 +228,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       expect(component.votes().get(17)).toBe('bad');
     });
 
-    it('go back to the list once the step closes', async () => {
+    it('go back to the centre panel once the step closes', async () => {
       const actions: KeyboardAction[] = [];
       keyboard.action$.subscribe((a) => actions.push(a));
       await start([17]);
@@ -357,10 +357,13 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
   });
 
   describe('closing', () => {
-    it('cancels a running check, leaving the state as it was', async () => {
+    const headBtn = () => el().querySelector('.stage-head .btn') as HTMLButtonElement;
+
+    it('stops a running check with Stop check, leaving the state as it was', async () => {
       await start([17, 4]);
       await press('ArrowRight');
-      (el().querySelector('.modal-footer .btn') as HTMLButtonElement).click();
+      expect(headBtn().textContent!.trim()).toBe('Stop check');
+      headBtn().click();
       await settleZoneless(fixture);
       httpMock.expectOne((req) => req.url === '/api/precision-check/cancel');
       httpMock.expectNone((req) => req.url === '/api/precision-check/votes');
@@ -368,25 +371,57 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       expect(voted).toEqual([]);
     });
 
-    it('cancels a check still drawing its first picks', async () => {
-      (el().querySelector('.modal-footer .btn') as HTMLButtonElement).click();
+    it('stops a check still drawing its first picks', async () => {
+      headBtn().click();
       await settleZoneless(fixture);
       httpMock.expectOne((req) => req.url === '/api/precision-check/cancel');
       expect(closed).toBe(1);
     });
 
-    it('closes a finished check without cancelling anything', async () => {
+    it('cancels a running check when the step goes away under it (Autopilot stopped, the view left)', async () => {
+      await start([17, 4]);
+      fixture.destroy();
+      httpMock.expectOne((req) => req.url === '/api/precision-check/cancel');
+      expect(closed).toBe(0);
+    });
+
+    it('cancels once when the step goes away after Stop check', async () => {
+      await start([17, 4]);
+      headBtn().click();
+      await settleZoneless(fixture);
+      fixture.destroy();
+      expect(httpMock.match((req) => req.url === '/api/precision-check/cancel').length).toBe(1);
+    });
+
+    it('ends a finished check with Continue, focused, cancelling nothing', async () => {
       await start([17]);
       await press('ArrowRight');
       const range = { lo: 0.55, hi: 1, labelled: 1, right: 1 };
       const recall = { lo: 0.5, hi: 1 };
       await answer(votesReq(), { balance: checkedBalance(32, range, recall), check: finished(range, recall) });
-      const done = el().querySelector('.modal-footer .btn') as HTMLButtonElement;
-      expect(done.textContent!.trim()).toBe('Done');
+      const done = headBtn();
+      expect(done.textContent!.trim()).toBe('Continue');
+      expect(document.activeElement).toBe(done);
       done.click();
       await settleZoneless(fixture);
+      fixture.destroy();
       httpMock.expectNone((req) => req.url === '/api/precision-check/cancel');
       expect(closed).toBe(1);
+    });
+  });
+
+  describe("Toasty's hint (#4807)", () => {
+    it('names the step on its first pick, before any vote, where the host allows it', async () => {
+      fixture.componentRef.setInput('hintable', true);
+      await start([17, 4]);
+      expect(component.voteHint()).toBe('spot-check');
+      await press('ArrowRight');
+      expect(component.voteHint()).toBeNull();
+    });
+
+    it('says nothing where the host does not allow it', async () => {
+      await start([17, 4]);
+      expect(component.voteHint()).toBeNull();
     });
   });
 
@@ -398,7 +433,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       );
       await settleZoneless(fixture);
       expect(el().querySelector('.error-text')!.textContent).toContain('already checked');
-      expect(el().querySelector('.modal-footer .btn')!.textContent!.trim()).toBe('Done');
+      expect(el().querySelector('.stage-head .btn')!.textContent!.trim()).toBe('Continue');
     });
 
     it('keeps a round whose votes failed to send, to send again', async () => {

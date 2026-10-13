@@ -184,6 +184,19 @@ class TestPhaseMachine:
     def test_done_when_all_three_are_green(self):
         assert _phase(9, 9, smart="green", stable="green", span="green", more_done=True) == "done"
 
+    def test_all_green_reaches_the_check_before_done_until_it_has_closed(self):
+        """The app's ``doneChecked``: all green reads ``spot`` until the run's check before Done has closed."""
+        green = {"smart": "green", "stable": "green", "span": "green", "more_done": True, "remaining_unlabeled": 1000}
+        assert next_phase(9, 9, done_checked=False, **green) == "spot"
+        assert next_phase(9, 9, done_checked=True, **green) == "done"
+        # Nothing left unlabeled leaves nothing to check.
+        assert next_phase(9, 9, done_checked=False, **{**green, "remaining_unlabeled": 0}) == "done"
+
+    def test_a_running_check_holds_the_phase_at_spot(self):
+        assert (
+            next_phase(9, 9, remaining_unlabeled=1000, smart="red", stable="red", span="red", checking=True) == "spot"
+        )
+
     def test_exhausted_when_nothing_left_and_not_all_green(self):
         assert _phase(9, 9, remaining=0) == "exhausted"
         # All-green still wins over exhausted, as in the app's branch order.
@@ -217,6 +230,7 @@ class TestDetectorVisibility:
     def test_detector_from_the_hard_phase_on(self):
         assert app_has_detector("hard")
         assert app_has_detector("new")
+        assert app_has_detector("spot")
         assert app_has_detector("done")
 
 
@@ -412,13 +426,56 @@ class TestAutopilotFlow:
         assert flow.recent_error_costs == []
         assert smart_status(flow.recent_error_costs, 9, 9) == "yellow"
 
-    def test_span_drives_the_new_to_done_transition(self):
+    def test_span_drives_the_new_to_spot_transition(self):
+        """All green reaches the check before Done first: the app checks the line, then reports Done."""
         flow = AutopilotFlow()
         flow.more_done = True
         flow.recent_error_costs = [0.3] * 4
         flow.stability = [_entry(0)] * 6
         assert flow.update(9, 9, 500, {"level": 0, "depth": 100}) == "new"
-        assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "done"
+        assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "spot"
+
+    def _all_green(self, **kw) -> AutopilotFlow:
+        flow = AutopilotFlow(**kw)
+        flow.more_done = True
+        flow.recent_error_costs = [0.3] * 4
+        flow.stability = [_entry(0)] * 6
+        flow.update(9, 9, 500, {"level": 40, "depth": 100})
+        return flow
+
+    def test_the_check_before_done_runs_once_then_done(self):
+        flow = self._all_green()
+        assert flow.phase == "spot" and flow.spot_check is None
+        assert flow.begin_spot_check("done") == "spot"
+        # Its rounds are votes; the phase holds at spot while it runs.
+        assert flow.update(12, 11, 495, {"level": 40, "depth": 100}) == "spot"
+        assert flow.end_spot_check() == "done"
+        assert flow.done_checked
+        # A later return of every light to green does not check again.
+        flow.recent_error_costs = [0.9, 0.5, 0.3, 0.2]
+        assert flow.update(12, 12, 494, {"level": 40, "depth": 100}) != "spot"
+        flow.recent_error_costs = [0.3] * 4
+        assert flow.update(12, 13, 493, {"level": 40, "depth": 100}) == "done"
+
+    def test_a_skipped_check_goes_straight_on_to_done(self):
+        flow = self._all_green()
+        assert flow.skip_done_check() == "done"
+        assert flow.done_checked and flow.spot_check is None
+
+    def test_a_weak_check_holds_spot_while_it_runs_and_latches_nothing(self):
+        flow = AutopilotFlow()
+        flow.update(GOOD_TARGET, BAD_TARGET, 500, None)
+        assert flow.begin_spot_check("weak") == "spot"
+        assert flow.update(GOOD_TARGET + 2, BAD_TARGET + 3, 495, None) == "spot"
+        assert flow.end_spot_check() == "hard"
+        assert not flow.done_checked
+
+    def test_the_arm_without_the_check_reads_all_green_as_done(self):
+        assert self._all_green(done_check=False).phase == "done"
+
+    def test_a_check_kind_is_named(self):
+        with pytest.raises(ValueError, match="kind"):
+            AutopilotFlow().begin_spot_check("whenever")
 
 
 def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:

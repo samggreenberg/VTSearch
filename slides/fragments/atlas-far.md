@@ -10,25 +10,14 @@
 
 <!-- build: figs/atlas-far.build3.png -->
 
-<!-- The atlas doing the job Out of Its Depth asked for, in the same room. This
-     is the shipped atlas and the shipped p-value, run on the drawing: each
-     item's position is its vector. -->
+<!-- **a** — The real atlas, on the floor: same cells, plus how typical each
+     cell's photos look. Seventy-six held out. -->
 
-<!-- **a** — The floor. Build the atlas on it: the same recursive split as
-     Cover Story, plus, in every cell, how typical its own items are. These
-     seventy-six were held out; the atlas was built on two thousand more like
-     them. -->
+<!-- **b** — Ask it: how much of your data looks stranger than this? Filled is
+     under 5%. Two of seventy-six, about chance. -->
 
-<!-- **b** — Ask it about each of these: what share of what you were built on
-     looks stranger than this? Filled means under 5%. Two of seventy-six, about
-     what chance gives: the floor looks like the floor. -->
+<!-- **c** — Now the ceiling collection. The detector scored these without
+     blinking. -->
 
-<!-- **c** — Out of Its Depth's second collection, on the ceiling. The detector
-     scored these without blinking, and sorted them. -->
-
-<!-- **d** — The atlas does blink: 68 of 76 filled. Nothing in it knows what a
-     book is; it knows only where its data was, and this is nowhere near it.
-     The eight it misses sit far out at the left, where height is a small part
-     of where they point. That is the whole second job: not "is this a
-     match?" but "is this a place I have seen?" How far to trust its numbers
-     is the next slide. -->
+<!-- **d** — The atlas blinks: 68 of 76. It knows nothing about books, just
+     where its data was. Not "is this a match?" but "have I been here?" -->

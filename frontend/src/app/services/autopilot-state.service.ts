@@ -2,7 +2,14 @@ import { Injectable, computed, signal } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 
-export type AutopilotPhase = 'idle' | 'good' | 'bad' | 'more' | 'hard' | 'new' | 'done' | 'exhausted';
+export type AutopilotPhase = 'idle' | 'good' | 'bad' | 'more' | 'hard' | 'new' | 'spot' | 'done' | 'exhausted';
+
+/**
+ * Why a spot check is running inside a run: `weak` when the labels separate
+ * weakly (#4496), `done` for the check Autopilot runs once every light is green,
+ * before it reports Done.
+ */
+export type SpotCheckKind = 'weak' | 'done';
 
 export interface AutopilotState {
   phase: AutopilotPhase;
@@ -82,6 +89,19 @@ export interface AutopilotState {
    * opening (votes un-done below its targets) or by a new run.
    */
   doneReached: boolean;
+  /**
+   * The spot check running inside this run, or null. While one runs the phase
+   * is `spot`: the check deals the picks, not the phase's sort, and the view
+   * shows them in the centre pane. Only Autopilot starts a check.
+   */
+  spotCheck: SpotCheckKind | null;
+  /**
+   * This run's check before Done has closed: it ran (finished, or stopped by
+   * the user), or was skipped because a check had just ended or the line has
+   * none to run. Latched for the run, like `moreDone`: Done follows from here
+   * on, and a later return of every light to green does not check again.
+   */
+  doneChecked: boolean;
 }
 
 /**
@@ -119,6 +139,8 @@ const INITIAL_STATE: AutopilotState = {
   spanTarget: 0,
   retrainMode: false,
   doneReached: false,
+  spotCheck: null,
+  doneChecked: false,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -180,6 +202,17 @@ export class AutopilotStateService {
    * count rose (``vtscore/eval/autopilot_flow.py`` reads it the same way).
    */
   private lastCounts: { good: number; bad: number } | null = null;
+  /** The dataset size at the last {@link checkPhaseTransition}, for re-deriving the phase when a check starts or ends. */
+  private lastTotal = 0;
+
+  /**
+   * Whether this run has taken its first labeling-status reading. A run whose
+   * first reading is already all green opened on a finished detector (the
+   * Train view re-entered after Done): it latches `doneChecked`, so the check
+   * before Done belongs to the session that brings the detector there, and
+   * re-entry after a server restart, which forgets the last check, runs none.
+   */
+  private statusRead = false;
 
   get state(): AutopilotState {
     return this.stateSubject.value;
@@ -254,6 +287,8 @@ export class AutopilotStateService {
     this.startedTrained.set(false);
     this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
+    this.lastTotal = 0;
+    this.statusRead = false;
     this.stateSubject.next({
       ...this.stateSubject.value,
       phase: 'good',
@@ -271,18 +306,65 @@ export class AutopilotStateService {
       spanTarget: 0,
       retrainMode,
       doneReached: false,
+      spotCheck: null,
+      doneChecked: false,
     });
   }
 
   deactivate(): void {
     this.handoff.set(null);
-    this.stateSubject.next({ ...this.stateSubject.value, phase: 'idle' });
+    this.stateSubject.next({ ...this.stateSubject.value, phase: 'idle', spotCheck: null });
+  }
+
+  /**
+   * A spot check starts inside the run: the phase is `spot` until
+   * {@link endSpotCheck}. The view calls it when the server says a weak check
+   * is due, and when the phase machine reached `spot` for the check before Done.
+   */
+  beginSpotCheck(kind: SpotCheckKind): void {
+    const st = this.stateSubject.value;
+    if (st.phase === 'idle' || st.spotCheck !== null) return;
+    this.stateSubject.next({ ...st, spotCheck: kind, phase: 'spot' });
+  }
+
+  /**
+   * The running check closed, however it ended: finished, stopped, or refused
+   * by the server. Closing the check before Done latches it for the run.
+   */
+  endSpotCheck(): void {
+    const st = this.stateSubject.value;
+    if (st.spotCheck === null) return;
+    this.stateSubject.next({ ...st, spotCheck: null, doneChecked: st.doneChecked || st.spotCheck === 'done' });
+    this.rederive();
+  }
+
+  /**
+   * The check before Done does not run (`done_check_due` false: a check ended
+   * moments ago, or the line has none to run): latch it, and the phase goes on
+   * to Done.
+   */
+  skipDoneCheck(): void {
+    const st = this.stateSubject.value;
+    if (st.phase === 'idle' || st.doneChecked) return;
+    this.stateSubject.next({ ...st, doneChecked: true });
+    this.rederive();
+  }
+
+  /** Re-run the phase check on the last counts, after a change that is not a vote. */
+  private rederive(): void {
+    const counts = this.lastCounts;
+    if (counts) this.checkPhaseTransition(counts.good, counts.bad, this.lastTotal);
   }
 
   updateFromLabelingStatus(status: LabelingStatusResponse): void {
     const current = this.stateSubject.value;
+    const allGreen =
+      status.smart.status === 'green' && status.stable.status === 'green' && status.span.status === 'green';
+    const firstRead = current.phase !== 'idle' && !this.statusRead;
+    if (current.phase !== 'idle') this.statusRead = true;
     this.stateSubject.next({
       ...current,
+      doneChecked: current.doneChecked || (firstRead && allGreen),
       dryRunStop: status.stop_rule === 'dry_run',
       smartStatus: status.smart.status || '',
       stableStatus: status.stable.status || '',
@@ -322,6 +404,7 @@ export class AutopilotStateService {
     // in Bads alone is a miss. Repeated checks with unchanged counts are no-ops.
     const prev = this.lastCounts;
     this.lastCounts = { good: goodCount, bad: badCount };
+    this.lastTotal = totalCount;
     // The Good walk's run of misses (#4731), read the same way. A miss counts
     // only with a Good already in hand, so the run is the misses since the
     // latest Good, and a walk that has found nothing never runs dry.
@@ -366,7 +449,10 @@ export class AutopilotStateService {
     // This allows both forward and backward transitions (e.g. if votes are
     // cleared or un-toggled, the phase regresses to match).
     let nextPhase: AutopilotPhase;
-    if (goodCount < effGoodTarget) {
+    if (st.spotCheck !== null) {
+      // A spot check is running: its picks are on screen, whatever the counts.
+      nextPhase = 'spot';
+    } else if (goodCount < effGoodTarget) {
       nextPhase = 'good';
     } else if (badCount < effBadTarget) {
       nextPhase = 'bad';
@@ -381,7 +467,9 @@ export class AutopilotStateService {
     } else if (!st.moreDone && goodCount < effMoreTarget) {
       nextPhase = 'more';
     } else if (st.smartStatus === 'green' && st.stableStatus === 'green' && st.spanStatus === 'green') {
-      nextPhase = 'done';
+      // Every light is green: check the line once before reporting Done. With
+      // nothing left unlabeled there is nothing to check.
+      nextPhase = st.doneChecked || remainingUnlabeled === 0 ? 'done' : 'spot';
     } else if (remainingUnlabeled === 0) {
       // Every item is labeled but the quality indicators never went green
       // (typical of a tiny dataset that can't reach the good+bad quorum).
@@ -417,6 +505,8 @@ export class AutopilotStateService {
     this.startedTrained.set(false);
     this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
+    this.lastTotal = 0;
+    this.statusRead = false;
     this.stateSubject.next({ ...INITIAL_STATE });
   }
 }

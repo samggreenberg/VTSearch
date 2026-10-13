@@ -10,25 +10,14 @@
 
 <!-- build: figs/calib-floor-ask.build3.png -->
 
-<!-- **a** — The problem, first. Under the line, ranked best on the right, is
-     what comes back: the **kept** set, the 32 items nobody has voted on above
-     the <span class="cut">line</span>. 32 is wherever What to Expect's peak
-     fell on this corpus; no cap set it. The question: how many of those 32
-     are right? That is the kept set's precision, and the user should be told
-     it with an honest range. -->
+<!-- **a** — New question. The line keeps 32 photos nobody voted on; how many
+     are right? The user deserves an honest answer, with a range. -->
 
-<!-- **b** — Where the app tells them: the Threshold control, Beta Max's three
-     radios, has one line of words under it. Before anyone checks, all it can
-     honestly say is how many are kept, and that nobody has checked them. -->
+<!-- **b** — Here's where we'd say it, under the Threshold control. Before
+     anyone checks, all it can honestly say is 'unchecked'. -->
 
-<!-- **c** — The obvious source of an answer: the votes the session already
-     holds, at the scores they landed on. A cluster at the top, where
-     Autopilot asked for likely matches, and one round the line, where it
-     asked the hard ones. The model chose every one of them. -->
+<!-- **c** — Obvious place to look: the votes we have. Top cluster, line
+     cluster, and the model chose every one. -->
 
-<!-- **d** — That is the trouble: a sample the model chose is biased toward
-     where the model looked. An estimator that promises a precision from
-     those votes alone breaks **83%** of its 50% promises (#4256). So the
-     answer has to come from picks the model did not choose, drawn uniformly
-     from the kept set, and counted. The next slide turns a count into a
-     range. -->
+<!-- **d** — That's the trouble: they say where the model LOOKED, not how right
+     the kept set is. So we pick at random, and count. -->

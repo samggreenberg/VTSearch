@@ -694,11 +694,13 @@ def check_note_letters(name: str, text: str, pages: int, problems: list[str]) ->
 
     A single note may name several letters (`**a**, **b** — recapitulation`);
     what is checked is coverage, not one note per page.
+
+    The stray-letter half runs on a one-page slide too: notes naming **b**
+    onward on a slide with one page are the trace of build markers that went
+    missing, which would otherwise pass as a plain one-page slide.
     """
-    if pages < 2:
-        return
     named = {m.group(1) for comment in COMMENT_RE.finditer(text) for m in NOTE_LETTER_RE.finditer(comment.group(1))}
-    missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named]
+    missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named] if pages >= 2 else []
     if missing:
         problems.append(
             f"fragments/{name}.md: this slide is {pages} pages, but its presenter notes "
@@ -799,9 +801,9 @@ def check_speaker_fit(
         where = f" (showing {letters})" if pages != group[name] else ""
         problems.append(
             f"fragments/{name}.md{where}: presenter notes overflow the speaker page by about "
-            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters, or move "
-            f"detail into the report the note cites. A speaker page never continues onto a "
-            f"second one; see slides/README.md."
+            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters. A speaker "
+            f"page never continues onto a second one; see slides/README.md, and slides/STYLE.md "
+            f"on what a note is for."
         )
 
 

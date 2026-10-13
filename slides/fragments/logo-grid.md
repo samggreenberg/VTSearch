@@ -28,10 +28,6 @@
 
 <!-- **f** — This can't count, right‽ -->
 
-<!-- **g** — But is this just like adding a swoop? Whatcha think? -->
-
-<!-- Do not answer any of them. The room will disagree out loud somewhere
-     around the fourth or fifth, and that disagreement is the slide: eight
-     results for one query, every answer defensible, and no two people giving
-     the same set. Where the concept ends belongs to whoever asked — same claim
-     as the book slide, in the one domain where a room expects a spec sheet. -->
+<!-- **g** — But is this just like adding a swoop? Whatcha think? That's eight
+     results for one search, and I bet no two of us would keep the same set.
+     Same as the books: where the line goes is up to whoever's asking. -->

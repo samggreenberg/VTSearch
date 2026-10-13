@@ -32,6 +32,7 @@ from vtscore.training.thresholds.labels_line import (
     WEAK_SEPARATION_D,
     WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
+    done_check_due,
     weak_check_due,
     weak_check_prompts,
 )
@@ -353,6 +354,21 @@ class TestWeakCheckDue:
     def test_no_cooldown_makes_it_due_once(self):
         assert weak_check_due(1.0, 20, None, cooldown=None)
         assert not weak_check_due(1.0, 500, 20, cooldown=None)
+
+
+class TestDoneCheckDue:
+    """Autopilot's check before Done runs unless a check ended in the last cooldown votes."""
+
+    def test_due_with_no_check_ended_yet(self):
+        assert done_check_due(0, None)
+        assert done_check_due(500, None)
+
+    def test_skipped_within_a_cooldown_of_the_last_check(self):
+        ended = 30
+        assert not done_check_due(ended, ended), "a check just measured this line"
+        assert not done_check_due(ended + WEAK_CHECK_COOLDOWN - 1, ended)
+        assert done_check_due(ended + WEAK_CHECK_COOLDOWN, ended)
+        assert not done_check_due(ended + 5, ended, cooldown=10)
 
 
 class TestWeakCheckPrompts:

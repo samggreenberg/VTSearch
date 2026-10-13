@@ -113,7 +113,7 @@ MIRRORS: list[Mirror] = [
     # ------------------------------------------------------------------ ported
     Mirror(
         id="autopilot.phase_machine",
-        app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(",
+        app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(goodCount",
         harness="vtscore/eval/autopilot_flow.py::next_phase",
         kind="ported",
         note=(
@@ -128,13 +128,28 @@ MIRRORS: list[Mirror] = [
             "ran_dry=) and AutopilotFlow(dry_run_stop=). The Good walk's dry run (#4731: moreDryRun "
             "misses with a Good in hand end the Good phase and spend the walk) is the same kind of "
             "history: the app's goodMisses/goodRanDry, the harness's AutopilotFlow good_misses/"
-            "good_dry, read by next_phase as good_ran_dry."
+            "good_dry, read by next_phase as good_ran_dry. The Spot Check step is history too: the app's "
+            "spotCheck (a check running: the phase is 'spot') and doneChecked (the run's check before Done "
+            "has closed, so all green reads 'done' rather than 'spot'), moved by beginSpotCheck / "
+            "endSpotCheck / skipDoneCheck; the harness's AutopilotFlow spot_check / done_checked, moved by "
+            "begin_spot_check / end_spot_check / skip_done_check, read by next_phase as checking / "
+            "done_checked. Whether the check before Done runs is done_check_due, which both call."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
             "panel keeps its Done step checked while the phase falls back to hard or new. It is "
             "computed from nextPhase and never feeds it, so the phase sequence - all next_phase "
-            "reproduces - is unchanged and the harness, which draws no panel, has nothing to port."
+            "reproduces - is unchanged and the harness, which draws no panel, has nothing to port. "
+            "The app decides the check before Done once the sort after the vote settles; the harness "
+            "decides it the step the flow reaches 'spot' (_settle_done_check), so a skipped check never "
+            "stamps a row. The harness also skips a check whose opening bands do not fit the voting "
+            "budget left, as it starts no prompted check that cannot: the app has no budget. And the "
+            "harness's end-of-budget check (spot_check 'end' and 'weak', rows with phase 'check' past "
+            "max_steps) is its measurement of the final line, which no app user can start since the "
+            "Check button went: it is never a click. The app also latches doneChecked when a run's first "
+            "labeling-status reading is already all green (the Train view re-entered on a finished "
+            "detector); a harness run starts with no votes, where the lights cannot be green, so it has "
+            "nothing to port."
         ),
     ),
     Mirror(
@@ -158,7 +173,8 @@ MIRRORS: list[Mirror] = [
         kind="ported",
         note=(
             "Which Sort and which Select each Autopilot phase drives - good=text+top, "
-            "bad=text+hard, more=text+top, hard=learned+hard, new=learned+new. The simulated user picks the "
+            "bad=text+hard, more=text+top, hard=learned+hard, new=learned+new, and spot (stopped inside the "
+            "Spot Check step) learned+hard, the harness's fallback branch. The simulated user picks the "
             "next item from exactly this pairing, so re-pointing a phase at a different sort "
             "or select here silently changes what every study's vote order means. The load- "
             "bearing row is `bad`: it is still on the TEXT sort, so the harness must not "

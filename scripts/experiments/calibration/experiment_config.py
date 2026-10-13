@@ -1085,6 +1085,11 @@ WEAK_REPEAT = None if _weak_repeat is None else int(_weak_repeat)
 #: - only once Autopilot has left its text-sort opening, where the app has no detector to read separation from;
 #: ``any`` is the arm #4496 priced first, a prompt anywhere in the flow.
 WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
+#: Whether Autopilot checks the line before Done (``CALIB_DONE_CHECK``): unset is the harness's default, the app's
+#: (on: the first time every light is green, the simulated user runs the check as clicks, then the flow reports Done);
+#: ``0`` is the arm before Autopilot ran it, where all green reads Done at once.
+_done_check = os.environ.get("CALIB_DONE_CHECK", "").strip().lower()
+DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no", "off")
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).

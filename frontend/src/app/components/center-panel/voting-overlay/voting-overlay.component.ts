@@ -11,7 +11,7 @@ import { countPhrase } from '../../../utils/count-phrase';
  */
 export type VoteHintId = Extract<
   HintId,
-  'start-voting' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'test-vote'
+  'start-voting' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'spot-check' | 'test-vote'
 >;
 
 /** What the Train phase hints count: the Goods and Bads so far, against Autopilot's targets. */

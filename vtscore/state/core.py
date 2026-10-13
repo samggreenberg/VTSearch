@@ -1839,32 +1839,35 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
 
 
 def detector_check_prompt(ctx: "DetectorContext", n_votes: int) -> dict[str, Any]:
-    """Whether *ctx*'s labels separate weakly enough that a spot check is due (#4496).
+    """Whether Autopilot should run a spot check on *ctx*'s line: mid-run for weak separation (#4496), or before Done.
 
     ``separation`` is the labels line's d' (``None`` before a retrain has drawn
     one, or when it is unbounded); ``check_due`` is :func:`weak_check_due` on
-    it, counted from the vote total when the last check ended.  Never due in
-    Find, which offers no check (#4317), nor while a check is running, nor on
-    a line a check cannot walk (#4489): no ranking - a structural detector's
-    line is the verification gate's boundary - or nothing in it unvoted, where
-    a check would be refused.  Never due on face crops either
+    it, counted from the vote total when the last check ended, and
+    ``done_check_due`` is :func:`done_check_due` from the same count: whether
+    the check Autopilot runs once its lights go green should run, or skip
+    because one ended moments ago.  Neither is due in Find, which runs no
+    check (#4317), nor while a check is running, nor on a line a check cannot
+    walk (#4489): no ranking - a structural detector's line is the
+    verification gate's boundary - or nothing in it unvoted, where a check
+    would be refused.  ``check_due`` is never due on face crops either
     (:func:`weak_check_prompts`, #4799): there the check's votes cost the
     session and find nothing.  ``separation`` is still reported.
     """
-    from vtscore.training.thresholds import weak_check_due, weak_check_prompts  # noqa: PLC0415
+    from vtscore.training.thresholds import done_check_due, weak_check_due, weak_check_prompts  # noqa: PLC0415
 
     sep = ctx.labels_line.separation if ctx.labels_line is not None else None
     ranking = ctx.line_ranking
-    due = (
+    checkable = (
         not ctx.find_mode
-        and weak_check_prompts(ctx.media_type)
         and ctx.precision_check_run is None
         and ranking is not None
         and ranking.unvoted_ids(human_voted_ids(ctx)).size > 0
-        and weak_check_due(sep, n_votes, ctx.check_ended_votes)
     )
+    due = checkable and weak_check_prompts(ctx.media_type) and weak_check_due(sep, n_votes, ctx.check_ended_votes)
+    done_due = checkable and done_check_due(n_votes, ctx.check_ended_votes)
     shown = round(float(sep), 4) if sep is not None and math.isfinite(sep) else None
-    return {"separation": shown, "check_due": bool(due)}
+    return {"separation": shown, "check_due": bool(due), "done_check_due": bool(done_due)}
 
 
 def detector_acquisition_threshold(

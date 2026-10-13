@@ -30,6 +30,7 @@ export const HINT_IDS = [
   'find-bads',
   'find-more',
   'keep-voting',
+  'spot-check',
   'resort-prompt',
   'autopilot-done',
   'autopilot-ran-dry',

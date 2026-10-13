@@ -21,7 +21,7 @@ votes, filled before a detector shows, for two lines:
 Only beta 1/4 separates the two, so the slide sits in the appendix after Conclusion rather than in Experimentation
 (#4563): an answer to a question, not a slide to walk a room through.
 
-Both start at the typed query, the notch at click 0. Page a draws cross-calibration alone ("one line, whatever
+Both start at the text query, the notch at click 0. Page a draws cross-calibration alone ("one line, whatever
 you want"); page b adds today's app. A reveal adds ink and restyles nothing, so every label holds its final
 place from the page it appears on.
 """
@@ -126,7 +126,7 @@ def _figure(curves: dict, today: bool) -> Figure:
         ticks = [0, 25, 50, 100, 150]
         ax.set_xticks(ticks)
         if i == len(ROWS) - 1:
-            ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150"])
+            ax.set_xticklabels(["text\nquery", "25", "50", "100", "150"])
             ax.set_xlabel("Votes")
         else:
             ax.set_xticklabels([])
@@ -149,7 +149,7 @@ def _figure(curves: dict, today: bool) -> Figure:
             ax.plot(tt, ty, color=SHIPPED, lw=3.6, solid_capstyle="round", zorder=4)
             ax.text(t_max * 1.02, lab[1], "today's app", color=SHIPPED, fontweight="bold", ha="left",
                     va="center", clip_on=False)  # fmt: skip
-        # The notch: the typed query, where both lines start.
+        # The notch: the text query, where both lines start.
         ax.plot([0], [float(xy[0])], marker="o", color=INK, markersize=8, zorder=5, clip_on=False)
     fig.text(left - 0.075, (top + bottom) / 2, "Fβ at the row's β", rotation=90, ha="center",
              va="center", fontsize=17)  # fmt: skip

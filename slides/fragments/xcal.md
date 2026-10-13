@@ -16,29 +16,21 @@
 
 <!-- build: figs/calib-xcal-flow.build6.png -->
 
-<!-- The textbook answer, and the thing everything else is measured against.
-     Land on the property that defines it: with enough labels this estimator
-     converges on the right answer. -->
+<!-- **a** — So where should the line go? The textbook answer: train M₀ on
+     every vote so far, D₀. But M₀ scoring its own votes is grading its own
+     homework, so those scores look better than they are. -->
 
-<!-- **a** — D₀ is every vote so far and M₀ is the model trained on all of it.
-     M₀ is the model you keep; its scores on its own training votes are
-     optimistically shifted, so you cannot cut on them. -->
+<!-- **b** — So we split the votes in half. -->
 
-<!-- **b** — So split the votes in half. **c** — And train a model on each half. -->
+<!-- **c** — And train a model on each half. -->
 
-<!-- **d** — Now cross them: each fold model scores the half it never trained
-     on. Honest scores, at the price of two extra models on half the data. -->
+<!-- **d** — M₁ scores D₂, the half it never saw. Those scores are honest:
+     Bads low, Goods high. -->
 
-<!-- **e** — On each half the Bad pile up low and the Good high, and a cut goes
-     between. **f** — Same on the other half, and note the Bad above θ₂: each
-     cut is a trade-off, not a free gap. -->
+<!-- **e** — So we cut between them: θ₁. -->
 
-<!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, red
-     is Bad. -->
+<!-- **f** — Same thing the other way round. This time one Bad lands above
+     θ₂, so that cut's a trade-off. -->
 
-<!-- This is the idea the rest of the deck keeps. Scored in F-beta at each
-     of the app's three radios, no line rule after it beat it until the
-     labels line in section III (#4582, #4519), and that line is built on
-     these folds: the scores each fold gives the votes it never saw are its
-     class model. The next slide is what happens *before* "enough
-     labels". -->
+<!-- **g** — Average the two cuts and hand θ₀ to M₀. That's cross-calibration.
+     With enough votes it gets it right. The catch is that word: enough. -->

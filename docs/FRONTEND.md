@@ -287,45 +287,72 @@ is in words, `foundWords`, and as a number only in the tooltip,
 `balanceExplanation`), with a green dot when checked and a yellow one when
 not; there is no red.
 
-**The spot check** (`vt-spot-check-modal`, #4273, walking to the balance's
-peak since #4413) measures that line, in Train only. The control's "Check N
-picks" emits `check`; the left panel forwards it as `check`, and the label
-view hosts the modal behind a `showSpotCheck` signal. Test sets the control's
-`offerCheck` false and hosts no modal: it tests the balance Train set, and
-labelling more to set one is too late there (#4317); its own test of the line
-is the Test autopilot (below), and the control's state line there is the
-host's (`lineState`: this corpus's result, or untested) with the radios
-`locked` while a phase runs.
-**When a check is due** (#4496): the balance's `checkDue` (the server's
-`check_due`, `weak_check_due` on the labels line's `separation`; never on a
-face detector, #4799) turns the
-control's button `btn--primary` and adds a `.balance-due` note. The label view
-runs the check itself under Autopilot: an effect on the balance and
-`sortBusy` calls `runDueCheck()`, which opens the modal with an `intro` line
-once a learned sort has landed with `checkDue` (under the typed query's hold,
-the held ranking's, `SortRunnerService.askBalance`, #4736), never in Autopilot's opening
-(`good`/`bad`/`more`, where no detector is trained) nor over another step;
-closing it advances Autopilot past any item the check voted.
-The modal owns the check's lifecycle against `/api/precision-check` and holds a
-round's votes locally until every pick has one, then sends the round whole. It
-takes the vote keys through `KeyboardService.captureVoteKeys`, a claim that
-routes ←/→ and ↓/↑ to its holder even with a modal open and sends nothing to
-`action$`, so the ranked list behind it never votes. The walk goes deeper
-while its F-beta estimate does not fall ("Better so far: checking the next
-32.") and turns back once it does ("Past the peak: checking a shorter list."),
-and the check is finished when `check.status` is `checked`; the result reads
-"Checked: likely 55–100% right, about half of them found (checked 15)." over
-"The line keeps these 32: the set where the check's balance peaked." Each
-round's `voted` event refreshes the piles; a finished check has moved the line
-server-side, so the view re-reads it with `GET /api/balance` and installs it
-over the ranking on screen through `SortRunnerService.refreshLine`. No re-sort
-follows: a retrain moves the list under the result, which is what reports it
-`stale`, and the owner's model is that *later* votes do that. The line draws
-the same in every state; the state and its likely range live in the balance
-control and on the Stats chart (which draws no horizontal line any more: a
-balance is a preference, not a precision to keep), and a stale range differs
-only in its tooltip. The Test view draws neither the range nor the Stats
-chart that used to carry it: its result pane draws the test's own ranges.
+**The spot check** (`vt-spot-check-stage`, #4273, walking to the balance's
+peak since #4413) measures that line, in Train only, and only Autopilot runs
+it: it is Autopilot's **Spot Check** step, phase `spot` in
+`AutopilotStateService`. The state's `spotCheck` says why one is running:
+`weak` when the labels separate weakly, `done` for the check before Done. The
+phase machine reaches `spot` the first time every quality light is green
+(`doneChecked` latches it for the run once that check closes, so Done
+follows), and a running check of either kind holds the phase at `spot`. A
+run whose first labeling-status reading is already all green (the Train view
+re-entered on a finished detector) latches `doneChecked` at that reading, so
+re-entry runs no check, even after a server restart has forgotten the last
+one. The
+Threshold control starts none (it has no check button), and Test runs none:
+it tests the balance Train set, and labelling more to set one is too late
+there (#4317); its own test of the line is the Test autopilot (below), and
+the control's state line there is the host's (`lineState`: this corpus's
+result, or untested) with the radios `locked` while a phase runs.
+**When a check runs.** The label view starts both kinds. For weak separation
+(#4496), an effect on the balance's `checkDue` (the server's `check_due`,
+`weak_check_due` on the labels line's `separation`; never on a face detector,
+#4799) and `sortBusy` calls `runDueCheck()`, which calls
+`beginSpotCheck('weak')` once a learned sort has landed with `checkDue`
+(under the typed query's hold, the held ranking's,
+`SortRunnerService.askBalance`, #4736), never in Autopilot's opening
+(`good`/`bad`/`more`, where no detector is trained) nor over another step.
+For the check before Done, a second effect waits for the phase to reach
+`spot` with no check running and the sort settled, then reads the balance's
+`doneCheckDue` (the server's `done_check_due`: no check ended in the last 25
+votes) and calls `beginSpotCheck('done')`, or `skipDoneCheck()` when a check
+has just measured the line. Since the balance on hand right after a check
+predates it, that effect also waits for the line re-read the check's close
+starts (`awaitingLine`). The Threshold keeps a `.balance-due` note while a
+weak check is due. Leaving `spot` sets the Select the step underneath uses and
+does not re-sort; the completion hand-off follows the state stream
+(`AutopilotPanelComponent`), since the check before Done ends outside any
+vote. The step list shows Spot Check between Explore Diversity and Done; a
+weak check makes it the active step and the list goes back to the step
+underneath when it ends, as it does from Diversity to Boundary.
+**The stage.** While `spotCheck` is set the label view renders the stage in
+place of the centre panel, which stays mounted but hidden, so its keyboard
+and viewer state survive. The stage owns the check's lifecycle against
+`/api/precision-check` and holds a round's votes locally until every pick has
+one, then sends the round whole. It takes the vote keys through
+`KeyboardService.captureVoteKeys`, a claim that routes ←/→ and ↓/↑ to its
+holder and sends nothing to `action$`, so the hidden centre panel never
+votes. Train's Autopilot tab shows no ranked list, so no pick's rank is on
+screen. **Stop check** cancels a running check (as does the stage going away
+under one: Autopilot stopped, the view left); **Continue** ends a finished
+one. Either way `closed` calls `endSpotCheck()` and the view catches up on the
+votes and the line, then advances Autopilot past any item the check voted.
+The walk goes deeper while its F-beta estimate does not fall ("Better so far:
+checking the next 32.") and turns back once it does ("Past the peak: checking
+a shorter list."), and the check is finished when `check.status` is
+`checked`; the result reads "Checked: likely 55–100% right, about half of
+them found (checked 15)." over "The line keeps these 32: the set where the
+check's balance peaked." Each round's `voted` event refreshes the piles; a
+finished check has moved the line server-side, so the view re-reads it with
+`GET /api/balance` and installs it over the ranking on screen through
+`SortRunnerService.refreshLine`. No re-sort follows: a retrain moves the list
+under the result, which is what reports it `stale`, and the owner's model is
+that *later* votes do that. The line draws the same in every state; the state
+and its likely range live in the balance control and on the Stats chart
+(which draws no horizontal line any more: a balance is a preference, not a
+precision to keep), and a stale range differs only in its tooltip. The Test
+view draws neither the range nor the Stats chart that used to carry it: its
+result pane draws the test's own ranges.
 
 ### Test view (`components/find-view/`)
 

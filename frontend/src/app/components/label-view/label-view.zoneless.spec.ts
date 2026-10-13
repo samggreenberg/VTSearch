@@ -14,6 +14,7 @@ import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import type { EmbedderInfo } from '../../models/api.models';
+import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { ActiveContextService } from '../../services/active-context.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
@@ -829,25 +830,41 @@ describe('LabelViewComponent', () => {
   });
 
   /**
-   * The spot check lives in Train alone (#4317): Find tests the balance set
-   * here. Opened from the Threshold control, the step takes the vote keys, the
-   * list behind it gets none, and a finished check's line is installed.
+   * The spot check is Autopilot's Spot Check step (#4273, #4413): only
+   * Autopilot starts one. The first time every light is green the phase
+   * reaches `spot`, the view starts the check in the centre pane (the centre
+   * panel hidden under it), the step takes the vote keys, a finished check's
+   * line is installed, and Continue lets Autopilot report Done.
    */
-  it('runs the spot check from the Threshold control and installs the line the result carries (#4273, #4317, #4413)', async () => {
+  it('runs the check before Done as the Spot Check step in the centre pane, then reports Done', async () => {
     flushInitialRequests();
-    await settleResource();
-    // Manual first: leaving Autopilot hands its sort mode back to the tab.
-    const left = fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
-    left.setTab('manual');
-    await settleResource();
+    const autopilot = TestBed.inject(AutopilotStateService);
     const sortState = TestBed.inject(SortStateService);
-    sortState.setSortMode('learned');
-    sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.4 }], 0.5, lineBalance('unchecked'));
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+    autopilot.activate();
+    TestBed.tick();
+    const ranked = { status: 'done', results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }], threshold: 0.5, balance: wireBalance('unchecked') };
+    autopilot.checkPhaseTransition(3, 0);
+    TestBed.tick();
+    httpMock.expectOne('/api/learned-sort').flush(ranked);
+    autopilot.checkPhaseTransition(3, 4);
+    TestBed.tick();
+    httpMock.expectOne('/api/learned-sort').flush(ranked);
     await settleResource();
     const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('vt-spot-check-stage')).toBeNull();
 
-    (el.querySelector('vt-balance .balance-check-btn') as HTMLButtonElement).click();
+    // Every light green, after a reading that was not: the Spot Check step, and the view starts the check.
+    autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'yellow' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
+    autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'green' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
+    autopilot.checkPhaseTransition(3, 4);
     await settleResource();
+    expect(autopilot.state.phase).toBe('spot');
+    expect(autopilot.state.spotCheck).toBe('done');
+    expect(el.querySelector('vt-spot-check-stage')).not.toBeNull();
+    expect((el.querySelector('vt-center-panel') as HTMLElement).style.display).toBe('none');
+    expect(component.spotCheckIntro()).toContain('Every quality light is green');
     httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
       balance: wireBalance('unchecked'),
       check: {
@@ -867,9 +884,8 @@ describe('LabelViewComponent', () => {
       },
     });
     await settleResource();
-    expect(el.querySelector('vt-spot-check-modal')).not.toBeNull();
 
-    // → votes the pick in the step; the list behind it gets nothing.
+    // → votes the pick in the step; the centre panel under it gets nothing.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     await settleResource();
     expect(httpMock.match((req) => req.url.startsWith('/api/medias/') && req.url.endsWith('/vote'))).toEqual([]);
@@ -904,7 +920,53 @@ describe('LabelViewComponent', () => {
     await settleResource();
     expect(sortState.threshold).toBe(0.3);
     expect(sortState.balance?.status).toBe('checked');
-    expect(el.querySelector('vt-balance .balance-state')!.textContent).toContain('Checked');
+
+    // Continue ends the step: Autopilot reports Done and the centre panel is back.
+    (el.querySelector('vt-spot-check-stage .stage-head .btn') as HTMLButtonElement).click();
+    await settleResource();
+    expect(autopilot.state.phase).toBe('done');
+    expect(autopilot.state.doneChecked).toBe(true);
+    expect(el.querySelector('vt-spot-check-stage')).toBeNull();
+    expect((el.querySelector('vt-center-panel') as HTMLElement).style.display).toBe('');
+  });
+
+  it('skips the check before Done when the server says one just ran', async () => {
+    flushInitialRequests();
+    const autopilot = TestBed.inject(AutopilotStateService);
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+    autopilot.activate();
+    TestBed.tick();
+    const ranked = { status: 'done', results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }], threshold: 0.5, balance: wireBalance('checked', { doneCheckDue: false }) };
+    autopilot.checkPhaseTransition(3, 0);
+    TestBed.tick();
+    httpMock.expectOne('/api/learned-sort').flush(ranked);
+    autopilot.checkPhaseTransition(3, 4);
+    TestBed.tick();
+    httpMock.expectOne('/api/learned-sort').flush(ranked);
+    await settleResource();
+    autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'yellow' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
+    autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'green' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
+    autopilot.checkPhaseTransition(3, 4);
+    await settleResource();
+    expect(autopilot.state.phase).toBe('done');
+    expect((fixture.nativeElement as HTMLElement).querySelector('vt-spot-check-stage')).toBeNull();
+    expect(httpMock.match((req) => req.url === '/api/precision-check/start')).toEqual([]);
+  });
+
+  it('offers no check of its own on the Threshold control (only Autopilot runs one)', async () => {
+    flushInitialRequests();
+    await settleResource();
+    const left = fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
+    left.setTab('manual');
+    await settleResource();
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortMode('learned');
+    sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.4 }], 0.5, lineBalance('unchecked'));
+    await settleResource();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('vt-balance .balance-state')).not.toBeNull();
+    expect(el.querySelector('vt-balance .balance-state button')).toBeNull();
   });
 
   it('seeds the balance control from the detector on entry', () => {
@@ -1215,18 +1277,26 @@ describe('LabelViewComponent', () => {
     expect(autopilot.state.phase).toBe('bad');
     httpMock.expectOne('/api/learned-sort').flush({ status: 'done', results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }], threshold: 0.5, balance: due });
     await settleResource();
-    expect(el.querySelector('vt-spot-check-modal')).toBeNull();
+    expect(el.querySelector('vt-spot-check-stage')).toBeNull();
     expect(httpMock.match((req) => req.url === '/api/precision-check/start')).toEqual([]);
 
-    // Past it, the first learned sort that says a check is due opens one, saying why.
+    // Past it, the first learned sort that says a check is due runs the Spot Check step, saying why.
     autopilot.checkPhaseTransition(3, 4);
     TestBed.tick();
     expect(autopilot.state.phase).toBe('hard');
     httpMock.expectOne('/api/learned-sort').flush({ status: 'done', results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }], threshold: 0.5, balance: due });
     await settleResource();
-    expect(el.querySelector('vt-spot-check-modal')).not.toBeNull();
+    expect(el.querySelector('vt-spot-check-stage')).not.toBeNull();
+    expect(autopilot.state.phase).toBe('spot');
+    expect(autopilot.state.spotCheck).toBe('weak');
     expect(component.spotCheckIntro()).toContain('Autopilot is checking the line');
     httpMock.expectOne((req) => req.url === '/api/precision-check/start');
+
+    // Stopping Autopilot inside the step cancels the check, and the step underneath takes its Select back.
+    component.onAutopilotStop();
+    await settleResource();
+    expect(el.querySelector('vt-spot-check-stage')).toBeNull();
+    httpMock.expectOne((req) => req.url === '/api/precision-check/cancel');
   });
 
   it('should switch to hard select mode when bouncing from new back to hard', () => {
