@@ -286,11 +286,22 @@ same edit.
   image, per image × detector, and early (≤30 clicks) vs late (>90). One
   click's credit includes refit noise, so an image claim needs repeat
   observations (`n_obs`).
+- **Only trained-head credit is an image's (owner, 2026-10-13, #4658).** The
+  per-image tables read only clicks whose credited step and the step before
+  both score the trained head (`head_credit`). A Bad cannot move the Goods'
+  centroid or the typed query's set (exactly 0 credit), and a step where the
+  tier changes charges the jump between two sorts to whichever click triggered
+  it. `influence.csv` still lists every click, with `tier` and `prev_tier`.
 - **An image's own effect:** judge images on `resid_z`, never the raw mean. The
-  raw mean mostly says *when* (early positives hurt) and *where* (hard classes)
-  an image was clicked. `resid` nets out the cell, label and phase. Report the
-  |z| > 3 count **next to the shuffled-image null** that `summary.md` prints.
-  At 3 seeds nothing cleared it; at 7 seeds (2026-09-24) the harmful side did.
+  raw mean mostly says *when* and *where* (hard classes) an image was clicked.
+  `resid` nets out the cell, label and phase. An image is flagged only when
+  |z| > 3 AND its raw credit is past |z| > 3 the same way (`raw_z`): the
+  credit is right-skewed, so a typical click sits below its bucket's mean, and
+  a Bad the head ignores is credited about 0 every time, a steady bucket-mean
+  below its peers. Neither hurt anything. Report the flagged counts **next to
+  the shuffled-image null** that `summary.md` prints. On the 2026-10-08 Binary
+  runs (24 seeds) that is about 370 helpful and 280 harmful, against a null of
+  about 4 each.
 
 ## Document Logo (the structural path): standing decisions (owner, 2026-10-01, #4392)
 

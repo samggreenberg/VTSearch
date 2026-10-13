@@ -30,7 +30,8 @@ full-label ceiling pass at beta 1 is shared by the three.
 - **Seeds 18 to 23** ran beside them, from 03:51, on four V100 nodes (`launch.sh pack`, 36 cells to a node, 16 for
   the ceiling). The GPU was hidden and BLAS pinned to the same kernel, so a cell computes what an array task does.
 
-**Analysis:** `analyze.sh` per run, then `perp.py --kind balance` and `by_click.py`, all with #4653's fix (below).
+**Analysis:** `analyze.sh` per run, then `perp.py --kind balance` and `by_click.py`, all with #4653's fix (below). The
+[images](#images-4658) were re-read on 2026-10-13 with #4658's credit rule (`analyze.py` only, no new sessions).
 
 A **review**, not an experiment: the app as it ships, the way a user meets it.
 - **The session.** The user types a query and sees the text sort, then votes for 150 clicks while Autopilot picks
@@ -299,17 +300,58 @@ The mean is +0.12 AP (0.42 → 0.54).
 
 ![Mean Goods found over clicks](figures/goods_over_clicks.png)
 
-## Images: no per-image claims this time (#4658)
+## Images (#4658)
 
-The per-image influence flags 1,010 helpful and 1,175 harmful images past |z| > 3, against a shuffled null of about
-85 and 83. That does not mean what it did in the last reviews, for two reasons:
-- **The credit rule.** Since #4605, influence reads the AP the app shows. Every click before the hand-over shares one
-  split of the change at the hand-over. In the 11% of sessions that never hand over, every click scores exactly 0.
-- **The test.** A (cell, label, phase) bucket then mixes zero-credit clicks with hand-over credit. 686 of the flagged
-  images move AP by under 0.001 a click, and the top "harmful" one scores z = −45 on a credit of exactly 0.
+**The credit rule changed after this review's first read, so this section does not read against the last reviews.**
+Since #4643 the detector the harness scores changes kind inside a session: the text sort, then the first Good's
+centroid, then the trained head. The old credit charged those changes to single clicks:
+- a Bad cannot move the Goods' centroid, so every Bad under the label quota scored exactly 0 (454654 was "harmful"
+  at z = −45 on 23 such clicks);
+- each run's first Good was charged the jump from the text sort to its one-image centroid, −0.3 to −0.6 AP for
+  173053, 555396 and 226368.
 
-#4658 asks which rule the owner wants. Re-reading these runs needs only `analyze.py`. `images.md` stays in the run
-directory, uncommitted.
+**The rule now (owner, 2026-10-13):**
+- **What a click taught the trained head.** An image is judged only on clicks whose scored step, and the step before
+  it, both score the trained head: 81% of clicks. `influence.csv` still lists every click, with both tiers.
+- **A flag needs the AP itself to move.** The image's credit, net of cell, label and phase, must pass |z| > 3, and so
+  must its raw credit, in the same direction. Most clicks barely move AP, so a typical click sits below its bucket's
+  mean, and a Bad the head ignores sits there every time without hurting anything. Before this second test, the top
+  harmful pair (503557, a Bad for bench) was flagged at z = −42 on −0.00003 AP a click.
+
+| preset | images tested (10+ clicks) | helpful | harmful | images shuffled within buckets, mean of 5 (helpful / harmful) |
+|---:|---:|---:|---:|---:|
+| 1/4 | 14,175 | 375 | 302 | 4.0 / 3.4 |
+| 1 | 14,161 | 366 | 284 | 3.8 / 3.6 |
+| 4 | 14,305 | 363 | 292 | 4.2 / 3.4 |
+
+About one flag in a hundred, on either side, is chance. The images below are the beta-1 sessions'.
+- [`images.md`](images.md) has the 12 flagged images on each side that moved AP most per click, with thumbnails.
+- The hand-review list for #4179 is the run's `harmful_pairs.csv`: 904 (image, class, label) pairs at beta 1.
+
+**The costliest harmful images are negatives that share the class's look, as in the last reviews (#4404).** Each
+is Bad for the class named, and the cost is AP lost per click on the trained head:
+- **560180**, tennis rackets leaning on a chain-link fence. **Bicycle** (large), 13 clicks, −0.16 a click: strung
+  ovals read as wheels.
+- **84474**, seaplanes moored at a harbour dock. **Boat**, 29 clicks, −0.12 a click (−0.15 at large). It was the
+  last review's worst image too.
+- **193977**, a figure sitting in deep powder on a steep slope. **Snowboard**, −0.14 and −0.10 a click at medium and
+  small (21 clicks), and about 0 at large. Whether a board is buried in the snow is a question for the hand review.
+- **505391**, a child in a helmet and goggles on short red skis, a Good for skis. **Snowboard**, −0.13 and −0.11 a
+  click at medium and small (28 clicks).
+- **85053**, people playing bat-and-ball with round blue paddles in a park. **Frisbee**, −0.09 and −0.10 a click at
+  medium and small (15 clicks).
+- **96034**, the silhouette of a plush bear against a metro map. **Dog**, 12 clicks, −0.06 a click.
+
+**Atypical Goods hurt as well: 535 of the 904 harmful pairs are Goods.** For example:
+- **272745**, a black dog asleep on a rug, put through a cartoon filter: a Good for **dog** (large), 10 clicks,
+  −0.09 a click.
+- **161308**, a street clock on an iron bracket among leaves: a Good for **clock** (large), 15 clicks, −0.05 a click.
+
+**The most helpful images are the class at its plainest,** each a Good:
+- **382521**, a grey puppy carrying a pink frisbee: **frisbee** (large), 10 clicks, +0.16 a click.
+- **264127**, a black-and-white dog carrying a blue-and-yellow frisbee: **frisbee** (large), 18 clicks, +0.12.
+- **579548**, a dark desk with three screens, a keyboard and a mouse on its pad: **mouse** (small), 16 clicks, +0.12.
+- **281210**, a plain wall clock filling the frame: **clock** (large), 12 clicks, +0.10.
 
 ## Known regimes to flag, not to fix
 
@@ -336,7 +378,8 @@ directory, uncommitted.
 - **#4121: a session that has found every positive.** One run in eighteen spends its last ~30 clicks on negatives.
   Autopilot's stop could fire there.
 - **#4483: a tighter check range.** The current one is honest but about 0.6 wide.
-- **#4404: correct early Bad votes that share a cue with the class.** Re-read once #4658 settles the image credit.
+- **#4404: correct early Bad votes that share a cue with the class.** Under #4658's rule the costliest harmful images
+  are such Bads again: rackets for bicycle, seaplanes for boat, short skis for snowboard, round paddles for frisbee.
 
 ## Files
 
@@ -346,9 +389,13 @@ directory, uncommitted.
 - `stopping_by_preset.csv`: where the app said stop, per preset and band (`stops_by_preset.py`).
 - `figures/`: the objective, the returned set and its path, per preset; AP and Goods over clicks; every cell.
 - `why/`: the confuser sheets and `why.csv`.
+- `images.md` and `images/`: the 12 flagged images each side that moved AP most per click at beta 1, under #4658's
+  rule (`thumbs.py`).
 - **Runs and full analyses:**
   - `/expscratch/sgreenberg/state-of-the-app/2026-10-08-b025|b1|b4/analysis-binary/` holds the analyses with #4653.
-    Beside it, `analysis-binary-runwt/` holds the run worktree's analyzer, from before #4653.
+    Beside it, `analysis-binary-runwt/` holds the run worktree's analyzer, from before #4653, and
+    `analysis-binary-4658/` the re-read with #4658's image rule (only its image files, `influence.csv`,
+    `images.csv`, `image_detector.csv`, `harmful_pairs.csv` and `images.md`, are cited here).
   - `perp.py` and `by_click.py` over them are in `2026-10-08-perp/` (and `-perp-runwt/`).
   - The viewer is `2026-10-08-betas/`.
 - **Scripts** are in `/expscratch/sgreenberg/sota-1008/`: the driver and the governor that shared the CPU cap

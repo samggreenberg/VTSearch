@@ -5,10 +5,15 @@
 
 Writes one small JPEG per named image (whole image, shrunk to ``--px``) and
 ``images.md``, a markdown table the report includes: the images with an effect
-of their own (``analyze.py``'s ``resid_z``: credit net of cell, label and
-phase), most helpful and most harmful, with how many times they were clicked,
-by how many detectors, and early vs late. Images past |z| > 3 are marked; the
-rest of the ``--n`` slots fill with the next strongest.
+of their own (``analyze.py``'s ``resid_z``: credit on the trained head, net of
+cell, label and phase), most helpful and most harmful, with how many times they
+were clicked, by how many detectors, and early vs late. Each side lists the
+images ``analyze.py`` flags first (``flag``: past |z| > 3 net of the bucket and
+on the raw credit, the same way, #4658), the most AP moved per click first, then
+fills the rest of the ``--n`` slots with the next strongest whose raw credit
+moved AP that way. Among flagged images the size of the effect, not its z,
+says which matter most: a Good that costs 0.002 a click every time reaches a
+higher z than a Bad that costs 0.1.
 
 Kept deliberately light: a review page with dozens of full-size images goes
 black on a laptop (the review-sheet weight budget), so each thumbnail is ~10 KB.
@@ -22,6 +27,7 @@ import sys
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pile"))
@@ -68,24 +74,34 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
 
     img = pd.read_csv(args.analysis / "images.csv")
-    seen = img[img["resid_z"].notna()].sort_values("resid_z", ascending=False)
-    picks = {"Most helpful": seen.head(args.n), "Most harmful": seen.tail(args.n).iloc[::-1]}
+    seen = img[img["resid_z"].notna()]
+    if "flag" not in seen.columns:  # an analysis from before #4658
+        seen = seen.assign(flag=np.sign(seen["resid_z"]) * (seen["resid_z"].abs() > 3), raw_z=np.nan)
+
+    def side(sign: int) -> pd.DataFrame:
+        s = seen[np.sign(seen["help_ap"]) == sign]
+        s = s.assign(flagged=s["flag"] == sign).sort_values(["flagged", "help_ap"], ascending=[False, sign < 0])
+        return s.head(args.n)
+
+    picks = {"Most helpful": side(1), "Most harmful": side(-1)}
     ids = {int(i) for df in picks.values() for i in df["image_id"]}
     names = _filenames(ids)
     zips = [zipfile.ZipFile(z) for z in (pc.COCO_VAL_ZIP, pc.COCO_TRAIN_ZIP)]
 
-    flagged = int((seen["resid_z"].abs() > 3).sum())
+    helpful, harmful = int((seen["flag"] > 0).sum()), int((seen["flag"] < 0).sum())
     lines = [
-        f"Images tested (clicked 10+ times): {len(seen)} of {len(img)}; {flagged} past |z| > 3. "
+        f"Images tested (clicked 10+ times on the trained head): {len(seen)} of {len(img)}; "
+        f"{helpful} helpful and {harmful} harmful flagged (past |z| > 3 net and raw, the same way). "
         "*Net* is the mean held-out AP added per click beyond what an average click with the same "
-        "cell, label and phase added; *z* is that in standard errors.",
+        "cell, label and phase added; *z* is that in standard errors; *raw* is the AP the click moved, "
+        "and *raw z* that in standard errors. An unflagged row is marked with a dash in *flag*.",
         "",
     ]
     for title, df in picks.items():
         lines += [f"### {title}", ""]
         lines += [
-            "| image | id | clicks | detectors | as positive | net / click | z | raw / click | early | late |",
-            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| image | id | flag | clicks | detectors | as positive | net / click | z | raw / click | raw z | early | late |",
+            "|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for r in df.itertuples():
             jpg = _thumb(zips, names.get(int(r.image_id), ""), args.px)
@@ -95,8 +111,9 @@ def main() -> int:
                 cell = f"![{int(r.image_id)}]({args.out.name}/{int(r.image_id)}.jpg)"
             fmt = lambda x: "" if pd.isna(x) else f"{x:+.3f}"  # noqa: E731
             lines.append(
-                f"| {cell} | {int(r.image_id)} | {int(r.n_obs)} | {int(r.n_detectors)} | {int(r.clicked_as_positive)} "
-                f"| {fmt(r.resid)} | {r.resid_z:+.1f} | {fmt(r.help_ap)} | {fmt(r.help_early)} | {fmt(r.help_late)} |"
+                f"| {cell} | {int(r.image_id)} | {'yes' if r.flagged else '-'} | {int(r.n_obs)} | {int(r.n_detectors)} "
+                f"| {int(r.clicked_as_positive)} | {fmt(r.resid)} | {r.resid_z:+.1f} | {fmt(r.help_ap)} "
+                f"| {'' if pd.isna(r.raw_z) else f'{r.raw_z:+.1f}'} | {fmt(r.help_early)} | {fmt(r.help_late)} |"
             )
         lines.append("")
     (args.out.parent / "images.md").write_text("\n".join(lines))

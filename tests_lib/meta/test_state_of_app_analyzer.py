@@ -663,6 +663,7 @@ def test_no_check_pick_is_credited_as_a_click(run) -> None:
     assert (inf["phase"] != "check").all()
     assert inf["t"].max() <= MAX_STEPS
     assert "help_ap" in inf.columns
+    assert {"tier", "prev_tier", "head_credit"} <= set(inf.columns), "every click keeps its tiers (#4658)"
 
 
 def test_an_advisory_check_is_scored_on_the_set_it_audited() -> None:
@@ -1048,3 +1049,58 @@ def test_the_session_reads_every_run_at_every_recorded_click() -> None:
     assert got.loc[("a@large", 2)] == 0.6 and got.loc[("a@large", 4)] == 0.7
     assert all(got.loc[("b@small", t)] == 0.05 for t in (1, 2, 4)), "the never-trained run: its typed query"
     assert sorted({t for _, t in got.index}) == [1, 2, 4], "the clicks any run recorded"
+
+
+def _influence_case(analyze, tiers: list[str] | None) -> pd.DataFrame:
+    """One run: a Good at t=1, Bads at t=2-3 (the Goods' centroid), the quota met at t=4, the head from there.
+
+    *tiers* is each step's ``detector_tier``; ``None`` writes no such column (a run from before #4643).
+    """
+    key = {"dataset": "coco_better", "category": "a@large", "embedder": "siglip", "style": "whole_image", "seed": 0}
+    ap = [0.2, 0.2, 0.2, 0.5, 0.6, 0.55]
+    base = pd.DataFrame([{**key, "t": t, "average_precision": a, "phase": "good"} for t, a in enumerate(ap, 1)])
+    if tiers is not None:
+        base["detector_tier"] = tiers
+    picks = pd.DataFrame(
+        [{**key, "t": t, "picked_id": 100 + t, "picked_label": int(t == 1 or t == 5), "phase": "good"}
+         for t in range(1, len(ap) + 1)]
+    )  # fmt: skip
+    ts = {("coco_better", "a@large", "siglip", 0): {"text_ap": 0.4}}
+    return analyze.attribute(base, picks, ts).set_index("t")
+
+
+def test_an_image_is_credited_only_what_it_taught_the_trained_head() -> None:
+    """#4658: the per-image tables read only clicks whose step and the step before both score the trained head.
+    A Bad under the Goods' centroid is credited exactly 0, and the step into a new tier charges a jump between two
+    sorts to one click; neither says anything about the image."""
+    analyze = _load("_sota_analyze_head", _SOTA / "analyze.py")
+    inf = _influence_case(analyze, ["centroid", "centroid", "centroid", "trained", "trained", "trained"])
+    assert inf.loc[1, "prev_tier"] == "text" and inf.loc[1, "d_ap"] == pytest.approx(-0.2), "the text -> centroid jump"
+    assert (inf.loc[[2, 3], "d_ap"] == 0).all(), "a Bad cannot move the Goods' centroid"
+    assert inf.loc[4, "prev_tier"] == "centroid" and inf.loc[4, "tier"] == "trained"
+    assert inf["head_credit"].to_dict() == {1: 0, 2: 0, 3: 0, 4: 0, 5: 1, 6: 1}
+    # The image tables never see the opening's clicks; influence.csv keeps them.
+    img, _ = analyze.roll_up(inf.reset_index())
+    assert sorted(img["image_id"]) == [105, 106]
+    # A run recorded before detector_tier: every row is the head, and only its first step (from the text sort) is out.
+    legacy = _influence_case(analyze, None)
+    assert legacy["head_credit"].to_dict() == {1: 0, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1}
+
+
+def test_an_image_is_flagged_only_when_the_ap_moved_its_way_past_chance() -> None:
+    """#4658: trained-head credit is right-skewed, so a typical click sits below its bucket's mean, and a Bad the
+    head ignores is credited about 0 every time, a steady bucket-mean below its peers (the 2026-10-08 runs' top
+    "harmful" pair, 503557, sat at z = -42 on -0.00003 AP a click). Neither hurt: a flag needs the raw credit past
+    the same z, the same way."""
+    analyze = _load("_sota_analyze_flag", _SOTA / "analyze.py")
+    rng = np.random.default_rng(0)
+    n = 20
+    rows = []
+    for img, raw, sd in ((1, 0.001, 0.0005), (2, -0.01, 0.0005), (3, 0.05, 0.0005), (4, -0.00003, 0.0001)):
+        for k, d in enumerate(raw + rng.normal(0, sd, n)):
+            rows.append({"image_id": img, "help_ap": d, "resid": d - 0.01, "k": k})
+    got = analyze._resid_z(pd.DataFrame(rows))
+    assert got.loc[1, "resid_z"] < -analyze.Z_FLAG and got.loc[1, "flag"] == 0, "below its peers, AP still rose"
+    assert got.loc[4, "resid_z"] < -analyze.Z_FLAG and got.loc[4, "flag"] == 0, "an ignored Bad moved nothing"
+    assert got.loc[2, "flag"] == -1, "past z and the AP fell past chance: harmful"
+    assert got.loc[3, "flag"] == 1, "past z and the AP rose past chance: helpful"
