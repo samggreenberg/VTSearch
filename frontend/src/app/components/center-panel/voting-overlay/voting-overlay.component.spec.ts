@@ -92,8 +92,8 @@ describe('VotingOverlayComponent', () => {
     fixture.componentRef.setInput('hint', 'start-voting');
     await settleZoneless(fixture);
     const text = (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
-    expect(text).toContain('Good, or press the right arrow key');
-    expect(text).toContain('Bad, or press the left arrow key');
+    expect(text).toContain('Good (or press the right arrow key)');
+    expect(text).toContain('Bad (the left arrow key)');
   });
 
   it("says what each Autopilot phase is after, with its counts, and what a test's pick is (#4807)", async () => {
