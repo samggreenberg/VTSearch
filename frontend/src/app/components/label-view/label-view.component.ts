@@ -212,8 +212,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       return 'revote';
     }
     if (this.centreExhausted()) return null;
-    // The vote sets the piles fill from move at different times: the item's
-    // own state on the click, the labelset's counts after a round-trip.
+    // The two vote tallies move at different times: the item's own state as
+    // the click lands, the labelset's counts after a round-trip.
     const cast = Math.max(
       votes.labelsetGoodCount + votes.labelsetBadCount,
       votes.goodVotes.size + votes.badVotes.size,
