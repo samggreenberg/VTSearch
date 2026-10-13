@@ -6407,7 +6407,7 @@ def _land_stage(stage: int) -> plt.Figure:
     ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
     # Every region's name sits where no later page draws over it: the trained
     # head's three to the right of the typed query's staircase.
-    _land_name(ax, LAND_B / 2 + 0.5, 0.5, "no Goods: nothing to rank toward")
+    _land_name(ax, LAND_B / 2 + 0.5, 0.5, "no Goods")
     _land_name(ax, 8.0, 2.0, "the Goods' average", plate=LAND_FILL["centroid"] if stage >= 4 else None)
     if stage >= 2:
         _land_quota(ax, stage)
@@ -6439,17 +6439,19 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
 #: The maps' legend: one swatch per pure colour, in the free column left of
 #: the plot and under the title notch, clear of the Goods axis's name. Its
 #: entries keep their slots across a build and appear on the page their colour
-#: does: (stage it appears on, fill key, label).
-MAP_LEGEND_X, MAP_LEGEND_TOP, MAP_LEGEND_STEP, MAP_LEGEND_SWATCH = 0.7, 4.4, 0.95, 0.5
+#: does: (stage it appears on, fill key, label). Each label is the outcome,
+#: what comes back and which ranking it is cut from, not the rule that chose it
+#: (owner, 2026-10-13); the region names inside the plot say the rule.
+MAP_LEGEND_X, MAP_LEGEND_TOP, MAP_LEGEND_STEP, MAP_LEGEND_SWATCH = 0.2, 5.0, 1.15, 0.5
 LAND_LEGEND = (
-    (1, "none", "no Goods"),
-    (1, "centroid", "Goods' average"),
-    (2, "count", "trained head,\ncounting"),
-    (3, "labels", "labels line"),
+    (1, "none", "Return text sort"),
+    (1, "centroid", "Return stand-outs,\nby Goods' average"),
+    (2, "count", "Return stand-outs,\nby trained head"),
+    (3, "labels", "Return Fβ peak,\nby trained head"),
 )
 IN_LEGEND = (
-    (1, "count", "trained head,\ncounting"),
-    (2, "labels", "labels line"),
+    (1, "count", "Return stand-outs,\nby trained head"),
+    (2, "labels", "Return Fβ peak,\nby trained head"),
 )
 
 

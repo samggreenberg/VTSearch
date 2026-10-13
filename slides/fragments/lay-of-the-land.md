@@ -15,8 +15,10 @@
      it, on the Binary path. Every edge is computed from the shipped rules,
      so it moves when they do. -->
 
-<!-- **a** — No Goods, nothing to rank toward, in white. Below the quota,
-     in yellow, the Goods' average, its line Out Standing's count. -->
+<!-- **a** — No Goods, in white: nothing to rank toward but the typed query,
+     so its text sort comes back. Below the quota, in yellow, the Goods'
+     average, its line Out Standing's count. The key says what each colour
+     returns; the names on the map say the rule that chose it. -->
 
 <!-- **b** — The quota: three Goods and four Bads, or a Good and sixteen Bads
      (#4643, #4731). Past it, in orange, a trained head, still counting what
