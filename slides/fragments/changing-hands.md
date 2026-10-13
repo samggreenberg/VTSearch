@@ -20,10 +20,10 @@
      when it runs dry (on faces, F-beta over a session went from 0.001 to
      0.47, #4731). Then a trained head, and still the same count, on its
      scores. With two to five Goods its class model cannot place the corpus's
-     matches: at β 4 on faces it kept up to 704 for 4 withheld (#4786). On a
-     single-vector space a typed query keeps showing its own set until thirty
-     labels: a head on three and four returns a worse set than the query's
-     until about vote 27 (#4736). -->
+     matches: at β 4 on faces it kept up to 704 for 4 withheld (#4786). A
+     typed query keeps showing its own set until thirty labels: a head on
+     three and four returns a worse set than the query's until about vote 27
+     (#4736). -->
 
 <!-- **c** — Six held-out Goods, whatever the Bads (#4798): about ten in hand,
      since the folds hold out some six votes in ten. From there it is the

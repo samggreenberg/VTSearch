@@ -6284,13 +6284,12 @@ def _land_p_labels(n_good: int, n_bad: int, split: float) -> float:
 
 @functools.lru_cache(maxsize=None)
 def _land_grid() -> dict:
-    """Every cell's strategy, from the shipped tiers and constants: single-vector spaces, and the patch boundary."""
+    """Every cell's strategy on a single-vector space (the Binary path), from the shipped tiers and constants."""
     from vtscore.detectors.label_quota import TIER_TRAINED, label_quota, query_holds  # noqa: PLC0415
     from vtscore.training.thresholds.knobs import PRODUCTION_SPLIT_BY_SPACE  # noqa: PLC0415
 
     kind = np.empty((LAND_G + 1, LAND_B + 1), dtype=object)
     p_labels = np.zeros((LAND_G + 1, LAND_B + 1))
-    p_patch = np.zeros((LAND_G + 1, LAND_B + 1))
     held = np.zeros((LAND_G + 1, LAND_B + 1), dtype=bool)
     for g in range(LAND_G + 1):
         for b in range(LAND_B + 1):
@@ -6302,9 +6301,8 @@ def _land_grid() -> dict:
                 kind[g, b] = "centroid"
             else:
                 p_labels[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["single_vector"])
-                p_patch[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["patch"])
                 kind[g, b] = "trained"
-    return {"kind": kind, "p": p_labels, "p_patch": p_patch, "held": held}
+    return {"kind": kind, "p": p_labels, "held": held}
 
 
 def lay_of_the_land_fig() -> None:
@@ -6314,9 +6312,10 @@ def lay_of_the_land_fig() -> None:
     and faces). Below the quota the Goods' average; past it the trained head,
     counting what stands out until its folds hold out six Goods, then the
     labels line. Where the folds' split rounds either way, the cell's grey is
-    mixed in proportion to the chance it is the labels line. A dashed rule
-    marks where the labels line starts on a patch space, and the last page
-    hatches where a typed query keeps its own set. Every boundary is computed
+    mixed in proportion to the chance it is the labels line, and the last
+    page fades where a typed query keeps its own set. Binary only: the room
+    meets region voting, whose folds split another way, sections later, so
+    the slide never names it. Every boundary is computed
     from the shipped functions and constants (`label_quota`, `query_holds`,
     `_dithered_count`, `PRODUCTION_SPLIT_BY_SPACE`, `HEAD_COUNT_GOODS`).
     """
@@ -6414,23 +6413,13 @@ def _land_quota(ax: plt.Axes, stage: int) -> None:
     _, _, cw, ch = _land_cell(0, 0)
     edge = [(BAD_QUOTA, LAND_G + 1), (BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, 1)]
     ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, LAND_NAME_B, 4.0 if stage >= 3 else 8.0, "the trained head,\ncounting what stands out")
+    _land_name(ax, LAND_NAME_B, 4.5 if stage >= 3 else 8.0, "the trained head,\ncounting what stands out")
 
 
 def _land_labels(ax: plt.Axes) -> None:
-    """Page 3: the labels line, the Goods where the split decides, and where a patch space always has it."""
-    from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA  # noqa: PLC0415
-
-    x0, y0, x1, _ = LAND_BOX
-    _, _, cw, ch = _land_cell(0, 0)
+    """Page 3: the labels line, and the Goods where the split decides."""
     _land_name(ax, LAND_NAME_B, 13.5, "the trained head:\nthe labels line")
     _land_name(ax, LAND_NAME_B, 9.0, "either, as the\nfolds' split rounds")
-    p_patch = _land_grid()["p_patch"]
-    patch_g = int(min(g for g in range(LAND_G + 1) if (p_patch[g, DRY_BAD_QUOTA:] >= 1.0).all()))
-    y = y0 + patch_g * ch
-    ax.plot([x0 + BAD_QUOTA * cw, x1], [y, y], color=INK, linewidth=1.6, linestyle=(0, (4, 3)), zorder=4)
-    ax.text(x1 - 0.1, y - LABEL_GAP, "Region voting: from here up", ha="right", va="top", fontsize=16, color=INK,
-            zorder=6)  # fmt: skip
 
 
 def _land_query(ax: plt.Axes) -> None:

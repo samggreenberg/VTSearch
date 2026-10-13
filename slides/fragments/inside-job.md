@@ -19,13 +19,12 @@
 
 <!-- **b** — Three Goods a fold, six between the two (#4798): the labels
      line. One flat edge, with no Bads in it. Lay of the Land's band is this
-     edge seen through the split: on the Binary path a fold can hold out
-     three from six Goods in hand, and always does from twelve; on a patch
-     space, from four, and always from seven. -->
+     edge seen through the split: a fold can hold out three from six Goods
+     in hand, and always does from twelve. -->
 
 <!-- **c** — Fifty Bads a fold, a hundred between them (#4490): from there
      the labels line may model the negatives by the Bads' own scores rather
      than a normal fitted to the corpus, if the Bads look like a random
      sample of it. An imported, fully labelled set does; a session's never
-     do, because Autopilot asks about the top. On the Binary path that is
-     about 160 to 170 Bads in hand. -->
+     do, because Autopilot asks about the top. That is about 160 to 170 Bads
+     in hand. -->
