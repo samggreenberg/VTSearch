@@ -339,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
         f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
         f"line_counts={'on' if cfg.LINE_COUNTS else 'off'} "
+        f"set_overlap={'on' if cfg.SET_OVERLAP else 'off'} "
         f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
@@ -359,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     from vtscore.eval.arms_handover import HANDOVER_COLUMNS
     from vtscore.eval.arms_line_counts import LINE_COUNT_COLUMNS
+    from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
     from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
@@ -400,6 +402,7 @@ def main(argv: list[str] | None = None) -> int:
     all_linetests: list[dict] = []
     all_handover: list[dict] = []
     all_linecounts: list[dict] = []
+    all_overlap: list[dict] = []
     all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
@@ -414,6 +417,7 @@ def main(argv: list[str] | None = None) -> int:
         linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
         handover_local: list[dict] | None = [] if cfg.HANDOVER_SHADOW else None
         linecounts_local: list[dict] | None = [] if cfg.LINE_COUNTS else None
+        overlap_local: list[dict] | None = [] if cfg.SET_OVERLAP else None
         with sigma_floor(cfg.SIGMA_FLOOR), head_count_bads(cfg.HEAD_COUNT_BADS):
             rows = simulate_voting_iterations(
                 medias,
@@ -503,6 +507,7 @@ def main(argv: list[str] | None = None) -> int:
                 handover_shadow=cfg.HANDOVER_SHADOW,
                 handover_sink=handover_local,
                 line_count_sink=linecounts_local,
+                set_overlap_sink=overlap_local,
                 query_tier=cfg.QUERY_TIER,
                 **({} if cfg.QUERY_HOLD is None else {"query_hold": cfg.QUERY_HOLD}),
             )
@@ -586,6 +591,9 @@ def main(argv: list[str] | None = None) -> int:
         for lc in linecounts_local or []:
             lc["embedder"] = emb
         all_linecounts.extend(linecounts_local or [])
+        for ov in overlap_local or []:
+            ov["embedder"] = emb
+        all_overlap.extend(overlap_local or [])
         if testscores_local:
             # The last ordinary step and the last row (after the check): what Train left and what Find applies.
             # The full-label ceiling's snapshot (#4490) is kept apart, never read as a session's step; and
@@ -682,6 +690,11 @@ def main(argv: list[str] | None = None) -> int:
     linecounts_cols = [*LINE_COUNT_COLUMNS, "embedder"]
     linecounts_out = cell_file(outdir / f"task_{idx:04d}__linecounts.csv")
     pd.DataFrame(all_linecounts, columns=pd.Index(linecounts_cols)).to_csv(linecounts_out, index=False)
+    # The #4816 set overlap: one row per click a trained head scored the pool on a typed-query run.  Same
+    # unconditional-write rule: an empty file with the header says it was off.
+    overlap_cols = [*OVERLAP_COLUMNS, "embedder"]
+    overlap_out = cell_file(outdir / f"task_{idx:04d}__overlap.csv")
+    pd.DataFrame(all_overlap, columns=pd.Index(overlap_cols)).to_csv(overlap_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means

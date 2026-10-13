@@ -441,6 +441,16 @@ PICK_COLUMNS: tuple[str, ...] = (
     "n_bad",
     #: Pool items still unlabelled after this click.
     "n_pool",
+    #: Where the pick sat at the previous click (#4816,
+    #: :data:`~vtscore.eval.arms_set_overlap.PICK_OVERLAP_COLUMNS`): in the
+    #: head's set and the typed query's, its rank by the head's score in the
+    #: pool and within its own part of the two sets, and the head's posterior.
+    #: NaN unless the run records the set overlap and a head scored the pool.
+    "picked_in_head",
+    "picked_in_query",
+    "picked_head_rank",
+    "picked_part_rank",
+    "picked_head_posterior",
 )
 
 #: Column order for the **rank frame** (issue #4357): where the positives sit in
