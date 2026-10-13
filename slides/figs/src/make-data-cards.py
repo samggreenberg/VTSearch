@@ -253,11 +253,14 @@ def frame_coco_zoom() -> Any:
 #: The four problems, in the order the slide takes them. The left column lists
 #: all four on every frame and sets the one being drawn at full weight — the
 #: deck's outline trick, so the room always knows which of the four it is on.
+#: The order is the order the fixes are made in (owner, #4835): correct the
+#: labels, split the boxes that hold a pile, choose the box that sets a photo's
+#: size, and only then cut the datasets by how common and how large.
 COCO_PROBLEMS = (
     "Two names, one thing",
-    "One set, many cuts",
-    "Which one sets the size?",
     "A pile is not large",
+    "Which one sets the size?",
+    "One set, many cuts",
 )
 
 #: `(annotation id, COCO's label)` pairs: the same kind of object, filed under
@@ -390,7 +393,7 @@ def frame_problem_merge() -> Any:
     whole media area: two picture columns, then the arrow and the merged name.
     """
     fig = dc.blank()
-    _problems_column(fig, 0, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("Two names, one thing"), COCO_PROBLEMS)
     x0, gap, cell_w = PROBLEMS_MEDIA_X0, 0.018, 0.2385
     label_h, row_gap = 0.05, 0.035
     cell_h = (0.955 - 0.045 - 3 * label_h - 2 * row_gap) / 3
@@ -428,7 +431,7 @@ def frame_problem_cuts() -> Any:
     from matplotlib.patches import Rectangle
 
     fig = dc.blank()
-    _problems_column(fig, 1, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("One set, many cuts"), COCO_PROBLEMS)
     fig.text(0.40, 0.935, "the same photographs, cut four ways", fontsize=dc.FLOOR_PT + 3, color=dc.SOFT, va="top")
 
     def dots(rect: list[float], cols: int, rows: int, hits: int, size: float, title: str) -> None:
@@ -484,7 +487,7 @@ def frame_problem_largest() -> Any:
     from PIL import Image
 
     fig = dc.blank()
-    _problems_column(fig, 2, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("Which one sets the size?"), COCO_PROBLEMS)
     images, coco, by_image, names = _coco()
     meta = next(i for i in coco["images"] if i["id"] == COCO_SHELF)
     cars = [a["bbox"] for a in by_image[COCO_SHELF] if names[a["category_id"]] == "book"]
@@ -523,7 +526,7 @@ def frame_problem_pile() -> Any:
 
     images, coco, _, _ = _coco()
     fig = dc.blank()
-    _problems_column(fig, 3, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("A pile is not large"), COCO_PROBLEMS)
     shown = []
     # Green for the box that is right to call large, red for the one that is not.
     for (image_id, ann_id), colour, dashed in ((COCO_PILE_ONE, dc.POS, False), (COCO_PILE_ROW, dc.NEG, True)):
@@ -1198,9 +1201,9 @@ FRAMES = {
     "coco-problems": [
         ("coco-problems-blank", frame_problem_blank),
         ("coco-problems-merge", frame_problem_merge),
-        ("coco-problems-cuts", frame_problem_cuts),
-        ("coco-problems-largest", frame_problem_largest),
         ("coco-problems-pile", frame_problem_pile),
+        ("coco-problems-largest", frame_problem_largest),
+        ("coco-problems-cuts", frame_problem_cuts),
     ],
 }
 
