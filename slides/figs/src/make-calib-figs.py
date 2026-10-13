@@ -62,7 +62,13 @@ from vtscore.training.thresholds import (
     inclusion_cost_weights,
     target_precision_threshold,
 )
-from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine, corpus_sigma_floor, fit_labels_line
+from vtscore.training.thresholds.labels_line import (
+    ClassScoreModel,
+    LabelsLine,
+    corpus_sigma_floor,
+    fit_labels_line,
+    head_count_serves,
+)
 from vtscore.training.structural_similarity import (
     PRECISION_CEILING_MARGIN,
     PRECISION_GOOD_FRACTION,
@@ -5239,10 +5245,14 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 
 # ── the line the labels draw (#4452) ─────────────────────────────────────────
 
-#: How many build stages the labels-line figure reveals in: the held-out votes;
-#: the class model fitted to them; the corpus and its fit; expected F-beta at
-#: the balanced radio, and the line at its peak; the other two radios' peaks.
+#: How many build stages the labels-line figure has: the held-out votes; the
+#: class model fitted to them; the corpus and its fit; expected F-beta at the
+#: balanced radio, and the line at its peak; the other two radios' peaks.
 LL_STAGES = 5
+#: The first stage What to Expect shows. The three before it are Joint
+#: Custody's (`calib-labels-fit`), at the end of section II, so the slide opens
+#: on that fit recapped and builds only what the balance adds.
+LL_FIRST_SHOWN = 3
 
 #: The canvas: `FBETA_CANVAS`, so the two slides that explain the balance
 #: draw at one scale and their type lands at one size.
@@ -5256,14 +5266,18 @@ LL_LOGIT = (-3.6, 3.0)
 #: that never saw it. Spaced so no two glyphs touch, and imperfect on purpose:
 #: the top Bad outscores the bottom Good. The Bads sit near the middle rather
 #: than down in the bulk, because Autopilot asked about the items near its
-#: line — the bias the corpus fit exists to correct.
-LL_GOODS = (0.35, 0.95, 1.25, 1.55, 1.85)
+#: line — the bias the corpus fit exists to correct. Six Goods, because the app
+#: draws the labels line only from `HEAD_COUNT_GOODS` held-out Goods (#4798):
+#: with five, these votes get the head's count line (it kept 3) and every slide
+#: drawn from them would describe a line the app does not draw. `_ll_data`
+#: asserts it.
+LL_GOODS = (0.35, 0.9, 1.15, 1.4, 1.65, 1.9)
 LL_BADS = (-1.3, -0.95, -0.6, -0.25, 0.05, 0.65)
 #: The corpus the line is drawn on: (items, share that are matches, the
 #: matches' (mean, spread), the rest's (mean, spread), seed), in logit units.
 #: One in eight are matches, far more than a real search sees (COCO Better's
 #: pools are 0.44%), so the matches' hump is visible at all; the seed is the
-#: one whose fit *under*-counts the matches a little (219 of 240), as a
+#: one whose fit *under*-counts the matches a little (212 of 240), as a
 #: session's easiest Goods make it do in practice.
 LL_CORPUS = (2000, 0.12, (1.1, 0.65), (-1.3, 0.85), 3)
 LL_BINS = 46
@@ -5298,6 +5312,7 @@ def _ll_data() -> tuple[np.ndarray, "LabelsLine"]:
     labels = [1.0] * len(LL_GOODS) + [0.0] * len(LL_BADS)
     line = fit_labels_line([(votes, labels)], _ll_sigmoid(corpus))
     assert line is not None and line.unvoted_scores is not None and line.unvoted_posteriors is not None
+    assert not head_count_serves(line.model), "the votes are under the thin-model gate: add Goods (LL_GOODS)"
     return corpus, line
 
 
@@ -5328,11 +5343,13 @@ def labels_line_fig() -> None:
     they imply; the corpus, and how many matches the fit says it holds; the
     expected F-beta of every cut, and the line at its peak. The last page adds
     the other two radios' peaks — the same three balances as `calib-fbeta`.
+    The first two rows are built up on Joint Custody (`labels_fit_fig`), so
+    the pages start at :data:`LL_FIRST_SHOWN` and are numbered from 1.
     """
     final = _ll_stage(LL_STAGES)
     box = tight_box(final)
-    for stage in range(1, LL_STAGES):
-        save(_ll_stage(stage), OUT, f"calib-labels-line.build{stage}.png", column=FULL_BLEED, box=box)
+    for page, stage in enumerate(range(LL_FIRST_SHOWN, LL_STAGES), start=1):
+        save(_ll_stage(stage), OUT, f"calib-labels-line.build{page}.png", column=FULL_BLEED, box=box)
     save(final, OUT, "calib-labels-line.png", column=FULL_BLEED, box=box)
 
 
@@ -5398,8 +5415,14 @@ def _ll_votes_row(ax: plt.Axes, model: "ClassScoreModel", stage: int) -> None:
         ax.plot(_ll_at(grid[seen]), LL_VOTES_Y + curve[seen] * LL_MODEL_H, color=color, linewidth=HUMP_LW, zorder=4)
 
 
-def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: "ClassScoreModel") -> None:
-    """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds."""
+def _ll_corpus_row(
+    ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: "ClassScoreModel", *, fit: bool = True
+) -> None:
+    """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds.
+
+    With ``fit=False`` the bars alone: the corpus as Oops! All Haystack left it,
+    before Joint Custody fits it.
+    """
     lo, hi = LL_LOGIT
     counts, edges = np.histogram(corpus, bins=LL_BINS, range=LL_LOGIT)
     bin_w = (hi - lo) / LL_BINS
@@ -5414,6 +5437,8 @@ def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: 
             ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [LL_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_CORPUS_Y, z=5)
     _ll_row_name(ax, LL_CORPUS_Y + 0.9, "The corpus")
+    if not fit:
+        return
     # The 2-part fit: the labels' Good normal, its shape held, and a normal
     # for everything else, each scaled to the count the fit gives it.
     grid = np.linspace(lo, hi, 700)
@@ -5476,6 +5501,72 @@ def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float,
     ax.text(
         (cut_x + right) / 2, bracket_y + LABEL_GAP, f"kept: {kept}", ha="center", va="bottom", fontsize=16, color=INK
     )
+
+
+# ── Joint Custody: the folds and the corpus, fitted together (#4452) ────────
+
+#: How many build stages Joint Custody's figure reveals in: the held-out votes;
+#: the class model fitted to them; the corpus, bare; the 2-part fit of it with
+#: the Good normal held, and its count; each item's chance of being a match.
+LF_STAGES = 5
+
+
+def labels_fit_fig() -> None:
+    """Joint Custody: where section II's three ideas meet, before any line is drawn (#4452).
+
+    What to Expect's canvas and rows, built up from nothing: Grade My Own
+    Homework's held-out votes and the two normals they imply; Oops! All
+    Haystack's corpus, bare; the fit Great Expectations' EM makes of it when
+    the Good normal's shape is held from the votes and only its share and the
+    rest are fitted, and the count of matches that fit gives; then the other
+    thing the same fit says, every item's chance of being a match, in the row
+    where What to Expect will draw expected F-beta. No line: choosing one
+    takes the user's balance, which section III introduces.
+    """
+    final = _lf_stage(LF_STAGES)
+    box = tight_box(final)
+    for stage in range(1, LF_STAGES):
+        save(_lf_stage(stage), OUT, f"calib-labels-fit.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-labels-fit.png", column=FULL_BLEED, box=box)
+
+
+def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
+    """Each unvoted item's chance of being a match, from the 3-part fit, with even odds marked.
+
+    Drawn where What to Expect draws expected F-beta, so Joint Custody and
+    Second Cut read as the same fit asked one question.
+    """
+    lo, hi = LL_LOGIT
+    right = LL_X0 + LL_W
+    half = LL_F_Y + LL_F_H / 2
+    _range_line(ax, LL_X0, right, LL_F_Y, z=3)
+    _ll_row_name(ax, half, "Chance of\na match")
+    # Even odds as a hairline across the row, named at its end: where the curve
+    # crosses it is a coin toss.
+    ax.plot([LL_X0, right], [half] * 2, color=SOFT, linewidth=1.2, linestyle=(0, (2, 3)), zorder=2)
+    ax.text(right + LABEL_GAP, half, "½", ha="left", va="center", fontsize=16, color=INK)
+    xs = _ll_logit(line.unvoted_scores)
+    chance = np.asarray(line.unvoted_posteriors, dtype=float)
+    inside = (xs >= lo) & (xs <= hi)
+    ax.plot(_ll_at(xs[inside]), LL_F_Y + chance[inside] * LL_F_H, color=INK, linewidth=2.4, zorder=4)
+
+
+def _lf_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Joint Custody's figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+
+    corpus, line = _ll_data()
+    model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
+    _ll_votes_row(ax, model, stage)
+    if stage >= 3:
+        _ll_corpus_row(ax, corpus, line, model, fit=stage >= 4)
+    if stage >= 5:
+        _ll_chance_row(ax, line)
+    return fig
 
 
 # ── Second Cut: where Autopilot asks (#3546, #4632) ──────────────────────────
@@ -5570,23 +5661,12 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
 
     corpus, line = _ll_data()
     model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
-    lo, hi = LL_LOGIT
-    right = LL_X0 + LL_W
     half = ACQ_CHANCE_Y + ACQ_CHANCE_H / 2
 
-    # ── stage 1: What to Expect's fit, asked the other thing it knows ─────────
+    # ── stage 1: Joint Custody's fit, with the line at the middle radio ───────
     _ll_votes_row(ax, model, 2)
     _ll_corpus_row(ax, corpus, line, model)
-    _range_line(ax, LL_X0, right, ACQ_CHANCE_Y, z=3)
-    _ll_row_name(ax, ACQ_CHANCE_Y + ACQ_CHANCE_H / 2, "Chance of\na match")
-    # Even odds as a hairline across the row, named at its end: where the curve
-    # crosses it is a coin toss.
-    ax.plot([LL_X0, right], [half] * 2, color=SOFT, linewidth=1.2, linestyle=(0, (2, 3)), zorder=2)
-    ax.text(right + LABEL_GAP, half, "½", ha="left", va="center", fontsize=16, color=INK)
-    xs = _ll_logit(line.unvoted_scores)
-    chance = np.asarray(line.unvoted_posteriors, dtype=float)
-    inside = (xs >= lo) & (xs <= hi)
-    ax.plot(_ll_at(xs[inside]), ACQ_CHANCE_Y + chance[inside] * ACQ_CHANCE_H, color=INK, linewidth=2.4, zorder=4)
+    _ll_chance_row(ax, line)
     _acq_cut(ax, line, LL_PICKED, "β 1", color=BLUE, linewidth=2.6)
 
     # ── stage 2: Autopilot asks where the chance falls to even odds ───────────

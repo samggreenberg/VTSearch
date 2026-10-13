@@ -59,16 +59,19 @@ slides:
   head-start
 
   # II — Calibration: the three ideas the labels line (section III) is built
-  # from, and only those (#4670). The folds' held-out scores are its class
-  # model; the unlabeled corpus is where it counts the matches; EM is how it
-  # fits that corpus. The rules that once stacked on these — the blend, the
-  # fused cut, rank transfer, the 70/30 split — are in the appendix: measured
-  # in F-beta, none of them beat cross-calibration (#4582, #4583), and none
-  # draws today's line.
+  # from, and only those (#4670), then the fit that joins them. The folds'
+  # held-out scores are its class model; the unlabeled corpus is where it
+  # counts the matches; EM is how it fits that corpus; Joint Custody is the
+  # three together, ending on the two numbers section III draws the line
+  # from, before any balance is set. The rules that once stacked on these —
+  # the blend, the fused cut, rank transfer, the 70/30 split — are in the
+  # appendix: measured in F-beta, none of them beat cross-calibration (#4582,
+  # #4583), and none draws today's line.
   outline-hold-the-line +at2
   xcal
   gmm-idea
   gmm-em
+  labels-fit
 
   # III — Inclination: why a line needs one, what F1 and F-beta are (#4517),
   # F-beta's peak and the three-radio balance that sets its beta (#4413,

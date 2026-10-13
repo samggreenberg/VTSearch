@@ -28,7 +28,8 @@
 
 <!-- **c** — Section II is the three ideas the line is built from: scores
      from models that never saw the votes, the unlabeled corpus the votes
-     came out of, and the algorithm that fits a mixture to it. -->
+     came out of, and the algorithm that fits a mixture to it. Then the fit
+     that joins the three. -->
 
 <!-- **d** — Section III is the line the app draws today: F-beta, the three
      radios that set its β, the line the labels put at its peak, what that

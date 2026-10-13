@@ -26,8 +26,9 @@
      midpoint between the two means. That is the whole estimator, and nothing
      in the bottom half of the figure ever looks at a vote. -->
 
-<!-- Say which half lasted. Reading the corpus did: section III's line
-     counts its matches on exactly this grey bar. The midpoint did not.
+<!-- Say which half lasted. Reading the corpus did: Joint Custody, at the
+     end of this section, counts the matches on exactly this grey bar. The
+     midpoint did not.
      Scored in F-beta over the session, cutting here instead of
      cross-calibrating lost 0.36, 0.36 and 0.28 at β ¼, 1 and 4 (#4582): where under half a percent
      of the corpus matches, a cut between the two means keeps far more than
