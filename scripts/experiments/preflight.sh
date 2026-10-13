@@ -187,10 +187,15 @@ say_note() { echo "  note  $*"; }
 # evaluated the empty string as 0 -- so a correctly-sized `--mem 14G` was
 # reported as "(< 12G)".  The gate failed closed, which is the safe direction,
 # but it failed for a reason its own message contradicted.
+#
+# Whole MB out, rounded, so the result is safe in `(( ))` and `[[ -lt ]]`: awk's
+# plain `print` writes a non-integral product as `1.15343e+06` (a "1.1T").  An
+# input in any other unit comes back unchanged, which is not a number, so a
+# caller that needs one can tell.
 _to_mb() {
   local v="${1^^}"; local n="${v%[GMT]*}"
-  case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
-                *G) awk "BEGIN{print $n*1024}";;
+  case "$v" in *T) awk "BEGIN{printf \"%.0f\", $n*1024*1024}";;
+                *G) awk "BEGIN{printf \"%.0f\", $n*1024}";;
                 *M) echo "$n";;
                 *)  echo "$n";; esac
 }
@@ -536,17 +541,30 @@ if [[ -n "$MEM_PER_TASK" && -n "$CONC" ]]; then
     squeue -u "$USER" -h -o %q 2>/dev/null | sort -u
     sacctmgr -n show assoc user="$USER" format=QOS%60 2>/dev/null | tr ',' '\n' | tr -d ' '
   }
+  #
+  # `sacctmgr` writes the cap in the largest unit that divides it exactly, so the
+  # suffix moves with the number, not with a Slurm upgrade: 1,100,000 MB printed
+  # as `mem=1100000M`, and the 1,126,400 MB it became by 2026-10-13 prints as
+  # `mem=1100G`.  Reading only the digits took that for 1,100 MB and failed every
+  # array at ~20,000% of its allowance (#4839), so the unit is parsed, and a cap
+  # in a unit `_to_mb` does not know fails the check rather than being guessed.
   cap_mb=""
   qos=""
+  unread=""
   while read -r q; do
     [[ -z "$q" || "$q" == "N/A" || "$q" == "(null)" ]] && continue
-    c=$(sacctmgr -n show qos "$q" format=MaxTRESPU%60 2>/dev/null \
-        | tr ',' '\n' | grep -o 'mem=[0-9]*' | head -1 | cut -d= -f2)
-    [[ -z "$c" ]] && continue
+    raw=$(sacctmgr -n show qos "$q" format=MaxTRESPU%60 2>/dev/null \
+        | tr ',' '\n' | grep -o 'mem=[^ ]*' | head -1 | cut -d= -f2)
+    [[ -z "$raw" ]] && continue
+    c=$(_to_mb "$raw")
+    if [[ ! "$c" =~ ^[0-9]+$ ]]; then unread+=" $q:mem=$raw"; continue; fi
     if [[ -z "$cap_mb" ]] || [[ "$c" -lt "$cap_mb" ]]; then cap_mb="$c"; qos="$q"; fi
   done < <(_qos_candidates | sort -u)
 
-  if [[ -z "$cap_mb" ]]; then
+  if [[ -n "$unread" ]]; then
+    say_fail "per-user memory allowance: a QOS cap in a unit this check cannot read (${unread# }) - NOT CHECKED"
+    echo "        -> teach _to_mb that unit; a misread cap is how #4839 failed every array"
+  elif [[ -z "$cap_mb" ]]; then
     say_fail "per-user memory allowance: could not read the QOS cap - NOT CHECKED"
     echo "        -> set PREFLIGHT_QOS=<qos> (or --warn-only if you accept the risk)"
     echo "        -> an unreadable cap is not a passing cap; #3129 jammed on this three times"
