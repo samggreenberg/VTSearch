@@ -9,8 +9,11 @@ of their own (``analyze.py``'s ``resid_z``: credit on the trained head, net of
 cell, label and phase), most helpful and most harmful, with how many times they
 were clicked, by how many detectors, and early vs late. Each side lists the
 images ``analyze.py`` flags first (``flag``: past |z| > 3 net of the bucket and
-on the raw credit, the same way, #4658), then fills the rest of the ``--n``
-slots with the next strongest whose raw credit moved AP that way.
+on the raw credit, the same way, #4658), the most AP moved per click first, then
+fills the rest of the ``--n`` slots with the next strongest whose raw credit
+moved AP that way. Among flagged images the size of the effect, not its z,
+says which matter most: a Good that costs 0.002 a click every time reaches a
+higher z than a Bad that costs 0.1.
 
 Kept deliberately light: a review page with dozens of full-size images goes
 black on a laptop (the review-sheet weight budget), so each thumbnail is ~10 KB.
@@ -77,7 +80,7 @@ def main() -> int:
 
     def side(sign: int) -> pd.DataFrame:
         s = seen[np.sign(seen["help_ap"]) == sign]
-        s = s.assign(flagged=s["flag"] == sign).sort_values(["flagged", "resid_z"], ascending=[False, sign < 0])
+        s = s.assign(flagged=s["flag"] == sign).sort_values(["flagged", "help_ap"], ascending=[False, sign < 0])
         return s.head(args.n)
 
     picks = {"Most helpful": side(1), "Most harmful": side(-1)}
