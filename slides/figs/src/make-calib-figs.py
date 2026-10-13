@@ -6460,6 +6460,152 @@ def _land_query(ax: plt.Axes) -> None:
     _land_name(ax, 14.0, 4.5, f"a typed query: its own\nset, to {QUERY_HOLD_LABELS} labels")
 
 
+# ── Inside Job: the trained head's line, read off what a fold holds out ─────
+
+#: How many build stages the inside view reveals in: a thin class model,
+#: counting what stands out; the labels line, from three Goods a fold; where
+#: the Bads may shape the negatives, from fifty Bads a fold.
+IN_STAGES = 3
+#: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 1..IN_G.
+#: A fold always holds out at least one of each (`_grouped_folds` trains on at
+#: most all but one of a class), so neither axis starts at 0.
+IN_B, IN_G = 80, 8
+
+
+@functools.lru_cache(maxsize=None)
+def _in_grid() -> np.ndarray:
+    """Every cell's line, from the shipped class model and its gates.
+
+    For each count a fold holds out, every fold holding out the same, as
+    `_grouped_folds` makes them: build the folds' held-out scores (Goods high,
+    Bads low, spread), fit `class_score_model` to them, and ask
+    `head_count_serves` and whether the model kept the Bads' scores
+    (`RANDOM_BADS_MIN`). The scores only have to separate; the counts decide.
+    """
+    from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import class_score_model, head_count_serves  # noqa: PLC0415
+
+    kind = np.empty((IN_G + 1, IN_B + 1), dtype=object)
+    for g in range(1, IN_G + 1):
+        for b in range(1, IN_B + 1):
+            goods = _ll_sigmoid(1.0 + np.linspace(-0.6, 0.6, g))
+            bads = _ll_sigmoid(-1.0 + np.linspace(-0.6, 0.6, b))
+            fold = (list(goods) + list(bads), [1.0] * g + [0.0] * b)
+            model = class_score_model([fold] * DEFAULT_CALIBRATE_COUNT)
+            assert model is not None
+            if head_count_serves(model):
+                kind[g, b] = "count"
+            else:
+                kind[g, b] = "bads" if model.neg_logits is not None else "labels"
+    return kind
+
+
+def inside_job_fig() -> None:
+    """Inside Job: Lay of the Land's grey band, seen from inside a fold, where it is a clean edge.
+
+    The axes are what each calibration fold holds out, not what the user
+    holds: from inside, the rounding that made Lay of the Land's band is
+    already done, and the trained head's line is a decision tree on two
+    counts. One or two Goods a fold, the head counts what stands out; three
+    (six between the two folds, `HEAD_COUNT_GOODS`), the labels line; fifty
+    Bads a fold (`RANDOM_BADS_MIN` between them), and the line may model the
+    negatives by the Bads' own scores, if they look like a random sample.
+    """
+    final = _in_stage(IN_STAGES)
+    box = tight_box(final)
+    for stage in range(1, IN_STAGES):
+        save(_in_stage(stage), OUT, f"calib-inside-job.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-inside-job.png", column=FULL_BLEED, box=box)
+
+
+def _in_cell(b: float, g: float) -> tuple[float, float, float, float]:
+    """``(x, y, w, h)`` of the cell for a fold holding out *b* Bads and *g* Goods (both from 1)."""
+    x0, y0, x1, y1 = LAND_BOX
+    w, h = (x1 - x0) / IN_B, (y1 - y0) / IN_G
+    return x0 + (b - 1) * w, y0 + (g - 1) * h, w, h
+
+
+def _in_edges() -> tuple[int, int]:
+    """``(Goods, Bads)`` a fold must hold out for the labels line, and for the Bads' own shape."""
+    from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, RANDOM_BADS_MIN  # noqa: PLC0415
+
+    return HEAD_COUNT_GOODS // DEFAULT_CALIBRATE_COUNT, RANDOM_BADS_MIN // DEFAULT_CALIBRATE_COUNT
+
+
+def _in_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the inside view."""
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
+
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+    x0, y0, x1, y1 = LAND_BOX
+    _, _, cw, ch = _in_cell(1, 1)
+    good_edge, bad_edge = _in_edges()
+    _in_cells(ax, stage)
+    _in_axes(ax)
+
+    def name(b: float, g: float, text: str) -> None:
+        ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
+
+    name(IN_B / 2, 1.0, "the trained head, counting what stands out")
+    if stage >= 2:
+        edge_y = _in_cell(1, good_edge)[1]
+        ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
+        name(bad_edge / 2, 5.5, f"the labels line: {good_edge} Goods a fold,\n{HEAD_COUNT_GOODS} between the two")
+    if stage >= 3:
+        edge_x = _in_cell(bad_edge, 1)[0]
+        ax.plot([edge_x, edge_x], [_in_cell(1, good_edge)[1], y1], color=INK, linewidth=2.0, zorder=4)
+        ax.text((edge_x + x1) / 2, y0 + 5.5 * ch, "the Bads' own\nscores, if they\nlook random",
+                ha="center", va="center", fontsize=16, color=INK, zorder=6,
+                bbox={"facecolor": LAND_FILL["labels"], "edgecolor": "none", "pad": 3})  # fmt: skip
+    return fig
+
+
+def _in_cells(ax: plt.Axes, stage: int) -> None:
+    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2, hatched from 3."""
+    kind = _in_grid()
+    for g in range(1, IN_G + 1):
+        for b in range(1, IN_B + 1):
+            k = kind[g, b]
+            if k != "count" and stage < 2:
+                continue
+            fill = LAND_FILL["count" if k == "count" else "labels"]
+            # Edgeless: inside a fold nothing varies cell to cell along the
+            # Bads, so only the Goods rows are ruled (below).
+            ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
+                                   linewidth=0.3, zorder=1))  # fmt: skip
+            if k == "bads" and stage >= 3:
+                ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor="none", edgecolor=INK,
+                                       hatch="//", linewidth=0, zorder=2))  # fmt: skip
+    x0, _, x1, _ = LAND_BOX
+    for g in range(1, IN_G):
+        ax.plot([x0, x1], [_in_cell(1, g + 1)[1]] * 2, color="white", linewidth=0.8, zorder=1.5)
+
+
+def _in_axes(ax: plt.Axes) -> None:
+    """The two axes, in what a fold holds out: Bads ticked at the Bads' edge, every Goods row ticked."""
+    x0, y0, x1, y1 = LAND_BOX
+    _, _, cw, ch = _in_cell(1, 1)
+    _, bad_edge = _in_edges()
+    ax.plot([x0, x1], [y0, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
+    ax.plot([x0, x0], [y0, y1], color=INK, linewidth=BASELINE_LW, zorder=3)
+    for b in (1, 20, 40, bad_edge, 60, IN_B):
+        x = _in_cell(b, 1)[0] + cw / 2
+        ax.plot([x, x], [y0 - 0.1, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(x, y0 - 0.18, str(b), ha="center", va="top", fontsize=16, color=INK)
+    ax.text((x0 + x1) / 2, y0 - 0.75, "Bads each fold holds out", ha="center", va="top", fontsize=16, color=INK)
+    for g in range(1, IN_G + 1):
+        y = _in_cell(1, g)[1] + ch / 2
+        ax.plot([x0 - 0.1, x0], [y, y], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(x0 - 0.18, y, str(g), ha="right", va="center", fontsize=16, color=INK)
+    ax.text(x0 - 0.75, y0 + 2.5 * ch, "Goods\neach fold\nholds out", ha="right", va="center", fontsize=16,
+            color=INK)  # fmt: skip
+
+
 # ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──
 
 #: How many build stages Weak Spot reveals in: two sessions' class models and

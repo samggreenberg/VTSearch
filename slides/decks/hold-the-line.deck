@@ -102,6 +102,11 @@ slides:
   # Lay of the Land: Changing Hands as a map, Goods up and Bads across, every edge computed from
   # the shipped quota, fold split and hold (#4643, #4731, #4736, #4798).
   lay-of-the-land
+  # Inside Job: the same decision from inside a fold, where the split has already rounded and Lay of
+  # the Land's grey band is one clean edge: three held-out Goods a fold (six between the two, #4798),
+  # and fifty held-out Bads a fold for the Bads' own shape (#4490). Computed from the shipped class
+  # model and its gates.
+  inside-job
   floor-ask
   clopper-pearson
   floor-check

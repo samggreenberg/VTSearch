@@ -28,7 +28,7 @@
      get the labels line: about one in ten at 7 Goods, four in ten at 8,
      seven at 9, nearly all at 10, all from 12. On a patch space the folds
      hold out half: half the labelsets at 5 Goods, all from 7, the dashed
-     rule. -->
+     rule. The next slide draws that band from inside a fold. -->
 
 <!-- **d** — A typed query on a single-vector space keeps showing its own set
      until thirty labels, whatever the head would draw (#4736), and with no
