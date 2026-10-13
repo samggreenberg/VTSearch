@@ -3518,7 +3518,7 @@ def simulate_voting_iterations(  # noqa: C901
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
     # #4816's set overlap: where the head's set and the typed query's split the unvoted media.
     overlap = (
-        SetOverlap(query_scores, beta, pool_labels)
+        SetOverlap(query_scores, clips_dict, beta, pool_labels)
         if set_overlap_sink is not None and query_scores is not None and beta is not None
         else None
     )

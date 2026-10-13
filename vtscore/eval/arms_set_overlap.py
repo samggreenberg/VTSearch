@@ -32,8 +32,9 @@ and within its own part, and the head's posterior there
 The query's display line is drawn as the app draws it over a collection, and as
 the text baseline the hold was priced on draws it (``text_baseline.py``'s
 ``text_line_cut_<b>``): :func:`~vtscore.training.thresholds.gmm.text_sort_threshold`
-at the run's beta over every media of the cell.  So ``Q`` here is the set whose
-F-beta #4736's pricing reads.
+at the run's beta over every media the cell can score (its evaluable pool, both
+halves; the text sort itself covers the whole dataset, wrong-band images too).
+So ``Q`` here is the set whose F-beta #4736's pricing reads.
 
 Recorded only: nothing here picks, trains or moves a line, so the session is the
 app's.  ``CALIB_SET_OVERLAP=1`` turns it on.
@@ -118,16 +119,23 @@ def _posteriors(line: Any, scores: np.ndarray) -> np.ndarray | None:
 class SetOverlap:
     """One typed-query run's overlap of the two sets (see the module docstring).
 
-    *query_scores* are the typed query's cosines (every media of the cell), *beta*
-    the run's balance, which draws the query's display line; *labels* each voting
-    media's truth (1.0 a positive).
+    *query_scores* are the typed query's cosines, *corpus_ids* the media the cell
+    can score (the display line is drawn over their cosines), *beta* the run's
+    balance, which draws it; *labels* each voting media's truth (1.0 a positive).
     """
 
-    def __init__(self, query_scores: Mapping[int, float], beta: float, labels: Mapping[int, float]) -> None:
+    def __init__(
+        self,
+        query_scores: Mapping[int, float],
+        corpus_ids: Iterable[int],
+        beta: float,
+        labels: Mapping[int, float],
+    ) -> None:
         from vtscore.training.thresholds.gmm import text_sort_threshold  # noqa: PLC0415
 
         self._labels = labels
-        self.query_cut = float(text_sort_threshold([float(s) for s in query_scores.values()], beta=float(beta)))
+        corpus = [float(query_scores[c]) for c in corpus_ids if c in query_scores]
+        self.query_cut = float(text_sort_threshold(corpus, beta=float(beta)))
         self._in_q = frozenset(int(c) for c, s in query_scores.items() if float(s) >= self.query_cut)
         # The last click's sets over the pool, which the next picks are read against.
         self._ids: dict[int, int] = {}

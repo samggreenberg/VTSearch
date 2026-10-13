@@ -70,6 +70,13 @@ class TestInTheHarness:
         cut = text_sort_threshold(list(seed_scores.values()), beta=resolve_line_knobs(None))
         assert all(s["query_cut"] == pytest.approx(cut) for s in sink)
 
+    def test_the_query_cut_is_drawn_over_the_cells_media_only(self):
+        """The text sort scores the whole dataset; the display line is drawn over what the cell can score."""
+        scores = {1: 0.9, 2: 0.8, 3: 0.2, 4: 0.1, 5: 0.95, 6: 0.97}
+        assert SetOverlap(scores, [1, 2, 3, 4], 1.0, {}).query_cut == pytest.approx(
+            SetOverlap({c: scores[c] for c in (1, 2, 3, 4)}, [1, 2, 3, 4], 1.0, {}).query_cut
+        )
+
     def test_each_pick_sits_where_the_previous_click_drew_the_sets(self, overlap_run):
         _rows, picks, sink = overlap_run
         by_t = {s["t"]: s for s in sink}
@@ -114,7 +121,7 @@ class TestSetOverlap:
 
         query = {1: 0.9, 2: 0.8, 3: 0.1, 4: 0.05, 5: 0.7, 6: 0.0}
         labels = {1: 1.0, 2: 0.0, 3: 1.0, 4: 0.0, 5: 1.0, 6: 0.0}
-        ov = SetOverlap(query, 1.0, labels)
+        ov = SetOverlap(query, list(query), 1.0, labels)
         ov.query_cut = 0.5
         ov._in_q = frozenset(c for c, s in query.items() if s >= 0.5)
         line = SimpleNamespace(
