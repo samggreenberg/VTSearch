@@ -193,7 +193,9 @@ class TestPhaseMachine:
         assert next_phase(9, 9, done_checked=False, **{**green, "remaining_unlabeled": 0}) == "done"
 
     def test_a_running_check_holds_the_phase_at_spot(self):
-        assert next_phase(9, 9, remaining_unlabeled=1000, smart="red", stable="red", span="red", checking=True) == "spot"
+        assert (
+            next_phase(9, 9, remaining_unlabeled=1000, smart="red", stable="red", span="red", checking=True) == "spot"
+        )
 
     def test_exhausted_when_nothing_left_and_not_all_green(self):
         assert _phase(9, 9, remaining=0) == "exhausted"
