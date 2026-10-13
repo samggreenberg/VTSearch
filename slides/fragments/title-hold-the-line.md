@@ -6,11 +6,9 @@
 ## Advances in VTSearch Calibration
 ### Sam Greenberg
 
-<!-- This talk is about VTSearch, a tool for searching a big pile of unlabeled
-     pictures for something you can describe but can't write a query for. You
-     vote Good or Bad on a few of them, a small model learns from your votes,
-     and it ranks everything else. -->
+<!-- VTSearch searches a big pile of unlabeled pictures for something you can
+     describe but can't write a query for. Vote on a few, and a little model
+     ranks the rest. -->
 
-<!-- Somewhere in that ranking there's a line: above it is a match, below it
-     isn't. Where that line goes, and why it's hard to put in the right place,
-     is what this talk is about. -->
+<!-- Somewhere in that ranking there's a line: match above, not below. Where it
+     goes, and why that's hard, is the whole talk. -->

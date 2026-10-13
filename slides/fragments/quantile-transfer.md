@@ -10,16 +10,15 @@
 
 <!-- build: figs/calib-quantile-flow.build6.png -->
 
-<!-- **a** — Where the mixture line ended up before the labels line. The two
-     halves cut at 0.50 and 0.66, but the answer has to be on M₀'s scale, on
-     the right. -->
+<!-- **a** — The mixture line, before the labels line. Each half has its own
+     cut, but the answer has to live on M₀'s scale, on the right. -->
 
-<!-- **b** — The obvious move: average them, 0.58. On M₀ that lands in the
-     middle of the Good bump. Three models, three meanings of 0.58. -->
+<!-- **b** — Average them? On M₀ that lands in the Good bump: three models,
+     three meanings of one number. -->
 
-<!-- **c** — The fix: read each cut as a share. 79% and 81%: they disagree
-     about the number but agree about the share. Average: 80%. -->
+<!-- **c** — So read each cut as a share. They disagree on the number, agree on
+     the share, so average THAT. -->
 
-<!-- **d** — Find where 80% falls on M₀, and the cut lands in the valley. Funny
-     thing: measured, the plain average did better. Today this is only a
-     fallback, for when the votes can't support the labels line. -->
+<!-- **d** — Put that share on M₀ and the cut's in the valley. Funny thing: the
+     plain average measured better. Now it's just a fallback for too few votes.
+     -->

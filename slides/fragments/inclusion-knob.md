@@ -10,17 +10,15 @@
 
 <!-- build: figs/calib-knob-flow.build3.png -->
 
-<!-- **a** — Before the radios, the control was a slider, Inclusion, minus ten
-     to plus ten: each step doubled the price of a miss or of a false alarm.
-     Here are seven held-out votes. Watch it not work. -->
+<!-- **a** — Before the radios there was a slider, minus ten to plus ten: each
+     step doubled the price of a miss or a false alarm. Watch it not work. -->
 
-<!-- **b** — At minus ten a false alarm costs about a thousand misses. The cost
-     drops a step at every cross, and creeps up a little past the checks. -->
+<!-- **b** — Minus ten: a false alarm's worth a thousand misses. Cost drops at
+     every cross, barely moves past the checks. -->
 
-<!-- **c** — Plus ten is the mirror image. Between the top cross and the bottom
-     check there's no mistake to make, so every cut there costs zero at every
-     setting. -->
+<!-- **c** — Plus ten is the mirror. Between the last cross and first check
+     there's no mistake to make, so that stretch costs zero at every setting.
+     -->
 
-<!-- **d** — The rule only tries cuts at vote scores, so it picks this one at
-     every stop: twenty-one stops, one answer. On real data that happened
-     almost half the time. -->
+<!-- **d** — And it only cuts at vote scores: twenty-one stops, one answer. On
+     real data, almost half the time. -->

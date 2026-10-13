@@ -12,20 +12,16 @@
 
 <!-- build: figs/calib-clopper.build4.png -->
 
-<!-- **a** — Quick stats detour. Pick five things at random from a set, and
-     four are right. The obvious guess is 80%, but that's only five picks. How
-     sure are we? -->
+<!-- **a** — Quick stats detour. Pick five at random, four are right. Obvious
+     guess is 80%, but it's five picks. How sure are we? -->
 
-<!-- **b** — How low could the true share be and still give four or more out of
-     five? At 28%, that happens one time in forty. Any lower, and what we saw
-     would be a fluke. -->
+<!-- **b** — How low could the truth be and still give four of five one time in
+     forty? 28%. Any lower is a fluke. -->
 
-<!-- **c** — Same from the top: if 99.5% were right, four or fewer out of five
-     happens one time in forty. -->
+<!-- **c** — Same from the top: 99.5%. -->
 
-<!-- **d** — Everything between is the range, 28% to 99.5%. That's
-     Clopper-Pearson: exact, and honest about tiny samples. Five picks buy a
-     range nearly as wide as the axis. -->
+<!-- **d** — Everything between is the range. That's Clopper-Pearson: exact, and
+     honest about tiny samples. Five picks buy almost nothing. -->
 
-<!-- **e** — Same 80% from fifty picks: 66% to 90%. The share didn't change;
-     how sure we are did. -->
+<!-- **e** — Same 80% from fifty picks: 66 to 90%. The share didn't change; our
+     confidence did. -->

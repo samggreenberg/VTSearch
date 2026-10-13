@@ -10,13 +10,12 @@
 
 <!-- build: figs/test-coverage.build2.png -->
 
-<!-- **a** — So does it hold? We ran almost 15,000 Tests on the COCO Better
-     sessions from the last section, with matches thinned three ways. Right
-     held the truth 92.5 to 99% of the time, against the 95% it claims. -->
+<!-- **a** — So does it hold? Almost 15,000 Tests on the last section's COCO
+     Better sessions, matches thinned three ways. Right held the truth 92.5 to
+     99% of the time, against the 95% it claims. -->
 
-<!-- **b** — Found is weaker: 80 to 87% where matches are rare, because the
-     deep bands lean on the detector's guess. That's why the pane leads Found
-     with words. -->
+<!-- **b** — Found's weaker where matches are rare, 80 to 87%, because the deep
+     bands lean on the detector's guess. Hence the words. -->
 
-<!-- **c** — And the cost: 55 to 67 picks to Done on average, and nine Tests in
+<!-- **c** — And the cost: around 60 picks to Done on average, and nine Tests in
      ten finish by 80. -->

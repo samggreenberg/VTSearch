@@ -8,12 +8,11 @@
 
 <!-- build: figs/autopilot-done.build2.png -->
 
-<!-- **a** — On photos, when all three lights go green, the app says the
-     detector's trained, with two buttons. Nothing times out; we choose. -->
+<!-- **a** — On photos, three green lights and the app says the detector's
+     trained. Nothing times out; we choose. -->
 
-<!-- **b** — Documents stop a different way: sixteen of the best matches in a
-     row with no Good. In testing, clicking on to 50 after that found at most
-     0.8% more of the matches. Same dialog, with that as the reason. -->
+<!-- **b** — Documents stop a different way: sixteen best matches in a row, none
+     Good. Clicking on past that found at most 0.8% more. Same dialog. -->
 
 <!-- **c** — And on a small collection we might vote on everything first; then
-     it just says there's nothing left. Each of these is said once. -->
+     it just says so. Each of these is said once. -->

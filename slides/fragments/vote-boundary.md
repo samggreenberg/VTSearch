@@ -22,37 +22,29 @@
 
 <!-- build: figs/vote-boundary.build9.png -->
 
-<!-- **a** — Here's that space flattened onto the slide. Each circle is a
-     photo. Nothing's labeled yet. Near means similar, and a detector is just a
-     boundary drawn through here. -->
+<!-- **a** — Content space, flattened. Each circle's a photo, near means
+     similar, and a detector's just a boundary through here. -->
 
-<!-- **b** — A couple minutes of voting: five Good, five Bad. Ten votes against
-     about ninety photos, and that's the situation we're always in. -->
+<!-- **b** — A couple minutes of voting: five Good, five Bad, ninety photos.
+     That's always the ratio. -->
 
-<!-- **c** — That's already enough to fit a detector. Everything inside the
-     curve, it calls a match, and most of that is stuff nobody's voted on. -->
+<!-- **c** — That's enough to fit a detector. Inside the curve is a match,
+     mostly stuff nobody voted on. -->
 
-<!-- **d** — These two aren't worth asking about. The detector's sure about
-     both, so a vote wouldn't change anything. -->
+<!-- **d** — These two aren't worth asking about; it's already sure. -->
 
 <!-- **e** — So it asks about this one, right on the line, where it can't tell.
      -->
 
-<!-- **f** — We say Good. Nothing else has moved yet; the vote and the retrain
-     are two separate steps. -->
+<!-- **f** — We say Good. Nothing's moved yet. -->
 
-<!-- **g** — Now it retrains, and the boundary moves. Dashed is where it was.
-     The rest of the boundary hasn't moved: one vote changes its mind about one
-     neighborhood. -->
+<!-- **g** — Now it retrains and the boundary moves; dashed is where it was. One
+     vote, one neighborhood. -->
 
-<!-- **h** — And now there's a new photo on the line, and that's the next
-     question. -->
+<!-- **h** — And a new photo's on the line: the next question. -->
 
-<!-- **i** — Now the other job. Same detector, but we could cut it looser or
-     tighter. Both keep all the Goods in and all the Bads out, so the votes
-     can't choose. But that strip between them comes back under one and not the
-     other. -->
+<!-- **i** — Now the other job. Same detector, looser or tighter; both fit every
+     vote, so the votes can't choose. That strip's the difference. -->
 
-<!-- **j** — And here's the catch: the line also decided which question to ask.
-     A bad line doesn't just get you the wrong results, it wastes the next
-     twenty votes. -->
+<!-- **j** — And the catch: the line also picked the question. A bad line wastes
+     the next twenty votes, not just the results. -->

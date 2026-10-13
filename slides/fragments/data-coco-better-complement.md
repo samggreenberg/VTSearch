@@ -19,29 +19,27 @@
 
 <!-- build: figs/dataset-coco-better-complement.build7.png -->
 
-<!-- **a** — Here's why "complete" matters. Three classes. Each circle is every
-     image showing that class, whatever else is in it; outside all three is the
-     empty set. -->
+<!-- **a** — Here's why "complete" matters. Three classes; each circle is every
+     image with that class in it, whatever else is there. -->
 
-<!-- **b** — The cheap experiment: positives are the A circle, negatives are
-     everything outside. It costs nothing, and the numbers come out beautiful. -->
+<!-- **b** — The cheap experiment: positives are the A circle, negatives
+     everything outside. Costs nothing, and the numbers come out beautiful. -->
 
 <!-- **c** — Same for B. -->
 
-<!-- **d** — And for C. Three easy wins, and none of these detectors ever had
-     to tell an A from a B. One detector that fires on any of the three aces
-     all three tests. -->
+<!-- **d** — And C. Three easy wins, and none of them ever had to tell an A from
+     a B. A detector that fires on ANY of the three aces all three tests. -->
 
-<!-- **e** — Complete labels add the equals sign: not "there's an A here," but
-     "there's an A and a B, and nothing else." Seven exact cells. Spotty labels
-     can't say that; silence isn't a no. -->
+<!-- **e** — Complete labels add the equals sign: not "there's an A here" but
+     "an A and a B and nothing else." Seven exact cells. Spotty labels can't say
+     that; silence isn't a no. -->
 
-<!-- **f** — And exact cells give us not-A: every image without an A. You can
-     only draw that region if absence is actually labeled. -->
+<!-- **f** — And exact cells give us not-A, every image without one. You can
+     only draw that if absence is actually labeled. -->
 
-<!-- **g** — The hard test: same positives, honest negatives, and nobody sits
-     out. Now the line has to fall between classes, and the A-or-B-or-C
-     detector fails. That's the benchmark worth building. -->
+<!-- **g** — The hard test: same positives, honest negatives, nobody sits out.
+     Now the line has to fall between classes, and the any-of-the-three detector
+     fails. That's the benchmark worth building. -->
 
-<!-- **h** — Back to the easy test. The A-or-B-or-C detector aces this one and
-     fails the last one. -->
+<!-- **h** — Back to the easy test: that same detector aces this one and fails
+     the hard one. -->
