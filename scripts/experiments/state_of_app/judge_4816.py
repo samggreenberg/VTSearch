@@ -686,6 +686,35 @@ def figures(a: argparse.Namespace) -> None:
     print(f"wrote {out}/fig_by_vote.png, fig_parts.png, fig_per_run.png")
 
 
+def examples(a: argparse.Namespace) -> None:
+    """Literal runs: what a judge saw at a vote, against each set's F-beta on the withheld half."""
+    arm = Arm(a.npz, picks=a.picks)
+    gain = np.where(arm.has_det, arm.det - arm.tq[:, None], 0.0)
+    rd, rq = arm.estimate("rate", 3.0, "head", "model", "pool")
+    od, oq = arm.estimate("oracle_all", 0.0, "half", "parts")
+    rows = []
+    seeds = np.load(a.npz)["seed"]
+    for t in a.votes:
+        cost = np.abs(gain[:, t])
+        if a.wrong:
+            # Runs where the judge shows the worse set at this vote, the costliest first.
+            cost = np.where(np.sign(rd[:, t] - rq[:, t]) != np.sign(gain[:, t]), cost, -1.0)
+        order = np.argsort(-cost)
+        for i in order[: a.n]:
+            rows.append({
+                "run": f"{arm.category[i]} s{int(seeds[i])}", "vote": t,
+                "withheld F head/query": f"{arm.det[i, t]:.2f} / {arm.tq[i]:.2f}",
+                "today shows": "head" if arm.today_head[i, t] else "query",
+                "|D| |Q| |DnQ| (unvoted)": f"{arm.n_d[i, t]:.0f} {arm.n_q[i, t]:.0f} {arm.size['dq'][i, t]:.0f}",
+                "votes D only (Good)": f"{arm.m[i, t, 1]:.0f} ({arm.y[i, t, 1]:.0f})",
+                "votes Q only (Good)": f"{arm.m[i, t, 2]:.0f} ({arm.y[i, t, 2]:.0f})",
+                "true Goods D only / Q only": f"{arm.ov['pos_d_only'][i, t]:.0f} / {arm.ov['pos_q_only'][i, t]:.0f}",
+                "rate judge F head/query": f"{rd[i, t]:.2f} / {rq[i, t]:.2f}",
+                "exact on collection head/query": f"{od[i, t]:.2f} / {oq[i, t]:.2f}",
+            })  # fmt: skip
+    print(md_table(pd.DataFrame(rows)))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -705,8 +734,14 @@ def main() -> None:
     f.add_argument("--priced", required=True, help="the price command's --out")
     f.add_argument("--picks", default="all", choices=("all", "past_opening", "past_quota"))
     f.add_argument("--out", required=True)
+    x = sub.add_parser("examples")
+    x.add_argument("--npz", required=True)
+    x.add_argument("--votes", type=int, nargs="+", default=[20, 40, 100])
+    x.add_argument("--n", type=int, default=4)
+    x.add_argument("--wrong", action="store_true", help="only runs where the rate judge shows the worse set")
+    x.add_argument("--picks", default="all", choices=("all", "past_opening", "past_quota"))
     a = ap.parse_args()
-    {"extract": extract, "price": price, "figures": figures}[a.cmd](a)
+    {"extract": extract, "price": price, "figures": figures, "examples": examples}[a.cmd](a)
 
 
 if __name__ == "__main__":
