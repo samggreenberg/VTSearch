@@ -28,10 +28,10 @@
      places: the line is where the user wants the cut. The rest of this slide
      is where the question goes. -->
 
-<!-- **c** — What to Expect's fit, its F-beta row swapped for the other thing
-     it says about every unvoted item: its chance of being a match, from the
-     three-part fit. Near nothing in the bulk, near certain at the top. The
-     line at the middle radio keeps 227, where that chance is 0.43. -->
+<!-- **c** — Joint Custody's fit again, ending on its other number: every
+     unvoted item's chance of being a match, from the three-part fit. Near
+     nothing in the bulk, near certain at the top. The line at the middle
+     radio keeps 221, where that chance is 0.43. -->
 
 <!-- **d** — Autopilot asks where the chance falls to even odds: best first,
      the first item the fit calls a coin toss, the one the detector is least
@@ -40,7 +40,7 @@
      is a match, it sits further in. -->
 
 <!-- **e** — The other two radios. β ¼ pulls the line up to where the chance
-     is 0.87; β 4 sends it down to 0.06, where asking would mean asking about
+     is 0.87; β 4 sends it down to 0.05, where asking would mean asking about
      near-certain non-matches. Even odds does not move: it is a fact about the
      fit, not about what the user wants back. -->
 

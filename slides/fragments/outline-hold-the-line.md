@@ -28,12 +28,13 @@
 
 <!-- **c** — Section II is the three ideas the line is built from: scores
      from models that never saw the votes, the unlabeled corpus the votes
-     came out of, and the algorithm that fits a mixture to it. -->
+     came out of, and the algorithm that fits a mixture to it. Then the fit
+     that joins the three. -->
 
 <!-- **d** — Section III is the line the app draws today: F-beta, the three
-     radios that set its β, the line the labels put at its peak, what that
-     line can and cannot claim before anyone checks — and the second job the
-     same fit does. -->
+     radios that set its β, the line the labels put at its peak and the count
+     that stands in until they can, what that line can and cannot claim
+     before anyone checks — and the second job the same fit does. -->
 
 <!-- **e** — Section IV is the half of asking the threshold does not do: the
      places no vote has been, and the atlas that knows where they are. -->
@@ -59,8 +60,8 @@
 
 <!-- **k** — Section X is faces: the consented benchmark the app's face
      path is measured on, where the face has to be found before the person
-     can be matched. One slide for now; the rest arrives with the first
-     study. -->
+     can be matched, then how the trained head starts from a person's few
+     photos and what that bought. The rest arrives with the first study. -->
 
 <!-- **l** — Section XI is the tool again, as a how-to: five slides, every
      click numbered, from an empty app to a detector finding books in photos

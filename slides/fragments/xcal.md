@@ -40,5 +40,5 @@
      of the app's three radios, no line rule after it beat it until the
      labels line in section III (#4582, #4519), and that line is built on
      these folds: the scores each fold gives the votes it never saw are its
-     class model. The next slide is what happens *before* "enough
+     class model, in Joint Custody. The next slide is what happens *before* "enough
      labels". -->

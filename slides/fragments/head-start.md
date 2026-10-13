@@ -10,9 +10,10 @@
 
 <!-- build: figs/head-start.build3.png -->
 
-<!-- Pics on a Plane said the detector is a line through the plane. This is
-     how that line is placed once there are votes enough to train it (3 Goods
-     and 4 Bads; until then Test ranks by the Goods' average). The model is a
+<!-- Back to Pics on a Plane, where the detector is a line through the
+     plane, and on faces. This is how that line is placed once there are
+     votes enough to train it (3 Goods and 4 Bads; until then Test ranks by
+     the Goods' average). The model is a
      linear SVM: the line with the widest margin between the Goods and the
      Bads, with a penalty that keeps it from leaning on any one direction. A
      drawing, not a fit: two dimensions cannot show the trouble, which needs

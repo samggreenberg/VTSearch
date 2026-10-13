@@ -15,7 +15,7 @@
      has to be drawn there too. -->
 
 <!-- **a** — Train, as What to Expect left it: the votes, the corpus they came
-     from, and the line at the middle radio, keeping 227. Goods and Bads on
+     from, and the line at the middle radio, keeping 221. Goods and Bads on
      their own rows now, at half the width. -->
 
 <!-- **b** — What goes to Find: the labels, each with where it was found, and
@@ -28,7 +28,7 @@
      of matches. -->
 
 <!-- **d** — The same labels and the same fit, drawn on this corpus. The line
-     moves, and keeps 116, near the 120 matches really there. Because the
+     moves, and keeps 113, near the 120 matches really there. Because the
      labels are all that travel, they are all an exported labelset needs: open
      another corpus, even under another embedder, and Find re-fits it from the
      same votes. Train and Find draw the line one way. -->
