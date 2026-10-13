@@ -4626,7 +4626,7 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
-        if held:
+        if held and query_scores is not None:
             # #4736: the typed query's set is what Test gives at this click, so it is the
             # untagged row; the head's, which the step drew all the same, stay as tagged rows.
             for row in rows[step_rows_from:]:
