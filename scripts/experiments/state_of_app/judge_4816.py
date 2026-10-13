@@ -786,6 +786,33 @@ def tables(a: argparse.Namespace) -> None:
     print(Path(a.out).read_text())
 
 
+def robust(a: argparse.Namespace) -> None:
+    """The best cross-fitted judge's gain over today, broken out by seed, class half and size band."""
+    arm = Arm(a.npz, picks=a.picks)
+    xf = pd.read_csv(Path(a.priced) / "crossfit.csv")
+    fam, picked = best_practical(xf, a.preset)
+    cv = curves_for(arm, {"today", *picked})
+    F = np.where((arm.half == 0)[:, None], cv[picked[0]], cv[picked[1]])
+    seeds = np.load(a.npz)["seed"]
+    band = np.array([c.split("@")[1] if "@" in c else "" for c in arm.category])
+    rows = []
+    groups = [("all", np.ones(arm.n, bool))]
+    groups += [(f"seed {s}", seeds == s) for s in sorted(set(seeds.tolist()))]
+    groups += [(f"class half {h}", arm.half == h) for h in (0, 1)]
+    groups += [(f"band {b}", band == b) for b in sorted(set(band.tolist()))]
+    for name, m in groups:
+        r = {"group": name, "runs": int(m.sum())}
+        for s in ("1-25", "1-150"):
+            d = span_mean(F, SPANS[s])[m] - span_mean(cv["today"], SPANS[s])[m]
+            mean, se = _mean_se(d, arm.cls[m])
+            r[f"votes {s}"] = sig2(mean, se)
+        d = span_mean(F, SPANS["1-150"])[m] - span_mean(cv["today"], SPANS["1-150"])[m]
+        r["runs gaining / losing"] = f"{(d > 1e-9).mean():.2f} / {(d < -1e-9).mean():.2f}"
+        rows.append(r)
+    print(f"{a.preset}: {fam} ({' / '.join(picked)})")
+    print(md_table(pd.DataFrame(rows)))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -814,8 +841,15 @@ def main() -> None:
     tb = sub.add_parser("tables")
     tb.add_argument("--priced", required=True)
     tb.add_argument("--out", required=True)
+    rb = sub.add_parser("robust")
+    rb.add_argument("--npz", required=True)
+    rb.add_argument("--priced", required=True)
+    rb.add_argument("--preset", required=True)
+    rb.add_argument("--picks", default="all", choices=("all", "past_opening", "past_quota"))
     a = ap.parse_args()
-    {"extract": extract, "price": price, "figures": figures, "examples": examples, "tables": tables}[a.cmd](a)
+    {"extract": extract, "price": price, "figures": figures, "examples": examples, "tables": tables, "robust": robust}[
+        a.cmd
+    ](a)
 
 
 if __name__ == "__main__":
