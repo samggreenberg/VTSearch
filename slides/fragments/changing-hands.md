@@ -8,14 +8,14 @@
 
 <!-- build: figs/calib-changing-hands.build2.png -->
 
-<!-- **a** — So who draws the line changes as the labels pile up: three hands,
-     two rules. Before there's a trained detector, we rank by the typed query
-     or the Goods' average, and the line counts what stands out. -->
+<!-- **a** — So who draws the line changes as the labels pile up. Before we've
+     trained anything, we rank by the text query or the Goods' average, and
+     the line is the outlier cut. -->
 
-<!-- **b** — At three Goods and four Bads, we can train the head, the tiny
-     model our votes actually train. But with only a few Goods it can't place
-     the matches yet, so it keeps counting what stands out, on its own scores. -->
+<!-- **b** — Once we hit the quota we can train the head. But with that few
+     Goods it can't place the matches yet, so it keeps the outlier cut, just
+     on its own scores. -->
 
-<!-- **c** — Once the folds hold out six Goods, about ten in hand, the labels
-     line takes over. These gates count labels, not clicks, so imported labels
-     land where a session would, in Train or Find. -->
+<!-- **c** — Once the folds hold out enough Goods, the labels line takes over.
+     These gates count labels, not clicks, so imported labels land in the same
+     place. -->

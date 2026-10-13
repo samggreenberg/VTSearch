@@ -82,7 +82,7 @@ slides:
   # how it was done without beta, then how it is done with beta (owner,
   # 2026-10-13). Then why the labels are what the line is drawn from: they
   # are all Find has (#4517). Then
-  # the line before the labels can draw one, a count of what stands out, and
+  # the line before the labels can draw one, the outlier cut, and
   # who draws it as the labels grow (#4603, #4759, #4786, #4798). Then
   # the question that line cannot answer before anyone checks (how many of
   # what it keeps are right), Clopper–Pearson on its own, what a check
@@ -101,8 +101,8 @@ slides:
   labels-fit
   labels-line
   transfer-student
-  # The line before the labels line can stand: a count of what stands out,
-  # drawn by one rule for the typed query, the Goods' average and a head with
+  # The line before the labels line can stand: the outlier cut,
+  # drawn by one rule for the text query, the Goods' average and a head with
   # too few Goods (#4603, #4759, #4786), then who draws the line as the labels
   # grow, and the six held-out Goods that hand it to What to Expect (#4643,
   # #4798). After Transfer Student, because both slides lean on the radios
@@ -115,7 +115,7 @@ slides:
   # Goods per fold (six between the two, #4798) for the labels line, and its cut on the Bads' own shape
   # from fifty Bads per fold that seem random (#4490), from the shipped class model and its gates.
   # Lay of the Land is every
-  # labelset in hand, Goods up and Bads across: the quota, the typed query's hold, and the band where
+  # labelset in hand, Goods up and Bads across: the quota, the text query's hold, and the band where
   # the folds' split decides, from the shipped quota, fold split and hold (#4643, #4731, #4736).
   inside-job
   lay-of-the-land

@@ -8,15 +8,13 @@
 
 <!-- build: figs/calib-inside-job.build2.png -->
 
-<!-- **a** — Here's that rule exactly. The fit only reads what the folds hold
-     out, so that's the map: Goods up, Bads across, per fold. No Goods, white:
-     the typed query. One or two, orange: the trained head, cut by counting
-     what stands out. -->
+<!-- **a** — Here's that rule exactly, per fold, since the fit only sees what
+     the folds hold out. No Goods, white, that's the text query. A couple of
+     Goods, orange, the trained head with the outlier cut. -->
 
-<!-- **b** — Three Goods per fold, six in all, and we're in purple: same head,
-     cut at the F-beta peak. One flat edge; the Bads don't move it. -->
+<!-- **b** — A few Goods per fold and we're in purple: same head, cut at the
+     F-beta peak. One flat edge, so the Bads don't move it. -->
 
-<!-- **c** — Dark purple: with fifty Bads per fold that look like a random
-     sample, the fit takes the non-matches' shape from the Bads themselves
-     instead of assuming a bell curve. A session never gets here; a big, fully
-     labeled import can. -->
+<!-- **c** — Dark purple: a big pile of Bads that look like a random sample,
+     and the fit takes the non-matches' shape from them instead of assuming a
+     bell curve. A session never gets here, but a big labeled import can. -->
