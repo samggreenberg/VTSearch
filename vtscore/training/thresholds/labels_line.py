@@ -116,7 +116,7 @@ WEAK_CHECK_COOLDOWN = 25
 #: the face review's sessions gained +0.007 to +0.018 over votes 1-50, with the
 #: objective after the end-of-run check and final AP unchanged.  On COCO the
 #: check pays most where it starts with fewest Goods, so a Good count cannot
-#: stand in for the media type.  The end-of-run check and the Check button stay.
+#: stand in for the media type.  Autopilot's check before Done stays (:func:`done_check_due`).
 WEAK_CHECK_OFF_MEDIA_TYPES: frozenset[str] = frozenset({"face"})
 #: The fewest Bads whose own scores model the negatives (#4490): a kernel density of a
 #: random 30 cannot see the upper tail (it lost 0.09 F at beta 1/4 on the review's
@@ -571,9 +571,9 @@ def weak_check_due(
     ended (*votes_at_last_check*, the vote count when it ended; ``None``
     before any).  ``cooldown=None`` makes a check due once at most.
 
-    The app's Autopilot runs the check when it is due and the Train tab's
-    Check button calls for it; the eval harness's default arm
-    (``spot_check="weak"``) runs it where this says, so both read this rule.
+    The app's Autopilot runs the check when it is due; the eval harness's
+    default arm (``spot_check="weak"``) runs it where this says, so both read
+    this rule.
     A weakly separated session's uniform picks within the line's bands are
     better training votes than the acquisition picks they replace: priced at
     equal clicks, +0.008 to +0.033 at click 20 and +0.023 to +0.049 at 50
@@ -585,6 +585,23 @@ def weak_check_due(
     if votes_at_last_check is None:
         return True
     return cooldown is not None and n_votes - votes_at_last_check >= cooldown
+
+
+def done_check_due(n_votes: int, votes_at_last_check: int | None, *, cooldown: int = WEAK_CHECK_COOLDOWN) -> bool:
+    """Whether Autopilot's spot check before Done is due: no check has ended in the last *cooldown* votes.
+
+    Autopilot checks the line once a run, the first time every quality light is
+    green, and only then reports Done.  The check is skipped when one ended
+    fewer than *cooldown* votes ago (*votes_at_last_check*, the vote count when
+    it ended; ``None`` before any): a weak-separation check just run, or a
+    session re-entered right after its own check, has already measured this
+    line.  Unlike :func:`weak_check_due` it reads no separation and runs on
+    every media type, face crops included.
+
+    The app's Autopilot reads it (``done_check_due`` beside ``check_due``), and
+    so does the eval harness's default arm.
+    """
+    return votes_at_last_check is None or n_votes - votes_at_last_check >= cooldown
 
 
 #: The smallest share of the labels' Good component a cut must hold for the
@@ -819,6 +836,7 @@ __all__ = [
     "WEAK_CHECK_MIN_VOTES",
     "WEAK_SEPARATION_D",
     "WEAK_CHECK_OFF_MEDIA_TYPES",
+    "done_check_due",
     "weak_check_due",
     "weak_check_prompts",
     "PREVALENCE_MAX",

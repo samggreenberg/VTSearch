@@ -480,6 +480,7 @@ def main(argv: list[str] | None = None) -> int:
                 **({"weak_min_t": cfg.WEAK_MIN_T} if cfg.WEAK_MIN_T is not None else {}),
                 **({"weak_repeat": cfg.WEAK_REPEAT} if cfg.WEAK_REPEAT is not None else {}),
                 **({"weak_phase": cfg.WEAK_PHASE} if cfg.WEAK_PHASE is not None else {}),
+                **({"done_check": cfg.DONE_CHECK} if cfg.DONE_CHECK is not None else {}),
                 startup_schedule=cfg.STARTUP_SCHEDULE,
                 opening_diversity=cfg.OPENING_DIVERSITY,
                 more_walk=cfg.MORE_WALK,

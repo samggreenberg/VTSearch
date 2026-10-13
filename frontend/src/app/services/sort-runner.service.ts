@@ -980,14 +980,17 @@ export class SortRunnerService {
    * Re-read the line after a spot check ends (#4273). The server has moved it
    * to the set where the check's balance peaked, a new count over the ranking
    * already on screen, so this moves the line without a re-sort. Only a
-   * learned ranking draws the detector's line.
+   * learned ranking draws the detector's line. *settled* runs once the read
+   * has landed or failed, so a caller can wait for the balance to be this
+   * line's.
    */
-  refreshLine(): void {
+  refreshLine(settled?: () => void): void {
     this.sortingApi
       .getBalance()
       .pipe(
         this.pairScope.scoped(),
         catchError(() => EMPTY),
+        finalize(() => settled?.()),
       )
       .subscribe((resp) => {
         if (this.sortState.sortMode !== 'learned' || resp.threshold == null) return;

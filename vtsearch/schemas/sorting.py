@@ -138,9 +138,12 @@ class BalanceStateSchema(Schema):
     # ``null`` before a retrain has drawn the labels' line.
     separation = fields.Float(allow_none=True)
     # The labels separate weakly (d' below 1.5, from 10 votes, and 25 votes
-    # after the last check ended): Autopilot runs the check, the Train tab's
-    # Check button calls for one (``weak_check_due``, #4496).
+    # after the last check ended): Autopilot runs the check
+    # (``weak_check_due``, #4496).
     check_due = fields.Boolean()
+    # Autopilot's check before Done should run: no check has ended in the last
+    # 25 votes (``done_check_due``).  Read once every quality light is green.
+    done_check_due = fields.Boolean()
 
 
 # ---------------------------------------------------------------------------
