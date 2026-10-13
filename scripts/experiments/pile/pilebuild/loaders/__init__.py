@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from types import ModuleType
 
-from pilebuild.loaders import coco, coco_better, demo, fhibe
+from pilebuild.loaders import coco, coco_better, demo, fhibe, o365_better
 
 #: ``DATASETS[ds]["kind"]`` -> the module that owns it.
 LOADERS: dict[str, ModuleType] = {
@@ -29,6 +29,7 @@ LOADERS: dict[str, ModuleType] = {
     "coco_better": coco_better,
     "demo": demo,
     "fhibe": fhibe,
+    "o365_better": o365_better,
 }
 
 

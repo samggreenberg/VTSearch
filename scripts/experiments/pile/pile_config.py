@@ -177,7 +177,30 @@ DATASETS: dict[str, dict] = {
         for tag, align in (("roll", "roll"), ("sim", "similarity"))
         for size in (1024, 640)
     },
+    # `coco_better`'s construction on a second source (#4815): the same *C*, the
+    # same three bands and the same shared-pool rule, drawn from Objects365 v2's
+    # validation split instead of COCO. It exists to CONFIRM method comparisons
+    # made on `coco_better`, not to make them -- a bench that is tuned on stops
+    # being able to say whether a result was tuned. `on_request` because its
+    # images are staged by hand (O365_ROOT) and are not in every checkout's pile.
+    "o365_better": {"boxed": True, "kind": "o365_better", "on_request": True},
 }
+
+#: Objects365 v2 (#4815), as `o365_better` reads it. The validation split only:
+#: 80,000 images and 1,240,587 boxes over 365 classes, every image annotated for
+#: every class. Staged by hand on the shared tree beside COCO -- the annotation
+#: file at the root of ``val/`` and each of the 44 image tarballs extracted under
+#: ``val/images/v1/`` (patches 0-15) or ``val/images/v2/`` (16-43), so that an
+#: annotation's ``file_name`` resolves against :data:`O365_VAL_DIR` as written.
+#: Licensed for non-commercial research: its cells are vectors of these images
+#: and must not be passed outside the group, like COCO's.
+O365_ROOT = Path(os.environ.get("VTS_O365_ROOT", "/exp/scale26/datasets/external/Objects365"))
+O365_VAL_DIR = O365_ROOT / "val"
+O365_VAL_ANNOTATIONS = O365_VAL_DIR / "zhiyuan_objv2_val.json"
+#: The directories a build opens pixels from, named so the rebuild canary checks
+#: exactly what the build reads (#3299). The split between ``v1`` and ``v2`` is
+#: the release's own, not a choice: the val set was published in two rounds.
+O365_VAL_PATCH_DIRS: tuple[str, ...] = tuple(f"images/{'v1' if i <= 15 else 'v2'}/patch{i}" for i in range(44))
 
 #: FHIBE's release, as downloaded by ``scripts/experiments/pile/fhibe/download.sbatch``.
 #: Owner-only on scratch and never redistributed: each user registers with Sony
@@ -3806,6 +3829,183 @@ SCALE_CLASS_RULES_FROZEN: dict[str, ClassRule] = {
 def coco_classes_for(cls: str) -> set[str]:
     """The COCO classes whose boxes count as *cls*, merges applied."""
     return set(SCALE_CLASS_MERGES.get(cls, (cls,)))
+
+
+#: The Objects365 categories whose boxes ARE the class (#4815), read against
+#: :data:`SCALE_CLASS_RULES` rather than against COCO's names: the rule is the
+#: definition, and COCO's vocabulary was only ever one reading of it. Spelled as
+#: Objects365 spells them, typos included (``Dinning Table``, ``Moniter/TV``) --
+#: the reader refuses a name its file does not carry, so a "corrected" spelling
+#: fails loudly instead of mapping nothing.
+#:
+#: A box under one of these names is a positive candidate unless the release
+#: flags it ``iscrowd``, ``isfake`` or ``isreflected`` (see the loader). Where
+#: the rule takes in more than one Objects365 category, the rule says so:
+#: `enclosed road vehicle` names pickups, vans, fire trucks and ambulances;
+#: `bowl` names plates; `bottle` names jugs and pitchers; `chair` names stools;
+#: `tie` names bow ties; `bag or luggage` names briefcases.
+O365_NAMES: dict[str, tuple[str, ...]] = {
+    "enclosed road vehicle": (
+        "Car",
+        "SUV",
+        "Van",
+        "Pickup Truck",
+        "Sports Car",
+        "Truck",
+        "Heavy Truck",
+        "Fire Truck",
+        "Ambulance",
+    ),
+    "clock": ("Clock",),
+    "bird": ("Wild Bird", "Duck", "Pigeon", "Goose", "Swan", "Parrot", "Penguin"),
+    "boat": ("Boat", "Sailboat", "Ship"),
+    "umbrella": ("Umbrella",),
+    "kite": ("Kite",),
+    "book": ("Book",),
+    "dog": ("Dog",),
+    "bag or luggage": ("Handbag/Satchel", "Backpack", "Luggage", "Briefcase"),
+    "knife": ("Knife",),
+    "bicycle": ("Bicycle",),
+    "bus": ("Bus",),
+    "stop sign": ("Stop Sign",),
+    "fork": ("Fork",),
+    "spoon": ("Spoon",),
+    "single serving drinking vessel": ("Cup", "Wine Glass"),
+    # `Bowl/Basin` is one category in the release. A wash basin is Bad under the
+    # rule, but the category cannot be split and most of it is tableware.
+    "bowl": ("Bowl/Basin", "Plate"),
+    "bottle": ("Bottle", "Jug"),
+    "vase or potted plant": ("Vase", "Potted Plant"),
+    "bench": ("Bench",),
+    "chair": ("Chair", "Stool"),
+    "sink": ("Sink",),
+    "cell phone": ("Cell Phone",),
+    "fire hydrant": ("Fire Hydrant",),
+    "airplane": ("Airplane",),
+    "apple": ("Apple",),
+    "banana": ("Banana",),
+    "baseball bat": ("Baseball Bat",),
+    "dining table": ("Dinning Table",),
+    "frisbee": ("Frisbee",),
+    "keyboard": ("Keyboard",),
+    "laptop": ("Laptop",),
+    "microwave": ("Microwave",),
+    "motorcycle": ("Motorcycle",),
+    "mouse": ("Mouse",),
+    "orange": ("Orange/Tangerine",),
+    "parking meter": ("Parking meter",),
+    "person": ("Person",),
+    "remote": ("Remote",),
+    "scissors": ("Scissors",),
+    "skateboard": ("Skateboard",),
+    "skis": ("Skiboard",),
+    "snowboard": ("Snowboard",),
+    "surfboard": ("Surfboard",),
+    "tennis racket": ("Tennis Racket",),
+    "tie": ("Tie", "Bow Tie"),
+    "toothbrush": ("Toothbrush",),
+    "traffic light": ("Traffic Light",),
+    "tv": ("Moniter/TV",),
+}
+
+#: Objects365 categories that MAY be the class and cannot be told apart from
+#: their name (#4815) -- the role `SCALE_VG_AMBIGUOUS` played for VG's spellings.
+#: A box under one of these makes the (image, class) pair neither a positive nor
+#: a negative: the image holds something the rule might count, so it may not
+#: score as an absence, and nothing vouches that it is the class, so it may not
+#: be one. The price is supply, never contamination, which is the direction to
+#: err in before the owner has ruled. The census prices each entry
+#: (``o365_supply.py``), and an owner ruling moves a name to
+#: :data:`O365_NAMES`, or deletes it, which makes it a plain negative.
+O365_AMBIGUOUS: dict[str, tuple[str, ...]] = {
+    # A rickshaw is a cycle (a trike, Good for `bicycle`) or a motor rickshaw
+    # (self-propelled and enclosed). Formula 1 cars are neither clearly enclosed
+    # nor carrying people or goods; `Machinery Vehicle` is mostly site plant (Bad)
+    # but the rule makes garbage trucks and tow trucks Good. The trailing space
+    # in "Formula 1 " is the release's own.
+    "enclosed road vehicle": ("Rickshaw", "Formula 1 ", "Machinery Vehicle"),
+    # Live hens are Good; a chicken prepared as food is Bad.
+    "bird": ("Chicken",),
+    # Purses are bags; whether a wallet is, the rule does not say.
+    "bag or luggage": ("Wallet/Purse",),
+    # Human-powered trikes are Good; the motorised cargo trikes common in the
+    # source are not bicycles.
+    "bicycle": ("Tricycle", "Rickshaw"),
+    # Serving pots and baskets that hold food are Good; a cooking pot on a stove,
+    # a laundry basket are not.
+    "bowl": ("Pot", "Bakset"),
+    # Shampoo and spray bottles are Good, and so are squeezable tubes; a bar of
+    # soap or a box of detergent is not. A vacuum flask is Good; lab glassware
+    # is not. Teapots pour for more than one, which the rule calls a bottle.
+    "bottle": ("Toiletry", "Cleaning Products", "Flask", "Tea pot"),
+    # A cut-flower arrangement is Good; a bed of plants growing in the ground is Bad.
+    "vase or potted plant": ("Flower",),
+    "chair": ("Wheelchair",),
+    # The rule is FUNCTION, not furniture: any surface in dining use is Good, and
+    # a bare table with nothing that says dining is not this class.
+    "dining table": ("Desk", "Coffee Table", "Side Table"),
+    # A motor scooter is Good; a kick scooter is not, and the name covers both.
+    "motorcycle": ("Scooter",),
+}
+
+#: Cells `o365_better` does not build because the validation split cannot fill
+#: them at ``SCALE_N_POS`` (#4815). Same reasoning as
+#: :data:`SCALE_DROPPED_CELLS`: built short, a cell's prevalence -- and so its
+#: AP -- would not be comparable with any other cell's. Set from the census in
+#: ``docs/experiments/2026-10-13-o365-supply-4815/``, so a rebuild that finds a
+#: listed cell filled changes nothing until this table changes.
+#:
+#: 37 of 147, and they are not random: COCO was collected AROUND its eighty
+#: classes, so it over-samples sports gear and street furniture that a general
+#: photo pool does not. Five classes go entirely -- `baseball bat`, `frisbee`,
+#: `skateboard`, `skis`, `snowboard` -- and most of the rest are `large` cells of
+#: small objects, a close-up the source rarely frames.
+O365_DROPPED_CELLS: frozenset[str] = frozenset(
+    {
+        "apple@large",
+        "baseball bat@small",
+        "baseball bat@medium",
+        "baseball bat@large",
+        "cell phone@large",
+        "clock@large",
+        "dining table@small",
+        "dining table@medium",
+        "fire hydrant@medium",
+        "fire hydrant@large",
+        "frisbee@small",
+        "frisbee@medium",
+        "frisbee@large",
+        "kite@small",
+        "kite@large",
+        "mouse@large",
+        "parking meter@large",
+        "remote@large",
+        "scissors@large",
+        "skateboard@small",
+        "skateboard@medium",
+        "skateboard@large",
+        "skis@small",
+        "skis@medium",
+        "skis@large",
+        "snowboard@small",
+        "snowboard@medium",
+        "snowboard@large",
+        "stop sign@medium",
+        "stop sign@large",
+        "surfboard@small",
+        "surfboard@large",
+        "tennis racket@small",
+        "tennis racket@large",
+        "tie@large",
+        "toothbrush@large",
+        "traffic light@large",
+    }
+)
+
+
+def o365_names_for(cls: str) -> tuple[str, ...]:
+    """The Objects365 categories whose boxes count as *cls* (:data:`O365_NAMES`)."""
+    return O365_NAMES.get(cls, ())
 
 
 #: Rule names for classes that have LEFT *C*, frozen so the committed human

@@ -164,6 +164,7 @@ def designate_cells(
     supply: dict[str, dict[str, list[int]]],
     corrections: dict[tuple[int, str], dict],
     roster: dict,
+    dropped: frozenset[str] | None = None,
 ) -> dict[str, list[int]]:
     """Choose each cell's ``SCALE_N_POS`` positives, preserving reviewed membership.
 
@@ -174,13 +175,18 @@ def designate_cells(
     that are no longer eligible (a correction moved or removed them) drop out and
     the shortfall is backfilled by :func:`rank`, so the roster adapts without
     ever reshuffling what it can keep.
+
+    *dropped* names the cells not to build; it defaults to
+    :data:`pile_config.SCALE_DROPPED_CELLS`, which is `coco_better`'s list. A
+    second source has its own supply, so it has its own list (#4815).
     """
+    dropped = pc.SCALE_DROPPED_CELLS if dropped is None else dropped
     chosen: dict[str, list[int]] = {}
     for c in pc.SCALE_CLASSES:
         for band in pc.BOX_BANDS:
             pool = sorted(supply[c][band])
             cell = pc.scale_cell(c, band)
-            if cell in pc.SCALE_DROPPED_CELLS:
+            if cell in dropped:
                 continue
             if len(pool) < pc.SCALE_N_POS:
                 # Say so rather than quietly building a smaller cell: unequal
@@ -405,6 +411,7 @@ def scale_media(
     reviewed_present: set[tuple[int, str]],
     embedder_name: str,
     importer: str,
+    labels_source: str = "coco",
 ) -> dict | None:
     """One scale-family media dict, or ``None`` if the bytes do not decode.
 
@@ -420,6 +427,10 @@ def scale_media(
     *data* is decoded header-only as a corruption check: a file that will not
     open here would fail later inside the embedder, where the failure is a
     stack trace in a six-hour job rather than one skipped image.
+
+    *labels_source* is recorded in the origin as the annotation source the
+    labels came from. It is ``coco`` for every COCO-built cell, and
+    ``objects365`` for `o365_better` (#4815).
     """
     import io  # noqa: PLC0415
 
@@ -457,7 +468,7 @@ def scale_media(
             reviewed_absent=reviewed_absent,
             reviewed_present=reviewed_present,
         ),
-        "origin": {"importer": importer, "params": {"embedder": embedder_name, "labels": "coco"}},
+        "origin": {"importer": importer, "params": {"embedder": embedder_name, "labels": labels_source}},
         "origin_name": origin_name,
     }
 
