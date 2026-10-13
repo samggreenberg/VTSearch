@@ -2,7 +2,7 @@
 # VTSearch: All-image-embedders CPU image
 #
 # For the GPU/CUDA variant see Dockerfile.image-embedders.gpu; same
-# six embedders, baked the same way, but on nvidia/cuda + cu121 wheels.
+# six embedders, baked the same way, but on nvidia/cuda + cu129 wheels.
 # The two share requirements/image-embedders.txt (each passes its own
 # --extra-index-url) and a byte-identical BEGIN/END SHARED BODY region
 # below, checked by tests_lib/meta/test_image_embedders_pair.py.
