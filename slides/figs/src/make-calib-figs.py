@@ -6463,9 +6463,9 @@ LAND_TABLE = (
     (1, "none", "Typed query", "Stand-out count"),
     (1, "centroid", "Goods' average", "Stand-out count"),
     (2, "count", "Trained head", "Stand-out count"),
-    # The band the folds' split decides: what it returns is either of the rows
-    # either side, so it is a row of the key and not a name on the map.
-    (3, "split", "Trained head", "Stand-out count\nor Fβ peak"),
+    # No row for the band the folds' split decides: a blend of orange and
+    # purple returns one or the other, which their own rows already say
+    # (owner, 2026-10-13).
     (3, "labels", "Trained head", "Fβ peak"),
 )
 IN_TABLE = (
@@ -6483,8 +6483,7 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
 
     *hatched* is ``(fill key, stage)``: from that stage a hatched swatch joins
     that row's, for a hatch on the map that shares the row's sort and cut.
-    White swatches are outlined so they show; the ``"split"`` row's swatch is
-    Lay of the Land's band, orange to purple; a `MAP_HATCHED_KEYS` row's is
+    White swatches are outlined so they show; a `MAP_HATCHED_KEYS` row's is
     another row's fill, hatched, for a hatch on the map with a return of its own. A two-line row takes half a
     row more, and every row keeps its place on every page.
     """
@@ -6499,11 +6498,7 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
         if stage < first:
             continue
         y = head - MAP_TABLE_STEP * (0.5 + sum(heights[:slot]) + heights[slot] / 2)
-        if key == "split":
-            for i, x in enumerate(np.linspace(0.0, MAP_TABLE_SWATCH, 25)[:-1]):
-                ax.add_patch(Rectangle((xs["swatch"] + x, y - half), MAP_TABLE_SWATCH / 24, MAP_TABLE_SWATCH,
-                                       facecolor=_land_mix(i / 23), edgecolor="none", zorder=3))  # fmt: skip
-        fill = "none" if key == "split" else LAND_FILL[MAP_HATCHED_KEYS.get(key, key)]
+        fill = LAND_FILL[MAP_HATCHED_KEYS.get(key, key)]
         ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH, facecolor=fill,
                                edgecolor=INK, hatch="//" if key in MAP_HATCHED_KEYS else None, linewidth=1.0,
                                zorder=3))  # fmt: skip
