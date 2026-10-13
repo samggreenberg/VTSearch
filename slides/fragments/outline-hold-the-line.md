@@ -60,8 +60,8 @@
 
 <!-- **k** — Section X is faces: the consented benchmark the app's face
      path is measured on, where the face has to be found before the person
-     can be matched. One slide for now; the rest arrives with the first
-     study. -->
+     can be matched, then how the trained head starts from a person's few
+     photos and what that bought. The rest arrives with the first study. -->
 
 <!-- **l** — Section XI is the tool again, as a how-to: five slides, every
      click numbered, from an empty app to a detector finding books in photos

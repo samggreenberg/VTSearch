@@ -6213,6 +6213,253 @@ def _ch_stage(stage: int) -> plt.Figure:
     return fig
 
 
+# ── Lay of the Land: which line, for every count of Goods and Bads ──────────
+
+#: How many build stages the map reveals in: no Goods, and the Goods' average
+#: below the quota; the quota, and the trained head counting what stands out;
+#: the labels line, with the Goods where the split decides; a typed query's hold.
+LAND_STAGES = 4
+#: The counts the map spans: Bads 0..LAND_B, Goods 0..LAND_G, one cell each.
+LAND_B, LAND_G = 50, 16
+#: Where the trained head's regions are named, in Bads: right of the typed
+#: query's staircase at every Goods row the names sit on.
+LAND_NAME_B = 40.5
+#: The plot's box, in canvas units: left, bottom, right, top. Its left edge
+#: stands right of the title notch, so the Goods axis can run to the top.
+LAND_BOX = (6.3, 1.55, 19.9, 10.9)
+#: Each strategy's fill: light to dark as the labels grow. Grey, not hue: hue is
+#: reserved for Good, Bad and the shipped line, and every region here is shipped.
+LAND_FILL = {
+    "none": "#ffffff",
+    "centroid": "#eef1f4",
+    "count": "#d2d9e2",
+    "labels": "#a7b3c2",
+}
+
+
+class _Coin:
+    """An RNG stub whose one draw is fixed: walks a dithered rounding's two branches through the shipped code."""
+
+    def __init__(self, u: float) -> None:
+        self.u = u
+
+    def random_sample(self) -> float:
+        return self.u
+
+
+def _land_branches(exact: float) -> list[tuple[float, int]]:
+    """``(probability, count)`` for each way `_dithered_count` can round *exact*, from the shipped function."""
+    from vtscore.training.thresholds.conformal import _dithered_count  # noqa: PLC0415
+
+    frac = exact - math.floor(exact)
+    if frac <= 0.0:
+        return [(1.0, _dithered_count(exact, _Coin(0.5)))]
+    return [(frac, _dithered_count(exact, _Coin(0.0))), (1.0 - frac, _dithered_count(exact, _Coin(1.0 - 1e-12)))]
+
+
+def _land_p_labels(n_good: int, n_bad: int, split: float) -> float:
+    """The chance a trained head's line is the labels line at these counts, over how the split rounds.
+
+    The calibration folds' arithmetic (`_grouped_folds`): each of the
+    `DEFAULT_CALIBRATE_COUNT` folds holds out the same number of Goods, sized by
+    two dithered roundings, and the labels line stands once they hold out
+    `HEAD_COUNT_GOODS` between them (`head_count_serves`). With too few votes to
+    split, the class model reads the head's own scores of every Good.
+    """
+    from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
+
+    n = n_good + n_bad
+    if n < 4 or n_good < 2 or n_bad < 2:
+        return 1.0 if n_good >= HEAD_COUNT_GOODS else 0.0
+    p = 0.0
+    for p_cal, n_cal in _land_branches(n * split):
+        n_train = n - max(1, n_cal)
+        for p_pos, target in _land_branches(n_good * n_train / n):
+            held = n_good - max(1, min(n_good - 1, target))
+            if DEFAULT_CALIBRATE_COUNT * held >= HEAD_COUNT_GOODS:
+                p += p_cal * p_pos
+    return p
+
+
+@functools.lru_cache(maxsize=None)
+def _land_grid() -> dict:
+    """Every cell's strategy, from the shipped tiers and constants: single-vector spaces, and the patch boundary."""
+    from vtscore.detectors.label_quota import TIER_TRAINED, label_quota, query_holds  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import PRODUCTION_SPLIT_BY_SPACE  # noqa: PLC0415
+
+    kind = np.empty((LAND_G + 1, LAND_B + 1), dtype=object)
+    p_labels = np.zeros((LAND_G + 1, LAND_B + 1))
+    p_patch = np.zeros((LAND_G + 1, LAND_B + 1))
+    held = np.zeros((LAND_G + 1, LAND_B + 1), dtype=bool)
+    for g in range(LAND_G + 1):
+        for b in range(LAND_B + 1):
+            tier = label_quota(g, b).tier
+            held[g, b] = g == 0 or tier != TIER_TRAINED or query_holds(g, b, patch_space=False)
+            if g == 0:
+                kind[g, b] = "none"
+            elif tier != TIER_TRAINED:
+                kind[g, b] = "centroid"
+            else:
+                p_labels[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["single_vector"])
+                p_patch[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["patch"])
+                kind[g, b] = "trained"
+    return {"kind": kind, "p": p_labels, "p_patch": p_patch, "held": held}
+
+
+def lay_of_the_land_fig() -> None:
+    """Lay of the Land: which line the app draws, for every count of Goods (up) and Bads (across).
+
+    One cell per pair of counts, on a single-vector space (the Binary path,
+    and faces). Below the quota the Goods' average; past it the trained head,
+    counting what stands out until its folds hold out six Goods, then the
+    labels line. Where the folds' split rounds either way, the cell's grey is
+    mixed in proportion to the chance it is the labels line. A dashed rule
+    marks where the labels line starts on a patch space, and the last page
+    hatches where a typed query keeps its own set. Every boundary is computed
+    from the shipped functions and constants (`label_quota`, `query_holds`,
+    `_dithered_count`, `PRODUCTION_SPLIT_BY_SPACE`, `HEAD_COUNT_GOODS`).
+    """
+    final = _land_stage(LAND_STAGES)
+    box = tight_box(final)
+    for stage in range(1, LAND_STAGES):
+        save(_land_stage(stage), OUT, f"calib-lay-of-the-land.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-lay-of-the-land.png", column=FULL_BLEED, box=box)
+
+
+def _land_cell(b: float, g: float) -> tuple[float, float, float, float]:
+    """``(x, y, w, h)`` of the cell for *b* Bads and *g* Goods."""
+    x0, y0, x1, y1 = LAND_BOX
+    w, h = (x1 - x0) / (LAND_B + 1), (y1 - y0) / (LAND_G + 1)
+    return x0 + b * w, y0 + g * h, w, h
+
+
+def _land_mix(p: float) -> str:
+    """The count's grey mixed toward the labels line's by *p*."""
+    a = np.array(matplotlib.colors.to_rgb(LAND_FILL["count"]))
+    z = np.array(matplotlib.colors.to_rgb(LAND_FILL["labels"]))
+    return matplotlib.colors.to_hex(a + (z - a) * p)
+
+
+def _land_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the map."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+    _land_cells(ax, stage)
+    _land_axes(ax)
+    # Every region's name sits where no later page draws over it: the trained
+    # head's three to the right of the typed query's staircase.
+    _land_name(ax, LAND_B / 2 + 0.5, 0.5, "no Goods: nothing to rank toward")
+    _land_name(ax, 8.0, 2.0, "the Goods' average")
+    if stage >= 2:
+        _land_quota(ax, stage)
+    if stage >= 3:
+        _land_labels(ax)
+    if stage >= 4:
+        _land_query(ax)
+    return fig
+
+
+def _land_cells(ax: plt.Axes, stage: int) -> None:
+    """One cell per pair of counts, filled by its strategy; the trained head's from page 2, its split from page 3."""
+    grid = _land_grid()
+    for g in range(LAND_G + 1):
+        for b in range(LAND_B + 1):
+            k = grid["kind"][g, b]
+            if k == "trained":
+                if stage < 2:
+                    continue  # the quota arrives on the next page
+                fill = _land_mix(float(grid["p"][g, b])) if stage >= 3 else LAND_FILL["count"]
+            else:
+                fill = LAND_FILL[k]
+            ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor=fill, edgecolor="white",
+                                   linewidth=0.6, zorder=1))  # fmt: skip
+
+
+def _land_axes(ax: plt.Axes) -> None:
+    """The two axes: counts at the cells' centres, ticked where something changes."""
+    from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA, GOOD_QUOTA, QUERY_HOLD_LABELS  # noqa: PLC0415
+
+    x0, y0, x1, y1 = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    ax.plot([x0, x1], [y0, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
+    ax.plot([x0, x0], [y0, y1], color=INK, linewidth=BASELINE_LW, zorder=3)
+    for b in (0, BAD_QUOTA, DRY_BAD_QUOTA, QUERY_HOLD_LABELS, LAND_B):
+        x = x0 + (b + 0.5) * cw
+        ax.plot([x, x], [y0 - 0.1, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(x, y0 - 0.18, str(b), ha="center", va="top", fontsize=16, color=INK)
+    ax.text((x0 + x1) / 2, y0 - 0.75, "Bads", ha="center", va="top", fontsize=16, color=INK)
+    for g in (0, 1, GOOD_QUOTA, 6, 10, LAND_G):
+        y = y0 + (g + 0.5) * ch
+        ax.plot([x0 - 0.1, x0], [y, y], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(x0 - 0.18, y, str(g), ha="right", va="center", fontsize=16, color=INK)
+    ax.text(x0 - 0.75, y0 + 6.5 * ch, "Goods", ha="right", va="center", fontsize=16, color=INK)
+
+
+def _land_name(ax: plt.Axes, b: float, g: float, text: str) -> None:
+    """A region's name, centred at *b* Bads and *g* Goods."""
+    x0, y0, _, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
+
+
+def _land_quota(ax: plt.Axes, stage: int) -> None:
+    """Page 2: the quota's edge, 3 Goods and 4 Bads or a Good and 16 Bads, and the trained head past it."""
+    from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA, GOOD_QUOTA  # noqa: PLC0415
+
+    x0, y0, _, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    edge = [(BAD_QUOTA, LAND_G + 1), (BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, 1)]
+    ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=4)
+    _land_name(ax, LAND_NAME_B, 4.0 if stage >= 3 else 8.0, "the trained head,\ncounting what stands out")
+
+
+def _land_labels(ax: plt.Axes) -> None:
+    """Page 3: the labels line, the Goods where the split decides, and where a patch space always has it."""
+    from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA  # noqa: PLC0415
+
+    x0, y0, x1, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    _land_name(ax, LAND_NAME_B, 13.5, "the trained head:\nthe labels line")
+    _land_name(ax, LAND_NAME_B, 9.0, "either, as the\nfolds' split rounds")
+    p_patch = _land_grid()["p_patch"]
+    patch_g = int(min(g for g in range(LAND_G + 1) if (p_patch[g, DRY_BAD_QUOTA:] >= 1.0).all()))
+    y = y0 + patch_g * ch
+    ax.plot([x0 + BAD_QUOTA * cw, x1], [y, y], color=INK, linewidth=1.6, linestyle=(0, (4, 3)), zorder=4)
+    ax.text(x1 - 0.1, y - LABEL_GAP, "Region voting: from here up", ha="right", va="top", fontsize=16, color=INK,
+            zorder=6)  # fmt: skip
+
+
+def _land_query(ax: plt.Axes) -> None:
+    """Page 4: where a typed query keeps its own set, faded, and the staircase that bounds it.
+
+    Below the quota, and on a single-vector space until its labels number
+    `QUERY_HOLD_LABELS`: the head's line is not what such a detector shows
+    there, so its cells fade.
+    """
+    from vtscore.detectors.label_quota import QUERY_HOLD_LABELS  # noqa: PLC0415
+
+    x0, y0, _, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    held = _land_grid()["held"]
+    for g in range(1, LAND_G + 1):
+        for b in range(LAND_B + 1):
+            if held[g, b]:
+                ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor="white",
+                                       edgecolor="none", alpha=0.6, zorder=2))  # fmt: skip
+    xs: list[float] = []
+    ys: list[float] = []
+    for g in range(1, LAND_G + 1):
+        b = QUERY_HOLD_LABELS - g
+        xs += [x0 + b * cw, x0 + b * cw]
+        ys += [y0 + g * ch, y0 + (g + 1) * ch]
+    ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=4)
+    _land_name(ax, 14.0, 4.5, f"a typed query: its own\nset, to {QUERY_HOLD_LABELS} labels")
+
+
 # ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──
 
 #: How many build stages Weak Spot reveals in: two sessions' class models and
