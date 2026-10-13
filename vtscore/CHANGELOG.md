@@ -10,6 +10,25 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Autopilot checks the line before Done, and the harness's default arm does too.** The app's Autopilot
+  runs the spot check as one of its steps (phase `spot`): once a run, the first time every quality light
+  is green, and then reports Done; a weak-separation check (#4496) is the same step mid-run. There is no
+  user-started check any more. New `vtscore.training.thresholds.done_check_due(n_votes,
+  votes_at_last_check, *, cooldown=WEAK_CHECK_COOLDOWN)`: due unless a check ended in the last 25 votes
+  (on every media type, face crops included); the app's balance payload carries it as `done_check_due`.
+  In `vtscore.eval.autopilot_flow`: `Phase` gains `"spot"`, and so does `TRAINED_PHASES`; `next_phase`
+  takes `checking` (a check running reads `spot`) and `done_checked` (default `True`, which reads all
+  green as `done` as before; `False` reads it as `spot`); `AutopilotFlow(done_check=True)` holds
+  `spot_check` and `done_checked` and gains `begin_spot_check(kind)`, `end_spot_check()` and
+  `skip_done_check()`. **A caller driving its own loop over `AutopilotFlow` now meets `spot` when every
+  light goes green**: run the check and call `end_spot_check()`, call `skip_done_check()`, or pass
+  `done_check=False` for the previous behavior. `simulate_voting_iterations(done_check=True)` runs the
+  check before Done as clicks (`phase == "prompt"` rows, inside the budget; skipped when a check ended
+  in the last 25 votes or its opening bands do not fit the budget left), so the first `done` row now
+  follows the check; `done_check=False` (`CALIB_DONE_CHECK=0`) is the arm before. The end-of-budget
+  check (`spot_check="end"` / `"weak"`, `phase == "check"` rows past `max_steps`) stays as the
+  harness's measurement of the final line. Not priced.
+
 - **The labels line keeps the head's count until the class model holds 6 held-out Goods, whatever its
   Bads** (issue #4798). `HEAD_COUNT_BADS` is unbounded (it was 32), so `head_count_serves` is the Goods
   half alone. With two to five held-out Goods past 32 Bads, the class model's cut ran to the corpus's

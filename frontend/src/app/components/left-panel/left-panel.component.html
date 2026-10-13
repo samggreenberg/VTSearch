@@ -52,14 +52,13 @@
         <vt-side-panel-toggle side="left" label="Autopilot" [collapsed]="false" (toggle)="toggleCollapse.emit()" />
         <!-- The balance, live between phases and frozen within one: the host
              says which. Its state line is this corpus's test result, or
-             untested, never Train's check range. No spot check here (#4317). -->
+             untested, never Train's check range. -->
         <div class="find-balance-row">
           <vt-balance
             [value]="beta()"
             [balance]="balance()"
             [returned]="returned()"
             [busy]="sortBusy()"
-            [offerCheck]="false"
             [locked]="balanceLocked()"
             [lineState]="balanceLineState()"
             (valueChange)="betaChange.emit($event)"
@@ -74,15 +73,13 @@
       <!-- The Threshold plus the unverified-positives work-queue actions
            (Browse / To Dataset / Export). All three scope over the unverified
            items above the line — the above-threshold items the human hasn't
-           acted on yet. Test tests the threshold Train set, so it offers no
-           spot check (#4317). -->
+           acted on yet. -->
       <div class="find-balance-row">
         <vt-balance
           [value]="beta()"
           [balance]="balance()"
           [returned]="returned()"
           [busy]="sortBusy()"
-          [offerCheck]="false"
           [locked]="balanceLocked()"
           [lineState]="balanceLineState()"
           (valueChange)="betaChange.emit($event)"
@@ -259,9 +256,7 @@
           [balance]="balance()"
           [returned]="returned()"
           [busy]="sortBusy()"
-          [checkable]="!disabled() && !sortBusy()"
           (valueChange)="betaChange.emit($event)"
-          (check)="check.emit()"
         />
 
         <div class="label-divider"></div>

@@ -89,6 +89,8 @@ class TestTrainingRecordsTheState:
             "checkable": True,
             "separation": None,
             "check_due": False,
+            # Nothing has checked this line: Autopilot's check before Done would run.
+            "done_check_due": True,
         }
         assert "floor" not in out["det"]
         assert out["det"]["threshold"] == 0.5, "the cut is still the one training drew"

@@ -61,10 +61,11 @@ returns while staying at or above P).  A run's sessions aim at one floor
 read off the same sessions, which is exact only while a session ignores P, so
 a review runs one set of sessions per P and reads each at its own.
 
-**The spot check is not a click.**  The default arm checks the line once the
-voting steps are spent (``spot_check="end"``): its rounds are cast as votes and
-emit ``phase == "check"`` rows past ``max_steps``.  They are read for the
-check's own columns only.  "Final" is the last *ordinary* step, the curves stop
+**The end-of-run spot check is not a click.**  The default arm checks the line
+once the voting steps are spent (``spot_check="end"``): its rounds are cast as
+votes and emit ``phase == "check"`` rows past ``max_steps``.  They are read for
+the check's own columns only.  The checks Autopilot runs inside the session (for
+weak separation, and once before Done) are clicks, ``phase == "prompt"``.  "Final" is the last *ordinary* step, the curves stop
 there, and no check pick is credited as a click.  The check's truth is the
 share right of the set its range describes: the top ``check_k`` of the pool's
 unvoted ranking at the last ordinary step (the ``last`` rank frame), which is

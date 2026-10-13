@@ -165,8 +165,6 @@ export class LeftPanelComponent implements OnInit {
   readonly selectModeChange = output<SelectMode>();
   /** The user picked a balance (a beta). */
   readonly betaChange = output<number>();
-  /** The Threshold control's "Check N picks", in Train only: the host opens the spot check (#4273, #4317). */
-  readonly check = output<void>();
   readonly textSort = output<string>();
   readonly learnedSort = output<void>();
   readonly loadSort = output<void>();

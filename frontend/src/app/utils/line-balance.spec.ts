@@ -6,8 +6,6 @@ import {
   balanceExplanation,
   balanceSummary,
   checkDueNote,
-  checkLabel,
-  checkTitle,
   foundWords,
   isBalancePreset,
   lineBalanceFrom,
@@ -46,6 +44,7 @@ describe('line-balance (#4413)', () => {
         checkable: true,
         separation: null,
         checkDue: false,
+        doneCheckDue: false,
       });
     });
 
@@ -64,6 +63,7 @@ describe('line-balance (#4413)', () => {
         checkable: true,
         separation: null,
         checkDue: false,
+        doneCheckDue: false,
       });
     });
 
@@ -82,11 +82,14 @@ describe('line-balance (#4413)', () => {
     });
 
     it('reads the labels\' separation and whether a check is due (#4496)', () => {
-      const wire = { beta: 1, status: 'unchecked', count: 40, precision: null, recall: null, fbeta: null, schedule: null, shape: 'advisory', audited: null, separation: 0.83, check_due: true };
+      const wire = { beta: 1, status: 'unchecked', count: 40, precision: null, recall: null, fbeta: null, schedule: null, shape: 'advisory', audited: null, separation: 0.83, check_due: true, done_check_due: true };
       const balance = lineBalanceFrom(wire as unknown as BalanceState)!;
       expect(balance.separation).toBe(0.83);
       expect(balance.checkDue).toBe(true);
+      expect(balance.doneCheckDue).toBe(true);
+      expect(lineBalanceFrom({ ...wire, done_check_due: undefined } as unknown as BalanceState)!.doneCheckDue).toBe(false);
       expect(checkDueNote(balance)).toContain('still overlap');
+      expect(checkDueNote(balance)).toContain('Autopilot');
       expect(checkDueNote({ ...balance, checkDue: false })).toBeNull();
       expect(checkDueNote(null)).toBeNull();
     });
@@ -232,10 +235,9 @@ describe('line-balance (#4413)', () => {
       expect(text).not.toContain('30–70%');
     });
 
-    it('has nothing to summarise, explain or check without a state', () => {
+    it('has nothing to summarise or explain without a state', () => {
       expect(balanceSummary(null)).toBeNull();
       expect(balanceExplanation(null)).toBeNull();
-      expect(checkLabel(null)).toBeNull();
     });
 
     it('explains a trimmed line (beta above 1) by its check, both ranges as numbers, as the set where the balance peaked', () => {
@@ -285,47 +287,6 @@ describe('line-balance (#4413)', () => {
       expect(balanceExplanation(stale)).toBe(balanceExplanation(fresh) + staleNote(stale.precision));
       expect(balanceExplanation(stale)).toContain('Measured before your later votes');
       expect(balanceExplanation(fresh)).not.toContain('later votes');
-    });
-  });
-
-  describe('the check affordance (#4273)', () => {
-    it.each<[number, number, string]>([
-      [2, 5, 'Check 5 picks'],
-      [1, 5, 'Check 5 picks'],
-      [0.5, 5, 'Check 5 picks'],
-    ])('at beta %s reads "%s picks" off the schedule', (beta, picks, label) => {
-      const balance = lineBalance('unchecked', { beta, schedule: { candidate: 32, rounds: 3, picks } });
-      expect(checkLabel(balance)).toBe(label);
-    });
-
-    it('is offered in both states: after a finished check it runs a fresh one', () => {
-      for (const status of ['unchecked', 'checked'] as const) {
-        expect(checkLabel(lineBalance(status))).toBe('Check 5 picks');
-      }
-      expect(checkLabel(lineBalance('unchecked', { schedule: null }))).toBe('Check the line');
-    });
-
-    it('is not offered on a line a check cannot walk: a structural detector\'s (#4489)', () => {
-      for (const status of ['unchecked', 'checked'] as const) {
-        expect(checkLabel(lineBalance(status, { checkable: false }))).toBeNull();
-      }
-      expect(checkLabel(lineBalance('gate'))).toBeNull();
-    });
-
-    it('says what a check does at this balance (#4427), and that its votes are votes', () => {
-      const trimmed = checkTitle(lineBalance('unchecked', { beta: 2, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
-      expect(trimmed).toBe(
-        'Vote on 5 random picks a band, walking the list from the top 128: the check steps to a shorter list while the balance ' +
-          'does not fall, and the line keeps the set where it ends. Your votes count as ordinary votes.',
-      );
-      const title = checkTitle(lineBalance('unchecked', { schedule: { candidate: 64, rounds: 4, picks: 5 } }));
-      expect(title).toBe(
-        'Vote on 5 random picks a band, walking the list from the top 64: the check goes deeper while the balance keeps ' +
-          'improving and shorter while it does not, and reports what it found; it informs the line and does not move it. ' +
-          'Your votes count as ordinary votes.',
-      );
-      expect(checkTitle(lineBalance('unchecked', { schedule: null }))).toContain('Vote on a few random picks:');
-      expect(checkTitle(null)).toContain('Vote on a few random picks:');
     });
   });
 

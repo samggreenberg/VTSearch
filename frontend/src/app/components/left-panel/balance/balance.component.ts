@@ -16,8 +16,6 @@ import {
   balanceExplanation,
   balanceSummary,
   checkDueNote,
-  checkLabel,
-  checkTitle,
   isBalancePreset,
   nearestBalancePreset,
   type LineBalance,
@@ -60,14 +58,12 @@ type Dot = 'green' | 'yellow' | 'none';
  * check applies there (#4505). Nothing is met or fallen short of (#4413).
  * There is no "off": every detector has a balance (#4269).
  *
- * In Train, the check affordance sits beside that line, "Check 5 picks"
- * (#4273), in both states: it opens the spot check (`vt-spot-check-modal`,
- * hosted by the view), and after a finished check it runs a fresh one. Find
- * sets `offerCheck` false: it tests the balance Train set, and labelling more
- * to set one is too late there (#4317). A line a check cannot walk offers none
- * either (`balance.checkable` false, #4489): a structural detector's, which is
- * the verification gate's boundary rather than a cut on a ranking. A range that later votes have left
- * stale reads exactly as before; only its tooltip says so.
+ * The control starts no check: only Autopilot does, as its Spot Check step
+ * (before Done, and while the labels separate weakly), which the Train view
+ * shows in its centre pane. When the server says one is due (#4496), a note
+ * under the line says why. Find runs none: it tests the balance Train set,
+ * and labelling more to set one is too late there (#4317). A range that later
+ * votes have left stale reads exactly as before; only its tooltip says so.
  *
  * In Test (the Find view since #4524) the host supplies the state line
  * (`lineState`): this corpus's test result, or *untested*, never Train's
@@ -98,10 +94,6 @@ export class BalanceComponent {
   readonly returned = input<number | null>(null);
   /** True while a sort or Find pass runs; a snap to a preset waits for it. */
   readonly busy = input(false);
-  /** False while the host can't run a check (a sort or a scoring pass in flight, or the panel disabled). */
-  readonly checkable = input(true);
-  /** False where the host offers no spot check at all: Find (#4317). */
-  readonly offerCheck = input(true);
   /** The radios are frozen: a test phase is running over the line they would move (#4524). */
   readonly locked = input(false);
   /** The host's own state line, in place of the check's (Test: this corpus's result, or untested). */
@@ -112,8 +104,6 @@ export class BalanceComponent {
 
   /** A balance the user picked, as a beta. */
   readonly valueChange = output<number>();
-  /** The user asked for a spot check of the line. */
-  readonly check = output<void>();
 
   readonly hint =
     'Where to draw the line. Toward False Positives returns more, with more wrong ones in it; ' +
@@ -134,11 +124,8 @@ export class BalanceComponent {
   readonly explanation = computed(() => this.lineState()?.title ?? balanceExplanation(this.balance()));
   /** Why the radios are frozen, on each one, while `locked`. */
   readonly lockedHint = 'The Threshold is frozen while a test phase runs: moving it would move the line under the picks.';
-  readonly checkText = computed(() => (this.offerCheck() ? checkLabel(this.balance()) : null));
-  readonly checkHint = computed(() => checkTitle(this.balance()));
-  /** A check is due (#4496): the button calls for it, and a note says why. Never where no check is offered. */
-  readonly due = computed(() => this.offerCheck() && !!this.balance()?.checkDue);
-  readonly dueNote = computed(() => (this.due() ? checkDueNote(this.balance()) : null));
+  /** A check is due (#4496): a note says why, and that Autopilot runs it. The server never says so in Find. */
+  readonly dueNote = computed(() => checkDueNote(this.balance()));
 
   readonly dot = computed<Dot>(() => {
     const own = this.lineState();

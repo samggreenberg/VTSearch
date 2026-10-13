@@ -113,6 +113,7 @@ from vtscore.training.thresholds import (
     balance_schedule,
     balance_state,
     check_shape,
+    done_check_due,
     fbeta_count,
     fit_labels_line,
     weak_check_due,
@@ -2477,7 +2478,8 @@ def production_spot_check(clips_dict: dict[int, dict[str, Any]]) -> str:
     media type the app never prompts on
     (:func:`~vtscore.training.thresholds.weak_check_prompts`: face crops), where
     it is ``"end"``.  Read off the first media's ``media_type``, as the app reads
-    its detector's; medias without one are prompted on.
+    its detector's; medias without one are prompted on.  The check Autopilot
+    runs before Done is the ``done_check`` knob's, on both.
     """
     first = next(iter(clips_dict.values()), None) if clips_dict else None
     media_type = first.get("media_type") if isinstance(first, dict) else None
@@ -2566,6 +2568,7 @@ def simulate_voting_iterations(  # noqa: C901
     weak_min_t: int = WEAK_CHECK_MIN_VOTES,
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
+    done_check: bool = True,
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
@@ -3066,8 +3069,12 @@ def simulate_voting_iterations(  # noqa: C901
         spot_check: When the simulated user runs the balance's **spot check**
             (#4272, the band walk of #4388 with #4413's F-beta stop).
             ``"end"``: once the voting steps are spent - *max_steps* reached,
-            or the pool exhausted - the user checks the line the way the app's
-            check step does: the unvoted ranking is fixed off the current one
+            or the pool exhausted - the line is checked the way the app's
+            check step does it.  No user starts this check in the app any more
+            (only Autopilot runs one, before Done and for weak separation, the
+            ``done_check`` knob and ``"weak"``): it is the harness's
+            measurement of the final line, read for the check's own columns
+            and never a click.  The unvoted ranking is fixed off the current one
             and cut into bands (the top 8, the next 8, 16, 32, ...), the walk
             starts at the bands holding the balance's cap (the top 32 at
             beta <= 1, 128 above it), each band's picks are answered from
@@ -3111,6 +3118,19 @@ def simulate_voting_iterations(  # noqa: C901
             example sort), where the app trains no detector and so has neither
             a separation to read nor a ranking to check.  Without a flow
             (a non-Autopilot strategy) both prompt anywhere.
+        done_check: Whether Autopilot checks the line before Done (the
+            default, the app's): the first time every quality light is green
+            the flow reaches ``spot`` and the simulated user runs the check
+            then and there, as clicks, with ``phase == "prompt"`` rows (they
+            count in ``t`` and the budget, and start only when the opening
+            bands fit it, as a prompted check does), and the flow reports
+            ``done`` once it closes.  Skipped, the flow going straight on to
+            ``done``, when a check ended in the last ``WEAK_CHECK_COOLDOWN``
+            votes (:func:`~vtscore.training.thresholds.done_check_due`, the
+            app's rule) or none can start.  Once a run, on every media type.
+            ``False`` is the arm before the app ran it, where all green reads
+            ``done`` at once; ``spot_check="off"`` and the Inclusion arm never
+            check.  Needs the Autopilot flow; ignored without one.
         label_quota: Whether the withheld half is scored as Test scores it
             under the app's label quota (#4643,
             :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
@@ -3661,7 +3681,14 @@ def simulate_voting_iterations(  # noqa: C901
     check_phase = "check"
     end_checked = False
     weak_due = False
-    last_weak_check: int | None = None
+    # The vote count when the last check Autopilot ran ended (the app's
+    # ``check_ended_votes``): the weak prompt's cooldown counts from it, and so
+    # does whether the check before Done runs.
+    last_check_end: int | None = None
+    if flow is not None and (spot_check == "off" or not done_check or beta is None):
+        # No check before Done: the arm before the app ran it, a run that never
+        # checks, or the Inclusion arm, which has no balance to check.
+        flow.done_checked = True
 
     def _start_check() -> "SpotCheck | None":
         """The app's check over the line's unvoted ranking; ``None`` with nothing unvoted in it."""
@@ -3696,6 +3723,27 @@ def simulate_voting_iterations(  # noqa: C901
 
     # The last finished check: what a prompted check the budget cut short leaves in place.
     finished_check: SpotCheck | None = None
+
+    def _settle_done_check() -> None:
+        """Whether the check before Done runs, decided the step the flow reaches it, as the app decides it.
+
+        The app reads ``done_check_due`` once the sort after the vote settles,
+        so a skip never shows as a step: the flow goes straight on, and this
+        step's row reads the phase it goes on to.  Skipped when a check ended
+        in the last ``WEAK_CHECK_COOLDOWN`` votes, or when none could start:
+        no ranking, nothing unvoted, or its opening bands do not fit the
+        budget left (the rule a prompted check starts by).
+        """
+        if flow is None or flow.phase != "spot" or flow.spot_check is not None:
+            return
+        n = len(good_votes) + len(bad_votes)
+        if (
+            not done_check_due(n, last_check_end)
+            or line_ranking is None
+            or not pool
+            or n + _check_start_cost() > n_steps
+        ):
+            flow.skip_done_check()
 
     def _check_start_cost() -> int:
         """The most a check's opening bands cost: what a prompted one needs left in the voting budget."""
@@ -3790,7 +3838,9 @@ def simulate_voting_iterations(  # noqa: C901
                 # the step does, and the end-of-run check takes over (#4496).
                 check.cancel()
                 check = finished_check
-                last_weak_check = t
+                last_check_end = t
+                if flow is not None:
+                    flow.end_spot_check()
             else:
                 picks = list(check.pending)
         if picks is None and not (check is not None and check.running):
@@ -3799,11 +3849,27 @@ def simulate_voting_iterations(  # noqa: C901
                 # the check's picks are clicks, so its opening bands must fit
                 # the budget left.
                 weak_due = False
-                last_weak_check = t
+                last_check_end = t
                 started = _start_check()
                 if started is not None and started.pending:
                     check, check_phase = started, "prompt"
                     picks = list(check.pending)
+                    # The step is Autopilot's Spot Check.  Not in the opening,
+                    # which only the ``weak_phase="any"`` arm prompts in and the
+                    # app never does: there the flow keeps the walk's phase, as
+                    # that arm was priced.
+                    if flow is not None and flow.phase not in _OPENING_PHASES:
+                        flow.begin_spot_check("weak")
+            if picks is None and flow is not None and flow.phase == "spot" and flow.spot_check is None:
+                # Every light went green last step and the check before Done is
+                # due (``_settle_done_check`` let it stand): the user runs it now.
+                started = _start_check() if line_ranking is not None and pool else None
+                if started is not None and started.pending:
+                    check, check_phase = started, "prompt"
+                    picks = list(check.pending)
+                    flow.begin_spot_check("done")
+                else:
+                    flow.skip_done_check()
             if picks is None and (t >= n_steps or not pool):
                 # The voting steps are spent.  Check the line once, if the run
                 # checks at all and there is a ranking with something unvoted in it.
@@ -3832,7 +3898,10 @@ def simulate_voting_iterations(  # noqa: C901
             assert check is not None and line_ranking is not None
             check.record(round_votes)
             if check.finished and check_phase == "prompt":
-                last_weak_check = t
+                last_check_end = t
+                if flow is not None:
+                    # The step ends with the check; this step's update reads the phase after it.
+                    flow.end_spot_check()
             if check.finished:
                 finished_check = check
                 # The set the line keeps from here on, as it stands with the
@@ -4074,7 +4143,7 @@ def simulate_voting_iterations(  # noqa: C901
                 if weak_line is not None and weak_check_due(
                     weak_line.separation,
                     t,
-                    last_weak_check,
+                    last_check_end,
                     threshold=weak_separation,
                     min_votes=weak_min_t,
                     cooldown=weak_repeat if weak_repeat > 0 else None,
@@ -4361,6 +4430,7 @@ def simulate_voting_iterations(  # noqa: C901
                 span=atlas.span_info() if atlas is not None else None,
                 last_vote_good=is_positive,
             )
+            _settle_done_check()
 
         # Identifying columns shared by every row this step emits.
         base_row = _ident_row(

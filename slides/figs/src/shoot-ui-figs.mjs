@@ -648,9 +648,10 @@ async function voteServed(page) {
   if (!served(before)) throw new Error(`the viewer never settled on a served item (alt ${before})`);
   const good = isBook(before);
   if ((await viewer.getAttribute('alt')) !== before) return voteServed(page);
-  // The check opens when a retrain lands, which is at no moment this script
-  // chooses (#4556): it can be up already, or come up while the click waits.
-  // Either way its backdrop takes the click, so nothing is cast.
+  // The check starts when a retrain lands or every light goes green, which is
+  // at no moment this script chooses (#4556): it can be up already, or come up
+  // while the click waits. Either way it hides the centre panel, so the click
+  // finds no button and nothing is cast.
   if (await spotCheckOpen(page)) return null;
   const cast = await page
     .locator(`vt-center-panel ${good ? '.btn-good' : '.btn-bad'}`)
@@ -709,7 +710,7 @@ async function assertVoted(filename, good) {
 
 /** The item in the Label view's centre, as against a spot-check pick. */
 const CENTRE_ITEM = 'vt-center-panel img.image-element';
-const SPOT_CHECK = 'vt-spot-check-modal';
+const SPOT_CHECK = 'vt-spot-check-stage';
 
 const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) > 0;
 
@@ -717,10 +718,12 @@ const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) >
  * Answer Autopilot's spot check, if it has one open, as truthfully as the loop
  * votes; the answers, Good as true, in the order they were given.
  *
- * Autopilot runs the check itself when the labels separate weakly (#4496):
- * from the tenth vote, once a retrain lands, which is a moment this script
- * does not choose (#4556). Its picks are the loop's question asked in a dialog
- * and its answers are ordinary votes, so it is answered the same way — by the
+ * Autopilot runs the check itself, as its Spot Check step: when the labels
+ * separate weakly (#4496), from the tenth vote once a retrain lands, and once
+ * before Done, when every light goes green; moments this script does not
+ * choose (#4556). Its picks are the loop's question asked in the centre pane
+ * in place of the served item, and its answers are ordinary votes, so it is
+ * answered the same way — by the
  * pick's file name, one at a time, round after round until the walk ends —
  * and its votes join the piles the last page shows. That is the session a
  * user has. Cancelling would not be: the check stays due, and comes back.
@@ -734,18 +737,18 @@ const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) >
  * answers.
  */
 async function answerSpotCheck(page) {
-  const modal = page.locator(SPOT_CHECK);
-  if (!(await modal.count())) return [];
+  const stage = page.locator(SPOT_CHECK);
+  if (!(await stage.count())) return [];
   log('autopilot opened a spot check; answering it');
-  const pick = modal.locator('.pick-stage img.image-element');
+  const pick = stage.locator('.pick-stage img.image-element');
   const answers = [];
-  for (let guard = 0; guard < 400 && (await modal.count()); guard++) {
+  for (let guard = 0; guard < 400 && (await stage.count()); guard++) {
     // A refused start or a lost round is not something to photograph around.
-    const error = modal.locator('.error-text');
+    const error = stage.locator('.error-text');
     if (await error.count()) throw new Error(`the spot check failed: ${(await error.first().textContent()).trim()}`);
-    if (await modal.locator('.check-result').count()) {
-      log(`spot check: ${(await modal.locator('.check-result-headline').textContent()).trim()}`);
-      await modal.getByRole('button', { name: 'Done', exact: true }).click();
+    if (await stage.locator('.check-result').count()) {
+      log(`spot check: ${(await stage.locator('.check-result-headline').textContent()).trim()}`);
+      await stage.getByRole('button', { name: 'Continue', exact: true }).click();
       break;
     }
     // Nothing to read while it draws a round; and a pick's file name, never
@@ -756,7 +759,7 @@ async function answerSpotCheck(page) {
       continue;
     }
     const good = isBook(name);
-    await modal.locator(good ? '.btn-good' : '.btn-bad').click();
+    await stage.locator(good ? '.btn-good' : '.btn-bad').click();
     answers.push({ name, good });
     // On to the next pick; or, on a round's last, the round goes to the server
     // with the pick still on screen, and the next round or the result replaces it.
@@ -770,7 +773,7 @@ async function answerSpotCheck(page) {
       { timeout: 120000 }
     );
   }
-  await modal.waitFor({ state: 'detached', timeout: 30000 });
+  await stage.waitFor({ state: 'detached', timeout: 30000 });
   for (const { name, good } of answers) await assertVoted(name, good);
   return answers.map((a) => a.good);
 }

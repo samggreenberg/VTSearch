@@ -1,15 +1,36 @@
-// One pick at a time wants room for the media, but the step is a short task,
-// not a page: the medium modal width, with a stage of fixed height so the
-// dialog does not jump as picks of different shapes come and go.
-:host ::ng-deep .modal-content {
-  width: var(--modal-w-md);
+// Autopilot's Spot Check step, as the centre pane rather than a modal: one
+// pick at a time with the dots above and the vote buttons below, filling the
+// pane, under a heading that names the step.
+
+:host {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
-.spot-check {
+.spot-check-stage {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--space-md);
+  min-width: 0;
   min-height: 0;
+  padding: var(--space-md);
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.stage-title {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
 }
 
 .check-note,
@@ -78,14 +99,14 @@
   }
 }
 
-// The viewers fill a flex column (`flex: 1; min-height: 0`), as they do in the
-// centre panel; this gives them one of a fixed height to fill.
+// The viewers fill a flex column (`flex: 1; min-height: 0`), as they do in
+// the centre panel.
 .pick-stage {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 45vh;
   min-height: 0;
   overflow: hidden;
 }
