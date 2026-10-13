@@ -6398,6 +6398,7 @@ def _land_stage(stage: int) -> plt.Figure:
     ax.set_ylim(0, LL_CANVAS[1])
     ax.set_axis_off()
     _land_cells(ax, stage)
+    _map_legend(ax, LAND_LEGEND, stage)
     _land_axes(ax)
     # The no-Goods row's edge, ruled: the yellow beside it is pale enough that
     # the edge should not rest on colour alone.
@@ -6433,6 +6434,35 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
             # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
                                    linewidth=0.3, zorder=1))  # fmt: skip
+
+
+#: The maps' legend: one swatch per pure colour, in the free column left of
+#: the plot and under the title notch, clear of the Goods axis's name. Its
+#: entries keep their slots across a build and appear on the page their colour
+#: does: (stage it appears on, fill key, label).
+MAP_LEGEND_X, MAP_LEGEND_TOP, MAP_LEGEND_STEP, MAP_LEGEND_SWATCH = 0.7, 4.4, 0.95, 0.5
+LAND_LEGEND = (
+    (1, "none", "no Goods"),
+    (1, "centroid", "Goods' average"),
+    (2, "count", "trained head,\ncounting"),
+    (3, "labels", "labels line"),
+)
+IN_LEGEND = (
+    (1, "count", "trained head,\ncounting"),
+    (2, "labels", "labels line"),
+)
+
+
+def _map_legend(ax: plt.Axes, entries: tuple, stage: int) -> None:
+    """Swatch and name for each pure colour the page has drawn so far; white is outlined so it shows."""
+    for slot, (first, key, label) in enumerate(entries):
+        if stage < first:
+            continue
+        y = MAP_LEGEND_TOP - slot * MAP_LEGEND_STEP
+        ax.add_patch(Rectangle((MAP_LEGEND_X, y - MAP_LEGEND_SWATCH / 2), MAP_LEGEND_SWATCH, MAP_LEGEND_SWATCH,
+                               facecolor=LAND_FILL[key], edgecolor=INK, linewidth=1.0, zorder=3))  # fmt: skip
+        ax.text(MAP_LEGEND_X + MAP_LEGEND_SWATCH + LABEL_GAP, y, label, ha="left", va="center", fontsize=16,
+                color=INK, linespacing=1.0)  # fmt: skip
 
 
 def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None:
@@ -6611,6 +6641,7 @@ def _in_stage(stage: int) -> plt.Figure:
     _, _, cw, ch = _in_cell(1, 1)
     good_edge, bad_edge = _in_edges()
     _in_cells(ax, stage)
+    _map_legend(ax, IN_LEGEND, stage)
     _in_axes(ax)
 
     def name(b: float, g: float, text: str) -> None:
