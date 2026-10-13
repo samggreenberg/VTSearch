@@ -32,8 +32,8 @@
   @case ('revote') {
     <vt-toasty-hint hintId="revote" [anchor]="voteButtons" side="above" reach="right">
       You already labeled this item <strong>{{ revoteLabel() }}</strong>. Click
-      <strong>{{ revoteOther() }}</strong> ({{ revoteKey() }}) to change it, or click Autopilot's current step on
-      the left (&uarr;) to go back to its pick.
+      <strong>{{ revoteOther() }}</strong>, or press the {{ revoteKey() }} arrow key, to change it. Click
+      Autopilot's current step on the left, or press the up arrow key, to go back to its pick.
     </vt-toasty-hint>
   }
   @case ('find-goods') {

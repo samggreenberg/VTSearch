@@ -80,7 +80,7 @@ any run.
 |---|---|---|---|
 | `start-voting` | happy | Autopilot picked this item for you. Click **Good**, or press the right arrow key, if it's what you're looking for. Click **Bad**, or press the left arrow key, if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
 | `fix-votes` | happy | Your vote went to **Labels** on the right. Misclicked? Open Labels, click the item, and vote again. | Autopilot is running with an item on screen, and the run that trains the detector has its first vote. Stands beside the **Labels** panel, folded or open. The next vote ends it, and `find-goods` takes over. |
-| `revote` | happy | You already labeled this item **{label}**. Click **{other}** ({key}) to change it, or click Autopilot's current step on the left (↑) to go back to its pick. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
+| `revote` | happy | You already labeled this item **{label}**. Click **{other}**, or press the {key} arrow key, to change it. Click Autopilot's current step on the left, or press the up arrow key, to go back to its pick. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
 | `find-goods` | happy | Autopilot needs {M Goods} to start training. You've found {N}. Keep voting. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
 | `find-bads` | happy | Your Goods are in. Autopilot needs {M Bads} too, and has {N}. Keep voting. | As `find-goods`, in **Find Initial Bads**. |
 | `find-more` | happy | Autopilot has its first Goods and Bads, and is walking the sort for more Goods. Keep voting. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
@@ -94,7 +94,7 @@ any run.
 `{M Goods}` and `{M Bads}` are Autopilot's Good and Bad targets ("3 Goods",
 "4 Bads" by default) and `{N}` the labels of that class so far. In `revote`,
 `{label}` is the item's label ("Good" or "Bad"), `{other}` the other one, and
-`{key}` the arrow key that votes it (← for Bad, → for Good). In
+`{key}` the arrow key that votes it ("left" for Bad, "right" for Good). In
 `resort-prompt`, `{N clicks}` is the votes cast under the current sort,
 `{found only K positives}` how many of them were Good ("found no positives"
 when none), and `{M}` the Good target. In `autopilot-ran-dry`, `{N}` is the

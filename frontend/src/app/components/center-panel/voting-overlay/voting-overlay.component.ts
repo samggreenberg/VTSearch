@@ -60,7 +60,7 @@ export class VotingOverlayComponent implements OnDestroy {
    *  drops the hint the moment the label moves, so these never name the label a vote just set. */
   readonly revoteLabel = computed(() => (this.isGood() ? 'Good' : 'Bad'));
   readonly revoteOther = computed(() => (this.isGood() ? 'Bad' : 'Good'));
-  readonly revoteKey = computed(() => (this.isGood() ? '←' : '→'));
+  readonly revoteKey = computed(() => (this.isGood() ? 'left' : 'right'));
 
   /** Transient flash classes; signals so the `setTimeout` reset repaints under
    *  zoneless change detection. */
