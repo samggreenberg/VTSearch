@@ -6321,6 +6321,15 @@ def _land_p_labels(n_good: int, n_bad: int, split: float) -> float:
     return p
 
 
+def _land_band() -> tuple[int, int]:
+    """``(lo, hi)``: the split can give a trained head the labels line from *lo* Goods, and always does from *hi*."""
+    grid = _land_grid()
+    trained = grid["kind"] == "trained"
+    some = [g for g in range(LAND_G + 1) if (grid["p"][g, trained[g]] > 0).any()]
+    every = [g for g in range(LAND_G + 1) if trained[g].any() and (grid["p"][g, trained[g]] >= 1.0).all()]
+    return min(some), min(every)
+
+
 @functools.lru_cache(maxsize=None)
 def _land_grid() -> dict:
     """Every cell's strategy on a single-vector space (the Binary path), from the shipped tiers and constants."""
@@ -6406,11 +6415,12 @@ def _land_stage(stage: int) -> plt.Figure:
     ch = _land_cell(0, 0)[3]
     ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
     # Every region's name sits where no later page draws over it: the trained
-    # head's three to the right of the typed query's staircase.
+    # head's three to the right of the typed query's staircase. Each names the
+    # region in the axes' own counts, never what it returns: that is the key's.
     _land_name(ax, LAND_B / 2 + 0.5, 0.5, "0 Goods")
-    _land_name(ax, 8.0, 2.0, "under\nthe quota", plate=LAND_FILL["centroid"] if stage >= 4 else None)
+    _land_name(ax, 8.0, 2.0, "under\nthe quota", plate=LAND_FILL["centroid"])
     if stage >= 2:
-        _land_quota(ax, stage)
+        _land_quota(ax)
     if stage >= 3:
         _land_labels(ax)
     if stage >= 4:
@@ -6419,15 +6429,21 @@ def _land_stage(stage: int) -> plt.Figure:
 
 
 def _land_cells(ax: plt.Axes, stage: int) -> None:
-    """One cell per pair of counts, filled by its strategy; the trained head's from page 2, its split from page 3."""
+    """One cell per pair of counts, filled by its strategy.
+
+    The trained head's rows the split cannot change, from page 2; the band
+    and the labels line above it, from page 3. A page only adds cells, so no
+    cell changes colour between pages.
+    """
     grid = _land_grid()
+    lo, hi = _land_band()
     for g in range(LAND_G + 1):
         for b in range(LAND_B + 1):
             k = grid["kind"][g, b]
             if k == "trained":
-                if stage < 2:
-                    continue  # the quota arrives on the next page
-                fill = _land_mix(float(grid["p_row"][g])) if stage >= 3 else LAND_FILL["count"]
+                if stage < (2 if g < lo else 3):
+                    continue
+                fill = LAND_FILL["count"] if g < lo else LAND_FILL["labels"] if g >= hi else _land_mix(grid["p_row"][g])
             else:
                 fill = LAND_FILL[k]
             # Edgeless, each cell edged in its own fill so no seam shows: only
@@ -6447,6 +6463,9 @@ LAND_TABLE = (
     (1, "none", "Typed query", "Stand-out count"),
     (1, "centroid", "Goods' average", "Stand-out count"),
     (2, "count", "Trained head", "Stand-out count"),
+    # The band the folds' split decides: what it returns is either of the rows
+    # either side, so it is a row of the key and not a name on the map.
+    (3, "split", "Trained head", "Stand-out count\nor Fβ peak"),
     (3, "labels", "Trained head", "Fβ peak"),
 )
 IN_TABLE = (
@@ -6461,7 +6480,9 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
 
     *hatched* is ``(fill key, stage)``: from that stage a hatched swatch joins
     that row's, for a hatch on the map that shares the row's sort and cut.
-    White swatches are outlined so they show.
+    White swatches are outlined so they show; the ``"split"`` row's swatch is
+    Lay of the Land's band, orange to purple. A two-line row takes half a
+    row more, and every row keeps its place on every page.
     """
     xs = MAP_TABLE_X
     head = MAP_TABLE_HEAD
@@ -6469,12 +6490,18 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
         ax.text(xs[col], head, text, ha="left", va="center", fontsize=16, fontweight="bold", color=INK)
     ax.plot([xs["swatch"], xs["end"]], [head - 0.38] * 2, color=INK, linewidth=1.0, zorder=3)
     half = MAP_TABLE_SWATCH / 2
+    heights = [1.5 if "\n" in sort + cut else 1.0 for _, _, sort, cut in rows]
     for slot, (first, key, sort, cut) in enumerate(rows):
         if stage < first:
             continue
-        y = head - (slot + 1) * MAP_TABLE_STEP
+        y = head - MAP_TABLE_STEP * (0.5 + sum(heights[:slot]) + heights[slot] / 2)
+        if key == "split":
+            for i, x in enumerate(np.linspace(0.0, MAP_TABLE_SWATCH, 25)[:-1]):
+                ax.add_patch(Rectangle((xs["swatch"] + x, y - half), MAP_TABLE_SWATCH / 24, MAP_TABLE_SWATCH,
+                                       facecolor=_land_mix(i / 23), edgecolor="none", zorder=3))  # fmt: skip
         ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
-                               facecolor=LAND_FILL[key], edgecolor=INK, linewidth=1.0, zorder=3))  # fmt: skip
+                               facecolor="none" if key == "split" else LAND_FILL[key], edgecolor=INK,
+                               linewidth=1.0, zorder=3))  # fmt: skip
         if hatched is not None and hatched[0] == key and stage >= hatched[1]:
             ax.add_patch(Rectangle((xs["swatch2"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
                                    facecolor=LAND_FILL[key], edgecolor=INK, hatch="//", linewidth=1.0,
@@ -6487,8 +6514,9 @@ def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None
     """A map's frame: evenly ticked counts at the cells' centres, plain axis names, and the chart's label.
 
     Shared by Inside Job and Lay of the Land, so the pair reads as one chart
-    asked twice: the label over each says whose counts the axes are, and the
-    axes themselves just say Goods and Bads. The decisions' values are where the
+    asked twice: the label over each says what the colours are (the Sort/Cut
+    each count returns) and whose counts the regions are, and the axes
+    themselves just say Goods and Bads (owner, 2026-10-13). The decisions' values are where the
     black edges are, so no tick is spent on them. *cell* is the map's
     ``(b, g) -> (x, y, w, h)``.
     """
@@ -6513,8 +6541,8 @@ def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None
 
 
 def _land_axes(ax: plt.Axes) -> None:
-    """Lay of the Land's frame: every ten Bads, every two Goods, under "What the user holds"."""
-    _map_axes(ax, _land_cell, range(0, LAND_B + 1, 10), range(0, LAND_G + 1, 2), "What the user holds")
+    """Lay of the Land's frame: every ten Bads, every two Goods, as what each count returns."""
+    _map_axes(ax, _land_cell, range(0, LAND_B + 1, 10), range(0, LAND_G + 1, 2), "Sort/Cut per User Label Counts")
 
 
 def _land_name(ax: plt.Axes, b: float, g: float, text: str, plate: str | None = None) -> None:
@@ -6525,21 +6553,25 @@ def _land_name(ax: plt.Axes, b: float, g: float, text: str, plate: str | None = 
     ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6, bbox=box)
 
 
-def _land_quota(ax: plt.Axes, stage: int) -> None:
+def _land_quota(ax: plt.Axes) -> None:
     """Page 2: the quota's edge, 3 Goods and 4 Bads or a Good and 16 Bads, and the trained head past it."""
     from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA, GOOD_QUOTA  # noqa: PLC0415
 
     x0, y0, _, _ = LAND_BOX
     _, _, cw, ch = _land_cell(0, 0)
     edge = [(BAD_QUOTA, LAND_G + 1), (BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, 1)]
-    ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, LAND_NAME_B, 4.5 if stage >= 3 else 8.0, "< 6 Goods\nheld out")
+    # Over the names' plates (zorder 6), which would otherwise hide the edge
+    # where "under the quota" sits against it; the staircase likewise.
+    ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=7)
+    lo, _ = _land_band()
+    _land_name(ax, LAND_NAME_B, (1 + lo) / 2, f"< {lo} Goods")
 
 
 def _land_labels(ax: plt.Axes) -> None:
     """Page 3: the labels line, and the Goods where the split decides."""
-    _land_name(ax, LAND_NAME_B, 13.5, "≥ 6 Goods\nheld out")
-    _land_name(ax, LAND_NAME_B, 9.0, "either, as the\nsplit rounds")
+    lo, hi = _land_band()
+    _land_name(ax, LAND_NAME_B, (hi + LAND_G + 1) / 2, f"≥ {hi} Goods")
+    _land_name(ax, LAND_NAME_B, (lo + hi) / 2, f"{lo}–{hi - 1} Goods")
 
 
 def _land_query(ax: plt.Axes) -> None:
@@ -6566,8 +6598,8 @@ def _land_query(ax: plt.Axes) -> None:
         b = QUERY_HOLD_LABELS - g
         xs += [x0 + b * cw, x0 + b * cw]
         ys += [y0 + g * ch, y0 + (g + 1) * ch]
-    ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, 14.0, 4.5, f"typed query,\n< {QUERY_HOLD_LABELS} labels", plate=LAND_FILL["count"])
+    ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=7)
+    _land_name(ax, 14.0, 4.5, f"< {QUERY_HOLD_LABELS} labels,\nwith a query", plate=LAND_FILL["count"])
 
 
 # ── Inside Job: the trained head's line, read off what a fold holds out ─────
@@ -6688,8 +6720,8 @@ def _in_cells(ax: plt.Axes, stage: int) -> None:
 
 
 def _in_axes(ax: plt.Axes) -> None:
-    """Inside Job's frame: every ten Bads, every Goods row, under "What each fold holds out"."""
-    _map_axes(ax, _in_cell, range(10, IN_B + 1, 10), range(0, IN_G + 1), "What each fold holds out")
+    """Inside Job's frame: every ten Bads, every Goods row, as what each held-out count returns."""
+    _map_axes(ax, _in_cell, range(10, IN_B + 1, 10), range(0, IN_G + 1), "Sort/Cut per Fold Holdout Counts")
 
 
 # ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──
