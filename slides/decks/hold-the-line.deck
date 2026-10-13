@@ -35,9 +35,13 @@
 # a talk *for* users moves it up to follow section I instead.
 
 theme: vtsearch
-# PDF metadata. Marp takes the title from the first heading unaided, but the
-# language it guesses from the locale of whatever machine renders it (`POSIX`
-# on a CI runner), and that is what a screen reader reads the deck in.
+# PDF metadata. The title is set here rather than left to Marp: it takes one
+# from the first heading, and the speaker cut has none (its first page is a
+# picture of the title slide), so that PDF was titled after Marp's temp file
+# (#4835); `build.py` adds "(presenter notes)" to the speaker cut's. The
+# language Marp guesses from the locale of whatever machine renders it
+# (`POSIX` on a CI runner), and that is what a screen reader reads the deck in.
+title: (thresh)Hold The Line
 author: Sam Greenberg
 lang: en
 
@@ -64,9 +68,10 @@ slides:
   # corpus. Then three ways of putting them together, naive to nuanced (owner,
   # 2026-10-13, #4833): Cross Examination averages the folds' cut with the
   # corpus's; Above Average reads the votes and the corpus's histograms
-  # together, the votes only naming the bumps; Joint Custody lets the votes
-  # shape the Good bump and the corpus say how big it is, ending on the two
-  # numbers the line is drawn from. Joint Custody uses no beta, so it is here
+  # together, the votes only naming the bumps; Curvey and InDiscreet (once
+  # titled for a custody split; owner, #4835) lets the votes, bunched near the line where
+  # Autopilot asks, shape the Good bump and the corpus say how big it is,
+  # ending on the two numbers the line is drawn from. It uses no beta, so it is here
   # rather than beside the line it feeds: turning it into a line takes the
   # user's preference, which is section III. The other rules that once
   # stacked on these — the anchored EM, rank transfer, the 70/30 split — are in
@@ -84,15 +89,15 @@ slides:
   # #4833: first define the preference, then use it to calibrate). Why a line
   # needs one, what F1 and F-beta are (#4517), F-beta's peak and the
   # three-radio balance that sets its beta (#4413, #4448), then the line the
-  # labels draw at its expected peak (#4452), from section II's Joint Custody
-  # fit. Then why the labels are what the line is drawn from: they
+  # labels draw at its expected peak (#4452), from section II's Curvey and
+  # InDiscreet fit. Then why the labels are what the line is drawn from: they
   # are all Find has (#4517). Then
   # the line before the labels can draw one, the outlier cut, and
-  # who draws it as the labels grow (#4603, #4759, #4786, #4798). Then
-  # the question that line cannot answer before anyone checks (how many of
-  # what it keeps are right), Clopper–Pearson on its own, what a check
-  # says about the line without moving it (#4427, #4452, #4517), and when
-  # Autopilot runs that check by itself (#4496). Present
+  # the map of which rule draws it for every labelset (#4603, #4759, #4786,
+  # #4798). Changing Hands, the same hand-over as a timeline, was cut: Lay of
+  # the Land covers it (owner, #4835). The Spot Check slides that followed
+  # moved to Examination: they measure the line, they do not draw it (owner,
+  # #4835). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after Conclusion.
   # Second Cut stays last: Autopilot asks where What to Expect's fit puts
@@ -107,24 +112,16 @@ slides:
   transfer-student
   # The line before the labels line can stand: the outlier cut,
   # drawn by one rule for the text query, the Goods' average and a head with
-  # too few Goods (#4603, #4759, #4786), then who draws the line as the labels
-  # grow, and the six held-out Goods that hand it to What to Expect (#4643,
-  # #4798). After Transfer Student, because both slides lean on the radios
+  # too few Goods (#4603, #4759, #4786): needles are rare and a first sort is
+  # weak, so the matches are a few outliers above the bulk, not a hump (owner,
+  # #4835). After Transfer Student, because both slides lean on the radios
   # and on What to Expect's fit to say what the count stands in for.
   out-standing
-  changing-hands
   # Lay of the Land: every labelset in hand, Goods up and Bads across: the quota, the text query's
   # hold, and the band where the folds' split decides, from the shipped quota, fold split and hold
   # (#4643, #4731, #4736). Inside Job, the same rule as a decision tree on what each fold holds out,
   # was cut: the room can read the cut rules off this map (owner, #4833).
   lay-of-the-land
-  floor-ask
-  clopper-pearson
-  floor-check
-  # Weak Spot: when the labels separate weakly, Autopilot runs Spot Check by
-  # itself (#4496), past the opening and never on faces (#4799). After Spot
-  # Check, which it calls, and before Second Cut, which stays last.
-  weak-spot
   inclusion-acq
 
   # IV — Exploration: the Coverage Atlas, how autopilot decides what to ask
@@ -193,10 +190,24 @@ slides:
   # #4560) and the model's count corrected below it (#4523); then the app — the
   # autopilot's rounds and stop, the result pane, and how often its ranges hold.
   # The bands and Clopper–Pearson it builds on are Spot Check's and Home on the
-  # Range's, in section III. Every figure but the last runs the shipped
+  # Range's, which open the section. Every figure but the last runs the shipped
   # `LineTest` on a planted pile (`make-test-figs.py`); the last is #4560's
   # shipped summary.
   outline-hold-the-line +at7
+  # First the check Autopilot runs on the pile you trained on (owner, #4835:
+  # moved here from Inclination, since it measures the line rather than
+  # drawing it): the question the line cannot answer before anyone checks
+  # (how many of what it keeps are right), Clopper–Pearson on its own, what
+  # a check says about the line without moving it (#4427, #4452, #4517).
+  # Flight Plan in section V names it as the step before Done (#4836).
+  floor-ask
+  clopper-pearson
+  floor-check
+  # Weak Spot: when the labels separate weakly, Autopilot runs Spot Check
+  # early (#4496), past the opening and never on faces (#4799). After Spot
+  # Check, which it calls. Then Test, the same question on a pile the
+  # detector never saw.
+  weak-spot
   test-question
   test-bands
   test-posterior
@@ -302,7 +313,7 @@ slides:
   # Then the line rules that stacked on section II's ideas and did not last,
   # moved out of Calibration (#4670); the blend went back there as the naive
   # combining (owner, 2026-10-13), and Above Average after it, as the step to
-  # Joint Custody (owner, #4833), leaving its anchored EM here. Measured in
+  # Curvey and InDiscreet (owner, #4833), leaving its anchored EM here. Measured in
   # F-beta at the three presets, none beat cross-calibration (#4582, at the
   # 0.44% pool). None draws today's line; the fused cut and rank transfer
   # survive only as the fallback for a session whose votes cannot support the
