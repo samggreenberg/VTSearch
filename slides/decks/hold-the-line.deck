@@ -172,8 +172,12 @@ slides:
   data-coco-better-complement
   data-coco-problems
   data-set-coco-better
-  # Up and Up: what the F-beta era bought at beta 1/4, in two lifts (#4668).
+  # Up and Up: what the F-beta era bought at beta 1/4, in two lifts (#4668),
+  # with today's app re-run on the same sessions (#4835); then the same chart
+  # at beta 1 and 4, to click through (owner, #4835). At beta 1 the labels
+  # line only ties cross-calibration, and the notes say so.
   up-and-up
+  up-and-up-radios
   # Follow Suit, what the work since the first rule bought (#4548), is in the
   # appendix after Conclusion: only β ¼ pulls away from cross-calibration, so
   # in the run of the talk it read as "the work changed nothing" (#4563).
