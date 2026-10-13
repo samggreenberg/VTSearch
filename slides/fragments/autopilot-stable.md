@@ -10,24 +10,23 @@
 
 <!-- build: figs/autopilot-stable.build3.png -->
 
-<!-- Stable asks the other half: would more labels still change which items
-     the detector calls Good? Smart can be flat while the calls churn
-     underneath it. The counts are the shipped rule's, on a planted pool. -->
+<!-- **a** — Stable asks something else: is the detector still changing its
+     mind? Smart can be flat while the calls churn underneath. Here's every
+     unvoted photo, scored by the last retrain on top and this one on the
+     bottom, best on the right. Most barely move. -->
 
-<!-- **a** — The same unvoted items, scored by the last retrain and by this
-     one, best on the right, each joined to itself. Most barely move. -->
+<!-- **b** — Six crossed the line. Counting every one sounds obvious, but it
+     never settles: a photo the model can't place just wobbles back and forth
+     forever. On a test pile like that, it kept Autopilot stuck in Boundary for
+     127 of 150 clicks. -->
 
-<!-- **b** — Six changed side of the <span class="cut">line</span>. Counting
-     every one is the obvious rule, and it never fires: an item the embedding
-     cannot place wobbles across the line forever. On #3831's dice pool it
-     held Autopilot in Boundary for 127 of 150 clicks. -->
+<!-- **c** — So we put a band around the line, a quarter of the scores' spread
+     on each side. A flip only counts if the photo was clear of the band both
+     times: clearly in, then clearly out. Four of these six were wobble; two
+     count. -->
 
-<!-- **c** — So a band round each line, a quarter of the scores' spread either
-     side. A flip counts only when the item was clear of the band both times:
-     clearly in, then clearly out. Four of the six were wobble; two count. -->
-
-<!-- **d** — Green, over the last ten retrains: the flips that count average
-     under 0.5% of the whole pool and never reach 1% in one retrain, and the
-     raw flip rate, wobble and all, has stopped falling. When it goes green
-     with the wobble still above 0.5%, the panel says so: what is left looks
-     irreducible in this embedding. -->
+<!-- **d** — It goes green when, over the last ten retrains, the flips that
+     count average under half a percent of the pool, never hit one percent in a
+     single retrain, and the total flipping has stopped falling. If it goes
+     green with a lot of wobble left, the panel says so: that's as settled as
+     these pictures are going to get. -->

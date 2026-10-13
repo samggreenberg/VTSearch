@@ -8,22 +8,14 @@
 
 <!-- build: figs/autopilot-stop.build1.png -->
 
-<!-- Where the stop actually fires, from the 2026-10-08 State of the App
-     review (Binary Photo, #4651): today's app on COCO Better, 49 classes at
-     every size, 24 seeds, 3,456 sessions at each radio, scored at the
-     radio's own beta. The simulated user clicks to the review's 150 either
-     way. The lines are the Fβ a user has in hand at each click, over every
-     session. -->
+<!-- **a** — So when does the stop actually fire? This is today's app on COCO
+     Better, the photo benchmark coming up next: thousands of simulated
+     sessions at each setting of the balance, all clicking to 150 no matter
+     what. Each line is the average F-beta at each click. The stop fired in
+     about 80% of sessions, at a median click of 81 to 93. The ones that never
+     fire are mostly small objects. -->
 
-<!-- **a** — The stop fired in 83%, 82% and 79% of sessions at β = ¼, 1
-     and 4, at median click 81, 83 and 93. (On the two upper lines the
-     earlier circle is β = ¼.) The sessions that never fired are mostly the
-     small objects: the stop fires in every large-object session and in
-     about half of the small ones. -->
-
-<!-- **b** — The stop comes early. Clicking on to 150 raised Fβ by 0.075,
-     0.076 and 0.046 on average, each within ± 0.005, and 60%, 69% and 58%
-     of the sessions told they could stop ended 0.02 or more better. Only
-     9 to 15% ended that much worse. At the stop, a session sat about 0.06
-     to 0.10 below the best it would reach, and most reached that best
-     later. -->
+<!-- **b** — And it fires early. Clicking on to 150 still raised F-beta by
+     about 0.05 to 0.08 on average, and 58 to 69% of the sessions told they
+     could stop ended up noticeably better. Only 9 to 15% ended up that much
+     worse. So there's still real F-beta left after the stop. -->

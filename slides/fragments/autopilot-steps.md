@@ -10,34 +10,22 @@
 
 <!-- build: figs/autopilot-steps.build3.png -->
 
-<!-- Every item the Train window shows comes from Autopilot. Sections III and
-     IV were the two ways it asks; this is the order it asks them in, and the
-     next four slides are how it decides it is done. In the panel each step
-     has one light, red to yellow to green, and hands over at green. -->
+<!-- **a** — Autopilot picks every photo we're shown, and this is the order it
+     asks in. It opens on our own query, before there's any detector: Goods off
+     the top until we have three, or have one and it's gone sixteen in a row
+     without another. Then four Bads right at the query's line, because that's
+     where the query's mistakes are. -->
 
-<!-- **a** — The opening, both steps on the ranking the user's own query
-     gives, typed words or example pictures: no detector is on screen yet.
-     Three Goods off the top, or, once one is in, until sixteen in a row are
-     not Good (#4731): a target the query can reach only once or twice used
-     to walk it for the whole session, and a Good with those sixteen Bads now
-     trains a detector. Four Bads from right at the query's own line,
-     where its mistakes are. Then the detector takes over. Until #4740 a third
-     step went back to the top for more Goods; scored on F-beta over the
-     session it won the first 25 votes and lost every vote after the 23rd
-     (#4671), so it is gone. -->
+<!-- **b** — Now the detector takes over. Boundary asks about the photo the
+     detector calls even odds, the one it's least sure about. It keeps going
+     until two lights are green, Smart and Stable, which are the next two
+     slides. Along the way, if the votes aren't separating well, it may stop
+     and run a Spot Check by itself. -->
 
-<!-- **b** — Boundary is the first step on the detector's own ranking, and it
-     is Second Cut's pick: the unvoted item the line's fit calls even odds. It
-     runs until two lights are green, Smart and Stable, the next two slides.
-     Past the opening, Autopilot may also stop to run Spot Check by itself
-     when the labels separate weakly (#4496), then carry on. -->
+<!-- **c** — Diversity is the atlas walk: the first cell nobody's voted in, and
+     the photo there most likely to prove the detector wrong. It runs until the
+     third light, Span, is green too. -->
 
-<!-- **c** — Diversity is section IV's walk: the first atlas cell no vote has
-     reached, and the item in it most likely to prove the detector wrong. It
-     runs until Span is green as well. -->
-
-<!-- **d** — Done, when all three are green. Nothing is latched: the step is
-     re-derived from the votes after every one, so a light that falls back to
-     yellow sends Autopilot back to Boundary. A detector that already has
-     votes, from another collection, skips the opening and starts on its own
-     ranking. -->
+<!-- **d** — When all three are green, it tells us we're done, and we decide
+     whether to keep going or leave. Nothing's locked in, though: if a light
+     drops back to yellow, Autopilot goes back to Boundary. -->

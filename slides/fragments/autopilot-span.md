@@ -10,23 +10,19 @@
 
 <!-- build: figs/autopilot-span.build3.png -->
 
-<!-- Span is section IV's atlas, read as a gauge: have the votes been
-     everywhere? -->
+<!-- **a** — Span is the atlas again, used as a gauge: have our votes been
+     everywhere? Here are its top four levels: one cell, three, nine,
+     twenty-seven. That's forty cells, and forty is Span's green bar. There are
+     thousands of smaller cells below, but Span never needs them. -->
 
-<!-- **a** — The atlas's first four levels: one cell, three, nine,
-     twenty-seven. Forty cells, which is exactly Span's green bar. Thousands of
-     smaller cells hang below and Span never needs them. The walk takes them
-     level by level, biggest first: left to right here. -->
+<!-- **b** — After Boundary. Each vote marks its cell and everything above it.
+     Span reads the tree from the top, a level at a time, biggest first, which
+     is left to right here, and counts until it hits an empty cell. Here that's
+     three, so it's red. The ringed cell is where Diversity starts. -->
 
-<!-- **b** — After Boundary. Every vote marks its cell and every cell above
-     it, so a few votes deep in the first two branches fill paths up to the
-     top. Span counts the run from the top, in the walk's order, and stops at
-     the first empty cell: three. Red. The ringed cell is where Diversity
-     starts. -->
+<!-- **c** — Four Diversity picks later, it's ten: yellow. Each pick fills the
+     first empty cell, so the count grows by at least one a pick, and it jumps
+     when it reaches cells the Boundary votes already filled. -->
 
-<!-- **c** — Four Diversity picks later, ten: yellow. Each pick fills the first
-     empty cell, so the run grows by at least one a pick, and it jumps when it
-     reaches cells the Boundary votes had already filled. -->
-
-<!-- **d** — All forty: green. Below ten is red, ten to forty yellow. An atlas
-     with fewer than forty cells, on a small collection, needs every one. -->
+<!-- **d** — All forty: green. Under ten is red, ten to forty is yellow. And a
+     small collection with fewer than forty cells just needs every one of them. -->

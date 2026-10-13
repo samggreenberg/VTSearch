@@ -6,24 +6,14 @@
 
 <!-- build: figs/autopilot-smart.build1.png -->
 
-<!-- Smart is the first of the three lights, and the plainest question: is
-     the detector still getting better? The figure runs the shipped rule on a
-     planted session. -->
-
-<!-- **a** — Each point is one retrain's detector, scored on the votes as
-     they stand today: its mistakes, false alarms plus misses as shares
-     (FPR + FNR), at its own cut. The whole window is re-scored on every
-     vote, so older detectors are judged by newer labels. Fit a line through
-     the last ten. Early on it falls 7% of its height a retrain: yellow, keep
+<!-- **a** — Smart is the first light, and it asks: is the detector still
+     getting better? Each point is one retrain's detector, scored against all
+     the votes we have today, as false alarms plus misses. Fit a line through
+     the last ten. Early on it's falling 7% a retrain, so it's yellow: keep
      going. -->
 
-<!-- **b** — Later the same fit is flat, 0.2% a retrain, inside the 1.5% line:
-     green. A fall also has to be bigger than the window's own scatter, two
-     standard errors, before it counts (#3832). Without that, a category the
-     embedding cannot separate jumps from retrain to retrain, and the light
-     flapped between Done and Boundary with it. -->
-
-<!-- Smart and Stable both stay red until the labels hold five Goods and five
-     Bads: below that there is no detector worth judging. Smart cuts every
-     detector the same way, whatever the Threshold is set to, so the points
-     in a window stay comparable (#4243). -->
+<!-- **b** — Later the same fit is flat, 0.2% a retrain, well inside the 1.5%
+     bar, so it's green. A drop also has to be bigger than the points' own
+     scatter to count; otherwise a hard category bounces around and the light
+     flickers. And it stays red until we have at least five Goods and five
+     Bads. -->

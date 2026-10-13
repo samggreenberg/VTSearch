@@ -12,37 +12,24 @@
 
 <!-- build: figs/atlas-depth.build4.png -->
 
-<!-- The atlas has a second job, and this is what it is for. Point a detector
-     at a collection it was not trained on and it does not hesitate, decline,
-     or look uncertain. It scores. -->
+<!-- **a** — The atlas has a second job. Start with the same kind of picture: a
+     collection, some votes, and a detector's boundary. -->
 
-<!-- **a** — Nothing new yet: the corpus, the votes and the boundary, exactly
-     as the last few slides left them. -->
+<!-- **b** — Now tilt it. That flat sheet is really the floor of a room. The
+     space is much bigger than the floor; our collection just happens to sit
+     there. -->
 
-<!-- **b** — One move, and not one new item. That plane is the *floor* of a
-     room. The floor is not the space — it is the part of the space this corpus
-     happened to occupy. -->
+<!-- **c** — And here's a whole second collection, way up a direction nobody
+     ever voted along. Not a few odd photos: same size, same spread, a
+     different kind of data entirely. -->
 
-<!-- **c** — And a whole second collection, a long way up a direction nobody
-     ever voted along. Not a few odd items: the same count and the same spread
-     as the floor, because it is a domain. -->
+<!-- **d** — What does the detector say about them? Its score is basically one
+     weighted sum, so moving along a direction it never learned changes
+     nothing. The boundary goes straight up like a pillar, and it sorts the new
+     collection into in and out, confidently, with no hint that it's guessing. -->
 
-<!-- **d** — What the detector says about them. The head is a **single linear
-     layer** — the score is one number, a projection — so it is *exactly*
-     constant along every direction that projection misses. Not an
-     approximation of the model. That **is** the model. So the cut has no lid,
-     and it **sorts** the new collection, cleanly, into the ones inside and the
-     ones outside. Every one of those verdicts is a copy, item for item, of one
-     about a different collection. Nothing in the output says the word
-     *extrapolating*. -->
-
-<!-- **e** — And the honest alternative: the concept stops. It fits every vote
-     on that floor exactly as well as the pillar does, and no amount of further
-     voting separates the two, because **every vote is on the floor** — which is
-     what makes this unlike the last two slides, where more clicks were the
-     answer. -->
-
-<!-- So the fix cannot come from the detector, but from something that models
-     where the data *was* — the atlas: it does not need to know the truth up
-     there, only to say "this is nowhere near anything I was built on". That is
-     the typicality p-value, and the next slide shows it saying so. -->
+<!-- **e** — What we'd actually want is for the concept to stop, like this
+     dome. But the dome fits every vote exactly as well as the pillar does, and
+     more votes won't tell them apart, because every vote is on the floor. The
+     detector can't fix this. Something that knows where our data was can, and
+     that's the atlas. -->
