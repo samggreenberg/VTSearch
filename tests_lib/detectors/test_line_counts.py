@@ -124,3 +124,19 @@ class TestTheHeadCountLine:
         with head_count_bads(0):
             TestInTheHarness()._run(line_count_sink=sink)
         assert sink and any(s["k_test"] != s["k_head_count"] for s in sink)
+
+
+class TestTheCutVariants:
+    """#4798's candidates ride the same rows: ``k_cut_class`` is the class model's cut, the head's count held off."""
+
+    def test_k_cut_class_is_what_test_keeps_without_the_heads_count(self):
+        from vtscore.eval.arms_cut_total import CUT_VARIANTS
+        from vtscore.eval.live_threshold_rules import head_count_bads
+
+        sink: list[dict] = []
+        with head_count_bads(0):
+            TestInTheHarness()._run(line_count_sink=sink)
+        with_model = [s for s in sink if s["model_n_neg"] == s["model_n_neg"]]
+        assert with_model, "the run should reach a trained click with a class model"
+        assert all(s["k_test"] == s["k_cut_class"] for s in with_model)
+        assert all(0 <= s[f"k_cut_{name}"] <= s["n_test"] for s in with_model for name in CUT_VARIANTS)

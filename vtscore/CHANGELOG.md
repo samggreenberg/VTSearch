@@ -10,6 +10,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The labels line keeps the head's count until the class model holds 6 held-out Goods, whatever its
+  Bads** (issue #4798). `HEAD_COUNT_BADS` is unbounded (it was 32), so `head_count_serves` is the Goods
+  half alone. With two to five held-out Goods past 32 Bads, the class model's cut ran to the corpus's
+  end at beta 4 on 2.5% of FHIBE face clicks; no fix to `corpus_cut`'s positives total won on COCO.
+  Priced as full sessions: Find's mean F-beta over votes 1-150 +0.008 to +0.032 on faces at beta 1/4 and
+  1 and +0.004 / +0.014 at beta 4; COCO Better's Binary opening +0.001 at beta 1/4 and at 1,
+  -0.002 at beta 4. `head_count_bads(32)` (`CALIB_HEAD_COUNT_BADS=32`) is #4786's gate.
+
 - **A typed-query detector keeps its query's set past the quota until 30 labels on a single-vector
   space** (issue #4736). New `label_quota.QUERY_HOLD_LABELS` (30) and `query_holds(n_good, n_bad, *,
   patch_space, hold=QUERY_HOLD_LABELS)`: true on a known single-vector space (`training._patch_space_for`
