@@ -6611,7 +6611,10 @@ def _land_query(ax: plt.Axes) -> None:
 #: (#4490), in dark purple. That last test reads the Bads' scores, not their
 #: count, so its region is named for both, as Lay of the Land's hatch is "with
 #: a query"; a session's Bads never pass it (owner, 2026-10-13: a return of its
-#: own). Until page 3 those cells are the purple a session would get there.
+#: own). Until page 3 those cells are the purple a session would get there,
+#: and page 3 darkens them: a deliberate exception to STYLE.md's no-restyle
+#: build rule (owner, 2026-10-13), since a blank there would stop page 2's
+#: purple at fifty Bads for no reason the room has yet been given.
 IN_STAGES = 3
 #: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 0..IN_G.
 #: A fold always holds out at least one of each (`_grouped_folds` trains on at
