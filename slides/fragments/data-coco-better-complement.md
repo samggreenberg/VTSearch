@@ -19,38 +19,32 @@
 
 <!-- build: figs/dataset-coco-better-complement.build7.png -->
 
-<!-- Why the size benchmark is built on COCO, in one slide. Three classes here; COCO has
-     eighty of them, and answers for every one of them on every image it
-     touches. Everything below is a consequence of that one property. -->
+<!-- **a** — Here's why "complete" matters. Three classes, A, B and C. Each
+     circle is every image showing that class, whatever else is in it; that's
+     the plus. Outside all three is the empty set: images with none of them. -->
 
-<!-- **a** — A circle is every image holding that class, whatever else it
-     also holds: that is the plus. Outside all three is the empty set —
-     images with none of them. -->
-
-<!-- **b** — The cheap experiment. Positives are the A circle, negatives are
-     the outside, and it costs nothing to build. The numbers come out
+<!-- **b** — The cheap experiment: positives are the A circle, negatives are
+     everything outside. It costs nothing to build, and the numbers come out
      beautiful. -->
 
-<!-- **c** — Same set, rotated for B. -->
+<!-- **c** — Same thing for B. -->
 
-<!-- **d** — And for C. Three detectors, three easy wins — and not one of
-     them was ever asked to tell an A from a B, because nothing in the
-     crescents is shown to anybody. A single detector that fires on **any**
-     of the three takes all three of these. -->
+<!-- **d** — And for C. Three detectors, three easy wins, and not one of them
+     ever had to tell an A from a B; the rest of the circles just sit out. A
+     single detector that fires on any of the three would ace all three tests. -->
 
-<!-- **e** — What exhaustive annotation adds is the equals sign: not "an A is
-     here" but "an A and a B are here, and nothing else is". Seven cells,
-     each an exact set. This is the sentence a sparsely labelled set cannot
-     say — its silence is not a no. -->
+<!-- **e** — What complete labels add is the equals sign. Not "there's an A
+     here," but "there's an A and a B here, and nothing else." Seven cells,
+     each one exact. A dataset with spotty labels can't say that: if it doesn't
+     mention a B, that's not a no. -->
 
-<!-- **f** — And it is the exact sets that buy the complement: everything
-     without an A is three of those cells plus the empty one. You can only
-     name that region if absence is annotated rather than inferred. -->
+<!-- **f** — And exact cells get us the complement, not-A: every image without
+     an A, which is three of those cells plus the empty set. You can only draw
+     that region if absence is actually labeled. -->
 
-<!-- **g** — Same positives, honest negatives, and no image sits the question
-     out: every one of them is on one side or the other. The line now has to
-     fall **between** classes, and the A-or-B-or-C detector fails it — which
-     is the benchmark worth building. -->
+<!-- **g** — So here's the hard test: same positives, honest negatives, and no
+     image sits out. Now the line has to fall between classes, and the detector
+     that fires on A or B or C fails. That's the benchmark worth building. -->
 
-<!-- **h** — Back to the easy test, same drawing. Flick between this and
-     the last one: the A-or-B-or-C detector aces this and fails that. -->
+<!-- **h** — And back to the easy test, same drawing. Compare it to the last
+     one: the A-or-B-or-C detector aces this one and fails that one. -->

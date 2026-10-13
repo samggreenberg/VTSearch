@@ -8,23 +8,15 @@
 
 <!-- build: figs/data-set-coco-better-grid.webp -->
 
-<!-- **COCO Better**: what we have. All of COCO 2017, 49 classes after the
-     merges, and 144 cells — a class at a size. No web address at the foot:
-     we built it, so there is nowhere to go and get it. Three are missing: small
-     bananas, apples and oranges, where no honest supply reaches 100. -->
+<!-- **a** — So here's what we built: COCO Better. Say it out loud. It's all
+     120 thousand COCO photos, 49 classes after the merges, and 144 cells,
+     where a cell is a class at a size, like Dog@Medium. That's 49 times three,
+     minus three small fruits that didn't have enough examples. Each photo here
+     is one positive with one box, its class's largest, because that's the box
+     our simulated user draws when it votes. -->
 
-<!-- **a** — The grid. Each picture is one positive, and it carries exactly one
-     region: the class's largest instance, the box the simulated user drags.
-     The label under it is its cell. -->
-
-<!-- **b** — The zoom, larger than the grid had room for. The Dog@Medium
-     frame again, grown out of its corner cell. Blue: COCO Better's classes in this picture, one region each.
-     Grey: classes checked absent — a longer list now there is room for it. The teddy
-     bear has no box at all — it is not a COCO Better class. -->
-
-<!-- Why "COCO Better": say it aloud. It is COCO, made better for this job:
-     one clean region per positive, sizes as bands, and negatives checked
-     absent. Every image is embedded once, so a new prevalence, a per-class
-     pool, or a different mix of sizes is a filter over the corpus rather than
-     a rebuild. It is a bench for comparing **methods**; the classes and bands
-     are strata to report across. -->
+<!-- **b** — The dog photo, up close. Blue is what's in it, one box each: a
+     person, a TV, the dog, and a vase, which is really a potted plant; that's
+     the merge from the last slide. Gray is checked absent. And every photo is
+     labeled and embedded once, so a new mix, rare books, small dogs, whatever,
+     is a filter over this, not a rebuild. -->
