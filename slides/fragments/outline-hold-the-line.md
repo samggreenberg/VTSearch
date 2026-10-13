@@ -15,56 +15,48 @@
 11. Instruction
 12. <span class="closing">Conclusion</span>
 
-<!-- **a** — Eleven stops, in order. Promise the room the shape: the first
-     third builds the tool, the next two sections are the same machinery walked
-     twice, and the rest is what else the loop has to get right — where it asks,
-     when it stops, what it was measured on, how a user can test it, regions,
-     documents and faces — then how to do it yourself. -->
+<!-- **a** — Here's where we're going. First I'll build the tool from nothing,
+     so you know what we're talking about. The next two sections are about the
+     line: what it's made of, and where it goes. Then the rest of what the tool
+     has to get right, and a how-to at the end. -->
 
-<!-- **b** — Section I is the tool's mission: what it is for, and the tool
-     itself, from nothing — nobody needs to have seen it before. The last of
-     its slides is where the whole talk's object turns up: one line through a
-     ranking, doing two jobs. -->
+<!-- **b** — Section one: what the tool is for, and the tool itself, starting
+     from an empty screen. It ends on the line this whole talk is about. -->
 
-<!-- **c** — Section II is the three ideas the line is built from: scores
-     from models that never saw the votes, the unlabeled corpus the votes
-     came out of, and the algorithm that fits a mixture to it. Then the fit
-     that joins the three. -->
+<!-- **c** — Section two: the three ideas the line is built from. Scores from
+     models that never saw the votes they're scoring, the big pile of unlabeled
+     photos, and fitting a mixture to that pile. Then how the three fit
+     together. -->
 
-<!-- **d** — Section III is the line the app draws today: F-beta, the three
-     radios that set its β, the line the labels put at its peak and the count
-     that stands in until they can, what that line can and cannot claim
-     before anyone checks — and the second job the same fit does. -->
+<!-- **d** — Section three: where the line actually goes. F-beta, which is how
+     we score a line; three buttons for which mistake you mind more; where the
+     line goes before there are enough votes; what it can promise before
+     anybody checks; and its second job, picking the next question. -->
 
-<!-- **e** — Section IV is the half of asking the threshold does not do: the
-     places no vote has been, and the atlas that knows where they are. -->
+<!-- **e** — Section four: the other half of picking questions. The places
+     nobody's voted yet, and the atlas that keeps track of them. -->
 
-<!-- **f** — Section V is Autopilot from end to end: the six steps it takes,
-     the three lights that tell a user they can stop, and where that stop
-     fell when it was measured. -->
+<!-- **f** — Section five: Autopilot, start to finish. The steps it takes, and
+     the three lights that tell you it's OK to stop. -->
 
-<!-- **g** — Section VI is the data the experiments run on: COCO, what it
-     does not give you, the bench we built out of it, and how the app does on
-     that bench today. -->
+<!-- **g** — Section six: the data we test all this on, and how the app does on
+     it today. -->
 
-<!-- **h** — Section VII is how a user finds that out on their own pile: the
-     Test button. What it asks of a line, the statistics behind its answer,
-     and how often that answer holds on the bench section VI just built. -->
+<!-- **h** — Section seven: the Test button. How you find out how good your
+     detector is on your own pictures, and how often that answer holds up. -->
 
-<!-- **i** — Section VIII introduces region voting, then asks whether there is a
-     smarter cut rule than the midpoint. -->
+<!-- **i** — Section eight: voting on part of a picture instead of the whole
+     thing, and what that does to the line. -->
 
-<!-- **j** — Section IX is documents, and the logos on them: where a concept ends when the room expects a
-     spec sheet, the document set we built to find them in, how we find them,
-     where the line goes on a page, and how well it all does. -->
+<!-- **j** — Section nine: documents. Finding logos on scanned pages, the
+     dataset we built for it, and how it does. -->
 
-<!-- **k** — Section X is faces: the consented benchmark the app's face
-     path is measured on, where the face has to be found before the person
-     can be matched, then how the trained head starts from a person's few
-     photos and what that bought. The rest arrives with the first study. -->
+<!-- **k** — Section ten: faces. The dataset we measure faces on, and a trick
+     that gets a face detector off to a better start. -->
 
-<!-- **l** — Section XI is the tool again, as a how-to: five slides, every
-     click numbered, from an empty app to a detector finding books in photos
-     it never saw. It is the one to leave on screen, or hand out. -->
+<!-- **l** — Section eleven: the tool again, as a how-to. Every click numbered,
+     from an empty app to finding books in photos it's never seen. It's the one
+     to hand out. -->
 
-<!-- **m** — Conclusion. The last line appears only now. Take questions. -->
+<!-- **m** — So that's the line: what it's built from, where it goes, and how
+     to check it. Thanks! I'm happy to take questions. -->
