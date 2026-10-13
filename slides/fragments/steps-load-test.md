@@ -18,10 +18,9 @@
 
 </div>
 
-<!-- **a** — Thirty-one answers later, the detector's trained. Now the photos
-     you actually want searched: same + button, same card, same dialog as step
-     one. -->
+<!-- **a** — Trained. Now the photos we actually want searched: same +, same
+     dialog as step one. -->
 
-<!-- **b** — Only the folder changes, to a new one the detector's never seen.
-     That's the whole point. We trained it on one pile so it can go through the
-     piles nobody's ever going to look through by hand. -->
+<!-- **b** — Only the folder changes, to a pile it's never seen. That's the
+     point: train on one pile, search the ones nobody'd look through by hand.
+     -->

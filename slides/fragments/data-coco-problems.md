@@ -13,22 +13,18 @@
 
 <!-- build: figs/coco-problems-largest.webp -->
 
-<!-- **a** — So COCO's complete, but it still isn't ready to use. Four problems
-     we had to fix first. -->
+<!-- **a** — So COCO's complete, but not ready to use. Four problems first. -->
 
-<!-- **b** — One: the same thing under two names. A pickup is a car in one
-     photo and a truck in the next. The labelers don't agree, so we merge each
-     pair into one class. -->
+<!-- **b** — One: the same thing under two names. A pickup's a car in one photo
+     and a truck in the next, so we merge those pairs. -->
 
-<!-- **c** — Two: we want lots of datasets from one set of photos, books common
-     or rare, small or large. So a dataset is a rule over the photos, and each
-     of these is a filter, not a rebuild. -->
+<!-- **c** — Two: we want lots of datasets from one pile, books common or
+     rare, small or large. So a dataset is a filter over the photos, not a
+     rebuild. -->
 
 <!-- **d** — Three: a size needs one box per photo, and a desk holds lots of
-     books. The one a user would box is the obvious one, the largest, so that
-     sets the size. -->
+     books. The largest is what a user would box, so it sets the size. -->
 
-<!-- **e** — Four: a pile is not large. Both are COCO's largest book box. Left,
-     one book filling the photo; right, a whole shelf under one box. So we
-     check against a second labeling that boxes books one at a time, and a pile
-     doesn't count. -->
+<!-- **e** — Four: a pile isn't large. Both are COCO's biggest book box: one
+     book, versus a whole shelf. So we check against a second labeling that
+     boxes books one at a time. -->

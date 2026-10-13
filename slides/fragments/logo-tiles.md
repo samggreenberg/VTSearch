@@ -6,10 +6,8 @@
 
 <!-- build: figs/logo-tiles.build1.webp -->
 
-<!-- **a** — And one vector per page has a problem. The crest is only 442 of
-     7,685 keypoints, six percent; the rest is type. So the page vector does no
-     better than chance at finding the crest. -->
+<!-- **a** — One vector per page has a problem: the crest is six percent of the
+     keypoints, the rest is type, so the vector can't find it. -->
 
-<!-- **b** — So each tile of the page gets its own vector, and a page scores as
-     its best tile, same trick as region voting. All 350 keypoints in this tile
-     are on the crest, so its vector is about nothing else. -->
+<!-- **b** — So each tile gets a vector and a page scores as its best tile, same
+     trick as region voting. This tile's ALL crest. -->

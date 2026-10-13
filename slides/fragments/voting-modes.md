@@ -4,11 +4,8 @@
 
 ![bg fit](figs/ui-region-voting.webp)
 
-<!-- Everything so far has been Good or Bad on a whole photo. Region voting
-     lets you draw a box around the part that's actually the book. A plain Good
-     here would also teach "phones and remotes"; the box says where the book
-     is. -->
+<!-- So far we voted on whole photos. Now we box just the book, so a Good
+     doesn't ALSO teach "phone and remote". -->
 
-<!-- With regions, a photo's score is its best region, the maximum. That
-     changes the shape of the scores the line is drawn on, so we report the two
-     modes separately. -->
+<!-- A photo scores as its best region, the max. That changes the shape of the
+     scores, so we report the two modes separately. -->

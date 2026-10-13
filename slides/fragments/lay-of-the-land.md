@@ -10,19 +10,18 @@
 
 <!-- build: figs/calib-lay-of-the-land.build3.png -->
 
-<!-- **a** — Same rule, from what you actually hold: total Goods up, total Bads
-     across, one cell per set of labels. No Goods, white: the typed query.
-     Under the quota, yellow: the Goods' average, counting what stands out. -->
+<!-- **a** — Same rule, but from what you actually hold: total Goods up, total
+     Bads across. No Goods, white, that's the text query. Under the quota,
+     yellow, the Goods' average with the outlier cut. -->
 
-<!-- **b** — The quota is three Goods and four Bads, or one Good and sixteen
-     Bads for a rare target. Past it, under six Goods, orange: the trained
-     head. Same counting rule, so the same warm color. -->
+<!-- **b** — Past the quota, that's three Goods and four Bads, we've got a
+     trained head, in orange. Same outlier cut though, so the same warm
+     color. -->
 
 <!-- **c** — Purple is the labels line. Which votes get held out is a random
-     split, so from six to eleven Goods it's odds: about one set in ten at
-     seven Goods, nearly all at ten, every one from twelve. Paler means closer
-     to a coin flip. -->
+     split, so in the striped rows it's the split that decides, and the more
+     purple, the better the odds. -->
 
-<!-- **d** — The hatching: if you started from a typed query, you keep seeing
-     its results until thirty labels, because until then they beat the head's.
-     The head still trains underneath, and still picks Autopilot's questions. -->
+<!-- **d** — The lighter region is where a text query's own results are still
+     what you see, because they beat the head's. The head still trains
+     underneath, and still picks Autopilot's questions. -->

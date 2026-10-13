@@ -9,14 +9,11 @@
 
 <!-- build: figs/fullmarks-problems-mask.webp -->
 
-<!-- **a** — These sources leave out three things. First, which marks are the
-     same? Three tobacco leaves and two chiefs, one nearly a mirror of the
-     other: all five are different marks, and a person decided every pair. -->
+<!-- **a** — Three things missing. First, which marks are the same? These five
+     are all different, and a person decided every pair. -->
 
-<!-- **b** — Second, masks aren't marks. This stamp's mask comes in 27 pieces.
-     Filter out small pieces first and the stamp's gone; merge first, then
-     filter, and you get one stamp. -->
+<!-- **b** — Second, masks aren't marks. This stamp's mask is dozens of pieces;
+     merge first, THEN filter the small stuff, or the stamp's gone. -->
 
-<!-- **c** — Third, the haystack holds needles. This Lorillard letterhead is a
-     positive in Tobacco800, and it's also sitting unboxed on UCSF pages from
-     the same archive. So we never score an archive against itself. -->
+<!-- **c** — Third, needles in the haystack: this Tobacco800 positive is on UCSF
+     pages too. So we never score an archive against itself. -->

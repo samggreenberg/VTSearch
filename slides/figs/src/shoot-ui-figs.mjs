@@ -197,23 +197,25 @@ const CALLOUT_SCALE = 1.3;
 const GRID_COLS = 4;
 const GRID_ROWS = 3;
 
-// The Find view's layout for the line shot, as the settings a user would have
-// after dragging the two dividers and picking a thumbnail size. That frame's
-// whole subject is the ranking in the left column — the line through it, and
-// what sits either side of it — and at the app's defaults that column was the
-// narrowest of the three, its thumbnails 80px, and the right column (two
-// counts) wider than it (#4176). So the left column is widened to three
-// columns of Large thumbnails, with the few pixels the panel's scrollbar and
-// padding need to keep the third (at 465 it drops to two, and the column is
-// narrower than the centre again), and the right one narrowed as far as its
-// counts allow without clipping; the centre keeps what is left. Set before the view opens and put back after the shot, because
-// these are persisted per media type and the Label view reads the same keys: a
-// run that left them behind would shoot the next run's train loop in this
-// layout.
+// The Test view's layout for the Instruction section's Review frame, as the
+// settings a user would have after dragging the two dividers and picking a
+// thumbnail size. That frame's subject is the ranking in the left column, and
+// at the app's defaults that column was the narrowest of the three, its
+// thumbnails 80px, and the right column (two counts) wider than it (#4176). So
+// the left column is widened to three columns of Large thumbnails, with the
+// few pixels the panel's scrollbar and padding need to keep the third (at 465
+// it drops to two, and the column is narrower than the centre again), and the
+// right one narrowed as far as its counts allow without clipping; the centre
+// keeps what is left. Set before the view opens and put back after the shot,
+// because these are persisted per media type and the Label view reads the
+// same keys: a run that left them behind would shoot the next run's train
+// loop in this layout. (It was drawn for `ui-find-line`, the same screen
+// scrolled to the line, a slide the deck cut as too technical that early;
+// owner, 2026-10-13.)
 // Both side panels open: Train and Test fold them to a strip by default
 // (#4673), and every slide is of what is in them.
 const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
-const FIND_LINE_LAYOUT = {
+const FIND_LAYOUT = {
   ...PANELS_OPEN,
   grid_icon_size_left: { image: 'L' },
   panel_pct_left: { image: 500 },
@@ -908,41 +910,24 @@ async function assertVoteColumns(page) {
 }
 
 /**
- * Scroll the left panel's virtual viewport, and let it re-render.
- *
- * It is a `cdk-virtual-scroll-viewport`, so what is in the DOM is a window onto
- * the ranking rather than the ranking — and the panel scrolls itself to the
- * selected item on arrival, which is how the first version of the Find shot
- * came out photographing position 4200px with the top of the list nowhere in
- * frame. Drive it explicitly instead of hoping.
- */
-async function scrollResults(page, to) {
-  const viewport = page.locator('.panel-left .cdk-virtual-scroll-viewport').first();
-  await viewport.evaluate((el, top) => el.scrollTo({ top, behavior: 'instant' }), to);
-  await page.waitForTimeout(1800);
-}
-
-/**
  * Step 3 — run it over the media nobody voted on.
  *
- * Two slides out of one session. `ui-find[.build1]` is the click-by-click one:
- * the dashboard with the *production* pile selected beside the detector, then
- * the top of the ranking it produces. `photos-prod` does not share a single
- * frame with `photos-train` (`coco_fixture.DISJOINT_FROM`), which is the only reason
- * that slide is allowed to say what it says.
+ * One slide out of one session, plus the Instruction section's frames.
+ * `ui-find[.build1]` is the click-by-click one: the dashboard with the
+ * *production* pile selected beside the detector, then the top of the ranking
+ * it produces. `photos-prod` does not share a single frame with `photos-train`
+ * (`coco_fixture.DISJOINT_FROM`), which is the only reason that slide is
+ * allowed to say what it says.
  *
- * `ui-find-line` is the same screen scrolled down to the line the tool drew
- * through the ranking, and it is a separate slide rather than a third build
- * page for a reason the house rules are explicit about: a build page adds ink
- * and moves nothing, and this one moves the whole left panel. It is also not a
- * reveal but a second observation — the deck's hand-off into `vote-boundary`,
- * which spends the next ten minutes on where that line should go.
+ * (`ui-find-line`, the same screen scrolled down to the line the tool drew,
+ * was a slide of its own until the deck cut it — owner, 2026-10-13: too
+ * technical that early — so the session no longer scrolls to the line.)
  */
 async function shootFind(page) {
   // The layout goes in first and the page is reloaded to read it, because the
   // app reads its settings at load and a hash navigation is not a load. The
   // dashboard frame below is unaffected: it has no media panels.
-  await app.api('/api/settings', { method: 'PUT', body: FIND_LINE_LAYOUT });
+  await app.api('/api/settings', { method: 'PUT', body: FIND_LAYOUT });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
   for (const [tag, name] of [['tr[vt-dataset-card]', TEST_DATASET], ['tr[vt-detector-card]', BOOK_DETECTOR]]) {
@@ -986,39 +971,6 @@ async function shootFind(page) {
   // What came back, with no tool around it. See `results_grid.py`.
   await shootFindGrid();
 
-  // Then the line. Its offset is read off the rendered list rather than
-  // computed from a rank, because how many items make a row is the panel's
-  // business (thumbnail size, panel width) and not something this script knows.
-  const line = await page.evaluate(() => {
-    const viewport = document.querySelector('.panel-left .cdk-virtual-scroll-viewport');
-    const marker = viewport?.querySelector('.media-threshold-line');
-    if (!viewport) return null;
-    if (!marker) return 'offscreen';
-    return viewport.scrollTop + marker.getBoundingClientRect().top
-      - viewport.getBoundingClientRect().top;
-  });
-  if (line === null || line === 'offscreen') {
-    // Virtualised: the marker is only in the DOM once it is near the window, so
-    // walk down until it appears rather than guessing a pixel offset.
-    for (let top = 0; top < 40000; top += 500) {
-      await scrollResults(page, top);
-      if (await page.locator('.media-threshold-line').count()) break;
-    }
-  } else {
-    await scrollResults(page, Math.max(0, line - 260));
-  }
-  const marker = page.locator('.media-threshold-line').first();
-  if (!(await marker.count())) throw new Error('no threshold line in the Find ranking');
-  // Centre it: whatever the walk above landed on, the line should sit in the
-  // middle of the panel with matches above it and rejects below.
-  const centred = await page.evaluate(() => {
-    const viewport = document.querySelector('.panel-left .cdk-virtual-scroll-viewport');
-    const rect = viewport.querySelector('.media-threshold-line').getBoundingClientRect();
-    const box = viewport.getBoundingClientRect();
-    return viewport.scrollTop + rect.top - box.top - box.height / 2;
-  });
-  await scrollResults(page, Math.max(0, centred));
-  await shoot(page, 'ui-find-line');
   await app.api('/api/settings', { method: 'PUT', body: DEFAULT_LAYOUT });
 }
 

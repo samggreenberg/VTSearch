@@ -12,19 +12,15 @@
 
 <!-- build: figs/data-set-coco-grid.webp -->
 
-<!-- **a** — Every result from here on is measured on somebody's photos, and
-     what got labeled decides what the number means. So every dataset gets the
-     same card. -->
+<!-- **a** — Every result from here on is on somebody's photos, and what got
+     labeled decides what the number means. So, one card per dataset. -->
 
-<!-- **b** — Caltech-101: one object per photo, centered, filling the frame,
-     and no boxes at all. It's our control: if a result holds here and on
-     cluttered scenes too, it's not just about clutter. -->
+<!-- **b** — Caltech-101: one object per photo, centered, no boxes. Our control:
+     a result that holds here AND on cluttered scenes isn't about clutter. -->
 
-<!-- **c** — COCO: rooms and streets, lots of things in every picture, and
-     every one boxed. "Complete" is the key word: every photo answers for all
-     eighty classes. -->
+<!-- **c** — COCO: rooms and streets, lots of things per picture, all boxed. Key
+     word "complete": every photo answers for all eighty classes. -->
 
-<!-- **d** — Up close: blue names are in the picture, each with its box. Gray
-     names aren't, and gray means somebody checked: there's no cup here. But
-     the paperweight and the glass hen get no box, because they're not among
-     the eighty. -->
+<!-- **d** — Up close: blue's in the picture, boxed. Gray's checked absent: no
+     cup here. The paperweight and the glass hen get nothing; not among the
+     eighty. -->

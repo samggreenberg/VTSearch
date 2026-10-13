@@ -12,20 +12,18 @@
 
 <!-- build: figs/atlas-depth.build4.png -->
 
-<!-- **a** — The atlas has a second job. Start with the same kind of picture:
-     photos, some votes, and a boundary. -->
+<!-- **a** — The atlas has a second job. Same picture: photos, votes, a
+     boundary. -->
 
-<!-- **b** — Now tilt it. That flat sheet is really the floor of a room; our
-     collection just happens to sit there. -->
+<!-- **b** — Now tilt it. That sheet's the floor of a room; our collection just
+     happens to sit there. -->
 
-<!-- **c** — And here's a whole second collection, way up a direction nobody
-     ever voted along. Same size, same spread, different data entirely. -->
+<!-- **c** — And here's a second collection, way up a direction nobody ever
+     voted along. -->
 
-<!-- **d** — The detector's score is one weighted sum, so moving straight up
-     changes nothing. The boundary becomes a pillar, and it sorts the new
-     collection into in and out with no hint that it's guessing. -->
+<!-- **d** — Straight up doesn't change the score, so the boundary's a pillar:
+     it sorts the new stuff in and out with no hint it's guessing. -->
 
-<!-- **e** — What we'd want is for the concept to stop, like this dome. But the
-     dome fits every vote as well as the pillar, and more votes can't tell them
-     apart, because every vote is on the floor. That takes something that knows
-     where our data was. -->
+<!-- **e** — We'd want a dome, where the concept stops. But every vote's on the
+     floor, so votes can't tell dome from pillar. That takes something that
+     knows where our data was. -->

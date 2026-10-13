@@ -8,13 +8,11 @@
 
 <!-- build: figs/logo-votes.build2.webp -->
 
-<!-- **a** — Last, what the votes do. Philip Morris has two crests: the globe
-     one we cropped, and this PM one on their U.S.A. letters. I count them as
-     one mark, but SIFT sees different ink: 6 agree, under 8, a miss. -->
+<!-- **a** — Last, the votes. Philip Morris has two crests. I'd call them one
+     mark; SIFT sees different ink: a miss. -->
 
-<!-- **b** — So we vote Good on another U.S.A. letter and box its crest. That
-     box becomes a second template. -->
+<!-- **b** — So we vote Good on a letter with the other one and box it: a second
+     template. -->
 
-<!-- **c** — Now every page scores its best template: 32 here. One vote taught
-     it the other drawing. Bad votes never touch the ranking; they only set
-     where the line goes. -->
+<!-- **c** — Every page scores its best template, so one vote taught it the
+     other drawing. Bads never touch the ranking, only the line. -->

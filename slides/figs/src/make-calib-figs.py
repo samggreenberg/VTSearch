@@ -18,6 +18,7 @@ The decomposition figure re-plots published numbers from
 """
 
 import functools
+import itertools
 import math
 import sys
 from pathlib import Path
@@ -4004,15 +4005,23 @@ def _fbeta_ranking(ax: plt.Axes, top_reserve: float = FBETA_TOP_RESERVE) -> tupl
     return x0, w, rank_y
 
 
-#: How many stages F-ing Metrics reveals in: the cut; Precision and Recall;
-#: F1; Fβ.
-FMETRICS_STAGES = 4
+#: How many stages F-ing Metrics reveals in: the cut, with F1's definition
+#: already up top; the two rates' names; their definitions; their arithmetic;
+#: F1's value; Fβ beside F1 (owner, 2026-10-13).
+FMETRICS_STAGES = 6
 #: The cut F-ing Metrics reads, as items kept: one left of the Cutting Room's
 #: middle one, so it is plainly not the best cut, and its two rates differ —
 #: 4/6 and 4/5 — where the middle cut's were both 4/5, which left a room unable
 #: to tell from the numbers which fraction was which (owner, #4618). One step
 #: right buys precision and costs no recall, which the presenter can say.
 FMETRICS_KEPT = 6
+#: F-ing Metrics' title notch: "F-ing Metrics" is one line, like "Beta Max",
+#: so it is the box `BETA_MAX_NOTCH_PX` measured. The ranking keeps the
+#: two-line reserve (`FBETA_TOP_RESERVE`) all the same, so it lands where the
+#: Cutting Room's did; what the shorter notch buys is the band above it, right
+#: of the headline, where the top row of formulas goes. Split the two constants
+#: if either headline grows a line.
+FMETRICS_NOTCH_PX = BETA_MAX_NOTCH_PX
 
 
 def fmetrics_fig() -> None:
@@ -4021,8 +4030,11 @@ def fmetrics_fig() -> None:
     Beta Max used to print the F-beta formula under its rows and leave the room
     to take it in while the rows were the point. This comes first, with Beta
     Release (the same score as a map, at each beta) between the two: one cut
-    through the same ranking, the two rates it has, F1 as their harmonic mean,
-    and Fβ as the same mean with recall weighted β times.
+    through the same ranking, and F1 up top from the first page — the title
+    plays on the F, so the F is the first thing on screen — then the two rates
+    it is made of, built up a click at a time (named, defined, worked out),
+    F1's value, and Fβ beside it as the same mean with recall weighted β times
+    (owner, 2026-10-13).
 
     The rates are defined in words the room already has — Goods, and what comes
     back — rather than through three named counts (kept, hits, matches), which
@@ -4031,8 +4043,15 @@ def fmetrics_fig() -> None:
     final = _fmetrics_stage(FMETRICS_STAGES)
     box = tight_box(final)
     for stage in range(1, FMETRICS_STAGES):
-        save(_fmetrics_stage(stage), OUT, f"calib-fmetrics.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box)
+        save(
+            _fmetrics_stage(stage),
+            OUT,
+            f"calib-fmetrics.build{stage}.png",
+            column=FULL_BLEED,
+            box=box,
+            notch=FMETRICS_NOTCH_PX,
+        )
+    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box, notch=FMETRICS_NOTCH_PX)
 
 
 def _math(expr: str) -> str:
@@ -4065,47 +4084,83 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
     for x in (cut_x, x0 + w):
         ax.plot([x] * 2, [bracket_y, bracket_y + 0.18], color=INK, linewidth=1.6, zorder=4)
 
-    # ── stages 2-4: the formulas, in two columns ──────────────────────────────
-    # The rates on the left, the scores made of them on the right, each pair
-    # read top to bottom (owner, #4618). A fraction is set as one, over a bar:
-    # "A / B" in a row of other slashes read as ASCII, not as maths. What each
-    # one *says* is the presenter's to read out, so it is in the notes.
+    # ── stages 1-6: the formulas, in the pieces the reveals add ───────────────
+    # A formula is revealed a piece at a time, so each piece is its own text,
+    # set flush against the one before it on a shared baseline. That comes out
+    # as the formula set in one string would: mathtext puts 0.2em either side
+    # of an `=`, and both travel with the piece whose `=` they flank, and a
+    # fraction's bar is shifted onto the `=`'s own centre, so the baseline is
+    # the one height every piece agrees on. A fraction is set as one, over a
+    # bar: "A / B" in a row of other slashes read as ASCII, not as maths. What
+    # each one *says* is the presenter's to read out, so it is in the notes.
+    #
+    # Laid out from every piece whether or not this stage shows it, so a
+    # reveal adds ink and moves nothing.
+    renderer = fig.canvas.get_renderer()
+
+    def width(text: str) -> float:
+        probe = ax.text(0, 0, text, fontsize=FMETRICS_PT, alpha=0)
+        measured = probe.get_window_extent(renderer).transformed(ax.transData.inverted()).width
+        probe.remove()
+        return measured
+
+    pieces: list[tuple[int, float, float, str, str]] = []  # (first stage, x, y, ha, text)
+
+    # The top row: F1, the score the title plays on, up from the first page in
+    # the gap right of the headline and above the ranking; its value is the
+    # fifth reveal, and Fβ, level with it, the last. The row ends where the
+    # ranking does, so F1 sits at its right end from the start and Fβ takes
+    # the room left of it (owner, 2026-10-13).
+    f1_def = _math(r"F1 = \dfrac{2PR}{P + R}")
+    f1_val = _math(rf"= {f1:.2f}")
+    fbeta = _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")
+    f1_x = x0 + w - width(f1_def) - width(f1_val)
+    pieces += [
+        (1, f1_x, FMETRICS_TOP_Y, "left", f1_def),
+        (5, f1_x + width(f1_def), FMETRICS_TOP_Y, "left", f1_val),
+        (6, f1_x - FMETRICS_COLUMN_GAP - width(fbeta), FMETRICS_TOP_Y, "left", fbeta),
+    ]
+
+    # The two rates under the ranking, a row each, aligned on their `=` rather
+    # than on the words' left edge (owner, 2026-10-13): first the names, then
+    # the definitions, then the arithmetic. The block is centred on the slide,
+    # not on the ranking: it is wider than the ranking's indent leaves room for.
     returned = r"\dfrac{\#\ Goods\ returned}"
-    p_rate = rf"P = {returned}{{\#\ returned}} = \dfrac{{{hits}}}{{{kept}}} = {precision:.2f}"
-    r_rate = rf"R = {returned}{{\#\ possible\ Goods}} = \dfrac{{{hits}}}{{{goods}}} = {recall:.2f}"
-    columns = (
-        ((2, "Precision  " + _math(p_rate)), (2, "Recall  " + _math(r_rate))),
+    rows = (
         (
-            (3, _math(rf"F1 = \dfrac{{2PR}}{{P + R}} = {f1:.2f}")),
-            (4, _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")),
+            "Precision  " + _math("P ="),
+            _math(rf"{returned}{{\#\ returned}}"),
+            _math(rf"= \dfrac{{{hits}}}{{{kept}}} = {precision:.2f}"),
+        ),
+        (
+            "Recall  " + _math("R ="),
+            _math(rf"{returned}{{\#\ possible\ Goods}}"),
+            _math(rf"= \dfrac{{{hits}}}{{{goods}}} = {recall:.2f}"),
         ),
     )
-    # Laid out from every formula whether or not this stage shows it, so a
-    # reveal adds ink and moves nothing. The block is centred on the slide, not
-    # on the ranking: it is wider than the ranking's indent leaves room for.
-    renderer = fig.canvas.get_renderer()
-    widths = []
-    for column in columns:
-        width = 0.0
-        for _first, formula in column:
-            probe = ax.text(0, 0, formula, fontsize=FMETRICS_PT, alpha=0)
-            width = max(width, probe.get_window_extent(renderer).transformed(ax.transData.inverted()).width)
-            probe.remove()
-        widths.append(width)
-    left = FBETA_CANVAS[0] / 2 - (sum(widths) + FMETRICS_COLUMN_GAP) / 2
-    for column, x in zip(columns, (left, left + widths[0] + FMETRICS_COLUMN_GAP), strict=True):
-        for (first, formula), y in zip(column, FMETRICS_ROWS_Y, strict=True):
-            if stage >= first:
-                ax.text(x, y, formula, ha="left", va="center", fontsize=FMETRICS_PT, color=INK)
+    before = max(width(name) for name, _defn, _calc in rows)
+    after = max(width(defn) + width(calc) for _name, defn, calc in rows)
+    eq_x = FBETA_CANVAS[0] / 2 - (before + after) / 2 + before
+    for (name, defn, calc), y in zip(rows, FMETRICS_ROWS_Y, strict=True):
+        pieces += [(2, eq_x, y, "right", name), (3, eq_x, y, "left", defn), (4, eq_x + width(defn), y, "left", calc)]
+
+    for first, x, y, ha, text in pieces:
+        if stage >= first:
+            ax.text(x, y, text, ha=ha, va="baseline", fontsize=FMETRICS_PT, color=INK)
     return fig
 
 
-#: The formulas' type, the gap between their two columns, and the two rows'
-#: centres, in canvas units: under the cut's bracket, with the space the three
-#: named counts used to take given to fractions, which stand two lines tall.
+#: The formulas' type; the gap between Fβ and F1 on the top row; and the rows'
+#: baselines, in canvas units — baselines rather than centres because a row is
+#: drawn in pieces and the baseline is the height they share (`_fmetrics_stage`).
+#: The top row sits level with the one-line headline in the notch beside it
+#: (`FMETRICS_NOTCH_PX`), clear of the axis label under it; the two rate rows
+#: sit under the cut's bracket, with the space the three named counts used to
+#: take given to fractions, which stand two lines tall.
 FMETRICS_PT = 20
 FMETRICS_COLUMN_GAP = 1.6
-FMETRICS_ROWS_Y = (4.45, 2.35)
+FMETRICS_TOP_Y = 10.25
+FMETRICS_ROWS_Y = (4.25, 2.15)
 
 
 # ── Beta Release: F-beta as a map, once per beta (#4519) ──────────────────────
@@ -5250,8 +5305,9 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 #: balanced radio, and the line at its peak; the other two radios' peaks.
 LL_STAGES = 5
 #: The first stage What to Expect shows. The three before it are Joint
-#: Custody's (`calib-labels-fit`), at the end of section II, so the slide opens
-#: on that fit recapped and builds only what the balance adds.
+#: Custody's (`calib-labels-fit`), the slide right before it (owner,
+#: 2026-10-13: the fit without a balance, then the line with one), so the slide
+#: opens on that fit recapped and builds only what the balance adds.
 LL_FIRST_SHOWN = 3
 
 #: The canvas: `FBETA_CANVAS`, so the two slides that explain the balance
@@ -5521,7 +5577,10 @@ def labels_fit_fig() -> None:
     rest are fitted, and the count of matches that fit gives; then the other
     thing the same fit says, every item's chance of being a match, in the row
     where What to Expect will draw expected F-beta. No line: choosing one
-    takes the user's balance, which section III introduces.
+    takes the user's balance. It sits in section III right before What to
+    Expect, after the balance is introduced and after section II has shown
+    Cross Examination, the naive averaging this fit replaced (owner,
+    2026-10-13).
     """
     final = _lf_stage(LF_STAGES)
     box = tight_box(final)
@@ -6111,8 +6170,8 @@ def _so_rank_row(ax: plt.Axes, d: dict, stage: int) -> None:
 # ── Changing Hands: who draws the line as the labels arrive (#4643, #4798) ──
 
 #: How many build stages Changing Hands reveals in: what draws the line before
-#: a head is trained; the quota, and the trained head counting what stands
-#: out; six held-out Goods, and the labels line.
+#: a head is trained; the quota, and the trained head with the outlier cut;
+#: six held-out Goods, and the labels line.
 CH_STAGES = 3
 #: The band's segments, left to right, in canvas units: (left, right). The
 #: first is the widest because its name is the longest, and its gate stands
@@ -6121,8 +6180,8 @@ CH_SEGMENTS = ((1.0, 8.4), (8.4, 14.0), (14.0, 19.6))
 #: Each segment: its name (two lines), what its glyph is, and the glyph's
 #: caption. The first two draw the same glyph, because they draw the same line.
 CH_NAMES = (
-    ("The typed query, or\nthe Goods' average", "count", "counts what stands out"),
-    ("The trained head,\nwith few Goods", "count", "counts what stands out"),
+    ("The text query, or\nthe Goods' average", "count", "the outlier cut"),
+    ("The trained head,\nwith few Goods", "count", "the outlier cut"),
     ("The trained head:\nthe labels line", "labels", "Joint Custody's fit,\ncut at the peak"),
 )
 #: The gates between segments: what the labels must reach.
@@ -6141,10 +6200,10 @@ CH_RANKING = (0.16, 0.19, 0.21, 0.24, 0.27, 0.31, 0.72, 0.84, 0.97)
 def changing_hands_fig() -> None:
     """Changing Hands: what draws the line, as the labels a session holds grow.
 
-    A band in three segments with a gate between each: the typed query's own
+    A band in three segments with a gate between each: the text query's own
     set or the Goods' average (`label_quota`'s tiers below the quota); the
-    trained head, its line counted by Out Standing's rule while the class
-    model is thin (`head_count_serves`); the labels line. The gates' numbers
+    trained head, its line the outlier cut (Out Standing's rule) while the
+    class model is thin (`head_count_serves`); the labels line. The gates' numbers
     are the shipped constants (`GOOD_QUOTA`, `BAD_QUOTA`, `HEAD_COUNT_GOODS`),
     asserted so a change to them fails here before it reaches a slide.
     """
@@ -6216,12 +6275,22 @@ def _ch_stage(stage: int) -> plt.Figure:
 # ── Lay of the Land: which line, for every count of Goods and Bads ──────────
 
 #: How many build stages the map reveals in: no Goods, and the Goods' average
-#: below the quota; the quota, and the trained head counting what stands out;
-#: the labels line, with the Goods where the split decides; a typed query's hold.
+#: below the quota; the quota, and the trained head with the outlier cut; the
+#: labels line, with the Goods where the split decides; a text query's hold.
+#: That last page lightens the cells the hold covers instead of adding ink
+#: over them: a deliberate exception to STYLE.md's no-restyle build rule, the
+#: same one Inside Job's third page takes (`IN_STAGES`). Until page 4 each of
+#: those cells is the colour of the line the head draws there, which stays
+#: true; page 4 says the room sees the query's set instead (owner,
+#: 2026-10-13: lighter, not hatched, since the colour's model is computed and
+#: the query's set is what is returned).
 LAND_STAGES = 4
 #: The counts the map spans: Bads 0..LAND_B, Goods 0..LAND_G, one cell each.
-LAND_B, LAND_G = 50, 16
-#: Where the trained head's regions are named, in Bads: right of the typed
+#: Tall enough (owner, 2026-10-13) for the text query's hold to close: its
+#: staircase meets the quota's edge, with the trained head's lines standing
+#: unlightened above it.
+LAND_B, LAND_G = 50, 32
+#: Where the trained head's regions are named, in Bads: right of the text
 #: query's staircase at every Goods row the names sit on.
 LAND_NAME_B = 40.5
 #: The plot's box, in canvas units: left, bottom, right, top. Its left edge
@@ -6229,7 +6298,7 @@ LAND_NAME_B = 40.5
 LAND_BOX = (10.0, 1.55, 19.9, 10.9)
 #: Each strategy's fill, white for "no Goods" and hues clear of the deck's
 #: three for the rest: red and green are Bad and Good, blue is the line itself.
-#: The two rules that count what stands out are warm and kin, yellow for the
+#: The two rules that cut at the outliers are warm and kin, yellow for the
 #: Goods' average and orange for the trained head; the labels line is purple.
 #: Picked as fills in OKLCH (yellow L 0.90, orange L 0.74, purple L 0.70) so
 #: lightness separates them as well as hue, and validated as fills, not as the
@@ -6240,10 +6309,9 @@ LAND_BOX = (10.0, 1.55, 19.9, 10.9)
 #: surface; here every region is named and ruled, the yellow's edge with the
 #: white row included. Inside Job's third cut, the labels line's peak on the
 #: Bads' own shape, is the purple darkened (owner, 2026-10-13: a barely
-#: different cut gets a barely different colour, not a hatch, which Lay of the
-#: Land spends on the typed query): its hue and chroma at L 0.50, normal-vision
-#: ΔE 18.1 from the purple with the other pairs unchanged, so its name is white
-#: (6.4:1).
+#: different cut gets a barely different colour, not a hatch): its hue and
+#: chroma at L 0.50, normal-vision ΔE 18.1 from the purple with the other pairs
+#: unchanged, so its name is white (6.4:1).
 LAND_FILL = {
     "none": "#ffffff",
     "centroid": "#f9dd73",
@@ -6251,9 +6319,18 @@ LAND_FILL = {
     "labels": "#ad80dd",
     "bads": "#764aa2",
 }
-#: How far a cell whose line the split decides is faded toward white at even
-#: odds (and less as the odds lean either way): uncertainty reads as fading.
-LAND_FADE = 0.55
+#: How far toward white, in OKLab, a cell under the text query's hold is
+#: lightened on the last page: half way, the colour's model under the query's
+#: set (owner, 2026-10-13).
+LAND_HOLD_WHITE = 0.5
+#: The band the folds' split decides is a mix of the two solid fills rather
+#: than a blend (owner, 2026-10-13): diagonal stripes of the labels line's
+#: purple on the outlier cut's orange, the purple's share of each period the
+#: row's chance of the labels line. This is the period along the Bads axis,
+#: in canvas units; the stripes run at 45°, on one phase for the whole band,
+#: each starting on the same line in every row, so a stripe's left edge is
+#: continuous up the band and its right edge steps out as the share grows.
+LAND_STRIPE_PERIOD = 0.5
 
 
 def _oklab(hex_color: str) -> np.ndarray:
@@ -6280,6 +6357,11 @@ def _from_oklab(lab: np.ndarray) -> str:
 
 def _toward_white(lab: np.ndarray, t: float) -> np.ndarray:
     return lab + (_oklab("#ffffff") - lab) * t
+
+
+def _lightened(hex_color: str) -> str:
+    """*hex_color* under the text query's hold: `LAND_HOLD_WHITE` of the way to white, in OKLab, so the hue holds."""
+    return _from_oklab(_toward_white(_oklab(hex_color), LAND_HOLD_WHITE))
 
 
 class _Coin:
@@ -6348,6 +6430,8 @@ def _land_grid() -> dict:
     for g in range(LAND_G + 1):
         for b in range(LAND_B + 1):
             tier = label_quota(g, b).tier
+            # Under the quota a text query holds at every count (`_query_tier`):
+            # the hold's staircase bounds it only inside the trained head's region.
             held[g, b] = g == 0 or tier != TIER_TRAINED or query_holds(g, b, patch_space=False)
             if g == 0:
                 kind[g, b] = "none"
@@ -6356,10 +6440,11 @@ def _land_grid() -> dict:
             else:
                 p_labels[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["single_vector"])
                 kind[g, b] = "trained"
-    # One shade per Goods row (owner, 2026-10-13): the exact chance wobbles a
+    # One mix per Goods row (owner, 2026-10-13): the exact chance wobbles a
     # few points along a row, with whether 0.3 of G + B is a whole number (at
     # 10 Goods it is 1.000 with 20 Bads and 0.93 either side), and that speckle
-    # reads as noise. Each row shows the mean of its trained cells' exact chance.
+    # reads as noise. Each row's stripes show the mean of its trained cells'
+    # exact chance.
     trained = kind == "trained"
     p_row = np.array([p_labels[g, trained[g]].mean() if trained[g].any() else 0.0 for g in range(LAND_G + 1)])
     return {"kind": kind, "p": p_labels, "p_row": p_row, "held": held}
@@ -6370,15 +6455,15 @@ def lay_of_the_land_fig() -> None:
 
     One cell per pair of counts, on a single-vector space (the Binary path,
     and faces). Below the quota the Goods' average; past it the trained head,
-    counting what stands out until its folds hold out six Goods, then the
-    labels line. Where the folds' split rounds either way, the row blends
-    the two fills by its mean chance of the labels line, paler the nearer
-    that is to even (`_land_mix`), and the last page hatches where a typed query
-    keeps its own set. Binary only: the room
-    meets region voting, whose folds split another way, sections later, so
-    the slide never names it. Every boundary is computed
-    from the shipped functions and constants (`label_quota`, `query_holds`,
-    `_dithered_count`, `PRODUCTION_SPLIT_BY_SPACE`, `HEAD_COUNT_GOODS`).
+    cutting at the outliers until its folds hold out six Goods, then the
+    labels line. Where the folds' split rounds either way, the row is striped
+    with the two fills, the labels line's share of each stripe its mean
+    chance (`_land_band_row`), and the last page lightens the cells where a
+    text query keeps its own set (`_lightened`). Binary only: the room meets
+    region voting, whose folds split another way, sections later, so the
+    slide never names it. Every boundary is computed from the shipped
+    functions and constants (`label_quota`, `query_holds`, `_dithered_count`,
+    `PRODUCTION_SPLIT_BY_SPACE`, `HEAD_COUNT_GOODS`).
     """
     final = _land_stage(LAND_STAGES)
     box = tight_box(final)
@@ -6394,26 +6479,17 @@ def _land_cell(b: float, g: float) -> tuple[float, float, float, float]:
     return x0 + b * w, y0 + g * h, w, h
 
 
-def _land_mix(p: float) -> str:
-    """A cell the split decides: the count's fill blended toward the labels line's by *p*, faded by its doubt.
-
-    The blend is in OKLab, so orange reaches violet through mauve rather than
-    through mud; the fade toward white is greatest at even odds (``4p(1 - p)``)
-    and gone at 0 and 1, where the cell is one of the two decisions outright.
-    """
-    a, z = _oklab(LAND_FILL["count"]), _oklab(LAND_FILL["labels"])
-    return _from_oklab(_toward_white(a + (z - a) * p, LAND_FADE * 4.0 * p * (1.0 - p)))
-
-
 def _land_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the map."""
+    from vtscore.detectors.label_quota import BAD_QUOTA  # noqa: PLC0415
+
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, LL_CANVAS[0])
     ax.set_ylim(0, LL_CANVAS[1])
     ax.set_axis_off()
     _land_cells(ax, stage)
-    _map_table(ax, LAND_TABLE, stage, hatched=("none", 4))
+    _map_table(ax, LAND_TABLE, stage)
     _land_axes(ax)
     # The no-Goods row's edge, ruled: the yellow beside it is pale enough that
     # the edge should not rest on colour alone.
@@ -6421,10 +6497,13 @@ def _land_stage(stage: int) -> plt.Figure:
     ch = _land_cell(0, 0)[3]
     ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
     # Every region's name sits where no later page draws over it: the trained
-    # head's three to the right of the typed query's staircase. Each names the
+    # head's three to the right of the text query's staircase. Each names the
     # region in the axes' own counts, never what it returns: that is the key's.
-    _land_name(ax, LAND_B / 2 + 0.5, 0.5, "0 Goods")
-    _land_name(ax, 8.0, 2.0, "under\nthe quota", plate=LAND_FILL["centroid"])
+    # The Goods' average is a column the quota's Bads wide and the map's full
+    # height, so its name reads up it. The no-Goods row goes unnamed: at
+    # thirty-three rows it is too thin for type at the floor, and its "0"
+    # tick and the key's white row say what Inside Job's "0 Goods" does.
+    _land_name(ax, BAD_QUOTA / 2, (LAND_G + 2) / 2, "under the quota", rotation=90)
     if stage >= 2:
         _land_quota(ax)
     if stage >= 3:
@@ -6435,27 +6514,104 @@ def _land_stage(stage: int) -> plt.Figure:
 
 
 def _land_cells(ax: plt.Axes, stage: int) -> None:
-    """One cell per pair of counts, filled by its strategy.
+    """One cell per pair of counts, filled by its strategy; the band the split decides, as striped rows.
 
     The trained head's rows the split cannot change, from page 2; the band
-    and the labels line above it, from page 3. A page only adds cells, so no
-    cell changes colour between pages.
+    and the labels line above it, from page 3. A page only adds cells until
+    the last, which lightens the cells under the text query's hold
+    (`LAND_STAGES`): the same cells in the same hues, half way to white.
     """
     grid = _land_grid()
     lo, hi = _land_band()
+    held = grid["held"] if stage >= LAND_STAGES else np.zeros_like(grid["held"])
     for g in range(LAND_G + 1):
         for b in range(LAND_B + 1):
             k = grid["kind"][g, b]
             if k == "trained":
-                if stage < (2 if g < lo else 3):
+                if stage < (2 if g < lo else 3) or lo <= g < hi:
                     continue
-                fill = LAND_FILL["count"] if g < lo else LAND_FILL["labels"] if g >= hi else _land_mix(grid["p_row"][g])
+                fill = LAND_FILL["count" if g < lo else "labels"]
             else:
                 fill = LAND_FILL[k]
+            if held[g, b]:
+                fill = _lightened(fill)
             # Edgeless, each cell edged in its own fill so no seam shows: only
             # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
                                    linewidth=0.3, zorder=1))  # fmt: skip
+    if stage >= 3:
+        for g in range(lo, hi):
+            _land_band_row(ax, g, grid["p_row"][g], held[g])
+
+
+def _land_band_row(ax: plt.Axes, g: int, p: float, held: np.ndarray) -> None:
+    """Row *g* of the band: the outlier cut's orange under the labels line's purple stripes, their share *p*.
+
+    *held* flags the row's cells under the text query's hold, which are drawn
+    in the lightened pair. The row's trained cells are one run (from the
+    quota's Bads on) and the held ones are its left end, so the row is at
+    most two runs, each striped in its own pair and clipped to its own cells.
+    """
+    grid = _land_grid()
+    _, y, _, h = _land_cell(0, g)
+    trained = [b for b in range(LAND_B + 1) if grid["kind"][g, b] == "trained"]
+    for lightened, run in itertools.groupby(trained, key=lambda b: bool(held[b])):
+        cells = list(run)
+        x0, x1 = _land_cell(cells[0], g)[0], _land_cell(cells[-1] + 1, g)[0]
+        base, stripe = (_lightened(LAND_FILL[k]) if lightened else LAND_FILL[k] for k in ("count", "labels"))
+        _land_stripes(ax, (x0, y, x1 - x0, h), p, base, stripe)
+
+
+def _land_stripes(ax: plt.Axes, box: tuple[float, float, float, float], p: float, base: str, stripe: str) -> None:
+    """Fill *box* with *base*, and over it 45° stripes of *stripe* that are *p* of every `LAND_STRIPE_PERIOD`.
+
+    The stripes' phase is the plot's origin, so every row of the band is cut
+    by the same stripes, each starting on the same line, and only their width
+    changes from row to row. Each stripe is a parallelogram the box's height,
+    cut to the box's width; it overlaps the rows above and below by a hair,
+    so no seam of the base shows between one row's stripes and the next's.
+    """
+    x, y, w, h = box
+    ax.add_patch(Rectangle((x, y), w, h, facecolor=base, edgecolor=base, linewidth=0.3, zorder=1))
+    width = p * LAND_STRIPE_PERIOD
+    if width <= 0.0:
+        return
+    eps = 0.01
+    bx0, by0 = LAND_BOX[:2]
+    # A stripe starts on the line x - y = bx0 - by0 + k * period, which
+    # crosses the row's bottom edge at `start + lo` and its top edge h
+    # further right, and it is `width` wide to the right of that line.
+    lo, hi = y - eps - by0, y + h + eps - by0
+    k_first = math.floor((x - bx0 - hi - width) / LAND_STRIPE_PERIOD)
+    k_last = math.ceil((x + w - bx0 - lo) / LAND_STRIPE_PERIOD)
+    for k in range(k_first, k_last + 1):
+        start = bx0 + k * LAND_STRIPE_PERIOD
+        corners = [
+            (start + lo, y - eps),
+            (start + lo + width, y - eps),
+            (start + hi + width, y + h + eps),
+            (start + hi, y + h + eps),
+        ]
+        cut = _clip_x(corners, x, x + w)
+        if len(cut) >= 3:
+            ax.add_patch(Polygon(cut, closed=True, facecolor=stripe, edgecolor="none", zorder=1.2))
+
+
+def _clip_x(points: list[tuple[float, float]], x_min: float, x_max: float) -> list[tuple[float, float]]:
+    """The part of a convex polygon between ``x = x_min`` and ``x = x_max`` (Sutherland–Hodgman, two edges)."""
+    for bound, keep in ((x_min, lambda px: px >= x_min), (x_max, lambda px: px <= x_max)):
+        kept: list[tuple[float, float]] = []
+        for (ax_, ay), (bx, by) in zip(points, points[1:] + points[:1], strict=True):
+            a_in, b_in = keep(ax_), keep(bx)
+            if a_in:
+                kept.append((ax_, ay))
+            if a_in != b_in:
+                t = (bound - ax_) / (bx - ax_)
+                kept.append((bound, ay + t * (by - ay)))
+        points = kept
+        if not points:
+            break
+    return points
 
 
 #: The maps' key: a table of what each colour does, its Sort and its Cut
@@ -6463,30 +6619,30 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
 #: of the plot and under the title notch. The map's own names say where each
 #: applies. Rows keep their slots across a build and appear on the page their
 #: colour does: (stage it appears on, fill key, sort, cut).
-MAP_TABLE_X = {"swatch": 0.3, "swatch2": 0.9, "sort": 1.65, "cut": 5.35, "end": 8.75}
+MAP_TABLE_X = {"swatch": 0.3, "sort": 1.65, "cut": 5.35, "end": 8.75}
 MAP_TABLE_HEAD, MAP_TABLE_STEP, MAP_TABLE_SWATCH = 7.6, 0.85, 0.5
 LAND_TABLE = (
-    (1, "none", "Typed query", "Stand-out count"),
-    (1, "centroid", "Goods' average", "Stand-out count"),
-    (2, "count", "Trained head", "Stand-out count"),
-    # No row for the band the folds' split decides: a blend of orange and
+    (1, "none", "Text query", "Outlier cut"),
+    (1, "centroid", "Goods' average", "Outlier cut"),
+    (2, "count", "Trained head", "Outlier cut"),
+    # No row for the band the folds' split decides: a mix of orange and
     # purple returns one or the other, which their own rows already say
-    # (owner, 2026-10-13).
+    # (owner, 2026-10-13). None for the text query's hold either: the map's
+    # own name says where the lightened cells are, and the white row says
+    # what they return.
     (3, "labels", "Trained head", "Fβ peak"),
 )
 IN_TABLE = (
-    (1, "none", "Typed query", "Stand-out count"),
-    (1, "count", "Trained head", "Stand-out count"),
+    (1, "none", "Text query", "Outlier cut"),
+    (1, "count", "Trained head", "Outlier cut"),
     (2, "labels", "Trained head", "Fβ peak"),
     (3, "bads", "Trained head", "Fβ peak,\nBads' shape"),
 )
 
 
-def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] | None = None) -> None:
+def _map_table(ax: plt.Axes, rows: tuple, stage: int) -> None:
     """The key as a table: a swatch, then what the colour sorts by and where it cuts.
 
-    *hatched* is ``(fill key, stage)``: from that stage a hatched swatch joins
-    that row's, for a hatch on the map that shares the row's sort and cut.
     White swatches are outlined so they show. A two-line row takes half a
     row more, and every row keeps its place on every page.
     """
@@ -6503,10 +6659,6 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
         y = head - MAP_TABLE_STEP * (0.5 + sum(heights[:slot]) + heights[slot] / 2)
         ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
                                facecolor=LAND_FILL[key], edgecolor=INK, linewidth=1.0, zorder=3))  # fmt: skip
-        if hatched is not None and hatched[0] == key and stage >= hatched[1]:
-            ax.add_patch(Rectangle((xs["swatch2"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
-                                   facecolor=LAND_FILL[key], edgecolor=INK, hatch="//", linewidth=1.0,
-                                   zorder=3))  # fmt: skip
         ax.text(xs["sort"], y, sort, ha="left", va="center", fontsize=16, color=INK)
         ax.text(xs["cut"], y, cut, ha="left", va="center", fontsize=16, color=INK)
 
@@ -6542,16 +6694,17 @@ def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None
 
 
 def _land_axes(ax: plt.Axes) -> None:
-    """Lay of the Land's frame: every ten Bads, every two Goods, as what each count returns."""
-    _map_axes(ax, _land_cell, range(0, LAND_B + 1, 10), range(0, LAND_G + 1, 2), "Sort/Cut per User Label Counts")
+    """Lay of the Land's frame: every ten Bads, every four Goods, as what each count returns."""
+    _map_axes(ax, _land_cell, range(0, LAND_B + 1, 10), range(0, LAND_G + 1, 4), "Sort/Cut per User Label Counts")
 
 
-def _land_name(ax: plt.Axes, b: float, g: float, text: str, plate: str | None = None) -> None:
-    """A region's name, centred at *b* Bads and *g* Goods, on a *plate* of its region's fill when a hatch runs under it."""
+def _land_name(ax: plt.Axes, b: float, g: float, text: str, plate: str | None = None, rotation: float = 0.0) -> None:
+    """A region's name, centred at *b* Bads and *g* Goods, on a *plate* of its region's fill when the name may cross a row of another."""
     x0, y0, _, _ = LAND_BOX
     _, _, cw, ch = _land_cell(0, 0)
     box = None if plate is None else {"facecolor": plate, "edgecolor": "none", "pad": 2}
-    ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6, bbox=box)
+    ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6, bbox=box,
+            rotation=rotation)  # fmt: skip
 
 
 def _land_quota(ax: plt.Axes) -> None:
@@ -6562,7 +6715,7 @@ def _land_quota(ax: plt.Axes) -> None:
     _, _, cw, ch = _land_cell(0, 0)
     edge = [(BAD_QUOTA, LAND_G + 1), (BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, 1)]
     # Over the names' plates (zorder 6), which would otherwise hide the edge
-    # where "under the quota" sits against it; the staircase likewise.
+    # where a name sits against it; the staircase likewise.
     ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=7)
     lo, _ = _land_band()
     _land_name(ax, LAND_NAME_B, (1 + lo) / 2, f"< {lo} Goods")
@@ -6576,40 +6729,40 @@ def _land_labels(ax: plt.Axes) -> None:
 
 
 def _land_query(ax: plt.Axes) -> None:
-    """Page 4: where a typed query keeps its own set, hatched, and the staircase that bounds it.
+    """Page 4: the staircase that bounds the text query's hold inside the trained head's region, and its name.
 
-    Below the quota, and on a single-vector space until its labels number
-    `QUERY_HOLD_LABELS`: the head's line is not what such a detector shows
-    there. Hatched rather than faded, because fading already means the split
-    has not decided.
+    Past the quota, on a single-vector space, a text query keeps its own set
+    until its labels number `QUERY_HOLD_LABELS`: the head's line is not what
+    such a detector shows there, so `_land_cells` lightens those cells on
+    this page. The staircase runs from the no-Goods row's edge up to the
+    quota's edge, where the quota's own line takes over: under the quota the
+    query holds at every count, so the Goods' average is lightened to the
+    top of the map.
     """
-    from vtscore.detectors.label_quota import QUERY_HOLD_LABELS  # noqa: PLC0415
+    from vtscore.detectors.label_quota import BAD_QUOTA, QUERY_HOLD_LABELS  # noqa: PLC0415
 
+    assert LAND_G >= QUERY_HOLD_LABELS - BAD_QUOTA, "the map must be tall enough for the hold to close"
     x0, y0, _, _ = LAND_BOX
     _, _, cw, ch = _land_cell(0, 0)
-    held = _land_grid()["held"]
-    for g in range(1, LAND_G + 1):
-        for b in range(LAND_B + 1):
-            if held[g, b]:
-                ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor="none",
-                                       edgecolor=INK, hatch="//", linewidth=0, zorder=2))  # fmt: skip
     xs: list[float] = []
     ys: list[float] = []
-    for g in range(1, LAND_G + 1):
+    for g in range(1, QUERY_HOLD_LABELS - BAD_QUOTA):
         b = QUERY_HOLD_LABELS - g
         xs += [x0 + b * cw, x0 + b * cw]
         ys += [y0 + g * ch, y0 + (g + 1) * ch]
+    xs.append(x0 + BAD_QUOTA * cw)
+    ys.append(y0 + (QUERY_HOLD_LABELS - BAD_QUOTA) * ch)
     ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=7)
-    _land_name(ax, 14.0, 4.5, f"< {QUERY_HOLD_LABELS} labels,\nwith a query", plate=LAND_FILL["count"])
+    _land_name(ax, 13.5, 5.0, f"< {QUERY_HOLD_LABELS} labels,\nwith a query", plate=_lightened(LAND_FILL["count"]))
 
 
 # ── Inside Job: the trained head's line, read off what a fold holds out ─────
 
 #: How many build stages the inside view reveals in: a thin class model,
-#: counting what stands out; the labels line, from three Goods per fold; its
+#: cutting at the outliers; the labels line, from three Goods per fold; its
 #: cut on the Bads' own shape, from fifty Bads per fold that seem random
 #: (#4490), in dark purple. That last test reads the Bads' scores, not their
-#: count, so its region is named for both, as Lay of the Land's hatch is "with
+#: count, so its region is named for both, as Lay of the Land's hold is "with
 #: a query"; a session's Bads never pass it (owner, 2026-10-13: a return of its
 #: own). Until page 3 those cells are the purple a session would get there,
 #: and page 3 darkens them: a deliberate exception to STYLE.md's no-restyle
@@ -6660,7 +6813,7 @@ def inside_job_fig() -> None:
     holds: inside a fold the split has already rounded, so the trained head's
     line is a decision tree on two counts, with nothing left to chance. It
     comes before Lay of the Land, which is the band this rule makes once the
-    rounding is unknown. One or two Goods per fold, the head counts what stands out; three
+    rounding is unknown. One or two Goods per fold, the head cuts at the outliers; three
     (six between the two folds, `HEAD_COUNT_GOODS`), the labels line; fifty
     Bads per fold (`RANDOM_BADS_MIN` between them) that seem a random sample
     of the corpus, the labels line's cut on the Bads' own shape.

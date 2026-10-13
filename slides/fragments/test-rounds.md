@@ -12,20 +12,18 @@
 
 <!-- build: figs/test-rounds.build4.png -->
 
-<!-- **a** — Now the app. The Test autopilot deals five picks at a time, over
-     bands on both sides of the line. The line stays frozen until it's done. -->
+<!-- **a** — Now the app. The Test autopilot deals five picks at a time, both
+     sides of the line, line frozen till it's done. -->
 
-<!-- **b** — First, check the matches: one round in every band above the line,
-     starting at the line, where the detector's least sure, and working up. -->
+<!-- **b** — First the matches: one round per band above the line, starting at
+     the line and working up. -->
 
-<!-- **c** — Round four goes wherever five more picks would narrow the F1 range
-     most. Here, the 16: the biggest band and the least sure. That's 20 picks,
-     this half's budget. -->
+<!-- **c** — Round four goes wherever five more picks narrow the F1 range most:
+     the 16, biggest and least sure. That's this half's budget. -->
 
-<!-- **d** — Then check the misses: one band deeper every round, eight rounds,
-     40 picks, even when it finds nothing, because that's where the detector's
-     guess needs checking. -->
+<!-- **d** — Then the misses: one band deeper a round, eight rounds, even
+     finding nothing, because that's where the detector's guess needs
+     checking. -->
 
-<!-- **e** — Done, at 60 picks. The band of 992 never got reached, so the
-     detector's guess stands in for it. In the app, each half has a light that
-     goes red, yellow, green. -->
+<!-- **e** — Done at 60. The 992 band never got reached, so the detector's guess
+     stands in. Each half gets a light in the app. -->

@@ -12,19 +12,17 @@
 
 <!-- build: figs/calib-gmm-flow.build4.png -->
 
-<!-- **a** — What that left out: the haystack. Every photo in the dataset,
-     unlabeled. I'll call it the corpus. Unlabeled doesn't mean there are no
-     books in it, just that we don't know which ones. -->
+<!-- **a** — What that left out: the haystack. Every unlabeled photo; I'll call
+     it the corpus. There ARE books in there, we just don't know which. -->
 
-<!-- **b** — Our votes are a little sample out of it, and M₀ trains on them,
-     same as before. -->
+<!-- **b** — Our votes are a sample of it, and M₀ trains on them, same as
+     before. -->
 
-<!-- **c** — Now M₀ scores the whole corpus: thousands of scores instead of a
-     few dozen, and they fall into two humps on their own. -->
+<!-- **c** — M₀ scores the whole corpus, and the scores fall into two humps on
+     their own. -->
 
-<!-- **d** — Fit a bell curve to each hump. See the question marks? Calling the
-     high one Good is a guess; nothing here checked it. -->
+<!-- **d** — Bell curve on each. See the question marks? Calling the high one
+     Good is a guess. -->
 
-<!-- **e** — Then cut halfway between them, without ever looking at a vote.
-     Reading the corpus stuck around; the halfway cut didn't. When under half a
-     percent of photos are matches, it keeps way more than there are. -->
+<!-- **e** — Cut halfway between, no votes needed. The corpus idea stuck; the
+     halfway cut didn't. With matches rare, it keeps WAY too much. -->

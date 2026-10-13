@@ -18,11 +18,8 @@
 
 </div>
 
-<!-- **a** — Here's the session from the start of the talk again, as a recipe.
-     From an empty app, step one is getting the photos in, and it starts at the
-     + on the Datasets card, the one button everybody misses the first time. -->
+<!-- **a** — Same session as the opening, now as a recipe. First, photos: hit
+     the + on Datasets, the button everybody misses. -->
 
-<!-- **b** — Files, then Folder, then type in the folder your photos are in, or
-     find it with Browse. It works out the rest itself: it sees they're images
-     and names the dataset after the folder. Hit Import, and it reads every
-     photo once, up front. -->
+<!-- **b** — Files, Folder, your folder (or Browse). It sees they're images and
+     names the dataset after the folder. Hit Import. -->

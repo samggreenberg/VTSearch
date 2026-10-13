@@ -12,21 +12,18 @@
 
 <!-- build: figs/calib-fbeta.build4.png -->
 
-<!-- **a** — Back to the ranking, with the cut taken off. Which cut should the
-     app pick? -->
+<!-- **a** — Back to the ranking, cut off. Which should the app pick? -->
 
-<!-- **b** — It puts the line where F-beta peaks. At beta of 1, a miss and a
-     false alarm cost the same, and the peak is the middle cut, include five. -->
+<!-- **b** — Where F-beta peaks. At beta 1, a miss and a false alarm cost the
+     same, so: the middle cut, five. -->
 
-<!-- **c** — At a quarter, a miss costs a sixteenth of a false alarm, and the
-     peak jumps to include two: fewer come back, but they're the sure ones. -->
+<!-- **c** — At a quarter, a miss is a sixteenth of a false alarm, and the peak
+     jumps to two: fewer, but sure. -->
 
-<!-- **d** — At 4, a miss costs sixteen false alarms, and it goes the other
-     way, to include eight. Three betas, three answers. The data didn't change;
-     the person asking did. -->
+<!-- **d** — At 4, a miss costs sixteen false alarms, so it goes to eight. Same
+     data, three answers; what changed is who's asking. -->
 
-<!-- **e** — The app just asks, with the Threshold control. Toward False
-     Positives is beta of 4: the most comes back, wrong ones too. Toward False
-     Negatives is a quarter: only the sure ones. The middle, 1, is the default.
-     The catch: off the votes, the app can't count the books, so it has to
-     expect them. -->
+<!-- **e** — The app just asks, with the Threshold control: toward False
+     Positives is 4, toward False Negatives a quarter, and the middle, 1, is the
+     default. The catch: off the votes, it can't COUNT the books, only expect
+     them. -->

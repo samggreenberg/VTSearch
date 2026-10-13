@@ -10,17 +10,14 @@
 
 <!-- build: figs/calib-floor-ask.build3.png -->
 
-<!-- **a** — New question. The line keeps 32 photos nobody voted on. How many
-     of those are actually right? That's the precision of what we hand back,
-     and the user deserves an honest answer, with a range. -->
+<!-- **a** — New question. The line keeps 32 photos nobody voted on; how many
+     are right? The user deserves an honest answer, with a range. -->
 
-<!-- **b** — Here's where we'd tell them, under the Threshold control. Before
-     anyone checks, all it can honestly say is "Top 32 kept, unchecked." -->
+<!-- **b** — Here's where we'd say it, under the Threshold control. Before
+     anyone checks, all it can honestly say is 'unchecked'. -->
 
-<!-- **c** — The obvious place to look is the votes we already have: a cluster
-     at the top, where Autopilot looked for likely matches, and a bunch around
-     the line, where it asked the hard ones. The model chose every one. -->
+<!-- **c** — Obvious place to look: the votes we have. Top cluster, line
+     cluster, and the model chose every one. -->
 
-<!-- **d** — And that's the trouble: they tell you where the model looked, not
-     how right the kept set is. So instead we pick from the kept set at random,
-     and count. -->
+<!-- **d** — That's the trouble: they say where the model LOOKED, not how right
+     the kept set is. So we pick at random, and count. -->
