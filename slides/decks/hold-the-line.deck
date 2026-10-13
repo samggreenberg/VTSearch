@@ -256,7 +256,8 @@ slides:
   # from the release itself, which is owner-only on the GRID, so
   # `make-data-cards.py --only fhibe` runs there (see `fhibe_media.py`). How a
   # face is found and matched, where the line goes on faces and how it does
-  # arrive with #4699's first study.
+  # arrive with #4699's first study. FHIBE's terms allow a publication twenty
+  # of its photos; the card's two pages show ten, so count before adding any.
   outline-hold-the-line +at10
   data-set-fhibe
   # Then Head Start: how the trained head's line is placed, the linear SVM before and after it
