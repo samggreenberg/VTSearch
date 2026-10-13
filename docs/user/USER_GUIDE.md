@@ -337,12 +337,11 @@ whether it counts as a yellow smiley is your call: the detector learns where
 answers is usually enough, and the phase list on the left shows how far
 along you are (see [Autopilot](#autopilot-the-guided-workflow)).
 
-**Got one wrong?** Everyone does, and an answer is never final. Open the
-**Labels** panel on the right and click the picture: it comes back in the
-middle with its answer's button filled in. Click the other button to change
-it, and Autopilot carries on. To leave it as it is, click Autopilot's current
-step in the strip on the left (or press `↑`), which brings back the picture
-Autopilot picked. `↓` steps back through the pictures you just answered, too
+**Misclicked?** Open the **Labels** panel on the right and click the
+picture: it comes back in the middle with its answer's button filled in.
+Click the other button to change it, and Autopilot carries on. To leave it as
+it is, click Autopilot's current step in the strip on the left (or press
+`↑`), which brings back the picture Autopilot picked. `↓` steps back through the pictures you just answered, too
 (see [Tips and shortcuts](#tips-and-shortcuts)).
 
 ### Step 3: Load a test dataset

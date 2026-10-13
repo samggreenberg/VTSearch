@@ -228,7 +228,7 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
-- **Toasty says how to fix a wrong vote** (issue #4824). After the first vote of the run that trains
+- **Toasty says how to fix a misclicked vote** (issue #4824). After the first vote of the run that trains
   a detector, Toasty stands beside the **Labels** panel until the next one: your votes go there, and
   you can click one to vote it again. On any Autopilot run, clicking an item you already labeled
   brings a hint over **Good** / **Bad** naming its label and the button that changes it, and saying
