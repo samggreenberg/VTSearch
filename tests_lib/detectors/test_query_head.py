@@ -304,3 +304,88 @@ class TestTheBalance:
         state = detector_balance_state(ctx, 1.0)
         assert state is not None and state["count"] == int(sum(s >= ctx.threshold for s in scores))
         assert recut_detector_threshold(ctx, beta=4.0) == pytest.approx(ctx.centroid_line.threshold_at(4.0))
+
+
+# ---------------------------------------------------------------------------
+# The hold past the quota (#4736)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def single_vector(monkeypatch):
+    """The test embedder as a known single-vector space (the registry does not know it: no hold by default)."""
+    import vtscore.detectors.training as training
+
+    monkeypatch.setattr(training, "_patch_space_for", lambda name: False if name == EMBEDDER else None)
+
+
+class TestTheQueryHold:
+    """On a single-vector space a typed-query detector keeps its query past the quota until QUERY_HOLD_LABELS labels."""
+
+    def test_the_rule_reads_the_counts_and_the_space_only(self):
+        from vtscore.detectors.label_quota import QUERY_HOLD_LABELS, query_holds
+
+        assert QUERY_HOLD_LABELS == 30
+        assert query_holds(3, 4, patch_space=False)
+        assert query_holds(10, QUERY_HOLD_LABELS - 11, patch_space=False)
+        assert not query_holds(10, QUERY_HOLD_LABELS - 10, patch_space=False)
+        assert not query_holds(3, 4, patch_space=True), "a patch space's head passes the query by vote 10"
+        assert not query_holds(3, 4, patch_space=None), "an unknown space keeps the hand-over at the quota"
+        assert not query_holds(3, 4, patch_space=False, hold=0), "the arm before"
+
+    def test_past_the_quota_the_detector_is_still_its_query(self, world, single_vector):
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        ls = make([1, 2, 3], [40, 41, 42, 43])
+        assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap, text_query=QUERY) is True
+        assert is_query_head(ctx.model) and query_head_text(ctx.model) == QUERY
+        assert served_quota(ctx.model, ls)["tier"] == TIER_QUERY
+
+    def test_at_the_hold_the_trained_head_takes_over(self, world, single_vector):
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        ls = make(list(range(1, 9)), list(range(40, 62)))
+        assert len(ls.elements) == 30
+        assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap, text_query=QUERY) is True
+        assert ctx.model is not None and not is_quota_head(ctx.model)
+
+    def test_without_a_query_the_quota_alone_decides(self, world, single_vector):
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        assert lt.train_from_labelset(ctx, make([1, 2, 3], [40, 41, 42, 43]), media_type="image", snap=snap) is True
+        assert ctx.model is not None and not is_quota_head(ctx.model)
+
+    def test_a_patch_space_has_no_hold(self, world, monkeypatch):
+        import vtscore.detectors.training as training
+
+        monkeypatch.setattr(training, "_patch_space_for", lambda name: True)
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        assert lt.train_from_labelset(
+            ctx, make([1, 2, 3], [40, 41, 42, 43]), media_type="image", snap=snap, text_query=QUERY
+        )
+        assert ctx.model is not None and not is_quota_head(ctx.model)
+
+    def test_a_cold_find_holds_too_and_the_learned_sort_never_does(self, world, single_vector):
+        snap, _proto, make, _embedded = world
+        ls = make([1, 2, 3], [40, 41, 42, 43])
+        _r, _t, model = lt.labelset_train_and_score(
+            _ctx(), ls, media_type="image", clips_dict=snap, label_quota=True, text_query=QUERY
+        )
+        assert is_query_head(model)
+        _r, _t, model = lt.labelset_train_and_score(_ctx(), ls, media_type="image", clips_dict=snap, text_query=QUERY)
+        assert model is not None and not is_quota_head(model), "the Train view asks from the head either way"
+
+    def test_a_cached_trained_head_is_not_handed_out_while_the_query_holds(self, world, monkeypatch):
+        """The learned sort caches its head under the labels' signature from the quota on; a Find must not take it."""
+        import vtscore.detectors.training as training
+
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        ls = make([1, 2, 3], [40, 41, 42, 43])
+        assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap)  # a head under this signature
+        assert ctx.model is not None and not is_quota_head(ctx.model)
+        assert cached_head_is_current(ctx, ls, QUERY), "an unknown space hands over at the quota"
+        monkeypatch.setattr(training, "_patch_space_for", lambda name: False)
+        assert not cached_head_is_current(ctx, ls, QUERY), "a Find there gives the query's set"
+        assert cached_head_is_current(ctx, ls, ""), "a detector with no query takes the head at the quota"

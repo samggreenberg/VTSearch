@@ -786,6 +786,11 @@ MIRRORS: list[Mirror] = [
             "head's from it; a run that opens on a typed query (seed_scores, no seed_examples) "
             "writes a row from the first vote, the typed query's set under the quota "
             "(_query_test, detector_tier 'query'; query_tier=False is the arm before). "
+            "Past the quota a typed-query detector on a single-vector space keeps its query's set "
+            "until QUERY_HOLD_LABELS labels (#4736, label_quota.query_holds, read by _query_tier and "
+            "cached_head_is_current); the harness calls the same query_holds on its vote counts "
+            "(query_hold, default QUERY_HOLD_LABELS; 0 is the arm before), writes the query's row "
+            "untagged with app_trained 0 and keeps the head's rows tagged hold:head. "
             "If the app's tiers move - a new tier, a quota read from somewhere "
             "other than the counts, a tier that needs a Bad - the harness's rows have to move "
             "with them, and so do the notes that describe them (curves.py, viewer.py and its "
@@ -795,7 +800,10 @@ MIRRORS: list[Mirror] = [
             "INTENTIONAL: the harness counts votes, not resolved labels - every simulated vote "
             "resolves - and keeps the Train side (acquisition, lights, spot check) on the trained "
             "head wherever there is a Good and a Bad, as the Train view's learned sort does "
-            "(labelset_train_and_score with label_quota=False)."
+            "(labelset_train_and_score with label_quota=False). The hold's space is the run's "
+            "region_aware (its media carry a patch grid) where the app reads the embedder's "
+            "capability (_patch_space_for): the same split on every production path, and an "
+            "unknown embedder, which the app does not hold, never reaches the harness."
         ),
         no_harness_pin=(
             "simulate_voting_iterations is the whole voting loop; the quota's own rows are "

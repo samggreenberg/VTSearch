@@ -84,11 +84,15 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
     A typed query's head (#4758) is current while its signature is and it was
     built from *text_query*, the detector's query now; ``None`` skips that
     check.  Any cached head is refused when the detector has a query and the
-    head is the centroid: a centroid cached before the query was there.
+    head is the centroid: a centroid cached before the query was there.  A
+    trained head is refused, too, while that query still holds (#4736): the
+    learned sort's head is cached from the quota on, but a Find there gives
+    the query's set until :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS`.
     """
     from vtscore.detectors.centroid_head import is_centroid_head
-    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota
+    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds
     from vtscore.detectors.query_head import is_query_head, query_head_text
+    from vtscore.detectors.training import _patch_space_for
 
     if det_ctx.model is None or det_ctx.model_labels_sig != labelset_signature(labelset):
         return False
@@ -96,7 +100,12 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
         return text_query is None or query_head_text(det_ctx.model) == text_query
     if text_query and is_centroid_head(det_ctx.model):
         return False
-    return is_centroid_head(det_ctx.model) or labelset_quota(labelset).tier == TIER_TRAINED
+    if is_centroid_head(det_ctx.model):
+        return True
+    quota = labelset_quota(labelset)
+    if text_query and query_holds(quota.n_good, quota.n_bad, patch_space=_patch_space_for(det_ctx.embedder)):
+        return False
+    return quota.tier == TIER_TRAINED
 
 
 def resolve_or_train_detector(

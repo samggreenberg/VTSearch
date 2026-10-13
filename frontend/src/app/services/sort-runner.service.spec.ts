@@ -1104,6 +1104,214 @@ describe('SortRunnerService', () => {
   // --- carrying a sort to a new pair (#4092) ---------------------------------
 
   /**
+   * #4736: while the server marks a learned sort `query_hold`, a session that
+   * opened on a typed query keeps that query's set on screen and asks from the
+   * learned ranking behind it.
+   */
+  describe('the typed query\'s hold (#4736)', () => {
+    const ids = (order: { id: number }[] | null) => order?.map((i) => i.id);
+    const TEXT_IDS = [3, 4, 5, 6, 1, 2];
+    /** The text sort: its Hard pick is 6, the first row at or below its cut of 0.65. */
+    const TEXT = {
+      results: TEXT_IDS.map((id, i) => ({ id, similarity: [0.9, 0.8, 0.7, 0.6, 0.3, 0.2][i] })),
+      threshold: 0.75,
+      acq_threshold: 0.65,
+      total: 6,
+      above_threshold: 2,
+      has_more_below: false,
+      sort_token: 'tok-text',
+    };
+    const LEARNED_IDS = [1, 5, 3, 2, 4, 6];
+    /** The learned sort: its cut of 0.5 falls at item 2 (voted), so its Hard pick is 3. */
+    const LEARNED = {
+      status: 'done',
+      results: LEARNED_IDS.map((id, i) => ({ id, score: [0.95, 0.8, 0.7, 0.4, 0.3, 0.1][i] })),
+      threshold: 0.6,
+      acq_threshold: 0.5,
+      balance: wireBalance('unchecked', { checkDue: true }),
+      total: 6,
+      above_threshold: 2,
+      has_more_below: false,
+      sort_token: 'tok-learned',
+    };
+
+    afterEach(() => vi.useRealTimers());
+
+    /** Autopilot's Hard phase over its typed query's text sort, as the view drives it. */
+    function hardOverTextSort(holds = true): void {
+      enableLearnedSort();
+      runner.holdsTypedQuery = () => holds;
+      sortState.setSelectMode('hard');
+      runner.onTextSort('birds', false);
+      httpMock.expectOne('/api/sort').flush(TEXT);
+      sortState.setSortMode('learned');
+    }
+
+    function landLearnedSort(extra: Record<string, unknown>): void {
+      runner.onLearnedSort(false);
+      httpMock.expectOne('/api/learned-sort').flush({ ...LEARNED, ...extra });
+    }
+
+    it('keeps the text sort on screen and asks the Hard question from the held learned ranking', () => {
+      hardOverTextSort();
+
+      landLearnedSort({ query_hold: true });
+
+      expect(ids(sortState.sortOrder)).toEqual(TEXT_IDS);
+      expect(sortState.threshold).toBe(0.75);
+      expect(sortState.aboveThreshold).toBe(2);
+      expect(sortState.sortToken).toBe('tok-text');
+      expect(sortState.sortMode).toBe('text');
+      expect(sortState.sortBusy).toBe(false);
+      expect(runner.queryHeld).toBe(true);
+      // The learned ranking's pick at its own cut; the text sort's would be 6.
+      expect(runner.peekNextMedia()).toEqual({ kind: 'media', id: 3 });
+      runner.autoSelectNext();
+      expect(mediaState.selectedId()).toBe(3);
+      // The prefetch walks the same ranking: 3 voted, the nearest to the cut is 4.
+      expect(runner.peekUpcomingMedia(3, 1)).toEqual([4]);
+      // The weak check reads the learned line, not the text one on screen.
+      expect(sortState.balance).toBeNull();
+      expect(runner.askBalance?.checkDue).toBe(true);
+    });
+
+    it('steers the New pick\'s atlas probe by the held learned ranking', () => {
+      hardOverTextSort();
+      landLearnedSort({ query_hold: true });
+      expect(runner.queryHeld).toBe(true);
+      sortState.setSelectMode('new');
+
+      runner.autoSelectNext();
+
+      const probe = httpMock.expectOne((req) => req.url.startsWith('/api/coverage-atlas/next'));
+      expect(probe.request.body).toEqual({
+        scores: { '1': 0.95, '5': 0.8, '3': 0.7, '2': 0.4, '4': 0.3, '6': 0.1 },
+        threshold: 0.5,
+      });
+      probe.flush({ id: 4, coverage_level: 1 });
+    });
+
+    it('hands over to the first learned ranking the query no longer holds, for good', () => {
+      hardOverTextSort();
+      landLearnedSort({ query_hold: true });
+      expect(sortState.sortMode).toBe('text');
+
+      landLearnedSort({ query_hold: false });
+
+      expect(ids(sortState.sortOrder)).toEqual(LEARNED_IDS);
+      expect(sortState.threshold).toBe(0.6);
+      expect(sortState.acqThreshold).toBe(0.5);
+      expect(sortState.sortToken).toBe('tok-learned');
+      expect(sortState.sortMode).toBe('learned');
+      expect(runner.queryHeld).toBe(false);
+
+      // An undo can take the labels back under the hold; the screen stays learned.
+      const reordered = [...LEARNED.results].reverse();
+      landLearnedSort({ query_hold: true, results: reordered });
+      expect(ids(sortState.sortOrder)).toEqual([...LEARNED_IDS].reverse());
+      expect(runner.queryHeld).toBe(false);
+    });
+
+    it('shows the learned ranking as before in a session that does not hold', () => {
+      hardOverTextSort(false);
+
+      landLearnedSort({ query_hold: true });
+
+      expect(ids(sortState.sortOrder)).toEqual(LEARNED_IDS);
+      expect(sortState.sortMode).toBe('learned');
+      expect(runner.queryHeld).toBe(false);
+    });
+
+    it('shows the learned ranking when no text sort is on screen to hold', () => {
+      enableLearnedSort();
+      runner.holdsTypedQuery = () => true;
+
+      landLearnedSort({ query_hold: true });
+
+      expect(ids(sortState.sortOrder)).toEqual(LEARNED_IDS);
+      expect(runner.queryHeld).toBe(false);
+    });
+
+    it('re-sorts the held ranking at a new balance and redraws the text line on screen', () => {
+      vi.useFakeTimers();
+      hardOverTextSort();
+      landLearnedSort({ query_hold: true });
+
+      runner.onBetaChange(0.25);
+      httpMock
+        .expectOne((req) => req.url === '/api/balance' && req.method === 'POST')
+        .flush({ ...wireBalance('unchecked', { beta: 0.25 }), threshold: null, n_returned: null });
+      httpMock
+        .expectOne((req) => req.url === '/api/sort/line' && req.urlWithParams.includes('token=tok-text'))
+        .flush({ threshold: 0.85, above_threshold: 1, total: 6 });
+      expect(sortState.threshold).toBe(0.85);
+
+      vi.advanceTimersByTime(400);
+      httpMock.expectOne('/api/learned-sort').flush({ ...LEARNED, acq_threshold: 0.75, query_hold: true });
+
+      expect(ids(sortState.sortOrder)).toEqual(TEXT_IDS);
+      expect(sortState.threshold).toBe(0.85);
+      // The held ranking's new cut (0.75) falls at item 3, so past it the Hard
+      // pick is 5; at the old cut it was 4.
+      expect(runner.peekUpcomingMedia(3, 1)).toEqual([5]);
+    });
+
+    it('puts the held ranking on screen when Autopilot stops on the learned sort', () => {
+      hardOverTextSort();
+      landLearnedSort({ query_hold: true });
+      expect(ids(sortState.sortOrder)).toEqual(TEXT_IDS);
+
+      // The stop's Sort for the Hard phase.
+      sortState.setSortMode('learned');
+      runner.endQueryHold();
+
+      expect(ids(sortState.sortOrder)).toEqual(LEARNED_IDS);
+      expect(sortState.threshold).toBe(0.6);
+      expect(sortState.sortToken).toBe('tok-learned');
+      expect(runner.queryHeld).toBe(false);
+    });
+
+    it('keeps the text sort on screen when Autopilot stops on it', () => {
+      hardOverTextSort();
+      landLearnedSort({ query_hold: true });
+      expect(runner.queryHeld).toBe(true);
+
+      // The stop's Sort for a phase an undo took back to the opening.
+      sortState.setSortMode('text');
+      runner.endQueryHold();
+
+      expect(ids(sortState.sortOrder)).toEqual(TEXT_IDS);
+      expect(sortState.sortToken).toBe('tok-text');
+      expect(runner.queryHeld).toBe(false);
+    });
+
+    it('lets the next run hold again after a hand-over', () => {
+      hardOverTextSort();
+      landLearnedSort({ query_hold: false });
+      runner.endQueryHold();
+
+      // The next run opens on its typed query again.
+      runner.onTextSort('birds', false);
+      httpMock.expectOne('/api/sort').flush(TEXT);
+      landLearnedSort({ query_hold: true });
+
+      expect(ids(sortState.sortOrder)).toEqual(TEXT_IDS);
+      expect(runner.queryHeld).toBe(true);
+    });
+
+    it('forgets the hold on a pair switch', () => {
+      hardOverTextSort();
+      landLearnedSort({ query_hold: true });
+      expect(runner.queryHeld).toBe(true);
+
+      runner.quiesce();
+
+      expect(runner.queryHeld).toBe(false);
+      expect(runner.askBalance).toBe(sortState.balance);
+    });
+  });
+
+  /**
    * The rule for a Train entry or pair switch: the sort controls carry over and
    * are re-run against the new pair; a sort the new pair cannot run falls back
    * to Text, so the controls never claim a sort that is not the one on screen.

@@ -345,7 +345,8 @@ AutoFind (see [find-label](api/find.md#find-label-score--label-the-active-datase
 A detector made from a typed query (its `text_query`, else its first `text`
 example) scores as that query's own set: each item's cosine to the query in
 the dataset's text embedder, cut where the text sort draws its line at the
-detector's balance (#4758). It needs no label, so such a detector runs before
+detector's balance (#4758), past the label quota too on a single-vector space
+until it has 30 labels (#4736). It needs no label, so such a detector runs before
 its first one; until #4758 the run stopped with `Detector '<name>' has no
 labels.` A detector with no typed query scores as the Goods' centroid from its
 first Good, and with no Good it still stops the run. Either way the run prints

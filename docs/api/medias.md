@@ -617,6 +617,13 @@ one whose `balance` is non-`null`; `balance` is the
 [line state](labeling.md#the-line-state) of `threshold`: the set the line
 keeps, and what the spot check found on it.
 
+The `done` payload also carries `query_hold` (#4736): whether a session opened
+on a typed query still shows that query's set rather than this ranking. It is
+`true` on a single-vector space while the labels number fewer than 30
+(`vtscore.detectors.label_quota.query_holds`; a patch space has no hold). The
+Train view then keeps the text sort on screen and takes Autopilot's Hard pick
+from this ranking; from the first payload without it, it shows this ranking.
+
 `threshold` is the **decision line**: the cutoff shown to the user, what
 `above_threshold` counts against, and what Find calls a match. `acq_threshold`
 is the **acquisition cut**, and it is a different number — Autopilot's Hard and

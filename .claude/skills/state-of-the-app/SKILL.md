@@ -178,7 +178,10 @@ same edit.
     whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
 - **The opening is the text sort (#4605).** The app stays on the text sort
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
-  the Hard phase on, a median ~40 clicks in. The harness scores the detector
+  the Hard phase on (vote 8 since #4742), and on a single-vector space (the
+  Binary path) not before 30 votes: until then a typed-query session keeps the
+  text sort on screen while Autopilot asks from the head (#4736, `app_trained`
+  0 on those clicks). The harness scores the detector
   Test would give during the opening anyway (from the first vote, the typed
   query's own set under the label quota since #4758 - the Goods' centroid from
   the first Good before it - then the trained head; #4643, `detector_tier`)
@@ -235,7 +238,9 @@ same edit.
   typed query's own set, from the first vote, on a run that opens on one
   (#4758; the Goods' centroid from the first Good before it, and still on any
   other opening), cut by its line on the withheld half, and from the
-  quota the trained head, whose line is Find's there. The report is the
+  quota the trained head, whose line is Find's there - on a single-vector
+  space from 30 votes, since the query holds until then (#4736; the head's
+  rows there are tagged `hold:head`). The report is the
   session, the viewer is the export, so the two still differ through the
   opening; the click-4 dip the head on 3 Goods and 1 Bad drew (#4640) went
   with the app, not with a viewer rule. A review run before #4643 starts its

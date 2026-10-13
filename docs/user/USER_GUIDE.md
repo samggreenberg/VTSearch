@@ -836,7 +836,11 @@ The phase panel labels them, in order:
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
-   and "stable" indicators in the status bar both turn green).
+   and "stable" indicators in the status bar both turn green). If you
+   started from a typed description on photos, the ranking behind the
+   item stays the description's until your 30th vote: the detector asks
+   the questions, but its matches only beat the description's from about
+   there.
 4. **Explore Diversity.** - Autopilot serves items from parts of the
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
@@ -1253,7 +1257,11 @@ VTSearch does not train a detector from its labels.
   images its text sort keeps in Train, at the detector's Threshold, so you can
   test it before your first vote. Those are the matches Autopilot shows you
   while it gathers the first labels, and on those first votes they are better
-  than the Goods' centroid's.
+  than the Goods' centroid's. On photos, where a picture is one point rather
+  than a set of regions, the description stays past those counts too, until
+  the detector has 30 labels: a detector trained on a few examples already
+  asks good questions, but until then its matches are worse than the
+  description's.
 - **A detector with no typed description** (made from media examples, or from
   a labels file) ranks everything by how close it is to the average of its
   Goods, and keeps the images that stand out from the rest. One Good is enough

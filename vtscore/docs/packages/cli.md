@@ -289,7 +289,8 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
    Bads, or a Good and 16 Bads) there is no trained head: a detector
    made from a typed query scores as that query's own set, in the
    dataset's text embedder, from before its first label (a
-   `detector_query` event, #4758), and one with no typed query as the
+   `detector_query` event, #4758), and on a single-vector space past
+   the quota until 30 labels (#4736), and one with no typed query as the
    Goods' centroid from its first Good (a `detector_centroid` event,
    #4643). The event's fields are the quota's
    (`vtscore.detectors.label_quota.served_quota`).
