@@ -10,7 +10,15 @@ count while the class model is thin, so a candidate changes only the clicks past
 
 * ``today``        what Test keeps (the head's count while thin, the class model's cut after);
 * ``cut:<name>``   the head's count while thin, candidate ``<name>``'s cut after;
-* ``oracle``       the best count on the withheld half, per click (a bound, not a rule).
+* ``oracle``       the best count on the withheld half, per click (a bound, not a rule);
+* ``headgoods``    not a fix to the total: #4786's head count past its Bads gate too, while the
+                   class model holds fewer than ``HEAD_COUNT_GOODS`` Goods (any Bads), today's
+                   cut after. Priced because the faces' deep cuts sit there;
+* ``floorhead``    ``headgoods``'s first half: there, never fewer than the head's count (today's cut
+                   when it keeps more);
+* ``caphead``      its second half: there, never more than the head's count (the deep-cut fix);
+* ``caphead-dry``  ``caphead`` only once the session has gone ``DRY_RUN_TARGET`` votes without a
+                   Good (#4488's dry run): the walk's own sign that few positives are left to find.
 
 ``cut:class`` is today by construction; the analyzer counts the clicks where it is not (none, if
 the frame is right). Scoring as #4786's ``line_4786.py``: Find's F-beta at every vote, carried,
@@ -41,16 +49,27 @@ import _cells_io  # noqa: E402
 from _cells_paths import main_frame_files  # noqa: E402
 from line_4786 import COLS, HORIZON, _carry, _ranks, fbeta_at, oracle_fbeta  # noqa: E402
 
+from vtscore.detectors.labeling_progress import DRY_RUN_TARGET  # noqa: E402
 from vtscore.eval.arms_cut_total import CUT_VARIANTS  # noqa: E402
 from vtscore.training.thresholds.labels_line import HEAD_COUNT_BADS, HEAD_COUNT_GOODS  # noqa: E402
 
-RULES = ["today", "oracle", *[f"cut:{v}" for v in CUT_VARIANTS]]
+RULES = ["today", "oracle", *[f"cut:{v}" for v in CUT_VARIANTS], "headgoods", "floorhead", "caphead", "caphead-dry"]
 
 
 def _linecounts_path(path: str) -> Path:
     p = Path(path)
     name = p.name.replace(".csv", "__linecounts.csv", 1)
     return p.with_name(name)
+
+
+def _dry(ts: np.ndarray, n_good: np.ndarray) -> np.ndarray:
+    """At each row, the votes since the session's Good count last rose (since the start if it never has)."""
+    out, last = np.zeros(len(ts)), 0
+    for i in range(len(ts)):
+        if i and n_good[i] > n_good[i - 1]:
+            last = ts[i]
+        out[i] = ts[i] - last
+    return out
 
 
 def read_run(path: str, dataset: str | None) -> list[dict] | None:
@@ -81,6 +100,7 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
         if missing:
             raise RuntimeError(f"{path}: {len(missing)} trained clicks have no line counts (run without them?)")
         f_today = base["fbeta"].to_numpy(float)
+        dry = _dry(ts, base["n_good"].to_numpy(float))
         beta = float(e["beta"].iloc[0]) if len(e) else float("nan")
         f = {r: f_today.copy() for r in RULES}
         mismatch = 0
@@ -96,13 +116,20 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
                 continue  # no class model: the retrain's fallback, the same under every candidate
             if n_neg < HEAD_COUNT_BADS and n_pos_m < HEAD_COUNT_GOODS:
                 continue  # the head's count serves: no candidate moves it
+            if n_pos_m < HEAD_COUNT_GOODS:
+                k_head, k_class = int(rec["k_head_count"]), int(rec["k_cut_class"])
+                f["headgoods"][i] = fbeta_at(k_head, ranks, n_pos, beta)
+                f["floorhead"][i] = fbeta_at(max(k_class, k_head), ranks, n_pos, beta)
+                f["caphead"][i] = fbeta_at(min(k_class, k_head), ranks, n_pos, beta)
+                if dry[i] >= DRY_RUN_TARGET:
+                    f["caphead-dry"][i] = f["caphead"][i]
             if int(rec["k_cut_class"]) != int(rec["k_test"]):
                 mismatch += 1
             ks = {v: int(rec[f"k_cut_{v}"]) for v in CUT_VARIANTS}
             fs = {v: fbeta_at(k, ranks, n_pos, beta) for v, k in ks.items()}
             for v in CUT_VARIANTS:
                 f[f"cut:{v}"][i] = fs[v]
-            if len({ks[v] for v in CUT_VARIANTS}) > 1:
+            if len({ks[v] for v in CUT_VARIANTS} | {int(rec["k_head_count"])}) > 1:
                 clicks.append(
                     {
                         "t": int(t),
@@ -112,6 +139,11 @@ def read_run(path: str, dataset: str | None) -> list[dict] | None:
                         "separation": float(rec["separation"]),
                         "est_positives": float(rec["est_positives"]),
                         "chances_sum": float(rec["chances_sum"]),
+                        "model_n_pos": n_pos_m,
+                        "model_n_neg": n_neg,
+                        "dry": float(dry[i]),
+                        "k_head_count": int(rec["k_head_count"]),
+                        "f_head_count": fbeta_at(int(rec["k_head_count"]), ranks, n_pos, beta),
                         **{f"k_{v}": ks[v] for v in CUT_VARIANTS},
                         **{f"f_{v}": fs[v] for v in CUT_VARIANTS},
                         "f_oracle": f["oracle"][i],
@@ -158,8 +190,8 @@ def summarize(name: str, runs: list[dict]) -> tuple[list[dict], list[dict]]:
             row[f"F_{lo}_{hi}"] = float(np.nanmean(m))
             row[f"dF_{lo}_{hi}"] = float(np.nanmean(d))
             row[f"dF_{lo}_{hi}_se"] = _se(d)
-            row[f"win_{lo}_{hi}"] = float((d > 1e-9).mean())
-            row[f"loss_{lo}_{hi}"] = float((d < -1e-9).mean())
+            row[f"win_{lo}_{hi}"] = float((d > 1e-6).mean())
+            row[f"loss_{lo}_{hi}"] = float((d < -1e-6).mean())
         rows.append(row)
         mean_curve = np.nanmean(f, axis=0)
         curves += [{"set": name, "rule": rule, "vote": t + 1, "F": float(mean_curve[t])} for t in range(HORIZON)]
