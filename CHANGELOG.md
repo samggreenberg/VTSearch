@@ -228,6 +228,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Toasty says how to fix a wrong vote** (issue #4824). After the first vote of the run that trains
+  a detector, Toasty stands beside the **Labels** panel until the next one: your votes go there, and
+  you can click one to vote it again. On any Autopilot run, clicking an item you already labeled
+  brings a hint over **Good** / **Bad** naming its label and the button that changes it, and saying
+  that Autopilot's current step on the left (or `↑`) goes back to Autopilot's pick.
+
 - **Collapse to photos** (issue #4751). In Train and Test, a Face dataset whose import also made an
   Image dataset has a **Show: Faces | Photos** switch under the list's header. **Photos** shows the
   ranking as the photos the faces were cut from: each photo once, in the place of its best face,

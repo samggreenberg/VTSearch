@@ -44,6 +44,7 @@ import type { LabelingStatusResponse } from '../../generated/api-client/models/l
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
 import { SidePanelToggleComponent } from '../side-panel-toggle/side-panel-toggle.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import {
   MediaPrefetchService,
   PREFETCH_DEPTH,
@@ -83,6 +84,7 @@ const DONE_CHECK_INTRO =
     MediaCropModalComponent,
     PanelResizeDirective,
     SidePanelToggleComponent,
+    ToastyHintComponent,
   ],
   providers: [LabelViewPanelStateService, PairScopeService, SortRunnerService],
   templateUrl: './label-view.component.html',
@@ -181,27 +183,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly autopilotRun = toSignal(this.autopilotStateService.state$, { requireSync: true });
 
   /**
-   * Toasty's hint over the Good / Bad buttons (#4680, #4807), or `null`. While
-   * Autopilot runs with an item on screen: `start-voting` on a detector that
-   * has no labels and nothing voted yet (the first vote ends it), then, on the
-   * run that trains the detector (as the hand-off, see
-   * `AutopilotStateService.startedUntrained`), one hint per phase until the
-   * run reaches Done, when the hand-off under the Dashboard button takes over.
+   * Toasty's one hint on the Train view's panes (#4680, #4807), or `null`.
+   * While Autopilot runs with an item on screen: `revote` on an item the user
+   * picked that is already labeled (#4824), on any run; otherwise
+   * `start-voting` on a detector that has no labels and nothing voted yet (the
+   * first vote ends it), then, on the run that trains the detector (as the
+   * hand-off, see `AutopilotStateService.startedUntrained`), `fix-votes` for
+   * the run's first vote and one hint per phase after it, until the run
+   * reaches Done, when the hand-off under the Dashboard button takes over.
+   * Nothing shows while that hand-off is up.
    */
-  readonly voteHint = computed<VoteHintId | null>(() => {
+  private readonly trainHint = computed<VoteHintId | 'fix-votes' | null>(() => {
     const run = this.autopilotRun();
-    if (run.phase === 'idle') return null;
+    if (run.phase === 'idle' || this.autopilotStateService.handoff()) return null;
     const votes = this.voteState;
-    if (!votes.votesLoaded || this.mediaState.selectedMedia === null || this.centreExhausted()) return null;
+    const selected = this.mediaState.selectedMedia;
+    if (!votes.votesLoaded || selected === null) return null;
+    // The label it was picked with, still on it: a vote on the item moves the
+    // label before its swipe ends, and the hint must not name the new one.
+    // Autopilot's current step is the way back, so not with nothing left to pick.
+    const picked = this.pickedLabel();
     if (
-      votes.labelsetGoodCount === 0 &&
-      votes.labelsetBadCount === 0 &&
-      votes.goodVotes.size === 0 &&
-      votes.badVotes.size === 0
+      this.viewingPick() &&
+      picked !== null &&
+      this.labelOf(selected.id) === picked &&
+      !(this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted())
     ) {
-      return 'start-voting';
+      return 'revote';
     }
+    if (this.centreExhausted()) return null;
+    // The vote sets the piles fill from move at different times: the item's
+    // own state on the click, the labelset's counts after a round-trip.
+    const cast = Math.max(
+      votes.labelsetGoodCount + votes.labelsetBadCount,
+      votes.goodVotes.size + votes.badVotes.size,
+    );
+    if (cast === 0) return 'start-voting';
     if (!this.autopilotStateService.startedUntrained() || run.doneReached) return null;
+    if (cast === 1) return 'fix-votes';
     switch (run.phase) {
       case 'good':
         return 'find-goods';
@@ -216,6 +235,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         return null;
     }
   });
+
+  /** The hint over the Good / Bad buttons: {@link trainHint}, unless that stands beside Labels. */
+  readonly voteHint = computed<VoteHintId | null>(() => {
+    const hint = this.trainHint();
+    return hint === 'fix-votes' ? null : hint;
+  });
+
+  /** `fix-votes`, beside the Labels panel: where the run's first vote went, and how to change one. */
+  readonly labelsHint = computed(() => this.trainHint() === 'fix-votes');
 
   /** The counts the phase hints say: Goods and Bads so far against Autopilot's targets. */
   readonly voteHintCounts = computed<VoteHintCounts>(() => {
@@ -244,6 +272,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * the point again.
    */
   private readonly pickedWhileDone = signal<number | null>(null);
+
+  /** The label the item picked by hand had when it was picked, or `null` when
+   *  it had none: what `revote` names (#4824). */
+  private readonly pickedLabel = signal<'good' | 'bad' | null>(null);
+
+  /** The label the Good / Bad buttons show for item `id`. */
+  private labelOf(id: number): 'good' | 'bad' | null {
+    if (this.voteState.effectiveGood(id)) return 'good';
+    return this.voteState.effectiveBad(id) ? 'bad' : null;
+  }
 
   /** True while the selection is still the item {@link pickedWhileDone}
    *  recorded. Both being `null` is not a match: that is "nothing picked and
@@ -1155,6 +1193,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onMediaSelect(id: number): void {
     this.centreProvisional = false;
     this.pickedWhileDone.set(id);
+    this.pickedLabel.set(this.labelOf(id));
     this.mediaState.selectMedia(id);
   }
 

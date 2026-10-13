@@ -114,6 +114,20 @@ describe('VotingOverlayComponent', () => {
     expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
   });
 
+  it("names a picked item's label, the button that changes it, and the way back (#4824)", async () => {
+    const text = () => (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
+    fixture.componentRef.setInput('hint', 'revote');
+    fixture.componentRef.setInput('isGood', true);
+    await settleZoneless(fixture);
+    expect(text()).toContain('You already labeled this item Good. Click Bad (←) to change it');
+    expect(text()).toContain("click Autopilot's current step on the left (↑) to go back to its pick");
+
+    fixture.componentRef.setInput('isGood', false);
+    fixture.componentRef.setInput('isBad', true);
+    await settleZoneless(fixture);
+    expect(text()).toContain('You already labeled this item Bad. Click Good (→) to change it');
+  });
+
   // Zoneless staleness canary: the flash class is added in a bound `(click)`
   // (which schedules CD on its own) but cleared by a `setTimeout`. The reset is
   // the zoneless-sensitive write — it only repaints because `goodFlash` is a

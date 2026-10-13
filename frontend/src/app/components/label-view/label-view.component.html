@@ -109,7 +109,7 @@
     (widthChange)="onRightWidthChange($event)"
     (resizeEnd)="onRightResizeEnd($event)"
   ></div>
-  <div class="panel-right">
+  <div class="panel-right" #labelsPanel>
     <vt-side-panel-toggle side="right" label="Labels" [collapsed]="rightCollapsed()" (toggle)="onTogglePanel('right')" />
     @if (!rightCollapsed()) {
       <vt-right-panel
@@ -121,6 +121,14 @@
       />
     }
   </div>
+  <!-- Beside the Labels panel, folded or open, reaching over the centre: the
+       panel clips, so the hint is placed in the layout instead (#4824). -->
+  @if (labelsHint()) {
+    <vt-toasty-hint hintId="fix-votes" [anchor]="labelsPanel" side="beside" reach="left">
+      Your vote went to <strong>Labels</strong> on the right. If you get one wrong, open Labels, click
+      the item, and vote again.
+    </vt-toasty-hint>
+  }
 </div>
 
 @if (progressModalMetric) {
