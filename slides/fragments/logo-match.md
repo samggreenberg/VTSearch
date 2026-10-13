@@ -8,10 +8,12 @@
 
 <!-- build: figs/logo-match.build2.webp -->
 
-<!-- **a** — Two steps. Left, a letter with the crest; right, a fax without. -->
+<!-- **a** — Two steps to check a page. Left, a letter with the crest; right, a
+     fax without. -->
 
 <!-- **b** — Step one: each crop keypoint finds its closest twin on the page.
      Lots are wrong on BOTH sides; type has corners too. -->
 
 <!-- **c** — Step two, RANSAC: the one placement the most matches agree on.
-     Those are the inliers, and it takes 8 to pass. -->
+     Right ones agree, wrong ones don't; those are the inliers, and it takes 8
+     to pass. -->

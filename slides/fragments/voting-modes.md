@@ -7,5 +7,5 @@
 <!-- So far we voted on whole photos. Now we box just the book, so a Good
      doesn't ALSO teach "phone and remote". -->
 
-<!-- A photo scores as its best region, the max. Different shape, so we report
-     the two modes separately. -->
+<!-- A photo scores as its best region, the max. That changes the shape of the
+     scores, so we report the two modes separately. -->

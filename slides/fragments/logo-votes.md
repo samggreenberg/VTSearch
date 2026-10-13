@@ -15,4 +15,4 @@
      template. -->
 
 <!-- **c** — Every page scores its best template, so one vote taught it the
-     other drawing. Bads only move the line. -->
+     other drawing. Bads never touch the ranking, only the line. -->

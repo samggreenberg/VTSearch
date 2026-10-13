@@ -15,8 +15,8 @@
 <!-- **a** — What do we test on? Four public sets. SPODS: made-up documents,
      masks but no names for the marks. -->
 
-<!-- **b** — Tobacco800: real tobacco-lawsuit letters, some with a logo boxed.
-     -->
+<!-- **b** — Tobacco800: real letters from the tobacco lawsuits, a few hundred
+     with a logo boxed. -->
 
 <!-- **c** — StaVer: German invoices, hand-stamped, so every one's a bit
      different. -->

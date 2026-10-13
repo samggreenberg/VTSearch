@@ -4004,15 +4004,23 @@ def _fbeta_ranking(ax: plt.Axes, top_reserve: float = FBETA_TOP_RESERVE) -> tupl
     return x0, w, rank_y
 
 
-#: How many stages F-ing Metrics reveals in: the cut; Precision and Recall;
-#: F1; Fβ.
-FMETRICS_STAGES = 4
+#: How many stages F-ing Metrics reveals in: the cut, with F1's definition
+#: already up top; the two rates' names; their definitions; their arithmetic;
+#: F1's value; Fβ beside F1 (owner, 2026-10-13).
+FMETRICS_STAGES = 6
 #: The cut F-ing Metrics reads, as items kept: one left of the Cutting Room's
 #: middle one, so it is plainly not the best cut, and its two rates differ —
 #: 4/6 and 4/5 — where the middle cut's were both 4/5, which left a room unable
 #: to tell from the numbers which fraction was which (owner, #4618). One step
 #: right buys precision and costs no recall, which the presenter can say.
 FMETRICS_KEPT = 6
+#: F-ing Metrics' title notch: "F-ing Metrics" is one line, like "Beta Max",
+#: so it is the box `BETA_MAX_NOTCH_PX` measured. The ranking keeps the
+#: two-line reserve (`FBETA_TOP_RESERVE`) all the same, so it lands where the
+#: Cutting Room's did; what the shorter notch buys is the band above it, right
+#: of the headline, where the top row of formulas goes. Split the two constants
+#: if either headline grows a line.
+FMETRICS_NOTCH_PX = BETA_MAX_NOTCH_PX
 
 
 def fmetrics_fig() -> None:
@@ -4021,8 +4029,11 @@ def fmetrics_fig() -> None:
     Beta Max used to print the F-beta formula under its rows and leave the room
     to take it in while the rows were the point. This comes first, with Beta
     Release (the same score as a map, at each beta) between the two: one cut
-    through the same ranking, the two rates it has, F1 as their harmonic mean,
-    and Fβ as the same mean with recall weighted β times.
+    through the same ranking, and F1 up top from the first page — the title
+    plays on the F, so the F is the first thing on screen — then the two rates
+    it is made of, built up a click at a time (named, defined, worked out),
+    F1's value, and Fβ beside it as the same mean with recall weighted β times
+    (owner, 2026-10-13).
 
     The rates are defined in words the room already has — Goods, and what comes
     back — rather than through three named counts (kept, hits, matches), which
@@ -4031,8 +4042,15 @@ def fmetrics_fig() -> None:
     final = _fmetrics_stage(FMETRICS_STAGES)
     box = tight_box(final)
     for stage in range(1, FMETRICS_STAGES):
-        save(_fmetrics_stage(stage), OUT, f"calib-fmetrics.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box)
+        save(
+            _fmetrics_stage(stage),
+            OUT,
+            f"calib-fmetrics.build{stage}.png",
+            column=FULL_BLEED,
+            box=box,
+            notch=FMETRICS_NOTCH_PX,
+        )
+    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box, notch=FMETRICS_NOTCH_PX)
 
 
 def _math(expr: str) -> str:
@@ -4065,47 +4083,83 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
     for x in (cut_x, x0 + w):
         ax.plot([x] * 2, [bracket_y, bracket_y + 0.18], color=INK, linewidth=1.6, zorder=4)
 
-    # ── stages 2-4: the formulas, in two columns ──────────────────────────────
-    # The rates on the left, the scores made of them on the right, each pair
-    # read top to bottom (owner, #4618). A fraction is set as one, over a bar:
-    # "A / B" in a row of other slashes read as ASCII, not as maths. What each
-    # one *says* is the presenter's to read out, so it is in the notes.
+    # ── stages 1-6: the formulas, in the pieces the reveals add ───────────────
+    # A formula is revealed a piece at a time, so each piece is its own text,
+    # set flush against the one before it on a shared baseline. That comes out
+    # as the formula set in one string would: mathtext puts 0.2em either side
+    # of an `=`, and both travel with the piece whose `=` they flank, and a
+    # fraction's bar is shifted onto the `=`'s own centre, so the baseline is
+    # the one height every piece agrees on. A fraction is set as one, over a
+    # bar: "A / B" in a row of other slashes read as ASCII, not as maths. What
+    # each one *says* is the presenter's to read out, so it is in the notes.
+    #
+    # Laid out from every piece whether or not this stage shows it, so a
+    # reveal adds ink and moves nothing.
+    renderer = fig.canvas.get_renderer()
+
+    def width(text: str) -> float:
+        probe = ax.text(0, 0, text, fontsize=FMETRICS_PT, alpha=0)
+        measured = probe.get_window_extent(renderer).transformed(ax.transData.inverted()).width
+        probe.remove()
+        return measured
+
+    pieces: list[tuple[int, float, float, str, str]] = []  # (first stage, x, y, ha, text)
+
+    # The top row: F1, the score the title plays on, up from the first page in
+    # the gap right of the headline and above the ranking; its value is the
+    # fifth reveal, and Fβ, level with it, the last. The row ends where the
+    # ranking does, so F1 sits at its right end from the start and Fβ takes
+    # the room left of it (owner, 2026-10-13).
+    f1_def = _math(r"F1 = \dfrac{2PR}{P + R}")
+    f1_val = _math(rf"= {f1:.2f}")
+    fbeta = _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")
+    f1_x = x0 + w - width(f1_def) - width(f1_val)
+    pieces += [
+        (1, f1_x, FMETRICS_TOP_Y, "left", f1_def),
+        (5, f1_x + width(f1_def), FMETRICS_TOP_Y, "left", f1_val),
+        (6, f1_x - FMETRICS_COLUMN_GAP - width(fbeta), FMETRICS_TOP_Y, "left", fbeta),
+    ]
+
+    # The two rates under the ranking, a row each, aligned on their `=` rather
+    # than on the words' left edge (owner, 2026-10-13): first the names, then
+    # the definitions, then the arithmetic. The block is centred on the slide,
+    # not on the ranking: it is wider than the ranking's indent leaves room for.
     returned = r"\dfrac{\#\ Goods\ returned}"
-    p_rate = rf"P = {returned}{{\#\ returned}} = \dfrac{{{hits}}}{{{kept}}} = {precision:.2f}"
-    r_rate = rf"R = {returned}{{\#\ possible\ Goods}} = \dfrac{{{hits}}}{{{goods}}} = {recall:.2f}"
-    columns = (
-        ((2, "Precision  " + _math(p_rate)), (2, "Recall  " + _math(r_rate))),
+    rows = (
         (
-            (3, _math(rf"F1 = \dfrac{{2PR}}{{P + R}} = {f1:.2f}")),
-            (4, _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")),
+            "Precision  " + _math("P ="),
+            _math(rf"{returned}{{\#\ returned}}"),
+            _math(rf"= \dfrac{{{hits}}}{{{kept}}} = {precision:.2f}"),
+        ),
+        (
+            "Recall  " + _math("R ="),
+            _math(rf"{returned}{{\#\ possible\ Goods}}"),
+            _math(rf"= \dfrac{{{hits}}}{{{goods}}} = {recall:.2f}"),
         ),
     )
-    # Laid out from every formula whether or not this stage shows it, so a
-    # reveal adds ink and moves nothing. The block is centred on the slide, not
-    # on the ranking: it is wider than the ranking's indent leaves room for.
-    renderer = fig.canvas.get_renderer()
-    widths = []
-    for column in columns:
-        width = 0.0
-        for _first, formula in column:
-            probe = ax.text(0, 0, formula, fontsize=FMETRICS_PT, alpha=0)
-            width = max(width, probe.get_window_extent(renderer).transformed(ax.transData.inverted()).width)
-            probe.remove()
-        widths.append(width)
-    left = FBETA_CANVAS[0] / 2 - (sum(widths) + FMETRICS_COLUMN_GAP) / 2
-    for column, x in zip(columns, (left, left + widths[0] + FMETRICS_COLUMN_GAP), strict=True):
-        for (first, formula), y in zip(column, FMETRICS_ROWS_Y, strict=True):
-            if stage >= first:
-                ax.text(x, y, formula, ha="left", va="center", fontsize=FMETRICS_PT, color=INK)
+    before = max(width(name) for name, _defn, _calc in rows)
+    after = max(width(defn) + width(calc) for _name, defn, calc in rows)
+    eq_x = FBETA_CANVAS[0] / 2 - (before + after) / 2 + before
+    for (name, defn, calc), y in zip(rows, FMETRICS_ROWS_Y, strict=True):
+        pieces += [(2, eq_x, y, "right", name), (3, eq_x, y, "left", defn), (4, eq_x + width(defn), y, "left", calc)]
+
+    for first, x, y, ha, text in pieces:
+        if stage >= first:
+            ax.text(x, y, text, ha=ha, va="baseline", fontsize=FMETRICS_PT, color=INK)
     return fig
 
 
-#: The formulas' type, the gap between their two columns, and the two rows'
-#: centres, in canvas units: under the cut's bracket, with the space the three
-#: named counts used to take given to fractions, which stand two lines tall.
+#: The formulas' type; the gap between Fβ and F1 on the top row; and the rows'
+#: baselines, in canvas units — baselines rather than centres because a row is
+#: drawn in pieces and the baseline is the height they share (`_fmetrics_stage`).
+#: The top row sits level with the one-line headline in the notch beside it
+#: (`FMETRICS_NOTCH_PX`), clear of the axis label under it; the two rate rows
+#: sit under the cut's bracket, with the space the three named counts used to
+#: take given to fractions, which stand two lines tall.
 FMETRICS_PT = 20
 FMETRICS_COLUMN_GAP = 1.6
-FMETRICS_ROWS_Y = (4.45, 2.35)
+FMETRICS_TOP_Y = 10.25
+FMETRICS_ROWS_Y = (4.25, 2.15)
 
 
 # ── Beta Release: F-beta as a map, once per beta (#4519) ──────────────────────

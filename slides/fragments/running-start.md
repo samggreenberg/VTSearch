@@ -13,5 +13,5 @@
      dip. -->
 
 <!-- **b** — Head start: no dip, and it stays ahead for thirty-odd votes. On
-     COCO the lines sit on top of each other: fixes faces, costs COCO nothing.
-     -->
+     COCO the lines sit on top of each other: fixes faces, costs COCO
+     nothing. -->

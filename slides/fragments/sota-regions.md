@@ -11,5 +11,6 @@
 <!-- **a** — Same review, region path. Same start from the text query, then they
      climb faster and end about a tenth higher. -->
 
-<!-- **b** — Clicks still mostly buy precision. Regions help most on small
-     things: chairs go from 0.04 to 0.24. Bowls and spoons are still bad. -->
+<!-- **b** — Clicks still mostly buy precision. Regions help most on small and
+     medium things: chairs go from 0.04 to 0.24. Bowls and spoons are still
+     bad. -->
