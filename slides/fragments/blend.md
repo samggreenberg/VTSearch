@@ -20,7 +20,5 @@
 <!-- **c** — On the left, cross-calibration: honest scores from the votes, but
      early on it starves. -->
 
-<!-- **d** — So don't choose: average the two cuts, with a weight. It beat the
-     halfway cut by a hair and stayed way below cross-calibration, because
-     averaging in a cut that keeps too much still keeps too much. The version
-     that actually works is in the next section. -->
+<!-- **d** — So don't choose: average the two cuts, with a weight. Simple, but
+     all it ever does is average two answers. -->

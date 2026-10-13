@@ -10,7 +10,7 @@
 
 <!-- build: figs/calib-em-anchored.build3.png -->
 
-<!-- **a** — How that combined fit uses the votes: the same EM as Great
+<!-- **a** — How Above Average's fit uses the votes: the same EM as Great
      Expectations, plus the checks and crosses along the bottom. Same terrible
      starting guess. -->
 

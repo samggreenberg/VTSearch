@@ -503,6 +503,13 @@ sheet of the top of the ranking with no app around it, built by
 composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
 
+And one is staged: `figs/ui-train-loop.webp`, Rock the Vote's last page, is the
+session's last real frame (`.build6`) with Toasty's "your detector is trained"
+hint drawn over it by `figs/src/stop-hint.mjs`, in the app's own markup and
+placement. The real hint waits for every quality light to go green, which takes
+far more votes than this session casts. The harness redraws it on every reshoot;
+`node figs/src/stop-hint.mjs` redraws it on the committed frame alone.
+
 The intro groups are **one session**, shot in the order a user works, from an
 app with nothing in it: import `photos-train` through the Add Dataset dialog, create
 the detector through the modal, answer what autopilot serves until the Good and

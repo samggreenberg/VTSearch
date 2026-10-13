@@ -37,6 +37,5 @@
 
 <!-- **g** — Each half cuts at the midpoint between its two bumps. -->
 
-<!-- **h** — Then average the cuts. It beat the blend by a few hundredths and
-     still fell well short of cross-calibration. Today's line flips it: the
-     votes shape the Good bump, and the pile only says how big it is. -->
+<!-- **h** — Then average the cuts. Here the votes only name the bumps. What
+     if they shaped one instead? -->
