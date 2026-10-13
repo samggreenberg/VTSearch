@@ -24,8 +24,8 @@
      Bads in it. Which side of it a user's labels land on is the next
      slide. -->
 
-<!-- **c** — One branch reads more than the counts. Fifty Bads per fold, a
-     hundred between them, that seem a random sample of the corpus, no more
+<!-- **c** — One branch reads more than the counts, in dark purple. Fifty Bads
+     per fold, a hundred between them, that seem a random sample of the corpus, no more
      than twice their share in its top twentieth (#4490): then the Fβ peak
      takes the non-matches' shape from the Bads' own scores, heavy upper tail
      and all, not from one normal fitted to the corpus, which read that tail

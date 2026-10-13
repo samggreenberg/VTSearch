@@ -6238,12 +6238,18 @@ LAND_BOX = (10.0, 1.55, 19.9, 10.9)
 #: ΔE 15.6 and normal-vision 19.4, black text 6.9:1 or better on each. Its
 #: lightness band fails the yellow (L 0.90), a check for thin marks on the
 #: surface; here every region is named and ruled, the yellow's edge with the
-#: white row included.
+#: white row included. Inside Job's third cut, the labels line's peak on the
+#: Bads' own shape, is the purple darkened (owner, 2026-10-13: a barely
+#: different cut gets a barely different colour, not a hatch, which Lay of the
+#: Land spends on the typed query): its hue and chroma at L 0.50, normal-vision
+#: ΔE 18.1 from the purple with the other pairs unchanged, so its name is white
+#: (6.4:1).
 LAND_FILL = {
     "none": "#ffffff",
     "centroid": "#f9dd73",
     "count": "#f58b4b",
     "labels": "#ad80dd",
+    "bads": "#764aa2",
 }
 #: How far a cell whose line the split decides is faded toward white at even
 #: odds (and less as the odds lean either way): uncertainty reads as fading.
@@ -6474,8 +6480,6 @@ IN_TABLE = (
     (2, "labels", "Trained head", "Fβ peak"),
     (3, "bads", "Trained head", "Fβ peak,\nBads' shape"),
 )
-#: Table keys whose swatch is another key's fill, hatched.
-MAP_HATCHED_KEYS = {"bads": "labels"}
 
 
 def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] | None = None) -> None:
@@ -6483,8 +6487,7 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
 
     *hatched* is ``(fill key, stage)``: from that stage a hatched swatch joins
     that row's, for a hatch on the map that shares the row's sort and cut.
-    White swatches are outlined so they show; a `MAP_HATCHED_KEYS` row's is
-    another row's fill, hatched, for a hatch on the map with a return of its own. A two-line row takes half a
+    White swatches are outlined so they show. A two-line row takes half a
     row more, and every row keeps its place on every page.
     """
     xs = MAP_TABLE_X
@@ -6498,10 +6501,8 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
         if stage < first:
             continue
         y = head - MAP_TABLE_STEP * (0.5 + sum(heights[:slot]) + heights[slot] / 2)
-        fill = LAND_FILL[MAP_HATCHED_KEYS.get(key, key)]
-        ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH, facecolor=fill,
-                               edgecolor=INK, hatch="//" if key in MAP_HATCHED_KEYS else None, linewidth=1.0,
-                               zorder=3))  # fmt: skip
+        ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
+                               facecolor=LAND_FILL[key], edgecolor=INK, linewidth=1.0, zorder=3))  # fmt: skip
         if hatched is not None and hatched[0] == key and stage >= hatched[1]:
             ax.add_patch(Rectangle((xs["swatch2"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
                                    facecolor=LAND_FILL[key], edgecolor=INK, hatch="//", linewidth=1.0,
@@ -6607,9 +6608,10 @@ def _land_query(ax: plt.Axes) -> None:
 #: How many build stages the inside view reveals in: a thin class model,
 #: counting what stands out; the labels line, from three Goods per fold; its
 #: cut on the Bads' own shape, from fifty Bads per fold that seem random
-#: (#4490). That last test reads the Bads' scores, not their count, so its
-#: region is named for both, as Lay of the Land's hatch is "with a query"; a
-#: session's Bads never pass it (owner, 2026-10-13: a return of its own).
+#: (#4490), in dark purple. That last test reads the Bads' scores, not their
+#: count, so its region is named for both, as Lay of the Land's hatch is "with
+#: a query"; a session's Bads never pass it (owner, 2026-10-13: a return of its
+#: own). Until page 3 those cells are the purple a session would get there.
 IN_STAGES = 3
 #: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 0..IN_G.
 #: A fold always holds out at least one of each (`_grouped_folds` trains on at
@@ -6708,33 +6710,29 @@ def _in_stage(stage: int) -> plt.Figure:
     edge_y = _in_cell(1, edge)[1]
     if stage >= 2:
         ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
-        # Left of where page 3's hatch starts, so it need not move.
+        # Left of where page 3's dark purple starts, so it need not move.
         name(bad_edge / 2, (edge + IN_G + 1) / 2, f"≥ {edge} Goods")
     if stage >= 3:
         edge_x = _in_cell(bad_edge, 1)[0]
         ax.plot([edge_x, edge_x], [edge_y, y1], color=INK, linewidth=2.0, zorder=7)
         ax.text((edge_x + x1) / 2, y0 + (edge + IN_G + 1) / 2 * ch, f"≥ {bad_edge} Bads,\nseem random",
-                ha="center", va="center", fontsize=16, color=INK, zorder=6,
-                bbox={"facecolor": LAND_FILL["labels"], "edgecolor": "none", "pad": 2})  # fmt: skip
+                ha="center", va="center", fontsize=16, color="white", zorder=6)  # fmt: skip
     return fig
 
 
 def _in_cells(ax: plt.Axes, stage: int) -> None:
-    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2, hatched from 3."""
+    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2, the Bads' shape's from 3."""
     kind = _in_grid()
     for g in range(IN_G + 1):
         for b in range(1, IN_B + 1):
             k = kind[g, b]
             if k in ("labels", "bads") and stage < 2:
                 continue
-            fill = LAND_FILL[MAP_HATCHED_KEYS.get(k, k)]
+            fill = LAND_FILL["labels" if k == "bads" and stage < 3 else k]
             # Edgeless, each cell edged in its own fill so no seam shows: only
             # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
                                    linewidth=0.3, zorder=1))  # fmt: skip
-            if k == "bads" and stage >= 3:
-                ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor="none", edgecolor=INK,
-                                       hatch="//", linewidth=0, zorder=2))  # fmt: skip
 
 
 def _in_axes(ax: plt.Axes) -> None:
