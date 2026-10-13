@@ -41,8 +41,8 @@ and is the foundation every other `vtscore` subsystem builds on.
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
-| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), silence detection, speech extractor, synthetic audio generator |
-| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
+| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), silence detection, speech extractor, synthetic audio generator |
+| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (auto / tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
 | `vtscore/media/document/` | none - a *convert-out* half type (converted to image or text before embedding) | clipper |
@@ -306,8 +306,8 @@ startup.
 
 | Type | Default embedder | Other embedders | Clippers | Cleaners |
 |------|------------------|-----------------|----------|----------|
-| `audio` | `clap_general` (`laion/larger_clap_general`) | `clap`, `clap_music`, `ast`, `beats`, `paraspeechclap`, `whisper_encoder` | `sound_tiling`, `sound_default`, `sound_silence`, `sound_speech_activity` | `audio_silence_trim` |
-| `image` | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip_l`, `siglip2`, `siglip2_l`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `sift_vlad`, `sift_vlad_doc`; `clip_l` is `eval_only` | `image_default`, `image_tiling`, `image_object` | `image_exif_orient`, `image_edge_trim` |
+| `audio` | `clap_general` (`laion/larger_clap_general`) | `clap`, `clap_music`, `ast`, `beats`, `paraspeechclap`, `whisper_encoder`, `embeddinggemma2_audio` | `sound_tiling`, `sound_default`, `sound_silence`, `sound_speech_activity` | `audio_silence_trim` |
+| `image` | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip_l`, `siglip2`, `siglip2_l`, `embeddinggemma2`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `sift_vlad`, `sift_vlad_doc`; `clip_l` is `eval_only` | `image_default`, `image_tiling`, `image_object` | `image_exif_orient`, `image_edge_trim` |
 | `text` | `e5` (`intfloat/e5-base-v2`) | `bge` | `text_default`, `text_paragraph`, `text_sentence` | `text_markup_strip`, `text_whitespace` |
 | `video` | `xclip` (`microsoft/xclip-base-patch32`) | `languagebind`, `videomae` | `video_auto`, `video_default`, `video_tiling`, `video_scene` | `video_letterbox_crop`, `video_blank_trim` |
 | `document` | none (convert-out: `converts_to = ["image", "text"]`) | - | `document_default` | - |

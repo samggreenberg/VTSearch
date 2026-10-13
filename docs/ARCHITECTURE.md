@@ -85,10 +85,10 @@ detector training and label export.
 
 | Media type | Default embedder | Model | Alternative embedders |
 |---|---|---|---|
-| `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `paraspeechclap`, `whisper_encoder` |
+| `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `embeddinggemma2_audio`, `paraspeechclap`, `whisper_encoder` |
 | `document` | — (convert first) | — | — |
 | `face` | `face` (FaceNet (face identity, 512d)) | — | — |
-| `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `clip_l`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `eupe_patch`, `eupe_single`, `sift_vlad`, `sift_vlad_doc`, `siglip2`, `siglip2_l`, `siglip_l` |
+| `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `clip_l`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `embeddinggemma2`, `eupe_patch`, `eupe_single`, `sift_vlad`, `sift_vlad_doc`, `siglip2`, `siglip2_l`, `siglip_l` |
 | `text` | `e5` (E5 (text)) | `intfloat/e5-base-v2` | `bge` |
 | `video` | `xclip` (X-CLIP (video)) | `microsoft/xclip-base-patch32` | `languagebind`, `videomae` |
 
@@ -166,10 +166,13 @@ VTSearch/
 │   │   │                           lazy_clip and the detector resolver's replay path
 │   │   ├── provenance.py           Human-readable Source / Derived Via / Imported Via lines
 │   │   ├── torch_setup.py          Process-wide torch thread + device configuration
+│   │   ├── _embeddinggemma2.py     EmbeddingGemma 2's shared loader + pooled forward (one
+│   │   │                           checkpoint behind an image and an audio embedder)
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
-│   │   │                           ParaSpeechCLAP, AST, Whisper), clippers, SpeechExtractor
+│   │   │                           ParaSpeechCLAP, AST, Whisper, EmbeddingGemma 2), clippers,
+│   │   │                           SpeechExtractor
 │   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, SigLIP2-L,
-│   │   │                           SigLIP-L, CLIP, SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
+│   │   │                           SigLIP-L, CLIP, EmbeddingGemma 2, SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
 │   │   │                           single + patch variants), clippers, ImageClassExtractor,
 │   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
@@ -805,7 +808,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 27 |
+| `embedders` | library | Media embedders | 29 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 7 |
 | `settings_importers` | app | Settings importers | 2 |
