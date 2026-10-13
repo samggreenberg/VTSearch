@@ -268,10 +268,11 @@ same edit.
   the end check's rows and picks feed only the check's own columns, never a
   curve, a checkpoint or an image's credit. Mid-session, Autopilot also runs
   the check when the labels separate weakly (`weak_check_due`, past its
-  text-sort opening): those rows carry `phase == "prompt"`, count in `t` and
+  text-sort opening), and once before Done, the first time every light is
+  green (`done_check`): those rows carry `phase == "prompt"`, count in `t` and
   the 150-vote budget, and read as ordinary clicks in every curve and credit.
-  Never on face crops (#4799): the face review's default arm is the end check
-  only, as the app's is.
+  The weak prompt never runs on face crops (#4799); the check before Done
+  does, as the app's does. The first `done` follows the check before Done.
 - **Rank frames:** the line at every P is read off where the positives sit in
   each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
   checkpoints (`CALIB_RANK_FRAME_STEPS`). For an F1 curve, record them densely:

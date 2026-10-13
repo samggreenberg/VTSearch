@@ -275,6 +275,57 @@ class TestTheBalanceArm:
             self._run(beta=9.0)
 
 
+class TestTheCheckBeforeDone:
+    """Autopilot's Spot Check step before Done: the app checks the line once, the first time every light is green."""
+
+    def _run(self, max_steps: int = 60, **kwargs):
+        picks: list[dict] = []
+        rows = simulate_voting_iterations(
+            _separable(40), "alpha", seed=0, max_steps=max_steps, calibrate_count=2, pick_sink=picks,
+            beta=1.0, weak_separation=-math.inf, **kwargs,
+        )  # fmt: skip
+        return rows, picks
+
+    @staticmethod
+    def _phases(rows: list[dict]) -> list[tuple[int, str]]:
+        seq: list[tuple[int, str]] = []
+        for r in rows:
+            if not seq or seq[-1] != (r["t"], r["phase"]):
+                seq.append((r["t"], r["phase"]))
+        return seq
+
+    def test_all_green_runs_the_check_as_clicks_then_reports_done(self):
+        rows, picks = self._run()
+        seq = self._phases(rows)
+        t_spot = next(t for t, ph in seq if ph == "spot")
+        t_done = next(t for t, ph in seq if ph == "done")
+        prompts = [p for p in picks if p["phase"] == "prompt"]
+        assert prompts, "the check before Done ran"
+        assert all(t_spot < p["t"] < t_done for p in prompts), "between reaching all green and Done"
+        assert all(r["n_good"] + r["n_bad"] == r["t"] for r in rows if r["phase"] == "prompt"), "its picks are clicks"
+        assert sum(ph == "spot" for _t, ph in seq) == 1, "once a run"
+
+    def test_the_arm_without_it_reads_all_green_as_done(self):
+        rows, picks = self._run(done_check=False)
+        seq = self._phases(rows)
+        assert "spot" not in {ph for _t, ph in seq}
+        assert not [p for p in picks if p["phase"] == "prompt"]
+        with_check, _ = self._run()
+        assert next(t for t, ph in seq if ph == "done") == next(t for t, ph in self._phases(with_check) if ph == "spot")
+
+    def test_a_check_that_cannot_fit_the_budget_is_skipped(self):
+        """Its opening bands must fit the votes left, as a prompted check's do: here they cannot, so Done at once."""
+        rows, picks = self._run(max_steps=20)
+        assert "spot" not in {r["phase"] for r in rows}
+        assert "done" in {r["phase"] for r in rows}
+        assert not [p for p in picks if p["phase"] == "prompt"]
+
+    def test_a_run_that_never_checks_never_runs_it(self):
+        rows, picks = self._run(spot_check="off")
+        assert "spot" not in {r["phase"] for r in rows}
+        assert not [p for p in picks if p["phase"] in ("prompt", "check")]
+
+
 class TestTheWeakSeparationPrompt:
     """#4496: ``spot_check="weak"`` - the app prompts a check when the labels separate weakly."""
 

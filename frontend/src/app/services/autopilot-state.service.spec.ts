@@ -425,7 +425,7 @@ describe('AutopilotStateService', () => {
     expect(service.state.phase).toBe('new');
   });
 
-  it('should transition from new to done when span is green', () => {
+  it('should transition from new to the Spot Check step, then done, when span is green', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
@@ -440,7 +440,88 @@ describe('AutopilotStateService', () => {
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' }),
     );
     service.checkPhaseTransition(15, 15);
+    // Every light green: Autopilot checks the line before it reports Done.
+    expect(service.state.phase).toBe('spot');
+    expect(service.state.spotCheck).toBeNull();
+    service.beginSpotCheck('done');
+    expect(service.state.phase).toBe('spot');
+    expect(service.state.spotCheck).toBe('done');
+    service.checkPhaseTransition(20, 25);
+    expect(service.state.phase).toBe('spot');
+    service.endSpotCheck();
     expect(service.state.phase).toBe('done');
+    expect(service.state.doneChecked).toBe(true);
+  });
+
+  describe('the Spot Check step', () => {
+    const green = makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' });
+    const yellow = makeStatus({ status: 'green' }, { status: 'yellow' }, { status: 'green' });
+
+    it('checks before Done once a run: a later return to all green is Done at once', () => {
+      service.activate();
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('spot');
+      service.beginSpotCheck('done');
+      service.endSpotCheck();
+      expect(service.state.phase).toBe('done');
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(3, 5);
+      expect(service.state.phase).toBe('hard');
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(3, 6);
+      expect(service.state.phase).toBe('done');
+    });
+
+    it('skips the check before Done when the server says one just ran', () => {
+      service.activate();
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(3, 4);
+      service.skipDoneCheck();
+      expect(service.state.phase).toBe('done');
+      expect(service.state.doneChecked).toBe(true);
+    });
+
+    it('holds a weak check at spot whatever the counts, then goes back to the step underneath', () => {
+      service.activate();
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('hard');
+      service.beginSpotCheck('weak');
+      expect(service.state.phase).toBe('spot');
+      service.checkPhaseTransition(5, 7);
+      expect(service.state.phase).toBe('spot');
+      service.endSpotCheck();
+      expect(service.state.phase).toBe('hard');
+      expect(service.state.doneChecked).toBe(false);
+    });
+
+    it('starts no check while idle, and none over a running one', () => {
+      service.beginSpotCheck('weak');
+      expect(service.state.spotCheck).toBeNull();
+      service.activate();
+      service.checkPhaseTransition(3, 4);
+      service.beginSpotCheck('weak');
+      service.beginSpotCheck('done');
+      expect(service.state.spotCheck).toBe('weak');
+    });
+
+    it('has nothing to check before Done with nothing left unlabeled', () => {
+      service.activate();
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(3, 4, 7);
+      expect(service.state.phase).toBe('done');
+    });
+
+    it('ends with a stop, and a new run starts without its latch', () => {
+      service.activate();
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(3, 4);
+      service.beginSpotCheck('done');
+      service.deactivate();
+      expect(service.state.spotCheck).toBeNull();
+      service.activate();
+      expect(service.state.doneChecked).toBe(false);
+    });
   });
 
   it('should bounce from new back to hard when smart goes non-green', () => {
@@ -533,11 +614,13 @@ describe('AutopilotStateService', () => {
   describe('doneReached (#4621)', () => {
     const green = makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' });
 
-    /** Run to Done: the Good and Bad quorum and every indicator green. */
+    /** Run to Done: the Good and Bad quorum, every indicator green, and the check before Done. */
     function reachDone(): void {
       service.activate();
       service.updateFromLabelingStatus(green);
       service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('spot');
+      service.skipDoneCheck();
       expect(service.state.phase).toBe('done');
     }
 

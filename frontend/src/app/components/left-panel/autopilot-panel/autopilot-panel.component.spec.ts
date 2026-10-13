@@ -6,7 +6,7 @@ import { AutopilotStateService, type AutopilotState } from '../../../services/au
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
-/** Green-across-the-board status payload: drives the phase machine to 'done'. */
+/** Green-across-the-board status payload: drives the phase machine to the Spot Check step, then 'done'. */
 const ALL_GREEN = {
   good_count: 0,
   bad_count: 0,
@@ -68,6 +68,15 @@ describe('AutopilotPanelComponent', () => {
     fixture.componentRef.setInput('badVotes', bads(5));
     fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
     TestBed.tick();
+    closeDoneCheck();
+  }
+
+  /** Every light green reaches the Spot Check step; the view runs the check before Done, and Done follows. */
+  function closeDoneCheck(): void {
+    expect(autopilotState.state.phase).toBe('spot');
+    autopilotState.beginSpotCheck('done');
+    autopilotState.endSpotCheck();
+    expect(autopilotState.state.phase).toBe('done');
   }
 
   it('should create', () => {
@@ -90,23 +99,30 @@ describe('AutopilotPanelComponent', () => {
 
   it('should show steps immediately', () => {
     const steps = fixture.nativeElement.querySelectorAll('.ap-step');
-    expect(steps.length).toBe(5);
+    expect(steps.length).toBe(6);
   });
 
   it('lists no More step on a photo dataset by default (#4740)', () => {
-    expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'done']);
+    expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'spot', 'done']);
     expect(component.steps.map((st) => st.shortLabel)).not.toContain('More');
     const labels = Array.from(fixture.nativeElement.querySelectorAll('.ap-step-label') as NodeListOf<HTMLElement>)
       .map((el) => el.textContent!.trim());
-    expect(labels).toEqual(['Find Initial Goods.', 'Find Initial Bads.', 'Refine Boundary.', 'Explore Diversity.', 'Done!']);
+    expect(labels).toEqual([
+      'Find Initial Goods.',
+      'Find Initial Bads.',
+      'Refine Boundary.',
+      'Explore Diversity.',
+      'Spot Check.',
+      'Done!',
+    ]);
   });
 
   it('lists the More step when a walk is configured (#4282)', async () => {
     withWalk(autopilotState);
     fixture.componentRef.setInput('goodVotes', new Set());
     await settleZoneless(fixture);
-    expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'hard', 'new', 'done']);
-    expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(6);
+    expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'hard', 'new', 'spot', 'done']);
+    expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(7);
   });
 
   it('should transition from good to bad phase', async () => {
@@ -202,7 +218,24 @@ describe('AutopilotPanelComponent', () => {
       span: { status: 'green' },
     });
     await settleZoneless(fixture);
-    expect(component.state.phase).toBe('done');
+    closeDoneCheck();
+  });
+
+  it('makes Spot Check the active step while a check runs, and goes back to the step underneath', async () => {
+    fixture.componentRef.setInput('goodVotes', goods(20));
+    fixture.componentRef.setInput('badVotes', bads(5));
+    await settleZoneless(fixture);
+    expect(component.state.phase).toBe('hard');
+    autopilotState.beginSpotCheck('weak');
+    await settleZoneless(fixture);
+    const active = component.steps.find((st) => st.state === 'active')!;
+    expect(active.phase).toBe('spot');
+    expect(active.label).toBe('Spot Check.');
+    expect(active.detail).toBe('Labels still overlap');
+    expect(active.light!.color).toBe('yellow');
+    autopilotState.endSpotCheck();
+    await settleZoneless(fixture);
+    expect(component.steps.find((st) => st.state === 'active')!.phase).toBe('hard');
   });
 
   it('should bounce from new back to hard when smart drops to yellow', async () => {
@@ -380,7 +413,8 @@ describe('AutopilotPanelComponent', () => {
       fixture.componentRef.setInput('badVotes', bads(5));
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fixture);
-      expect(component.state.phase).toBe('done');
+      closeDoneCheck();
+      await settleZoneless(fixture);
       // Past Done the active step is Keep Improving (#4621), green while every
       // indicator is.
       expect(component.steps.find((st) => st.state === 'active')?.phase).toBe('improve');
@@ -392,8 +426,8 @@ describe('AutopilotPanelComponent', () => {
       const activeCheck = el.querySelector('.ap-step.active .ap-check')!;
       expect(activeCheck).toBeTruthy();
       expect(activeCheck.getAttribute('aria-label')).toBe('Step progress: green');
-      // ...and every finished step before it, Done included, carries the same check.
-      expect(el.querySelectorAll('.ap-step.done .ap-check').length).toBe(5);
+      // ...and every finished step before it, Spot Check and Done included, carries the same check.
+      expect(el.querySelectorAll('.ap-step.done .ap-check').length).toBe(6);
 
       fixture.componentRef.setInput('collapsed', true);
       await settleZoneless(fixture);
@@ -416,17 +450,17 @@ describe('AutopilotPanelComponent', () => {
       reachDone();
       await settleZoneless(fixture);
 
-      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'done', 'improve']);
-      expect(component.steps.slice(0, 5).every((st) => st.state === 'done')).toBe(true);
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'spot', 'done', 'improve']);
+      expect(component.steps.slice(0, 6).every((st) => st.state === 'done')).toBe(true);
       const step = active();
       expect(step.phase).toBe('improve');
       expect(step.label).toBe('Keep Improving.');
-      expect(step.stepNumber).toBe(6);
+      expect(step.stepNumber).toBe(7);
       expect(step.detail).toBe('All indicators green');
       expect(step.intent).toContain('Optional');
 
       const el: HTMLElement = fixture.nativeElement;
-      expect(el.querySelectorAll('.ap-step').length).toBe(6);
+      expect(el.querySelectorAll('.ap-step').length).toBe(7);
       expect(el.querySelector('.ap-step.active .ap-step-label')!.textContent!.trim()).toBe('Keep Improving.');
     });
 
@@ -447,7 +481,7 @@ describe('AutopilotPanelComponent', () => {
       expect(step.detail).toBe('Showing boundary items');
       expect(step.light!.color).toBe('yellow');
       expect(step.light!.title).toContain('Stable (yellow)');
-      expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(6);
+      expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(7);
 
       // Back to green: the same step, its light green again.
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
@@ -475,7 +509,7 @@ describe('AutopilotPanelComponent', () => {
       await settleZoneless(fixture);
       const label = fixture.nativeElement.querySelector('.collapsed-step.active .collapsed-step-label');
       expect(label.textContent.trim()).toBe('Improve');
-      expect(fixture.nativeElement.querySelectorAll('.collapsed-step').length).toBe(6);
+      expect(fixture.nativeElement.querySelectorAll('.collapsed-step').length).toBe(7);
     });
 
     it('gives the full step list back when votes fall back into the opening', async () => {
@@ -485,7 +519,7 @@ describe('AutopilotPanelComponent', () => {
       fixture.componentRef.setInput('goodVotes', goods(1));
       await settleZoneless(fixture);
       expect(component.state.phase).toBe('good');
-      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'done']);
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'spot', 'done']);
       expect(active().phase).toBe('good');
     });
 
@@ -498,7 +532,7 @@ describe('AutopilotPanelComponent', () => {
       fixture.componentRef.setInput('labelingStatus', status('yellow', 'yellow', 'yellow'));
       await settleZoneless(fixture);
       expect(component.state.phase).toBe('hard');
-      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'done']);
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'new', 'spot', 'done']);
       expect(active().phase).toBe('hard');
     });
   });
@@ -555,7 +589,7 @@ describe('AutopilotPanelComponent', () => {
 
   it('should show tooltip on each step label via title attribute', () => {
     const stepLabels = fixture.nativeElement.querySelectorAll('.ap-step-label');
-    expect(stepLabels.length).toBe(5);
+    expect(stepLabels.length).toBe(6);
     // Active step (phase 1) leads with phase intent and ends with reselect hint
     expect(stepLabels[0].title).toContain('Phase 1');
     expect(stepLabels[0].title).toContain('Find initial goods');
@@ -568,6 +602,8 @@ describe('AutopilotPanelComponent', () => {
     expect(stepLabels[2].title).toContain('Refine the cutoff');
     expect(stepLabels[3].title).toContain('Phase 4');
     expect(stepLabels[3].title).toContain('Cover a broad mix');
+    expect(stepLabels[4].title).toContain('Phase 5');
+    expect(stepLabels[4].title).toContain('Spot check the line');
   });
 
   it('should show the More step as phase 3 when a walk is configured', async () => {
@@ -575,7 +611,7 @@ describe('AutopilotPanelComponent', () => {
     fixture.componentRef.setInput('goodVotes', new Set());
     await settleZoneless(fixture);
     const stepLabels = fixture.nativeElement.querySelectorAll('.ap-step-label');
-    expect(stepLabels.length).toBe(6);
+    expect(stepLabels.length).toBe(7);
     expect(stepLabels[2].title).toContain('Phase 3');
     expect(stepLabels[2].title).toContain('Find more goods');
     expect(stepLabels[3].title).toContain('Phase 4');
@@ -587,7 +623,7 @@ describe('AutopilotPanelComponent', () => {
     fixture.componentRef.setInput('collapsed', true);
     await settleZoneless(fixture);
     const dots = fixture.nativeElement.querySelectorAll('.collapsed-step');
-    expect(dots.length).toBe(5);
+    expect(dots.length).toBe(6);
     expect(dots[0].title).toContain('Phase 1');
     expect(dots[0].title).toContain('Find initial goods');
     expect(dots[0].title).toContain('reselect');
@@ -733,6 +769,8 @@ describe('AutopilotPanelComponent', () => {
       revisit.componentRef.setInput('badVotes', bads(5));
       revisit.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(revisit);
+      closeDoneCheck();
+      await settleZoneless(revisit);
 
       expect(revisit.componentInstance.state.phase).toBe('done');
       expect(autopilotState.handoff()).toBeNull();
@@ -754,6 +792,8 @@ describe('AutopilotPanelComponent', () => {
       fresh.componentRef.setInput('goodVotes', goods(20));
       fresh.componentRef.setInput('badVotes', bads(5));
       fresh.componentRef.setInput('labelingStatus', ALL_GREEN);
+      await settleZoneless(fresh);
+      closeDoneCheck();
       await settleZoneless(fresh);
 
       expect(fresh.componentInstance.state.phase).toBe('done');
@@ -783,6 +823,8 @@ describe('AutopilotPanelComponent', () => {
       fixture.componentRef.setInput('badVotes', bads(5));
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fixture);
+      closeDoneCheck();
+      await settleZoneless(fixture);
 
       expect(component.state.phase).toBe('done');
       expect(autopilotState.handoff()).toBeNull();
@@ -797,6 +839,8 @@ describe('AutopilotPanelComponent', () => {
       pending.componentRef.setInput('goodVotes', goods(20));
       pending.componentRef.setInput('badVotes', bads(5));
       pending.componentRef.setInput('labelingStatus', ALL_GREEN);
+      await settleZoneless(pending);
+      closeDoneCheck();
       await settleZoneless(pending);
 
       expect(pending.componentInstance.state.phase).toBe('done');

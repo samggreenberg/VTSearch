@@ -304,6 +304,36 @@ class TestTheWeakCheckPrompt:
         assert detector_balance_state(image, 1.0)["check_due"] is True
 
 
+class TestTheDoneCheckPrompt:
+    """The balance payload says whether Autopilot's check before Done should run (``done_check_due``)."""
+
+    def test_due_until_a_check_has_ended_moments_ago(self):
+        ctx = _ctx("det-done")
+        assert detector_balance_state(ctx, 1.0)["done_check_due"] is True
+        n = len(human_voted_ids(ctx))
+        ctx.check_ended_votes = n
+        assert detector_balance_state(ctx, 1.0)["done_check_due"] is False
+        ctx.check_ended_votes = n - WEAK_CHECK_COOLDOWN
+        assert detector_balance_state(ctx, 1.0)["done_check_due"] is True
+
+    def test_due_on_face_crops_too_whatever_the_separation(self):
+        face = _ctx("det-done-face")
+        face.media_type = "face"
+        face.labels_line = LabelsLine(ClassScoreModel(2.0, 0.0, 0.5, 8, 8), 0.01)
+        assert detector_balance_state(face, 1.0)["done_check_due"] is True
+
+    def test_never_due_in_find_while_a_check_runs_or_on_a_line_a_check_cannot_walk(self):
+        find = _ctx("det-done-find")
+        find.find_mode = True
+        running = _ctx("det-done-running")
+        unvoted = running.line_ranking.unvoted_ids(human_voted_ids(running)).tolist()
+        running.precision_check_run = SpotCheck.start_balance(unvoted, 1.0, 10.0, seed=0)
+        gone = _ctx("det-done-structural")
+        gone.line_ranking = None
+        for ctx in (find, running, gone):
+            assert detector_balance_state(ctx, 1.0)["done_check_due"] is False
+
+
 def test_the_planted_ranking_is_what_the_tests_assume():
     ranking, labels = _two_populations(n_high=28)
     assert isinstance(ranking, LineRanking) and len(labels) == 16

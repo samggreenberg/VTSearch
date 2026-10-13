@@ -46,6 +46,7 @@ export function lineBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     checkable: status !== 'gate',
     separation: null,
     checkDue: false,
+    doneCheckDue: status !== 'gate',
     ...overrides,
   };
 }
@@ -66,5 +67,6 @@ export function wireBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     checkable: b.checkable,
     separation: b.separation,
     check_due: b.checkDue,
+    done_check_due: b.doneCheckDue,
   };
 }

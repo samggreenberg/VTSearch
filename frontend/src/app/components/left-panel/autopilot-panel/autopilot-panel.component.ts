@@ -9,7 +9,7 @@ import {
   untracked,
 } from '@angular/core';
 
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { pairwise } from 'rxjs';
 
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
@@ -116,6 +116,12 @@ function dryRunNote(dryRun: number): string {
 })
 export class AutopilotPanelComponent implements OnInit {
   autopilotState = inject(AutopilotStateService);
+  /**
+   * The run's state as a signal, so the steps repaint on a change no input
+   * carries: a Spot Check starting or ending between votes. The effect below
+   * never reads it, so it adds no dependency there.
+   */
+  private readonly run = toSignal(this.autopilotState.state$, { requireSync: true });
 
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
@@ -214,7 +220,7 @@ export class AutopilotPanelComponent implements OnInit {
   }
 
   get state(): AutopilotState {
-    return this.autopilotState.state;
+    return this.run();
   }
 
   get running(): boolean {
