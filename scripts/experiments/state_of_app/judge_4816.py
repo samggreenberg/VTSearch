@@ -269,12 +269,14 @@ class Arm:
 
     # ---- what each judge estimates ------------------------------------------------------------------------
     def estimate(
-        self, kind: str, a: float, prior: str, pmode: str, scope: str = "pool"
+        self, kind: str, a: float, prior: str, pmode: str, scope: str = "pool", qshrink: float = 1.0
     ) -> tuple[np.ndarray, np.ndarray]:
         """Estimated F-beta of D and of Q on the voting collection, per run and vote.
 
         *scope* ``pool`` reads the unvoted media only; ``all`` adds the voted ones at their known labels, in the
-        part this click's sets put them (in sample: the head was fitted to them).
+        part this click's sets put them (in sample: the head was fitted to them); ``oos`` adds them in the part
+        they sat in when picked (out of sample: the previous click's sets). *qshrink* scales the Q-only part's
+        rate read off its votes (the head's picks there sit just below its line, the part's richest media).
         """
         tp = {}
         for k, name in enumerate(PARTS):
@@ -288,19 +290,23 @@ class Arm:
                 else:
                     pi = np.full_like(m, 0.5)
                 r = (y + a * pi) / (m + a) if a > 0 else np.where(m > 0, y / np.maximum(m, 1), pi)
-                tp[name] = n_k * r
+                tp[name] = n_k * r * (qshrink if name == "q_only" else 1.0)
             elif kind == "calib":
                 # Observed Goods against the head's posterior for the same votes, shrunk to 1 with *a* pseudo-votes.
                 pv = self.p[:, :, k]
                 c = (y + a * 0.5) / (pv + a * 0.5) if a > 0 else np.where(pv > 0, y / np.maximum(pv, 1e-9), 1.0)
                 base = np.where(np.isfinite(post_sum), post_sum, 0.5 * n_k)
                 tp[name] = c * base
-            elif kind in ("oracle_pool", "oracle_all"):
+            elif kind.startswith("oracle"):
                 tp[name] = self.ov[f"pos_{name}"]
             else:
                 raise ValueError(kind)
         size_d, size_q = self.n_d, self.n_q
-        if kind == "oracle_all" or scope == "all":
+        if kind == "oracle_oos" or scope == "oos":
+            tp = {k: tp[k] + self.y[:, :, i] for i, k in enumerate(PARTS)}
+            size_d = size_d + self.m[:, :, 0] + self.m[:, :, 1]
+            size_q = size_q + self.m[:, :, 0] + self.m[:, :, 2]
+        elif kind == "oracle_all" or scope == "all":
             g = {k: np.nan_to_num(self.ov[f"good_{k}"]) for k in PARTS}
             b = {k: np.nan_to_num(self.ov[f"bad_{k}"]) for k in PARTS}
             tp = {k: tp[k] + g[k] for k in PARTS}
@@ -308,7 +314,7 @@ class Arm:
             size_q = size_q + g["dq"] + g["q_only"] + b["dq"] + b["q_only"]
         tp_d = tp["dq"] + tp["d_only"]
         tp_q = tp["dq"] + tp["q_only"]
-        if kind in ("oracle_pool", "oracle_all") or pmode == "parts":
+        if kind.startswith("oracle") or pmode == "parts":
             pos = tp_d + tp["q_only"] + tp["none"]
         elif pmode == "union":
             pos = tp_d + tp["q_only"]
@@ -317,7 +323,7 @@ class Arm:
         else:
             raise ValueError(pmode)
         pos = np.maximum(pos, np.maximum(tp_d, tp_q))
-        if pmode == "model" and (kind == "oracle_all" or scope == "all"):
+        if pmode == "model" and scope in ("all", "oos"):
             pos = pos + self.n_good
         return fbeta_counts(tp_d, size_d, pos, self.beta), fbeta_counts(tp_q, size_q, pos, self.beta)
 
@@ -359,27 +365,40 @@ class Arm:
         yield "ceiling_once", "ceiling", "once", self.handover(best)
         mdis = self.m[:, :, 1] + self.m[:, :, 2]
         judges = [
-            (kind, (a, prior, pmode, scope))
-            for kind, a, prior, pmode, scope in itertools.product(
-                ("rate", "calib"), (0.0, 1.0, 3.0, 10.0), ("half", "head"), ("parts", "union", "model"), ("pool", "all")
+            (kind, (a, prior, pmode, scope, qs))
+            for kind, a, prior, pmode, scope, qs in itertools.product(
+                ("rate", "calib"),
+                (0.0, 1.0, 3.0, 10.0),
+                ("half", "head"),
+                ("parts", "model"),
+                ("pool", "all", "oos"),
+                (1.0, 0.5),
             )
-            if not (kind == "calib" and prior == "head")
+            if not (kind == "calib" and (prior == "head" or qs != 1.0))
         ]
-        judges += [("pv", None), ("oracle_pool", None), ("oracle_all", None)]
+        judges += [("pv", None), ("oracle_pool", None), ("oracle_all", None), ("oracle_oos", None)]
         # Before a judge is ready: today's rule (the hold on Binary), or the head from the quota.
         fallback = {"today": self.today_head, "quota": self.trained}
         for kind, param in judges:
-            fd, fq = self.pv() if kind == "pv" else self.estimate(kind, *(param or (0.0, "half", "parts", "pool")))
+            fd, fq = self.pv() if kind == "pv" else self.estimate(kind, *(param or (0.0, "half", "parts", "pool", 1.0)))
             say_raw = fd - fq
             for margin, mmin, fb, mode in itertools.product(
-                (-0.05, 0.0, 0.05), (0, 3, 6), ("today", "quota"), ("switch", "once")
+                (-0.05, 0.0, 0.05), (0, 3, 6), ("today", "quota"), ("switch", "once", "extend", "shorten")
             ):
                 if kind.startswith("oracle") and (margin != 0.0 or mmin != 0 or fb != "today"):
+                    continue
+                if mode in ("extend", "shorten") and fb != "today":
                     continue
                 ready = self.trained & (mdis >= mmin) & np.isfinite(say_raw) & np.isfinite(self.ov["n_pool"])
                 say = say_raw >= margin
                 if mode == "switch":
                     head = np.where(ready, say, fallback[fb])
+                elif mode == "extend":
+                    # Only past today's hand-over: the judge may keep the query on screen longer.
+                    head = self.today_head & ~(ready & ~say)
+                elif mode == "shorten":
+                    # Only before it: the judge may hand over earlier.
+                    head = self.today_head | (ready & say)
                 else:
                     # The fallback until the judge is first ready; from then the query until it first says the head.
                     h = first_true(ready & say)
@@ -447,10 +466,10 @@ def diagnose(arm: Arm, preset: str) -> pd.DataFrame:
     ok_t = arm.trained & arm.has_det & np.isfinite(arm.ov["n_pool"])
     pool_d, pool_q = arm.estimate("oracle_pool", 0.0, "half", "parts")
     cands = {"oracle_pool": (pool_d, pool_q), "oracle_all": arm.estimate("oracle_all", 0.0, "half", "parts"),
-             "pv": arm.pv()}  # fmt: skip
+             "oracle_oos": arm.estimate("oracle_oos", 0.0, "half", "parts"), "pv": arm.pv()}  # fmt: skip
     for kind, a, prior, pmode in (("rate", 1.0, "half", "parts"), ("rate", 3.0, "head", "parts"), ("rate", 3.0, "head", "model"),
                                   ("calib", 1.0, "half", "parts"), ("calib", 3.0, "half", "model")):  # fmt: skip
-        for scope in ("pool", "all"):
+        for scope in ("pool", "all", "oos"):
             cands[f"{kind}|{a}|{prior}|{pmode}|{scope}"] = arm.estimate(kind, a, prior, pmode, scope)
     for lo, hi in ((1, 30), (31, 150), (1, 150)):
         win = ok_t & (GRID[None, :] >= lo) & (GRID[None, :] <= hi)
@@ -540,6 +559,133 @@ def price(a: argparse.Namespace) -> None:
     print((out / "summary.md").read_text())
 
 
+PRACTICAL = ("rate", "calib", "pv")
+
+
+def best_practical(xf: pd.DataFrame, preset: str) -> tuple[str, list[str]]:
+    """The practical family with the best cross-fitted gain over votes 1-150, and its two picks."""
+    g = xf[(xf["preset"] == preset) & xf["family"].str.split(":").str[0].isin(PRACTICAL)]
+    r = g.sort_values("d_1-150", ascending=False).iloc[0]
+    return str(r["family"]), str(r["picked"]).split(" / ")
+
+
+def curves_for(arm: Arm, names: set[str]) -> dict[str, np.ndarray]:
+    return {name: F for name, _fam, _p, F in arm.rules() if name in names}
+
+
+def figures(a: argparse.Namespace) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    ink, ink2, surface, grid = "#0b0b0b", "#52514e", "#fcfcfb", "#e4e3df"
+    slots = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100")
+    plt.rcParams.update({"font.size": 10, "axes.edgecolor": ink2, "axes.labelcolor": ink2, "xtick.color": ink2,
+                         "ytick.color": ink2, "text.color": ink, "axes.spines.top": False, "axes.spines.right": False,
+                         "figure.facecolor": surface, "axes.facecolor": surface})  # fmt: skip
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    xf = pd.read_csv(Path(a.priced) / "crossfit.csv")
+    bias = pd.read_csv(Path(a.priced) / "bias.csv")
+    arms: dict[str, tuple[Arm, str]] = {}
+    for spec in a.arm:
+        preset, rest = spec.split("=", 1)
+        path, title = rest.split("::", 1)
+        arms[preset] = (Arm(path, picks=a.picks), title)
+
+    def label_ends(ax, ends, lo, hi):
+        """Direct labels at the right end, ink text with a short line-key in the series colour."""
+        ys = [e[0] for e in ends]
+        order = sorted(range(len(ys)), key=lambda i: ys[i])
+        pos = list(ys)
+        gap = 0.06 * (hi - lo)
+        for i, j in zip(order, order[1:]):
+            if pos[j] - pos[i] < gap:
+                pos[j] = pos[i] + gap
+        for (y, text, color), yy in zip(ends, pos):
+            ax.plot([T + 2, T + 7], [yy, yy], color=color, lw=2, clip_on=False, solid_capstyle="round")
+            ax.text(T + 9, yy, text, color=ink2, va="center", fontsize=8, clip_on=False)
+
+    # Figure 1: the set on screen at every vote.
+    n = len(arms)
+    ncol = 2 if n > 1 else 1
+    nrow = -(-n // ncol)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(5.6 * ncol, 3.6 * nrow), squeeze=False)
+    per_run = {}
+    for ax, (preset, (arm, title)) in zip(axes.flat, arms.items()):
+        fam, picked = best_practical(xf, preset)
+        oracle = "oracle_all:switch|None|m+0.00|n0|today"
+        need = {"today", "ceiling_switch", oracle, *picked}
+        cv = curves_for(arm, need)
+        judge = np.where((arm.half == 0)[:, None], cv[picked[0]], cv[picked[1]])
+        series = [
+            (cv["ceiling_switch"], "better set, hindsight", slots[3], "--"),
+            (cv[oracle], "exact F on the collection", slots[2], "-"),
+            (judge, f"best judge ({fam.split(':')[0]})", slots[1], "-"),
+            (cv["today"], "today (hold to 30)" if not arm.region else "today (quota)", slots[0], "-"),
+        ]
+        ends = []
+        for F, label, color, ls in series:
+            m = F[:, 1:].mean(axis=0)
+            ax.plot(GRID[1:], m, color=color, lw=2, ls=ls, solid_capstyle="round")
+            ends.append((float(m[-1]), label, color))
+        per_run[preset] = (arm, cv["today"], judge, cv[oracle], cv["ceiling_switch"])
+        ax.set_xlim(0, T)
+        if not arm.region:
+            ax.axvline(30, color=grid, lw=1, zorder=0)
+        ax.grid(axis="y", color=grid, lw=0.8)
+        lo, hi = ax.get_ylim()
+        label_ends(ax, ends, lo, hi)
+        ax.set_title(title, fontsize=10, loc="left")
+        ax.set_xlabel("vote")
+        ax.set_ylabel("mean F-beta of the set on screen")
+    for ax in list(axes.flat)[n:]:
+        ax.set_visible(False)
+    fig.tight_layout(w_pad=12.0, h_pad=1.5)
+    fig.savefig(out / "fig_by_vote.png", dpi=130)
+    plt.close(fig)
+
+    # Figure 2: each part's votes against its truth.
+    parts = [("d_only", "D only"), ("q_only", "Q only"), ("dq", "both")]
+    fig, axes = plt.subplots(1, n, figsize=(3.3 * n, 3.2), squeeze=False, sharey=True)
+    for ax, preset in zip(axes.flat, arms):
+        b = bias[(bias["preset"] == preset) & (bias["picks"] == "all")].set_index("part")
+        x = np.arange(len(parts))
+        for k, (col, label, color) in enumerate((("part_true_rate", "the part's Goods", slots[0]),
+                                                  ("vote_good_rate", "its votes' Goods", slots[1]))):  # fmt: skip
+            v = [float(b.loc[p, col]) for p, _ in parts]
+            ax.bar(x + (k - 0.5) * 0.3, v, width=0.26, color=color, label=label)
+        ax.set_xticks(x, [lab for _, lab in parts])
+        ax.set_title(arms[preset][1], fontsize=9, loc="left")
+        ax.grid(axis="y", color=grid, lw=0.8)
+        ax.set_axisbelow(True)
+    axes.flat[0].set_ylabel("share Good")
+    axes.flat[0].legend(frameon=False, fontsize=8, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(out / "fig_parts.png", dpi=130)
+    plt.close(fig)
+
+    # Figure 3: every run's gain over votes 1-150, sorted.
+    fig, axes = plt.subplots(1, n, figsize=(3.3 * n, 3.2), squeeze=False, sharey=True)
+    for ax, (preset, (arm, today, judge, oracle, ceiling)) in zip(axes.flat, per_run.items()):
+        base = span_mean(today, (1, 150))
+        for F, label, color in ((ceiling, "hindsight", slots[3]), (oracle, "exact on collection", slots[2]),
+                                (judge, "best judge", slots[1])):  # fmt: skip
+            d = np.sort(span_mean(F, (1, 150)) - base)
+            ax.plot(np.linspace(0, 1, len(d)), d, color=color, lw=2, label=label)
+        ax.axhline(0, color=ink2, lw=0.8)
+        ax.set_title(arms[preset][1], fontsize=9, loc="left")
+        ax.set_xlabel("share of runs")
+        ax.grid(axis="y", color=grid, lw=0.8)
+    axes.flat[0].set_ylabel("gain over today, votes 1-150")
+    axes.flat[0].legend(frameon=False, fontsize=8, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(out / "fig_per_run.png", dpi=130)
+    plt.close(fig)
+    print(f"wrote {out}/fig_by_vote.png, fig_parts.png, fig_per_run.png")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -554,8 +700,13 @@ def main() -> None:
     p.add_argument("--picks", default="all", choices=("all", "past_opening", "past_quota"))
     p.add_argument("--out", required=True)
     p.add_argument("--top", type=int, default=15)
+    f = sub.add_parser("figures")
+    f.add_argument("--arm", action="append", required=True, help="PRESET=extract.npz::panel title, repeatable")
+    f.add_argument("--priced", required=True, help="the price command's --out")
+    f.add_argument("--picks", default="all", choices=("all", "past_opening", "past_quota"))
+    f.add_argument("--out", required=True)
     a = ap.parse_args()
-    extract(a) if a.cmd == "extract" else price(a)
+    {"extract": extract, "price": price, "figures": figures}[a.cmd](a)
 
 
 if __name__ == "__main__":
