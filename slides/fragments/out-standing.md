@@ -12,23 +12,21 @@
 
 <!-- build: figs/calib-out-standing.build4.png -->
 
-<!-- **a** — Back up a second. What to Expect fits a bell curve to the held-out
-     Goods, and we decided it needs six of them before we trust that fit. A
-     text query starts with none, and the first few votes don't get there. So
-     what's the line until then? Think about what we're usually hunting: rare
-     needles. A few matches in thousands of non-matches aren't a hump of their
-     own; they're a few outliers sitting above the bulk. So until the labels
-     can draw a line, we count the outliers. Here's a planted corpus: four
-     thousand non-matches and seven matches, five of them way out on their
-     own. -->
+<!-- **a** — Before the labels can draw a line, all we have is a ranking of
+     photos nobody's voted on: the text query's, or the Goods' average. Two
+     things make that hard. Needles are rare, so a few matches in thousands
+     make no hump of their own. And a first sort is weak, so some matches sit
+     down in the bulk's tail. So we count the outliers. Here's a planted
+     corpus: four thousand non-matches and seven matches, five way out on
+     their own. -->
 
 <!-- **b** — First count. Matches are rare, so the middle and the spread are
      basically the bulk's. Put a bar four spreads up. A normal bulk would put
      about a tenth of a photo past it, and there are five. Five outliers. -->
 
-<!-- **c** — Second count, for a rare target near the top of the bulk: line up
-     the top fifteen and find the biggest drop between neighbors in the top
-     eleven. Three sit above it. -->
+<!-- **c** — Second count, for a rare target near the top of the bulk: zoom in
+     on the top fifteen, lined up in order, and find the biggest drop between
+     neighbors in the top eleven. Three sit above it. -->
 
 <!-- **d** — The middle radio keeps the larger count: five, all real matches. -->
 
