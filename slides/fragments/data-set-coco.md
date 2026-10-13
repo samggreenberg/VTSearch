@@ -13,25 +13,18 @@
 <!-- build: figs/data-set-coco-grid.webp -->
 
 <!-- **a** — Every result from here on is measured on somebody's photos, and
-     what got labeled decides what the number means. So every dataset in this
-     talk shows up on the same card: its name, a few counts, where to get it,
-     and what the pictures look like. -->
+     what got labeled decides what the number means. So every dataset gets the
+     same card. -->
 
-<!-- **b** — Caltech-101. About nine thousand photos, each one a single object,
-     centered, filling the frame, usually on a plain background. A hundred and
-     one categories, one per picture, and no boxes at all. It's our control:
-     the object is the whole picture, so if a result holds here and on
-     cluttered scenes too, it's not just a result about clutter. -->
+<!-- **b** — Caltech-101: one object per photo, centered, filling the frame,
+     and no boxes at all. It's our control: if a result holds here and on
+     cluttered scenes too, it's not just about clutter. -->
 
-<!-- **c** — COCO. Rooms and streets and kitchens, lots of things in every
-     picture, and every one of them boxed: about 120 thousand photos, eighty
-     classes, 900 thousand boxes. And "complete" is the important word: every
-     photo answers for all eighty classes. -->
+<!-- **c** — COCO: rooms and streets, lots of things in every picture, and
+     every one boxed. "Complete" is the key word: every photo answers for all
+     eighty classes. -->
 
-<!-- **d** — Here's one up close: a museum case with Mary Poppins' umbrella in
-     it. Blue names are in the picture, each with its box: a book, a bowl, the
-     umbrella. Gray names aren't, and since COCO answers for every class, gray
-     means somebody checked. There's no cup in this case, and COCO says so. But
-     nobody boxed the paperweight, the placard or the glass hen, because they
-     aren't among the eighty. Checked means checked for these classes, and only
-     these. -->
+<!-- **d** — Up close: blue names are in the picture, each with its box. Gray
+     names aren't, and gray means somebody checked: there's no cup here. But
+     the paperweight and the glass hen get no box, because they're not among
+     the eighty. -->

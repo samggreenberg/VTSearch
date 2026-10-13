@@ -12,24 +12,20 @@
 
 <!-- build: figs/atlas-depth.build4.png -->
 
-<!-- **a** — The atlas has a second job. Start with the same kind of picture: a
-     collection, some votes, and a detector's boundary. -->
+<!-- **a** — The atlas has a second job. Start with the same kind of picture:
+     photos, some votes, and a boundary. -->
 
-<!-- **b** — Now tilt it. That flat sheet is really the floor of a room. The
-     space is much bigger than the floor; our collection just happens to sit
-     there. -->
+<!-- **b** — Now tilt it. That flat sheet is really the floor of a room; our
+     collection just happens to sit there. -->
 
 <!-- **c** — And here's a whole second collection, way up a direction nobody
-     ever voted along. Not a few odd photos: same size, same spread, a
-     different kind of data entirely. -->
+     ever voted along. Same size, same spread, different data entirely. -->
 
-<!-- **d** — What does the detector say about them? Its score is basically one
-     weighted sum, so moving along a direction it never learned changes
-     nothing. The boundary goes straight up like a pillar, and it sorts the new
-     collection into in and out, confidently, with no hint that it's guessing. -->
+<!-- **d** — The detector's score is one weighted sum, so moving straight up
+     changes nothing. The boundary becomes a pillar, and it sorts the new
+     collection into in and out with no hint that it's guessing. -->
 
-<!-- **e** — What we'd actually want is for the concept to stop, like this
-     dome. But the dome fits every vote exactly as well as the pillar does, and
-     more votes won't tell them apart, because every vote is on the floor. The
-     detector can't fix this. Something that knows where our data was can, and
-     that's the atlas. -->
+<!-- **e** — What we'd want is for the concept to stop, like this dome. But the
+     dome fits every vote as well as the pillar, and more votes can't tell them
+     apart, because every vote is on the floor. That takes something that knows
+     where our data was. -->

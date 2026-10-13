@@ -18,33 +18,25 @@
 
 <!-- build: figs/calib-fold-anchored-flow.build7.png -->
 
-<!-- **a** — The blend averaged two answers. This one combines the evidence
-     before it answers. Quick recap: the unlabeled pile, the votes, M₀. -->
+<!-- **a** — The blend averaged two answers; this one combines the evidence
+     first. Recap: the pile, the votes, M₀. -->
 
-<!-- **b** — Split the votes, and train a model on each half. -->
+<!-- **b** — Split the votes and train a model on each half. -->
 
-<!-- **c** — Here's where the two ideas meet. Each half's model scores the
-     whole unlabeled pile, and that's these two histograms: bare bars, no
+<!-- **c** — Each half's model scores the whole unlabeled pile. Bare bars, no
      labels, just the shape of the data. -->
 
-<!-- **d** — Fit two bumps to each, like Oops! All Haystack. But every question
-     mark is asking the same thing: which bump is the Goods? The fit can't say,
-     because it never read a vote. -->
+<!-- **d** — Fit two bumps to each. But which bump is the Goods? The fit can't
+     say; it never read a vote. -->
 
-<!-- **e** — Now bring in the held-out votes, each one scored by the model that
-     didn't train on it, along that model's own axis. Nothing's decided yet. -->
+<!-- **e** — Now add the held-out votes, each scored by the model that didn't
+     train on it. -->
 
-<!-- **f** — Read the two together and the question marks turn into Good and
-     Bad. The bumps didn't change shape; the votes just told us which is which.
-     That was the idea: votes name the bumps, they don't shape them, and naming
-     is the cheap question. -->
+<!-- **f** — Read together, the question marks become Good and Bad. The votes
+     don't shape the bumps, they just name them, and naming is cheap. -->
 
-<!-- **g** — Each half cuts at the midpoint between its own two bumps, θ₁ and
-     θ₂. -->
+<!-- **g** — Each half cuts at the midpoint between its two bumps. -->
 
-<!-- **h** — And then average them. That's how it's drawn, but it isn't quite
-     what we shipped, because two models don't have to score on the same scale;
-     that's No Mean Feat, two slides on. This beat the blend by a few
-     hundredths of F-beta and still fell well short of cross-calibration.
-     Today's line does it the other way round: the votes shape the Good bump,
-     and the pile only says how big it is. -->
+<!-- **h** — Then average the cuts. It beat the blend by a few hundredths and
+     still fell well short of cross-calibration. Today's line flips it: the
+     votes shape the Good bump, and the pile only says how big it is. -->

@@ -8,18 +8,13 @@
 
 <!-- build: figs/logo-stages.build2.webp -->
 
-<!-- **a** — But checking is slow: about a tenth of a second of computer time
-     per page. At fifty thousand pages, that's way too slow for someone who
-     wants an answer after every vote. So we don't check the whole pile.
-     Instead, every page gets boiled down to one vector, the same kind of thing
-     SigLIP makes, so the rest of the app works on it unchanged. -->
+<!-- **a** — But checking takes about a tenth of a second a page: way too slow
+     for fifty thousand pages and an answer every vote. So every page also gets
+     boiled down to one vector, like SigLIP makes. -->
 
 <!-- **b** — Stage 1 compares the crop's vector with every page's, all at once,
-     which is fast, and keeps a shortlist off the top. On documents it actually
-     compares pieces of pages; more on that in a second. -->
+     and keeps a shortlist off the top. -->
 
-<!-- **c** — Stage 2 does the slow check from before, only on the shortlist,
-     and ranks those pages by how many matches agree. These four are the real
-     top for this crop, out of about thirteen hundred letters. The app
-     shortlists two thousand pages, and a page that misses the shortlist never
-     gets checked, so Stage 1 is the ceiling. -->
+<!-- **c** — Stage 2 runs the slow check on just that shortlist and ranks by
+     how many agree. A page that misses the shortlist never gets checked, so
+     Stage 1 is the ceiling. -->

@@ -18,11 +18,9 @@
 
 </div>
 
-<!-- **a** — Here's the session from the start of the talk again, but as a
-     recipe you can take home. We start from an empty app: nothing loaded,
-     nothing trained. Step one is getting the photos in, and it starts at the +
-     on the Datasets card. That's the one button everybody misses the first
-     time. -->
+<!-- **a** — Here's the session from the start of the talk again, as a recipe.
+     From an empty app, step one is getting the photos in, and it starts at the
+     + on the Datasets card, the one button everybody misses the first time. -->
 
 <!-- **b** — Files, then Folder, then type in the folder your photos are in, or
      find it with Browse. It works out the rest itself: it sees they're images

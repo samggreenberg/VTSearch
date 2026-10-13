@@ -10,24 +10,18 @@
 
 <!-- build: figs/logo-balance.build3.png -->
 
-<!-- **a** — The three radios again, now on documents. On photos the radio just
-     moves the cut. Here the line is a count of inliers with rules on it, so
-     each radio gets its own rule. This is one detector partway through a
-     session. Top line: the votes, Goods above and Bads below, placed by how
-     many inliers each gets. Bottom: the pages, real copies of the mark above,
-     wrong pages below. See how the faint copies sit as low as the hard wrong
-     pages? That's the whole problem. -->
+<!-- **a** — The three radios again, on documents, where each gets its own
+     rule. One detector mid-session: votes on top, pages below, placed by
+     inliers, right ones above each line and wrong ones below. The faint real
+     copies sit as low as the hard wrong pages. That's the whole problem. -->
 
-<!-- **b** — The middle radio, beta of 1, is the rule from the last slide: beat
-     every Bad. That keeps 11 pages, 1 of them wrong, and the faint copies
-     under the top Bad are lost. -->
+<!-- **b** — Beta of 1 is the last slide's rule: beat every Bad. Eleven kept,
+     one wrong, and the faint copies are lost. -->
 
-<!-- **c** — Beta of 4, for when a miss hurts more than a wrong one: also keep
-     any page that gets a quarter of the Goods' typical count, at least 10,
-     whatever the Bads say. Now it keeps 18, 5 of them wrong. It's always the
-     middle set plus more, so turning the radio that way only adds pages. -->
+<!-- **c** — Beta of 4 also keeps any page with a quarter of the Goods' typical
+     count, at least 10. Eighteen kept, five wrong. It's always the middle set
+     plus more. -->
 
-<!-- **d** — Beta of a quarter, for when a wrong one hurts more: take the
-     middle set and keep only the pages that beat every Bad by at least 5. Nine
-     kept, none wrong. And since that's always a piece of the middle set, the
-     radio stays in order both ways. -->
+<!-- **d** — Beta of a quarter keeps only pages that beat every Bad by 5. Nine
+     kept, none wrong, and it's always a piece of the middle set, so the radio
+     stays in order. -->

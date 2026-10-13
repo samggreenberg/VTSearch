@@ -10,26 +10,19 @@
 
 <!-- build: figs/calib-lay-of-the-land.build3.png -->
 
-<!-- **a** — Same rule, from what you're actually holding: total Goods up,
-     total Bads across, one cell for every possible set of labels. No Goods,
-     white: nothing to rank by but the typed query. Under the quota, yellow:
-     rank by the Goods' average, and count what stands out. -->
+<!-- **a** — Same rule, from what you actually hold: total Goods up, total Bads
+     across, one cell per set of labels. No Goods, white: the typed query.
+     Under the quota, yellow: the Goods' average, counting what stands out. -->
 
 <!-- **b** — The quota is three Goods and four Bads, or one Good and sixteen
-     Bads, which is where a rare target ends up when Autopilot runs out of
-     likely matches. Past it, with under six Goods, orange: the trained head,
-     still counting what stands out. It's warm like the yellow because it's the
-     same rule. -->
+     Bads for a rare target. Past it, under six Goods, orange: the trained
+     head. Same counting rule, so the same warm color. -->
 
-<!-- **c** — Now the labels line, in purple. The last slide's edge was six
-     held-out Goods, but which votes get held out is a random split, so from
-     six to eleven Goods it comes down to odds. At seven Goods, about one set
-     in ten gets the labels line; four in ten at eight, seven at nine, nearly
-     all at ten, and every one from twelve. The paler the row, the closer to a
-     coin flip. -->
+<!-- **c** — Purple is the labels line. Which votes get held out is a random
+     split, so from six to eleven Goods it's odds: about one set in ten at
+     seven Goods, nearly all at ten, every one from twelve. Paler means closer
+     to a coin flip. -->
 
-<!-- **d** — One more wrinkle: the hatching. If you started from a typed query,
-     you keep seeing the query's own results until you have thirty labels,
-     whatever the head would draw, because before that the head's results are
-     worse than the query's. The head still trains underneath, and still picks
-     Autopilot's questions; it just isn't what you're shown yet. -->
+<!-- **d** — The hatching: if you started from a typed query, you keep seeing
+     its results until thirty labels, because until then they beat the head's.
+     The head still trains underneath, and still picks Autopilot's questions. -->

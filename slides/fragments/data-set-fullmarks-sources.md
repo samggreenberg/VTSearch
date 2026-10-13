@@ -12,18 +12,15 @@
 
 <!-- build: figs/data-set-staver.webp -->
 
-<!-- **a** — That's the matcher. So what do we test it on? There are four
-     public sets to build from. First, SPODS: about eleven hundred made-up
-     official documents, each with logos, stamps and signatures, and a mask for
-     each kind. But nothing says which logo is which. -->
+<!-- **a** — Now, what do we test this on? Four public sets. SPODS: eleven
+     hundred made-up official documents, with masks for logos, stamps and
+     signatures, but no names for the marks. -->
 
 <!-- **b** — Tobacco800: thirteen hundred real business letters from the
-     eighties and nineties, out of the tobacco lawsuits. Of those, 412 have a
-     logo boxed, and 21 logos show up more than once. -->
+     tobacco lawsuits, 412 with a logo boxed. -->
 
-<!-- **c** — StaVer: four hundred German invoices with real rubber stamps. They
-     were stamped by hand, so every impression's a little different, and again,
-     no names for the stamps. -->
+<!-- **c** — StaVer: four hundred German invoices, stamped by hand, so every
+     impression's a little different. Again, no names. -->
 
 <!-- **d** — And UCSF Industry Documents: thirteen million real
-     tobacco-industry documents, with no boxes at all. That's the haystack. -->
+     tobacco-industry documents, no boxes at all. That's the haystack. -->

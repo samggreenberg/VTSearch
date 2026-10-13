@@ -12,29 +12,22 @@
 
 <!-- build: figs/calib-out-standing.build4.png -->
 
-<!-- **a** — The labels line needs about six held-out Goods, and the first few
-     votes don't have that many. If all we did was type 'books', we have none.
-     Until then, the line comes from counting what stands out. Here's a corpus
-     the way a detector scores it: a big bulk, and five way out on their own. I
-     planted it: four thousand non-matches, seven matches. -->
+<!-- **a** — The labels line needs about six held-out Goods, and a typed query
+     starts with none. Until then, the line counts what stands out. Here's a
+     planted corpus: four thousand non-matches and seven matches, five of them
+     way out on their own. -->
 
-<!-- **b** — First count. Matches are rare, a few percent at most, so the
-     middle and the spread of all the scores are basically the bulk's. Put a
-     bar four spreads up. A normal bulk this size would put about a tenth of a
-     photo past it, and there are five. So five stand out. -->
+<!-- **b** — First count. Matches are rare, so the middle and spread are
+     basically the bulk's. Put a bar four spreads up. A normal bulk would put
+     about a tenth of a photo past it, and there are five. Five stand out. -->
 
-<!-- **c** — Second count: line up the top fifteen in order, and find the
-     biggest drop between neighbors in the top eleven. Three sit above it. This
-     one's for a rare target sitting in the bulk's own top. On faces, one
-     person's photos only sit three or four spreads up, and the bar alone found
-     one of their four. -->
+<!-- **c** — Second count, for a rare target near the top of the bulk: line up
+     the top fifteen and find the biggest drop between neighbors in the top
+     eleven. Three sit above it. -->
 
-<!-- **d** — The middle radio keeps the larger of the two counts: five. All
-     five are real matches. -->
+<!-- **d** — The middle radio keeps the larger count: five, all real matches. -->
 
-<!-- **e** — The other radios scale that count. Beta of a quarter keeps fewer,
-     but never fewer than the drop's three, so three. Beta of 4 keeps more:
-     thirteen. The rings are the seven real matches, so beta of 4 reaches the
-     two hiding in the bulk's tail, and pays six non-matches for them. On real
-     photos, this beat the line typed queries used to get, by a lot at the
-     tight setting. -->
+<!-- **e** — The other radios scale it. Beta of a quarter keeps fewer, but
+     never fewer than the drop's three. Beta of 4 keeps thirteen. The rings are
+     the seven real matches, so it reaches the two in the bulk's tail and pays
+     six non-matches for them. -->

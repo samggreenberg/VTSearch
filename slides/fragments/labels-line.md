@@ -8,19 +8,15 @@
 
 <!-- build: figs/calib-labels-line.build2.png -->
 
-<!-- **a** — Here's the fit from the end of the last section. The votes tell us
-     what a match scores and what a near-miss scores, and the corpus says there
-     are about 210 matches in it. It also gives every photo its own chance of
-     being a match, and that's what we'll use. -->
+<!-- **a** — Here's the fit from the end of the last section: what a match
+     scores, what a near-miss scores, and about 210 matches in the corpus. It
+     also gives every photo its own chance of being a match. -->
 
-<!-- **b** — Now score every cut down the ranking, with expected numbers
-     instead of counted ones. The Goods that come back are the sum of those
-     chances above the cut, and the total number of Goods is the 210. The peak
-     is the line, in blue, and here it keeps 221. Nobody chose 221, and nothing
-     caps it: a corpus with no matches would hand back almost nothing. -->
+<!-- **b** — So score every cut with expected numbers. The Goods that come back
+     are the sum of those chances, and the total is the 210. The peak is the
+     line: here it keeps 221, and nobody chose that number. -->
 
-<!-- **c** — The other two radios are just different curves on the same fit.
-     Beta of a quarter peaks to the right, a tighter cut; beta of 4 peaks to
-     the left, a looser one. Flip the radio and it re-cuts right away, no
-     retraining. And notice what went in: only the labels and the corpus.
-     That's on purpose, and the next slide is why. -->
+<!-- **c** — The other radios are just different curves on the same fit: beta
+     of a quarter peaks tighter, beta of 4 looser. Flip the radio and it
+     re-cuts, no retraining. And all that went in was the labels and the
+     corpus. -->

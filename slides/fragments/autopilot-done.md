@@ -8,18 +8,12 @@
 
 <!-- build: figs/autopilot-done.build2.png -->
 
-<!-- **a** — On photos, when all three lights are green, the app says the
-     detector is trained, in those words, with two buttons: keep training, or
-     head to the Dashboard. Nothing times out and nothing happens by itself; we
-     choose. -->
+<!-- **a** — On photos, when all three lights go green, the app says the
+     detector's trained, with two buttons. Nothing times out; we choose. -->
 
-<!-- **b** — Documents, which we'll get to later, stop a different way. The
-     lights don't fit how documents get ranked, so there Autopilot just walks
-     down the detector's best matches, and sixteen in a row with no Good ends
-     it. In testing that stopped at a median of click 31, and clicking on to 50
-     found at most 0.8% more of the matches. Same dialog. -->
+<!-- **b** — Documents stop a different way: sixteen of the best matches in a
+     row with no Good. In testing, clicking on to 50 after that found at most
+     0.8% more of the matches. Same dialog, with that as the reason. -->
 
-<!-- **c** — And on a small collection the lights might never go green: we've
-     voted on everything, and it tells us there's nothing left. Each of these
-     is said once, to the session that trained the detector. Come back later
-     and Autopilot works the same way; it just doesn't announce it. -->
+<!-- **c** — And on a small collection we might vote on everything first; then
+     it just says there's nothing left. Each of these is said once. -->

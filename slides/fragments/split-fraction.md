@@ -6,15 +6,10 @@
 
 <!-- build: figs/calib-split-idea.build1.png -->
 
-<!-- **a** — Same picture as the last slide, with the numbers off. Every fold
-     in this talk has quietly split the votes fifty-fifty: half train the
-     model, half are held out to place its cut. Nobody ever measured
-     fifty-fifty; it was just the obvious choice, and it stuck. -->
+<!-- **a** — Same picture, numbers off. Every fold so far split the votes
+     fifty-fifty, half to train and half to place the cut. Nobody ever measured
+     that. -->
 
-<!-- **b** — So we measured it under the old mixture line, and seventy percent
-     into training won. Each half draws its own seventy percent from the same
-     votes, so the two training sets overlap now: that lens in the middle,
-     forty percent of the votes, trains both models. At twenty votes, that's
-     fourteen to train and six to place the cut. Under today's line the split
-     hardly matters, within a few thousandths of F-beta either way, so
-     seventy-thirty stays because nothing beats it. -->
+<!-- **b** — Measured under the old mixture line, seventy percent into training
+     won, so the two training sets now overlap in the middle. Under today's
+     line it hardly matters either way, so seventy-thirty stays. -->

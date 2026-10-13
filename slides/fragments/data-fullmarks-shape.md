@@ -4,18 +4,12 @@
 
 ## What's in<br>the Pile
 
-<!-- Two charts. On top, the four sources, on a log scale: UCSF, the gray
-     haystack, is about seventy times the other three put together. Those three
-     sit whole in the smallest tier, and the bigger tiers just pile on more
-     UCSF pages. So a bigger tier means more real, unrelated scans, not
-     trickier look-alikes. -->
+<!-- Top: the four sources, on a log scale. The other three sit whole in the
+     smallest tier, and bigger tiers just add UCSF pages, so a bigger pile
+     means more unrelated scans, not trickier look-alikes. -->
 
-<!-- On the bottom, copies per mark, from 5 up to 399. Miss one copy of a rare
-     mark and you've lost a fifth of it, so a score for one mark always needs
-     its count beside it. And the v5.0 matters: when the version changes, the
-     marks themselves can change, so we re-run rather than compare across
-     versions. -->
+<!-- Bottom: copies per mark run from 5 to 399, so a score for one mark needs
+     its count beside it. -->
 
-<!-- One caveat: the copies were found with SIFT's help, so a copy too faint
-     for SIFT is the one most likely still missing. That flatters SIFT a
-     little. -->
+<!-- One caveat: SIFT helped find the copies, so the ones it can't see are the
+     ones most likely still missing. That flatters SIFT a little. -->

@@ -6,14 +6,10 @@
 
 <!-- build: figs/autopilot-smart.build1.png -->
 
-<!-- **a** — Smart is the first light, and it asks: is the detector still
-     getting better? Each point is one retrain's detector, scored against all
-     the votes we have today, as false alarms plus misses. Fit a line through
-     the last ten. Early on it's falling 7% a retrain, so it's yellow: keep
-     going. -->
+<!-- **a** — Smart asks: is the detector still getting better? Each point is
+     one retrain's mistakes, scored on today's votes. Fit a line through the
+     last ten: falling 7% a retrain, so yellow. Keep going. -->
 
-<!-- **b** — Later the same fit is flat, 0.2% a retrain, well inside the 1.5%
-     bar, so it's green. A drop also has to be bigger than the points' own
-     scatter to count; otherwise a hard category bounces around and the light
-     flickers. And it stays red until we have at least five Goods and five
-     Bads. -->
+<!-- **b** — Later it's flat, 0.2% a retrain, inside the 1.5% bar: green. A
+     fall also has to beat the points' own scatter to count, or the light just
+     flickers. -->

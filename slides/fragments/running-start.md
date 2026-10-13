@@ -8,16 +8,12 @@
 
 <!-- build: figs/running-start.build1.png -->
 
-<!-- **a** — So what did that buy us? We ran every session twice, plain SVM and
-     head start, everything else the same: 562 people from FHIBE, starting from
-     one photo or four, and COCO Better photos. Each curve is how good Find's
-     results are at every vote, as F-beta at beta one. Plain first. On faces,
-     Find dips the moment the first detector gets trained, below the average it
-     replaced. On COCO there's no dip to fix. -->
+<!-- **a** — Did it help? We ran every session twice, plain SVM and head start:
+     562 people from FHIBE, from one photo or four, plus COCO Better. This is
+     the plain SVM. On faces, Find dips the moment the first detector's
+     trained. On COCO, no dip. -->
 
-<!-- **b** — And here's the head start. On faces the dip's gone, and it stays
-     clearly ahead for the first thirty-odd votes. Over the first fifty votes,
-     Find's F-beta is up about 0.06, from one photo or four, and about three
-     people in four come out ahead. On COCO the two lines sit right on top of
-     each other, the head start a hair ahead. So it fixes faces and costs COCO
+<!-- **b** — With the head start, the dip's gone, and it stays clearly ahead
+     for the first thirty-odd votes, up about 0.06 over the first fifty. On
+     COCO the lines sit on top of each other. So it fixes faces and costs COCO
      nothing. -->

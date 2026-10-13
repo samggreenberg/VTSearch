@@ -20,7 +20,7 @@
      moment we made them, so we just hit Train, and this detector learns from
      these photos. -->
 
-<!-- **b** — It shows you one photo at a time, with one question: is this what
-     you're looking for? Hit Good or Bad, or use the arrow keys. Every answer
-     retrains it, and it picks the next photo from what it just learned, so the
-     hard ones come to you. Twenty or thirty answers is usually plenty. -->
+<!-- **b** — One photo at a time, one question: is this what you're looking
+     for? Hit Good or Bad, or the arrow keys. Every answer retrains it and
+     picks the next photo, so the hard ones come to you. Twenty or thirty
+     answers is usually plenty. -->

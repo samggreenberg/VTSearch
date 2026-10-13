@@ -15,10 +15,9 @@
 
 <!-- **b** — When we import them, every photo goes through a big pretrained
      network, SigLIP, once, and comes out as a point in a 768-dimensional
-     space. The cube's standing in for those 768 dimensions. Similar photos end
-     up near each other. That's also why retraining is so fast: the big network
-     never runs again, and the detector is a tiny model on top of these points.
-     -->
+     space; the cube stands in for that. Similar photos land near each other.
+     And since the big network never runs again, retraining the tiny detector
+     on top is instant. -->
 
 <!-- **c** — Now the word. "book" goes through the same network. One model, two
      kinds of input. -->

@@ -8,20 +8,16 @@
 
 <!-- build: figs/calib-weak-spot.build2.png -->
 
-<!-- **a** — Spot Check normally waits for you to press it. But some sessions
-     shouldn't wait, and the labels can tell us which. Here are two sessions'
-     held-out votes and the two curves each one implies. On the right, Goods
-     and Bads sit 3.6 spreads apart; on the left, only 1.2, and they overlap.
-     That gap is called d-prime. -->
+<!-- **a** — Spot Check usually waits for you, but some sessions shouldn't.
+     Here are two sessions' held-out votes: on the right, Goods and Bads sit
+     3.6 spreads apart; on the left, only 1.2, and they overlap. That gap's
+     called d-prime. -->
 
-<!-- **b** — Below 1.5, a session tends to hand back way too much, and no
-     choice of cut rescues it. What did help was Spot Check's twenty random
-     picks, used as training votes. The check never moves the line, but its
-     picks are the least biased votes we can get. -->
+<!-- **b** — Below 1.5, a session tends to hand back way too much, and no cut
+     fixes it. What helps is Spot Check's twenty random picks, used as training
+     votes. -->
 
-<!-- **c** — So when the labels separate weakly, Autopilot runs Spot Check by
-     itself: never during the opening, while it's still working off the query,
-     and again 25 votes after each check while things stay weak. Here it fires
-     right as the opening ends. It pays off late, with a couple more Goods
-     found by vote 150. We skip it on faces, where a person's few photos are
-     found before a check could even start. -->
+<!-- **c** — So when the labels separate weakly, Autopilot runs Spot Check
+     itself: after the opening, and again 25 votes after each check while it
+     stays weak. It pays off late. We skip it on faces, where a person's few
+     photos are found before a check could start. -->

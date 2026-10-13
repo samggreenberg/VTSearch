@@ -23,8 +23,7 @@
      starts with a quick check of the line: a few random picks to answer, if
      you want to know how far to trust it. -->
 
-<!-- **b** — The Review tab has the new photos, best match first, and the line
-     kept the top twenty-five. Check any you like with Good or Bad, or don't
-     bother. Export sends the matches wherever you need them: a file, an email,
-     a folder. And once you trust the detector, Find skips the test, and
-     AutoFind does the whole thing on every new pile by itself. -->
+<!-- **b** — The Review tab has the new photos, best match first; the line kept
+     the top twenty-five. Check any you like with Good or Bad, or don't. Export
+     sends the matches wherever you need them. And once you trust it, AutoFind
+     does all this on every new pile by itself. -->
