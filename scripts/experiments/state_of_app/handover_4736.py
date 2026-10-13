@@ -448,8 +448,12 @@ def read_arm_pair(args: tuple[str, str, float, int]) -> dict | None:
     tagged = _rows_by_t(arm[tag], beta).drop_duplicates("t", keep="last")
     abase = _rows_by_t(_cells_io._base_rows(arm), beta).drop_duplicates("t", keep="last").sort_values("t")
     cbase = _rows_by_t(_cells_io._base_rows(ctl), beta).drop_duplicates("t", keep="last").sort_values("t")
-    horizon = int(abase["t"].max())
-    # The picks, click for click, up to the arm's last vote (a check round past it is the arm's end, not a click).
+    # Through the hold: past it the arm is today's code, and a run cut short of 150 votes picks differently near
+    # its end (the prompted check starts only with its rounds' votes left in the budget).
+    horizon = min(int(abase["t"].max()), int(hold))
+    abase = abase[abase["t"] <= horizon]
+    tagged = tagged[tagged["t"] <= horizon]
+    # The picks, click for click, through the horizon (a check round past it is not a click here).
     ap = apk[(apk["t"] <= horizon) & (apk["phase"] != "check")]
     cp = cpk[(cpk["t"] <= horizon) & (cpk["phase"] != "check")]
     picks_same = len(ap) == len(cp) and bool((ap["picked_id"].to_numpy() == cp["picked_id"].to_numpy()).all())
