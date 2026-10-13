@@ -419,6 +419,129 @@ def price(a: argparse.Namespace) -> None:
     print((out / "summary.md").read_text())
 
 
+HOLD_TAG = "hold:head"
+QUERY = "query"
+ARM_COLS = [*BASE_COLS, "gmm_variant"]
+
+
+def _rows_by_t(df: pd.DataFrame, beta: float) -> pd.DataFrame:
+    df = df[~_cells_io.check_rows(df) & np.isclose(df["beta"].astype(float), beta) & (df["t"] <= T)]
+    return df.assign(F=fbeta_pr(df["precision"].to_numpy(), df["recall"].to_numpy(), beta))
+
+
+def read_arm_pair(args: tuple[str, str, float, int]) -> dict | None:
+    """One run of the hold's arm against the same run of today's sessions: the checks, and both F curves."""
+    arm_path, ctl_path, beta, hold = args
+    try:
+        arm = pd.read_csv(arm_path, usecols=lambda c: c in ARM_COLS, low_memory=False)
+        ctl = pd.read_csv(ctl_path, usecols=lambda c: c in BASE_COLS, low_memory=False)
+        apk = pd.read_csv(arm_path.replace(".csv", "__picks.csv"))
+        cpk = pd.read_csv(ctl_path.replace(".csv", "__picks.csv"))
+    except (pd.errors.EmptyDataError, OSError, ValueError):
+        return None
+    if arm.empty or ctl.empty:
+        return None
+    key = (str(arm["category"].iloc[0]), int(arm["seed"].iloc[0]))
+    if key != (str(ctl["category"].iloc[0]), int(ctl["seed"].iloc[0])):
+        return {"error": f"{arm_path}: {key} is not the control's run"}
+    tag = arm["gmm_variant"].fillna("").astype(str) == HOLD_TAG
+    tagged = _rows_by_t(arm[tag], beta).drop_duplicates("t", keep="last")
+    abase = _rows_by_t(_cells_io._base_rows(arm), beta).drop_duplicates("t", keep="last").sort_values("t")
+    cbase = _rows_by_t(_cells_io._base_rows(ctl), beta).drop_duplicates("t", keep="last").sort_values("t")
+    horizon = int(abase["t"].max())
+    # The picks, click for click, up to the arm's last vote (a check round past it is the arm's end, not a click).
+    ap = apk[(apk["t"] <= horizon) & (apk["phase"] != "check")]
+    cp = cpk[(cpk["t"] <= horizon) & (cpk["phase"] != "check")]
+    picks_same = len(ap) == len(cp) and bool((ap["picked_id"].to_numpy() == cp["picked_id"].to_numpy()).all())
+    ctrained = cbase[cbase["detector_tier"].astype(str) == TRAINED].set_index("t")["F"]
+    head_same = all(abs(f - ctrained.get(t, np.nan)) < 1e-9 for t, f in zip(tagged["t"], tagged["F"]))
+    aq = abase[abase["detector_tier"].astype(str) == QUERY]
+    qf = aq["F"].unique()
+    atrained = abase[abase["detector_tier"].astype(str) == TRAINED].set_index("t")["F"]
+    after_same = all(abs(f - ctrained.get(t, np.nan)) < 1e-9 for t, f in atrained.items())
+    ft = float(ctrained.index.min()) if len(ctrained) else np.inf
+    held_past_quota = aq[aq["t"] >= ft]
+    q = float(qf[0]) if len(qf) else np.nan
+    # Today: the typed query's set until the quota (#4758), the head from it.  The arm: its own rows up to its
+    # last vote, today's head after it.
+    head = carry(ctrained.index.to_numpy(), ctrained.to_numpy())
+    today = np.where(GRID >= ft, head, q)
+    arm_curve = carry(abase["t"].to_numpy(), abase["F"].to_numpy())
+    arm_curve = np.where(GRID <= horizon, arm_curve, today)
+    return {
+        "category": key[0],
+        "seed": key[1],
+        "horizon": horizon,
+        "first_trained": ft,
+        "picks_same": picks_same,
+        "head_same": head_same,
+        "after_same": after_same,
+        "query_sets": len(qf),
+        "held_app_trained": int(held_past_quota["app_trained"].fillna(0).astype(int).sum()),
+        "n_held_past_quota": len(held_past_quota),
+        "last_held": float(held_past_quota["t"].max()) if len(held_past_quota) else np.nan,
+        "query_F": q,
+        "today": today,
+        "arm": arm_curve,
+    }
+
+
+def arm_check(a: argparse.Namespace) -> None:
+    """The hold's arm against today's sessions, run for run: the checks that it is today's but for what Test gives."""
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    summary = []
+    for spec in a.arm:
+        preset, rest = spec.split("=", 1)
+        arm_dir, ctl_dir, beta_s, offline = rest.split("::")
+        beta = float(beta_s)
+        cells = sorted(p.name for p in Path(arm_dir).glob("task_[0-9]*.csv") if "__" not in p.name)
+        jobs = [(str(Path(arm_dir) / c), str(Path(ctl_dir) / c), beta, a.hold) for c in cells]
+        with ProcessPoolExecutor(a.workers) as ex:
+            got = [g for g in ex.map(read_arm_pair, jobs, chunksize=4) if g is not None]
+        errors = [g["error"] for g in got if "error" in g]
+        runs = [g for g in got if "error" not in g]
+        cls = np.array([r["category"].split("@")[0] for r in runs])
+        today = np.stack([r["today"] for r in runs])
+        armF = np.stack([r["arm"] for r in runs])
+        r = {
+            "preset": preset,
+            "cells": len(cells),
+            "runs": len(runs),
+            "mismatched_runs": len(errors),
+            "picks_same": sum(x["picks_same"] for x in runs),
+            "head_rows_same": sum(x["head_same"] for x in runs),
+            "trained_rows_same": sum(x["after_same"] for x in runs),
+            "one_query_set": sum(x["query_sets"] == 1 for x in runs),
+            "held_rows_app_trained": sum(x["held_app_trained"] for x in runs),
+            "runs_held_past_quota": sum(x["n_held_past_quota"] > 0 for x in runs),
+            "last_held_vote": float(np.nanmax([x["last_held"] for x in runs])),
+        }
+        for s, span in SPANS.items():
+            r[f"today_{s}"] = float(span_mean(today, span).mean())
+            r[f"d_{s}"], r[f"se_{s}"] = _mean_se(span_mean(armF, span) - span_mean(today, span), cls)
+        seeds = np.array([x["seed"] for x in runs])
+        d150 = span_mean(armF, (1, 150)) - span_mean(today, (1, 150))
+        r["d_1-150_by_seed"] = " ".join(f"{d150[seeds == s].mean():+.4f}" for s in sorted(set(seeds)))
+        if offline:
+            # The offline price on the text baseline, on the same runs: what the arm replaces.
+            off = Arm(offline)
+            idx = {(c, int(s)): i for i, (c, s) in enumerate(zip(off.category, off.seed))}
+            sel = np.array([idx[(x["category"], x["seed"])] for x in runs])
+            F = off.handover(np.maximum(off.ft, float(a.hold)))[sel]
+            base = off.handover(off.ft)[sel]
+            for s, span in SPANS.items():
+                r[f"offline_{s}"] = float((span_mean(F, span) - span_mean(base, span)).mean())
+            r["query_F_minus_baseline"] = float(np.nanmean(np.array([x["query_F"] for x in runs]) - off.tq[sel]))
+        summary.append(r)
+        if errors:
+            print("\n".join(errors[:5]))
+    tab = pd.DataFrame(summary)
+    tab.to_csv(out / "arm.csv", index=False)
+    with pd.option_context("display.width", 250, "display.max_columns", 60):
+        print(tab.T.to_string())
+
+
 HOLDS = tuple(range(0, 81, 5))
 
 
@@ -563,11 +686,20 @@ def main() -> None:
     f.add_argument("--arm", action="append", required=True, help="PRESET=extract.npz::panel title, repeatable")
     f.add_argument("--hold", type=int, default=30)
     f.add_argument("--out", required=True)
+    c = sub.add_parser("arm")
+    c.add_argument(
+        "--arm", action="append", required=True, help="PRESET=ARM_CELLS::CONTROL_CELLS::BETA::OFFLINE.npz, repeatable"
+    )
+    c.add_argument("--hold", type=int, default=30)
+    c.add_argument("--workers", type=int, default=16)
+    c.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "extract":
         extract(a)
     elif a.cmd == "figures":
         figures(a)
+    elif a.cmd == "arm":
+        arm_check(a)
     else:
         price(a)
 
