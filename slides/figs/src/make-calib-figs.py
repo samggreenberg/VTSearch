@@ -6429,24 +6429,40 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
                                    linewidth=0.3, zorder=1))  # fmt: skip
 
 
-def _land_axes(ax: plt.Axes) -> None:
-    """The two axes: counts at the cells' centres, ticked where something changes."""
-    from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA, GOOD_QUOTA, QUERY_HOLD_LABELS  # noqa: PLC0415
+def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None:
+    """A map's frame: evenly ticked counts at the cells' centres, plain axis names, and the chart's label.
 
+    Shared by Inside Job and Lay of the Land, so the pair reads as one chart
+    asked twice: the label over each says whose counts the axes are, and the
+    axes themselves just say Goods and Bads. The decisions' values are where the
+    black edges are, so no tick is spent on them. *cell* is the map's
+    ``(b, g) -> (x, y, w, h)``.
+    """
     x0, y0, x1, y1 = LAND_BOX
-    _, _, cw, ch = _land_cell(0, 0)
+    _, _, cw, ch = cell(bads[0], goods[0])
     ax.plot([x0, x1], [y0, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
     ax.plot([x0, x0], [y0, y1], color=INK, linewidth=BASELINE_LW, zorder=3)
-    for b in (0, BAD_QUOTA, DRY_BAD_QUOTA, QUERY_HOLD_LABELS, LAND_B):
-        x = x0 + (b + 0.5) * cw
+    for b in bads:
+        x = cell(b, goods[0])[0] + cw / 2
         ax.plot([x, x], [y0 - 0.1, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
         ax.text(x, y0 - 0.18, str(b), ha="center", va="top", fontsize=16, color=INK)
     ax.text((x0 + x1) / 2, y0 - 0.75, "Bads", ha="center", va="top", fontsize=16, color=INK)
-    for g in (0, 1, GOOD_QUOTA, 6, 10, LAND_G):
-        y = y0 + (g + 0.5) * ch
+    for g in goods:
+        y = cell(bads[0], g)[1] + ch / 2
         ax.plot([x0 - 0.1, x0], [y, y], color=INK, linewidth=BASELINE_LW, zorder=3)
         ax.text(x0 - 0.18, y, str(g), ha="right", va="center", fontsize=16, color=INK)
-    ax.text(x0 - 0.75, y0 + 6.5 * ch, "Goods", ha="right", va="center", fontsize=16, color=INK)
+    # Named halfway between the two ticks nearest the middle, so the name is
+    # never read with a number beside it ("Goods 8").
+    mid = goods[len(goods) // 2]
+    name_y = (cell(bads[0], mid)[1] + cell(bads[0], goods[len(goods) // 2 - 1])[1]) / 2 + ch / 2
+    ax.text(x0 - 0.9, name_y, "Goods", ha="right", va="center", fontsize=16, color=INK)
+    ax.text((x0 + x1) / 2, y1 + LABEL_GAP, title, ha="center", va="bottom", fontsize=18, fontweight="bold",
+            color=INK)  # fmt: skip
+
+
+def _land_axes(ax: plt.Axes) -> None:
+    """Lay of the Land's frame: every ten Bads, every two Goods, under "What the user holds"."""
+    _map_axes(ax, _land_cell, range(0, LAND_B + 1, 10), range(0, LAND_G + 1, 2), "What the user holds")
 
 
 def _land_name(ax: plt.Axes, b: float, g: float, text: str, plate: str | None = None) -> None:
@@ -6627,23 +6643,8 @@ def _in_cells(ax: plt.Axes, stage: int) -> None:
 
 
 def _in_axes(ax: plt.Axes) -> None:
-    """The two axes, in what a fold holds out: Bads ticked at the Bads' edge, every Goods row ticked."""
-    x0, y0, x1, y1 = LAND_BOX
-    _, _, cw, ch = _in_cell(1, 1)
-    _, bad_edge = _in_edges()
-    ax.plot([x0, x1], [y0, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
-    ax.plot([x0, x0], [y0, y1], color=INK, linewidth=BASELINE_LW, zorder=3)
-    for b in (1, 20, 40, bad_edge, 60, IN_B):
-        x = _in_cell(b, 1)[0] + cw / 2
-        ax.plot([x, x], [y0 - 0.1, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
-        ax.text(x, y0 - 0.18, str(b), ha="center", va="top", fontsize=16, color=INK)
-    ax.text((x0 + x1) / 2, y0 - 0.75, "Bads each fold holds out", ha="center", va="top", fontsize=16, color=INK)
-    for g in range(1, IN_G + 1):
-        y = _in_cell(1, g)[1] + ch / 2
-        ax.plot([x0 - 0.1, x0], [y, y], color=INK, linewidth=BASELINE_LW, zorder=3)
-        ax.text(x0 - 0.18, y, str(g), ha="right", va="center", fontsize=16, color=INK)
-    ax.text(x0 - 0.75, y0 + 2.5 * ch, "Goods\neach fold\nholds out", ha="right", va="center", fontsize=16,
-            color=INK)  # fmt: skip
+    """Inside Job's frame: every ten Bads, every Goods row, under "What each fold holds out"."""
+    _map_axes(ax, _in_cell, range(10, IN_B + 1, 10), range(1, IN_G + 1), "What each fold holds out")
 
 
 # ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──
