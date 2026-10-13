@@ -1209,11 +1209,11 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
 
-#: Issue #4786's gate: until the labels line's class model holds this many Bads (and
-#: while it holds few Goods), the line keeps the head's count (``vtscore.eval.
-#: live_threshold_rules.head_count_bads``).  Unset is the app's; ``0`` is the line
-#: before #4786.  A value that is not a non-negative integer is kept as given, for
-#: the harness to refuse.
+#: The Bads half of issue #4786's gate: while the labels line's class model holds few
+#: Goods and fewer than this many Bads, the line keeps the head's count (``vtscore.eval.
+#: live_threshold_rules.head_count_bads``).  Unset is the app's (no Bads half since
+#: #4798); ``0`` is the line before #4786, ``32`` #4786's gate.  A value that is not a
+#: non-negative integer is kept as given, for the harness to refuse.
 _HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
 HEAD_COUNT_BADS: "int | str | None" = (
     int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)

@@ -10,6 +10,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The labels line keeps the head's count until the class model holds 6 held-out Goods, whatever its
+  Bads** (issue #4798). `HEAD_COUNT_BADS` is unbounded (it was 32), so `head_count_serves` is the Goods
+  half alone. With two to five held-out Goods past 32 Bads, the class model's cut ran to the corpus's
+  end at beta 4 on 2.5% of FHIBE face clicks; no fix to `corpus_cut`'s positives total won on COCO.
+  Priced as full sessions: Find's mean F-beta over votes 1-150 +0.008 to +0.032 on faces at beta 1/4 and
+  1 and +0.004 / +0.014 at beta 4; COCO Better's Binary opening +0.001 at beta 1/4 and at 1,
+  -0.002 at beta 4. `head_count_bads(32)` (`CALIB_HEAD_COUNT_BADS=32`) is #4786's gate.
+
 - **While the class model is thin, the labels line is the head's count** (issue #4786).
   `LabelsLine.threshold` keeps, at every balance, what the Goods' centroid's count rule finds standing
   out in the head's own logit scores (`head_count_cut`) while the class model holds fewer than

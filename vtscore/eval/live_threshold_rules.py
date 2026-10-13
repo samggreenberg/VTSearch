@@ -230,13 +230,14 @@ def sigma_floor(mode: str) -> Iterator[None]:
 
 @contextmanager
 def head_count_bads(bads: "int | str | None") -> Iterator[None]:
-    """Hold the labels line's head-count gate at *bads* while the block runs (#4786).
+    """Hold the Bads half of the labels line's head-count gate at *bads* while the block runs (#4786).
 
-    Until the class model holds :data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_BADS`
-    Bads (and fewer than its ``HEAD_COUNT_GOODS`` Goods), the line keeps the head's count
-    (:func:`~vtscore.training.thresholds.labels_line.head_count_cut`).  *bads* replaces that
-    gate: ``0`` is the line before #4786, another count prices another gate, and ``None``
-    changes nothing (the app's).  Every line reads the module's constant when it cuts,
+    Until the class model holds ``HEAD_COUNT_GOODS`` Goods, and while it holds fewer than
+    :data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_BADS` Bads (unbounded in the
+    app since #4798), the line keeps the head's count
+    (:func:`~vtscore.training.thresholds.labels_line.head_count_cut`).  *bads* bounds that
+    half: ``0`` is the line before #4786, ``32`` is #4786's gate, another count prices
+    another gate, and ``None`` changes nothing (the app's).  Every line reads the module's constant when it cuts,
     Train's and Find's alike, so the swap reaches both; it is process-wide, as
     :func:`sigma_floor`'s is, and undone on the way out.
     """
