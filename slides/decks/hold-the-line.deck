@@ -51,29 +51,37 @@ slides:
   make-detector
   train-loop
   find-results
-  find-line
+  # Drawing the Line, the Find screen scrolled to the line, was cut here
+  # (owner, 2026-10-13: too technical this early, and the Test flow has moved
+  # on since it was shot); the line is first met on Pics on a Plane.
   embed-flow
   vote-boundary
 
   # II — Calibration: the three ideas the labels line (section III) is built
-  # from, and only those (#4670), then the fit that joins them. The folds'
-  # held-out scores are its class model; the unlabeled corpus is where it
-  # counts the matches; EM is how it fits that corpus; Joint Custody is the
-  # three together, ending on the two numbers section III draws the line
-  # from, before any balance is set. The rules that once stacked on these —
-  # the blend, the fused cut, rank transfer, the 70/30 split — are in the
-  # appendix: measured in F-beta, none of them beat cross-calibration (#4582,
-  # #4583), and none draws today's line.
+  # from, and only those (#4670), then the first, naive way they were put
+  # together. The folds' held-out scores are its class model; the unlabeled
+  # corpus is where it counts the matches; EM is how it fits that corpus;
+  # Cross Examination averages the folds' cut with the corpus's, which is
+  # shown before the fit that joins them properly (owner, 2026-10-13: show
+  # the naive combining before the nuanced one). That fit, Joint Custody, is
+  # in section III, right before the line it feeds. The other rules that once
+  # stacked on these — the fused cut, rank transfer, the 70/30 split — are in
+  # the appendix: measured in F-beta, none of them beat cross-calibration
+  # (#4582, #4583), and none draws today's line.
   outline-hold-the-line +at2
   xcal
   gmm-idea
   gmm-em
-  labels-fit
+  blend
 
   # III — Inclination: why a line needs one, what F1 and F-beta are (#4517),
   # F-beta's peak and the three-radio balance that sets its beta (#4413,
-  # #4448), the line the labels draw at its expected peak (#4452), and why
-  # the labels are what it is drawn from: they are all Find has (#4517). Then
+  # #4448), then Joint Custody — section II's three ideas fitted together,
+  # ending on the two numbers the line is drawn from, before any balance is
+  # set — right before the line the labels draw at its expected peak (#4452):
+  # how it was done without beta, then how it is done with beta (owner,
+  # 2026-10-13). Then why the labels are what the line is drawn from: they
+  # are all Find has (#4517). Then
   # the line before the labels can draw one, a count of what stands out, and
   # who draws it as the labels grow (#4603, #4759, #4786, #4798). Then
   # the question that line cannot answer before anyone checks (how many of
@@ -90,6 +98,7 @@ slides:
   fbeta-metrics
   fbeta-maps
   balance-fbeta
+  labels-fit
   labels-line
   transfer-student
   # The line before the labels line can stand: a count of what stands out,
@@ -292,13 +301,13 @@ slides:
   # rather than a slide to walk a room through.
   follow-suit
   # Then the line rules that stacked on section II's ideas and did not last,
-  # moved out of Calibration (#4670). Measured in F-beta at the three presets,
-  # none beat cross-calibration (#4582, at the 0.44% pool), and each slide's
-  # notes say what it measured against the rule before it. None draws
+  # moved out of Calibration (#4670); the blend itself went back there as the
+  # naive combining (owner, 2026-10-13). Measured in F-beta at the three
+  # presets, none beat cross-calibration (#4582, at the 0.44% pool), and each
+  # slide's notes say what it measured against the rule before it. None draws
   # today's line; the fused cut and rank transfer survive only as the
   # fallback for a session whose votes cannot support the labels' model, and
   # the 70/30 split ships as a null (#4583).
-  blend
   anchored-gmm
   anchored-em
   quantile-transfer

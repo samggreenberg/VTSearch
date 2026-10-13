@@ -5250,8 +5250,9 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 #: balanced radio, and the line at its peak; the other two radios' peaks.
 LL_STAGES = 5
 #: The first stage What to Expect shows. The three before it are Joint
-#: Custody's (`calib-labels-fit`), at the end of section II, so the slide opens
-#: on that fit recapped and builds only what the balance adds.
+#: Custody's (`calib-labels-fit`), the slide right before it (owner,
+#: 2026-10-13: the fit without a balance, then the line with one), so the slide
+#: opens on that fit recapped and builds only what the balance adds.
 LL_FIRST_SHOWN = 3
 
 #: The canvas: `FBETA_CANVAS`, so the two slides that explain the balance
@@ -5521,7 +5522,10 @@ def labels_fit_fig() -> None:
     rest are fitted, and the count of matches that fit gives; then the other
     thing the same fit says, every item's chance of being a match, in the row
     where What to Expect will draw expected F-beta. No line: choosing one
-    takes the user's balance, which section III introduces.
+    takes the user's balance. It sits in section III right before What to
+    Expect, after the balance is introduced and after section II has shown
+    Cross Examination, the naive averaging this fit replaced (owner,
+    2026-10-13).
     """
     final = _lf_stage(LF_STAGES)
     box = tight_box(final)

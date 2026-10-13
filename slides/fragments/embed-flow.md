@@ -10,19 +10,14 @@
 
 <!-- build: figs/embed-flow.build3.png -->
 
-<!-- **a** — Quick detour: how does typing one word find pictures? Start with
-     the pile of photos. -->
+<!-- **a** — Let's talk about how this works. There's an embedder called
+     SigLIP. -->
 
-<!-- **b** — When we import them, every photo goes through a big pretrained
-     network, SigLIP, once, and comes out as a point in a 768-dimensional
-     space; the cube stands in for that. Similar photos land near each other.
-     And since the big network never runs again, retraining the tiny detector
-     on top is instant. -->
+<!-- **b** — It can take a pile of pictures and make them vectors in content
+     space. (Content-space is like 768-dimensions, but of course we drew it 3-d
+     here.) -->
 
-<!-- **c** — Now the word. "book" goes through the same network. One model, two
-     kinds of input. -->
+<!-- **c** — But SigLIP can ALSO take text (like the word "book") -->
 
-<!-- **d** — So it lands in the same space as the photos, and "which photos are
-     near the word book?" is a question with an answer. That's our first
-     ranking, and that's where the first question comes from. After that, the
-     votes take over and the word stops mattering. -->
+<!-- **d** — and put THAT into content space. So now we can see which photos
+     are close to each other or to our text. -->
