@@ -640,6 +640,32 @@ against the full VG source the same band holds **643** categories. So the fix is
 to use `vg_box_small` — built for exactly this — rather than to re-cut the band
 on a dataset that was never sampled for scale.
 
+## A second source: `o365_better` (#4815)
+
+`coco_better`'s construction on Objects365 v2's validation split: the same *C*,
+bands, pool rule and media dict, through the same `scale_core` objects, so a cell
+of the same name means the same thing on both. It exists to **confirm** method
+comparisons made on `coco_better`, and it can only do that if nothing is tuned
+on it.
+
+What changes is the vocabulary. `pile_config.O365_NAMES` maps each class onto
+Objects365 categories through its class rule, and `O365_AMBIGUOUS` holds the
+names that may or may not be the class. A box under an ambiguous name, or one the
+release flags `iscrowd` / `isfake` / `isreflected`, holds the class (so the image
+is no negative for it) but is never a positive. The supply census reads the
+annotation file alone, through the loader's own reader:
+
+```bash
+python o365_supply.py --annotations <zhiyuan_objv2_val.json> --out supply.json
+```
+
+Val fills 110 of 147 cells (the rest are `O365_DROPPED_CELLS`) and a 7,356-image
+pool, so a cell is scored against fewer negatives than on `coco_better` and
+absolute AP does not compare across the two. Full numbers, the rulings the
+ambiguous names are waiting on, and how to stage the images:
+[`docs/experiments/2026-10-13-o365-supply-4815/`](../../../docs/experiments/2026-10-13-o365-supply-4815/REPORT.md).
+The dataset is `on_request`, so it builds only when named.
+
 ## Rebuilding
 
 Scratch is treated as purgeable, so every cell must rebuild from sources that

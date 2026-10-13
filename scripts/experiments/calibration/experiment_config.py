@@ -249,6 +249,13 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "coco_better": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
+    # `o365_better` (#4815) is `coco_better`'s construction on Objects365, on the
+    # same *C* and the same `class@band` keys -- so the same texts, for the same
+    # reason: it exists to be read against `coco_better`, and a query that
+    # differed between them would put a seeding axis inside the source axis.
+    "o365_better": {
+        f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
+    },
     "coco_val": _COCO_TEXTS,
     # `vg_scale` with the band collapsed away (#3115): the same verified images
     # under the bare class name, so the same twelve texts serve it.  Without this
@@ -393,6 +400,10 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # seeding difference inside the voting-mode axis (#3276, #3278). Both halves
     # are built for this dataset, so the pair is available rather than aspirational.
     "coco_better": os.environ.get("CALIB_COCO_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    # `o365_better` (#4815): the same two arms on the second source. Its own env
+    # var for the reason `coco_better` has one: the two are run against each other,
+    # and a shared knob would turn a source contrast into a column contrast.
+    "o365_better": os.environ.get("CALIB_O365_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
     # FHIBE (#4699): one identity per cell, the person's one-person photos as
     # its positives. The photo arms are whole images at two stored sizes; the
     # face arms are `image2face` crops of those copies, embedded by FaceNet. The
@@ -469,6 +480,8 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # `test_pile_boxed_datasets_are_registered` is now the guard rather than this
     # comment.
     "coco_better": True,
+    # Objects365's own boxes, banded by the same rule (#4815).
+    "o365_better": True,
     # FHIBE's photos carry the subject's annotated face box (#4699). Only a
     # whole-image embedder is built for them, so they binary-vote; the entry
     # keeps a future patch arm from silently doing the same. The face crops
