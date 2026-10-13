@@ -29,6 +29,14 @@ gained on FHIBE's faces and COCO Better's Binary opening, and on the Region path
 it ranked slightly better at a hair's cost in F-beta (−0.002 ± 0.002), and the
 owner chose one head everywhere.  The eval harness names it
 ``head="linear_svm_prior"``; ``head="linear_svm"`` is the plain SVM before it.
+
+**A second prior, the typed query's direction (#4384), is an eval arm.**  On a
+typed-query detector the query's own embedding ranks the corpus better than the
+first heads do for about 30 votes (#4736).  :data:`QUERY_PRIOR` adds it as a
+second cheap feature beside the centroid, so the head starts from the text sort
+as well as from the Goods and leaves both as the labels pay for.  It is ``None``
+in the app; the harness sets it for a run
+(:func:`vtscore.eval.live_threshold_rules.query_prior`).
 """
 
 from __future__ import annotations
@@ -42,6 +50,11 @@ import numpy as np
 #: 1, 3 and 10 over votes 1-50 in #4776's shadow pricing, on faces and on COCO.
 CENTROID_PRIOR_SCALE: float = 10.0
 
+#: The typed query's unit direction and its feature scale, as a second prior
+#: (#4384, an eval arm).  ``None`` (the app's) adds nothing.  A fit in a space of
+#: another size (a region bag's) also adds nothing.
+QUERY_PRIOR: tuple[np.ndarray, float] | None = None
+
 
 def centroid_prior_direction(
     X: np.ndarray,
@@ -50,10 +63,13 @@ def centroid_prior_direction(
     scale: float = CENTROID_PRIOR_SCALE,
     seed: int = 42,
     sample_weight: np.ndarray | None = None,
+    query: tuple[np.ndarray, float] | None = None,
 ) -> tuple[np.ndarray, float]:
     """``(w, b)`` of the SVM started from the Goods' centroid of *X*'s positive rows.
 
-    Raises :class:`ValueError` without both classes.
+    *query* is a second prior, ``(direction, scale)`` (#4384); unset, it is
+    :data:`QUERY_PRIOR`.  A *scale* of 0 drops the centroid's feature, so the
+    query can be priced alone.  Raises :class:`ValueError` without both classes.
     """
     from sklearn.svm import LinearSVC  # noqa: PLC0415
 
@@ -75,9 +91,18 @@ def centroid_prior_direction(
         max_iter=5000,
         random_state=seed,
     )
-    clf.fit(np.hstack([X, scale * (X @ centroid)[:, None]]), (y > 0.5).astype(int), sample_weight=sample_weight)
-    w = np.asarray(clf.coef_, dtype=np.float64).ravel()
-    return w[:-1] + scale * w[-1] * centroid, float(np.asarray(clf.intercept_).ravel()[0])
+    priors = [(float(scale), centroid)] if scale > 0 else []
+    query = QUERY_PRIOR if query is None else query
+    if query is not None and query[1] > 0 and np.asarray(query[0]).shape == (X.shape[1],):
+        direction = np.asarray(query[0], dtype=np.float64)
+        priors.append((float(query[1]), direction / np.linalg.norm(direction)))
+    features = [X, *[(s * (X @ d))[:, None] for s, d in priors]]
+    clf.fit(np.hstack(features), (y > 0.5).astype(int), sample_weight=sample_weight)
+    coef = np.asarray(clf.coef_, dtype=np.float64).ravel()
+    w = coef[: X.shape[1]].copy()
+    for k, (s, d) in enumerate(priors):
+        w += s * coef[X.shape[1] + k] * d
+    return w, float(np.asarray(clf.intercept_).ravel()[0])
 
 
 def fit_linear_svm_prior_head(
