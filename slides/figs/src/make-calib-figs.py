@@ -6407,7 +6407,7 @@ def _land_stage(stage: int) -> plt.Figure:
     ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
     # Every region's name sits where no later page draws over it: the trained
     # head's three to the right of the typed query's staircase.
-    _land_name(ax, LAND_B / 2 + 0.5, 0.5, "no Goods")
+    _land_name(ax, LAND_B / 2 + 0.5, 0.5, "0 Goods")
     _land_name(ax, 8.0, 2.0, "under\nthe quota", plate=LAND_FILL["centroid"] if stage >= 4 else None)
     if stage >= 2:
         _land_quota(ax, stage)
@@ -6533,12 +6533,12 @@ def _land_quota(ax: plt.Axes, stage: int) -> None:
     _, _, cw, ch = _land_cell(0, 0)
     edge = [(BAD_QUOTA, LAND_G + 1), (BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, 1)]
     ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, LAND_NAME_B, 4.5 if stage >= 3 else 8.0, "under 6\nheld-out Goods")
+    _land_name(ax, LAND_NAME_B, 4.5 if stage >= 3 else 8.0, "< 6 Goods\nheld out")
 
 
 def _land_labels(ax: plt.Axes) -> None:
     """Page 3: the labels line, and the Goods where the split decides."""
-    _land_name(ax, LAND_NAME_B, 13.5, "6+ held-out\nGoods")
+    _land_name(ax, LAND_NAME_B, 13.5, "≥ 6 Goods\nheld out")
     _land_name(ax, LAND_NAME_B, 9.0, "either, as the\nsplit rounds")
 
 
@@ -6567,15 +6567,17 @@ def _land_query(ax: plt.Axes) -> None:
         xs += [x0 + b * cw, x0 + b * cw]
         ys += [y0 + g * ch, y0 + (g + 1) * ch]
     ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, 14.0, 4.5, f"typed query,\nunder {QUERY_HOLD_LABELS} labels", plate=LAND_FILL["count"])
+    _land_name(ax, 14.0, 4.5, f"typed query,\n< {QUERY_HOLD_LABELS} labels", plate=LAND_FILL["count"])
 
 
 # ── Inside Job: the trained head's line, read off what a fold holds out ─────
 
 #: How many build stages the inside view reveals in: a thin class model,
-#: counting what stands out; the labels line, from three Goods per fold; where
-#: the Bads may shape the negatives, from fifty Bads per fold.
-IN_STAGES = 3
+#: counting what stands out; the labels line, from three Goods per fold.
+#: #4490's random-sample Bads are not drawn: whether a labelset's Bads pass
+#: that test is read off their scores, not their count, so it is no edge on a
+#: map of counts, and a session's Bads never pass it.
+IN_STAGES = 2
 #: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 0..IN_G.
 #: A fold always holds out at least one of each (`_grouped_folds` trains on at
 #: most all but one of a class), so the Bads start at 1; the Goods row at 0 is
@@ -6590,8 +6592,7 @@ def _in_grid() -> np.ndarray:
     For each count a fold holds out, every fold holding out the same, as
     `_grouped_folds` makes them: build the folds' held-out scores (Goods high,
     Bads low, spread), fit `class_score_model` to them, and ask
-    `head_count_serves` and whether the model kept the Bads' scores
-    (`RANDOM_BADS_MIN`). The scores only have to separate; the counts decide.
+    `head_count_serves`. The scores only have to separate; the counts decide.
     """
     from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
     from vtscore.training.thresholds.labels_line import class_score_model, head_count_serves  # noqa: PLC0415
@@ -6605,10 +6606,7 @@ def _in_grid() -> np.ndarray:
             fold = (list(goods) + list(bads), [1.0] * g + [0.0] * b)
             model = class_score_model([fold] * DEFAULT_CALIBRATE_COUNT)
             assert model is not None
-            if head_count_serves(model):
-                kind[g, b] = "count"
-            else:
-                kind[g, b] = "bads" if model.neg_logits is not None else "labels"
+            kind[g, b] = "count" if head_count_serves(model) else "labels"
     return kind
 
 
@@ -6620,9 +6618,7 @@ def inside_job_fig() -> None:
     line is a decision tree on two counts, with nothing left to chance. It
     comes before Lay of the Land, which is the band this rule makes once the
     rounding is unknown. One or two Goods per fold, the head counts what stands out; three
-    (six between the two folds, `HEAD_COUNT_GOODS`), the labels line; fifty
-    Bads per fold (`RANDOM_BADS_MIN` between them), and the line may model the
-    negatives by the Bads' own scores, if they look like a random sample.
+    (six between the two folds, `HEAD_COUNT_GOODS`), the labels line.
     """
     final = _in_stage(IN_STAGES)
     box = tight_box(final)
@@ -6638,28 +6634,26 @@ def _in_cell(b: float, g: float) -> tuple[float, float, float, float]:
     return x0 + (b - 1) * w, y0 + g * h, w, h
 
 
-def _in_edges() -> tuple[int, int]:
-    """``(Goods, Bads)`` a fold must hold out for the labels line, and for the Bads' own shape."""
+def _in_edge() -> int:
+    """The Goods a fold must hold out for the labels line: `HEAD_COUNT_GOODS` between the folds."""
     from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
-    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, RANDOM_BADS_MIN  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
 
-    return HEAD_COUNT_GOODS // DEFAULT_CALIBRATE_COUNT, RANDOM_BADS_MIN // DEFAULT_CALIBRATE_COUNT
+    return HEAD_COUNT_GOODS // DEFAULT_CALIBRATE_COUNT
 
 
 def _in_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the inside view."""
-    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
-
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, LL_CANVAS[0])
     ax.set_ylim(0, LL_CANVAS[1])
     ax.set_axis_off()
-    x0, y0, x1, y1 = LAND_BOX
+    x0, y0, x1, _ = LAND_BOX
     _, _, cw, ch = _in_cell(1, 0)
-    good_edge, bad_edge = _in_edges()
+    edge = _in_edge()
     _in_cells(ax, stage)
-    _map_table(ax, IN_TABLE, stage, hatched=("labels", 3))
+    _map_table(ax, IN_TABLE, stage)
     _in_axes(ax)
     # The no-Goods row's edge, ruled, as on Lay of the Land.
     ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
@@ -6667,38 +6661,30 @@ def _in_stage(stage: int) -> plt.Figure:
     def name(b: float, g: float, text: str) -> None:
         ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
 
-    name(IN_B / 2, 0.5, "no Goods")
-    # The chart's title says "each fold holds out", so the names do not.
-    name(IN_B / 2, 2.0, f"under {good_edge} Goods")
+    # In math, not words (owner, 2026-10-13), and per fold only: the chart's
+    # title says so, and the deck doubles it where it must.
+    name(IN_B / 2, 0.5, "0 Goods")
+    name(IN_B / 2, 2.0, f"< {edge} Goods")
     if stage >= 2:
-        edge_y = _in_cell(1, good_edge)[1]
+        edge_y = _in_cell(1, edge)[1]
         ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
-        name(bad_edge / 2, 6.0, f"{good_edge}+ Goods,\n{HEAD_COUNT_GOODS}+ between the two")
-    if stage >= 3:
-        edge_x = _in_cell(bad_edge, 1)[0]
-        ax.plot([edge_x, edge_x], [_in_cell(1, good_edge)[1], y1], color=INK, linewidth=2.0, zorder=4)
-        ax.text((edge_x + x1) / 2, y0 + 6.0 * ch, f"{bad_edge}+ Bads:\nthe Bads'\nown scores,\nif random",
-                ha="center", va="center", fontsize=16, color=INK, zorder=6,
-                bbox={"facecolor": LAND_FILL["labels"], "edgecolor": "none", "pad": 3})  # fmt: skip
+        name(IN_B / 2, (edge + IN_G + 1) / 2, f"≥ {edge} Goods")
     return fig
 
 
 def _in_cells(ax: plt.Axes, stage: int) -> None:
-    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2, hatched from 3."""
+    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2."""
     kind = _in_grid()
     for g in range(IN_G + 1):
         for b in range(1, IN_B + 1):
             k = kind[g, b]
-            if k not in ("none", "count") and stage < 2:
+            if k == "labels" and stage < 2:
                 continue
-            fill = LAND_FILL[k if k in ("none", "count") else "labels"]
+            fill = LAND_FILL[k]
             # Edgeless, each cell edged in its own fill so no seam shows: only
             # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
                                    linewidth=0.3, zorder=1))  # fmt: skip
-            if k == "bads" and stage >= 3:
-                ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor="none", edgecolor=INK,
-                                       hatch="//", linewidth=0, zorder=2))  # fmt: skip
 
 
 def _in_axes(ax: plt.Axes) -> None:
@@ -7695,8 +7681,14 @@ if __name__ == "__main__":
     fmetrics_fig()
     fbeta_maps_fig()
     fbeta_fig()
+    labels_fit_fig()
     labels_line_fig()
     transfer_fig()
+    out_standing_fig()
+    changing_hands_fig()
+    inside_job_fig()
+    lay_of_the_land_fig()
+    weak_spot_fig()
     doc_balance_fig()
     patch_fig()
     region_max_fig()
@@ -7714,6 +7706,7 @@ if __name__ == "__main__":
     clopper_fig()
     floor_check_fig()
     blend_schedule_fig()
+    split_idea_fig()
     split_fraction_fig()
     anchored_fig()
     print("wrote figures to", OUT)
