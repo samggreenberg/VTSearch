@@ -855,7 +855,8 @@ describe('LabelViewComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-spot-check-stage')).toBeNull();
 
-    // Every light green: the Spot Check step, and the view starts the check.
+    // Every light green, after a reading that was not: the Spot Check step, and the view starts the check.
+    autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'yellow' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
     autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'green' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
     autopilot.checkPhaseTransition(3, 4);
     await settleResource();
@@ -944,6 +945,7 @@ describe('LabelViewComponent', () => {
     TestBed.tick();
     httpMock.expectOne('/api/learned-sort').flush(ranked);
     await settleResource();
+    autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'yellow' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
     autopilot.updateFromLabelingStatus({ smart: { status: 'green' }, stable: { status: 'green' }, span: { status: 'green' } } as unknown as LabelingStatusResponse);
     autopilot.checkPhaseTransition(3, 4);
     await settleResource();

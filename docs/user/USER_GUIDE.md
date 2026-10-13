@@ -140,27 +140,35 @@ Until you **check** the items above the line, nothing has measured how much
 of them is right or how much of what is there they found, and the note under
 the Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
 
-**The spot check.** In Train, click **Check 5 picks** beside the note.
-VTSearch cuts the list you haven't voted on into bands from the top (the top
-8, the next 8, then 16, 32, 64, and so on), draws 5 items at random from a
-band, and shows them one at a time. Vote each one Good or Bad with the usual
-keys: → for Good, ← for Bad, and ↓ to go back and change one. The last vote
-of a round sends it, and the check moves to the next band. Test offers no
-spot check: it is where you test the Threshold you set here, not where you set it.
+**The spot check.** Autopilot runs it for you, as its **Spot Check.** step
+(see [The phases](#the-phases)): once every quality light is green, just
+before it says **Done!**. There is no button for it; only Autopilot starts a
+check. VTSearch cuts the list you haven't voted on into bands from the top
+(the top 8, the next 8, then 16, 32, 64, and so on), draws 5 items at random
+from a band, and shows them one at a time in the centre, where the item
+usually is. Vote each one Good or Bad with the usual keys: → for Good, ← for
+Bad, and ↓ to go back and change one. The last vote of a round sends it, and
+the check moves to the next band. **Stop check** ends it early, and Autopilot
+carries on; **Continue** ends a finished one. If a check ended in your last 25
+answers, Autopilot skips this one: that check has just measured the line. It
+also runs none when you come back to a detector whose lights were already all
+green when Autopilot started: the session that finished it had its check. Test
+runs no spot check: it is where you test the Threshold you set here, not
+where you set it.
 
 **When your labels still overlap**, a check is worth doing now rather than
-later. If the detector scores your Good and Bad answers close together, the
-check button turns into the highlighted **Check 5 picks** and a note under the
-Threshold says your labels still overlap. A check's picks, spread evenly down
-the list, are exactly the answers that show the detector where its line falls.
-Autopilot runs the check itself at that point, once it has started learning
-from your answers, and asks again 25 answers later if your labels still
-overlap. Measured on COCO, sessions whose labels overlap returned far fewer
-wrong pictures and found more right ones for the same number of clicks.
+later. If the detector scores your Good and Bad answers close together, a note
+under the Threshold says your labels still overlap. A check's picks, spread
+evenly down the list, are exactly the answers that show the detector where its
+line falls, so Autopilot runs the Spot Check step at that point too, once it
+has started learning from your answers, and again 25 answers later if your
+labels still overlap. Measured on COCO, sessions whose labels overlap returned
+far fewer wrong pictures and found more right ones for the same number of
+clicks.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
-  <img src="assets/floor-check.light.webp" alt="The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
+  <img src="assets/floor-check.light.webp" alt="Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
 </picture>
 
 The picks come in the order they were drawn, which is random, with no rank
@@ -808,7 +816,7 @@ that reaches **Done!** opens its result panel on its own.
 Most users should never need Manual mode.
 
 Click the **Autopilot** tab in the left panel. Autopilot breaks
-labeling into four phases and tells you what to do at each step.
+labeling into phases and tells you what to do at each step.
 You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
@@ -817,7 +825,7 @@ just picks *which* items to show you and *when* each phase ends.
   <img src="assets/autopilot-vote.light.webp" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
 </picture>
 
-### The four phases
+### The phases
 
 The phase panel labels them, in order:
 
@@ -845,6 +853,14 @@ The phase panel labels them, in order:
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
+5. **Spot Check.** - With every quality light green, Autopilot checks
+   the line before it calls the detector done: a few items drawn at
+   random from bands of the list, shown in the centre one at a time for
+   your Good or Bad (see [How close the line got](#how-close-the-line-got)).
+   It measures how much of what the detector returns is right, and its
+   answers train the detector like any others. It runs once a session;
+   while your Good and Bad labels still overlap, Autopilot runs it earlier
+   too, and the panel goes back to the phase it interrupted afterwards.
 
 The current phase carries one light that shows how close it is to done.
 It starts as a **red** circle, turns **yellow** once the phase is past
@@ -853,10 +869,10 @@ which point Autopilot moves on to the next one; every finished phase
 keeps its check. For the two Find phases, halfway is half the
 vote target (2 of 3 goods, 2 of 4 bads); for Refine Boundary the light
 shows whichever of the smart and stable indicators is further behind;
-for Explore Diversity it is half the coverage goal. Hover the light for
-the details.
+for Explore Diversity it is half the coverage goal; Spot Check stays
+yellow until the check ends. Hover the light for the details.
 
-When all four phases are done, Autopilot shows **Done!** and Toasty
+When the phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
 trained: keep voting and it keeps improving (your next vote sends Toasty
 away), or click **Dashboard** to export it or run it over another dataset.
@@ -912,7 +928,7 @@ full phase list, and its ◀ collapses it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
-  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity, Spot Check) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
@@ -982,7 +998,7 @@ Picks *which unlabeled item* the app highlights next.
 - **New** - Pick an item from a part of the dataset you haven't
   covered yet. Ensures a broad mix.
 
-Autopilot cycles through these automatically in its four phases,
+Autopilot cycles through these automatically in its phases,
 but in Manual mode you choose directly.
 
 ### 3. Threshold
@@ -1018,13 +1034,13 @@ of two states:
   the line keeps that set, and the note says how much of it is likely right
   and how much of what the list holds it likely found.
 
-The range a check measured is a number. In Train, beside the note, **Check 5
-picks** runs a spot check of the list: 5 random picks from each band of it,
-which you vote on, walking deeper while a longer list scores better on the
-balance and stopping where it peaks. See
+The range a check measured is a number. Autopilot's **Spot Check.** step
+runs a spot check of the list: 5 random picks from each band of it, which you
+vote on, walking deeper while a longer list scores better on the balance and
+stopping where it peaks. See
 [How close the line got](#how-close-the-line-got) for the check and its
-likely range. Test shows the same note with no check beside it: there you
-test the Threshold, and it is too late to label more to set it. The **?**
+likely range. Test shows the same note and runs no check: there you test the
+Threshold, and it is too late to label more to set it. The **?**
 beside **Threshold:** explains it in two short sentences.
 
 A Threshold toward False Positives keeps a longer list, and the lists nest:

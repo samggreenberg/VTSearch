@@ -205,6 +205,15 @@ export class AutopilotStateService {
   /** The dataset size at the last {@link checkPhaseTransition}, for re-deriving the phase when a check starts or ends. */
   private lastTotal = 0;
 
+  /**
+   * Whether this run has taken its first labeling-status reading. A run whose
+   * first reading is already all green opened on a finished detector (the
+   * Train view re-entered after Done): it latches `doneChecked`, so the check
+   * before Done belongs to the session that brings the detector there, and
+   * re-entry after a server restart, which forgets the last check, runs none.
+   */
+  private statusRead = false;
+
   get state(): AutopilotState {
     return this.stateSubject.value;
   }
@@ -279,6 +288,7 @@ export class AutopilotStateService {
     this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
     this.lastTotal = 0;
+    this.statusRead = false;
     this.stateSubject.next({
       ...this.stateSubject.value,
       phase: 'good',
@@ -348,8 +358,13 @@ export class AutopilotStateService {
 
   updateFromLabelingStatus(status: LabelingStatusResponse): void {
     const current = this.stateSubject.value;
+    const allGreen =
+      status.smart.status === 'green' && status.stable.status === 'green' && status.span.status === 'green';
+    const firstRead = current.phase !== 'idle' && !this.statusRead;
+    if (current.phase !== 'idle') this.statusRead = true;
     this.stateSubject.next({
       ...current,
+      doneChecked: current.doneChecked || (firstRead && allGreen),
       dryRunStop: status.stop_rule === 'dry_run',
       smartStatus: status.smart.status || '',
       stableStatus: status.stable.status || '',
@@ -491,6 +506,7 @@ export class AutopilotStateService {
     this.initialLabelsetKnown.set(false);
     this.lastCounts = null;
     this.lastTotal = 0;
+    this.statusRead = false;
     this.stateSubject.next({ ...INITIAL_STATE });
   }
 }

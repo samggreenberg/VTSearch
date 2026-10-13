@@ -459,6 +459,7 @@ describe('AutopilotStateService', () => {
 
     it('checks before Done once a run: a later return to all green is Done at once', () => {
       service.activate();
+      service.updateFromLabelingStatus(yellow);
       service.updateFromLabelingStatus(green);
       service.checkPhaseTransition(3, 4);
       expect(service.state.phase).toBe('spot');
@@ -473,10 +474,29 @@ describe('AutopilotStateService', () => {
       expect(service.state.phase).toBe('done');
     });
 
-    it('skips the check before Done when the server says one just ran', () => {
+    it('runs none on a run that opens with every light already green: a finished detector re-entered', () => {
       service.activate();
       service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(30, 40);
+      expect(service.state.phase).toBe('done');
+      expect(service.state.doneChecked).toBe(true);
+    });
+
+    it('still checks a run whose first reading was not all green', () => {
+      service.activate();
+      service.updateFromLabelingStatus(yellow);
       service.checkPhaseTransition(3, 4);
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(3, 5);
+      expect(service.state.phase).toBe('spot');
+    });
+
+    it('skips the check before Done when the server says one just ran', () => {
+      service.activate();
+      service.updateFromLabelingStatus(yellow);
+      service.updateFromLabelingStatus(green);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('spot');
       service.skipDoneCheck();
       expect(service.state.phase).toBe('done');
       expect(service.state.doneChecked).toBe(true);
@@ -514,6 +534,7 @@ describe('AutopilotStateService', () => {
 
     it('ends with a stop, and a new run starts without its latch', () => {
       service.activate();
+      service.updateFromLabelingStatus(yellow);
       service.updateFromLabelingStatus(green);
       service.checkPhaseTransition(3, 4);
       service.beginSpotCheck('done');
@@ -617,6 +638,7 @@ describe('AutopilotStateService', () => {
     /** Run to Done: the Good and Bad quorum, every indicator green, and the check before Done. */
     function reachDone(): void {
       service.activate();
+      service.updateFromLabelingStatus(makeStatus({ status: 'yellow' }, { status: 'yellow' }, { status: 'yellow' }));
       service.updateFromLabelingStatus(green);
       service.checkPhaseTransition(3, 4);
       expect(service.state.phase).toBe('spot');

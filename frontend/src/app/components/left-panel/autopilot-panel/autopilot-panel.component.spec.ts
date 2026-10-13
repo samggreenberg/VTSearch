@@ -17,6 +17,13 @@ const ALL_GREEN = {
 };
 
 /**
+ * Span still short of green: a run's reading on the way to Done. A run whose
+ * *first* reading is all green opened on a finished detector and runs no
+ * check before Done, so a run that should meet the check reads this first.
+ */
+const SPAN_SHORT = { ...ALL_GREEN, span: { status: 'yellow' } };
+
+/**
  * Good vote ids 1..n: 20 of them carry a run past every opening target, a
  * configured #4282 walk's included.
  */
@@ -66,6 +73,8 @@ describe('AutopilotPanelComponent', () => {
     fixture.componentRef.setInput('votesLoaded', true);
     fixture.componentRef.setInput('goodVotes', goods(20));
     fixture.componentRef.setInput('badVotes', bads(5));
+    fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+    TestBed.tick();
     fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
     TestBed.tick();
     closeDoneCheck();
@@ -411,6 +420,8 @@ describe('AutopilotPanelComponent', () => {
     it('at Done the active step is green, drawn as the check a finished step keeps', async () => {
       fixture.componentRef.setInput('goodVotes', goods(20));
       fixture.componentRef.setInput('badVotes', bads(5));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      await settleZoneless(fixture);
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fixture);
       closeDoneCheck();
@@ -769,8 +780,8 @@ describe('AutopilotPanelComponent', () => {
       revisit.componentRef.setInput('badVotes', bads(5));
       revisit.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(revisit);
-      closeDoneCheck();
-      await settleZoneless(revisit);
+      // It opened on a finished detector: no check before Done either.
+      expect(autopilotState.state.doneChecked).toBe(true);
 
       expect(revisit.componentInstance.state.phase).toBe('done');
       expect(autopilotState.handoff()).toBeNull();
@@ -791,6 +802,8 @@ describe('AutopilotPanelComponent', () => {
       // already trained when the run started.
       fresh.componentRef.setInput('goodVotes', goods(20));
       fresh.componentRef.setInput('badVotes', bads(5));
+      fresh.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      await settleZoneless(fresh);
       fresh.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fresh);
       closeDoneCheck();
@@ -821,6 +834,8 @@ describe('AutopilotPanelComponent', () => {
       fixture.componentRef.setInput('labelsetBadCount', 9);
       fixture.componentRef.setInput('goodVotes', goods(20));
       fixture.componentRef.setInput('badVotes', bads(5));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      await settleZoneless(fixture);
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fixture);
       closeDoneCheck();
@@ -838,6 +853,8 @@ describe('AutopilotPanelComponent', () => {
       pending.componentRef.setInput('votesLoaded', false);
       pending.componentRef.setInput('goodVotes', goods(20));
       pending.componentRef.setInput('badVotes', bads(5));
+      pending.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      await settleZoneless(pending);
       pending.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(pending);
       closeDoneCheck();

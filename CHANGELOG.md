@@ -23,9 +23,9 @@ not list every commit. Use `git log` for the full history.
   step in Autopilot's list, between Explore Diversity and Done, and the check Autopilot already ran
   while your Good and Bad labels still overlap is the same step. **Stop check** ends it early and
   Autopilot carries on. The Threshold's **Check 5 picks** button is gone: only Autopilot starts a
-  check. Autopilot skips the check before Done when one ended in the last 25 votes, so coming back to a
-  detector you just finished does not check it again. The balance payload's new `done_check_due` says
-  whether it would run.
+  check. Autopilot skips the check before Done when one ended in the last 25 votes, and when a session
+  opens with every light already green, so coming back to a detector you finished does not check it
+  again. The balance payload's new `done_check_due` says whether it would run.
 - **On photos, Autopilot keeps showing a typed description's matches until 30 votes** (issue #4736).
   From the 8th vote Autopilot asks about the items a trained detector is unsure of, but a detector
   trained on so few examples finds worse matches than the description does. So in a session started

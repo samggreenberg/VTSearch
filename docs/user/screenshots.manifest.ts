@@ -229,14 +229,6 @@ async function findPair(h: Helpers): Promise<{ dataset: string; detector: string
   return { dataset: ds.id, detector: det.id };
 }
 
-/** The dashboard rows of the example's training pile and detector: the pair Train works on. */
-async function trainPair(h: Helpers): Promise<{ dataset: string; detector: string }> {
-  const ds = h.app.named(await h.app.datasets(), TRAIN_DATASET);
-  const det = h.app.named(await h.app.detectors(), DETECTOR);
-  if (!ds || !det) throw new Error(`no ${TRAIN_DATASET} / ${DETECTOR} to train with`);
-  return { dataset: ds.id, detector: det.id };
-}
-
 /**
  * End the detector's live Find session (its verified pictures) and put its
  * balance back to the middle radio, so the next Find shot starts from a fresh scoring run
@@ -432,6 +424,23 @@ async function dropExample(page: Page, h: Helpers): Promise<void> {
  */
 const ROSY = 'Rosy Smileys';
 const ROSY_TEXT = 'yellow smiley face with rosy cheeks';
+
+/**
+ * A detector whose labels overlap, for the Spot Check shot: Goods and Bads
+ * from the same two kinds of drawing, so the labels separate weakly and
+ * Autopilot runs its weak-separation check (#4496) as soon as its first
+ * learned sort lands. Only Autopilot starts a check, and this is the one it
+ * starts on entry; ten labels meet `WEAK_CHECK_MIN_VOTES`.
+ */
+const OVERLAP = 'Overlapping Smileys';
+
+/** The Overlapping Smileys detector's labels: each pile half yellow smileys, half yellow faces. */
+function overlapVotes(): { good: string[]; bad: string[] } {
+  const { pictures } = corpus(TRAIN_DATASET);
+  const smileys = framesOf(pictures, 'yellow-smiley', 6);
+  const faces = framesOf(pictures, 'yellow-face', 4);
+  return { good: [...smileys.slice(0, 3), ...faces.slice(0, 2)], bad: [...smileys.slice(3), ...faces.slice(2)] };
+}
 
 type Drawing = { kind: string; objects: { shape: string; color: string; smiling?: boolean; cheeks?: boolean }[] };
 
@@ -666,12 +675,12 @@ async function testUntilDone(page: Page, h: Helpers): Promise<void> {
 
 /**
  * The chromium check of the spot check's keys (#4273), run by the `floor-check`
- * shot on every capture: jsdom is not a browser, and focus traps and key
- * routing are browser semantics (CLAUDE.md). In the open step, → votes the pick
- * on screen Good and moves on, ↓ goes back, ← votes it Bad; none of it may
- * reach the ranked list behind the modal (a `POST /api/medias/<id>/vote`), and
- * focus stays inside the dialog. Votes are held in the step until a round is
- * whole, so this sends nothing: the recipe's `after` cancels the check.
+ * shot on every capture: jsdom is not a browser, and key routing is browser
+ * semantics (CLAUDE.md). In Autopilot's Spot Check step, → votes the pick on
+ * screen Good and moves on, ↓ goes back, ← votes it Bad; none of it may reach
+ * the centre panel hidden under the step (a `POST /api/medias/<id>/vote`).
+ * Votes are held in the step until a round is whole, so this sends nothing:
+ * the recipe's `after` cancels the check.
  */
 async function checkStepKeys(page: Page): Promise<void> {
   const listVotes: string[] = [];
@@ -708,10 +717,8 @@ async function checkStepKeys(page: Page): Promise<void> {
     await expect('↓ goes back a pick', ['good', ...rest], 0);
     await page.keyboard.press('ArrowLeft');
     await expect('← changes it to Bad and moves on', ['bad', ...rest], 1);
-    const inDialog = await page.evaluate(() => !!document.activeElement?.closest('.modal-backdrop'));
-    if (!inDialog) throw new Error('floor-check: focus left the dialog');
     await page.waitForTimeout(300);
-    if (listVotes.length) throw new Error(`floor-check: the ranked list took a vote: ${listVotes.join(', ')}`);
+    if (listVotes.length) throw new Error(`floor-check: the centre panel took a vote: ${listVotes.join(', ')}`);
   } finally {
     page.off('request', onRequest);
   }
@@ -1102,7 +1109,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'autopilot-progress',
     embeddedIn: `${GUIDE}#the-collapsed-bar`,
-    caption: 'The Autopilot phase panel: the five phases (Find Initial Goods, Find Initial Bads, Find More Goods, Refine Boundary, Explore Diversity) tracked in order',
+    caption: 'The Autopilot phase panel: the phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity, Spot Check) tracked in order',
     themes: BOTH,
     clip: { target: '.autopilot-panel' },
     async recipe(_page, h) {
@@ -1303,27 +1310,34 @@ export const SHOTS: Shot[] = [
     id: 'floor-check',
     embeddedIn: `${GUIDE}#how-close-the-line-got`,
     caption:
-      'The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it',
+      "Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it",
     themes: BOTH,
-    clip: { target: '.modal-content' },
-    // Opens the check from Train's "Check 5 picks" (Find offers none, #4317)
-    // and answers the first pick with the keys, which is the step's chromium
-    // check (`checkStepKeys`). The server draws the picks at random, by
-    // design; refresh.sh seeds that draw (VTSEARCH_SPOT_CHECK_SEED, #4330),
-    // so the same pick is framed on every capture.
+    clip: { target: 'vt-spot-check-stage' },
+    // Only Autopilot starts a check (there is no Check button), so the shot
+    // enters Autopilot on a detector whose labels overlap (`OVERLAP`), which
+    // runs the weak-separation check at once, and answers the first pick with
+    // the keys, which is the step's chromium check (`checkStepKeys`). The
+    // server draws the picks at random, by design; refresh.sh seeds that draw
+    // (VTSEARCH_SPOT_CHECK_SEED, #4330), so the same pick is framed on every
+    // capture.
     async recipe(page, h) {
-      await h.enterLabelView();
-      await h.leftTab('Manual');
-      await h.serveItem();
-      await page.locator('vt-balance .balance-check-btn').first().click();
-      await page.locator('.pick-dot').first().waitFor({ timeout: 20000 });
-      await page.locator('vt-spot-check-modal img.image-element').first().waitFor({ timeout: 20000 });
+      await h.app.dropDetectors(OVERLAP);
+      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+      const det = await h.app.ensureDetector(OVERLAP, train, DETECTOR_TEXT);
+      await h.app.setVotes(train, det, overlapVotes());
+      await h.enterLabelView(TRAIN_DATASET, OVERLAP);
+      await h.leftTab('Autopilot');
+      await page.locator('vt-spot-check-stage .pick-dot').first().waitFor({ timeout: 120000 });
+      await page.locator('vt-spot-check-stage img.image-element').first().waitFor({ timeout: 20000 });
       await checkStepKeys(page);
       await page.mouse.move(5, 5);
       await h.wait(1200);
     },
     after: async (_page, h) => {
-      await h.app.api('/api/precision-check/cancel', { method: 'POST', ...(await trainPair(h)) });
+      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+      const det = h.app.named(await h.app.detectors(), OVERLAP);
+      if (det) await h.app.api('/api/precision-check/cancel', { method: 'POST', dataset: train.id, detector: det.id });
+      await h.app.dropDetectors(OVERLAP);
     },
   },
   {

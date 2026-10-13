@@ -294,7 +294,11 @@ it: it is Autopilot's **Spot Check** step, phase `spot` in
 `weak` when the labels separate weakly, `done` for the check before Done. The
 phase machine reaches `spot` the first time every quality light is green
 (`doneChecked` latches it for the run once that check closes, so Done
-follows), and a running check of either kind holds the phase at `spot`. The
+follows), and a running check of either kind holds the phase at `spot`. A
+run whose first labeling-status reading is already all green (the Train view
+re-entered on a finished detector) latches `doneChecked` at that reading, so
+re-entry runs no check, even after a server restart has forgotten the last
+one. The
 Threshold control starts none (it has no check button), and Test runs none:
 it tests the balance Train set, and labelling more to set one is too late
 there (#4317); its own test of the line is the Test autopilot (below), and

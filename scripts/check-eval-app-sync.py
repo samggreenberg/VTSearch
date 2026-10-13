@@ -146,7 +146,10 @@ MIRRORS: list[Mirror] = [
             "budget left, as it starts no prompted check that cannot: the app has no budget. And the "
             "harness's end-of-budget check (spot_check 'end' and 'weak', rows with phase 'check' past "
             "max_steps) is its measurement of the final line, which no app user can start since the "
-            "Check button went: it is never a click."
+            "Check button went: it is never a click. The app also latches doneChecked when a run's first "
+            "labeling-status reading is already all green (the Train view re-entered on a finished "
+            "detector); a harness run starts with no votes, where the lights cannot be green, so it has "
+            "nothing to port."
         ),
     ),
     Mirror(
