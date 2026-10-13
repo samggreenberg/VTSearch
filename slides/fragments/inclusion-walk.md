@@ -14,28 +14,22 @@
 
 <!-- build: figs/calib-walk-flow.build5.png -->
 
-<!-- **a** — Same panel and same seven votes; only the middle row changed. The
-     fix is a change of kind: stop searching cut points, start reading
-     **quantiles**, which move whenever scores have spread. -->
+<!-- **a** — Same votes. The fix: stop hunting for the cheapest cut and read
+     quantiles instead, points a set fraction of the way through the votes.
+     Those move whenever the scores spread. -->
 
-<!-- **b** — The false-positive guard: the cut stays at or above a quantile of
-     the held-out negatives — three quarters of them at inclusion zero, and
-     deliberately not their maximum. -->
+<!-- **b** — First, a guard against false alarms: the cut stays above three
+     quarters of the Bads. -->
 
-<!-- **c** — Between that guard and the lowest check is the band the calibration
-     data cannot resolve: the last slide's flat cost floor. Its top edge is one
-     held-out vote; the midpoint is max-margin. -->
+<!-- **c** — Between the guard and the lowest Good, the votes can't tell
+     anything apart. At zero, the cut goes in the middle. -->
 
-<!-- **d** — The knob. Below inclusion zero the cut walks up from that midpoint
-     toward the positives' 75th percentile at minus ten — "just the surest
-     matches". Every stop is its own quantile, so every stop is its own cut. -->
+<!-- **d** — Turn the slider down and the cut walks up toward the top quarter
+     of the Goods. Every stop, its own cut. -->
 
-<!-- **e** — Above inclusion zero the cut never exceeds an α-quantile of the
-     positives, α halving per step: *the fraction of true matches I am willing
-     to miss*. A cap, not a target. -->
+<!-- **e** — Turn it up and there's a cap: never miss more than a set fraction
+     of the Goods, halving each step. A cap, not a target. -->
 
-<!-- **f** — And what the user saw: three settings, three different sets, where
-     the retired rule returned one answer for the whole slider. -->
-
-<!-- Measured: no flat sweeps at all, ten distinct admitted sizes across eleven
-     stops rather than two, no monotonicity violations. -->
+<!-- **f** — Three settings, three different sets, each inside the looser one.
+     Measured, about ten different answers across eleven stops, where the old
+     rule gave two. -->

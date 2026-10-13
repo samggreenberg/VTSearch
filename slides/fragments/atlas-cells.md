@@ -14,36 +14,21 @@
 
 <!-- build: figs/atlas-cells.build5.png -->
 
-<!-- **a** — Same collection, and now the only question is where its parts are.
-     Nothing here is about the detector. -->
+<!-- **a** — Same photos, and forget the detector for a minute. The only
+     question is what parts this collection has. -->
 
-<!-- **b** — Split it in three. Ordinary k-means, k = 3, on the embeddings the
-     items already carry — no new model, nothing trained. -->
+<!-- **b** — Split it into three groups of similar photos. That's plain k-means
+     on the points we already have; nothing new to train. -->
 
-<!-- **c** — Then split the parts, and keep going until a cell is too small to
-     divide — twenty items in the shipped build. A few thousand cells for a
-     corpus of tens of thousands, and it is cached in the dataset pickle, so it
-     is built once and not once per session. -->
+<!-- **c** — Then split each group into three, and keep going until a cell's
+     down to about twenty photos. -->
 
-<!-- **d** — Every vote marks the cell it landed in **and every cell above it**,
-     which is the whole state the thing keeps: one pair of counters per node,
-     good and bad. A cell is *covered* the moment either is non-zero. -->
+<!-- **d** — Every vote marks its cell, and every bigger cell around it. Any
+     cell with a vote in it counts as visited. -->
 
-<!-- **e** — So "where have I not been?" is a walk: breadth-first from the top,
-     biggest sibling first, stop at the first cell carrying nothing. Biggest
-     first is the only tuning in it, and it buys the most collection per click. -->
+<!-- **e** — So "where haven't I been?" is a walk: from the top, a level at a
+     time, biggest first, stopping at the first cell with no votes. This one. -->
 
-<!-- **f** — Then the good bit. Don't show the typical item of that cell — show
-     the one that could prove the model wrong about it. The cell's median score
-     says what the model presumes: above the threshold it is a good region, so
-     serve its **lowest**-scored item; below, serve its highest. -->
-
-<!-- Informative whichever way the answer lands, which is the part worth saying
-     slowly. If it flips, the user has found a pocket the model had backwards —
-     the best click in the session. If it doesn't, the region's presumption has
-     been tested where it was weakest, and nothing else in the cell was more
-     likely to break it. -->
-
-<!-- One refinement, if asked: the extremum is taken over the cell's *typical*
-     half. An extreme score on an atypical item is usually a lone oddball — a
-     corrupt file, a strange crop — and its flip says nothing about the region. -->
+<!-- **f** — Then show the photo in that cell most likely to prove the detector
+     wrong: its lowest scorer if the cell looks Good, its highest if it looks
+     Bad. If we flip it, we've found a pocket the detector had backwards. -->

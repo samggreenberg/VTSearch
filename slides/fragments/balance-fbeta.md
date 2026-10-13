@@ -12,33 +12,21 @@
 
 <!-- build: figs/calib-fbeta.build4.png -->
 
-<!-- **a** — The same ranking, its cut taken off: F-ing Metrics scored one
-     cut, and the question now is which cut. -->
+<!-- **a** — Back to the ranking, with the cut taken off. Which cut should the
+     app pick? -->
 
-<!-- **b** — The app keeps its line where F-beta peaks, so score every cut:
-     one row per β, the peak dotted up to the cut it picks. At β = 1 a miss
-     and a false alarm weigh the same, and the peak is the middle cut, Include
-     five: one false alarm against one miss, F 0.80. -->
+<!-- **b** — It puts the line where F-beta peaks. At beta of 1, a miss and a
+     false alarm cost the same, and the peak is the middle cut, include five. -->
 
-<!-- **c** — β = 1/4: a miss now weighs a sixteenth of a false alarm, and the
-     peak moves to the tightest cut, Include two (0.92). Fewer items come back,
-     and the ones that do are surer. -->
+<!-- **c** — At a quarter, a miss costs a sixteenth of a false alarm, and the
+     peak jumps to include two: fewer come back, but they're the sure ones. -->
 
-<!-- **d** — β = 4: a miss weighs sixteen false alarms, and it moves the other
-     way, to Include eight (0.97). Three betas, three answers, each the only
-     peak on its own row. The data has not changed; the person at the keyboard
-     has. Worth a beat: at Include five all three rows read 0.80. Where
-     precision equals recall every F-beta agrees, so β only matters away from
-     that point. -->
+<!-- **d** — At 4, a miss costs sixteen false alarms, and it goes the other
+     way, to include eight. Three betas, three answers. The data didn't change;
+     the person asking did. -->
 
-<!-- **e** — So the app asks. The Threshold control: a False Positives …
-     False Negatives track and three radios, with no word or number on any of
-     them. Left is β = 4: it returns the most and lets more wrong ones in.
-     Right is β = 1/4: only the surest come back, and more are missed. The
-     middle is 1, and it is every detector's default (#4413, #4448). It sits
-     under the rows because β is all it sets: the trade, not a place on the
-     ranking. -->
-
-<!-- The catch, and the next slide: the formula counts the Goods returned
-     and the possible Goods, and off the votes the app knows neither. It has
-     to *expect* them. -->
+<!-- **e** — The app just asks, with the Threshold control. Toward False
+     Positives is beta of 4: the most comes back, wrong ones too. Toward False
+     Negatives is a quarter: only the sure ones. The middle, 1, is the default.
+     The catch: off the votes, the app can't count the books, so it has to
+     expect them. -->

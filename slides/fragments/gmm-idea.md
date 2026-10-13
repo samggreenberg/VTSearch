@@ -12,26 +12,19 @@
 
 <!-- build: figs/calib-gmm-flow.build4.png -->
 
-<!-- **a** — The same votes and the same model as the last slide, rearranged.
-     The new object is the grey bar above: the unlabeled corpus the votes were
-     drawn out of. Far wider, and no Good/Bad hatching, because unlabeled means
-     the classes are unknown, not absent. The labelled sliver is what the last
-     slide starved on, and the grey bar was there the whole time. -->
+<!-- **a** — What that left out: the haystack. Every photo in the dataset,
+     unlabeled. I'll call it the corpus. Unlabeled doesn't mean there are no
+     books in it, just that we don't know which ones. -->
 
-<!-- **b** — So run the loop the other way round. Train M₀ on the votes as
-     before. **c** — And score the *whole corpus*: fifty thousand scores instead
-     of tens, and their shape is bimodal on its own. -->
+<!-- **b** — Our votes are a little sample out of it, and M₀ trains on them,
+     same as before. -->
 
-<!-- **d** — Fit a two-component Gaussian mixture to it. **e** — And cut at the
-     midpoint between the two means. That is the whole estimator, and nothing
-     in the bottom half of the figure ever looks at a vote. -->
+<!-- **c** — Now M₀ scores the whole corpus: thousands of scores instead of a
+     few dozen, and they fall into two humps on their own. -->
 
-<!-- Say which half lasted. Reading the corpus did: Joint Custody, at the
-     end of this section, counts the matches on exactly this grey bar. The
-     midpoint did not.
-     Scored in F-beta over the session, cutting here instead of
-     cross-calibrating lost 0.36, 0.36 and 0.28 at β ¼, 1 and 4 (#4582): where under half a percent
-     of the corpus matches, a cut between the two means keeps far more than
-     there are matches. And the colours are an assumption the fit cannot
-     justify: measured, the high component weighed 0.35 against a true
-     prevalence of 0.09. -->
+<!-- **d** — Fit a bell curve to each hump. See the question marks? Calling the
+     high one Good is a guess; nothing here checked it. -->
+
+<!-- **e** — Then cut halfway between them, without ever looking at a vote.
+     Reading the corpus stuck around; the halfway cut didn't. When under half a
+     percent of photos are matches, it keeps way more than there are. -->

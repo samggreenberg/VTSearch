@@ -4,12 +4,11 @@
 
 ![bg fit](figs/ui-region-voting.webp)
 
-<!-- Region voting. Instead of "is this item a match?", the user draws a box:
-     *which part of it*. A whole-item Good on a mostly-irrelevant image is a
-     mostly-wrong training signal; a box says where the evidence actually is. -->
+<!-- Everything so far has been Good or Bad on a whole photo. Region voting
+     lets you draw a box around the part that's actually the book. A plain Good
+     here would also teach "phones and remotes"; the box says where the book
+     is. -->
 
-<!-- The consequence is the number the rest of this section is built on: under
-     region voting an item's score is the **maximum** over its regions, not one
-     number from one vector. That changes the shape of the distribution the
-     whole talk is about, which is why nearly every result is reported
-     separately for the two modes. -->
+<!-- With regions, a photo's score is its best region, the maximum. That
+     changes the shape of the scores the line is drawn on, so we report the two
+     modes separately. -->

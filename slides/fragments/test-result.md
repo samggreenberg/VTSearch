@@ -8,24 +8,14 @@
 
 <!-- build: figs/test-result.build2.png -->
 
-<!-- What the result pane says at Done, for the running example's sixty
-     picks, laid out as the pane lays it out. -->
+<!-- **a** — Here's the report card, laid out like the result pane. The
+     headline's F1 at your radio, 0.54, likely 0.35 to 0.67. Found leads with
+     words, because below the line it leans on the detector. The chart: how
+     right the top N likely are, at every N. -->
 
-<!-- **a** — The headline is the balance: F-beta at the radio's β, here 1,
-     so F1, 0.54, likely 0.35–0.67. It is the one number that weighs the two
-     mistakes the way the radio does. Right, likely
-     44–66%. Found in words, about half of them found, with its range: words,
-     because below the line the model is helping. The chart is Precision by
-     Number Returned: how right the top N likely are, at every band edge, from
-     the same draws, on a log count axis as the app draws it. -->
+<!-- **b** — Dotted is the truth we planted, which you'd never have in real
+     life. Every range holds it. -->
 
-<!-- **b** — Dotted: the planted truth, which only a planted pile can show.
-     Every band edge's range holds it here. -->
-
-<!-- **c** — Lean the Threshold: the same draws read at the line each radio
-     would draw on this pile. β 4 keeps 121, 17–28% right, against a true 23%;
-     β ¼ keeps 11, 55–82%, against 73%. Pick one and the Threshold moves,
-     with nothing re-scored. The other two exits: Move to AutoFind, the
-     reason the test exists, and Add Corrections, the failed-the-test one.
-     The verdict is kept on the detector, one per pile, and a test opened
-     again on the same ranking picks up its picks. -->
+<!-- **c** — And Lean the Threshold reads the same draws at the other radios: β
+     4 keeps 121, β ¼ keeps 11. Pick one and the line moves. Or Move to
+     AutoFind, which is why you ran the test, or Add Corrections if it failed. -->

@@ -11,28 +11,16 @@
 
 <!-- build: figs/ui-make-detector.build3.webp -->
 
-<!-- **a** — Where the user starts, which is with nothing: no photographs and
-     no detectors, and each empty card pointing at its own **+**. The first one
-     is how the pictures get in. -->
+<!-- **a** — So, here's the tool. We'll put all our datasets in that top window
+     and all our detectors in that bottom window, but at the start, we don't
+     have any. So we click that + button and -->
 
-<!-- **b** — A few hundred photographs, imported and embedded — `photos-train`,
-     the pile this detector will learn from — and not one label anywhere. No
-     classifier, no taxonomy, no annotation guideline: the corpus is the whole
-     of what exists. What is left to press is the **+** on the detectors card. -->
+<!-- **b** — We can add a bunch of unlabeled images from a folder or service or
+     whatever. Then we need a detector, so hit that + button and -->
 
-<!-- **c** — The dialog asks for exactly one thing: an example of what you are
-     after. A phrase, or a picture. That is the entire specification, and it is
-     the first place the twenty-minute budget shows up in the design — anything
-     longer to fill in is a form somebody abandons. -->
+<!-- **c** — We need to declare what we're searching for. We're making a book
+     detector, but we need to give VTSearch some hint to start the search, like
+     a phrase or picture. We type 'books', and that's all we need. -->
 
-<!-- **d** — So: `book`, and the dialog names the detector from it —
-     "Book detector" — so there is nothing else to fill in. Worth being clear about what that word is *not*. It is
-     not a query — the corpus has no text to match it against. It is not a class
-     label — nothing was trained on it. It is a **direction**, used once, to
-     seed the first ranking so the tool has something to ask about; from the next
-     slide on the votes take over and the phrase stops mattering. -->
-
-<!-- And that is the whole specification. Click Create and the detector exists,
-     with no training data and nothing trained: a name, a seed, and — from here
-     on — a growing pile of answers. It cost one sentence, which is the point,
-     because the expensive part of this was never supposed to be the setup. -->
+<!-- **d** — It gets a default name like 'Book Detector' and we can start
+     training. -->
