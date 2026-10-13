@@ -6668,15 +6668,16 @@ def _in_stage(stage: int) -> plt.Figure:
         ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
 
     name(IN_B / 2, 0.5, "no Goods")
-    name(IN_B / 2, 2.0, f"under {good_edge} held-out Goods per fold")
+    # The chart's title says "each fold holds out", so the names do not.
+    name(IN_B / 2, 2.0, f"under {good_edge} Goods")
     if stage >= 2:
         edge_y = _in_cell(1, good_edge)[1]
         ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
-        name(bad_edge / 2, 6.0, f"{good_edge}+ held-out\nGoods per fold,\n{HEAD_COUNT_GOODS}+ between the two")
+        name(bad_edge / 2, 6.0, f"{good_edge}+ Goods,\n{HEAD_COUNT_GOODS}+ between the two")
     if stage >= 3:
         edge_x = _in_cell(bad_edge, 1)[0]
         ax.plot([edge_x, edge_x], [_in_cell(1, good_edge)[1], y1], color=INK, linewidth=2.0, zorder=4)
-        ax.text((edge_x + x1) / 2, y0 + 6.0 * ch, f"{bad_edge}+ Bads\nper fold: the\nBads' scores,\nif random",
+        ax.text((edge_x + x1) / 2, y0 + 6.0 * ch, f"{bad_edge}+ Bads:\nthe Bads'\nown scores,\nif random",
                 ha="center", va="center", fontsize=16, color=INK, zorder=6,
                 bbox={"facecolor": LAND_FILL["labels"], "edgecolor": "none", "pad": 3})  # fmt: skip
     return fig
