@@ -243,6 +243,11 @@ at beta 1, `2026-10-13-overlap4816region-b1`, as V100 packs (32 GB a cell; a smo
   was identical at every common click, and Q's cut equalled the text baseline's to six decimals. The first
   smoke drew Q's cut over all 24,504 media, wrong-band images included; it was fixed (`d8dc7d0b5`) before the
   full run.
+- **Dev moved after the runs.** #4836 (merged later the same day) makes Autopilot check the line before Done,
+  and the harness's default arm with it. That changes the picks from a run's first all-green on. In these
+  sessions that is a median of vote 58-68 on Binary and 60 on Region, and before vote 50 in 10-31% of runs.
+  So the votes 1-25 results are untouched, votes 1-50 mostly so, and the 1-150 numbers come from 64a5fe004's
+  sessions. A Region build would be re-priced on its own sessions.
 - **Every run is in every average.** All 720 cells a preset have rows: the 18 a preset #4736 lost now write the
   query tier's rows from vote 1 (#4758). Today is the session's own untagged row at each vote. The query's
   F-beta is the session's own query rows, which never move within a run.
