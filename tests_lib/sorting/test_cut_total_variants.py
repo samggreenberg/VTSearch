@@ -23,6 +23,7 @@ def _diffuse_line(total: float = 3.0) -> tuple[LabelsLine, np.ndarray]:
 class TestTheDiffuseCase:
     def test_todays_cut_runs_to_the_end(self):
         line, s = _diffuse_line()
+        assert line.unvoted_posteriors is not None
         assert variant_counts(line, s, 4.0)["class"] == s.size
         assert variant_threshold("class", line, 4.0) == corpus_cut(line.unvoted_posteriors, s, 3.0, 4.0)
 
