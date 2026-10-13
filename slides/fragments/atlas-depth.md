@@ -15,16 +15,15 @@
 <!-- **a** — The atlas has a second job. Same picture: photos, votes, a
      boundary. -->
 
-<!-- **b** — Now tilt it. That sheet's really the floor of a room; our
-     collection just happens to sit there. -->
+<!-- **b** — Now tilt it. That sheet's the floor of a room; our collection just
+     happens to sit there. -->
 
-<!-- **c** — And here's a whole second collection, way up a direction nobody
-     ever voted along. Different data entirely. -->
+<!-- **c** — And here's a second collection, way up a direction nobody ever
+     voted along. -->
 
-<!-- **d** — Moving straight up doesn't change the score, so the boundary's a
-     pillar. It sorts the new collection in and out with no hint it's guessing.
-     -->
+<!-- **d** — Straight up doesn't change the score, so the boundary's a pillar:
+     it sorts the new stuff in and out with no hint it's guessing. -->
 
-<!-- **e** — What we'd want is a dome: the concept stops. But every vote's on
-     the floor, so no amount of votes can tell dome from pillar. That takes
-     something that knows where our data was. -->
+<!-- **e** — We'd want a dome, where the concept stops. But every vote's on the
+     floor, so votes can't tell dome from pillar. That takes something that
+     knows where our data was. -->

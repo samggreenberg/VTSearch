@@ -11,13 +11,12 @@
 <!-- build: figs/autopilot-span.build3.png -->
 
 <!-- **a** — Span is the atlas as a gauge: have our votes been everywhere? The
-     top four levels add up to forty cells, and forty is the bar. -->
+     top four levels are forty cells, and forty's the bar. -->
 
-<!-- **b** — After Boundary: count from the top till the first empty cell.
-     Three, red. The ringed cell is where Diversity starts. -->
+<!-- **b** — After Boundary: count from the top to the first empty cell. Three,
+     red. The ring's where Diversity starts. -->
 
 <!-- **c** — Four Diversity picks later, ten: yellow. Each pick fills the first
      empty cell, and the count jumps past ones Boundary already filled. -->
 
-<!-- **d** — All forty: green. (A collection with fewer than forty cells just
-     needs all of them.) -->
+<!-- **d** — All forty: green. (Fewer than forty cells? Then all of them.) -->

@@ -26,7 +26,7 @@
      similar, and a detector's just a boundary through here. -->
 
 <!-- **b** — A couple minutes of voting: five Good, five Bad, ninety photos.
-     That's always the ratio. -->
+     A few votes and a lot of photos: that's always the situation. -->
 
 <!-- **c** — That's enough to fit a detector. Inside the curve is a match,
      mostly stuff nobody voted on. -->

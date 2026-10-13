@@ -10,15 +10,14 @@
 
 <!-- build: figs/atlas-blindspot.build3.png -->
 
-<!-- **a** — Back to our plane: a detector, a few votes, and a lot of photos
-     nobody's looked at. -->
+<!-- **a** — Back to our plane: a detector, a few votes, lots of unseen photos.
+     -->
 
-<!-- **b** — Every question so far came out of this strip near the line. On
-     purpose: an answer there moves the line. -->
+<!-- **b** — Every question so far came from this strip, on purpose: an answer
+     near the line moves the line. -->
 
-<!-- **c** — Now this patch. Nobody's voted near it, and it's far from the line,
-     so the detector's confident and the loop will never ask. -->
+<!-- **c** — Now this patch. No votes near it, far from the line: the detector's
+     confident and never asks. -->
 
 <!-- **d** — And it's full of books. Confidently wrong, and nothing tells us. So
-     the second question isn't "what am I least sure about?" but "where haven't
-     I been?" -->
+     the second question is "where haven't I been?" -->

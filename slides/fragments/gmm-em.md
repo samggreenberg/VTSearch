@@ -19,4 +19,5 @@
 <!-- **c** — M step: refit each curve to what it claimed. -->
 
 <!-- **d** — Repeat until nothing moves. No labels involved, so EM can't say
-     which hump is the books. Next slide, the votes decide. -->
+     which hump is the books. Next: our first try at mixing this with the
+     votes. -->

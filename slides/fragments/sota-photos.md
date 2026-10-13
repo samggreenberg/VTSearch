@@ -8,11 +8,11 @@
 
 <!-- build: figs/sota-photos.build1.png -->
 
-<!-- **a** — So how does today's app do on photos? Every COCO Better cell, ten
-     times, at all three radios. Each line's scored at its own β, so it's not a
-     race. They sit at the text query through the opening, then climb. -->
+<!-- **a** — How does today's app do on photos? Every COCO Better cell, ten
+     times, all three radios, each scored at its own β, so it's not a race. Flat
+     through the opening, then climbing. -->
 
-<!-- **b** — Same sessions, precision against recall: the clicks mostly buy
-     precision. Big things do well, small ones don't. Tennis rackets hit 0.97;
-     chairs get 0.04, because SigLIP sees the whole photo as "a seat" and can't
-     tell a chair from a couch. -->
+<!-- **b** — Same sessions as precision against recall: clicks mostly buy
+     precision. Big things do well, small ones don't: tennis rackets 0.97,
+     chairs 0.04, because to SigLIP the whole photo's "a seat", chair or couch.
+     -->

@@ -16,8 +16,8 @@
 
 <!-- **b** — Two of five right, and the curve gathers in. -->
 
-<!-- **c** — But we want a count. The band holds 16, we've seen 5, and we fill
-     in the other 11 from the curve: likely 2 to 12 matches. -->
+<!-- **c** — But we want a count. 16 in the band, 5 seen, fill in the other 11
+     from the curve: likely 2 to 12 matches. -->
 
 <!-- **d** — A second round, one more right: 3 of 10, likely 3 to 8. Fewer to
-     guess, and a tighter curve to guess with. -->
+     guess, tighter curve to guess with. -->

@@ -10,15 +10,15 @@
 
 <!-- build: figs/autopilot-steps.build3.png -->
 
-<!-- **a** — Autopilot picks every photo we see, in this order. It opens on our
-     text query: Goods off the top till we have three (or give up after
-     sixteen), then four Bads right at the query's line. -->
+<!-- **a** — Autopilot picks every photo we see. It opens on our text query:
+     Goods off the top till we have three, then four Bads at the query's line.
+     -->
 
-<!-- **b** — Then the detector takes over. Boundary asks about whatever it's
-     least sure of, till two lights, Smart and Stable, go green. -->
+<!-- **b** — Then the detector takes over. Boundary asks what it's least sure
+     of, till Smart and Stable go green. -->
 
 <!-- **c** — Diversity is the atlas walk, the first cell nobody's voted in, till
-     the third light, Span, is green too. -->
+     Span's green too. -->
 
 <!-- **d** — All three green and it says we're done; we decide. A light drops
-     back, and it's back to Boundary. -->
+     back, it's back to Boundary. -->

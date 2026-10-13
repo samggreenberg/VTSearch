@@ -11,8 +11,8 @@
 <!-- **a** — On photos, three green lights and the app says the detector's
      trained. Nothing times out; we choose. -->
 
-<!-- **b** — Documents stop a different way: sixteen best matches in a row, none
+<!-- **b** — Documents stop differently: sixteen best matches in a row, none
      Good. Clicking on past that found at most 0.8% more. Same dialog. -->
 
 <!-- **c** — And on a small collection we might vote on everything first; then
-     it just says so. Each of these is said once. -->
+     it just says so. Each is said once. -->
