@@ -6423,8 +6423,10 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
                 fill = _land_mix(float(grid["p"][g, b])) if stage >= 3 else LAND_FILL["count"]
             else:
                 fill = LAND_FILL[k]
-            ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor=fill, edgecolor="white",
-                                   linewidth=0.6, zorder=1))  # fmt: skip
+            # Edgeless, each cell edged in its own fill so no seam shows: only
+            # the black edges between decisions are drawn.
+            ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
+                                   linewidth=0.3, zorder=1))  # fmt: skip
 
 
 def _land_axes(ax: plt.Axes) -> None:
@@ -6541,12 +6543,13 @@ def _in_grid() -> np.ndarray:
 
 
 def inside_job_fig() -> None:
-    """Inside Job: Lay of the Land's pale band, seen from inside a fold, where it is a clean edge.
+    """Inside Job: the trained head's line as a decision tree on what each fold holds out.
 
     The axes are what each calibration fold holds out, not what the user
-    holds: from inside, the rounding that made Lay of the Land's band is
-    already done, and the trained head's line is a decision tree on two
-    counts. One or two Goods a fold, the head counts what stands out; three
+    holds: inside a fold the split has already rounded, so the trained head's
+    line is a decision tree on two counts, with nothing left to chance. It
+    comes before Lay of the Land, which is the band this rule makes once the
+    rounding is unknown. One or two Goods a fold, the head counts what stands out; three
     (six between the two folds, `HEAD_COUNT_GOODS`), the labels line; fifty
     Bads a fold (`RANDOM_BADS_MIN` between them), and the line may model the
     negatives by the Bads' own scores, if they look like a random sample.
@@ -6614,16 +6617,13 @@ def _in_cells(ax: plt.Axes, stage: int) -> None:
             if k != "count" and stage < 2:
                 continue
             fill = LAND_FILL["count" if k == "count" else "labels"]
-            # Edgeless: inside a fold nothing varies cell to cell along the
-            # Bads, so only the Goods rows are ruled (below).
+            # Edgeless, each cell edged in its own fill so no seam shows: only
+            # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
                                    linewidth=0.3, zorder=1))  # fmt: skip
             if k == "bads" and stage >= 3:
                 ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor="none", edgecolor=INK,
                                        hatch="//", linewidth=0, zorder=2))  # fmt: skip
-    x0, _, x1, _ = LAND_BOX
-    for g in range(1, IN_G):
-        ax.plot([x0, x1], [_in_cell(1, g + 1)[1]] * 2, color="white", linewidth=0.8, zorder=1.5)
 
 
 def _in_axes(ax: plt.Axes) -> None:

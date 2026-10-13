@@ -8,20 +8,17 @@
 
 <!-- build: figs/calib-inside-job.build2.png -->
 
-<!-- Lay of the Land's pale band is the view from outside the folds: from
-     the counts in hand nobody can say how the split will round. Inside a
-     fold the rounding is done, and what is left is a decision tree on two
-     counts, what each fold holds out. Same colours as the last slide, and
-     no pale cells: nothing here is left to chance. -->
+<!-- The rule first. The class model reads only the votes the two folds
+     hold out, so the trained head's line is a decision tree on two counts:
+     what each fold holds out. Nothing in it is left to chance. -->
 
 <!-- **a** — Each of the two folds holds out at least one Good and one Bad.
-     With one or two Goods a fold the class model is too thin, and the head
-     counts what stands out. -->
+     With one or two Goods a fold, in orange, the class model is too thin,
+     and the head counts what stands out: Out Standing's rule. -->
 
-<!-- **b** — Three Goods a fold, six between the two (#4798): the labels
-     line. One flat edge, with no Bads in it. Lay of the Land's band is this
-     edge seen through the split: a fold can hold out three from six Goods
-     in hand, and always does from twelve. -->
+<!-- **b** — Three Goods a fold, six between the two (#4798), in purple: the
+     labels line. One flat edge, with no Bads in it. Which side of it a
+     user's labels land on is the next slide. -->
 
 <!-- **c** — Fifty Bads a fold, a hundred between them (#4490): from there
      the labels line may model the negatives by the Bads' own scores rather

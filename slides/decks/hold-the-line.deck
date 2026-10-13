@@ -99,14 +99,15 @@ slides:
   # and on What to Expect's fit to say what the count stands in for.
   out-standing
   changing-hands
-  # Lay of the Land: Changing Hands as a map, Goods up and Bads across, every edge computed from
-  # the shipped quota, fold split and hold (#4643, #4731, #4736, #4798).
-  lay-of-the-land
-  # Inside Job: the same decision from inside a fold, where the split has already rounded and Lay of
-  # the Land's grey band is one clean edge: three held-out Goods a fold (six between the two, #4798),
-  # and fifty held-out Bads a fold for the Bads' own shape (#4490). Computed from the shipped class
-  # model and its gates.
+  # Inside Job, then Lay of the Land: the rule first, then what it looks like from the counts a user
+  # holds (owner, 2026-10-13: the deterministic version before the random one it creates). Inside
+  # Job is the trained head's line as a decision tree on what each fold holds out: three held-out
+  # Goods a fold (six between the two, #4798) for the labels line, fifty held-out Bads a fold for the
+  # Bads' own shape (#4490), from the shipped class model and its gates. Lay of the Land is every
+  # labelset in hand, Goods up and Bads across: the quota, the typed query's hold, and the band where
+  # the folds' split decides, from the shipped quota, fold split and hold (#4643, #4731, #4736).
   inside-job
+  lay-of-the-land
   floor-ask
   clopper-pearson
   floor-check
