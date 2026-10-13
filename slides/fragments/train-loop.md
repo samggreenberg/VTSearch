@@ -1,4 +1,20 @@
 <!-- _class: full -->
+<!-- frames: equal -->
+
+![bg fit](figs/ui-train-loop.webp)
+
+## Rock the Vote
+
+<!-- build: figs/ui-train-loop.build1.webp -->
+
+<!-- build: figs/ui-train-loop.build2.webp -->
+
+<!-- build: figs/ui-train-loop.build3.webp -->
+
+<!-- build: figs/ui-train-loop.build4.webp -->
+
+<!-- build: figs/ui-train-loop.build5.webp -->
+
 <!-- **a** — This is training. It shows a picture, we hit Good or Bad, and the
      votes pile up on the right. The strip on the left is Autopilot picking
      what's next. Suitcase of books? Good. -->
