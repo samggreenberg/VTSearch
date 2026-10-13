@@ -17,8 +17,8 @@
 
 <!-- **a** — No Goods, in white: nothing to rank toward but the typed query,
      so its text sort comes back. Below the quota, in yellow, the Goods'
-     average, its line Out Standing's count. The key says what each colour
-     returns; the names on the map say the rule that chose it. -->
+     average, cut by Out Standing's count. The table says what each colour
+     does, its sort and its cut; the names on the map say where. -->
 
 <!-- **b** — The quota: three Goods and four Bads, or a Good and sixteen Bads
      (#4643, #4731). Past it, in orange, a trained head, still counting what

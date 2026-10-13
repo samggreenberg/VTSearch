@@ -6226,7 +6226,7 @@ LAND_B, LAND_G = 50, 16
 LAND_NAME_B = 40.5
 #: The plot's box, in canvas units: left, bottom, right, top. Its left edge
 #: stands right of the title notch, so the Goods axis can run to the top.
-LAND_BOX = (6.3, 1.55, 19.9, 10.9)
+LAND_BOX = (10.0, 1.55, 19.9, 10.9)
 #: Each strategy's fill, white for "no Goods" and hues clear of the deck's
 #: three for the rest: red and green are Bad and Good, blue is the line itself.
 #: The two rules that count what stands out are warm and kin, yellow for the
@@ -6398,7 +6398,7 @@ def _land_stage(stage: int) -> plt.Figure:
     ax.set_ylim(0, LL_CANVAS[1])
     ax.set_axis_off()
     _land_cells(ax, stage)
-    _map_legend(ax, LAND_LEGEND, stage)
+    _map_table(ax, LAND_TABLE, stage, hatched=("none", 4))
     _land_axes(ax)
     # The no-Goods row's edge, ruled: the yellow beside it is pale enough that
     # the edge should not rest on colour alone.
@@ -6408,7 +6408,7 @@ def _land_stage(stage: int) -> plt.Figure:
     # Every region's name sits where no later page draws over it: the trained
     # head's three to the right of the typed query's staircase.
     _land_name(ax, LAND_B / 2 + 0.5, 0.5, "no Goods")
-    _land_name(ax, 8.0, 2.0, "the Goods' average", plate=LAND_FILL["centroid"] if stage >= 4 else None)
+    _land_name(ax, 8.0, 2.0, "under\nthe quota", plate=LAND_FILL["centroid"] if stage >= 4 else None)
     if stage >= 2:
         _land_quota(ax, stage)
     if stage >= 3:
@@ -6436,35 +6436,51 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
                                    linewidth=0.3, zorder=1))  # fmt: skip
 
 
-#: The maps' legend: one swatch per pure colour, in the free column left of
-#: the plot and under the title notch, clear of the Goods axis's name. Its
-#: entries keep their slots across a build and appear on the page their colour
-#: does: (stage it appears on, fill key, label). Each label is the outcome,
-#: what comes back and which ranking it is cut from, not the rule that chose it
-#: (owner, 2026-10-13); the region names inside the plot say the rule.
-MAP_LEGEND_X, MAP_LEGEND_TOP, MAP_LEGEND_STEP, MAP_LEGEND_SWATCH = 0.2, 5.0, 1.15, 0.5
-LAND_LEGEND = (
-    (1, "none", "Text sort"),
-    (1, "centroid", "Stand-outs,\nby Goods' average"),
-    (2, "count", "Stand-outs,\nby trained head"),
-    (3, "labels", "Fβ peak,\nby trained head"),
+#: The maps' key: a table of what each colour does, its Sort and its Cut
+#: (owner, 2026-10-13: what we do is as important as where), in the column left
+#: of the plot and under the title notch. The map's own names say where each
+#: applies. Rows keep their slots across a build and appear on the page their
+#: colour does: (stage it appears on, fill key, sort, cut).
+MAP_TABLE_X = {"swatch": 0.3, "swatch2": 0.9, "sort": 1.65, "cut": 5.35, "end": 8.75}
+MAP_TABLE_HEAD, MAP_TABLE_STEP, MAP_TABLE_SWATCH = 7.6, 0.85, 0.5
+LAND_TABLE = (
+    (1, "none", "Typed query", "Stand-out count"),
+    (1, "centroid", "Goods' average", "Stand-out count"),
+    (2, "count", "Trained head", "Stand-out count"),
+    (3, "labels", "Trained head", "Fβ peak"),
 )
-IN_LEGEND = (
-    (1, "count", "Stand-outs,\nby trained head"),
-    (2, "labels", "Fβ peak,\nby trained head"),
+IN_TABLE = (
+    (1, "none", "Typed query", "Stand-out count"),
+    (1, "count", "Trained head", "Stand-out count"),
+    (2, "labels", "Trained head", "Fβ peak"),
 )
 
 
-def _map_legend(ax: plt.Axes, entries: tuple, stage: int) -> None:
-    """Swatch and name for each pure colour the page has drawn so far; white is outlined so it shows."""
-    for slot, (first, key, label) in enumerate(entries):
+def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] | None = None) -> None:
+    """The key as a table: a swatch, then what the colour sorts by and where it cuts.
+
+    *hatched* is ``(fill key, stage)``: from that stage a hatched swatch joins
+    that row's, for a hatch on the map that shares the row's sort and cut.
+    White swatches are outlined so they show.
+    """
+    xs = MAP_TABLE_X
+    head = MAP_TABLE_HEAD
+    for col, text in (("sort", "Sort"), ("cut", "Cut")):
+        ax.text(xs[col], head, text, ha="left", va="center", fontsize=16, fontweight="bold", color=INK)
+    ax.plot([xs["swatch"], xs["end"]], [head - 0.38] * 2, color=INK, linewidth=1.0, zorder=3)
+    half = MAP_TABLE_SWATCH / 2
+    for slot, (first, key, sort, cut) in enumerate(rows):
         if stage < first:
             continue
-        y = MAP_LEGEND_TOP - slot * MAP_LEGEND_STEP
-        ax.add_patch(Rectangle((MAP_LEGEND_X, y - MAP_LEGEND_SWATCH / 2), MAP_LEGEND_SWATCH, MAP_LEGEND_SWATCH,
+        y = head - (slot + 1) * MAP_TABLE_STEP
+        ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
                                facecolor=LAND_FILL[key], edgecolor=INK, linewidth=1.0, zorder=3))  # fmt: skip
-        ax.text(MAP_LEGEND_X + MAP_LEGEND_SWATCH + LABEL_GAP, y, label, ha="left", va="center", fontsize=16,
-                color=INK, linespacing=1.0)  # fmt: skip
+        if hatched is not None and hatched[0] == key and stage >= hatched[1]:
+            ax.add_patch(Rectangle((xs["swatch2"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
+                                   facecolor=LAND_FILL[key], edgecolor=INK, hatch="//", linewidth=1.0,
+                                   zorder=3))  # fmt: skip
+        ax.text(xs["sort"], y, sort, ha="left", va="center", fontsize=16, color=INK)
+        ax.text(xs["cut"], y, cut, ha="left", va="center", fontsize=16, color=INK)
 
 
 def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None:
@@ -6489,11 +6505,9 @@ def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None
         y = cell(bads[0], g)[1] + ch / 2
         ax.plot([x0 - 0.1, x0], [y, y], color=INK, linewidth=BASELINE_LW, zorder=3)
         ax.text(x0 - 0.18, y, str(g), ha="right", va="center", fontsize=16, color=INK)
-    # Named halfway between the two ticks nearest the middle, so the name is
-    # never read with a number beside it ("Goods 8").
-    mid = goods[len(goods) // 2]
-    name_y = (cell(bads[0], mid)[1] + cell(bads[0], goods[len(goods) // 2 - 1])[1]) / 2 + ch / 2
-    ax.text(x0 - 0.9, name_y, "Goods", ha="right", va="center", fontsize=16, color=INK)
+    # Named at the top of its axis, over the tick numbers, so the column left
+    # of the plot belongs to the key.
+    ax.text(x0 - 0.18, y1 + LABEL_GAP, "Goods", ha="right", va="bottom", fontsize=16, color=INK)
     ax.text((x0 + x1) / 2, y1 + LABEL_GAP, title, ha="center", va="bottom", fontsize=18, fontweight="bold",
             color=INK)  # fmt: skip
 
@@ -6519,13 +6533,13 @@ def _land_quota(ax: plt.Axes, stage: int) -> None:
     _, _, cw, ch = _land_cell(0, 0)
     edge = [(BAD_QUOTA, LAND_G + 1), (BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, 1)]
     ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, LAND_NAME_B, 4.5 if stage >= 3 else 8.0, "the trained head,\ncounting what stands out")
+    _land_name(ax, LAND_NAME_B, 4.5 if stage >= 3 else 8.0, "under 6\nheld-out Goods")
 
 
 def _land_labels(ax: plt.Axes) -> None:
     """Page 3: the labels line, and the Goods where the split decides."""
-    _land_name(ax, LAND_NAME_B, 13.5, "the trained head:\nthe labels line")
-    _land_name(ax, LAND_NAME_B, 9.0, "either, as the\nfolds' split rounds")
+    _land_name(ax, LAND_NAME_B, 13.5, "6+ held-out\nGoods")
+    _land_name(ax, LAND_NAME_B, 9.0, "either, as the\nsplit rounds")
 
 
 def _land_query(ax: plt.Axes) -> None:
@@ -6553,7 +6567,7 @@ def _land_query(ax: plt.Axes) -> None:
         xs += [x0 + b * cw, x0 + b * cw]
         ys += [y0 + g * ch, y0 + (g + 1) * ch]
     ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=4)
-    _land_name(ax, 14.0, 4.5, f"a typed query: its own\nset, to {QUERY_HOLD_LABELS} labels", plate=LAND_FILL["count"])
+    _land_name(ax, 14.0, 4.5, f"typed query,\nunder {QUERY_HOLD_LABELS} labels", plate=LAND_FILL["count"])
 
 
 # ── Inside Job: the trained head's line, read off what a fold holds out ─────
@@ -6562,9 +6576,10 @@ def _land_query(ax: plt.Axes) -> None:
 #: counting what stands out; the labels line, from three Goods a fold; where
 #: the Bads may shape the negatives, from fifty Bads a fold.
 IN_STAGES = 3
-#: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 1..IN_G.
+#: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 0..IN_G.
 #: A fold always holds out at least one of each (`_grouped_folds` trains on at
-#: most all but one of a class), so neither axis starts at 0.
+#: most all but one of a class), so the Bads start at 1; the Goods row at 0 is
+#: the labelset with no Goods at all, white as on Lay of the Land.
 IN_B, IN_G = 80, 8
 
 
@@ -6582,6 +6597,7 @@ def _in_grid() -> np.ndarray:
     from vtscore.training.thresholds.labels_line import class_score_model, head_count_serves  # noqa: PLC0415
 
     kind = np.empty((IN_G + 1, IN_B + 1), dtype=object)
+    kind[0, :] = "none"
     for g in range(1, IN_G + 1):
         for b in range(1, IN_B + 1):
             goods = _ll_sigmoid(1.0 + np.linspace(-0.6, 0.6, g))
@@ -6616,10 +6632,10 @@ def inside_job_fig() -> None:
 
 
 def _in_cell(b: float, g: float) -> tuple[float, float, float, float]:
-    """``(x, y, w, h)`` of the cell for a fold holding out *b* Bads and *g* Goods (both from 1)."""
+    """``(x, y, w, h)`` of the cell for a fold holding out *b* Bads (from 1) and *g* Goods (from 0)."""
     x0, y0, x1, y1 = LAND_BOX
-    w, h = (x1 - x0) / IN_B, (y1 - y0) / IN_G
-    return x0 + (b - 1) * w, y0 + (g - 1) * h, w, h
+    w, h = (x1 - x0) / IN_B, (y1 - y0) / (IN_G + 1)
+    return x0 + (b - 1) * w, y0 + g * h, w, h
 
 
 def _in_edges() -> tuple[int, int]:
@@ -6640,24 +6656,27 @@ def _in_stage(stage: int) -> plt.Figure:
     ax.set_ylim(0, LL_CANVAS[1])
     ax.set_axis_off()
     x0, y0, x1, y1 = LAND_BOX
-    _, _, cw, ch = _in_cell(1, 1)
+    _, _, cw, ch = _in_cell(1, 0)
     good_edge, bad_edge = _in_edges()
     _in_cells(ax, stage)
-    _map_legend(ax, IN_LEGEND, stage)
+    _map_table(ax, IN_TABLE, stage, hatched=("labels", 3))
     _in_axes(ax)
+    # The no-Goods row's edge, ruled, as on Lay of the Land.
+    ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
 
     def name(b: float, g: float, text: str) -> None:
         ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=16, color=INK, zorder=6)
 
-    name(IN_B / 2, 1.0, "the trained head, counting what stands out")
+    name(IN_B / 2, 0.5, "no Goods")
+    name(IN_B / 2, 2.0, f"under {good_edge} held-out Goods a fold")
     if stage >= 2:
         edge_y = _in_cell(1, good_edge)[1]
         ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
-        name(bad_edge / 2, 5.5, f"the labels line: {good_edge} Goods a fold,\n{HEAD_COUNT_GOODS} between the two")
+        name(bad_edge / 2, 6.0, f"{good_edge}+ held-out Goods a fold,\n{HEAD_COUNT_GOODS}+ between the two")
     if stage >= 3:
         edge_x = _in_cell(bad_edge, 1)[0]
         ax.plot([edge_x, edge_x], [_in_cell(1, good_edge)[1], y1], color=INK, linewidth=2.0, zorder=4)
-        ax.text((edge_x + x1) / 2, y0 + 5.5 * ch, "the Bads' own\nscores, if they\nlook random",
+        ax.text((edge_x + x1) / 2, y0 + 6.0 * ch, f"{bad_edge}+ Bads\na fold: the\nBads' scores,\nif random",
                 ha="center", va="center", fontsize=16, color=INK, zorder=6,
                 bbox={"facecolor": LAND_FILL["labels"], "edgecolor": "none", "pad": 3})  # fmt: skip
     return fig
@@ -6666,12 +6685,12 @@ def _in_stage(stage: int) -> plt.Figure:
 def _in_cells(ax: plt.Axes, stage: int) -> None:
     """The cells, filled by the line they get: the thin model's first, the labels line's from page 2, hatched from 3."""
     kind = _in_grid()
-    for g in range(1, IN_G + 1):
+    for g in range(IN_G + 1):
         for b in range(1, IN_B + 1):
             k = kind[g, b]
-            if k != "count" and stage < 2:
+            if k not in ("none", "count") and stage < 2:
                 continue
-            fill = LAND_FILL["count" if k == "count" else "labels"]
+            fill = LAND_FILL[k if k in ("none", "count") else "labels"]
             # Edgeless, each cell edged in its own fill so no seam shows: only
             # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
@@ -6683,7 +6702,7 @@ def _in_cells(ax: plt.Axes, stage: int) -> None:
 
 def _in_axes(ax: plt.Axes) -> None:
     """Inside Job's frame: every ten Bads, every Goods row, under "What each fold holds out"."""
-    _map_axes(ax, _in_cell, range(10, IN_B + 1, 10), range(1, IN_G + 1), "What each fold holds out")
+    _map_axes(ax, _in_cell, range(10, IN_B + 1, 10), range(0, IN_G + 1), "What each fold holds out")
 
 
 # ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──

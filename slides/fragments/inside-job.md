@@ -10,15 +10,19 @@
 
 <!-- The rule first. The class model reads only the votes the two folds
      hold out, so the trained head's line is a decision tree on two counts:
-     what each fold holds out. Nothing in it is left to chance. -->
+     what each fold holds out. Nothing in it is left to chance. The table is
+     what each colour does, the ranking it sorts by and where it cuts; the
+     map is where each applies. -->
 
-<!-- **a** — Each of the two folds holds out at least one Good and one Bad.
-     With one or two Goods a fold, in orange, the class model is too thin,
-     and the head counts what stands out: Out Standing's rule. -->
+<!-- **a** — No Goods at all, in white: the typed query's text sort. With
+     Goods, each fold holds out at least one Good and one Bad. With one or
+     two Goods a fold, in orange, the class model is too thin, and the head's
+     ranking is cut by Out Standing's count. -->
 
 <!-- **b** — Three Goods a fold, six between the two (#4798), in purple: the
-     labels line. One flat edge, with no Bads in it. Which side of it a
-     user's labels land on is the next slide. -->
+     same ranking, cut at What to Expect's Fβ peak. One flat edge, with no
+     Bads in it. Which side of it a user's labels land on is the next
+     slide. -->
 
 <!-- **c** — Fifty Bads a fold, a hundred between them (#4490): from there
      the labels line may model the negatives by the Bads' own scores rather
