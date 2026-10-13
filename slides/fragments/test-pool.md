@@ -8,25 +8,20 @@
 
 <!-- build: figs/test-pool.build2.png -->
 
-<!-- The first of the two repairs #4523's replay forced, above the line. A
-     different planted pile for it: a line at the recall end on a sparse
-     corpus, 2,048 kept of 16,384, nine bands above the line with one round
-     in each (45 picks: the budget waits for every band's round, #4560). -->
+<!-- **a** — That simple version breaks in two places, one on each side of the
+     line. The first needs a tougher pile: 16,384 photos, rare matches, and a
+     wide line that keeps 2,048, so nine bands above it, five picks each. The
+     circles are the planted truth, nearly 90% right at the top, down to none
+     in the band of 64. The picks found 4, 2, 1 and 1 up top, then nothing. 29
+     matches in all: 1.4% right. -->
 
-<!-- **a** — Open circles: the planted share right in each band, from 88% at
-     the top to none at all in the band of 64. Over each band, its picks: 4 of
-     5 at the top, then 2, 1 and 1, and five rounds that found nothing. 29
-     matches above the line: 1.4% right. -->
+<!-- **b** — Red is every band on its own. Five empty picks reads as about 8%
+     right, however big the band is, so the band of 1,024 invents 85 matches
+     all by itself. Add them up: 186 matches, likely 2 to 25% right, and the
+     whole range sits above the truth. -->
 
-<!-- **b** — Red: every band on its own Jeffreys prior. A band with nothing in
-     its five reads as a half in six, 8% right, whatever its size, so the band
-     of 1,024 invents 85 matches on its own. The line reads 186, likely
-     2.0–25% right, and the whole range sits above the truth. On #4523's
-     replay that range held for no line keeping over 1,024. -->
-
-<!-- **c** — Green: the app's prior. Each band's comes from the picks in the
-     bands beside it, worth five picks (#4539, #4560): an empty deep band
-     borrows its neighbours' emptiness, a rich top band borrows from rich ones.
-     Only neighbours: one pool over every band let the rich top lift the
-     sparse tail. 89 matches, 0.8–17%: wide, because five picks a band cannot
-     say more of 2,048 photos, but it holds. -->
+<!-- **c** — Green is what the app does: each band starts from what the picks
+     in the bands right next to it found, worth five picks. An empty deep band
+     borrows its neighbors' emptiness; a rich band up top borrows from rich
+     ones. Now it's 89, likely 0.8 to 17% right. Wide, because five picks a
+     band can't say much about 2,048 photos, but it holds the truth. -->
