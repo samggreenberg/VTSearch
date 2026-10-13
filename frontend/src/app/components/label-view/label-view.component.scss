@@ -7,6 +7,9 @@
   grid-template-columns: var(--left-col) 8px 1fr 8px var(--right-col);
   height: 100%;
   overflow: hidden;
+  // Positioning context for Toasty's `fix-votes` hint beside the Labels panel,
+  // which clips; absolutely placed, it takes no grid cell.
+  position: relative;
 
   &.layout--left-collapsed {
     --left-col: 48px;

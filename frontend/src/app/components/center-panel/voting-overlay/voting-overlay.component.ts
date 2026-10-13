@@ -7,11 +7,12 @@ import { countPhrase } from '../../../utils/count-phrase';
 /**
  * The hints that stand over the Good / Bad buttons (#4680, #4807). The host
  * picks one: Train's label view walks `start-voting` and the Autopilot phase
- * hints, the Test view's stage shows `test-vote`.
+ * hints, and shows `revote` on an item the user picked to change (#4824); the
+ * Test view's stage shows `test-vote`.
  */
 export type VoteHintId = Extract<
   HintId,
-  'start-voting' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'spot-check' | 'test-vote'
+  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'spot-check' | 'test-vote'
 >;
 
 /** What the Train phase hints count: the Goods and Bads so far, against Autopilot's targets. */
@@ -55,6 +56,11 @@ export class VotingOverlayComponent implements OnDestroy {
 
   readonly goodsNeededPhrase = computed(() => countPhrase(this.hintCounts().goodsNeeded, 'Good', 'Goods'));
   readonly badsNeededPhrase = computed(() => countPhrase(this.hintCounts().badsNeeded, 'Bad', 'Bads'));
+  /** What `revote` says the item is labeled, and the button and key that change it. The host
+   *  drops the hint the moment the label moves, so these never name the label a vote just set. */
+  readonly revoteLabel = computed(() => (this.isGood() ? 'Good' : 'Bad'));
+  readonly revoteOther = computed(() => (this.isGood() ? 'Bad' : 'Good'));
+  readonly revoteKey = computed(() => (this.isGood() ? 'left' : 'right'));
 
   /** Transient flash classes; signals so the `setTimeout` reset repaints under
    *  zoneless change detection. */

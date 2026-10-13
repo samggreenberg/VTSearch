@@ -1016,9 +1016,17 @@ describe('LabelViewComponent', () => {
       component.onMediaSelect(2);
       TestBed.tick();
     };
+    // The run's first vote: Toasty moves beside Labels for one vote (#4824).
     votes([1], []);
+    expect(component.voteHint()).toBeNull();
+    expect(component.labelsHint()).toBe(true);
+    const labelsHint = fixture.nativeElement.querySelector('.layout > vt-toasty-hint') as HTMLElement | null;
+    expect(labelsHint?.textContent?.replace(/\s+/g, ' ')).toContain('Your vote went to Labels on the right');
+
+    votes([1, 3], []);
+    expect(component.labelsHint()).toBe(false);
     expect(component.voteHint()).toBe('find-goods');
-    expect(component.voteHintCounts()).toEqual({ goods: 1, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
+    expect(component.voteHintCounts()).toEqual({ goods: 2, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
 
     votes([1, 3, 4], []);
     expect(component.voteHint()).toBe('find-bads');
@@ -1026,6 +1034,84 @@ describe('LabelViewComponent', () => {
 
     votes([1, 3, 4], [5, 6, 7, 8]);
     expect(component.voteHint()).toBe('keep-voting');
+  });
+
+  describe('changing a label (#4824)', () => {
+    const medias = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    const labeled = { good: [1], bad: [5], click_times: {}, learned_scores: {} };
+
+    it('says how to change a picked label, on a detector that already has labels', async () => {
+      flushInitialRequests(labeled, medias);
+      await settleResource();
+      // An unlabeled pick on a run that did not train the detector: no hint.
+      component.onMediaSelect(3);
+      TestBed.tick();
+      expect(component.voteHint()).toBeNull();
+
+      // One picked from Labels.
+      component.onMediaSelect(1);
+      TestBed.tick();
+      expect(component.voteHint()).toBe('revote');
+      expect(component.labelsHint()).toBe(false);
+
+      // A vote on it moves the label as the click lands, before its swipe
+      // ends: the hint goes then, rather than naming the new label.
+      component.voteState.applyOptimisticState(1, 'bad');
+      TestBed.tick();
+      expect(component.voteHint()).toBeNull();
+    });
+
+    it("ends when the user goes back to Autopilot's pick", async () => {
+      flushInitialRequests(labeled, medias);
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults([{ id: 5, score: 0.9 }, { id: 3, score: 0.4 }], 0.5);
+      TestBed.tick();
+      component.onMediaSelect(5);
+      TestBed.tick();
+      expect(component.voteHint()).toBe('revote');
+
+      // Autopilot's current step (the left panel's refocus).
+      component.onAutopilotRefocus();
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(3);
+      expect(component.voteHint()).toBeNull();
+    });
+
+    it("stands aside for the hand-off, and when there is no pick to go back to", async () => {
+      flushInitialRequests(labeled, medias);
+      await settleResource();
+      component.onMediaSelect(1);
+      TestBed.tick();
+      expect(component.voteHint()).toBe('revote');
+
+      TestBed.inject(AutopilotStateService).handoff.set({ kind: 'done', votes: 2 });
+      TestBed.tick();
+      expect(component.voteHint()).toBeNull();
+
+      TestBed.inject(AutopilotStateService).handoff.set(null);
+      component.autopilotExhausted.set(true);
+      TestBed.tick();
+      expect(component.voteHint()).toBeNull();
+    });
+
+    it('wins over fix-votes on the run that trains the detector', async () => {
+      flushInitialRequests(undefined, medias);
+      await settleResource();
+      component.onMediaSelect(2);
+      TestBed.tick();
+      expect(component.voteHint()).toBe('start-voting');
+      component.voteState.loadVotes();
+      httpMock.match('/api/votes').forEach((req) => req.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} }));
+      TestBed.tick();
+      expect(component.labelsHint()).toBe(true);
+
+      // The user did what fix-votes says: opened Labels and clicked the vote.
+      component.onMediaSelect(1);
+      TestBed.tick();
+      expect(component.labelsHint()).toBe(false);
+      expect(component.voteHint()).toBe('revote');
+    });
   });
 
   it('should return null selectedMedia when no selection', () => {
