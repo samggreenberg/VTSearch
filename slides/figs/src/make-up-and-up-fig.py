@@ -10,19 +10,19 @@ ran the F-beta era as a cumulative build-up, each change added to the one before
 the owner picked the slide that draws those two at beta 1/4:
 
 - the labels line at the preset (#4452), which lifts the second half of the session;
-- the typed query's line at the preset (#4603), which lifts the opening, where no detector is on screen yet.
+- the text query's line at the preset (#4603), which lifts the opening, where no detector is on screen yet.
 
 The relative floor (#4492), the weak check (#4496) and even-odds asking (#3546) sit between them in the build-up. Each
 moves the curve by less than 0.02, so the slide does not draw them and the notes name them.
 
 One panel, the objective (F-beta 1/4 of the withheld half above the line the app shows) over votes, filled from the
-typed query's set until a detector shows. A three-page build, each page adding a line:
+text query's set until a detector shows. A three-page build, each page adding a line:
 
 - a: cross-calibration (rung b1), grey;
 - b: plus the labels line at the preset (b2), dark;
 - c: today's app (b6), the deck's blue.
 
-Lines a and b start at the typed query's old line (the mixture midpoint) and line c at today's, so each line carries
+Lines a and b start at the text query's old line (the mixture midpoint) and line c at today's, so each line carries
 its own click-0 dot.
 """
 
@@ -110,7 +110,7 @@ def _figure(curves: dict[str, tuple[np.ndarray, np.ndarray]], shown: int) -> Fig
     ax.yaxis.grid(True, color="#e3e7ec", lw=1.0)
     ax.set_axisbelow(True)
     ax.set_xticks([0, 25, 50, 100, 150])
-    ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150"])
+    ax.set_xticklabels(["text\nquery", "25", "50", "100", "150"])
     ax.set_xlabel("Votes")
     ax.set_ylabel("Fβ at β = ¼")
     ends = [float(curves[r][1][-1]) for r, *_ in LINES]
