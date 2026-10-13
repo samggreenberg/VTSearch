@@ -42,6 +42,7 @@ SIDE_FRAME_SUFFIXES = (
     "__linetest",
     "__handover",
     "__linecounts",
+    "__overlap",
 )
 
 

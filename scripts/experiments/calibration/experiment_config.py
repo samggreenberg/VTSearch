@@ -1208,6 +1208,13 @@ HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not 
 #: the line is priced on the same sessions.  Recorded only, so the session is the
 #: app's; ``CALIB_LINE_COUNTS=1`` turns it on.
 LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", "0")
+#: Issue #4816's set overlap: on a typed-query run, at every click a trained head
+#: scored the pool, how its set and the typed query's split the unvoted media
+#: (``task_NNNN__overlap.csv``), and where each pick sat in them at the previous
+#: click (the pick log's ``picked_in_head`` ...), so a hand-over judge that reads
+#: the votes where the two sets disagree is priced on the same sessions.
+#: Recorded only, so the session is the app's; ``CALIB_SET_OVERLAP=1`` turns it on.
+SET_OVERLAP: bool = os.environ.get("CALIB_SET_OVERLAP", "").strip() not in ("", "0")
 #: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
 #: Test gives the typed query's own set until the label quota (rows tagged
 #: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the
