@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A typed-query detector keeps its query's set past the quota until 30 labels on a single-vector
+  space** (issue #4736). New `label_quota.QUERY_HOLD_LABELS` (30) and `query_holds(n_good, n_bad, *,
+  patch_space, hold=QUERY_HOLD_LABELS)`: true on a known single-vector space (`training._patch_space_for`
+  is `False`) below that many labels. `labelset_training._query_tier` (so `train_from_labelset` and
+  `labelset_train_and_score(label_quota=True)`) gives the typed query's head while it holds, and
+  `cached_head_is_current` refuses a cached trained head then. A patch space, or an unknown embedder, hands
+  over at the quota as before. The eval harness's `simulate_voting_iterations(query_hold=)` (default the
+  app's 30; `CALIB_QUERY_HOLD=0` is the hand-over at the quota) writes a held click's untagged row as the
+  typed query's set with `app_trained` 0 and tags the head's rows `hold:head`. Priced as full sessions on
+  COCO Better's Binary opening: +0.025 / +0.037 / +0.050 at beta 1/4, 1 and 4 over votes 1-25, +0.004 / +0.006 / +0.009, in every seed over 1-150.
+
 - **While the class model is thin, the labels line is the head's count** (issue #4786).
   `LabelsLine.threshold` keeps, at every balance, what the Goods' centroid's count rule finds standing
   out in the head's own logit scores (`head_count_cut`) while the class model holds fewer than

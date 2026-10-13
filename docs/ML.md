@@ -54,8 +54,8 @@ counts (#4643, `vtscore/detectors/label_quota.py`):
 |---|---|---|
 | no Good | none: Test is refused, there is nothing to sort toward | **the typed query's own set** |
 | a Good, but under both quotas below | **the Goods' centroid** | **the typed query's own set** |
-| 3 Goods and 4 Bads | the trained head above | the trained head above |
-| a Good and 16 Bads | the trained head above (#4731) | the trained head above |
+| 3 Goods and 4 Bads | the trained head above | the trained head above; on a single-vector space the typed query's own set until 30 labels (#4736) |
+| a Good and 16 Bads | the trained head above (#4731) | the same as at 3 Goods and 4 Bads |
 
 The first quota is Autopilot's own quorum (`goodToStart` / `badToStart`), the
 counts its opening has always judged enough to train on; its "more" walk mines
@@ -138,6 +138,26 @@ Train view's learned sort cached is not reused under it. The Train view's own
 learned sort is not a detector anyone takes away and still trains from the
 first Good and Bad. The eval harness's default arm scores the withheld half the
 same way (`detector_tier`, see [`EVAL.md`](EVAL.md)).
+
+**On a single-vector space the typed query holds past the quota, until 30
+labels (#4736).** A head trained on the quota's 3 Goods and 4 Bads asks good
+questions, and Autopilot asks them from vote 8 (#4742). But its set is worse
+than the typed query's: on COCO Better's Binary opening the head's mean F-beta
+passes the query's only around vote 27 at beta 1/4 and 1, and 45 at 4. So a
+typed-query detector keeps giving its query's set until its labels number
+`QUERY_HOLD_LABELS` (`label_quota.query_holds`). That covers Test, Find,
+AutoFind, a load, an export, the CLI and the Train view, where the text sort
+stays on screen while Autopilot asks from the learned ranking held behind it
+(the learned-sort payload's `query_hold`). As full sessions (702 a preset),
+holding to 30 votes gained +0.025 / +0.037 / +0.050 at beta 1/4, 1 and 4 over votes 1-25 and +0.004 / +0.006 / +0.009 over the
+session, in every seed (`docs/experiments/2026-10-12-handover-4736`). The best
+hold is 25-30 votes at beta 1/4 and 1 and 40-45 at beta 4; 30 is one number for
+all three, and holding to 45 at beta 4 added 0.002 for twice the variance. Judges
+that read the votes did not beat a fixed count: the Hard picks sit at the head's
+own line, where its calls are coin flips (#4816). The Region path's head (DINOv3
+patches) passes the query by about vote 10, and a hold there loses 0.035 over
+votes 1-25, so a patch space, or an embedder the registry does not know
+(`training._patch_space_for`), hands over at the quota.
 
 ## Training Configuration
 
