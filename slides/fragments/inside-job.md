@@ -6,6 +6,8 @@
 
 <!-- build: figs/calib-inside-job.build1.png -->
 
+<!-- build: figs/calib-inside-job.build2.png -->
+
 <!-- The rule first. The class model reads only the votes the two folds
      hold out, so the trained head's line is a decision tree on two counts:
      what each fold holds out. Nothing in it is left to chance. The table is
@@ -20,7 +22,13 @@
 <!-- **b** — Three Goods per fold, six between the two (#4798), in purple: the
      same ranking, cut at What to Expect's Fβ peak. One flat edge, with no
      Bads in it. Which side of it a user's labels land on is the next
-     slide. (The one thing the counts do not settle: with a hundred Bads held
-     out that look like a random sample of the corpus, the peak models the
-     negatives by their scores, #4490. An imported, fully labelled set can;
-     a session's Bads, picked from the top, never do.) -->
+     slide. -->
+
+<!-- **c** — One branch reads more than the counts. Fifty Bads per fold, a
+     hundred between them, that seem a random sample of the corpus, no more
+     than twice their share in its top twentieth (#4490): then the Fβ peak
+     takes the non-matches' shape from the Bads' own scores, heavy upper tail
+     and all, not from one normal fitted to the corpus, which read that tail
+     as matches and cut deep. A session never gets here, because Autopilot
+     asks about the top. An imported, fully labelled set can, at some 160 to
+     170 Bads in hand: past the next slide's edge. -->

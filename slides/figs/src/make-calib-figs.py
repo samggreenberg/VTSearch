@@ -6472,7 +6472,10 @@ IN_TABLE = (
     (1, "none", "Typed query", "Stand-out count"),
     (1, "count", "Trained head", "Stand-out count"),
     (2, "labels", "Trained head", "Fβ peak"),
+    (3, "bads", "Trained head", "Fβ peak,\nBads' shape"),
 )
+#: Table keys whose swatch is another key's fill, hatched.
+MAP_HATCHED_KEYS = {"bads": "labels"}
 
 
 def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] | None = None) -> None:
@@ -6481,7 +6484,8 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
     *hatched* is ``(fill key, stage)``: from that stage a hatched swatch joins
     that row's, for a hatch on the map that shares the row's sort and cut.
     White swatches are outlined so they show; the ``"split"`` row's swatch is
-    Lay of the Land's band, orange to purple. A two-line row takes half a
+    Lay of the Land's band, orange to purple; a `MAP_HATCHED_KEYS` row's is
+    another row's fill, hatched, for a hatch on the map with a return of its own. A two-line row takes half a
     row more, and every row keeps its place on every page.
     """
     xs = MAP_TABLE_X
@@ -6499,9 +6503,10 @@ def _map_table(ax: plt.Axes, rows: tuple, stage: int, hatched: tuple[str, int] |
             for i, x in enumerate(np.linspace(0.0, MAP_TABLE_SWATCH, 25)[:-1]):
                 ax.add_patch(Rectangle((xs["swatch"] + x, y - half), MAP_TABLE_SWATCH / 24, MAP_TABLE_SWATCH,
                                        facecolor=_land_mix(i / 23), edgecolor="none", zorder=3))  # fmt: skip
-        ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
-                               facecolor="none" if key == "split" else LAND_FILL[key], edgecolor=INK,
-                               linewidth=1.0, zorder=3))  # fmt: skip
+        fill = "none" if key == "split" else LAND_FILL[MAP_HATCHED_KEYS.get(key, key)]
+        ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH, facecolor=fill,
+                               edgecolor=INK, hatch="//" if key in MAP_HATCHED_KEYS else None, linewidth=1.0,
+                               zorder=3))  # fmt: skip
         if hatched is not None and hatched[0] == key and stage >= hatched[1]:
             ax.add_patch(Rectangle((xs["swatch2"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
                                    facecolor=LAND_FILL[key], edgecolor=INK, hatch="//", linewidth=1.0,
@@ -6605,11 +6610,12 @@ def _land_query(ax: plt.Axes) -> None:
 # ── Inside Job: the trained head's line, read off what a fold holds out ─────
 
 #: How many build stages the inside view reveals in: a thin class model,
-#: counting what stands out; the labels line, from three Goods per fold.
-#: #4490's random-sample Bads are not drawn: whether a labelset's Bads pass
-#: that test is read off their scores, not their count, so it is no edge on a
-#: map of counts, and a session's Bads never pass it.
-IN_STAGES = 2
+#: counting what stands out; the labels line, from three Goods per fold; its
+#: cut on the Bads' own shape, from fifty Bads per fold that seem random
+#: (#4490). That last test reads the Bads' scores, not their count, so its
+#: region is named for both, as Lay of the Land's hatch is "with a query"; a
+#: session's Bads never pass it (owner, 2026-10-13: a return of its own).
+IN_STAGES = 3
 #: What one fold holds out, the map's two axes: Bads 1..IN_B, Goods 0..IN_G.
 #: A fold always holds out at least one of each (`_grouped_folds` trains on at
 #: most all but one of a class), so the Bads start at 1; the Goods row at 0 is
@@ -6624,7 +6630,9 @@ def _in_grid() -> np.ndarray:
     For each count a fold holds out, every fold holding out the same, as
     `_grouped_folds` makes them: build the folds' held-out scores (Goods high,
     Bads low, spread), fit `class_score_model` to them, and ask
-    `head_count_serves`. The scores only have to separate; the counts decide.
+    `head_count_serves` and whether the model kept the Bads' scores
+    (`RANDOM_BADS_MIN`), which the cut reads only if they seem random. The
+    scores only have to separate; the counts decide.
     """
     from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
     from vtscore.training.thresholds.labels_line import class_score_model, head_count_serves  # noqa: PLC0415
@@ -6638,7 +6646,10 @@ def _in_grid() -> np.ndarray:
             fold = (list(goods) + list(bads), [1.0] * g + [0.0] * b)
             model = class_score_model([fold] * DEFAULT_CALIBRATE_COUNT)
             assert model is not None
-            kind[g, b] = "count" if head_count_serves(model) else "labels"
+            if head_count_serves(model):
+                kind[g, b] = "count"
+            else:
+                kind[g, b] = "bads" if model.neg_logits is not None else "labels"
     return kind
 
 
@@ -6650,7 +6661,9 @@ def inside_job_fig() -> None:
     line is a decision tree on two counts, with nothing left to chance. It
     comes before Lay of the Land, which is the band this rule makes once the
     rounding is unknown. One or two Goods per fold, the head counts what stands out; three
-    (six between the two folds, `HEAD_COUNT_GOODS`), the labels line.
+    (six between the two folds, `HEAD_COUNT_GOODS`), the labels line; fifty
+    Bads per fold (`RANDOM_BADS_MIN` between them) that seem a random sample
+    of the corpus, the labels line's cut on the Bads' own shape.
     """
     final = _in_stage(IN_STAGES)
     box = tight_box(final)
@@ -6666,12 +6679,12 @@ def _in_cell(b: float, g: float) -> tuple[float, float, float, float]:
     return x0 + (b - 1) * w, y0 + g * h, w, h
 
 
-def _in_edge() -> int:
-    """The Goods a fold must hold out for the labels line: `HEAD_COUNT_GOODS` between the folds."""
+def _in_edges() -> tuple[int, int]:
+    """``(Goods, Bads)`` a fold must hold out for the labels line, and for its cut on the Bads' own shape."""
     from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
-    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, RANDOM_BADS_MIN  # noqa: PLC0415
 
-    return HEAD_COUNT_GOODS // DEFAULT_CALIBRATE_COUNT
+    return HEAD_COUNT_GOODS // DEFAULT_CALIBRATE_COUNT, RANDOM_BADS_MIN // DEFAULT_CALIBRATE_COUNT
 
 
 def _in_stage(stage: int) -> plt.Figure:
@@ -6681,9 +6694,9 @@ def _in_stage(stage: int) -> plt.Figure:
     ax.set_xlim(0, LL_CANVAS[0])
     ax.set_ylim(0, LL_CANVAS[1])
     ax.set_axis_off()
-    x0, y0, x1, _ = LAND_BOX
+    x0, y0, x1, y1 = LAND_BOX
     _, _, cw, ch = _in_cell(1, 0)
-    edge = _in_edge()
+    edge, bad_edge = _in_edges()
     _in_cells(ax, stage)
     _map_table(ax, IN_TABLE, stage)
     _in_axes(ax)
@@ -6697,26 +6710,36 @@ def _in_stage(stage: int) -> plt.Figure:
     # title says so, and the deck doubles it where it must.
     name(IN_B / 2, 0.5, "0 Goods")
     name(IN_B / 2, 2.0, f"< {edge} Goods")
+    edge_y = _in_cell(1, edge)[1]
     if stage >= 2:
-        edge_y = _in_cell(1, edge)[1]
         ax.plot([x0, x1], [edge_y, edge_y], color=INK, linewidth=2.0, zorder=4)
-        name(IN_B / 2, (edge + IN_G + 1) / 2, f"≥ {edge} Goods")
+        # Left of where page 3's hatch starts, so it need not move.
+        name(bad_edge / 2, (edge + IN_G + 1) / 2, f"≥ {edge} Goods")
+    if stage >= 3:
+        edge_x = _in_cell(bad_edge, 1)[0]
+        ax.plot([edge_x, edge_x], [edge_y, y1], color=INK, linewidth=2.0, zorder=7)
+        ax.text((edge_x + x1) / 2, y0 + (edge + IN_G + 1) / 2 * ch, f"≥ {bad_edge} Bads,\nseem random",
+                ha="center", va="center", fontsize=16, color=INK, zorder=6,
+                bbox={"facecolor": LAND_FILL["labels"], "edgecolor": "none", "pad": 2})  # fmt: skip
     return fig
 
 
 def _in_cells(ax: plt.Axes, stage: int) -> None:
-    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2."""
+    """The cells, filled by the line they get: the thin model's first, the labels line's from page 2, hatched from 3."""
     kind = _in_grid()
     for g in range(IN_G + 1):
         for b in range(1, IN_B + 1):
             k = kind[g, b]
-            if k == "labels" and stage < 2:
+            if k in ("labels", "bads") and stage < 2:
                 continue
-            fill = LAND_FILL[k]
+            fill = LAND_FILL[MAP_HATCHED_KEYS.get(k, k)]
             # Edgeless, each cell edged in its own fill so no seam shows: only
             # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
                                    linewidth=0.3, zorder=1))  # fmt: skip
+            if k == "bads" and stage >= 3:
+                ax.add_patch(Rectangle(_in_cell(b, g)[:2], *_in_cell(b, g)[2:], facecolor="none", edgecolor=INK,
+                                       hatch="//", linewidth=0, zorder=2))  # fmt: skip
 
 
 def _in_axes(ax: plt.Axes) -> None:
