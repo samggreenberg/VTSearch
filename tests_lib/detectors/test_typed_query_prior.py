@@ -154,7 +154,8 @@ def _past_the_hold(make):
 
 
 class TestTheApp:
-    def test_a_typed_query_detector_fits_from_its_query(self, world, applies):  # noqa: F811
+    @pytest.mark.usefixtures("applies")
+    def test_a_typed_query_detector_fits_from_its_query(self, world):  # noqa: F811
         snap, proto, make, _embedded = world
         ctx = _ctx()
         assert lt.train_from_labelset(ctx, _past_the_hold(make), media_type="image", snap=snap, text_query=QUERY)
@@ -171,7 +172,8 @@ class TestTheApp:
         assert lt.train_from_labelset(ctx, _past_the_hold(make), media_type="image", snap=snap, text_query=QUERY)
         assert fitted_query_prior_text(ctx.model) is None
 
-    def test_the_prior_moves_the_head_toward_the_query(self, world, applies):  # noqa: F811
+    @pytest.mark.usefixtures("applies")
+    def test_the_prior_moves_the_head_toward_the_query(self, world):  # noqa: F811
         snap, proto, make, _embedded = world
         with_q, without = _ctx(), _ctx()
         ls = _past_the_hold(make)
@@ -179,7 +181,8 @@ class TestTheApp:
         assert lt.train_from_labelset(without, ls, media_type="image", snap=snap)
         assert _cos(_head_weight(with_q.model), proto) > _cos(_head_weight(without.model), proto)
 
-    def test_the_learned_sort_fits_from_the_query_it_is_handed(self, world, applies):  # noqa: F811
+    @pytest.mark.usefixtures("applies")
+    def test_the_learned_sort_fits_from_the_query_it_is_handed(self, world):  # noqa: F811
         snap, _proto, make, _embedded = world
         ls = make([1, 2, 3], [40, 41, 42, 43])
         _r, _t, model = lt.labelset_train_and_score(_ctx(), ls, media_type="image", clips_dict=snap, text_query=QUERY)
@@ -202,7 +205,8 @@ class TestTheApp:
             ctx.detector_id = det_id
             assert resolve_active_text_query(ctx) == want
 
-    def test_a_cached_head_is_current_only_if_fitted_from_the_detectors_query(self, world, applies):  # noqa: F811
+    @pytest.mark.usefixtures("applies")
+    def test_a_cached_head_is_current_only_if_fitted_from_the_detectors_query(self, world):  # noqa: F811
         snap, _proto, make, _embedded = world
         ls = _past_the_hold(make)
         ctx = _ctx()
