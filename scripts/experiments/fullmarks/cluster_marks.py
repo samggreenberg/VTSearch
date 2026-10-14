@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence, Union
+from typing import Any, Iterable, NamedTuple, Optional, Sequence, Union
 
 import numpy as np
 
@@ -75,6 +75,52 @@ class MarkRef:
 #: page id for the case — now only a legacy one — where the page carries a
 #: single clustered mark and the index adds nothing.  See ``resolve_pairs``.
 Endpoint = Union[str, tuple[str, int]]
+
+
+class Side(NamedTuple):
+    """One side of a stored separation that also records its class's members.
+
+    *anchor* is the mark the row names, the same endpoint a bare side would
+    be.  *members* are every ``(page_id, mark_index)`` the class held when the
+    verdict was given.  ``apply_confusable`` records them for a class that has
+    not been through the membership pass.  Such a class is not one must-linked
+    group yet, so the anchor alone would hold apart one mark and not the class
+    (#3837).  ``load_adjudications`` returns a bare endpoint for a side without
+    members, so a store with none of these reads exactly as it did before.
+    """
+
+    anchor: Endpoint
+    members: tuple[tuple[str, int], ...]
+
+
+#: One side of a loaded separation: a bare endpoint, or a `Side` carrying the
+#: class it stood for.
+SeparationSide = Union[Endpoint, Side]
+
+
+@dataclass(frozen=True)
+class Separation:
+    """Two sets of rows ruled to be different marks, resolved for one clustering.
+
+    ``left`` and ``right`` are the rows the verdict names, and they are
+    **hard**.  If a must-link puts both in one group, the store contradicts
+    itself and the clustering refuses, the same as it does for a single pair.
+
+    ``left_members`` and ``right_members`` are the rest of each class as it
+    stood when the verdict was given, and they are **soft**.  A membership
+    snapshot is a presumption about marks nobody has looked at one by one, and
+    later passes do look.  A membership rejection or a completeness accept can
+    move a mark out of the class it was presumed to be in.  So where a human
+    must-link puts a soft member in a group with the other side, the human
+    verdict wins and the member's tag is dropped for that group.  Against a
+    *distance* the soft members hold, which is the point: the threshold is the
+    thing the verdict exists to overrule.
+    """
+
+    left: tuple[int, ...]
+    right: tuple[int, ...]
+    left_members: tuple[int, ...] = ()
+    right_members: tuple[int, ...] = ()
 
 
 # --------------------------------------------------------------------------
@@ -292,6 +338,7 @@ def single_linkage(
     *,
     cannot_link: Optional[Sequence[tuple[int, int]]] = None,
     must_link: Optional[Sequence[tuple[int, int]]] = None,
+    separations: Optional[Sequence[Separation]] = None,
 ) -> list[int]:
     """Union-find single-linkage clustering.  Returns a label per row.
 
@@ -301,14 +348,26 @@ def single_linkage(
     * *must_link* — pairs adjudicated as the **same mark**.  Joined whatever
       their distance, because a clustering that splits one mark in two is a
       thing a person can see and the descriptor cannot.
-    * *cannot_link* — pairs adjudicated as **different marks**.  Never joined,
-      however similar they look, and the constraint propagates: once ``a`` and
-      ``b`` are apart, nothing may reunite their groups through a third crop.
+    * *cannot_link* and *separations* — marks adjudicated as **different**.
+      Never joined, however similar they look, and the constraint propagates:
+      once ``a`` and ``b`` are apart, nothing may reunite their groups through a
+      third crop.  A *cannot_link* pair is the one-row-a-side case of a
+      `Separation`; a separation between two *classes* names every row of each,
+      because naming one per side holds apart those two rows and no more.
+      Merges run in increasing distance order, so a cheaper crossing edge
+      elsewhere fuses the classes first and leaves the two named rows as the
+      only ones kept apart (#3837).
 
-    The asymmetry between the two is the whole operating strategy.  Run the
+    Each group carries, per separation, which side of it the group is on (a
+    bit for left, a bit for right), and a union is refused when the two groups
+    together would hold both sides.  That is the same rule as before for a pair.
+    It is also exactly the rule for a class, and it costs a dict merge per
+    union, not a rewrite of every constraint.
+
+    The asymmetry between the two kinds is the whole operating strategy.  Run the
     threshold **strict**, so the partition over-splits: a split is one visible
     mistake that a person fixes with one merge, while a bad merge is invisible
-    contamination that quietly makes a class mean two things.  These two lists
+    contamination that quietly makes a class mean two things.  These lists
     are how that repair survives — they are replayed on every re-cluster, so
     the work is done once rather than re-done whenever a number moves.
 
@@ -324,47 +383,58 @@ def single_linkage(
             i = parent[i]
         return i
 
-    # Groups that must stay apart, tracked by representative and kept current
-    # as unions happen.
-    forbidden: set[tuple[int, int]] = set()
-
-    def forbid(a: int, b: int) -> None:
+    # Human merges first, so a separation is checked against the groups the
+    # person actually meant rather than against raw rows.
+    for a, b in must_link or ():
         ra, rb = find(a), find(b)
         if ra != rb:
-            forbidden.add((min(ra, rb), max(ra, rb)))
+            parent[max(ra, rb)] = min(ra, rb)
 
-    def blocked(ra: int, rb: int) -> bool:
-        return (min(ra, rb), max(ra, rb)) in forbidden
+    rules = [Separation((a,), (b,)) for a, b in cannot_link or ()] + list(separations or ())
+    left_bit, right_bit = 1, 2
+    both = left_bit | right_bit
 
-    def union(a: int, b: int) -> None:
-        ra, rb = find(a), find(b)
-        if ra == rb:
-            return
-        keep, gone = min(ra, rb), max(ra, rb)
-        parent[gone] = keep
-        nonlocal forbidden
-        if forbidden:
-            forbidden = {
-                (
-                    min(keep if x == gone else x, keep if y == gone else y),
-                    max(keep if x == gone else x, keep if y == gone else y),
-                )
-                for x, y in forbidden
-            }
-
-    # Human merges first, so a subsequent separation is checked against the
-    # groups the person actually meant rather than against raw rows.
-    for a, b in must_link or ():
-        union(a, b)
-
-    for a, b in cannot_link or ():
-        if find(a) == find(b):
+    for rule in rules:
+        clash = [(a, b) for a in rule.left for b in rule.right if find(a) == find(b)]
+        if clash:
+            a, b = clash[0]
             raise ValueError(
                 f"rows {a} and {b} are adjudicated both same and different — "
                 "one of the two verdicts is wrong, and guessing which would "
                 "silently pick a side"
             )
-        forbid(a, b)
+
+    # Per group, per rule: which side(s) the group is on.  Named rows first;
+    # a member only tags a group the named rows have not already placed, and a
+    # group holding members of both sides — two presumptions a human must-link
+    # has just contradicted — keeps neither.
+    hard: dict[int, dict[int, int]] = {}
+    soft: dict[int, dict[int, int]] = {}
+    for index, rule in enumerate(rules):
+        for rows, bit, store in (
+            (rule.left, left_bit, hard),
+            (rule.right, right_bit, hard),
+            (rule.left_members, left_bit, soft),
+            (rule.right_members, right_bit, soft),
+        ):
+            for row in rows:
+                tags = store.setdefault(find(row), {})
+                tags[index] = tags.get(index, 0) | bit
+    sides: dict[int, dict[int, int]] = {}
+    for root in sorted(set(hard) | set(soft)):
+        named_on, presumed_on = hard.get(root, {}), soft.get(root, {})
+        tags = {}
+        for index in set(named_on) | set(presumed_on):
+            bits = named_on.get(index) or presumed_on.get(index, 0)
+            if bits != both:
+                tags[index] = bits
+        if tags:
+            sides[root] = tags
+
+    def blocked(a: dict[int, int], b: dict[int, int]) -> bool:
+        if len(a) > len(b):
+            a, b = b, a
+        return any(bits | b.get(index, 0) == both for index, bits in a.items())
 
     candidates = sorted(
         ((dist[i, j], i, j) for i in range(n) for j in range(i + 1, n) if dist[i, j] <= threshold),
@@ -372,18 +442,26 @@ def single_linkage(
     )
     for _d, i, j in candidates:
         ri, rj = find(i), find(j)
-        if ri == rj or blocked(ri, rj):
+        if ri == rj:
+            continue
+        ti, tj = sides.get(ri), sides.get(rj)
+        if ti and tj and blocked(ti, tj):
             continue
         keep, gone = min(ri, rj), max(ri, rj)
         parent[gone] = keep
-        # Re-key every constraint that referenced the absorbed group.
-        if forbidden:
-            rekeyed = set()
-            for x, y in forbidden:
-                nx = keep if x == gone else x
-                ny = keep if y == gone else y
-                rekeyed.add((min(nx, ny), max(nx, ny)))
-            forbidden = rekeyed
+        # Fold the absorbed group's sides into the survivor's, smaller into
+        # larger, so a long chain of unions does not copy one big dict each time.
+        absorbed = sides.pop(gone, None)
+        if absorbed:
+            kept = sides.get(keep)
+            if kept is None:
+                sides[keep] = absorbed
+            else:
+                if len(kept) < len(absorbed):
+                    kept, absorbed = absorbed, kept
+                for index, bits in absorbed.items():
+                    kept[index] = kept.get(index, 0) | bits
+                sides[keep] = kept
 
     # Relabel roots to dense 0..k-1 in first-appearance order, so the labelling
     # is a pure function of the distance matrix and not of dict iteration.
@@ -467,41 +545,90 @@ def resolve_pairs(
     raising: pages come and go with tier budgets, and a dropped page is not a
     reason to refuse to build.
     """
-    rows_by_page: dict[str, list[int]] = {}
-    rows_by_mark: dict[tuple[str, int], int] = {}
-    for index, ref in enumerate(refs):
-        rows_by_page.setdefault(ref.page_id, []).append(index)
-        rows_by_mark[(ref.page_id, ref.mark_index)] = index
+    endpoints = _EndpointRows(refs)
+    out: list[tuple[int, int]] = []
+    for left, right in pairs:
+        for a in endpoints.rows(left):
+            for b in endpoints.rows(right):
+                if a != b:
+                    out.append((a, b))
+    endpoints.refuse_ambiguous()
+    return out
 
-    ambiguous: list[str] = []
 
-    def rows_for(endpoint: Endpoint) -> list[int]:
+def resolve_separations(
+    refs: Sequence[MarkRef],
+    pairs: Sequence[tuple[SeparationSide, SeparationSide]],
+) -> list[Separation]:
+    """Turn stored separations into `Separation`\\ s over row indices.
+
+    A bare side resolves exactly as in :func:`resolve_pairs`, to the one row it
+    names.  A `Side` resolves its anchor the same way, plus its recorded
+    members as the soft rows of that side.  A member that is not a row here
+    (another source's page, a page outside this tier, a mark already carrying
+    an identity) is skipped, as a dropped page is.  So is a whole separation one
+    of whose sides has no row here at all: there is nothing on that side for
+    the constraint to keep anything away from.
+    """
+    endpoints = _EndpointRows(refs)
+    out: list[Separation] = []
+    for left, right in pairs:
+        resolved = []
+        for side in (left, right):
+            if isinstance(side, Side):
+                named = tuple(endpoints.rows(side.anchor))
+                members = {row for member in side.members for row in endpoints.rows(member)}
+                resolved.append((named, tuple(sorted(members - set(named)))))
+            else:
+                resolved.append((tuple(endpoints.rows(side)), ()))
+        (left_named, left_members), (right_named, right_members) = resolved
+        if not (left_named or left_members) or not (right_named or right_members):
+            continue
+        if left_named and left_named == right_named:
+            continue  # one mark on both sides; `resolve_pairs` drops this too
+        out.append(Separation(left_named, right_named, left_members, right_members))
+    endpoints.refuse_ambiguous()
+    return out
+
+
+class _EndpointRows:
+    """Rows of *refs* by endpoint, collecting every ambiguous bare page id."""
+
+    def __init__(self, refs: Sequence[MarkRef]) -> None:
+        self.refs = refs
+        self.by_page: dict[str, list[int]] = {}
+        self.by_mark: dict[tuple[str, int], int] = {}
+        for index, ref in enumerate(refs):
+            self.by_page.setdefault(ref.page_id, []).append(index)
+            self.by_mark[(ref.page_id, ref.mark_index)] = index
+        self.ambiguous: list[str] = []
+
+    def rows(self, endpoint: Endpoint) -> list[int]:
+        if isinstance(endpoint, Side):
+            # Reading only the anchor would silently turn a class-level
+            # separation back into the two-mark kind (#3837).
+            raise TypeError("a separation side that carries members resolves through resolve_separations")
         if isinstance(endpoint, str):
-            rows = rows_by_page.get(endpoint, [])
+            rows = self.by_page.get(endpoint, [])
             if len(rows) > 1:
-                ambiguous.append(
+                self.ambiguous.append(
                     f"{endpoint} carries {len(rows)} clustered marks "
-                    f"({', '.join(str(refs[r].mark_index) for r in rows)})"
+                    f"({', '.join(str(self.refs[r].mark_index) for r in rows)})"
                 )
                 return []
             return rows
-        row = rows_by_mark.get((endpoint[0], endpoint[1]))
+        row = self.by_mark.get((endpoint[0], endpoint[1]))
         return [row] if row is not None else []
 
-    out: list[tuple[int, int]] = []
-    for left, right in pairs:
-        for a in rows_for(left):
-            for b in rows_for(right):
-                if a != b:
-                    out.append((a, b))
-    if ambiguous:
-        raise ValueError(
-            f"{len(ambiguous)} adjudication endpoint(s) name a page carrying more than one "
-            f"clustered mark, so which mark was ruled on is not recorded: {'; '.join(sorted(set(ambiguous))[:5])}. "
-            "Re-record them with a mark index — `audit_to_corrections.py --migrate-adjudications "
-            "--corpus <dir>` does it from the class ids the rows already carry."
-        )
-    return out
+    def refuse_ambiguous(self) -> None:
+        if self.ambiguous:
+            raise ValueError(
+                f"{len(self.ambiguous)} adjudication endpoint(s) name a page carrying more than one "
+                "clustered mark, so which mark was ruled on is not recorded: "
+                f"{'; '.join(sorted(set(self.ambiguous))[:5])}. "
+                "Re-record them with a mark index — `audit_to_corrections.py --migrate-adjudications "
+                "--corpus <dir>` does it from the class ids the rows already carry."
+            )
 
 
 def collect_refs(pages: Sequence[Page], *, kinds: Iterable[str], source: str) -> list[MarkRef]:
@@ -524,15 +651,18 @@ def cluster_source(
     kinds: Iterable[str] = ("logo", "stamp"),
     backend: str = "phash",
     threshold: float = 0.18,
-    same: Optional[Sequence[tuple[str, str]]] = None,
-    different: Optional[Sequence[tuple[str, str]]] = None,
+    same: Optional[Sequence[tuple[Endpoint, Endpoint]]] = None,
+    different: Optional[Sequence[tuple[SeparationSide, SeparationSide]]] = None,
     provenance: str = "clustered",
 ) -> dict[str, Any]:
     """Cluster one source's marks in place.  Returns a summary for the report.
 
-    *same* and *different* are adjudicated ``(page_id, page_id)`` pairs. They
-    survive re-clustering: a human decision about two marks must not be undone
-    by someone later nudging the threshold.
+    *same* and *different* are adjudicated pairs, as `load_adjudications`
+    returns them.  They survive re-clustering: a human decision about two marks
+    must not be undone by someone later nudging the threshold.
+
+    ``separations_on_members`` counts the separations that carry a recorded
+    class membership (#3837), of ``separations_applied`` in all.
     """
     refs = collect_refs(pages, kinds=kinds, source=source)
     if not refs:
@@ -541,8 +671,8 @@ def cluster_source(
     desc = describe_marks(pages, refs, backend=backend)
     dist = distance_matrix(desc, refs, backend=backend)
     must_link = resolve_pairs(refs, same or ())
-    cannot_link = resolve_pairs(refs, different or ())
-    labels = single_linkage(dist, threshold, cannot_link=cannot_link, must_link=must_link)
+    separations = resolve_separations(refs, different or ())
+    labels = single_linkage(dist, threshold, must_link=must_link, separations=separations)
     classes = assign_class_ids(pages, refs, labels, source=source, provenance=provenance)
 
     sizes = sorted((len(v) for v in classes.values()), reverse=True)
@@ -553,7 +683,8 @@ def cluster_source(
         "backend": backend,
         "threshold": threshold,
         "merges_applied": len(must_link),
-        "separations_applied": len(cannot_link),
+        "separations_applied": len(separations),
+        "separations_on_members": sum(1 for s in separations if s.left_members or s.right_members),
         "largest_clusters": sizes[:10],
         "singletons": sum(1 for s in sizes if s == 1),
     }
@@ -572,10 +703,12 @@ def write_cluster_report(summaries: list[dict[str, Any]], path: Path) -> None:
 # needs both: same-mark pairs say what the detector must find, different-mark
 # pairs say what it must keep apart.  Clustering can only ever propose the
 # first; the second has to be adjudicated and then enforced, which is what
-# `cannot_link` in single_linkage does with these.
+# the separations in single_linkage do with these.
 
 
-def load_adjudications(path: Path) -> tuple[list[tuple[Endpoint, Endpoint]], list[tuple[Endpoint, Endpoint]]]:
+def load_adjudications(
+    path: Path,
+) -> tuple[list[tuple[Endpoint, Endpoint]], list[tuple[SeparationSide, SeparationSide]]]:
     """``(same, different)`` mark pairs a human has ruled on.
 
     Both directions live in one file because they are one decision procedure
@@ -587,6 +720,11 @@ def load_adjudications(path: Path) -> tuple[list[tuple[Endpoint, Endpoint]], lis
     as ``(page_id, mark_index)``; one without comes back as the bare page id it
     was written as, and ``resolve_pairs`` decides whether that is still
     unambiguous.  Reading a legacy row as a mark would be inventing the index.
+
+    A ``different`` side that records its class's members
+    (``left_members`` / ``right_members``) comes back as a `Side`, and has to go
+    through `resolve_separations`; reading only its anchor would turn a
+    separation between two classes back into one between two marks (#3837).
     """
     if not path.exists():
         return [], []
@@ -597,10 +735,15 @@ def load_adjudications(path: Path) -> tuple[list[tuple[Endpoint, Endpoint]], lis
         page_id = row[f"{side}_page_id"]
         return page_id if index is None else (page_id, int(index))
 
-    def rows(key: str) -> list[tuple[Endpoint, Endpoint]]:
-        return [(endpoint(r, "left"), endpoint(r, "right")) for r in payload.get(key, [])]
+    def separation_side(row: dict[str, Any], side: str) -> SeparationSide:
+        members = row.get(f"{side}_members")
+        if not members:
+            return endpoint(row, side)
+        return Side(endpoint(row, side), tuple((str(page_id), int(index)) for page_id, index in members))
 
-    return rows("same"), rows("different")
+    same = [(endpoint(r, "left"), endpoint(r, "right")) for r in payload.get("same", [])]
+    different = [(separation_side(r, "left"), separation_side(r, "right")) for r in payload.get("different", [])]
+    return same, different
 
 
 def load_adjudication_rows(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

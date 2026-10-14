@@ -1925,24 +1925,214 @@ class TestAnAuditVerdictSurvivesARebuild:
         assert classes["spods/a"]["audit"]["reviewed_by"] == "a reviewer"
         assert classes["spods/a"]["audit"]["reviewed_on"]
 
-    def test_a_separation_says_whether_it_pins_marks_or_classes(self, mods):
-        # Recorded on the row rather than left to be re-derived: before the
-        # membership pass a class is not one must-linked group, so a single
-        # representative pair holds those two marks apart and nothing else.
+    def test_a_separation_says_whether_it_pins_members_or_classes(self, mods):
+        # Recorded on the row rather than left to be re-derived. Before the
+        # membership pass a class is not one must-linked group, so the row
+        # carries the class's members; after it, the star does that job and
+        # one representative per side is the whole constraint (#3837).
         pages = [
             _page(mods, "spods/001", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")]),
             _page(mods, "spods/002", "spods", [("logo", (0, 0, 200, 120), "spods/b", "clustered")]),
+            _page(mods, "spods/003", "spods", [("logo", (0, 0, 200, 120), "spods/b", "clustered")]),
         ]
         classes = {
             "spods/a": {"n_instances": 1, "page_ids": ["spods/001"], "audit": {"membership_verified": True}},
-            "spods/b": {"n_instances": 1, "page_ids": ["spods/002"], "audit": {}},
+            "spods/b": {"n_instances": 2, "page_ids": ["spods/002", "spods/003"], "audit": {}},
         }
         rows = [{"left_class_id": "spods/a", "right_class_id": "spods/b", "verdict": "different"}]
         _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
-        assert separations[0]["pins"] == "marks"
+        assert separations[0]["pins"] == "members"
+        assert separations[0]["right_members"] == [["spods/002", 0], ["spods/003", 0]]
+        assert "left_members" not in separations[0]  # the verified side's star already pins it
         classes["spods/b"]["audit"]["membership_verified"] = True
         _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
         assert separations[0]["pins"] == "classes"
+        assert "left_members" not in separations[0] and "right_members" not in separations[0]
+
+
+class TestASeparationPinsTheClassNotTheMarks:
+    """#3837: a separation between two unverified classes must hold the classes apart.
+
+    The fixture is the failure in four marks.  Classes ``a`` = rows 0, 1 and
+    ``b`` = rows 2, 3, with the verdict's representatives at rows 0 and 2.  The
+    crossing edge 1-3 is the cheapest distance in the matrix, so single linkage
+    takes it before either within-class edge.  If the separation names only
+    rows 0 and 2, rows 1 and 3 fuse, row 0 then joins them through 0-1, and
+    row 2 is the only mark left outside.  The two classes are one apart from
+    one row, and ``cluster_report.json`` still counts the separation as applied.
+    """
+
+    # 0-1 and 2-3 are within a class; 1-3 is the cheap crossing edge.
+    DIST = np.array(
+        [
+            [0.0, 0.05, 0.9, 0.9],
+            [0.05, 0.0, 0.9, 0.01],
+            [0.9, 0.9, 0.0, 0.05],
+            [0.9, 0.01, 0.05, 0.0],
+        ]
+    )
+
+    def test_two_named_marks_alone_let_the_classes_fuse(self, mods):
+        # The control, and the bug: the pair holds, the classes do not.
+        labels = mods["cluster"].single_linkage(self.DIST, 0.1, cannot_link=[(0, 2)])
+        assert labels[0] != labels[2]
+        assert labels[0] == labels[1] == labels[3]
+
+    def test_recorded_members_keep_each_class_on_its_side(self, mods):
+        Separation = mods["cluster"].Separation
+        labels = mods["cluster"].single_linkage(self.DIST, 0.1, separations=[Separation((0,), (2,), (1,), (3,))])
+        assert labels == [0, 0, 1, 1]
+
+    def test_a_member_a_human_merged_across_the_line_goes_with_the_human(self, mods):
+        # Row 1 was presumed in class a when the verdict was given, and a later
+        # pass (a membership rejection, a completeness accept) ruled it the same
+        # mark as b's representative. The snapshot was a presumption; the
+        # must-link is a verdict. Refusing the build here would make every
+        # separation a wedge against the passes that come after it.
+        Separation = mods["cluster"].Separation
+        labels = mods["cluster"].single_linkage(
+            self.DIST, 0.1, must_link=[(1, 2)], separations=[Separation((0,), (2,), (1,), (3,))]
+        )
+        assert labels[1] == labels[2] == labels[3]
+        assert labels[0] != labels[1]
+
+    def test_a_must_link_across_two_presumptions_keeps_neither(self, mods):
+        # Rows 1 and 3 are each presumed on opposite sides and a human joins
+        # them: one presumption is wrong and nothing says which. The group
+        # stays free of both, and the named marks still never meet.
+        Separation = mods["cluster"].Separation
+        labels = mods["cluster"].single_linkage(
+            self.DIST, 0.1, must_link=[(1, 3)], separations=[Separation((0,), (2,), (1,), (3,))]
+        )
+        assert labels[1] == labels[3]
+        assert labels[0] != labels[2]
+
+    def test_the_named_marks_ruled_both_ways_still_refuse(self, mods):
+        Separation = mods["cluster"].Separation
+        with pytest.raises(ValueError, match="both same and different"):
+            mods["cluster"].single_linkage(
+                self.DIST, 0.1, must_link=[(0, 2)], separations=[Separation((0,), (2,), (1,), (3,))]
+            )
+
+    def test_members_resolve_to_rows_and_skip_what_is_not_here(self, mods):
+        MarkRef, Side = mods["cluster"].MarkRef, mods["cluster"].Side
+        refs = [MarkRef(i, 0, f"spods/00{i}", "logo", (0, 0, 10, 10)) for i in range(4)]
+        left = Side(("spods/000", 0), (("spods/000", 0), ("spods/001", 0), ("tobacco800/x", 1)))
+        (sep,) = mods["cluster"].resolve_separations(refs, [(left, ("spods/002", 0))])
+        # The anchor is named, not presumed; another source's mark has no row.
+        assert (sep.left, sep.left_members, sep.right, sep.right_members) == ((0,), (1,), (2,), ())
+
+    def test_a_side_with_members_cannot_be_read_as_a_bare_pair(self, mods):
+        # Reading only the anchor is exactly the bug, so it is refused loudly.
+        MarkRef, Side = mods["cluster"].MarkRef, mods["cluster"].Side
+        refs = [MarkRef(0, 0, "spods/000", "logo", (0, 0, 10, 10))]
+        with pytest.raises(TypeError):
+            mods["cluster"].resolve_pairs(refs, [(Side(("spods/000", 0), ()), ("spods/000", 0))])
+
+    def test_the_members_survive_the_store_with_their_side(self, mods, tmp_path):
+        # Saved sorted within the pair, so the members must swap with the ids.
+        path = tmp_path / "adjudications.json"
+        row = {
+            "left_page_id": "spods/900",
+            "left_mark_index": 0,
+            "left_members": [["spods/900", 0], ["spods/901", 0]],
+            "right_page_id": "spods/100",
+            "right_mark_index": 0,
+        }
+        mods["cluster"].save_adjudications([], [row], path)
+        [(left, right)] = mods["cluster"].load_adjudications(path)[1]
+        assert left == ("spods/100", 0)
+        assert right == mods["cluster"].Side(("spods/900", 0), (("spods/900", 0), ("spods/901", 0)))
+
+    def _apply_and_rebuild(self, mods, tmp_path, monkeypatch, *, strip_members=False):
+        """Rule ``a`` != ``b`` through the confusable pass, store it, rebuild."""
+        pages = [
+            _page(mods, f"spods/00{i}", "spods", [("logo", (0, 0, 200, 120), cid, "clustered")])
+            for i, cid in enumerate(("spods/a", "spods/a", "spods/b", "spods/b"))
+        ]
+        classes = {
+            cid: {"n_instances": 2, "page_ids": [p.page_id for p in pages if p.marks[0].class_id == cid], "audit": {}}
+            for cid in ("spods/a", "spods/b")
+        }
+        rows = [{"left_class_id": "spods/a", "right_class_id": "spods/b", "verdict": "different"}]
+        _c, problems, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert not problems
+        if strip_members:
+            separations = [{k: v for k, v in r.items() if not k.endswith("_members")} for r in separations]
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications([], separations, path)
+        same, different = mods["cluster"].load_adjudications(path)
+
+        Mark = mods["common"].Mark
+        for page in pages:
+            page.marks = [Mark(m.kind, m.box, None, m.provenance) for m in page.marks]
+        # The descriptor is not what is under test; the order of the merges is.
+        monkeypatch.setattr(mods["cluster"], "describe_marks", lambda pages, refs, backend: np.zeros((len(refs), 1)))
+        monkeypatch.setattr(mods["cluster"], "distance_matrix", lambda desc, refs, backend: self.DIST)
+        summary = mods["cluster"].cluster_source(
+            pages, "spods", backend="phash", threshold=0.1, same=same, different=different
+        )
+        return summary, [p.marks[0].class_id for p in pages]
+
+    def test_a_rebuild_without_the_members_loses_the_class_separation(self, mods, tmp_path, monkeypatch):
+        # What a pre-#3837 row did: applied, counted, and holding one mark.
+        summary, ids = self._apply_and_rebuild(mods, tmp_path, monkeypatch, strip_members=True)
+        assert summary["separations_applied"] == 1
+        assert ids[0] == ids[1] == ids[3] != ids[2]
+
+    def test_a_rebuild_with_the_members_reproduces_both_classes(self, mods, tmp_path, monkeypatch):
+        summary, ids = self._apply_and_rebuild(mods, tmp_path, monkeypatch)
+        assert summary["separations_on_members"] == 1
+        assert ids[0] == ids[1] != ids[2] == ids[3]
+
+
+class TestSeparationCheck:
+    """``separation_check.py``: the store each arm replays, and the edge it blames."""
+
+    SAME = [
+        {"left_page_id": "s/1", "left_mark_index": 0, "right_page_id": "s/2", "right_mark_index": 0,
+         "note": "membership: every instance of s/a confirmed by hand"},
+        {"left_page_id": "s/1", "left_mark_index": 0, "right_page_id": "s/3", "right_mark_index": 0,
+         "note": "split of s/x"},
+    ]  # fmt: skip
+    DIFFERENT = [
+        {"left_page_id": "s/1", "left_mark_index": 0, "right_page_id": "s/4", "right_mark_index": 0,
+         "left_class_id": "s/a", "right_class_id": "s/b", "pins": "marks"},
+        {"left_page_id": "s/5", "left_mark_index": 0, "right_page_id": "s/1", "right_mark_index": 0,
+         "note": "completeness: candidate rejected for s/a"},
+    ]  # fmt: skip
+    CLASS_OF = {("s/1", 0): "s/a", ("s/2", 0): "s/a", ("s/4", 0): "s/b"}
+    MEMBERS_OF = {"s/a": [["s/1", 0], ["s/2", 0]], "s/b": [["s/4", 0]]}
+
+    def _store(self, arm, skip=None):
+        check = importlib.import_module("separation_check")
+        return check.arm_store(arm, self.SAME, self.DIFFERENT, self.MEMBERS_OF, self.CLASS_OF, set(skip or ()))
+
+    def test_the_stored_arm_is_the_store(self, mods):
+        assert self._store("stored") == {"same": self.SAME, "different": self.DIFFERENT}
+
+    def test_before_membership_drops_the_later_passes_and_names_two_marks(self, mods):
+        store = self._store("before_named")
+        assert [r["note"] for r in store["same"]] == ["split of s/x"]
+        assert len(store["different"]) == 1
+        assert not any(k.endswith("_members") for k in store["different"][0])
+
+    def test_the_members_arm_records_both_classes(self, mods):
+        (row,) = self._store("before_members")["different"]
+        assert row["left_members"] == [["s/1", 0], ["s/2", 0]]
+        assert row["right_members"] == [["s/4", 0]]
+
+    def test_a_skipped_pair_is_gone_from_every_arm(self, mods):
+        skip = {frozenset({("s/1", 0), ("s/4", 0)})}
+        for arm in ("stored", "before_named", "before_members"):
+            assert all(r.get("left_class_id") is None for r in self._store(arm, skip)["different"])
+
+    def test_the_bridge_is_the_edge_that_first_joined_the_two_classes(self, mods):
+        check = importlib.import_module("separation_check")
+        edges = [(0.01, 1, 3), (0.05, 0, 1), (0.05, 2, 3)]
+        assert check.bridge(edges, {0, 1}, {2, 3}) == (1, 3, 0.01)
+        # Through an unclassed mark: the edge that closed the chain is blamed.
+        assert check.bridge([(0.01, 1, 4), (0.02, 4, 3)], {1}, {3}) == (4, 3, 0.02)
 
 
 class TestAReviewerMayChangeTheirMind:
