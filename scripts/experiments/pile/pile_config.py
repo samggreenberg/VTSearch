@@ -3481,6 +3481,9 @@ EMBEDDERS: dict[str, dict] = {
     # they carry far more activation memory per item than their backbone size
     # alone suggests.
     "dinov3_patch": {"patch": True, "gated": True, "batch": 64},
+    # EmbeddingGemma 2 (#4837): ~2,520 vision patches an image, so a batch of 32
+    # peaks at 33 GB on a V100 in fp32 for no more throughput than 8 gets.
+    "embeddinggemma2": {"patch": False, "batch": 8},
     # FaceNet over `image2face` crops (#4699). The only embedder of `face` media,
     # so it pairs only with datasets whose `media_type` is "face" -- see `cells`.
     "face": {"patch": False, "batch": 128, "media_type": "face"},

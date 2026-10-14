@@ -92,7 +92,7 @@
         [hint]="voteHint()"
         (voted)="vote($event)"
       ></vt-voting-overlay>
-      <p class="check-keys">&rarr; Good · &larr; Bad · &darr; back a pick. The last vote sends the round.</p>
+      <p class="check-keys">Arrow keys: &rarr; Good · &larr; Bad · &darr; back a pick. The last vote sends the round.</p>
 
       @if (error()) {
         <p class="error-text" role="alert">

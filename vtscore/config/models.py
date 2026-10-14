@@ -39,6 +39,18 @@ CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
 # `ImageClipLargeEmbedder.eval_only`.
 CLIP_L_MODEL_ID = "openai/clip-vit-large-patch14"
 DINOV2_MODEL_ID = "facebook/dinov2-base"
+# EmbeddingGemma 2 (#4837): one 768-d space for text, images and audio (and
+# video), so a single checkpoint backs both the ``embeddinggemma2`` image
+# embedder (eval-only: too slow for the app, #4837) and ``embeddinggemma2_audio``.  Needs transformers >= 5.18.  Text
+# queries carry the model card's ``SearchQuery`` prefix; media take none.
+# Audio goes in as 16 kHz mono, capped at 30 s (25 soft tokens a second, so 750
+# of the 8,192-token context) to bound CPU memory and latency, as for
+# ParaSpeechCLAP, from the clip's start so re-embedding is deterministic.
+EMBEDDINGGEMMA2_MODEL_ID = "google/embeddinggemma-2"
+EMBEDDINGGEMMA2_QUERY_PREFIX = "task: search result | query: "
+EMBEDDINGGEMMA2_SAMPLE_RATE = 16000
+EMBEDDINGGEMMA2_MAX_SAMPLES = 16000 * 30
+EMBEDDINGGEMMA2_MIN_SAMPLES = 16000  # zero-pad a sub-second clip to 1 s, as for BEATs
 DINOV3_MODEL_ID = "facebook/dinov3-vitb16-pretrain-lvd1689m"
 EUPE_MODEL_ID = "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
 """Direct URL to the real EUPE ViT-B/16 weights on Hugging Face.
