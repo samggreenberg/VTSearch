@@ -358,6 +358,36 @@ class TestTheDefaultArmDrawsTheLabelsLine:
         assert all(np.isnan(r["line_efbeta"]) for r in variants), "only the base row reads the line"
 
 
+class TestTheStopArms:
+    """#4878: the arms that stop on the labels line's own expected F-beta move the phase, and the app's does not."""
+
+    @staticmethod
+    def _phases(**kw):
+        rows = _run_safe_uncached("max_patch", beta=None, max_steps=30, **kw)
+        base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
+        return [(r["t"], r["phase"], r["line_head_count"]) for r in base], base
+
+    def test_the_app_s_rule_named_is_the_app(self):
+        default, rows_d = self._phases()
+        named, rows_n = self._phases(stop_rule="lights")
+        assert default == named
+        assert [r["threshold"] for r in rows_d] == [r["threshold"] for r in rows_n]
+
+    def test_a_level_always_met_stops_at_the_first_step_the_class_model_cuts(self):
+        phases, _ = self._phases(stop_rule="level", stop_level=0.0)
+        first_cut = next(i for i, (_, ph, hc) in enumerate(phases) if hc == 0 and ph not in ("good", "bad", "more"))
+        assert phases[first_cut][1] == "spot", phases
+        assert any(ph == "done" for _, ph, _ in phases)
+
+    def test_a_level_never_met_never_stops(self):
+        phases, _ = self._phases(stop_rule="level", stop_level=1.01)
+        assert not any(ph in ("spot", "done", "prompt") for _, ph, _ in phases), phases
+
+    def test_a_level_arm_needs_a_balance(self):
+        with pytest.raises(ValueError, match="stop_rule"):
+            _run_safe_uncached("max_patch", beta="off", max_steps=8, stop_rule="level")
+
+
 class TestTheWiderWorldKnobs:
     """#4452: the withheld half's scores are kept for post-hoc Find scenarios, and the Train pool can shrink."""
 

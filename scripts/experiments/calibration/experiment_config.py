@@ -1144,6 +1144,11 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
+#: #4878's stop arms: ``CALIB_STOP_RULE=level|lights+level|lights|level`` reads
+#: the labels line's own expected F-beta against ``CALIB_STOP_LEVEL`` (0.5) for
+#: when Autopilot says Done.  Unset = the app (``lights``).
+STOP_RULE = os.environ.get("CALIB_STOP_RULE", "").strip().lower() or "lights"
+STOP_LEVEL = float(os.environ.get("CALIB_STOP_LEVEL", "").strip() or 0.5)
 #: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
 #: the first Good until 3 Goods and 4 Bads, or a Good and 16 Bads); ``CALIB_LABEL_QUOTA=off`` is the
 #: pre-#4643 arm, a trained head from the first Good and Bad, which the study
