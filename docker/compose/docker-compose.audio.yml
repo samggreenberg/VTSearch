@@ -1,0 +1,25 @@
+# Audio-only CPU deployment: the full CPU image locked to the audio
+# media type (VTSEARCH_SOLO_MEDIA_TYPE=audio), with the CLAP General weights baked
+# in at build time so the container is ready to serve on first run.
+# See docker/Dockerfile.solo.
+#
+#   docker compose -f docker/compose/docker-compose.audio.yml up
+#   docker compose -f docker/compose/docker-compose.audio.yml up -d
+#   docker compose -f docker/compose/docker-compose.audio.yml down
+
+services:
+  vtsearch:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.solo
+      args:
+        MEDIA_TYPE: audio
+    image: vtsearch:audio
+    ports:
+      - "5000:5000"
+    volumes:
+      - vtsearch-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  vtsearch-data:

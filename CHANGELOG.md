@@ -239,6 +239,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
+  image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's
+  default embedder weights in at build time (CLAP General for `audio`, X-CLIP for `video`), so a fresh
+  container serves on first run without a Hugging Face download. `docker/compose/docker-compose.audio.yml`
+  and `docker-compose.video.yml` build and run the two; any other media type builds with
+  `--build-arg MEDIA_TYPE=<type>`. See [SETUP.md](docs/SETUP.md#single-media-type-audio-only-video-only).
 - **EmbeddingGemma 2 (audio) embedder** (issue #4837). A new choice for sound collections, built on Google's
   `embeddinggemma-2`. It finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
   but is weaker than CLAP on other sounds and music, so CLAP-general stays the default. It needs transformers
