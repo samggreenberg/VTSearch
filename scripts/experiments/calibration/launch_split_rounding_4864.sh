@@ -59,6 +59,9 @@ export CALIB_FOLD_COUNTS=""
 export CALIB_ANCHORED=0
 export CALIB_CUT_INCL_KS=""
 export CALIB_HAYSTACK_PREVALENCE=0.01
+# Recorded only: the class model's held-out Goods at every click (`model_n_pos`), so
+# each arm's switches between the count line and the labels line can be counted.
+export CALIB_LINE_COUNTS=1
 
 # --- environment (as #4583) -------------------------------------------------------
 export CALIB_DATASETS=coco_better
