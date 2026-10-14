@@ -40,7 +40,8 @@ function formatIsoUtc(unixSeconds) {
 function fromGit() {
   const res = spawnSync('git', ['-C', resolve(frontendRoot, '..'), 'log', '-1', '--format=%ct', 'HEAD'], {
     encoding: 'utf8',
-    timeout: 5000,
+    // The same bound as `vtsearch._GIT_TIMEOUT_S`: a loaded GRID node on NFS can be slow (#4852).
+    timeout: 10000,
   });
   const ts = (res.stdout || '').trim();
   return res.status === 0 && /^\d+$/.test(ts) ? formatIsoUtc(Number(ts)) : null;
