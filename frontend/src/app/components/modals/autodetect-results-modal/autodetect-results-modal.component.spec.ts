@@ -145,12 +145,44 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(fixture.nativeElement.querySelector('.centroid-note')?.textContent).not.toContain('Typed');
   });
 
+  it('names the detectors held on their typed query past the quota apart from those short of it (#4889)', async () => {
+    const quota = (nGood: number, nBad: number, holdOwed: number) => ({
+      tier: 'query',
+      n_good: nGood,
+      n_bad: nBad,
+      goods_owed: Math.max(0, 3 - nGood),
+      bads_owed: Math.max(0, 4 - nBad),
+      good_quota: 3,
+      bad_quota: 4,
+      dry_bad_quota: 16,
+      hold_labels: 30,
+      hold_owed: holdOwed,
+    });
+    fixture.componentRef.setInput('data', {
+      ...mockData,
+      results: {
+        held: { detector_name: 'Held', hits: [], label_quota: quota(12, 15, 3) },
+        short: { detector_name: 'Short', hits: [], label_quota: quota(1, 0, 0) },
+      },
+    } as any);
+    await flushInit();
+    expect(component.heldDetectors).toEqual(['Held (3 more labels)']);
+    expect(component.queryDetectors).toEqual(['Short (2 more Goods and 4 more Bads)']);
+    const heldNote = fixture.nativeElement.querySelector('.held-note')?.textContent ?? '';
+    expect(heldNote).toContain('until it has 30 labels');
+    expect(heldNote).toContain('Held');
+    expect(heldNote).not.toContain('Too few labels');
+    expect(fixture.nativeElement.querySelector('.query-note')?.textContent).not.toContain('Held');
+  });
+
   it('says nothing about the centroid when every detector trained', async () => {
     await flushInit();
     expect(component.centroidDetectors).toEqual([]);
     expect(component.queryDetectors).toEqual([]);
+    expect(component.heldDetectors).toEqual([]);
     expect(fixture.nativeElement.querySelector('.centroid-note')).toBeNull();
     expect(fixture.nativeElement.querySelector('.query-note')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.held-note')).toBeNull();
   });
 
   it('should display all hits when both selected', async () => {

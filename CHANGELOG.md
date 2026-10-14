@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector held on its typed query no longer reads "Too few labels"** (issue #4889). A detector made
+  from a typed query keeps its query's set past the label quota until it has 30 labels (#4736). The Test
+  view's note used to blame the quota for that, naming counts the labels already met ("it takes 3 Goods
+  and 4 Bads") and owing nothing. It now says the detector keeps its query's set until 30 labels, how many
+  it has, and how many more labels, Good or Bad, give a trained one. AutoFind's results list held detectors
+  on their own line, and the CLI's message says the same. The `label_quota` payload gains `hold_labels` and
+  `hold_owed`.
+
 - **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
   and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
   2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with

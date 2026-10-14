@@ -110,6 +110,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`served_quota` says when the typed query's hold, not the quota, is why** (issue #4889). Its dict gains
+  `hold_labels` (`label_quota.QUERY_HOLD_LABELS`, 30) and `hold_owed`: on a typed query's head whose labels
+  meet the quota, the labels of either kind still owed before the hold (#4736) gives the trained head, and
+  `0` otherwise. `LabelQuota.as_dict()` is unchanged. The CLI's `detector_query` event carries both, and its
+  text names the hold rather than calling a held detector "under the quota".
+
 - **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
   scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the
   Goods' centroid, folded back into the one `Linear(D, 1)`; a centroid scale of 0 prices the query alone.
