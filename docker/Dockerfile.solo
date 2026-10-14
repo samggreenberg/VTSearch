@@ -13,7 +13,7 @@
 #   image     SigLIP (docker/Dockerfile.labbench is the slimmer image-only build)
 #   text      E5
 #   document  nothing (no document embedder is registered)
-#   face      fails the build: facenet-pytorch is not in any Docker image
+#   face      fails the build: facenet-pytorch is not in any Docker image (#4886)
 #
 # That table is informational. The baked embedder is whatever the registry
 # calls the type's default, because the build runs the server's own startup
