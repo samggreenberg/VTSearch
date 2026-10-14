@@ -225,7 +225,7 @@ class TestTheShadow:
 
     def test_without_a_query_vector_the_run_is_the_centroid_alone(self, before_run):
         rows, picks = _run()
-        b_rows, b_picks, _sink = before_run
+        _b_rows, b_picks, _sink = before_run
         assert [p["picked_id"] for p in picks] == [p["picked_id"] for p in b_picks]
 
     def test_off_without_a_query_vector(self):
