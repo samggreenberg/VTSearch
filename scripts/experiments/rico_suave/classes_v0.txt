@@ -1,0 +1,15 @@
+# Rico Suave v0 (#4356): the classes a session is run on, one per line.
+# The pool holds all twelve; `splash` is left out as a TARGET only, because just
+# two screens agree on it (its activity names and captions almost never meet),
+# and a session needs Goods on both sides of the split.
+settings
+login
+signup
+onboarding
+map
+search
+chat
+gallery
+player
+cart
+browser
