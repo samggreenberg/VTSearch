@@ -95,6 +95,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The typed query as a second prior for the head, an eval arm** (issue #4384).
+  `vtscore.training.svm_prior.QUERY_PRIOR` (None in the app) adds the typed query's unit direction, at its own
+  scale, as a second cheap feature beside the Goods' centroid, folded back into the one `Linear(D, 1)`;
+  `centroid_prior_direction(query=(direction, scale))` takes it explicitly too, and a centroid scale of 0
+  prices the query alone. Unset, the fit is the shipped one bit for bit. The harness sets it for a run with
+  `vtscore.eval.arms_query_prior.query_prior(direction, scale)`, and
+  `simulate_voting_iterations(query_prior_sink=[...], query_vector=...)` records, at every click a trained
+  head is drawn on a single-vector typed-query run, one `QUERY_PRIOR_COLUMNS` row: where the withheld
+  positives sit under candidate heads refitted on the same votes. Recorded only; the session is unchanged.
+
 - **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`, `eval_only`: too slow
   for the app) and `embeddinggemma2_audio` (`audio`, selectable), both `google/embeddinggemma-2`, 768-d, with a
   text side; registered once per media type and loading only that type's encoder.

@@ -43,6 +43,7 @@ SIDE_FRAME_SUFFIXES = (
     "__handover",
     "__linecounts",
     "__overlap",
+    "__queryprior",
 )
 
 

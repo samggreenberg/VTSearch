@@ -1215,6 +1215,22 @@ LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", 
 #: the votes where the two sets disagree is priced on the same sessions.
 #: Recorded only, so the session is the app's; ``CALIB_SET_OVERLAP=1`` turns it on.
 SET_OVERLAP: bool = os.environ.get("CALIB_SET_OVERLAP", "").strip() not in ("", "0")
+#: Issue #4384's typed-query prior shadow: on a single-vector typed-query run, at
+#: every click a trained head is drawn, where the withheld positives sit under
+#: candidate heads started from the typed query (``task_NNNN__queryprior.csv``).
+#: Recorded only, so the session is the app's; ``CALIB_QUERY_PRIOR_SHADOW=1``.
+QUERY_PRIOR_SHADOW: bool = os.environ.get("CALIB_QUERY_PRIOR_SHADOW", "").strip() not in ("", "0")
+#: Issue #4384's arm: on such a run every head fit also takes the typed query's
+#: direction as a cheap feature at this scale, beside the Goods' centroid
+#: (``vtscore.eval.arms_query_prior.query_prior``).  Unset is the app.  A value
+#: that is not a positive number is kept as given, for the harness to refuse.
+_QUERY_PRIOR = os.environ.get("CALIB_QUERY_PRIOR", "").strip()
+QUERY_PRIOR: "float | str | None" = None
+if _QUERY_PRIOR:
+    try:
+        QUERY_PRIOR = float(_QUERY_PRIOR)
+    except ValueError:
+        QUERY_PRIOR = _QUERY_PRIOR
 #: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
 #: Test gives the typed query's own set until the label quota (rows tagged
 #: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the

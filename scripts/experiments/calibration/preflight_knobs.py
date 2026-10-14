@@ -335,6 +335,13 @@ def probe(C: Any) -> list[str]:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))
     elif C.SIGMA_FLOOR != "relative":
         rows.append(("sigma_floor", C.SIGMA_FLOOR, "<unset> = relative, the app's floor (#4492)"))
+    # #4384's typed-query prior: unset is the app's head (the Goods' centroid only), a scale an arm.
+    qp = getattr(C, "QUERY_PRIOR", None)
+    if qp is not None:
+        if isinstance(qp, float) and qp > 0 and qp != float("inf"):
+            rows.append(("query_prior", "%g" % qp, "<unset> = the app's head, started from the Goods' centroid only"))
+        else:
+            refuse("query_prior", "CALIB_QUERY_PRIOR", "must be a positive number")
 
     # The balance the line is drawn at (#4413).  Unset is the app's default;
     # the precision floor went in #4421 (experiment_config refuses its knob).

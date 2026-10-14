@@ -71,6 +71,7 @@ from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_ro
 from vtscore.eval.arms_handover import HANDOVER_CENTROID_TAG, HandoverJudge
 from vtscore.eval.arms_line_counts import line_count_row
 from vtscore.eval.arms_set_overlap import SetOverlap, pick_overlap_blank
+from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
@@ -2581,6 +2582,8 @@ def simulate_voting_iterations(  # noqa: C901
     handover_sink: Optional[list[dict[str, Any]]] = None,
     line_count_sink: Optional[list[dict[str, Any]]] = None,
     set_overlap_sink: Optional[list[dict[str, Any]]] = None,
+    query_prior_sink: Optional[list[dict[str, Any]]] = None,
+    query_vector: Optional[np.ndarray] = None,
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
 ) -> list[dict[str, Any]]:
@@ -2772,6 +2775,14 @@ def simulate_voting_iterations(  # noqa: C901
             :data:`~vtscore.eval.arms_set_overlap.PICK_OVERLAP_COLUMNS`: where
             each pick sat at the previous click.  Recorded only: the session is
             the app's.
+        query_prior_sink: On a single-vector typed-query run given
+            *query_vector*, receives at every click a trained head is drawn
+            where the withheld positives sit under candidate heads started from
+            the typed query (#4384,
+            :data:`~vtscore.eval.arms_query_prior.QUERY_PRIOR_COLUMNS`).
+            Recorded only: the session is the app's.
+        query_vector: The typed query's embedding in the media's space, which
+            *seed_scores* is the cosine to (#4384's shadow reads it).
         query_tier: Whether a run that opens on a typed query (*seed_scores*
             from the caller, no *seed_examples*) is a typed-query detector, as
             the app's is (#4758): until the quota, a Test on the withheld half
@@ -3540,6 +3551,23 @@ def simulate_voting_iterations(  # noqa: C901
     overlap = (
         SetOverlap(query_scores, clips_dict, beta, pool_labels)
         if set_overlap_sink is not None and query_scores is not None and beta is not None
+        else None
+    )
+    # #4384's candidate heads started from the typed query, on a single-vector typed-query run.
+    query_prior_shadow = (
+        QueryPriorShadow(
+            clips_dict,
+            sim_ids,
+            test_ids,
+            target_category,
+            query_vector,
+            lambda media: good_training_vec(media, target_category, region_voting),
+        )
+        if query_prior_sink is not None
+        and query_vector is not None
+        and query_scores is not None
+        and not region_aware
+        and (style_obj is None or style_obj.name == _WHOLE_IMAGE_STYLE)
         else None
     )
     # #4776's hand-over evidence, on a single-vector run (the region path's geometry is its own).
@@ -4478,6 +4506,17 @@ def simulate_voting_iterations(  # noqa: C901
                         dict(zip(sim_pooled_ids, sim_pooled_scores)) if sim_pooled_scores else None,
                     ),
                 }
+            )
+        if (
+            query_prior_shadow is not None
+            and query_prior_sink is not None
+            and not centroid
+            and good_votes
+            and bad_votes
+        ):
+            # #4384: the withheld positives' ranks under heads started from the typed query, on these votes.
+            query_prior_sink.append(
+                {**rank_ident, "t": t, "phase": base_row["phase"], **query_prior_shadow.row(good_votes, bad_votes)}
             )
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
