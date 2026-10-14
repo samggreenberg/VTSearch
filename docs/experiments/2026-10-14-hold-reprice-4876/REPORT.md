@@ -6,7 +6,10 @@ before #4859's typed-query prior, where it was worth +0.004 / +0.006 / +0.009 ov
 Two reads since said the trade had moved: about zero on photos (#4853), and a cost on Rico Suave's app screens
 (#4875). This study prices it again on one build (today's dev), at every count from 0 to 30, on both.
 
-**Answer: drop the hold.** On photos every count from 0 to 30 lands within 0.003 of every other. Over votes 1-150,
+**Owner's ruling, 2026-10-14: keep the hold.** No build follows. The measurement below says dropping it would
+help. That is recorded here so a later change can start from it.
+
+**The measurement says drop the hold.** On photos every count from 0 to 30 lands within 0.003 of every other. Over votes 1-150,
 no hold minus the shipped hold is **+0.003 / +0.001 / −0.001**. On app screens the best count is 0 at every
 preset, and no hold beats the shipped hold by **+0.014 / +0.026 / +0.021** over votes 1-150 and by +0.043 / +0.079 /
 +0.064 over votes 1-50, in every seed. The issue's rule was "if off wins or ties on photos and wins on screens,
@@ -149,9 +152,10 @@ or more. The issue expected a check inside the hold to need a run; it does not, 
   (`hold_4876.py check`). *Pending: the arrays queue behind #4878's in the CPU cap; the result lands in
   this PR.*
 
-## Recommendation
+## Recommendation (not taken)
 
-Set the hold to 0, which hands over to the head's set at the label quota as before #4736. That gains +0.003 /
+The owner kept the hold at 30 (2026-10-14). What this study recommended: set the hold to 0, which hands over to
+the head's set at the label quota as before #4736. That gains +0.003 /
 +0.001 / −0.001 on photos and +0.014 / +0.026 / +0.021 on app screens over votes 1-150. The build is a separate
 change: `label_quota.QUERY_HOLD_LABELS`, the server's `query_hold` mark on the learned sort, the sort runner's
 `heldRanking`, and the docs that describe the hold.
