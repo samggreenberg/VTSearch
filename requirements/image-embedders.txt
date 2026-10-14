@@ -52,6 +52,12 @@ scikit-learn
 # spelled for whichever version is present (`backend=` on 5, `use_fast=` on
 # 4.x) — so both sides of this range now resize identically, which is the
 # property a floor could never give us in someone's existing environment.
+#
+# EmbeddingGemma 2 (`embeddinggemma2` / `embeddinggemma2_audio`, #4837) needs
+# >= 5.18 and says so when it loads; nothing else does. The floor is NOT raised
+# for it: 5.18+ calls `torch.accelerator.current_accelerator()` on import, which
+# torch 2.6 (both GRID venvs) answers by raising on a host with no GPU, so a
+# raised floor would break every Hugging Face embedder on CPU (#4838).
 transformers>=4.49.0
 # One pandas major everywhere; see the pandas entry in pyproject.toml (#4381).
 pandas>=3

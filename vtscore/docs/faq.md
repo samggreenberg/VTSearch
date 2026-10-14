@@ -156,6 +156,7 @@ Depends on the embedder — each one declares its dimensionality via the
 | `beats` | `audio` | 768 |
 | `clap` | `audio` | 512 |
 | `clap_music` | `audio` | 512 |
+| `embeddinggemma2_audio` | `audio` | 768 |
 | `paraspeechclap` | `audio` | 768 |
 | `whisper_encoder` | `audio` | 512 |
 | `face` | `face` | 512 |
@@ -166,6 +167,7 @@ Depends on the embedder — each one declares its dimensionality via the
 | `dinov2_single` | `image` | 768 |
 | `dinov3_patch` | `image` | 768 |
 | `dinov3_single` | `image` | 768 |
+| `embeddinggemma2` | `image` | 768 |
 | `eupe_patch` | `image` | 768 |
 | `eupe_single` | `image` | 768 |
 | `sift_vlad` | `image` | 8192 |

@@ -99,6 +99,7 @@ declares it via its `embedding_dim` property):
 | `beats` | `audio` | 768 |
 | `clap` | `audio` | 512 |
 | `clap_music` | `audio` | 512 |
+| `embeddinggemma2_audio` | `audio` | 768 |
 | `paraspeechclap` | `audio` | 768 |
 | `whisper_encoder` | `audio` | 512 |
 | `face` | `face` | 512 |
@@ -109,6 +110,7 @@ declares it via its `embedding_dim` property):
 | `dinov2_single` | `image` | 768 |
 | `dinov3_patch` | `image` | 768 |
 | `dinov3_single` | `image` | 768 |
+| `embeddinggemma2` | `image` | 768 |
 | `eupe_patch` | `image` | 768 |
 | `eupe_single` | `image` | 768 |
 | `sift_vlad` | `image` | 8192 |
@@ -414,7 +416,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 27 |
+| `embedders` | library | Media embedders | 29 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 7 |
 | `settings_importers` | app | Settings importers | 2 |

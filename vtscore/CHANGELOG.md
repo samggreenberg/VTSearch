@@ -95,6 +95,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`, `eval_only`: too slow
+  for the app) and `embeddinggemma2_audio` (`audio`, selectable), both `google/embeddinggemma-2`, 768-d, with a
+  text side; registered once per media type and loading only that type's encoder.
+  - **Recipe:** each input runs through the model's text backbone (images as soft tokens, audio at 25 tokens a
+    second), and the vector is the masked mean of its last hidden state, L2-normalised. That is the checkpoint's
+    sentence-transformers recipe, on plain `transformers`.
+  - **Queries** carry `EMBEDDINGGEMMA2_QUERY_PREFIX` (`"task: search result | query: "`); media take none.
+  - **Precision:** the model never runs in fp16, which overflows; it runs in bf16 when `VTSEARCH_EMBED_PRECISION`
+    asks.
+  - **Batch:** the image embedder's default batch is 8.
+  - **Audio** is 16 kHz mono, its first 30 s (`EMBEDDINGGEMMA2_MAX_SAMPLES`), padded to 1 s
+    (`EMBEDDINGGEMMA2_MIN_SAMPLES`).
+  - **Needs transformers >= 5.18;** loading on an older one raises `ImportError` naming the version.
+  - **New config constants:** `EMBEDDINGGEMMA2_MODEL_ID`, `EMBEDDINGGEMMA2_QUERY_PREFIX`,
+    `EMBEDDINGGEMMA2_SAMPLE_RATE`, `EMBEDDINGGEMMA2_MAX_SAMPLES`, `EMBEDDINGGEMMA2_MIN_SAMPLES`.
+
 - **Set overlap for the harness** (issue #4816). On a typed-query run,
   `simulate_voting_iterations(set_overlap_sink=[...])` records, at every click a trained head scored the
   pool, one `vtscore.eval.arms_set_overlap.OVERLAP_COLUMNS` row: how the head's set and the typed query's
