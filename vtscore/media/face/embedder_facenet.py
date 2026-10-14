@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -101,6 +102,16 @@ class FaceEmbedder(MediaEmbedder):
             # intercept_tqdm_progress so the bar is forwarded to the GUI progress
             # callback and never leaks to stdout/stderr.
             from facenet_pytorch import InceptionResnetV1  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+            from vtscore.config import MODELS_CACHE_DIR  # noqa: PLC0415
+
+            # The checkpoint lands in $TORCH_HOME/checkpoints. Point it at the
+            # shared model cache, as the EUPE and speech-clipper loaders do, so
+            # it sits with every other model (and in a Docker image's baked or
+            # volume-backed models dir) rather than under whichever $HOME this
+            # process has -- and not only when one of those happened to load
+            # first. An explicit TORCH_HOME still wins.
+            os.environ.setdefault("TORCH_HOME", str(Path(MODELS_CACHE_DIR).expanduser()))
 
             model = InceptionResnetV1(pretrained="vggface2")
             model.eval()

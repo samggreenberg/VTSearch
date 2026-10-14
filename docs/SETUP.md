@@ -498,8 +498,7 @@ pipeline rather than an embedding space:
   The build bakes the image default (SigLIP), which is what the pages embed with.
   The converter needs PyMuPDF, so do not combine it with `REQUIREMENTS=base-no-agpl.txt`.
 - **`face`**: image input, with the faces cropped out by `image2face` and
-  embedded in FaceNet identity space. The build bakes FaceNet, and this image
-  installs `facenet-pytorch`, which both halves need.
+  embedded in FaceNet identity space. The build bakes FaceNet.
 
 The lock does not yet force that pipeline in every import flow, or give the
 new-detector flow the embedded type (#4891).
