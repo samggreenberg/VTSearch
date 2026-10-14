@@ -291,12 +291,20 @@ DELAYS = tuple(range(0, 125, 5))
 
 
 def with_placebos(sessions: pd.DataFrame) -> pd.DataFrame:
-    """*sessions* with Done's stop and the delay placebos as ``stop[...]`` columns."""
+    """*sessions* with Done's stop, the delay placebos, and Done-or-level as ``stop[...]`` columns.
+
+    ``done|{level rule}`` stops at whichever comes first, Done or the level rule: Done keeps every session
+    it stops, and the level rule can end one sooner.
+    """
     start = pd.to_numeric(sessions["class_model_from"], errors="coerce")
+    done = pd.to_numeric(sessions["done"], errors="coerce")
     extra = {"stop[done]": sessions["done"]}
     for n in DELAYS:
         stop = start + n
         extra[f"stop[delay:{n}]"] = stop.where(stop <= HORIZON)
+    for col in [c for c in sessions.columns if c.startswith("stop[") and ":level:" in c and "done+" not in c]:
+        rule = col[5:-1]
+        extra[f"stop[done|{rule}]"] = np.fmin(done, pd.to_numeric(sessions[col], errors="coerce"))
     return sessions.assign(**extra)
 
 
@@ -306,7 +314,7 @@ def family(rule: str) -> str:
         return "done"
     if rule.startswith("delay:"):
         return "delay"
-    sig = rule.removeprefix("done+").split(":")[0]
+    sig = rule.removeprefix("done+").removeprefix("done|").split(":")[0]
     return "diagnostic" if sig in DIAGNOSTIC else "candidate"
 
 
@@ -357,8 +365,8 @@ def held_out(sessions: pd.DataFrame) -> pd.DataFrame:
 
 
 #: The rules the report reads by band: Done, one level rule at one threshold for every preset, the same after
-#: Done, and the placebo that stops when the class model first cuts.
-BY_BAND = ("done", "efbeta:level:0.5", "done+efbeta:level:0.5", "delay:0")
+#: Done, Done or it whichever comes first, and the placebo that stops when the class model first cuts.
+BY_BAND = ("done", "efbeta:level:0.5", "done+efbeta:level:0.5", "done|efbeta:level:0.5", "delay:0")
 
 
 def by_band(sessions: pd.DataFrame) -> pd.DataFrame:
@@ -446,16 +454,21 @@ def edges_figure(priced: pd.DataFrame, out: Path) -> None:
             for k, color in KIND_COLORS.items():
                 q = p[p["kind"] == k]
                 after = q["rule"].str.startswith("done+")
-                ax.scatter(q.loc[~after, "mean_leave"], q.loc[~after, metric], s=12, color=color, label=k, zorder=3)
-                ax.scatter(
-                    q.loc[after, "mean_leave"],
-                    q.loc[after, metric],
-                    s=14,
-                    marker="^",
-                    color=color,
-                    label=f"Done, then {k}" if k != "diagnostic" else None,
-                    zorder=3,
-                )
+                either = q["rule"].str.startswith("done|")
+                alone = ~after & ~either
+                named = k != "diagnostic"
+                ax.scatter(q.loc[alone, "mean_leave"], q.loc[alone, metric], s=12, color=color, label=k, zorder=3)
+                for mask, marker, text in ((after, "^", f"Done, then {k}"), (either, "s", f"Done or {k}, first")):
+                    if mask.any():
+                        ax.scatter(
+                            q.loc[mask, "mean_leave"],
+                            q.loc[mask, metric],
+                            s=14,
+                            marker=marker,
+                            color=color,
+                            label=text if named else None,
+                            zorder=3,
+                        )
             d = p[p["kind"] == "done"].iloc[0]
             ax.scatter([d["mean_leave"]], [d[metric]], s=60, marker="D", color=INK, label="Done", zorder=4)
             if row == 0:

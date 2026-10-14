@@ -164,6 +164,30 @@ On large objects the level rule stops sooner than Done and leaves a higher F-bet
 medium and small objects it mostly does not stop: those sessions click on, and gain. Within every band the
 rule's clicks go where they pay better than at random, so it is not only sorting easy classes from hard ones.
 
+### Done or the level rule, whichever comes first
+
+A gentler change keeps Done for every session it stops, and lets the level rule end a session sooner. That is
+`done|efbeta:level:0.5`, over all 720 sessions a preset (`by_band.csv`):
+
+| preset | rule | fires | mean leave | F-beta at leave | edge over a fixed click | edge over random dealing |
+|---|---|---|---|---|---|---|
+| β 1/4 | Done | 89% | 74 | 0.58 | +0.015 ± 0.007 | +0.008 ± 0.005 |
+| | Done or level | 90% | 63 | 0.575 | +0.007 ± 0.008 | +0.026 ± 0.007 |
+| β 1 | Done | 89% | 76 | 0.47 | −0.007 ± 0.005 | +0.000 ± 0.003 |
+| | Done or level | 89% | 65 | 0.468 | +0.005 ± 0.006 | +0.021 ± 0.005 |
+| β 4 | Done | 88% | 85 | 0.55 | −0.013 ± 0.005 | −0.004 ± 0.004 |
+| | Done or level | 89% | 69 | 0.539 | −0.002 ± 0.006 | +0.011 ± 0.005 |
+
+It stops a session 11, 12 and 16 clicks sooner than Done does, on average, for 0.005, 0.003 and 0.009 of mean
+F-beta. It spends its clicks better than Done at every preset (the last column), and at β 1 and 4 it beats a
+fixed click where Done loses to one.
+
+It also beats the placebo at the same mean click, by interpolating the dotted line:
+- **over random dealing:** +0.026, +0.021 and +0.011, against the placebo's +0.014, +0.007 and +0.006;
+- **over a fixed click:** +0.007, +0.005 and −0.002, against the placebo's +0.000, −0.006 and +0.001.
+
+So the level reading adds to Done at β 1/4 and β 1, and little at β 4.
+
 ## What this leaves open
 
 - **The level rule's threshold was learned on one corpus.** COCO Better's 11.6k-image Train pool at about 1%
