@@ -1259,6 +1259,13 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
 
+#: Issue #4864's split rounding: ``nearest`` sizes each class's calibration
+#: holdout to the nearest whole vote, with no coin (``vtscore.eval.
+#: arms_split_rounding.split_rounding``).  Unset (the default, ``dither``) is the
+#: app.  Like :data:`CALIBRATION_FRACTION` it moves the trajectory, so it is a
+#: run-level A/B.
+SPLIT_ROUNDING = os.environ.get("CALIB_SPLIT_ROUNDING", "").strip() or "dither"
+
 #: The Bads half of issue #4786's gate: while the labels line's class model holds few
 #: Goods and fewer than this many Bads, the line keeps the head's count (``vtscore.eval.
 #: live_threshold_rules.head_count_bads``).  Unset is the app's (no Bads half since

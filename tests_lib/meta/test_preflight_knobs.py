@@ -103,6 +103,7 @@ _DIVERGENT = [
     ({"CALIB_NEW_WALK": "hard"}, "new_walk"),
     ({"CALIB_BAND_SHARE": "8"}, "band_share"),
     ({"CALIB_SIGMA_FLOOR": "absolute"}, "sigma_floor"),
+    ({"CALIB_SPLIT_ROUNDING": "nearest"}, "split_rounding"),
     ({"CALIB_QUERY_PRIOR": "3"}, "query_prior"),
     ({"CALIB_QUERY_PRIOR": "0"}, "query_prior"),
     ({"CALIB_SEED_EXAMPLES": "1"}, "seed_examples"),
@@ -154,6 +155,7 @@ def test_pins_at_the_shipped_values_pass(check):
         CALIB_WALK_PICKS="0",
         CALIB_WALK_TOL="0",
         CALIB_WALK_FINE="0",
+        CALIB_SPLIT_ROUNDING="dither",
     )
     assert "MATCHES" in out, out
 
@@ -191,6 +193,7 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_BAND_SHARE": "0"}, "band_share"),
         ({"CALIB_BAND_SHARE": "one"}, "band_share"),
         ({"CALIB_SIGMA_FLOOR": "abs"}, "sigma_floor"),
+        ({"CALIB_SPLIT_ROUNDING": "round"}, "split_rounding"),
         ({"CALIB_QUERY_PRIOR": "ten"}, "query_prior"),
         ({"CALIB_QUERY_PRIOR": "-1"}, "query_prior"),
         ({"CALIB_GOOD_DRY_RUN": "0"}, "good_dry_run"),
