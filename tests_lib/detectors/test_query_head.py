@@ -333,7 +333,8 @@ class TestTheQueryHold:
         assert not query_holds(3, 4, patch_space=None), "an unknown space keeps the hand-over at the quota"
         assert not query_holds(3, 4, patch_space=False, hold=0), "the arm before"
 
-    def test_past_the_quota_the_detector_is_still_its_query(self, world, single_vector):
+    @pytest.mark.usefixtures("single_vector")
+    def test_past_the_quota_the_detector_is_still_its_query(self, world):
         snap, _proto, make, _embedded = world
         ctx = _ctx()
         ls = make([1, 2, 3], [40, 41, 42, 43])
@@ -341,7 +342,8 @@ class TestTheQueryHold:
         assert is_query_head(ctx.model) and query_head_text(ctx.model) == QUERY
         assert served_quota(ctx.model, ls)["tier"] == TIER_QUERY
 
-    def test_at_the_hold_the_trained_head_takes_over(self, world, single_vector):
+    @pytest.mark.usefixtures("single_vector")
+    def test_at_the_hold_the_trained_head_takes_over(self, world):
         snap, _proto, make, _embedded = world
         ctx = _ctx()
         ls = make(list(range(1, 9)), list(range(40, 62)))
@@ -349,7 +351,8 @@ class TestTheQueryHold:
         assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap, text_query=QUERY) is True
         assert ctx.model is not None and not is_quota_head(ctx.model)
 
-    def test_without_a_query_the_quota_alone_decides(self, world, single_vector):
+    @pytest.mark.usefixtures("single_vector")
+    def test_without_a_query_the_quota_alone_decides(self, world):
         snap, _proto, make, _embedded = world
         ctx = _ctx()
         assert lt.train_from_labelset(ctx, make([1, 2, 3], [40, 41, 42, 43]), media_type="image", snap=snap) is True
@@ -366,7 +369,8 @@ class TestTheQueryHold:
         )
         assert ctx.model is not None and not is_quota_head(ctx.model)
 
-    def test_a_cold_find_holds_too_and_the_learned_sort_never_does(self, world, single_vector):
+    @pytest.mark.usefixtures("single_vector")
+    def test_a_cold_find_holds_too_and_the_learned_sort_never_does(self, world):
         snap, _proto, make, _embedded = world
         ls = make([1, 2, 3], [40, 41, 42, 43])
         _r, _t, model = lt.labelset_train_and_score(
