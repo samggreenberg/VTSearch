@@ -291,6 +291,10 @@ slides:
   # committed curves (`make-head-start-figs.py`).
   head-start
   running-start
+  # Then In So Many Words: a detector made from typed text starts its line from the words as well as the
+  # Goods' average (#4384, #4859). Head Start's schematic again, drawn with a typed query instead of faces
+  # (`make-many-words-figs.py`).
+  many-words
 
   # XI — Instruction: the tool as a how-to (#4202). Section I shows the same
   # session as an argument; this shows it as instructions, every click marked

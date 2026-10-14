@@ -1,4 +1,4 @@
-"""#4384's typed-query prior: the early head started from the typed query as well as from the Goods.
+"""#4384's typed-query prior: the head started from the typed query as well as from the Goods.
 
 On a typed-query detector the first trained heads rank the corpus worse than
 the query they replace.  #4736 holds the query's set on screen until 30 labels
@@ -7,25 +7,29 @@ the head started from the Goods' centroid (#4785) did not close the gap.  The
 query is the better prior: three Goods off the top of its own sort say less
 about the class than the text that found them.
 
-Two pieces, both for single-vector typed-query runs:
+Since #4859 the app ships it: a typed-query detector on its query's own
+single-vector space fits every head within
+:func:`vtscore.training.svm_prior.typed_query_prior`, and so does the harness on
+a typed-query run given the query's vector.  Two pieces here:
 
-* :func:`query_prior`, the arm.  Within the block every centroid-prior fit also
-  takes the typed query's direction as a cheap feature
-  (:data:`vtscore.training.svm_prior.QUERY_PRIOR`), so the picks, the folds,
-  the line and Test all come from that head.  ``CALIB_QUERY_PRIOR=<scale>``.
+* :func:`query_prior_scale`, the arm.  It holds
+  :data:`~vtscore.training.svm_prior.QUERY_PRIOR_SCALE` at another scale for a
+  run; ``0`` is the head before #4859 (the Goods' centroid alone).
+  ``CALIB_QUERY_PRIOR=<scale>``, unset the app's 10.
 * :class:`QueryPriorShadow`, the screen.  At every click a trained head is
   drawn, it refits a few candidate heads on the same votes and records where
   the withheld half's positives sit in each one's ranking (one
   :data:`QUERY_PRIOR_COLUMNS` row in the ``__queryprior.csv`` side frame).  AP
   and the F-beta of any top *K* follow from the ranks.  The candidates:
 
-  - ``head``: the shipped fit (the centroid's feature at
-    :data:`~vtscore.training.svm_prior.CENTROID_PRIOR_SCALE`), a check against
-    the run's own rows;
+  - ``head``: the centroid's feature alone, at
+    :data:`~vtscore.training.svm_prior.CENTROID_PRIOR_SCALE` (the app's head
+    before #4859; the run's own head when the prior is off);
   - ``query``: the typed query's sort;
   - ``q<S>``: the SVM with the query's feature at scale ``S`` and no centroid;
-  - ``cq<S>``: the shipped fit plus the query's feature at scale ``S``;
-  - ``blend<A>``: the shipped head's score and the query's, each divided by
+  - ``cq<S>``: the centroid plus the query's feature at scale ``S`` (``cq10`` is
+    the app's head since #4859);
+  - ``blend<A>``: the centroid-only head's score and the query's, each divided by
     its spread over the voting half, mixed with weight ``A`` on the query
     (#4384's second arm, a fixed blend).
 
@@ -84,26 +88,27 @@ QUERY_PRIOR_COLUMNS = [
 
 
 @contextmanager
-def query_prior(direction: "np.ndarray | None", scale: float | None) -> Iterator[None]:
-    """Hold :data:`~vtscore.training.svm_prior.QUERY_PRIOR` at ``(direction, scale)`` while the block runs.
+def query_prior_scale(scale: float | None) -> Iterator[None]:
+    """Hold :data:`~vtscore.training.svm_prior.QUERY_PRIOR_SCALE` at *scale* while the block runs.
 
-    ``None`` for either changes nothing (the app's).  Process-wide, as
+    ``None`` changes nothing (the app's); ``0`` turns the typed query's prior off,
+    the head before #4859.  Process-wide, as
     :func:`~vtscore.eval.live_threshold_rules.head_count_bads` is, which suits a
     task that runs one cell, and undone on the way out.
     """
-    if direction is None or scale is None:
+    if scale is None:
         yield
         return
-    if not np.isfinite(scale) or scale <= 0:
-        raise ValueError(f"query_prior scale must be a positive number; got {scale!r}")
+    if not np.isfinite(scale) or scale < 0:
+        raise ValueError(f"query_prior_scale must be a number >= 0; got {scale!r}")
     from vtscore.training import svm_prior  # noqa: PLC0415
 
-    shipped = svm_prior.QUERY_PRIOR
-    svm_prior.QUERY_PRIOR = (np.asarray(direction, dtype=np.float64), float(scale))
+    shipped = svm_prior.QUERY_PRIOR_SCALE
+    svm_prior.QUERY_PRIOR_SCALE = float(scale)
     try:
         yield
     finally:
-        svm_prior.QUERY_PRIOR = shipped
+        svm_prior.QUERY_PRIOR_SCALE = shipped
 
 
 def positive_ranks(ids: Sequence[int], scores: np.ndarray, positive: set[int]) -> str:

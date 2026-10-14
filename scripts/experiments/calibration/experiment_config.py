@@ -1220,10 +1220,12 @@ SET_OVERLAP: bool = os.environ.get("CALIB_SET_OVERLAP", "").strip() not in ("", 
 #: candidate heads started from the typed query (``task_NNNN__queryprior.csv``).
 #: Recorded only, so the session is the app's; ``CALIB_QUERY_PRIOR_SHADOW=1``.
 QUERY_PRIOR_SHADOW: bool = os.environ.get("CALIB_QUERY_PRIOR_SHADOW", "").strip() not in ("", "0")
-#: Issue #4384's arm: on such a run every head fit also takes the typed query's
-#: direction as a cheap feature at this scale, beside the Goods' centroid
-#: (``vtscore.eval.arms_query_prior.query_prior``).  Unset is the app.  A value
-#: that is not a positive number is kept as given, for the harness to refuse.
+#: Issue #4384's arm, the app's since #4859: on a typed-query single-vector run every
+#: head fit also takes the typed query's direction as a cheap feature beside the
+#: Goods' centroid, at ``vtscore.training.svm_prior.QUERY_PRIOR_SCALE`` (10).  Unset
+#: is the app; ``0`` is the head before #4859 (the centroid alone); another number
+#: is a scale arm (``vtscore.eval.arms_query_prior.query_prior_scale``).  A value
+#: that is not a number is kept as given, for the harness to refuse.
 _QUERY_PRIOR = os.environ.get("CALIB_QUERY_PRIOR", "").strip()
 QUERY_PRIOR: "float | str | None" = None
 if _QUERY_PRIOR:

@@ -43,6 +43,7 @@ def build_seed_scores(
     embedder_name: str = "siglip",
     categories: Optional[dict[str, list[str]]] = None,
     enrich: bool = False,
+    vectors_out: "dict[str, dict[str, np.ndarray]] | None" = None,
 ) -> dict[str, dict[str, dict[int, float]]]:
     """Build ``{dataset: {category: {media_id: cosine}}}`` text-sort rankings.
 
@@ -66,6 +67,10 @@ def build_seed_scores(
             actually sees.  Pass the app's value explicitly if it ever stops
             defaulting to off, or the seed ranking silently stops being the
             one the run's arms were opened on (#3341).
+
+        vectors_out: Filled, when given, with each kept query's unit vector
+            keyed like the result, for ``run_voting_iterations_eval(query_vectors=…)``:
+            a typed-query run fits its heads from its query too (#4859).
 
     Returns:
         Nested mapping suitable for ``run_voting_iterations_eval(seed_scores=…)``.
@@ -102,6 +107,8 @@ def build_seed_scores(
             scores = {ids[k]: float(cos[k]) for k in range(len(ids))}
             if existing is None or max(scores.values()) > max(existing.values()):
                 ds_out[cat] = scores
+                if vectors_out is not None:
+                    vectors_out.setdefault(ds_name, {})[cat] = _unit(np.asarray(qvec, dtype=np.float32))
         if ds_out:
             result[ds_name] = ds_out
     return result

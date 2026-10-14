@@ -164,7 +164,7 @@ ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
 ENVX="$ENVX CALIB_LINE_COUNTS=${CALIB_LINE_COUNTS:-}"
 # The set overlap (#4816): a side frame of how the head's set and the typed query's split the pool; the session is unchanged.
 ENVX="$ENVX CALIB_SET_OVERLAP=${CALIB_SET_OVERLAP:-}"
-# The typed-query prior (#4384): the shadow is a side frame (session unchanged); the scale is the arm (unset = the app's head).
+# The typed-query prior (#4384, #4859): the shadow is a side frame (session unchanged); the scale is the arm (unset = the app's 10, 0 = before #4859).
 ENVX="$ENVX CALIB_QUERY_PRIOR_SHADOW=${CALIB_QUERY_PRIOR_SHADOW:-} CALIB_QUERY_PRIOR=${CALIB_QUERY_PRIOR:-}"
 # The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
 ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
