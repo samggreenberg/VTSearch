@@ -349,7 +349,8 @@ class TestTheDefaultArmDrawsTheLabelsLine:
         drawn = [r for r in base if np.isfinite(r["train_prevalence"])]
         assert drawn, "the default arm never drew the labels' line"
         for r in drawn:
-            assert 0.0 <= r["line_efbeta"] <= 1.0 and 0.0 <= r["line_efbeta_fresh"] <= 1.0, r
+            for col in ("line_efbeta", "line_efbeta_corpus", "line_efbeta_fresh", "find_efbeta"):
+                assert 0.0 <= r[col] <= 1.0, (col, r)
             assert np.isfinite(r["line_separation"]) and r["line_head_count"] in (0, 1), r
         undrawn = [r for r in base if not np.isfinite(r["train_prevalence"])]
         assert all(np.isnan(r["line_efbeta"]) and r["line_head_count"] == -1 for r in undrawn)

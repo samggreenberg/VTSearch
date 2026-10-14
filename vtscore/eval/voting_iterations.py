@@ -1262,22 +1262,37 @@ def _standalone_calibration_row(
     return row
 
 
-def _line_reading(line: "LabelsLine | None", beta: float | None) -> dict[str, Any]:
-    """The labels line's own reading of how well it does, on Train at *beta* (#4878); nothing with no line.
+def _line_reading(
+    line: "LabelsLine | None",
+    beta: float | None,
+    corpus_scores: Any = None,
+    on_test: "LabelsLine | None" = None,
+) -> dict[str, Any]:
+    """The labels line's own reading of how well it does, at *beta* (#4878); nothing with no line.
 
     What a stop rule in the objective's units would read, and the app has all of
-    it at every retrain: the expected F-beta at the line's cut over the corpus's
-    unvoted items and on a fresh corpus like it, the labels' d', and whether the
-    head's count line served.
+    it at every retrain: the expected F-beta at the line's cut over the Train
+    corpus's unvoted items, over the Train corpus read as unlabelled
+    (*corpus_scores*: a Find on a corpus like this one), and on a fresh corpus
+    in the class model's normals; the labels' d'; and whether the head's count
+    line served.  *on_test* is the line fitted on the withheld half, whose
+    expected F-beta is a diagnostic the app cannot read: it is read off that
+    half's scores (never its labels), beside the F-beta it is estimating.
     """
     if line is None or beta is None:
         return {}
-    return {
-        "line_efbeta": round6(line.expected_fbeta(float(beta))),
-        "line_efbeta_fresh": round6(line.expected_fbeta_fresh(float(beta))),
+    b = float(beta)
+    out = {
+        "line_efbeta": round6(line.expected_fbeta(b)),
+        "line_efbeta_fresh": round6(line.expected_fbeta_fresh(b)),
         "line_separation": round6(float(line.separation)),
         "line_head_count": int(head_count_serves(line.model)),
     }
+    if corpus_scores is not None:
+        out["line_efbeta_corpus"] = round6(line.on_corpus(corpus_scores).expected_fbeta(b))
+    if on_test is not None:
+        out["find_efbeta"] = round6(on_test.expected_fbeta(b))
+    return out
 
 
 def _calibration_metric_rows(
@@ -1360,7 +1375,15 @@ def _calibration_metric_rows(
     base["train_threshold"] = round6(float(train_threshold))
     base["train_prevalence"] = round6(float(details.get("train_prevalence", float("nan"))))
     base["find_prevalence"] = round6(find_prevalence)
-    base.update(_line_reading(find_line, details.get("beta")))
+    line_ranking = details.get("line_ranking")
+    base.update(
+        _line_reading(
+            find_line,
+            details.get("beta"),
+            corpus_scores=None if line_ranking is None else line_ranking.scores,
+            on_test=details.get("find_on_test"),
+        )
+    )
     # How many held-out scores the conformal quantile was actually taken over,
     # on the SHIPPED row rather than only on the fold-count variant rows (issue
     # #3287).  It was declared in `CALIBRATION_COLUMNS` and filled only by the
