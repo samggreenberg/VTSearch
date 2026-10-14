@@ -8,9 +8,10 @@
 
 <!-- build: figs/autopilot-done.build2.webp -->
 
-<!-- **a** — On photos, three green lights, then the one Spot Check, and
-     Toasty says the detector's trained, under the Dashboard button. Nothing
-     times out; we choose. -->
+<!-- **a** — Back to Autopilot for one slide: how does a run end? On photos,
+     three green lights, then the one Spot Check, and Toasty says the
+     detector's trained, under the Dashboard button. Nothing times out; we
+     choose. -->
 
 <!-- **b** — Documents stop differently: sixteen best matches in a row, none
      Good. Clicking on past that found at most 0.8% more. Same news, with that

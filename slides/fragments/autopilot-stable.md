@@ -10,15 +10,16 @@
 
 <!-- build: figs/autopilot-stable.build3.webp -->
 
-<!-- **a** — Stable: is it still changing its mind? Every unvoted photo, last
-     retrain on top, this one below. Most barely move. -->
+<!-- **a** — Stable asks: is it still changing its mind? Every unvoted photo,
+     lettered, on the last retrain and on this one. A and B swapped, which
+     changes nothing we get back. -->
 
-<!-- **b** — Six crossed the line. Count them all and it never settles: a photo
-     it can't place wobbles forever. On one pile that kept Autopilot asking at
+<!-- **b** — Six changed side. Count them all and it never settles: a photo it
+     can't place wobbles forever. On one pile that kept Autopilot asking at
      the line for 127 of 150 clicks. -->
 
 <!-- **c** — So, a band around the line. A flip only counts if the photo was
-     clear of it both times. Two of the six. -->
+     clear of it both times: D and N. Two super changed side. -->
 
-<!-- **d** — Green when those flips stay tiny over the last ten retrains and the
-     flipping has stopped falling. -->
+<!-- **d** — Count those over a session. They jiggle, then flatten out to
+     none, and low is what Stable waits for. -->

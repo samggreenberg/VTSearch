@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-labels-fit.webp)
 
-## Curvey &<br>InDiscreet
+## Curvey &<br>InDiscrete
 
 <!-- build: figs/calib-labels-fit.build1.webp -->
 

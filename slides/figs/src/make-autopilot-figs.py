@@ -71,9 +71,6 @@ from vtscore.detectors.cost_trend import (  # noqa: E402
 )
 from vtscore.detectors.stability import (  # noqa: E402
     STABLE_BAND_STD_FRACTION,
-    STABLE_MAX_THRESHOLD,
-    STABLE_RATE_THRESHOLD,
-    STABLE_WINDOW,
     ScoredSnapshot,
     count_flips,
 )
@@ -82,9 +79,7 @@ from vtscore.eval.autopilot_flow import (  # noqa: E402
     GOOD_TARGET,
     MORE_DRY_RUN,
     SPAN_GREEN_DEFAULT,
-    SPAN_YELLOW,
     next_phase,
-    span_status,
 )
 
 OUT = Path(__file__).resolve().parent.parent
@@ -100,6 +95,10 @@ RED = "#b91c1c"
 GREEN = "#0d8a5f"
 AMBER = "#c98a06"
 RULE = "#d8dee6"
+#: An atlas's edges: dark enough to read as the tree's own structure from the
+#: back of a room, still lighter than the cells they join (owner, #4884: the
+#: rule grey was too faint).
+EDGE = "#9aa3ae"
 UNLABELED_FILL = "#dae0e8"
 #: The ambiguity band around the line: a tint of the line's own blue, since it
 #: is the line's band.
@@ -211,14 +210,17 @@ STEPS_STAGES = 4
 #: also runs it earlier when the labels separate weakly (#4496), so it is not
 #: a fifth step in a fixed order (owner, #4872). Its "until" is what the check
 #: is for: it walks bands down from the top while its estimate of the kept
-#: set's F-beta rises, and stops at that estimate's peak (`spot_check`).
+#: set's F-beta rises, and stops at that estimate's peak (`spot_check`), so the
+#: slide says "Fβ estimated". Each light's "until" names what green
+#: means for it, not the colour (owner, #4884), so the slide reads without the
+#: three light slides before it; a two-part rule takes two lines.
 STEPS = (
     # The Good walk can also run dry once a Good is in (#4731).
-    ("good", "1", "Good", "query-top", f"{GOOD_TARGET} Goods, or {MORE_DRY_RUN} in a row without one"),
+    ("good", "1", "Good", "query-top", f"{GOOD_TARGET} Goods OR\n{MORE_DRY_RUN} in a row without one"),
     ("bad", "2", "Bad", "query-line", f"{BAD_TARGET} Bads"),
-    ("hard", "3", "Boundary", "detector-odds", "Smart and Stable both green"),
-    ("new", "4", "Diversity", "atlas", "Span green"),
-    ("spot", "A", "Spot Check", "bands", "Its Fβ estimate peaks"),
+    ("hard", "3", "Boundary", "detector-odds", "Smart: flat AND\nStable: low"),
+    ("new", "4", "Diversity", "atlas", "Span: full"),
+    ("spot", "A", "Spot Check", "bands", "Fβ estimated"),
 )
 #: No More walk on photos since #4740 (``MORE_TARGET`` 0): the opening is Good and
 #: Bad on the query, then the detector takes over. Five rows down the slide,
@@ -228,7 +230,9 @@ STEP_HEAD_Y = 5.85
 #: Which row each build stage reveals up to: the opening on the query, then
 #: one step a stage.
 STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5}
-NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 3.05, 7.55, 7.95
+#: The "where it asks" column is the point of the slide, so it takes every inch
+#: the shortened "until" column gives back (owner, #4884).
+NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 3.05, 9.2, 9.6
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
 QUERY_LINE, DETECTOR_LINE = 0.62, 0.68
@@ -302,7 +306,7 @@ def _ask(ax: plt.Axes, x: float, y: float) -> None:
 
 def _spot_bands(ax: plt.Axes, y: float) -> None:
     """The detector's strip with Spot Check's bands bracketed from the top, and a few random picks in each."""
-    _strip(ax, y, "the detector", DETECTOR_LINE)
+    _strip(ax, y, "Detector", DETECTOR_LINE)
     width = PICTURE_X1 - PICTURE_X0
     # Each band's bracket sits over the strip, its picks on the strip under it.
     top = y + STRIP_H / 2 + 0.1
@@ -327,7 +331,7 @@ def _mini_tree(ax: plt.Axes, y: float) -> None:
     for level in range(1, len(levels)):
         for i, x in enumerate(xs[level]):
             parent = xs[level - 1][i // 3]
-            ax.plot([parent, x], [ys[level - 1], ys[level]], color=RULE, linewidth=1.4, zorder=2)
+            ax.plot([parent, x], [ys[level - 1], ys[level]], color=EDGE, linewidth=1.4, zorder=2)
     # Voted in, filled as the Span slide fills them: the root, its first two
     # children, and three cells under those. The walk's next cell carries the (?).
     covered = {(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 4)}
@@ -352,30 +356,76 @@ def _steps_stage(stage: int) -> Figure:
         _disc(ax, 0.85, y, mark)
         ax.text(NAME_X, y, name, ha="left", va="center", fontsize=18, fontweight="bold")
         if picture == "query-top":
-            _strip(ax, y, "your query", QUERY_LINE)
+            _strip(ax, y, "Query", QUERY_LINE)
             _ask(ax, PICTURE_X1 - ASK_R - 0.03, y)
         elif picture == "query-line":
-            _ask(ax, _strip(ax, y, "your query", QUERY_LINE), y)
+            _ask(ax, _strip(ax, y, "Query", QUERY_LINE), y)
         elif picture == "detector-odds":
-            _strip(ax, y, "the detector", DETECTOR_LINE)
+            _strip(ax, y, "Detector", DETECTOR_LINE)
             _ask(ax, PICTURE_X0 + DETECTOR_ODDS * (PICTURE_X1 - PICTURE_X0), y)
         elif picture == "atlas":
             _mini_tree(ax, y)
         else:
             _spot_bands(ax, y)
-        ax.text(ENDS_X, y, ends, ha="left", va="center", fontsize=16)
+        ax.text(ENDS_X, y, ends, ha="left", va="center", fontsize=16, linespacing=1.35)
     return fig
 
 
 # ── Diminishing Returns: Smart ───────────────────────────────────────────────
 
-SMART_STAGES = 2
+#: The idea first, then the implementation (owner, #4884): eight pages of a
+#: student taking Spanish 101 to 104, then the two pages of the retrain chart.
+SPANISH_PAGES = 8
+SMART_STAGES = SPANISH_PAGES + 2
+#: The classes along the time axis, and the ability axis's words, bottom up.
+SPANISH_CLASSES = ("Spanish101", "Spanish102", "Spanish103", "Spanish104")
+SPANISH_LEVELS = ("Bad", "Ok", "Good", "Great")
+#: Each test the student takes, in order: (class, before or after it, ability).
+#: Ability is in a fixed unit nobody sees — how much Spanish they know — and the
+#: axis shows it against everything they have met so far.
+SPANISH_TESTS = (
+    (0, "before", 0.0),
+    (0, "after", 1.0),
+    (1, "before", 1.0),
+    (1, "after", 3.0),
+    (2, "before", 3.0),
+    (2, "after", 5.0),
+    (3, "before", 5.0),
+    (3, "after", 5.0),
+)
+#: How the axis reads ability while each class is the hardest one met, as
+#: (ability at "Bad", axis steps per unit). A new class shows how much Spanish
+#: there is, so the axis takes the student's ability on starting it as "Bad" and
+#: everything they knew before shrinks below it; 104 brings nothing they did not
+#: already know, so its axis is 103's.
+SPANISH_SCALES = ((0.0, 3.0), (1.0, 1.0), (3.0, 0.5), (3.0, 0.5))
+#: Where a test sits along its class: just inside its start or its end.
+SPANISH_INSET = 0.12
+SPANISH_YLIM = (-1.85, 3.35)
+#: The ability each page shows, as the notes describe it: the class's words, once a test is the newest on the page.
+SPANISH_SHOWN = ("Bad", "Great", "Bad", "Good", "Bad", "Ok", "Ok", "Ok")
 #: A planted session's error cost, one point a retrain: falling fast, then
 #: flat with the step-to-step scatter a real labelset gives it.
 SMART_RETRAINS = 30
 SMART_SEED = 7
 #: The two windows the slide fits, as the last retrain each one ends on.
 SMART_EARLY_END, SMART_LATE_END = 14, 30
+
+
+def _spanish_axis(page: int) -> tuple[float, float]:
+    """The axis on *page* (1-based): the scale of the hardest class whose test is on it."""
+    newest = SPANISH_TESTS[page - 1][0]
+    return SPANISH_SCALES[newest]
+
+
+def _spanish_points(page: int) -> list[tuple[float, float]]:
+    """``(time, axis height)`` of every test on *page* (1-based), read on that page's axis."""
+    bad, steps = _spanish_axis(page)
+    out = []
+    for klass, when, ability in SPANISH_TESTS[:page]:
+        x = klass + (SPANISH_INSET if when == "before" else 1 - SPANISH_INSET)
+        out.append((x, (ability - bad) * steps))
+    return out
 
 
 def _smart_costs() -> np.ndarray:
@@ -391,11 +441,20 @@ def _smart_window(costs: np.ndarray, end: int) -> tuple[np.ndarray, dict]:
 
 
 def smart_fig() -> None:
-    """Smart: the error cost of the last ten detectors, and the trend fitted through it.
+    """Smart: the idea, in Spanish classes, and then the error cost of the last ten detectors.
 
-    Two stages: early in a session, the window is still falling (yellow); later,
-    it has levelled off (green).
+    Ten stages (owner, #4884): eight pages of the idea, a student whose ability
+    axis rescales each time a class shows them how much more Spanish there is,
+    until a class brings nothing new and the curve goes flat; then the shipped
+    measure, early in a session (still falling) and later (flat).
     """
+    # Every test on its own page reads as the notes say it does.
+    for page, words in enumerate(SPANISH_SHOWN, start=1):
+        height = _spanish_points(page)[-1][1]
+        assert height == SPANISH_LEVELS.index(words), (page, height, words)
+    # And each rescale leaves everything before it below the new "Bad".
+    for page in (3, 5):
+        assert all(y < 0 for _x, y in _spanish_points(page)[: page - 2]), page
     # The notes say "two standard errors" and "the 1.5% line".
     assert (SMART_SLOPE_T, SMART_FLAT_THRESHOLD) == (2.0, -0.015), (SMART_SLOPE_T, SMART_FLAT_THRESHOLD)
     costs = _smart_costs()
@@ -405,6 +464,38 @@ def smart_fig() -> None:
     _save(SMART_STAGES, lambda stage: _smart_stage(stage, costs), "autopilot-smart")
 
 
+def _spanish_stage(page: int) -> Figure:
+    """The student's tests up to *page*, on that page's axis; a rescale shows where the old dots were."""
+    fig = plt.figure(figsize=(W, H))
+    ax = fig.add_axes((0.15, 0.15, 0.79, 0.58))
+    ax.set_xlim(0, len(SPANISH_CLASSES))
+    ax.set_ylim(*SPANISH_YLIM)
+    ax.set_yticks(range(len(SPANISH_LEVELS)))
+    ax.set_yticklabels(SPANISH_LEVELS, fontsize=17)
+    ax.tick_params(axis="y", colors=INK)
+    ax.set_xticks([k + 0.5 for k in range(len(SPANISH_CLASSES))])
+    ax.set_xticklabels(SPANISH_CLASSES, fontsize=17, color=INK)
+    ax.tick_params(axis="x", length=0, pad=10)
+    ax.set_ylabel("Spanish ability")
+    for k in range(1, len(SPANISH_CLASSES)):
+        ax.axvline(k, color=RULE, linewidth=1.2, zorder=1)
+    for level in range(len(SPANISH_LEVELS)):
+        ax.axhline(level, color="#eef1f5", linewidth=1.0, zorder=0)
+    points = _spanish_points(page)
+    if page > 1 and _spanish_axis(page) != _spanish_axis(page - 1):
+        # The rescale: every earlier test where the last page had it, hollow, and an arrow down to where it is now.
+        for (x, was), (_x, now) in zip(_spanish_points(page - 1), points, strict=False):
+            ax.plot(x, was, marker="o", markersize=12, markerfacecolor="white", markeredgecolor=SOFT,
+                    markeredgewidth=1.6, linestyle="none", zorder=3)  # fmt: skip
+            ax.annotate("", xy=(x, now + 0.16), xytext=(x, was - 0.16),
+                        arrowprops=dict(arrowstyle="-|>", color=SOFT, linewidth=1.6, mutation_scale=16,
+                                        shrinkA=0, shrinkB=0), zorder=3)  # fmt: skip
+    xs, ys = zip(*points, strict=True)
+    ax.plot(xs, ys, color=INK, linewidth=2.4, zorder=4)
+    ax.plot(xs, ys, marker="o", markersize=12, color=INK, linestyle="none", zorder=5)
+    return fig
+
+
 def _fit_line(window: np.ndarray, x0: int) -> tuple[np.ndarray, np.ndarray]:
     xs = np.arange(x0, x0 + window.size)
     slope, intercept = np.polyfit(xs, window, 1)
@@ -412,6 +503,8 @@ def _fit_line(window: np.ndarray, x0: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
+    if stage <= SPANISH_PAGES:
+        return _spanish_stage(stage)
     fig = plt.figure(figsize=(W, H))
     ax = fig.add_axes((0.40, 0.14, 0.56, 0.62))
     ax.set_xlim(0.3, SMART_RETRAINS + 0.7)
@@ -432,11 +525,13 @@ def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
             (f"through the last {SMART_WINDOW}", "body", 0.055),
         ],
     )
-    shown = SMART_EARLY_END if stage == 1 else SMART_RETRAINS
+    shown = SMART_EARLY_END if stage == SPANISH_PAGES + 1 else SMART_RETRAINS
     xs = np.arange(1, shown + 1)
     ax.plot(xs, costs[:shown], linestyle="none", marker="o", markersize=8, color=INK, zorder=4)
-    windows = [(SMART_EARLY_END, 0.56)] + ([(SMART_LATE_END, 0.36)] if stage >= 2 else [])
-    for end, label_y in windows:
+    windows = [(SMART_EARLY_END, 0.56, "still falling")]
+    if stage == SMART_STAGES:
+        windows.append((SMART_LATE_END, 0.36, "flat"))
+    for end, label_y, words in windows:
         window, status = _smart_window(costs, end)
         x0 = end - SMART_WINDOW + 1
         ax.add_patch(Rectangle((x0 - 0.45, 0.0), SMART_WINDOW - 0.1, SMART_Y_TOP, facecolor="#eef1f5",
@@ -444,18 +539,9 @@ def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
         fx, fy = _fit_line(window, x0)
         ax.plot(fx, fy, color=INK, linewidth=2.6, zorder=5)
         cx, cy = _to_canvas(fig, ax, x0 + (SMART_WINDOW - 1) / 2, label_y)
-        _labelled_light(overlay, cx, cy, status["status"], _signed(100 * status["slope"]) + "% a retrain")
-    if stage >= 2:
-        _side_block(
-            fig,
-            [
-                ("Green", "head", 0.0),
-                (f"flatter than {_signed(100 * SMART_FLAT_THRESHOLD)}% a retrain,", "body", 0.055),
-                ("or a fall smaller than", "body", 0.05),
-                ("its own scatter", "body", 0.05),
-            ],
-            top=SIDE_TOP - 0.36,
-        )
+        overlay.text(cx, cy, words, ha="center", va="center", fontsize=17, fontweight="bold")
+        overlay.text(cx, cy - 0.36, _signed(100 * status["slope"]) + "% a retrain", ha="center", va="center",
+                     fontsize=16)  # fmt: skip
     return fig
 
 
@@ -483,66 +569,77 @@ def _to_canvas(fig: Figure, ax: plt.Axes, x: float, y: float) -> tuple[float, fl
     return fx * W, fy * H
 
 
-def _labelled_light(overlay: plt.Axes, cx: float, cy: float, colour: str, words: str) -> None:
-    """A light with its colour's name beside it, and *words* under both, centred on (*cx*, *cy*)."""
-    name = overlay.text(cx + 0.15, cy, colour, ha="center", va="center", fontsize=17, fontweight="bold")
-    overlay.figure.canvas.draw()
-    box = name.get_window_extent().transformed(overlay.transData.inverted())
-    _light(overlay, box.x0 - 0.2, cy, colour)
-    overlay.text(cx, cy - 0.36, words, ha="center", va="center", fontsize=16)
-
-
 # ── Change of Heart: Stable ──────────────────────────────────────────────────
 
 STABLE_STAGES = 4
-#: The planted pool both retrains score: every item's score under the last
-#: retrain, and how far this one moved it. Most barely move; four wobble across
-#: the line from just beside it; two cross it from well clear on both sides.
-STABLE_SEED = 3
-STABLE_POOL = 36
 STABLE_CUT = 0.5
+#: The planted pool both retrains score, one photo a letter, best on the right.
+#: Lettered left to right on the last retrain, so the room can follow each one
+#: down to this retrain (owner, #4884): A and B swap places, which changes
+#: nothing anyone gets back; H, I, J and K wobble across the line from inside
+#: the band; D and N cross it from well clear on both sides, the two that count.
+#: Placed by hand rather than drawn at random, because every circle has to
+#: clear its neighbours on both lines (`STABLE_MIN_GAP`), and the line between
+#: them (`STABLE_LINE_CLEAR`).
+STABLE_LAST = (0.04, 0.10, 0.16, 0.22, 0.28, 0.335, 0.385, 0.43, 0.47, 0.53, 0.57, 0.62, 0.68, 0.74, 0.80, 0.86,
+               0.92, 0.97)  # fmt: skip
+STABLE_THIS = (0.10, 0.04, 0.16, 0.785, 0.29, 0.34, 0.385, 0.53, 0.57, 0.43, 0.47, 0.615, 0.67, 0.225, 0.725, 0.85,
+               0.915, 0.965)  # fmt: skip
+STABLE_LETTERS = "ABCDEFGHIJKLMNOPQR"
 #: Two retrains drawn one above the other; scores run left to right, best on
-#: the right, across this span of the canvas.
-STABLE_Y_LAST, STABLE_Y_THIS = 4.55, 1.95
-STABLE_X0, STABLE_X1 = 4.9, 12.2
-#: The column the counts and the rule stand in, left of the two retrains.
+#: the right, across this span of the canvas. Wide, so each photo's lettered
+#: circle clears the next.
+STABLE_Y_LAST, STABLE_Y_THIS = 4.75, 2.15
+STABLE_X0, STABLE_X1 = 4.25, 12.3
+STABLE_ITEM_R = 0.13
+STABLE_MIN_GAP = 2 * STABLE_ITEM_R + 0.04
+STABLE_LINE_CLEAR = STABLE_ITEM_R + 0.08
+#: The column the counts stand in, left of the two retrains.
 STABLE_TEXT_X = 0.7
+#: The last page's chart: a planted session's count of flips that count, one a
+#: retrain, jiggling down to none (owner, #4884: fabricated, it is a picture of
+#: the idea). Retrains from the hand-over to the detector to the 150th click.
+STABLE_CHART_SEED = 31
+STABLE_CHART_CLICKS = (8, 150)
 
 
 def _stable_retrains() -> tuple[ScoredSnapshot, ScoredSnapshot]:
-    rng = np.random.default_rng(STABLE_SEED)
-    last = np.sort(rng.uniform(0.04, 0.96, size=STABLE_POOL))
-    move = rng.normal(0.0, 0.012, size=STABLE_POOL)
-    this = last + move
-    # Keep everything else on its own side, so the flips are only the planted ones.
-    this = np.where(last >= STABLE_CUT, np.maximum(this, STABLE_CUT + 0.002), np.minimum(this, STABLE_CUT - 0.002))
-    near = np.argsort(np.abs(last - STABLE_CUT))
-    for k, i in enumerate(near[:4]):
-        # The four nearest the line wobble across it, landing just the other side.
-        this[i] = STABLE_CUT - 0.03 if last[i] >= STABLE_CUT else STABLE_CUT + 0.03 + 0.01 * k
-    above = [i for i in np.argsort(last) if last[i] > STABLE_CUT + 0.2]
-    below = [i for i in np.argsort(last) if last[i] < STABLE_CUT - 0.2]
-    # Two cross from well clear: one Good the detector now calls Bad, and back.
-    this[above[1]] = 0.24
-    this[below[-2]] = 0.79
+    assert len(STABLE_LAST) == len(STABLE_THIS) == len(STABLE_LETTERS)
     return (
-        ScoredSnapshot.from_scores(dict(enumerate(last)), STABLE_CUT),
-        ScoredSnapshot.from_scores(dict(enumerate(this)), STABLE_CUT),
+        ScoredSnapshot.from_scores(dict(enumerate(STABLE_LAST)), STABLE_CUT),
+        ScoredSnapshot.from_scores(dict(enumerate(STABLE_THIS)), STABLE_CUT),
     )
 
 
-def stable_fig() -> None:
-    """Stable: two retrains' calls on the same pool, the items that changed side, and which of those count.
+def _stable_chart() -> tuple[np.ndarray, np.ndarray]:
+    """The super flips at every retrain of a planted session: a few early, jiggling, flattening to none."""
+    rng = np.random.default_rng(STABLE_CHART_SEED)
+    t = np.arange(STABLE_CHART_CLICKS[0], STABLE_CHART_CLICKS[1] + 1)
+    mean = 7.0 * np.exp(-(t - t[0]) / 26.0)
+    count = np.maximum(0, np.round(mean + rng.normal(0.0, 1.0, size=t.size) * 0.8 * np.sqrt(mean))) + 0.0
+    return t, count
 
-    Four stages: the two retrains, every item joined to itself; the items that
-    changed side; the band around the line, and the flips clear of it both
-    times, the only ones that count; and the rule over the last ten retrains.
+
+def stable_fig() -> None:
+    """Stable: two retrains' calls on the same pool, the photos that changed side, and which of those count.
+
+    Four stages: the two retrains, every photo joined to itself by its letter;
+    the photos that changed side; the band around the line, and the flips clear
+    of it both times, the super flips, the only ones that count; and those over
+    a session, falling to none.
     """
     # The notes say "a quarter of the scores' spread either side".
     assert STABLE_BAND_STD_FRACTION == 0.25, STABLE_BAND_STD_FRACTION
     last, this = _stable_retrains()
     flips, confident = count_flips(last, this)
     assert (flips, confident) == (6, 2), (flips, confident)
+    for scores in (STABLE_LAST, STABLE_THIS):
+        xs = sorted(_score_x(v) for v in scores)
+        assert min(b - a for a, b in zip(xs, xs[1:])) >= STABLE_MIN_GAP, "two lettered circles touch"
+        assert min(abs(x - _score_x(STABLE_CUT)) for x in xs) >= STABLE_LINE_CLEAR, "the line cuts a circle"
+    t, count = _stable_chart()
+    # The session settles: no flip that counts over its last forty retrains.
+    assert count[0] >= 5 and not count[-40:].any(), count
     _save(STABLE_STAGES, lambda stage: _stable_stage(stage, last, this), "autopilot-stable")
 
 
@@ -550,51 +647,61 @@ def _score_x(score: float) -> float:
     return STABLE_X0 + score * (STABLE_X1 - STABLE_X0)
 
 
+def _runs(ax: plt.Axes, x: float, y: float, runs: tuple[tuple[str, str], ...], size: float = 17) -> None:
+    """One line of bold text from *x*, set in runs of ``(words, "normal" | "italic")``."""
+    renderer = ax.figure.canvas.get_renderer()
+    for words, style in runs:
+        label = ax.text(x, y, words, ha="left", va="center", fontsize=size, fontweight="bold", fontstyle=style)
+        box = label.get_window_extent(renderer).transformed(ax.transData.inverted())
+        x = box.x1
+
+
 def _stable_stage(stage: int, last: ScoredSnapshot, this: ScoredSnapshot) -> Figure:
+    if stage == STABLE_STAGES:
+        return _stable_chart_stage()
     fig, ax = _canvas()
-    _statement(ax, "Does the detector still change its mind?")
     _stable_retrain_axes(ax, stage, last, this)
     flipped, confident = _stable_items(ax, last, this)
     if stage >= 2:
         for x0, x1 in flipped:
             ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=SOFT, linewidth=2.6, zorder=5)
-        ax.text(STABLE_TEXT_X, 4.7, f"{len(flipped)} changed side", ha="left", va="center", fontsize=17,
+        ax.text(STABLE_TEXT_X, 4.0, f"{len(flipped)} changed side", ha="left", va="center", fontsize=17,
                 fontweight="bold")  # fmt: skip
     if stage >= 3:
         for x0, x1 in confident:
             ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=INK, linewidth=4.2, zorder=6)
-        for k, words in enumerate((f"{len(confident)} were clear of the", "band both times:", "only those count")):
-            ax.text(STABLE_TEXT_X, 4.15 - 0.35 * k, words, ha="left", va="center", fontsize=17, fontweight="bold")
-    if stage >= 4:
-        _stable_rule(ax)
+        _runs(ax, STABLE_TEXT_X, 3.4, ((f"{len(confident)} ", "normal"), ("super", "italic"),
+                                       (" changed side", "normal")))  # fmt: skip
     return fig
 
 
 def _stable_retrain_axes(ax: plt.Axes, stage: int, last: ScoredSnapshot, this: ScoredSnapshot) -> None:
     """The two retrains' score axes, each with its line, and from stage 3 its band."""
     for y, snap, words, words_y in (
-        (STABLE_Y_LAST, last, "last retrain", STABLE_Y_LAST + 0.45),
-        (STABLE_Y_THIS, this, "this retrain", STABLE_Y_THIS - 0.45),
+        (STABLE_Y_LAST, last, "last retrain", STABLE_Y_LAST + 0.5),
+        (STABLE_Y_THIS, this, "this retrain", STABLE_Y_THIS - 0.5),
     ):
-        ax.plot([STABLE_X0, STABLE_X1], [y, y], color=SOFT, linewidth=1.4, zorder=2)
-        ax.text(STABLE_X0, words_y, words, ha="left", va="center", fontsize=16, color=SOFT)
+        ax.plot([STABLE_X0 - 0.2, STABLE_X1 + 0.2], [y, y], color=SOFT, linewidth=1.4, zorder=2)
+        ax.text(STABLE_X0 - 0.2, words_y, words, ha="left", va="center", fontsize=16, color=SOFT)
         if stage >= 3:
             x0, x1 = _score_x(snap.threshold - snap.band), _score_x(snap.threshold + snap.band)
-            ax.add_patch(Rectangle((x0, y - 0.24), x1 - x0, 0.48, facecolor=BAND_FILL, edgecolor="none", zorder=1))
-        _line(ax, _score_x(snap.threshold), y - 0.3, y + 0.3)
-    ax.text(STABLE_X1, STABLE_Y_LAST + 0.45, "best", ha="right", va="center", fontsize=15, color=SOFT)
+            ax.add_patch(Rectangle((x0, y - 0.3), x1 - x0, 0.6, facecolor=BAND_FILL, edgecolor="none", zorder=1))
+        _line(ax, _score_x(snap.threshold), y - 0.36, y + 0.36)
+    ax.text(STABLE_X1 + 0.2, STABLE_Y_LAST + 0.5, "best", ha="right", va="center", fontsize=15, color=SOFT)
 
 
 def _stable_items(
     ax: plt.Axes, last: ScoredSnapshot, this: ScoredSnapshot
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Every item joined to itself; returns the ends of the flips, and of the confident ones among them."""
+    """Every photo joined to itself, its letter on both lines; returns the ends of the flips, and of the confident ones among them."""
     flipped, confident = [], []
     for cid in sorted(this.scores):
         x0, x1 = _score_x(last.scores[cid]), _score_x(this.scores[cid])
-        ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=RULE, linewidth=1.2, zorder=3)
+        ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=RULE, linewidth=1.4, zorder=3)
         for x, y in ((x0, STABLE_Y_LAST), (x1, STABLE_Y_THIS)):
-            ax.plot(x, y, marker="o", markersize=7, color=SOFT, zorder=4, linestyle="none")
+            ax.add_patch(Circle((x, y), STABLE_ITEM_R, facecolor="white", edgecolor=SOFT, linewidth=1.6, zorder=7))
+            ax.text(x, y, STABLE_LETTERS[cid], ha="center", va="center_baseline", fontsize=15, fontweight="bold",
+                    color=INK, zorder=8)  # fmt: skip
         if last.predicted(cid) != this.predicted(cid):
             flipped.append((x0, x1))
             if last.confident(cid) and this.confident(cid):
@@ -602,32 +709,28 @@ def _stable_items(
     return flipped, confident
 
 
-def _stable_rule(ax: plt.Axes) -> None:
-    """Stable's green, in words, from the shipped constants."""
-    lines = (
-        ("Green, over the last", True),
-        (f"{STABLE_WINDOW} retrains:", True),
-        ("flips that count average", False),
-        (f"under {100 * STABLE_RATE_THRESHOLD:.1f}% of the pool,", False),
-        (f"never {100 * STABLE_MAX_THRESHOLD:.0f}% in one;", False),
-        ("and all flips have", False),
-        ("stopped falling", False),
-    )
-    for k, (words, bold) in enumerate(lines):
-        ax.text(STABLE_TEXT_X if bold else STABLE_TEXT_X + 0.15, 2.75 - 0.35 * k, words, ha="left", va="center",
-                fontsize=16, fontweight="bold" if bold else "normal")  # fmt: skip
+def _stable_chart_stage() -> Figure:
+    """The super flips over a session, one point a retrain, falling to none."""
+    t, count = _stable_chart()
+    fig = plt.figure(figsize=(W, H))
+    ax = fig.add_axes((0.10, 0.14, 0.84, 0.58))
+    ax.set_xlim(0, STABLE_CHART_CLICKS[1] + 2)
+    ax.set_ylim(0, max(count) + 1)
+    ax.set_xticks([0, 25, 50, 75, 100, 125, 150])
+    ax.set_yticks(range(0, int(max(count)) + 2, 2))
+    ax.set_xlabel("clicks")
+    ax.set_ylabel("# super changed side")
+    ax.plot(t, count, color=INK, linewidth=2.4, solid_joinstyle="round", zorder=4)
+    fig.text(STATEMENT_X / W, STATEMENT_Y / H, "# Super Changed Side vs Clicks", ha="left", va="center", fontsize=19)
+    return fig
 
 
 # ── Lay of the Land: Span ────────────────────────────────────────────────────
 
-SPAN_STAGES = 4
+SPAN_STAGES = 5
 #: The atlas the slide draws: three children a cell, the first four levels,
-#: which are exactly the 40 cells Span's default green asks for.
+#: which are exactly the 40 cells Span's default full asks for.
 SPAN_K, SPAN_LEVELS = 3, 4
-#: The whole atlas the light is computed against: thousands of cells, as a
-#: COCO-sized collection builds, so the green bar is the default and not the
-#: tree's size.
-SPAN_ATLAS_CELLS = 2000
 SPAN_LEVEL_Y = (4.95, 3.85, 2.75, 1.65)
 SPAN_LEAF_X0, SPAN_LEAF_X1 = 1.9, 12.3
 #: Cells as (level, index within the level), the walk's breadth-first order
@@ -635,9 +738,22 @@ SPAN_LEAF_X0, SPAN_LEAF_X1 = 1.9, 12.3
 #: Boundary step's votes landed in, before Diversity begins: deep in the first
 #: branch, and one deep in the second.
 SPAN_BOUNDARY_VOTES = ((3, 0), (3, 1), (3, 4), (3, 5), (3, 13))
-#: The picks Diversity then makes, each the first cell the walk finds empty,
-#: up to the stage the slide stops on.
-SPAN_STAGE_PICKS = {2: 0, 3: 4, 4: None}
+#: The picks Diversity then makes, each the first cell the walk finds empty, and
+#: the drawn leaf the picked item sits in. A vote is on one item, which sits in
+#: one leaf of the atlas, and it marks that leaf and every cell above it
+#: (`CoverageAtlas.label`), so a pick in a big empty cell fills a path down
+#: through it, not the cell alone. Which child the item sits in is the item's
+#: business, so the paths wander (owner, #4884: not always the leftmost child):
+#: the first pick, cell 02, lands in 021 and then 0212.
+SPAN_PICK_LEAVES = {(1, 2): (3, 23), (2, 2): (3, 8), (2, 3): (3, 10), (2, 5): (3, 16)}
+#: The five pages (owner, #4884): the empty atlas; the cells the Boundary votes
+#: reached; where the walk asks next; four picks later; and where it asks after
+#: those. No lights and no bar: the slide shows the measure, not the rule.
+#: Per page: how many picks are in, and whether the (?) is drawn.
+SPAN_PAGES = {1: (None, False), 2: (0, False), 3: (0, True), 4: (4, False), 5: (4, True)}
+#: The runs the notes quote: from the top to the first empty cell, after the
+#: Boundary votes and after the four picks.
+SPAN_RUNS = {0: 3, 4: 10}
 
 
 def _span_cells() -> list[tuple[int, int]]:
@@ -653,43 +769,28 @@ def _span_ancestors(cell: tuple[int, int]) -> list[tuple[int, int]]:
     return out
 
 
-def _span_leafward(cell: tuple[int, int]) -> list[tuple[int, int]]:
-    """The cells under *cell* that a pick in it reaches: its first child's, down to the drawn leaves.
+def _span_covered(picks_in: int | None) -> tuple[set[tuple[int, int]], int, list[tuple[int, int]]]:
+    """The cells holding a vote (each with its path), the walk's run, and the picks Diversity made.
 
-    A vote is on one item, which sits in one leaf of the atlas, and it marks
-    that leaf and every cell above it (`CoverageAtlas.label`). So a pick in a
-    big empty cell fills a path down through it, not the cell alone. Which
-    child the item sits in is the item's business; the drawing puts it in the
-    biggest child, the first, all the way down.
+    *picks_in* is how many picks Diversity has made; None is the empty atlas,
+    before any vote.
     """
-    level, i = cell
-    out = []
-    while level < SPAN_LEVELS - 1:
-        level, i = level + 1, i * SPAN_K
-        out.append((level, i))
-    return out
-
-
-def _span_covered(stage: int) -> tuple[set[tuple[int, int]], int, list[tuple[int, int]]]:
-    """The cells holding a vote (each with its path), the walk's run, and the picks Diversity made."""
     covered: set[tuple[int, int]] = set()
-    if stage >= 2:
+    picks: list[tuple[int, int]] = []
+    if picks_in is not None:
         for cell in SPAN_BOUNDARY_VOTES:
             covered.update(_span_ancestors(cell))
-    picks: list[tuple[int, int]] = []
-    budget = SPAN_STAGE_PICKS.get(stage, 0)
-    order = _span_cells()
-    while budget is None or len(picks) < budget:
-        empty = next((cell for cell in order if cell not in covered), None)
-        if empty is None:
-            break
-        # The walk takes the first empty cell; the vote there marks a leaf
-        # under it, and every cell from that leaf up to the root.
-        picks.append(empty)
-        covered.update(_span_ancestors(empty))
-        covered.update(_span_leafward(empty))
+        order = _span_cells()
+        while len(picks) < picks_in:
+            # The walk takes the first empty cell; the vote there marks the
+            # leaf its item sits in, and every cell from that leaf up to the root.
+            empty = next(cell for cell in order if cell not in covered)
+            leaf = SPAN_PICK_LEAVES[empty]
+            assert empty in _span_ancestors(leaf), (empty, leaf)
+            picks.append(empty)
+            covered.update(_span_ancestors(leaf))
     run = 0
-    for cell in order:
+    for cell in _span_cells():
         if cell not in covered:
             break
         run += 1
@@ -697,18 +798,18 @@ def _span_covered(stage: int) -> tuple[set[tuple[int, int]], int, list[tuple[int
 
 
 def span_fig() -> None:
-    """Span: the first 40 cells of an atlas, the cells the votes reach, and the walk's run.
+    """Span: the first 40 cells of an atlas, the cells the votes reach, and where the walk asks.
 
-    Four stages: the cells, in the walk's order; after asking at the line, a few
-    covered and the run stopped at the first gap (red); four atlas picks later, the
-    run at 11 (yellow), past a cell the first pick's path had already filled;
-    all 40 (green).
+    Five stages (owner, #4884): the empty cells; after asking at the line, a few
+    darkened; the first empty cell, where the walk asks; four atlas picks later,
+    the first of them a path down 02, 021, 0212; and the next ask.
     """
-    expect = {2: (3, "red"), 3: (11, "yellow"), 4: (40, "green")}
-    for stage, (run, light) in expect.items():
-        _covered, got, _picks = _span_covered(stage)
-        assert got == run and span_status(got, SPAN_ATLAS_CELLS) == light, (stage, got)
-    assert SPAN_YELLOW == 10 and SPAN_GREEN_DEFAULT == len(_span_cells()) == 40
+    for picks_in, run in SPAN_RUNS.items():
+        _covered, got, picks = _span_covered(picks_in)
+        assert got == run and len(picks) == picks_in, (picks_in, got)
+    # Every pick the slide draws has its leaf named, and no leaf is named for a cell the walk never picks.
+    assert set(_span_covered(max(SPAN_RUNS))[2]) == set(SPAN_PICK_LEAVES)
+    assert SPAN_GREEN_DEFAULT == len(_span_cells()) == 40
     _save(SPAN_STAGES, _span_stage, "autopilot-span")
 
 
@@ -723,6 +824,11 @@ def _span_xy() -> dict[tuple[int, int], tuple[float, float]]:
     return xy
 
 
+#: A cell's radius, and the (?) drawn in place of the cell the walk asks next:
+#: the deck's mark for where a step asks, as Flight Plan draws it.
+SPAN_CELL_R = 0.13
+
+
 def _span_stage(stage: int) -> Figure:
     fig, ax = _canvas()
     _statement(ax, "Have your votes been everywhere?")
@@ -730,39 +836,26 @@ def _span_stage(stage: int) -> Figure:
     for (level, i), (x, y) in xy.items():
         if level:
             px, py = xy[(level - 1, i // SPAN_K)]
-            ax.plot([px, x], [py, y], color=RULE, linewidth=1.5, zorder=2)
+            ax.plot([px, x], [py, y], color=EDGE, linewidth=1.6, zorder=2)
     for level, y in enumerate(SPAN_LEVEL_Y):
         count = SPAN_K**level
         ax.text(0.7, y, f"{count} cell" if count == 1 else f"{count} cells", ha="left", va="center", fontsize=15,
                 color=SOFT)  # fmt: skip
     for i in range(SPAN_K ** (SPAN_LEVELS - 1)):
         x, y = xy[(SPAN_LEVELS - 1, i)]
-        ax.plot([x - 0.08, x, x + 0.08], [y - 0.42, y, y - 0.42], color=RULE, linewidth=1.2, zorder=1)
+        ax.plot([x - 0.08, x, x + 0.08], [y - 0.42, y, y - 0.42], color=EDGE, linewidth=1.3, zorder=1)
     ax.text((SPAN_LEAF_X0 + SPAN_LEAF_X1) / 2, 0.85, "and thousands of smaller cells below", ha="center",
             va="center", fontsize=15, color=SOFT)  # fmt: skip
-    covered, _run, _picks = _span_covered(stage)
+    picks_in, asking = SPAN_PAGES[stage]
+    covered, run, _picks = _span_covered(picks_in)
+    ask = _span_cells()[run] if asking else None
     for cell, (x, y) in xy.items():
+        if cell == ask:
+            _ask(ax, x, y)
+            continue
         face = INK if cell in covered else "white"
-        ax.add_patch(Circle((x, y), 0.13, facecolor=face, edgecolor=SOFT, linewidth=1.4, zorder=4))
-    if stage >= 2:
-        # Where the walk starts: the first empty cell once Boundary is over. The
-        # ring stays as the cell fills, so the build only ever adds.
-        _covered, run, _picks = _span_covered(2)
-        x, y = xy[_span_cells()[run]]
-        ax.add_patch(Circle((x, y), 0.22, facecolor="none", edgecolor=INK, linewidth=2.6, zorder=5))
-    for shown in range(2, stage + 1):
-        _covered, run, picks = _span_covered(shown)
-        words = {2: "asking at the line", 3: f"{len(picks)} picks later", 4: "Span is green"}[shown]
-        y = SPAN_NOTE_Y[shown]
-        _light(ax, SPAN_NOTE_X, y, span_status(run, SPAN_ATLAS_CELLS))
-        ax.text(SPAN_NOTE_X + 0.25, y, f"{run} of 40, {words}", ha="left", va="center", fontsize=16,
-                fontweight="bold")  # fmt: skip
+        ax.add_patch(Circle((x, y), SPAN_CELL_R, facecolor=face, edgecolor=SOFT, linewidth=1.4, zorder=4))
     return fig
-
-
-#: Where each stage's count sits: a column right of the root, one line a
-#: stage, so the build only adds.
-SPAN_NOTE_X, SPAN_NOTE_Y = 8.75, {2: 5.75, 3: 5.35, 4: 4.95}
 
 
 # ── Cleared to Land: Done ────────────────────────────────────────────────────

@@ -1482,14 +1482,25 @@ FAR_FLAGGED = (2, 68)
 #: directions the shipped atlas splits: the picture is "how far from your
 #: cell's centre", and that is what the shipped score ranks (owner, #4872).
 FAR_LEVELS = 2
-#: A centre's mark: a diamond, a shape no item has, on the floor.
-FAR_CENTRE_SIZE = 11
+#: A centre's mark: a white cube, a shape no item has, half sunk in the floor as
+#: every item is (owner, #4884: not a black diamond laid over everything). Its
+#: half-side in world units, sized so the cube stands as big on the page as a
+#: sphere does.
+FAR_CUBE = 0.11
+#: The cube's faces, lit from above: the top white, the near side a shade
+#: down, the right side another. Under the floor each face is seen through the
+#: floor's own wash, as a sphere's crescent is.
+CUBE_FACES = {"top": "white", "front": "#f3f5f8", "right": "#e2e7ee"}
+CUBE_FACES_SUNK = {"front": PLANE_FILL, "right": "#d6dde6"}
 #: The spokes from each item to its cell's centre.
-FAR_SPOKE = {"color": SOFT, "linewidth": 1.1}
-#: Above the floor's items (so a centre an item stands on still shows), below the ceiling's.
-Z_CENTRE = 7.6
-#: Under every item and over both planes' fills: a spoke starts at its item's edge.
-Z_SPOKE = 0.5
+FAR_SPOKE = {"color": SOFT, "linewidth": 1.2}
+#: How finely a spoke is cut to be tested against what stands in front of it,
+#: in page units, before each change between seen and hidden is refined.
+SPOKE_STEP = 0.01
+#: Every object is painted far to near, two z-steps apiece (a sphere spends 0.3
+#: of its own), the ceiling's after the floor's; the parts of the spokes the eye
+#: can see go over all of them, and the box's three near edges over those.
+Z_FAR_FLOOR, Z_FAR_CEILING, Z_FAR_SPOKES, Z_FAR_NEAR_EDGES = 1.0, 200.0, 400.0, 410.0
 
 
 @functools.lru_cache(maxsize=1)
@@ -1561,26 +1572,199 @@ def far_fig() -> None:
     save(_far_stage(FAR_STAGES), OUT, "atlas-far.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
 
 
+#: The way toward the eye, in world units: the displacement that leaves a point
+#: where it is on the page. Nearer is south, and up (see `_occluded_by_pillar`).
+TOWARD = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
+#: A sphere's radius in the world, as its page radius is drawn.
+ITEM_R_WORLD = ITEM_R / PROJ_SCALE
+
+
+def _sunk(colour: str) -> str:
+    """*colour* as seen through a plane: the map that takes white to the plane's fill and black to a sunk rim.
+
+    It is the one the spheres already obey — their white face goes to
+    `PLANE_FILL` under the floor and their black rim to `OUTLINE_SUNK` — taken
+    per channel and applied to anything else seen through the same glass.
+    """
+    hexes = (colour, PLANE_FILL, OUTLINE_SUNK)
+    c, white, black = (np.array([int(h[i : i + 2], 16) for i in (1, 3, 5)]) / 255.0 for h in hexes)
+    out = black + c * (white - black)
+    return "#" + "".join(f"{round(255 * v):02x}" for v in out)
+
+
+def _cube(ax: plt.Axes, u: float, v: float, zorder: float) -> None:
+    """A cell's centre: a cube half sunk in the floor, drawn as a sphere is.
+
+    The camera sees the top, the south face and the east face. The floor cuts
+    the two side faces at half height: above it they are white-ish with ink
+    edges, below it they are seen through the floor in its wash, edged in the
+    sunk grey, and the cut itself is the waterline, in the waterline's grey.
+    """
+    a = FAR_CUBE
+
+    def at(du: float, dv: float, dh: float) -> np.ndarray:
+        return proj(u + du * a, v + dv * a, dh * a)
+
+    sunk_edge = {"color": OUTLINE_SUNK, "linewidth": 1.4, "solid_capstyle": "round"}
+    ink_edge = {"color": INK, "linewidth": 1.7, "solid_capstyle": "round", "solid_joinstyle": "round"}
+    faces = {
+        "front": lambda h0, h1: [at(-1, -1, h0), at(1, -1, h0), at(1, -1, h1), at(-1, -1, h1)],
+        "right": lambda h0, h1: [at(1, -1, h0), at(1, 1, h0), at(1, 1, h1), at(1, -1, h1)],
+    }
+    for name, face in faces.items():
+        ax.add_patch(plt.Polygon(face(-1, 0), closed=True, facecolor=CUBE_FACES_SUNK[name], edgecolor="none",
+                                 zorder=zorder))  # fmt: skip
+        ax.add_patch(plt.Polygon(face(0, 1), closed=True, facecolor=CUBE_FACES[name], edgecolor="none",
+                                 zorder=zorder + 0.1))  # fmt: skip
+    top = [at(-1, -1, 1), at(1, -1, 1), at(1, 1, 1), at(-1, 1, 1)]
+    ax.add_patch(plt.Polygon(top, closed=True, facecolor=CUBE_FACES["top"], edgecolor="none", zorder=zorder + 0.1))
+    # Under the floor: the bottom edges and the lower halves of the three near verticals.
+    for path in ([at(-1, -1, 0), at(-1, -1, -1), at(1, -1, -1), at(1, 1, -1), at(1, 1, 0)], [at(1, -1, 0), at(1, -1, -1)]):
+        ax.plot(*np.array(path).T, zorder=zorder + 0.05, **sunk_edge)
+    # The waterline, where the floor cuts the two faces.
+    ax.plot(*np.array([at(-1, -1, 0), at(1, -1, 0), at(1, 1, 0)]).T, color=CELL_LINE, linewidth=1.1,
+            zorder=zorder + 0.15)  # fmt: skip
+    # Above it: the upper halves of the verticals and the top's four edges.
+    for path in (
+        [at(-1, -1, 0), at(-1, -1, 1), at(-1, 1, 1), at(1, 1, 1), at(1, 1, 0)],
+        [at(1, -1, 0), at(1, -1, 1)],
+        [at(-1, -1, 1), at(1, -1, 1), at(1, 1, 1)],
+    ):
+        ax.plot(*np.array(path).T, zorder=zorder + 0.2, **ink_edge)
+
+
+def _in_polygon(q: np.ndarray, polygon: np.ndarray) -> bool:
+    return bool(MplPath(polygon).contains_point(tuple(q)))
+
+
+class _Scene:
+    """What stands between a point on a spoke and the eye.
+
+    The figure is painted far to near, which settles every sphere and cube
+    against every other; a spoke cannot be, because it runs from one depth to
+    another. So each spoke is cut fine and every piece asks the scene whether
+    anything covers it, and only the pieces nothing covers are drawn, over
+    everything. That one rule is all of the owner's (#4884): a spoke passes
+    behind whichever end is nearer the eye and over the other, a spoke from the
+    ceiling passes in front of the floor's items it crosses, and the piece of
+    one below the ceiling is seen through the ceiling.
+    """
+
+    def __init__(self, floor: np.ndarray, centres: list[np.ndarray], ceiling: np.ndarray | None) -> None:
+        self.floor = [np.array([u, v, 0.0]) for u, v in floor]
+        self.cubes = [np.array([u, v, 0.0]) for u, v in centres]
+        self.ceiling = [] if ceiling is None else [np.array([u, v, NEW_H]) for u, v in ceiling]
+        corners = [(0, 0), (BOX_U, 0), (BOX_U, BOX_V), (0, BOX_V)]
+        self.lid = np.array([proj(u, v, BOX_H) for u, v in corners])
+        self.crescent = _submerged_outline(CLIP_PAD)
+
+    def _behind_sphere(self, point: np.ndarray, q: np.ndarray, centre: np.ndarray) -> bool:
+        c = proj(*centre)
+        if float(np.hypot(*(q - c))) > ITEM_R + CLIP_PAD:
+            return False
+        if point[2] == centre[2]:
+            # In the sphere's own plane: under the cap, unless it is in front of the sunk half.
+            return not _in_polygon(q - c, self.crescent)
+        behind = float((centre - point) @ TOWARD) > 0.0
+        return behind or float(np.linalg.norm(point - centre)) < ITEM_R_WORLD
+
+    @staticmethod
+    def _behind_cube(point: np.ndarray, centre: np.ndarray) -> bool:
+        """Whether the ray from *point* toward the eye meets the cube: the slab test, from t = 0."""
+        half = FAR_CUBE + CLIP_PAD / PROJ_SCALE
+        lo, hi = 0.0, math.inf
+        for k in range(3):
+            near, far = centre[k] - half, centre[k] + half
+            if abs(TOWARD[k]) < 1e-12:
+                if not near <= point[k] <= far:
+                    return False
+                continue
+            t0, t1 = sorted(((near - point[k]) / TOWARD[k], (far - point[k]) / TOWARD[k]))
+            lo, hi = max(lo, t0), min(hi, t1)
+            if lo > hi:
+                return False
+        return True
+
+    def look(self, point: np.ndarray) -> str | None:
+        """``None`` if something covers *point*, else how it is seen: ``"clear"``, or ``"sunk"`` under the lid."""
+        q = proj(*point)
+        if any(self._behind_cube(point, c) for c in self.cubes):
+            return None
+        if any(self._behind_sphere(point, q, c) for c in self.floor + self.ceiling):
+            return None
+        if point[2] < NEW_H - 1e-9 and _in_polygon(q, self.lid):
+            return "sunk"
+        return "clear"
+
+
+def _spoke(ax: plt.Axes, scene: _Scene, start: np.ndarray, end: np.ndarray) -> None:
+    """One spoke, drawn wherever nothing stands in front of it, tinted where the lid is over it."""
+    length = float(np.hypot(*(proj(*end) - proj(*start))))
+    ts = np.linspace(0.0, 1.0, max(2, math.ceil(length / SPOKE_STEP) + 1))
+
+    def at(t: float) -> np.ndarray:
+        return start + t * (end - start)
+
+    looks = [scene.look(at(t)) for t in ts]
+    # Each change between one look and the next, refined to a hair, so a spoke
+    # ends on an object's edge rather than on the nearest step.
+    cuts = [0.0]
+    for i in range(1, len(ts)):
+        if looks[i] != looks[i - 1]:
+            lo, hi = ts[i - 1], ts[i]
+            for _ in range(20):
+                mid = 0.5 * (lo + hi)
+                lo, hi = (mid, hi) if scene.look(at(mid)) == looks[i - 1] else (lo, mid)
+            cuts.append(0.5 * (lo + hi))
+    cuts.append(1.0)
+    for t0, t1 in zip(cuts, cuts[1:], strict=False):
+        look = scene.look(at(0.5 * (t0 + t1)))
+        if look is None:
+            continue
+        colour = FAR_SPOKE["color"] if look == "clear" else _sunk(FAR_SPOKE["color"])
+        ax.plot(*np.array([proj(*at(t0)), proj(*at(t1))]).T, color=colour, linewidth=FAR_SPOKE["linewidth"],
+                solid_capstyle="butt", zorder=Z_FAR_SPOKES)  # fmt: skip
+
+
+def _near_edges(ax: plt.Axes) -> None:
+    """The three edges of the box that stand in front of something: the near right post, and the lid's near and right edges.
+
+    Every other edge is behind everything it crosses on the page, so the
+    wireframe's own strokes under the items are right for them. These three
+    are nearer than the floor's items behind the post and the spokes under the
+    lid (owner, #4884: the post in front of the lower spheres), so they are
+    drawn again on top, in the same weight.
+    """
+    for a, b in (((1, 0, 0), (1, 0, 1)), ((0, 0, 1), (1, 0, 1)), ((1, 0, 1), (1, 1, 1))):
+        ends = [proj(u * BOX_U, v * BOX_V, h * BOX_H) for u, v, h in (a, b)]
+        ax.plot(*np.array(ends).T, color=RULE, linewidth=1.2, zorder=Z_FAR_NEAR_EDGES)
+
+
 def _far_stage(stage: int) -> plt.Figure:
     fig, ax = _canvas()
     planes = _wireframe(ax)
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
-    for index, depth_z in _painted_back_to_front(floor, 0.0):
-        _item(ax, proj(*floor[index], 0.0), Z_IN_FRONT + depth_z, planes[0])
-    for _centre, kids in _far_tree():
-        for c in kids:
-            ax.plot(*proj(*c, 0.0), marker="D", markersize=FAR_CENTRE_SIZE, markerfacecolor=INK,
-                    markeredgecolor="white", markeredgewidth=1.2, zorder=Z_CENTRE)  # fmt: skip
+    centres = [c for _centre, kids in _far_tree() for c in kids]
+    # The floor's spheres and cubes, far to near: whichever is further south is nearer and covers the other.
+    things = [("item", tuple(p)) for p in floor] + [("cube", tuple(c)) for c in centres]
+    for k, (kind, (u, v)) in enumerate(sorted(things, key=lambda thing: -thing[1][1])):
+        zorder = Z_FAR_FLOOR + 0.5 * k
+        if kind == "item":
+            _item(ax, proj(u, v, 0.0), zorder, planes[0])
+        else:
+            _cube(ax, u, v, zorder)
+    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED) if stage >= 3 else None
+    if ceiling is not None:
+        for index, depth_z in _painted_back_to_front(ceiling, 0.0):
+            _item(ax, proj(*ceiling[index], NEW_H), Z_FAR_CEILING + 100 * depth_z, planes[1])
+    scene = _Scene(floor, centres, ceiling)
     if stage >= 2:
         for u, v in floor:
-            ax.plot(*zip(proj(u, v, 0.0), proj(*_far_centre(u, v), 0.0)), zorder=Z_SPOKE, **FAR_SPOKE)
-    if stage >= 3:
-        ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
-        for index, depth_z in _painted_back_to_front(ceiling, 0.0):
-            _item(ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1])
-        if stage >= 4:
-            for u, v in ceiling:
-                ax.plot(*zip(proj(u, v, NEW_H), proj(*_far_centre(u, v), 0.0)), zorder=Z_SPOKE, **FAR_SPOKE)
+            _spoke(ax, scene, np.array([u, v, 0.0]), np.array([*_far_centre(u, v), 0.0]))
+    if stage >= 4:
+        for u, v in ceiling:
+            _spoke(ax, scene, np.array([u, v, NEW_H]), np.array([*_far_centre(u, v), 0.0]))
+    _near_edges(ax)
     return fig
 
 
