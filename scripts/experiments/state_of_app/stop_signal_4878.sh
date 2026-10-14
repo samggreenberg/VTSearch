@@ -14,6 +14,7 @@
 #
 #   stop_signal_4878.sh dirs                 run dirs <root>/<date>-stop4878<tag>-b{025,1,4}
 #   stop_signal_4878.sh launch BETA [IDX]    that preset's sessions as a cpu array (default: every seed's)
+#   stop_signal_4878.sh pack BETA [IDX]      the same as V100 packs, the GPU hidden (the cpu cap full)
 #
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it).
 # Env: STOP4878_ARM, STOP4878_LEVEL, STOP4878_DATE (default 2026-10-14), STOP4878_TAG (e.g. smoke),
@@ -59,7 +60,7 @@ JSON
     echo "$r"
   done
   ;;
-launch)
+launch|pack)
   b="${2:?beta (0.25, 1 or 4)}"
   idx="${3:-$(all_idx)}"
   export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}" CALIB_MEM="${CALIB_MEM:-3G}"
@@ -69,8 +70,13 @@ launch)
     export CALIB_STOP_RULE="$RULE" CALIB_STOP_LEVEL="$LEVEL"
     export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}stop_rule"
   fi
+  if [[ "$1" == pack ]]; then
+    export CALIB_PARTITION=gpu CALIB_PACK_GRES="${CALIB_PACK_GRES:-gpu:v100:1}" CALIB_PACK_JOBS="${CALIB_PACK_JOBS:-1}"
+    export CALIB_PACK_PAR="${CALIB_PACK_PAR:-24}" CALIB_TIME="${CALIB_TIME:-12:00:00}"
+    exec bash "$HERE/launch.sh" pack "$idx"
+  fi
   exec bash "$HERE/launch.sh" redo "$idx"
   ;;
 *)
-  echo "usage: stop_signal_4878.sh {dirs | launch BETA [IDX]}" >&2; exit 1 ;;
+  echo "usage: stop_signal_4878.sh {dirs | launch BETA [IDX] | pack BETA [IDX]}" >&2; exit 1 ;;
 esac
