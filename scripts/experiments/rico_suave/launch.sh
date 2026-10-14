@@ -23,6 +23,12 @@
 #
 # The balance: RICO_BETA=0.25|1|4 runs every session at that preset and
 # suffixes the run dir (-b025, -b1, -b4); unset is the app's default.
+#
+# The prevalence: RICO_PREVALENCE=0.01 thins every class's positives to that
+# share of its cell before the split (CALIB_TARGET_PREVALENCE) and prefixes the
+# run dir's suffix (-p001-b1). The pool is only the twelve classes' agreed
+# screens, so a class's natural share runs from 1% (cart) to 36% (settings);
+# a common rate is what lets classes, and app screens and photos, be compared.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,8 +47,12 @@ if [[ -n "${RICO_BETA:-}" ]]; then
   export CALIB_BETA="$RICO_BETA"
   _BTAG="-b$(python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$RICO_BETA")"
 fi
+if [[ -n "${RICO_PREVALENCE:-}" ]]; then
+  export CALIB_TARGET_PREVALENCE="$RICO_PREVALENCE"
+  _PTAG="-p$(python3 -c "import sys; print(f'{float(sys.argv[1]):g}'.replace('.', ''))" "$RICO_PREVALENCE")"
+fi
 export RICO_RUN="${RICO_RUN:-$(date +%Y-%m-%d)}"
-export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/rico-suave/runs/$RICO_RUN${_BTAG:-}}"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/rico-suave/runs/$RICO_RUN${_PTAG:-}${_BTAG:-}}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_DATASETS=rico_suave
@@ -65,7 +75,7 @@ CPUS="${CALIB_CPUS:-2}"
 TIME="${CALIB_TIME:-1:00:00}"
 PARTITION="${CALIB_PARTITION:-cpu}"
 CONC="${CALIB_CONC:-60}"
-JOB_NAME="${CALIB_JOB_NAME:-rico-suave${_BTAG:-}}"
+JOB_NAME="${CALIB_JOB_NAME:-rico-suave${_PTAG:-}${_BTAG:-}}"
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
 
@@ -78,6 +88,7 @@ ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
 ENVX="$ENVX CALIB_CELL_ORDER=$CALIB_CELL_ORDER CALIB_SKYLINE_ARMS=$CALIB_SKYLINE_ARMS"
 ENVX="$ENVX CALIB_SAFE_THRESHOLDS=$CALIB_SAFE_THRESHOLDS CALIB_EMIT_PICKS=$CALIB_EMIT_PICKS"
 ENVX="$ENVX CALIB_RANK_FRAME_STEPS=$CALIB_RANK_FRAME_STEPS CALIB_BETA=${CALIB_BETA:-}"
+ENVX="$ENVX CALIB_TARGET_PREVALENCE=${CALIB_TARGET_PREVALENCE:-}"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS= CALIB_TEST_BANDS="
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
@@ -138,6 +149,7 @@ json.dump(
         "cell_order": "$CALIB_CELL_ORDER",
         "split": "split_group (app)",
         "beta": "${CALIB_BETA:-}",
+        "target_prevalence": "${CALIB_TARGET_PREVALENCE:-}",
         "job_name": "$JOB_NAME",
     },
     open(sys.argv[1], "w"),
