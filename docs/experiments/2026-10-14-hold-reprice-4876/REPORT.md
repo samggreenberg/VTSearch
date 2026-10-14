@@ -145,12 +145,25 @@ or more. The issue expected a check inside the hold to need a run; it does not, 
   (`rico-suave/runs/2026-10-14-p001-hold0-b*`, 330 sessions) picked the same images as the shipped runs, click for
   click, in 330 of 330 sessions. Their curves equal the offline price at hold 0 to within 3 × 10⁻⁶, which is CSV
   rounding.
-- **Today's dev at other holds (queued):** photo cells from #4874's grid (seeds 1 and 3, every fourth SigLIP cell,
-  72 a preset) at `CALIB_QUERY_HOLD=0` and `15` (`state-of-the-app/2026-10-14-hold4876-h{0,15}-b*`), and every Rico
-  Suave session at 15 (`rico-suave/runs/2026-10-14-p001-hold15-b*`), from the frozen dev tree `564ba13de`
-  (`hold_4876.sh`). Each must pick what the shipped session picked and show what the offline price says
-  (`hold_4876.py check`). *Pending: the arrays queue behind #4878's in the CPU cap; the result lands in
-  this PR.*
+- **Today's dev at other holds:** photo cells from #4874's grid (seeds 1 and 3, every fourth SigLIP cell, 72 a
+  preset) at `CALIB_QUERY_HOLD=0` and `15` (`state-of-the-app/2026-10-14-hold4876-h{0,15}-b*`), and every Rico
+  Suave session at 15 (`rico-suave/runs/2026-10-14-p001-hold15-b*`). All ran from the frozen dev tree `564ba13de`
+  (`hold_4876.sh`), 762 sessions in all, and `hold_4876.py check` compared each with its shipped-hold session.
+
+  | | photos, hold 0 | photos, hold 15 | screens, hold 15 |
+  |---|---|---|---|
+  | same picks, beta ¼ / 1 / 4 | 70 / 70 / 72 of 72 | 72 / 71 / 72 of 72 | 110 / 110 / 110 of 110 |
+  | session mean, run minus offline price | +0.0001 / +0.0000 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+
+  Every one of the 630 pairs that ran on the same CPU vendor picked identically, and its curve equals the
+  offline price to CSV rounding. So did 127 of the 132 pairs that ran on different vendors. The 5 that differ
+  are all cross-vendor pairs (AMD against Intel, the BLAS drift of #4481), they are two sessions, and both
+  diverge late:
+  - fire hydrant@small, seed 1 (3 of the 5), at vote 175: the end-of-run check, past vote 150, so the curve is
+    identical;
+  - parking meter@small, seed 1 (2 of the 5), at vote 124: a prompted check round, long after the hold ends.
+
+  So today's dev reproduces the priced sessions, and the hold changes no pick.
 
 ## Recommendation (not taken)
 
