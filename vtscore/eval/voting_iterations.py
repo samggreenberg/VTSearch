@@ -2617,6 +2617,7 @@ def simulate_voting_iterations(  # noqa: C901
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
     done_check: bool = True,
+    early_check: Optional[int] = None,
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
@@ -3202,6 +3203,19 @@ def simulate_voting_iterations(  # noqa: C901
             ``False`` is the arm before the app ran it, where all green reads
             ``done`` at once; ``spot_check="off"`` and the Inclusion arm never
             check.  Needs the Autopilot flow; ignored without one.
+        early_check: An experiment knob (issue #4664): Autopilot prompts a
+            check in **every** session at the first ordinary step from
+            *early_check* votes on, past the opening, on top of the app's own
+            checks (the weak prompt and the check before Done).  Its picks are
+            clicks, ``phase == "prompt"`` rows and ``check_kind == "early"``
+            picks, and the session goes on after it.  Once a run, and skipped,
+            once, where the check before Done would be: a check ended in the
+            last ``WEAK_CHECK_COOLDOWN`` votes
+            (:func:`~vtscore.training.thresholds.done_check_due`), or none can
+            start (nothing unvoted, or its opening bands do not fit the budget
+            left).  A step where the check before Done is due runs that one
+            instead.  ``None`` - the default - is the app, which has no such
+            check.  Needs the balance (*beta*) and the phase machine.
         label_quota: Whether the withheld half is scored as Test scores it
             under the app's label quota (#4643,
             :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
@@ -3666,6 +3680,12 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
+    if early_check is not None and (
+        isinstance(early_check, bool) or not isinstance(early_check, int) or early_check < 1
+    ):
+        raise ValueError(f"early_check must be an integer >= 1 (a vote count) or None; got {early_check!r}")
+    if early_check is not None and (flow is None or beta is None or spot_check == "off"):
+        raise ValueError("early_check needs Autopilot's phase machine, a balance (beta) and a run that checks")
     # #4482's band picks: how many picks past the opening, and how many of them were band picks.
     learned_picks = 0
     band_picks = 0
@@ -3721,6 +3741,17 @@ def simulate_voting_iterations(  # noqa: C901
                 "style": style or "",
                 "t": len(good_votes) + len(bad_votes),
                 "phase": phase_name or "",
+                # Which check a check pick is in (#4664): the flow's running one
+                # (``weak``, ``done``, ``early``) for a prompted pick - ``weak``
+                # where no flow runs it, as only the weak prompt can - ``end`` for
+                # the end-of-run check's, and blank for every other pick.
+                "check_kind": (
+                    "end"
+                    if phase_name == "check"
+                    else ((flow.spot_check if flow is not None else None) or "weak")
+                    if phase_name == "prompt"
+                    else ""
+                ),
                 "startup_round": startup_round,
                 "startup_held": bool(startup_state.held_for_quorum) if startup_state is not None else False,
                 "startup_extended_clicks": int(startup_state.extended_clicks) if startup_state is not None else 0,
@@ -3780,6 +3811,8 @@ def simulate_voting_iterations(  # noqa: C901
     # ``check_ended_votes``): the weak prompt's cooldown counts from it, and so
     # does whether the check before Done runs.
     last_check_end: int | None = None
+    # #4664's early check: settled (run, or skipped) once a run.
+    early_settled = early_check is None
     if flow is not None and (spot_check == "off" or not done_check or beta is None):
         # No check before Done: the arm before the app ran it, a run that never
         # checks, or the Inclusion arm, which has no balance to check.
@@ -3965,6 +3998,32 @@ def simulate_voting_iterations(  # noqa: C901
                     flow.begin_spot_check("done")
                 else:
                     flow.skip_done_check()
+            if (
+                picks is None
+                and not early_settled
+                and early_check is not None
+                and flow is not None
+                and t >= early_check
+                and flow.phase not in _OPENING_PHASES
+                and flow.phase != "spot"
+                and flow.spot_check is None
+            ):
+                # #4664: the check every session gets from early_check votes on,
+                # once, unless one just ran or none fits, as the check before
+                # Done is skipped.
+                early_settled = True
+                if (
+                    done_check_due(t, last_check_end)
+                    and t + _check_start_cost() <= n_steps
+                    and pool
+                    and line_ranking is not None
+                ):
+                    started = _start_check()
+                    if started is not None and started.pending:
+                        last_check_end = t
+                        check, check_phase = started, "prompt"
+                        picks = list(check.pending)
+                        flow.begin_spot_check("early")
             if picks is None and (t >= n_steps or not pool):
                 # The voting steps are spent.  Check the line once, if the run
                 # checks at all and there is a ranking with something unvoted in it.

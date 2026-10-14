@@ -117,6 +117,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
+  takes `early_check` (`None`, the default and the app; or N: Autopilot prompts the spot check once, at the first
+  step from N votes past the opening, on top of the app's own checks, skipped where the check before Done would
+  be). Its picks are clicks with phase `"prompt"`. The pick log gains `check_kind` (`weak`, `done`, `early` or
+  `end` on a check's picks, blank on every other), and `AutopilotFlow.begin_spot_check` takes `"early"`. An
+  experiment arm; the app is unchanged.
+
 - **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
   scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the
   Goods' centroid, folded back into the one `Linear(D, 1)`; a centroid scale of 0 prices the query alone.

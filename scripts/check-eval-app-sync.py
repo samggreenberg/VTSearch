@@ -149,7 +149,8 @@ MIRRORS: list[Mirror] = [
             "Check button went: it is never a click. The app also latches doneChecked when a run's first "
             "labeling-status reading is already all green (the Train view re-entered on a finished "
             "detector); a harness run starts with no votes, where the lights cannot be green, so it has "
-            "nothing to port."
+            "nothing to port. The harness's early check (begin_spot_check('early'), early_check=N, #4664) "
+            "is an experiment arm the app does not run: a check at a fixed vote count, which latches nothing."
         ),
     ),
     Mirror(

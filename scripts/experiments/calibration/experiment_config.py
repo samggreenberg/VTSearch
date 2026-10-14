@@ -1113,6 +1113,11 @@ WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
 #: ``0`` is the arm before Autopilot ran it, where all green reads Done at once.
 _done_check = os.environ.get("CALIB_DONE_CHECK", "").strip().lower()
 DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no", "off")
+#: Issue #4664's early check (``CALIB_EARLY_CHECK=N``): Autopilot checks in every session at the first step from N
+#: votes past the opening, on top of the app's own checks.  Unset (the default) is the app.  A value that is not a
+#: positive integer is kept as given, for preflight to refuse.
+_EARLY_CHECK = os.environ.get("CALIB_EARLY_CHECK", "").strip()
+EARLY_CHECK: "int | str | None" = int(_EARLY_CHECK) if _EARLY_CHECK.isdigit() else (_EARLY_CHECK or None)
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
