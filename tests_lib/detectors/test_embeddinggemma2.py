@@ -160,9 +160,8 @@ class TestTransformersFloor:
     def test_old_transformers_names_the_fix(self, monkeypatch):
         from vtscore.media import _embeddinggemma2 as eg2
 
-        fake = types.ModuleType("transformers")
-        fake.__version__ = "5.17.0"
-        monkeypatch.setitem(sys.modules, "transformers", fake)
+        # Stands in for a transformers that predates EmbeddingGemma2Model: a version and no class.
+        monkeypatch.setitem(sys.modules, "transformers", types.SimpleNamespace(__version__="5.17.0"))
         with pytest.raises(ImportError, match=r"transformers>=5\.18\.0.*5\.17\.0"):
             eg2._require_transformers()
 
