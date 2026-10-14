@@ -1369,13 +1369,16 @@ def vote_boundary_fig() -> None:
 
 
 def second_cut_fig() -> None:
-    """Pics on a Plane's last page, asking somewhere else: Second Cut's opening (#4517).
+    """Pics on a Plane's last page, asking somewhere else: A Cut Above's opening (#4517).
 
-    Second Cut opens on page 8j as it stands — the first detector, its looser
+    A Cut Above opens on page 8j as it stands — the first detector, its looser
     and tighter cuts, and the question on the line — and then this: the same
-    page with the question moved to the unvoted item just inside the *tighter*
-    cut (`_inside_item`). That is the move the slide is about, drawn where the
-    room first learned to read it, before the statistics say how far in to go.
+    page with the question moved one item further in, to the unvoted item just
+    inside the line beside the one it asked (`_inside_item`). That is the move
+    the slide is about, drawn where the room first learned to read it, before
+    the statistics say how far in to go. Not the item deep inside the tighter
+    cut, which is the one Pics on a Plane said was not worth asking (owner,
+    #4872).
     """
     save(
         _vote_boundary_stage(FLASHBACK_STAGE, ask_inside=True),
@@ -1387,14 +1390,14 @@ def second_cut_fig() -> None:
     )
 
 
-def _inside_item(model: SVC, width: float, pts: np.ndarray, labeled: tuple[int, ...]) -> int:
-    """The unvoted item nearest the tighter cut from inside it, wholly clear of the dashed line."""
-    curve = _contour(model)
-    depth = np.hypot(*(pts[:, None, :] - curve[None, :, :]).transpose(2, 0, 1)).min(axis=1)
-    eligible = (model.decision_function(pts) > 0) & (depth >= width + R)
-    eligible[list(labeled)] = False
-    assert eligible.any(), "no unvoted item sits inside the tighter cut"
-    return int(np.flatnonzero(eligible)[np.argmin(depth[eligible])])
+def _inside_item(model: SVC, pts: np.ndarray, labeled: tuple[int, ...], asked: int) -> int:
+    """The unvoted item inside the line nearest the one asked on it: the question, one step further in."""
+    eligible = model.decision_function(pts) > 0
+    eligible[list(labeled) + [asked]] = False
+    assert eligible.any(), "no unvoted item sits inside the line"
+    near = np.flatnonzero(eligible)[np.argmin(np.hypot(*(pts[eligible] - pts[asked]).T))]
+    assert pts[near][1] < pts[asked][1], "the item one step in should sit below the one asked, inside the line"
+    return int(near)
 
 
 def _vote_boundary_stage(stage: int, ask_inside: bool = False) -> plt.Figure:
@@ -1429,7 +1432,7 @@ def _vote_boundary_stage(stage: int, ask_inside: bool = False) -> plt.Figure:
     # its whole point is that those cuts were on offer when the question was
     # picked (#3301).
     asking = (
-        {_inside_item(first, _band_width(first, pts, labeled), pts, labeled)}
+        {_inside_item(first, pts, labeled, asked)}
         if ask_inside
         else ({asked} if step == 5 else ({asked_again} if step == 8 else set()))
     )

@@ -5,8 +5,8 @@ Run from the repo root:
 
     python slides/figs/src/make-autopilot-figs.py
 
-Autopilot picks every item a user is shown in the Train window, in six steps,
-and it tells them when they can stop. The steps are
+Autopilot picks every item a user is shown in the Train window, in four steps
+and a check, and it tells them when they can stop. The steps are
 `AutopilotStateService.checkPhaseTransition`; the stop is three lights the
 labeling status computes, Smart (`vtscore/detectors/cost_trend.py`), Stable
 (`vtscore/detectors/stability.py`) and Span (the coverage atlas), all green.
@@ -15,7 +15,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 * `autopilot-steps` walks the harness's port of the phase machine
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
-  `scripts/check-eval-app-sync.py`) through the six steps, and every target it
+  `scripts/check-eval-app-sync.py`) through the steps, and every target it
   prints is that module's constant.
 * `autopilot-smart` runs the shipped `smart_status_from_costs` on a planted
   session's error costs, and asserts the lights the slide draws.
@@ -190,9 +190,9 @@ def _light(ax: plt.Axes, x: float, y: float, colour: str, r: float = 0.13) -> No
         )
 
 
-def _disc(ax: plt.Axes, x: float, y: float, number: int, r: float = 0.22) -> None:
+def _disc(ax: plt.Axes, x: float, y: float, mark: int | str, r: float = 0.22) -> None:
     ax.add_patch(Circle((x, y), r, facecolor=INK, edgecolor="none", zorder=6))
-    ax.text(x, y, f"{number}", ha="center", va="center", fontsize=16, color="white", fontweight="bold", zorder=7)
+    ax.text(x, y, f"{mark}", ha="center", va="center", fontsize=16, color="white", fontweight="bold", zorder=7)
 
 
 def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
@@ -200,37 +200,35 @@ def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
     ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
 
 
-# ── Flight Plan: the six steps ──────────────────────────────────────────────
+# ── Flight Plan: the steps ───────────────────────────────────────────────────
 
-STEPS_STAGES = 5
+STEPS_STAGES = 4
 
-#: The rows, top to bottom: the step's name as the panel's short label shows
-#: it, what it asks about, the drawing in the middle column, and what ends it.
-#: The targets are the harness's constants, which mirror the app's.
+#: The rows, top to bottom: the step's mark, its name as the panel's short
+#: label shows it, the drawing in the middle column, and what ends it. The
+#: targets are the harness's constants, which mirror the app's. Spot Check is
+#: lettered, not numbered: it runs once every light is green, but Autopilot
+#: also runs it earlier when the labels separate weakly (#4496), so it is not
+#: a fifth step in a fixed order (owner, #4872). Its "until" is what the check
+#: is for: it walks bands down from the top while its estimate of the kept
+#: set's F-beta rises, and stops at that estimate's peak (`spot_check`).
 STEPS = (
     # The Good walk can also run dry once a Good is in (#4731).
-    (
-        "good",
-        "Good",
-        "the top of your query",
-        "query-top",
-        f"{GOOD_TARGET} Goods, or {MORE_DRY_RUN} in a row without one",
-    ),
-    ("bad", "Bad", "at your query's line", "query-line", f"{BAD_TARGET} Bads"),
-    ("hard", "Boundary", "at even odds", "detector-odds", "Smart and Stable both green"),
-    ("new", "Diversity", "a cell nobody voted in", "atlas", "Span green as well"),
-    # Once, the first time every light is green (#4836): the band walk Spot
-    # Check runs, its picks drawn at random from bands down from the top.
-    ("spot", "Spot Check", "every light green", "bands", "it has checked the line once"),
-    ("done", "Done", "after the check", "lights", "you say: keep going, or leave"),
+    ("good", "1", "Good", "query-top", f"{GOOD_TARGET} Goods, or {MORE_DRY_RUN} in a row without one"),
+    ("bad", "2", "Bad", "query-line", f"{BAD_TARGET} Bads"),
+    ("hard", "3", "Boundary", "detector-odds", "Smart and Stable both green"),
+    ("new", "4", "Diversity", "atlas", "Span green"),
+    ("spot", "A", "Spot Check", "bands", "Its Fβ estimate peaks"),
 )
 #: No More walk on photos since #4740 (``MORE_TARGET`` 0): the opening is Good and
-#: Bad on the query, then the detector takes over.
-STEP_ROWS_Y = (4.95, 4.08, 3.21, 2.34, 1.38, 0.5)
+#: Bad on the query, then the detector takes over. Five rows down the slide,
+#: with no statement over them (owner, #4872: the room has met Autopilot by now).
+STEP_ROWS_Y = (5.0, 3.95, 2.9, 1.85, 0.8)
+STEP_HEAD_Y = 5.85
 #: Which row each build stage reveals up to: the opening on the query, then
 #: one step a stage.
-STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5, 5: 6}
-NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 4.3, 7.6, 7.95
+STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5}
+NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 3.05, 7.55, 7.95
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
 QUERY_LINE, DETECTOR_LINE = 0.62, 0.68
@@ -244,38 +242,42 @@ DETECTOR_ODDS = 0.80
 SPOT_BANDS = (0.0, 0.08, 0.16, 0.32, 0.64)
 #: Where in each band its few random picks fall, as a share of the band's
 #: width: drawn once, so every page of the build shows the same picks.
-SPOT_PICKS = ((0.5,), (0.5,), (0.3, 0.75), (0.2, 0.5, 0.8))
+SPOT_PICKS = ((0.5,), (0.5,), (0.25, 0.75), (0.2, 0.5, 0.8))
+#: The asked item's mark, the deck's "?" in a ring (owner, #4872: the (?) for
+#: where it asks, not a pointer); 15pt is the smallest type this canvas holds.
+ASK_R, ASK_PT = 0.125, 15
 
 
 def _check_step_order() -> None:
-    """The six steps in the order the phase machine takes them, from its own rule.
+    """The steps in the order the phase machine takes them, from its own rule.
 
     A session walked the way the slide narrates it: the counts reach each
     target in turn, then Smart and Stable go green, then Span, then the check
-    before Done runs and closes.
+    every light green calls for runs.
     """
     many = math.inf
-    # The check before Done is still open the first time every light is green,
-    # and closed after it (the app's ``doneChecked``).
     walk = (
         dict(good_count=0, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=BAD_TARGET, smart="red", stable="red", span="red"),
         dict(good_count=24, bad_count=30, smart="green", stable="green", span="yellow"),
         dict(good_count=30, bad_count=50, smart="green", stable="green", span="green", done_checked=False),
-        dict(good_count=34, bad_count=66, smart="green", stable="green", span="green", done_checked=True),
     )
     phases = tuple(next_phase(remaining_unlabeled=many, **state) for state in walk)
     assert phases == tuple(step[0] for step in STEPS), phases
+    # And the check also runs mid-run, which is why it is lettered: a weak-separation
+    # check holds the phase at Spot Check whatever the counts.
+    early = next_phase(remaining_unlabeled=many, checking=True, **walk[3])
+    assert early == "spot", early
 
 
 def steps_fig() -> None:
-    """The six steps: what each asks about, and what ends it.
+    """The steps: what each asks about, and what ends it.
 
-    Five stages: the opening's two steps, both on the query's own ranking, with
+    Four stages: the opening's two steps, both on the query's own ranking, with
     no detector shown yet; then Boundary, the first step on the detector's
-    ranking; then Diversity, off the atlas; then Spot Check, once, the first
-    time every light is green (#4836); then Done.
+    ranking; then Diversity, off the atlas; then Spot Check, which every light
+    green calls for (#4836) and weak separation can call earlier (#4496).
     """
     _check_step_order()
     _save(STEPS_STAGES, _steps_stage, "autopilot-steps")
@@ -292,31 +294,29 @@ def _strip(ax: plt.Axes, y: float, words: str, line_at: float) -> float:
     return x
 
 
-def _pick(ax: plt.Axes, x: float, y: float) -> None:
-    """Where the step asks: a pointer onto the strip from above."""
-    ax.plot(x, y + STRIP_H / 2 + 0.2, marker="v", markersize=14, color=INK, zorder=7, linestyle="none")
+def _ask(ax: plt.Axes, x: float, y: float) -> None:
+    """Where the step asks: the deck's (?) on the item it picks."""
+    ax.add_patch(Circle((x, y), ASK_R, facecolor="white", edgecolor=INK, linewidth=2.2, zorder=8))
+    ax.text(x, y, "?", ha="center", va="center_baseline", fontsize=ASK_PT, fontweight="bold", color=INK, zorder=9)
 
 
 def _spot_bands(ax: plt.Axes, y: float) -> None:
     """The detector's strip with Spot Check's bands bracketed from the top, and a few random picks in each."""
     _strip(ax, y, "the detector", DETECTOR_LINE)
     width = PICTURE_X1 - PICTURE_X0
-    # The picks point down onto the strip from just above it, clear of its
-    # words; each band's bracket sits over its picks.
-    pick_y = y + STRIP_H / 2 + 0.08
-    top = pick_y + 0.1
+    # Each band's bracket sits over the strip, its picks on the strip under it.
+    top = y + STRIP_H / 2 + 0.1
     for k in range(len(SPOT_BANDS) - 1):
         right = PICTURE_X1 - SPOT_BANDS[k] * width
         left = PICTURE_X1 - SPOT_BANDS[k + 1] * width
         lo, hi = left + 0.025, right - 0.025
         ax.plot([lo, lo, hi, hi], [top, top + 0.08, top + 0.08, top], color=INK, linewidth=1.4, zorder=6)
         for share in SPOT_PICKS[k]:
-            x = left + share * (right - left)
-            ax.plot(x, pick_y, marker="v", markersize=8, color=INK, zorder=7, linestyle="none")
+            _ask(ax, left + share * (right - left), y)
 
 
 def _mini_tree(ax: plt.Axes, y: float) -> None:
-    """Three levels of an atlas, the first cell nobody has voted in filled."""
+    """Three levels of an atlas, the first cell nobody has voted in asked about."""
     levels = (1, 3, 9)
     ys = (y + 0.27, y, y - 0.27)
     span = PICTURE_X1 - PICTURE_X0 - 0.4
@@ -329,55 +329,41 @@ def _mini_tree(ax: plt.Axes, y: float) -> None:
             parent = xs[level - 1][i // 3]
             ax.plot([parent, x], [ys[level - 1], ys[level]], color=RULE, linewidth=1.4, zorder=2)
     # Voted in, filled as the Span slide fills them: the root, its first two
-    # children, and three cells under those. The walk's next cell is ringed.
+    # children, and three cells under those. The walk's next cell carries the (?).
     covered = {(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 4)}
     first_empty = (1, 2)
     for level, row in enumerate(xs):
         for i, x in enumerate(row):
+            if (level, i) == first_empty:
+                _ask(ax, x, ys[level])
+                continue
             face = INK if (level, i) in covered else "white"
             ax.add_patch(Circle((x, ys[level]), 0.075, facecolor=face, edgecolor=SOFT, linewidth=1.2, zorder=4))
-    ax.add_patch(Circle((xs[1][first_empty[1]], ys[1]), 0.13, facecolor="none", edgecolor=INK, linewidth=2.4,
-                        zorder=5))  # fmt: skip
 
 
 def _steps_stage(stage: int) -> Figure:
     fig, ax = _canvas()
-    _statement(ax, "Autopilot picks every item you are shown")
     centre = (PICTURE_X0 + PICTURE_X1) / 2
-    ax.text(centre, 5.62, "where it asks", ha="center", va="center", fontsize=15, color=SOFT)
-    ax.text(ENDS_X, 5.62, "until", ha="left", va="center", fontsize=15, color=SOFT)
+    ax.text(centre, STEP_HEAD_Y, "where it asks", ha="center", va="center", fontsize=15, color=SOFT)
+    ax.text(ENDS_X, STEP_HEAD_Y, "until", ha="left", va="center", fontsize=15, color=SOFT)
     for row in range(STEP_STAGE_ROWS[stage]):
-        _phase, name, asks, picture, ends = STEPS[row]
+        _phase, mark, name, picture, ends = STEPS[row]
         y = STEP_ROWS_Y[row]
-        _disc(ax, 0.85, y, row + 1)
-        ax.text(NAME_X, y + 0.14, name, ha="left", va="center", fontsize=18, fontweight="bold")
-        ax.text(NAME_X, y - 0.2, asks, ha="left", va="center", fontsize=15, color=SOFT)
+        _disc(ax, 0.85, y, mark)
+        ax.text(NAME_X, y, name, ha="left", va="center", fontsize=18, fontweight="bold")
         if picture == "query-top":
             _strip(ax, y, "your query", QUERY_LINE)
-            _pick(ax, PICTURE_X1 - 0.12, y)
+            _ask(ax, PICTURE_X1 - ASK_R - 0.03, y)
         elif picture == "query-line":
-            _pick(ax, _strip(ax, y, "your query", QUERY_LINE), y)
+            _ask(ax, _strip(ax, y, "your query", QUERY_LINE), y)
         elif picture == "detector-odds":
             _strip(ax, y, "the detector", DETECTOR_LINE)
-            _pick(ax, PICTURE_X0 + DETECTOR_ODDS * (PICTURE_X1 - PICTURE_X0), y)
+            _ask(ax, PICTURE_X0 + DETECTOR_ODDS * (PICTURE_X1 - PICTURE_X0), y)
         elif picture == "atlas":
             _mini_tree(ax, y)
-        elif picture == "bands":
-            _spot_bands(ax, y)
         else:
-            for k, word in enumerate(("Smart", "Stable", "Span")):
-                x = PICTURE_X0 + 0.2 + k * 1.13
-                _light(ax, x, y, "green")
-                ax.text(x + 0.2, y, word, ha="left", va="center", fontsize=16)
-        ax.text(
-            ENDS_X,
-            y,
-            ends,
-            ha="left",
-            va="center",
-            fontsize=16,
-            fontweight="bold" if row == len(STEPS) - 1 else "normal",
-        )
+            _spot_bands(ax, y)
+        ax.text(ENDS_X, y, ends, ha="left", va="center", fontsize=16)
     return fig
 
 
@@ -713,8 +699,8 @@ def _span_covered(stage: int) -> tuple[set[tuple[int, int]], int, list[tuple[int
 def span_fig() -> None:
     """Span: the first 40 cells of an atlas, the cells the votes reach, and the walk's run.
 
-    Four stages: the cells, in the walk's order; after Boundary, a few covered
-    and the run stopped at the first gap (red); four Diversity picks later, the
+    Four stages: the cells, in the walk's order; after asking at the line, a few
+    covered and the run stopped at the first gap (red); four atlas picks later, the
     run at 11 (yellow), past a cell the first pick's path had already filled;
     all 40 (green).
     """
@@ -766,7 +752,7 @@ def _span_stage(stage: int) -> Figure:
         ax.add_patch(Circle((x, y), 0.22, facecolor="none", edgecolor=INK, linewidth=2.6, zorder=5))
     for shown in range(2, stage + 1):
         _covered, run, picks = _span_covered(shown)
-        words = {2: "after Boundary", 3: f"{len(picks)} picks later", 4: "Span is green"}[shown]
+        words = {2: "asking at the line", 3: f"{len(picks)} picks later", 4: "Span is green"}[shown]
         y = SPAN_NOTE_Y[shown]
         _light(ax, SPAN_NOTE_X, y, span_status(run, SPAN_ATLAS_CELLS))
         ax.text(SPAN_NOTE_X + 0.25, y, f"{run} of 40, {words}", ha="left", va="center", fontsize=16,

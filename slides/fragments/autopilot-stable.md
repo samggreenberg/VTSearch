@@ -14,8 +14,8 @@
      retrain on top, this one below. Most barely move. -->
 
 <!-- **b** — Six crossed the line. Count them all and it never settles: a photo
-     it can't place wobbles forever. On one pile that held Boundary for 127 of
-     150 clicks. -->
+     it can't place wobbles forever. On one pile that kept Autopilot asking at
+     the line for 127 of 150 clicks. -->
 
 <!-- **c** — So, a band around the line. A flip only counts if the photo was
      clear of it both times. Two of the six. -->

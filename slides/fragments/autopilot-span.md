@@ -13,10 +13,10 @@
 <!-- **a** — Span is the atlas as a gauge: have our votes been everywhere? The
      top four levels are forty cells, and forty's the bar. -->
 
-<!-- **b** — After Boundary: count from the top to the first empty cell. Three,
-     red. The ring's where Diversity starts. -->
+<!-- **b** — After asking at the line: count from the top to the first empty
+     cell. Three, red. The ring's where the atlas walk asks next. -->
 
-<!-- **c** — Four Diversity picks later, eleven: yellow, which starts at ten.
+<!-- **c** — Four atlas picks later, eleven: yellow, which starts at ten.
      Each pick fills the first empty cell and a path down to its item, so the
      count jumps past cells earlier votes reached. -->
 
