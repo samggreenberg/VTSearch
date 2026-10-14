@@ -2104,9 +2104,9 @@ class TestSeparationCheck:
     CLASS_OF = {("s/1", 0): "s/a", ("s/2", 0): "s/a", ("s/4", 0): "s/b"}
     MEMBERS_OF = {"s/a": [["s/1", 0], ["s/2", 0]], "s/b": [["s/4", 0]]}
 
-    def _store(self, arm, skip=frozenset()):
+    def _store(self, arm, skip=None):
         check = importlib.import_module("separation_check")
-        return check.arm_store(arm, self.SAME, self.DIFFERENT, self.MEMBERS_OF, self.CLASS_OF, set(skip))
+        return check.arm_store(arm, self.SAME, self.DIFFERENT, self.MEMBERS_OF, self.CLASS_OF, set(skip or ()))
 
     def test_the_stored_arm_is_the_store(self, mods):
         assert self._store("stored") == {"same": self.SAME, "different": self.DIFFERENT}
