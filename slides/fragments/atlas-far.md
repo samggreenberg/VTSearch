@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/atlas-far.png)
+![bg fit](figs/atlas-far.webp)
 
 ## Far Out
 
-<!-- build: figs/atlas-far.build1.png -->
+<!-- build: figs/atlas-far.build1.webp -->
 
-<!-- build: figs/atlas-far.build2.png -->
+<!-- build: figs/atlas-far.build2.webp -->
 
-<!-- build: figs/atlas-far.build3.png -->
+<!-- build: figs/atlas-far.build3.webp -->
 
 <!-- **a** — The real atlas, on the floor: same cells, plus how typical each
      cell's photos look. Seventy-six held out. -->

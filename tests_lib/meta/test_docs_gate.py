@@ -131,7 +131,7 @@ class TestLinkCheck:
         them against `slides/fragments/` would flag every working slide.
         """
         fragment = REPO_ROOT / "slides" / "fragments" / "__synthetic__.md"
-        assert run("![bg fit](figs/cost-traces.png)", fragment) == []
+        assert run("![bg fit](figs/cost-traces.webp)", fragment) == []
 
     def test_slide_fragment_links_are_still_checked(self):
         """The override changes the base directory, it does not disable the check."""
@@ -140,7 +140,7 @@ class TestLinkCheck:
 
     def test_link_base_override_does_not_leak_to_other_docs(self):
         """A doc outside the override prefix still resolves against its own dir."""
-        assert checks("![bg fit](figs/cost-traces.png)") == ["LINK"]
+        assert checks("![bg fit](figs/cost-traces.webp)") == ["LINK"]
 
 
 class TestAnchorCheck:

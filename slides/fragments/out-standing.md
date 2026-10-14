@@ -1,16 +1,16 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-out-standing.png)
+![bg fit](figs/calib-out-standing.webp)
 
 ## Out<br>Standing
 
-<!-- build: figs/calib-out-standing.build1.png -->
+<!-- build: figs/calib-out-standing.build1.webp -->
 
-<!-- build: figs/calib-out-standing.build2.png -->
+<!-- build: figs/calib-out-standing.build2.webp -->
 
-<!-- build: figs/calib-out-standing.build3.png -->
+<!-- build: figs/calib-out-standing.build3.webp -->
 
-<!-- build: figs/calib-out-standing.build4.png -->
+<!-- build: figs/calib-out-standing.build4.webp -->
 
 <!-- **a** — Before the labels can draw a line, all we have is a ranking of
      photos nobody's voted on: the text query's, or the Goods' average. Two

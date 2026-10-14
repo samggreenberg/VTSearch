@@ -332,12 +332,12 @@ def blindspot_fig() -> None:
         save(
             _blindspot_stage(stage),
             OUT,
-            f"atlas-blindspot.build{stage}.png",
+            f"atlas-blindspot.build{stage}.webp",
             column=FULL_BLEED,
             tight=False,
             notch=NOTCH,
         )
-    save(_blindspot_stage(BLINDSPOT_STAGES), OUT, "atlas-blindspot.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+    save(_blindspot_stage(BLINDSPOT_STAGES), OUT, "atlas-blindspot.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -437,8 +437,8 @@ def cells_fig() -> None:
     the surprise probe inside that cell.
     """
     for stage in range(1, CELLS_STAGES):
-        save(_cells_stage(stage), OUT, f"atlas-cells.build{stage}.png", column=FULL_BLEED, tight=False, notch=NOTCH)
-    save(_cells_stage(CELLS_STAGES), OUT, "atlas-cells.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+        save(_cells_stage(stage), OUT, f"atlas-cells.build{stage}.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
+    save(_cells_stage(CELLS_STAGES), OUT, "atlas-cells.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1298,8 +1298,8 @@ def depth_fig() -> None:
     against; a floor, four posts and a lid give every item a place.
     """
     for stage in range(1, DEPTH_STAGES):
-        save(_depth_stage(stage), OUT, f"atlas-depth.build{stage}.png", column=FULL_BLEED, tight=False, notch=NOTCH)
-    save(_depth_stage(DEPTH_STAGES), OUT, "atlas-depth.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+        save(_depth_stage(stage), OUT, f"atlas-depth.build{stage}.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
+    save(_depth_stage(DEPTH_STAGES), OUT, "atlas-depth.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1352,8 +1352,8 @@ def far_fig() -> None:
     item filled. No chart: the drift is which spheres go dark.
     """
     for stage in range(1, FAR_STAGES):
-        save(_far_stage(stage), OUT, f"atlas-far.build{stage}.png", column=FULL_BLEED, tight=False, notch=NOTCH)
-    save(_far_stage(FAR_STAGES), OUT, "atlas-far.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+        save(_far_stage(stage), OUT, f"atlas-far.build{stage}.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
+    save(_far_stage(FAR_STAGES), OUT, "atlas-far.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
 
 
 def _far_stage(stage: int) -> plt.Figure:
@@ -1483,8 +1483,8 @@ def pvalues_fig() -> None:
     spot check passes it for as long as anybody spot-checks.
     """
     for stage in range(1, PVALUES_STAGES):
-        save(_pvalues_stage(stage), OUT, f"atlas-pvalues.build{stage}.png", column=FULL_BLEED, tight=False)
-    save(_pvalues_stage(PVALUES_STAGES), OUT, "atlas-pvalues.png", column=FULL_BLEED, tight=False)
+        save(_pvalues_stage(stage), OUT, f"atlas-pvalues.build{stage}.webp", column=FULL_BLEED, tight=False)
+    save(_pvalues_stage(PVALUES_STAGES), OUT, "atlas-pvalues.webp", column=FULL_BLEED, tight=False)
 
 
 if __name__ == "__main__":

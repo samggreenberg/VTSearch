@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-weak-spot.png)
+![bg fit](figs/calib-weak-spot.webp)
 
 ## Weak Spot
 
-<!-- build: figs/calib-weak-spot.build1.png -->
+<!-- build: figs/calib-weak-spot.build1.webp -->
 
-<!-- build: figs/calib-weak-spot.build2.png -->
+<!-- build: figs/calib-weak-spot.build2.webp -->
 
 <!-- **a** — Spot Check usually comes once, just before Done, but some sessions
      shouldn't wait that long. Two sessions' held-out votes: on the right,

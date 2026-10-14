@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/book-boundary.png)
+![bg fit](figs/book-boundary.webp)
 
 ## Judging a Book<br>by its Cover
 
-<!-- build: figs/book-boundary.build1.png -->
+<!-- build: figs/book-boundary.build1.webp -->
 
-<!-- build: figs/book-boundary.build2.png -->
+<!-- build: figs/book-boundary.build2.webp -->
 
-<!-- build: figs/book-boundary.build3.png -->
+<!-- build: figs/book-boundary.build3.webp -->
 
 <!-- **a** — Say you've got a big pile of pictures and you want the books. Some
      are easy. A stack, a shelf, one lying face up: nobody here needs a

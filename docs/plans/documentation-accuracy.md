@@ -114,7 +114,7 @@ separately.
   omits `png` / `--no-pageno`, and the comment above the `PIPESTATUS` check says the script has no
   `pipefail` though it sets `set -euo pipefail` (so the check may be dead). `docker/Dockerfile*`:
   the "OMP/MKL thread limits are already set in app.py" comment is misleading — `app.py` overwrites
-  them with the CPU allocation. `slides/figs/ui-autopilot.png` is referenced by nothing.
+  them with the CPU allocation. `slides/figs/ui-autopilot.webp` is referenced by nothing.
   `scripts/experiments/pile/launch_pile.sh`'s header still shows a `--force` rebuild of `vg_scale`,
   which can no longer be rebuilt; `scripts/experiments/max_patch/queue_all.sh` defaults
   `NCELLS=240` against a 288-cell grid. `docs/user/screenshots.manifest.ts` pins

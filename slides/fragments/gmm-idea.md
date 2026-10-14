@@ -1,16 +1,16 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-gmm-flow.png)
+![bg fit](figs/calib-gmm-flow.webp)
 
 ## Oops! All<br>Haystack
 
-<!-- build: figs/calib-gmm-flow.build1.png -->
+<!-- build: figs/calib-gmm-flow.build1.webp -->
 
-<!-- build: figs/calib-gmm-flow.build2.png -->
+<!-- build: figs/calib-gmm-flow.build2.webp -->
 
-<!-- build: figs/calib-gmm-flow.build3.png -->
+<!-- build: figs/calib-gmm-flow.build3.webp -->
 
-<!-- build: figs/calib-gmm-flow.build4.png -->
+<!-- build: figs/calib-gmm-flow.build4.webp -->
 
 <!-- **a** — What that left out: the haystack. Every unlabeled photo; I'll call
      it the corpus. There ARE books in there, we just don't know which. -->

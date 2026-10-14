@@ -3,8 +3,8 @@
 
     python slides/figs/src/make-book-figs.py
 
-Writes `figs/book-boundary.png` (the sidebar figure on *A Concept in Your
-Head*) and `figs/book-rank.png` with its build stages (the full-bleed figure
+Writes `figs/book-boundary.webp` (the sidebar figure on *A Concept in Your
+Head*) and `figs/book-rank.webp` with its build stages (the full-bleed figure
 that opens Part 3).
 
 Both exist because a talk about searching images that shows no images is asking
@@ -221,7 +221,7 @@ def boundary_fig() -> None:
         save(
             _boundary_stage(stage),
             OUT,
-            f"book-boundary.build{stage}.png",
+            f"book-boundary.build{stage}.webp",
             column=FULL_BLEED,
             tight=False,
         )
@@ -231,7 +231,7 @@ def boundary_fig() -> None:
     # corner to spare. It is also what makes every stage share this one's
     # framing for free — the canvas is fixed, so nothing reflows as the bottom
     # row fills in.
-    save(_boundary_stage(BOUNDARY_STAGES), OUT, "book-boundary.png", column=FULL_BLEED, tight=False)
+    save(_boundary_stage(BOUNDARY_STAGES), OUT, "book-boundary.webp", column=FULL_BLEED, tight=False)
 
 
 def _boundary_stage(stage: int) -> plt.Figure:
@@ -351,8 +351,8 @@ def rank_fig() -> None:
     """
     final = _rank_stage(2)
     box = tight_box(final)
-    save(_rank_stage(1), OUT, "book-rank.build1.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "book-rank.png", column=FULL_BLEED, box=box)
+    save(_rank_stage(1), OUT, "book-rank.build1.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "book-rank.webp", column=FULL_BLEED, box=box)
 
 
 def _rank_stage(stage: int) -> plt.Figure:

@@ -1,18 +1,18 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-walk-flow.png)
+![bg fit](figs/calib-walk-flow.webp)
 
 ## Drop Me A Line
 
-<!-- build: figs/calib-walk-flow.build1.png -->
+<!-- build: figs/calib-walk-flow.build1.webp -->
 
-<!-- build: figs/calib-walk-flow.build2.png -->
+<!-- build: figs/calib-walk-flow.build2.webp -->
 
-<!-- build: figs/calib-walk-flow.build3.png -->
+<!-- build: figs/calib-walk-flow.build3.webp -->
 
-<!-- build: figs/calib-walk-flow.build4.png -->
+<!-- build: figs/calib-walk-flow.build4.webp -->
 
-<!-- build: figs/calib-walk-flow.build5.png -->
+<!-- build: figs/calib-walk-flow.build5.webp -->
 
 <!-- **a** — Same votes. Instead of hunting the cheapest cut, read quantiles, a
      set fraction of the way through the votes, so they move when the scores do.

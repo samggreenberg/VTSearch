@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-fbeta-maps.png)
+![bg fit](figs/calib-fbeta-maps.webp)
 
 ## Beta Release
 
-<!-- build: figs/calib-fbeta-maps.build1.png -->
+<!-- build: figs/calib-fbeta-maps.build1.webp -->
 
-<!-- build: figs/calib-fbeta-maps.build2.png -->
+<!-- build: figs/calib-fbeta-maps.build2.webp -->
 
 <!-- **a** — F1 as a map: recall across, precision up, one score per curve. It's
      balanced, so it doesn't care which you give up. Our include-six cut lands

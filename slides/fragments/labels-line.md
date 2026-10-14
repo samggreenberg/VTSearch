@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-labels-line.png)
+![bg fit](figs/calib-labels-line.webp)
 
 ## What to<br>Expect
 
-<!-- build: figs/calib-labels-line.build1.png -->
+<!-- build: figs/calib-labels-line.build1.webp -->
 
-<!-- build: figs/calib-labels-line.build2.png -->
+<!-- build: figs/calib-labels-line.build2.webp -->
 
 <!-- **a** — Back to Curvey and InDiscreet's fit: what a match scores, what a
      near-miss scores, about 210 matches in the corpus, and every photo's

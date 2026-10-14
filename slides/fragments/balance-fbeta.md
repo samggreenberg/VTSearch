@@ -1,16 +1,16 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-fbeta.png)
+![bg fit](figs/calib-fbeta.webp)
 
 ## Beta Max
 
-<!-- build: figs/calib-fbeta.build1.png -->
+<!-- build: figs/calib-fbeta.build1.webp -->
 
-<!-- build: figs/calib-fbeta.build2.png -->
+<!-- build: figs/calib-fbeta.build2.webp -->
 
-<!-- build: figs/calib-fbeta.build3.png -->
+<!-- build: figs/calib-fbeta.build3.webp -->
 
-<!-- build: figs/calib-fbeta.build4.png -->
+<!-- build: figs/calib-fbeta.build4.webp -->
 
 <!-- **a** — Back to the ranking, cut off. Which should the app pick? -->
 

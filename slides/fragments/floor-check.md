@@ -1,16 +1,16 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-floor-check.png)
+![bg fit](figs/calib-floor-check.webp)
 
 ## Spot Check
 
-<!-- build: figs/calib-floor-check.build1.png -->
+<!-- build: figs/calib-floor-check.build1.webp -->
 
-<!-- build: figs/calib-floor-check.build2.png -->
+<!-- build: figs/calib-floor-check.build2.webp -->
 
-<!-- build: figs/calib-floor-check.build3.png -->
+<!-- build: figs/calib-floor-check.build3.webp -->
 
-<!-- build: figs/calib-floor-check.build4.png -->
+<!-- build: figs/calib-floor-check.build4.webp -->
 
 <!-- **a** — Back to the kept set, still unchecked. Now the random picks. -->
 

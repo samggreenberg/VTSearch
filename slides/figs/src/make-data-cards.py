@@ -25,9 +25,7 @@ from __future__ import annotations
 
 import argparse
 import collections
-import contextlib
 import functools
-import io
 import sys
 from pathlib import Path
 from typing import Any
@@ -46,19 +44,11 @@ OUT = REPO / "slides" / "figs"
 
 
 def _save(fig: Any, name: str) -> None:
-    """Photograph-carrying frames go out as WebP (slides/README.md), through `save`'s checks."""
-    from PIL import Image
-
-    png = f"{name}.png"
+    """Photograph-carrying frames go out as lossy WebP, through `save`'s checks."""
     # A "Data, Set" card's headline is one line, and its subtitle — the
     # dataset's name — sits in the half of the reserve that line leaves.
     notch = dc.DATA_SET_NOTCH_PX if name.startswith("data-set-") else True
-    with contextlib.redirect_stdout(io.StringIO()):
-        save(fig, OUT, png, column=FULL_BLEED, tight=False, notch=notch)
-    with Image.open(OUT / png) as image:
-        image.convert("RGB").save(OUT / f"{name}.webp", quality=88, method=6)
-    (OUT / png).unlink()
-    print(f"wrote figs/{name}.webp")
+    save(fig, OUT, f"{name}.webp", column=FULL_BLEED, tight=False, notch=notch, photo=True)
 
 
 # --------------------------------------------------------------------------

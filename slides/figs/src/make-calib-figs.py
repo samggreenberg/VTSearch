@@ -299,11 +299,11 @@ def xcal_flow_fig() -> None:
         save(
             _xcal_flow_stage(stage),
             OUT,
-            f"calib-xcal-flow.build{stage}.png",
+            f"calib-xcal-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-xcal-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-xcal-flow.webp", column=FULL_BLEED, box=box)
 
 
 #: The share of the votes each fold model trains on, as slide 13 draws it —
@@ -730,11 +730,11 @@ def gmm_flow_fig() -> None:
         save(
             _gmm_flow_stage(stage, fit, scores),
             OUT,
-            f"calib-gmm-flow.build{stage}.png",
+            f"calib-gmm-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-gmm-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-gmm-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _haystack_scores() -> tuple[GmmFit1D, np.ndarray]:
@@ -1276,11 +1276,11 @@ def blend_flow_fig() -> None:
         save(
             _blend_flow_stage(stage, fit, scores),
             OUT,
-            f"calib-blend-flow.build{stage}.png",
+            f"calib-blend-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-blend-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-blend-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figure:
@@ -1589,12 +1589,12 @@ def xsemi_flow_fig() -> None:
         save(
             _xsemi_flow_stage(stage, folds),
             OUT,
-            f"calib-fold-anchored-flow.build{stage}.png",
+            f"calib-fold-anchored-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-fold-anchored-flow.png", column=FULL_BLEED, box=box)
-    enforce_rendered_px(OUT / "calib-fold-anchored-flow.png", XSEMI_MARK_PT, VOTE_MARK_PX, "vote glyph")
+    save(final, OUT, "calib-fold-anchored-flow.webp", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-fold-anchored-flow.webp", XSEMI_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
@@ -2131,12 +2131,12 @@ def xquant_flow_fig() -> None:
         save(
             _xquant_flow_stage(stage, folds, final),
             OUT,
-            f"calib-quantile-flow.build{stage}.png",
+            f"calib-quantile-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final_stage, OUT, "calib-quantile-flow.png", column=FULL_BLEED, box=box)
-    enforce_rendered_px(OUT / "calib-quantile-flow.png", XQUANT_MARK_PT, VOTE_MARK_PX, "vote glyph")
+    save(final_stage, OUT, "calib-quantile-flow.webp", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-quantile-flow.webp", XQUANT_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xquant_populations() -> tuple[list[tuple[GmmFit1D, np.ndarray, dict]], np.ndarray]:
@@ -2917,11 +2917,11 @@ def knob_flow_fig() -> None:
         save(
             _knob_flow_stage(stage, scores, labels),
             OUT,
-            f"calib-knob-flow.build{stage}.png",
+            f"calib-knob-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-knob-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-knob-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -3086,11 +3086,11 @@ def walk_flow_fig() -> None:
         save(
             _walk_flow_stage(stage, corpus, scores, labels),
             OUT,
-            f"calib-walk-flow.build{stage}.png",
+            f"calib-walk-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-walk-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-walk-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -3313,11 +3313,11 @@ def tilt_flow_fig() -> None:
         save(
             _tilt_flow_stage(stage, folds, final),
             OUT,
-            f"calib-tilt-flow.build{stage}.png",
+            f"calib-tilt-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(last, OUT, "calib-tilt-flow.png", column=FULL_BLEED, box=box)
+    save(last, OUT, "calib-tilt-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
@@ -3562,7 +3562,7 @@ def blend_schedule_fig() -> None:
         va="top",
     )
     fig.text(0.06, 0.425, f"{binary} — the same at every vote count", fontsize=15, color=SOFT, va="top")
-    save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
+    save(fig, OUT, "calib-blend-schedule.webp", column=FULL_BLEED, tight=False)
 
 
 def split_idea_fig() -> None:
@@ -3586,11 +3586,11 @@ def split_idea_fig() -> None:
     save(
         _xquant_flow_stage(XQUANT_FLOW_STAGES, folds, final, numbers=False, split=True),
         OUT,
-        "calib-split-idea.build1.png",
+        "calib-split-idea.build1.webp",
         column=FULL_BLEED,
         box=box,
     )
-    save(final_stage, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
+    save(final_stage, OUT, "calib-split-idea.webp", column=FULL_BLEED, box=box)
 
 
 #: The six measured series, in legend order: the four single-vector models
@@ -3709,7 +3709,7 @@ def split_fraction_fig() -> None:
         labelspacing=0.55,
         fontsize=SPLIT_LEGEND_PT,
     )
-    save(fig, OUT, "calib-split-fraction.png", column=FULL_BLEED, tight=False)
+    save(fig, OUT, "calib-split-fraction.webp", column=FULL_BLEED, tight=False)
 
 
 def anchored_fig() -> None:
@@ -3788,7 +3788,7 @@ def anchored_fig() -> None:
     ax.spines["left"].set_visible(False)
     ax.set_title("Votes re-identify the components", loc="left", pad=14)
     fig.tight_layout()
-    save(fig, OUT, "calib-anchored-em.png")
+    save(fig, OUT, "calib-anchored-em.webp")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3928,12 +3928,12 @@ def fbeta_fig() -> None:
         save(
             _fbeta_stage(stage),
             OUT,
-            f"calib-fbeta.build{stage}.png",
+            f"calib-fbeta.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
             notch=BETA_MAX_NOTCH_PX,
         )
-    save(final, OUT, "calib-fbeta.png", column=FULL_BLEED, box=box, notch=BETA_MAX_NOTCH_PX)
+    save(final, OUT, "calib-fbeta.webp", column=FULL_BLEED, box=box, notch=BETA_MAX_NOTCH_PX)
 
 
 #: The F-beta figure's own canvas: the slide's 16:9 at nearly the teaching
@@ -4047,12 +4047,12 @@ def fmetrics_fig() -> None:
         save(
             _fmetrics_stage(stage),
             OUT,
-            f"calib-fmetrics.build{stage}.png",
+            f"calib-fmetrics.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
             notch=FMETRICS_NOTCH_PX,
         )
-    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box, notch=FMETRICS_NOTCH_PX)
+    save(final, OUT, "calib-fmetrics.webp", column=FULL_BLEED, box=box, notch=FMETRICS_NOTCH_PX)
 
 
 def _math(expr: str) -> str:
@@ -4213,8 +4213,8 @@ def fbeta_maps_fig() -> None:
     final = _fbeta_maps_stage(FBETA_MAPS_STAGES)
     box = tight_box(final)
     for stage in range(1, FBETA_MAPS_STAGES):
-        save(_fbeta_maps_stage(stage), OUT, f"calib-fbeta-maps.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-fbeta-maps.png", column=FULL_BLEED, box=box)
+        save(_fbeta_maps_stage(stage), OUT, f"calib-fbeta-maps.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-fbeta-maps.webp", column=FULL_BLEED, box=box)
 
 
 def _fbeta_maps_stage(stage: int) -> plt.Figure:
@@ -4662,8 +4662,8 @@ def patch_fig() -> None:
     final = _patch_stage(PATCH_STAGES)
     box = tight_box(final)
     for stage in range(1, PATCH_STAGES):
-        save(_patch_stage(stage), OUT, f"calib-patches.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-patches.png", column=FULL_BLEED, box=box)
+        save(_patch_stage(stage), OUT, f"calib-patches.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-patches.webp", column=FULL_BLEED, box=box)
 
 
 def _patch_cell(row: int, col: int) -> tuple[float, float, float]:
@@ -4838,8 +4838,8 @@ def region_max_fig() -> None:
     final = _region_max_stage(REGION_MAX_STAGES)
     box = tight_box(final)
     for stage in range(1, REGION_MAX_STAGES):
-        save(_region_max_stage(stage), OUT, f"calib-region-max.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-region-max.png", column=FULL_BLEED, box=box)
+        save(_region_max_stage(stage), OUT, f"calib-region-max.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-region-max.webp", column=FULL_BLEED, box=box)
 
 
 def _maxima(rng_seed: int = 5) -> np.ndarray:
@@ -5201,10 +5201,10 @@ def em_steps_fig() -> None:
         final = _em_stage(EM_STAGES, sample, votes)
         box = tight_box(final)
         for stage in range(1, EM_STAGES):
-            save(_em_stage(stage, sample, votes), OUT, f"{name}.build{stage}.png", column=FULL_BLEED, box=box)
-        save(final, OUT, f"{name}.png", column=FULL_BLEED, box=box)
+            save(_em_stage(stage, sample, votes), OUT, f"{name}.build{stage}.webp", column=FULL_BLEED, box=box)
+        save(final, OUT, f"{name}.webp", column=FULL_BLEED, box=box)
         if votes:
-            enforce_rendered_px(OUT / f"{name}.png", EM_MARK_PT, VOTE_MARK_PX, "vote glyph")
+            enforce_rendered_px(OUT / f"{name}.webp", EM_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figure:
@@ -5445,8 +5445,8 @@ def labels_line_fig() -> None:
     final = _ll_stage(LL_STAGES)
     box = tight_box(final)
     for page, stage in enumerate(range(LL_FIRST_SHOWN, LL_STAGES), start=1):
-        save(_ll_stage(stage), OUT, f"calib-labels-line.build{page}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-labels-line.png", column=FULL_BLEED, box=box)
+        save(_ll_stage(stage), OUT, f"calib-labels-line.build{page}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-labels-line.webp", column=FULL_BLEED, box=box)
 
 
 #: The rows' left edge and width: the same indent and right margin as
@@ -5629,8 +5629,8 @@ def labels_fit_fig() -> None:
     final = _lf_stage(LF_STAGES)
     box = tight_box(final)
     for stage in range(1, LF_STAGES):
-        save(_lf_stage(stage), OUT, f"calib-labels-fit.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-labels-fit.png", column=FULL_BLEED, box=box)
+        save(_lf_stage(stage), OUT, f"calib-labels-fit.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-labels-fit.webp", column=FULL_BLEED, box=box)
 
 
 def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
@@ -5710,8 +5710,8 @@ def acq_flow_fig() -> None:
     final = _acq_flow_stage(ACQ_FLOW_STAGES)
     box = tight_box(final)
     for stage in range(1, ACQ_FLOW_STAGES):
-        save(_acq_flow_stage(stage), OUT, f"calib-acq-flow.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-acq-flow.png", column=FULL_BLEED, box=box)
+        save(_acq_flow_stage(stage), OUT, f"calib-acq-flow.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-acq-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
@@ -5864,8 +5864,8 @@ def transfer_fig() -> None:
     final = _tx_stage(TX_STAGES)
     box = tight_box(final)
     for stage in range(1, TX_STAGES):
-        save(_tx_stage(stage), OUT, f"calib-transfer.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-transfer.png", column=FULL_BLEED, box=box)
+        save(_tx_stage(stage), OUT, f"calib-transfer.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-transfer.webp", column=FULL_BLEED, box=box)
 
 
 def _tx_at(column: tuple[float, float], logit: float | np.ndarray) -> np.ndarray:
@@ -6076,8 +6076,8 @@ def out_standing_fig() -> None:
     final = _so_stage(SO_STAGES)
     box = tight_box(final)
     for stage in range(1, SO_STAGES):
-        save(_so_stage(stage), OUT, f"calib-out-standing.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-out-standing.png", column=FULL_BLEED, box=box)
+        save(_so_stage(stage), OUT, f"calib-out-standing.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-out-standing.webp", column=FULL_BLEED, box=box)
 
 
 def _so_x(score: float | np.ndarray) -> np.ndarray:
@@ -6432,8 +6432,8 @@ def lay_of_the_land_fig() -> None:
     final = _land_stage(LAND_STAGES)
     box = tight_box(final)
     for stage in range(1, LAND_STAGES):
-        save(_land_stage(stage), OUT, f"calib-lay-of-the-land.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-lay-of-the-land.png", column=FULL_BLEED, box=box)
+        save(_land_stage(stage), OUT, f"calib-lay-of-the-land.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-lay-of-the-land.webp", column=FULL_BLEED, box=box)
 
 
 def _land_cell(b: float, g: float) -> tuple[float, float, float, float]:
@@ -6759,8 +6759,8 @@ def weak_spot_fig() -> None:
     final = _ws_stage(WS_STAGES)
     box = tight_box(final)
     for stage in range(1, WS_STAGES):
-        save(_ws_stage(stage), OUT, f"calib-weak-spot.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-weak-spot.png", column=FULL_BLEED, box=box)
+        save(_ws_stage(stage), OUT, f"calib-weak-spot.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-weak-spot.webp", column=FULL_BLEED, box=box)
 
 
 @functools.lru_cache(maxsize=None)
@@ -6960,8 +6960,8 @@ def doc_balance_fig() -> None:
     final = _doc_stage(DOC_STAGES)
     box = tight_box(final)
     for stage in range(1, DOC_STAGES):
-        save(_doc_stage(stage), OUT, f"logo-balance.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "logo-balance.png", column=FULL_BLEED, box=box)
+        save(_doc_stage(stage), OUT, f"logo-balance.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "logo-balance.webp", column=FULL_BLEED, box=box)
 
 
 def _hatched_dot(ax: plt.Axes, xy: tuple[float, float], r: float, good: bool, z: float = 4) -> None:
@@ -7188,8 +7188,8 @@ def floor_ask_fig() -> None:
     final = _floor_stage(FLOOR_ASK_STAGES, "ask")
     box = tight_box(final)
     for stage in range(1, FLOOR_ASK_STAGES):
-        save(_floor_stage(stage, "ask"), OUT, f"calib-floor-ask.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-floor-ask.png", column=FULL_BLEED, box=box)
+        save(_floor_stage(stage, "ask"), OUT, f"calib-floor-ask.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-floor-ask.webp", column=FULL_BLEED, box=box)
 
 
 def floor_check_fig() -> None:
@@ -7208,8 +7208,8 @@ def floor_check_fig() -> None:
     final = _floor_stage(FLOOR_CHECK_STAGES, "check")
     box = tight_box(final)
     for stage in range(1, FLOOR_CHECK_STAGES):
-        save(_floor_stage(stage, "check"), OUT, f"calib-floor-check.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-floor-check.png", column=FULL_BLEED, box=box)
+        save(_floor_stage(stage, "check"), OUT, f"calib-floor-check.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-floor-check.webp", column=FULL_BLEED, box=box)
 
 
 # ── Clopper–Pearson, on its own (#4517) ──────────────────────────────────────
@@ -7247,8 +7247,8 @@ def clopper_fig() -> None:
     final = _cp_stage(CP_STAGES)
     box = tight_box(final)
     for stage in range(1, CP_STAGES):
-        save(_cp_stage(stage), OUT, f"calib-clopper.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-clopper.png", column=FULL_BLEED, box=box)
+        save(_cp_stage(stage), OUT, f"calib-clopper.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-clopper.webp", column=FULL_BLEED, box=box)
 
 
 def _cp_x(share: float) -> float:

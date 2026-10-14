@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/autopilot-stable.png)
+![bg fit](figs/autopilot-stable.webp)
 
 ## Change<br>of Heart
 
-<!-- build: figs/autopilot-stable.build1.png -->
+<!-- build: figs/autopilot-stable.build1.webp -->
 
-<!-- build: figs/autopilot-stable.build2.png -->
+<!-- build: figs/autopilot-stable.build2.webp -->
 
-<!-- build: figs/autopilot-stable.build3.png -->
+<!-- build: figs/autopilot-stable.build3.webp -->
 
 <!-- **a** — Stable: is it still changing its mind? Every unvoted photo, last
      retrain on top, this one below. Most barely move. -->

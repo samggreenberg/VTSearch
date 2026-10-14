@@ -4,9 +4,9 @@
   Layout options (pick one, delete the rest, and swap in your own figure).
   Paths are relative to slides/, not to this file:
 
-    ![bg right:56% fit](figs/cost-traces.png)   figure right, text left
-    ![bg left:56% fit](figs/cost-traces.png)    figure left, text right
-    ![bg fit](figs/cost-traces.png)             full bleed (with _class: full)
+    ![bg right:56% fit](figs/cost-traces.webp)   figure right, text left
+    ![bg left:56% fit](figs/cost-traces.webp)    figure left, text right
+    ![bg fit](figs/cost-traces.webp)             full bleed (with _class: full)
 
   Slide classes: lead (title), statement (one big claim), outline (the deck's
   opening "where this goes" list), full (edge-to-edge figure), caveat (quiet

@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-region-max.png)
+![bg fit](figs/calib-region-max.webp)
 
 ## Extreme<br>Measures
 
-<!-- build: figs/calib-region-max.build1.png -->
+<!-- build: figs/calib-region-max.build1.webp -->
 
-<!-- build: figs/calib-region-max.build2.png -->
+<!-- build: figs/calib-region-max.build2.webp -->
 
-<!-- build: figs/calib-region-max.build3.png -->
+<!-- build: figs/calib-region-max.build3.webp -->
 
 <!-- **a** — Back to that maximum. Two photos in regions, one with a book, one
      without. -->

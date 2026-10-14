@@ -1,6 +1,6 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-blend-schedule.png)
+![bg fit](figs/calib-blend-schedule.webp)
 
 ## Weight and See
 

@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-bands.png)
+![bg fit](figs/test-bands.webp)
 
 ## Band<br>Practice
 
-<!-- build: figs/test-bands.build1.png -->
+<!-- build: figs/test-bands.build1.webp -->
 
-<!-- build: figs/test-bands.build2.png -->
+<!-- build: figs/test-bands.build2.webp -->
 
-<!-- build: figs/test-bands.build3.png -->
+<!-- build: figs/test-bands.build3.webp -->
 
 <!-- **a** — First idea: bands, like Spot Check: top 8, next 8, then 16,
      doubling. -->

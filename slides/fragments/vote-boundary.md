@@ -1,26 +1,26 @@
 <!-- _class: full -->
 
-![bg fit](figs/vote-boundary.png)
+![bg fit](figs/vote-boundary.webp)
 
 ## Pics on a Plane
 
-<!-- build: figs/vote-boundary.build1.png -->
+<!-- build: figs/vote-boundary.build1.webp -->
 
-<!-- build: figs/vote-boundary.build2.png -->
+<!-- build: figs/vote-boundary.build2.webp -->
 
-<!-- build: figs/vote-boundary.build3.png -->
+<!-- build: figs/vote-boundary.build3.webp -->
 
-<!-- build: figs/vote-boundary.build4.png -->
+<!-- build: figs/vote-boundary.build4.webp -->
 
-<!-- build: figs/vote-boundary.build5.png -->
+<!-- build: figs/vote-boundary.build5.webp -->
 
-<!-- build: figs/vote-boundary.build6.png -->
+<!-- build: figs/vote-boundary.build6.webp -->
 
-<!-- build: figs/vote-boundary.build7.png -->
+<!-- build: figs/vote-boundary.build7.webp -->
 
-<!-- build: figs/vote-boundary.build8.png -->
+<!-- build: figs/vote-boundary.build8.webp -->
 
-<!-- build: figs/vote-boundary.build9.png -->
+<!-- build: figs/vote-boundary.build9.webp -->
 
 <!-- **a** — Content space, flattened. Each circle's a photo, near means
      similar, and a detector's just a boundary through here. -->

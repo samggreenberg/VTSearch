@@ -68,7 +68,7 @@ across the whole slot — except the top-left corner, which every full-bleed
 slide reserves for its headline (`slide_figure.TITLE_NOTCH_PX`). Items are
 rejected from that rectangle rather than the title being moved, because the
 notch is a fixed standard and a headline that dodges each figure stops being a
-headline. The figure is saved untrimmed (`tight=False`) so the PNG *is* the
+headline. The figure is saved untrimmed (`tight=False`) so the image *is* the
 16:9 window and the reserve lands where the arithmetic says it does.
 
 **On the build rule.** `slides/STYLE.md` says a reveal adds ink and nothing
@@ -130,7 +130,7 @@ plt.rcParams.update(
 
 #: The figure is a 16:9 canvas — the whole full-bleed slot — drawn at this many
 #: printed points per unit, which fixes the size everything else is expressed
-#: in. Every stage is saved untrimmed, so the PNG has exactly this aspect and
+#: in. Every stage is saved untrimmed, so the image has exactly this aspect and
 #: the title notch falls exactly where `slide_figure` says it does.
 UNIT_PT = 46.0
 CANVAS = (16.0, 9.0)
@@ -314,7 +314,7 @@ def _notch_rect() -> tuple[float, float, float, float]:
 
     `slide_figure.notch_box` returns figure fractions, which are exact here
     because the figure is saved untrimmed at the slot's own 16:9 aspect: the
-    PNG *is* the window, so a fraction of the image is the same fraction of
+    image *is* the window, so a fraction of the image is the same fraction of
     the canvas.
     """
     box = notch_box(*CANVAS, FULL_BLEED, VOTE_NOTCH_PX)
@@ -1353,7 +1353,7 @@ def vote_boundary_fig() -> None:
         save(
             _vote_boundary_stage(stage),
             OUT,
-            f"vote-boundary.build{stage}.png",
+            f"vote-boundary.build{stage}.webp",
             column=FULL_BLEED,
             tight=False,
             notch=VOTE_NOTCH_PX,
@@ -1361,7 +1361,7 @@ def vote_boundary_fig() -> None:
     save(
         _vote_boundary_stage(VOTE_BOUNDARY_STAGES),
         OUT,
-        "vote-boundary.png",
+        "vote-boundary.webp",
         column=FULL_BLEED,
         tight=False,
         notch=VOTE_NOTCH_PX,
@@ -1380,7 +1380,7 @@ def second_cut_fig() -> None:
     save(
         _vote_boundary_stage(FLASHBACK_STAGE, ask_inside=True),
         OUT,
-        "vote-boundary-second-cut.png",
+        "vote-boundary-second-cut.webp",
         column=FULL_BLEED,
         tight=False,
         notch=VOTE_NOTCH_PX,
@@ -1840,14 +1840,14 @@ def embed_flow_fig() -> None:
         save(
             _embed_flow_stage(stage),
             OUT,
-            f"embed-flow.build{stage}.png",
+            f"embed-flow.build{stage}.webp",
             column=FULL_BLEED,
             tight=False,
         )
     save(
         _embed_flow_stage(EMBED_FLOW_STAGES),
         OUT,
-        "embed-flow.png",
+        "embed-flow.webp",
         column=FULL_BLEED,
         tight=False,
     )

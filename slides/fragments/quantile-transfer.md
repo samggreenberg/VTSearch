@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-quantile-flow.png)
+![bg fit](figs/calib-quantile-flow.webp)
 
 ## No Mean Feat
 
-<!-- build: figs/calib-quantile-flow.build4.png -->
+<!-- build: figs/calib-quantile-flow.build4.webp -->
 
-<!-- build: figs/calib-quantile-flow.build5.png -->
+<!-- build: figs/calib-quantile-flow.build5.webp -->
 
-<!-- build: figs/calib-quantile-flow.build6.png -->
+<!-- build: figs/calib-quantile-flow.build6.webp -->
 
 <!-- **a** — The mixture line, before the labels line. Each half has its own
      cut, but the answer has to live on M₀'s scale, on the right. -->

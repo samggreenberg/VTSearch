@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/atlas-pvalues.png)
+![bg fit](figs/atlas-pvalues.webp)
 
 ## A Likely Story
 
 <div class="asof">Measured 2026-08-30</div>
 
-<!-- build: figs/atlas-pvalues.build1.png -->
+<!-- build: figs/atlas-pvalues.build1.webp -->
 
 <!-- **a** — That answer's a p-value, so on fresh photos from the same place it
      should land under 5% about 5% of the time. Ours does 4.3%. The usual check,

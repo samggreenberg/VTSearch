@@ -1,20 +1,20 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-xcal-flow.png)
+![bg fit](figs/calib-xcal-flow.webp)
 
 ## Grade My Own<br>Homework
 
-<!-- build: figs/calib-xcal-flow.build1.png -->
+<!-- build: figs/calib-xcal-flow.build1.webp -->
 
-<!-- build: figs/calib-xcal-flow.build2.png -->
+<!-- build: figs/calib-xcal-flow.build2.webp -->
 
-<!-- build: figs/calib-xcal-flow.build3.png -->
+<!-- build: figs/calib-xcal-flow.build3.webp -->
 
-<!-- build: figs/calib-xcal-flow.build4.png -->
+<!-- build: figs/calib-xcal-flow.build4.webp -->
 
-<!-- build: figs/calib-xcal-flow.build5.png -->
+<!-- build: figs/calib-xcal-flow.build5.webp -->
 
-<!-- build: figs/calib-xcal-flow.build6.png -->
+<!-- build: figs/calib-xcal-flow.build6.webp -->
 
 <!-- **a** — So where should the line go? The textbook answer: train M₀ on
      every vote so far, D₀. But M₀ scoring its own votes is grading its own
