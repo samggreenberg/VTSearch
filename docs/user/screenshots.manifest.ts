@@ -434,15 +434,18 @@ const ROSY_TEXT = 'yellow smiley face with rosy cheeks';
  *
  * One kind, not two: piles that were each half yellow smileys, half yellow
  * faces came out at a separation of 2.3, over the 1.5 that makes a check due,
- * so the shot waited for a check that never came (#4862). Five yellow smileys
- * a side measure 0.13.
+ * so the shot waited for a check that never came (#4862). Five yellow faces a
+ * side measure 0.50 in the app refresh.sh starts and 0.26 after a restart.
+ * Ten yellow smileys are no good: 0.13 after a restart, but 2.69 in the
+ * process that imported the fixtures, which is the one refresh.sh shoots in
+ * (#4892).
  */
 const OVERLAP = 'Overlapping Smileys';
 
-/** The Overlapping Smileys detector's labels: ten yellow smileys, five in each pile. */
+/** The Overlapping Smileys detector's labels: ten yellow faces, none smiling, five in each pile. */
 function overlapVotes(): { good: string[]; bad: string[] } {
-  const smileys = framesOf(corpus(TRAIN_DATASET).pictures, 'yellow-smiley', 10);
-  return { good: smileys.slice(0, 5), bad: smileys.slice(5) };
+  const faces = framesOf(corpus(TRAIN_DATASET).pictures, 'yellow-face', 10);
+  return { good: faces.slice(0, 5), bad: faces.slice(5) };
 }
 
 type Drawing = { kind: string; objects: { shape: string; color: string; smiling?: boolean; cheeks?: boolean }[] };
