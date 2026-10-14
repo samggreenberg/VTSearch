@@ -342,6 +342,20 @@ class TestTheDefaultArmDrawsTheLabelsLine:
         assert all(np.isfinite(r["find_prevalence"]) and 0.0 < r["find_prevalence"] <= 0.5 for r in drawn)
         assert all(np.isfinite(r["train_threshold"]) for r in drawn)
 
+    def test_base_rows_carry_the_line_s_own_reading(self):
+        """#4878: the expected F-beta the line gives itself, on Train at the row's beta, beside the labels' d'."""
+        rows = _run_safe_uncached("max_patch", beta=None)
+        base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
+        drawn = [r for r in base if np.isfinite(r["train_prevalence"])]
+        assert drawn, "the default arm never drew the labels' line"
+        for r in drawn:
+            assert 0.0 <= r["line_efbeta"] <= 1.0 and 0.0 <= r["line_efbeta_fresh"] <= 1.0, r
+            assert np.isfinite(r["line_separation"]) and r["line_head_count"] in (0, 1), r
+        undrawn = [r for r in base if not np.isfinite(r["train_prevalence"])]
+        assert all(np.isnan(r["line_efbeta"]) and r["line_head_count"] == -1 for r in undrawn)
+        variants = [r for r in rows if r["gmm_variant"] != "" or r["pool_variant"] != "max"]
+        assert all(np.isnan(r["line_efbeta"]) for r in variants), "only the base row reads the line"
+
 
 class TestTheWiderWorldKnobs:
     """#4452: the withheld half's scores are kept for post-hoc Find scenarios, and the Train pool can shrink."""

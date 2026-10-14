@@ -641,6 +641,16 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "train_threshold",
     "train_prevalence",
     "find_prevalence",
+    # #4878: the labels line's own reading of how well it does, on Train at the row's beta - what a stop rule in
+    # the objective's units would read.  ``line_efbeta`` is the expected F-beta at its cut over the Train corpus's
+    # unvoted items (what ``corpus_cut`` maximises), ``line_efbeta_fresh`` the class model's on a fresh corpus
+    # like it (``parametric_expected_fbeta``), ``line_separation`` the labels' d', and ``line_head_count`` 1 where
+    # the head's count line served (#4786), 0 where the class model's cut did, -1 with no line.  NaN / -1 off
+    # the base row and with no balance.
+    "line_efbeta",
+    "line_efbeta_fresh",
+    "line_separation",
+    "line_head_count",
     "gmm_cut",
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base

@@ -19,11 +19,13 @@ from vtscore.training.thresholds import (
     ClassScoreModel,
     LabelsLine,
     class_score_model,
+    corpus_expected_fbeta,
     corpus_prevalence,
     corpus_sigma_floor,
     estimate_positives,
     fit_labels_line,
     labels_line_threshold,
+    parametric_expected_fbeta,
 )
 from vtscore.training.thresholds.labels_line import (
     MIN_LOGIT_SIGMA,
@@ -117,6 +119,50 @@ class TestTheThreshold:
         assert labels_line_threshold(m, 0.01, 1.0) == labels_line_threshold(m, 0.01, 1.0)
         line = LabelsLine(m, 0.01)
         assert line.threshold(1.0) == labels_line_threshold(m, 0.01, 1.0)
+
+
+class TestTheLinesOwnReading:
+    """#4878: what the line expects of itself, read where it cuts - the quantity a stop rule in F-beta would watch."""
+
+    def test_the_counted_reading_is_the_expected_f_beta_of_the_set_the_cut_keeps(self):
+        line = fit_labels_line(_orderings(), _corpus(), None, {})
+        assert line is not None and line.unvoted_scores is not None and line.unvoted_posteriors is not None
+        assert line.unvoted_share is not None
+        for beta in (0.25, 1.0, 4.0):
+            kept = line.unvoted_scores >= line.threshold(beta)
+            tp = float(line.unvoted_posteriors[kept].sum())
+            pos = max(line.unvoted_share * line.unvoted_scores.size, float(line.unvoted_posteriors.sum()))
+            want = (1 + beta**2) * tp / (beta**2 * pos + int(kept.sum()))
+            assert line.expected_fbeta(beta) == pytest.approx(want, rel=1e-9)
+            assert corpus_expected_fbeta(line.unvoted_posteriors, pos, beta) == pytest.approx(want, rel=1e-9)
+
+    def test_the_fresh_reading_is_the_parametric_line_s_peak(self):
+        m = class_score_model(_orderings())
+        assert m is not None
+        for beta in (0.25, 1.0, 4.0):
+            cut = labels_line_threshold(m, 0.01, beta)
+            s1, s0 = m.survival(cut)
+            want = (1 + beta**2) * 0.01 * s1 / (0.01 * s1 + beta**2 * 0.01 + 0.99 * s0)
+            assert parametric_expected_fbeta(m, 0.01, beta) == pytest.approx(want, rel=1e-6)
+        line = LabelsLine(m, 0.01)
+        assert line.expected_fbeta(1.0) == line.expected_fbeta_fresh(1.0) == parametric_expected_fbeta(m, 0.01, 1.0)
+
+    def test_both_readings_rise_as_the_labels_separate(self):
+        weak = fit_labels_line(_orderings(), _corpus(), None, {})
+        rng = np.random.default_rng(0)
+        sharp_orderings = [
+            (list(_sig(rng.normal(3, 0.6, 10))) + list(_sig(rng.normal(-1, 0.6, 30))), [1.0] * 10 + [0.0] * 30)
+            for _ in range(2)
+        ]
+        sharp = fit_labels_line(sharp_orderings, _corpus(), None, {})
+        assert weak is not None and sharp is not None
+        assert sharp.separation > weak.separation
+        assert sharp.expected_fbeta_fresh(1.0) > weak.expected_fbeta_fresh(1.0)
+        assert 0.0 < weak.expected_fbeta(1.0) <= 1.0 and 0.0 < sharp.expected_fbeta(1.0) <= 1.0
+
+    def test_a_corpus_with_nothing_to_keep_reads_zero(self):
+        assert corpus_expected_fbeta(np.zeros(5), 0.0, 1.0) == 0.0
+        assert corpus_expected_fbeta(np.zeros(0), 0.0, 1.0) == 0.0
 
 
 class TestThePrevalence:

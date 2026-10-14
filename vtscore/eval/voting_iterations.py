@@ -109,6 +109,7 @@ from vtscore.training.thresholds import (
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
+    LabelsLine,
     LineRanking,
     SpotCheck,
     balance_line,
@@ -118,6 +119,7 @@ from vtscore.training.thresholds import (
     done_check_due,
     fbeta_count,
     fit_labels_line,
+    head_count_serves,
     weak_check_due,
     weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
@@ -1260,6 +1262,24 @@ def _standalone_calibration_row(
     return row
 
 
+def _line_reading(line: "LabelsLine | None", beta: float | None) -> dict[str, Any]:
+    """The labels line's own reading of how well it does, on Train at *beta* (#4878); nothing with no line.
+
+    What a stop rule in the objective's units would read, and the app has all of
+    it at every retrain: the expected F-beta at the line's cut over the corpus's
+    unvoted items and on a fresh corpus like it, the labels' d', and whether the
+    head's count line served.
+    """
+    if line is None or beta is None:
+        return {}
+    return {
+        "line_efbeta": round6(line.expected_fbeta(float(beta))),
+        "line_efbeta_fresh": round6(line.expected_fbeta_fresh(float(beta))),
+        "line_separation": round6(float(line.separation)),
+        "line_head_count": int(head_count_serves(line.model)),
+    }
+
+
 def _calibration_metric_rows(
     step: StepModel,
     threshold: float,
@@ -1340,6 +1360,7 @@ def _calibration_metric_rows(
     base["train_threshold"] = round6(float(train_threshold))
     base["train_prevalence"] = round6(float(details.get("train_prevalence", float("nan"))))
     base["find_prevalence"] = round6(find_prevalence)
+    base.update(_line_reading(find_line, details.get("beta")))
     # How many held-out scores the conformal quantile was actually taken over,
     # on the SHIPPED row rather than only on the fold-count variant rows (issue
     # #3287).  It was declared in `CALIBRATION_COLUMNS` and filled only by the
