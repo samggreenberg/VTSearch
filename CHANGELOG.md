@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Faces work in every Docker image** (issue #4886). No image installed `facenet-pytorch`, so in a container
+  the Images → Faces converter found no faces (with only a log warning), and the face localizer and the
+  FaceNet embedder failed to load. Every `docker/Dockerfile*` now installs it, `--no-deps` as
+  `scripts/install.sh` does. FaceNet's weights also now always download into the model cache
+  (`VTSEARCH_MODELS_DIR`, else `data/models`) rather than under `$HOME`; a host that already holds
+  them in `~/.cache/torch` fetches them once more (~107 MB).
 - **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
   and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
   2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with
