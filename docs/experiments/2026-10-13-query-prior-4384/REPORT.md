@@ -52,16 +52,21 @@ every preset. At beta 4 today's head starts below the query it replaces; the arm
   checks by vote 50 fall from 7.7 to 5.0 at beta 1, while the checks find 7.5 against 5.2. By vote 150 the gap
   is 0.4-0.8 of 28-29 Goods, under two SEs at each preset. It sits in the large-instance classes (beta 1:
   -2.2 of 40 Goods; small and medium: 0.0 and -0.1). There the arm reaches Done earlier: its head settles
-  sooner, and the first Done vote's median moves from 68/71/82 to 56/60/68. **At scale 3** (beta 1 only):
+  sooner, and the first Done vote's median moves from 68/71/82 to 56/60/68. **At scale 3** (priced at every
+  preset on 2026-10-14, the owner's call before the build):
 
-  | beta 1 | scale 3 minus today | scale 3 minus scale 10 |
-  |---|---|---|
-  | the objective, votes 1-150 | +0.010 ± 0.001 (seeds +0.009 to +0.011) | -0.002 ± 0.002 |
-  | AP of the set on screen, votes 1-150 | +0.012 ± 0.001 | -0.008 ± 0.002 |
-  | Goods at vote 25 / 150 | -0.2 ± 0.1 / -0.1 ± 0.2 | +0.9 ± 0.2 / +0.7 ± 0.4 |
+  | scale 3 | beta ¼ | beta 1 | beta 4 |
+  |---|---|---|---|
+  | objective 1-150, minus today | +0.010 ± 0.002 | +0.010 ± 0.001 | +0.011 ± 0.001 |
+  | the five seeds | +0.008 to +0.014 | +0.009 to +0.011 | +0.009 to +0.014 |
+  | Goods at vote 25 / 150, minus today | -0.1 / -0.0 ± 0.2 | -0.2 / -0.1 ± 0.2 | -0.2 / +0.2 ± 0.2 |
+  | objective 1-150, minus scale 10 | -0.002 ± 0.003 | -0.002 ± 0.002 | **-0.007 ± 0.002** (every seed) |
+  | AP of the set on screen 1-150, minus scale 10 | -0.008 ± 0.002 | -0.008 ± 0.002 | -0.007 ± 0.002 |
+  | Goods at vote 150, minus scale 10 | +0.6 ± 0.3 | +0.7 ± 0.4 | +0.6 ± 0.4 |
 
-  So the scale trades ranking for Goods: scale 10 ranks better (AP +0.008), scale 3 keeps the Goods, and the
-  objective cannot tell them apart at 720 runs.
+  So the scale trades ranking for Goods. Scale 3 gains at every preset and loses no Goods. Scale 10 ranks
+  better everywhere (AP +0.008), ties scale 3 on the objective at beta ¼ and 1, and beats it at beta 4
+  (+0.007), at the price of about 0.6 Goods by vote 150.
 - **The hold no longer matters under the arm.** The arm's head over votes 1-25 is as good as the typed
   query's set (0.476 against 0.464 at beta ¼, 0.364 against 0.364 at beta 1, 0.462 against 0.468 at beta 4).
   Re-priced offline (the hold changes no pick), every hold from 0 to 30 labels is within 0.003 of 30 at every
@@ -125,7 +130,8 @@ cell.
   `scripts/experiments/state_of_app/queryprior_4384.sh`:
   - the control, today's app with the shadow on: `state-of-the-app/2026-10-13-qp4384ctl-b{025,1,4}`;
   - the arm at scale 10: `2026-10-13-qp4384arm10-b{025,1,4}`;
-  - the arm at scale 3, beta 1: `2026-10-13-qp4384arm3-b1`.
+  - the arm at scale 3: `2026-10-13-qp4384arm3-b1` (2026-10-13) and `-b025`, `-b4` (2026-10-14, see the venv
+    below).
 - **The shadow** (`CALIB_QUERY_PRIOR_SHADOW=1`, `vtscore/eval/arms_query_prior.py`) records, at every vote a
   trained head is drawn, where the withheld positives sit under candidate heads refitted on the control's
   own votes (`task_NNNN__queryprior.csv`). It is open loop: the votes are today's, so it prices ranking only.
@@ -134,10 +140,15 @@ cell.
   The single number is its mean over votes 1-150, the area under the curve. Every run is in every average
   (#4631). Differences are paired per run, with SEs clustered on the 48 classes.
 - **Analysis**: `scripts/experiments/state_of_app/queryprior_4384.py` (`extract`, `shadow`, `pair`,
-  `figures`, `examples`). Tables: `pair.md` (every preset), `pair_s3.md` (scale 3), `shadow.md`,
+  `figures`, `examples`). Tables: `pair.md` (every preset), `pair_s3.md` (scale 3 against today and against scale 10, every preset), `shadow.md`,
   `examples.md`; per class `per_class.csv`.
-- **The venv.** Every session and the analysis ran on torch 2.6.0 and transformers 5.17. The app venv moved
-  to torch 2.14.1 after them (#4838).
+- **The venv.** Every session of 2026-10-13 ran on torch 2.6.0 and transformers 5.17. The app venv moved to
+  torch 2.14.1 and transformers 5.19 overnight (#4838), so scale 3 at beta ¼ and 4 ran on the new one. Before
+  pairing it with the old control, 18 cells were re-run on the new venv. The control's six cells at beta ¼
+  and at beta 4 were identical click for click and row for row. Scale 3's six at beta 1 picked identically,
+  with F-beta, precision, recall and the count kept identical (thresholds within 1e-6, from the query's
+  embedding). Only the tagged `pooled_sim_oracle_*` and `pooled_bagfit_*` diagnostics, which no number here
+  reads, moved.
 
 **Checks.**
 - **The shadow does not touch the session.** Two cells run with the shadow on and off picked identically
@@ -153,7 +164,8 @@ cell.
 
 - **The build.** A typed-query detector on a single-vector space would pass its query's embedding to every
   head fit (`embed_detector_query`, as Find's query tier already embeds it), explicitly rather than through
-  the eval's process-wide knob. The scale is open: 10 ranks better, 3 keeps the Goods.
+  the eval's process-wide knob. The scale is the owner's: 10 ranks better and wins at beta 4, 3 keeps the
+  Goods.
 - **#4384's three pools** (0.44%, 0.1%, 5%): priced at the three presets instead, as every review since
-  #4448. Scale 3 at beta ¼ and 4 is unpriced.
+  #4448.
 - **The hold** can be revisited once the build lands: under the arm it is worth nothing either way.
