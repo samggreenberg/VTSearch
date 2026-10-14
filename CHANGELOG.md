@@ -228,6 +228,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **EmbeddingGemma 2 embedders, for images and for audio** (issue #4837). Two new choices in the embedder picker:
+  **EmbeddingGemma 2 (images)** and **EmbeddingGemma 2 (audio)**, both built on Google's `embeddinggemma-2`,
+  which puts text, images and sound in one space. Neither is a default.
+  - **The image one** finds more than SigLIP on every photo set measured: on COCO Better, a session's withheld
+    F-beta is +0.08 to +0.09 higher at every balance, and typed descriptions alone rank better (AP 0.42 → 0.50).
+    It embeds 11–22× slower on a GPU and about 38× slower on a CPU (about 10 s a photo).
+  - **The audio one** finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
+    but is weaker than CLAP on other sounds and music.
+  - **Needs transformers 5.18 or newer.** Selecting it in an older environment says so (#4838).
 - **Collapse to photos** (issue #4751). In Train and Test, a Face dataset whose import also made an
   Image dataset has a **Show: Faces | Photos** switch under the list's header. **Photos** shows the
   ranking as the photos the faces were cut from: each photo once, in the place of its best face,
