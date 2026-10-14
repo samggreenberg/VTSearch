@@ -512,9 +512,10 @@ section.speaker .speaker-hero img {
    picked per fragment by `<!-- frames: ... -->`:
 
      build   the reveals of one picture. The last frame holds all of them, so
-             it is the hero above and this strip is the steps that got there,
-             in the smallest square grid that holds them: one frame the
-             hero's size, up to four in 2x2, up to nine in 3x3 (#4884).
+             it is the hero, under this strip of the steps that got there,
+             which runs in letter order in the smallest square grid that
+             holds them: one frame the hero's size, up to four in 2x2, up to
+             nine in 3x3 (#4884).
      equal   reveals of equal standing: three screens of a click-through, six
              votes in a row. There is no frame that contains the others, so
              there is no hero, and the space it would have taken is shared out
@@ -528,7 +529,7 @@ section.speaker .speaker-frames {
   flex-wrap: wrap;
   gap: 10px;
 }
-section.speaker .speaker-hero + .speaker-frames { margin-top: 18px; }
+section.speaker .speaker-frames + .speaker-hero { margin-top: 18px; }
 section.speaker .speaker-frames figure {
   margin: 0;
   position: relative;

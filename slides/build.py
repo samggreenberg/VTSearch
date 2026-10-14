@@ -398,7 +398,7 @@ VISUAL_W = VISUAL_FRACTION * SPEAKER_W
 VISUAL_GUTTER = 34
 FRAME_GAP = 10
 FRAME_BORDER = 2
-#: Gap between the hero miniature and the strip of frames under it.
+#: Gap between the strip of earlier frames and the hero miniature under it.
 STRIP_TOP = 18
 SLIDE_ASPECT = 9 / 16
 
@@ -428,8 +428,10 @@ def frame_columns(count: int, style: str) -> int:
     as wide as it can without leaving a widow: two up to four (a square), three
     beyond, and it never shrinks itself to buy room for prose.
 
-    A **build-up** puts its last frame on top, as the hero, and the earlier
-    frames under it in the smallest square grid that holds them: one column for
+    A **build-up** puts its earlier frames first, in letter order, in the
+    smallest square grid that holds them, and its last frame under them as the
+    hero, so the column reads a, b, c … and ends on the slide (owner, #4884:
+    the hero on top made the order e, a, b, c, d). One column for
     one earlier frame, so a two-frame build shows both frames at one size; two
     up to four; three up to nine; four up to sixteen (owner, #4884: "don't take
     4x4 until you need it"). The presenter has to recognise those frames, not
@@ -516,9 +518,10 @@ def frame_overview(deck: str, pages: list[int], group: list[int], style: str) ->
 
     A **build-up** — the default, and what a `<!-- build -->` marker usually
     means — reveals one picture in stages, so only the last frame holds all of
-    it. That frame is the hero, drawn big, and the rest sit under it small: the
-    presenter needs to *read* the slide they are on and only needs to
-    *recognise* the steps that got there.
+    it. That frame is the hero, drawn big under the rest, which sit above it
+    in letter order: the presenter needs to *read* the slide they are on and
+    only needs to *recognise* the steps that got there, and the column reads in
+    the order the room sees it.
 
     An **equal-weight** group has no such last frame. Its reveals are different
     pictures of equal standing — three screens of a click-through, six votes in
@@ -534,18 +537,19 @@ def frame_overview(deck: str, pages: list[int], group: list[int], style: str) ->
         return f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png"></figure>\n'
     letters = {page: stage_letter(index) for index, page in enumerate(group)}
     if style == "equal":
-        shown, head = group, ""
+        shown, tail = group, ""
     else:
         # Every frame but the one drawn big — "earlier" for a real build, "the
-        # other showings" for a fragment the deck comes back to.
+        # other showings" for a fragment the deck comes back to — and the big
+        # one after them, so the column reads in letter order.
         shown = [page for page in group if page != hero]
-        head = (
+        tail = (
             f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png">'
             f"<figcaption>{letters[hero]}</figcaption></figure>\n"
         )
     cols = frame_columns(len(shown), style)
     cells = "\n".join(_frame_cell(deck, page, letters[page]) for page in shown)
-    return f'{head}<div class="speaker-frames speaker-frames--c{cols}">\n{cells}\n</div>\n'
+    return f'<div class="speaker-frames speaker-frames--c{cols}">\n{cells}\n</div>\n{tail}'
 
 
 def notes_for_showing(notes: list[str], letters: set[str], first: bool) -> list[str]:

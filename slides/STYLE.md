@@ -508,8 +508,9 @@ unmentioned.
 
 The speaker build draws the group in whichever of two shapes the fragment
 declares. A **build-up** gets its last page large — a speaker glancing at notes
-needs the whole picture, not whichever stage the audience is on — with the
-earlier frames beneath it in the smallest square grid that holds them: a
+needs the whole picture, not whichever stage the audience is on — under the
+earlier frames, which run in letter order in the smallest square grid that
+holds them, so the column reads a, b, c and ends on the slide: a
 two-page build's first page at the hero's own size, up to four in 2×2, up to
 nine in 3×3, and 4×4 only past that. An **equal-weight** group gets every frame at
 one size and no hero, which is also a bigger frame, because the space the hero
