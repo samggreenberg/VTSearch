@@ -27,13 +27,14 @@
   +0.12. The owner ruled it out for images on speed (#4837). Offline, **the shipped premium embedder
   `siglip2_l` reaches small objects almost as well**: its sort leaves 11% of `@small` runs short of
   3 positives in its top 150, against SigLIP's 30% on the same cells and seeds (**−18 ± 5 points**).
-  EmbeddingGemma 2 leaves 9% (−21 ± 5.5). CLIP and CLIP L are worse than SigLIP.
+  EmbeddingGemma 2 leaves 9% (−21 ± 5.5). CLIP and CLIP L are worse than SigLIP. #4874 runs
+  `siglip2_l`'s sessions and times its embedding.
 - **Region on today's app is not resolvable on 2 seeds:** 21% → 18% (−2.2 ± 3.5 points; 4 rescued,
   2 newly starved). Its small-band gain (+0.048 ± 0.014) comes from runs that were already fed.
 
 **Nothing ships from this issue.** The opening fix it asked for already shipped as #4731. No
 acquisition rule can reach a run that never leaves the Good phase. What remains is the typed query's
-sort on small objects: an embedder question, and #4217's for Region.
+sort on small objects: an embedder question (#4874 for `siglip2_l`), and #4217's for Region.
 
 ## The question
 
@@ -217,7 +218,7 @@ its bar.*
   9% → 4%.
 - **`siglip2_l` reaches small objects almost as well as EmbeddingGemma 2**, and it is already an image
   embedder the app ships. Its sessions have never been run on this bench, so its objective and its
-  embedding time against SigLIP's are unmeasured here.
+  embedding time against SigLIP's are unmeasured here. #4874 measures both.
 - **CLIP is worse than SigLIP**, at small and at medium, and CLIP L leans the same way.
 
 ## What this does not license
