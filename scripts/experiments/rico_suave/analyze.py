@@ -47,6 +47,8 @@ import _cells_io  # noqa: E402
 HORIZON = 150
 SHORT = 50
 CEILING = "skyline_train_full"
+#: The head's own rows at a vote where the app shows the typed query's set instead (#4736's hold).
+HOLD_TAG = "hold:head"
 COLS = [
     "dataset", "category", "embedder", "seed", "t", "phase", "beta", "fbeta", "precision", "recall",
     "average_precision", "app_trained", "n_test_pos", "n_test_neg", "pool_variant", "gmm_variant",
@@ -63,6 +65,28 @@ def _carry(t: np.ndarray, v: np.ndarray, horizon: int = HORIZON) -> np.ndarray:
     ok = idx >= 0
     out[ok] = v[idx[ok]]
     return out
+
+
+def _without_hold(df: pd.DataFrame, ordinary: pd.DataFrame, beta: float) -> np.ndarray:
+    """The F-beta curve had Find shown the trained head from the label quota (#4736's hold off).
+
+    The hold changes what Test shows, not what Autopilot picks, so the session is the same one: at a
+    vote where the typed query's set was held, the head's own row (tagged :data:`HOLD_TAG`) is what
+    would have shown. F-beta is recomputed from its precision and recall at the session's beta.
+    """
+    held = df[(df["gmm_variant"].fillna("").astype(str) == HOLD_TAG) & ~_cells_io.check_rows(df)]
+    held = held[held["t"] <= HORIZON].groupby("t", as_index=False).last()
+    shown = ordinary.set_index("t")["fbeta"].fillna(0.0).astype(float)
+    if not held.empty:
+        p, r = held["precision"].fillna(0.0).to_numpy(float), held["recall"].fillna(0.0).to_numpy(float)
+        b2 = beta * beta
+        with np.errstate(divide="ignore", invalid="ignore"):
+            f = np.where(b2 * p + r > 0, (1 + b2) * p * r / (b2 * p + r), 0.0)
+        shown = shown.copy()
+        for tt, ff in zip(held["t"], f):
+            shown.loc[tt] = ff
+        shown = shown.sort_index()
+    return _carry(shown.index.to_numpy(dtype=float), shown.to_numpy(dtype=float))
 
 
 def everything_fbeta(prevalence: float, beta: float) -> float:
@@ -86,11 +110,12 @@ def read_cell(path: str) -> dict | None:
     ordinary = ordinary[ordinary["t"] <= HORIZON].groupby("t", as_index=False).last()
     t = ordinary["t"].to_numpy(dtype=float)
     curves = {m: _carry(t, ordinary[m].fillna(0.0).to_numpy(dtype=float)) for m in ("fbeta", "precision", "recall")}
+    beta = float(base["beta"].iloc[0]) if pd.notna(base["beta"].iloc[0]) else 1.0
+    nohold = _without_hold(df, ordinary, beta)
     ap = _carry(t, ordinary["average_precision"].fillna(0.0).to_numpy(dtype=float))
     shown = ordinary.loc[ordinary["app_trained"].fillna(0).astype(float) > 0, "t"]
     first = base.iloc[0]
     n_pos, n_neg = float(first["n_test_pos"]), float(first.get("n_test_neg", np.nan))
-    beta = float(first["beta"]) if pd.notna(first.get("beta")) else 1.0
     prev = n_pos / (n_pos + n_neg) if n_pos + n_neg > 0 else np.nan
     return {
         "dataset": first["dataset"],
@@ -106,6 +131,8 @@ def read_cell(path: str) -> dict | None:
         "fbeta_first": float(curves["fbeta"][0]),
         "fbeta_mean": float(curves["fbeta"].mean()),
         "fbeta_mean_short": float(curves["fbeta"][:SHORT].mean()),
+        "fbeta_mean_nohold": float(nohold.mean()),
+        "fbeta_mean_short_nohold": float(nohold[:SHORT].mean()),
         "fbeta_at_end": float(curves["fbeta"][-1]),
         "fbeta_after_check": float(check.sort_values("t")["fbeta"].iloc[-1])
         if len(check)
@@ -161,6 +188,41 @@ def summary(runs: pd.DataFrame, ref: pd.DataFrame, empty: dict[str, int], labels
                 f"{_fmt(g['ceiling_ap'].mean())} | "
                 f"{_fmt(g['everything_fbeta'].mean())} | {g['first_shown'].median():.0f} |"
             )
+    lines += [
+        "",
+        "## The typed query's hold (#4736), priced on the same sessions",
+        "",
+        "Find shows the typed query's set until 30 labels; the head's own rows at those votes say what it "
+        "would have shown. Difference = the session as run minus the session with the head shown from the "
+        "label quota (positive: the hold helps).",
+        "",
+        "| preset | dataset | runs | hold - no hold (1-150) | hold - no hold (1-50) | runs the hold helps (1-50) |",
+        "|---|---|---|---|---|---|",
+    ]
+    for k in labels:
+        for name, g in (("rico_suave", rico[rico["preset"] == k]), ("coco_better (ref)", ref[ref["preset"] == k])):
+            if g.empty:
+                continue
+            d = g["fbeta_mean"] - g["fbeta_mean_nohold"]
+            ds = g["fbeta_mean_short"] - g["fbeta_mean_short_nohold"]
+            lines.append(
+                f"| {k} | {name} | {len(g)} | {d.mean():+.3f} ± {d.std(ddof=1) / np.sqrt(len(d)):.3f} | "
+                f"{ds.mean():+.3f} ± {ds.std(ddof=1) / np.sqrt(len(ds)):.3f} | {(ds > 1e-9).mean():.0%} |"
+            )
+    lines += [
+        "",
+        "Per class (hold - no hold, votes 1-50, mean over seeds):",
+        "",
+        "| class | " + " | ".join(labels) + " |",
+        "|---|" + "---|" * len(labels),
+    ]
+    for c in sorted(rico["category"].unique()):
+        g = rico[rico["category"] == c]
+        cells = []
+        for k in labels:
+            h = g[g["preset"] == k]
+            cells.append(f"{(h['fbeta_mean_short'] - h['fbeta_mean_short_nohold']).mean():+.3f}")
+        lines.append(f"| {c} | " + " | ".join(cells) + " |")
     lines += [
         "",
         "## Per class (session mean F-beta over votes 1-150, the floor of returning everything, AP at 150 "
