@@ -380,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     from vtscore.eval.arms_handover import HANDOVER_COLUMNS
     from vtscore.eval.arms_line_counts import LINE_COUNT_COLUMNS
-    from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior
+    from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior_scale
     from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
     from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
@@ -411,20 +411,11 @@ def main(argv: list[str] | None = None) -> int:
         f"seed: mode={seed_mode} embedder={seed_embedder or '-'} query={seed_query!r} "
         f"declared={cfg.REQUIRE_OPENING or 'nothing'}"
     )
-    # #4384: the typed query's embedding, for its prior's shadow and its arm.
-    query_vec = (
-        cell_query_vector(ds, emb, cat, seed_mode) if cfg.QUERY_PRIOR_SHADOW or cfg.QUERY_PRIOR is not None else None
-    )
-    if cfg.QUERY_PRIOR is not None:
-        if isinstance(cfg.QUERY_PRIOR, str):
-            raise ValueError(f"CALIB_QUERY_PRIOR must be a positive number; got {cfg.QUERY_PRIOR!r}")
-        if query_vec is None:
-            # The arm is the head started from the typed query; a cell without one would run the app's
-            # head under the arm's name.
-            raise RuntimeError(
-                f"CALIB_QUERY_PRIOR is set but {ds}x{emb}:{cat} has no typed query in its own space "
-                f"(opening {seed_mode!r}); the arm covers single-vector typed-query cells only"
-            )
+    # The typed query's embedding in the cell's own space: a typed-query detector's head starts from it
+    # (#4859, the app's), and #4384's shadow reads it.  None on a paired or non-text cell.
+    query_vec = cell_query_vector(ds, emb, cat, seed_mode)
+    if isinstance(cfg.QUERY_PRIOR, str):
+        raise ValueError(f"CALIB_QUERY_PRIOR must be a number >= 0; got {cfg.QUERY_PRIOR!r}")
 
     all_rows: list[dict] = []
     all_sweep: list[dict] = []
@@ -458,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         with (
             sigma_floor(cfg.SIGMA_FLOOR),
             head_count_bads(cfg.HEAD_COUNT_BADS),
-            query_prior(query_vec if cfg.QUERY_PRIOR is not None else None, cfg.QUERY_PRIOR),  # type: ignore[arg-type]
+            query_prior_scale(cfg.QUERY_PRIOR),  # type: ignore[arg-type]  # a str was refused above
         ):
             rows = simulate_voting_iterations(
                 medias,

@@ -1,4 +1,9 @@
-"""#4384's typed-query prior: the head started from the typed query as well as the Goods' centroid."""
+"""#4384's typed-query prior: the head started from the typed query as well as the Goods' centroid.
+
+The app's since #4859 (``tests_lib/detectors/test_typed_query_prior.py`` pins the
+app's entry points); here the fit's arithmetic, the eval's scale arm and #4384's
+shadow.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,7 @@ import torch
 
 from tests_lib.detectors.test_eval_query_tier import DIM, _run, _world
 from vtscore.detectors.label_quota import TIER_TRAINED, label_quota
-from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, VARIANTS, positive_ranks, query_prior
+from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, VARIANTS, positive_ranks, query_prior_scale
 from vtscore.training import svm_prior
 from vtscore.training.mlp import LINEAR_SVM_PRIOR_HEAD, train_model
 from vtscore.training.svm_prior import CENTROID_PRIOR_SCALE, centroid_prior_direction
@@ -41,9 +46,9 @@ def _labels(seed: int = 0, n_good: int = 3, n_bad: int = 4, dim: int = 32):
     return np.vstack([goods, bads]), np.r_[np.ones(n_good), np.zeros(n_bad)], query
 
 
-def _prior() -> tuple[np.ndarray, float] | None:
-    """The module's prior as it stands now (read fresh, so a type checker does not carry a narrowing over)."""
-    return svm_prior.QUERY_PRIOR
+def _scale() -> float:
+    """The module's scale as it stands now (read fresh, so a type checker does not carry a narrowing over)."""
+    return svm_prior.QUERY_PRIOR_SCALE
 
 
 def _ap(ranks: str) -> float:
@@ -104,28 +109,26 @@ class TestTheFit:
 
 
 class TestTheArm:
-    def test_the_context_sets_and_restores_the_prior(self):
-        _X, _y, q = _labels()
-        assert _prior() is None
-        with query_prior(q, 10.0):
-            got = _prior()
-            assert got is not None
-            direction, scale = got
-            assert np.array_equal(direction, q) and scale == 10.0
-        assert _prior() is None
+    def test_the_scale_arm_sets_and_restores_the_scale(self):
+        assert _scale() == 10.0
+        with query_prior_scale(3.0):
+            assert _scale() == 3.0
+        with query_prior_scale(0.0):
+            assert _scale() == 0.0
+        assert _scale() == 10.0
 
     def test_none_changes_nothing(self):
-        with query_prior(None, 10.0), query_prior(np.ones(3), None):
-            assert _prior() is None
+        with query_prior_scale(None):
+            assert _scale() == 10.0
 
-    @pytest.mark.parametrize("scale", [0.0, -1.0, float("nan")])
-    def test_refuses_a_scale_that_is_not_positive(self, scale):
-        with pytest.raises(ValueError, match="positive"), query_prior(np.ones(3), scale):
+    @pytest.mark.parametrize("scale", [-1.0, float("nan"), float("inf")])
+    def test_refuses_a_scale_that_is_not_a_number_at_least_zero(self, scale):
+        with pytest.raises(ValueError, match=">= 0"), query_prior_scale(scale):
             pass
 
-    def test_every_production_fit_takes_it(self):
+    def test_every_production_fit_in_the_block_takes_it(self):
         X, y, q = _labels(seed=5)
-        with query_prior(q, 10.0):
+        with svm_prior.typed_query_prior(q):
             model = train_model(
                 torch.from_numpy(X.astype(np.float32)),
                 torch.from_numpy(y.astype(np.float32)).unsqueeze(1),
@@ -147,7 +150,8 @@ def test_positive_ranks_order_as_a_line_ranking():
 
 @pytest.fixture(scope="module")
 def plain_run():
-    return _run()
+    """Today's app: the typed query's prior on (the run is given its query)."""
+    return _run(query_vector=_query())
 
 
 @pytest.fixture(scope="module")
@@ -158,9 +162,10 @@ def shadow_run():
 
 
 @pytest.fixture(scope="module")
-def arm_run():
+def before_run():
+    """The head before #4859 (the centroid alone), the shadow on."""
     sink: list[dict] = []
-    with query_prior(_query(), 10.0):
+    with query_prior_scale(0.0):
         rows, picks = _run(query_prior_sink=sink, query_vector=_query())
     return rows, picks, sink
 
@@ -196,8 +201,8 @@ class TestTheShadow:
         assert [s["t"] for s in sink] == trained
         assert all(s[f"ranks_{v}"] for s in sink for v in VARIANTS)
 
-    def test_head_is_the_runs_own_head(self, shadow_run):
-        rows, _picks, sink = shadow_run
+    def test_head_is_the_runs_own_head_with_the_prior_off(self, before_run):
+        rows, _picks, sink = before_run
         head = _trained_head_aps(rows)
         assert {s["t"] for s in sink} <= set(head)
         for s in sink:
@@ -210,14 +215,18 @@ class TestTheShadow:
         (want,) = query_ap
         assert all(_ap(s["ranks_query"]) == pytest.approx(want) for s in sink)
 
-    def test_under_the_arm_the_runs_head_is_cq10(self, plain_run, arm_run):
-        _rows, picks = plain_run
-        a_rows, a_picks, sink = arm_run
-        head = _trained_head_aps(a_rows)
+    def test_by_default_the_runs_head_is_cq10(self, shadow_run, before_run):
+        rows, picks, sink = shadow_run
+        head = _trained_head_aps(rows)
         for s in sink:
             assert _ap(s["ranks_cq10"]) == pytest.approx(head[s["t"]], abs=1e-3), s["t"]
-        # The arm's head asks its own Hard questions.
-        assert [p["picked_id"] for p in a_picks] != [p["picked_id"] for p in picks]
+        # The head started from the query asks its own Hard questions.
+        assert [p["picked_id"] for p in picks] != [p["picked_id"] for p in before_run[1]]
+
+    def test_without_a_query_vector_the_run_is_the_centroid_alone(self, before_run):
+        rows, picks = _run()
+        b_rows, b_picks, _sink = before_run
+        assert [p["picked_id"] for p in picks] == [p["picked_id"] for p in b_picks]
 
     def test_off_without_a_query_vector(self):
         sink: list[dict] = []

@@ -14,6 +14,9 @@
 #   queryprior_4384.sh launch BETA [IDX]    that preset's sessions as a cpu array (IDX: a subset, e.g. a smoke)
 #   queryprior_4384.sh pack BETA [IDX]      the same as V100 packs, the GPU hidden (the cpu cap full)
 #
+# Since #4859 the typed-query prior at scale 10 IS the app, so an unset QP4384_ARM runs it (the run dirs
+# keep the name `ctl`) and QP4384_ARM=0 is the head before #4859 (the Goods' centroid alone).
+#
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it).
 # Env: QP4384_ARM (unset = the control), QP4384_SHADOW (default 1), QP4384_DATE (default 2026-10-13),
 # QP4384_TAG (e.g. smoke), SOTA_ROOT, QP4384_SEEDS (5), and anything launch.sh reads (CALIB_MEM, CALIB_CONC,
