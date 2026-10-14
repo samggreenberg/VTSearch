@@ -13,10 +13,14 @@
 #   early_check_4664.sh dirs                       run dirs <root>/<date>-early4664-<arm>-b{1,4}
 #   early_check_4664.sh launch ARM BETA [IDX]      one arm at one preset as a cpu array (default: every seed's)
 #   early_check_4664.sh pack ARM BETA [IDX]        the same as V100 packs, the GPU hidden (the cpu cap full)
+#   early_check_4664.sh cpack ARM BETA [IDX]       the same as cpu-partition packs: one job runs CALIB_PACK_PAR
+#                                                  cells at CALIB_CPUS (default 1) thread each, for when the
+#                                                  2,000-job submit cap is full; a cell is charged one CPU, not
+#                                                  an array task's whole core
 #
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it).
 # Env: EARLY4664_DATE (default 2026-10-14), EARLY4664_SEEDS (5), EARLY4664_TAG (e.g. smoke), SOTA_ROOT, and anything
-# launch.sh reads (CALIB_MEM, CALIB_CONC, CALIB_TIME).
+# launch.sh reads (CALIB_MEM, CALIB_CONC, CALIB_TIME, CALIB_PACK_JOBS, CALIB_PACK_PAR, CALIB_PACK_TIME).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
@@ -54,11 +58,12 @@ JSON
     done
   done
   ;;
-launch|pack)
+launch|pack|cpack)
   arm="${2:?arm (${ARMS[*]})}" b="${3:?beta (1 or 4)}"
   [[ -v "AT[$arm]" ]] || { echo "arm must be one of ${ARMS[*]}" >&2; exit 2; }
   idx="${4:-$(all_idx)}"
   run="$(run_of "$arm" "$b")"
+  mem_in="${CALIB_MEM:-}"
   export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}" CALIB_MEM="${CALIB_MEM:-3G}" CALIB_TIME="${CALIB_TIME:-2:00:00}"
   export SOTA_BETA="$b" SOTA_DATE="$D-$run" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS" SOTA_MAX_STEPS="$STEPS"
   export SOTA_RANK_FRAME_STEPS="${SOTA_RANK_FRAME_STEPS:-10,25,50,100,150,200}"
@@ -74,8 +79,15 @@ launch|pack)
     export CALIB_PACK_PAR="${CALIB_PACK_PAR:-24}" CALIB_TIME="${CALIB_PACK_TIME:-12:00:00}"
     exec bash "$HERE/launch.sh" pack "$idx"
   fi
+  if [[ "$1" == cpack ]]; then
+    export CALIB_PARTITION=cpu CALIB_CPUS="${CALIB_CPUS:-1}" CALIB_MEM="${mem_in:-2G}"
+    export CALIB_PACK_JOBS="${CALIB_PACK_JOBS:-1}" CALIB_PACK_PAR="${CALIB_PACK_PAR:-16}"
+    export CALIB_TIME="${CALIB_PACK_TIME:-12:00:00}"
+    unset CALIB_PACK_GRES
+    exec bash "$HERE/launch.sh" pack "$idx"
+  fi
   exec bash "$HERE/launch.sh" redo "$idx"
   ;;
 *)
-  echo "usage: early_check_4664.sh {dirs | launch ARM BETA [IDX] | pack ARM BETA [IDX]}" >&2; exit 1 ;;
+  echo "usage: early_check_4664.sh {dirs | launch ARM BETA [IDX] | pack ARM BETA [IDX] | cpack ARM BETA [IDX]}" >&2; exit 1 ;;
 esac
