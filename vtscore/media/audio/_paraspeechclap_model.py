@@ -36,6 +36,13 @@ def _default_loader(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     return fn(*args, **kwargs)
 
 
+# Both towers load in fp32, the dtype of the projection heads they feed.
+# transformers defaults to ``dtype="auto"``, and Granite's config.json says
+# bfloat16, so left to the default its CLS output met the fp32 text head and the
+# first text forward raised on every host (#4845).
+_ENCODER_DTYPE = torch.float32
+
+
 class Projection(torch.nn.Module):
     """Residual MLP head projecting an encoder output into the shared space."""
 
@@ -63,7 +70,7 @@ class SpeechEncoder(torch.nn.Module):
         # LayerDrop is a training-time regulariser; disable it so inference is
         # deterministic (and so the module graph matches the checkpoint).
         config.layerdrop = 0.0
-        self.base = loader(AutoModel.from_pretrained, model_name, config=config)
+        self.base = loader(AutoModel.from_pretrained, model_name, config=config, dtype=_ENCODER_DTYPE)
         self.hidden_size = self.base.config.hidden_size
 
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
@@ -80,7 +87,7 @@ class TextEncoder(torch.nn.Module):
 
     def __init__(self, model_name: str, loader: Loader = _default_loader) -> None:
         super().__init__()
-        self.base = loader(AutoModel.from_pretrained, model_name)
+        self.base = loader(AutoModel.from_pretrained, model_name, dtype=_ENCODER_DTYPE)
 
     def forward(self, x: dict) -> torch.Tensor:
         return self.base(**x).last_hidden_state[:, 0, :]
