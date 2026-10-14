@@ -184,6 +184,12 @@ DATASETS: dict[str, dict] = {
     # being able to say whether a result was tuned. `on_request` because its
     # images are staged by hand (O365_ROOT) and are not in every checkout's pile.
     "o365_better": {"boxed": True, "kind": "o365_better", "on_request": True},
+    # Rico Suave (#4356): Android app screens by what the screen is for -- settings,
+    # login, map, chat... -- the born-digital benchmark's genre track. Whole-image
+    # classes, no boxes; a label is a developer's Activity name and Screen2Words'
+    # crowd captions agreeing (`pilebuild/loaders/rico_suave.py`). `on_request`
+    # while it is v0: the reviewed disagreements have not joined yet.
+    "rico_suave": {"boxed": False, "kind": "rico_suave", "on_request": True},
 }
 
 #: Objects365 v2 (#4815), as `o365_better` reads it. The validation split only:
@@ -201,6 +207,13 @@ O365_VAL_ANNOTATIONS = O365_VAL_DIR / "zhiyuan_objv2_val.json"
 #: exactly what the build reads (#3299). The split between ``v1`` and ``v2`` is
 #: the release's own, not a choice: the val set was published in two rounds.
 O365_VAL_PATCH_DIRS: tuple[str, ...] = tuple(f"images/{'v1' if i <= 15 else 'v2'}/patch{i}" for i in range(44))
+
+#: Rico's original release (#4356), staged on the shared tree with its
+#: ``ui_details.csv`` and Screen2Words' ``screen2words/screen_summaries.csv``
+#: beside it; the README there names each source. Files are keyed by the Rico id
+#: Screen2Words keys on. Never the HuggingFace mirror ``creative-graphic-design/Rico``:
+#: its ``request_id`` is not the Rico id and its rows are shuffled.
+RICO_ROOT = Path(os.environ.get("VTS_RICO_ROOT", "/exp/scale26/datasets/external/Rico"))
 
 #: FHIBE's release, as downloaded by ``scripts/experiments/pile/fhibe/download.sbatch``.
 #: Owner-only on scratch and never redistributed: each user registers with Sony
