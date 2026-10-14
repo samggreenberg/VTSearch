@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
+  and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
+  2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with
+  `CUDA_VISIBLE_DEVICES=` set, every Hugging Face embedder failed to load. The `cu124` tag a V100
+  used to get stops at torch 2.6.0, so `scripts/install.sh` now picks `cu126` for Volta (a torch past
+  2.7 that still ships `sm_70` kernels) and falls back to it when it cannot detect the GPU.
+  `pyproject.toml` requires `torch>=2.7`. `install.sh` refuses `cu121` and `cu124` with a message:
+  their indexes stop below that floor, so the requirements pass would have swapped in PyPI's newest
+  torch, which has no kernels for older GPUs. `cu118` (torch 2.7.1) remains for drivers older than
+  CUDA 12.6. With that pair ruled out, `transformers` is floored at 5.18, which the EmbeddingGemma 2
+  embedders need (#4837).
 - **Spot Check is an Autopilot step, not a dialog.** Autopilot now checks the line itself, the first
   time every quality light goes green, before it says Done: a few picks drawn at random from bands of
   the list, voted Good or Bad in the centre pane, where the item usually is. It is the **Spot Check**

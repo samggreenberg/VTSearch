@@ -42,23 +42,24 @@ scikit-learn
 # and DINOv3's HF wrapper landed in the same window ). Pin a known-good
 # floor instead of "latest" so the image is reproducible.
 #
-# The floor deliberately stays at 4.49 even though the *default image-processor
-# backend flips inside this range*: transformers 5 removed the `Fast` suffix, so
-# the bare `SiglipImageProcessor` means the PIL implementation below 5 and the
-# torchvision one at 5+, and the two disagree on 53-59% of pixel elements
-# (#3146). Raising the floor to >=5 is not the fix, because it only governs what
-# *installs*. Since #3173 the app names the backend outright
-# (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, default `torchvision`), and the request is
-# spelled for whichever version is present (`backend=` on 5, `use_fast=` on
-# 4.x) — so both sides of this range now resize identically, which is the
-# property a floor could never give us in someone's existing environment.
+# The floor was not raised past 5 for the processor's sake, even though the
+# *default image-processor backend flips at 5*: transformers 5 removed the
+# `Fast` suffix, so the bare `SiglipImageProcessor` means the PIL
+# implementation below 5 and the torchvision one at 5+, and the two disagree on
+# 53-59% of pixel elements (#3146). Raising the floor to >=5 is not the fix,
+# because it only governs what *installs*. Since #3173 the app names the
+# backend outright (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, default `torchvision`),
+# and the request is spelled for whichever version is present (`backend=` on 5,
+# `use_fast=` on 4.x) — so both sides of this range now resize identically,
+# which is the property a floor could never give us in someone's existing
+# environment.
 #
 # EmbeddingGemma 2 (`embeddinggemma2` / `embeddinggemma2_audio`, #4837) needs
-# >= 5.18 and says so when it loads; nothing else does. The floor is NOT raised
-# for it: 5.18+ calls `torch.accelerator.current_accelerator()` on import, which
-# torch 2.6 (both GRID venvs) answers by raising on a host with no GPU, so a
-# raised floor would break every Hugging Face embedder on CPU (#4838).
-transformers>=4.49.0
+# >= 5.18, and that is the floor now. 5.18+ calls
+# `torch.accelerator.current_accelerator()` on import, which torch 2.6 answers by
+# raising on a host with no GPU; the torch>=2.7 floor below rules that pair out,
+# and the GRID venvs moved to torch 2.14.1+cu126 (#4838).
+transformers>=5.18.0
 # One pandas major everywhere; see the pandas entry in pyproject.toml (#4381).
 pandas>=3
 
@@ -75,7 +76,9 @@ scipy
 umap-learn
 
 # ── PyTorch (index chosen by the caller; see the header) ─────────────
-torch>=2.0.0
+# Floor: transformers >= 5.18 cannot import a model class on torch 2.6 when no
+# GPU is visible (#4838); kept equal to pyproject.toml's.
+torch>=2.7
 # Every image embedder now asks for the torchvision image-processor
 # backend by name rather than inheriting a default (#3173), so torchvision
 # is a hard requirement of the preprocessing path and not just of DINOv2 /
@@ -113,7 +116,7 @@ ftfy
 # ── VTSBrowse signpost naming (toponymy) ─────────────────────────────
 # `toponymy` letters the Browse map (vtscore.projection.signpost_build).
 # It is NOT listed here: its `transformers<5.0.0` pin would drag this file's
-# `transformers>=4.49.0` floor backwards, and the pin is empirically
+# `transformers>=5.18.0` floor backwards, and the pin is empirically
 # unnecessary for our usage — so both Dockerfiles install it in a dedicated
 # `--no-deps` step, exactly as scripts/install.sh does for a host install
 # (see docs/plans/vtsbrowse-toponymy.md). A requirements file cannot express
