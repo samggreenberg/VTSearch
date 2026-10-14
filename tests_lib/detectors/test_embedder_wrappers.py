@@ -1067,6 +1067,24 @@ class TestParaSpeechClapModel:
         emb = model.get_audio_embedding(torch.randn(1, 80), normalize=False)
         assert emb.shape == (1, 5)
 
+    def test_clap_loads_both_towers_in_fp32(self, _patched_transformers):
+        """Granite's config.json says bfloat16; both towers still load in fp32 (#4845).
+
+        transformers' ``dtype="auto"`` default otherwise loads Granite in bf16,
+        and its output then fails to multiply into the fp32 text projection head.
+        """
+        from vtscore.media.audio._paraspeechclap_model import CLAP
+
+        model_dtypes = []
+
+        def _loader(fn, *args, **kwargs):
+            if fn == _patched_transformers.AutoModel.from_pretrained:
+                model_dtypes.append(kwargs.get("dtype"))
+            return fn(*args, **kwargs)
+
+        CLAP("microsoft/wavlm-large", "ibm-granite/granite", embedding_dim=5, loader=_loader)
+        assert model_dtypes == [torch.float32, torch.float32]
+
     def test_clap_text_embedding(self, _patched_transformers):
         from vtscore.media.audio._paraspeechclap_model import CLAP
 
