@@ -427,19 +427,25 @@ const ROSY_TEXT = 'yellow smiley face with rosy cheeks';
 
 /**
  * A detector whose labels overlap, for the Spot Check shot: Goods and Bads
- * from the same two kinds of drawing, so the labels separate weakly and
- * Autopilot runs its weak-separation check (#4496) as soon as its first
- * learned sort lands. Only Autopilot starts a check, and this is the one it
- * starts on entry; ten labels meet `WEAK_CHECK_MIN_VOTES`.
+ * of the same kind of drawing, so the labels separate weakly and Autopilot
+ * runs its weak-separation check (#4496) as soon as its first learned sort
+ * lands. Only Autopilot starts a check, and this is the one it starts on
+ * entry; ten labels meet `WEAK_CHECK_MIN_VOTES`.
+ *
+ * One kind, not two: piles that were each half yellow smileys, half yellow
+ * faces came out at a separation of 2.3, over the 1.5 that makes a check due,
+ * so the shot waited for a check that never came (#4862). Five yellow faces a
+ * side measure 0.50 in the app refresh.sh starts and 0.26 after a restart.
+ * Ten yellow smileys are no good: 0.13 after a restart, but 2.69 in the
+ * process that imported the fixtures, which is the one refresh.sh shoots in
+ * (#4892).
  */
 const OVERLAP = 'Overlapping Smileys';
 
-/** The Overlapping Smileys detector's labels: each pile half yellow smileys, half yellow faces. */
+/** The Overlapping Smileys detector's labels: ten yellow faces, none smiling, five in each pile. */
 function overlapVotes(): { good: string[]; bad: string[] } {
-  const { pictures } = corpus(TRAIN_DATASET);
-  const smileys = framesOf(pictures, 'yellow-smiley', 6);
-  const faces = framesOf(pictures, 'yellow-face', 4);
-  return { good: [...smileys.slice(0, 3), ...faces.slice(0, 2)], bad: [...smileys.slice(3), ...faces.slice(2)] };
+  const faces = framesOf(corpus(TRAIN_DATASET).pictures, 'yellow-face', 10);
+  return { good: faces.slice(0, 5), bad: faces.slice(5) };
 }
 
 type Drawing = { kind: string; objects: { shape: string; color: string; smiling?: boolean; cheeks?: boolean }[] };
