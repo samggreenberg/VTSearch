@@ -548,6 +548,23 @@ control there is the embedder picker, which is actually a three-role picker:
 - **Instance embedder (optional)** - a pattern-matching model for
   finding a specific object or logo.
 
+**Which embedder for photos?** The default, SigLIP, is fast on any machine.
+If a GPU analyzes your collection, **SigLIP2-L (SO400M/384)** is the better
+choice, especially when what you are looking for is small in a busy scene:
+a fork on a dining table, a distant chair.
+
+- **What it gains.** Its typed-query search and its detectors are better at
+  every object size. It also cut by about two thirds how often a search for a
+  small object turned up fewer than three examples in its first 150 votes
+  ([the measurements](../experiments/2026-10-14-siglip2l-4874/REPORT.md)).
+- **What it costs on a GPU.** Analysis takes about 10× as long as SigLIP's, or
+  about 3× with half precision (`VTSEARCH_EMBED_PRECISION=fp16`, see
+  [Deployment](../DEPLOYMENT.md)).
+- **Not on a CPU-only machine.** There it is about 19× slower, so keep SigLIP.
+
+The choice is made once, at import: a dataset's detectors are trained in its
+embedder's space, so switching later means analyzing the dataset again.
+
 The rest of the Advanced section, and one toggle on the importer's own
 form:
 
