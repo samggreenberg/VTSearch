@@ -172,7 +172,7 @@ VTSearch/
 │   │   │                           ParaSpeechCLAP, AST, Whisper, EmbeddingGemma 2), clippers,
 │   │   │                           SpeechExtractor
 │   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, SigLIP2-L,
-│   │   │                           SigLIP-L, CLIP, EmbeddingGemma 2, SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
+│   │   │                           SigLIP-L, CLIP, EmbeddingGemma 2 (eval-only), SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
 │   │   │                           single + patch variants), clippers, ImageClassExtractor,
 │   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers

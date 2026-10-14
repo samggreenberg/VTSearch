@@ -41,7 +41,7 @@ CLIP_L_MODEL_ID = "openai/clip-vit-large-patch14"
 DINOV2_MODEL_ID = "facebook/dinov2-base"
 # EmbeddingGemma 2 (#4837): one 768-d space for text, images and audio (and
 # video), so a single checkpoint backs both the ``embeddinggemma2`` image
-# embedder and ``embeddinggemma2_audio``.  Needs transformers >= 5.18.  Text
+# embedder (eval-only: too slow for the app, #4837) and ``embeddinggemma2_audio``.  Needs transformers >= 5.18.  Text
 # queries carry the model card's ``SearchQuery`` prefix; media take none.
 # Audio goes in as 16 kHz mono, capped at 30 s (25 soft tokens a second, so 750
 # of the 8,192-token context) to bound CPU memory and latency, as for

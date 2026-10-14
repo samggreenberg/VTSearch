@@ -371,7 +371,7 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 | `image` | `dinov2_single` | DINOv2 single (image vector) | `facebook/dinov2-base` | 768 | no text queries |
 | `image` | `dinov3_patch` | DINOv3 patch (region-aware images) | `facebook/dinov3-vitb16-pretrain-lvd1689m` | 768 | no text queries; patch grid (region-aware) |
 | `image` | `dinov3_single` | DINOv3 single (image vector) | `facebook/dinov3-vitb16-pretrain-lvd1689m` | 768 | no text queries |
-| `image` | `embeddinggemma2` | EmbeddingGemma 2 (images) | `google/embeddinggemma-2` | 768 | — |
+| `image` | `embeddinggemma2` | EmbeddingGemma 2 (images) | `google/embeddinggemma-2` | 768 | **evaluation only** — registered, but withheld from the app's pickers |
 | `image` | `eupe_patch` | EUPE patch (region-aware images) | `https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt` | 768 | no text queries; patch grid (region-aware); restricted model license |
 | `image` | `eupe_single` | EUPE single (image vector) | `https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt` | 768 | no text queries; restricted model license |
 | `image` | `sift_vlad` | SIFT/VLAD (instance matching) | — | 8192 | no text queries; geometric verification |

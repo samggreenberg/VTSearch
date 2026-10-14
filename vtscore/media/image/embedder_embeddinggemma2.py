@@ -56,6 +56,17 @@ class ImageEmbeddingGemma2Embedder(_CrossModalHFEmbedder):
         return 768
 
     @property
+    def eval_only(self) -> bool:
+        """Withheld from the app: too slow to embed with (owner, 2026-10-13, #4837).
+
+        On COCO Better it beat SigLIP by +0.08 to +0.09 session F-beta at every
+        balance, but embeds 11x slower on a V100 and about 10 s an image on a
+        CPU. It stays registered so the #4837 pile cell and sessions still load
+        by name; no picker, default or API listing offers it.
+        """
+        return True
+
+    @property
     def embed_batch_size(self) -> int:
         """8 by default, not the shared 32: each image is ~2,520 vision patches.
 

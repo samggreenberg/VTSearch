@@ -95,9 +95,9 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
-- **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`) and
-  `embeddinggemma2_audio` (`audio`), both `google/embeddinggemma-2`, 768-d, with a text side; registered once
-  per media type and loading only that type's encoder.
+- **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`, `eval_only`: too slow
+  for the app) and `embeddinggemma2_audio` (`audio`, selectable), both `google/embeddinggemma-2`, 768-d, with a
+  text side; registered once per media type and loading only that type's encoder.
   - **Recipe:** each input runs through the model's text backbone (images as soft tokens, audio at 25 tokens a
     second), and the vector is the masked mean of its last hidden state, L2-normalised. That is the checkpoint's
     sentence-transformers recipe, on plain `transformers`.

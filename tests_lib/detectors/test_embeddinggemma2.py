@@ -28,12 +28,16 @@ class TestRegistration:
         assert img.model_id == aud.model_id == "google/embeddinggemma-2"
         assert img.embedding_dim == aud.embedding_dim == 768
 
-    def test_selectable_not_default(self):
-        from vtscore.media import embedders_for_type
+    def test_image_half_is_eval_only_audio_half_selectable(self):
+        """The owner kept the image half out of the app as too slow (#4837); audio stays a choice."""
+        from vtscore.media import all_embedders_dict, embedders_for_type, get_embedder
 
         image = embedders_for_type("image")
         audio = embedders_for_type("audio")
-        assert "embeddinggemma2" in [e.name for e in image]
+        assert get_embedder("embeddinggemma2").eval_only is True
+        assert "embeddinggemma2" not in [e.name for e in image]
+        assert "embeddinggemma2" not in {d["name"] for d in all_embedders_dict()}
+        assert get_embedder("embeddinggemma2_audio").eval_only is False
         assert "embeddinggemma2_audio" in [e.name for e in audio]
         assert image[0].name == "siglip"
         assert audio[0].name == "clap_general"

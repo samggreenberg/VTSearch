@@ -2,8 +2,12 @@
 
 **2026-10-13.** Google's EmbeddingGemma 2 (`google/embeddinggemma-2`, 740M parameters, Apache 2.0) maps text,
 images and audio into one 768-d space. #4837 asked for it as a new image **and** audio embedder, a test against
-SigLIP on our image benchmarks, and its runtime beside SigLIP's. Both halves ship in this PR as selectable
-embedders, `embeddinggemma2` (images) and `embeddinggemma2_audio`; neither is a default.
+SigLIP on our image benchmarks, and its runtime beside SigLIP's. Both halves are built: `embeddinggemma2`
+(images) and `embeddinggemma2_audio`.
+
+**The owner's ruling (2026-10-13): the image half is not used; it is too slow.** It ships `eval_only`. It stays
+registered, so this study's pile cell and sessions still load by name, but no picker, default or API listing
+offers it. The audio half is selectable, and CLAP-general stays the audio default.
 
 **On COCO Better's Binary path it wins by about 11 SE at every balance.** Each EmbeddingGemma 2 session is paired
 with the SigLIP session of the same class, size band, seed and split (720 pairs a preset, 4,320 sessions). The
@@ -31,7 +35,7 @@ Better's 24,504 images in **3,258 s against SigLIP's 288 s (11×)**. With decode
 model runs at 7.7 images a second against SigLIP's 166 (22×). On 8 CPU threads it takes **10 s an image, 38×
 SigLIP**. A 24k-image collection would take about 68 hours on a laptop-class CPU, against SigLIP's 1.8. Each
 image enters the model as 280 vision tokens (2,520 patches); the model card's smaller budgets of 140 and 70
-tokens run 2.3× and 4.3× faster, at a quality nobody has measured here yet (#4848). A typed query costs 42 ms
+tokens run 2.3× and 4.3× faster, at a quality not measured here. A typed query costs 42 ms
 on the GPU (SigLIP 6 ms) and 112 ms on the CPU (SigLIP 144 ms).
 
 **The audio half is a different instrument from CLAP.** On environmental sound and music it loses badly to the
@@ -44,13 +48,14 @@ On **spoken words** it finds what CLAP cannot: asked for `someone saying "yes"` 
 it scores mAP **0.96** where CLAP-general is at chance (0.09, chance 0.07). It is a speech-content search, not a
 sound search.
 
-**Recommended: ship both as selectable embedders, and do not change either default yet.**
-- **The quality gain is real and broad:** about 11 SE at every preset, 47 of 49 classes, every size band, and the
-  four other image sets.
-- **It cannot run in the app today.** It needs transformers ≥ 5.18, and with the GRID venvs' torch 2.6 that
-  release cannot load any Hugging Face model on a host without a GPU (#4838, a venv upgrade under way).
-- **The default is the owner's call.** On a CPU-only install every image costs 10 s. Settle that on #4848's
-  budget curve rather than on the 280-token cost.
+**What this report recommended, and what was decided.** The draft recommended shipping both halves as
+selectable, leaving both defaults alone, and settling an image default on a vision-budget curve (#4848). The
+quality gain is real and broad: about 11 SE at every preset, 47 of 49 classes, every size band, and the four
+other image sets. The owner ruled the image half out on speed. At its default budget it costs 10 s an image on a
+CPU-only install, and even 70 tokens would leave it 5–7× slower than SigLIP. So #4848, #4849 and #4850, which
+existed to inform an image default, are closed as not planned. In-app use of the audio half waits on #4838:
+transformers ≥ 5.18 with the GRID venvs' torch 2.6 cannot load any Hugging Face model on a host without a GPU,
+and a venv upgrade is under way.
 
 ## Figure 1: the objective at every click
 
@@ -111,7 +116,7 @@ By size band, the session mean at β 1 (the other presets in `by_band.csv` look 
 - It is not a gain everywhere. On `a person` the prefixed query scores **0.033** against 0.18 without it and
   SigLIP's 0.098: on large persons, 0.04 against SigLIP's 0.26. Dog would gain more without the prefix; skis and
   motorcycle need it.
-- **#4850** asks why `a person` collapses and whether another prompt wins over all classes.
+- Why `a person` collapses was filed as #4850 and closed with the image half.
 
 ## Runtime
 
@@ -235,8 +240,6 @@ outputs under `eg2-4837/`, both in the owner's `/expscratch`.
 
 - **#4838:** transformers ≥ 5.18 with torch 2.6 breaks every Hugging Face embedder on a GPU-less host. This
   blocks EmbeddingGemma 2 in the app; the venv upgrade is under way.
-- **#4848:** EmbeddingGemma 2 at 140 and 70 vision tokens, paired on this bench. It is the speed/quality curve a
-  default decision needs.
-- **#4849:** open the Region path on EmbeddingGemma 2's typed query (`embeddinggemma2+dinov3_patch`). The
-  typed-query gain alone is +0.085 AP.
-- **#4850:** the search prefix and `a person`.
+- **#4848** (the vision-budget curve), **#4849** (the Region path opened on EmbeddingGemma 2's typed query) and
+  **#4850** (the search prefix and `a person`) were filed from this report and closed as not planned once the
+  owner ruled the image half out.

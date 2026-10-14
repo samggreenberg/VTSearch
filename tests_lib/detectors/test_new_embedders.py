@@ -1111,8 +1111,9 @@ class TestAllEmbeddersRegistration:
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
         # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap)
-        # + the two halves of EmbeddingGemma 2 (#4837): `embeddinggemma2` (image)
-        #   and `embeddinggemma2_audio`, one checkpoint registered once per media type.
+        # + the two halves of EmbeddingGemma 2 (#4837): `embeddinggemma2` (image,
+        #   eval_only like clip_l) and `embeddinggemma2_audio`, one checkpoint
+        #   registered once per media type.
         #
         # `all_embedders` is the REGISTRY, so it counts `clip_l` even though that
         # arm is `eval_only` and never reaches a picker (#3292). The listings the
@@ -1139,7 +1140,6 @@ class TestAllEmbeddersRegistration:
             "clap_general",
             "paraspeechclap",
             "xclip",
-            "embeddinggemma2",
             "embeddinggemma2_audio",
         ):
             assert by_name[name]["supports_text"] is True, name
@@ -1222,7 +1222,6 @@ class TestAllEmbeddersRegistration:
             "siglip2_l",
             "siglip_l",
             "clip",
-            "embeddinggemma2",
             "dinov2_single",
             "dinov2_patch",
             "dinov3_single",
@@ -1306,8 +1305,8 @@ class TestAllEmbeddersRegistration:
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
         # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap)
-        # + the image and audio halves of EmbeddingGemma 2 (#4837).
-        assert len(dicts) == 28
+        # + EmbeddingGemma 2's audio half (#4837); its image half is eval_only, like clip_l.
+        assert len(dicts) == 27
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d

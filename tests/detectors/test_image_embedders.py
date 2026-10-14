@@ -507,8 +507,7 @@ class TestApiEmbeddersResponseShape:
         body = resp.get_json()
         entries = {e["name"]: e for e in body["embedders"]}
         # All image embedders must be present; five CLIP-family bimodal
-        # models (siglip, siglip2, siglip2_l, siglip_l, clip), the image half of
-        # EmbeddingGemma 2 (#4837), single/patch pairs for
+        # models (siglip, siglip2, siglip2_l, siglip_l, clip), single/patch pairs for
         # DINOv2/DINOv3/EUPE, and the SIFT/VLAD structural embedder.  The
         # FaceNet face-identity embedder is *not* here — it belongs to the
         # separate ``face`` media type now.
@@ -518,7 +517,6 @@ class TestApiEmbeddersResponseShape:
             "siglip2_l",
             "siglip_l",
             "clip",
-            "embeddinggemma2",
             "dinov2_single",
             "dinov2_patch",
             "dinov3_single",
@@ -539,7 +537,6 @@ class TestApiEmbeddersResponseShape:
         assert entries["siglip"]["supports_text"] is True
         assert entries["siglip_l"]["supports_text"] is True
         assert entries["siglip2_l"]["supports_text"] is True
-        assert entries["embeddinggemma2"]["supports_text"] is True
         for name in (
             "dinov2_single",
             "dinov2_patch",
