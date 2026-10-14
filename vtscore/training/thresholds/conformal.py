@@ -514,8 +514,12 @@ def _dithered_count(exact: float, rng: "np.random.RandomState") -> int:
     Stochastic rounding: ``P(round up) = frac(exact)``, so the count is
     **unbiased** (its expectation is *exact*) instead of being pinned to
     whichever side ``round`` picks.  A whole number is returned unchanged and
-    draws nothing, so at the shipped ``calibration_fraction = 0.5`` this fires
-    on odd vote counts only - the exact ties, where "nearest" has no answer.
+    draws nothing.  At a ``calibration_fraction`` of 0.5 (patch spaces) that
+    means it fires on odd vote counts only, the exact ties; at 0.3 (single-vector
+    spaces, since #3287) almost every count has a fractional part, so it is
+    stochastic rounding of the count rather than a tie-break.  Inside the band
+    where the held-out Goods decide the labels line, that makes the line a
+    labelset's coin flip (#4864).
 
     Why this is not just cosmetic (issue #3286).  ``round`` is round-half-to-
     **even**, so at a 50/50 split the tie-break alternates with the vote count:
@@ -535,6 +539,33 @@ def _dithered_count(exact: float, rng: "np.random.RandomState") -> int:
     if frac <= 0.0:
         return int(low)
     return int(low) + (1 if rng.random_sample() < frac else 0)
+
+
+def _split_train_counts(
+    n: int, n_pos: int, n_neg: int, calibration_fraction: float, dither: "np.random.RandomState"
+) -> tuple[int, int] | None:
+    """How many Goods and Bads train each fold; ``None`` when the split leaves too few to train.
+
+    *n* counts the votes (rows, or bags on the grouped path) and *n_pos* /
+    *n_neg* the two classes.  The calibration share is sized over all *n* votes,
+    then each class trains its proportional share of the rest, with both counts
+    dithered (:func:`_dithered_count`) and each class keeping at least one vote
+    on either side.  Every fold holds out the same counts.
+
+    The one place the split's sizes are decided, for the row-wise and grouped
+    folds alike, so a harness arm can swap the rule for a run
+    (``vtscore.eval.arms_split_rounding``, #4864).
+    """
+    n_cal = max(1, _dithered_count(n * calibration_fraction, dither))
+    n_train = n - n_cal
+    if n_train < 2 or n_cal < 1:
+        return None
+
+    def _per_class_n_train(class_total: int) -> int:
+        target = _dithered_count(class_total * n_train / n, dither)
+        return max(1, min(class_total - 1, target))
+
+    return _per_class_n_train(n_pos), _per_class_n_train(n_neg)
 
 
 def _grouped_folds(
@@ -591,18 +622,12 @@ def _grouped_folds(
 
     # Split sizes are dithered, not rounded, so a half-case does not resolve the
     # same way for every labelset of the same size (issue #3286).
-    dither = _split_dither_rng(X_np, y_np)
-    n_cal = max(1, _dithered_count(n * calibration_fraction, dither))
-    n_train = n - n_cal
-    if n_train < 2 or n_cal < 1:
+    sizes = _split_train_counts(
+        n, len(pos_groups), len(neg_groups), calibration_fraction, _split_dither_rng(X_np, y_np)
+    )
+    if sizes is None:
         return [], NO_GOOD_THRESHOLD, X_np, rows_by_group, label_by_group
-
-    def _per_class_n_train(class_total: int) -> int:
-        target = _dithered_count(class_total * n_train / n, dither)
-        return max(1, min(class_total - 1, target))
-
-    n_train_pos = _per_class_n_train(len(pos_groups))
-    n_train_neg = _per_class_n_train(len(neg_groups))
+    n_train_pos, n_train_neg = sizes
 
     # Index the plain group lists by position - group ids are tuples, and
     # ``np.array(list_of_tuples)`` would build a 2-D array and mangle them.
@@ -904,27 +929,19 @@ def compute_fold_orderings(
     X_np = np.array(X_list)
     y_np = np.array(y_list)
 
-    # Split sizes are dithered, not rounded, so a half-case does not resolve the
-    # same way for every labelset of the same size (issue #3286).
-    dither = _split_dither_rng(X_np, y_np)
-    n_cal = max(1, _dithered_count(n * calibration_fraction, dither))
-    n_train = n - n_cal
-    if n_train < 2 or n_cal < 1:
-        return [], NO_GOOD_THRESHOLD
-
     pos_idx = np.where(y_np == 1.0)[0]
     neg_idx = np.where(y_np == 0.0)[0]
+    # Split sizes are dithered, not rounded, so a half-case does not resolve the
+    # same way for every labelset of the same size (issue #3286).  Sized before
+    # the class check, so a split too small to train still returns its sentinel.
+    sizes = _split_train_counts(n, len(pos_idx), len(neg_idx), calibration_fraction, _split_dither_rng(X_np, y_np))
+    if sizes is None:
+        return [], NO_GOOD_THRESHOLD
     if len(pos_idx) < 2 or len(neg_idx) < 2:
         return [], 0.5
 
     calibrate_count = max(1, calibrate_count)
-
-    def _per_class_n_train(class_total: int) -> int:
-        target = _dithered_count(class_total * n_train / n, dither)
-        return max(1, min(class_total - 1, target))
-
-    n_train_pos = _per_class_n_train(len(pos_idx))
-    n_train_neg = _per_class_n_train(len(neg_idx))
+    n_train_pos, n_train_neg = sizes
 
     orderings: list[tuple[list[float], list[float]]] = []
     for _ in range(calibrate_count):

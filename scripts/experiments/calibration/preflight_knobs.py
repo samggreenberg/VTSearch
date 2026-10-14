@@ -63,6 +63,7 @@ def _shipped_spot_check(C: Any, T: Any) -> str:
 
 def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
+    from vtscore.eval.arms_split_rounding import SPLIT_ROUNDINGS
     from vtscore.eval.live_threshold_rules import SIGMA_FLOORS
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
@@ -335,6 +336,11 @@ def probe(C: Any) -> list[str]:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))
     elif C.SIGMA_FLOOR != "relative":
         rows.append(("sigma_floor", C.SIGMA_FLOOR, "<unset> = relative, the app's floor (#4492)"))
+    # #4864's split rounding: unset is the app's dithered split sizes.
+    if C.SPLIT_ROUNDING not in SPLIT_ROUNDINGS:
+        refuse("split_rounding", "CALIB_SPLIT_ROUNDING", "must be one of %s" % ", ".join(SPLIT_ROUNDINGS))
+    elif C.SPLIT_ROUNDING != "dither":
+        rows.append(("split_rounding", C.SPLIT_ROUNDING, "<unset> = dither, the app's split sizes (#3286)"))
     # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
     # before it (the Goods' centroid alone), another scale an arm.
     from vtscore.training.svm_prior import QUERY_PRIOR_SCALE  # noqa: PLC0415
