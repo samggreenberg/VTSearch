@@ -67,6 +67,18 @@ def mark_indices(pages: Sequence[Page], class_id: str) -> dict[str, int]:
     return out
 
 
+def class_marks(pages: Sequence[Page], class_id: str) -> list[list[Any]]:
+    """Every ``[page_id, mark_index]`` carrying *class_id*, sorted.
+
+    Unlike :func:`mark_indices` this keeps a page's second instance of the class
+    as well as its first: it is the class's whole membership, written onto a
+    separation that has to hold the class apart and not one mark of it (#3837).
+    """
+    return sorted(
+        [page.page_id, index] for page in pages for index, mark in enumerate(page.marks) if mark.class_id == class_id
+    )
+
+
 def star(endpoints: Sequence[tuple[str, int]], note: str) -> list[dict[str, Any]]:
     """``n-1`` rows binding *endpoints* into one group, not ``n(n-1)/2``.
 
@@ -559,40 +571,45 @@ def apply_confusable(
                 lmeta["distinct_from"].append(right)
             if left not in rmeta["distinct_from"]:
                 rmeta["distinct_from"].append(left)
-            # One representative mark per side is enough to pin the constraint,
-            # and keeps the store small — but only because the membership pass
-            # ran first and must-linked each class into one group, which
-            # `single_linkage` forms before any separation is registered.  On a
-            # class that is still a clustering proposal it is NOT enough: the
-            # forbidden pair is between the two named marks, so a cheaper
-            # crossing edge elsewhere can fuse the classes and leave the two
-            # representatives as the only members kept apart.  Hence the
-            # warning rather than a quiet row.
+            # One representative mark per side pins a class that has been
+            # through the membership pass: it is recorded as a must-link star,
+            # which `single_linkage` forms before any separation is registered,
+            # so the representative's group is the whole class.  A class that
+            # is still a clustering proposal is not one group, and a single
+            # mark would hold apart that mark and nothing else, because a
+            # cheaper crossing edge elsewhere can fuse the classes first.  The
+            # `merge` slate runs before membership by design, so that is
+            # where these get written (#3837).  So an unverified side also
+            # records the class's members as they stand now, and the
+            # clusterer keeps every one of them on its side.
             lat, rat = mark_indices(pages, left), mark_indices(pages, right)
             unverified = [
                 cid
                 for cid, meta in ((left, lmeta), (right, rmeta))
                 if not meta.get("audit", {}).get("membership_verified")
             ]
-            separations.append(
-                {
-                    "left_page_id": lmeta["page_ids"][0],
-                    "left_mark_index": lat.get(lmeta["page_ids"][0]),
-                    "right_page_id": rmeta["page_ids"][0],
-                    "right_mark_index": rat.get(rmeta["page_ids"][0]),
-                    "left_class_id": left,
-                    "right_class_id": right,
-                    # What the constraint will actually hold apart on a rebuild.
-                    # Not a detail: a reader of this file should not have to
-                    # re-derive which of their separations are load-bearing.
-                    "pins": "marks" if unverified else "classes",
-                    "note": row.get("notes", ""),
-                }
-            )
+            separation = {
+                "left_page_id": lmeta["page_ids"][0],
+                "left_mark_index": lat.get(lmeta["page_ids"][0]),
+                "right_page_id": rmeta["page_ids"][0],
+                "right_mark_index": rat.get(rmeta["page_ids"][0]),
+                "left_class_id": left,
+                "right_class_id": right,
+                # What the constraint will actually hold apart on a rebuild.
+                # Not a detail: a reader of this file should not have to
+                # re-derive which of their separations are load-bearing.
+                # `marks` is what an unverified side wrote before #3837.
+                "pins": "members" if unverified else "classes",
+                "note": row.get("notes", ""),
+            }
+            for side, cid in (("left", left), ("right", right)):
+                if cid in unverified:
+                    separation[f"{side}_members"] = class_marks(pages, cid)
+            separations.append(separation)
             changes.append(
                 f"{left} != {right}: separation recorded"
                 + (
-                    f" (pins the two marks only — {', '.join(unverified)} not membership-verified)"
+                    f" (pins the recorded members of {', '.join(unverified)} — not membership-verified)"
                     if unverified
                     else ""
                 )

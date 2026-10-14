@@ -246,7 +246,9 @@ boxes and 2,004 roster instances.
 **Everything decided by hand survives a rebuild.** Three stores are replayed,
 in this order:
 - `adjudications.json` (must-link and cannot-link rows, keyed on the mark
-  rather than the class id);
+  rather than the class id; a cannot-link ruled on a class that has not been
+  membership-verified also lists that class's members, so it holds the class
+  apart and not just the one mark it names, #3837);
 - `added_marks.json` (hand-drawn boxes, replayed **before** clustering so the
   must-links can name them);
 - `box_overrides.json` (hand-accepted tighter boxes, replaced in place by mark
