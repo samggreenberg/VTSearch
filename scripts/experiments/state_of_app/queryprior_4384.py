@@ -121,6 +121,20 @@ def read_cell(args: tuple[str, float]) -> dict | None:
     p = picks[picks["t"] <= T].drop_duplicates("t", keep="last")
     out["n_good"] = carry(p["t"], p["n_good"])
     out["n_bad"] = carry(p["t"], p["n_bad"])
+    # Where the session's Goods came from: the prompted checks' picks (#4496) and the first Done vote.
+    pp = picks[picks["t"] <= T]
+    prompt = pp["phase"].astype(str) == "prompt"
+    out["prompt_picks"] = carry(GRID, np.cumsum(np.bincount(pp.loc[prompt, "t"].astype(int), minlength=T + 1)[: T + 1]))
+    out["prompt_goods"] = carry(
+        GRID,
+        np.cumsum(
+            np.bincount(pp.loc[prompt, "t"].astype(int), weights=pp.loc[prompt, "picked_label"], minlength=T + 1)[
+                : T + 1
+            ]
+        ),
+    )
+    done = pp.loc[pp["phase"].astype(str) == "done", "t"]
+    out["first_done"] = float(done.min()) if len(done) else np.inf
     qp_path = Path(path.replace(".csv", "__queryprior.csv"))
     try:
         qp = pd.read_csv(qp_path) if qp_path.exists() else pd.DataFrame()
@@ -156,7 +170,7 @@ def extract(a: argparse.Namespace) -> None:
     if len(variants) > 1:
         raise SystemExit(f"cells disagree on the shadow's variants: {variants}")
     vs = list(variants[0]) if variants else []
-    series = ["shown", "shown_ap", "head", "head_ap", "k_head", "n_good", "n_bad"]
+    series = ["shown", "shown_ap", "head", "head_ap", "k_head", "n_good", "n_bad", "prompt_picks", "prompt_goods"]
     series += [f"sh_{m}_{v}" for v in vs for m in ("ap", "fk", "fq", "best")]
     nan = np.full(T + 1, np.nan)
     arrays = {k: np.stack([r.get(k, nan) for r in runs]) for k in series}
@@ -167,6 +181,7 @@ def extract(a: argparse.Namespace) -> None:
         category=np.array([r["category"] for r in runs]),
         seed=np.array([r["seed"] for r in runs]),
         first_head=np.array([r["first_head"] for r in runs]),
+        first_done=np.array([r["first_done"] for r in runs]),
         app_from=np.array([r["app_from"] for r in runs]),
         query_F=np.array([r["query_F"] for r in runs]),
         query_ap=np.array([r["query_ap"] for r in runs]),
@@ -310,6 +325,16 @@ def pair(a: argparse.Namespace) -> None:
             )
             rows.append({"preset": preset, "what": "goods", "span": str(t), "control": float(np.nanmean(gc)),
                          "arm": float(np.nanmean(ga)), "d": float(np.nanmean(d)), "se": clustered_se(d, cls)})  # fmt: skip
+        lines.append("\n### Where the Goods came from: the prompted checks (#4496) and Done\n")
+        lines.append("| | control | arm |\n|---|---|---|")
+        for t in (25, 50, 150):
+            lines.append(f"| prompted-check picks by vote {t} | {np.nanmean(C['prompt_picks'][ic, t]):.1f} | "
+                         f"{np.nanmean(A['prompt_picks'][ia, t]):.1f} |")  # fmt: skip
+            lines.append(f"| Goods from them by vote {t} | {np.nanmean(C['prompt_goods'][ic, t]):.1f} | "
+                         f"{np.nanmean(A['prompt_goods'][ia, t]):.1f} |")  # fmt: skip
+        fd_c, fd_a = C["first_done"][ic], A["first_done"][ia]
+        lines.append(f"| first Done vote, median (runs reaching Done) | {np.median(fd_c[np.isfinite(fd_c)]):.0f} "
+                     f"({np.isfinite(fd_c).mean():.0%}) | {np.median(fd_a[np.isfinite(fd_a)]):.0f} ({np.isfinite(fd_a).mean():.0%}) |")  # fmt: skip
         lines.append("\n### The hold re-priced (offline; the hold changes no pick): session mean 1-150 and 1-25\n")
         lines.append(
             "| hold (labels) | control 1-25 | arm 1-25 | control 1-150 | arm 1-150 | arm@H - control@30, 1-150 |"
@@ -346,6 +371,148 @@ def pair(a: argparse.Namespace) -> None:
     print("\n".join(lines))
 
 
+INK, INK2, SURFACE, GRIDC = "#0b0b0b", "#52514e", "#fcfcfb", "#e4e3df"
+SLOTS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100")  # the reports' categorical order (passes the CVD validator)
+QUERY_GRAY = "#8a8985"
+
+
+def _style():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update(
+        {
+            "font.size": 10,
+            "axes.edgecolor": INK2,
+            "axes.labelcolor": INK2,
+            "xtick.color": INK2,
+            "ytick.color": INK2,
+            "text.color": INK,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "figure.facecolor": SURFACE,
+            "axes.facecolor": SURFACE,
+            "lines.solid_capstyle": "round",
+        }
+    )
+    return plt
+
+
+def _spread(ys: list[float], gap: float) -> list[float]:
+    order = sorted(range(len(ys)), key=lambda i: ys[i])
+    o = list(ys)
+    for i, j in zip(order, order[1:]):
+        if o[j] - o[i] < gap:
+            o[j] = o[i] + gap
+    shift = (sum(o) - sum(ys)) / max(len(ys), 1)
+    return [y - shift for y in o]
+
+
+def _end_labels(ax, ends: list[tuple[float, str, str]]) -> None:
+    """Each line's name at its right end in ink, with a short key in the line's colour (no leader lines)."""
+    lo, hi = ax.get_ylim()
+    for (_y, label, color), yy in zip(ends, _spread([e[0] for e in ends], 0.075 * (hi - lo))):
+        ax.plot([T + 3, T + 9], [yy, yy], color=color, lw=2, clip_on=False)
+        ax.text(T + 12, yy, label, color=INK2, va="center", fontsize=8, clip_on=False)
+
+
+def figures(a: argparse.Namespace) -> None:
+    plt = _style()
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    sets = []
+    for spec in a.pair:
+        preset, rest = spec.split("=", 1)
+        arm_p, ctl_p, title = rest.split("::")
+        A, C = load(arm_p), load(ctl_p)
+        ka = {(c, int(s)): i for i, (c, s) in enumerate(zip(A["category"], A["seed"]))}
+        ic = np.array([i for i, k in enumerate(zip(C["category"], C["seed"].astype(int))) if k in ka])
+        ia = np.array([ka[(C["category"][i], int(C["seed"][i]))] for i in ic])
+        sets.append((preset, title, A, C, ia, ic))
+    x = GRID[1:]
+    hold = 30
+
+    def panels(name: str, ylab: str, series_fn, note: str) -> None:
+        fig, axes = plt.subplots(1, len(sets), figsize=(4.6 * len(sets) + 1.2, 3.6), squeeze=False)
+        for ax, (preset, title, A, C, ia, ic) in zip(axes.flat, sets):
+            ends = []
+            for y, label, color, lw in series_fn(A, C, ia, ic):
+                ax.plot(x, y[1:], color=color, lw=lw)
+                ends.append((float(y[-1]), label, color))
+            ax.axvline(hold, color=GRIDC, lw=1, zorder=0)
+            ax.grid(axis="y", color=GRIDC, lw=0.8)
+            ax.set_xlim(0, T)
+            ax.set_title(title, fontsize=10)
+            ax.set_xlabel("vote")
+            ax.set_ylabel(ylab)
+            _end_labels(ax, ends)
+        fig.tight_layout(w_pad=9.0)
+        fig.savefig(out / name, dpi=130)
+        plt.close(fig)
+        print(f"wrote {out / name}: {note}")
+
+    def dip(A, C, ia, ic):
+        q = np.full(T + 1, np.nanmean(C["query_ap"][ic]))
+        return [
+            (q, "typed query", QUERY_GRAY, 1.6),
+            (np.nanmean(fill_query(C["head_ap"], C, "query_ap")[ic], axis=0), "head today", SLOTS[0], 2.0),
+            (np.nanmean(fill_query(A["head_ap"], A, "query_ap")[ia], axis=0), "head + query prior", SLOTS[1], 2.0),
+        ]
+
+    def shown(A, C, ia, ic):
+        q = np.full(T + 1, np.nanmean(C["query_F"][ic]))
+        return [
+            (q, "typed query", QUERY_GRAY, 1.6),
+            (np.nanmean(C["shown"][ic], axis=0), "today", SLOTS[0], 2.0),
+            (np.nanmean(A["shown"][ia], axis=0), "query prior", SLOTS[1], 2.0),
+        ]
+
+    def head_f(A, C, ia, ic):
+        q = np.full(T + 1, np.nanmean(C["query_F"][ic]))
+        return [
+            (q, "typed query", QUERY_GRAY, 1.6),
+            (np.nanmean(fill_query(C["head"], C)[ic], axis=0), "head today", SLOTS[0], 2.0),
+            (np.nanmean(fill_query(A["head"], A)[ia], axis=0), "head + query prior", SLOTS[1], 2.0),
+        ]
+
+    panels("fig_dip.png", "mean AP of the head (withheld half)", dip, "the dip: the head's AP against the query's")
+    panels("fig_head.png", "mean F-beta of the head's set", head_f, "the head's set, hidden by the hold to 30")
+    panels("fig_shown.png", "mean F-beta of the set on screen", shown, "the objective")
+
+    # The open-loop candidates on the control's votes: each against the shipped head, with two clustered SEs.
+    vs = [v for v in (str(v) for v in sets[0][3]["variants"]) if v not in ("head", "query")]
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 0.32 * len(vs) + 1.4), sharey=True)
+    for ax, (key, span, xlab) in zip(
+        axes,
+        (
+            ("ap", "1-25", "AP, votes 1-25, minus the head's"),
+            ("fk", "1-150", "F-beta at the head's count, votes 1-150, minus the head's"),
+        ),
+    ):
+        for k, (preset, title, A, C, ia, ic) in enumerate(sets):
+            fill = "query_ap" if key == "ap" else "query_F"
+            base = span_mean(fill_query(C[f"sh_{key}_head"], C, fill), SPANS[span])
+            for j, v in enumerate(vs):
+                d = span_mean(fill_query(C[f"sh_{key}_{v}"], C, fill), SPANS[span]) - base
+                m, se = float(np.nanmean(d)), clustered_se(d, C["cls"])
+                y = j + (k - (len(sets) - 1) / 2) * 0.22
+                ax.plot([m - 2 * se, m + 2 * se], [y, y], color=SLOTS[k], lw=1.4)
+                ax.plot([m], [y], "o", color=SLOTS[k], ms=5, mec=SURFACE, mew=1.5, label=title if j == 0 else None)
+        ax.axvline(0, color=INK2, lw=0.8)
+        ax.grid(axis="x", color=GRIDC, lw=0.8)
+        ax.set_xlabel(xlab, fontsize=9)
+    axes[0].set_yticks(range(len(vs)))
+    axes[0].set_yticklabels(vs)
+    axes[0].invert_yaxis()
+    axes[1].legend(frameon=False, fontsize=8, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(out / "fig_shadow.png", dpi=130)
+    plt.close(fig)
+    print(f"wrote {out / 'fig_shadow.png'}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -360,8 +527,11 @@ def main() -> None:
     p = sub.add_parser("pair")
     p.add_argument("--pair", action="append", required=True, help="PRESET=ARM.npz::CTL.npz")
     p.add_argument("--out", required=True)
+    f = sub.add_parser("figures")
+    f.add_argument("--pair", action="append", required=True, help="PRESET=ARM.npz::CTL.npz::TITLE")
+    f.add_argument("--out", required=True)
     a = ap.parse_args()
-    {"extract": extract, "shadow": shadow, "pair": pair}[a.cmd](a)
+    {"extract": extract, "shadow": shadow, "pair": pair, "figures": figures}[a.cmd](a)
 
 
 if __name__ == "__main__":
