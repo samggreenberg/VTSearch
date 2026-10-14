@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/autopilot-span.png)
+![bg fit](figs/autopilot-span.webp)
 
 ## Lay of<br>the Land
 
-<!-- build: figs/autopilot-span.build1.png -->
+<!-- build: figs/autopilot-span.build1.webp -->
 
-<!-- build: figs/autopilot-span.build2.png -->
+<!-- build: figs/autopilot-span.build2.webp -->
 
-<!-- build: figs/autopilot-span.build3.png -->
+<!-- build: figs/autopilot-span.build3.webp -->
 
 <!-- **a** — Span is the atlas as a gauge: have our votes been everywhere? The
      top four levels are forty cells, and forty's the bar. -->

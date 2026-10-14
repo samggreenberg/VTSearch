@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-result.png)
+![bg fit](figs/test-result.webp)
 
 ## Report<br>Card
 
-<!-- build: figs/test-result.build1.png -->
+<!-- build: figs/test-result.build1.webp -->
 
-<!-- build: figs/test-result.build2.png -->
+<!-- build: figs/test-result.build2.webp -->
 
 <!-- **a** — Laid out like the result pane. Headline's F-beta at your radio.
      Found leads with words, because below the line it leans on the

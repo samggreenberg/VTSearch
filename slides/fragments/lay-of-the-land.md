@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-lay-of-the-land.png)
+![bg fit](figs/calib-lay-of-the-land.webp)
 
 ## Lay of<br>the Land
 
-<!-- build: figs/calib-lay-of-the-land.build1.png -->
+<!-- build: figs/calib-lay-of-the-land.build1.webp -->
 
-<!-- build: figs/calib-lay-of-the-land.build2.png -->
+<!-- build: figs/calib-lay-of-the-land.build2.webp -->
 
-<!-- build: figs/calib-lay-of-the-land.build3.png -->
+<!-- build: figs/calib-lay-of-the-land.build3.webp -->
 
 <!-- **a** — Here's that rule from what you actually hold: total Goods up,
      total Bads across. No Goods, white, that's the text query. Under the quota,

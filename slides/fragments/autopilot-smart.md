@@ -1,10 +1,10 @@
 <!-- _class: full -->
 
-![bg fit](figs/autopilot-smart.png)
+![bg fit](figs/autopilot-smart.webp)
 
 ## Diminishing<br>Returns
 
-<!-- build: figs/autopilot-smart.build1.png -->
+<!-- build: figs/autopilot-smart.build1.webp -->
 
 <!-- **a** — Smart: is it still getting better? Each point's one retrain's
      mistakes. A line through the last ten is still falling: yellow. -->

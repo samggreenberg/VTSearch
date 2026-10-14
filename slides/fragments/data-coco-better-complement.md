@@ -1,23 +1,23 @@
 <!-- _class: full -->
 <!-- frames: equal -->
 
-![bg fit](figs/dataset-coco-better-complement.png)
+![bg fit](figs/dataset-coco-better-complement.webp)
 
 ## Venn Nothing<br>Isn't Enough
 
-<!-- build: figs/dataset-coco-better-complement.build1.png -->
+<!-- build: figs/dataset-coco-better-complement.build1.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build2.png -->
+<!-- build: figs/dataset-coco-better-complement.build2.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build3.png -->
+<!-- build: figs/dataset-coco-better-complement.build3.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build4.png -->
+<!-- build: figs/dataset-coco-better-complement.build4.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build5.png -->
+<!-- build: figs/dataset-coco-better-complement.build5.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build6.png -->
+<!-- build: figs/dataset-coco-better-complement.build6.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build7.png -->
+<!-- build: figs/dataset-coco-better-complement.build7.webp -->
 
 <!-- **a** — Why "complete" matters. Three classes; each circle is every image
      with that class, whatever else is in it. -->

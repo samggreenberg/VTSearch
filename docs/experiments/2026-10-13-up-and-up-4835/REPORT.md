@@ -68,5 +68,5 @@ Today's app against 10-08's, paired run for run (± SE, n = 720):
   says so rather than claim a step there.
 - **The check barely moves the end**: +0.001 / −0.003 / +0.008 against vote 150.
 
-The slides: `slides/figs/up-and-up.png` (beta 1/4, a three-page build) and `slides/figs/up-and-up-b1.png`,
-`slides/figs/up-and-up-b4.png`, drawn by `slides/figs/src/make-up-and-up-fig.py` from this CSV and #4668's.
+The slides: `slides/figs/up-and-up.webp` (beta 1/4, a three-page build) and `slides/figs/up-and-up-b1.webp`,
+`slides/figs/up-and-up-b4.webp`, drawn by `slides/figs/src/make-up-and-up-fig.py` from this CSV and #4668's.

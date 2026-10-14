@@ -109,7 +109,7 @@ PATH_SKIP_PREFIXES = ("docs/plans/",)
 # Documents whose relative links resolve against a directory other than their
 # own. Slide fragments are assembled into `slides/_build/<deck>.md` by
 # `slides/build.py`, which repoints every image path as it goes, so a fragment
-# writes `figs/x.png` relative to `slides/` rather than to its own directory.
+# writes `figs/x.webp` relative to `slides/` rather than to its own directory.
 # Resolving those against `slides/fragments/` would be wrong rather than
 # lenient, so the LINK check follows the convention instead of skipping it —
 # these links stay fully policed, just against the base Marp will see.

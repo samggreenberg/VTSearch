@@ -1,6 +1,6 @@
 <!-- _class: full -->
 
-![bg fit](figs/dataset-coco-better-bands.png)
+![bg fit](figs/dataset-coco-better-bands.webp)
 
 ## Same Words,<br>Three Sizes
 

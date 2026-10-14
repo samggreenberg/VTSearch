@@ -1,13 +1,13 @@
 <!-- _class: full -->
 
-![bg fit](figs/up-and-up.png)
+![bg fit](figs/up-and-up.webp)
 
 ## Up and<br>Up
 
 <div class="asof">Measured 2026-10-08 and 10-13</div>
 
-<!-- build: figs/up-and-up.build1.png -->
-<!-- build: figs/up-and-up.build2.png -->
+<!-- build: figs/up-and-up.build1.webp -->
+<!-- build: figs/up-and-up.build2.webp -->
 
 <!-- **a** — Did it pay off? F-beta at β ¼, the surest-results radio, 720
      simulated sessions. Nothing till vote 23 but the text query. First,

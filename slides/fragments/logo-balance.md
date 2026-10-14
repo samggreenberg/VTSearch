@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/logo-balance.png)
+![bg fit](figs/logo-balance.webp)
 
 ## The Fine<br>Print
 
-<!-- build: figs/logo-balance.build1.png -->
+<!-- build: figs/logo-balance.build1.webp -->
 
-<!-- build: figs/logo-balance.build2.png -->
+<!-- build: figs/logo-balance.build2.webp -->
 
-<!-- build: figs/logo-balance.build3.png -->
+<!-- build: figs/logo-balance.build3.webp -->
 
 <!-- **a** — Three radios, three rules. Pages sit by inliers, right ones above
      the line and wrong ones below. The faint real copies sit as low as the hard

@@ -27,7 +27,7 @@ Everything else is subtraction: one shared legend instead of one per panel, no
 suptitle (the slide's own headline says it), no footnote (that is a presenter
 note). The numbers are untouched.
 
-`--check` re-reads every report figure without writing PNGs, so a move or a
+`--check` re-reads every report figure without writing figures, so a move or a
 re-render on the report side surfaces as a failure here rather than as a stale
 slide nobody looked at.
 """
@@ -169,7 +169,7 @@ def positives_fig() -> None:
         handlelength=1.8,
     )
     fig.subplots_adjust(left=0.085, right=0.985, top=0.675, bottom=0.145, wspace=0.13, hspace=0.30)
-    save(fig, OUT, "positive-starvation.png", column=FULL_BLEED, tight=False)
+    save(fig, OUT, "positive-starvation.webp", column=FULL_BLEED, tight=False)
 
 
 def _split_traces(panel: report_svg.Panel) -> tuple[list, list, list]:
@@ -242,7 +242,7 @@ def cost_traces_fig() -> None:
     )
     fig.supylabel("cost = FPR + FNR", fontsize=15, x=0.005)
     fig.subplots_adjust(left=0.135, right=0.985, top=0.675, bottom=0.145, wspace=0.13, hspace=0.30)
-    save(fig, OUT, "cost-traces.png", column=FULL_BLEED, tight=False)
+    save(fig, OUT, "cost-traces.webp", column=FULL_BLEED, tight=False)
 
 
 BOX_SERIES = [
@@ -343,12 +343,12 @@ def regret_fig() -> None:
     handles = [plt.Line2D([], [], color=COLOR[e], linewidth=7) for e in EMBEDDERS]
     fig.legend(handles, EMBEDDERS, loc="upper center", ncol=3, frameon=False, bbox_to_anchor=(0.5, 1.03))
     fig.tight_layout(rect=(0, 0, 1, 0.93))
-    save(fig, OUT, "regret-decomposition.png")
+    save(fig, OUT, "regret-decomposition.webp")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument("--check", action="store_true", help="re-derive everything, write no PNGs")
+    parser.add_argument("--check", action="store_true", help="re-derive everything, write no figures")
     args = parser.parse_args()
 
     if args.check:
@@ -360,8 +360,8 @@ def main() -> int:
 
     positives_fig()
     cost_traces_fig()
-    region_voting_fig("region-voting-vs-binary.png", rows=2, size=(7.2, 7.0), column=SIDEBAR)
-    region_voting_fig("region-voting-vs-binary.wide.png", rows=1, size=(11.6, 6.4), column=FULL_BLEED)
+    region_voting_fig("region-voting-vs-binary.webp", rows=2, size=(7.2, 7.0), column=SIDEBAR)
+    region_voting_fig("region-voting-vs-binary.wide.webp", rows=1, size=(11.6, 6.4), column=FULL_BLEED)
     regret_fig()
     return 0
 

@@ -1,10 +1,10 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-split-idea.png)
+![bg fit](figs/calib-split-idea.webp)
 
 ## Train More,<br>Check Less
 
-<!-- build: figs/calib-split-idea.build1.png -->
+<!-- build: figs/calib-split-idea.build1.webp -->
 
 <!-- **a** — Every fold split the votes fifty-fifty, half to train and half to
      place the cut. Nobody'd measured that. -->

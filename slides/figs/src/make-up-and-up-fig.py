@@ -187,10 +187,10 @@ def _figure(curves: dict[str, Curve], beta_name: str, shown: int) -> Figure:
 def main() -> int:
     for preset, (beta_name, name) in PRESETS.items():
         curves = read_curves(preset)
-        save(_figure(curves, beta_name, len(LINES)), OUT, f"{name}.png", column=FULL_BLEED, tight=False)
+        save(_figure(curves, beta_name, len(LINES)), OUT, f"{name}.webp", column=FULL_BLEED, tight=False)
         if preset == "b025":
             for k in range(1, len(LINES)):
-                save(_figure(curves, beta_name, k), OUT, f"{name}.build{k}.png", column=FULL_BLEED, tight=False)
+                save(_figure(curves, beta_name, k), OUT, f"{name}.build{k}.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

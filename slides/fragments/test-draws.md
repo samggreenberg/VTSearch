@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-draws.png)
+![bg fit](figs/test-draws.webp)
 
 ## Luck of<br>the Draw
 
-<!-- build: figs/test-draws.build1.png -->
+<!-- build: figs/test-draws.build1.webp -->
 
-<!-- build: figs/test-draws.build2.png -->
+<!-- build: figs/test-draws.build2.webp -->
 
 <!-- **a** — One range for the whole line? Simulate: one draw picks a count for
      every band at once, 4,000 times. -->

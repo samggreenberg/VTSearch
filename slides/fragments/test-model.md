@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-model.png)
+![bg fit](figs/test-model.webp)
 
 ## Second<br>Opinion
 
-<!-- build: figs/test-model.build1.png -->
+<!-- build: figs/test-model.build1.webp -->
 
-<!-- build: figs/test-model.build2.png -->
+<!-- build: figs/test-model.build2.webp -->
 
-<!-- build: figs/test-model.build3.png -->
+<!-- build: figs/test-model.build3.webp -->
 
 <!-- **a** — Second break: below the line, the hard half. First pile again: 19
      matches down here, so Found is really 49%. The picks got four, all near the

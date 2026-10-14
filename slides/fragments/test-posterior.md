@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-posterior.png)
+![bg fit](figs/test-posterior.webp)
 
 ## Posterior<br>Motive
 
-<!-- build: figs/test-posterior.build1.png -->
+<!-- build: figs/test-posterior.build1.webp -->
 
-<!-- build: figs/test-posterior.build2.png -->
+<!-- build: figs/test-posterior.build2.webp -->
 
-<!-- build: figs/test-posterior.build3.png -->
+<!-- build: figs/test-posterior.build3.webp -->
 
 <!-- **a** — One band up close. The app keeps a curve over every share it
      could have right, high where it's believable. Before any picks, anything

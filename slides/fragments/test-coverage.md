@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-coverage.png)
+![bg fit](figs/test-coverage.webp)
 
 ## Grading<br>the Grader
 
 <div class="asof">Measured 2026-10-06</div>
 
-<!-- build: figs/test-coverage.build1.png -->
+<!-- build: figs/test-coverage.build1.webp -->
 
-<!-- build: figs/test-coverage.build2.png -->
+<!-- build: figs/test-coverage.build2.webp -->
 
 <!-- **a** — Does it hold? Almost 15,000 Tests on the last section's sessions,
      matches thinned three ways. Right held the truth 92.5 to 99% of the time,

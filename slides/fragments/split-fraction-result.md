@@ -1,6 +1,6 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-split-fraction.png)
+![bg fit](figs/calib-split-fraction.webp)
 
 ## What the<br>Sweep Said
 

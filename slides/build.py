@@ -7,7 +7,7 @@ otherwise fail late (missing fragment, missing figure, a stray `---` inside a
 fragment that would silently split one slide into two, a build marker naming a
 missing stage figure).
 
-A fragment may carry `<!-- build -->` / `<!-- build: figs/x.png -->` markers:
+A fragment may carry `<!-- build -->` / `<!-- build: figs/x.webp -->` markers:
 progressive-reveal chop points. The audience build expands each marker into an
 earlier stage of the slide (the content above the marker, the figure swapped
 when the marker names one), all sharing one page number; the speaker build
@@ -57,7 +57,7 @@ IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
 # markdown image cannot sit inside a <figure> without a blank line either side.
 SRC_RE = re.compile(r'src="([^"]+)"')
 # A build marker, alone on its line: `<!-- build -->` repeats the slide in the
-# audience deck with only the content above the marker; `<!-- build: figs/x.png -->`
+# audience deck with only the content above the marker; `<!-- build: figs/x.webp -->`
 # additionally swaps the slide's (first) figure for that stage's figure. The
 # speaker build ignores markers and keeps one page per fragment.
 BUILD_RE = re.compile(r"^\s*<!--\s*build(?:\s*:\s*(\S+))?\s*-->\s*$")
@@ -238,7 +238,7 @@ def yaml_scalar(value: str) -> str:
 def rewrite_images(text: str) -> str:
     """Repoint image paths from repo-root-relative to _build/-relative.
 
-    Fragments are authored with paths like `figs/x.png` relative to the repo
+    Fragments are authored with paths like `figs/x.webp` relative to the repo
     root, but the assembled deck lives in _build/, so Marp would resolve them
     one directory too deep. Marp only *warns* about missing local files and
     still exits 0, so this must be right rather than merely checked.
@@ -659,7 +659,7 @@ def check_build_markers(name: str, text: str, problems: list[str]) -> None:
             if line.strip().startswith("<!-- build"):
                 problems.append(
                     f"fragments/{name}.md:{lineno}: malformed build marker — expected "
-                    f"`<!-- build -->` or `<!-- build: figs/x.png -->` alone on its line"
+                    f"`<!-- build -->` or `<!-- build: figs/x.webp -->` alone on its line"
                 )
             continue
         figure = marker.group(1)

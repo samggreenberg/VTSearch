@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/many-words.png)
+![bg fit](figs/many-words.webp)
 
 ## In So Many<br>Words
 
-<!-- build: figs/many-words.build1.png -->
+<!-- build: figs/many-words.build1.webp -->
 
-<!-- build: figs/many-words.build2.png -->
+<!-- build: figs/many-words.build2.webp -->
 
 <!-- **a** — Now a detector made from words. I typed "a chair", and Autopilot
      voted the text sort's top three Good and four from its middle Bad. Look

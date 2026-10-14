@@ -238,8 +238,8 @@ def _canvas() -> tuple[Figure, plt.Axes]:
 def _save(stages: int, draw, name: str) -> None:
     """Every stage of a build at the canvas's declared bounds, the last as the slide's own figure."""
     for stage in range(1, stages):
-        save(draw(stage), OUT, f"{name}.build{stage}.png", column=FULL_BLEED, tight=False)
-    save(draw(stages), OUT, f"{name}.png", column=FULL_BLEED, tight=False)
+        save(draw(stage), OUT, f"{name}.build{stage}.webp", column=FULL_BLEED, tight=False)
+    save(draw(stages), OUT, f"{name}.webp", column=FULL_BLEED, tight=False)
 
 
 def _pct(share: float) -> str:

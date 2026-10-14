@@ -1,6 +1,6 @@
 <!-- _class: full -->
 
-![bg fit](figs/dataset-fullmarks-shape.png)
+![bg fit](figs/dataset-fullmarks-shape.webp)
 
 ## What's in<br>the Pile
 

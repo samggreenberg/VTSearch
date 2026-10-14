@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/logo-line.png)
+![bg fit](figs/logo-line.webp)
 
 ## Raise<br>the Bar
 
 <div class="asof">Measured 2026-10-01 and 10-02</div>
 
-<!-- build: figs/logo-line.build1.png -->
+<!-- build: figs/logo-line.build1.webp -->
 
-<!-- build: figs/logo-line.build2.png -->
+<!-- build: figs/logo-line.build2.webp -->
 
 <!-- **a** — The matcher on that pile: F1 as we vote. The old line, 8 inliers,
      sits near 0.43: type clears 8 easily. -->

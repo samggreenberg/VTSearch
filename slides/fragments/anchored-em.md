@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-em-anchored.png)
+![bg fit](figs/calib-em-anchored.webp)
 
 ## Vote of<br>Confidence
 
-<!-- build: figs/calib-em-anchored.build1.png -->
+<!-- build: figs/calib-em-anchored.build1.webp -->
 
-<!-- build: figs/calib-em-anchored.build2.png -->
+<!-- build: figs/calib-em-anchored.build2.webp -->
 
-<!-- build: figs/calib-em-anchored.build3.png -->
+<!-- build: figs/calib-em-anchored.build3.webp -->
 
 <!-- **a** — How Above Average's fit uses the votes: the same EM as Great
      Expectations, plus the checks and crosses along the bottom. Same terrible

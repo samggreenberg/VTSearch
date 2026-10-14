@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-floor-ask.png)
+![bg fit](figs/calib-floor-ask.webp)
 
 ## Say It<br>Out Loud
 
-<!-- build: figs/calib-floor-ask.build1.png -->
+<!-- build: figs/calib-floor-ask.build1.webp -->
 
-<!-- build: figs/calib-floor-ask.build2.png -->
+<!-- build: figs/calib-floor-ask.build2.webp -->
 
-<!-- build: figs/calib-floor-ask.build3.png -->
+<!-- build: figs/calib-floor-ask.build3.webp -->
 
 <!-- **a** — New question. The line keeps 32 photos nobody voted on; how many
      are right? The user deserves an honest answer, with a range. -->

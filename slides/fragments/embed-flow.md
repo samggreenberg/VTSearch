@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/embed-flow.png)
+![bg fit](figs/embed-flow.webp)
 
 ## Embed-time<br>Stories
 
-<!-- build: figs/embed-flow.build1.png -->
+<!-- build: figs/embed-flow.build1.webp -->
 
-<!-- build: figs/embed-flow.build2.png -->
+<!-- build: figs/embed-flow.build2.webp -->
 
-<!-- build: figs/embed-flow.build3.png -->
+<!-- build: figs/embed-flow.build3.webp -->
 
 <!-- **a** — Let's talk about how this works. There's an embedder called
      SigLIP. -->

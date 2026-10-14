@@ -1,18 +1,18 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-acq-flow.png)
+![bg fit](figs/calib-acq-flow.webp)
 
 ## Second Cut
 
-<!-- build: figs/vote-boundary.png -->
+<!-- build: figs/vote-boundary.webp -->
 
-<!-- build: figs/vote-boundary-second-cut.png -->
+<!-- build: figs/vote-boundary-second-cut.webp -->
 
-<!-- build: figs/calib-acq-flow.build1.png -->
+<!-- build: figs/calib-acq-flow.build1.webp -->
 
-<!-- build: figs/calib-acq-flow.build2.png -->
+<!-- build: figs/calib-acq-flow.build2.webp -->
 
-<!-- build: figs/calib-acq-flow.build3.png -->
+<!-- build: figs/calib-acq-flow.build3.webp -->
 
 <!-- **a** — Back to the start: the detector, its two cuts, and its question
      right on the line. Picking that question was the line's second job. -->

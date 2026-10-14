@@ -1,16 +1,16 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-rounds.png)
+![bg fit](figs/test-rounds.webp)
 
 ## Pencils<br>Down
 
-<!-- build: figs/test-rounds.build1.png -->
+<!-- build: figs/test-rounds.build1.webp -->
 
-<!-- build: figs/test-rounds.build2.png -->
+<!-- build: figs/test-rounds.build2.webp -->
 
-<!-- build: figs/test-rounds.build3.png -->
+<!-- build: figs/test-rounds.build3.webp -->
 
-<!-- build: figs/test-rounds.build4.png -->
+<!-- build: figs/test-rounds.build4.webp -->
 
 <!-- **a** — Now the app. The Test autopilot deals five picks at a time, both
      sides of the line, line frozen till it's done. -->

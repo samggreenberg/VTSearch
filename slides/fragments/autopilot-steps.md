@@ -1,16 +1,16 @@
 <!-- _class: full -->
 
-![bg fit](figs/autopilot-steps.png)
+![bg fit](figs/autopilot-steps.webp)
 
 ## Flight Plan
 
-<!-- build: figs/autopilot-steps.build1.png -->
+<!-- build: figs/autopilot-steps.build1.webp -->
 
-<!-- build: figs/autopilot-steps.build2.png -->
+<!-- build: figs/autopilot-steps.build2.webp -->
 
-<!-- build: figs/autopilot-steps.build3.png -->
+<!-- build: figs/autopilot-steps.build3.webp -->
 
-<!-- build: figs/autopilot-steps.build4.png -->
+<!-- build: figs/autopilot-steps.build4.webp -->
 
 <!-- **a** — Autopilot picks every photo we see. It opens on our text query:
      Goods off the top till we have three, then four Bads at the query's

@@ -1,18 +1,18 @@
 <!-- _class: full -->
 
-![bg fit](figs/atlas-cells.png)
+![bg fit](figs/atlas-cells.webp)
 
 ## Cover Story
 
-<!-- build: figs/atlas-cells.build1.png -->
+<!-- build: figs/atlas-cells.build1.webp -->
 
-<!-- build: figs/atlas-cells.build2.png -->
+<!-- build: figs/atlas-cells.build2.webp -->
 
-<!-- build: figs/atlas-cells.build3.png -->
+<!-- build: figs/atlas-cells.build3.webp -->
 
-<!-- build: figs/atlas-cells.build4.png -->
+<!-- build: figs/atlas-cells.build4.webp -->
 
-<!-- build: figs/atlas-cells.build5.png -->
+<!-- build: figs/atlas-cells.build5.webp -->
 
 <!-- **a** — Same photos, forget the detector. What parts does this collection
      have? -->
