@@ -20,14 +20,27 @@ eval's horizon).  Every rule is scored the same two ways:
 
 Signals, each read on Train at the session's beta (``voting_iterations._line_reading``):
 
-* ``efbeta``: the expected F-beta at the line's cut over the corpus's unvoted items (what ``corpus_cut``
+* ``efbeta``: the expected F-beta at the line's cut over the Train corpus's unvoted items (what ``corpus_cut``
   maximises).  It falls as the session labels positives away, model unchanged.
-* ``fresh``: the class model's expected F-beta on a fresh corpus like this one.  Counts no item.
+* ``corpus``: the same class model's line on the whole Train corpus read as unlabelled: a Find on a corpus like
+  this one.
+* ``fresh``: the class model's expected F-beta in its own normals, on a fresh corpus.  Counts no item.
 * ``sep``: the labels' d'.
+* ``find`` (a diagnostic, :data:`DIAGNOSTIC`): the expected F-beta of Find's line on the withheld half, from
+  that half's scores alone.  The app has no withheld half; it bounds what a better estimate could buy.
 
-A rule ``{signal}:w{W}:e{E}`` fires at the first click t, from the first click the class model cuts the line
-(``line_head_count == 0``; the head's count line before it reads a model too thin to trust), at which the
-signal's running best has risen by at most E over the last W clicks.  ``done+`` variants wait for Done too.
+Two rule families, each from the first click the class model cuts the line (``line_head_count == 0``; the head's
+count line before it reads a model too thin to trust):
+
+* ``{signal}:best:w{W}:e{E}`` fires at the first click at which the signal's running best has risen by at most E
+  over the last W clicks.  Quick to fire on a noisy signal: one high reading sets a best that later ones miss.
+* ``{signal}:mean:w{W}:e{E}`` fires at the first click at which the signal's mean over the last W clicks is at
+  most E above its mean over the W before them: the trend, with the noise averaged.
+
+A third family reads the level rather than the trend: ``{signal}:level:{T}`` fires at the first click the signal
+reads at least T, which spends few clicks where the estimate is high and many where it is low.
+
+``done+`` variants wait for Done, then apply the rule.
 
     python stop_signal_4878.py --cells 0.25=<b025>/results/cells --cells 1=<b1>/... --cells 4=<b4>/... \\
         --work /expscratch/$USER/stop-4878/work --out docs/experiments/<date>-stop-signal-4878
@@ -53,22 +66,50 @@ from vtscore.eval.autopilot_flow import STOPPING_PHASE  # noqa: E402
 #: The eval's horizon: a session whose rule never fires leaves here.
 HORIZON = 150
 #: The signals a rule can watch, by the column each is read from.
-SIGNALS = {"efbeta": "line_efbeta", "fresh": "line_efbeta_fresh", "sep": "line_separation"}
+SIGNALS = {
+    "efbeta": "line_efbeta",
+    "corpus": "line_efbeta_corpus",
+    "fresh": "line_efbeta_fresh",
+    "sep": "line_separation",
+    "find": "find_efbeta",
+}
+#: Signals the app cannot read: priced as a bound on what a better estimate could buy, never as a candidate.
+DIAGNOSTIC = frozenset({"find"})
 #: The rule grid: windows in clicks, and the rise in the running best that still counts as "stopped rising".
 WINDOWS = (10, 20, 30)
-EPSILONS = {"efbeta": (0.0, 0.01, 0.02), "fresh": (0.0, 0.01, 0.02), "sep": (0.0, 0.05, 0.1)}
+EPSILONS = {
+    "efbeta": (0.0, 0.01, 0.02),
+    "corpus": (0.0, 0.01, 0.02),
+    "fresh": (0.0, 0.01, 0.02),
+    "sep": (0.0, 0.05, 0.1),
+    "find": (0.0, 0.01, 0.02),
+}
+#: The level family's thresholds, in each signal's own units.
+LEVELS = {
+    "efbeta": (0.3, 0.5, 0.7, 0.9),
+    "corpus": (0.3, 0.5, 0.7, 0.9),
+    "fresh": (0.8, 0.9, 0.95, 0.98),
+    "sep": (1.5, 2.0, 2.5, 3.0),
+    "find": (0.3, 0.5, 0.7, 0.9),
+}
 #: Fixed stops for the yardstick.
 FIXED = tuple(range(1, HORIZON + 1))
 PRESET = {0.25: "β 1/4", 1.0: "β 1", 4.0: "β 4"}
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#898781", "#e1e0d9", "#fcfcfb"
 
 
+#: The two ways a rule reads "stopped rising".
+KINDS = ("best", "mean")
+
+
 def rule_names() -> list[str]:
     names = []
     for sig in SIGNALS:
-        for w in WINDOWS:
-            for e in EPSILONS[sig]:
-                names.append(f"{sig}:w{w}:e{e:g}")
+        for kind in KINDS:
+            for w in WINDOWS:
+                for e in EPSILONS[sig]:
+                    names.append(f"{sig}:{kind}:w{w}:e{e:g}")
+        names += [f"{sig}:level:{t:g}" for t in LEVELS[sig]]
     return names
 
 
@@ -80,14 +121,38 @@ def _per_click(t: np.ndarray, v: np.ndarray, horizon: int = HORIZON) -> np.ndarr
     return out
 
 
-def _plateau_stop(sig: np.ndarray, start: int, w: int, eps: float) -> int | None:
-    """The first click (1-based) from *start* at which the running best rose by at most *eps* over the last *w*."""
-    best = np.fmax.accumulate(np.where(np.isnan(sig), -np.inf, sig))
-    for c in range(max(start, w + 1), sig.size + 1):
-        then, now = best[c - 1 - w], best[c - 1]
-        if np.isfinite(then) and now - then <= eps:
-            return c
+def rule_stop(sig: np.ndarray, start: int, frm: int, kind: str, w: int, eps: float) -> int | None:
+    """The first click (1-based) at or after *frm* at which the signal has stopped rising; ``None`` if never.
+
+    *sig* is the signal at every click (NaN where none was read), read from *start* on.  ``best``: its running
+    best has risen by at most *eps* over the last *w* clicks.  ``mean``: its mean over the last *w* clicks is at
+    most *eps* above its mean over the *w* before them, both windows at or after *start* and read at every
+    click.  Each reads only clicks up to the one tested, as the app would.
+    """
+    s = np.where(np.arange(1, sig.size + 1) >= start, sig, np.nan)
+    best = np.fmax.accumulate(np.where(np.isnan(s), -np.inf, s))
+    for c in range(max(frm, start), s.size + 1):
+        if kind == "best":
+            if c - 1 - w < 0:
+                continue
+            then, now = best[c - 1 - w], best[c - 1]
+            if np.isfinite(then) and now - then <= eps:
+                return c
+        else:
+            if c - 2 * w < start - 1:
+                continue
+            recent, before = s[c - w : c], s[c - 2 * w : c - w]
+            if np.isnan(recent).any() or np.isnan(before).any():
+                continue
+            if float(recent.mean()) - float(before.mean()) <= eps:
+                return c
     return None
+
+
+def level_stop(sig: np.ndarray, frm: int, tau: float) -> int | None:
+    """The first click (1-based) at or after *frm* at which the signal reads at least *tau*; ``None`` if never."""
+    hit = np.flatnonzero(sig[frm - 1 :] >= tau)
+    return int(frm + hit[0]) if hit.size else None
 
 
 def session_rows(g: pd.DataFrame) -> dict:
@@ -109,12 +174,21 @@ def session_rows(g: pd.DataFrame) -> dict:
         out[f"sig_{sig}"] = _per_click(t, v)
     rules: dict[str, int | None] = {}
     for name in rule_names():
-        sig, w, e = name.split(":")
+        if ":level:" in name:
+            sig, _, tau = name.split(":")
+            series = out[f"sig_{sig}"]
+            for at, frm in ((name, start), (f"done+{name}", out["done"])):
+                rules[at] = None if start is None or frm is None else level_stop(series, max(start, frm), float(tau))
+            continue
+        sig, kind, w, e = name.split(":")
         series, win, eps = out[f"sig_{sig}"], int(w[1:]), float(e[1:])
-        rules[name] = None if start is None else _plateau_stop(series, start, win, eps)
-        # Done first, then the plateau: the first click from Done at which the signal has stopped rising.
-        late = None if start is None or out["done"] is None else max(start, out["done"])
-        rules[f"done+{name}"] = None if late is None else _plateau_stop(series, late, win, eps)
+        rules[name] = None if start is None else rule_stop(series, start, start, kind, win, eps)
+        # Done first, then the rule: the first click from Done at which the signal has stopped rising.  The
+        # windows may reach back before Done: the signal's history is the app's either way.
+        done_at = out["done"]
+        rules[f"done+{name}"] = (
+            None if start is None or done_at is None else rule_stop(series, start, done_at, kind, win, eps)
+        )
     out["rules"] = rules
     return out
 
@@ -179,6 +253,11 @@ def score(sessions: pd.DataFrame, stop_col: str | None, fixed: int | None = None
     frac = mean_leave - lo
     fixed_at = (1 - frac) * fb[:, max(lo, 1) - 1] + frac * fb[:, hi - 1]
     edge = pd.Series(at - fixed_at)
+    # The same clicks dealt at random: each session's F-beta averaged over every session's leave click.  The
+    # rule and its shuffle spend the same clicks in total and in distribution, so the difference is only
+    # whether the rule gives each session the clicks that pay there.
+    dealt = fb[:, leave - 1].mean(axis=1)
+    shuffle_edge = pd.Series(at - dealt)
     gain = pd.Series(final - at)
     cat = sessions["category"].reset_index(drop=True)
     return {
@@ -191,6 +270,8 @@ def score(sessions: pd.DataFrame, stop_col: str | None, fixed: int | None = None
         "fixed_at_mean_leave": float(fixed_at.mean()),
         "edge": float(edge.mean()),
         "se_edge": _se(edge, cat),
+        "shuffle_edge": float(shuffle_edge.mean()),
+        "se_shuffle_edge": _se(shuffle_edge, cat),
     }
 
 
@@ -203,14 +284,93 @@ def load(work: Path) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+#: The placebo: stop a fixed number of clicks after the class model first cuts the line.  It reads no signal,
+#: only when the session got a class model, which already says how hard the session is.  A signal rule is worth
+#: something only where it beats this.
+DELAYS = tuple(range(0, 125, 5))
+
+
+def with_placebos(sessions: pd.DataFrame) -> pd.DataFrame:
+    """*sessions* with Done's stop and the delay placebos as ``stop[...]`` columns."""
+    start = pd.to_numeric(sessions["class_model_from"], errors="coerce")
+    extra = {"stop[done]": sessions["done"]}
+    for n in DELAYS:
+        stop = start + n
+        extra[f"stop[delay:{n}]"] = stop.where(stop <= HORIZON)
+    return sessions.assign(**extra)
+
+
+def family(rule: str) -> str:
+    """``done``, ``delay``, ``diagnostic`` (a signal the app cannot read), or ``candidate``."""
+    if rule == "done":
+        return "done"
+    if rule.startswith("delay:"):
+        return "delay"
+    sig = rule.removeprefix("done+").split(":")[0]
+    return "diagnostic" if sig in DIAGNOSTIC else "candidate"
+
+
 def price(sessions: pd.DataFrame) -> pd.DataFrame:
     rows = []
-    rules = [c[5:-1] for c in sessions.columns if c.startswith("stop[")]
     for (arm, beta), g in sessions.groupby(["arm", "beta"], sort=False):
-        g = g.reset_index(drop=True)
-        d = g.assign(**{"stop[done]": g["done"]})
-        for rule in ["done", *rules]:
-            rows.append({"arm": arm, "beta": beta, "rule": rule, **score(d, f"stop[{rule}]")})
+        d = with_placebos(g.reset_index(drop=True))
+        rules = [c[5:-1] for c in d.columns if c.startswith("stop[")]
+        for rule in rules:
+            rows.append({"arm": arm, "beta": beta, "rule": rule, "family": family(rule), **score(d, f"stop[{rule}]")})
+    return pd.DataFrame(rows)
+
+
+#: Seeds the held-out reading chooses on, and the ones it reports on.
+SELECT_SEEDS = (0, 1)
+
+
+def held_out(sessions: pd.DataFrame) -> pd.DataFrame:
+    """Each family's best rule chosen on :data:`SELECT_SEEDS` by the shuffle edge, then scored on the other seeds.
+
+    With 200 rules a preset, the best edge on the sessions it was chosen on is biased up; this one is not.
+    """
+    pick = sessions[sessions["seed"].isin(SELECT_SEEDS)]
+    test = sessions[~sessions["seed"].isin(SELECT_SEEDS)]
+    if pick.empty or test.empty:
+        return pd.DataFrame()
+    chosen = price(pick)
+    rows = []
+    for (arm, beta), g in test.groupby(["arm", "beta"], sort=False):
+        d = with_placebos(g.reset_index(drop=True))
+        c = chosen[chosen["arm"] == arm]
+        for fam in ("done", "delay", "candidate", "diagnostic"):
+            f = c[c["family"] == fam]
+            if f.empty:
+                continue
+            best = f.loc[f["shuffle_edge"].idxmax()]
+            rows.append(
+                {
+                    "arm": arm,
+                    "beta": beta,
+                    "family": fam,
+                    "rule": best["rule"],
+                    "chosen_shuffle_edge": best["shuffle_edge"],
+                    **score(d, f"stop[{best['rule']}]"),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+#: The rules the report reads by band: Done, one level rule at one threshold for every preset, the same after
+#: Done, and the placebo that stops when the class model first cuts.
+BY_BAND = ("done", "efbeta:level:0.5", "done+efbeta:level:0.5", "delay:0")
+
+
+def by_band(sessions: pd.DataFrame) -> pd.DataFrame:
+    """:data:`BY_BAND`'s rules per preset, over all sessions and per size band."""
+    rows = []
+    for (arm, beta), g in sessions.groupby(["arm", "beta"], sort=False):
+        d = with_placebos(g.reset_index(drop=True))
+        band = d["category"].astype(str).str.split("@").str[1].fillna("")
+        for scope, h in [("all", d), *((str(b), x) for b, x in d.groupby(band, sort=True))]:
+            h = h.reset_index(drop=True)
+            for rule in BY_BAND:
+                rows.append({"arm": arm, "beta": beta, "scope": scope, "rule": rule, **score(h, f"stop[{rule}]")})
     return pd.DataFrame(rows)
 
 
@@ -248,31 +408,65 @@ def _axes(ax) -> None:
     ax.set_axisbelow(True)
 
 
-def frontier_figure(priced: pd.DataFrame, front: pd.DataFrame, out: Path) -> None:
-    """Mean leave click against mean F-beta at leave: the fixed-click curve, Done, and every rule."""
+def kind(rule: str) -> str:
+    """``done``, ``delay``, ``trend`` (``best`` or ``mean``), ``level``, or ``diagnostic``, for a figure's colour."""
+    fam = family(rule)
+    if fam != "candidate":
+        return fam
+    return "level" if ":level:" in rule else "trend"
+
+
+#: How the figures draw each kind (the reference palette's first slots; every kind is also in the legend).
+KIND_COLORS = {"trend": "#2a78d6", "level": "#eb6834", "diagnostic": "#898781"}
+
+
+def edges_figure(priced: pd.DataFrame, out: Path) -> None:
+    """Each rule's two edges against its mean leave click: over its stops dealt at random, and over a fixed click."""
     import matplotlib  # noqa: PLC0415
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt  # noqa: PLC0415
 
     arms = list(dict.fromkeys(priced["arm"]))
-    fig, axes = plt.subplots(1, len(arms), figsize=(4.0 * len(arms), 3.8), facecolor=SURFACE)
-    colors = {"efbeta": "#2a78d6", "fresh": "#eb6834", "sep": "#1baf7a"}
-    for ax, arm in zip(np.atleast_1d(axes), arms, strict=True):
-        _axes(ax)
-        f = front[front["arm"] == arm]
-        ax.plot(f["click"], f["fbeta"], color=MUTED, linewidth=1.5, label="stop at a fixed click")
-        p = priced[priced["arm"] == arm]
-        for sig, color in colors.items():
-            q = p[p["rule"].str.startswith(f"{sig}:")]
-            ax.scatter(q["mean_leave"], q["fbeta_at_leave"], s=14, color=color, label=f"{sig} plateau", zorder=3)
-        d = p[p["rule"] == "done"].iloc[0]
-        ax.scatter([d["mean_leave"]], [d["fbeta_at_leave"]], s=60, marker="D", color=INK, label="Done", zorder=4)
-        ax.set_title(arm, color=INK, fontsize=10)
-        ax.set_xlabel("mean click the session leaves at", color=INK)
-    np.atleast_1d(axes)[0].set_ylabel("withheld F-beta at leave (mean)", color=INK)
-    np.atleast_1d(axes)[-1].legend(frameon=False, fontsize=7.5, labelcolor=INK, loc="lower right")
-    fig.tight_layout()
+    fig, axes = plt.subplots(
+        2, len(arms), figsize=(3.8 * len(arms), 6.4), sharex=True, sharey="row", facecolor=SURFACE, squeeze=False
+    )
+    rows = (
+        ("shuffle_edge", "edge over the same clicks\ndealt at random"),
+        ("edge", "edge over a stop\nat a fixed click"),
+    )
+    for col, arm in enumerate(arms):
+        p = priced[priced["arm"] == arm].assign(kind=lambda d: d["rule"].map(kind))
+        for row, (metric, label) in enumerate(rows):
+            ax = axes[row][col]
+            _axes(ax)
+            ax.axhline(0, color=MUTED, linewidth=0.8)
+            dl = p[p["kind"] == "delay"].sort_values("mean_leave")
+            ax.plot(dl["mean_leave"], dl[metric], color=INK, linewidth=1, linestyle=":", label="delay placebo")
+            for k, color in KIND_COLORS.items():
+                q = p[p["kind"] == k]
+                after = q["rule"].str.startswith("done+")
+                ax.scatter(q.loc[~after, "mean_leave"], q.loc[~after, metric], s=12, color=color, label=k, zorder=3)
+                ax.scatter(
+                    q.loc[after, "mean_leave"],
+                    q.loc[after, metric],
+                    s=14,
+                    marker="^",
+                    color=color,
+                    label=f"Done, then {k}" if k != "diagnostic" else None,
+                    zorder=3,
+                )
+            d = p[p["kind"] == "done"].iloc[0]
+            ax.scatter([d["mean_leave"]], [d[metric]], s=60, marker="D", color=INK, label="Done", zorder=4)
+            if row == 0:
+                ax.set_title(arm, color=INK, fontsize=10)
+            else:
+                ax.set_xlabel("mean click the session leaves at", color=INK)
+            if col == 0:
+                ax.set_ylabel(label, color=INK)
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(handles, labels, frameon=False, fontsize=8, labelcolor=INK, loc="lower center", ncol=len(labels))
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(out, dpi=130, facecolor=SURFACE)
     plt.close(fig)
 
@@ -290,13 +484,16 @@ def calibration_figure(cal: pd.DataFrame, out: Path) -> None:
         _axes(ax)
         g = cal[cal["arm"] == arm]
         ax.plot(g["click"], g["fbeta"], color=INK, linewidth=2, label="withheld F-beta")
-        ax.plot(g["click"], g["efbeta"], color="#2a78d6", linewidth=1.5, label="efbeta (unvoted corpus)")
-        ax.plot(g["click"], g["fresh"], color="#eb6834", linewidth=1.5, label="fresh (fresh corpus)")
+        ax.plot(g["click"], g["efbeta"], color="#2a78d6", linewidth=1.5, label="efbeta (unvoted Train)")
+        ax.plot(g["click"], g["corpus"], color="#1baf7a", linewidth=1.5, label="corpus (Train as unlabelled)")
+        ax.plot(g["click"], g["fresh"], color="#eb6834", linewidth=1.5, label="fresh (class model's normals)")
+        ax.plot(g["click"], g["find"], color="#eda100", linewidth=1.5, linestyle="--", label="find (withheld half)")
         ax.set_title(arm, color=INK, fontsize=10)
         ax.set_xlabel("clicks", color=INK)
-    np.atleast_1d(axes)[0].set_ylabel("F-beta (mean over sessions with a class model)", color=INK)
-    np.atleast_1d(axes)[-1].legend(frameon=False, fontsize=7.5, labelcolor=INK, loc="lower right")
-    fig.tight_layout()
+    np.atleast_1d(axes)[0].set_ylabel("F-beta, mean of sessions with a class model", color=INK)
+    handles, labels = np.atleast_1d(axes)[0].get_legend_handles_labels()
+    fig.legend(handles, labels, frameon=False, fontsize=8, labelcolor=INK, loc="lower center", ncol=len(labels))
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     fig.savefig(out, dpi=130, facecolor=SURFACE)
     plt.close(fig)
 
@@ -307,11 +504,13 @@ def report(work: Path, out: Path) -> None:
     (out / "figures").mkdir(exist_ok=True)
     priced = price(sessions)
     priced.to_csv(out / "rules.csv", index=False, float_format="%.4f")
+    held_out(sessions).to_csv(out / "held_out.csv", index=False, float_format="%.4f")
+    by_band(sessions).to_csv(out / "by_band.csv", index=False, float_format="%.4f")
     front = frontier(sessions)
     front.to_csv(out / "fixed_stop.csv", index=False, float_format="%.4f")
     cal = calibration_rows(sessions)
     cal.to_csv(out / "signals_over_clicks.csv", index=False, float_format="%.4f")
-    frontier_figure(priced, front, out / "figures" / "frontier.png")
+    edges_figure(priced, out / "figures" / "edges.png")
     calibration_figure(cal, out / "figures" / "signals.png")
     print(f"wrote {out}")
 
