@@ -41,6 +41,11 @@ def _labels(seed: int = 0, n_good: int = 3, n_bad: int = 4, dim: int = 32):
     return np.vstack([goods, bads]), np.r_[np.ones(n_good), np.zeros(n_bad)], query
 
 
+def _prior() -> tuple[np.ndarray, float] | None:
+    """The module's prior as it stands now (read fresh, so a type checker does not carry a narrowing over)."""
+    return svm_prior.QUERY_PRIOR
+
+
 def _ap(ranks: str) -> float:
     r = sorted(int(v) for v in ranks.split())
     return float(np.mean([(i + 1) / (k + 1) for i, k in enumerate(r)]))
@@ -56,12 +61,18 @@ class TestTheFit:
 
         X, y, _q = _labels()
         c = np.asarray(goods_centroid(list(X[y > 0.5])), dtype=np.float64)
-        clf = LinearSVC(C=config.SVM_HEAD_C, class_weight="balanced", dual=False, max_iter=5000, random_state=42)
+        clf = LinearSVC(
+            C=config.SVM_HEAD_C,
+            class_weight="balanced",
+            dual=False,  # pyright: ignore[reportArgumentType]  # the stubs type it as a string
+            max_iter=5000,
+            random_state=42,
+        )
         clf.fit(np.hstack([X, CENTROID_PRIOR_SCALE * (X @ c)[:, None]]), y.astype(int))
         w = clf.coef_.ravel()
         got, b = centroid_prior_direction(X, y)
         assert np.array_equal(got, w[:-1] + CENTROID_PRIOR_SCALE * w[-1] * c)
-        assert b == float(clf.intercept_[0])
+        assert b == float(np.asarray(clf.intercept_).ravel()[0])
 
     def test_the_query_pulls_the_head_toward_it(self):
         """Alone, a cheaper query pulls harder.  (Beside the centroid it need not: the two make their
@@ -95,15 +106,17 @@ class TestTheFit:
 class TestTheArm:
     def test_the_context_sets_and_restores_the_prior(self):
         _X, _y, q = _labels()
-        assert svm_prior.QUERY_PRIOR is None
+        assert _prior() is None
         with query_prior(q, 10.0):
-            direction, scale = svm_prior.QUERY_PRIOR
+            got = _prior()
+            assert got is not None
+            direction, scale = got
             assert np.array_equal(direction, q) and scale == 10.0
-        assert svm_prior.QUERY_PRIOR is None
+        assert _prior() is None
 
     def test_none_changes_nothing(self):
         with query_prior(None, 10.0), query_prior(np.ones(3), None):
-            assert svm_prior.QUERY_PRIOR is None
+            assert _prior() is None
 
     @pytest.mark.parametrize("scale", [0.0, -1.0, float("nan")])
     def test_refuses_a_scale_that_is_not_positive(self, scale):

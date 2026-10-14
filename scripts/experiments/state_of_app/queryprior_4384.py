@@ -371,6 +371,83 @@ def pair(a: argparse.Namespace) -> None:
     print("\n".join(lines))
 
 
+def examples(a: argparse.Namespace) -> None:
+    """Per class (pooled over size bands and seeds): where the query prior helps and hurts most, with the query."""
+    sys.path.insert(0, str(HERE.parent / "calibration"))
+    import experiment_config as cfg  # noqa: PLC0415
+
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    lines = ["# #4384 examples: classes where the head started from the typed query helps or hurts most\n"]
+    frames = []
+    for spec in a.pair:
+        preset, rest = spec.split("=", 1)
+        arm_p, ctl_p = rest.split("::")[:2]
+        A, C = load(arm_p), load(ctl_p)
+        ka = {(c, int(s)): i for i, (c, s) in enumerate(zip(A["category"], A["seed"]))}
+        ic = np.array([i for i, k in enumerate(zip(C["category"], C["seed"].astype(int))) if k in ka])
+        ia = np.array([ka[(C["category"][i], int(C["seed"][i]))] for i in ic])
+        df = pd.DataFrame(
+            {
+                "preset": preset,
+                "category": C["category"][ic],
+                "seed": C["seed"][ic],
+                "d_obj": span_mean(A["shown"][ia], SPANS["1-150"]) - span_mean(C["shown"][ic], SPANS["1-150"]),
+                "d_head_1_25": span_mean(fill_query(A["head"], A)[ia], SPANS["1-25"])
+                - span_mean(fill_query(C["head"], C)[ic], SPANS["1-25"]),
+                "d_goods150": A["n_good"][ia, T] - C["n_good"][ic, T],
+                "ctl_goods150": C["n_good"][ic, T],
+                "query_ap": C["query_ap"][ic],
+                "ctl_head_ap150": C["head_ap"][ic, T],
+                "arm_head_ap150": A["head_ap"][ia, T],
+                "ctl_done": C["first_done"][ic],
+                "arm_done": A["first_done"][ia],
+            }
+        )
+        frames.append(df)
+    df = pd.concat(frames)
+    df["cls"] = df["category"].str.split("@").str[0]
+    df["band"] = df["category"].str.split("@").str[1]
+    df.to_csv(out / "per_run.csv", index=False)
+    by = df.groupby("cls").agg(
+        runs=("d_obj", "size"),
+        d_obj=("d_obj", "mean"),
+        d_head_1_25=("d_head_1_25", "mean"),
+        d_goods150=("d_goods150", "mean"),
+        ctl_goods150=("ctl_goods150", "mean"),
+        query_ap=("query_ap", "mean"),
+    )
+    by["query"] = [
+        cfg.seed_query_text("coco_better", f"{c}@large") or cfg.seed_query_text("coco_better", c) for c in by.index
+    ]
+    by = by.sort_values("d_obj")
+    by.to_csv(out / "per_class.csv")
+    cols = "| class | typed query | runs | objective 1-150 | head's set 1-25 | Goods @150 (of control's) | query AP |"
+    sep = "|---|---|---|---|---|---|---|"
+
+    def row(c, r):
+        return (f"| {c} | \"{r['query']}\" | {r['runs']} | {r['d_obj']:+.3f} | {r['d_head_1_25']:+.3f} | "
+                f"{r['d_goods150']:+.1f} ({r['ctl_goods150']:.0f}) | {r['query_ap']:.2f} |")  # fmt: skip
+
+    lines += ["\n## The ten classes where it loses most (all presets pooled)\n", cols, sep]
+    lines += [row(c, r) for c, r in by.head(10).iterrows()]
+    lines += ["\n## The ten classes where it gains most\n", cols, sep]
+    lines += [row(c, r) for c, r in by.tail(10).iloc[::-1].iterrows()]
+    lines += [f"\n{(by['d_obj'] > 0).sum()} of {len(by)} classes gain on the session mean; "
+              f"{(by['d_goods150'] < 0).sum()} find fewer Goods by vote 150.\n"]  # fmt: skip
+    worst = df.sort_values("d_obj").head(8)
+    lines += [
+        "\n## The eight runs where it loses most\n",
+        "| preset | cell | seed | objective 1-150 | Goods @150 | first Done (control, arm) |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in worst.to_dict("records"):
+        lines.append(f"| {r['preset']} | {r['category']} | {r['seed']} | {r['d_obj']:+.3f} | {r['d_goods150']:+.0f} of {r['ctl_goods150']:.0f} | "
+                     f"{r['ctl_done']:.0f}, {r['arm_done']:.0f} |")  # fmt: skip
+    (out / "examples.md").write_text("\n".join(lines) + "\n")
+    print("\n".join(lines))
+
+
 INK, INK2, SURFACE, GRIDC = "#0b0b0b", "#52514e", "#fcfcfb", "#e4e3df"
 SLOTS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100")  # the reports' categorical order (passes the CVD validator)
 QUERY_GRAY = "#8a8985"
@@ -481,6 +558,14 @@ def figures(a: argparse.Namespace) -> None:
     panels("fig_head.png", "mean F-beta of the head's set", head_f, "the head's set, hidden by the hold to 30")
     panels("fig_shown.png", "mean F-beta of the set on screen", shown, "the objective")
 
+    def seeds(A, C, ia, ic):
+        d = A["shown"][ia] - C["shown"][ic]
+        sd = C["seed"][ic]
+        return [(np.nanmean(d[sd == k], axis=0), f"seed {k}", (SLOTS + (QUERY_GRAY,))[j % 5], 1.4)
+                for j, k in enumerate(np.unique(sd))]  # fmt: skip
+
+    panels("fig_seeds.png", "arm minus today, F-beta on screen", seeds, "each seed's paired difference")
+
     # The open-loop candidates on the control's votes: each against the shipped head, with two clustered SEs.
     vs = [v for v in (str(v) for v in sets[0][3]["variants"]) if v not in ("head", "query")]
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 0.32 * len(vs) + 1.4), sharey=True)
@@ -530,8 +615,11 @@ def main() -> None:
     f = sub.add_parser("figures")
     f.add_argument("--pair", action="append", required=True, help="PRESET=ARM.npz::CTL.npz::TITLE")
     f.add_argument("--out", required=True)
+    x = sub.add_parser("examples")
+    x.add_argument("--pair", action="append", required=True, help="PRESET=ARM.npz::CTL.npz[::TITLE]")
+    x.add_argument("--out", required=True)
     a = ap.parse_args()
-    {"extract": extract, "shadow": shadow, "pair": pair, "figures": figures}[a.cmd](a)
+    {"extract": extract, "shadow": shadow, "pair": pair, "figures": figures, "examples": examples}[a.cmd](a)
 
 
 if __name__ == "__main__":
