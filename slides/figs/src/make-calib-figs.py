@@ -5311,7 +5311,7 @@ LL_STAGES = 6
 #: The stage each radio's expected F-beta arrives on, in `FBETA_ARMS` order.
 LL_REVEAL = (5, 4, 6)
 #: The first stage Just How You Like It shows. The three before it are Curvey and
-#: InDiscreet's (`calib-labels-fit`), the slide right before it (owner,
+#: InDiscrete's (`calib-labels-fit`), the slide right before it (owner,
 #: 2026-10-13: the fit without a balance, then the line with one), so the slide
 #: opens on that fit recapped and builds only what the balance adds.
 LL_FIRST_SHOWN = 3
@@ -5443,7 +5443,7 @@ def labels_line_fig() -> None:
     expected F-beta of every cut, and the line at its peak. The last two pages
     add the other radios' peaks, β ¼'s and then β 4's — the same three balances
     as `calib-fbeta`.
-    The first two rows are built up on Curvey & InDiscreet (`labels_fit_fig`), so
+    The first two rows are built up on Curvey & InDiscrete (`labels_fit_fig`), so
     the pages start at :data:`LL_FIRST_SHOWN` and are numbered from 1.
     """
     final = _ll_stage(LL_STAGES)
@@ -5529,7 +5529,7 @@ def _ll_corpus_row(
     """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds.
 
     With ``fit=False`` the bars alone: the corpus as Oops! All Haystack left it,
-    before Curvey & InDiscreet fits it. With ``show_count=False`` the fit without the
+    before Curvey & InDiscrete fits it. With ``show_count=False`` the fit without the
     count of matches, on a slide whose point is elsewhere (A Cut Above).
     """
     lo, hi = LL_LOGIT
@@ -5614,9 +5614,9 @@ def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float,
     )
 
 
-# ── Curvey & InDiscreet: the folds and the corpus, fitted together (#4452) ────────
+# ── Curvey & InDiscrete: the folds and the corpus, fitted together (#4452) ────────
 
-#: How many build stages Curvey & InDiscreet's figure reveals in (owner,
+#: How many build stages Curvey & InDiscrete's figure reveals in (owner,
 #: #4835): the held-out votes and the corpus, bare, so the room sees at once
 #: that the votes are no sample of it; the class model fitted to the votes; the
 #: 2-part fit of the corpus with the Good normal held, and its count; each
@@ -5625,7 +5625,7 @@ LF_STAGES = 4
 
 
 def labels_fit_fig() -> None:
-    """Curvey & InDiscreet: where section II's three ideas meet, before any line is drawn (#4452).
+    """Curvey & InDiscrete: where section II's three ideas meet, before any line is drawn (#4452).
 
     Just How You Like It's canvas and rows, built up from nothing (owner, #4835):
     Grade My Own Homework's held-out votes beside Oops! All Haystack's corpus,
@@ -5649,7 +5649,7 @@ def labels_fit_fig() -> None:
 def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
     """Each unvoted item's chance of being a match, from the 3-part fit, with even odds marked.
 
-    Drawn where Just How You Like It draws expected F-beta, so Curvey & InDiscreet and
+    Drawn where Just How You Like It draws expected F-beta, so Curvey & InDiscrete and
     A Cut Above read as the same fit asked one question.
     """
     lo, hi = LL_LOGIT
@@ -5668,7 +5668,7 @@ def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
 
 
 def _lf_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of Curvey & InDiscreet's figure."""
+    """Draw the first *stage* steps (1-based, cumulative) of Curvey & InDiscrete's figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, LL_CANVAS[0])
@@ -5693,7 +5693,7 @@ def _lf_stage(stage: int) -> plt.Figure:
 #: going back into the votes.
 ACQ_FLOW_STAGES = 4
 #: The first stage the slide shows. The chance of a match is Curvey &
-#: InDiscreet's last page already, so the slide goes straight to where it asks
+#: InDiscrete's last page already, so the slide goes straight to where it asks
 #: (owner, #4872).
 ACQ_FIRST_SHOWN = 2
 #: The chance row stands where Just How You Like It drew expected F-beta, at that
@@ -5783,7 +5783,7 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
     model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
     half = ACQ_CHANCE_Y + ACQ_CHANCE_H / 2
 
-    # ── stage 1: Curvey & InDiscreet's fit, with the line at the middle radio ───────
+    # ── stage 1: Curvey & InDiscrete's fit, with the line at the middle radio ───────
     _ll_votes_row(ax, model, 2)
     _ll_corpus_row(ax, corpus, line, model, show_count=False)
     _ll_chance_row(ax, line)
