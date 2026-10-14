@@ -26,7 +26,8 @@ not list every commit. Use `git log` for the full history.
   `pyproject.toml` requires `torch>=2.7`. `install.sh` refuses `cu121` and `cu124` with a message:
   their indexes stop below that floor, so the requirements pass would have swapped in PyPI's newest
   torch, which has no kernels for older GPUs. `cu118` (torch 2.7.1) remains for drivers older than
-  CUDA 12.6.
+  CUDA 12.6. With that pair ruled out, `transformers` is floored at 5.18, which the EmbeddingGemma 2
+  embedders need (#4837).
 - **Spot Check is an Autopilot step, not a dialog.** Autopilot now checks the line itself, the first
   time every quality light goes green, before it says Done: a few picks drawn at random from bands of
   the list, voted Good or Bad in the centre pane, where the item usually is. It is the **Spot Check**

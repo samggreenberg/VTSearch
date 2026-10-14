@@ -56,7 +56,8 @@ dependencies = [
     # threadpool-controller warm-up (also a scikit-learn dependency).
     "threadpoolctl",
     "umap-learn",
-    "transformers",
+    # EmbeddingGemma 2 (#4837) needs 5.18; that needs torch>=2.7 below (#4838).
+    "transformers>=5.18",
     # Imported directly by vtscore.media.embedder for the Hub metadata
     # preflight (also a transformers dependency).
     "huggingface_hub",
