@@ -32,12 +32,14 @@
  * clicks is decided by the filename of whatever autopilot chose to serve — the
  * picks of a spot check autopilot opens included — so the piles that
  * accumulate in the right-hand panel are a real session's, and the ranking
- * `find` then shows is a real trained head's.
+ * `find` then shows is a real trained head's (`assertTrainedHead` fails the run
+ * when it is not).
  *
  * One output of the `find` group is not a screenshot at all.
- * `figs/ui-find-grid.webp` is a contact sheet of the top of that ranking with
- * no app around it, built by `results_grid.py` from the frames the panel
- * actually listed — because not viewing your results in the tool is a feature,
+ * `figs/ui-find-grid.webp` is a contact sheet of book photographs with no app
+ * around it, built by `results_grid.py` from a seeded sample of the production
+ * pile's `book/` folder (`shootFindGrid` says why not the ranking itself) —
+ * because not viewing your results in the tool is a feature,
  * and the slide's payoff is the pictures rather than a screen with the
  * pictures stacked down one side of it (#3779). It is composed into the same
  * box a screenshot occupies, so the slide's build reveals into the same frame.
@@ -182,6 +184,12 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 //
 // A spot check's answers count towards all three (`answerSpotCheck`): they are
 // votes, and they land in the same piles.
+//
+// None of the three is the label count `find` needs. The Book detector is made
+// from a typed query, so on SigLIP it keeps its query's own set until it has 30
+// labels (#4736); the session ended at 36 on 2026-10-14 only because the spot
+// checks' picks count too. `assertTrainedHead` fails the run if it ever ends
+// short (#4890).
 const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
 // The numbered markers on the Instruction frames, scaled for the slot. The
@@ -962,7 +970,15 @@ async function shootFind(page) {
   ]);
 
   // Test, not Find: since #4525 the Find button runs AutoFind and opens no view.
-  await page.getByRole('button', { name: 'Test', exact: true }).click();
+  // Its scoring pass says which detector the labels gave (`label_quota`).
+  const [scored] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/find-label',
+      { timeout: 300000 },
+    ),
+    page.getByRole('button', { name: 'Test', exact: true }).click(),
+  ]);
+  assertTrainedHead((await scored.json()).label_quota);
   await page.waitForSelector('.panel-right', { timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
   // photographing a progress bar.
@@ -985,6 +1001,28 @@ async function shootFind(page) {
   await shootFindGrid();
 
   await app.api('/api/settings', { method: 'PUT', body: DEFAULT_LAYOUT });
+}
+
+/**
+ * Fail the run unless Test scored with the session's trained head (#4890).
+ *
+ * The deck says the ranking `find` shows is a real trained head's, and
+ * `ui-steps-find` frames it. Under the label quota, or under the typed query's
+ * hold (#4736), the detector is its typed query's own set instead, with a note
+ * under the Test view's tabs saying so; `TRAIN_FINAL` stops the session on
+ * vote counts, not on that. *quota* is the scoring pass's `label_quota`.
+ */
+function assertTrainedHead(quota) {
+  if (quota?.tier === 'trained') return;
+  const counts = quota ? `${quota.n_good} Good / ${quota.n_bad} Bad` : 'no label_quota';
+  const why = quota?.hold_owed > 0
+    ? `; a typed-query detector keeps its query's set until ${quota.hold_labels} labels, ${quota.hold_owed} more`
+    : '';
+  const as = { query: "its typed query's own set", centroid: "the Goods' centroid", none: 'nothing' }[quota?.tier];
+  throw new Error(
+    `find: Test scored the detector as ${as ?? (quota?.tier ? `tier ${quota.tier}` : 'an unknown detector')}, not a trained head (${counts}${why}): ` +
+      'raise TRAIN_FINAL so the train loop ends with one',
+  );
 }
 
 /**
