@@ -1,0 +1,23 @@
+ref,where,found,runs
+"Binary, the same 2 seeds",left the Good phase,1,5
+"Binary, the same 2 seeds",left the Good phase,2,1
+"Binary, the same 2 seeds",still in the Good phase,0,9
+"Binary, the same 2 seeds",still in the Good phase,1,3
+"Binary, the same 2 seeds",still in the Good phase,2,1
+EmbeddingGemma 2 (5 seeds),left the Good phase,1,2
+EmbeddingGemma 2 (5 seeds),left the Good phase,2,3
+EmbeddingGemma 2 (5 seeds),still in the Good phase,0,4
+EmbeddingGemma 2 (5 seeds),still in the Good phase,1,1
+"Region path, today (2 seeds)",left the Good phase,1,2
+"Region path, today (2 seeds)",left the Good phase,2,2
+"Region path, today (2 seeds)",still in the Good phase,0,9
+"Region path, today (2 seeds)",still in the Good phase,1,3
+"Region path, today (2 seeds)",still in the Good phase,2,1
+"before #4731 (SotA 2026-10-08, 24 seeds)",still in the Good phase,0,87
+"before #4731 (SotA 2026-10-08, 24 seeds)",still in the Good phase,1,118
+"before #4731 (SotA 2026-10-08, 24 seeds)",still in the Good phase,2,101
+"today (2026-10-13, 5 seeds)",left the Good phase,1,10
+"today (2026-10-13, 5 seeds)",left the Good phase,2,6
+"today (2026-10-13, 5 seeds)",still in the Good phase,0,18
+"today (2026-10-13, 5 seeds)",still in the Good phase,1,8
+"today (2026-10-13, 5 seeds)",still in the Good phase,2,1
