@@ -16,7 +16,8 @@
 <!-- **b** — After Boundary: count from the top to the first empty cell. Three,
      red. The ring's where Diversity starts. -->
 
-<!-- **c** — Four Diversity picks later, ten: yellow. Each pick fills the first
-     empty cell, and the count jumps past ones Boundary already filled. -->
+<!-- **c** — Four Diversity picks later, eleven: yellow, which starts at ten.
+     Each pick fills the first empty cell and a path down to its item, so the
+     count jumps past cells earlier votes reached. -->
 
 <!-- **d** — All forty: green. (Fewer than forty cells? Then all of them.) -->
