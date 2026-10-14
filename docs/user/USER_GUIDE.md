@@ -337,6 +337,13 @@ whether it counts as a yellow smiley is your call: the detector learns where
 answers is usually enough, and the phase list on the left shows how far
 along you are (see [Autopilot](#autopilot-the-guided-workflow)).
 
+**Misclicked?** Open the **Labels** panel on the right and click the
+picture: it comes back in the middle with its answer's button filled in.
+Click the other button to change it, and Autopilot carries on. To leave it as
+it is, click Autopilot's current step in the strip on the left (or press
+`↑`), which brings back the picture Autopilot picked. `↓` steps back through the pictures you just answered, too
+(see [Tips and shortcuts](#tips-and-shortcuts)).
+
 ### Step 3: Load a test dataset
 
 Load the pictures you want to search the same way as in Step 1, but point
@@ -921,9 +928,9 @@ dry run there means the detector has found what it can.
 Autopilot starts collapsed to a thin strip that just shows the
 phase indicators, with the current phase's light above its name
 (the left panel's fold; see [The three-panel layout](#the-three-panel-layout)).
-Click any active phase to re-pick the
-current recommendation (useful if you voted the wrong way and
-want a fresh suggestion). The ▶ at the top of the strip opens the
+Click the active phase to go back to
+Autopilot's pick: after clicking an item in **Labels** to check or
+change its answer, say, or for a fresh suggestion. The ▶ at the top of the strip opens the
 full phase list, and its ◀ collapses it again.
 
 <picture>
@@ -1664,10 +1671,15 @@ one", since the hint says the same thing; both come back if you hide the
 hint.
 
 In the Train view he asks for your first vote over **Good** / **Bad** while
-Autopilot runs on a detector with no labels, then stays there through the
-run that trains it, saying what each phase is after and how far along it is
-(how many Goods and Bads it still needs, then that the detector retrains on
-every vote until the lights go green). He explains the **Update Sort
+Autopilot runs on a detector with no labels. Once you have voted, he moves
+beside the **Labels** panel until your next vote, saying that your votes go
+there and that you can change one by clicking it. Then he is back over **Good** / **Bad** through the run
+that trains the detector, saying what each phase is after and how far along it
+is (how many Goods and Bads it still needs, then that the detector retrains on
+every vote until the lights go green). On any run, when you click an item you
+have already labeled, he says what it is labeled, which button changes it, and
+that clicking Autopilot's current step on the left (or `↑`) goes back to
+Autopilot's pick. He explains the **Update Sort
 Example?** prompt from just below it (see [Get Autopilot
 unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he stands
 under the top bar's **Dashboard** button (see [Autopilot: the guided

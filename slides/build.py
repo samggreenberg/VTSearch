@@ -1254,6 +1254,18 @@ def speaker_bodies(
     return bodies
 
 
+def front_matter(front: dict[str, str], *, speaker: bool, editable: bool) -> str:
+    """The assembled deck's front matter: the defaults, the manifest's keys, and what the cut adds."""
+    merged = dict(DEFAULT_FRONTMATTER)
+    merged.update(front)
+    if speaker and merged.get("title"):
+        # The two cuts side by side in a PDF viewer should not read alike.
+        merged["title"] = f"{merged['title']} (presenter notes)"
+    if editable:
+        merged["style"] = EDITABLE_STYLE
+    return "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
+
+
 def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True, editable: bool = False) -> list[str]:
     """Preflight one deck; write _build/<deck>[.speaker|.editable|.unnumbered].md unless write=False.
 
@@ -1295,11 +1307,7 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
     if problems or not write:
         return problems
 
-    merged = dict(DEFAULT_FRONTMATTER)
-    merged.update(front)
-    if editable:
-        merged["style"] = EDITABLE_STYLE
-    header = "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
+    header = front_matter(front, speaker=speaker, editable=editable)
 
     BUILD.mkdir(exist_ok=True)
     parts = [""] if speaker else [p for p, on in ((".editable", editable), (".unnumbered", not pageno)) if on]

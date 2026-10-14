@@ -70,6 +70,7 @@ from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_co
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_handover import HANDOVER_CENTROID_TAG, HandoverJudge
 from vtscore.eval.arms_line_counts import line_count_row
+from vtscore.eval.arms_set_overlap import SetOverlap, pick_overlap_blank
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
@@ -2579,6 +2580,7 @@ def simulate_voting_iterations(  # noqa: C901
     handover_shadow: bool = False,
     handover_sink: Optional[list[dict[str, Any]]] = None,
     line_count_sink: Optional[list[dict[str, Any]]] = None,
+    set_overlap_sink: Optional[list[dict[str, Any]]] = None,
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
 ) -> list[dict[str, Any]]:
@@ -2762,6 +2764,14 @@ def simulate_voting_iterations(  # noqa: C901
             :data:`~vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS`), so a
             count rule for the line is priced on the same session.  Recorded
             only: the session is the app's.
+        set_overlap_sink: On a typed-query run under a balance, receives at
+            every click a trained head scored the pool how the head's set and
+            the typed query's split the unvoted media (#4816,
+            :data:`~vtscore.eval.arms_set_overlap.OVERLAP_COLUMNS`), and fills
+            the pick log's
+            :data:`~vtscore.eval.arms_set_overlap.PICK_OVERLAP_COLUMNS`: where
+            each pick sat at the previous click.  Recorded only: the session is
+            the app's.
         query_tier: Whether a run that opens on a typed query (*seed_scores*
             from the caller, no *seed_examples*) is a typed-query detector, as
             the app's is (#4758): until the quota, a Test on the withheld half
@@ -3526,6 +3536,12 @@ def simulate_voting_iterations(  # noqa: C901
     # examples from the positives here when no text sort is available.  Cheap to
     # build once up front.
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
+    # #4816's set overlap: where the head's set and the typed query's split the unvoted media.
+    overlap = (
+        SetOverlap(query_scores, clips_dict, beta, pool_labels)
+        if set_overlap_sink is not None and query_scores is not None and beta is not None
+        else None
+    )
     # #4776's hand-over evidence, on a single-vector run (the region path's geometry is its own).
     handover_judge: HandoverJudge | None = None
     if (
@@ -3646,6 +3662,7 @@ def simulate_voting_iterations(  # noqa: C901
                 "n_good": len(good_votes),
                 "n_bad": len(bad_votes),
                 "n_pool": len(pool),
+                **(overlap.pick(cid) if overlap is not None else pick_overlap_blank()),
             }
         )
 
@@ -4442,6 +4459,26 @@ def simulate_voting_iterations(  # noqa: C901
             details,
             "query" if query else "centroid" if centroid else "trained",
         )
+        if overlap is not None and set_overlap_sink is not None:
+            # #4816: how this click's head set and the typed query's split the unvoted media.
+            set_overlap_sink.append(
+                {
+                    **rank_ident,
+                    "t": t,
+                    "phase": base_row["phase"],
+                    "n_good": len(good_votes),
+                    "n_bad": len(bad_votes),
+                    "beta": float(beta) if beta is not None else float("nan"),
+                    **overlap.click(
+                        pool_scores,
+                        threshold,
+                        details.get("find_line"),
+                        good_votes,
+                        bad_votes,
+                        dict(zip(sim_pooled_ids, sim_pooled_scores)) if sim_pooled_scores else None,
+                    ),
+                }
+            )
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
             # but #3314's scheduled arm - and recorded regardless, because a

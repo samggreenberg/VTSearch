@@ -110,6 +110,15 @@ instead, since every commit on `dev` is effectively a new app release.)
   - **Needs transformers >= 5.18;** loading on an older one raises `ImportError` naming the version.
   - **New config constants:** `EMBEDDINGGEMMA2_MODEL_ID`, `EMBEDDINGGEMMA2_QUERY_PREFIX`,
     `EMBEDDINGGEMMA2_SAMPLE_RATE`, `EMBEDDINGGEMMA2_MAX_SAMPLES`, `EMBEDDINGGEMMA2_MIN_SAMPLES`.
+
+- **Set overlap for the harness** (issue #4816). On a typed-query run,
+  `simulate_voting_iterations(set_overlap_sink=[...])` records, at every click a trained head scored the
+  pool, one `vtscore.eval.arms_set_overlap.OVERLAP_COLUMNS` row: how the head's set and the typed query's
+  split the unvoted media (both, head only, query only, neither), the positives in each part, the head's
+  class model's expected positives there, and the voted Goods and Bads in each part. The pick log gains
+  `picked_in_head`, `picked_in_query`, `picked_head_rank`, `picked_part_rank` and `picked_head_posterior`
+  (where each pick sat at the click before it; NaN without the sink). Recorded only; the session is unchanged.
+
 - **Line counts for the harness** (issue #4786). `simulate_voting_iterations(line_count_sink=[...])`
   records, at every click Test gives the trained head under a balance, one
   `vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS` row: where the withheld half's positives sit in

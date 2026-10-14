@@ -5,7 +5,7 @@ Run from the repo root:
 
     python slides/figs/src/make-autopilot-figs.py
 
-Autopilot picks every item a user is shown in the Train window, in five steps,
+Autopilot picks every item a user is shown in the Train window, in six steps,
 and it tells them when they can stop. The steps are
 `AutopilotStateService.checkPhaseTransition`; the stop is three lights the
 labeling status computes, Smart (`vtscore/detectors/cost_trend.py`), Stable
@@ -15,7 +15,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 * `autopilot-steps` walks the harness's port of the phase machine
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
-  `scripts/check-eval-app-sync.py`) through the five steps, and every target it
+  `scripts/check-eval-app-sync.py`) through the six steps, and every target it
   prints is that module's constant.
 * `autopilot-smart` runs the shipped `smart_status_from_costs` on a planted
   session's error costs, and asserts the lights the slide draws.
@@ -200,9 +200,9 @@ def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
     ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
 
 
-# ── Flight Plan: the five steps ──────────────────────────────────────────────
+# ── Flight Plan: the six steps ──────────────────────────────────────────────
 
-STEPS_STAGES = 4
+STEPS_STAGES = 5
 
 #: The rows, top to bottom: the step's name as the panel's short label shows
 #: it, what it asks about, the drawing in the middle column, and what ends it.
@@ -219,14 +219,17 @@ STEPS = (
     ("bad", "Bad", "at your query's line", "query-line", f"{BAD_TARGET} Bads"),
     ("hard", "Boundary", "at even odds", "detector-odds", "Smart and Stable both green"),
     ("new", "Diversity", "a cell nobody voted in", "atlas", "Span green as well"),
-    ("done", "Done", "every light green", "lights", "you say: keep going, or leave"),
+    # Once, the first time every light is green (#4836): the band walk Spot
+    # Check runs, its picks drawn at random from bands down from the top.
+    ("spot", "Spot Check", "every light green", "bands", "it has checked the line once"),
+    ("done", "Done", "after the check", "lights", "you say: keep going, or leave"),
 )
 #: No More walk on photos since #4740 (``MORE_TARGET`` 0): the opening is Good and
 #: Bad on the query, then the detector takes over.
-STEP_ROWS_Y = (4.95, 3.9, 2.85, 1.8, 0.75)
+STEP_ROWS_Y = (4.95, 4.08, 3.21, 2.34, 1.38, 0.5)
 #: Which row each build stage reveals up to: the opening on the query, then
 #: one step a stage.
-STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5}
+STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5, 5: 6}
 NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 4.3, 7.6, 7.95
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
@@ -235,32 +238,44 @@ QUERY_LINE, DETECTOR_LINE = 0.62, 0.68
 #: line's own fit calls even odds (#3546, #4632). Inside the line, as it is at
 #: the middle radio every detector starts on; at β ¼ the two nearly meet.
 DETECTOR_ODDS = 0.80
+#: Spot Check's bands on the detector's strip, as fractions of it from the
+#: right: the top 8, the next 8, then 16, then the band past the line, each
+#: twice the last (`calib-floor-check`'s bands, where the line keeps 32).
+SPOT_BANDS = (0.0, 0.08, 0.16, 0.32, 0.64)
+#: Where in each band its few random picks fall, as a share of the band's
+#: width: drawn once, so every page of the build shows the same picks.
+SPOT_PICKS = ((0.5,), (0.5,), (0.3, 0.75), (0.2, 0.5, 0.8))
 
 
 def _check_step_order() -> None:
-    """The five steps in the order the phase machine takes them, from its own rule.
+    """The six steps in the order the phase machine takes them, from its own rule.
 
     A session walked the way the slide narrates it: the counts reach each
-    target in turn, then Smart and Stable go green, then Span.
+    target in turn, then Smart and Stable go green, then Span, then the check
+    before Done runs and closes.
     """
     many = math.inf
+    # The check before Done is still open the first time every light is green,
+    # and closed after it (the app's ``doneChecked``).
     walk = (
         dict(good_count=0, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=BAD_TARGET, smart="red", stable="red", span="red"),
         dict(good_count=24, bad_count=30, smart="green", stable="green", span="yellow"),
-        dict(good_count=30, bad_count=50, smart="green", stable="green", span="green"),
+        dict(good_count=30, bad_count=50, smart="green", stable="green", span="green", done_checked=False),
+        dict(good_count=34, bad_count=66, smart="green", stable="green", span="green", done_checked=True),
     )
     phases = tuple(next_phase(remaining_unlabeled=many, **state) for state in walk)
     assert phases == tuple(step[0] for step in STEPS), phases
 
 
 def steps_fig() -> None:
-    """The five steps: what each asks about, and what ends it.
+    """The six steps: what each asks about, and what ends it.
 
-    Four stages: the opening's two steps, both on the query's own ranking, with
+    Five stages: the opening's two steps, both on the query's own ranking, with
     no detector shown yet; then Boundary, the first step on the detector's
-    ranking; then Diversity, off the atlas; then Done.
+    ranking; then Diversity, off the atlas; then Spot Check, once, the first
+    time every light is green (#4836); then Done.
     """
     _check_step_order()
     _save(STEPS_STAGES, _steps_stage, "autopilot-steps")
@@ -280,6 +295,24 @@ def _strip(ax: plt.Axes, y: float, words: str, line_at: float) -> float:
 def _pick(ax: plt.Axes, x: float, y: float) -> None:
     """Where the step asks: a pointer onto the strip from above."""
     ax.plot(x, y + STRIP_H / 2 + 0.2, marker="v", markersize=14, color=INK, zorder=7, linestyle="none")
+
+
+def _spot_bands(ax: plt.Axes, y: float) -> None:
+    """The detector's strip with Spot Check's bands bracketed from the top, and a few random picks in each."""
+    _strip(ax, y, "the detector", DETECTOR_LINE)
+    width = PICTURE_X1 - PICTURE_X0
+    # The picks point down onto the strip from just above it, clear of its
+    # words; each band's bracket sits over its picks.
+    pick_y = y + STRIP_H / 2 + 0.08
+    top = pick_y + 0.1
+    for k in range(len(SPOT_BANDS) - 1):
+        right = PICTURE_X1 - SPOT_BANDS[k] * width
+        left = PICTURE_X1 - SPOT_BANDS[k + 1] * width
+        lo, hi = left + 0.025, right - 0.025
+        ax.plot([lo, lo, hi, hi], [top, top + 0.08, top + 0.08, top], color=INK, linewidth=1.4, zorder=6)
+        for share in SPOT_PICKS[k]:
+            x = left + share * (right - left)
+            ax.plot(x, pick_y, marker="v", markersize=8, color=INK, zorder=7, linestyle="none")
 
 
 def _mini_tree(ax: plt.Axes, y: float) -> None:
@@ -329,6 +362,8 @@ def _steps_stage(stage: int) -> Figure:
             _pick(ax, PICTURE_X0 + DETECTOR_ODDS * (PICTURE_X1 - PICTURE_X0), y)
         elif picture == "atlas":
             _mini_tree(ax, y)
+        elif picture == "bands":
+            _spot_bands(ax, y)
         else:
             for k, word in enumerate(("Smart", "Stable", "Span")):
                 x = PICTURE_X0 + 0.2 + k * 1.13
