@@ -560,7 +560,10 @@ and `labelset_quota(labelset)` return a `LabelQuota` (`tier`, `goods_owed`,
 is the pre-#4731 rule, for the eval harness);
 `served_quota(model, labelset)` is what the app's responses report; it reads
 the tier off the model, so it also reports `TIER_QUERY` (`"query"`, #4758)
-for a typed query's head, which the counts alone never give.
+for a typed query's head, which the counts alone never give. It adds
+`hold_labels` (`QUERY_HOLD_LABELS`) and `hold_owed`: on a typed query's head
+whose labels meet the quota, the hold below is why, and `hold_owed` is the
+labels still owed to it (`0` otherwise, #4889).
 `query_holds(n_good, n_bad, *, patch_space, hold=QUERY_HOLD_LABELS)` is the
 typed query's hold (#4736): on a known single-vector space (`patch_space`
 `False`, from `training._patch_space_for`) a typed-query detector keeps its

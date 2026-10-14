@@ -308,6 +308,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       threshold: 0.5,
       label_quota: {
         tier: 'centroid', n_good: 1, n_bad: 0, goods_owed: 2, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16,
+        hold_labels: 30, hold_owed: 0,
       },
     });
     httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));
@@ -329,6 +330,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       threshold: 0.5,
       label_quota: {
         tier: 'query', n_good: 0, n_bad: 0, goods_owed: 3, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16,
+        hold_labels: 30, hold_owed: 0,
       },
     });
     httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));

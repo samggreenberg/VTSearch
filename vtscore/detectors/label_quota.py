@@ -198,15 +198,24 @@ def served_quota(model: object, labelset: "LabelSet | None") -> dict[str, Any]:
     not toward the quota, so the two can differ, and a typed query's head
     (:data:`TIER_QUERY`) is the detector's, not the labels'.  ``None`` model,
     ``none`` tier.
+
+    ``hold_labels`` is :data:`QUERY_HOLD_LABELS`, and ``hold_owed`` the labels,
+    of either kind, a typed query's head still owes that hold (#4736) when the
+    hold is why it was served: its labels meet the quota, so nothing else kept
+    the trained head away.  ``0`` otherwise, so a view can tell "too few
+    labels" from "held on the typed query" (#4889).
     """
     from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
     from vtscore.detectors.query_head import is_query_head  # noqa: PLC0415
 
-    out = labelset_quota(labelset).as_dict()
+    quota = labelset_quota(labelset)
+    out = {**quota.as_dict(), "hold_labels": QUERY_HOLD_LABELS, "hold_owed": 0}
     if model is None:
         out["tier"] = TIER_NONE
     elif is_query_head(model):
         out["tier"] = TIER_QUERY
+        if quota.tier == TIER_TRAINED:
+            out["hold_owed"] = max(0, QUERY_HOLD_LABELS - quota.n_good - quota.n_bad)
     else:
         out["tier"] = TIER_CENTROID if is_centroid_head(model) else TIER_TRAINED
     return out

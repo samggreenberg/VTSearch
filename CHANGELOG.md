@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector held on its typed query no longer reads "Too few labels"** (issue #4889). A detector made
+  from a typed query keeps its query's set past the label quota until it has 30 labels (#4736). The Test
+  view's note used to blame the quota for that, naming counts the labels already met ("it takes 3 Goods
+  and 4 Bads") and owing nothing. It now says the detector keeps its query's set until 30 labels, how many
+  it has, and how many more labels, Good or Bad, give a trained one. AutoFind's results list held detectors
+  on their own line, and the CLI's message says the same. The `label_quota` payload gains `hold_labels` and
+  `hold_owed`.
+
 - **Faces work in every Docker image** (issue #4886). No image installed `facenet-pytorch`, so in a container
   the Images → Faces converter found no faces (with only a log warning), and the face localizer and the
   FaceNet embedder failed to load. Every `docker/Dockerfile*` now installs it, `--no-deps` as
