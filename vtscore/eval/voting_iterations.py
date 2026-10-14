@@ -285,11 +285,31 @@ def _split_media_ids(
     sim_fraction: float,
     rng: np.random.RandomState,
 ) -> tuple[list[int], list[int]]:
-    """Randomly partition media IDs into simulation and test sets."""
+    """Randomly partition media IDs into simulation and test sets.
+
+    A dataset whose medias carry ``split_group`` (``rico_suave``'s app, #4356)
+    is split by group instead: the groups are drawn in a seeded order and each
+    joins the simulation half while it is short of ``sim_fraction``, so no group
+    has medias on both sides and the simulation half overshoots by less than one
+    group. Medias without the key split exactly as before, draw for draw; a
+    dataset where only some carry it is refused, since that is a build bug.
+    """
     all_ids = sorted(clips_dict.keys())
-    shuffled = rng.permutation(all_ids).tolist()
-    n_sim = max(1, int(len(shuffled) * sim_fraction))
-    return shuffled[:n_sim], shuffled[n_sim:]
+    groups = [clips_dict[cid].get("split_group") for cid in all_ids]
+    n_sim = max(1, int(len(all_ids) * sim_fraction))
+    if all(g is None for g in groups):
+        shuffled = rng.permutation(all_ids).tolist()
+        return shuffled[:n_sim], shuffled[n_sim:]
+    if any(g is None for g in groups):
+        raise ValueError("some medias carry split_group and some do not; a grouped split needs every one")
+    members: dict[str, list[int]] = {}
+    for cid, g in zip(all_ids, groups):
+        members.setdefault(str(g), []).append(cid)
+    sim: list[int] = []
+    test: list[int] = []
+    for g in rng.permutation(sorted(members)).tolist():
+        (sim if len(sim) < n_sim else test).extend(members[g])
+    return sim, test
 
 
 def _pool_uncertainty(

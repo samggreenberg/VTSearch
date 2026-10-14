@@ -70,7 +70,12 @@ def stratified_split(
     Positives are shuffled and divided by :func:`positive_split_sizes`. Negatives are shuffled and
     divided at *sim_fraction*, as the plain split divides everything. Both shuffles draw from *rng*,
     so the split is fixed by the run's seed alone.
+
+    Refuses a dataset split by ``split_group`` (#4356): splitting its positives on their own would
+    put one group on both sides, which is what the group exists to prevent.
     """
+    if any(m.get("split_group") is not None for m in clips_dict.values()):
+        raise ValueError("stratified_split cannot honour split_group; this dataset splits by group")
     ids = sorted(clips_dict)
     pos = [cid for cid in ids if media_is_positive(clips_dict[cid], target_category)]
     neg = [cid for cid in ids if not media_is_positive(clips_dict[cid], target_category)]
