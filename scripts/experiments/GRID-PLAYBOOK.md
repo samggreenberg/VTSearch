@@ -178,10 +178,23 @@ silently runs as binary voting**, which has now cost three studies (#2877,
 
 ## Memory is a per-user quota, not just a per-job request
 
-`cpu_limit` caps **cpu=240 and mem=1100000M (~1.07 TB) per user**. CPU is rarely
-the binding constraint; memory usually is, and it binds against *your own* jobs.
+`cpu_limit` (the `cpu` partition's QOS) caps **cpu=360 and mem=1126400M (1100 GiB)
+per user** as of 2026-10-13; until then it was cpu=240 and mem=1100000M (1074 GiB).
+It moves, so read it rather than this line:
 
-An array of `16 x --mem=64G` claims 1024G — 95 % of the allowance — so every
+```bash
+scontrol show assoc_mgr qos=cpu_limit flags=qos | grep -m1 -o 'MaxTRESPU=[^ ]*'
+# MaxTRESPU=cpu=360(<used>),mem=1126400(<used MB>),...
+```
+
+Never copy the numbers into a driver or a governor; `preflight.sh` check 8 reads the
+memory cap live for the same reason. SLURM charges a whole 2-thread core to a 1-CPU
+task, so the cap in tasks is half the CPU figure. The `gpu` partition carries no
+partition QOS: a job there counts only against your GPU tier (`4gpu_tier`, 4 GPUs).
+CPU is rarely the binding constraint; memory usually is, and it binds against *your
+own* jobs.
+
+An array of `16 x --mem=64G` claims 1024G — 93 % of the allowance — so every
 later job you submit sits in `QOSMaxMemoryPerUser` behind it. That is
 indistinguishable from a busy cluster and it is entirely self-inflicted. In
 #3129 it delayed a prepare job, throttled a second array to 2 slots instead of
