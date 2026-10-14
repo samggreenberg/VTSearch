@@ -2488,6 +2488,32 @@ def production_spot_check(clips_dict: dict[int, dict[str, Any]]) -> str:
     return "weak" if weak_check_prompts(media_type) else "end"
 
 
+def _fits_from_typed_query(fn: Any) -> Any:
+    """Run *fn* (the session) with every head fit starting from its ``query_vector`` too (#4859).
+
+    The app's rule for a typed-query detector on its query's own single-vector
+    space (:func:`vtscore.training.svm_prior.typed_query_prior`), applied to the
+    whole session so the picks, the folds, the line and Test all take it.  Only
+    a typed-query run (*seed_scores* given, no example opening) on a
+    single-vector dataset (no media with a ``patch_grid``: a region run learns
+    in a space the query has no direction in) takes it.
+    """
+    import functools  # noqa: PLC0415
+
+    @functools.wraps(fn)
+    def run(*args: Any, **kwargs: Any) -> Any:
+        from vtscore.training.svm_prior import typed_query_prior  # noqa: PLC0415
+
+        clips = args[0] if args else kwargs.get("clips_dict", {})
+        typed = kwargs.get("seed_scores") is not None and kwargs.get("seed_examples") is None
+        single_vector = not any(m.get("patch_grid") is not None for m in clips.values())
+        with typed_query_prior(kwargs.get("query_vector") if typed and single_vector else None):
+            return fn(*args, **kwargs)
+
+    return run
+
+
+@_fits_from_typed_query
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -2782,7 +2808,11 @@ def simulate_voting_iterations(  # noqa: C901
             :data:`~vtscore.eval.arms_query_prior.QUERY_PRIOR_COLUMNS`).
             Recorded only: the session is the app's.
         query_vector: The typed query's embedding in the media's space, which
-            *seed_scores* is the cosine to (#4384's shadow reads it).
+            *seed_scores* is the cosine to.  Given, every head fit in the
+            session starts from it as well as from the Goods, as a typed-query
+            detector's does in the app on its query's own single-vector space
+            (#4859); a caller passes it only for such a run.  #4384's shadow
+            reads it too.
         query_tier: Whether a run that opens on a typed query (*seed_scores*
             from the caller, no *seed_examples*) is a typed-query detector, as
             the app's is (#4758): until the quota, a Test on the withheld half
@@ -5013,6 +5043,7 @@ def run_voting_iterations_eval(
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
     seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
+    query_vectors: "Optional[dict[str, dict[str, np.ndarray]]]" = None,
     trainers: Optional[list[str]] = None,
     prevalence_arms: Optional[list[Optional[float]]] = None,
     styles: Optional[list[Optional[str]]] = None,
@@ -5063,6 +5094,12 @@ def run_voting_iterations_eval(
             ``{dataset: {category: {media_id: similarity}}}``.  When a
             (dataset, category) has an entry, the autopilot seed follows that
             text ranking; otherwise it seeds from random known-good examples.
+        query_vectors: The typed queries those rankings are the cosine to,
+            keyed ``{dataset: {category: vector}}``
+            (:func:`vtscore.eval.seed_scores.build_seed_scores`'s
+            *vectors_out*).  A typed-query run given its query fits every head
+            from it too, as the app's typed-query detector does (#4859); a
+            cell without one fits from the Goods alone.
         trainers: Which pipelines to run at each cell (see
             :func:`simulate_voting_iterations`).  ``None`` (default) runs
             ``["app"]``; pass e.g. ``["app", "svm_linear", "svm_rbf"]`` for the
@@ -5123,6 +5160,7 @@ def run_voting_iterations_eval(
         for seed in seeds:
             for cat in target_cats:
                 cat_seed_scores = (seed_scores or {}).get(ds_name, {}).get(cat)
+                cat_query_vector = (query_vectors or {}).get(ds_name, {}).get(cat)
                 for arm in arm_list:
                     for strategy in strategy_list:
                         for trainer in trainer_list:
@@ -5142,6 +5180,7 @@ def run_voting_iterations_eval(
                                     max_steps=max_steps,
                                     atlas_min_node_size=atlas_min_node_size,
                                     seed_scores=cat_seed_scores,
+                                    query_vector=cat_query_vector,
                                     trainer=trainer,
                                     target_prevalence=arm,
                                     style=style,

@@ -10,6 +10,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A typed-query detector's head starts from its typed query too** (issue #4859, priced in #4384). On the
+  query's own single-vector space (`vtscore.detectors.query_head.typed_query_prior_applies`), every fit of a
+  training pass adds the typed query's unit embedding as a second cheap feature beside the Goods' centroid,
+  at `vtscore.training.svm_prior.QUERY_PRIOR_SCALE` (10), inside `svm_prior.typed_query_prior(direction,
+  text)` (a `ContextVar`, so threads never share it). `labelset_train_and_score` and `train_from_labelset`
+  enter it with `query_head.typed_query_prior_vector(text_query, embedder, media_type)`. The learned sort
+  passes its detector's registry query (`learned_sort.resolve_active_text_query`). Fitted heads carry the
+  query (`svm_prior.fitted_query_prior_text`). `cached_head_is_current` refuses a trained head fitted
+  without the detector's query, and the calibration cache key includes it. The harness follows:
+  `simulate_voting_iterations(query_vector=...)` fits every head from it on a typed-query single-vector
+  run, `run_voting_iterations_eval(query_vectors=...)` takes them from
+  `build_seed_scores(vectors_out=...)`, and `arms_query_prior.query_prior_scale(0)` is the arm before.
+  Priced on COCO Better's Binary opening: the objective over votes 1-150 +0.013 / +0.013 / +0.018 at beta
+  1/4, 1, 4, and Goods by vote 150 about -0.6 of 28.
+
 - **Autopilot checks the line before Done, and the harness's default arm does too.** The app's Autopilot
   runs the spot check as one of its steps (phase `spot`): once a run, the first time every quality light
   is green, and then reports Done; a weak-separation check (#4496) is the same step mid-run. There is no
@@ -95,15 +110,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
-- **The typed query as a second prior for the head, an eval arm** (issue #4384).
-  `vtscore.training.svm_prior.QUERY_PRIOR` (None in the app) adds the typed query's unit direction, at its own
-  scale, as a second cheap feature beside the Goods' centroid, folded back into the one `Linear(D, 1)`;
-  `centroid_prior_direction(query=(direction, scale))` takes it explicitly too, and a centroid scale of 0
-  prices the query alone. Unset, the fit is the shipped one bit for bit. The harness sets it for a run with
-  `vtscore.eval.arms_query_prior.query_prior(direction, scale)`, and
+- **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
+  scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the
+  Goods' centroid, folded back into the one `Linear(D, 1)`; a centroid scale of 0 prices the query alone.
   `simulate_voting_iterations(query_prior_sink=[...], query_vector=...)` records, at every click a trained
-  head is drawn on a single-vector typed-query run, one `QUERY_PRIOR_COLUMNS` row: where the withheld
-  positives sit under candidate heads refitted on the same votes. Recorded only; the session is unchanged.
+  head is drawn on a single-vector typed-query run, one `vtscore.eval.arms_query_prior.QUERY_PRIOR_COLUMNS`
+  row: where the withheld positives sit under candidate heads refitted on the same votes. Recorded only;
+  the session is unchanged. (#4859 made the prior the app's; see Changed.)
 
 - **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`, `eval_only`: too slow
   for the app) and `embeddinggemma2_audio` (`audio`, selectable), both `google/embeddinggemma-2`, 768-d, with a

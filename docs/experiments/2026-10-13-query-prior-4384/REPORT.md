@@ -162,10 +162,8 @@ cell.
 
 ## Not done here
 
-- **The build.** A typed-query detector on a single-vector space would pass its query's embedding to every
-  head fit (`embed_detector_query`, as Find's query tier already embeds it), explicitly rather than through
-  the eval's process-wide knob. The scale is the owner's: 10 ranks better and wins at beta 4, 3 keeps the
-  Goods.
+- **The build** is #4859: the owner chose scale 10 (2026-10-14). A typed-query detector on its query's
+  own single-vector space fits every head from its query too, and the harness's default arm follows.
 - **#4384's three pools** (0.44%, 0.1%, 5%): priced at the three presets instead, as every review since
   #4448.
 - **The hold** can be revisited once the build lands: under the arm it is worth nothing either way.

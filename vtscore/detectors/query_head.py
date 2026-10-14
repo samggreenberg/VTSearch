@@ -113,6 +113,41 @@ def embed_detector_query(text: str, media_type: str, embedder: str) -> "np.ndarr
     return embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder)
 
 
+def typed_query_prior_applies(embedder: str | None) -> bool:
+    """Whether a head learning in *embedder*'s space takes its detector's typed query as a prior (#4859).
+
+    Only a known single-vector space whose own text tower embeds into it (SigLIP,
+    the Binary photo path): a patch space learns where the query has no direction,
+    and an embedder with no text tower cannot embed it.  Reads the embedder's
+    capabilities, not the query, so a cache can ask it cheaply.
+    """
+    from vtscore.detectors.training import _patch_space_for  # noqa: PLC0415
+
+    if _patch_space_for(embedder) is not False:
+        return False
+    from vtscore.media import get_embedder  # noqa: PLC0415
+
+    try:
+        return bool(get_embedder(str(embedder)).supports_text)
+    except (KeyError, ValueError):
+        return False
+
+
+def typed_query_prior_vector(text: str, embedder: str | None, media_type: str) -> "np.ndarray | None":
+    """The typed query a head learning in *embedder*'s space starts from (#4859), or ``None``.
+
+    *text* embedded by *embedder*'s own text tower, as the text sort embeds it
+    (:func:`embed_detector_query`), where :func:`typed_query_prior_applies`;
+    ``None`` with no text, elsewhere, or when the query does not embed.  The
+    training entry points fit within
+    :func:`vtscore.training.svm_prior.typed_query_prior` of it.
+    """
+    if not text or not typed_query_prior_applies(embedder):
+        return None
+    vec = embed_detector_query(text, media_type, str(embedder))
+    return None if vec is None else np.asarray(vec, dtype=np.float32)
+
+
 def query_head(
     query_vec: np.ndarray, cut: float, *, embedder: str, text: str, scale: float | None = None
 ) -> "nn.Sequential":

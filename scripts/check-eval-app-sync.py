@@ -785,6 +785,33 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="training.typed_query_prior",
+        app="py:vtscore.detectors.query_head.typed_query_prior_vector",
+        harness="vtscore/eval/voting_iterations.py::_fits_from_typed_query",
+        kind="default",
+        note=(
+            "A typed-query detector's head starts from its typed query as well as from the Goods' "
+            "centroid (#4384, #4859): every fit of a training pass runs inside "
+            "svm_prior.typed_query_prior, whose query feature sits at QUERY_PRIOR_SCALE (10). The app "
+            "enters it in labelset_train_and_score and train_from_labelset (Find, AutoFind, a load, "
+            "an export, the CLI, and the Train view's learned sort, which passes its detector's "
+            "registry query, learned_sort.resolve_active_text_query), with the query embedded by "
+            "typed_query_prior_vector where typed_query_prior_applies. The harness's default arm "
+            "runs the whole session inside it when the caller hands it the run's query_vector "
+            "(run_cells.cell_query_vector; run_voting_iterations_eval's query_vectors). If the app "
+            "enters the prior elsewhere, reads another space or another scale, the harness's "
+            "wrapper has to move with it."
+        ),
+        divergence=(
+            "INTENTIONAL: the app embeds the detector's text_query itself, with the user's enrich "
+            "setting, on a known single-vector space with a text tower (typed_query_prior_applies); "
+            "the harness is handed the cell's query vector (embedded at SEED_ENRICH, the app's "
+            "default) and applies it on a typed-query run (seed_scores, no example opening) whose "
+            "media carry no patch grid - the same split on every production path. CALIB_QUERY_PRIOR "
+            "(query_prior_scale) is an arm: unset is the app's scale, 0 the head before #4859."
+        ),
+    ),
+    Mirror(
         id="detectors.label_quota_default",
         app="py:vtscore.detectors.labelset_training.train_from_labelset",
         harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
@@ -807,6 +834,8 @@ MIRRORS: list[Mirror] = [
             "cached_head_is_current); the harness calls the same query_holds on its vote counts "
             "(query_hold, default QUERY_HOLD_LABELS; 0 is the arm before), writes the query's row "
             "untagged with app_trained 0 and keeps the head's rows tagged hold:head. "
+            "The trained head it then fits starts from the typed query too (#4859): mirrored by "
+            "training.typed_query_prior. "
             "If the app's tiers move - a new tier, a quota read from somewhere "
             "other than the counts, a tier that needs a Bad - the harness's rows have to move "
             "with them, and so do the notes that describe them (curves.py, viewer.py and its "

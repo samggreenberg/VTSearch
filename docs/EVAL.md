@@ -594,7 +594,7 @@ The voting simulation takes two knobs that both sound like "which model?". They 
 | `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced (#2790/#2809). |
 | `mlp` | An auto-sized hidden layer, BCE — the head shipped before #2790 (#2781). |
 | `linear_logreg` | The same `Linear(d, 1)` fitted by converged, balanced logistic regression (scikit-learn), the in-loop test of #3197 (#4114). |
-| `linear_svm_prior` | The SVM's objective with the Goods' centroid made a cheap direction: one extra feature, 10 x the dot with the unit centroid of the rows being fitted, folded back into a `Linear(d, 1)`, so a head on a few labels starts at the centroid (#4776). **The shipped detector head** since #4785; `head=None` resolves here. Every fit takes it: Test, the picks, the folds and the line. |
+| `linear_svm_prior` | The SVM's objective with the Goods' centroid made a cheap direction: one extra feature, 10 x the dot with the unit centroid of the rows being fitted, folded back into a `Linear(d, 1)`, so a head on a few labels starts at the centroid (#4776). **The shipped detector head** since #4785; `head=None` resolves here. Every fit takes it: Test, the picks, the folds and the line. On a typed-query run given its `query_vector` (single-vector media, no example opening) every fit also takes the typed query's direction at `svm_prior.QUERY_PRIOR_SCALE`, as the app's typed-query detector does since #4859; `CALIB_QUERY_PRIOR=0` (`arms_query_prior.query_prior_scale(0)`) is the arm before. |
 
 Passing `head=` alongside an `svm_*` or `gp_*` trainer is an error: those arms fit their own estimator and have no head to choose, which is why their rows carry an empty `head` column.
 
