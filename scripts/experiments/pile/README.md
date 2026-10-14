@@ -690,7 +690,8 @@ Three things the loader does that no other kind does:
   it: votes arrive in the app's ranked order, so a part-answered queue is the
   easy end.
 
-Runs and the first read: [`scripts/experiments/rico_suave/`](../rico_suave/launch.sh).
+Runs: [`scripts/experiments/rico_suave/launch.sh`](../rico_suave/launch.sh). First read:
+[`docs/experiments/2026-10-14-rico-suave-v0-4356/`](../../../docs/experiments/2026-10-14-rico-suave-v0-4356/REPORT.md).
 The dataset is `on_request`, so it builds only when named.
 
 ## Rebuilding
