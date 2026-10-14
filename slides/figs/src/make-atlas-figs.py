@@ -1619,7 +1619,10 @@ def _cube(ax: plt.Axes, u: float, v: float, zorder: float) -> None:
     top = [at(-1, -1, 1), at(1, -1, 1), at(1, 1, 1), at(-1, 1, 1)]
     ax.add_patch(plt.Polygon(top, closed=True, facecolor=CUBE_FACES["top"], edgecolor="none", zorder=zorder + 0.1))
     # Under the floor: the bottom edges and the lower halves of the three near verticals.
-    for path in ([at(-1, -1, 0), at(-1, -1, -1), at(1, -1, -1), at(1, 1, -1), at(1, 1, 0)], [at(1, -1, 0), at(1, -1, -1)]):
+    for path in (
+        [at(-1, -1, 0), at(-1, -1, -1), at(1, -1, -1), at(1, 1, -1), at(1, 1, 0)],
+        [at(1, -1, 0), at(1, -1, -1)],
+    ):
         ax.plot(*np.array(path).T, zorder=zorder + 0.05, **sunk_edge)
     # The waterline, where the floor cuts the two faces.
     ax.plot(*np.array([at(-1, -1, 0), at(1, -1, 0), at(1, 1, 0)]).T, color=CELL_LINE, linewidth=1.1,
