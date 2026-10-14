@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-fbeta-maps.webp)
 
-## Beta Release
+## Beta Testers
 
 <!-- build: figs/calib-fbeta-maps.build1.webp -->
 

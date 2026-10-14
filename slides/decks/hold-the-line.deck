@@ -38,7 +38,7 @@ theme: vtsearch
 # PDF metadata. The title is set here rather than left to Marp: it takes one
 # from the first heading, and the speaker cut has none (its first page is a
 # picture of the title slide), so that PDF was titled after Marp's temp file
-# (#4835); `build.py` adds "(presenter notes)" to the speaker cut's. The
+# (#4835); `build.py` prefixes the speaker cut's with "Presenter: " (#4872). The
 # language Marp guesses from the locale of whatever machine renders it
 # (`POSIX` on a CI runner), and that is what a screen reader reads the deck in.
 title: (thresh)Hold The Line
@@ -68,7 +68,7 @@ slides:
   # corpus. Then three ways of putting them together, naive to nuanced (owner,
   # 2026-10-13, #4833): Cross Examination averages the folds' cut with the
   # corpus's; Above Average reads the votes and the corpus's histograms
-  # together, the votes only naming the bumps; Curvey and InDiscreet (once
+  # together, the votes only naming the bumps; Curvey & InDiscreet (once
   # titled for a custody split; owner, #4835) lets the votes, bunched near the line where
   # Autopilot asks, shape the Good bump and the corpus say how big it is,
   # ending on the two numbers the line is drawn from. It uses no beta, so it is here
@@ -100,7 +100,7 @@ slides:
   # #4835). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after Conclusion.
-  # Second Cut stays last: Autopilot asks where What to Expect's fit puts
+  # A Cut Above stays last: Autopilot asks where the fit on Just How You Like It puts
   # even odds (#3546, #4632), so it has to follow the slides that draw that
   # fit and say where the line lands beside it.
   outline-hold-the-line +at3
@@ -115,9 +115,9 @@ slides:
   # too few Goods (#4603, #4759, #4786): needles are rare and a first sort is
   # weak, so the matches are a few outliers above the bulk, not a hump (owner,
   # #4835). After Transfer Student, because both slides lean on the radios
-  # and on What to Expect's fit to say what the count stands in for.
+  # and on the fit on Just How You Like It to say what the count stands in for.
   out-standing
-  # Lay of the Land: every labelset in hand, Goods up and Bads across: the quota, the text query's
+  # Head Count: every labelset in hand, Goods up and Bads across: the quota, the text query's
   # hold, and the band where the folds' split decides, from the shipped quota, fold split and hold
   # (#4643, #4731, #4736). Inside Job, the same rule as a decision tree on what each fold holds out,
   # was cut: the room can read the cut rules off this map (owner, #4833).
@@ -126,35 +126,35 @@ slides:
 
   # IV — Exploration: the Coverage Atlas, how autopilot decides what to ask
   # when the answer is not "whatever is nearest the line". It follows Inclination
-  # because Second Cut has just said the threshold decides what gets asked, and
+  # because A Cut Above has just said the threshold decides what gets asked, and
   # the honest reading of these four is "and here is the half of that the
   # threshold does not do".
   #
   # The order is the argument, not the code: the blind spot the atlas exists
-  # for, the structure, the second job that structure also does, the atlas
-  # doing it on that very room (#4517), and how badly it does it. That last one stays last whatever happens to the rest — it is
-  # the only slide here that reports a loss, and a loss read before the
-  # mechanism is just a reason not to listen.
+  # for, the structure and the walk down its tree, the second job that
+  # structure also does, and the atlas doing it on that very room (#4517).
+  # A Likely Story, how calibrated the atlas's typicality score is, was cut:
+  # too technical about a feature the app rarely uses (owner, #4872).
   outline-hold-the-line +at4
   atlas-blindspot
   atlas-cells
   atlas-depth
   atlas-far
-  atlas-pvalues
 
   # V — Navigation: Autopilot from end to end (#4610). Sections III and IV are
   # the two ways it asks; this is the order it asks them in, and when it tells
-  # the user they can stop. The steps first, then one slide per light — Smart,
-  # Stable, Span, each drawn by the shipped rule on a planted session
-  # (`make-autopilot-figs.py`) — then the ways a run ends and what the app says.
+  # the user they can stop. One slide per light first — Smart, Stable, Span,
+  # each drawn by the shipped rule on a planted session
+  # (`make-autopilot-figs.py`) — then the steps, whose "until" column names those
+  # lights (owner, #4872), then the ways a run ends and what the app says.
   # Last, where the stop fired when it was measured: #3945's sessions, the only
   # stopping numbers committed so far, until a State of the App review's
   # stopping block replaces them (#4611).
   outline-hold-the-line +at5
-  autopilot-steps
   autopilot-smart
   autopilot-stable
   autopilot-span
+  autopilot-steps
   autopilot-done
   autopilot-stop
 
@@ -203,7 +203,7 @@ slides:
   # drawing it): the question the line cannot answer before anyone checks
   # (how many of what it keeps are right), Clopper–Pearson on its own, what
   # a check says about the line without moving it (#4427, #4452, #4517).
-  # Flight Plan in section V names it as the step before Done (#4836).
+  # Flight Plan in section V names it as step A (#4836, #4872).
   floor-ask
   clopper-pearson
   floor-check
@@ -321,7 +321,7 @@ slides:
   # Then the line rules that stacked on section II's ideas and did not last,
   # moved out of Calibration (#4670); the blend went back there as the naive
   # combining (owner, 2026-10-13), and Above Average after it, as the step to
-  # Curvey and InDiscreet (owner, #4833), leaving its anchored EM here. Measured in
+  # Curvey & InDiscreet (owner, #4833), leaving its anchored EM here. Measured in
   # F-beta at the three presets, none beat cross-calibration (#4582, at the
   # 0.44% pool). None draws today's line; the fused cut and rank transfer
   # survive only as the fallback for a session whose votes cannot support the

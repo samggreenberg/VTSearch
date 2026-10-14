@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-lay-of-the-land.webp)
 
-## Lay of<br>the Land
+## Head Count
 
 <!-- build: figs/calib-lay-of-the-land.build1.webp -->
 

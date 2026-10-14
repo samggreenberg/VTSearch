@@ -1259,8 +1259,9 @@ def front_matter(front: dict[str, str], *, speaker: bool, editable: bool) -> str
     merged = dict(DEFAULT_FRONTMATTER)
     merged.update(front)
     if speaker and merged.get("title"):
-        # The two cuts side by side in a PDF viewer should not read alike.
-        merged["title"] = f"{merged['title']} (presenter notes)"
+        # The two cuts side by side in a PDF viewer should not read alike, and
+        # an OS truncates a long title from the end, so the difference leads.
+        merged["title"] = f"Presenter: {merged['title']}"
     if editable:
         merged["style"] = EDITABLE_STYLE
     return "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())

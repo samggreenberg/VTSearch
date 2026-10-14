@@ -11,6 +11,7 @@
      the middle. Our magazines, DVDs and notebook are in here, all voted Bad.
      Nothing on a ranking says where the books stop. -->
 
-<!-- **b** — So where do we cut? Two misses books, eight lets junk in, five is
-     one mistake each way. All fit the labels; it's which mistake you mind more.
-     -->
+<!-- **b** — So where do we cut? Only these three make sense: anywhere else,
+     one of them makes fewer mistakes of one kind and no more of the other.
+     Two misses books, eight lets junk in, five is one mistake each way.
+     Between those three, it's just which mistake you mind more. -->
