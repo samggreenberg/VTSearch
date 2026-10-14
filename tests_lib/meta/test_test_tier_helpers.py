@@ -90,6 +90,7 @@ _SHARED_CONFTEST_NAMES = (
     "freeze_collected_heap",
     "add_group_markers",
     "print_summary_and_exit",
+    "isolate_data_dir",
 )
 
 

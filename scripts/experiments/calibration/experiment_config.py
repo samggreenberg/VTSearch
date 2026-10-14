@@ -249,6 +249,13 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "coco_better": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
+    # `o365_better` (#4815) is `coco_better`'s construction on Objects365, on the
+    # same *C* and the same `class@band` keys -- so the same texts, for the same
+    # reason: it exists to be read against `coco_better`, and a query that
+    # differed between them would put a seeding axis inside the source axis.
+    "o365_better": {
+        f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
+    },
     "coco_val": _COCO_TEXTS,
     # `vg_scale` with the band collapsed away (#3115): the same verified images
     # under the bare class name, so the same twelve texts serve it.  Without this
@@ -393,6 +400,10 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # seeding difference inside the voting-mode axis (#3276, #3278). Both halves
     # are built for this dataset, so the pair is available rather than aspirational.
     "coco_better": os.environ.get("CALIB_COCO_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    # `o365_better` (#4815): the same two arms on the second source. Its own env
+    # var for the reason `coco_better` has one: the two are run against each other,
+    # and a shared knob would turn a source contrast into a column contrast.
+    "o365_better": os.environ.get("CALIB_O365_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
     # FHIBE (#4699): one identity per cell, the person's one-person photos as
     # its positives. The photo arms are whole images at two stored sizes; the
     # face arms are `image2face` crops of those copies, embedded by FaceNet. The
@@ -469,6 +480,8 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # `test_pile_boxed_datasets_are_registered` is now the guard rather than this
     # comment.
     "coco_better": True,
+    # Objects365's own boxes, banded by the same rule (#4815).
+    "o365_better": True,
     # FHIBE's photos carry the subject's annotated face box (#4699). Only a
     # whole-image embedder is built for them, so they binary-vote; the entry
     # keeps a future patch arm from silently doing the same. The face crops
@@ -1072,6 +1085,11 @@ WEAK_REPEAT = None if _weak_repeat is None else int(_weak_repeat)
 #: - only once Autopilot has left its text-sort opening, where the app has no detector to read separation from;
 #: ``any`` is the arm #4496 priced first, a prompt anywhere in the flow.
 WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
+#: Whether Autopilot checks the line before Done (``CALIB_DONE_CHECK``): unset is the harness's default, the app's
+#: (on: the first time every light is green, the simulated user runs the check as clicks, then the flow reports Done);
+#: ``0`` is the arm before Autopilot ran it, where all green reads Done at once.
+_done_check = os.environ.get("CALIB_DONE_CHECK", "").strip().lower()
+DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no", "off")
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
@@ -1190,12 +1208,44 @@ HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not 
 #: the line is priced on the same sessions.  Recorded only, so the session is the
 #: app's; ``CALIB_LINE_COUNTS=1`` turns it on.
 LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", "0")
+#: Issue #4816's set overlap: on a typed-query run, at every click a trained head
+#: scored the pool, how its set and the typed query's split the unvoted media
+#: (``task_NNNN__overlap.csv``), and where each pick sat in them at the previous
+#: click (the pick log's ``picked_in_head`` ...), so a hand-over judge that reads
+#: the votes where the two sets disagree is priced on the same sessions.
+#: Recorded only, so the session is the app's; ``CALIB_SET_OVERLAP=1`` turns it on.
+SET_OVERLAP: bool = os.environ.get("CALIB_SET_OVERLAP", "").strip() not in ("", "0")
+#: Issue #4384's typed-query prior shadow: on a single-vector typed-query run, at
+#: every click a trained head is drawn, where the withheld positives sit under
+#: candidate heads started from the typed query (``task_NNNN__queryprior.csv``).
+#: Recorded only, so the session is the app's; ``CALIB_QUERY_PRIOR_SHADOW=1``.
+QUERY_PRIOR_SHADOW: bool = os.environ.get("CALIB_QUERY_PRIOR_SHADOW", "").strip() not in ("", "0")
+#: Issue #4384's arm, the app's since #4859: on a typed-query single-vector run every
+#: head fit also takes the typed query's direction as a cheap feature beside the
+#: Goods' centroid, at ``vtscore.training.svm_prior.QUERY_PRIOR_SCALE`` (10).  Unset
+#: is the app; ``0`` is the head before #4859 (the centroid alone); another number
+#: is a scale arm (``vtscore.eval.arms_query_prior.query_prior_scale``).  A value
+#: that is not a number is kept as given, for the harness to refuse.
+_QUERY_PRIOR = os.environ.get("CALIB_QUERY_PRIOR", "").strip()
+QUERY_PRIOR: "float | str | None" = None
+if _QUERY_PRIOR:
+    try:
+        QUERY_PRIOR = float(_QUERY_PRIOR)
+    except ValueError:
+        QUERY_PRIOR = _QUERY_PRIOR
 #: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
 #: Test gives the typed query's own set until the label quota (rows tagged
 #: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the
 #: default) is the app; ``CALIB_QUERY_TIER=0`` is the arm before (the Goods'
 #: centroid from the first Good, no row before it).
 QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", "off", "false")
+#: Issue #4736: past the quota, such a run's Test keeps giving the typed query's set
+#: on a single-vector space until this many votes (rows tagged ``detector_tier =
+#: "query"``; the head's own rows tagged ``hold:head``), as the app's does.  Unset is
+#: the app (:data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS`); ``0`` / ``off``
+#: is the arm before (the head from the quota), any other count an arm.
+_QUERY_HOLD = os.environ.get("CALIB_QUERY_HOLD", "").strip().lower()
+QUERY_HOLD: "int | None" = None if not _QUERY_HOLD else 0 if _QUERY_HOLD in ("off", "false") else int(_QUERY_HOLD)
 
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
@@ -1209,11 +1259,11 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
 
-#: Issue #4786's gate: until the labels line's class model holds this many Bads (and
-#: while it holds few Goods), the line keeps the head's count (``vtscore.eval.
-#: live_threshold_rules.head_count_bads``).  Unset is the app's; ``0`` is the line
-#: before #4786.  A value that is not a non-negative integer is kept as given, for
-#: the harness to refuse.
+#: The Bads half of issue #4786's gate: while the labels line's class model holds few
+#: Goods and fewer than this many Bads, the line keeps the head's count (``vtscore.eval.
+#: live_threshold_rules.head_count_bads``).  Unset is the app's (no Bads half since
+#: #4798); ``0`` is the line before #4786, ``32`` #4786's gate.  A value that is not a
+#: non-negative integer is kept as given, for the harness to refuse.
 _HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
 HEAD_COUNT_BADS: "int | str | None" = (
     int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)

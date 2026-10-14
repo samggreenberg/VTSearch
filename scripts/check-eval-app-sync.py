@@ -113,7 +113,7 @@ MIRRORS: list[Mirror] = [
     # ------------------------------------------------------------------ ported
     Mirror(
         id="autopilot.phase_machine",
-        app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(",
+        app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(goodCount",
         harness="vtscore/eval/autopilot_flow.py::next_phase",
         kind="ported",
         note=(
@@ -128,13 +128,28 @@ MIRRORS: list[Mirror] = [
             "ran_dry=) and AutopilotFlow(dry_run_stop=). The Good walk's dry run (#4731: moreDryRun "
             "misses with a Good in hand end the Good phase and spend the walk) is the same kind of "
             "history: the app's goodMisses/goodRanDry, the harness's AutopilotFlow good_misses/"
-            "good_dry, read by next_phase as good_ran_dry."
+            "good_dry, read by next_phase as good_ran_dry. The Spot Check step is history too: the app's "
+            "spotCheck (a check running: the phase is 'spot') and doneChecked (the run's check before Done "
+            "has closed, so all green reads 'done' rather than 'spot'), moved by beginSpotCheck / "
+            "endSpotCheck / skipDoneCheck; the harness's AutopilotFlow spot_check / done_checked, moved by "
+            "begin_spot_check / end_spot_check / skip_done_check, read by next_phase as checking / "
+            "done_checked. Whether the check before Done runs is done_check_due, which both call."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
             "panel keeps its Done step checked while the phase falls back to hard or new. It is "
             "computed from nextPhase and never feeds it, so the phase sequence - all next_phase "
-            "reproduces - is unchanged and the harness, which draws no panel, has nothing to port."
+            "reproduces - is unchanged and the harness, which draws no panel, has nothing to port. "
+            "The app decides the check before Done once the sort after the vote settles; the harness "
+            "decides it the step the flow reaches 'spot' (_settle_done_check), so a skipped check never "
+            "stamps a row. The harness also skips a check whose opening bands do not fit the voting "
+            "budget left, as it starts no prompted check that cannot: the app has no budget. And the "
+            "harness's end-of-budget check (spot_check 'end' and 'weak', rows with phase 'check' past "
+            "max_steps) is its measurement of the final line, which no app user can start since the "
+            "Check button went: it is never a click. The app also latches doneChecked when a run's first "
+            "labeling-status reading is already all green (the Train view re-entered on a finished "
+            "detector); a harness run starts with no votes, where the lights cannot be green, so it has "
+            "nothing to port."
         ),
     ),
     Mirror(
@@ -158,7 +173,8 @@ MIRRORS: list[Mirror] = [
         kind="ported",
         note=(
             "Which Sort and which Select each Autopilot phase drives - good=text+top, "
-            "bad=text+hard, more=text+top, hard=learned+hard, new=learned+new. The simulated user picks the "
+            "bad=text+hard, more=text+top, hard=learned+hard, new=learned+new, and spot (stopped inside the "
+            "Spot Check step) learned+hard, the harness's fallback branch. The simulated user picks the "
             "next item from exactly this pairing, so re-pointing a phase at a different sort "
             "or select here silently changes what every study's vote order means. The load- "
             "bearing row is `bad`: it is still on the TEXT sort, so the harness must not "
@@ -769,6 +785,33 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="training.typed_query_prior",
+        app="py:vtscore.detectors.query_head.typed_query_prior_vector",
+        harness="vtscore/eval/voting_iterations.py::_fits_from_typed_query",
+        kind="default",
+        note=(
+            "A typed-query detector's head starts from its typed query as well as from the Goods' "
+            "centroid (#4384, #4859): every fit of a training pass runs inside "
+            "svm_prior.typed_query_prior, whose query feature sits at QUERY_PRIOR_SCALE (10). The app "
+            "enters it in labelset_train_and_score and train_from_labelset (Find, AutoFind, a load, "
+            "an export, the CLI, and the Train view's learned sort, which passes its detector's "
+            "registry query, learned_sort.resolve_active_text_query), with the query embedded by "
+            "typed_query_prior_vector where typed_query_prior_applies. The harness's default arm "
+            "runs the whole session inside it when the caller hands it the run's query_vector "
+            "(run_cells.cell_query_vector; run_voting_iterations_eval's query_vectors). If the app "
+            "enters the prior elsewhere, reads another space or another scale, the harness's "
+            "wrapper has to move with it."
+        ),
+        divergence=(
+            "INTENTIONAL: the app embeds the detector's text_query itself, with the user's enrich "
+            "setting, on a known single-vector space with a text tower (typed_query_prior_applies); "
+            "the harness is handed the cell's query vector (embedded at SEED_ENRICH, the app's "
+            "default) and applies it on a typed-query run (seed_scores, no example opening) whose "
+            "media carry no patch grid - the same split on every production path. CALIB_QUERY_PRIOR "
+            "(query_prior_scale) is an arm: unset is the app's scale, 0 the head before #4859."
+        ),
+    ),
+    Mirror(
         id="detectors.label_quota_default",
         app="py:vtscore.detectors.labelset_training.train_from_labelset",
         harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
@@ -786,6 +829,13 @@ MIRRORS: list[Mirror] = [
             "head's from it; a run that opens on a typed query (seed_scores, no seed_examples) "
             "writes a row from the first vote, the typed query's set under the quota "
             "(_query_test, detector_tier 'query'; query_tier=False is the arm before). "
+            "Past the quota a typed-query detector on a single-vector space keeps its query's set "
+            "until QUERY_HOLD_LABELS labels (#4736, label_quota.query_holds, read by _query_tier and "
+            "cached_head_is_current); the harness calls the same query_holds on its vote counts "
+            "(query_hold, default QUERY_HOLD_LABELS; 0 is the arm before), writes the query's row "
+            "untagged with app_trained 0 and keeps the head's rows tagged hold:head. "
+            "The trained head it then fits starts from the typed query too (#4859): mirrored by "
+            "training.typed_query_prior. "
             "If the app's tiers move - a new tier, a quota read from somewhere "
             "other than the counts, a tier that needs a Bad - the harness's rows have to move "
             "with them, and so do the notes that describe them (curves.py, viewer.py and its "
@@ -795,7 +845,10 @@ MIRRORS: list[Mirror] = [
             "INTENTIONAL: the harness counts votes, not resolved labels - every simulated vote "
             "resolves - and keeps the Train side (acquisition, lights, spot check) on the trained "
             "head wherever there is a Good and a Bad, as the Train view's learned sort does "
-            "(labelset_train_and_score with label_quota=False)."
+            "(labelset_train_and_score with label_quota=False). The hold's space is the run's "
+            "region_aware (its media carry a patch grid) where the app reads the embedder's "
+            "capability (_patch_space_for): the same split on every production path, and an "
+            "unknown embedder, which the app does not hold, never reaches the harness."
         ),
         no_harness_pin=(
             "simulate_voting_iterations is the whole voting loop; the quota's own rows are "

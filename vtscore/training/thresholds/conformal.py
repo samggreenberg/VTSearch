@@ -97,6 +97,10 @@ def _calibration_cache_key(
     # Bag membership changes the fold split and per-group max-pool, so a change
     # in grouping must invalidate the cached orderings even when X/y are equal.
     groups_key = tuple(str(g) for g in groups) if groups is not None else None
+    # The fold models of a typed-query detector start from its query (#4859): a pass
+    # under another query, or none, must not be served this one's folds.
+    from vtscore.training.svm_prior import active_query_prior_key  # noqa: PLC0415
+
     return (
         X_hash,
         y_hash,
@@ -105,6 +109,7 @@ def _calibration_cache_key(
         int(hidden_dim),
         groups_key,
         _score_rows_digest(score_rows_by_group),
+        active_query_prior_key(),
     )
 
 

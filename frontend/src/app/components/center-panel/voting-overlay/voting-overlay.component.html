@@ -25,13 +25,20 @@
 @switch (hint()) {
   @case ('start-voting') {
     <vt-toasty-hint hintId="start-voting" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot picked this item for you. Click <strong>Good</strong> (&rarr;) if it's what you're looking
-      for, or <strong>Bad</strong> (&larr;) if not.
+      Autopilot picked this item for you. Click <strong>Good</strong>, or press the right arrow key, if
+      it's what you're looking for. Click <strong>Bad</strong>, or press the left arrow key, if not.
+    </vt-toasty-hint>
+  }
+  @case ('revote') {
+    <vt-toasty-hint hintId="revote" [anchor]="voteButtons" side="above" reach="right">
+      You already labeled this item <strong>{{ revoteLabel() }}</strong>. Click
+      <strong>{{ revoteOther() }}</strong>, or press the {{ revoteKey() }} arrow key, to change it. Click
+      Autopilot's current step on the left, or press the up arrow key, to go back to its pick.
     </vt-toasty-hint>
   }
   @case ('find-goods') {
     <vt-toasty-hint hintId="find-goods" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot needs {{ goodsNeededPhrase() }} to start training; you've found {{ hintCounts().goods }}.
+      Autopilot needs {{ goodsNeededPhrase() }} to start training. You've found {{ hintCounts().goods }}.
       Keep voting.
     </vt-toasty-hint>
   }
@@ -50,6 +57,12 @@
     <vt-toasty-hint hintId="keep-voting" [anchor]="voteButtons" side="above" reach="right">
       Your detector now retrains on every vote. Keep voting until the lights on the left are all
       green.
+    </vt-toasty-hint>
+  }
+  @case ('spot-check') {
+    <vt-toasty-hint hintId="spot-check" [anchor]="voteButtons" side="above" reach="right">
+      Autopilot is checking the line: these picks are drawn at random from bands of the list. Vote
+      <strong>Good</strong> or <strong>Bad</strong> on each.
     </vt-toasty-hint>
   }
   @case ('test-vote') {

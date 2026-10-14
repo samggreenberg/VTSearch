@@ -10,36 +10,16 @@
 
 <!-- build: figs/calib-knob-flow.build3.png -->
 
-<!-- Appendix. Before the balance, the control was a slider, Inclusion,
-     minus ten to plus ten: each step up doubled the price of a miss, each
-     step down the price of a false alarm. Defined; now watch it not work. -->
+<!-- **a** — Before the radios there was a slider, Inclusion, minus ten to plus
+     ten: each step doubled the price of a miss or a false alarm. Watch it not
+     work. -->
 
-<!-- **a** — One fold model's score axis, with its held-out votes standing on
-     it. That is the whole of the evidence: nothing is fitted, and the rule
-     about to be drawn reads these seven marks and nothing else. -->
+<!-- **b** — Minus ten: a false alarm's worth a thousand misses. Cost drops at
+     every cross, barely moves past the checks. -->
 
-<!-- **b** — One end of the slider, k = −10: a false alarm priced a thousand
-     times a miss. Read the curve left to right — it drops a step every time
-     the cut passes a ✗. Past the ✓s it creeps up, and only a little: a miss at
-     a thousandth of the price is cheap, not free. (The creep is drawn larger
-     than a thousandth, or it would not show at all.) -->
+<!-- **c** — Plus ten is the mirror. Between the last cross and first check
+     there's no mistake to make, so that stretch costs zero at every setting.
+     -->
 
-<!-- **c** — The other end, k = +10, the mirror image, drawn bold the way the
-     last slide drew its miss-fearing price. Between the top ✗ and the bottom
-     ✓ there are no errors to make, so both curves sit on zero: every cut in
-     that band is optimal at every setting. -->
-
-<!-- **d** — The search only ever looked at the observed vote scores — the soft
-     ticks — so it returns θ, and returns it at *every* stop: no ✗ here ranks
-     above a ✓, so the cost has one optimum at every price, and the twenty-one
-     ticks the slider offers land on one score. -->
-
-<!-- And that is the common case, not a corner case. The cost has as many
-     distinct optima as the calibration set has ranking errors, and a strongly
-     fit model on a handful of separable votes usually has none. Twenty-one
-     stops of the slider, one answer. -->
-
-<!-- Measured: a hundred percent flat sweeps on the separable synthetic arm;
-     forty-four percent on real AG News at twelve votes, and about 1.8 distinct
-     admitted sizes across eleven stops. It also *reversed* in six to twelve
-     percent of sweeps. -->
+<!-- **d** — And it only cuts at vote scores: twenty-one stops, one answer. On
+     real data, almost half the time. -->

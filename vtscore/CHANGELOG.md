@@ -10,6 +10,59 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A typed-query detector's head starts from its typed query too** (issue #4859, priced in #4384). On the
+  query's own single-vector space (`vtscore.detectors.query_head.typed_query_prior_applies`), every fit of a
+  training pass adds the typed query's unit embedding as a second cheap feature beside the Goods' centroid,
+  at `vtscore.training.svm_prior.QUERY_PRIOR_SCALE` (10), inside `svm_prior.typed_query_prior(direction,
+  text)` (a `ContextVar`, so threads never share it). `labelset_train_and_score` and `train_from_labelset`
+  enter it with `query_head.typed_query_prior_vector(text_query, embedder, media_type)`. The learned sort
+  passes its detector's registry query (`learned_sort.resolve_active_text_query`). Fitted heads carry the
+  query (`svm_prior.fitted_query_prior_text`). `cached_head_is_current` refuses a trained head fitted
+  without the detector's query, and the calibration cache key includes it. The harness follows:
+  `simulate_voting_iterations(query_vector=...)` fits every head from it on a typed-query single-vector
+  run, `run_voting_iterations_eval(query_vectors=...)` takes them from
+  `build_seed_scores(vectors_out=...)`, and `arms_query_prior.query_prior_scale(0)` is the arm before.
+  Priced on COCO Better's Binary opening: the objective over votes 1-150 +0.013 / +0.013 / +0.018 at beta
+  1/4, 1, 4, and Goods by vote 150 about -0.6 of 28.
+
+- **Autopilot checks the line before Done, and the harness's default arm does too.** The app's Autopilot
+  runs the spot check as one of its steps (phase `spot`): once a run, the first time every quality light
+  is green, and then reports Done; a weak-separation check (#4496) is the same step mid-run. There is no
+  user-started check any more. New `vtscore.training.thresholds.done_check_due(n_votes,
+  votes_at_last_check, *, cooldown=WEAK_CHECK_COOLDOWN)`: due unless a check ended in the last 25 votes
+  (on every media type, face crops included); the app's balance payload carries it as `done_check_due`.
+  In `vtscore.eval.autopilot_flow`: `Phase` gains `"spot"`, and so does `TRAINED_PHASES`; `next_phase`
+  takes `checking` (a check running reads `spot`) and `done_checked` (default `True`, which reads all
+  green as `done` as before; `False` reads it as `spot`); `AutopilotFlow(done_check=True)` holds
+  `spot_check` and `done_checked` and gains `begin_spot_check(kind)`, `end_spot_check()` and
+  `skip_done_check()`. **A caller driving its own loop over `AutopilotFlow` now meets `spot` when every
+  light goes green**: run the check and call `end_spot_check()`, call `skip_done_check()`, or pass
+  `done_check=False` for the previous behavior. `simulate_voting_iterations(done_check=True)` runs the
+  check before Done as clicks (`phase == "prompt"` rows, inside the budget; skipped when a check ended
+  in the last 25 votes or its opening bands do not fit the budget left), so the first `done` row now
+  follows the check; `done_check=False` (`CALIB_DONE_CHECK=0`) is the arm before. The end-of-budget
+  check (`spot_check="end"` / `"weak"`, `phase == "check"` rows past `max_steps`) stays as the
+  harness's measurement of the final line. Not priced.
+
+- **The labels line keeps the head's count until the class model holds 6 held-out Goods, whatever its
+  Bads** (issue #4798). `HEAD_COUNT_BADS` is unbounded (it was 32), so `head_count_serves` is the Goods
+  half alone. With two to five held-out Goods past 32 Bads, the class model's cut ran to the corpus's
+  end at beta 4 on 2.5% of FHIBE face clicks; no fix to `corpus_cut`'s positives total won on COCO.
+  Priced as full sessions: Find's mean F-beta over votes 1-150 +0.008 to +0.032 on faces at beta 1/4 and
+  1 and +0.004 / +0.014 at beta 4; COCO Better's Binary opening +0.001 at beta 1/4 and at 1,
+  -0.002 at beta 4. `head_count_bads(32)` (`CALIB_HEAD_COUNT_BADS=32`) is #4786's gate.
+
+- **A typed-query detector keeps its query's set past the quota until 30 labels on a single-vector
+  space** (issue #4736). New `label_quota.QUERY_HOLD_LABELS` (30) and `query_holds(n_good, n_bad, *,
+  patch_space, hold=QUERY_HOLD_LABELS)`: true on a known single-vector space (`training._patch_space_for`
+  is `False`) below that many labels. `labelset_training._query_tier` (so `train_from_labelset` and
+  `labelset_train_and_score(label_quota=True)`) gives the typed query's head while it holds, and
+  `cached_head_is_current` refuses a cached trained head then. A patch space, or an unknown embedder, hands
+  over at the quota as before. The eval harness's `simulate_voting_iterations(query_hold=)` (default the
+  app's 30; `CALIB_QUERY_HOLD=0` is the hand-over at the quota) writes a held click's untagged row as the
+  typed query's set with `app_trained` 0 and tags the head's rows `hold:head`. Priced as full sessions on
+  COCO Better's Binary opening: +0.025 / +0.037 / +0.050 at beta 1/4, 1 and 4 over votes 1-25, +0.004 / +0.006 / +0.009, in every seed over 1-150.
+
 - **While the class model is thin, the labels line is the head's count** (issue #4786).
   `LabelsLine.threshold` keeps, at every balance, what the Goods' centroid's count rule finds standing
   out in the head's own logit scores (`head_count_cut`) while the class model holds fewer than
@@ -56,6 +109,38 @@ instead, since every commit on `dev` is effectively a new app release.)
   Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
 
 ### Added
+
+- **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
+  scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the
+  Goods' centroid, folded back into the one `Linear(D, 1)`; a centroid scale of 0 prices the query alone.
+  `simulate_voting_iterations(query_prior_sink=[...], query_vector=...)` records, at every click a trained
+  head is drawn on a single-vector typed-query run, one `vtscore.eval.arms_query_prior.QUERY_PRIOR_COLUMNS`
+  row: where the withheld positives sit under candidate heads refitted on the same votes. Recorded only;
+  the session is unchanged. (#4859 made the prior the app's; see Changed.)
+
+- **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`, `eval_only`: too slow
+  for the app) and `embeddinggemma2_audio` (`audio`, selectable), both `google/embeddinggemma-2`, 768-d, with a
+  text side; registered once per media type and loading only that type's encoder.
+  - **Recipe:** each input runs through the model's text backbone (images as soft tokens, audio at 25 tokens a
+    second), and the vector is the masked mean of its last hidden state, L2-normalised. That is the checkpoint's
+    sentence-transformers recipe, on plain `transformers`.
+  - **Queries** carry `EMBEDDINGGEMMA2_QUERY_PREFIX` (`"task: search result | query: "`); media take none.
+  - **Precision:** the model never runs in fp16, which overflows; it runs in bf16 when `VTSEARCH_EMBED_PRECISION`
+    asks.
+  - **Batch:** the image embedder's default batch is 8.
+  - **Audio** is 16 kHz mono, its first 30 s (`EMBEDDINGGEMMA2_MAX_SAMPLES`), padded to 1 s
+    (`EMBEDDINGGEMMA2_MIN_SAMPLES`).
+  - **Needs transformers >= 5.18;** loading on an older one raises `ImportError` naming the version.
+  - **New config constants:** `EMBEDDINGGEMMA2_MODEL_ID`, `EMBEDDINGGEMMA2_QUERY_PREFIX`,
+    `EMBEDDINGGEMMA2_SAMPLE_RATE`, `EMBEDDINGGEMMA2_MAX_SAMPLES`, `EMBEDDINGGEMMA2_MIN_SAMPLES`.
+
+- **Set overlap for the harness** (issue #4816). On a typed-query run,
+  `simulate_voting_iterations(set_overlap_sink=[...])` records, at every click a trained head scored the
+  pool, one `vtscore.eval.arms_set_overlap.OVERLAP_COLUMNS` row: how the head's set and the typed query's
+  split the unvoted media (both, head only, query only, neither), the positives in each part, the head's
+  class model's expected positives there, and the voted Goods and Bads in each part. The pick log gains
+  `picked_in_head`, `picked_in_query`, `picked_head_rank`, `picked_part_rank` and `picked_head_posterior`
+  (where each pick sat at the click before it; NaN without the sink). Recorded only; the session is unchanged.
 
 - **Line counts for the harness** (issue #4786). `simulate_voting_iterations(line_count_sink=[...])`
   records, at every click Test gives the trained head under a balance, one

@@ -10,7 +10,7 @@ import { AutopilotStateService } from './autopilot-state.service';
 import { DetectorsFindApiService } from './detectors-find-api.service';
 import { MediaStateService } from './media-state.service';
 import { PairScopeService } from './pair-scope.service';
-import { SortStateService, SortMode, SelectMode, type LoadSortSource } from './sort-state.service';
+import { SortStateService, SortMode, SelectMode, type LoadSortSource, type SortedItem } from './sort-state.service';
 import { SortingApiService } from './sorting-api.service';
 import { ToastService } from './toast.service';
 import { VoteStateService } from './vote-state.service';
@@ -23,6 +23,25 @@ import { lineBalanceFrom, type LineBalance } from '../utils/line-balance';
 /** What a sort ranks by: the detector's model, a text query, example media, or
  *  a saved detector's scores. See {@link SortRunnerService.newestSortKind}. */
 export type SortKind = 'learned' | 'text' | 'example' | 'detector';
+
+/** A learned ranking Autopilot asks from without showing it (#4736). */
+interface HeldRanking {
+  sortOrder: SortedItem[];
+  /** Its acquisition cut, with the same fallback to the line as `SortStateService.acqThreshold`. */
+  acqThreshold: number;
+  balance: LineBalance | null;
+  /** The whole response, to install if the hold ends with Autopilot. */
+  response: LearnedSortResponse;
+}
+
+/** A sort response's rows, `similarity` (text / example) or `score` (learned / detector). */
+function sortedItems(rows: Array<Record<string, unknown>> | undefined): SortedItem[] {
+  return (rows ?? []).map((r) => ({
+    id: r['id'] as number,
+    score: (r['score'] ?? r['similarity'] ?? 0) as number,
+    bestRegion: r['best_region'] as number[] | undefined,
+  }));
+}
 
 /**
  * Runs sorts, and lands the user on the next thing to vote on.
@@ -57,6 +76,17 @@ export type SortKind = 'learned' | 'text' | 'example' | 'detector';
  * a pair switch. Without it two sorts in the air install whichever lands
  * second, which on entry to Train was Autopilot's text seed landing on top of
  * the learned sort that had already replaced it (#4318).
+ *
+ * ## The typed query's hold (#4736)
+ *
+ * A learned ranking is not always the one on screen. While an Autopilot run
+ * that opened on a typed query has fewer labels than the hold, the server marks
+ * its learned sort `query_hold`: the typed query's set is better than the
+ * head's that early, but the head still asks the better questions. Such a
+ * ranking is kept behind the text sort ({@link heldRanking}) and Autopilot's
+ * picks read it, while the text sort stays on screen. The first learned
+ * ranking without the mark takes the screen, for good. Whether a run holds at
+ * all is the view's call ({@link holdsTypedQuery}).
  *
  * ## What stays with the view
  *
@@ -115,6 +145,39 @@ export class SortRunnerService {
   readonly advancePending = computed(() => this.diversityProbesInFlight() > 0);
 
   /**
+   * The learned ranking Autopilot asks from while the typed query's set stays
+   * on screen (#4736), or `null` when the ranking it asks from is the one on
+   * screen. Its picks (Hard, New's atlas steer) and its weak check read this;
+   * the line, the count and the list the user sees never do.
+   */
+  private readonly heldRanking = signal<HeldRanking | null>(null);
+
+  /**
+   * Set by the view: whether this session keeps its typed query's set on
+   * screen while the learned sort says the query holds (#4736). The view knows
+   * what the run opened on and what phase it is in; the runner only applies
+   * the answer.
+   */
+  holdsTypedQuery: () => boolean = () => false;
+
+  /** A learned ranking has taken the screen in a session that holds, so no later one goes behind the query. */
+  private queryHandedOver = false;
+
+  /** The kind of the ranking on screen: a hold keeps a text ranking there, and with none there is nothing to hold. */
+  private shownSortKind: SortKind | null = null;
+
+  /** True while a learned ranking is held behind the typed query's set (#4736). */
+  get queryHeld(): boolean {
+    return this.heldRanking() !== null;
+  }
+
+  /** The balance on the line Autopilot asks from: the held learned ranking's while there is one (#4736). */
+  get askBalance(): LineBalance | null {
+    const held = this.heldRanking();
+    return held ? held.balance : this.sortState.balance;
+  }
+
+  /**
    * True when the current Sort + Select has nothing left to advance to: every
    * row in the loaded ranking is labeled (`top` / `hard`), or the coverage
    * atlas has no unseen item left to offer (`new`).
@@ -135,10 +198,12 @@ export class SortRunnerService {
    * un-voted, with no fresh probe (#4312). The undone item, still selected,
    * comes straight back as it does under `top` / `hard`, and the next vote
    * probes again. Deliberately false before any sort has landed — an unranked
-   * pair is the placeholder state, not an exhausted one.
+   * pair is the placeholder state, not an exhausted one. It reads the ranking
+   * the advance reads, which under the typed query's hold is the held one
+   * (#4736).
    */
   readonly queueExhausted = computed(() => {
-    const sortOrder = this.sortState.sortOrder;
+    const { sortOrder } = this.askWindow();
     if (!sortOrder || sortOrder.length === 0) return false;
     const good = this.voteState.goodVotes;
     const bad = this.voteState.badVotes;
@@ -210,6 +275,10 @@ export class SortRunnerService {
     this.sortState.setSortBusy(false);
     this._newestSortKind.set(null);
     this.redrawWhenSortLands = false;
+    // The hold is over the pair's own text ranking, which the reset drops (#4736).
+    this.heldRanking.set(null);
+    this.queryHandedOver = false;
+    this.shownSortKind = null;
   }
 
   /** Fires when a sort starts, ending the one before it. See {@link beginSort}. */
@@ -351,11 +420,9 @@ export class SortRunnerService {
     sort_token?: string;
   }): void {
     const threshold = response.threshold ?? 0;
-    const items = (response.results ?? []).map((r) => ({
-      id: r['id'] as number,
-      score: (r['score'] ?? r['similarity'] ?? 0) as number,
-      bestRegion: r['best_region'] as number[] | undefined,
-    }));
+    const items = sortedItems(response.results);
+    // A ranking only lands as the newest sort (see `beginSort`).
+    this.shownSortKind = this._newestSortKind();
     this.sortState.setSortWindow({
       items,
       threshold,
@@ -393,14 +460,7 @@ export class SortRunnerService {
         catchError(() => EMPTY),
         finalize(() => this.loadingMoreSort.set(false)),
       )
-      .subscribe((page) => {
-        const items = (page.results ?? []).map((r) => ({
-          id: r['id'] as number,
-          score: (r['score'] ?? r['similarity'] ?? 0) as number,
-          bestRegion: r['best_region'] as number[] | undefined,
-        }));
-        this.sortState.appendSortItems(items, page.has_more);
-      });
+      .subscribe((page) => this.sortState.appendSortItems(sortedItems(page.results), page.has_more));
   }
 
   /**
@@ -529,13 +589,59 @@ export class SortRunnerService {
   }
 
   private applyLearnedSortResult(response: LearnedSortResponse, autoSelect: boolean): void {
-    this.applySortWindow(response);
+    if (this.goesBehindQuery(response)) {
+      this.heldRanking.set({
+        sortOrder: sortedItems(response.results),
+        acqThreshold: response.acq_threshold ?? response.threshold ?? 0,
+        balance: lineBalanceFrom(response.balance),
+        response,
+      });
+      // The text sort stays on screen, and the controls say so.
+      this.sortState.setSortMode('text');
+    } else {
+      if (this.heldRanking()) {
+        // The hand-over: the learned ranking takes the screen, and its controls with it.
+        this.heldRanking.set(null);
+        this.sortState.setSortMode('learned');
+      }
+      if (this.holdsTypedQuery()) this.queryHandedOver = true;
+      this.applySortWindow(response);
+    }
     this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
     this.sortState.setSortStatus('');
     if (autoSelect) {
       this.autoSelectNext();
     }
+  }
+
+  /**
+   * Whether a learned ranking goes behind the typed query's set rather than on
+   * screen (#4736): the server says the query still holds, the session is one
+   * that holds, the text sort is what is on screen, and no learned ranking has
+   * taken the screen since.
+   */
+  private goesBehindQuery(response: LearnedSortResponse): boolean {
+    return (
+      response.query_hold === true &&
+      !this.queryHandedOver &&
+      this.shownSortKind === 'text' &&
+      this.holdsTypedQuery()
+    );
+  }
+
+  /**
+   * Autopilot stopped, and the hold was its (#4736). The Sort the stop left
+   * selected (`onAutopilotStop`) decides what stays on screen, since the
+   * controls must show the sort on screen: under Learned, the Hard / New
+   * phases' row, the held ranking takes the screen; under Text the text sort
+   * is already there. The next run starts unheld.
+   */
+  endQueryHold(): void {
+    this.queryHandedOver = false;
+    const held = this.heldRanking();
+    this.heldRanking.set(null);
+    if (held && this.sortState.sortMode === 'learned') this.applySortWindow(held.response);
   }
 
   /** Cancel whatever sort run is currently in flight.
@@ -781,7 +887,8 @@ export class SortRunnerService {
   }
 
   private fetchDiversityNext(): void {
-    const sortOrder = this.sortState.sortOrder;
+    // Steered by the ranking Autopilot asks from, as the Hard pick is (#4736).
+    const { sortOrder, acqThreshold } = this.askWindow();
     const scores = sortOrder
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
@@ -794,7 +901,7 @@ export class SortRunnerService {
       // The New pick reads the threshold as a sampling position too (it steers
       // the atlas probe by a node's median score), so it takes the acquisition
       // cut alongside the Hard pick.
-      .getCoverageAtlasNext(scores, this.sortState.acqThreshold ?? undefined)
+      .getCoverageAtlasNext(scores, acqThreshold ?? undefined)
       .pipe(
         this.pairScope.scoped(),
         // Every way out — an answer, an error, a pair switch superseding the
@@ -841,6 +948,10 @@ export class SortRunnerService {
    * ({@link redrawSortLine}). The acquisition cut stays, and so does the
    * selection. Any other ranking (a detector's Find, a label-file sort) has a
    * line the server does not redraw, and keeps it.
+   *
+   * **A learned ranking held behind the typed query's set** (#4736) re-sorts
+   * at the new balance as well, so Autopilot keeps asking from its cut there;
+   * the text line on screen is redrawn as above, and the selection stays.
    */
   private afterBalanceChange(balance: LineBalance | null): void {
     if (this.sortState.sortMode === 'learned') {
@@ -856,6 +967,7 @@ export class SortRunnerService {
     }
     this.redrawSortLine();
     if (this.sortState.sortBusy) this.redrawWhenSortLands = true;
+    if (this.queryHeld && this.voteState.learnedSortAvailable) this.scheduleLearnedSort(false);
   }
 
   /** Ask the server to redraw the ranking on screen's line at the balance it has now (#4760). */
@@ -868,14 +980,17 @@ export class SortRunnerService {
    * Re-read the line after a spot check ends (#4273). The server has moved it
    * to the set where the check's balance peaked, a new count over the ranking
    * already on screen, so this moves the line without a re-sort. Only a
-   * learned ranking draws the detector's line.
+   * learned ranking draws the detector's line. *settled* runs once the read
+   * has landed or failed, so a caller can wait for the balance to be this
+   * line's.
    */
-  refreshLine(): void {
+  refreshLine(settled?: () => void): void {
     this.sortingApi
       .getBalance()
       .pipe(
         this.pairScope.scoped(),
         catchError(() => EMPTY),
+        finalize(() => settled?.()),
       )
       .subscribe((resp) => {
         if (this.sortState.sortMode !== 'learned' || resp.threshold == null) return;
@@ -897,6 +1012,20 @@ export class SortRunnerService {
   // --- Selection advance ---
 
   /**
+   * The ranking and acquisition cut the advance reads: the learned ranking
+   * held behind the typed query's set while there is one (#4736), else the
+   * ranking on screen. Every pick reads it, so Autopilot asks what it would
+   * with the learned ranking on screen: the Hard pick, the atlas's steer in
+   * New, and a phase that falls back after an undo. The rule itself is
+   * untouched.
+   */
+  private askWindow(): { sortOrder: SortedItem[] | null; acqThreshold: number | null } {
+    const held = this.heldRanking();
+    if (held) return { sortOrder: held.sortOrder, acqThreshold: held.acqThreshold };
+    return { sortOrder: this.sortState.sortOrder, acqThreshold: this.sortState.acqThreshold };
+  }
+
+  /**
    * Advance to the next media the current Sort + Select says to show.
    *
    * The rule itself lives in {@link pickNextMedia} (`utils/auto-select-next`)
@@ -915,9 +1044,8 @@ export class SortRunnerService {
    */
   peekNextMedia(excludeId?: number): AutoSelectPick {
     return pickNextMedia({
-      sortOrder: this.sortState.sortOrder,
+      ...this.askWindow(),
       selectMode: this.sortState.selectMode,
-      acqThreshold: this.sortState.acqThreshold,
       goodVotes: this.voteState.goodVotes,
       badVotes: this.voteState.badVotes,
       excludeId,
@@ -942,9 +1070,8 @@ export class SortRunnerService {
    */
   peekUpcomingMedia(currentId: number | null, depth: number): number[] {
     if (currentId === null) return [];
-    const sortOrder = this.sortState.sortOrder;
+    const { sortOrder, acqThreshold } = this.askWindow();
     const selectMode = this.sortState.selectMode;
-    const acqThreshold = this.sortState.acqThreshold;
     const badVotes = this.voteState.badVotes;
     let goodVotes: ReadonlySet<number> = this.voteState.goodVotes;
     let excludeId = currentId;

@@ -86,9 +86,7 @@
 }
 
 // The state line under the spectrum: the Smart/Stable/Diverse indicators' dot,
-// in the muted small type of the left panel's `.all-labeled-note`. It wraps:
-// the note keeps a readable width, and where the panel is too narrow for it
-// and the check button side by side, the button drops to the next line.
+// in the muted small type of the left panel's `.all-labeled-note`.
 .balance-state {
   display: flex;
   flex-wrap: wrap;
@@ -126,19 +124,9 @@
 }
 
 .balance-state-text {
-  // Room for the note on its own; below this the button wraps under it.
   flex: 1 1 16em;
   min-width: 0;
   cursor: help;
-}
-
-// The check affordance rides the state line it measures, in the line's small
-// type rather than the toolbar's, so it reads as part of the sentence.
-.balance-check-btn {
-  flex-shrink: 0;
-  padding: 0 var(--space-sm);
-  font-size: var(--font-2xs);
-  letter-spacing: normal;
 }
 
 // The call for a check when the labels separate weakly (#4496): one short line

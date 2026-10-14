@@ -18,11 +18,10 @@
 
 </div>
 
-<!-- **a** — Tick the new pile and the trained detector, and Test instead of
-     Train. Test scores every photo in the pile, and opens on a short test of
-     the line: a few random picks to answer, if you want the numbers. -->
+<!-- **a** — Tick the new pile and the detector, and this time hit Test. It
+     scores every photo, then offers a few random picks to vote on, so you know
+     how far to trust it. -->
 
-<!-- **b** — The Review tab: the new photos, best match first. Check any you
-     like with Good or Bad, or don't. Export sends the matches wherever they
-     are needed — a file, an email, a folder — and once you trust the
-     detector, Find (or AutoFind) does all five steps on every new pile. -->
+<!-- **b** — Review shows them best first; vote on any you like, or don't.
+     Export sends the matches on. Once you trust it, AutoFind does all this by
+     itself. -->

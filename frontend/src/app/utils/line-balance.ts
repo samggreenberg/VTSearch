@@ -86,11 +86,16 @@ export interface LineBalance {
   /** How far apart the labels' Good and Bad scores sit, in spreads (d'); null before a retrain has drawn the labels' line. */
   separation: number | null;
   /**
-   * The labels separate weakly enough that a spot check is due (#4496): Autopilot runs one, and the
-   * Train tab's Check button calls for one. The server decides (`weak_check_due`): d' below 1.5, from
-   * 10 votes on, and 25 votes after the last check ended.
+   * The labels separate weakly enough that a spot check is due (#4496): Autopilot runs one. The
+   * server decides (`weak_check_due`): d' below 1.5, from 10 votes on, and 25 votes after the last
+   * check ended.
    */
   checkDue: boolean;
+  /**
+   * Autopilot's check before Done should run (`done_check_due`): no check has ended in the last 25
+   * votes. Read once every quality light is green; false skips the step.
+   */
+  doneCheckDue: boolean;
 }
 
 const STATUSES: readonly BalanceStatus[] = ['unchecked', 'checked', 'gate'];
@@ -125,6 +130,7 @@ export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBala
     checkable: wire.checkable !== false,
     separation: wire.separation ?? null,
     checkDue: wire.check_due ?? false,
+    doneCheckDue: wire.done_check_due ?? false,
   };
 }
 
@@ -222,12 +228,6 @@ export function foundWords(recall: LikelyRange): string {
   return 'nearly all of them found';
 }
 
-/** The picks a check deals, in words: "5 random picks a band, walking the list from the top 32". */
-function checkCost(schedule: CheckSchedule | null): string {
-  if (!schedule) return 'a few random picks';
-  return `${schedule.picks} random picks a band, walking the list from the top ${schedule.candidate.toLocaleString()}`;
-}
-
 /**
  * The balance's state in one short line, for the control under the spectrum
  * (#4413; the line is #4246's and #4273's): what the line keeps, and what the
@@ -289,40 +289,13 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
 }
 
 /**
- * The balance control's check affordance (#4273): "Check 5 picks", with the
- * picks a band draws at this balance. It starts a check in every state; after
- * a finished one it runs a fresh check. Null with no line to check, or a line
- * a check cannot walk (#4489): a structural detector's, which is the
- * verification gate's boundary and keeps no ranking.
- */
-export function checkLabel(balance: LineBalance | null): string | null {
-  if (!balance?.checkable) return null;
-  return balance.schedule ? `Check ${balance.schedule.picks} picks` : 'Check the line';
-}
-
-/**
  * Why a check is due, when the server says one is (#4496): the labels separate weakly, and a check's
  * picks, drawn evenly down the list, are the votes that teach the detector where its line falls.
- * Null when none is due.
+ * Only Autopilot runs a check, so the note points there. Null when none is due.
  */
 export function checkDueNote(balance: LineBalance | null): string | null {
   if (!balance?.checkDue) return null;
-  return 'Your Good and Bad labels still overlap. A check now teaches the detector where its line falls.';
-}
-
-/** The check affordance's tooltip: what a check does at this balance (#4427), and what it costs. */
-export function checkTitle(balance: LineBalance | null): string {
-  const cost = checkCost(balance?.schedule ?? null);
-  if (balance?.shape === 'trim') {
-    return (
-      `Vote on ${cost}: the check steps to a shorter list while the balance does not fall, ` +
-      `and the line keeps the set where it ends. Your votes count as ordinary votes.`
-    );
-  }
-  return (
-    `Vote on ${cost}: the check goes deeper while the balance keeps improving and shorter while it does not, ` +
-    `and reports what it found; it informs the line and does not move it. Your votes count as ordinary votes.`
-  );
+  return 'Your Good and Bad labels still overlap. Autopilot runs a spot check now: its picks teach the detector where its line falls.';
 }
 
 /** A range's own tooltip, for a chart that draws it (#4273): how it was measured, and whether it is stale. */

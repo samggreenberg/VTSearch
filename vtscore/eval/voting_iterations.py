@@ -70,10 +70,12 @@ from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_co
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_handover import HANDOVER_CENTROID_TAG, HandoverJudge
 from vtscore.eval.arms_line_counts import line_count_row
+from vtscore.eval.arms_set_overlap import SetOverlap, pick_overlap_blank
+from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import DRY_BAD_QUOTA, TIER_CENTROID
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -113,6 +115,7 @@ from vtscore.training.thresholds import (
     balance_schedule,
     balance_state,
     check_shape,
+    done_check_due,
     fbeta_count,
     fit_labels_line,
     weak_check_due,
@@ -2409,6 +2412,10 @@ def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bo
 #: labelled collection today) and the cell's media less the voted ones (``unvoted``).
 CENTROID_LINE_CORPORA = ("withheld", "pool", "unvoted")
 
+#: The ``gmm_variant`` tag of the head's rows at a click where the typed query holds (#4736):
+#: Test gives the query's set there, so the head's line is what it would have given.
+QUERY_HOLD_HEAD_TAG = "hold:head"
+
 
 def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
     """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
@@ -2473,13 +2480,40 @@ def production_spot_check(clips_dict: dict[int, dict[str, Any]]) -> str:
     media type the app never prompts on
     (:func:`~vtscore.training.thresholds.weak_check_prompts`: face crops), where
     it is ``"end"``.  Read off the first media's ``media_type``, as the app reads
-    its detector's; medias without one are prompted on.
+    its detector's; medias without one are prompted on.  The check Autopilot
+    runs before Done is the ``done_check`` knob's, on both.
     """
     first = next(iter(clips_dict.values()), None) if clips_dict else None
     media_type = first.get("media_type") if isinstance(first, dict) else None
     return "weak" if weak_check_prompts(media_type) else "end"
 
 
+def _fits_from_typed_query(fn: Any) -> Any:
+    """Run *fn* (the session) with every head fit starting from its ``query_vector`` too (#4859).
+
+    The app's rule for a typed-query detector on its query's own single-vector
+    space (:func:`vtscore.training.svm_prior.typed_query_prior`), applied to the
+    whole session so the picks, the folds, the line and Test all take it.  Only
+    a typed-query run (*seed_scores* given, no example opening) on a
+    single-vector dataset (no media with a ``patch_grid``: a region run learns
+    in a space the query has no direction in) takes it.
+    """
+    import functools  # noqa: PLC0415
+
+    @functools.wraps(fn)
+    def run(*args: Any, **kwargs: Any) -> Any:
+        from vtscore.training.svm_prior import typed_query_prior  # noqa: PLC0415
+
+        clips = args[0] if args else kwargs.get("clips_dict", {})
+        typed = kwargs.get("seed_scores") is not None and kwargs.get("seed_examples") is None
+        single_vector = not any(m.get("patch_grid") is not None for m in clips.values())
+        with typed_query_prior(kwargs.get("query_vector") if typed and single_vector else None):
+            return fn(*args, **kwargs)
+
+    return run
+
+
+@_fits_from_typed_query
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -2562,6 +2596,7 @@ def simulate_voting_iterations(  # noqa: C901
     weak_min_t: int = WEAK_CHECK_MIN_VOTES,
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
+    done_check: bool = True,
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
@@ -2572,7 +2607,11 @@ def simulate_voting_iterations(  # noqa: C901
     handover_shadow: bool = False,
     handover_sink: Optional[list[dict[str, Any]]] = None,
     line_count_sink: Optional[list[dict[str, Any]]] = None,
+    set_overlap_sink: Optional[list[dict[str, Any]]] = None,
+    query_prior_sink: Optional[list[dict[str, Any]]] = None,
+    query_vector: Optional[np.ndarray] = None,
     query_tier: bool = True,
+    query_hold: int = QUERY_HOLD_LABELS,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2754,6 +2793,26 @@ def simulate_voting_iterations(  # noqa: C901
             :data:`~vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS`), so a
             count rule for the line is priced on the same session.  Recorded
             only: the session is the app's.
+        set_overlap_sink: On a typed-query run under a balance, receives at
+            every click a trained head scored the pool how the head's set and
+            the typed query's split the unvoted media (#4816,
+            :data:`~vtscore.eval.arms_set_overlap.OVERLAP_COLUMNS`), and fills
+            the pick log's
+            :data:`~vtscore.eval.arms_set_overlap.PICK_OVERLAP_COLUMNS`: where
+            each pick sat at the previous click.  Recorded only: the session is
+            the app's.
+        query_prior_sink: On a single-vector typed-query run given
+            *query_vector*, receives at every click a trained head is drawn
+            where the withheld positives sit under candidate heads started from
+            the typed query (#4384,
+            :data:`~vtscore.eval.arms_query_prior.QUERY_PRIOR_COLUMNS`).
+            Recorded only: the session is the app's.
+        query_vector: The typed query's embedding in the media's space, which
+            *seed_scores* is the cosine to.  Given, every head fit in the
+            session starts from it as well as from the Goods, as a typed-query
+            detector's does in the app on its query's own single-vector space
+            (#4859); a caller passes it only for such a run.  #4384's shadow
+            reads it too.
         query_tier: Whether a run that opens on a typed query (*seed_scores*
             from the caller, no *seed_examples*) is a typed-query detector, as
             the app's is (#4758): until the quota, a Test on the withheld half
@@ -2762,6 +2821,16 @@ def simulate_voting_iterations(  # noqa: C901
             default - is the app; ``False`` is the arm before (the Goods'
             centroid from the first Good, no row before it).  Inert without the
             quota, and on an example or known-good opening.
+        query_hold: The votes through which such a run's Test keeps giving the
+            typed query's own set past the quota on a single-vector space, as
+            the app's does (#4736, :func:`~vtscore.detectors.label_quota.query_holds`):
+            :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS` - the
+            default - is the app, ``0`` the arm before.  A held click's
+            untagged row is the typed query's (``detector_tier = "query"``,
+            ``app_trained = 0``), and the head's rows that would have been
+            untagged are kept tagged :data:`QUERY_HOLD_HEAD_TAG`, so the hold is
+            priced on the same session.  Picks never change: the head is
+            trained and asks either way.  Inert where *query_tier* is.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -3051,8 +3120,12 @@ def simulate_voting_iterations(  # noqa: C901
         spot_check: When the simulated user runs the balance's **spot check**
             (#4272, the band walk of #4388 with #4413's F-beta stop).
             ``"end"``: once the voting steps are spent - *max_steps* reached,
-            or the pool exhausted - the user checks the line the way the app's
-            check step does: the unvoted ranking is fixed off the current one
+            or the pool exhausted - the line is checked the way the app's
+            check step does it.  No user starts this check in the app any more
+            (only Autopilot runs one, before Done and for weak separation, the
+            ``done_check`` knob and ``"weak"``): it is the harness's
+            measurement of the final line, read for the check's own columns
+            and never a click.  The unvoted ranking is fixed off the current one
             and cut into bands (the top 8, the next 8, 16, 32, ...), the walk
             starts at the bands holding the balance's cap (the top 32 at
             beta <= 1, 128 above it), each band's picks are answered from
@@ -3096,6 +3169,19 @@ def simulate_voting_iterations(  # noqa: C901
             example sort), where the app trains no detector and so has neither
             a separation to read nor a ranking to check.  Without a flow
             (a non-Autopilot strategy) both prompt anywhere.
+        done_check: Whether Autopilot checks the line before Done (the
+            default, the app's): the first time every quality light is green
+            the flow reaches ``spot`` and the simulated user runs the check
+            then and there, as clicks, with ``phase == "prompt"`` rows (they
+            count in ``t`` and the budget, and start only when the opening
+            bands fit it, as a prompted check does), and the flow reports
+            ``done`` once it closes.  Skipped, the flow going straight on to
+            ``done``, when a check ended in the last ``WEAK_CHECK_COOLDOWN``
+            votes (:func:`~vtscore.training.thresholds.done_check_due`, the
+            app's rule) or none can start.  Once a run, on every media type.
+            ``False`` is the arm before the app ran it, where all green reads
+            ``done`` at once; ``spot_check="off"`` and the Inclusion arm never
+            check.  Needs the Autopilot flow; ignored without one.
         label_quota: Whether the withheld half is scored as Test scores it
             under the app's label quota (#4643,
             :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
@@ -3491,6 +3577,29 @@ def simulate_voting_iterations(  # noqa: C901
     # examples from the positives here when no text sort is available.  Cheap to
     # build once up front.
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
+    # #4816's set overlap: where the head's set and the typed query's split the unvoted media.
+    overlap = (
+        SetOverlap(query_scores, clips_dict, beta, pool_labels)
+        if set_overlap_sink is not None and query_scores is not None and beta is not None
+        else None
+    )
+    # #4384's candidate heads started from the typed query, on a single-vector typed-query run.
+    query_prior_shadow = (
+        QueryPriorShadow(
+            clips_dict,
+            sim_ids,
+            test_ids,
+            target_category,
+            query_vector,
+            lambda media: good_training_vec(media, target_category, region_voting),
+        )
+        if query_prior_sink is not None
+        and query_vector is not None
+        and query_scores is not None
+        and not region_aware
+        and (style_obj is None or style_obj.name == _WHOLE_IMAGE_STYLE)
+        else None
+    )
     # #4776's hand-over evidence, on a single-vector run (the region path's geometry is its own).
     handover_judge: HandoverJudge | None = None
     if (
@@ -3611,6 +3720,7 @@ def simulate_voting_iterations(  # noqa: C901
                 "n_good": len(good_votes),
                 "n_bad": len(bad_votes),
                 "n_pool": len(pool),
+                **(overlap.pick(cid) if overlap is not None else pick_overlap_blank()),
             }
         )
 
@@ -3646,7 +3756,14 @@ def simulate_voting_iterations(  # noqa: C901
     check_phase = "check"
     end_checked = False
     weak_due = False
-    last_weak_check: int | None = None
+    # The vote count when the last check Autopilot ran ended (the app's
+    # ``check_ended_votes``): the weak prompt's cooldown counts from it, and so
+    # does whether the check before Done runs.
+    last_check_end: int | None = None
+    if flow is not None and (spot_check == "off" or not done_check or beta is None):
+        # No check before Done: the arm before the app ran it, a run that never
+        # checks, or the Inclusion arm, which has no balance to check.
+        flow.done_checked = True
 
     def _start_check() -> "SpotCheck | None":
         """The app's check over the line's unvoted ranking; ``None`` with nothing unvoted in it."""
@@ -3681,6 +3798,27 @@ def simulate_voting_iterations(  # noqa: C901
 
     # The last finished check: what a prompted check the budget cut short leaves in place.
     finished_check: SpotCheck | None = None
+
+    def _settle_done_check() -> None:
+        """Whether the check before Done runs, decided the step the flow reaches it, as the app decides it.
+
+        The app reads ``done_check_due`` once the sort after the vote settles,
+        so a skip never shows as a step: the flow goes straight on, and this
+        step's row reads the phase it goes on to.  Skipped when a check ended
+        in the last ``WEAK_CHECK_COOLDOWN`` votes, or when none could start:
+        no ranking, nothing unvoted, or its opening bands do not fit the
+        budget left (the rule a prompted check starts by).
+        """
+        if flow is None or flow.phase != "spot" or flow.spot_check is not None:
+            return
+        n = len(good_votes) + len(bad_votes)
+        if (
+            not done_check_due(n, last_check_end)
+            or line_ranking is None
+            or not pool
+            or n + _check_start_cost() > n_steps
+        ):
+            flow.skip_done_check()
 
     def _check_start_cost() -> int:
         """The most a check's opening bands cost: what a prompted one needs left in the voting budget."""
@@ -3775,7 +3913,9 @@ def simulate_voting_iterations(  # noqa: C901
                 # the step does, and the end-of-run check takes over (#4496).
                 check.cancel()
                 check = finished_check
-                last_weak_check = t
+                last_check_end = t
+                if flow is not None:
+                    flow.end_spot_check()
             else:
                 picks = list(check.pending)
         if picks is None and not (check is not None and check.running):
@@ -3784,11 +3924,27 @@ def simulate_voting_iterations(  # noqa: C901
                 # the check's picks are clicks, so its opening bands must fit
                 # the budget left.
                 weak_due = False
-                last_weak_check = t
+                last_check_end = t
                 started = _start_check()
                 if started is not None and started.pending:
                     check, check_phase = started, "prompt"
                     picks = list(check.pending)
+                    # The step is Autopilot's Spot Check.  Not in the opening,
+                    # which only the ``weak_phase="any"`` arm prompts in and the
+                    # app never does: there the flow keeps the walk's phase, as
+                    # that arm was priced.
+                    if flow is not None and flow.phase not in _OPENING_PHASES:
+                        flow.begin_spot_check("weak")
+            if picks is None and flow is not None and flow.phase == "spot" and flow.spot_check is None:
+                # Every light went green last step and the check before Done is
+                # due (``_settle_done_check`` let it stand): the user runs it now.
+                started = _start_check() if line_ranking is not None and pool else None
+                if started is not None and started.pending:
+                    check, check_phase = started, "prompt"
+                    picks = list(check.pending)
+                    flow.begin_spot_check("done")
+                else:
+                    flow.skip_done_check()
             if picks is None and (t >= n_steps or not pool):
                 # The voting steps are spent.  Check the line once, if the run
                 # checks at all and there is a ranking with something unvoted in it.
@@ -3817,7 +3973,10 @@ def simulate_voting_iterations(  # noqa: C901
             assert check is not None and line_ranking is not None
             check.record(round_votes)
             if check.finished and check_phase == "prompt":
-                last_weak_check = t
+                last_check_end = t
+                if flow is not None:
+                    # The step ends with the check; this step's update reads the phase after it.
+                    flow.end_spot_check()
             if check.finished:
                 finished_check = check
                 # The set the line keeps from here on, as it stands with the
@@ -4059,7 +4218,7 @@ def simulate_voting_iterations(  # noqa: C901
                 if weak_line is not None and weak_check_due(
                     weak_line.separation,
                     t,
-                    last_weak_check,
+                    last_check_end,
                     threshold=weak_separation,
                     min_votes=weak_min_t,
                     cooldown=weak_repeat if weak_repeat > 0 else None,
@@ -4162,8 +4321,14 @@ def simulate_voting_iterations(  # noqa: C901
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
         centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
-        # ... and a typed-query run's Test gives the typed query's own set (#4758).
+        # ... and a typed-query run's Test gives the typed query's own set (#4758), past
+        # the quota too while the query holds on a single-vector space (#4736).
         query = centroid and query_on
+        held = (
+            query_on
+            and not centroid
+            and query_holds(len(good_votes), len(bad_votes), patch_space=region_aware, hold=query_hold)
+        )
         centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
@@ -4340,6 +4505,7 @@ def simulate_voting_iterations(  # noqa: C901
                 span=atlas.span_info() if atlas is not None else None,
                 last_vote_good=is_positive,
             )
+            _settle_done_check()
 
         # Identifying columns shared by every row this step emits.
         base_row = _ident_row(
@@ -4351,6 +4517,37 @@ def simulate_voting_iterations(  # noqa: C901
             details,
             "query" if query else "centroid" if centroid else "trained",
         )
+        if overlap is not None and set_overlap_sink is not None:
+            # #4816: how this click's head set and the typed query's split the unvoted media.
+            set_overlap_sink.append(
+                {
+                    **rank_ident,
+                    "t": t,
+                    "phase": base_row["phase"],
+                    "n_good": len(good_votes),
+                    "n_bad": len(bad_votes),
+                    "beta": float(beta) if beta is not None else float("nan"),
+                    **overlap.click(
+                        pool_scores,
+                        threshold,
+                        details.get("find_line"),
+                        good_votes,
+                        bad_votes,
+                        dict(zip(sim_pooled_ids, sim_pooled_scores)) if sim_pooled_scores else None,
+                    ),
+                }
+            )
+        if (
+            query_prior_shadow is not None
+            and query_prior_sink is not None
+            and not centroid
+            and good_votes
+            and bad_votes
+        ):
+            # #4384: the withheld positives' ranks under heads started from the typed query, on these votes.
+            query_prior_sink.append(
+                {**rank_ident, "t": t, "phase": base_row["phase"], **query_prior_shadow.row(good_votes, bad_votes)}
+            )
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
             # but #3314's scheduled arm - and recorded regardless, because a
@@ -4372,6 +4569,7 @@ def simulate_voting_iterations(  # noqa: C901
             "elapsed_seconds": round(time.monotonic() - start_time, 3),
         }
 
+        step_rows_from = len(rows)
         if calibration is not None and centroid:
             # The Goods' centroid's row (#4643).  The study extras below all
             # vary the trained head's cut, which no Test gives at this click.
@@ -4604,6 +4802,33 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
+        if held and query_scores is not None:
+            # #4736: the typed query's set is what Test gives at this click, so it is the
+            # untagged row; the head's, which the step drew all the same, stay as tagged rows.
+            for row in rows[step_rows_from:]:
+                if not row.get("gmm_variant") and not row.get("schedule"):
+                    row["gmm_variant"] = QUERY_HOLD_HEAD_TAG
+            q_step, q_rows = _query_test(
+                query_scores,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                beta=details.get("beta"),
+                calibration_rows=emit_calibration_metrics and style_obj is not None,
+                line_beta=beta,
+            )
+            q_bands = _band_metrics(
+                q_step,
+                CENTROID_THRESHOLD,
+                unfiltered,
+                band_cohorts if test_bands else None,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                neg_ids=band_neg_ids,
+                target_category=target_category,
+            )
+            rows.append({**base_row, "detector_tier": "query", "app_trained": 0, **q_rows[0], **q_bands, **timing_cols})
         if centroid and line_variants and not query:
             rows.extend(
                 _centroid_line_variant_rows(
@@ -4818,6 +5043,7 @@ def run_voting_iterations_eval(
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
     seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
+    query_vectors: "Optional[dict[str, dict[str, np.ndarray]]]" = None,
     trainers: Optional[list[str]] = None,
     prevalence_arms: Optional[list[Optional[float]]] = None,
     styles: Optional[list[Optional[str]]] = None,
@@ -4868,6 +5094,12 @@ def run_voting_iterations_eval(
             ``{dataset: {category: {media_id: similarity}}}``.  When a
             (dataset, category) has an entry, the autopilot seed follows that
             text ranking; otherwise it seeds from random known-good examples.
+        query_vectors: The typed queries those rankings are the cosine to,
+            keyed ``{dataset: {category: vector}}``
+            (:func:`vtscore.eval.seed_scores.build_seed_scores`'s
+            *vectors_out*).  A typed-query run given its query fits every head
+            from it too, as the app's typed-query detector does (#4859); a
+            cell without one fits from the Goods alone.
         trainers: Which pipelines to run at each cell (see
             :func:`simulate_voting_iterations`).  ``None`` (default) runs
             ``["app"]``; pass e.g. ``["app", "svm_linear", "svm_rbf"]`` for the
@@ -4928,6 +5160,7 @@ def run_voting_iterations_eval(
         for seed in seeds:
             for cat in target_cats:
                 cat_seed_scores = (seed_scores or {}).get(ds_name, {}).get(cat)
+                cat_query_vector = (query_vectors or {}).get(ds_name, {}).get(cat)
                 for arm in arm_list:
                     for strategy in strategy_list:
                         for trainer in trainer_list:
@@ -4947,6 +5180,7 @@ def run_voting_iterations_eval(
                                     max_steps=max_steps,
                                     atlas_min_node_size=atlas_min_node_size,
                                     seed_scores=cat_seed_scores,
+                                    query_vector=cat_query_vector,
                                     trainer=trainer,
                                     target_prevalence=arm,
                                     style=style,

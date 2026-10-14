@@ -187,8 +187,9 @@ per-slide with `<!-- _class: full -->`.
 
 Any HTML comment that isn't a Marp directive becomes a **presenter note** —
 visible in `--preview` and exported into PPTX/HTML notes, not on the slide.
-Write them as real speaking notes: wordier than the slide, covering what to
-say, not just provenance.
+Write them as what you will actually say, a sentence or three per page, and
+leave the provenance out (see *Presenter notes are what you say* in
+[`STYLE.md`](STYLE.md)).
 
 PDF has no native speaker view, so there are two renderers for the same deck.
 The plain build ignores the notes; the **speaker build**
@@ -501,6 +502,13 @@ sheet of the top of the ranking with no app around it, built by
 `figs/src/results_grid.py` from the frames the results panel listed. It is
 composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
+
+And one is staged: `figs/ui-train-loop.webp`, Rock the Vote's last page, is the
+session's last real frame (`.build6`) with Toasty's "your detector is trained"
+hint drawn over it by `figs/src/stop-hint.mjs`, in the app's own markup and
+placement. The real hint waits for every quality light to go green, which takes
+far more votes than this session casts. The harness redraws it on every reshoot;
+`node figs/src/stop-hint.mjs` redraws it on the committed frame alone.
 
 The intro groups are **one session**, shot in the order a user works, from an
 app with nothing in it: import `photos-train` through the Add Dataset dialog, create

@@ -17,25 +17,15 @@
 
 </div>
 
-<!-- **a** — Different pile. The detector was voted into existence on one set of
-     photographs; this is a **second set, sharing no item with the first** —
-     none of it voted on, none of it ever shown. Which is the situation that
-     actually matters: the few minutes bought a detector, and the detector is
-     for the data nobody is ever going to look at by hand. -->
+<!-- **a** — Now the payoff. Here's a second pile, ten thousand photos, and
+     none of them were in the training set. That's the real job: a few minutes
+     of training so the detector can go through everything we'll never look at
+     ourselves. Pick it, hit Find, and -->
 
-<!-- **b** — Ten thousand items scored and ranked in the time it took to
-     click, and this is what came back: shelves, stacks, spines and four
-     people reading — out of a corpus that had no labels in it an hour ago, on
-     the strength of a handful of answers to a handful of questions. -->
+<!-- **b** — here's what comes back: shelves, stacks, people reading. Ten
+     thousand photos, no labels, about thirty votes. -->
 
-<!-- **c** — Say what is *not* on this slide, because it is the point: the
-     tool. Nobody opened anything. New media flows in on its own — whatever
-     lands in the team's channel — and a detector left on AutoFind sends what
-     it finds wherever the person who asked already looks: an email, a
-     Dropbox folder, anything an exporter can reach. The person who asked for
-     the books gets the books — so the picture of the payoff is the pictures,
-     not a screen with them stacked in a panel down one side of it. -->
-
-<!-- The next slide goes back into the tool, once, for the one thing this view
-     cannot show: the top of the ranking came back and the rest did not. Nobody
-     asked for that split, and no vote said where it goes. -->
+<!-- **c** — And you don't even have to open the tool. New pictures can flow in
+     on their own, say from a team chat, and a detector set to AutoFind sends
+     what it finds wherever you already look: email, a Dropbox folder,
+     whatever. -->

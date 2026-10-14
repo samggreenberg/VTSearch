@@ -45,11 +45,15 @@ pricing in ``docs/experiments`` measures what that costs on the objective.
 at the hand-over to the trained head a session holds four Bads - and its cut goes
 wrong both ways: at beta 4 the line kept a median of 5 of a FHIBE person's faces at
 the first trained click, one face in a fifth of sessions and thousands in the
-weakly separated ones.  While the class model is thin (fewer than
-:data:`HEAD_COUNT_BADS` Bads and :data:`HEAD_COUNT_GOODS` Goods), the line at every
+weakly separated ones.  Until the class model holds :data:`HEAD_COUNT_GOODS`
+held-out Goods, however many Bads (#4798), the line at every
 balance keeps instead what stands out in the head's own scores, counted by the rule
 that draws the Goods' centroid's line (:func:`head_count_cut`): the line Test gave
-until the hand-over, now drawn on the head.  That count is ``beta ** 0.708`` times
+until the hand-over, now drawn on the head.  With two to five Goods the Good
+component cannot place the corpus's positives: past 32 Bads the 3-part chances
+collapse while the 2-part total stays several times the positives, and a beta-4 cut
+ran to the corpus's end on faces (2.5% of clicks, up to 704 kept for 4 withheld)
+in a way no fix to the total could tell from a hard target's sound deep cut.  That count is ``beta ** 0.708`` times
 what stands out, so the line keeps more as the balance leans to recall.  Like the
 centroid's it is a count on the corpus being decided, not a cut the labels imply;
 the class model takes over once it has the labels to stand on.  The Goods half
@@ -112,7 +116,7 @@ WEAK_CHECK_COOLDOWN = 25
 #: the face review's sessions gained +0.007 to +0.018 over votes 1-50, with the
 #: objective after the end-of-run check and final AP unchanged.  On COCO the
 #: check pays most where it starts with fewest Goods, so a Good count cannot
-#: stand in for the media type.  The end-of-run check and the Check button stay.
+#: stand in for the media type.  Autopilot's check before Done stays (:func:`done_check_due`).
 WEAK_CHECK_OFF_MEDIA_TYPES: frozenset[str] = frozenset({"face"})
 #: The fewest Bads whose own scores model the negatives (#4490): a kernel density of a
 #: random 30 cannot see the upper tail (it lost 0.09 F at beta 1/4 on the review's
@@ -137,12 +141,13 @@ _SEARCH_SPREADS = 8.0
 _SEARCH_POINTS = 4001
 #: The prevalence range an estimate is held to: never a certainty either way.
 PREVALENCE_MIN, PREVALENCE_MAX = 1e-6, 0.5
-#: While the class model is thin - fewer than this many Bads (its held-out ones, about 0.6 of
-#: the Bads in hand) and fewer than :data:`HEAD_COUNT_GOODS` Goods - the line at every balance
-#: keeps the head's count (:func:`head_count_cut`, #4786) rather than the class model's cut.
-#: ``0`` is the line before #4786.
-HEAD_COUNT_BADS = 32
-#: The Goods half of the thin-model gate (#4786): with this many held-out Goods the class
+#: The Bads half of the thin-model gate: while the class model holds fewer than this many Bads
+#: (its held-out ones, about 0.6 of the Bads in hand) and fewer than :data:`HEAD_COUNT_GOODS`
+#: Goods, the line at every balance keeps the head's count (:func:`head_count_cut`) rather than
+#: the class model's cut.  Unbounded since #4798, so the Goods alone close the gate; #4786
+#: shipped 32.  ``0`` is the line before #4786.
+HEAD_COUNT_BADS: float = math.inf
+#: The thin-model gate (#4786, #4798): with this many held-out Goods the class
 #: model's Good component stands on its own, and a broad target's labels line keeps what its
 #: many positives need where the head's count, a count of what stands out, keeps several
 #: times too many.
@@ -511,7 +516,7 @@ class LabelsLine:
 
 
 def head_count_serves(model: ClassScoreModel) -> bool:
-    """Whether the line is the head's count line (#4786): a class model too thin to cut on."""
+    """Whether the line is the head's count line (#4786): a class model with too few Goods to cut on (#4798)."""
     return model.n_neg < HEAD_COUNT_BADS and model.n_pos < HEAD_COUNT_GOODS
 
 
@@ -566,9 +571,9 @@ def weak_check_due(
     ended (*votes_at_last_check*, the vote count when it ended; ``None``
     before any).  ``cooldown=None`` makes a check due once at most.
 
-    The app's Autopilot runs the check when it is due and the Train tab's
-    Check button calls for it; the eval harness's default arm
-    (``spot_check="weak"``) runs it where this says, so both read this rule.
+    The app's Autopilot runs the check when it is due; the eval harness's
+    default arm (``spot_check="weak"``) runs it where this says, so both read
+    this rule.
     A weakly separated session's uniform picks within the line's bands are
     better training votes than the acquisition picks they replace: priced at
     equal clicks, +0.008 to +0.033 at click 20 and +0.023 to +0.049 at 50
@@ -580,6 +585,23 @@ def weak_check_due(
     if votes_at_last_check is None:
         return True
     return cooldown is not None and n_votes - votes_at_last_check >= cooldown
+
+
+def done_check_due(n_votes: int, votes_at_last_check: int | None, *, cooldown: int = WEAK_CHECK_COOLDOWN) -> bool:
+    """Whether Autopilot's spot check before Done is due: no check has ended in the last *cooldown* votes.
+
+    Autopilot checks the line once a run, the first time every quality light is
+    green, and only then reports Done.  The check is skipped when one ended
+    fewer than *cooldown* votes ago (*votes_at_last_check*, the vote count when
+    it ended; ``None`` before any): a weak-separation check just run, or a
+    session re-entered right after its own check, has already measured this
+    line.  Unlike :func:`weak_check_due` it reads no separation and runs on
+    every media type, face crops included.
+
+    The app's Autopilot reads it (``done_check_due`` beside ``check_due``), and
+    so does the eval harness's default arm.
+    """
+    return votes_at_last_check is None or n_votes - votes_at_last_check >= cooldown
 
 
 #: The smallest share of the labels' Good component a cut must hold for the
@@ -814,6 +836,7 @@ __all__ = [
     "WEAK_CHECK_MIN_VOTES",
     "WEAK_SEPARATION_D",
     "WEAK_CHECK_OFF_MEDIA_TYPES",
+    "done_check_due",
     "weak_check_due",
     "weak_check_prompts",
     "PREVALENCE_MAX",

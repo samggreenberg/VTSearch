@@ -18,14 +18,8 @@
 
 </div>
 
-<!-- **a** — Step by step, from an empty app: nothing loaded, nothing trained.
-     The first job is getting the photos in, and it starts at the **+** on the
-     Datasets card — the one control a newcomer never spots, which is why this
-     section exists. -->
+<!-- **a** — Same session as the opening, now as a recipe. First, photos: hit
+     the + on Datasets, the button everybody misses. -->
 
-<!-- **b** — Add Dataset. Files, then Folder, then the folder the photos are
-     in, as the server sees it — typed, or found with Browse. The importer looks
-     inside and fills in the rest itself: it says *Image* because that is what
-     it found, and it names the dataset after the folder. Import, and every
-     photo gets its fingerprint once; for a few hundred photos that is a minute
-     or two on a laptop. -->
+<!-- **b** — Files, Folder, your folder (or Browse). It sees they're images and
+     names the dataset after the folder. Hit Import. -->

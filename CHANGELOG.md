@@ -17,6 +17,36 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
+  and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
+  2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with
+  `CUDA_VISIBLE_DEVICES=` set, every Hugging Face embedder failed to load. The `cu124` tag a V100
+  used to get stops at torch 2.6.0, so `scripts/install.sh` now picks `cu126` for Volta (a torch past
+  2.7 that still ships `sm_70` kernels) and falls back to it when it cannot detect the GPU.
+  `pyproject.toml` requires `torch>=2.7`. `install.sh` refuses `cu121` and `cu124` with a message:
+  their indexes stop below that floor, so the requirements pass would have swapped in PyPI's newest
+  torch, which has no kernels for older GPUs. `cu118` (torch 2.7.1) remains for drivers older than
+  CUDA 12.6. With that pair ruled out, `transformers` is floored at 5.18, which the EmbeddingGemma 2
+  embedders need (#4837).
+- **Spot Check is an Autopilot step, not a dialog.** Autopilot now checks the line itself, the first
+  time every quality light goes green, before it says Done: a few picks drawn at random from bands of
+  the list, voted Good or Bad in the centre pane, where the item usually is. It is the **Spot Check**
+  step in Autopilot's list, between Explore Diversity and Done, and the check Autopilot already ran
+  while your Good and Bad labels still overlap is the same step. **Stop check** ends it early and
+  Autopilot carries on. The Threshold's **Check 5 picks** button is gone: only Autopilot starts a
+  check. Autopilot skips the check before Done when one ended in the last 25 votes, and when a session
+  opens with every light already green, so coming back to a detector you finished does not check it
+  again. The balance payload's new `done_check_due` says whether it would run.
+- **On photos, Autopilot keeps showing a typed description's matches until 30 votes** (issue #4736).
+  From the 8th vote Autopilot asks about the items a trained detector is unsure of, but a detector
+  trained on so few examples finds worse matches than the description does. So in a session started
+  from a typed description, the ranking behind the item stays the description's text ranking until
+  the 30th vote, while Autopilot keeps asking the detector's questions; from the 30th vote the
+  detector's ranking takes over. Test, Find, AutoFind and an export of such a detector give the
+  description's matches until then too. On COCO Better's photos that raised the F-beta of what is on
+  screen by 0.025 / 0.037 / 0.050 over the first 25 votes and 0.004 / 0.006 / 0.009 over 150, at the three balances. Region
+  search (DINOv3) is unchanged: its detector beats the description by about the 10th vote. The
+  learned-sort payload's new `query_hold` says when the description still holds.
 - **Toasty's hints say where you are, and cover the whole path from an empty Dashboard to results**
   (issue #4807). Each hint now opens with the state that raised it and ends with the one step to
   take, in a sentence or two ("You have detectors, but none is selected. Click one to select it, or
@@ -208,6 +238,19 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **EmbeddingGemma 2 (audio) embedder** (issue #4837). A new choice for sound collections, built on Google's
+  `embeddinggemma-2`. It finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
+  but is weaker than CLAP on other sounds and music, so CLAP-general stays the default. It needs transformers
+  5.18 or newer, and selecting it in an older environment says so (#4838). The same model's image half beat SigLIP
+  on every photo set measured (+0.08 to +0.09 session F-beta on COCO Better), but embeds 11–22× slower on a GPU
+  and about 10 s a photo on a CPU, so it is not offered.
+
+- **Toasty says how to fix a misclicked vote** (issue #4824). After the first vote of the run that trains
+  a detector, Toasty stands beside the **Labels** panel until the next one: your votes go there, and
+  you can click one to vote it again. On any Autopilot run, clicking an item you already labeled
+  brings a hint over **Good** / **Bad** naming its label and the button that changes it, and saying
+  that Autopilot's current step on the left (or `↑`) goes back to Autopilot's pick.
 
 - **Collapse to photos** (issue #4751). In Train and Test, a Face dataset whose import also made an
   Image dataset has a **Show: Faces | Photos** switch under the list's header. **Photos** shows the

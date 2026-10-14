@@ -12,21 +12,14 @@
 
 <!-- build: figs/data-set-staver.webp -->
 
-<!-- That is the matcher. Now the pile it is measured on: four public sets
-     to build from. The pages are real pages, drawn with whatever boxes each
-     source ships. -->
+<!-- **a** — What do we test on? Four public sets. SPODS: made-up documents,
+     masks but no names for the marks. -->
 
-<!-- **a** — SPODS. Pseudo-official documents made for the dataset, each
-     carrying logos, stamps and signatures, with a pixel mask for each kind.
-     Clean colour scans. Nothing says which logo is which. -->
+<!-- **b** — Tobacco800: real letters from the tobacco lawsuits, a few hundred
+     with a logo boxed. -->
 
-<!-- **b** — Tobacco800. Real business letters from 1980s–90s tobacco
-     litigation, binarised. Logos and signatures are boxed; its published
-     protocol keeps the 21 logos that appear twice or more. -->
+<!-- **c** — StaVer: German invoices, hand-stamped, so every one's a bit
+     different. -->
 
-<!-- **c** — StaVer. German invoices with real rubber stamps, a pixel mask per
-     stamp. Stamped by hand, so every impression differs. -->
-
-<!-- **d** — UCSF Industry Documents. The haystack: millions of real scanned
-     pages from six industries — tobacco, food, opioids and more — searchable
-     by author and type, and with no boxes at all. -->
+<!-- **d** — And UCSF: thirteen million real pages, no boxes. That's the
+     haystack. -->

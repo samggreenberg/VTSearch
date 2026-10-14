@@ -8,23 +8,10 @@
 
 <!-- build: figs/data-set-coco-better-grid.webp -->
 
-<!-- **COCO Better**: what we have. All of COCO 2017, 49 classes after the
-     merges, and 144 cells — a class at a size. No web address at the foot:
-     we built it, so there is nowhere to go and get it. Three are missing: small
-     bananas, apples and oranges, where no honest supply reaches 100. -->
+<!-- **a** — So here's what we built: COCO Better. Say it out loud. All of
+     COCO, every class at every size, like Dog@Medium. One box per positive, the largest, like a user
+     would draw. -->
 
-<!-- **a** — The grid. Each picture is one positive, and it carries exactly one
-     region: the class's largest instance, the box the simulated user drags.
-     The label under it is its cell. -->
-
-<!-- **b** — The zoom, larger than the grid had room for. The Dog@Medium
-     frame again, grown out of its corner cell. Blue: COCO Better's classes in this picture, one region each.
-     Grey: classes checked absent — a longer list now there is room for it. The teddy
-     bear has no box at all — it is not a COCO Better class. -->
-
-<!-- Why "COCO Better": say it aloud. It is COCO, made better for this job:
-     one clean region per positive, sizes as bands, and negatives checked
-     absent. Every image is embedded once, so a new prevalence, a per-class
-     pool, or a different mix of sizes is a filter over the corpus rather than
-     a rebuild. It is a bench for comparing **methods**; the classes and bands
-     are strata to report across. -->
+<!-- **b** — The dog up close: blue's in it, gray's checked absent. Everything's
+     labeled and embedded once, so rare books, small dogs, whatever, is a
+     filter, not a rebuild. -->

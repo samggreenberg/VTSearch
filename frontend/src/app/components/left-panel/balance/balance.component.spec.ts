@@ -224,13 +224,6 @@ describe('BalanceComponent (#4413, #4317)', () => {
       }
     });
 
-    it('prices a check off the schedule, rounds and all, on the check button', async () => {
-      await show(4, lineBalance('unchecked', { beta: 4, count: 128, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
-      expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('5 random picks a band, walking the list from the top 128');
-      // A trim-shaped state (#4427's beta-2 shape for the count line; the fixture still sends it above beta 1).
-      expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('steps to a shorter list while the balance does not fall');
-    });
-
     it('notes a stale checked range only in the tooltip', async () => {
       const fresh = lineBalance('checked');
       await show(1, fresh, 300);
@@ -254,66 +247,25 @@ describe('BalanceComponent (#4413, #4317)', () => {
     });
   });
 
-  describe('the check affordance (#4273)', () => {
-    const checkBtn = () => (fixture.nativeElement as HTMLElement).querySelector('.balance-check-btn') as HTMLButtonElement | null;
-
-    it('is absent with no line to check', async () => {
-      await show(1, null);
-      expect(checkBtn()).toBeNull();
-    });
-
-    it.each(BALANCE_STATES)('offers a check in the %s state, and runs it on click', async (status) => {
+  describe('no check of its own', () => {
+    // Only Autopilot starts a spot check, as its Spot Check step: the control has no check button.
+    it.each(BALANCE_STATES)('offers no check button in the %s state', async (status) => {
       await show(1, lineBalance(status), 32);
-      const emitted = vi.spyOn(component.check, 'emit');
-      expect(checkBtn()!.textContent!.trim()).toBe('Check 5 picks');
-      checkBtn()!.click();
-      expect(emitted).toHaveBeenCalledOnce();
-    });
-
-    it('reads the pick count off the schedule: 5 a band at the false-negatives end too (#4388)', async () => {
-      await show(0.25, lineBalance('checked', { beta: 0.25, schedule: { candidate: 32, rounds: 3, picks: 5 } }));
-      expect(checkBtn()!.textContent!.trim()).toBe('Check 5 picks');
-    });
-
-    it('is held while the host cannot run a check', async () => {
-      fixture.componentRef.setInput('checkable', false);
-      await show(1, lineBalance('unchecked'));
-      expect(checkBtn()!.disabled).toBe(true);
-    });
-
-    it.each(BALANCE_STATES)('is absent where the host offers no check, Find (%s, #4317)', async (status) => {
-      fixture.componentRef.setInput('offerCheck', false);
-      await show(1, lineBalance(status), 32);
-      expect(checkBtn()).toBeNull();
-      expect(stateText()).not.toBeNull();
-    });
-
-    it.each(BALANCE_STATES)('is absent on a line a check cannot walk, a structural detector\'s (%s, #4489)', async (status) => {
-      await show(1, lineBalance(status, { checkable: false }), 32);
-      expect(checkBtn()).toBeNull();
+      expect(root().querySelector('.balance-state button')).toBeNull();
       expect(stateText()).not.toBeNull();
     });
 
     describe('when the labels separate weakly (#4496)', () => {
       const dueNote = () => (fixture.nativeElement as HTMLElement).querySelector('.balance-due');
 
-      it('calls for the check: the primary button and a note saying why', async () => {
+      it('says why a check is due, and that Autopilot runs it', async () => {
         await show(1, lineBalance('unchecked', { checkDue: true, separation: 0.8 }), 32);
-        expect(checkBtn()!.classList).toContain('btn--primary');
-        expect(checkBtn()!.classList).not.toContain('btn--toolbar');
         expect(dueNote()!.textContent).toContain('still overlap');
+        expect(dueNote()!.textContent).toContain('Autopilot');
       });
 
-      it('stays a quiet toolbar button when no check is due', async () => {
+      it('says nothing when no check is due', async () => {
         await show(1, lineBalance('unchecked', { checkDue: false, separation: 3.1 }), 32);
-        expect(checkBtn()!.classList).toContain('btn--toolbar');
-        expect(dueNote()).toBeNull();
-      });
-
-      it('says nothing where no check is offered, even when one would be due', async () => {
-        fixture.componentRef.setInput('offerCheck', false);
-        await show(1, lineBalance('unchecked', { checkDue: true }), 32);
-        expect(checkBtn()).toBeNull();
         expect(dueNote()).toBeNull();
       });
     });

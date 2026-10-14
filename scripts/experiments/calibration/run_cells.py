@@ -153,14 +153,10 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     Good").  Both are things a user does; ranking by cosine to a cropped box is
     not, which is why this no longer seeds from crops.
     """
-    from vtscore.embedding.helpers import embed_text_query  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
     text_emb = cfg.text_embedder(emb)
-    text = _seed_query_text(ds, cat)
-    if not text:
-        return None
-    qvec = embed_text_query(text, "image", enrich=cfg.SEED_ENRICH, embedder_name=text_emb)
+    qvec = _text_query_vector(ds, emb, cat)
     if qvec is None:
         return None
 
@@ -185,6 +181,28 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     matrix = np.stack(rows)
     cos = matrix @ _unit(qvec)
     return {ids[k]: float(cos[k]) for k in range(len(ids))}
+
+
+def _text_query_vector(ds: str, emb: str, cat: str) -> "np.ndarray | None":
+    """The typed query's embedding in the text half's space, or ``None`` with no query or no text tower."""
+    from vtscore.embedding.helpers import embed_text_query  # noqa: PLC0415
+
+    text = _seed_query_text(ds, cat)
+    if not text:
+        return None
+    qvec = embed_text_query(text, "image", enrich=cfg.SEED_ENRICH, embedder_name=cfg.text_embedder(emb))
+    return None if qvec is None else np.asarray(qvec, dtype=np.float32)
+
+
+def cell_query_vector(ds: str, emb: str, cat: str, seed_mode: str) -> "np.ndarray | None":
+    """The typed query's embedding in the cell's own space (#4384), or ``None`` where it has none.
+
+    Only a single-vector cell that opened on its typed query has one: a paired
+    cell learns in another space than its text sort ranks in.
+    """
+    if seed_mode != "text" or cfg.is_paired(emb):
+        return None
+    return _text_query_vector(ds, emb, cat)
 
 
 def cell_opening(ds: str, emb: str, cat: str, medias: dict) -> "tuple[dict[int, float] | None, str, str, str]":
@@ -339,8 +357,12 @@ def main(argv: list[str] | None = None) -> int:
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
         f"handover_shadow={'on' if cfg.HANDOVER_SHADOW else 'off'} "
         f"line_counts={'on' if cfg.LINE_COUNTS else 'off'} "
+        f"set_overlap={'on' if cfg.SET_OVERLAP else 'off'} "
+        f"query_prior_shadow={'on' if cfg.QUERY_PRIOR_SHADOW else 'off'} "
+        f"query_prior={cfg.QUERY_PRIOR if cfg.QUERY_PRIOR is not None else 'app'} "
         f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
+        f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
@@ -358,6 +380,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     from vtscore.eval.arms_handover import HANDOVER_COLUMNS
     from vtscore.eval.arms_line_counts import LINE_COUNT_COLUMNS
+    from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior_scale
+    from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
     from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
@@ -387,6 +411,11 @@ def main(argv: list[str] | None = None) -> int:
         f"seed: mode={seed_mode} embedder={seed_embedder or '-'} query={seed_query!r} "
         f"declared={cfg.REQUIRE_OPENING or 'nothing'}"
     )
+    # The typed query's embedding in the cell's own space: a typed-query detector's head starts from it
+    # (#4859, the app's), and #4384's shadow reads it.  None on a paired or non-text cell.
+    query_vec = cell_query_vector(ds, emb, cat, seed_mode)
+    if isinstance(cfg.QUERY_PRIOR, str):
+        raise ValueError(f"CALIB_QUERY_PRIOR must be a number >= 0; got {cfg.QUERY_PRIOR!r}")
 
     all_rows: list[dict] = []
     all_sweep: list[dict] = []
@@ -399,6 +428,8 @@ def main(argv: list[str] | None = None) -> int:
     all_linetests: list[dict] = []
     all_handover: list[dict] = []
     all_linecounts: list[dict] = []
+    all_overlap: list[dict] = []
+    all_queryprior: list[dict] = []
     all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
@@ -413,7 +444,13 @@ def main(argv: list[str] | None = None) -> int:
         linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
         handover_local: list[dict] | None = [] if cfg.HANDOVER_SHADOW else None
         linecounts_local: list[dict] | None = [] if cfg.LINE_COUNTS else None
-        with sigma_floor(cfg.SIGMA_FLOOR), head_count_bads(cfg.HEAD_COUNT_BADS):
+        overlap_local: list[dict] | None = [] if cfg.SET_OVERLAP else None
+        queryprior_local: list[dict] | None = [] if cfg.QUERY_PRIOR_SHADOW else None
+        with (
+            sigma_floor(cfg.SIGMA_FLOOR),
+            head_count_bads(cfg.HEAD_COUNT_BADS),
+            query_prior_scale(cfg.QUERY_PRIOR),  # type: ignore[arg-type]  # a str was refused above
+        ):
             rows = simulate_voting_iterations(
                 medias,
                 target_category=cat,
@@ -479,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
                 **({"weak_min_t": cfg.WEAK_MIN_T} if cfg.WEAK_MIN_T is not None else {}),
                 **({"weak_repeat": cfg.WEAK_REPEAT} if cfg.WEAK_REPEAT is not None else {}),
                 **({"weak_phase": cfg.WEAK_PHASE} if cfg.WEAK_PHASE is not None else {}),
+                **({"done_check": cfg.DONE_CHECK} if cfg.DONE_CHECK is not None else {}),
                 startup_schedule=cfg.STARTUP_SCHEDULE,
                 opening_diversity=cfg.OPENING_DIVERSITY,
                 more_walk=cfg.MORE_WALK,
@@ -502,7 +540,11 @@ def main(argv: list[str] | None = None) -> int:
                 handover_shadow=cfg.HANDOVER_SHADOW,
                 handover_sink=handover_local,
                 line_count_sink=linecounts_local,
+                set_overlap_sink=overlap_local,
+                query_prior_sink=queryprior_local,
+                query_vector=query_vec,
                 query_tier=cfg.QUERY_TIER,
+                **({} if cfg.QUERY_HOLD is None else {"query_hold": cfg.QUERY_HOLD}),
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
@@ -584,6 +626,12 @@ def main(argv: list[str] | None = None) -> int:
         for lc in linecounts_local or []:
             lc["embedder"] = emb
         all_linecounts.extend(linecounts_local or [])
+        for ov in overlap_local or []:
+            ov["embedder"] = emb
+        all_overlap.extend(overlap_local or [])
+        for qp in queryprior_local or []:
+            qp["embedder"] = emb
+        all_queryprior.extend(queryprior_local or [])
         if testscores_local:
             # The last ordinary step and the last row (after the check): what Train left and what Find applies.
             # The full-label ceiling's snapshot (#4490) is kept apart, never read as a session's step; and
@@ -680,6 +728,16 @@ def main(argv: list[str] | None = None) -> int:
     linecounts_cols = [*LINE_COUNT_COLUMNS, "embedder"]
     linecounts_out = cell_file(outdir / f"task_{idx:04d}__linecounts.csv")
     pd.DataFrame(all_linecounts, columns=pd.Index(linecounts_cols)).to_csv(linecounts_out, index=False)
+    # The #4816 set overlap: one row per click a trained head scored the pool on a typed-query run.  Same
+    # unconditional-write rule: an empty file with the header says it was off.
+    overlap_cols = [*OVERLAP_COLUMNS, "embedder"]
+    overlap_out = cell_file(outdir / f"task_{idx:04d}__overlap.csv")
+    pd.DataFrame(all_overlap, columns=pd.Index(overlap_cols)).to_csv(overlap_out, index=False)
+    # The #4384 typed-query prior shadow: one row per click a trained head is drawn on a single-vector
+    # typed-query run.  Same unconditional-write rule.
+    queryprior_cols = [*QUERY_PRIOR_COLUMNS, "embedder"]
+    queryprior_out = cell_file(outdir / f"task_{idx:04d}__queryprior.csv")
+    pd.DataFrame(all_queryprior, columns=pd.Index(queryprior_cols)).to_csv(queryprior_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means

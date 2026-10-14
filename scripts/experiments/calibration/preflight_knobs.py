@@ -335,6 +335,18 @@ def probe(C: Any) -> list[str]:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))
     elif C.SIGMA_FLOOR != "relative":
         rows.append(("sigma_floor", C.SIGMA_FLOOR, "<unset> = relative, the app's floor (#4492)"))
+    # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
+    # before it (the Goods' centroid alone), another scale an arm.
+    from vtscore.training.svm_prior import QUERY_PRIOR_SCALE  # noqa: PLC0415
+
+    qp = getattr(C, "QUERY_PRIOR", None)
+    if qp is not None:
+        if not isinstance(qp, float) or qp < 0 or qp == float("inf"):
+            refuse("query_prior", "CALIB_QUERY_PRIOR", "must be a number >= 0")
+        elif qp != QUERY_PRIOR_SCALE:
+            rows.append(
+                ("query_prior", "%g" % qp, "<unset> = %g, the app's typed-query prior (#4859)" % QUERY_PRIOR_SCALE)
+            )
 
     # The balance the line is drawn at (#4413).  Unset is the app's default;
     # the precision floor went in #4421 (experiment_config refuses its knob).

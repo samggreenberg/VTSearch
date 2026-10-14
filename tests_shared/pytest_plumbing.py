@@ -75,6 +75,11 @@ def print_summary_and_exit(config, exitstatus: int) -> None:
         print(f"TESTS {status} (exit code {exitstatus}; reporter unavailable)", flush=True)
     print("=" * 60, flush=True)
 
+    # The one atexit job the force-exit below must not skip.
+    from tests_shared.data_dir import release_data_dir
+
+    release_data_dir()
+
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(exitstatus)

@@ -5,7 +5,7 @@ Run from the repo root:
 
     python slides/figs/src/make-autopilot-figs.py
 
-Autopilot picks every item a user is shown in the Train window, in five steps,
+Autopilot picks every item a user is shown in the Train window, in six steps,
 and it tells them when they can stop. The steps are
 `AutopilotStateService.checkPhaseTransition`; the stop is three lights the
 labeling status computes, Smart (`vtscore/detectors/cost_trend.py`), Stable
@@ -15,7 +15,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 * `autopilot-steps` walks the harness's port of the phase machine
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
-  `scripts/check-eval-app-sync.py`) through the five steps, and every target it
+  `scripts/check-eval-app-sync.py`) through the six steps, and every target it
   prints is that module's constant.
 * `autopilot-smart` runs the shipped `smart_status_from_costs` on a planted
   session's error costs, and asserts the lights the slide draws.
@@ -24,8 +24,8 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 * `autopilot-span` counts the walk's run over the first 40 cells of an atlas,
   as `CoverageAtlas.coverage_level` does, and reads the light from the
   harness's port of the Span rule.
-* `autopilot-done` is the hand-off, in the app's own words
-  (`autopilot-panel.component.ts`).
+* `autopilot-done` is the hand-off, Toasty's hint in the app's own words
+  (`app.component.html`).
 
 The last figure, `autopilot-stop`, is the only measurement: where the stop
 fired in today's app, at each radio's beta, and what clicking on bought. It is
@@ -58,7 +58,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
-from matplotlib.patches import Circle, FancyBboxPatch, Rectangle  # noqa: E402
+from matplotlib.patches import Circle, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import FULL_BLEED, INK, SOFT, save, spread_labels  # noqa: E402
@@ -200,9 +200,9 @@ def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
     ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
 
 
-# ── Flight Plan: the five steps ──────────────────────────────────────────────
+# ── Flight Plan: the six steps ──────────────────────────────────────────────
 
-STEPS_STAGES = 4
+STEPS_STAGES = 5
 
 #: The rows, top to bottom: the step's name as the panel's short label shows
 #: it, what it asks about, the drawing in the middle column, and what ends it.
@@ -219,14 +219,17 @@ STEPS = (
     ("bad", "Bad", "at your query's line", "query-line", f"{BAD_TARGET} Bads"),
     ("hard", "Boundary", "at even odds", "detector-odds", "Smart and Stable both green"),
     ("new", "Diversity", "a cell nobody voted in", "atlas", "Span green as well"),
-    ("done", "Done", "every light green", "lights", "you say: keep going, or leave"),
+    # Once, the first time every light is green (#4836): the band walk Spot
+    # Check runs, its picks drawn at random from bands down from the top.
+    ("spot", "Spot Check", "every light green", "bands", "it has checked the line once"),
+    ("done", "Done", "after the check", "lights", "you say: keep going, or leave"),
 )
 #: No More walk on photos since #4740 (``MORE_TARGET`` 0): the opening is Good and
 #: Bad on the query, then the detector takes over.
-STEP_ROWS_Y = (4.95, 3.9, 2.85, 1.8, 0.75)
+STEP_ROWS_Y = (4.95, 4.08, 3.21, 2.34, 1.38, 0.5)
 #: Which row each build stage reveals up to: the opening on the query, then
 #: one step a stage.
-STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5}
+STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5, 5: 6}
 NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 4.3, 7.6, 7.95
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
@@ -235,32 +238,44 @@ QUERY_LINE, DETECTOR_LINE = 0.62, 0.68
 #: line's own fit calls even odds (#3546, #4632). Inside the line, as it is at
 #: the middle radio every detector starts on; at β ¼ the two nearly meet.
 DETECTOR_ODDS = 0.80
+#: Spot Check's bands on the detector's strip, as fractions of it from the
+#: right: the top 8, the next 8, then 16, then the band past the line, each
+#: twice the last (`calib-floor-check`'s bands, where the line keeps 32).
+SPOT_BANDS = (0.0, 0.08, 0.16, 0.32, 0.64)
+#: Where in each band its few random picks fall, as a share of the band's
+#: width: drawn once, so every page of the build shows the same picks.
+SPOT_PICKS = ((0.5,), (0.5,), (0.3, 0.75), (0.2, 0.5, 0.8))
 
 
 def _check_step_order() -> None:
-    """The five steps in the order the phase machine takes them, from its own rule.
+    """The six steps in the order the phase machine takes them, from its own rule.
 
     A session walked the way the slide narrates it: the counts reach each
-    target in turn, then Smart and Stable go green, then Span.
+    target in turn, then Smart and Stable go green, then Span, then the check
+    before Done runs and closes.
     """
     many = math.inf
+    # The check before Done is still open the first time every light is green,
+    # and closed after it (the app's ``doneChecked``).
     walk = (
         dict(good_count=0, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=0, smart="red", stable="red", span="red"),
         dict(good_count=GOOD_TARGET, bad_count=BAD_TARGET, smart="red", stable="red", span="red"),
         dict(good_count=24, bad_count=30, smart="green", stable="green", span="yellow"),
-        dict(good_count=30, bad_count=50, smart="green", stable="green", span="green"),
+        dict(good_count=30, bad_count=50, smart="green", stable="green", span="green", done_checked=False),
+        dict(good_count=34, bad_count=66, smart="green", stable="green", span="green", done_checked=True),
     )
     phases = tuple(next_phase(remaining_unlabeled=many, **state) for state in walk)
     assert phases == tuple(step[0] for step in STEPS), phases
 
 
 def steps_fig() -> None:
-    """The five steps: what each asks about, and what ends it.
+    """The six steps: what each asks about, and what ends it.
 
-    Four stages: the opening's two steps, both on the query's own ranking, with
+    Five stages: the opening's two steps, both on the query's own ranking, with
     no detector shown yet; then Boundary, the first step on the detector's
-    ranking; then Diversity, off the atlas; then Done.
+    ranking; then Diversity, off the atlas; then Spot Check, once, the first
+    time every light is green (#4836); then Done.
     """
     _check_step_order()
     _save(STEPS_STAGES, _steps_stage, "autopilot-steps")
@@ -280,6 +295,24 @@ def _strip(ax: plt.Axes, y: float, words: str, line_at: float) -> float:
 def _pick(ax: plt.Axes, x: float, y: float) -> None:
     """Where the step asks: a pointer onto the strip from above."""
     ax.plot(x, y + STRIP_H / 2 + 0.2, marker="v", markersize=14, color=INK, zorder=7, linestyle="none")
+
+
+def _spot_bands(ax: plt.Axes, y: float) -> None:
+    """The detector's strip with Spot Check's bands bracketed from the top, and a few random picks in each."""
+    _strip(ax, y, "the detector", DETECTOR_LINE)
+    width = PICTURE_X1 - PICTURE_X0
+    # The picks point down onto the strip from just above it, clear of its
+    # words; each band's bracket sits over its picks.
+    pick_y = y + STRIP_H / 2 + 0.08
+    top = pick_y + 0.1
+    for k in range(len(SPOT_BANDS) - 1):
+        right = PICTURE_X1 - SPOT_BANDS[k] * width
+        left = PICTURE_X1 - SPOT_BANDS[k + 1] * width
+        lo, hi = left + 0.025, right - 0.025
+        ax.plot([lo, lo, hi, hi], [top, top + 0.08, top + 0.08, top], color=INK, linewidth=1.4, zorder=6)
+        for share in SPOT_PICKS[k]:
+            x = left + share * (right - left)
+            ax.plot(x, pick_y, marker="v", markersize=8, color=INK, zorder=7, linestyle="none")
 
 
 def _mini_tree(ax: plt.Axes, y: float) -> None:
@@ -329,6 +362,8 @@ def _steps_stage(stage: int) -> Figure:
             _pick(ax, PICTURE_X0 + DETECTOR_ODDS * (PICTURE_X1 - PICTURE_X0), y)
         elif picture == "atlas":
             _mini_tree(ax, y)
+        elif picture == "bands":
+            _spot_bands(ax, y)
         else:
             for k, word in enumerate(("Smart", "Stable", "Span")):
                 x = PICTURE_X0 + 0.2 + k * 1.13
@@ -632,8 +667,25 @@ def _span_ancestors(cell: tuple[int, int]) -> list[tuple[int, int]]:
     return out
 
 
+def _span_leafward(cell: tuple[int, int]) -> list[tuple[int, int]]:
+    """The cells under *cell* that a pick in it reaches: its first child's, down to the drawn leaves.
+
+    A vote is on one item, which sits in one leaf of the atlas, and it marks
+    that leaf and every cell above it (`CoverageAtlas.label`). So a pick in a
+    big empty cell fills a path down through it, not the cell alone. Which
+    child the item sits in is the item's business; the drawing puts it in the
+    biggest child, the first, all the way down.
+    """
+    level, i = cell
+    out = []
+    while level < SPAN_LEVELS - 1:
+        level, i = level + 1, i * SPAN_K
+        out.append((level, i))
+    return out
+
+
 def _span_covered(stage: int) -> tuple[set[tuple[int, int]], int, list[tuple[int, int]]]:
-    """The cells holding a vote (with everything above them), the walk's run, and the picks Diversity made."""
+    """The cells holding a vote (each with its path), the walk's run, and the picks Diversity made."""
     covered: set[tuple[int, int]] = set()
     if stage >= 2:
         for cell in SPAN_BOUNDARY_VOTES:
@@ -645,9 +697,11 @@ def _span_covered(stage: int) -> tuple[set[tuple[int, int]], int, list[tuple[int
         empty = next((cell for cell in order if cell not in covered), None)
         if empty is None:
             break
-        # The walk takes the first empty cell; a vote there marks it and every cell above.
+        # The walk takes the first empty cell; the vote there marks a leaf
+        # under it, and every cell from that leaf up to the root.
         picks.append(empty)
         covered.update(_span_ancestors(empty))
+        covered.update(_span_leafward(empty))
     run = 0
     for cell in order:
         if cell not in covered:
@@ -661,9 +715,10 @@ def span_fig() -> None:
 
     Four stages: the cells, in the walk's order; after Boundary, a few covered
     and the run stopped at the first gap (red); four Diversity picks later, the
-    run at 10 (yellow); all 40 (green).
+    run at 11 (yellow), past a cell the first pick's path had already filled;
+    all 40 (green).
     """
-    expect = {2: (3, "red"), 3: (10, "yellow"), 4: (40, "green")}
+    expect = {2: (3, "red"), 3: (11, "yellow"), 4: (40, "green")}
     for stage, (run, light) in expect.items():
         _covered, got, _picks = _span_covered(stage)
         assert got == run and span_status(got, SPAN_ATLAS_CELLS) == light, (stage, got)
@@ -727,46 +782,42 @@ SPAN_NOTE_X, SPAN_NOTE_Y = 8.75, {2: 5.75, 3: 5.35, 4: 4.95}
 # ── Cleared to Land: Done ────────────────────────────────────────────────────
 
 DONE_STAGES = 3
-DIALOG_X0, DIALOG_X1 = 7.0, 12.3
+#: Toasty's picture: the happy face every hand-off hint wears
+#: (`frontend/src/app/utils/toasty-faces.ts`).
+TOASTY_PNG = _REPO_ROOT / "frontend" / "public" / "logo.png"
+#: The three hints, top to bottom, as `app.component.html` words them. A
+#: ``*word*`` is set bold, as the app sets Dashboard; the dry run's count is the
+#: harness's constant, which mirrors the app's.
+DONE_HINTS = (
+    "Your detector is trained! Every quality light is green. Keep voting to sharpen it, or click *Dashboard* to "
+    "test it or put it to work.",
+    f"Your detector is trained! {MORE_DRY_RUN} of its best matches in a row were not good, so it has likely found "
+    "what it can. Keep voting to sharpen it, or click *Dashboard* to test it or put it to work.",
+    "You've labeled every item in this dataset! Click *Dashboard* to test or run your detector on another dataset.",
+)
+#: Toasty stands at the left and his bubble reaches right, as `toastyHintPlacement`
+#: lays a hint under the top bar's Dashboard button; the bubble drops a little
+#: below his head, as the component's margin does.
+TOASTY_SIZE = 0.7
+TOASTY_X = 5.0
+BUBBLE_X0, BUBBLE_X1 = TOASTY_X + TOASTY_SIZE + 0.1, 12.35
+BUBBLE_DROP, BUBBLE_PAD, TAIL_DROP, TAIL = 0.08, 0.17, 0.22, 0.09
+HINT_SIZE, HINT_LEADING, HINT_ASCENT, HINT_DESCENT = 15, 0.29, 0.16, 0.05
+#: The first hint's top, low enough that the ending beside it clears the title
+#: notch; and the gap between hints.
+HINT_TOP, HINT_GAP = 5.35, 0.3
+#: Where each ending's words stop and its arrow to Toasty starts.
+ENDING_X0, ENDING_X1 = 0.7, 4.25
 
 
 def done_fig() -> None:
     """The ways a run ends, and what the app says at each, in the app's own words.
 
-    Three stages: every light green on a photo collection; a document
-    collection's dry run, the same dialog; and every item labeled, the other.
+    Since #4680 the hand-off is Toasty's hint under the top bar's Dashboard
+    button, one version per ending. Three stages: every light green on a photo
+    collection; a document collection's dry run; every item labeled.
     """
     _save(DONE_STAGES, _done_stage, "autopilot-done")
-
-
-def _button(ax: plt.Axes, x: float, y: float, words: str, primary: bool) -> float:
-    """A dialog button with its left edge at *x*, sized to its words; returns its right edge."""
-    face, ink = (INK, "white") if primary else ("white", INK)
-    label = ax.text(x + BUTTON_PAD, y, words, ha="left", va="center", fontsize=15, color=ink, zorder=7)
-    ax.figure.canvas.draw()
-    width = label.get_window_extent().transformed(ax.transData.inverted()).width + 2 * BUTTON_PAD
-    ax.add_patch(FancyBboxPatch((x, y - 0.2), width, 0.4, boxstyle="round,pad=0,rounding_size=0.07",
-                                facecolor=face, edgecolor=INK, linewidth=1.4, zorder=6))  # fmt: skip
-    return x + width
-
-
-#: A button's padding either side of its words, in inches.
-BUTTON_PAD = 0.16
-
-
-def _dialog(ax: plt.Axes, y_top: float, heading: str, body: list[str], stay: str) -> tuple[float, float]:
-    """The hand-off as the app draws it, top edge at *y_top*; returns its left edge's middle."""
-    height = 1.15 + 0.36 * len(body)
-    y0 = y_top - height
-    ax.add_patch(FancyBboxPatch((DIALOG_X0, y0), DIALOG_X1 - DIALOG_X0, height,
-                                boxstyle="round,pad=0,rounding_size=0.12", facecolor="white", edgecolor=SOFT,
-                                linewidth=1.6, zorder=4))  # fmt: skip
-    ax.text(DIALOG_X0 + 0.25, y_top - 0.33, heading, ha="left", va="center", fontsize=18, fontweight="bold", zorder=5)
-    for k, words in enumerate(body):
-        ax.text(DIALOG_X0 + 0.25, y_top - 0.75 - 0.34 * k, words, ha="left", va="center", fontsize=15, zorder=5)
-    right = _button(ax, DIALOG_X0 + 0.25, y0 + 0.36, stay, primary=False)
-    _button(ax, right + 0.18, y0 + 0.36, "Head to Dashboard", primary=True)
-    return DIALOG_X0, y0 + height / 2
 
 
 def _arrow(ax: plt.Axes, x0: float, y0: float, x1: float, y1: float) -> None:
@@ -775,36 +826,81 @@ def _arrow(ax: plt.Axes, x0: float, y0: float, x1: float, y1: float) -> None:
                                 shrinkA=0, shrinkB=0))  # fmt: skip
 
 
+def _text_width(ax: plt.Axes, words: str, bold: bool) -> float:
+    label = ax.text(0, 0, words, fontsize=HINT_SIZE, fontweight="bold" if bold else "normal")
+    width = label.get_window_extent(ax.figure.canvas.get_renderer()).width / ax.figure.dpi
+    label.remove()
+    return width
+
+
+def _wrap(ax: plt.Axes, words: str) -> list[list[tuple[str, bool, float]]]:
+    """*words* in lines that fit the bubble, each word with its weight and its offset from the line's start."""
+    room = BUBBLE_X1 - BUBBLE_X0 - 2 * BUBBLE_PAD
+    space = _text_width(ax, "a a", False) - _text_width(ax, "aa", False)
+    lines: list[list[tuple[str, bool, float]]] = [[]]
+    end = 0.0
+    for word in words.split():
+        bold = word.startswith("*")
+        word = word.strip("*")
+        width = _text_width(ax, word, bold)
+        if lines[-1] and end + space + width > room:
+            lines.append([])
+        start = end + space if lines[-1] else 0.0
+        lines[-1].append((word, bold, start))
+        end = start + width
+    return lines
+
+
+def _hint(ax: plt.Axes, top: float, lines: list[list[tuple[str, bool, float]]], face: np.ndarray | None) -> float:
+    """Toasty and his bubble, top edge at *top*; returns the hint's bottom. Drawn only when *face* is given."""
+    bubble_top = top - BUBBLE_DROP
+    height = HINT_ASCENT + (len(lines) - 1) * HINT_LEADING + HINT_DESCENT + 2 * BUBBLE_PAD
+    if face is not None:
+        ax.imshow(face, extent=(TOASTY_X, TOASTY_X + TOASTY_SIZE, top - TOASTY_SIZE, top), aspect="auto", zorder=5)
+        ax.add_patch(FancyBboxPatch((BUBBLE_X0, bubble_top - height), BUBBLE_X1 - BUBBLE_X0, height,
+                                    boxstyle="round,pad=0,rounding_size=0.1", facecolor="white", edgecolor=SOFT,
+                                    linewidth=1.6, zorder=4))  # fmt: skip
+        # The tail, pointing back at Toasty: white over the bubble's edge, outlined on its two outer sides.
+        y = bubble_top - TAIL_DROP
+        ax.add_patch(Polygon([(BUBBLE_X0 + 0.03, y + TAIL), (BUBBLE_X0 - TAIL, y), (BUBBLE_X0 + 0.03, y - TAIL)],
+                             facecolor="white", edgecolor="none", zorder=5))  # fmt: skip
+        ax.plot([BUBBLE_X0, BUBBLE_X0 - TAIL, BUBBLE_X0], [y + TAIL, y, y - TAIL], color=SOFT, linewidth=1.6,
+                zorder=6)  # fmt: skip
+        for k, line in enumerate(lines):
+            baseline = bubble_top - BUBBLE_PAD - HINT_ASCENT - k * HINT_LEADING
+            for word, bold, start in line:
+                ax.text(BUBBLE_X0 + BUBBLE_PAD + start, baseline, word, ha="left", va="baseline",
+                        fontsize=HINT_SIZE, fontweight="bold" if bold else "normal", zorder=6)  # fmt: skip
+    return min(top - TOASTY_SIZE, bubble_top - height)
+
+
 def _done_stage(stage: int) -> Figure:
     fig, ax = _canvas()
     _statement(ax, "Three ways a run ends, each said once")
-    trained_x, trained_y = _dialog(
-        ax,
-        5.65,
-        "Detector Trained",
-        ["Every quality indicator is green.", "Nothing here expires."],
-        "Continue Training",
-    )
+    face = plt.imread(TOASTY_PNG)
+    # Lay all three out on every stage, so the build only adds.
+    middles, top = [], HINT_TOP
+    for k, words in enumerate(DONE_HINTS):
+        middles.append(top - TOASTY_SIZE / 2)
+        top = _hint(ax, top, _wrap(ax, words), face if stage > k else None) - HINT_GAP
+    for k in range(stage):
+        _arrow(ax, ENDING_X1, middles[k], TOASTY_X - 0.12, middles[k])
     # Photos: every light green.
-    ax.text(0.7, 4.95, "Photos", ha="left", va="center", fontsize=18, fontweight="bold")
+    y = middles[0]
+    ax.text(ENDING_X0, y + 0.28, "Photos", ha="left", va="center", fontsize=18, fontweight="bold")
     for k, word in enumerate(("Smart", "Stable", "Span")):
-        x = 0.85 + k * 1.45
-        _light(ax, x, 4.4, "green")
-        ax.text(x + 0.2, 4.4, word, ha="left", va="center", fontsize=16)
-    _arrow(ax, 5.25, 4.55, trained_x - 0.15, trained_y + 0.15)
+        x = ENDING_X0 + 0.15 + k * 1.15
+        _light(ax, x, y - 0.24, "green")
+        ax.text(x + 0.2, y - 0.24, word, ha="left", va="center", fontsize=16)
     if stage >= 2:
-        ax.text(0.7, 3.45, "Documents", ha="left", va="center", fontsize=18, fontweight="bold")
-        ax.text(0.7, 3.0, f"{MORE_DRY_RUN} best matches in a row,", ha="left", va="center", fontsize=16)
-        ax.text(0.7, 2.65, "not one of them Good", ha="left", va="center", fontsize=16)
-        _arrow(ax, 5.25, 3.05, trained_x - 0.15, trained_y - 0.25)
+        y = middles[1]
+        ax.text(ENDING_X0, y + 0.38, "Documents", ha="left", va="center", fontsize=18, fontweight="bold")
+        ax.text(ENDING_X0, y - 0.05, f"{MORE_DRY_RUN} best matches in a row,", ha="left", va="center", fontsize=16)
+        ax.text(ENDING_X0, y - 0.4, "not one of them Good", ha="left", va="center", fontsize=16)
     if stage >= 3:
-        # Clear of the page number, which the theme sets in the bottom-right corner.
-        ax.text(0.7, 1.8, "Anything", ha="left", va="center", fontsize=18, fontweight="bold")
-        ax.text(0.7, 1.35, "every item has a vote", ha="left", va="center", fontsize=16)
-        left_x, left_y = _dialog(
-            ax, 2.55, "Nothing Left to Label", ["Autopilot has labeled every item", "in this dataset."], "Stay Here"
-        )
-        _arrow(ax, 5.25, 1.55, left_x - 0.15, left_y)
+        y = middles[2]
+        ax.text(ENDING_X0, y + 0.22, "Anything", ha="left", va="center", fontsize=18, fontweight="bold")
+        ax.text(ENDING_X0, y - 0.23, "every item has a vote", ha="left", va="center", fontsize=16)
     return fig
 
 

@@ -43,6 +43,22 @@ def resolve_active_labelset(det_ctx):
     return LabelSet.from_dict(det_data.get("labelset") or {}), det_data.get("media_type", "") or ""
 
 
+def resolve_active_text_query(det_ctx) -> str:
+    """The typed query the active detector was made from (its registry entry's), ``""`` for none (#4859).
+
+    The Train view's learned sort trains that detector's head, which starts from
+    its typed query as well as from the Goods on the query's own single-vector
+    space (:func:`~vtscore.detectors.query_head.typed_query_prior_vector`).
+    """
+    from vtscore.detectors.query_head import detector_text_query
+    from vtscore.detectors.registry import get_detector
+    from vtscore.state.core import _empty_detector_context
+
+    if det_ctx is _empty_detector_context or not getattr(det_ctx, "detector_id", None):
+        return ""
+    return detector_text_query(get_detector(det_ctx.detector_id))
+
+
 def resolve_labelset_local_state(labelset, snap):
     """Resolve labelset elements to local cids using the dataset snapshot.
 
@@ -247,6 +263,8 @@ def run_learned_sort(
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
                 beta=beta_value,
+                # For the head's prior only (#4859): the learned sort never gives the query's own set.
+                text_query=resolve_active_text_query(det_ctx),
             )
         else:
             results, threshold, model = train_and_score(

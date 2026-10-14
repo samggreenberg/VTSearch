@@ -1,13 +1,15 @@
 """The head's count line (#4786): while the class model is thin, the line counts what stands out.
 
 At the hand-over the labels line's cut on a class model fitted to a handful of
-held-out votes went wrong both ways (one face, or thousands).  While the model holds
-fewer than ``HEAD_COUNT_BADS`` Bads and ``HEAD_COUNT_GOODS`` Goods, the line at every
-balance keeps instead what the Goods' centroid's count rule finds standing out in the
-head's own scores.
+held-out votes went wrong both ways (one face, or thousands).  Until the model holds
+``HEAD_COUNT_GOODS`` Goods, however many Bads (#4798), the line at every balance keeps
+instead what the Goods' centroid's count rule finds standing out in the head's own
+scores.  ``HEAD_COUNT_BADS`` is the knob's Bads half, unbounded in the app.
 """
 
 from __future__ import annotations
+
+import math
 
 import numpy as np
 import pytest
@@ -71,11 +73,20 @@ class TestTheGate:
         assert line is not None and line.model.n_neg == 4
         assert head_count_serves(line.model)
 
-    def test_the_class_model_takes_over_at_the_bads(self):
-        line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS), _corpus())
-        assert line is not None and not head_count_serves(line.model)
-        line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS - 1), _corpus())
-        assert line is not None and head_count_serves(line.model)
+    def test_many_bads_do_not_close_it(self):
+        """#4798: with few Goods the class model cannot place the positives, however many Bads it holds."""
+        assert HEAD_COUNT_BADS == math.inf
+        line = fit_labels_line(_orderings(HEAD_COUNT_GOODS - 1, 400), _corpus())
+        assert line is not None and line.model.n_neg == 400
+        assert head_count_serves(line.model)
+
+    def test_a_bads_gate_is_the_knobs(self):
+        """``head_count_bads(32)`` is #4786's gate: the class model took over at 32 held-out Bads."""
+        with head_count_bads(32):
+            line = fit_labels_line(_orderings(4, 32), _corpus())
+            assert line is not None and not head_count_serves(line.model)
+            line = fit_labels_line(_orderings(4, 31), _corpus())
+            assert line is not None and head_count_serves(line.model)
 
     def test_and_at_the_goods(self):
         line = fit_labels_line(_orderings(HEAD_COUNT_GOODS, 4), _corpus())
@@ -100,7 +111,7 @@ class TestTheLine:
             assert kept == sorted(kept), kept
 
     def test_a_model_with_the_labels_cuts_on_them(self):
-        line = fit_labels_line(_orderings(4, HEAD_COUNT_BADS), _corpus())
+        line = fit_labels_line(_orderings(HEAD_COUNT_GOODS, 40), _corpus())
         assert line is not None and line.unvoted_scores is not None and line.unvoted_posteriors is not None
         total = float(line.unvoted_share or 0.0) * line.unvoted_scores.size
         for beta in (0.25, 1.0, 4.0):

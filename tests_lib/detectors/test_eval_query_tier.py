@@ -58,7 +58,8 @@ def _run(**kwargs):
 
 @pytest.fixture(scope="module")
 def typed_run():
-    return _run()
+    """The quota's hand-over, before #4736's hold: the tiers this class pins."""
+    return _run(query_hold=0)
 
 
 @pytest.fixture(scope="module")
@@ -105,6 +106,71 @@ class TestATypedQueryRun:
         assert rows[0]["t"] == first_good
         assert TIER_QUERY not in {r["detector_tier"] for r in rows}
         assert TIER_CENTROID in {r["detector_tier"] for r in rows}
+
+
+HOLD = 12
+
+
+@pytest.fixture(scope="module")
+def held_run():
+    """The app's hold (#4736) at a count this short run crosses."""
+    return _run(query_hold=HOLD)
+
+
+def _base(rows):
+    return [r for r in rows if not r.get("gmm_variant")]
+
+
+class TestTheQueryHold:
+    """Past the quota the typed query's set stays the untagged row until the hold; the head's rows ride tagged."""
+
+    def test_the_default_is_the_apps_hold(self):
+        import inspect
+
+        from vtscore.detectors.label_quota import QUERY_HOLD_LABELS
+
+        assert inspect.signature(simulate_voting_iterations).parameters["query_hold"].default == QUERY_HOLD_LABELS
+
+    def test_the_picks_are_the_hand_overs_at_the_quota(self, held_run, typed_run):
+        _rows, picks = held_run
+        _old, old_picks = typed_run
+        assert [(p["t"], p["picked_id"]) for p in picks] == [(p["t"], p["picked_id"]) for p in old_picks]
+
+    def test_one_untagged_row_a_click_the_query_until_the_hold(self, held_run):
+        rows, _picks = held_run
+        base = _base(rows)
+        assert [r["t"] for r in base] == list(range(1, 21))
+        for r in base:
+            held = r["n_good"] + r["n_bad"] < HOLD
+            trained = label_quota(r["n_good"], r["n_bad"]).tier == TIER_TRAINED
+            assert r["detector_tier"] == (TIER_TRAINED if trained and not held else TIER_QUERY), r["t"]
+        held_past_quota = [
+            r
+            for r in base
+            if r["detector_tier"] == TIER_QUERY and label_quota(r["n_good"], r["n_bad"]).tier == TIER_TRAINED
+        ]
+        assert held_past_quota, "the run meets the quota before the hold"
+        assert all(r["app_trained"] == 0 for r in held_past_quota)
+
+    def test_a_held_clicks_head_is_the_tagged_row_and_the_rest_are_the_hand_overs(self, held_run, typed_run):
+        from vtscore.eval.voting_iterations import QUERY_HOLD_HEAD_TAG
+
+        rows, _picks = held_run
+        old_by_t = {r["t"]: r for r in _base(typed_run[0])}
+        tagged = {r["t"]: r for r in rows if r.get("gmm_variant") == QUERY_HOLD_HEAD_TAG}
+        assert tagged and max(tagged) < HOLD
+        base_by_t = {r["t"]: r for r in _base(rows)}
+        for t, old in old_by_t.items():
+            new = tagged.get(t, base_by_t[t]) if old["detector_tier"] == TIER_TRAINED else base_by_t[t]
+            assert new["detector_tier"] == old["detector_tier"], t
+            for col in ("precision", "recall", "fbeta", "n_flagged"):
+                assert new[col] == old[col] or (math.isnan(new[col]) and math.isnan(old[col])), (t, col)
+
+    def test_the_held_rows_are_the_query_rows_set(self, held_run):
+        rows, _picks = held_run
+        query = [r for r in _base(rows) if r["detector_tier"] == TIER_QUERY]
+        for col in ("precision", "recall", "fbeta", "n_flagged"):
+            assert len({r[col] for r in query}) == 1, col
 
 
 class TestOtherOpeningsAreUnchanged:

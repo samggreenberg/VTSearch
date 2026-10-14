@@ -528,7 +528,8 @@ Goods' centroid head (`install_centroid_head`); with either quota met it runs
 `train_and_threshold`.  With *text_query* (the detector's typed query,
 `detector_text_query`), it stores that query's head instead of nothing or the
 centroid until a quota is met (`install_query_head`, #4758), its line drawn
-on the haystack; a haystack with no text slot falls back to those.
+on the haystack, and past the quota while the query holds (`query_holds`,
+#4736, below); a haystack with no text slot falls back to those.
 `haystack_for(embedder_name)` may return a `Haystack` to
 fit the line's corpus side on a different population than *snap* (the
 CLI uses it for converted / re-clipped scoring sets); the class model the
@@ -543,8 +544,8 @@ the active `clips_dict`. Returns the same `(results, threshold, model)`
 tuple. *inclusion_value* is deprecated the same way. `label_quota=True`
 applies the label quota as `train_from_labelset` does - a cold Find
 passes it, with the detector's *text_query*, which gives that query's head
-under the quota (#4758); the Train view's learned sort, the sort the user
-labels on, does not, so it defaults to `False`.
+under the quota (#4758) and while it holds (#4736); the Train view's learned
+sort, the sort the user labels on, does not, so it defaults to `False`.
 
 ### The label quota and the Goods' centroid (#4643)
 
@@ -560,6 +561,14 @@ is the pre-#4731 rule, for the eval harness);
 `served_quota(model, labelset)` is what the app's responses report; it reads
 the tier off the model, so it also reports `TIER_QUERY` (`"query"`, #4758)
 for a typed query's head, which the counts alone never give.
+`query_holds(n_good, n_bad, *, patch_space, hold=QUERY_HOLD_LABELS)` is the
+typed query's hold (#4736): on a known single-vector space (`patch_space`
+`False`, from `training._patch_space_for`) a typed-query detector keeps its
+query's head past the quota until its labels number `QUERY_HOLD_LABELS` (30).
+A patch space, or an embedder the registry does not know, has no hold.
+`_query_tier` and `cached_head_is_current` read it, and the learned-sort
+payload reports it as `query_hold`, so the Train view keeps the text sort on
+screen while Autopilot asks from the head.
 
 The centroid is `fit_centroid_head(goods, score, *, rule=None, beta=None,
 line_mask=None)`: the unit mean of the L2-normalised Good vectors, as a

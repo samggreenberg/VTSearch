@@ -694,11 +694,13 @@ def check_note_letters(name: str, text: str, pages: int, problems: list[str]) ->
 
     A single note may name several letters (`**a**, **b** — recapitulation`);
     what is checked is coverage, not one note per page.
+
+    The stray-letter half runs on a one-page slide too: notes naming **b**
+    onward on a slide with one page are the trace of build markers that went
+    missing, which would otherwise pass as a plain one-page slide.
     """
-    if pages < 2:
-        return
     named = {m.group(1) for comment in COMMENT_RE.finditer(text) for m in NOTE_LETTER_RE.finditer(comment.group(1))}
-    missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named]
+    missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named] if pages >= 2 else []
     if missing:
         problems.append(
             f"fragments/{name}.md: this slide is {pages} pages, but its presenter notes "
@@ -799,9 +801,9 @@ def check_speaker_fit(
         where = f" (showing {letters})" if pages != group[name] else ""
         problems.append(
             f"fragments/{name}.md{where}: presenter notes overflow the speaker page by about "
-            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters, or move "
-            f"detail into the report the note cites. A speaker page never continues onto a "
-            f"second one; see slides/README.md."
+            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters. A speaker "
+            f"page never continues onto a second one; see slides/README.md, and slides/STYLE.md "
+            f"on what a note is for."
         )
 
 
@@ -1252,6 +1254,18 @@ def speaker_bodies(
     return bodies
 
 
+def front_matter(front: dict[str, str], *, speaker: bool, editable: bool) -> str:
+    """The assembled deck's front matter: the defaults, the manifest's keys, and what the cut adds."""
+    merged = dict(DEFAULT_FRONTMATTER)
+    merged.update(front)
+    if speaker and merged.get("title"):
+        # The two cuts side by side in a PDF viewer should not read alike.
+        merged["title"] = f"{merged['title']} (presenter notes)"
+    if editable:
+        merged["style"] = EDITABLE_STYLE
+    return "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
+
+
 def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True, editable: bool = False) -> list[str]:
     """Preflight one deck; write _build/<deck>[.speaker|.editable|.unnumbered].md unless write=False.
 
@@ -1293,11 +1307,7 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
     if problems or not write:
         return problems
 
-    merged = dict(DEFAULT_FRONTMATTER)
-    merged.update(front)
-    if editable:
-        merged["style"] = EDITABLE_STYLE
-    header = "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
+    header = front_matter(front, speaker=speaker, editable=editable)
 
     BUILD.mkdir(exist_ok=True)
     parts = [""] if speaker else [p for p, on in ((".editable", editable), (".unnumbered", not pageno)) if on]

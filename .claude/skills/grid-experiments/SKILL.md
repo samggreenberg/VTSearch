@@ -558,7 +558,9 @@ labelset. So the page shows what that gives, and neither module reads
 the labels hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731), the trained head from there; since
 #4758 a run that opens on a typed query gives that query's own set until the
 quota instead, from its first vote (`detector_tier` `query`; `CALIB_QUERY_TIER=0`
-is the arm before). The harness
+is the arm before), and since #4736 on a single-vector space past the quota
+until 30 votes (`app_trained` 0 there, the head's rows tagged `hold:head`;
+`CALIB_QUERY_HOLD=0` is the arm before). The harness
 writes each row as that detector and names it in `detector_tier`, which
 neither module reads either. A report that scores the *session* filters on
 `app_trained` itself, as the State of the App analyzer does. A study that wants

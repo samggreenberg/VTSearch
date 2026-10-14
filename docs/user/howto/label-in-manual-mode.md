@@ -65,11 +65,12 @@ Below **Select**, the **Threshold** - a spectrum from **False Positives** to
 detector leans toward returning every match it can (toward False Positives)
 or only the ones most likely right (toward False Negatives), which moves its
 line between match and not a match without changing the order of the list.
-The note under it says whether the line can keep that promise yet, and
-**Check 5 picks** beside it measures that with a spot check (see
-[How close the line got](../USER_GUIDE.md#how-close-the-line-got)). When the
-button is highlighted and a note says your labels still overlap, check now:
-those picks are the answers the detector most needs.
+The note under it says whether the line can keep that promise yet. Only
+Autopilot measures that, with its **Spot Check** step (see
+[How close the line got](../USER_GUIDE.md#how-close-the-line-got)): there is
+no check button in Manual mode. When a note says your labels still overlap,
+hand back to Autopilot (Step 4) and it runs the check at once: those picks are
+the answers the detector most needs.
 
 ## Step 4: Hand back to Autopilot
 

@@ -128,10 +128,24 @@ source "$WT/gridenv.sh"
 
 command -v ruff >/dev/null || { echo "FATAL: venv did not activate (no ruff on PATH)"; exit 2; }
 
+# A data dir of the job's own, removed when it ends (#4706). On the GRID
+# ~/.bashrc exports VTSEARCH_DATA_DIR as the LIVE app's data, and sbatch hands
+# it to this job. So every test that wrote under config.DATA_DIR wrote into the
+# live dir: 299 fixture autodetect_results_*.json, 152 local_uploads/ dirs,
+# staging pickles and a user_settings.json rewrite. The conftests now isolate
+# pytest by themselves (tests_shared/data_dir.py). This block covers the rest of
+# what run-tests.sh starts, and any branch cut before that fix. Set after
+# gridenv.sh, so nothing sourced can point it back.
+_inherited_data="${VTSEARCH_DATA_DIR:-unset}"
+_data="$(mktemp -d "${TMPDIR:-/tmp}/vtsearch-suite-data.XXXXXX")" || { echo "FATAL: could not create the suite's data dir"; exit 2; }
+export VTSEARCH_DATA_DIR="$_data"
+trap 'rm -rf "$_data"; restore' EXIT
+
 echo "=== host $(hostname)  mem $(free -g | awk '/Mem:/{print $2}')G  node $(node --version) ==="
 echo "=== worktree $WT"
 echo "=== HEAD $(git log --oneline -1)"
 echo "=== ref  $_refnote"
+echo "=== data $_data (inherited VTSEARCH_DATA_DIR: $_inherited_data, not used)"
 echo
 
 # Keep a copy of the output to read the verdict from; the job log still gets all of it.

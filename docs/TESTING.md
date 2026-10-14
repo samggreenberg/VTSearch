@@ -104,6 +104,8 @@ The default filter lives in `pyproject.toml`'s `addopts`: `-m 'not gpu and not s
 
 ## Test Isolation
 
+**The session's data dir comes first, before any fixture.** Both conftests call `isolate_data_dir()` from [`tests_shared/data_dir.py`](../tests_shared/data_dir.py) before anything imports `vtscore.config`. So `config.DATA_DIR` is a fresh temp dir for the whole run, shared by every xdist worker and every subprocess a test starts, and removed when the run ends. Whatever `VTSEARCH_DATA_DIR` the shell exported is ignored. On the HLTCOE GRID that is the live app's data, and suite runs used to leave fixture exports, upload dirs and staging pickles in it and rewrite its `user_settings.json` (#4706); on a laptop it is the checkout's own `data/`. The model cache is the one exception. If the dir the app would read models from exists, `VTSEARCH_MODELS_DIR` keeps naming it, so the `gpu` group does not download every model again; nothing is ever created in the inherited dir. The dir is shared across the run, so a test that needs an empty one still takes its own `tmp_path`.
+
 All mutable global state is reset automatically before each test via these autouse fixtures:
 
 1. **`reset_state`** — Clears all dataset contexts and creates a fresh `_test_default` context with the pre-generated test medias replayed into it. Also clears:
