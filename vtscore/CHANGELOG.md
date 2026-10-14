@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`predict_embedders_to_preload` resolves a convert-out half type to its conversion target** (issue
+  #4868). A media type with no embedder of its own that declares `converts_to` (`document`) now
+  predicts the default embedder of `converts_to[0]` (the image default for `document`), both for
+  `extra_media_types` and for a registry entry of that type with no `embedder`. It used to predict
+  nothing, so a server locked to `document` warmed no model at startup. Convert-in types (`face`) and
+  full types are unchanged.
+
 - **A typed-query detector's head starts from its typed query too** (issue #4859, priced in #4384). On the
   query's own single-vector space (`vtscore.detectors.query_head.typed_query_prior_applies`), every fit of a
   training pass adds the typed query's unit embedding as a second cheap feature beside the Goods' centroid,

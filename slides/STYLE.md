@@ -96,12 +96,11 @@ If the slide has no figure, it has no reason to colour a word.
 Nothing on a slide renders below **20px** — which is the page number, the
 smallest thing the theme draws. Body copy is 28px.
 
-**The speaker page is the one exception, and it is deliberate.** Its presenter
-notes render at 18px, because this floor is about a projector at the back of a
-room and that page is a PDF half a metre from the presenter's own eyes. It is
-also load-bearing: a speaker page never continues onto a second one, and at
-20px the longest slides' narration could not be made to fit however the
-pictures were arranged. Nothing an *audience* ever sees goes below 20px.
+**The speaker page holds the same floor.** Its presenter notes render at 20px.
+They were 18px while the longest slides' narration ran to a page of prose and a
+speaker page may not continue onto a second; notes are now a sentence or three
+a page (*Presenter notes are what you say*, below), so the type came back up to
+the floor (#4884).
 
 This binds figures too, and figures are where it gets broken, because the size
 a figure's labels *render* at is not the size they were *set* at. A figure `W`
@@ -509,8 +508,11 @@ unmentioned.
 
 The speaker build draws the group in whichever of two shapes the fragment
 declares. A **build-up** gets its last page large — a speaker glancing at notes
-needs the whole picture, not whichever stage the audience is on — with the
-earlier frames small beneath it. An **equal-weight** group gets every frame at
+needs the whole picture, not whichever stage the audience is on — under the
+earlier frames, which run in letter order in the smallest square grid that
+holds them, so the column reads a, b, c and ends on the slide: a
+two-page build's first page at the hero's own size, up to four in 2×2, up to
+nine in 3×3, and 4×4 only past that. An **equal-weight** group gets every frame at
 one size and no hero, which is also a bigger frame, because the space the hero
 would have taken is shared out. Either way the overview is why a note never has
 to *describe* the build: "this slide is a seven-page build" is a sentence spent

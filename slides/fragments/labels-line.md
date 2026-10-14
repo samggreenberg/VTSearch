@@ -10,7 +10,7 @@
 
 <!-- build: figs/calib-labels-line.build3.webp -->
 
-<!-- **a** — Back to Curvey & InDiscreet's fit: what a match scores, what a
+<!-- **a** — Back to Curvey & InDiscrete's fit: what a match scores, what a
      near-miss scores, about 210 matches in the corpus, and every photo's
      chance of being one. -->
 
