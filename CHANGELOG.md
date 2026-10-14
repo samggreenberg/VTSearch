@@ -25,6 +25,12 @@ not list every commit. Use `git log` for the full history.
   on their own line, and the CLI's message says the same. The `label_quota` payload gains `hold_labels` and
   `hold_owed`.
 
+- **Faces work in every Docker image** (issue #4886). No image installed `facenet-pytorch`, so in a container
+  the Images → Faces converter found no faces (with only a log warning), and the face localizer and the
+  FaceNet embedder failed to load. Every `docker/Dockerfile*` now installs it, `--no-deps` as
+  `scripts/install.sh` does. FaceNet's weights also now always download into the model cache
+  (`VTSEARCH_MODELS_DIR`, else `data/models`) rather than under `$HOME`; a host that already holds
+  them in `~/.cache/torch` fetches them once more (~107 MB).
 - **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
   and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
   2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with
@@ -247,6 +253,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
+  image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's
+  default embedder weights in at build time (CLAP General for `audio`, X-CLIP for `video`), so a fresh
+  container serves on first run without a Hugging Face download. `docker/compose/docker-compose.audio.yml`
+  and `docker-compose.video.yml` build and run the two; any other media type builds with
+  `--build-arg MEDIA_TYPE=<type>`. The half types bake what their media embed as: `document` means
+  document input converted to page images, so it bakes SigLIP; `face` means image input with the faces
+  cropped out, so it bakes FaceNet (and the image installs `facenet-pytorch`). A server locked to
+  `document` now also warms SigLIP at startup, where it used to warm nothing. See
+  [SETUP.md](docs/SETUP.md#single-media-type-audio-only-video-only).
 - **EmbeddingGemma 2 (audio) embedder** (issue #4837). A new choice for sound collections, built on Google's
   `embeddinggemma-2`. It finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
   but is weaker than CLAP on other sounds and music, so CLAP-general stays the default. It needs transformers
