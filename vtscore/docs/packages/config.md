@@ -315,6 +315,7 @@ time. The actual download + load is lazy, driven by each embedder's
 | `CLIP_L_MODEL_ID`              | `"openai/clip-vit-large-patch14"`                                                      | OpenAI CLIP ViT-L/14.                                                                  |
 | `SIGLIP_L_MODEL_ID` / `SIGLIP_L_PRETRAINED` | `"ViT-SO400M-14-SigLIP-384"` / `"webli"`                                  | open_clip model name + pretrained tag (not a HF id).                                   |
 | `PARASPEECHCLAP_*`             | `SPEECH_MODEL_ID="microsoft/wavlm-large"`, `TEXT_MODEL_ID="ibm-granite/granite-embedding-278m-multilingual"`, `CHECKPOINT_REPO="ajd12342/paraspeechclap-combined"`, `CHECKPOINT_FILE="slap-combined.pth.tar"` | Plus `EMBED_DIM=768`, `SAMPLE_RATE=16000`, `MAX_SAMPLES=16000*30`. |
+| `EMBEDDINGGEMMA2_*`            | `MODEL_ID="google/embeddinggemma-2"`, `QUERY_PREFIX="task: search result \| query: "` | One 768-d text/image/audio space behind both `embeddinggemma2` and `embeddinggemma2_audio`; needs transformers >= 5.18. Plus `SAMPLE_RATE=16000`, `MAX_SAMPLES=16000*30`, `MIN_SAMPLES=16000`. |
 | `E5_MODEL_ID`                  | `"intfloat/e5-base-v2"`                                                                | Default text embedder.                                                                 |
 | `BGE_MODEL_ID`                 | `"BAAI/bge-base-en-v1.5"`                                                              | Alternative text embedder.                                                             |
 

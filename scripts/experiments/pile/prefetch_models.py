@@ -33,6 +33,7 @@ def main() -> int:
         "siglip2": vtc.SIGLIP2_MODEL_ID,
         "siglip2_l": vtc.SIGLIP2_L_MODEL_ID,
         "dinov3_patch": vtc.DINOV3_MODEL_ID,
+        "embeddinggemma2": vtc.EMBEDDINGGEMMA2_MODEL_ID,
     }
     names = sys.argv[1].split(",") if len(sys.argv) > 1 else list(wanted)
 

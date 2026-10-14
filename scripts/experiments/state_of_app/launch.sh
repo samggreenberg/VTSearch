@@ -42,7 +42,9 @@ fi
 export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)${_PTAG:-}}"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/state-of-the-app/$SOTA_DATE}"
 export CALIB_DATASETS=coco_better
-export CALIB_COCO_BETTER_EMBEDDERS="siglip,siglip+dinov3_patch"
+# SOTA_EMBEDDERS swaps the columns for an A/B on the embedder itself (#4837 runs
+# `siglip,embeddinggemma2`); a review never sets it, so "the app" stays named here.
+export CALIB_COCO_BETTER_EMBEDDERS="${SOTA_EMBEDDERS:-siglip,siglip+dinov3_patch}"
 export CALIB_PATCH_STYLES=max_patch
 export CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="${SOTA_SEEDS:-1}"
@@ -113,19 +115,20 @@ esac
 if [[ "${1:-}" == "subset" ]]; then
   CLASSES="${2:?usage: launch.sh subset \"airplane,dining table,...\"}"
   SUBSET_PATH="${SOTA_PATH:-binary}"
-  IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" "$SUBSET_PATH" <<'PYIDX'
+  IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" "$SUBSET_PATH" "$CALIB_COCO_BETTER_EMBEDDERS" <<'PYIDX'
 import json, sys
 info = json.load(open(sys.argv[1]))["datasets"]["coco_better"]
 keep = {c.strip() for c in sys.argv[2].split(",") if c.strip()}
 n_seeds = int(sys.argv[3])
-paths = {"binary": ("siglip",), "region": ("siglip+dinov3_patch",), "all": ("siglip", "siglip+dinov3_patch")}
+embedders = tuple(sys.argv[5].split(","))
+paths = {"binary": ("siglip",), "region": ("siglip+dinov3_patch",), "all": embedders}
 if sys.argv[4] not in paths:
     raise SystemExit(f"SOTA_PATH must be one of {sorted(paths)}, got {sys.argv[4]!r}")
 # array_cells order at CALIB_CELL_ORDER=seed: seed-major, then embedder, then category.
 # Both embedders still count toward the seed's block size, so an index means the
 # same cell whichever path is selected.
 one, per_seed = [], 0
-for emb in ("siglip", "siglip+dinov3_patch"):
+for emb in embedders:
     cats = info[emb]["selected_categories"]
     unknown = keep - {c.split("@")[0] for c in cats}
     if unknown:

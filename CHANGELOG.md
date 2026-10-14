@@ -228,6 +228,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **EmbeddingGemma 2 (audio) embedder** (issue #4837). A new choice for sound collections, built on Google's
+  `embeddinggemma-2`. It finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
+  but is weaker than CLAP on other sounds and music, so CLAP-general stays the default. It needs transformers
+  5.18 or newer, and selecting it in an older environment says so (#4838). The same model's image half beat SigLIP
+  on every photo set measured (+0.08 to +0.09 session F-beta on COCO Better), but embeds 11–22× slower on a GPU
+  and about 10 s a photo on a CPU, so it is not offered.
+
 - **Toasty says how to fix a misclicked vote** (issue #4824). After the first vote of the run that trains
   a detector, Toasty stands beside the **Labels** panel until the next one: your votes go there, and
   you can click one to vote it again. On any Autopilot run, clicking an item you already labeled

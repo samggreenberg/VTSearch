@@ -357,6 +357,7 @@ embedder per media type should override the `is_default` property to return
 | `audio/embedder_beats.py` | `AudioBEATsEmbedder` | `beats` | `audio` |  |
 | `audio/embedder_clap.py` | `AudioClapEmbedder` | `clap` | `audio` |  |
 | `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | `clap_music` | `audio` |  |
+| `audio/embedder_embeddinggemma2_audio.py` | `AudioEmbeddingGemma2Embedder` | `embeddinggemma2_audio` | `audio` |  |
 | `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` |  |
 | `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` |  |
 | `face/embedder_facenet.py` | `FaceEmbedder` | `face` | `face` |  |
@@ -367,6 +368,7 @@ embedder per media type should override the `is_default` property to return
 | `image/embedder_dinov2_single.py` | `ImageDinov2SingleEmbedder` | `dinov2_single` | `image` |  |
 | `image/embedder_dinov3_patch.py` | `ImageDinov3PatchEmbedder` | `dinov3_patch` | `image` |  |
 | `image/embedder_dinov3_single.py` | `ImageDinov3SingleEmbedder` | `dinov3_single` | `image` |  |
+| `image/embedder_embeddinggemma2.py` | `ImageEmbeddingGemma2Embedder` | `embeddinggemma2` | `image` |  |
 | `image/embedder_eupe_patch.py` | `ImageEupePatchEmbedder` | `eupe_patch` | `image` |  |
 | `image/embedder_eupe_single.py` | `ImageEupeSingleEmbedder` | `eupe_single` | `image` |  |
 | `image/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | `sift_vlad` | `image` |  |
