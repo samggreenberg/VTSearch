@@ -256,7 +256,7 @@ same kind of thing:
 
 | | What it is | What the speaker page draws |
 |---|---|---|
-| `build` (the default) | One picture revealed in stages, so the last frame contains all of them | That last frame large, with the earlier ones small beneath it |
+| `build` (the default) | One picture revealed in stages, so the last frame contains all of them | That last frame large, with the earlier ones beneath it in the smallest square grid that holds them (1×1, 2×2, 3×3, …) |
 | `equal` | Frames of equal standing — three screens of a click-through, six votes in a row | Every frame at one size, no hero, so each is bigger than a strip thumbnail |
 
 Build-up is the default because that is what a build marker usually means, and

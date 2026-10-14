@@ -512,15 +512,15 @@ section.speaker .speaker-hero img {
    picked per fragment by `<!-- frames: ... -->`:
 
      build   the reveals of one picture. The last frame holds all of them, so
-             it is the hero above and this strip is the steps that got there —
-             an afterthought, drawn small, capped at two rows however long the
-             build runs.
+             it is the hero above and this strip is the steps that got there,
+             in the smallest square grid that holds them: one frame the
+             hero's size, up to four in 2x2, up to nine in 3x3 (#4884).
      equal   reveals of equal standing: three screens of a click-through, six
              votes in a row. There is no frame that contains the others, so
              there is no hero, and the space it would have taken is shared out
              among frames that are all the same size — and bigger for it.
 
-   The column count comes from build.py as --c2/--c3 rather than from a media
+   The column count comes from build.py as --c1 … --c6 rather than from a media
    query, because the same number decides how tall the block stands and hence
    how much of the notes column runs full width. */
 section.speaker .speaker-frames {
@@ -533,6 +533,7 @@ section.speaker .speaker-frames figure {
   margin: 0;
   position: relative;
 }
+section.speaker .speaker-frames--c1 figure { flex: 0 0 100%; }
 section.speaker .speaker-frames--c2 figure { flex: 0 0 calc((100% - 10px) / 2); }
 section.speaker .speaker-frames--c3 figure { flex: 0 0 calc((100% - 20px) / 3); }
 section.speaker .speaker-frames--c4 figure { flex: 0 0 calc((100% - 30px) / 4); }
@@ -559,11 +560,10 @@ section.speaker figcaption {
   line-height: 1.1;
   text-align: center;
 }
-/* 18px, below the deck's 20px floor, and deliberately: that floor is about a
-   projector at the back of a room, and this page is a PDF half a metre from
-   the presenter's own eyes. See STYLE.md. */
+/* 20px, the deck's own floor. It was 18px while a long slide's narration ran
+   to a page of prose; notes are a sentence or three a page now (#4884). */
 section.speaker .speaker-notes {
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1.38;
   color: var(--ink);
 }
