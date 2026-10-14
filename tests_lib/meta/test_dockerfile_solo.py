@@ -83,10 +83,25 @@ def test_missing_models_dir_fails(preload, env, calls, monkeypatch):
     assert calls["calls"] == []
 
 
-def test_a_type_with_no_embedder_has_nothing_to_bake(preload, env, calls, monkeypatch):
+def test_a_type_the_server_warms_nothing_for_has_nothing_to_bake(preload, env, calls, monkeypatch):
     monkeypatch.setattr(vtscore.embedding, "predict_embedders_to_preload", lambda **_: [])
-    assert preload.main(["document"]) == 0
+    assert preload.main(["image"]) == 0
     assert calls["calls"] == []
+
+
+def test_half_types_bake_what_they_embed_as(preload, env, calls):
+    """document's pages embed as images; face crops embed with the face model."""
+    assert preload.main(["document"]) == 0
+    assert preload.main(["face"]) == 0
+    assert calls["calls"] == [["document"], ["face"]]
+
+
+def test_dockerfile_installs_facenet_without_deps() -> None:
+    """A face container needs facenet-pytorch, and its pins would downgrade torch."""
+    text = re.sub(r"\\\n\s*", " ", _DOCKERFILE.read_text())
+    installs = [seg for seg in re.split(r"&&|\n", text) if "pip install" in seg and "facenet-pytorch" in seg]
+    assert installs, "docker/Dockerfile.solo does not install facenet-pytorch, so MEDIA_TYPE=face cannot bake"
+    assert all("--no-deps" in seg for seg in installs), installs
 
 
 def test_bakes_through_the_server_preload(preload, env, calls):

@@ -14,10 +14,14 @@ type's default, through that embedder's own ``load_models()``. Nothing here
 names a model, so a change of default (or of how an embedder loads) cannot
 leave the image baking the wrong files.
 
+That includes the half media types, which name a pipeline: ``document``
+bakes the image default its pages embed with, and ``face`` the face embedder
+its crops embed with.
+
 ``preload_predicted_embedders`` logs a load failure and carries on, which is
 right for a server and wrong for a build, so the result is checked here and a
-missing embedder fails the build. A media type with no embedder registered
-(``document``) has nothing to bake and exits 0.
+missing embedder fails the build. A type the server would warm nothing for has
+nothing to bake and exits 0.
 
 The registry walk is pointed at an empty, throwaway data directory: the build
 has no datasets or detectors to predict from, and this step must not write

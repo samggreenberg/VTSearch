@@ -491,6 +491,19 @@ which also holds when the image is redeployed onto an existing volume. The
 general image accepts it as well (`docker run -e VTSEARCH_SOLO_MEDIA_TYPE=audio … vtsearch`),
 but that image has no weights baked, so it downloads them on first boot.
 
+`document` and `face` are *half* media types, so a container for either names a
+pipeline rather than an embedding space:
+
+- **`document`**: document input, converted to page images by `document2image`.
+  The build bakes the image default (SigLIP), which is what the pages embed with.
+  The converter needs PyMuPDF, so do not combine it with `REQUIREMENTS=base-no-agpl.txt`.
+- **`face`**: image input, with the faces cropped out by `image2face` and
+  embedded in FaceNet identity space. The build bakes FaceNet, and this image
+  installs `facenet-pytorch`, which both halves need.
+
+The lock does not yet force that pipeline in every import flow, or give the
+new-detector flow the embedded type (#4891).
+
 ### All image embedders
 
 `docker/Dockerfile.image-embedders` (CPU) and
