@@ -161,7 +161,8 @@ Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 **Determinism knobs (non-negotiable):** the Smiley example's corpora (seeded
 drawings) and a fixed vote baseline, on a fresh app data dir every run (#4299)
 with a seeded Browse map (#4296);
-viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
+viewport **1440 × 900**, `deviceScaleFactor: 2`, written at most 1440 px wide
+(`MAX_WIDTH` in `capture.ts`: 2× the guide's 720 px embed); animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`), and timed
 flashes (Settings' "✓ saved") hidden; mask volatile
 text (app version — a git timestamp — and any wall-clock/elapsed/gauge text)

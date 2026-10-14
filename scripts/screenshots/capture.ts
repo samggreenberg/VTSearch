@@ -43,6 +43,16 @@ const ASSETS = process.env.OUT_DIR
   : resolve(HERE, '../../docs/user/assets');
 const VIEWPORT = { width: 1440, height: 900 };
 /**
+ * The widest a written shot may be, in pixels. The guide embeds a shot at most
+ * 720 px wide (`width="720"`), so 1440 is still 2× for a high-DPI screen, and a
+ * full-window shot — captured at `deviceScaleFactor: 2`, 2880 px wide — is
+ * downscaled to it at encode time, which keeps the 2× capture's supersampled
+ * text. It is less than half the bytes per shot, and every shot is a blob that
+ * git keeps forever once a refresh rewrites it. Crops narrower than this are
+ * written as captured.
+ */
+const MAX_WIDTH = 1440;
+/**
  * How long the page must have had nothing in flight, and nothing land, to count
  * as settled (`settleSorts`): over three times the 300 ms timers the label view
  * starts its own sorts on, and under the ~1.5 s its polls leave between them.
@@ -486,7 +496,8 @@ async function clipBox(page: Page, clip: NonNullable<Shot['clip']>, marks: Box |
  * guide shows them — the same trade `slides/README.md` records for the deck's
  * screenshots. Pillow (a project dependency) does the encode, because
  * Playwright writes only PNG and JPEG; the encoder is deterministic, so
- * `check.sh` can still compare bytes.
+ * `check.sh` can still compare bytes. A shot wider than `MAX_WIDTH` is
+ * downscaled to it first.
  *
  * An encode takes most of a second at this size, so it runs while the next
  * shot's recipe does rather than in front of it: each is queued behind the one
@@ -502,9 +513,12 @@ function encodeWebp(png: Buffer, out: string): Promise<void> {
         [
           '-c',
           'import sys;from io import BytesIO;from PIL import Image;'
-            + 'Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB")'
-            + '.save(sys.argv[1],"WEBP",quality=90,method=6)',
+            + 'im=Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB");'
+            + 'w,h=im.size;m=int(sys.argv[2]);'
+            + 'im=im.resize((m,round(h*m/w)),Image.Resampling.LANCZOS) if w>m else im;'
+            + 'im.save(sys.argv[1],"WEBP",quality=90,method=6)',
           out,
+          String(MAX_WIDTH),
         ],
         (err, _stdout, stderr) => (err ? fail(new Error(`encode ${out}: ${stderr || err.message}`)) : done()),
       );
