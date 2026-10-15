@@ -406,6 +406,12 @@ PICK_COLUMNS: tuple[str, ...] = (
     "style",
     "t",
     "phase",
+    #: Which check a check pick is in (#4664): ``weak``, ``done`` or ``early``
+    #: on a prompted check's picks (``phase == "prompt"``), ``end`` on the
+    #: end-of-run check's (``phase == "check"``), blank on every other pick.
+    #: The phase alone cannot tell a weak-separation check from the check
+    #: before Done.
+    "check_kind",
     #: Index of the schedule round this click was spent in, or -1 outside one.
     "startup_round",
     #: The round's cut on the seed sort, and where that lands in the sort's own
