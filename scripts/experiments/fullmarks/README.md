@@ -114,6 +114,20 @@ clustered mark rather than guessing;
 `audit_to_corrections.py --migrate-adjudications` recovers the index for a
 pre-#3343 store from the class ids those rows already carry.
 
+A bare endpoint is no key for comparing two rulings either. It keys as mark
+`-1`, which is not a mark, and reading it as one let the owner's 2026-09-14
+merge of `afm90c00-first_1#0` and `bad45f00` sit beside the 09-13 separation it
+overturned, so every Tobacco800 rebuild refused (#4866). The fix has three parts:
+
+- `supersede` and the clash check in `save_adjudications` read a bare endpoint
+  as possibly any mark on its page.
+- `apply_confusable` refuses a class whose listed page carries no mark of it,
+  rather than storing a bare endpoint. Every writer is also backstopped by a
+  check that writes nothing if a new row lacks an index.
+- The migration looks up a merged-away class under its survivor. A stamped row
+  that repeats a row on file is dropped. A stamped row that contradicts a
+  stored ruling replaces it only on `--supersede`.
+
 ## What each source ships
 
 **SPODS** — 1,088 scanned pseudo-official pages, direct download, no
