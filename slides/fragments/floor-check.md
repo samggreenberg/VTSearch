@@ -23,6 +23,6 @@
 <!-- **d** — Then it walks. One band deeper: worse. One shallower: worse. So the
      line was already at the peak, and all twenty picks train the model. -->
 
-<!-- **e** — Checked: 12 to 93% right, about half found. And the line didn't
-     move; a check informs it but never moves it, so it still travels with the
-     labels. -->
+<!-- **e** — Checked: of the 32 it kept, 28 to 78% right, about half found.
+     And the line didn't move; a check informs it but never moves it. Fifteen
+     of those 32 are votes now, so it keeps 17 more. -->
