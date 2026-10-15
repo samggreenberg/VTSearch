@@ -32,7 +32,7 @@ import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { PanelHideStateService, type PanelSide } from '../../services/panel-hide-state.service';
-import { AutopilotStateService, type AutopilotPhase } from '../../services/autopilot-state.service';
+import { AutopilotStateService, cappedInOpening, type AutopilotPhase } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SourcePhotoService } from '../../services/source-photo.service';
@@ -360,6 +360,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private resortInterval = 10;
   private resortVoteCount = 0;
   private resortNextThreshold = 0;
+  /** The prompt has come up for the click cap this run (#4903): once, whatever the user answers. */
+  private resortCapShown = false;
 
   /** A folded side's strip, in px; the `.layout--*-collapsed` rules in the SCSS match it. */
   readonly COLLAPSED_WIDTH = 48;
@@ -1484,6 +1486,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
+    this.resortCapShown = false;
     this.resetResortSortTally();
 
     const state = this.autopilotStateService.state;
@@ -1603,7 +1606,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (event.vote === 'good' && this.voteState.goodVotes.has(event.id)) {
       this.resortSortPositives++;
     }
-    if (this.resortVoteCount >= this.resortNextThreshold) {
+    // The click cap in the opening (#4903): Autopilot has stopped without the
+    // Goods it needs, and a different sort is the way on, so the prompt comes up
+    // there too, once, whatever its own count says.
+    const atCap = !this.resortCapShown && cappedInOpening(this.autopilotStateService.state);
+    if (this.resortVoteCount >= this.resortNextThreshold || atCap) {
+      if (atCap) this.resortCapShown = true;
       // Determine current example info for the prompt
       if (this.labelSession.textQuery) {
         this.resortCurrentType = 'text';

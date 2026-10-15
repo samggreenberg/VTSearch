@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot stops every session by 200 votes** (issue #4903). Done came only when the quality lights went
+  green or the detector expected an F-beta of 0.5, and 1–2% of sessions reach neither by 400 votes; the app has
+  no horizon, so they went on as long as the user did. Done now also comes at 200 votes, after the same check
+  before Done, and the panel and Toasty say "You have cast 200 votes, as many as Autopilot asks for" when that
+  is what said Done. A session still looking for its first Goods at 200 votes is told **Autopilot has stopped**,
+  with the Goods it found, and offered the **Update Sort Example?** prompt once more; voting on keeps looking.
+  Priced on 2,160 simulated sessions run to 400 votes: the cap ends 6–7% of sessions early, all but a few on
+  small objects, at a median F-beta of 0.00–0.04, which 200 more votes would have taken to 0.07–0.14.
+
 - **Autopilot also says Done once the detector expects a good result** (issue #4878). Done came only
   when the Smart, Stable and Span lights were all green. It now also comes once the detector's labels
   line expects an F-beta of at least 0.5 at your balance, its own estimate of how good the set it keeps

@@ -13,6 +13,7 @@ issue #2788's cold-start degenerate thresholds look like a user-facing bug when
 they were an artifact of a flow no user takes.
 """
 
+from typing import Any
 import math
 
 import numpy as np
@@ -31,7 +32,9 @@ from vtscore.eval.autopilot_flow import (
     SPAN_YELLOW,
     STABLE_MAX_THRESHOLD,
     STABLE_RATE_THRESHOLD,
+    STOP_CAP,
     AutopilotFlow,
+    capped_in_opening,
     Status,
     app_has_detector,
     next_phase,
@@ -121,6 +124,10 @@ class TestPortedConstants:
         # (the photo walk is off since #4740), moreDryRun 16 (a document's walk).
         assert (GOOD_TARGET, BAD_TARGET) == (3, 4)
         assert (MORE_TARGET, MORE_DRY_RUN) == (0, 16)
+
+    def test_stop_cap_matches_the_app(self):
+        # frontend STOP_CAP_VOTES (#4903): Done at 200 votes whatever the lights and the level.
+        assert STOP_CAP == 200
 
     def test_indicator_gates_match_labeling_progress(self):
         # _compute_smart_status / _compute_stable_status: "Need at least 5 good
@@ -541,6 +548,57 @@ class TestStopRules:
         flow = self._flow("lights|level")
         assert flow.update(9, 9, 500, self.SHORT) == "new", "without the level read it is the lights alone"
         assert flow.update(9, 9, 500, self.SHORT, level_met=True) == "done"
+
+
+class TestStopCap:
+    """#4903: whatever the rule, a session that holds ``STOP_CAP`` votes goes to the check before Done and to Done."""
+
+    SHORT = {"level": 0, "depth": 100}
+
+    def _flow(self, rule: str = "lights|level", **kw) -> AutopilotFlow:
+        flow = AutopilotFlow(stop_rule=rule, **kw)
+        flow.more_done = True
+        flow.recent_error_costs = [0.9, 0.6, 0.4, 0.2]
+        flow.stability = [_entry(0)] * 6
+        return flow
+
+    @pytest.mark.parametrize("rule", ["lights|level", "lights", "level", "lights+level"])
+    def test_every_rule_stops_at_the_cap(self, rule):
+        good = STOP_CAP // 2
+        assert self._flow(rule, done_check=False).update(good, STOP_CAP - good - 1, 500, self.SHORT) == "hard"
+        assert self._flow(rule, done_check=False).update(good, STOP_CAP - good, 500, self.SHORT) == "done"
+
+    def test_the_cap_runs_the_check_before_done(self):
+        flow = self._flow()
+        assert flow.update(100, STOP_CAP - 100, 500, self.SHORT) == "spot"
+        assert flow.begin_spot_check("done") == "spot"
+        assert flow.end_spot_check() == "done"
+
+    def test_no_cap_is_an_arm(self):
+        assert self._flow(stop_cap=None, done_check=False).update(300, 300, 500, self.SHORT) == "hard"
+        assert self._flow(stop_cap=40, done_check=False).update(20, 20, 500, self.SHORT) == "done"
+
+    def test_smart_gate_never_reads_no_cap(self):
+        """#4359's bound holds the session in Hard to the end of the run, cap or no cap."""
+        assert self._flow(smart_gate="never", done_check=False).update(300, 300, 500, self.SHORT) == "hard"
+
+    def test_the_cap_is_an_integer(self):
+        bads: tuple[Any, ...] = (0, -1, 2.5, True)
+        for bad in bads:
+            with pytest.raises(ValueError, match="stop_cap"):
+                AutopilotFlow(stop_cap=bad)
+
+    def test_the_app_s_cap(self):
+        assert AutopilotFlow().stop_cap == STOP_CAP
+
+    def test_a_session_still_in_its_opening_is_capped_on_screen_only(self):
+        """The app's cappedInOpening: the phase, and so the picks, stay the opening's."""
+        flow = AutopilotFlow()
+        assert flow.update(0, STOP_CAP, 500, None) == "good"
+        assert capped_in_opening(flow.phase, 0, STOP_CAP)
+        assert not capped_in_opening(flow.phase, 0, STOP_CAP - 1)
+        assert not capped_in_opening("hard", 0, STOP_CAP), "past the opening the cap is Done's"
+        assert not capped_in_opening("good", 0, STOP_CAP, stop_cap=None)
 
 
 def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:

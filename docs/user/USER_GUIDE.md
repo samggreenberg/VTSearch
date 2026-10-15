@@ -860,7 +860,12 @@ The phase panel labels them, in order:
    ranking the Text sort uses. If you don't see anything good,
    Autopilot eventually offers to change what it sorts by; you can also
    find a few matches yourself on the **Manual** tab (see
-   [Get Autopilot unstuck](howto/unstick-autopilot.md)).
+   [Get Autopilot unstuck](howto/unstick-autopilot.md)). If 200 votes go
+   by without the Goods it needs, Autopilot stops: the panel says
+   **Autopilot has stopped** and how many it found, and it offers the
+   change of sort once more. Your search may not reach what you are after
+   in this collection; voting on keeps looking, and if the Goods turn up
+   Autopilot checks the line and calls the detector done straight away.
 2. **Find Initial Bads.** - Vote some **bad** items (default: 4). Now
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
@@ -881,10 +886,13 @@ The phase panel labels them, in order:
 5. **Spot Check.** - With every quality light green, or once the
    detector expects an F-beta of at least 0.5 at your balance (its own
    estimate of how much of what it returns is right, and how much of what
-   is there it finds), Autopilot checks the line before it calls the
-   detector done. The second way ends a session that is already good
-   without waiting on the last light, and the panel then quotes the
-   F-beta it expects instead of saying every light is green. The check is
+   is there it finds), or once you have cast 200 votes, Autopilot checks
+   the line before it calls the detector done. The second way ends a
+   session that is already good without waiting on the last light, and the
+   panel then quotes the F-beta it expects instead of saying every light is
+   green. The third ends every session that has not got there by 200
+   votes: past that, sessions that are still going gain little, from
+   little, and the panel says so ("as many as Autopilot asks for"). The check is
    a few items drawn at
    random from bands of the list, shown in the centre one at a time for
    your Good or Bad (see [How close the line got](#how-close-the-line-got)).

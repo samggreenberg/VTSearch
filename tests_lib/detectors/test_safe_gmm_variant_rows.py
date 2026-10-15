@@ -391,6 +391,21 @@ class TestTheStopArms:
         with pytest.raises(ValueError, match="stop_rule"):
             _run_safe_uncached("max_patch", beta="off", max_steps=8, stop_rule="level")
 
+    def test_the_cap_stops_a_session_no_rule_does(self):
+        """#4903: a level never met never stops, until the votes reach the click cap."""
+        phases, _ = self._phases(stop_rule="level", stop_level=1.01, stop_cap=20)
+        trained = [(t, ph) for t, ph, _ in phases if ph not in ("good", "bad", "more")]
+        assert trained and trained[0][0] < 20, phases
+        assert all(ph not in ("spot", "done", "prompt") for t, ph in trained if t < 20), phases
+        assert any(ph in ("spot", "prompt", "done") for t, ph in trained if t >= 20), phases
+
+    def test_the_cap_does_not_bind_at_the_eval_s_horizon(self):
+        """The app's cap is past every session the eval runs: no cap and the app's read the same."""
+        capped, rows_c = self._phases()
+        uncapped, rows_u = self._phases(stop_cap=None)
+        assert capped == uncapped
+        assert [r["threshold"] for r in rows_c] == [r["threshold"] for r in rows_u]
+
 
 class TestTheWiderWorldKnobs:
     """#4452: the withheld half's scores are kept for post-hoc Find scenarios, and the Train pool can shrink."""

@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A click cap backs every stop rule** (issue #4903). `vtscore.eval.autopilot_flow.STOP_CAP` (200) mirrors the
+  app's `STOP_CAP_VOTES`: `stop_lights(..., at_cap=)` says stop under every rule, `AutopilotFlow(stop_cap=)` and
+  `simulate_voting_iterations(stop_cap=)` default to it (`None` is no cap), and `capped_in_opening(phase,
+  good_count, bad_count)` reads the app's display-only stop for a session still in its opening at the cap. It
+  never binds inside the eval's 150 clicks.
+
 - **The labels line reads its own F-beta, and Autopilot's Done stops on it** (issue #4878).
   `LabelsLine.expected_fbeta(beta)` is the expected F-beta at the line's cut over the corpus's unvoted
   items (what `corpus_cut` maximises), `LabelsLine.expected_fbeta_fresh(beta)` the class model's on a
