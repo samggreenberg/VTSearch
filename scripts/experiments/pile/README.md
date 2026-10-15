@@ -666,7 +666,7 @@ ambiguous names are waiting on, and how to stage the images:
 [`docs/experiments/2026-10-13-o365-supply-4815/`](../../../docs/experiments/2026-10-13-o365-supply-4815/REPORT.md).
 The dataset is `on_request`, so it builds only when named.
 
-## Born-digital: `rico_suave` (#4356)
+## Born-digital: `apptitude` (#4356)
 
 Android app screens by what the screen is for (settings, login, map, chat...),
 the genre track of the born-digital benchmark. Whole-image classes, no boxes.
@@ -690,7 +690,10 @@ Three things the loader does that no other kind does:
   it: votes arrive in the app's ranked order, so a part-answered queue is the
   easy end.
 
-Runs: [`scripts/experiments/rico_suave/launch.sh`](../rico_suave/launch.sh). First read:
+Apptitude was named Rico Suave (`rico_suave`) until 2026-10-15; v0's report and its GRID runs
+(`/expscratch/$USER/rico-suave/runs/`) predate the rename and keep the old name.
+
+Runs: [`scripts/experiments/apptitude/launch.sh`](../apptitude/launch.sh). First read:
 [`docs/experiments/2026-10-14-rico-suave-v0-4356/`](../../../docs/experiments/2026-10-14-rico-suave-v0-4356/REPORT.md).
 The dataset is `on_request`, so it builds only when named.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Rico Suave v0's curve figure (#4356): what Find returns at every vote, on app screens and on photos.
+"""Apptitude v0's curve figure (#4356): what Find returns at every vote, on app screens and on photos.
 
 Reads ``curves.csv`` from ``analyze.py`` and writes ``fig_fbeta_by_vote.png``: one panel per balance
-preset. The thick blue line is every Rico Suave class pooled, the faint blue lines are the classes one
+preset. The thick blue line is every Apptitude class pooled, the faint blue lines are the classes one
 by one, and the grey dashed line is the coco_better reference read by the same code. Lines are
 labelled at their right ends, not through leader lines (slides/STYLE.md).
 
@@ -58,13 +58,13 @@ def main(argv: list[str] | None = None) -> int:
     fig, axes = plt.subplots(1, len(presets), figsize=(5.2 * len(presets), 4.2), sharey=True, squeeze=False)
     for ax, p in zip(axes[0], presets):
         g = curves[curves["preset"] == p]
-        rico = g[g["dataset"] == "rico_suave"]
-        for _, d in rico[rico["category"] != "all"].groupby("category"):
+        screens = g[g["dataset"] == "apptitude"]
+        for _, d in screens[screens["category"] != "all"].groupby("category"):
             d = d.sort_values("t")
             ax.plot(d["t"], d["fbeta"], color=BLUE, lw=0.8, alpha=0.25)
         ends = []
         for ds, colour, ls, name in (
-            ("rico_suave", BLUE, "-", "app screens"),
+            ("apptitude", BLUE, "-", "app screens"),
             ("coco_better", GREY, "--", "photos (coco_better)"),
         ):
             d = g[(g["dataset"] == ds) & (g["category"] == "all")].sort_values("t")

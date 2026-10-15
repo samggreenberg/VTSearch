@@ -1,4 +1,4 @@
-"""``rico_suave``: Android app screens by what the screen is FOR (#4356), the genre track.
+"""``apptitude``: Android app screens by what the screen is FOR (#4356), the genre track.
 
 Built from Rico (Deka et al., UIST 2017; :data:`pile_config.RICO_ROOT`), 66,261
 screens each with its view hierarchy. No source labels screen function at scale,
@@ -186,7 +186,7 @@ def select(root: Path) -> list[Screen]:
     for rid in sorted(caps, key=int):
         hier = combined / f"{rid}.json"
         if not hier.exists():
-            raise SystemExit(f"rico_suave: Screen2Words names screen {rid}, which {combined} lacks")
+            raise SystemExit(f"apptitude: Screen2Words names screen {rid}, which {combined} lacks")
         act = json.loads(hier.read_text()).get("activity_name") or ""
         cls = activity_class(act)
         if cls not in ROSTER:
@@ -228,7 +228,7 @@ def screen_media(s: Screen, data: bytes, size: tuple[int, int], embedder_name: s
         "categories": [s.cls],
         "evaluable_categories": [c for c in ROSTER if c not in s.also],
         "split_group": s.group,
-        "origin": {"importer": "rico_suave", "params": {"embedder": embedder_name, "version": "v0"}},
+        "origin": {"importer": "apptitude", "params": {"embedder": embedder_name, "version": "v0"}},
         "origin_name": f"rico:{s.rico_id}",
     }
 
@@ -246,7 +246,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         medias[s.rico_id] = screen_media(s, data, size, embedder_name)
     per = Counter(s.cls for s in screens)
     log(
-        f"  rico_suave: {len(screens):,} agreed screens, {len({s.group for s in screens}):,} app groups; "
+        f"  apptitude: {len(screens):,} agreed screens, {len({s.group for s in screens}):,} app groups; "
         + ", ".join(f"{c} {per[c]}" for c in ROSTER)
     )
 

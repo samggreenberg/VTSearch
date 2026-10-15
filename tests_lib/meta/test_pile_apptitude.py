@@ -1,4 +1,4 @@
-"""The ``rico_suave`` loader's decisions, on a synthetic Rico small enough to reason about (#4356).
+"""The ``apptitude`` loader's decisions, on a synthetic Rico small enough to reason about (#4356).
 
 What needs pinning is what the loader decides:
 
@@ -39,9 +39,9 @@ def pc():
 @pytest.fixture
 def mod(pc):
     pytest.importorskip("PIL")
-    from pilebuild.loaders import rico_suave
+    from pilebuild.loaders import apptitude
 
-    return rico_suave
+    return apptitude
 
 
 def _jpg(shade: int) -> bytes:
@@ -99,7 +99,7 @@ def root(pc, tmp_path, monkeypatch):
 
 def _load(mod) -> dict[int, dict]:
     medias: dict[int, dict] = {}
-    mod.load("rico_suave", medias, "siglip")
+    mod.load("apptitude", medias, "siglip")
     return medias
 
 
@@ -163,14 +163,14 @@ class TestSplitGroups:
 
 class TestCheck:
     def test_it_counts_what_a_build_would_read(self, mod, root):
-        assert "7 agreed screens" in mod.check("rico_suave")
+        assert "7 agreed screens" in mod.check("apptitude")
 
     def test_a_missing_source_fails_loudly(self, mod, root):
         (root / "ui_details.csv").unlink()
         with pytest.raises(SystemExit, match="ui_details.csv"):
-            mod.check("rico_suave")
+            mod.check("apptitude")
 
     def test_a_captioned_screen_without_a_hierarchy_fails_loudly(self, mod, root):
         (root / "combined" / "6.json").unlink()
         with pytest.raises(SystemExit, match="6"):
-            mod.check("rico_suave")
+            mod.check("apptitude")
