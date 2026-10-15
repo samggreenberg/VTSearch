@@ -521,8 +521,9 @@ class AutopilotFlow:
         #: dry run is ``done`` (see :func:`next_phase`).
         self.dry_run_stop = dry_run_stop
         #: #4359's bound: ``"never"`` holds Smart yellow for the phase decision
-        #: (the light is still computed and reported), so a session stays in
-        #: ``hard`` until the run ends.  ``"app"`` is the app.
+        #: (the light is still computed and reported) and reads no stop level
+        #: (#4878), so a session stays in ``hard`` until the run ends.  ``"app"``
+        #: is the app.
         if smart_gate not in SMART_GATES:
             raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
         self.smart_gate = smart_gate
@@ -710,8 +711,10 @@ class AutopilotFlow:
         self.stable_flip_rate_late = _num(stable_d.get("flip_rate_late"))
         # What the phase decision reads: the lights as computed, under #4359's
         # Smart gate and #4878's stop rule (both the app's by default).
+        # #4359's bound holds the session in Hard to the end, so it reads no level either.
+        never = self.smart_gate == "never"
         read_smart, read_stable, read_span = stop_lights(
-            "yellow" if self.smart_gate == "never" else smart, stable, sp, self.stop_rule, level_met
+            "yellow" if never else smart, stable, sp, self.stop_rule, level_met and not never
         )
         self._last_args = {
             "good_count": good_count,

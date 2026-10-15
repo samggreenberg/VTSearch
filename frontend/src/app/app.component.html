@@ -71,7 +71,7 @@
             your detector on another dataset.
           </vt-toasty-hint>
         } @else if (handoff.expectedFbeta != null) {
-          <vt-toasty-hint hintId="autopilot-done" [anchor]="dashboardBtn" reach="right">
+          <vt-toasty-hint hintId="autopilot-done-level" [anchor]="dashboardBtn" reach="right">
             Your detector is trained! It expects an F-beta of {{ handoff.expectedFbeta.toFixed(2) }}
             at your balance. Keep voting to sharpen it, or click <strong>Dashboard</strong> to test it
             or put it to work.
