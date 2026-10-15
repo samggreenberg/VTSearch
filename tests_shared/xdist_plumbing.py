@@ -16,7 +16,9 @@ nothing in the log to name the test.  Two faults, both in the plugins:
   reports it failed, by name) where upstream would run it again: a test past
   the timeout once does it again on the next worker, 300 s each time, until
   xdist's restart budget (four per worker) runs out.  ``--dist load`` already
-  drops a crashed test.
+  drops a crashed test.  And it takes back a unit whose send finds the worker
+  already gone, which upstream lets escape as an ``INTERNALERROR`` that ends
+  the run.
 * **pytest-timeout's report goes to /dev/null.**  The ``thread`` method writes
   the stacks through the terminal writer, then calls ``os._exit(1)``.  In an
   xdist worker that writer is the worker's stdout, which execnet points at
@@ -55,6 +57,21 @@ class CrashSafeLoadGroupScheduling(LoadGroupScheduling):
         for other in self.assigned_work:
             self._reschedule(other)
         return crashitem
+
+    def _assign_work_unit(self, node):
+        try:
+            super()._assign_work_unit(node)
+        except OSError:
+            # The worker died just after reporting a test.  Its report is
+            # handled before its death, and until execnet sees the pipe close
+            # the worker does not read as shutting down, so the report hands it
+            # another unit and the send finds the pipe closed.  It never got the
+            # unit: put it back at the head of the queue for remove_node, which
+            # runs next, to hand on.  (xdist's own shutdown() swallows the same
+            # error.)
+            scope, unit = self.assigned_work[node].popitem()
+            self.workqueue[scope] = unit
+            self.workqueue.move_to_end(scope, last=False)
 
     def schedule(self):
         # A worker runs a test only once it holds the next one (or a shutdown),
