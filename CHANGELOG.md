@@ -928,6 +928,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The server no longer crashes on newer AMD CPUs with numpy 2.5.2 or later** (issue #4938). The server
+  pins OpenBLAS to its Haswell kernels on every x86 machine (issue #4481). The OpenBLAS bundled with numpy
+  2.5.2 and later re-tunes that pin on an AMD Zen 4 or Zen 5 CPU (EPYC 9004/9005, Ryzen 7000/9000). A
+  double-precision matrix product, or any SVD, then overruns the kernel's stack, so the server crashed the
+  first time it fitted a document collection's Stage-1 projection. Single-precision products also came out
+  slightly different from every other CPU's. The server now sets `OPENBLAS_L2_SIZE=2048` with the Haswell
+  pin, which keeps OpenBLAS's Haswell blocking on those CPUs. On any other CPU, or with an older numpy, it
+  changes nothing (`docs/experiments/2026-10-15-openblas-zen4-4938/REPORT.md`).
+
 - **Labels that do not separate start Autopilot's weak-separation check** (issue #4899). When a retrain's
   calibration folds scored the held-out Goods no higher than the held-out Bads, the line fell back to the
   head's own scores of the labels it trained on, and the separation was read from those, so labels that

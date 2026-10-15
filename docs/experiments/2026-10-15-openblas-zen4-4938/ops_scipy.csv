@@ -1,0 +1,11 @@
+numpy,l2,op,nodes,crashed_on,distinct_results,odd_nodes_out
+2.2.6,-,dgemm_scipy m=128 k=1024,6,,1,
+2.2.6,-,dgemm_scipy m=128 k=320,6,,1,
+2.2.6,-,dgemm_scipy m=128 k=768,6,,1,
+2.2.6,-,sgemm_scipy m=64 k=400,6,,1,
+2.2.6,-,sgemm_scipy m=64 k=768,6,,1,
+2.2.6,2048,dgemm_scipy m=128 k=1024,6,,1,
+2.2.6,2048,dgemm_scipy m=128 k=320,6,,1,
+2.2.6,2048,dgemm_scipy m=128 k=768,6,,1,
+2.2.6,2048,sgemm_scipy m=64 k=400,6,,1,
+2.2.6,2048,sgemm_scipy m=64 k=768,6,,1,

@@ -41,6 +41,14 @@ export TOKENIZERS_PARALLELISM=false
 # AVX-512 kernels and the Xeons AVX2, whose float32 rounding differs enough to move
 # document VLAD/tile vectors, and with them closed-loop sessions, between node types.
 export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
+# OpenBLAS 0.3.34 (numpy 2.5.2 on) re-tunes GEMM blocking on a Zen 4 CPU (the L40S
+# nodes' EPYC 9534) even under a forced core (#4938): Haswell float64 GEMM and any
+# SVD then segfault, and float32 GEMM sums in another order. It fires only on a 1 MB
+# L2, which the Haswell table reads nowhere else, so 2 MB keeps its blocking. An
+# exported value, an empty one included, wins.
+if [ "${OPENBLAS_CORETYPE,,}" = haswell ]; then
+  export OPENBLAS_L2_SIZE="${OPENBLAS_L2_SIZE-2048}"
+fi
 # And one set of numpy kernels (#4110): numpy dispatches float64 exp/log and argsort
 # to AVX-512 code where the CPU has it (Xeon Silver 4114 and Gold 5218R, EPYC 9534)
 # and not where it does not (EPYC 7713, Xeon E5-2698 v4). The two round exp/log

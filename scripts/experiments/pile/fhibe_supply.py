@@ -393,4 +393,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")
+    if os.environ["OPENBLAS_CORETYPE"].lower() == "haswell":
+        os.environ.setdefault("OPENBLAS_L2_SIZE", "2048")  # #4938: keeps the Haswell blocking on a Zen 4 CPU
     main()

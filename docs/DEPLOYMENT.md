@@ -209,6 +209,7 @@ These are read by the installer, not the running app.
 | `OMP_NUM_THREADS` | set by app | OpenMP thread count; overwritten at startup with the resolved `VTSEARCH_TORCH_THREADS` — set that instead |
 | `MKL_NUM_THREADS` | set by app | Intel MKL thread count; same as above |
 | `OPENBLAS_CORETYPE` | `Haswell` on x86-64 (set by app unless already set) | One set of OpenBLAS kernels on every node, so a document ranking does not depend on the CPU the server runs on (#4481): AVX-512 and AVX2 kernels round float32 differently, which moved the VLAD and tile vectors. |
+| `OPENBLAS_L2_SIZE` | `2048` with the `Haswell` core (set by app unless already set) | Keeps the Haswell pin meaning the same blocking on every CPU (#4938). OpenBLAS 0.3.34, bundled with numpy 2.5.2 and later, re-tunes a forced core on an AMD Zen 4/5 CPU with a 1 MB L2: float64 matrix products and SVDs then crash, and float32 products round differently. The Haswell kernels read the L2 size nowhere else. Export it empty to let OpenBLAS detect the cache. |
 
 ### Docker / GPU
 
