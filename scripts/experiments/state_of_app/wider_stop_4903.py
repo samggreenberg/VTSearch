@@ -476,20 +476,21 @@ def groups_figure(curves: pd.DataFrame, out: Path) -> None:
     fig, axes = plt.subplots(1, len(presets), figsize=(3.8 * len(presets), 3.6), sharey=True, facecolor=S.SURFACE)
     for ax, preset in zip(np.atleast_1d(axes), presets, strict=True):
         S._axes(ax)
+        ends = []
         for k in GROUPS:
             g = curves[(curves["preset"] == preset) & (curves["group"] == k)]
             if g.empty:
                 continue
             n = int(g["sessions"].iloc[0])
             ax.plot(g["click"], g["fbeta"], color=GROUP_COLORS[k], linewidth=1.8, label=GROUP_LABEL[k])
+            ends.append([float(g["fbeta"].iloc[-1]), f"n={n}"])
+        # Each line's count at its end, spread so that lines ending close together keep readable labels.
+        ends.sort()
+        for i in range(1, len(ends)):
+            ends[i][0] = max(ends[i][0], ends[i - 1][0] + 0.035)
+        for y, text in ends:
             ax.annotate(
-                f"n={n}",
-                (g["click"].iloc[-1], g["fbeta"].iloc[-1]),
-                xytext=(3, 0),
-                textcoords="offset points",
-                fontsize=7,
-                color=S.INK,
-                va="center",
+                text, (HORIZON, y), xytext=(3, 0), textcoords="offset points", fontsize=7, color=S.INK, va="center"
             )
         ax.axvline(EVAL_HORIZON, color=S.MUTED, linewidth=0.8, linestyle=":")
         ax.set_title(preset, color=S.INK, fontsize=10)
