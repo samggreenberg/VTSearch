@@ -162,7 +162,9 @@ MIRRORS: list[Mirror] = [
             "it has nothing to port. A run that reaches the cap still in its opening (cappedInOpening, #4903) "
             "is told Autopilot has stopped and offered the re-sort prompt, but its phase stays the opening's: "
             "display only, like doneReached, so next_phase has nothing to port; the harness's "
-            "capped_in_opening reads the same condition for a reader asking where such a session stopped."
+            "capped_in_opening reads the same condition for a reader asking where such a session stopped. "
+            "The harness's early check (begin_spot_check('early'), early_check=N, #4664) "
+            "is an experiment arm the app does not run: a check at a fixed vote count, which latches nothing."
         ),
     ),
     Mirror(

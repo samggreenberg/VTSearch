@@ -2666,6 +2666,7 @@ def simulate_voting_iterations(  # noqa: C901
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
     done_check: bool = True,
+    early_check: Optional[int] = None,
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
@@ -3267,6 +3268,21 @@ def simulate_voting_iterations(  # noqa: C901
             ``False`` is the arm before the app ran it, where all green reads
             ``done`` at once; ``spot_check="off"`` and the Inclusion arm never
             check.  Needs the Autopilot flow; ignored without one.
+        early_check: An experiment knob (issue #4664): **every** session is
+            checked at *early_check* votes, on top of the app's own checks (the
+            weak prompt and the check before Done).  Once a run, at the first
+            step from *early_check* votes past the opening: a prompted check
+            already running then, or starting that step, is that session's
+            check; otherwise Autopilot prompts one, however recently another
+            ended (no cooldown), if it can start (something unvoted, and its
+            opening bands fit the budget left).  Its picks are clicks,
+            ``phase == "prompt"`` rows and ``check_kind == "early"`` picks, and
+            the session goes on after it.  A cooldown variant - skip where a
+            check ended in the last ``WEAK_CHECK_COOLDOWN`` votes - is this
+            arm's run where it fires and the arm-free run where it would skip,
+            so it is read off the two without a run of its own.  ``None`` - the
+            default - is the app, which has no such check.  Needs the balance
+            (*beta*) and the phase machine.
         label_quota: Whether the withheld half is scored as Test scores it
             under the app's label quota (#4643,
             :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
@@ -3740,6 +3756,12 @@ def simulate_voting_iterations(  # noqa: C901
     if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
         # An arm that waits on the level, with no line to read or no phase to move, would never stop.
         raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
+    if early_check is not None and (
+        isinstance(early_check, bool) or not isinstance(early_check, int) or early_check < 1
+    ):
+        raise ValueError(f"early_check must be an integer >= 1 (a vote count) or None; got {early_check!r}")
+    if early_check is not None and (flow is None or beta is None or spot_check == "off"):
+        raise ValueError("early_check needs Autopilot's phase machine, a balance (beta) and a run that checks")
     # #4482's band picks: how many picks past the opening, and how many of them were band picks.
     learned_picks = 0
     band_picks = 0
@@ -3795,6 +3817,17 @@ def simulate_voting_iterations(  # noqa: C901
                 "style": style or "",
                 "t": len(good_votes) + len(bad_votes),
                 "phase": phase_name or "",
+                # Which check a check pick is in (#4664): the flow's running one
+                # (``weak``, ``done``, ``early``) for a prompted pick - ``weak``
+                # where no flow runs it, as only the weak prompt can - ``end`` for
+                # the end-of-run check's, and blank for every other pick.
+                "check_kind": (
+                    "end"
+                    if phase_name == "check"
+                    else ((flow.spot_check if flow is not None else None) or "weak")
+                    if phase_name == "prompt"
+                    else ""
+                ),
                 "startup_round": startup_round,
                 "startup_held": bool(startup_state.held_for_quorum) if startup_state is not None else False,
                 "startup_extended_clicks": int(startup_state.extended_clicks) if startup_state is not None else 0,
@@ -3854,6 +3887,8 @@ def simulate_voting_iterations(  # noqa: C901
     # ``check_ended_votes``): the weak prompt's cooldown counts from it, and so
     # does whether the check before Done runs.
     last_check_end: int | None = None
+    # #4664's early check: settled (run, or skipped) once a run.
+    early_settled = early_check is None
     if flow is not None and (spot_check == "off" or not done_check or beta is None):
         # No check before Done: the arm before the app ran it, a run that never
         # checks, or the Inclusion arm, which has no balance to check.
@@ -3996,6 +4031,18 @@ def simulate_voting_iterations(  # noqa: C901
             "detector_tier": tier,
         }
 
+    def _media_scorer(ids: list[int]) -> Callable[[StepModel], list[float]]:
+        """A step's scores of *ids*, in order (#4786's line counts).
+
+        Made here rather than in the loop, where pyright cannot settle a nested
+        def's type through the loop's flow ("refers to itself").
+        """
+
+        def score(st: StepModel) -> list[float]:
+            return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+
+        return score
+
     while True:
         picks: list[int] | None = None
         # The vote count before this step's votes: a frame is due at every
@@ -4053,6 +4100,31 @@ def simulate_voting_iterations(  # noqa: C901
                 if not picks:
                     break
 
+        if (
+            not early_settled
+            and early_check is not None
+            and flow is not None
+            and t >= early_check
+            and flow.phase not in _OPENING_PHASES
+        ):
+            # #4664: every session is checked at early_check votes, once.  A
+            # prompted check running now or started this step, or one whose
+            # rounds reached that vote (a round casts its picks at once, so it
+            # can step over it), is that check; otherwise the user checks now,
+            # if a check can start.
+            if (check is not None and check.running and check_phase == "prompt") or (
+                last_check_end is not None and last_check_end >= early_check
+            ):
+                early_settled = True
+            elif picks is None and flow.phase != "spot" and flow.spot_check is None:
+                early_settled = True
+                if t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                    started = _start_check()
+                    if started is not None and started.pending:
+                        last_check_end = t
+                        check, check_phase = started, "prompt"
+                        picks = list(check.pending)
+                        flow.begin_spot_check("early")
         if picks is not None:
             # A check round: every pick is answered at once.  The candidate was
             # fixed at the start, so the retrain each round triggers cannot
@@ -4978,14 +5050,13 @@ def simulate_voting_iterations(  # noqa: C901
                 if on_test is None and details.get("find_line") is not None:
                     on_test = details["find_line"].on_corpus(np.asarray(lc_scores, dtype=np.float64))
 
-                def _lc_score(st: StepModel, ids: list[int] = lc_ids) -> list[float]:
-                    return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+                lc_score = _media_scorer(lc_ids)
 
                 lc_centroid = _centroid_step(
                     good_votes,
                     clips_dict,
                     target_category,
-                    _lc_score,
+                    lc_score,
                     region_voting=region_voting,
                     style_obj=style_obj,
                     line_rule=centroid_line,
@@ -5004,7 +5075,7 @@ def simulate_voting_iterations(  # noqa: C901
                         lc_labels,
                         float(details.get("find_threshold", threshold)),
                         on_test,
-                        _lc_score(lc_centroid),
+                        lc_score(lc_centroid),
                         CENTROID_THRESHOLD,
                     )
                 )

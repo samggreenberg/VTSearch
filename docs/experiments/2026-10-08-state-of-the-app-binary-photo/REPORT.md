@@ -211,6 +211,13 @@ small band the KM median stop is 132, 142 and 150. Every band gains after the st
 nodes. Smart is not green on 62–63% of held clicks, Stable on 44–60%. The full blocks, with each gate's margin, are in
 each run's `analysis-binary/summary.md`. This agrees with #4647: the stop fires with Fβ still to come.
 
+> **Correction (2026-10-14, #3560).** Span is not the binding light. Both numbers above counted every click
+> before the stop, the opening and Hard included. Autopilot walks the atlas only in New, which it enters once
+> Smart and Stable are green, so Span is never green before New, by construction. Read each light in the
+> stretch that waits on it, and on these cells Smart is the binding rule in Hard: it was the last light green
+> before New in 60–70% of sessions, Stable in 23–37%. New was a 17–18-click walk. See
+> [the stopping-rules reading](../2026-10-14-stopping-rules-3560/REPORT.md#the-counting-error-this-fixes).
+
 ## Where the app does well and where it does poorly
 
 **By size band** (beta 1, every run; the objective after the check, AP of the ranking):

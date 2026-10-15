@@ -174,6 +174,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
+  takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of
+  the app's own checks: at the first step from N votes past the opening, a prompted check already running, or one
+  whose rounds reached vote N, counts, and otherwise Autopilot prompts one, with no cooldown). Its picks are clicks
+  with phase `"prompt"`. The pick log (`PICK_COLUMNS`) gains `check_kind`: `weak`, `done` or `early` on a prompted
+  check's picks, `end` on the end-of-run check's, blank on every other. `AutopilotFlow.begin_spot_check` takes
+  `"early"`, which latches nothing. An experiment arm; the app is unchanged.
+
 - **`served_quota` says when the typed query's hold, not the quota, is why** (issue #4889). Its dict gains
   `hold_labels` (`label_quota.QUERY_HOLD_LABELS`, 30) and `hold_owed`: on a typed query's head whose labels
   meet the quota, the labels of either kind still owed before the hold (#4736) gives the trained head, and
