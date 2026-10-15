@@ -1,0 +1,42 @@
+<vt-modal [open]="true" [title]="'Auto-export: ' + detectorName()" (closed)="close()">
+  @if (loading()) {
+    <p class="loading-text">Loading…</p>
+  } @else if (binding(); as b) {
+    <p class="info-text">
+      This detector's labels are copied to <strong>{{ b.display_name }}</strong> as you label, so a copy
+      outside VTSearch stays current.
+      @if (b.inherited) {
+        Every detector here is, by this server's settings.
+      }
+    </p>
+    @if (fields().length) {
+      <vt-labelset-source-fields
+        idPrefix="ae"
+        [fields]="fields()"
+        [values]="values()"
+        (valuesChange)="values.set($event)"
+      />
+    } @else {
+      <p class="info-text">There is nothing to fill in: this server sets every value.</p>
+    }
+  } @else if (!error()) {
+    <p class="info-text">This detector's labels are not auto-exported anywhere.</p>
+  }
+  @if (error()) {
+    <p class="error-text">{{ error() }}</p>
+  }
+
+  <div modal-footer>
+    <button class="btn btn--secondary" (click)="close()" title="Close without saving">Cancel</button>
+    @if (binding() && fields().length) {
+      <button
+        class="btn btn--primary"
+        [disabled]="!ready() || saving()"
+        (click)="save()"
+        [title]="ready() ? 'Save, then bring the detector and its auto-export level with each other' : 'Fill in every field marked *'"
+      >
+        {{ saving() ? 'Saving…' : 'Save' }}
+      </button>
+    }
+  </div>
+</vt-modal>

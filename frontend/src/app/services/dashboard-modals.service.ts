@@ -28,6 +28,12 @@ export interface StatsState {
   datasetName: string;
 }
 
+export interface AutoExportState {
+  open: boolean;
+  detectorId: string;
+  detectorName: string;
+}
+
 export interface DetectorStatsState {
   open: boolean;
   detectorId: string;
@@ -73,6 +79,11 @@ export class DashboardModalsService {
     detectorId: '',
     detectorName: '',
   });
+  private readonly autoExportSubject = new BehaviorSubject<AutoExportState>({
+    open: false,
+    detectorId: '',
+    detectorName: '',
+  });
 
   readonly combineDatasets$ = this.combineDatasetsSubject.asObservable();
   readonly combineDetectors$ = this.combineDetectorsSubject.asObservable();
@@ -80,6 +91,7 @@ export class DashboardModalsService {
   readonly addLabels$ = this.addLabelsSubject.asObservable();
   readonly stats$ = this.statsSubject.asObservable();
   readonly detectorStats$ = this.detectorStatsSubject.asObservable();
+  readonly autoExport$ = this.autoExportSubject.asObservable();
 
   get combineDatasets(): CombineDatasetsState {
     return this.combineDatasetsSubject.value;
@@ -103,6 +115,10 @@ export class DashboardModalsService {
 
   get detectorStats(): DetectorStatsState {
     return this.detectorStatsSubject.value;
+  }
+
+  get autoExport(): AutoExportState {
+    return this.autoExportSubject.value;
   }
 
   openCombineDatasets(datasets: DatasetRegistryEntry[]): void {
@@ -151,5 +167,13 @@ export class DashboardModalsService {
 
   closeDetectorStats(): void {
     this.detectorStatsSubject.next({ open: false, detectorId: '', detectorName: '' });
+  }
+
+  openAutoExport(detectorId: string, detectorName: string): void {
+    this.autoExportSubject.next({ open: true, detectorId, detectorName });
+  }
+
+  closeAutoExport(): void {
+    this.autoExportSubject.next({ open: false, detectorId: '', detectorName: '' });
   }
 }

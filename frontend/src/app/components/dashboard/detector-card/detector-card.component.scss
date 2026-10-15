@@ -37,6 +37,14 @@ td {
   color: var(--text-warning);
 }
 
+// Auto-export (#4913) is missing a value: a small warning line under the name
+// that opens the Auto-export dialog.
+.autoexport-warning {
+  display: block;
+  color: var(--text-warning);
+  font-size: var(--font-xs);
+}
+
 // Pencil/trash icon animations are scoped to their marker classes; the button
 // chrome comes from `.card-icon-btn`.
 .edit-btn {
