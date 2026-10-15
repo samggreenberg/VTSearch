@@ -139,7 +139,9 @@ def ripple(wide: pd.DataFrame, freqs: Sequence[float], rng: np.random.Generator)
 def load_linecounts(cells: Path) -> pd.DataFrame:
     cols = ["seed", "category", "style", "t", "phase", "n_good", "n_bad", "model_n_pos", "model_n_neg"]
     frames = []
-    for f in sorted(cells.glob("task_[0-9][0-9][0-9][0-9]__linecounts.csv*")):
+    import _cells_io  # noqa: PLC0415
+
+    for f in _cells_io.side_frame_files(cells, "__linecounts"):
         try:
             frames.append(pd.read_csv(f, usecols=lambda c: c in cols))
         except (OSError, ValueError, EOFError, pd.errors.EmptyDataError):

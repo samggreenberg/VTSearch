@@ -83,7 +83,7 @@ def contrasts(data: Path, out: Path) -> None:
     ax.axvline(-0.003, color="#C44E52", lw=1, ls="--", label="ship rule's -0.003")
     ax.set_yticks(ticks, names)
     ax.set_xlabel("Δ-objective, nearest - dither (±2 SE, clustered on category)")
-    ax.legend(frameon=False, fontsize=8, loc="lower right")
+    ax.legend(frameon=False, fontsize=8, loc="upper left")
     ax.grid(axis="x", alpha=0.3)
     fig.tight_layout()
     fig.savefig(out / "contrasts.png", dpi=DPI)

@@ -103,7 +103,7 @@ def read_trajectories(cells: Path) -> tuple[pd.DataFrame, int]:
     """
     import _cells_io  # noqa: PLC0415
 
-    files = sorted(p for p in cells.glob("task_[0-9][0-9][0-9][0-9].csv*") if "__" not in p.name)
+    files = _cells_io.main_frame_files(cells)
     cols = [
         "seed",
         "category",
