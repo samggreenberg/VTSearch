@@ -1,7 +1,9 @@
 # A stop that reads the objective (#4878)
 
-**2026-10-14.** 2,160 new sessions of today's app with the labels line's own reading of itself recorded at
-every click, and 246 stop rules a preset priced on them offline against Autopilot's Done.
+**2026-10-14.** Two parts:
+- **The pricing:** 2,160 new sessions of today's app, with the labels line's own reading of itself recorded
+  at every click, and 246 stop rules a preset priced on them offline against Autopilot's Done.
+- **The A/B:** the three level rules the owner chose, run in the phase machine on 6,480 more sessions.
 
 ## The answer
 
@@ -29,8 +31,14 @@ every click, and 246 stop rules a preset priced on them offline against Autopilo
   (0.84 against 0.83, 0.73 against 0.72, 0.80 against 0.79). Elsewhere its edge comes from keeping the
   sessions it never stops clicking to 150, where Done would have let them go at 63–113.
 
-Whether the app should tell users "your detector is as good as it gets" this way, and never tell many of
-them, is a product decision. The numbers are below, and the question is on the issue.
+- **In the app's phase machine ([the A/B](#the-ab-in-the-apps-phase-machine)), no stop rule changes the
+  session.** Over 720 sessions per arm and preset, the mean F-beta over clicks 1–150 moves by at most +0.001.
+  On the stop itself, `level` is the best of the three. Sessions leave with +0.04 to +0.05 more F-beta than
+  at today's Done, and its stops go where they pay at every preset. But it tells only 43–49% of sessions to
+  stop. `lights or level` is today's Done 5–6 clicks sooner. `lights + level` is dominated by `level`.
+
+Whether the app should tell users "your detector is as good as it gets" this way, and never tell over half
+of them, is a product decision. The numbers are below.
 
 ## Data
 
@@ -187,6 +195,70 @@ It also beats the placebo at the same mean click, by interpolating the dotted li
 - **over a fixed click:** +0.007, +0.005 and −0.002, against the placebo's +0.000, −0.006 and +0.001.
 
 So the level reading adds to Done at β 1/4 and β 1, and little at β 4.
+
+## The A/B in the app's phase machine
+
+The owner asked for all three level rules to be A/B'd in the phase machine. A rule changes what Autopilot
+picks as well as what the app says: the atlas walk ends at the stop, and the check before Done runs there.
+
+**How the arms run.**
+- **The knob:** each arm is `AutopilotFlow(stop_rule=)`: `level` (Done on the level alone), `lights+level`
+  (both), `lights|level` (either), each at `line_efbeta` ≥ 0.5 from the first click the class model cuts.
+- **The phase it reads:** the flow hands `next_phase` the lights that make it decide that way, as #4359's
+  Smart gate does, so the ported phase machine is untouched. A session with every light green that the rule
+  does not stop reads Hard; Done's pick is Hard's.
+- **The sessions:** 720 per arm and preset, the same cells and seeds as the sessions above, which serve as
+  the control.
+- **The paired control is valid:** 12 control cells re-run at the arms' commit matched the stored control on
+  every pick and phase. Three of them differed in thresholds at the 6th decimal, #4110's run-to-run float
+  noise.
+- **Where they ran:** seeds 0–1 on the cpu partition, seeds 2–4 as V100 packs with the GPU hidden.
+- **The reader:** [`stop_ab_4878.py`](../../../scripts/experiments/state_of_app/stop_ab_4878.py). Tables in
+  [`ab/ab.csv`](ab/ab.csv) and [`ab/over_clicks.csv`](ab/over_clicks.csv).
+
+![Each arm's withheld F-beta minus today's app, session for session, over clicks](ab/figures/vs_control.png)
+
+*The mean paired difference from today's app at each click. Dotted lines are each arm's mean stop click; the
+black one is today's Done. The arms differ only by noise: no stop rule changes what a session reaches.*
+
+| preset | rule | session mean F-beta, arm − today | fires | mean stop click | F-beta at stop | gain from stop to 150 | edge over a fixed click | edge over random dealing |
+|---|---|---|---|---|---|---|---|---|
+| β 1/4 | today (lights) | — | 89% | 74 | 0.580 | +0.060 | +0.015 ± 0.007 | +0.008 ± 0.005 |
+| | level | +0.000 ± 0.001 | 49% | 100 | 0.633 | +0.006 | +0.041 ± 0.007 | +0.042 ± 0.005 |
+| | lights + level | +0.000 ± 0.000 | 43% | 110 | 0.634 | +0.006 | +0.030 ± 0.006 | +0.029 ± 0.004 |
+| | lights or level | −0.000 ± 0.000 | 89% | 68 | 0.583 | +0.056 | +0.017 ± 0.006 | +0.022 ± 0.005 |
+| β 1 | today (lights) | — | 89% | 76 | 0.471 | +0.060 | −0.007 ± 0.005 | +0.000 ± 0.003 |
+| | level | +0.001 ± 0.000 | 43% | 107 | 0.516 | +0.015 | +0.015 ± 0.006 | +0.023 ± 0.004 |
+| | lights + level | +0.001 ± 0.000 | 39% | 116 | 0.519 | +0.012 | +0.011 ± 0.005 | +0.016 ± 0.003 |
+| | lights or level | +0.000 ± 0.000 | 89% | 71 | 0.472 | +0.060 | +0.005 ± 0.005 | +0.008 ± 0.004 |
+| β 4 | today (lights) | — | 88% | 85 | 0.548 | +0.058 | −0.013 ± 0.005 | −0.004 ± 0.004 |
+| | level | +0.001 ± 0.000 | 46% | 108 | 0.587 | +0.020 | +0.009 ± 0.005 | +0.016 ± 0.004 |
+| | lights + level | +0.001 ± 0.000 | 39% | 119 | 0.594 | +0.013 | +0.004 ± 0.005 | +0.013 ± 0.003 |
+| | lights or level | +0.000 ± 0.000 | 89% | 79 | 0.545 | +0.061 | −0.013 ± 0.005 | −0.001 ± 0.004 |
+
+*A session the rule never stops leaves at 150, so its mean stop click counts 150. Gains are means; SEs
+are over the 49 class means.*
+
+**No arm changes the session.** Mean F-beta over clicks 1–150 moves by at most +0.001, at every preset. A stop
+rule here changes what the app tells the user, and the session reaches the same detectors either way.
+
+**`level` is the better stop.**
+- **At the stop:** a session leaves with +0.053, +0.045 and +0.039 more F-beta than at today's Done, and
+  little is left after it (+0.006 to +0.020, against today's +0.06).
+- **Where its stops go:** best of the three at every preset, on both edges.
+- **The price:** it tells only 43–49% of sessions to stop. Its median stop is the horizon, and the sessions it
+  stops, it stops later: mean click 100–108, against 74–85 today.
+
+The live arm fires less often and later than the offline pricing predicted (51–55% at click 89–93). The
+check before Done now runs at the level's first fire, and Done waits for it. When the check ends, the level
+must hold again.
+
+**`lights + level` is dominated by `level`.** It stops later still, for the same F-beta, and spends its clicks
+less well.
+
+**`lights or level` is today's Done, a few clicks sooner.** At β 1/4 and β 1 it stops 5–6 clicks sooner for
+the same F-beta, and its stops go where they pay a little better (+0.022 and +0.008, against today's +0.008
+and +0.000). At β 4 it is today's Done.
 
 ## What this leaves open
 
