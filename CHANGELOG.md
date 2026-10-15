@@ -853,6 +853,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Labels that do not separate start Autopilot's weak-separation check** (issue #4899). When a retrain's
+  calibration folds scored the held-out Goods no higher than the held-out Bads, the line fell back to the
+  head's own scores of the labels it trained on, and the separation was read from those, so labels that
+  did not separate at all read as separating strongly (2.69 on five yellow smileys Good against five
+  Bad) and the check never came due. The separation now comes from the folds (0 or below), so the check
+  runs. The line itself is unchanged.
+
 - **A dataset reloaded after a restart trains the same line as the process that imported it** (issue
   #4892). Reloading a dataset moved the last bit of about a third of its stored vectors, and that was
   enough to change which votes the calibration folds held out. The same labels could then get another

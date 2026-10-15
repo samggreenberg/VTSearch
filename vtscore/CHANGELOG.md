@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Folds that rank the held-out Goods at or below the Bads read as no separation** (issue #4899).
+  `fit_labels_line` still draws the line from the head's in-sample scores of the labels there, as before
+  (the owner's ruling), but the folds' own model now rides on the line as `LabelsLine.held_out` (a new
+  trailing field, default `None`; floored on the corpus, and re-floored by `on_corpus`), and
+  `LabelsLine.separation` reads it: the folds' gap, 0 or below. The in-sample model separates the labels
+  its head trained on by construction, so such labels used to read as separating strongly (2.69 on
+  #4892's), and `weak_check_due` never came due on them. `class_score_model` is unchanged. The eval
+  harness's weak-check arm reads the same `separation`, so it follows. Additive: every existing
+  construction of `LabelsLine` keeps its meaning.
+
 - **`l2_normalize` is idempotent bit for bit** (issue #4892). A vector already unit-norm to within 1e-6
   is returned with the bytes it came in with (as a new array), and a vector that is not is divided by its
   norm in `float64` and rounded to `float32` once. A second pass used to divide by the `float32` norm
