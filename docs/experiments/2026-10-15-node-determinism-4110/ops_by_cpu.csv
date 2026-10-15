@@ -1,0 +1,231 @@
+probe,variant,op,cpu_models,distinct_outputs,agree
+ops,all,np_argsort_quick,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_argsort_stable,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_exp_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_exp_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_log_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_log_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_matmul_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_matvec_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_matvec_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_mean_f32_axis0,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_sort_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_sum_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_sum_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_tanh_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,np_var_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,sk_linearsvc_coef,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,sk_scaler,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,torch_exp_f32,5,2,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R | Silver 4114"
+ops,all,torch_linear_f32,5,2,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R | Silver 4114"
+ops,all,torch_matmul_f32,5,3,"E5-2698 v4, EPYC 9534, Gold 5218R | EPYC 7713 | Silver 4114"
+ops,all,torch_sigmoid_linear,5,2,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R | Silver 4114"
+ops,all,torch_sum_dim0,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,vts_fit_score_gmm,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,vts_gmm_threshold,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,all,vts_svm_head_scores,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_argsort_quick,5,2,"E5-2698 v4, EPYC 7713 | EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_argsort_stable,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_exp_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_exp_f64,5,2,"E5-2698 v4, EPYC 7713 | EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_log_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_log_f64,5,2,"E5-2698 v4, EPYC 7713 | EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_matmul_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_matvec_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_matvec_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_mean_f32_axis0,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_sort_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_sum_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_sum_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_tanh_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,np_var_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,sk_linearsvc_coef,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,sk_scaler,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,torch_exp_f32,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,base,torch_linear_f32,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,base,torch_matmul_f32,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,base,torch_sigmoid_linear,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,base,torch_sum_dim0,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,vts_fit_score_gmm,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,vts_gmm_threshold,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,base,vts_svm_head_scores,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_argsort_quick,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_argsort_stable,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_exp_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_exp_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_log_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_log_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_matmul_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_matvec_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_matvec_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_mean_f32_axis0,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_sort_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_sum_f32,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_sum_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_tanh_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,np_var_f64,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,sk_linearsvc_coef,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,sk_scaler,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,torch_exp_f32,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,npy,torch_linear_f32,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,npy,torch_matmul_f32,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,npy,torch_sigmoid_linear,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+ops,npy,torch_sum_dim0,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,vts_fit_score_gmm,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,vts_gmm_threshold,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,npy,vts_svm_head_scores,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+ops,torch,np_argsort_quick,2,2,EPYC 7713 | Silver 4114
+ops,torch,np_argsort_stable,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_exp_f32,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_exp_f64,2,2,EPYC 7713 | Silver 4114
+ops,torch,np_log_f32,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_log_f64,2,2,EPYC 7713 | Silver 4114
+ops,torch,np_matmul_f32,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_matvec_f32,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_matvec_f64,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_mean_f32_axis0,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_sort_f64,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_sum_f32,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_sum_f64,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_tanh_f64,2,1,"EPYC 7713, Silver 4114"
+ops,torch,np_var_f64,2,1,"EPYC 7713, Silver 4114"
+ops,torch,sk_linearsvc_coef,2,1,"EPYC 7713, Silver 4114"
+ops,torch,sk_scaler,2,1,"EPYC 7713, Silver 4114"
+ops,torch,torch_exp_f32,2,2,EPYC 7713 | Silver 4114
+ops,torch,torch_linear_f32,2,2,EPYC 7713 | Silver 4114
+ops,torch,torch_matmul_f32,2,2,EPYC 7713 | Silver 4114
+ops,torch,torch_sigmoid_linear,2,2,EPYC 7713 | Silver 4114
+ops,torch,torch_sum_dim0,2,1,"EPYC 7713, Silver 4114"
+ops,torch,vts_fit_score_gmm,2,1,"EPYC 7713, Silver 4114"
+ops,torch,vts_gmm_threshold,2,1,"EPYC 7713, Silver 4114"
+ops,torch,vts_svm_head_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,aten_nomkldnn,exp,2,2,EPYC 7713 | Silver 4114
+mkl,aten_nomkldnn,linear,2,2,EPYC 7713 | Silver 4114
+mkl,aten_nomkldnn,matmul,2,2,EPYC 7713 | Silver 4114
+mkl,aten_nomkldnn,mv,2,2,EPYC 7713 | Silver 4114
+mkl,aten_nomkldnn,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,aten_nomkldnn,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,aten_nomkldnn,vts_scores,2,2,EPYC 7713 | Silver 4114
+mkl,atendefault,exp,2,2,EPYC 7713 | Silver 4114
+mkl,atendefault,linear,2,2,EPYC 7713 | Silver 4114
+mkl,atendefault,matmul,2,2,EPYC 7713 | Silver 4114
+mkl,atendefault,mv,2,2,EPYC 7713 | Silver 4114
+mkl,atendefault,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,atendefault,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,atendefault,vts_scores,2,2,EPYC 7713 | Silver 4114
+mkl,base,exp,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+mkl,base,linear,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+mkl,base,matmul,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+mkl,base,mv,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+mkl,base,sigmoid,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,base,svm_head_coef,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,base,vts_scores,5,3,"E5-2698 v4 | EPYC 7713, EPYC 9534 | Gold 5218R, Silver 4114"
+mkl,cbwr_strict,exp,2,2,EPYC 7713 | Silver 4114
+mkl,cbwr_strict,linear,2,2,EPYC 7713 | Silver 4114
+mkl,cbwr_strict,matmul,2,1,"EPYC 7713, Silver 4114"
+mkl,cbwr_strict,mv,2,2,EPYC 7713 | Silver 4114
+mkl,cbwr_strict,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,cbwr_strict,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,cbwr_strict,vts_scores,2,2,EPYC 7713 | Silver 4114
+mkl,cbwr_strict_aten,exp,2,2,EPYC 7713 | Silver 4114
+mkl,cbwr_strict_aten,linear,2,2,EPYC 7713 | Silver 4114
+mkl,cbwr_strict_aten,matmul,2,1,"EPYC 7713, Silver 4114"
+mkl,cbwr_strict_aten,mv,2,2,EPYC 7713 | Silver 4114
+mkl,cbwr_strict_aten,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,cbwr_strict_aten,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,cbwr_strict_aten,vts_scores,2,2,EPYC 7713 | Silver 4114
+mkl,compat_default,exp,2,1,"EPYC 7713, Silver 4114"
+mkl,compat_default,linear,2,1,"EPYC 7713, Silver 4114"
+mkl,compat_default,matmul,2,1,"EPYC 7713, Silver 4114"
+mkl,compat_default,mv,2,1,"EPYC 7713, Silver 4114"
+mkl,compat_default,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,compat_default,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,compat_default,vts_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx,exp,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx,linear,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx,matmul,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_avx,mv,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx,vts_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx2s_atendef,exp,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_avx2s_atendef,linear,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_avx2s_atendef,matmul,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx2s_atendef,mv,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_avx2s_atendef,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx2s_atendef,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx2s_atendef,vts_scores,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_avx_strict,exp,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx_strict,linear,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx_strict,matmul,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_avx_strict,mv,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx_strict,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx_strict,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_avx_strict,vts_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat,exp,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,mkl_compat,linear,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,mkl_compat,matmul,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,mkl_compat,mv,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,mkl_compat,sigmoid,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,mkl_compat,svm_head_coef,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,mkl_compat,vts_scores,5,1,"E5-2698 v4, EPYC 7713, EPYC 9534, Gold 5218R, Silver 4114"
+mkl,mkl_compat_aten2,exp,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_aten2,linear,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_aten2,matmul,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_aten2,mv,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_aten2,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_aten2,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_aten2,vts_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_atendef,exp,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_atendef,linear,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_atendef,matmul,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_atendef,mv,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_atendef,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_atendef,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_compat_atendef,vts_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42,exp,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42,linear,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42,matmul,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_sse42,mv,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42,vts_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42_strict,exp,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42_strict,linear,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42_strict,matmul,2,2,EPYC 7713 | Silver 4114
+mkl,mkl_sse42_strict,mv,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42_strict,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42_strict,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mkl_sse42_strict,vts_scores,2,1,"EPYC 7713, Silver 4114"
+mkl,mklinstr_aten,exp,2,2,EPYC 7713 | Silver 4114
+mkl,mklinstr_aten,linear,2,2,EPYC 7713 | Silver 4114
+mkl,mklinstr_aten,matmul,2,2,EPYC 7713 | Silver 4114
+mkl,mklinstr_aten,mv,2,2,EPYC 7713 | Silver 4114
+mkl,mklinstr_aten,sigmoid,2,1,"EPYC 7713, Silver 4114"
+mkl,mklinstr_aten,svm_head_coef,2,1,"EPYC 7713, Silver 4114"
+mkl,mklinstr_aten,vts_scores,2,2,EPYC 7713 | Silver 4114
+text,aten2,a bus,2,2,EPYC 7713 | Silver 4114
+text,aten2,a cat,2,2,EPYC 7713 | Silver 4114
+text,aten2,a person riding a horse,2,2,EPYC 7713 | Silver 4114
+text,aten2,a refrigerator,2,2,EPYC 7713 | Silver 4114
+text,aten2,a sports ball,2,2,EPYC 7713 | Silver 4114
+text,base,a bus,2,2,EPYC 7713 | Silver 4114
+text,base,a cat,2,2,EPYC 7713 | Silver 4114
+text,base,a person riding a horse,2,2,EPYC 7713 | Silver 4114
+text,base,a refrigerator,2,2,EPYC 7713 | Silver 4114
+text,base,a sports ball,2,2,EPYC 7713 | Silver 4114
+text,pins,a bus,2,2,EPYC 7713 | Silver 4114
+text,pins,a cat,2,2,EPYC 7713 | Silver 4114
+text,pins,a person riding a horse,2,2,EPYC 7713 | Silver 4114
+text,pins,a refrigerator,2,2,EPYC 7713 | Silver 4114
+text,pins,a sports ball,2,2,EPYC 7713 | Silver 4114
+text,pins_aten2,a bus,2,1,"EPYC 7713, Silver 4114"
+text,pins_aten2,a cat,2,1,"EPYC 7713, Silver 4114"
+text,pins_aten2,a person riding a horse,2,1,"EPYC 7713, Silver 4114"
+text,pins_aten2,a refrigerator,2,1,"EPYC 7713, Silver 4114"
+text,pins_aten2,a sports ball,2,1,"EPYC 7713, Silver 4114"
+text,pins_atendef,a bus,2,1,"EPYC 7713, Silver 4114"
+text,pins_atendef,a cat,2,1,"EPYC 7713, Silver 4114"
+text,pins_atendef,a person riding a horse,2,1,"EPYC 7713, Silver 4114"
+text,pins_atendef,a refrigerator,2,1,"EPYC 7713, Silver 4114"
+text,pins_atendef,a sports ball,2,1,"EPYC 7713, Silver 4114"

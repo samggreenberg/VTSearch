@@ -1,0 +1,570 @@
+{
+ "pairs": [
+  {
+   "pair": "a_base ~ a_rep",
+   "question": "the same arm twice on one node type",
+   "cells": 72,
+   "identical": 72,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 0,
+   "diagnostics": 0,
+   "base_cols_differing": {},
+   "median_first_diff_t": null,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.0,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.0,
+   "base_threshold_gap_median": 0.0,
+   "base_threshold_gap_p90": 0.0,
+   "base_threshold_gap_max": 0.0,
+   "base_votes_threshold_moved_median": 0.0,
+   "first_diff_cols": {}
+  },
+  {
+   "pair": "i_base ~ a_base",
+   "question": "today's dev, Intel vs AMD",
+   "cells": 72,
+   "identical": 0,
+   "trajectory": 0,
+   "objective": 2,
+   "threshold": 69,
+   "diagnostics": 1,
+   "base_cols_differing": {
+    "line_separation": 72,
+    "oracle_threshold_honest": 72,
+    "oracle_cost_honest": 72,
+    "regret_honest": 72,
+    "threshold": 71,
+    "fbeta_oracle_threshold": 71,
+    "acq_threshold": 71,
+    "calibration_shift_honest": 70,
+    "cal_oracle_threshold": 70,
+    "oracle_threshold": 70,
+    "train_threshold": 70,
+    "line_efbeta_corpus": 67
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.791209,
+   "frac_votes_fbeta_moved": 0.0002485609628466771,
+   "mean_gap_fbeta": 4.4646999825570696e-07,
+   "se_gap_fbeta": 3.387244638600998e-07,
+   "mean_abs_gap_fbeta": 4.4646999825570696e-07,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.255917,
+   "base_threshold_gap_median": 2.9999999999752447e-06,
+   "base_threshold_gap_p90": 1.4800000000092514e-05,
+   "base_threshold_gap_max": 0.0010350000000000081,
+   "base_votes_threshold_moved_median": 6.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 46,
+    "oracle_cost_honest": 20,
+    "oracle_threshold": 3,
+    "fbeta_oracle_threshold": 2,
+    "auroc": 1
+   }
+  },
+  {
+   "pair": "i_npy ~ a_base",
+   "question": "numpy pin only, Intel vs AMD",
+   "cells": 28,
+   "identical": 0,
+   "trajectory": 0,
+   "objective": 1,
+   "threshold": 27,
+   "diagnostics": 0,
+   "base_cols_differing": {
+    "acq_threshold": 28,
+    "threshold": 28,
+    "train_threshold": 28,
+    "fbeta_oracle_threshold": 28,
+    "line_separation": 28,
+    "oracle_threshold_honest": 28,
+    "oracle_cost_honest": 28,
+    "calibration_shift_honest": 28,
+    "cal_oracle_threshold": 28,
+    "regret_honest": 28,
+    "oracle_threshold": 27,
+    "line_efbeta_corpus": 27
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.718624,
+   "frac_votes_fbeta_moved": 0.0002747252747252747,
+   "mean_gap_fbeta": 3.4230769230769154e-07,
+   "se_gap_fbeta": 3.4230769230769154e-07,
+   "mean_abs_gap_fbeta": 3.4230769230769154e-07,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.254649,
+   "base_threshold_gap_median": 2.9999999999752447e-06,
+   "base_threshold_gap_p90": 1.5600000000082216e-05,
+   "base_threshold_gap_max": 0.0010350000000000081,
+   "base_votes_threshold_moved_median": 6.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 16,
+    "oracle_cost_honest": 9,
+    "oracle_threshold": 1,
+    "auroc": 1,
+    "fbeta_oracle_threshold": 1
+   }
+  },
+  {
+   "pair": "i_pin ~ a_pin",
+   "question": "numpy + MKL pins, Intel vs AMD",
+   "cells": 12,
+   "identical": 0,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 12,
+   "diagnostics": 0,
+   "base_cols_differing": {
+    "acq_threshold": 12,
+    "threshold": 12,
+    "train_threshold": 12,
+    "line_efbeta_corpus": 12,
+    "find_efbeta": 12,
+    "line_separation": 12,
+    "oracle_threshold": 12,
+    "fbeta_oracle_threshold": 12,
+    "cal_oracle_threshold": 12,
+    "oracle_threshold_honest": 12,
+    "oracle_cost_honest": 12,
+    "regret_honest": 12
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.675852,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.2517745,
+   "base_threshold_gap_median": 4.500000000018378e-06,
+   "base_threshold_gap_p90": 1.4499999999995074e-05,
+   "base_threshold_gap_max": 2.8000000000028002e-05,
+   "base_votes_threshold_moved_median": 7.5,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 7,
+    "oracle_cost_honest": 4,
+    "fbeta_oracle_threshold": 1
+   }
+  },
+  {
+   "pair": "i_full ~ a_full",
+   "question": "numpy + MKL + ATen pins, Intel vs AMD",
+   "cells": 72,
+   "identical": 72,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 0,
+   "diagnostics": 0,
+   "base_cols_differing": {},
+   "median_first_diff_t": null,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.0,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.0,
+   "base_threshold_gap_median": 0.0,
+   "base_threshold_gap_p90": 0.0,
+   "base_threshold_gap_max": 0.0,
+   "base_votes_threshold_moved_median": 0.0,
+   "first_diff_cols": {}
+  },
+  {
+   "pair": "a_base ~ a_full",
+   "question": "what the three pins move on AMD",
+   "cells": 72,
+   "identical": 0,
+   "trajectory": 1,
+   "objective": 1,
+   "threshold": 69,
+   "diagnostics": 1,
+   "base_cols_differing": {
+    "oracle_cost_honest": 71,
+    "regret_honest": 71,
+    "line_separation": 71,
+    "oracle_threshold_honest": 71,
+    "acq_threshold": 70,
+    "threshold": 69,
+    "xcal_threshold": 69,
+    "fbeta_oracle_threshold": 69,
+    "calibration_shift_honest": 69,
+    "train_threshold": 69,
+    "find_efbeta": 68,
+    "cal_oracle_threshold": 67
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": 5.0,
+   "max_gap_fbeta": 0.787719,
+   "frac_votes_fbeta_moved": 0.009535991531404376,
+   "mean_gap_fbeta": -0.00016485368540735516,
+   "se_gap_fbeta": 0.000164718744605028,
+   "mean_abs_gap_fbeta": 0.0010382423194542462,
+   "final_gap_fbeta_mean": -0.0014153055555555562,
+   "final_gap_fbeta_max_abs": 0.10190200000000005,
+   "median_max_gap_threshold": 0.254068,
+   "base_threshold_gap_median": 2.9999999999752447e-06,
+   "base_threshold_gap_p90": 1.289999999998792e-05,
+   "base_threshold_gap_max": 0.09949999999999992,
+   "base_votes_threshold_moved_median": 6.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 45,
+    "oracle_cost_honest": 22,
+    "fbeta_oracle_threshold": 3,
+    "auroc": 2
+   }
+  },
+  {
+   "pair": "i_base ~ i_full",
+   "question": "what the three pins move on Intel",
+   "cells": 72,
+   "identical": 0,
+   "trajectory": 1,
+   "objective": 1,
+   "threshold": 69,
+   "diagnostics": 1,
+   "base_cols_differing": {
+    "line_separation": 71,
+    "oracle_cost_honest": 71,
+    "regret_honest": 71,
+    "oracle_threshold_honest": 71,
+    "acq_threshold": 70,
+    "fbeta_oracle_threshold": 70,
+    "threshold": 70,
+    "oracle_threshold": 70,
+    "xcal_threshold": 69,
+    "calibration_shift_honest": 69,
+    "train_threshold": 69,
+    "find_efbeta": 68
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": 5.0,
+   "max_gap_fbeta": 0.744765,
+   "frac_votes_fbeta_moved": 0.009570877280575839,
+   "mean_gap_fbeta": -0.00016440721540909945,
+   "se_gap_fbeta": 0.00016472527711239662,
+   "mean_abs_gap_fbeta": 0.0010384225501362627,
+   "final_gap_fbeta_mean": -0.0014153055555555562,
+   "final_gap_fbeta_max_abs": 0.10190200000000005,
+   "median_max_gap_threshold": 0.2544509999999999,
+   "base_threshold_gap_median": 2.9999999999752447e-06,
+   "base_threshold_gap_p90": 1.289999999998792e-05,
+   "base_threshold_gap_max": 0.09949999999999992,
+   "base_votes_threshold_moved_median": 7.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 39,
+    "oracle_cost_honest": 25,
+    "oracle_threshold": 3,
+    "auroc": 3,
+    "fbeta_oracle_threshold": 2
+   }
+  },
+  {
+   "pair": "i_base ~ i_npy",
+   "question": "what the numpy pin moves on Intel",
+   "cells": 28,
+   "identical": 0,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 0,
+   "diagnostics": 28,
+   "base_cols_differing": {
+    "oracle_cost_honest": 28,
+    "regret_honest": 28,
+    "oracle_threshold_honest": 15
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.0,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.0,
+   "base_threshold_gap_median": 0.0,
+   "base_threshold_gap_p90": 0.0,
+   "base_threshold_gap_max": 0.0,
+   "base_votes_threshold_moved_median": 0.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 15,
+    "oracle_cost_honest": 13
+   }
+  },
+  {
+   "pair": "a_base ~ a_pin",
+   "question": "what the MKL pin moves on AMD",
+   "cells": 12,
+   "identical": 0,
+   "trajectory": 1,
+   "objective": 0,
+   "threshold": 11,
+   "diagnostics": 0,
+   "base_cols_differing": {
+    "acq_threshold": 11,
+    "threshold": 11,
+    "xcal_threshold": 11,
+    "train_threshold": 11,
+    "line_separation": 11,
+    "line_efbeta_corpus": 11,
+    "fbeta_oracle_threshold": 11,
+    "find_efbeta": 11,
+    "oracle_threshold_honest": 11,
+    "calibration_shift_honest": 11,
+    "regret_honest": 11,
+    "oracle_cost_honest": 11
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": 5.0,
+   "max_gap_fbeta": 0.693836,
+   "frac_votes_fbeta_moved": 0.05657492354740062,
+   "mean_gap_fbeta": -0.000988323394495413,
+   "se_gap_fbeta": 0.000988323394495413,
+   "mean_abs_gap_fbeta": 0.006228655198776759,
+   "final_gap_fbeta_mean": -0.008491833333333337,
+   "final_gap_fbeta_max_abs": 0.10190200000000005,
+   "median_max_gap_threshold": 0.254068,
+   "base_threshold_gap_median": 5.500000000019378e-06,
+   "base_threshold_gap_p90": 2.1899999999996927e-05,
+   "base_threshold_gap_max": 0.09949999999999992,
+   "base_votes_threshold_moved_median": 7.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 8,
+    "oracle_cost_honest": 4
+   }
+  }
+ ],
+ "hardware": {
+  "a_base": {
+   "cpus": [
+    "AMD EPYC 7713 64-Core Processor"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "-"
+   ],
+   "mkl_cbwr": [
+    "-"
+   ],
+   "npy_disable": [
+    "-"
+   ]
+  },
+  "a_full": {
+   "cpus": [
+    "AMD EPYC 7713 64-Core Processor"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "-"
+   ],
+   "mkl_cbwr": [
+    "COMPATIBLE"
+   ],
+   "npy_disable": [
+    "AVX512F AVX512_SKX"
+   ]
+  },
+  "a_pin": {
+   "cpus": [
+    "AMD EPYC 7713 64-Core Processor"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "-"
+   ],
+   "mkl_cbwr": [
+    "COMPATIBLE"
+   ],
+   "npy_disable": [
+    "AVX512F AVX512_SKX"
+   ]
+  },
+  "a_rep": {
+   "cpus": [
+    "AMD EPYC 7713 64-Core Processor"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "-"
+   ],
+   "mkl_cbwr": [
+    "-"
+   ],
+   "npy_disable": [
+    "-"
+   ]
+  },
+  "i_base": {
+   "cpus": [
+    "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz"
+   ],
+   "torch_cap": [
+    "AVX512"
+   ],
+   "np_avx512": [
+    "AVX512BW,AVX512CD,AVX512DQ,AVX512F,AVX512VL,AVX512_SKX"
+   ],
+   "mkl_cbwr": [
+    "-"
+   ],
+   "npy_disable": [
+    "-"
+   ]
+  },
+  "i_full": {
+   "cpus": [
+    "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "AVX512BW,AVX512CD,AVX512DQ,AVX512VL"
+   ],
+   "mkl_cbwr": [
+    "COMPATIBLE"
+   ],
+   "npy_disable": [
+    "AVX512F AVX512_SKX"
+   ]
+  },
+  "i_npy": {
+   "cpus": [
+    "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz"
+   ],
+   "torch_cap": [
+    "AVX512"
+   ],
+   "np_avx512": [
+    "AVX512BW,AVX512CD,AVX512DQ,AVX512VL"
+   ],
+   "mkl_cbwr": [
+    "-"
+   ],
+   "npy_disable": [
+    "AVX512F AVX512_SKX"
+   ]
+  },
+  "i_pin": {
+   "cpus": [
+    "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz"
+   ],
+   "torch_cap": [
+    "AVX512"
+   ],
+   "np_avx512": [
+    "AVX512BW,AVX512CD,AVX512DQ,AVX512VL"
+   ],
+   "mkl_cbwr": [
+    "COMPATIBLE"
+   ],
+   "npy_disable": [
+    "AVX512F AVX512_SKX"
+   ]
+  }
+ },
+ "cell_seconds": {
+  "a_base": {
+   "cells": 72,
+   "median_s": 193.16,
+   "mean_s": 190.99390277777778
+  },
+  "a_full": {
+   "cells": 72,
+   "median_s": 184.063,
+   "mean_s": 181.67631944444443
+  },
+  "a_pin": {
+   "cells": 12,
+   "median_s": 216.6975,
+   "mean_s": 206.73166666666668
+  },
+  "a_rep": {
+   "cells": 72,
+   "median_s": 194.7595,
+   "mean_s": 194.01720833333334
+  },
+  "i_base": {
+   "cells": 72,
+   "median_s": 244.816,
+   "mean_s": 242.34393055555554
+  },
+  "i_full": {
+   "cells": 72,
+   "median_s": 252.32549999999998,
+   "mean_s": 250.068625
+  },
+  "i_npy": {
+   "cells": 28,
+   "median_s": 240.2125,
+   "mean_s": 234.81910714285712
+  },
+  "i_pin": {
+   "cells": 28,
+   "median_s": 243.2745,
+   "mean_s": 235.0860357142857
+  }
+ },
+ "time_ratios": {
+  "i_npy/i_base": {
+   "cells": 28,
+   "median": 0.9817918922950895,
+   "mean": 0.9704351701406955
+  },
+  "i_pin/i_base": {
+   "cells": 28,
+   "median": 0.9903329240454253,
+   "mean": 0.9721025568449436
+  },
+  "i_full/i_base": {
+   "cells": 72,
+   "median": 1.0334553346183368,
+   "mean": 1.0357866293521922
+  },
+  "a_pin/a_base": {
+   "cells": 12,
+   "median": 0.9739846725579114,
+   "mean": 0.9653818118120413
+  },
+  "a_full/a_base": {
+   "cells": 72,
+   "median": 0.9879051411509383,
+   "mean": 0.9650686020287065
+  },
+  "a_rep/a_base": {
+   "cells": 72,
+   "median": 0.9946432789681157,
+   "mean": 1.0254246594503027
+  },
+  "i_base/a_base": {
+   "cells": 72,
+   "median": 1.2535523964516853,
+   "mean": 1.286033804207881
+  }
+ }
+}

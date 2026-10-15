@@ -23,9 +23,21 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import _expcommon
-from _expcommon import log, timed  # re-exported: stages call ``common.timed`` / ``common.log``
+from _expcommon import kernel_report, log, pin_cpu_kernels, timed  # re-exported for the stages
 
-__all__ = ["DATADIR", "EXP", "REPO", "RESULTS", "USER", "WARM_HF", "log", "setup_env", "timed"]
+__all__ = [
+    "DATADIR",
+    "EXP",
+    "REPO",
+    "RESULTS",
+    "USER",
+    "WARM_HF",
+    "kernel_report",
+    "log",
+    "pin_cpu_kernels",
+    "setup_env",
+    "timed",
+]
 
 USER = os.environ.get("USER", "sgreenberg")
 REPO = Path(os.environ.get("VTS_REPO", f"/exp/{USER}/projects/vts-calib"))

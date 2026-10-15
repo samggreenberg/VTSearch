@@ -40,11 +40,68 @@ a set of taxonomy builders that happens to carry the same filename), and
 from __future__ import annotations
 
 import os
+import platform
 import sys
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, MutableMapping
 from contextlib import contextmanager
 from pathlib import Path
+
+#: The numeric kernels a closed-loop cell runs on, the same on every x86-64 node (#4110).
+#:
+#: The GRID mixes AVX-512 CPUs (Xeon Silver 4114 and Gold 5218R, EPYC 9534) with
+#: AVX2-only ones (EPYC 7713, Xeon E5-2698 v4), and four libraries on a cell's path
+#: pick their kernels by CPU: OpenBLAS (#4481), numpy (its AVX-512 float64 exp/log
+#: and argsort, the anchored EM and tie order), torch's bundled MKL (the head's
+#: sgemv, the text tower's sgemm) and torch's own ATen kernels (the text tower's
+#: LayerNorm, softmax and GELU).  The two kinds of node agree to the last bit only
+#: with all four pinned, and a last-bit difference is enough to move a threshold
+#: by 1e-6 and, some votes later, a pick (#3840: 3 of 114 cells).
+#:
+#: ``MKL_CBWR=COMPATIBLE`` makes CPU GEMMs 2.2-3.5x slower, so this is the cell
+#: runner's to set, not ``gridenv.sh``'s: a cell's only CPU GEMM is the forward
+#: pass of one typed query (+0.3 s), while a CPU embedding job would pay it on
+#: every image.  Disabling numpy's AVX-512 targets costs the anchored EM ~40% on
+#: an AVX-512 node and nothing on an AVX2 one.
+CPU_KERNEL_PINS: dict[str, str] = {
+    "OPENBLAS_CORETYPE": "Haswell",
+    "NPY_DISABLE_CPU_FEATURES": "AVX512F AVX512_SKX",
+    "MKL_CBWR": "COMPATIBLE",
+    "ATEN_CPU_CAPABILITY": "avx2",
+}
+
+
+def pin_cpu_kernels(environ: MutableMapping[str, str] | None = None) -> dict[str, str]:
+    """Default :data:`CPU_KERNEL_PINS` into *environ* (``os.environ``); return what this call set.
+
+    Each pin is a default, so an exported value wins, and ``VTS_KERNEL_PINS=0``
+    skips all four (to rerun an arm as it ran before #4110).  x86-64 only: the
+    names mean nothing on another architecture, and numpy warns at import about
+    a feature its build cannot dispatch.  The libraries read these when they
+    load, so a pin set after numpy or torch is imported would silently do
+    nothing; on ``os.environ`` this raises instead.
+    """
+    env = os.environ if environ is None else environ
+    if env.get("VTS_KERNEL_PINS", "1") == "0" or platform.machine() not in ("x86_64", "AMD64"):
+        return {}
+    loaded = [m for m in ("numpy", "torch") if m in sys.modules]
+    if loaded and environ is None:
+        raise RuntimeError(f"pin_cpu_kernels() must run before {' and '.join(loaded)} is imported")
+    set_now = {k: v for k, v in CPU_KERNEL_PINS.items() if k not in env}
+    env.update(set_now)
+    return set_now
+
+
+def kernel_report() -> str:
+    """One line naming this host's CPU and the kernel pins in force, for a cell's log."""
+    model = "?"
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as f:
+            model = next((ln.split(":", 1)[1].strip() for ln in f if ln.startswith("model name")), "?")
+    except OSError:
+        pass
+    pins = " ".join(f"{k}={os.environ.get(k, '-')}" for k in CPU_KERNEL_PINS)
+    return f"host={platform.node().split('.')[0]} cpu={model!r} {pins}"
 
 
 def neutralise_editable_finder() -> None:
