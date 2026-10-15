@@ -25,6 +25,11 @@ from pathlib import Path
 
 import common
 
+if __name__ == "__main__":
+    # Before numpy or torch loads: one set of numeric kernels on every node, so a
+    # cell is bit-identical wherever it runs (#4110).  Only as a script: a test that
+    # imports this module must not change its own process's kernels.
+    common.pin_cpu_kernels()
 common.setup_env()
 
 import numpy as np  # noqa: E402
@@ -365,6 +370,8 @@ def main(argv: list[str] | None = None) -> int:
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
+    # Which CPU, and which kernels: a cross-node pair is read by these (#4110).
+    common.log(f"kernels: {common.kernel_report()}")
 
     import pandas as pd
 
