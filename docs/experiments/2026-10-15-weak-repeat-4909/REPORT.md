@@ -1,6 +1,7 @@
 # The weak check's repeat, re-priced at today's head (issue #4909)
 
-**Status (2026-10-15): Binary Photo at beta 1 and 4, 5 seeds, priced. The ship form is the owner's call.**
+**Status (2026-10-15): Binary Photo at beta 1 and 4, 5 seeds, priced. The owner chose to ship "once": the weak
+check prompts at most once a session, and never after any check has run.**
 
 **The repeat no longer pays, and neither does the weak check itself, past click 75.** Every arm ran today's app to
 click 200, then the closing check, and differed only in the weak-separation check:
@@ -33,9 +34,10 @@ check. A "0" is exact: those arms are the shipped app until its first repeat.
 Without the weak check, the check before Done runs in 93% of sessions instead of 44–46%: today it is skipped when a
 weak check ended in the last 25 votes.
 
-**The weak check's one gain is early, at beta 1, in sessions that succeed anyway.** Over clicks 0–50 at beta 1 it
-is worth +0.0025. Almost all of that sits in sessions whose F1 at click 200 is 0.5 or more, which it gets there
-sooner; by click 75 the arm without it has caught up. Sessions that end below 0.2 get nothing from it (below).
+**The weak check's one gain is early, in sessions that succeed anyway.** Over clicks 0–50 it is worth +0.0025 at
+beta 1 and +0.0010 at beta 4. Almost all of that sits in sessions that end at F-beta 0.5 or more, which it gets to
+Done 5–9 clicks sooner at the same F-beta; over clicks, the arm without it catches up by click 75. Sessions that end
+below 0.2 get nothing from it (below). Once keeps that gain: its first prompt is the shipped app's.
 
 ## The question
 
@@ -86,16 +88,31 @@ over the app as shipped.*
 
 The weak check fires in 65% (beta 1) and 63% (beta 4) of sessions. Weak separation does predict failure: these
 sessions end far worse than the rest. But the check does not rescue the failures. Paired gain of no weak check over
-the app as shipped, in the sessions where its weak check fired, by how the shipped session ends:
+the app as shipped, in the sessions where its weak check fired, by how the session ends. A session's outcome is the
+mean of the two arms': binned on one arm's own outcome, the pair's difference regresses toward the bin's mean (on
+the shipped arm's F-beta at Done, the top bin reads −0.026; on the other arm's, +0.026).
 
-| F-beta at click 200, as shipped | sessions | clicks 0–50 | clicks 0–200 | F-beta at 50, as shipped / without |
+| F-beta where the user stops (Done, or click 200) | sessions | clicks 0–50 | F-beta at the stop | clicks to the stop |
 |---|---|---|---|---|
-| beta 1, below 0.2 | 111 | +0.0002 (± 0.0007) | +0.0033 (± 0.0018) | 0.06 / 0.06 |
-| beta 1, 0.2 to 0.5 | 162 | −0.0010 (± 0.0015) | +0.0015 (± 0.0021) | 0.21 / 0.21 |
-| beta 1, 0.5 or more | 194 | **−0.0086** (± 0.0024) | −0.0033 (± 0.0010) | 0.54 / 0.51 |
-| beta 4, below 0.2 | 51 | −0.0007 (± 0.0013) | +0.0081 (± 0.0035) | 0.08 / 0.08 |
-| beta 4, 0.2 to 0.5 | 141 | +0.0020 (± 0.0013) | +0.0053 (± 0.0029) | 0.20 / 0.21 |
-| beta 4, 0.5 or more | 262 | −0.0037 (± 0.0021) | +0.0018 (± 0.0016) | 0.58 / 0.57 |
+| beta 1, below 0.2 | 154 | 0.000 (± 0.001) | −0.008 (± 0.007) | +4.7 (± 1.2) |
+| beta 1, 0.2 to 0.5 | 210 | −0.003 (± 0.002) | −0.005 (± 0.009) | +4.3 (± 0.9) |
+| beta 1, 0.5 or more | 103 | **−0.011** (± 0.003) | +0.011 (± 0.006) | **+9.3** (± 1.2) |
+| beta 4, below 0.2 | 95 | −0.001 (± 0.002) | −0.011 (± 0.018) | +0.2 (± 2.0) |
+| beta 4, 0.2 to 0.5 | 179 | +0.004 (± 0.006) | +0.005 (± 0.007) | +3.8 (± 1.4) |
+| beta 4, 0.5 or more | 180 | **−0.008** (± 0.002) | 0.000 (± 0.005) | **+5.2** (± 1.2) |
+
+| F-beta at click 200 | sessions | clicks 0–50 | clicks 0–200 |
+|---|---|---|---|
+| beta 1, below 0.2 | 117 | 0.000 (± 0.001) | 0.000 (± 0.003) |
+| beta 1, 0.2 to 0.5 | 150 | −0.001 (± 0.002) | +0.004 (± 0.002) |
+| beta 1, 0.5 or more | 200 | **−0.008** (± 0.002) | −0.003 (± 0.001) |
+| beta 4, below 0.2 | 53 | −0.001 (± 0.001) | +0.002 (± 0.003) |
+| beta 4, 0.2 to 0.5 | 137 | +0.004 (± 0.001) | +0.008 (± 0.004) |
+| beta 4, 0.5 or more | 264 | **−0.004** (± 0.002) | +0.002 (± 0.002) |
+
+Where the user stops, every bin ends at the same F-beta either way. What the weak check buys the sessions that
+succeed is an earlier Done: without it they reach Done 9 clicks later at beta 1 and 5 at beta 4. Once keeps that:
+in every bin it stops within 1.5 clicks of the app as shipped, at an F-beta within 0.004.
 
 The eventual successes end level at click 200 (F1 0.70 both ways, F4 0.72 both ways). Sessions the weak check helped
 most over clicks 0–50:
@@ -133,7 +150,7 @@ Done 3.7 (± 0.6) clicks later at beta 1 and 2.7 (± 0.6) at beta 4, at the same
 runs where the weak check used to stand in for it. The clicks the repeat costs go to Autopilot after Done.
 Goods found by 200 (30 / 29) and AP at click 200 are unchanged in every arm.
 
-## What each ship form would change
+## What each ship form would change (the owner chose once)
 
 - **No weak check.** Autopilot's steps run in order: good → bad → more (the opening), hard/new, then the Spot Check
   once before Done, then Done. Today the weak check is the only thing that enters the Spot Check out of turn

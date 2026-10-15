@@ -264,21 +264,31 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
     summary = pd.DataFrame(rows)
 
     # By band; by how many weak checks the control ran (the arms can only differ where it ran two or more, r0 and
-    # r50, or one, nw); and, where it ran one, by how the control's session ends (F at click 200): does the weak
-    # check help sessions that fail anyway? Gains in mean F over 0-50 and 0-200.
+    # r50, or one, nw); and, where it ran one, by how the session ends, at click 200 and where the user stops (Done,
+    # or click 200 without it): does the weak check help sessions that fail anyway? A session's outcome is the mean of
+    # the two arms' (binning on one arm's own outcome would regress the pair's difference toward the mean of the bin).
     n_ctl = col(CONTROL, "weak_n")
     by_n = {"0 weak checks": n_ctl == 0, "1": n_ctl == 1, "2": n_ctl == 2, "3 or more": n_ctl >= 3}
-    end = F[CONTROL][:, T]
     fired = n_ctl >= 1
-    by_end = {"below 0.2": fired & (end < 0.2), "0.2 to 0.5": fired & (end >= 0.2) & (end < 0.5),
-              "0.5 or more": fired & (end >= 0.5)}  # fmt: skip
+
+    def by_outcome(x: np.ndarray) -> dict[str, np.ndarray]:
+        return {
+            "below 0.2": fired & (x < 0.2),
+            "0.2 to 0.5": fired & (x >= 0.2) & (x < 0.5),
+            "0.5 or more": fired & (x >= 0.5),
+        }
+
     brow = []
     for arm in others:
         g = area(F[arm], 0, T) - area(F[CONTROL], 0, T)
         g50 = area(F[arm], 0, 50) - area(F[CONTROL], 0, 50)
         ga = after[arm] - after[CONTROL]
+        gs = col(arm, "stop_f") - col(CONTROL, "stop_f")
+        gc = col(arm, "stop_clicks") - col(CONTROL, "stop_clicks")
+        at_200 = by_outcome((F[arm][:, T] + F[CONTROL][:, T]) / 2)
+        at_stop = by_outcome((col(arm, "stop_f") + col(CONTROL, "stop_f")) / 2)
         for split, mask_of in (("band", {bd: band == bd for bd in sorted(set(band))}), ("control's weak checks", by_n),
-                               ("weak check fired, control's F at 200", by_end)):  # fmt: skip
+                               ("weak check fired, F at 200", at_200), ("weak check fired, F where the user stops", at_stop)):  # fmt: skip
             for lvl, m in mask_of.items():
                 if m.sum() < 2:
                     continue
@@ -286,8 +296,12 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
                              "share": float(m.mean()), "meanF_gain_0_50": float(g50[m].mean()),
                              "se_0_50": se_over_classes(g50[m], cls[m]), "meanF_gain_0_200": float(g[m].mean()),
                              "se": se_over_classes(g[m], cls[m]), "after_gain": float(np.nanmean(ga[m])),
+                             "stop_f_gain": float(np.nanmean(gs[m])), "stop_f_se": se_over_classes(gs[m], cls[m]),
+                             "stop_clicks_gain": float(np.nanmean(gc[m])), "stop_clicks_se": se_over_classes(gc[m], cls[m]),
+                             "control_stop_clicks": float(np.nanmedian(col(CONTROL, "stop_clicks")[m])),
                              "control_F50": float(np.nanmean(F[CONTROL][m, 50])), "arm_F50": float(np.nanmean(F[arm][m, 50])),
                              "control_F200": float(np.nanmean(F[CONTROL][m, T])), "arm_F200": float(np.nanmean(F[arm][m, T])),
+                             "control_stop_f": float(np.nanmean(col(CONTROL, "stop_f")[m])), "arm_stop_f": float(np.nanmean(col(arm, "stop_f")[m])),
                              "check_clicks": float(np.nanmean(col(arm, "check_clicks")[m])),
                              "control_check_clicks": float(np.nanmean(col(CONTROL, "check_clicks")[m])),
                              "better": float(np.mean(g[m] > 1e-9)), "worse": float(np.mean(g[m] < -1e-9))})  # fmt: skip
