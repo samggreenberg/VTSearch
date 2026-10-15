@@ -11,7 +11,7 @@ the quota is the same as 0, since the quota's own query tier (#4758) is not the 
 
 Each vote scores F-beta at the session's preset of the set Find returns on the withheld half; a vote with no
 row carries the last one (a check round writes one row for its votes) and a vote before the first row scores 0,
-as ``rico_suave/analyze.py`` reads them. The session mean is over votes 1-150 (the owner's number, #4668) and the
+as ``apptitude/analyze.py`` reads them. The session mean is over votes 1-150 (the owner's number, #4668) and the
 short one over 1-50.
 
     python hold_4876.py extract --cells <run>/results/cells --out X.npz [--embedder siglip]
@@ -347,7 +347,7 @@ def figures(a: argparse.Namespace) -> None:
     out.mkdir(parents=True, exist_ok=True)
     arms = {(d, p): z for d, p, z in (_load(s) for s in a.arm)}
     presets = [p for p in PRESET_TITLE if any(k[1] == p for k in arms)]
-    names = {"photos": ("photos (COCO Better)", BLUE), "screens": ("app screens (Rico Suave, 1%)", ORANGE)}
+    names = {"photos": ("photos (COCO Better)", BLUE), "screens": ("app screens (Apptitude, 1%)", ORANGE)}
 
     fig, axes = plt.subplots(2, len(presets), figsize=(10, 5.6), sharex=True, squeeze=False)
     for col, pr in enumerate(presets):

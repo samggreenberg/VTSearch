@@ -184,12 +184,12 @@ DATASETS: dict[str, dict] = {
     # being able to say whether a result was tuned. `on_request` because its
     # images are staged by hand (O365_ROOT) and are not in every checkout's pile.
     "o365_better": {"boxed": True, "kind": "o365_better", "on_request": True},
-    # Rico Suave (#4356): Android app screens by what the screen is for -- settings,
+    # Apptitude (#4356): Android app screens by what the screen is for -- settings,
     # login, map, chat... -- the born-digital benchmark's genre track. Whole-image
     # classes, no boxes; a label is a developer's Activity name and Screen2Words'
-    # crowd captions agreeing (`pilebuild/loaders/rico_suave.py`). `on_request`
+    # crowd captions agreeing (`pilebuild/loaders/apptitude.py`). `on_request`
     # while it is v0: the reviewed disagreements have not joined yet.
-    "rico_suave": {"boxed": False, "kind": "rico_suave", "on_request": True},
+    "apptitude": {"boxed": False, "kind": "apptitude", "on_request": True},
 }
 
 #: Objects365 v2 (#4815), as `o365_better` reads it. The validation split only:
