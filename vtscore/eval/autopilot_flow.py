@@ -245,9 +245,17 @@ SMART_GATES = ("app", "never")
 #: Done's), not New, whose atlas walk is over.
 STOP_RULES = ("lights|level", "lights", "level", "lights+level")
 
+#: The click cap (#4903): whatever the stop rule, a session that holds this many
+#: votes goes to the check before Done and to Done, as one the rule stops does.
+#: Every rule leaves some sessions unstopped (a third of small-object sessions
+#: under the lights at 150 clicks), and the app has no horizon: a user it never
+#: tells to stop either quits when they like or labels on through the collection.
+#: ``None`` (an arm) is no cap.
+STOP_CAP = 200
+
 
 def stop_lights(
-    smart: Status, stable: Status, span: Status, rule: str, level_met: bool
+    smart: Status, stable: Status, span: Status, rule: str, level_met: bool, at_cap: bool = False
 ) -> tuple[Status, Status, Status]:
     """The lights :func:`next_phase` reads under stop *rule*, given the real ones and whether the level is met.
 
@@ -255,7 +263,13 @@ def stop_lights(
     green, so the phase goes to the check before Done and to Done as the app's
     own all-green does; one that does not, with every real light green, holds
     Smart yellow, so the phase reads Hard.  Otherwise the real lights stand.
+    *at_cap* (the session holds :data:`STOP_CAP` votes, #4903) says stop under
+    every rule.
     """
+    if rule not in STOP_RULES:
+        raise ValueError(f"stop rule must be one of {STOP_RULES}, got {rule!r}")
+    if at_cap:
+        return "green", "green", "green"
     if rule == "lights":
         return smart, stable, span
     lights = smart == "green" and stable == "green" and span == "green"
@@ -263,10 +277,8 @@ def stop_lights(
         stop = level_met
     elif rule == "lights+level":
         stop = lights and level_met
-    elif rule == "lights|level":
-        stop = lights or level_met
     else:
-        raise ValueError(f"stop rule must be one of {STOP_RULES}, got {rule!r}")
+        stop = lights or level_met
     if stop:
         return "green", "green", "green"
     if lights:
@@ -371,6 +383,22 @@ TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "spot", "done", "exha
 #: pool with the indicators still amber - the opposite result - and folding the
 #: two together would report a starved run as a converged one.
 STOPPING_PHASE: str = "done"
+
+#: Autopilot's opening: the phases before its first learned sort.
+OPENING_PHASES: frozenset[str] = frozenset({"good", "bad", "more"})
+
+
+def capped_in_opening(phase: str, good_count: int, bad_count: int, stop_cap: int | None = STOP_CAP) -> bool:
+    """The app's ``cappedInOpening`` (#4903): the run holds *stop_cap* votes still in its opening.
+
+    The click cap's stop for a session with no detector: the app says Autopilot
+    has stopped and offers a different sort.  It is display only there, so the
+    phase - and every pick - is :func:`next_phase`'s, and a session that finds
+    its Goods later goes to the check before Done and Done at once.  A reader
+    asking where such a session was told to stop reads it here, beside
+    :data:`STOPPING_PHASE`.
+    """
+    return stop_cap is not None and phase in OPENING_PHASES and good_count + bad_count >= stop_cap
 
 
 #: What the app records for a vote Autopilot surfaced, per labelling phase:
@@ -497,6 +525,7 @@ class AutopilotFlow:
         good_dry_run: int | None = MORE_DRY_RUN,
         done_check: bool = True,
         stop_rule: str = "lights|level",
+        stop_cap: int | None = STOP_CAP,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -534,6 +563,11 @@ class AutopilotFlow:
         if stop_rule not in STOP_RULES:
             raise ValueError(f"stop_rule must be one of {STOP_RULES}, got {stop_rule!r}")
         self.stop_rule = stop_rule
+        #: The click cap (:data:`STOP_CAP`, #4903): Done at this many votes
+        #: whatever the rule; ``None`` is no cap.
+        if stop_cap is not None and (isinstance(stop_cap, bool) or not isinstance(stop_cap, int) or stop_cap < 1):
+            raise ValueError(f"stop_cap must be an integer >= 1 or None, got {stop_cap!r}")
+        self.stop_cap = stop_cap
         #: The ``more`` walk's history, as the app keeps it: consecutive walk
         #: picks without a positive, and whether the walk has ended (met its
         #: target or ran dry).  A vote's outcome is read the way the app reads
@@ -711,10 +745,11 @@ class AutopilotFlow:
         self.stable_flip_rate_late = _num(stable_d.get("flip_rate_late"))
         # What the phase decision reads: the lights as computed, under #4359's
         # Smart gate and #4878's stop rule (both the app's by default).
-        # #4359's bound holds the session in Hard to the end, so it reads no level either.
+        # #4359's bound holds the session in Hard to the end, so it reads no level, nor the cap (#4903), either.
         never = self.smart_gate == "never"
+        at_cap = not never and self.stop_cap is not None and good_count + bad_count >= self.stop_cap
         read_smart, read_stable, read_span = stop_lights(
-            "yellow" if never else smart, stable, sp, self.stop_rule, level_met and not never
+            "yellow" if never else smart, stable, sp, self.stop_rule, level_met and not never, at_cap
         )
         self._last_args = {
             "good_count": good_count,

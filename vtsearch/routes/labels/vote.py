@@ -600,10 +600,6 @@ def import_labels(body: dict):
 
     sync_labels_to_loaded_detector()
 
-    from vtscore.labels.sync import sync_to_labelset_source
-
-    sync_to_labelset_source()
-
     return {"applied": applied, "skipped": skipped}
 
 
@@ -726,11 +722,9 @@ def fill_labels_from_sort(body: dict):
     # Persist labels to disk BEFORE building the response.  Letting a
     # silent disk-write failure here fall through to ``return {...}`` is
     # the C11 bug; the UI would treat the labels as committed while
-    # ``detectors/<name>.json`` never received them.  ``sync_to_labelset_source``
-    # is fire-and-forget by design (debounced background timer), so we
-    # only guard against the unlikely synchronous scheduling failure.
+    # ``detectors/<name>.json`` never received them.  The write also
+    # schedules the push to the detector's labelset source, if it has one.
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
-    from vtscore.labels.sync import sync_to_labelset_source
 
     try:
         sync_labels_to_loaded_detector()
@@ -751,11 +745,6 @@ def fill_labels_from_sort(body: dict):
             det_ctx.click_counter = saved_click_counter
         logger.exception("fill_labels_from_sort: detector label sync failed")
         abort(500, message=f"Failed to persist labels to detector store: {exc}")
-
-    try:
-        sync_to_labelset_source()
-    except Exception:
-        logger.exception("fill_labels_from_sort: labelset source scheduling failed")
 
     # Build a results dict compatible with exporters.  Reuse the snapshot
     # taken at the top so the hit dicts reference the same dataset's media

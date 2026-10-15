@@ -114,7 +114,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="autopilot.phase_machine",
         app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(goodCount",
-        harness="vtscore/eval/autopilot_flow.py::next_phase,stop_lights",
+        harness="vtscore/eval/autopilot_flow.py::next_phase,stop_lights,STOP_CAP",
         kind="ported",
         note=(
             "The phase ordering and every transition trigger of the simulated Autopilot user. "
@@ -138,7 +138,11 @@ MIRRORS: list[Mirror] = [
             "levelMet (the labeling status's level.met, from the library's stop_level_reading) beside the three "
             "lights, and every light green or the level met is that branch; the harness's AutopilotFlow, under its "
             "default stop_rule 'lights|level', hands next_phase every light green when stop_lights says the rule "
-            "stops, reading stop_level_met on the step's labels line."
+            "stops, reading stop_level_met on the step's labels line. And on the click cap (#4903): the app's "
+            "checkPhaseTransition opens that branch once the votes reach STOP_CAP_VOTES (atCap); the harness's "
+            "AutopilotFlow passes stop_lights at_cap once they reach its stop_cap (STOP_CAP by default), and "
+            "stop_lights says stop under every rule. The two numbers are pinned literally by "
+            "TestPortedConstants and the service spec."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
@@ -153,8 +157,13 @@ MIRRORS: list[Mirror] = [
             "max_steps) is its measurement of the final line, which no app user can start since the "
             "Check button went: it is never a click. The app also latches doneChecked when a run's first "
             "labeling-status reading already says Done, every light green or the level met (the Train view "
-            "re-entered on a finished detector); a harness run starts with no votes, where neither can hold, so "
-            "it has nothing to port. The harness's early check (begin_spot_check('early'), early_check=N, #4664) "
+            "re-entered on a finished detector), and when its first labelset reading already holds the cap "
+            "(noteInitialLabelset); a harness run starts with no votes, where none can hold, so "
+            "it has nothing to port. A run that reaches the cap still in its opening (cappedInOpening, #4903) "
+            "is told Autopilot has stopped and offered the re-sort prompt, but its phase stays the opening's: "
+            "display only, like doneReached, so next_phase has nothing to port; the harness's "
+            "capped_in_opening reads the same condition for a reader asking where such a session stopped. "
+            "The harness's early check (begin_spot_check('early'), early_check=N, #4664) "
             "is an experiment arm the app does not run: a check at a fixed vote count, which latches nothing."
         ),
     ),
@@ -263,26 +272,24 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="check.likely_range",
         app="py:vtscore.training.thresholds.spot_check.likely_range",
-        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::range_tail,likely_range",
+        harness="scripts/experiments/state_of_app/check_range_4483.py::hg_bounds",
         kind="ported",
         note=(
-            "The interval one band of a checked set carries (#4272, #4388): Clopper-Pearson "
-            "from the picks inside the band, each tail at alpha / bands (range_tail, split "
-            "over the bands in the set so the set's size-weighted range holds by the union "
-            "bound), exact (s / K) once the picks cover the band. The walk decides on the "
-            "band-weighted point estimate, not on this range, which says how close the "
-            "estimate is; a balance reports it for the set's precision and, over the walk's "
-            "count of positives, its recall (#4413). The reference's coverage numbers "
-            "(99% of sessions) hold only for this tail; a plain 90% range showed above the "
-            "truth 11% of the time after a first pass. If the tail or the census rule moves on "
-            "either side, move the other."
+            "The bound one part of a checked set carries (#4483, the owner's ruling of 2026-10-15; "
+            "before it #4272's Clopper-Pearson with the tail split over the bands): the exact "
+            "hypergeometric bound for a part of known size from the picks inside it, each tail at "
+            "alpha (range_tail no longer splits), exact (s / K) once the picks cover the part, 0-100% "
+            "with none. The parts are summed size-weighted over the set the line kept when the check "
+            "started (SpotCheck.range_over). #4483 priced it on 3,568 real closing checks and simulated "
+            "checks at clicks 25-100: it held the truth in at least 98.9% of checks in every regime, "
+            "at 0.55-0.76 of the Clopper-Pearson width. If the bound, the tail or the census rule "
+            "moves on either side, move the other."
         ),
         divergence=(
-            "INTENTIONAL: the reference is vectorised over frames (numpy arrays, a cached bound "
-            "table); the library bounds one set at a time through scipy's beta quantile, "
-            "clopper_pearson_lower / clopper_pearson_upper, and returns a LikelyRange record. "
-            "range_tail is a separate one-liner on both sides; it is named here because the "
-            "tail is half of what this mirror is about."
+            "INTENTIONAL: the reference returns a band's (lo, hi) share for the pricing's own sums and "
+            "takes a zero-pick band as 0-100% before scipy; the library returns a LikelyRange record "
+            "through hypergeometric_lower / hypergeometric_upper, which search only the counts the "
+            "picks leave possible (the same bound)."
         ),
     ),
     Mirror(
@@ -304,7 +311,10 @@ MIRRORS: list[Mirror] = [
             "INTENTIONAL: the app's check can end 'cancelled' (the user closed the step), "
             "carries a fingerprint for the stale flag, reports its state to a client, and draws "
             "one band at a time as the walk reaches it; the reference draws every band's picks "
-            "up front from planted labels (the same picks the walk would touch) and asks no user."
+            "up front from planted labels (the same picks the walk would touch) and asks no user. "
+            "Since #4483 the app's check also records the count the line kept when it started "
+            "(kept) and bounds that set from its picks (parts_over / range_over), which the "
+            "reference, an estimate of the walk's own set, does not model."
         ),
     ),
     Mirror(

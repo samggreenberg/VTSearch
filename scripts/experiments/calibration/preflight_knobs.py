@@ -425,7 +425,8 @@ def probe(C: Any) -> list[str]:
     for knob, var, value, param, shipped in (
         ("weak_d", "CALIB_WEAK_D", C.WEAK_D, "weak_separation", T.WEAK_SEPARATION_D),
         ("weak_min_t", "CALIB_WEAK_MIN_T", C.WEAK_MIN_T, "weak_min_t", T.WEAK_CHECK_MIN_VOTES),
-        ("weak_repeat", "CALIB_WEAK_REPEAT", C.WEAK_REPEAT, "weak_repeat", T.WEAK_CHECK_COOLDOWN),
+        # The app's None (once, #4909) is the harness's 0.
+        ("weak_repeat", "CALIB_WEAK_REPEAT", C.WEAK_REPEAT, "weak_repeat", T.WEAK_CHECK_REPEAT or 0),
     ):
         resolved(knob, var, value if value is not None else harness_default(param), shipped)
     # The app has no detector to read separation from during its opening, so it
@@ -452,6 +453,10 @@ def probe(C: Any) -> list[str]:
                 "lights|level@0.5 (every light green, or the line's level)",
             )
         )
+    from vtscore.eval.autopilot_flow import STOP_CAP  # noqa: PLC0415
+
+    if C.STOP_CAP != STOP_CAP:
+        rows.append(("stop_cap", str(C.STOP_CAP), f"{STOP_CAP} (Done at {STOP_CAP} votes whatever the rule; #4903)"))
     if C.LABEL_QUOTA is not None:
         rows.append(
             (

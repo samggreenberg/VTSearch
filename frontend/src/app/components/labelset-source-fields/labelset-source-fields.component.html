@@ -1,0 +1,52 @@
+@for (field of shownFields; track field.key) {
+  <div class="form-group">
+    <label class="form-label" [for]="idPrefix() + '-' + field.key" [title]="field.description || ''">
+      @if (field.field_type === 'checkbox') {
+        <vt-plugin-checkbox
+          [inputId]="idPrefix() + '-' + field.key"
+          [value]="value(field.key)"
+          (valueChange)="set(field.key, $event)"
+          [title]="field.description || field.label || field.key"
+        ></vt-plugin-checkbox>
+      }
+      {{ field.label || field.key }}{{ field.field_type === 'checkbox' ? '' : ':' }}
+      @if (needsValue(field)) {
+        <span class="required">*</span>
+      }
+    </label>
+    @if (field.field_type === 'select') {
+      <select
+        [id]="idPrefix() + '-' + field.key"
+        class="form-select"
+        [ngModel]="value(field.key)"
+        (ngModelChange)="set(field.key, $event)"
+        [attr.aria-label]="field.label || field.key">
+        @for (opt of field.options ?? []; track opt) {
+          <option [value]="opt">{{ opt }}</option>
+        }
+      </select>
+    } @else if (field.field_type === 'number') {
+      <input
+        [id]="idPrefix() + '-' + field.key"
+        type="number"
+        class="form-input"
+        [ngModel]="value(field.key)"
+        (ngModelChange)="set(field.key, $event)"
+        [placeholder]="field.placeholder || field.default || ''"
+        [attr.min]="field.min || null"
+        [attr.max]="field.max || null"
+        [attr.step]="field.step || null" />
+    } @else if (field.field_type !== 'checkbox') {
+      <input
+        [id]="idPrefix() + '-' + field.key"
+        [type]="inputType(field)"
+        class="form-input"
+        [ngModel]="value(field.key)"
+        (ngModelChange)="set(field.key, $event)"
+        [placeholder]="field.placeholder || field.default || field.description || ''" />
+    }
+    @if (field.hint) {
+      <p class="form-hint">{{ field.hint }}</p>
+    }
+  </div>
+}

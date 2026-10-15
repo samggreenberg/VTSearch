@@ -234,7 +234,11 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: retrained the model, so the range describes the list as it was), 0
     #: while it holds, -1 with no finished check.
     "check_stale",
+    #: The set the walk ended on (#4427), and the set the ranges describe: how
+    #: many unvoted items the line kept when the check started (#4483), -1
+    #: where the ranges describe the audited set (a forced ``trim`` arm).
     "check_audited",
+    "check_kept",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one

@@ -25,6 +25,11 @@ from pathlib import Path
 
 import common
 
+if __name__ == "__main__":
+    # Before numpy or torch loads: one set of numeric kernels on every node, so a
+    # cell is bit-identical wherever it runs (#4110).  Only as a script: a test that
+    # imports this module must not change its own process's kernels.
+    common.pin_cpu_kernels()
 common.setup_env()
 
 import numpy as np  # noqa: E402
@@ -349,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
-        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} label_quota={cfg.LABEL_QUOTA} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
@@ -365,6 +370,8 @@ def main(argv: list[str] | None = None) -> int:
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
+    # Which CPU, and which kernels: a cross-node pair is read by these (#4110).
+    common.log(f"kernels: {common.kernel_report()}")
 
     import pandas as pd
 
@@ -509,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
                 smart_gate=cfg.SMART_GATE,
                 stop_rule=cfg.STOP_RULE,
                 stop_level=cfg.STOP_LEVEL,
+                stop_cap=cfg.STOP_CAP,
                 label_quota=cfg.LABEL_QUOTA,
                 walk_picks=cfg.WALK_PICKS,
                 walk_tol=cfg.WALK_TOL,

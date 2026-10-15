@@ -90,6 +90,25 @@ def _as_set(pair: tuple[np.ndarray, np.ndarray]) -> set[tuple[int, int]]:
     return set(zip(pair[0].tolist(), pair[1].tolist()))
 
 
+def _ratio_test_by_cdist(
+    template: np.ndarray, candidates: list[np.ndarray], ratio: float
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """``ratio_test_matches`` as it was before #4515: the full ``cdist`` matrix, then ``topk``."""
+    import torch
+
+    out = []
+    t = torch.from_numpy(np.asarray(template, dtype=np.float32))
+    for c in candidates:
+        if c.shape[0] < 2:
+            out.append((np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)))
+            continue
+        dist = torch.cdist(t.unsqueeze(0), torch.from_numpy(c.astype(np.float32)).unsqueeze(0))[0]
+        best, idx = torch.topk(dist, 2, dim=1, largest=False)
+        sel = np.nonzero((best[:, 0] < ratio * best[:, 1]).numpy())[0].astype(np.int64)
+        out.append((sel, idx[:, 0].numpy()[sel].astype(np.int64)))
+    return out
+
+
 # --------------------------------------------------------------------------
 # ratio_test_matches
 # --------------------------------------------------------------------------
@@ -138,9 +157,52 @@ class TestRatioTestMatches:
         template = _descs(40, seed=8)
         candidates = [_descs(20 + i, seed=100 + i) for i in range(7)]
         whole = ratio_test_matches(template, candidates, ratio=_LOWE)
-        monkeypatch.setattr(structural, "_MATCH_CHUNK_ELEMENTS", 1)  # force one candidate per chunk
+        # Force one candidate per chunk, on either device's budget.
+        monkeypatch.setattr(structural, "_MATCH_CHUNK_ELEMENTS", 1)
+        monkeypatch.setattr(structural, "_MATCH_CHUNK_ELEMENTS_CPU", 1)
         chunked = ratio_test_matches(template, candidates, ratio=_LOWE)
         assert [_as_set(p) for p in chunked] == [_as_set(p) for p in whole]
+
+    @pytest.mark.parametrize("budget", [1, 10**9])
+    def test_integer_descriptors_match_the_cdist_path_exactly(
+        self, monkeypatch: pytest.MonkeyPatch, budget: int
+    ) -> None:
+        """#4515: on SIFT's integer descriptors the result is the old cdist + topk path's, pair for pair.
+
+        Every partial sum of the expanded squared distance is an integer below 2**24, so float32
+        is exact and ranking on ``|b|^2 - 2ab`` finds the same two neighbours at the same
+        distances. Values span the whole uint8 range, the bound's worst case, and the pages
+        are ragged so the padding is exercised.
+        """
+        rng = np.random.default_rng(11)
+        template = rng.integers(0, 256, (60, SIFT_DESCRIPTOR_DIM)).astype(np.float32)
+        # Near-copies of template rows plant real matches among the random ones.
+        candidates = []
+        for n in (2, 3, 40, 75, 120):
+            c = rng.integers(0, 256, (n, SIFT_DESCRIPTOR_DIM))
+            k = min(n, 20)
+            c[:k] = np.clip(
+                template[rng.choice(60, k, replace=False)] + rng.integers(-6, 7, (k, SIFT_DESCRIPTOR_DIM)), 0, 255
+            )
+            candidates.append(c.astype(np.uint8))
+        want = _ratio_test_by_cdist(template, candidates, _LOWE)
+        monkeypatch.setattr(structural, "_MATCH_CHUNK_ELEMENTS", budget)
+        monkeypatch.setattr(structural, "_MATCH_CHUNK_ELEMENTS_CPU", budget)
+        got = ratio_test_matches(template, candidates, ratio=_LOWE)
+        assert sum(p[0].size for p in want) > 50  # the planted matches survive the ratio test
+        for g, w in zip(got, want):
+            assert np.array_equal(g[0], w[0]) and np.array_equal(g[1], w[1])
+            assert g[0].dtype == g[1].dtype == np.int64
+
+    def test_a_tied_nearest_neighbour_is_never_a_match(self) -> None:
+        """Two candidate descriptors at the same distance: the ratio test cannot pass, whichever is found."""
+        template = np.zeros((2, SIFT_DESCRIPTOR_DIM), dtype=np.float32)
+        template[1, 0] = 200
+        cand = np.zeros((3, SIFT_DESCRIPTOR_DIM), dtype=np.uint8)
+        cand[0, 1] = cand[1, 2] = 10  # both at distance 10 from template row 0
+        cand[2, 0] = 200  # template row 1's exact match
+        ((t_idx, c_idx),) = ratio_test_matches(template, [cand], ratio=_LOWE)
+        assert t_idx.tolist() == [1] and c_idx.tolist() == [2]
 
 
 class TestDeviceDescriptorCache:
@@ -175,9 +237,9 @@ class TestDeviceDescriptorCache:
         # A cache entry left by a freed array whose id the new array now has.
         structural._DEVICE_DESCRIPTORS[id(fresh)] = (weakref.ref(dead), stale)
         structural._DEVICE_DESCRIPTOR_BYTES[0] = stale.nbytes
-        out = structural._device_descriptors(fresh, "cpu", cache=True)
-        assert out.dtype == torch.float32
-        assert torch.equal(out, torch.full((3, 4), 7.0))
+        out = structural._stored_descriptors(fresh, "cpu", cache=True)
+        assert out.dtype == torch.uint8
+        assert torch.equal(out, torch.full((3, 4), 7, dtype=torch.uint8))
 
     def test_the_least_recently_used_pages_go_past_the_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from vtscore.media import structural
@@ -185,7 +247,7 @@ class TestDeviceDescriptorCache:
         monkeypatch.setattr(structural, "DEVICE_DESCRIPTOR_LIMIT_BYTES", 2 * 100 * 128)
         pages = [np.zeros((100, 128), dtype=np.uint8) for _ in range(3)]
         for p in pages:
-            structural._device_descriptors(p, "cpu", cache=True)
+            structural._stored_descriptors(p, "cpu", cache=True)
         kept = [k for k in structural._DEVICE_DESCRIPTORS]
         assert kept == [id(pages[1]), id(pages[2])]
         assert structural._DEVICE_DESCRIPTOR_BYTES[0] == 2 * 100 * 128

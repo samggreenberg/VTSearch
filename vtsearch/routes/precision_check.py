@@ -82,7 +82,12 @@ def start_precision_check():
     last finished result stays in force until this check ends.
     """
     from vtscore.config import SPOT_CHECK_SEED  # noqa: PLC0415
-    from vtscore.state.core import detector_walk_positives, get_active_detector_context, human_voted_ids  # noqa: PLC0415
+    from vtscore.state.core import (  # noqa: PLC0415
+        detector_balance_state,
+        detector_walk_positives,
+        get_active_detector_context,
+        human_voted_ids,
+    )
     from vtscore.training.thresholds import SpotCheck  # noqa: PLC0415
     from vtsearch.state import line_knobs  # noqa: PLC0415
 
@@ -105,7 +110,10 @@ def start_precision_check():
     # only the screenshot harness does, so a refresh frames the same picks
     # (#4330).
     n_pos = detector_walk_positives(det_ctx, beta)
-    det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED)
+    # The finished check's ranges describe the set the line keeps now (#4483):
+    # the top of this same unvoted ranking.
+    kept = detector_balance_state(det_ctx, beta)["count"]
+    det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED, kept=kept)
     return _payload()
 
 
@@ -152,7 +160,7 @@ def vote_precision_check(body: dict):
     if finished and check.finished:
         # The set the line keeps from now on, as it stands with the check's
         # own votes cast: what a later vote or retrain is compared against.
-        check.fingerprint = det_ctx.line_ranking.fingerprint(check.k, human_voted_ids(det_ctx))
+        check.fingerprint = det_ctx.line_ranking.fingerprint(check.range_count, human_voted_ids(det_ctx))
         det_ctx.precision_check = check
         det_ctx.precision_check_run = None
         # The weak-separation prompt's cooldown counts from here (#4496).
@@ -181,17 +189,12 @@ def cancel_precision_check():
 def _persist_votes() -> None:
     """Persist the check's votes exactly as ``/api/medias/<id>/vote`` persists one."""
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector  # noqa: PLC0415
-    from vtscore.labels.sync import sync_to_labelset_source  # noqa: PLC0415
 
     try:
         sync_labels_to_loaded_detector()
     except Exception as exc:
         log.exception("precision check: detector label sync failed")
         abort(500, message=f"Failed to persist votes to detector store: {exc}")
-    try:
-        sync_to_labelset_source()
-    except Exception:
-        log.exception("precision check: labelset source scheduling failed")
 
 
 def _move_line(det_ctx) -> None:

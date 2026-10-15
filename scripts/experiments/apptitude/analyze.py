@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Read Rico Suave runs (#4356): does the app work on app screens, per class and balance preset.
+"""Read Apptitude runs (#4356): does the app work on app screens, per class and balance preset.
 
 Each run directory is one balance preset (``launch.sh``, ``runs/<date>-b<beta>``). Every cell is one
 class on one seed. Written under ``--out``:
@@ -164,12 +164,12 @@ def _fmt(x: float) -> str:
 
 
 def summary(runs: pd.DataFrame, ref: pd.DataFrame, empty: dict[str, int], labels: list[str]) -> str:
-    rico = runs[runs["dataset"] == "rico_suave"]
+    screens = runs[runs["dataset"] == "apptitude"]
     lines = [
-        "# Rico Suave v0 (#4356)",
+        "# Apptitude v0 (#4356)",
         "",
         "F-beta at the session's preset of what Find returns on the withheld half, every run at every vote "
-        f"(split by app). Runs per preset: {rico.groupby('preset').size().to_dict()}. Empty cells: {empty}.",
+        f"(split by app). Runs per preset: {screens.groupby('preset').size().to_dict()}. Empty cells: {empty}.",
         "",
         "## Per preset, every class",
         "",
@@ -178,7 +178,7 @@ def summary(runs: pd.DataFrame, ref: pd.DataFrame, empty: dict[str, int], labels
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for k in labels:
-        for name, g in (("rico_suave", rico[rico["preset"] == k]), ("coco_better (ref)", ref[ref["preset"] == k])):
+        for name, g in (("apptitude", screens[screens["preset"] == k]), ("coco_better (ref)", ref[ref["preset"] == k])):
             if g.empty:
                 continue
             lines.append(
@@ -200,7 +200,7 @@ def summary(runs: pd.DataFrame, ref: pd.DataFrame, empty: dict[str, int], labels
         "|---|---|---|---|---|---|",
     ]
     for k in labels:
-        for name, g in (("rico_suave", rico[rico["preset"] == k]), ("coco_better (ref)", ref[ref["preset"] == k])):
+        for name, g in (("apptitude", screens[screens["preset"] == k]), ("coco_better (ref)", ref[ref["preset"] == k])):
             if g.empty:
                 continue
             d = g["fbeta_mean"] - g["fbeta_mean_nohold"]
@@ -216,8 +216,8 @@ def summary(runs: pd.DataFrame, ref: pd.DataFrame, empty: dict[str, int], labels
         "| class | " + " | ".join(labels) + " |",
         "|---|" + "---|" * len(labels),
     ]
-    for c in sorted(rico["category"].unique()):
-        g = rico[rico["category"] == c]
+    for c in sorted(screens["category"].unique()):
+        g = screens[screens["category"] == c]
         cells = []
         for k in labels:
             h = g[g["preset"] == k]
@@ -233,9 +233,9 @@ def summary(runs: pd.DataFrame, ref: pd.DataFrame, empty: dict[str, int], labels
         + " | AP at 150 | ceiling AP |",
         "|---|---|---|" + "---|---|" * len(labels) + "---|---|",
     ]
-    order = rico.groupby("category")["prevalence"].mean().sort_values(ascending=False).index
+    order = screens.groupby("category")["prevalence"].mean().sort_values(ascending=False).index
     for c in order:
-        g = rico[rico["category"] == c]
+        g = screens[screens["category"] == c]
         cells = []
         for k in labels:
             h = g[g["preset"] == k]
@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     groups: dict[tuple, list[dict]] = {}
     for rec in recs:
         groups.setdefault((rec["preset"], rec["dataset"], "all"), []).append(rec)
-        if rec["dataset"] == "rico_suave":
+        if rec["dataset"] == "apptitude":
             groups.setdefault((rec["preset"], rec["dataset"], rec["category"]), []).append(rec)
     for (preset, ds, cat), rs in groups.items():
         means = {m: np.mean(np.stack([r[m] for r in rs]), axis=0) for m in ("fbeta", "precision", "recall")}

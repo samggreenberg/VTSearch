@@ -6685,9 +6685,8 @@ WS_TIME_Y = 0.95
 #: The separation axis's range.
 WS_D_MAX = 4.0
 #: One weak session, in votes: where the opening ends (the median session's
-#: first learned step, #4496), and each check's (start, length). A check runs
-#: about twenty picks; the second starts the shipped cooldown after the first
-#: ends, because the labels still separate weakly then.
+#: first learned step, #4496), and the check's length. A check runs about
+#: twenty picks, once a session (#4909).
 WS_SESSION_VOTES = 150
 WS_OPENING_END = 45
 WS_CHECK_LEN = 20
@@ -6698,8 +6697,9 @@ def weak_spot_fig() -> None:
 
     The separation is d' = (Good mean − Bad mean) / spread of the class model
     the held-out votes imply, computed by the shipped `class_score_model`; the
-    bar, the first vote a check may come at and the cooldown between checks
-    are `WEAK_SEPARATION_D`, `WEAK_CHECK_MIN_VOTES` and `WEAK_CHECK_COOLDOWN`.
+    bar and the first vote a check may come at are `WEAK_SEPARATION_D` and
+    `WEAK_CHECK_MIN_VOTES`, and the check comes once a session
+    (`WEAK_CHECK_REPEAT`, #4909).
     The session row is a schematic of one weak session drawn on those
     constants, not a measured one.
     """
@@ -6779,8 +6779,8 @@ def _ws_axis_row(ax: plt.Axes) -> None:
 
 
 def _ws_session_row(ax: plt.Axes) -> None:
-    """Stage 3: one weak session's votes, with the checks Autopilot runs and the cooldown between them."""
-    from vtscore.training.thresholds.labels_line import WEAK_CHECK_COOLDOWN, WEAK_CHECK_MIN_VOTES  # noqa: PLC0415
+    """Stage 3: one weak session's votes, with the check Autopilot runs once, after the opening."""
+    from vtscore.training.thresholds.labels_line import WEAK_CHECK_MIN_VOTES  # noqa: PLC0415
 
     x0, x1 = WS_PANELS[0][0], WS_PANELS[1][1]
 
@@ -6798,20 +6798,12 @@ def _ws_session_row(ax: plt.Axes) -> None:
                            edgecolor=INK, linewidth=1.2, zorder=2))  # fmt: skip
     ax.text((at(0) + at(WS_OPENING_END)) / 2, WS_TIME_Y + h / 2, "opening", ha="center", va="center", fontsize=16,
             color=INK, zorder=3)  # fmt: skip
-    first = max(WS_OPENING_END, WEAK_CHECK_MIN_VOTES)
-    second = first + WS_CHECK_LEN + WEAK_CHECK_COOLDOWN
-    for start in (first, second):
-        ax.add_patch(Rectangle((at(start), WS_TIME_Y), at(start + WS_CHECK_LEN) - at(start), h, facecolor="white",
-                               edgecolor=BLUE, linewidth=2.2, zorder=2))  # fmt: skip
-        ax.text((at(start) + at(start + WS_CHECK_LEN)) / 2, WS_TIME_Y + h / 2, "check", ha="center", va="center",
-                fontsize=16, color=INK, zorder=3)  # fmt: skip
-    # The cooldown, as a span from one check's end to the next one's start.
-    a, b = at(first + WS_CHECK_LEN), at(second)
-    y = WS_TIME_Y + h + 0.3
-    ax.annotate("", xy=(b, y), xytext=(a, y), arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.4},
-                zorder=4)  # fmt: skip
-    ax.text((a + b) / 2, y + LABEL_GAP, f"{WEAK_CHECK_COOLDOWN} votes", ha="center", va="bottom", fontsize=16,
-            color=INK)  # fmt: skip
+    start = max(WS_OPENING_END, WEAK_CHECK_MIN_VOTES)
+    mid = (at(start) + at(start + WS_CHECK_LEN)) / 2
+    ax.add_patch(Rectangle((at(start), WS_TIME_Y), at(start + WS_CHECK_LEN) - at(start), h, facecolor="white",
+                           edgecolor=BLUE, linewidth=2.2, zorder=2))  # fmt: skip
+    ax.text(mid, WS_TIME_Y + h / 2, "check", ha="center", va="center", fontsize=16, color=INK, zorder=3)
+    ax.text(mid, WS_TIME_Y + h + LABEL_GAP, "once a session", ha="center", va="bottom", fontsize=16, color=INK)
 
 
 def _ws_stage(stage: int) -> plt.Figure:
@@ -7116,6 +7108,9 @@ FLOOR_BAND_LIFT = 0.70
 FLOOR_WALK_DROP = 0.55
 FLOOR_ASK_STAGES = 4
 FLOOR_CHECK_STAGES = 5
+#: The gap between the two lines of the check's reading (17pt), a little more
+#: than the 15pt lines' 0.55 under it.
+FLOOR_READING_LEADING = 0.62
 
 
 def floor_ask_fig() -> None:
@@ -7349,7 +7344,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict
         ax.text(
             FLOOR_STATEMENT_X,
             top - FLOOR_STATEMENT_DROP,
-            f"“Top {FLOOR_K} kept, unchecked”",
+            f"“{FLOOR_K} more kept, unchecked”",
             ha="left",
             va="bottom",
             fontsize=18,
@@ -7430,7 +7425,7 @@ def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict, top: float) -> None:
         ax.text(
             FLOOR_STATEMENT_X,
             top - FLOOR_STATEMENT_DROP - FLOOR_ASK_HEADROOM,
-            f"The Threshold control says: “Top {FLOOR_K} kept, unchecked”",
+            f"The Threshold control says: “{FLOOR_K} more kept, unchecked”",
             ha="left",
             va="bottom",
             fontsize=18,
@@ -7519,7 +7514,9 @@ def _floor_check_reading() -> str:
     band's Clopper–Pearson interval at the walk's split tail, `likely_range` at
     `range_tail`, weighted by the band's size — over the kept set for precision
     and over the walk's count of positives for recall. Worded as the control's
-    state line (`balanceSummary`), and rounded the way it rounds.
+    state line (`balanceSummary`), and rounded the way it rounds: it names the
+    set the check measured, the items nobody had voted on, and counts the kept
+    ones beside the votes (#4914).
     """
     k = FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][1]
     assert k == FLOOR_K, k
@@ -7536,7 +7533,10 @@ def _floor_check_reading() -> str:
     n_pos = FLOOR_CHECK_POSITIVES
     found = _floor_found_words((min(1.0, lo / n_pos) + min(1.0, hi / n_pos)) / 2)
     percent = "–".join(f"{math.floor(100 * x / k + 0.5):d}" for x in (lo, hi))
-    return f"Checked · likely {percent}% right, {found} (checked {labelled}) · {FLOOR_K} kept"
+    return (
+        f"Checked the top {k} you hadn't voted on · likely {percent}% right, "
+        f"{found} (checked {labelled}) · {FLOOR_K} more kept"
+    )
 
 
 def _floor_band_bracket(ax: plt.Axes, rows: dict, band: int) -> None:
@@ -7618,31 +7618,40 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
         _floor_walk_arrow(ax, line_x + 0.2, shallower_x, walk_y, "a band shallower: worse")
     # ── stage 5: what the control says, and what the check did to the line ───
     if stage >= 5:
-        reading_y = walk_y - 1.45
+        _floor_check_said(ax, walk_y - 1.45)
+
+
+def _floor_check_said(ax: plt.Axes, reading_y: float) -> None:
+    """Stage 5 of `calib-floor-check`: the control's reading at *reading_y*, and what the check did to the line under it."""
+    # The reading is too long for one line at this size, as it is in the
+    # app's panel: it breaks after the share right, as a reader pauses.
+    head, tail = _floor_check_reading().split(" right, ", 1)
+    for row, words in enumerate((f"“{head} right,", f"{tail}”")):
         ax.text(
             INCL_CANVAS_W / 2,
-            reading_y,
-            f"“{_floor_check_reading()}”",
+            reading_y - row * FLOOR_READING_LEADING,
+            words,
             ha="center",
             va="center",
             fontsize=17,
             color=INK,
         )
-        for row, words in enumerate(
-            (
-                "At every radio a check informs the line and does not move it:",
-                "its picks are votes, and the line stays where the labels put it.",
-            )
-        ):
-            ax.text(
-                INCL_CANVAS_W / 2,
-                reading_y - 0.75 - row * 0.55,
-                words,
-                ha="center",
-                va="center",
-                fontsize=15,
-                color=INK,
-            )
+    reading_y -= FLOOR_READING_LEADING
+    for row, words in enumerate(
+        (
+            "At every radio a check informs the line and does not move it:",
+            "its picks are votes, and the line stays where the labels put it.",
+        )
+    ):
+        ax.text(
+            INCL_CANVAS_W / 2,
+            reading_y - 0.75 - row * 0.55,
+            words,
+            ha="center",
+            va="center",
+            fontsize=15,
+            color=INK,
+        )
 
 
 if __name__ == "__main__":

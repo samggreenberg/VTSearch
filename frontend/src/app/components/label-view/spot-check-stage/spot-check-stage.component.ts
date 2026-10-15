@@ -27,7 +27,7 @@ import type { Media } from '../../../models/api.models';
 import type { PrecisionCheckResponse } from '../../../generated/api-client/models/precision-check-response';
 import type { PrecisionCheckState } from '../../../generated/api-client/models/precision-check-state';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { foundWords, lineBalanceFrom, rangePercent, type LineBalance } from '../../../utils/line-balance';
+import { foundWords, lineBalanceFrom, rangedSetWords, rangePercent, type LineBalance } from '../../../utils/line-balance';
 
 /** Where the step is: drawing the first round, voting on a round, sending it, on the result, or refused. */
 type Phase = 'starting' | 'voting' | 'sending' | 'done' | 'error';
@@ -170,29 +170,41 @@ export class SpotCheckStageComponent implements OnInit {
     return `${picks[0].toUpperCase()}${picks.slice(1)}${from}, ${set}.`;
   });
 
-  /** The result's headline: what the picks found on the set the walk ended on (under `advisory`, named, since the line keeps another). */
+  /**
+   * The result's headline: what the picks found on the set the ranges describe, named - since #4483
+   * the ones the line kept when the check started, which its votes have since moved - and holding
+   * only what the user had not voted on (#4914).
+   */
   readonly resultHeadline = computed(() => {
     const b = this.balance();
     if (!b) return '';
     const p = b.precision;
     const r = b.recall;
-    const what = b.shape === 'advisory' ? `Checked the top ${(b.audited ?? b.count).toLocaleString()}` : 'Checked';
+    const what = `Checked ${rangedSetWords(b)}`;
     return p && r ? `${what}: likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}).` : `${what}.`;
   });
 
-  /** What the line keeps now, and what the ranges describe (#4427: under `advisory` the two differ). */
+  /**
+   * What the line keeps now, and what the ranges describe (#4427: under `advisory` the two differ).
+   * Neither range counts the Goods voted before the check (#4914), which is why a session that
+   * harvested the top well can end on low ranges, so the note says so.
+   */
   readonly resultDetail = computed(() => {
     const b = this.balance();
     if (!b) return '';
     const kept = b.count.toLocaleString();
+    const before = 'the Goods you had already voted on count in neither.';
     if (b.shape === 'advisory') {
-      const audited = (b.audited ?? b.count).toLocaleString();
+      const ranged =
+        b.keptAtCheck !== null
+          ? `the ${b.keptAtCheck.toLocaleString()} it kept when the check started`
+          : `the top ${(b.audited ?? b.count).toLocaleString()} you hadn't voted on`;
       return (
-        `The line keeps its ${kept}, where your labels put it: the check informs the line and does not move it. ` +
-        `The ranges are what the picks say about the top ${audited}.`
+        `The line keeps the top ${kept} you haven't voted on, where your labels put it: the check informs the line and does not move it. ` +
+        `The ranges are what the picks say about ${ranged}; ${before}`
       );
     }
-    return `The line keeps these ${kept}: the set where the check's balance peaked. The ranges are what the picks say about them.`;
+    return `The line keeps these ${kept}: the set where the check's balance peaked. The ranges are what the picks say about them; ${before}`;
   });
 
   constructor() {

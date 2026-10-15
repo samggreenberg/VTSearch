@@ -105,10 +105,16 @@ WEAK_SEPARATION_D = 1.5
 #: The fewest votes before weak separation makes a spot check due (#4496): the
 #: first few labels separate noisily, and a check needs a line to walk.
 WEAK_CHECK_MIN_VOTES = 10
-#: Votes after a check ends before weak separation makes another due (#4496).
-#: Priced against prompting once: +0.013 to +0.027 at click 150 against +0.007
-#: to +0.010, for 28-35% of a prompted session's clicks spent checking.
+#: Votes after a check ends before the check before Done runs (:func:`done_check_due`, #4496): a check that ended
+#: moments ago has already measured this line.  It was also the weak check's repeat until #4909.
 WEAK_CHECK_COOLDOWN = 25
+#: Votes after a check ends before weak separation makes another due; ``None``: never, so the weak check prompts at
+#: most once a session, and only before any other check has ended (#4909, the owner's choice of 2026-10-15).  #4496
+#: had chosen again after 25 votes, on an app where a check's picks were worth far more than Autopilot's.  At
+#: today's head prompting once matched or beat it: +0.0006 (beta 1) and +0.0013 (beta 4) in mean F-beta over clicks
+#: 0-200, level after the closing check, Done at the same click and F-beta, and 24-25 fewer of 200 clicks spent
+#: checking (``docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md``).
+WEAK_CHECK_REPEAT: int | None = None
 #: Media types whose sessions never get a prompted weak check (#4778, #4799).  A
 #: face search's opening finds the person's few photos before the check could
 #: start (a median of 4 Goods at vote 11), so a check's votes find nothing and
@@ -777,7 +783,7 @@ def weak_check_due(
     *,
     threshold: float = WEAK_SEPARATION_D,
     min_votes: int = WEAK_CHECK_MIN_VOTES,
-    cooldown: int | None = WEAK_CHECK_COOLDOWN,
+    cooldown: int | None = WEAK_CHECK_REPEAT,
 ) -> bool:
     """Whether the labels separate weakly enough that a spot check is due (#4496, the owner's ruling of 2026-10-05).
 
@@ -785,7 +791,8 @@ def weak_check_due(
     *threshold*, at least *min_votes* votes have been cast, and either no
     check has ended yet or *cooldown* votes have been cast since the last one
     ended (*votes_at_last_check*, the vote count when it ended; ``None``
-    before any).  ``cooldown=None`` makes a check due once at most.
+    before any).  ``cooldown=None``, the default (:data:`WEAK_CHECK_REPEAT`,
+    #4909), makes a check due once at most: never after any check has ended.
 
     The app's Autopilot runs the check when it is due; the eval harness's
     default arm (``spot_check="weak"``) runs it where this says, so both read
@@ -1066,6 +1073,7 @@ __all__ = [
     "RANDOM_BADS_TOP_SHARE",
     "WEAK_CHECK_COOLDOWN",
     "WEAK_CHECK_MIN_VOTES",
+    "WEAK_CHECK_REPEAT",
     "WEAK_SEPARATION_D",
     "WEAK_CHECK_OFF_MEDIA_TYPES",
     "done_check_due",

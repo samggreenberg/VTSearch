@@ -1,10 +1,13 @@
 # Writing a `LabelsetSource`
 
 A labelset source is a bidirectional sync target for one detector's
-labels. Once linked to a detector, every vote change debounces a
-background push to the source, and a detector reload (or an explicit
-`POST .../labelset-source/sync`) pulls the source's current state back
-in. Sources can also surface detector-level metadata (input spec,
+labels. Once linked to a detector, every change to the detector's labels
+schedules a paced background push of its whole labelset to the source,
+and loading the detector (or an explicit
+`POST .../labelset-source/sync`) pulls the source's labels back in and
+merges them. A deployment can link every detector to one source at once,
+which keeps a copy of each detector's labels current outside the server
+(#4913). Sources can also surface detector-level metadata (input spec,
 media type, etc.) alongside the labels, so a detector imported from a
 source comes back fully configured. Use a source for ongoing sync with
 an external store (server JSON file, database, S3 object, an LMS
@@ -29,7 +32,8 @@ covers the UI / route wiring. This guide focuses on the library API.
 - [The contract](#the-contract)
 - [`_do_load` vs. `_do_load_full`](#_do_load-vs-_do_load_full)
 - [Template variables: `{detector_id}` and `{detector_name}`](#template-variables-detector_id-and-detector_name)
-- [Circular-trigger prevention (`_syncing` guard)](#circular-trigger-prevention-_syncing-guard)
+- [How a detector is linked](#how-a-detector-is-linked)
+- [When your `_do_save` and `_do_load_full` run](#when-your-_do_save-and-_do_load_full-run)
 - [Entry-point registration](#entry-point-registration)
 - [Worked example](#worked-example)
 - [Testing pattern](#testing-pattern)
@@ -110,8 +114,8 @@ Two template variables resolve at runtime from the active
 
 - `{detector_id}` - stable internal identifier
 - `{detector_name}` - user-facing detector name (may be renamed; the
-  rename endpoint resolves both old and new paths to detect orphaned
-  files)
+  rename routes resolve both the old and the new path and move an on-disk
+  file to follow the new name)
 
 **Declare them on the field; don't substitute them yourself.** The
 framework only interpolates a field that lists the variables in
@@ -137,41 +141,85 @@ substituted *and* confined. Omit `template_vars` and the user's
 `{detector_name}` arrives as a literal - the placeholder ends up in the
 filename.
 
+The framework resolves the templates against the detector being synced,
+not whichever one the request has active: a push runs on a background
+timer, so it scopes a context carrying that detector's id and name.
+
 The one case that still needs manual work is resolving a template for a
-detector that **isn't** the active one - the rename endpoint has to
-resolve both the old and the new path to spot an orphaned file. The
+detector under a name it does not have yet - the rename routes have to
+resolve both the old and the new path to move the file. The
 built-in source's `resolve_filepath_for()` helper does that by hand with
 `sanitize_template_value` + `validate_server_filepath`, and is the
 pattern to copy.
 
-## Circular-trigger prevention (`_syncing` guard)
+## How a detector is linked
 
-When a source's `load()` runs, every label it applies would normally
-fire `sync_to_labelset_source()` and push the same labels back to the
-source - an infinite loop. The framework prevents this with a
-module-level `_syncing` flag in
-[`vtscore/labels/sync.py`](../../labels/sync.py), coordinated by a
-re-entrant `_sync_lock`. The flag is set for the duration of a
-`sync_from_labelset_source()` import pass, and
-`sync_to_labelset_source()` checks it (both at scheduling time and at
-execution time) to suppress the push.
+A detector's link to a source is resolved in one place,
+[`vtscore.labels.binding.resolve_labelset_source`](../../labels/binding.py),
+which every push, pull and route reads:
 
-You don't have to do anything in your source to participate - the
-guard wraps the apply pass, not your `_do_load()` or `_do_save()`. Just know
-that:
+1. the detector's own binding, stored on its registry entry under
+   `labelset_source` (`{"source_name": ..., "field_values": {...}}`);
+   `{"source_name": "none"}` opts it out;
+2. otherwise a binding set in memory on its loaded `DetectorContext`
+   (`ctx.labelset_source`) - the library-level way to link a source
+   without a registry;
+3. otherwise the deployment default, `CoreConfig.default_labelset_source`
+   (the app's `default_labelset_source` server setting), which the
+   detector inherits;
+4. otherwise nothing.
 
-- `_do_save()` will not be called as a side effect of `_do_load()` returning
-  labels;
-- two concurrent `sync_to`s from different threads serialize on
-  `_sync_lock`;
-- the `atexit` hook flushes the debounce queue at interpreter exit so
-  the last 200ms of votes get pushed (SIGKILL bypasses atexit and
-  drops that window).
+Every non-empty value in the default's `field_values` is **fixed**: it is
+laid over the detector's own values whenever the detector syncs to the
+default's source, never stored per detector, and never sent to a
+browser. The app's New Detector form asks only for your source's other
+fields (`unfixed_fields`), so a source whose fields an admin fills in
+completely costs users nothing. A required field that is neither fixed,
+filled in, nor defaulted is reported as missing, and the detector is not
+synced until it has a value.
 
-If your source's `_do_save()` is expensive, the 200ms debounce coalesces
-rapid voting bursts into a single push; the in-flight write is held
-by `_workers_lock` so `flush_pending_label_syncs()` (used by tests
-and graceful shutdown) waits for it.
+## When your `_do_save` and `_do_load_full` run
+
+The engine is [`vtscore/labels/sync.py`](../../labels/sync.py). You do not
+call it; knowing what it does tells you what your source can assume.
+
+**Pushes (`_do_save`).** Every write of a detector's JSON file schedules
+one, so votes, label imports, corrections and renames all reach your
+source. The `LabelSet` you receive is the detector file's **whole**
+labelset - every dataset's labels, not just the active dataset's votes -
+plus a `detector_meta` block, read when the push runs. Pushes are paced
+per detector:
+
+- never two at once for one detector, so `_do_save` is not re-entered for
+  the same detector (different detectors may push concurrently);
+- at least `CoreConfig.labelset_source_push_interval` seconds (default 60)
+  between the starts of two pushes, so a slow target or a burst of votes
+  costs one call per window;
+- a payload identical to what your source is known to hold is not sent
+  again.
+
+`_do_save` runs on a background thread, as the detector's creator (which
+is the user a `server_path` field is confined to).
+`flush_pending_label_syncs()` runs every pending push now, ignoring the
+pace; tests use it, and an `atexit` hook calls it so the newest labels
+reach your source on a normal shutdown (SIGKILL loses what was waiting).
+
+**Pulls (`_do_load_full`).** A pull merges what your source holds into
+the detector file: labels it has and the file lacks are added, and when
+both hold one item with different labels the caller decides who wins -
+the file when the detector loads or is linked (it is never older than
+what it pushed), your source on an explicit sync. A pull never removes a
+label. **A detector's first push in a process pulls first**, so a push
+never overwrites labels only your source held - which is how a detector
+this server lost comes back: re-create it under the same name and its
+labels are restored from your source. If `_do_load_full` raises, that
+push is skipped rather than risk overwriting what it could not read.
+
+A pull that changes the file schedules a push of the merged labels;
+that push is a no-op when the merge changed nothing your source lacks.
+Raising from `_do_save` or `_do_load_full` is never fatal: the failure is
+logged, the detector file stays the record, and the next change tries
+again.
 
 ## Entry-point registration
 
@@ -298,17 +346,18 @@ s3 = "my_pkg.labelset_source:LABELSET_SOURCE"
 After `pip install`, link the source to a detector via `PUT
 /api/detectors/<name>/labelset-source` with body
 `{"source_name": "s3", "field_values": {"bucket": "my-bucket", "key":
-"vtsearch/labels/{detector_name}.json"}}`. Every vote then debounces a
-push to S3; reloading the detector calls `load_full()` and applies
-the round-tripped labels (plus any `detector_meta` the source
-carried).
+"vtsearch/labels/{detector_name}.json"}}`, or make it every detector's
+target with the `default_labelset_source` server setting. Every change
+then schedules a paced push to S3; loading the detector calls
+`load_full()` and merges the round-tripped labels (plus any
+`detector_meta` the source carried).
 
 ## Testing pattern
 
 Labelset-source tests live in `tests_lib/io/` and benefit from the
 autouse fixtures that reset detector contexts. Use
 [`vtscore.labels.sync.flush_pending_label_syncs`](../../labels/sync.py)
-in tests that assert the debounced push actually wrote, or
+in tests that assert the scheduled push actually wrote, or
 [`vtscore.labels.sync.reset_label_sync_for_tests`](../../labels/sync.py)
 to drop pending pushes between tests.
 

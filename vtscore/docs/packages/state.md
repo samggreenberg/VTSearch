@@ -136,7 +136,7 @@ canonical persisted form.
 | `votes_dataset_id` | `str` | Dataset ID the cid-keyed dicts are valid against |
 | `cached_labelset` | `LabelSet \| None` | Parsed labelset, reused across requests |
 | `cached_labelset_mtime` / `cached_labelset_media_type` | `float` / `str` | Mtime and media type of the JSON the cache was built from |
-| `labelset_source` | `dict \| None` | Active sync target |
+| `labelset_source` | `dict \| None` | An in-memory labelset-source binding (library callers); a registered detector's binding lives on its registry entry. See [labels.md](labels.md#binding) |
 | `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another balance or inclusion re-runs only the cheap cut |
 | `anchored_cut_cache` | `FoldAnchoredCut \| None` | The fold-anchored population estimator behind the current threshold |
 | `precision_floor_cache` | `None` | Retired (#4362): always `None`. It held the #4220 estimate a retrain parked for the Find Stats curve, which went in #4360 |

@@ -1105,9 +1105,8 @@ def vote_media(body: dict, media_id: int):
     # while the on-disk labelset stayed at its prior value (audit finding
     # H30).  Now we explicitly surface the failure as a 500 with a clear
     # message; the in-memory mutation is rare enough to be acceptable
-    # since the next vote re-merges and retries.  ``sync_to_labelset_source``
-    # stays best-effort: it's the debounced background-timer scheduling
-    # call, so only a synchronous scheduling failure could fault here.
+    # since the next vote re-merges and retries.  The write also schedules
+    # the push to the detector's labelset source, if it has one.
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
     try:
@@ -1117,15 +1116,6 @@ def vote_media(body: dict, media_id: int):
 
         logging.getLogger(__name__).exception("vote_media: detector label sync failed")
         abort(500, message=f"Failed to persist vote to detector store: {exc}")
-
-    from vtscore.labels.sync import sync_to_labelset_source
-
-    try:
-        sync_to_labelset_source()
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("vote_media: labelset source scheduling failed")
 
     return {"ok": True, "state": new_state, "click_time": click_time}
 
@@ -1189,15 +1179,6 @@ def vote_media_bulk(body: dict):
 
         logging.getLogger(__name__).exception("vote_media_bulk: detector label sync failed")
         abort(500, message=f"Failed to persist votes to detector store: {exc}")
-
-    from vtscore.labels.sync import sync_to_labelset_source
-
-    try:
-        sync_to_labelset_source()
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("vote_media_bulk: labelset source scheduling failed")
 
     return {"ok": True, "changed": changed, "missing": missing}
 
@@ -1414,15 +1395,11 @@ def _sync_pile_label_to_storage() -> None:
     """Persist a newly-applied add-to-pile label to the detector's storage.
 
     Mirrors the tail of :func:`vote_media` so the in-memory good/bad-votes
-    update also reaches the detector's on-disk labelset and any configured
-    :class:`LabelsetSource`. Without this, the label vanishes the next time
-    ``ensure_votes_match_active_dataset`` rehydrates the detector from disk.
-    (logical-bug-audit H33.)
+    update also reaches the detector's on-disk labelset, whose write schedules
+    the push to any configured :class:`LabelsetSource`. Without this, the
+    label vanishes the next time ``ensure_votes_match_active_dataset``
+    rehydrates the detector from disk. (logical-bug-audit H33.)
     """
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector  # noqa: PLC0415
 
     sync_labels_to_loaded_detector()
-
-    from vtscore.labels.sync import sync_to_labelset_source  # noqa: PLC0415
-
-    sync_to_labelset_source()

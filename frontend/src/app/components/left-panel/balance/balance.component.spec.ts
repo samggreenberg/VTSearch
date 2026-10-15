@@ -185,25 +185,30 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(state()).toBeNull();
     });
 
-    it('says a checked line is checked, with the share right, how many were found in words, and the count kept', async () => {
+    it('says a checked line is checked, with the set checked, the share right, how many were found in words, and the count kept', async () => {
       await show(0.25, lineBalance('checked', { beta: 0.25 }), 1234);
       expect(state()!.getAttribute('data-status')).toBe('green');
-      expect(stateText()!.textContent).toContain('Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept');
-      // An advisory check (#4427, every beta since #4452): the ranges describe the audited set, the line keeps its own count.
-      expect(stateText()!.getAttribute('title')).toContain('5 random picks from the top 32');
+      expect(stateText()!.textContent).toContain(
+        "Checked the 32 kept you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept",
+      );
+      // An advisory check (#4427, every beta since #4452): the ranges describe what the line kept when the check
+      // started (#4483), and the line keeps its own count.
+      expect(stateText()!.getAttribute('title')).toContain(
+        "When the check started, the line kept the top 32 you hadn't voted on. 5 of the check's random picks fell among them",
+      );
       expect(stateText()!.getAttribute('title')).toContain('a check informs the line and does not move it');
     });
 
     it('reads the count off the result, never the preset', async () => {
       await show(4, lineBalance('checked', { beta: 4, count: 64 }));
-      expect(stateText()!.textContent).toContain('64 kept');
+      expect(stateText()!.textContent).toContain('64 more kept');
     });
 
     it('says an unchecked line keeps the starting candidate', async () => {
       await show(4, lineBalance('unchecked', { beta: 4, count: 128 }), 300);
       expect(state()!.getAttribute('data-status')).toBe('yellow');
-      expect(stateText()!.textContent).toContain('Top 128 kept, unchecked');
-      expect(stateText()!.getAttribute('title')).toContain('nothing has measured how much of it is right');
+      expect(stateText()!.textContent).toContain('128 more kept, unchecked');
+      expect(stateText()!.getAttribute('title')).toContain('nothing has measured how many of them are right');
       expect(stateText()!.textContent).not.toMatch(/likely|%\s*right/);
     });
 
@@ -243,7 +248,7 @@ describe('BalanceComponent (#4413, #4317)', () => {
     it('describes the line it was cut at, not a pick still on its way to the server', async () => {
       await show(0.25, lineBalance('unchecked', { beta: 1, count: 40 }), 40);
       expect(checkedValue()).toBe('0.25');
-      expect(stateText()!.textContent).toContain('Top 40 kept');
+      expect(stateText()!.textContent).toContain('40 more kept');
     });
   });
 

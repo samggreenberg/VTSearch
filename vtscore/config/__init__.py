@@ -55,7 +55,11 @@ import importlib
 import sys
 from types import ModuleType
 
-from vtscore.config.core_config import CoreConfig, register_core_config_builder
+from vtscore.config.core_config import (
+    DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL,
+    CoreConfig,
+    register_core_config_builder,
+)
 from vtscore.config.device import (
     DEVICE,
     EMBED_PRECISION,
@@ -149,6 +153,7 @@ from vtscore.config.runtime import (
 #: and ``from vtscore.config import X`` keep resolving unchanged.  Grouped by
 #: submodule, in the order they are imported above.
 __all__ = [
+    "DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL",
     "CoreConfig",
     "register_core_config_builder",
     "DEVICE",

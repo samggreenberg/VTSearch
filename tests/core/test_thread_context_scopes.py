@@ -172,8 +172,8 @@ class TestThreadDetectorContextScope:
 class TestCombinedScopes:
     def test_stacked_scopes_all_restore(self):
         """All three scopes can be stacked in a single ``with`` and
-        each restores independently on exit; the pattern used by
-        ``vtscore/labels/sync.py:_push_with_thread_context``."""
+        each restores independently on exit; the pattern a background
+        worker uses to run as the request that spawned it."""
         set_thread_user("outer_user")
         outer_ds = DatasetContext("outer_ds")
         outer_det = DetectorContext("outer_det")

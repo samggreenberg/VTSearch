@@ -433,6 +433,10 @@ markers = [
 #   the main thread, missing hangs blocked in C extensions or socket reads.
 #   The outer wall-clock cap in run-tests.sh is the backstop for the case this
 #   cannot see: a worker that dies outright can no longer fire its own timeout.
+#   Under xdist the timeout ends the worker with os._exit(1). The conftests
+#   (tests_shared/xdist_plumbing.py, #4925) write its stacks to stderr, since a
+#   worker's stdout is /dev/null, and keep --dist loadgroup from hanging on the
+#   dead worker: the test fails as "worker 'gwN' crashed while running <test>".
 addopts = "-m 'not gpu and not slow' --timeout=300 --timeout-method=thread"
 
 [tool.coverage.run]

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { BehaviorSubject } from 'rxjs';
-import { AutopilotStateService, type AutopilotState } from './autopilot-state.service';
+import { AutopilotStateService, cappedInOpening, STOP_CAP_VOTES, type AutopilotState } from './autopilot-state.service';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 import type { StatusIndicator } from '../generated/api-client/models/status-indicator';
 
@@ -497,6 +497,54 @@ describe('AutopilotStateService', () => {
       service.activate();
       service.updateFromLabelingStatus(level(true));
       service.checkPhaseTransition(30, 40);
+      expect(service.state.phase).toBe('done');
+      expect(service.state.doneChecked).toBe(true);
+    });
+  });
+
+  describe('the click cap also says Done (#4903)', () => {
+    const yellow = makeStatus({ status: 'yellow' }, { status: 'green' }, { status: 'red' });
+
+    it('is the harness STOP_CAP', () => {
+      expect(STOP_CAP_VOTES).toBe(200);
+    });
+
+    it('goes to the check before Done at the cap, every light short and the level unmet, then Done', () => {
+      service.activate();
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('hard');
+      service.checkPhaseTransition(100, STOP_CAP_VOTES - 101);
+      expect(service.state.phase).toBe('hard');
+      expect(service.state.atCap).toBe(false);
+      service.checkPhaseTransition(100, STOP_CAP_VOTES - 100);
+      expect(service.state.atCap).toBe(true);
+      expect(service.state.phase).toBe('spot');
+      service.beginSpotCheck('done');
+      service.endSpotCheck();
+      expect(service.state.phase).toBe('done');
+    });
+
+    it('in the opening, says the run is capped and leaves the phase alone (#4903)', () => {
+      service.activate();
+      service.checkPhaseTransition(0, STOP_CAP_VOTES - 1);
+      expect(service.state.phase).toBe('good');
+      expect(cappedInOpening(service.state)).toBe(false);
+      service.checkPhaseTransition(0, STOP_CAP_VOTES);
+      expect(service.state.phase).toBe('good');
+      expect(cappedInOpening(service.state)).toBe(true);
+      // Finding the Goods later goes straight to the check before Done.
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(3, STOP_CAP_VOTES);
+      expect(service.state.phase).toBe('spot');
+      expect(cappedInOpening(service.state)).toBe(false);
+    });
+
+    it('runs no check on a re-entered detector that already holds the cap', () => {
+      service.activate();
+      service.noteInitialLabelset(100, STOP_CAP_VOTES);
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(100, STOP_CAP_VOTES);
       expect(service.state.phase).toBe('done');
       expect(service.state.doneChecked).toBe(true);
     });

@@ -374,10 +374,6 @@ def find_label(body: dict):
         good_count = len(det_ctx.good_votes)
         bad_count = len(det_ctx.bad_votes)
 
-        from vtscore.labels.sync import sync_to_labelset_source
-
-        sync_to_labelset_source()
-
         update_find_progress(
             "idle",
             "Done",

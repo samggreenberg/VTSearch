@@ -16,3 +16,7 @@ Floating-point drift between the two vendors' kernels flips a late acquisition t
 **But check capacity first.** The same night, all seven Intel nodes were fully allocated, mostly by other users. A pinned run got 46 concurrent tasks instead of 100, and two requeued arrays sat 45 min on `JobArrayTaskLimit,Priority`: requeued tasks still count against the array's throttle. The pin was lifted (`scontrol update JobId=<array> Features=`), and the drift was accepted as mean-zero noise and reported. Pin only when the baseline's vendor has room. Otherwise, report the drift: the paired mean over untouched sessions shows it.
 
 **Status:** advice only. The launcher has no feature knob, so a pin is a post-submit `scontrol` step.
+
+**Superseded 2026-10-15 (#4110).** The drift was four libraries choosing kernels by CPU, and `run_cells.py`
+now pins all four, so a cell is bit-identical on either vendor and there is no vendor to pin
+([the lesson](2026-10-15-four-libraries-pick-kernels-by-cpu.md)).

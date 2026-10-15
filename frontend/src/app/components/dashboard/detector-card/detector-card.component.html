@@ -37,6 +37,10 @@
     @if (frozen) {
       <span class="verdict-line" [class.verdict-line--stale]="verdict?.stale" [class.verdict-line--untested]="!verdict" [title]="verdictHint">{{ verdictText }}</span>
     }
+    <!-- Auto-export (#4913) needs a value this detector doesn't have yet. -->
+    @if (autoExportMissing.length) {
+      <button type="button" class="link-btn autoexport-warning" (click)="onAutoExportWarning($event)" [title]="autoExportWarning">⚠ Auto-export not set up</button>
+    }
   }
 </td>
 @if (loadingTask() && !loadingTask()!.error) {

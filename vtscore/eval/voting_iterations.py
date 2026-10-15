@@ -55,7 +55,7 @@ from vtscore.eval.example_opening import (
     example_sort,
     stratified_split,
 )
-from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, STOP_CAP, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -106,8 +106,8 @@ from vtscore.eval.voting_columns import (
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
-    WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
+    WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     LabelsLine,
     LineRanking,
@@ -292,7 +292,7 @@ def _split_media_ids(
 ) -> tuple[list[int], list[int]]:
     """Randomly partition media IDs into simulation and test sets.
 
-    A dataset whose medias carry ``split_group`` (``rico_suave``'s app, #4356)
+    A dataset whose medias carry ``split_group`` (``apptitude``'s app, #4356)
     is split by group instead: the groups are drawn in a seeded order and each
     joins the simulation half while it is short of ``sim_fraction``, so no group
     has medias on both sides and the simulation half overshoots by less than one
@@ -434,8 +434,10 @@ def _line_columns(details: dict[str, Any]) -> dict[str, Any]:
             "check_right": -1,
             "check_stale": -1,
             "check_audited": -1,
+            "check_kept": -1,
         }
-    # The kept set's precision range: what the range columns have always read.
+    # The check's precision range: since #4483 over the set the line kept when
+    # the check started (``check_kept``), before it over the audited set.
     rng = state.precision
     return {
         "beta": beta,
@@ -449,6 +451,9 @@ def _line_columns(details: dict[str, Any]) -> dict[str, Any]:
         # The set the walk audited (#4427): under the advisory shape not the
         # set the line keeps, which ``floor_count`` reports.
         "check_audited": state.audited if rng is not None else -1,
+        # The set the ranges describe (#4483): how many unvoted items the line
+        # kept when the check started; -1 where they describe the audited set.
+        "check_kept": state.kept_at_check if rng is not None and state.kept_at_check is not None else -1,
     }
 
 
@@ -2765,6 +2770,7 @@ def simulate_voting_iterations(  # noqa: C901
     smart_gate: str = "app",
     stop_rule: str = "lights|level",
     stop_level: float = STOP_LEVEL,
+    stop_cap: Optional[int] = STOP_CAP,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
@@ -2797,7 +2803,7 @@ def simulate_voting_iterations(  # noqa: C901
     spot_check: Optional[str] = None,
     weak_separation: float = WEAK_SEPARATION_D,
     weak_min_t: int = WEAK_CHECK_MIN_VOTES,
-    weak_repeat: int = WEAK_CHECK_COOLDOWN,
+    weak_repeat: int = WEAK_CHECK_REPEAT or 0,
     weak_phase: str = "learned",
     done_check: bool = True,
     early_check: Optional[int] = None,
@@ -3175,6 +3181,10 @@ def simulate_voting_iterations(  # noqa: C901
             ``"lights"`` is the app before #4878; ``"level"`` and
             ``"lights+level"`` are #4878's other arms and need a balance and the flow.
         stop_level: The level the rule reads (the app's ``STOP_LEVEL``; #4878 priced 0.3 to 0.7).
+        stop_cap: The click cap (#4903; the app's
+            :data:`~vtscore.eval.autopilot_flow.STOP_CAP`): whatever *stop_rule*,
+            a session holding this many votes goes to the check before Done and
+            to Done.  ``None`` is no cap.  Never binds before the eval's 150 clicks.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -3371,15 +3381,17 @@ def simulate_voting_iterations(  # noqa: C901
             record on them, at each requested click a round reaches).  It starts
             only when its opening bands fit the voting budget left, and a deeper
             band that would overrun the budget ends it there, as a user closing
-            the step does, so a run's clicks still end at *max_steps*.  With
-            *weak_repeat* > 0 the prompt returns once that many votes have
-            been cast since the last prompted check ended, while the labels
-            still separate weakly; 0 prompts once.  Ignored on the Inclusion
+            the step does, so a run's clicks still end at *max_steps*.  It
+            prompts once, and only while no check has ended (*weak_repeat* 0,
+            the app since #4909); with *weak_repeat* > 0 the prompt returns
+            once that many votes have been cast since the last check ended,
+            while the labels still separate weakly.  Ignored on the Inclusion
             arm, and when nothing is left unvoted to check.
         weak_separation: The d' below which ``spot_check="weak"`` prompts (the app's ``WEAK_SEPARATION_D``).
         weak_min_t: The fewest votes before ``spot_check="weak"`` prompts (``WEAK_CHECK_MIN_VOTES``).
-        weak_repeat: Votes after a prompted check before it may prompt again
-            (``WEAK_CHECK_COOLDOWN``); 0 prompts once, the priced alternative.
+        weak_repeat: Votes after a check ends before the weak check may
+            prompt again; 0 (the default, the app's ``WEAK_CHECK_REPEAT``,
+            ``None``, #4909) prompts once.  25 is the app before #4909.
         weak_phase: Where in Autopilot's flow ``spot_check="weak"`` may prompt.
             ``"learned"`` (the default, the app's) or ``"any"`` (the arm #4496
             priced first): ``"learned"`` prompts only once the flow has left
@@ -3887,7 +3899,11 @@ def simulate_voting_iterations(  # noqa: C901
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
         flow = AutopilotFlow(
-            startup=startup_state, smart_gate=smart_gate, good_dry_run=flow_good_dry_run, stop_rule=stop_rule
+            startup=startup_state,
+            smart_gate=smart_gate,
+            good_dry_run=flow_good_dry_run,
+            stop_rule=stop_rule,
+            stop_cap=stop_cap,
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4019,6 +4035,9 @@ def simulate_voting_iterations(  # noqa: C901
     # bands are cut from and a finished result is fingerprinted against.
     check: SpotCheck | None = None
     line_ranking: LineRanking | None = None
+    # How many unvoted items the line keeps on it: the set a check started next
+    # ranges over (#4483).
+    line_kept: int | None = None
     # The rank frame's identity, and the inputs of the last ordinary step's
     # frame (#4357), which is emitted once the loop ends.
     rank_ident = {
@@ -4078,6 +4097,9 @@ def simulate_voting_iterations(  # noqa: C901
             fine=walk_fine,
             guard=walk_guard,
             shallow_only=walk_shape_resolved == CHECK_TRIM,
+            # The ranges describe the set the line keeps as the check starts, as
+            # the app's (#4483); a ``trim`` walk's line is its own end.
+            kept=line_kept if walk_shape_resolved != CHECK_TRIM else None,
         )
 
     # The last finished check: what a prompted check the budget cut short leaves in place.
@@ -4303,7 +4325,7 @@ def simulate_voting_iterations(  # noqa: C901
                 # The set the line keeps from here on, as it stands with the
                 # check's own votes cast: what the retrains below are
                 # compared against for ``check_stale``.
-                check.fingerprint = line_ranking.fingerprint(check.k, set(good_votes) | set(bad_votes))
+                check.fingerprint = line_ranking.fingerprint(check.range_count, set(good_votes) | set(bad_votes))
         else:
             phase = flow.phase if flow is not None else None
             startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
@@ -4531,6 +4553,8 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             )
             line_ranking = details.get("line_ranking")
+            line_state = details.get("line_state")
+            line_kept = line_state.count if line_state is not None else None
             if (
                 spot_check == "weak"
                 and picks is None

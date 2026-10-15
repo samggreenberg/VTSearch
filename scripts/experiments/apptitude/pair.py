@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""Pair two Rico Suave analyses session for session (#4356): an arm against the app.
+"""Pair two Apptitude analyses session for session (#4356): an arm against the app.
 
-Reads the ``runs.csv`` that ``analyze.py`` writes for each, keeps the rico_suave rows, and pairs them
+Reads the ``runs.csv`` that ``analyze.py`` writes for each, keeps the apptitude rows, and pairs them
 on (preset, class, seed) -- the same cell, so the same split and the same opening. Writes
 ``pair.md`` beside ``--out``: the mean difference (arm - control) of the session mean F-beta over
 votes 1-150 and 1-50, with its standard error over sessions and the share of sessions the arm wins,
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ctl = pd.read_csv(args.control)
     arm = pd.read_csv(args.arm)
-    ctl, arm = ctl[ctl["dataset"] == "rico_suave"], arm[arm["dataset"] == "rico_suave"]
+    ctl, arm = ctl[ctl["dataset"] == "apptitude"], arm[arm["dataset"] == "apptitude"]
     both = ctl.merge(arm, on=KEY, suffixes=("_ctl", "_arm"))
     if len(both) != len(ctl) or len(both) != len(arm):
         raise SystemExit(f"unpaired sessions: control {len(ctl)}, arm {len(arm)}, paired {len(both)}")

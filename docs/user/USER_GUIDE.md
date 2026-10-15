@@ -138,7 +138,8 @@ from your labels, it travels with them: export the detector, run it on
 another collection, and VTSearch draws the line the same way there.
 Until you **check** the items above the line, nothing has measured how much
 of them is right or how much of what is there they found, and the note under
-the Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
+the Threshold says so: **32 more kept, unchecked** (or however many it kept
+besides the items you voted on).
 
 **The spot check.** Autopilot runs it for you, as its **Spot Check.** step
 (see [The phases](#the-phases)): once every quality light is green, or the
@@ -190,27 +191,40 @@ where the balance peaked, or at either end of the list: on a long list of
 good matches that can be hundreds, on a short or sparse one as few as 8.
 **The check does not move the line**: it measures, and your picks become
 votes that the next retrain learns from like any other, but the line stays
-where your labels put it. The check's last screen says what it found -
-**Checked the top 48: likely 55–80% right, about half of them found (checked
-15).** and **The line keeps its 30, where your labels put it: the check
-informs the line and does not move it. The ranges are what the picks say
-about the top 48.** - and the note under the Threshold then shows the same
-result:
+where your labels put it. What it reports is about the items the line kept,
+as they stood when the check started: of those, it counts the picks that
+fell among them. The check's last screen says what it found - **Checked the
+36 kept you hadn't voted on: likely 55–80% right, about half of them found
+(checked 12).** and **The line keeps the top 30 you haven't voted on, where
+your labels put it: the check informs the line and does not move it. The
+ranges are what the picks say about the 36 it kept when the check started;
+the Goods you had already voted on count in neither.** - and the note under
+the Threshold then shows the same result:
 
-- **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  30 kept** - the check measured the top 48, and the line keeps 30. The
-  range is how much of the checked set is likely right; the phrase after it
-  is how much of what the list holds that set likely found (**few of them**,
-  **about a quarter**, **about half**, **about three quarters** or **nearly
-  all of them**). Hovering the note says which set the check measured. The note names no cause for a poor result: a dataset with very few
+- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 12) · 30 more kept** - when the check started the
+  line kept 36 items you hadn't voted on; now, with the check's own picks
+  voted and the line re-drawn, it keeps 30 more besides your votes. The range
+  is how much of those 36 is likely right; the phrase after it is how much of
+  the matches you hadn't voted on they likely held (**few of them**, **about a quarter**, **about half**,
+  **about three quarters** or **nearly all of them**). Hovering the note
+  gives both as numbers. The note names no cause for a poor result: a dataset with very few
   matches and a detector that can't yet tell them apart look the same from
   here.
 
-**The likely range** says how much of the set the line keeps is probably
-right. It comes from your picks alone, never from the detector's own guess:
-each band's picks bound that band, and the bands are weighed by their size.
-With 5 picks a band it is wide; that width is the honest answer to "how
-close did we get?". The **found** phrase is the rougher of the two: it reads
+**Neither range counts your own votes.** The check samples only the items
+you haven't voted on, so the Goods you have already found are in neither the
+share right nor the share found. Late in a session, once you have voted on
+most of the matches near the top, the items left there hold few of them, so
+the check before **Done!** can read low after a session that went well.
+
+**The likely range** says how much of the items the line kept, when the
+check started, is probably right. It comes from your picks alone, never from
+the detector's own guess: the picks that fell in each band's part of that
+set bound that part, exactly for its size (in a band of 8, 4 right of 5
+means 4 to 7 of the 8 are), and the parts are weighed by their size. With 5
+picks a band it is still wide; that width is the honest answer to "how close
+did we get?". The **found** phrase is the rougher of the two: it reads
 the same picks against the detector's own estimate of how many matches the
 list holds, which is the one thing the picks cannot measure. The check
 decides where to stop on the picks' plain share, so the range says how sure
@@ -860,7 +874,12 @@ The phase panel labels them, in order:
    ranking the Text sort uses. If you don't see anything good,
    Autopilot eventually offers to change what it sorts by; you can also
    find a few matches yourself on the **Manual** tab (see
-   [Get Autopilot unstuck](howto/unstick-autopilot.md)).
+   [Get Autopilot unstuck](howto/unstick-autopilot.md)). If 200 votes go
+   by without the Goods it needs, Autopilot stops: the panel says
+   **Autopilot has stopped** and how many it found, and it offers the
+   change of sort once more. Your search may not reach what you are after
+   in this collection; voting on keeps looking, and if the Goods turn up
+   Autopilot checks the line and calls the detector done straight away.
 2. **Find Initial Bads.** - Vote some **bad** items (default: 4). Now
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
@@ -881,10 +900,13 @@ The phase panel labels them, in order:
 5. **Spot Check.** - With every quality light green, or once the
    detector expects an F-beta of at least 0.5 at your balance (its own
    estimate of how much of what it returns is right, and how much of what
-   is there it finds), Autopilot checks the line before it calls the
-   detector done. The second way ends a session that is already good
-   without waiting on the last light, and the panel then quotes the
-   F-beta it expects instead of saying every light is green. The check is
+   is there it finds), or once you have cast 200 votes, Autopilot checks
+   the line before it calls the detector done. The second way ends a
+   session that is already good without waiting on the last light, and the
+   panel then quotes the F-beta it expects instead of saying every light is
+   green. The third ends every session that has not got there by 200
+   votes: past that, sessions that are still going gain little, from
+   little, and the panel says so ("as many as Autopilot asks for"). The check is
    a few items drawn at
    random from bands of the list, shown in the centre one at a time for
    your Good or Bad (see [How close the line got](#how-close-the-line-got)).
@@ -1057,13 +1079,14 @@ Once the list is ranked by the detector (a **Learned** sort, or Test), the
 note under the spectrum says what the Threshold is doing to the line, in one
 of two states:
 
-- **Top 32 kept, unchecked** - nothing has measured the set yet (the count
-  is 32 at most; fewer when the detector's estimate says the balance peaks
-  sooner).
-- **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  48 kept** - a check walked the list and ended where the balance peaked;
-  the line keeps that set, and the note says how much of it is likely right
-  and how much of what the list holds it likely found.
+- **32 more kept, unchecked** - the line keeps 32 items you haven't voted
+  on, besides your votes, and nothing has measured them yet.
+- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 12) · 30 more kept** - a check walked the items you
+  hadn't voted on; the note says how much of the 36 the line kept when it
+  started is likely right, and how much of the matches you hadn't voted on
+  they likely held. The line keeps its own 30 more now, where your labels put
+  it.
 
 The range a check measured is a number. Autopilot's **Spot Check.** step
 runs a spot check of the list: 5 random picks from each band of it, which you
@@ -1250,6 +1273,11 @@ It has two tabs:
   in Manual mode. The detector keeps it, and Autopilot draws its line there.
   It starts on your last pick, so most detectors never need it opened; you
   can change it later in Manual or Test.
+- **Auto-export** (both tabs, only on a server set up for it) - where the
+  detector's labels are copied as you label, so a copy outside VTSearch stays
+  current (see [Auto-export](#auto-export)). The form asks only for what
+  the server left for you to fill in, such as a file name; often there is
+  nothing to fill in and it just says where the labels go.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server
@@ -1606,8 +1634,11 @@ with bulk-action and per-card controls.
     Like datasets, the name carries a **Rename** pencil and **Delete**
     is inline; the **⋯** overflow menu holds the rest, including
     **Import Labels** (import labels into this detector), **Export
-    labels** (see [Exporting your work](#exporting-your-work)), and
-    **Move to AutoFind**.
+    labels** (see [Exporting your work](#exporting-your-work)),
+    **Auto-export…** (on a server set up for it; see
+    [Auto-export](#auto-export)), and **Move to AutoFind**. A row whose
+    auto-export still needs a value says **⚠ Auto-export not set up**
+    under its name; click it to fill the value in.
   - **AutoFind** holds finalized detectors. They run automatically
     against every dataset you import (see
     [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset))
@@ -1947,6 +1978,23 @@ gives only the Goods' centroid, as in [Test](#testing-a-detector), and a
 bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
+
+#### Auto-export
+
+On a server whose administrator has set it up, you don't have to remember
+to export at all: every detector's labels are copied to one place outside
+VTSearch (a backup folder, say) as you label, at most about once a minute,
+and once more when the server shuts down. The **New Detector** form and the
+**Auto-export…** item in a detector's **⋯** menu show where, and ask for
+anything the server left you to fill in. A detector the server does not
+have every value for is not copied until you fill them in; its row says
+**⚠ Auto-export not set up**.
+
+The copy also comes back. When a detector loads, VTSearch adds any labels
+its copy holds that the detector lacks (the detector's own label wins where
+the two disagree). So if the server loses its data, make a new detector with
+the **same name**: when it loads, its labels are restored from the copy.
+Renaming a detector moves its copy to the new name.
 
 #### Portable ONNX bundles (advanced)
 

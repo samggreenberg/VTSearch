@@ -17,6 +17,61 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
+  check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
+  and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4
+  right of 5 in a band of 8 means 4 to 7 of them are right, which read "34–99%" and now reads "50–88%". The
+  range is now exact for each band's size, with no split, and it describes the items the line kept when the
+  check started instead of the set the check's walk ended on, so the note reads "Checked the 36 kept you
+  hadn't voted on · likely 55–80% right, about half of them found (checked 12) · 30 more kept". Priced on
+  3,568 real checks and simulated checks at clicks 25–100, it held the truth in at least 98.9% of them at
+  every preset, at 0.55–0.76 of the old width (`docs/experiments/2026-10-15-check-range-4483/REPORT.md`).
+
+- **A Good on a document collection is up to twice as fast without a GPU** (issue #4515). After a
+  Good, the server matches the new mark's SIFT points against every point on each shortlisted page,
+  1,000 pages without a GPU, and keeps the pairs whose nearest point is clearly nearer than the
+  next. It now ranks the two nearest points without working out every distance in full, and on a
+  CPU it works through a page at a time so the numbers stay in the processor's cache. On 8 cores of
+  an AMD EPYC 7713 a Good takes ~4.5 s at 5,000 pages (was 9.2 s) and ~5.7 s at 50,000 (was
+  9.7 s). On a V100 it takes ~1.25 s at 5,000 pages (was 1.6 s) and ~1.5 s at 50,000 (was
+  1.75 s). Rankings are unchanged.
+
+- **Autopilot checks for overlapping labels once a session** (issue #4909). When your Good and Bad answers
+  score close together, Autopilot still opens the spot check once it has started learning, but it no longer
+  asks again 25 votes later while they still overlap, and it does not ask after any other check has run. The
+  repeat had cost a quarter of a session's clicks: 50 to 57 of 200 went to checks, against 25 to 33 now.
+  Priced on today's app, asking once did as well or better over 200 clicks (mean F-beta +0.0006 at beta 1,
+  +0.0013 at beta 4), was level after the closing check, and reached Done at the same click with the same
+  result (`docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md`). The check before Done is unchanged.
+
+- **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
+  you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
+  voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
+  "Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept" read as half of all the
+  matches, and put the range of the set the check ended on beside a count it did not describe. It now reads
+  "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32
+  more kept", or "32 more kept, unchecked" before a check, and its tooltip and the check's result screen say
+  the same. Late in a session, once the matches near the top are voted, the check before Done can read low
+  after a session that went well; the note now says why. What the check measures is unchanged.
+
+- **Autopilot stops every session by 200 votes** (issue #4903). Done came only when the quality lights went
+  green or the detector expected an F-beta of 0.5, and 1–2% of sessions reach neither by 400 votes; the app has
+  no horizon, so they went on as long as the user did. Done now also comes at 200 votes, after the same check
+  before Done, and the panel and Toasty say "You have cast 200 votes, as many as Autopilot asks for" when that
+  is what said Done. A session still looking for its first Goods at 200 votes is told **Autopilot has stopped**,
+  with the Goods it found, and offered the **Update Sort Example?** prompt once more; voting on keeps looking.
+  Priced on 2,160 simulated sessions run to 400 votes: the cap ends 6–7% of sessions early, all but a few on
+  small objects, at a median F-beta of 0.00–0.04, which 200 more votes would have taken to 0.07–0.14.
+
+- **A detector's labelset-source link is persisted, and pushes the whole labelset** (issue #4913). The link
+  set with `PUT /api/detectors/<id>/labelset-source` lived only on the loaded detector and was lost on
+  unload or restart; it is now stored on the registry entry, works for an unloaded detector, takes the id
+  or the name, and is creator-only. A push now sends the detector file's labels from every dataset (it
+  sent only the active dataset's votes, which overwrote the rest), and a sync merges into the detector
+  instead of only voting what the active dataset holds. Renaming a detector moves a
+  `{detector_name}`-templated labelset file itself: the *Move existing labelset file?* prompt,
+  `pending_labelset_move`, and `POST /api/detectors/registry/<id>/labelset-source/move-file` are gone.
+
 - **Autopilot also says Done once the detector expects a good result** (issue #4878). Done came only
   when the Smart, Stable and Span lights were all green. It now also comes once the detector's labels
   line expects an F-beta of at least 0.5 at your balance, its own estimate of how good the set it keeps
@@ -261,6 +316,17 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
+  `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
+  its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to
+  export. Pushes for one detector never overlap and start at least `labelset_source_push_interval_seconds`
+  apart (default 60), so a burst of votes is one write; pending pushes are flushed on shutdown. Loading a
+  detector merges back what its source holds, so a detector whose server lost its data is restored by
+  re-creating it under the same name. Values the admin sets are fixed; the **New Detector** form asks for
+  the source's other fields, and a detector's Dashboard ⋯ menu gains **Auto-export…** to fill them in later
+  (its row warns when one is missing). `GET /api/labelset-sources/default` serves the form, and the
+  registry listing carries each detector's `labelset_source_status`.
 
 - **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
   image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's

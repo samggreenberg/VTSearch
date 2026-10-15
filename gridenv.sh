@@ -41,3 +41,15 @@ export TOKENIZERS_PARALLELISM=false
 # AVX-512 kernels and the Xeons AVX2, whose float32 rounding differs enough to move
 # document VLAD/tile vectors, and with them closed-loop sessions, between node types.
 export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
+# And one set of numpy kernels (#4110): numpy dispatches float64 exp/log and argsort
+# to AVX-512 code where the CPU has it (Xeon Silver 4114 and Gold 5218R, EPYC 9534)
+# and not where it does not (EPYC 7713, Xeon E5-2698 v4). The two round exp/log
+# differently and order ties differently, which moved the anchored EM's threshold by
+# 1e-6 and, votes later, a pick. Turning those targets off costs that EM ~40% on an
+# AVX-512 node and nothing on the others. x86-64 only: numpy warns about a feature
+# its build cannot dispatch. The cell runner pins MKL and ATen as well
+# (scripts/experiments/_expcommon.py `CPU_KERNEL_PINS`); they cost a CPU GEMM 2-3x,
+# so they are not set here for every job.
+if [ "$(uname -m)" = x86_64 ]; then
+  export NPY_DISABLE_CPU_FEATURES="${NPY_DISABLE_CPU_FEATURES-AVX512F AVX512_SKX}"
+fi

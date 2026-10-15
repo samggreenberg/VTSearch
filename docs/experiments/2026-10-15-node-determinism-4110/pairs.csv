@@ -1,0 +1,459 @@
+left,right,cell,category,verdict,pick_diverge_t,first_diff_t,first_diff_col,base_max_gap_threshold,base_votes_threshold_moved,frac_votes_fbeta_moved,mean_gap_fbeta,final_gap_fbeta,sidecars_differing
+a_base,a_rep,task_0000,airplane@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0002,airplane@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0004,apple@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0006,bag or luggage@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0008,banana@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0010,baseball bat@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0012,baseball bat@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0014,bench@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0016,bicycle@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0018,bicycle@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0020,bird@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0022,boat@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0024,boat@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0026,book@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0028,bottle@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0030,bottle@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0032,bowl@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0034,bus@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0036,bus@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0038,cell phone@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0040,chair@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0042,chair@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0044,clock@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0046,dining table@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0048,dining table@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0050,dog@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0052,enclosed road vehicle@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0054,enclosed road vehicle@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0056,fire hydrant@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0058,fork@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0060,fork@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0062,frisbee@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0064,keyboard@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0066,keyboard@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0068,kite@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0070,knife@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0072,knife@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0074,laptop@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0076,microwave@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0078,microwave@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0080,motorcycle@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0082,mouse@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0084,mouse@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0086,orange@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0088,parking meter@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0090,person@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0092,person@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0094,remote@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0096,scissors@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0098,scissors@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0100,single serving drinking vessel@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0102,sink@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0104,sink@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0106,skateboard@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0108,skis@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0110,skis@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0112,snowboard@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0114,spoon@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0116,spoon@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0118,stop sign@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0120,surfboard@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0122,surfboard@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0124,tennis racket@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0126,tie@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0128,tie@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0130,toothbrush@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0132,traffic light@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0134,traffic light@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0136,tv@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0138,umbrella@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0140,umbrella@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_rep,task_0142,vase or potted plant@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_base,a_base,task_0000,airplane@large,threshold,,1.0,oracle_threshold_honest,2.2999999999995246e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0002,airplane@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0004,apple@medium,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0006,bag or luggage@medium,threshold,,1.0,oracle_threshold_honest,7.99999999995249e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0008,banana@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0010,baseball bat@large,threshold,,1.0,oracle_cost_honest,9.000000000036756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0012,baseball bat@small,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0014,bench@medium,threshold,,1.0,oracle_threshold_honest,5.000000000032756e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0016,bicycle@large,threshold,,1.0,oracle_cost_honest,2.0000000000020002e-05,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0018,bicycle@small,threshold,,1.0,oracle_threshold_honest,8.000000000008e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0020,bird@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0022,boat@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0024,boat@small,threshold,,1.0,oracle_cost_honest,4.000000000004e-06,14,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0026,book@medium,threshold,,1.0,oracle_threshold_honest,2.000000000002e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0028,bottle@large,threshold,,1.0,oracle_threshold_honest,8.000000000008e-06,17,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0030,bottle@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz"
+i_base,a_base,task_0032,bowl@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0034,bus@large,threshold,,1.0,oracle_threshold_honest,8.000000000008e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0036,bus@small,threshold,,1.0,oracle_threshold_honest,7.000000000034756e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0038,cell phone@medium,threshold,,1.0,oracle_threshold,9.000000000036756e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0040,chair@large,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0042,chair@small,threshold,,1.0,oracle_cost_honest,6.999999999979245e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0044,clock@medium,threshold,,1.0,auroc,2.9999999999752447e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0046,dining table@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0048,dining table@small,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0050,dog@medium,threshold,,1.0,oracle_threshold,8.999999999981245e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0052,enclosed road vehicle@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0054,enclosed road vehicle@small,threshold,,1.0,oracle_threshold_honest,4.999999999921734e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0056,fire hydrant@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0058,fork@large,threshold,,1.0,oracle_threshold,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0060,fork@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0062,frisbee@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0064,keyboard@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0066,keyboard@small,threshold,,1.0,oracle_threshold_honest,6.0000000000060005e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0068,kite@medium,threshold,,1.0,oracle_threshold_honest,5.000000000032756e-06,13,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0070,knife@large,threshold,,1.0,oracle_threshold_honest,6.000000000061512e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0072,knife@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0074,laptop@medium,threshold,,1.0,oracle_cost_honest,9.000000000036756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0076,microwave@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0078,microwave@small,threshold,,1.0,oracle_cost_honest,2.9999999999752447e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0080,motorcycle@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0082,mouse@large,threshold,,1.0,oracle_threshold_honest,9.000000000036756e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0084,mouse@small,threshold,,1.0,oracle_threshold_honest,3.000000000086267e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0086,orange@medium,threshold,,1.0,oracle_cost_honest,9.999999999177334e-07,1,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0088,parking meter@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0090,person@large,threshold,,1.0,oracle_threshold_honest,3.000000000030756e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0092,person@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz"
+i_base,a_base,task_0094,remote@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,1,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0096,scissors@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0098,scissors@small,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0100,single serving drinking vessel@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0102,sink@large,threshold,,1.0,oracle_threshold_honest,1.0999999999983245e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0104,sink@small,threshold,,1.0,oracle_threshold_honest,6.000000000061512e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0106,skateboard@medium,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0108,skis@large,threshold,,1.0,oracle_cost_honest,1.5000000000098268e-05,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0110,skis@small,threshold,,1.0,oracle_cost_honest,1.7000000000044757e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0112,snowboard@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0114,spoon@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0116,spoon@small,objective,,1.0,oracle_threshold_honest,0.0010350000000000081,4,0.007692307692307693,9.584615384615363e-06,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0118,stop sign@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0120,surfboard@large,threshold,,1.0,fbeta_oracle_threshold,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0122,surfboard@small,threshold,,1.0,oracle_cost_honest,1.8999999999991246e-05,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0124,tennis racket@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0126,tie@large,threshold,,1.0,fbeta_oracle_threshold,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0128,tie@small,threshold,,1.0,oracle_cost_honest,2.0000000000575113e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0130,toothbrush@medium,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0132,traffic light@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0134,traffic light@small,threshold,,1.0,oracle_threshold_honest,1.3000000000040757e-05,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0136,tv@medium,threshold,,1.0,oracle_threshold_honest,4.000000000004e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0138,umbrella@large,threshold,,1.0,oracle_cost_honest,2.2999999999995246e-05,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0140,umbrella@small,objective,,1.0,oracle_threshold_honest,0.0009109999999999951,8,0.01020408163265306,2.256122448979554e-05,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,a_base,task_0142,vase or potted plant@medium,threshold,,1.0,oracle_threshold_honest,8.000000000008e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0000,airplane@large,threshold,,1.0,oracle_cost_honest,2.2999999999995246e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0002,airplane@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0004,apple@medium,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0006,bag or luggage@medium,threshold,,1.0,oracle_threshold_honest,7.99999999995249e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0008,banana@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0010,baseball bat@large,threshold,,1.0,oracle_cost_honest,9.000000000036756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0012,baseball bat@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0036,bus@small,threshold,,1.0,oracle_threshold_honest,7.000000000034756e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0038,cell phone@medium,threshold,,1.0,oracle_threshold,9.000000000036756e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0040,chair@large,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0042,chair@small,threshold,,1.0,oracle_threshold_honest,6.999999999979245e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0044,clock@medium,threshold,,1.0,auroc,2.9999999999752447e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0046,dining table@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0048,dining table@small,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0072,knife@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0074,laptop@medium,threshold,,1.0,oracle_cost_honest,9.000000000036756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0076,microwave@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0078,microwave@small,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0080,motorcycle@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0082,mouse@large,threshold,,1.0,oracle_threshold_honest,9.000000000036756e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0084,mouse@small,threshold,,1.0,oracle_threshold_honest,3.000000000086267e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0108,skis@large,threshold,,1.0,oracle_cost_honest,1.5000000000098268e-05,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0110,skis@small,threshold,,1.0,oracle_cost_honest,1.7000000000044757e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0112,snowboard@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0114,spoon@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0116,spoon@small,objective,,1.0,oracle_threshold_honest,0.0010350000000000081,4,0.007692307692307693,9.584615384615363e-06,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0118,stop sign@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_npy,a_base,task_0120,surfboard@large,threshold,,1.0,fbeta_oracle_threshold,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0000,airplane@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0002,airplane@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0004,apple@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000065512e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0036,bus@small,threshold,,1.0,oracle_cost_honest,6.999999999979245e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0038,cell phone@medium,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0040,chair@large,threshold,,1.0,oracle_threshold_honest,4.000000000004e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0072,knife@small,threshold,,1.0,oracle_threshold_honest,3.000000000030756e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0074,laptop@medium,threshold,,1.0,fbeta_oracle_threshold,9.000000000036756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0076,microwave@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0108,skis@large,threshold,,1.0,oracle_cost_honest,2.8000000000028002e-05,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0110,skis@small,threshold,,1.0,oracle_threshold_honest,1.4999999999987246e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_pin,a_pin,task_0112,snowboard@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_full,a_full,task_0000,airplane@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0002,airplane@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0004,apple@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0006,bag or luggage@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0008,banana@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0010,baseball bat@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0012,baseball bat@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0014,bench@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0016,bicycle@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0018,bicycle@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0020,bird@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0022,boat@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0024,boat@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0026,book@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0028,bottle@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0030,bottle@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0032,bowl@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0034,bus@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0036,bus@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0038,cell phone@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0040,chair@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0042,chair@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0044,clock@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0046,dining table@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0048,dining table@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0050,dog@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0052,enclosed road vehicle@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0054,enclosed road vehicle@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0056,fire hydrant@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0058,fork@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0060,fork@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0062,frisbee@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0064,keyboard@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0066,keyboard@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0068,kite@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0070,knife@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0072,knife@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0074,laptop@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0076,microwave@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0078,microwave@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0080,motorcycle@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0082,mouse@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0084,mouse@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0086,orange@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0088,parking meter@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0090,person@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0092,person@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0094,remote@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0096,scissors@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0098,scissors@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0100,single serving drinking vessel@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0102,sink@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0104,sink@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0106,skateboard@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0108,skis@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0110,skis@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0112,snowboard@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0114,spoon@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0116,spoon@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0118,stop sign@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0120,surfboard@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0122,surfboard@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0124,tennis racket@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0126,tie@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0128,tie@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0130,toothbrush@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0132,traffic light@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0134,traffic light@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0136,tv@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0138,umbrella@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0140,umbrella@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_full,a_full,task_0142,vase or potted plant@medium,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,i_full,task_0000,airplane@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,i_full,task_0024,boat@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,i_full,task_0048,dining table@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,i_full,task_0072,knife@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,i_full,task_0096,scissors@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,i_full,task_0120,surfboard@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_ship,a_full,task_0000,airplane@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_ship,a_full,task_0024,boat@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_ship,a_full,task_0048,dining table@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_ship,a_full,task_0072,knife@small,identical,,,,0.0,0,0.0,0.0,0.0,
+a_ship,a_full,task_0096,scissors@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_ship,a_full,task_0120,surfboard@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,a_ship,task_0000,airplane@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,a_ship,task_0024,boat@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,a_ship,task_0048,dining table@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,a_ship,task_0072,knife@small,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,a_ship,task_0096,scissors@large,identical,,,,0.0,0,0.0,0.0,0.0,
+i_ship,a_ship,task_0120,surfboard@large,identical,,,,0.0,0,0.0,0.0,0.0,
+a_base,a_full,task_0000,airplane@large,threshold,,1.0,oracle_threshold_honest,2.2999999999995246e-05,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0002,airplane@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0004,apple@medium,threshold,,1.0,oracle_threshold_honest,9.000000000036756e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0006,bag or luggage@medium,threshold,,1.0,oracle_threshold_honest,3.000000000030756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0008,banana@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0010,baseball bat@large,threshold,,1.0,oracle_cost_honest,9.000000000036756e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0012,baseball bat@small,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0014,bench@medium,threshold,,1.0,oracle_threshold_honest,6.0000000000060005e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0016,bicycle@large,threshold,,1.0,oracle_cost_honest,2.0000000000020002e-05,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0018,bicycle@small,threshold,,1.0,oracle_threshold_honest,8.999999999981245e-06,15,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0020,bird@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0022,boat@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0024,boat@small,threshold,,1.0,oracle_threshold_honest,4.000000000004e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0026,book@medium,threshold,,1.0,oracle_threshold_honest,4.000000000004e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0028,bottle@large,threshold,,1.0,oracle_cost_honest,8.000000000008e-06,18,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0030,bottle@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz"
+a_base,a_full,task_0032,bowl@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0034,bus@large,threshold,,1.0,oracle_cost_honest,8.000000000008e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0036,bus@small,threshold,,1.0,oracle_threshold_honest,7.000000000034756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0038,cell phone@medium,threshold,,1.0,oracle_cost_honest,4.000000000004e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0040,chair@large,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0042,chair@small,threshold,,1.0,oracle_threshold_honest,6.999999999979245e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0044,clock@medium,threshold,,1.0,fbeta_oracle_threshold,2.9999999999752447e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0046,dining table@large,threshold,,1.0,auroc,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0048,dining table@small,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0050,dog@medium,threshold,,1.0,oracle_threshold_honest,1.2999999999985246e-05,15,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0052,enclosed road vehicle@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0054,enclosed road vehicle@small,threshold,,1.0,oracle_threshold_honest,4.999999999921734e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0056,fire hydrant@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0058,fork@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0060,fork@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0062,frisbee@medium,threshold,,1.0,fbeta_oracle_threshold,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0064,keyboard@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0066,keyboard@small,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0068,kite@medium,threshold,,1.0,oracle_cost_honest,1.0000000000010001e-05,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0070,knife@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0072,knife@small,threshold,,1.0,oracle_threshold_honest,1.2000000000012001e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0074,laptop@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0076,microwave@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0078,microwave@small,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0080,motorcycle@medium,threshold,,1.0,oracle_threshold_honest,6.0000000000060005e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0082,mouse@large,threshold,,1.0,oracle_cost_honest,4.000000000004e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0084,mouse@small,threshold,,1.0,oracle_threshold_honest,6.000000000061512e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0086,orange@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,1,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0088,parking meter@medium,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0090,person@large,threshold,,1.0,oracle_threshold_honest,3.000000000030756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0092,person@small,diagnostics,,1.0,auroc,0.0,0,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0094,remote@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0096,scissors@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0098,scissors@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0100,single serving drinking vessel@medium,threshold,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0102,sink@large,threshold,,1.0,oracle_threshold_honest,1.0999999999983245e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0104,sink@small,threshold,,1.0,oracle_threshold_honest,1.399999999995849e-05,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0106,skateboard@medium,threshold,,1.0,oracle_cost_honest,9.999999999732445e-07,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0108,skis@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0110,skis@small,threshold,,1.0,oracle_threshold_honest,1.2000000000012001e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0112,snowboard@medium,trajectory,5.0,1.0,oracle_cost_honest,0.09949999999999992,80,0.6788990825688074,-0.011859880733944957,-0.10190200000000005,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0114,spoon@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0116,spoon@small,objective,,1.0,oracle_threshold_honest,0.0010359999999999814,6,0.007692307692307693,-9.584615384615363e-06,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0118,stop sign@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,1,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0120,surfboard@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0122,surfboard@small,threshold,,1.0,oracle_threshold_honest,1.399999999995849e-05,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0124,tennis racket@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0126,tie@large,threshold,,1.0,fbeta_oracle_threshold,1.0000000000287557e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0128,tie@small,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0130,toothbrush@medium,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0132,traffic light@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0134,traffic light@small,threshold,,1.0,oracle_threshold_honest,1.399999999995849e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0136,tv@medium,threshold,,1.0,oracle_threshold_honest,4.000000000004e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0138,umbrella@large,threshold,,1.0,oracle_cost_honest,3.000000000030756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0140,umbrella@small,threshold,,1.0,oracle_threshold_honest,7.99999999995249e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_full,task_0142,vase or potted plant@medium,threshold,,1.0,oracle_threshold_honest,3.000000000030756e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0000,airplane@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0002,airplane@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0004,apple@medium,threshold,,1.0,oracle_threshold_honest,9.000000000036756e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0006,bag or luggage@medium,threshold,,1.0,oracle_threshold_honest,7.99999999995249e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0008,banana@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0010,baseball bat@large,threshold,,1.0,oracle_cost_honest,8.999999999981245e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0012,baseball bat@small,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0014,bench@medium,threshold,,1.0,oracle_threshold_honest,6.0000000000060005e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0016,bicycle@large,threshold,,1.0,oracle_cost_honest,9.000000000036756e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0018,bicycle@small,threshold,,1.0,oracle_cost_honest,8.999999999981245e-06,13,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0020,bird@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0022,boat@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0024,boat@small,threshold,,1.0,oracle_threshold_honest,4.000000000004e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0026,book@medium,threshold,,1.0,oracle_cost_honest,4.000000000004e-06,14,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0028,bottle@large,threshold,,1.0,oracle_threshold_honest,5.999999999950489e-06,14,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0030,bottle@small,threshold,,1.0,oracle_threshold_honest,9.999999999732445e-07,1,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz"
+i_base,i_full,task_0032,bowl@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0034,bus@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0036,bus@small,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0038,cell phone@medium,threshold,,1.0,oracle_threshold,9.000000000036756e-06,13,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0040,chair@large,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0042,chair@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0044,clock@medium,threshold,,1.0,auroc,2.9999999999752447e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0046,dining table@large,threshold,,1.0,auroc,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0048,dining table@small,threshold,,1.0,oracle_threshold_honest,2.000000000002e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0050,dog@medium,threshold,,1.0,oracle_threshold,1.2999999999985246e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0052,enclosed road vehicle@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0054,enclosed road vehicle@small,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0056,fire hydrant@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0058,fork@large,threshold,,1.0,oracle_threshold,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0060,fork@small,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0062,frisbee@medium,threshold,,1.0,fbeta_oracle_threshold,1.0000000000287557e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0064,keyboard@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0066,keyboard@small,threshold,,1.0,oracle_threshold_honest,6.0000000000060005e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0068,kite@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000010001e-05,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0070,knife@large,threshold,,1.0,oracle_threshold_honest,6.000000000061512e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0072,knife@small,threshold,,1.0,oracle_threshold_honest,1.2000000000012001e-05,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0074,laptop@medium,threshold,,1.0,oracle_cost_honest,9.000000000036756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0076,microwave@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0078,microwave@small,threshold,,1.0,oracle_cost_honest,2.9999999999752447e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0080,motorcycle@medium,threshold,,1.0,oracle_threshold_honest,6.0000000000060005e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0082,mouse@large,threshold,,1.0,oracle_threshold_honest,9.000000000036756e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0084,mouse@small,threshold,,1.0,oracle_threshold_honest,6.000000000061512e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0086,orange@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0088,parking meter@medium,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0090,person@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0092,person@small,diagnostics,,1.0,auroc,0.0,0,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0094,remote@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0096,scissors@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0098,scissors@small,threshold,,1.0,oracle_threshold_honest,2.9999999999752447e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0100,single serving drinking vessel@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,3,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0102,sink@large,threshold,,1.0,oracle_cost_honest,9.99999999995449e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0104,sink@small,threshold,,1.0,oracle_threshold_honest,1.399999999995849e-05,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0106,skateboard@medium,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0108,skis@large,threshold,,1.0,oracle_cost_honest,1.5000000000098268e-05,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0110,skis@small,threshold,,1.0,oracle_threshold_honest,1.6000000000016e-05,10,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0112,snowboard@medium,trajectory,5.0,1.0,oracle_cost_honest,0.09949999999999992,80,0.6788990825688074,-0.011859880733944957,-0.10190200000000005,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0114,spoon@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0116,spoon@small,threshold,,1.0,oracle_threshold_honest,3.000000000030756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0118,stop sign@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0120,surfboard@large,threshold,,1.0,fbeta_oracle_threshold,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0122,surfboard@small,threshold,,1.0,oracle_threshold_honest,5.000000000032756e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0124,tennis racket@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0126,tie@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0128,tie@small,threshold,,1.0,oracle_cost_honest,5.000000000032756e-06,12,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0130,toothbrush@medium,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0132,traffic light@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0134,traffic light@small,threshold,,1.0,oracle_threshold_honest,1.399999999995849e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0136,tv@medium,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0138,umbrella@large,threshold,,1.0,oracle_cost_honest,2.2999999999995246e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0140,umbrella@small,objective,,1.0,oracle_cost_honest,0.0009109999999999951,10,0.01020408163265306,2.256122448979554e-05,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_full,task_0142,vase or potted plant@medium,threshold,,1.0,oracle_threshold_honest,8.000000000008e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+i_base,i_npy,task_0000,airplane@large,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0002,airplane@small,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0004,apple@medium,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0006,bag or luggage@medium,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0008,banana@large,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0010,baseball bat@large,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0012,baseball bat@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0036,bus@small,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0038,cell phone@medium,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0040,chair@large,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0042,chair@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0044,clock@medium,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0046,dining table@large,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0048,dining table@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0072,knife@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0074,laptop@medium,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0076,microwave@large,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0078,microwave@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0080,motorcycle@medium,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0082,mouse@large,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0084,mouse@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0108,skis@large,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0110,skis@small,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0112,snowboard@medium,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0114,spoon@large,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0116,spoon@small,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0118,stop sign@medium,diagnostics,,1.0,oracle_threshold_honest,0.0,0,0.0,0.0,0.0,
+i_base,i_npy,task_0120,surfboard@large,diagnostics,,1.0,oracle_cost_honest,0.0,0,0.0,0.0,0.0,
+a_base,a_pin,task_0000,airplane@large,threshold,,1.0,oracle_threshold_honest,2.2999999999995246e-05,9,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0002,airplane@small,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0004,apple@medium,threshold,,1.0,oracle_threshold_honest,9.000000000036756e-06,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0036,bus@small,threshold,,1.0,oracle_threshold_honest,7.000000000034756e-06,5,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0038,cell phone@medium,threshold,,1.0,oracle_cost_honest,4.000000000004e-06,11,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0040,chair@large,threshold,,1.0,oracle_threshold_honest,1.999999999946489e-06,8,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0072,knife@small,threshold,,1.0,oracle_threshold_honest,1.2000000000012001e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0074,laptop@medium,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,2,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0076,microwave@large,threshold,,1.0,oracle_threshold_honest,1.0000000000287557e-06,6,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0108,skis@large,threshold,,1.0,oracle_cost_honest,1.0000000000287557e-06,4,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0110,skis@small,threshold,,1.0,oracle_threshold_honest,1.2000000000012001e-05,7,0.0,0.0,0.0,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"
+a_base,a_pin,task_0112,snowboard@medium,trajectory,5.0,1.0,oracle_cost_honest,0.09949999999999992,80,0.6788990825688074,-0.011859880733944957,-0.10190200000000005,"__cutdiag.csv.gz,__picks.csv.gz,__sweep.csv.gz"

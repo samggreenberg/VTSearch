@@ -10,6 +10,59 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
+  #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
+  `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns
+  `alpha` whatever the bands (#4272's union split is dropped). `SpotCheck.start_balance(kept=)` records how
+  many unvoted items the line kept as the check starts (`SpotCheck.kept`); `range_over(top)` /
+  `recall_range_over(top)` bound any top set from the picks that fell in it (`parts_over`), `range_count` is
+  the set a finished check's ranges describe, and `is_stale` watches that set. `BalanceState` gains
+  `kept_at_check`, and its `precision` / `recall` describe that set; the eval harness passes the line's count
+  and logs it as `check_kept`. `range()` / `recall_range()` still describe the walk's own set. Priced at
+  `docs/experiments/2026-10-15-check-range-4483/REPORT.md`.
+
+- **`ratio_test_matches` ranks on `|b|^2 - 2ab`, in cache-sized blocks on a CPU** (issue #4515).
+  SIFT descriptors are integers in `[0, 255]`, so every partial sum of the expanded squared distance
+  is an integer below `2**24` and float32 holds it exactly. The two nearest neighbours are found on
+  `|b|^2 - 2ab` (one `baddbmm` with `+inf` on padded rows, then `min`, `scatter_` and `amin`), and
+  `|a|^2` and the square root are added for those two alone, so the pairs are the old `cdist` +
+  `topk` path's, pair for pair. On a CPU a block is `_MATCH_CHUNK_ELEMENTS_CPU` (2M) elements, about
+  a page against a template; the GPU budget stays `_MATCH_CHUNK_ELEMENTS` (32M).
+  `_stored_descriptors` replaces `_device_descriptors`: candidates are widened from their stored
+  dtype straight into the batch. A 1,000-page shortlist takes 2.95 s on 8 EPYC 7713 cores (was
+  6.55 s) and 0.24 s on a V100 (was 0.37 s).
+
+- **The weak-separation check prompts once** (issue #4909). New
+  `vtscore.training.thresholds.WEAK_CHECK_REPEAT` (`None`) is `weak_check_due`'s default `cooldown`, so a
+  check is due only while none has ended (it was `WEAK_CHECK_COOLDOWN`, 25: again 25 votes after the last
+  check). `WEAK_CHECK_COOLDOWN` stays 25 and now governs only `done_check_due`. The harness follows:
+  `simulate_voting_iterations(weak_repeat=)` defaults to 0 (once), and 25 is the arm before. Priced at
+  `docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md`.
+
+- **A click cap backs every stop rule** (issue #4903). `vtscore.eval.autopilot_flow.STOP_CAP` (200) mirrors the
+  app's `STOP_CAP_VOTES`: `stop_lights(..., at_cap=)` says stop under every rule, `AutopilotFlow(stop_cap=)` and
+  `simulate_voting_iterations(stop_cap=)` default to it (`None` is no cap), and `capped_in_opening(phase,
+  good_count, bad_count)` reads the app's display-only stop for a session still in its opening at the cap. It
+  never binds inside the eval's 150 clicks.
+
+- **Labelset sources push the detector file's whole labelset, paced, and pull by merging** (issue #4913).
+  `vtscore.labels.sync` is rewritten. Every detector-file write (`vtscore.detectors.store._write_detector` /
+  `queue_detector_write`, through the new `note_detector_written` hook) schedules a push, and the payload
+  is the file's labelset from every dataset plus `detector_meta` - it was the active dataset's votes, so a
+  push from one dataset erased the others' labels at the source. Pushes for one detector never overlap,
+  start at least `CoreConfig.labelset_source_push_interval` seconds apart (new field, default
+  `DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL` = 60), skip a payload the source already holds, run as the
+  detector's creator, and resolve `{detector_*}` templates for that detector rather than the request's;
+  a detector's first push in a process pulls first, and a source that cannot be read is not pushed to.
+  `sync_from_labelset_source(detector_id=None, *, prefer="source")` now merges the source into the
+  detector file (adds what is missing, `prefer` decides a disagreement, removes nothing) and re-derives a
+  loaded detector's votes from it, instead of only voting the active dataset's matches; it needs the
+  detector's JSON file. `sync_to_labelset_source()` keeps its signature and schedules a push for the active
+  detector. Removed: the private `_syncing` / `_sync_lock` re-export guard (a pull now writes once, and the
+  resulting push is a no-op when nothing changed), `_run_pending_sync`, `_push_with_thread_context` and
+  `_push_to_labelset_source`. `DetectorContext.labelset_source` still links a source (in memory), below a
+  registry binding.
+
 - **The labels line reads its own F-beta, and Autopilot's Done stops on it** (issue #4878).
   `LabelsLine.expected_fbeta(beta)` is the expected F-beta at the line's cut over the corpus's unvoted
   items (what `corpus_cut` maximises), `LabelsLine.expected_fbeta_fresh(beta)` the class model's on a
@@ -178,6 +231,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   (how far the transfer moved the held-out logits and the class model, and the share of held-out Goods above their
   fold's haystack). `vtscore.training.thresholds` gains `FOLD_SCALES`, `transfer_fold_orderings`,
   `fold_transfer_shift` and `fold_transfer_clipped`. An experiment arm; the app is unchanged.
+
+- **Detector-to-labelset-source bindings and a deployment default** (issue #4913). New
+  `vtscore.labels.binding`: `resolve_labelset_source(entry)` resolves a detector's registry-entry
+  `labelset_source` binding, then a `DetectorContext.labelset_source`, then the new
+  `CoreConfig.default_labelset_source`, whose non-empty field values are fixed and overlay the detector's
+  own; the result reports `missing_fields`. Also `labelset_source_status`, `unfixed_fields`,
+  `fixed_field_values`, `deployment_default_labelset_source`, `stored_labelset_source` and `OPT_OUT`. In
+  `vtscore.labels.sync`: `schedule_labelset_push(name)`, `note_detector_written(data)` and
+  `reconcile_labelset_source(name)` (pull with the file winning, then push - run when a detector loads or
+  is linked). In `vtscore.detectors.labelset_ops`: `follow_rename_with_labelset_file(detector_id,
+  old_name=, new_name=)` moves a `{detector_name}`-templated server file to follow a rename.
 
 - **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
   takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of
