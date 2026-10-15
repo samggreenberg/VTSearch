@@ -1,0 +1,226 @@
+{
+ "pairs": [
+  {
+   "pair": "i_full ~ a_full",
+   "question": "numpy + MKL + ATen pins, Intel vs AMD",
+   "cells": 72,
+   "identical": 0,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 0,
+   "diagnostics": 72,
+   "base_cols_differing": {
+    "oracle_cost_honest": 72,
+    "regret_honest": 72,
+    "oracle_threshold_honest": 45
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.0006620000000000029,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.0,
+   "base_threshold_gap_median": 0.0,
+   "base_threshold_gap_p90": 0.0,
+   "base_threshold_gap_max": 0.0,
+   "base_votes_threshold_moved_median": 0.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 45,
+    "oracle_cost_honest": 27
+   }
+  },
+  {
+   "pair": "i_ship ~ i_full",
+   "question": "the shipped pins vs the tested ones, Intel",
+   "cells": 72,
+   "identical": 0,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 0,
+   "diagnostics": 72,
+   "base_cols_differing": {
+    "oracle_cost_honest": 72,
+    "regret_honest": 72,
+    "oracle_threshold_honest": 45
+   },
+   "median_first_diff_t": 1.0,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.0006620000000000029,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.0,
+   "base_threshold_gap_median": 0.0,
+   "base_threshold_gap_p90": 0.0,
+   "base_threshold_gap_max": 0.0,
+   "base_votes_threshold_moved_median": 0.0,
+   "first_diff_cols": {
+    "oracle_threshold_honest": 45,
+    "oracle_cost_honest": 27
+   }
+  },
+  {
+   "pair": "a_ship ~ a_full",
+   "question": "the shipped pins vs the tested ones, AMD",
+   "cells": 72,
+   "identical": 72,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 0,
+   "diagnostics": 0,
+   "base_cols_differing": {},
+   "median_first_diff_t": null,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.0,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.0,
+   "base_threshold_gap_median": 0.0,
+   "base_threshold_gap_p90": 0.0,
+   "base_threshold_gap_max": 0.0,
+   "base_votes_threshold_moved_median": 0.0,
+   "first_diff_cols": {}
+  },
+  {
+   "pair": "i_ship ~ a_ship",
+   "question": "the shipped pins, Intel vs AMD",
+   "cells": 72,
+   "identical": 72,
+   "trajectory": 0,
+   "objective": 0,
+   "threshold": 0,
+   "diagnostics": 0,
+   "base_cols_differing": {},
+   "median_first_diff_t": null,
+   "median_pick_diverge_t": null,
+   "max_gap_fbeta": 0.0,
+   "frac_votes_fbeta_moved": 0.0,
+   "mean_gap_fbeta": 0.0,
+   "se_gap_fbeta": 0.0,
+   "mean_abs_gap_fbeta": 0.0,
+   "final_gap_fbeta_mean": 0.0,
+   "final_gap_fbeta_max_abs": 0.0,
+   "median_max_gap_threshold": 0.0,
+   "base_threshold_gap_median": 0.0,
+   "base_threshold_gap_p90": 0.0,
+   "base_threshold_gap_max": 0.0,
+   "base_votes_threshold_moved_median": 0.0,
+   "first_diff_cols": {}
+  }
+ ],
+ "hardware": {
+  "a_full": {
+   "cpus": [
+    "AMD EPYC 7713 64-Core Processor"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "-"
+   ],
+   "mkl_cbwr": [
+    "COMPATIBLE"
+   ],
+   "npy_disable": [
+    "AVX512F AVX512_SKX"
+   ]
+  },
+  "a_ship": {
+   "cpus": [
+    "AMD EPYC 7713 64-Core Processor"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "-"
+   ],
+   "mkl_cbwr": [
+    "-"
+   ],
+   "npy_disable": [
+    "-"
+   ]
+  },
+  "i_full": {
+   "cpus": [
+    "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz"
+   ],
+   "torch_cap": [
+    "AVX2"
+   ],
+   "np_avx512": [
+    "AVX512BW,AVX512CD,AVX512DQ,AVX512F,AVX512VL,AVX512_SKX,X86_V4"
+   ],
+   "mkl_cbwr": [
+    "COMPATIBLE"
+   ],
+   "npy_disable": [
+    "AVX512F AVX512_SKX"
+   ]
+  },
+  "i_ship": {
+   "cpus": [
+    "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz"
+   ],
+   "torch_cap": [
+    "AVX512"
+   ],
+   "np_avx512": [
+    "AVX512BW,AVX512CD,AVX512DQ,AVX512F,AVX512VL,AVX512_SKX,X86_V4"
+   ],
+   "mkl_cbwr": [
+    "-"
+   ],
+   "npy_disable": [
+    "-"
+   ]
+  }
+ },
+ "cell_seconds": {
+  "a_full": {
+   "cells": 72,
+   "median_s": 169.48649999999998,
+   "mean_s": 163.66515277777776
+  },
+  "a_ship": {
+   "cells": 72,
+   "median_s": 169.70299999999997,
+   "mean_s": 164.0185277777778
+  },
+  "i_full": {
+   "cells": 72,
+   "median_s": 248.585,
+   "mean_s": 239.98084722222222
+  },
+  "i_ship": {
+   "cells": 72,
+   "median_s": 262.40250000000003,
+   "mean_s": 254.08920833333337
+  }
+ },
+ "time_ratios": {
+  "i_ship/i_full": {
+   "cells": 72,
+   "median": 1.0487268836848354,
+   "mean": 1.0568748462672932
+  },
+  "a_ship/a_full": {
+   "cells": 72,
+   "median": 1.004425944252656,
+   "mean": 1.0027831236889158
+  }
+ }
+}

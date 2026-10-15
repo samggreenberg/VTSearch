@@ -1,8 +1,9 @@
 """Print one TSV line naming the node a task ran on and the numeric kernels it resolved (#4110).
 
 Columns: job, array task, host, CPU model, whether the CPU has AVX-512, numpy's
-enabled AVX-512 dispatch targets, torch's ATen CPU capability, and the pins
-(OPENBLAS_CORETYPE, NPY_DISABLE_CPU_FEATURES, MKL_CBWR) as the process saw them.
+enabled AVX-512 dispatch targets (``X86_V4`` among them from numpy 2.4), torch's
+ATen CPU capability, and the pins (OPENBLAS_CORETYPE, NPY_DISABLE_CPU_FEATURES,
+MKL_CBWR) as the process saw them.
 A cross-node pair is read by these columns, not by node name: one partition
 holds more than one CPU model.
 """
@@ -39,7 +40,8 @@ def main() -> None:
         os.uname().nodename.split(".")[0],
         model,
         str(avx512),
-        ",".join(sorted(k for k, v in feats.items() if v and k.startswith("AVX512"))) or "-",
+        # numpy 2.4 renamed AVX512_SKX's targets X86_V4 (#4930)
+        ",".join(sorted(k for k, v in feats.items() if v and (k.startswith("AVX512") or k == "X86_V4"))) or "-",
         torch.backends.cpu.get_cpu_capability(),
         os.environ.get("OPENBLAS_CORETYPE", "-"),
         os.environ.get("NPY_DISABLE_CPU_FEATURES", "-"),
