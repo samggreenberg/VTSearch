@@ -4,17 +4,19 @@ The GRID mixes AVX-512 CPUs with AVX2-only ones, and OpenBLAS, numpy, torch's
 MKL and torch's ATen each pick kernels by CPU.  Their last-bit differences moved
 a cell's threshold by 1e-6 and, votes later, a pick, so the same arm on the same
 commit was not the same cell on an Intel and an AMD node (#3840).  The fix is
-four env pins (``_expcommon.CPU_KERNEL_PINS``) that only work if they are set
+four env pins (``_expcommon.cpu_kernel_pins``) that only work if they are set
 before numpy and torch load, and that fail silently if they are not -- so these
-tests pin the order as well as the values.
+tests pin the order as well as the values.  numpy's pin names dispatch targets,
+which numpy 2.4 renamed, so it is chosen by numpy's version, and the last class
+checks that the numpy installed here takes it (#4930).
 """
 
 from __future__ import annotations
 
 import ast
+import importlib.metadata
 import os
 import platform
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -43,8 +45,9 @@ def x86(monkeypatch, expcommon):
 class TestPinCpuKernels:
     def test_defaults_all_four(self, expcommon, x86):
         env: dict[str, str] = {}
-        assert expcommon.pin_cpu_kernels(env) == expcommon.CPU_KERNEL_PINS
-        assert env == expcommon.CPU_KERNEL_PINS
+        assert expcommon.pin_cpu_kernels(env) == expcommon.cpu_kernel_pins()
+        assert env == expcommon.cpu_kernel_pins()
+        assert env["NPY_DISABLE_CPU_FEATURES"] == expcommon.numpy_kernel_pin()
 
     def test_an_exported_value_wins(self, expcommon, x86):
         env = {"MKL_CBWR": "AVX2", "NPY_DISABLE_CPU_FEATURES": ""}
@@ -67,14 +70,50 @@ class TestPinCpuKernels:
         """Set after the import, a pin would do nothing and say nothing."""
         import numpy  # noqa: F401
 
-        for k in expcommon.CPU_KERNEL_PINS:
+        for k in expcommon.cpu_kernel_pins():
             monkeypatch.delenv(k, raising=False)
         with pytest.raises(RuntimeError, match="before numpy"):
             expcommon.pin_cpu_kernels()
 
     def test_the_report_names_every_pin(self, expcommon):
         line = expcommon.kernel_report()
-        assert all(f"{k}=" in line for k in expcommon.CPU_KERNEL_PINS)
+        assert all(f"{k}=" in line for k in expcommon.cpu_kernel_pins())
+
+    def test_the_report_names_the_kernels_numpy_runs(self, expcommon):
+        """A pin numpy ignored still reads as set, so the report also says what numpy dispatched to (#4930)."""
+        import numpy
+
+        line = expcommon.kernel_report()
+        assert f" numpy={numpy.__version__} numpy_targets=" in line
+
+
+class TestNumpyKernelPin:
+    @pytest.mark.parametrize(
+        ("version", "pin"),
+        [
+            ("1.26.4", "AVX512F AVX512_SKX"),
+            ("2.2.6", "AVX512F AVX512_SKX"),
+            ("2.3.5", "AVX512F AVX512_SKX"),
+            ("2.4.0rc1", "X86_V4 AVX512_ICL AVX512_SPR"),
+            ("2.4.0", "X86_V4 AVX512_ICL AVX512_SPR"),
+            ("2.5.3", "X86_V4 AVX512_ICL AVX512_SPR"),
+        ],
+    )
+    def test_by_version(self, expcommon, version, pin):
+        """numpy 2.4 renamed its x86 dispatch targets; each value is ignored by the other numpy."""
+        assert expcommon.numpy_kernel_pin(version) == pin
+
+    def test_the_installed_numpy_without_importing_it(self, expcommon):
+        """numpy reads the pin when it loads, so choosing the pin must not load it."""
+        code = (
+            "import sys; sys.path.insert(0, sys.argv[1]); import _expcommon\n"
+            "print(_expcommon.numpy_kernel_pin()); assert 'numpy' not in sys.modules\n"
+        )
+        proc = subprocess.run(  # noqa: S603  # interpreter + test-controlled args
+            [sys.executable, "-c", code, str(_EXPERIMENTS)], capture_output=True, text=True, timeout=60
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip() == expcommon.numpy_kernel_pin(importlib.metadata.version("numpy"))
 
 
 def _is_call(node: ast.stmt, name: str) -> bool:
@@ -113,33 +152,99 @@ class TestRunCellsPinsFirst:
         assert not bare, "pin_cpu_kernels() must sit under `if __name__ == '__main__':`"
 
 
+def _source_gridenv(tmp_path: Path, python: str | None, **env: str) -> subprocess.CompletedProcess[str]:
+    """Source a copy of ``gridenv.sh`` in a scratch tree; print its numpy pin.
+
+    A copy, so the ``.shadow/`` it creates lands in *tmp_path*, not the checkout.
+    *python* is what a bare ``python`` runs (a venv's), or None for one that fails.
+    """
+    tree = tmp_path / "wt"
+    (tree / "scripts" / "experiments").mkdir(parents=True)
+    (tree / "gridenv.sh").write_text((_ROOT / "gridenv.sh").read_text(encoding="utf-8"), encoding="utf-8")
+    (tree / "scripts" / "experiments" / "_expcommon.py").write_text(
+        (_EXPERIMENTS / "_expcommon.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # A wrapper, not a symlink: a venv's python finds its venv from where it was invoked.
+    (bin_dir / "python").write_text("#!/bin/sh\n" + ("exit 1\n" if python is None else f'exec "{python}" "$@"\n'))
+    (bin_dir / "python").chmod(0o755)
+    base = {k: v for k, v in os.environ.items() if k != "NPY_DISABLE_CPU_FEATURES"}
+    base.update(VTS_PYTHON_MODULE="", VTS_VENV="", PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}", **env)
+    return subprocess.run(  # noqa: S603  # fixed argv, a scratch copy of the repo's script
+        ["bash", "-c", 'source "$1/gridenv.sh" && printf %s "${NPY_DISABLE_CPU_FEATURES-unset}"', "_", str(tree)],  # noqa: S607
+        capture_output=True,
+        text=True,
+        env=base,
+        timeout=60,
+    )
+
+
 class TestGridenvAgrees:
-    def test_gridenv_exports_the_same_numpy_pin(self, expcommon):
-        """Two homes, one value: every GRID job gets the numpy pin, the cell runner all four."""
+    def test_openblas_pin(self):
         src = (_ROOT / "gridenv.sh").read_text(encoding="utf-8")
-        m = re.search(r'export NPY_DISABLE_CPU_FEATURES="\$\{NPY_DISABLE_CPU_FEATURES-([^}]*)\}"', src)
-        assert m, "gridenv.sh must default NPY_DISABLE_CPU_FEATURES (#4110)"
-        assert m.group(1) == expcommon.CPU_KERNEL_PINS["NPY_DISABLE_CPU_FEATURES"]
         assert 'export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"' in src
+
+    @pytest.mark.skipif(platform.machine() != "x86_64", reason="gridenv.sh pins numpy on x86-64 only")
+    def test_gridenv_exports_the_same_numpy_pin(self, expcommon, tmp_path):
+        """Two homes, one value: every GRID job gets the numpy pin, the cell runner all four."""
+        proc = _source_gridenv(tmp_path, sys.executable)
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == expcommon.numpy_kernel_pin()
+
+    def test_an_exported_value_wins(self, tmp_path):
+        proc = _source_gridenv(tmp_path, sys.executable, NPY_DISABLE_CPU_FEATURES="")
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == ""
+
+    @pytest.mark.skipif(platform.machine() != "x86_64", reason="gridenv.sh pins numpy on x86-64 only")
+    def test_says_so_when_it_cannot_choose(self, tmp_path):
+        """No numpy to read, no pin: said on stderr rather than a guess numpy might ignore."""
+        proc = _source_gridenv(tmp_path, None)
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == "unset"
+        assert "#4930" in proc.stderr
+
+
+#: The dispatch targets an AVX2-only node (EPYC 7713, Xeon E5-2698 v4) can run, in
+#: numpy's names before 2.4 and from 2.4 on.  A pinned numpy runs nothing else.
+_AVX2_LEVEL = ("SSSE3", "SSE41", "POPCNT", "SSE42", "AVX", "F16C", "FMA3", "AVX2", "X86_V2", "X86_V3")
 
 
 @pytest.mark.skipif(platform.machine() not in ("x86_64", "AMD64"), reason="the pin is x86-64 only")
 class TestThisNumpyAcceptsThePin:
     def test_imports_without_a_warning_and_turns_the_targets_off(self, expcommon):
-        """A numpy that dropped either target from its dispatch list would warn at every import.
+        """The installed numpy takes its pin, and no optimized ufunc runs above AVX2 under it.
 
-        That warning is an ``ImportWarning``, hidden by default, so a renamed target
-        would leave the pin quietly half-applied; ``-W error`` makes it fail here instead.
+        A name the build does not dispatch makes numpy ignore the whole variable with
+        an ``ImportWarning``, hidden by default, which is how numpy 2.4's renamed
+        targets left the pre-2.4 pin doing nothing (#4930); ``-W error`` makes that
+        fail here.  ``__cpu_features__`` reports the CPU's flags as well as the
+        targets turned off, so a target the pin does not name (``AVX512_ICL`` before
+        numpy 2.4) can read as on while no kernel uses it.  The ufunc check reads
+        what runs instead.  It can only fail on an AVX-512 CPU; an AVX2 one runs
+        nothing above AVX2 either way.
         """
-        env = dict(os.environ, NPY_DISABLE_CPU_FEATURES=expcommon.CPU_KERNEL_PINS["NPY_DISABLE_CPU_FEATURES"])
+        pin = expcommon.numpy_kernel_pin()
+        env = dict(os.environ, NPY_DISABLE_CPU_FEATURES=pin)
         code = (
+            "import sys\n"
             "try:\n"
             "    from numpy._core._multiarray_umath import __cpu_features__ as F\n"
             "except ImportError:\n"
             "    from numpy.core._multiarray_umath import __cpu_features__ as F\n"
-            "assert not F['AVX512F'] and not F['AVX512_SKX'], F\n"
+            "on = [t for t in sys.argv[1].split() if F.get(t)]\n"
+            "assert not on, f'pinned targets still on: {on}'\n"
+            "from numpy.lib import introspect\n"
+            "run = {d['current'] for s in introspect.opt_func_info().values() for d in s.values()}\n"
+            "above = sorted(t for t in run if not t.startswith('baseline') and t not in sys.argv[2].split())\n"
+            "assert not above, f'ufuncs run above AVX2: {above}'\n"
         )
         proc = subprocess.run(  # noqa: S603  # interpreter + test-controlled args
-            [sys.executable, "-W", "error", "-c", code], env=env, capture_output=True, text=True, timeout=120
+            [sys.executable, "-W", "error", "-c", code, pin, " ".join(_AVX2_LEVEL)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         assert proc.returncode == 0, proc.stderr
