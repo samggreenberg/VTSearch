@@ -960,6 +960,13 @@ def _centroid_beta(det_ctx) -> float | None:
     return detector_beta(det_ctx) if isinstance(det_ctx, DetectorContext) else line_knobs()["beta"]
 
 
+def _unvoted_mask(rows: Any, labelled: set[int]) -> list[bool] | None:
+    """One flag per scored media in *rows*: whether it is not among the *labelled* (#4779)."""
+    if rows is None:
+        return None
+    return [rid not in labelled for rid in rows.ids]
+
+
 def install_centroid_head(
     det_ctx,
     goods: list[np.ndarray],
@@ -967,6 +974,7 @@ def install_centroid_head(
     labelset: LabelSet | None,
     *,
     beta: float | None = None,
+    line_mask: Any = None,
 ) -> tuple[Any, float]:
     """Store the Goods' centroid head on *det_ctx* as its detector, and return ``(head, threshold)``.
 
@@ -974,7 +982,8 @@ def install_centroid_head(
     :mod:`~vtscore.detectors.centroid_head`.  *score* scores a head over the
     corpus the line is cut on (:func:`~vtscore.detectors.centroid_head.fit_centroid`),
     and *beta* is the balance the line is drawn at (#4732): the detector's own,
-    as a trained head's is.
+    as a trained head's is.  *line_mask* flags the scored media the line counts:
+    the unvoted ones (#4779, :func:`_unvoted_mask`).
 
     Every cache a trained head's retrain leaves for a later re-cut is dropped:
     the centroid has no calibration folds, no fitted cut and no labels line.  It
@@ -984,9 +993,20 @@ def install_centroid_head(
     signature like a trained one (#4204).
     """
     from vtscore.detectors.centroid_head import fit_centroid
+
+    head, threshold, line = fit_centroid(goods, score, beta=beta, line_mask=line_mask)
+    _store_quota_head(det_ctx, head, threshold, line, labelset)
+    return head, threshold
+
+
+def _store_quota_head(det_ctx, head: Any, threshold: float, line: Any, labelset: LabelSet | None) -> None:
+    """Make *head*, a head the quota gives (the Goods' centroid or a typed query), *det_ctx*'s detector.
+
+    Every cache a trained head's retrain leaves for a later re-cut is dropped;
+    the head keeps its own line instead.  Stamped with *labelset*'s signature.
+    """
     from vtscore.detectors.model_loading import labelset_signature
 
-    head, threshold, line = fit_centroid(goods, score, beta=beta)
     det_ctx.model = head
     det_ctx.model_labels_sig = labelset_signature(labelset)
     det_ctx.threshold = threshold
@@ -996,7 +1016,74 @@ def install_centroid_head(
     det_ctx.centroid_line = line
     det_ctx.line_ranking = None
     det_ctx.gate_passed = None
-    return head, threshold
+
+
+def _query_tier(resolved_tier: str, labelset: LabelSet, embedder: str | None) -> bool:
+    """Whether a typed-query detector gives its query: under the quota, or past it while the query holds.
+
+    Under the quota (#4758) by what resolved *and* by what is labelled.  The
+    quota counts the labels that resolved; a labelset that meets it as written
+    but whose origins failed to resolve is a resolution failure to report, not
+    a detector under the quota, so it does not get the query.  Past the quota,
+    the query holds on a single-vector space until
+    :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS` labels (#4736, :func:`~vtscore.detectors.label_quota.query_holds`):
+    *embedder* is the space the labels were embedded in.
+    """
+    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds
+    from vtscore.detectors.training import _patch_space_for
+
+    quota = labelset_quota(labelset)
+    if resolved_tier != TIER_TRAINED and quota.tier != TIER_TRAINED:
+        return True
+    return query_holds(quota.n_good, quota.n_bad, patch_space=_patch_space_for(embedder))
+
+
+def install_query_head(
+    det_ctx,
+    text: str,
+    snap: dict[int, dict[str, Any]] | None,
+    labelset: LabelSet | None,
+    *,
+    media_type: str,
+    beta: float | None = None,
+) -> tuple[Any, float, Any] | None:
+    """Store a typed query's head on *det_ctx* as its detector: ``(head, threshold, rows)``, or ``None``.
+
+    What a typed-query detector gives until it has a trained head (#4758): see
+    :mod:`~vtscore.detectors.query_head`.  *text* is embedded and *snap* scored
+    in *snap*'s text space, and the line is the text sort's, drawn over every
+    media at *beta*.  *rows* are those text-space rows, for a caller that scores
+    the head next.  ``None``, with *det_ctx* untouched, when *snap* has no text
+    slot or the query does not embed: the caller falls back to the centroid.
+    """
+    from vtscore.detectors.query_head import embed_detector_query, fit_query_head, text_embedder_for_snap
+    from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
+
+    embedder = text_embedder_for_snap(snap)
+    if not text or not snap or not embedder:
+        return None
+    vec = embed_detector_query(text, media_type, embedder)
+    if vec is None:
+        return None
+    rows = scoring_rows_for_snap(snap, embedder)
+    if not rows.ids:
+        return None
+    if int(np.asarray(vec).size) != int(rows.matrix.shape[1]):
+        # A query that embeds in another width than the snapshot's text-slot
+        # vectors cannot score them: the centroid answers, as with no text slot.
+        log.warning(
+            "Typed query %r embeds to %d dims but %r's vectors have %d: falling back to the centroid",
+            text,
+            int(np.asarray(vec).size),
+            embedder,
+            int(rows.matrix.shape[1]),
+        )
+        return None
+    head, threshold, line = fit_query_head(
+        vec, lambda h: score_rows_with_model(h, rows)[0], beta=beta, embedder=embedder, text=text
+    )
+    _store_quota_head(det_ctx, head, threshold, line, labelset)
+    return head, threshold, rows
 
 
 def train_from_labelset(
@@ -1007,6 +1094,7 @@ def train_from_labelset(
     snap: dict[int, dict[str, Any]] | None,
     haystack_for: "Callable[[str], Haystack | None] | None" = None,
     on_progress: ProgressCallback | None = None,
+    text_query: str = "",
 ) -> bool:
     """Populate the embedding cache, build (X, y), train, and store on *det_ctx*.
 
@@ -1029,6 +1117,16 @@ def train_from_labelset(
     the space they turned out to land in, which is the very thing a routing
     decision needs and which does not exist before this call.  Returning
     ``None`` from it keeps *snap* as the haystack.
+
+    *text_query* is the typed query the detector was made from
+    (:func:`~vtscore.detectors.query_head.detector_text_query`).  Until the
+    quota gives a trained head, a detector with one gets that query's head
+    (:func:`install_query_head`, #4758) in place of nothing or the centroid,
+    its line drawn over the haystack, and on a single-vector space it keeps it
+    past the quota until the labels number
+    :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS` (#4736).  Where the
+    haystack has no text slot it falls back to those.  The trained head it then
+    fits on that space starts from the query as well as from the Goods (#4859).
     """
     populate_label_embeddings(
         det_ctx,
@@ -1044,23 +1142,37 @@ def train_from_labelset(
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the threshold's pass in that same space.
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
+    if text_query and _query_tier(tier, labelset, det_ctx.embedder):
+        hay = haystack.medias if haystack is not None else snap
+        if (
+            install_query_head(det_ctx, text_query, hay, labelset, media_type=media_type, beta=_centroid_beta(det_ctx))
+            is not None
+        ):
+            return True
     if tier == TIER_CENTROID:
         from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
 
         hay = haystack.medias if haystack is not None else snap
         rows = scoring_rows_for_snap(hay, det_ctx.embedder or None) if hay else None
+        # The line counts the unvoted media (#4779); a haystack names them in its own ids.
+        labelled = set(labeled_media_labels(labelset, snap))
+        if haystack is not None:
+            labelled = {hid for hid, src in haystack.to_source.items() if src in labelled}
         install_centroid_head(
             det_ctx,
             [x for x, y in zip(X_list, y_list, strict=True) if y == 1.0],
             (lambda head: score_rows_with_model(head, rows)[0]) if rows is not None else (lambda _head: []),
             labelset,
             beta=_centroid_beta(det_ctx),
+            line_mask=_unvoted_mask(rows, labelled),
         )
         return True
     if tier != TIER_TRAINED:
         return False
 
+    from vtscore.detectors.query_head import typed_query_prior_vector
     from vtscore.detectors.training import train_and_threshold
+    from vtscore.training.svm_prior import typed_query_prior
 
     # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
     # (otherwise a balance change can't move the cutoff — see train_and_threshold).
@@ -1071,18 +1183,20 @@ def train_from_labelset(
         labels = {hid: labels[src] for hid, src in haystack.to_source.items() if src in labels}
         voted_ids = set(labels)
 
-    mlp, threshold = train_and_threshold(
-        X_list,
-        y_list,
-        snap=snap,
-        embedder_name=det_ctx.embedder or None,
-        det_ctx=det_ctx,
-        groups=groups,
-        score_rows=score_rows,
-        voted_ids=voted_ids,
-        haystack=haystack.medias if haystack is not None else None,
-        labels=labels,
-    )
+    # A typed-query detector's head starts from its query as well as the Goods (#4859).
+    with typed_query_prior(typed_query_prior_vector(text_query, det_ctx.embedder, media_type), text_query):
+        mlp, threshold = train_and_threshold(
+            X_list,
+            y_list,
+            snap=snap,
+            embedder_name=det_ctx.embedder or None,
+            det_ctx=det_ctx,
+            groups=groups,
+            score_rows=score_rows,
+            voted_ids=voted_ids,
+            haystack=haystack.medias if haystack is not None else None,
+            labels=labels,
+        )
     from vtscore.detectors.model_loading import labelset_signature
 
     det_ctx.model = mlp
@@ -1104,6 +1218,7 @@ def labelset_train_and_score(
     on_progress: ProgressCallback | None = None,
     beta: float | None = None,
     label_quota: bool = False,
+    text_query: str = "",
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
@@ -1144,10 +1259,19 @@ def labelset_train_and_score(
     Find) passes ``True`` and gets the Goods' centroid under the quota, cut on
     *clips_dict*, and nothing with no Good.  The Train view's learned sort
     leaves it ``False``: the head it trains is the sort the user labels on, not
-    a detector anyone takes away.
+    a detector anyone takes away.  With *label_quota*, *text_query* (the
+    detector's typed query, #4758) gives that query's head under the quota
+    instead, and past it while the query holds (#4736), cut and scored on
+    *clips_dict*'s text space, as :func:`train_from_labelset` does.  Whatever
+    *label_quota* says, a trained head on the query's own single-vector space
+    starts from *text_query* as well as from the Goods (#4859,
+    :func:`~vtscore.detectors.query_head.typed_query_prior_vector`): the Train
+    view's learned sort passes the detector's query for that alone.
     """
     from vtscore.config.core_config import _retired_inclusion
+    from vtscore.detectors.query_head import typed_query_prior_vector
     from vtscore.detectors.training import _format_results, _train_and_score_xy, score_rows_with_model
+    from vtscore.training.svm_prior import typed_query_prior
 
     _retired_inclusion("labelset_train_and_score(inclusion_value=...)", inclusion_value)
 
@@ -1158,6 +1282,12 @@ def labelset_train_and_score(
         from vtscore.detectors.training import detector_score_embedder, scoring_rows_for_snap
 
         tier = quota_from_groups(groups).tier
+        if text_query and _query_tier(tier, labelset, det_ctx.embedder):
+            installed = install_query_head(det_ctx, text_query, clips_dict, labelset, media_type=media_type, beta=beta)
+            if installed is not None:
+                head, threshold, query_rows = installed
+                scores, best_region = score_rows_with_model(head, query_rows)
+                return _format_results(query_rows.ids, scores, best_region, clips_dict), threshold, head
         if tier == TIER_NONE:
             return [], 0.5, None
         if tier == TIER_CENTROID:
@@ -1170,25 +1300,28 @@ def labelset_train_and_score(
                 lambda h: score_rows_with_model(h, centroid_rows)[0],
                 labelset,
                 beta=beta,
+                line_mask=_unvoted_mask(centroid_rows, set(labeled_media_labels(labelset, clips_dict))),
             )
             scores, best_region = score_rows_with_model(head, centroid_rows)
             results = _format_results(centroid_rows.ids, scores, best_region, clips_dict)
             results, threshold = maybe_labelset_structural_rerank(det_ctx, labelset, results, threshold, clips_dict)
             return results, threshold, head
-    results, threshold, model = _train_and_score_xy(
-        X_list,
-        y_list,
-        clips_dict,
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-        det_ctx=det_ctx,
-        groups=groups,
-        score_rows=score_rows,
-        voted_ids=set(labelset_labels := labeled_media_labels(labelset, clips_dict)),
-        rows=rows,
-        labels=labelset_labels,
-        beta=beta,
-    )
+    # A typed-query detector's head starts from its query as well as the Goods (#4859).
+    with typed_query_prior(typed_query_prior_vector(text_query, det_ctx.embedder, media_type), text_query):
+        results, threshold, model = _train_and_score_xy(
+            X_list,
+            y_list,
+            clips_dict,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            det_ctx=det_ctx,
+            groups=groups,
+            score_rows=score_rows,
+            voted_ids=set(labelset_labels := labeled_media_labels(labelset, clips_dict)),
+            rows=rows,
+            labels=labelset_labels,
+            beta=beta,
+        )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded
     # cross-dataset (the labelset counterpart to the vote-driven re-rank in

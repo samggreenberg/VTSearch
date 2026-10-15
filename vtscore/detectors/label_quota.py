@@ -17,10 +17,13 @@ a Good, but under both quotas below      the Goods' centroid (:data:`TIER_CENTRO
 a Good and :data:`DRY_BAD_QUOTA` Bads    the trained head (:data:`TIER_TRAINED`)
 ======================================  =========================================
 
-The centroid is :mod:`vtscore.detectors.centroid_head`.  There is no tier keyed
-on the typed query: a labelset does not carry it (an exported, an imported and
-a CLI-made labelset have none), so a tier that read it would not travel with
-the labels.
+The centroid is :mod:`vtscore.detectors.centroid_head`.  The counts alone never
+read the typed query: a labelset does not carry it (an exported, an imported and
+a CLI-made labelset have none).  A detector made from a typed query keeps it
+instead, and until its labels give the trained head, every row above but the
+last gives that query's own set (:data:`TIER_QUERY`,
+:mod:`vtscore.detectors.query_head`, #4758): the set the opening shows on
+screen, which beat the centroid by 0.13 to 0.20 F-beta on its votes.
 
 **Why 3 and 4.**  They are Autopilot's own quorum, ``goodToStart`` /
 ``badToStart`` in ``frontend/src/app/services/autopilot-state.service.ts``
@@ -53,6 +56,20 @@ photos then gets a head that keeps a median of one image, and mean F-beta over a
 session goes from 0.001 to 0.47; on COCO Better it moves +0.004
 (``docs/experiments/2026-10-09-good-dry-4731``).  Counts only, as the first
 quota is, so a Good and 16 Bads labelled by hand get the head too.
+
+**The typed query's hold (#4736).**  On a single-vector space a typed-query
+detector keeps giving its query's own set past the quota, until its labels
+number :data:`QUERY_HOLD_LABELS` (:func:`query_holds`).  A head trained on the
+quota's 3 Goods and 4 Bads asks good questions, but its set is worse than the
+typed query's: on COCO Better's Binary opening (702 sessions a preset) the
+head's mean F-beta passes the query's only around vote 27 at beta 1/4 and 1,
+and vote 45 at 4.  Keeping the query's set until 30 labels gains +0.026 /
++0.037 / +0.050 over votes 1-25 and +0.004 / +0.006 / +0.009 over votes 1-150,
+in every seed.  The Region path's head (DINOv3 patches) passes the query by
+vote 10, so a patch space has no hold: there the same hold loses -0.035 over
+votes 1-25 (``docs/experiments/2026-10-12-handover-4736``).  The Train view's
+learned sort is the head either way: the hold changes what is shown, never
+what Autopilot asks.
 """
 
 from __future__ import annotations
@@ -73,6 +90,10 @@ BAD_QUOTA = 4
 #: the run of misses that ends a Good walk that has run dry.
 DRY_BAD_QUOTA = 16
 
+#: Labels through which a typed-query detector on a single-vector space keeps giving its
+#: query's own set past the quota (#4736): :func:`query_holds`.
+QUERY_HOLD_LABELS = 30
+
 #: No Goods: there is nothing to sort toward, so Test is refused.
 TIER_NONE = "none"
 
@@ -82,7 +103,11 @@ TIER_CENTROID = "centroid"
 #: Both quotas met: the trained head (the linear SVM).
 TIER_TRAINED = "trained"
 
-DetectorTier = Literal["none", "centroid", "trained"]
+#: Under the quota, on a detector made from a typed query: the typed query's own set (#4758).
+#: Read off the detector, never the counts: :class:`LabelQuota` gives the other three.
+TIER_QUERY = "query"
+
+DetectorTier = Literal["none", "centroid", "trained", "query"]
 
 
 @dataclass(frozen=True)
@@ -138,6 +163,19 @@ def label_quota(n_good: int, n_bad: int, *, dry_bad_quota: int | None = DRY_BAD_
     return LabelQuota(int(n_good), int(n_bad), dry_bad_quota)
 
 
+def query_holds(n_good: int, n_bad: int, *, patch_space: bool | None, hold: int = QUERY_HOLD_LABELS) -> bool:
+    """Whether a typed-query detector still gives its query's own set at these counts (#4736).
+
+    True on a known single-vector space (*patch_space* ``False``) while the
+    labels number fewer than *hold*; a patch space, or one the registry does
+    not know (``None``), has no hold.  It reads the counts only, as the quota
+    does, and says nothing about a detector without a typed query: the caller
+    asks only for one that has.  *hold* is the app's :data:`QUERY_HOLD_LABELS`
+    except in an eval arm.
+    """
+    return patch_space is False and int(n_good) + int(n_bad) < int(hold)
+
+
 def labelset_quota(labelset: "LabelSet | None") -> LabelQuota:
     """The quota a labelset's elements make, counting every Good and Bad it holds.
 
@@ -157,13 +195,27 @@ def served_quota(model: object, labelset: "LabelSet | None") -> dict[str, Any]:
 
     ``tier`` is read off *model* rather than the counts, because it is what was
     served: a Good or Bad whose origin did not resolve counts in *labelset* but
-    not toward the quota, so the two can differ.  ``None`` model, ``none`` tier.
+    not toward the quota, so the two can differ, and a typed query's head
+    (:data:`TIER_QUERY`) is the detector's, not the labels'.  ``None`` model,
+    ``none`` tier.
+
+    ``hold_labels`` is :data:`QUERY_HOLD_LABELS`, and ``hold_owed`` the labels,
+    of either kind, a typed query's head still owes that hold (#4736) when the
+    hold is why it was served: its labels meet the quota, so nothing else kept
+    the trained head away.  ``0`` otherwise, so a view can tell "too few
+    labels" from "held on the typed query" (#4889).
     """
     from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
+    from vtscore.detectors.query_head import is_query_head  # noqa: PLC0415
 
-    out = labelset_quota(labelset).as_dict()
+    quota = labelset_quota(labelset)
+    out = {**quota.as_dict(), "hold_labels": QUERY_HOLD_LABELS, "hold_owed": 0}
     if model is None:
         out["tier"] = TIER_NONE
+    elif is_query_head(model):
+        out["tier"] = TIER_QUERY
+        if quota.tier == TIER_TRAINED:
+            out["hold_owed"] = max(0, QUERY_HOLD_LABELS - quota.n_good - quota.n_bad)
     else:
         out["tier"] = TIER_CENTROID if is_centroid_head(model) else TIER_TRAINED
     return out

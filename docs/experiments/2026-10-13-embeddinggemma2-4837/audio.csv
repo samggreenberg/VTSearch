@@ -1,0 +1,9 @@
+dataset,embedder,classes,clips,text_mAP,zero_shot_top1,nn1,chance_AP,learned_F1
+urbansound8k,clap_general,10.0,300.0,0.7925,0.7667,0.8667,0.1,
+urbansound8k,embeddinggemma2_audio,10.0,300.0,0.4273,0.3167,0.7267,0.1,
+gtzan,clap_general,10.0,299.0,0.5914,0.4582,0.8161,0.1,
+gtzan,embeddinggemma2_audio,10.0,299.0,0.4474,0.4381,0.5585,0.1,
+speech_commands,clap_general,14.0,420.0,0.0937,0.0905,0.1214,0.0714,
+speech_commands,embeddinggemma2_audio,14.0,420.0,0.9614,0.9548,0.9571,0.0714,
+esc50_m (vtscore.eval),clap_general,,,0.8691,,,,0.7414
+esc50_m (vtscore.eval),embeddinggemma2_audio,,,0.2926,,,,0.2262

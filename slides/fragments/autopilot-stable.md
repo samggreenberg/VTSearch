@@ -1,33 +1,25 @@
 <!-- _class: full -->
 
-![bg fit](figs/autopilot-stable.png)
+![bg fit](figs/autopilot-stable.webp)
 
 ## Change<br>of Heart
 
-<!-- build: figs/autopilot-stable.build1.png -->
+<!-- build: figs/autopilot-stable.build1.webp -->
 
-<!-- build: figs/autopilot-stable.build2.png -->
+<!-- build: figs/autopilot-stable.build2.webp -->
 
-<!-- build: figs/autopilot-stable.build3.png -->
+<!-- build: figs/autopilot-stable.build3.webp -->
 
-<!-- Stable asks the other half: would more labels still change which items
-     the detector calls Good? Smart can be flat while the calls churn
-     underneath it. The counts are the shipped rule's, on a planted pool. -->
+<!-- **a** — Stable asks: is it still changing its mind? Every unvoted photo,
+     lettered, on the last retrain and on this one. A and B swapped, which
+     changes nothing we get back. -->
 
-<!-- **a** — The same unvoted items, scored by the last retrain and by this
-     one, best on the right, each joined to itself. Most barely move. -->
+<!-- **b** — Six changed side. Count them all and it never settles: a photo it
+     can't place wobbles forever. On one pile that kept Autopilot asking at
+     the line for 127 of 150 clicks. -->
 
-<!-- **b** — Six changed side of the <span class="cut">line</span>. Counting
-     every one is the obvious rule, and it never fires: an item the embedding
-     cannot place wobbles across the line forever. On #3831's dice pool it
-     held Autopilot in Boundary for 127 of 150 clicks. -->
+<!-- **c** — So, a band around the line. A flip only counts if the photo was
+     clear of it both times: D and N. Two super changed side. -->
 
-<!-- **c** — So a band round each line, a quarter of the scores' spread either
-     side. A flip counts only when the item was clear of the band both times:
-     clearly in, then clearly out. Four of the six were wobble; two count. -->
-
-<!-- **d** — Green, over the last ten retrains: the flips that count average
-     under 0.5% of the whole pool and never reach 1% in one retrain, and the
-     raw flip rate, wobble and all, has stopped falling. When it goes green
-     with the wobble still above 0.5%, the panel says so: what is left looks
-     irreducible in this embedding. -->
+<!-- **d** — Count those over a session. They jiggle, then flatten out to
+     none, and low is what Stable waits for. -->

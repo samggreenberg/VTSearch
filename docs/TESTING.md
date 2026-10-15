@@ -28,7 +28,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | Dependencies | `python -m deptry .` | |
 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
 | Doc inventories | `scripts/gen-docs-inventories.py --check` | Regenerate with `python scripts/gen-docs-inventories.py` and commit the result. |
-| Dockerfiles | `scripts/check-dockerfiles.py` | |
+| Dockerfiles | `scripts/check-dockerfiles.py` | A RUN that executes Python, or pip-installs the local project (directly or through a requirements file that forwards to `-e .`), must come after both `vtsearch/` and `vtscore/` are copied in. An editable install maps only the packages present when it runs (#4894). |
 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
 | vtscore package docs | `scripts/check-vtscore-docs.py` | |
 | Extension docs | `scripts/check-extension-docs.py` | Holds `docs/EXTENDING-*.md` and `vtscore/docs/extending/` to the plugin ABCs they both document: every member named in a contract table must exist, and neither set may present a public wrapper as the override point when the class defines an `_impl` hook behind it. AST sweep, imports nothing. Register a new contract section in `SECTIONS` — an unregistered one fails the gate rather than going unchecked. |
@@ -103,6 +103,8 @@ The default filter lives in `pyproject.toml`'s `addopts`: `-m 'not gpu and not s
 **Gotcha: naming a group re-opens `slow` and `gpu`.** `./run-tests.sh <group>` passes `-m "<group>"` on the command line, and a command-line `-m` *replaces* the one in `addopts` rather than combining with it. So `./run-tests.sh cli` does run the slow subprocess test, and `./run-tests.sh projection` does run the toponymy smoke tests — a group run is slower than the same tests in a default run. That is also why `./run-tests.sh gpu` works at all. To get the default exclusions back inside a group, spell the filter out after `--` (a later `-m` wins): `./run-tests.sh cli -- -m 'cli and not slow'`.
 
 ## Test Isolation
+
+**The session's data dir comes first, before any fixture.** Both conftests call `isolate_data_dir()` from [`tests_shared/data_dir.py`](../tests_shared/data_dir.py) before anything imports `vtscore.config`. So `config.DATA_DIR` is a fresh temp dir for the whole run, shared by every xdist worker and every subprocess a test starts, and removed when the run ends. Whatever `VTSEARCH_DATA_DIR` the shell exported is ignored. On the HLTCOE GRID that is the live app's data, and suite runs used to leave fixture exports, upload dirs and staging pickles in it and rewrite its `user_settings.json` (#4706); on a laptop it is the checkout's own `data/`. The model cache is the one exception. If the dir the app would read models from exists, `VTSEARCH_MODELS_DIR` keeps naming it, so the `gpu` group does not download every model again; nothing is ever created in the inherited dir. The dir is shared across the run, so a test that needs an empty one still takes its own `tmp_path`.
 
 All mutable global state is reset automatically before each test via these autouse fixtures:
 

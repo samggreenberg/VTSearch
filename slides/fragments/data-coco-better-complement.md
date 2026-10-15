@@ -1,56 +1,45 @@
 <!-- _class: full -->
 <!-- frames: equal -->
 
-![bg fit](figs/dataset-coco-better-complement.png)
+![bg fit](figs/dataset-coco-better-complement.webp)
 
 ## Venn Nothing<br>Isn't Enough
 
-<!-- build: figs/dataset-coco-better-complement.build1.png -->
+<!-- build: figs/dataset-coco-better-complement.build1.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build2.png -->
+<!-- build: figs/dataset-coco-better-complement.build2.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build3.png -->
+<!-- build: figs/dataset-coco-better-complement.build3.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build4.png -->
+<!-- build: figs/dataset-coco-better-complement.build4.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build5.png -->
+<!-- build: figs/dataset-coco-better-complement.build5.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build6.png -->
+<!-- build: figs/dataset-coco-better-complement.build6.webp -->
 
-<!-- build: figs/dataset-coco-better-complement.build7.png -->
+<!-- build: figs/dataset-coco-better-complement.build7.webp -->
 
-<!-- Why the size benchmark is built on COCO, in one slide. Three classes here; COCO has
-     eighty of them, and answers for every one of them on every image it
-     touches. Everything below is a consequence of that one property. -->
+<!-- **a** — Why "complete" matters. Three classes; each circle is every image
+     with that class, whatever else is in it. -->
 
-<!-- **a** — A circle is every image holding that class, whatever else it
-     also holds: that is the plus. Outside all three is the empty set —
-     images with none of them. -->
+<!-- **b** — The cheap experiment: positives are A, negatives everything
+     outside. Costs nothing, numbers come out beautiful. -->
 
-<!-- **b** — The cheap experiment. Positives are the A circle, negatives are
-     the outside, and it costs nothing to build. The numbers come out
-     beautiful. -->
+<!-- **c** — Same for B. -->
 
-<!-- **c** — Same set, rotated for B. -->
+<!-- **d** — And C. Three easy wins, and none ever had to tell an A from a B. A
+     detector that fires on ANY of the three aces all three. -->
 
-<!-- **d** — And for C. Three detectors, three easy wins — and not one of
-     them was ever asked to tell an A from a B, because nothing in the
-     crescents is shown to anybody. A single detector that fires on **any**
-     of the three takes all three of these. -->
+<!-- **e** — Complete labels add the equals sign: "an A and a B and nothing
+     else." Seven exact cells. Spotty labels can't say that; silence isn't a
+     no. -->
 
-<!-- **e** — What exhaustive annotation adds is the equals sign: not "an A is
-     here" but "an A and a B are here, and nothing else is". Seven cells,
-     each an exact set. This is the sentence a sparsely labelled set cannot
-     say — its silence is not a no. -->
+<!-- **f** — And exact cells give us not-A, every image without one. You can
+     only draw that if absence is labeled. -->
 
-<!-- **f** — And it is the exact sets that buy the complement: everything
-     without an A is three of those cells plus the empty one. You can only
-     name that region if absence is annotated rather than inferred. -->
+<!-- **g** — The hard test: same positives, honest negatives, nobody sits out.
+     Now the line has to fall between classes, and any-of-the-three fails.
+     That's the benchmark. -->
 
-<!-- **g** — Same positives, honest negatives, and no image sits the question
-     out: every one of them is on one side or the other. The line now has to
-     fall **between** classes, and the A-or-B-or-C detector fails it — which
-     is the benchmark worth building. -->
-
-<!-- **h** — Back to the easy test, same drawing. Flick between this and
-     the last one: the A-or-B-or-C detector aces this and fails that. -->
+<!-- **h** — Back to the easy test: the same detector aces this one and fails
+     the hard one. -->

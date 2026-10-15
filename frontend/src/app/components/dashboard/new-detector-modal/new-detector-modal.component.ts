@@ -18,6 +18,7 @@ import { NgTemplateOutlet } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
@@ -71,10 +72,21 @@ import { sortRowsByColumn } from '../../../utils/sort-rows';
 import { revealInScrollParent } from '../../../utils/reveal-in-scroll-parent';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import {
+  fieldsComplete,
+  LabelsetSourceFieldsComponent,
+} from '../../labelset-source-fields/labelset-source-fields.component';
+import { LabelsetSourcesApiService } from '../../../services/labelset-sources-api.service';
+import { ToastService } from '../../../services/toast.service';
+import type { DefaultLabelsetSource } from '../../../generated/api-client/models/default-labelset-source';
 import { BalanceComponent } from '../../left-panel/balance/balance.component';
 import { DEFAULT_BETA, nearestBalancePreset } from '../../../utils/line-balance';
 
 type ModalView = 'main' | 'media-picker';
+
+/** What the Create button's tooltip and the error line say while an
+ *  auto-export field still needs a value. */
+const AUTO_EXPORT_HINT = 'Fill in where this detector’s labels are auto-exported';
 type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
 
@@ -110,7 +122,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent, LabelsetSourceFieldsComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -132,6 +144,8 @@ export class NewDetectorModalComponent implements OnInit {
   private embedderCaps = inject(EmbedderCapabilityService);
   private mediaState = inject(MediaStateService);
   private datasetState = inject(DatasetStateService);
+  private labelsetSourcesApi = inject(LabelsetSourcesApiService);
+  private toast = inject(ToastService);
 
   /** Media type of the currently active dataset, if any. */
   readonly defaultMediaType = input('');
@@ -178,6 +192,18 @@ export class NewDetectorModalComponent implements OnInit {
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
   readonly error = signal('');
+
+  /** Where this deployment keeps every detector's labels current (#4913), or
+   *  null when it has no such target. Its ``fields`` are only the ones the
+   *  admin left for the user, which this form asks for. */
+  readonly autoExportSource = signal<DefaultLabelsetSource | null>(null);
+  /** The user's values for {@link autoExportSource}'s open fields. */
+  readonly autoExportValues = signal<Record<string, string>>({});
+  readonly autoExportFields = computed(() =>
+    visibleFields((this.autoExportSource()?.fields ?? []) as ImporterField[]),
+  );
+  /** Whether every auto-export field that must be filled in is. */
+  readonly autoExportReady = computed(() => fieldsComplete(this.autoExportFields(), this.autoExportValues()));
 
   /** The balance the user picked in this form; null until they pick one. */
   private readonly pickedBeta = signal<number | null>(null);
@@ -351,6 +377,19 @@ export class NewDetectorModalComponent implements OnInit {
     // silent for the same reason: the stock Text / media tabs still work.
     this.seedImportersApi.list().subscribe({
       next: (res) => this.seedImporters.set((res.importers || []).filter((imp) => !imp['hidden_from_picker'])),
+    });
+    // The deployment's auto-export target, if it has one. A failure is silent:
+    // the server still syncs to it, and the Dashboard row says when a
+    // detector is missing a value.
+    this.labelsetSourcesApi.getDefault().subscribe({
+      next: (source) => {
+        this.autoExportSource.set(source);
+        const seeded: Record<string, string> = {};
+        for (const f of (source?.fields ?? []) as ImporterField[]) {
+          if (f.default) seeded[f.key] = f.default;
+        }
+        this.autoExportValues.set(seeded);
+      },
     });
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
@@ -721,7 +760,7 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** A blank name is fine: Create falls back to {@link defaultName}. */
   get canSubmitBlank(): boolean {
-    return this.hasExample && !this.submitting();
+    return this.hasExample && this.autoExportReady() && !this.submitting();
   }
 
   /** Title for the blank-tab Create button. When enabled, describes the
@@ -730,6 +769,7 @@ export class NewDetectorModalComponent implements OnInit {
   get blankSubmitTitle(): string {
     if (this.canSubmitBlank) return 'Create the detector with the example you provided';
     if (!this.hasExample) return this.exampleHint;
+    if (!this.autoExportReady()) return AUTO_EXPORT_HINT;
     return 'Create the detector';
   }
 
@@ -737,6 +777,7 @@ export class NewDetectorModalComponent implements OnInit {
     return (
       !!this.selectedLabelImporter &&
       this.trainedView === 'form' &&
+      this.autoExportReady() &&
       !this.submitting()
     );
   }
@@ -1314,7 +1355,7 @@ export class NewDetectorModalComponent implements OnInit {
           }
           const ingestTaskId = String(resp?.ingest_task_id || '');
           if (!ingestTaskId) {
-            this.loadAndFinish(newId);
+            this.saveAutoExport(newId, () => this.loadAndFinish(newId));
             return;
           }
           // The imported labels' media are still being fetched and embedded in
@@ -1327,7 +1368,7 @@ export class NewDetectorModalComponent implements OnInit {
             next: (task) => this.ingestTask.set(task),
             complete: () => {
               this.ingestTask.set(null);
-              this.loadAndFinish(newId);
+              this.saveAutoExport(newId, () => this.loadAndFinish(newId));
             },
           });
         },
@@ -1336,6 +1377,28 @@ export class NewDetectorModalComponent implements OnInit {
           this.error.set(apiErrorMessage(err, 'Failed to create detector from labelset'));
         },
       });
+  }
+
+  /** Store the user's auto-export values on the new detector (#4913), then
+   *  run *then*. Skipped when there is nothing to store. A failure never undoes
+   *  the create: the detector exists, a toast says its auto-export is not set
+   *  up, and its Dashboard row offers to fix it. */
+  private saveAutoExport(detectorId: string, then: () => void): void {
+    const source = this.autoExportSource();
+    if (!source || !detectorId || this.autoExportFields().length === 0) {
+      then();
+      return;
+    }
+    this.labelsetSourcesApi.setDetectorSource(detectorId, source.name, this.autoExportValues()).subscribe({
+      next: () => then(),
+      error: (err) => {
+        this.toast.warning({
+          message: 'Detector created, but its auto-export is not set up',
+          detail: `${apiErrorMessage(err, 'The values were refused.')} Use Auto-export… in its Dashboard menu to fix it.`,
+        });
+        then();
+      },
+    });
   }
 
   /** Load the freshly-created detector, then hand its id back to the caller.
@@ -1375,6 +1438,11 @@ export class NewDetectorModalComponent implements OnInit {
     // and name inputs fire this on Enter while a POST is in flight, and a
     // second registerDetector would create a duplicate detector.
     if (this.submitting()) return;
+
+    if (!this.autoExportReady()) {
+      this.error.set(AUTO_EXPORT_HINT);
+      return;
+    }
 
     if (this.tab === 'trained') {
       this.submitTrained();
@@ -1431,8 +1499,11 @@ export class NewDetectorModalComponent implements OnInit {
       })
       .subscribe({
         next: (resp: any) => {
-          this.submitting.set(false);
-          this.created.emit(resp?.detector?.id || '');
+          const newId = resp?.detector?.id || '';
+          this.saveAutoExport(newId, () => {
+            this.submitting.set(false);
+            this.created.emit(newId);
+          });
         },
         error: (err) => {
           this.submitting.set(false);

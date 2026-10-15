@@ -1,0 +1,41 @@
+cell,contrast,measure,a_mean,b_mean,gap,se
+arcface_roll,pronoun,loo_ap,0.9206,0.962,-0.0414,0.0105
+arcface_roll,age 18-29 vs 45+,loo_ap,0.9446,0.9521,-0.0075,0.0131
+arcface_roll,pronoun,loo_ap_balanced,0.9422,0.9734,-0.0313,0.0082
+arcface_roll,age 18-29 vs 45+,loo_ap_balanced,0.961,0.9641,-0.003,0.0103
+arcface_roll,pronoun,genuine_mean,0.5801,0.676,-0.096,0.0101
+arcface_roll,age 18-29 vs 45+,genuine_mean,0.6281,0.6368,-0.0087,0.0134
+arcface_roll,pronoun,impostor_top1,0.3412,0.3377,0.0035,0.0081
+arcface_roll,age 18-29 vs 45+,impostor_top1,0.3532,0.3201,0.0331,0.0094
+arcface_roll,pronoun,margin,0.2389,0.3383,-0.0994,0.0113
+arcface_roll,age 18-29 vs 45+,margin,0.2749,0.3167,-0.0418,0.0153
+facenet_plain,pronoun,loo_ap,0.6196,0.8179,-0.1983,0.0188
+facenet_plain,age 18-29 vs 45+,loo_ap,0.6918,0.7741,-0.0824,0.0259
+facenet_plain,pronoun,loo_ap_balanced,0.7619,0.9058,-0.1439,0.0134
+facenet_plain,age 18-29 vs 45+,loo_ap_balanced,0.8316,0.8348,-0.0031,0.0196
+facenet_plain,pronoun,genuine_mean,0.7001,0.7661,-0.066,0.009
+facenet_plain,age 18-29 vs 45+,genuine_mean,0.7376,0.7407,-0.0032,0.0115
+facenet_plain,pronoun,impostor_top1,0.7333,0.7135,0.0199,0.0061
+facenet_plain,age 18-29 vs 45+,impostor_top1,0.7376,0.7055,0.032,0.0082
+facenet_plain,pronoun,margin,-0.0332,0.0526,-0.0859,0.0079
+facenet_plain,age 18-29 vs 45+,margin,-0.0,0.0352,-0.0352,0.0118
+facenet_roll,pronoun,loo_ap,0.6526,0.8376,-0.185,0.0182
+facenet_roll,age 18-29 vs 45+,loo_ap,0.7159,0.8078,-0.0919,0.0246
+facenet_roll,pronoun,loo_ap_balanced,0.7931,0.92,-0.1269,0.0124
+facenet_roll,age 18-29 vs 45+,loo_ap_balanced,0.8526,0.867,-0.0144,0.0177
+facenet_roll,pronoun,genuine_mean,0.718,0.7743,-0.0563,0.0085
+facenet_roll,age 18-29 vs 45+,genuine_mean,0.749,0.7576,-0.0086,0.0109
+facenet_roll,pronoun,impostor_top1,0.7353,0.7136,0.0217,0.0061
+facenet_roll,age 18-29 vs 45+,impostor_top1,0.7389,0.7087,0.0302,0.0082
+facenet_roll,pronoun,margin,-0.0173,0.0607,-0.078,0.0075
+facenet_roll,age 18-29 vs 45+,margin,0.0101,0.0488,-0.0387,0.011
+facenet_tight,pronoun,loo_ap,0.6415,0.8163,-0.1748,0.019
+facenet_tight,age 18-29 vs 45+,loo_ap,0.7006,0.8035,-0.103,0.0259
+facenet_tight,pronoun,loo_ap_balanced,0.7723,0.9055,-0.1332,0.0137
+facenet_tight,age 18-29 vs 45+,loo_ap_balanced,0.8343,0.8576,-0.0233,0.0198
+facenet_tight,pronoun,genuine_mean,0.7002,0.7554,-0.0552,0.0091
+facenet_tight,age 18-29 vs 45+,genuine_mean,0.7292,0.7437,-0.0145,0.0123
+facenet_tight,pronoun,impostor_top1,0.7239,0.7002,0.0237,0.0058
+facenet_tight,age 18-29 vs 45+,impostor_top1,0.7239,0.6981,0.0258,0.0078
+facenet_tight,pronoun,margin,-0.0237,0.0552,-0.0789,0.0084
+facenet_tight,age 18-29 vs 45+,margin,0.0053,0.0456,-0.0403,0.0124

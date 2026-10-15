@@ -56,7 +56,8 @@ dependencies = [
     # threadpool-controller warm-up (also a scikit-learn dependency).
     "threadpoolctl",
     "umap-learn",
-    "transformers",
+    # EmbeddingGemma 2 (#4837) needs 5.18; that needs torch>=2.7 below (#4838).
+    "transformers>=5.18",
     # Imported directly by vtscore.media.embedder for the Hub metadata
     # preflight (also a transformers dependency).
     "huggingface_hub",
@@ -80,7 +81,13 @@ dependencies = [
     "pyyaml",
     "matplotlib",
     "scipy",
-    "torch>=2.0.0",
+    # transformers >= 5.18 calls torch.accelerator.current_accelerator() while
+    # importing any model class; torch 2.6 raises there when no GPU is visible
+    # (a CPU node, or a GPU node with CUDA_VISIBLE_DEVICES=), 2.7+ returns None.
+    # transformers itself only asks for torch>=2.5, so the floor lives here
+    # (#4838). Move it together with requirements/image-embedders.txt and
+    # requirements/labbench.txt.
+    "torch>=2.7",
     # Plugin deps that are imported from the codebase
     "sentence-transformers",
     "dnspython>=2.0.0",
@@ -472,6 +479,8 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # spells the breed and is a member of the `dog`/breed group in SCALE_VG_GROUPS
 # (#3636); `vas` is VG's truncated spelling of `vase` and joined
 # SCALE_VG_AMBIGUOUS at the #3588 promotion. Correcting any of them would break
-# a lookup against the data. `whis` is matplotlib's own `boxplot` keyword (the
+# a lookup against the data. `moniter` is Objects365's own spelling of its
+# `Moniter/TV` category, quoted verbatim in O365_NAMES (#4815) for the same
+# reason. `whis` is matplotlib's own `boxplot` keyword (the
 # whisker range), so it is an API name rather than a word.
-ignore-words-list = "whis,bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"
+ignore-words-list = "whis,moniter,bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"

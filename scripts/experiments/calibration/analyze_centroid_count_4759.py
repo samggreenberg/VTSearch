@@ -26,7 +26,7 @@ Writes under ``--out``:
 Usage::
 
     python analyze_centroid_count_4759.py --run fhibe-k1=<run dir> --run coco-b1=<run dir> --out <dir> \\
-        --variants "$CALIB_CENTROID_LINE_VARIANTS" [--reference count] [--horizon 40]
+        --variants "$CALIB_CENTROID_LINE_VARIANTS" [--reference count] [--derive NEW=BELOW:ABOVE] [--horizon 40]
 """
 
 from __future__ import annotations
@@ -60,6 +60,22 @@ def add_derived(cells: pd.DataFrame, curves: dict) -> pd.DataFrame:
     for (label, ds, rule, beta), c in list(curves.items()):
         if rule == derived_rule(beta):
             curves[(label, ds, "count_gap_floor", beta)] = c
+    return cells
+
+
+def add_gated(cells: pd.DataFrame, curves: dict, specs: list[str]) -> pd.DataFrame:
+    """Rules gated on the balance, read off two run rules: ``NEW=BELOW:ABOVE`` takes BELOW's rows at beta < 1
+    and ABOVE's at beta >= 1 (#4783). Exact for a rule defined that way, since each balance's rows stand alone."""
+    for spec in specs:
+        new, _, pair = spec.partition("=")
+        below, _, above = pair.partition(":")
+        if not (new and below and above) or not {below, above} <= set(cells["rule"]):
+            raise SystemExit(f"--derive {spec!r}: expected NEW=BELOW:ABOVE over rules the runs carry")
+        pick = cells["rule"] == cells["beta"].map(lambda b, lo=below, hi=above: lo if b < 1 else hi)
+        cells = pd.concat([cells, cells[pick].assign(rule=new)], ignore_index=True)
+        for (label, ds, rule, beta), c in list(curves.items()):
+            if rule == (below if beta < 1 else above):
+                curves[(label, ds, new, beta)] = c
     return cells
 
 
@@ -133,6 +149,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--variants", required=True, help="the runs' CALIB_CENTROID_LINE_VARIANTS (with midpoint@*)")
     ap.add_argument("--reference", default="count")
+    ap.add_argument("--derive", action="append", default=[], help="NEW=BELOW:ABOVE, a rule gated on beta 1 (#4783)")
     ap.add_argument("--horizon", type=int, default=40)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--run-beta", type=float, default=1.0, help="the runs' balance, for the runs that found no Good")
@@ -147,7 +164,8 @@ def main() -> None:
         df, cv = load_run(label, Path(run), args.horizon, args.workers, variants, args.run_beta)
         frames.append(df)
         curves.update(cv)
-    cells = paired(add_derived(pd.concat(frames, ignore_index=True), curves), args.reference)
+    cells = add_gated(add_derived(pd.concat(frames, ignore_index=True), curves), curves, args.derive)
+    cells = paired(cells, args.reference)
     cells.to_csv(args.out / "cells.csv", index=False)
     summary = summary_table(cells, args.horizon)
     summary.to_csv(args.out / "summary.csv", index=False)

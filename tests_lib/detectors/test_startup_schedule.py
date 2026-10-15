@@ -429,7 +429,8 @@ class TestPickLog:
         assert len(picks) == 24
         assert [p["t"] for p in picks] == list(range(1, 25))
         first_good = min(p["t"] for p in picks if p["picked_label"] == 1)
-        assert [r["t"] for r in rows] == list(range(first_good, 25))
+        # One session row a click; a click where the typed query holds adds the head's, tagged (#4736).
+        assert [r["t"] for r in rows if not r.get("gmm_variant")] == list(range(first_good, 25))
 
     def test_every_declared_column_is_present(self):
         _, picks = _run("n6@q0.02,n8@q0.25")

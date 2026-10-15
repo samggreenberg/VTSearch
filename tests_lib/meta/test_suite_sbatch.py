@@ -16,7 +16,10 @@ throwaway origin + clone + worktree:
   exit 2, never "corrected" to the older ``origin/<ref>``;
 * **diverged** -- refused, exit 2;
 * in every case the worktree is put back on the branch it was on (the EXIT
-  trap), and a non-worktree is refused before anything is touched.
+  trap), and a non-worktree is refused before anything is touched;
+* **data dir** -- the suite runs on a fresh ``VTSEARCH_DATA_DIR`` of its own,
+  never the inherited one (the live app's, on the GRID: #4706), and the job
+  removes it when it ends.
 
 ``run-tests.sh`` and ``gridenv.sh`` are stubs here: what is under test is the
 launcher's ref handling, not the suite it launches.
@@ -25,6 +28,7 @@ launcher's ref handling, not the suite it launches.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -77,7 +81,10 @@ def grid(tmp_path: Path) -> dict:
         'mkdir -p "$PWD/.bin"; printf "#!/bin/sh\\n" > "$PWD/.bin/ruff"\n'
         'chmod +x "$PWD/.bin/ruff"; export PATH="$PWD/.bin:$PATH"\n'
     )
-    (seed / "run-tests.sh").write_text('#!/usr/bin/env bash\necho "SUITE RAN at $(git rev-parse HEAD)"\n')
+    (seed / "run-tests.sh").write_text(
+        '#!/usr/bin/env bash\necho "SUITE RAN at $(git rev-parse HEAD)"\n'
+        'echo "DATA $VTSEARCH_DATA_DIR"; touch "$VTSEARCH_DATA_DIR/written"\n'
+    )
     (seed / "run-tests.sh").chmod(0o755)
     (seed / ".gitignore").write_text(".bin/\n")
     _git(seed, "add", ".")
@@ -94,8 +101,8 @@ def grid(tmp_path: Path) -> dict:
     return {"seed": seed, "clone": clone, "wt": wt, "base": base}
 
 
-def _run(wt: Path, ref: str) -> subprocess.CompletedProcess:
-    env = {**os.environ, "SUITE_HF_HOME": str(wt.parent / "hf")}
+def _run(wt: Path, ref: str, **extra_env: str) -> subprocess.CompletedProcess:
+    env = {**os.environ, "SUITE_HF_HOME": str(wt.parent / "hf"), **extra_env}
     return subprocess.run([BASH, str(SCRIPT), str(wt), ref], env=env, capture_output=True, text=True, timeout=120)  # noqa: S603  # fixed argv, no shell
 
 
@@ -177,6 +184,24 @@ def test_diverged_is_refused(grid: dict) -> None:
     assert r.returncode == 2, r.stdout + r.stderr
     assert "DIVERGED" in r.stdout
     assert "SUITE RAN" not in r.stdout
+
+
+def test_suite_gets_a_data_dir_of_its_own(grid: dict, tmp_path: Path) -> None:
+    """#4706: the inherited VTSEARCH_DATA_DIR is the live app's on the GRID."""
+    live = tmp_path / "live-data"
+    live.mkdir()
+    scratch = tmp_path / "job-tmp"
+    scratch.mkdir()
+    r = _run(grid["wt"], BRANCH, VTSEARCH_DATA_DIR=str(live), TMPDIR=str(scratch))
+    assert r.returncode == 0, r.stdout + r.stderr
+    m = re.search(r"^DATA (.+)$", r.stdout, re.MULTILINE)
+    assert m, r.stdout
+    used = Path(m.group(1))
+    assert used.parent == scratch
+    assert f"=== data {used} (inherited VTSEARCH_DATA_DIR: {live}, not used)" in r.stdout
+    assert not any(live.iterdir()), "the suite wrote into the inherited data dir"
+    assert not used.exists(), "the job's data dir outlived the job"
+    assert _restored(grid)
 
 
 def test_unknown_ref_is_refused(grid: dict) -> None:

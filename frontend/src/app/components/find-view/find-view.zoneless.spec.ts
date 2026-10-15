@@ -308,6 +308,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       threshold: 0.5,
       label_quota: {
         tier: 'centroid', n_good: 1, n_bad: 0, goods_owed: 2, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16,
+        hold_labels: 30, hold_owed: 0,
       },
     });
     httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));
@@ -316,6 +317,29 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(fixture.componentInstance.detectorNote()).toContain('2 more Goods and 4 more Bads');
     const note = fixture.nativeElement.querySelector('.find-detector-note');
     expect(note?.textContent).toContain("Goods' centroid");
+  });
+
+  // #4758: a detector made from a typed query is that query's own set under the
+  // quota, from before its first label, and the left panel says so.
+  it('says when the pass was the typed query', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+
+    httpMock.expectOne('/api/find-label').flush({
+      results: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      label_quota: {
+        tier: 'query', n_good: 0, n_bad: 0, goods_owed: 3, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16,
+        hold_labels: 30, hold_owed: 0,
+      },
+    });
+    httpMock.match('/api/line-test/start').forEach((req) => req.flush({}));
+    await settleZoneless(fixture);
+
+    expect(fixture.componentInstance.detectorNote()).toContain('3 more Goods and 4 more Bads');
+    const note = fixture.nativeElement.querySelector('.find-detector-note');
+    expect(note?.textContent).toContain("the detector's typed query");
+    expect(note?.textContent).not.toContain('centroid');
   });
 
   // The balance POST is deferred until the picker settles (issue #2973), and
@@ -860,7 +884,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(text).not.toContain('Checked');
       // Find tests the balance Train set: it offers no spot check to set one (#4317).
       expect(row.querySelector('.balance-check-btn')).toBeNull();
-      expect((fixture.nativeElement as HTMLElement).querySelector('vt-spot-check-modal')).toBeNull();
+      expect((fixture.nativeElement as HTMLElement).querySelector('vt-spot-check-stage')).toBeNull();
     });
 
     it('shows the phase panel, the stage and the result on the Autopilot tab, with no ranked list, and the work queue on Review', async () => {
@@ -885,6 +909,48 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(el.querySelector('vt-line-test-stage')).toBeNull();
       // The Stats modal is retired into the result pane (#4524).
       expect(el.querySelector('button[aria-label="Stats"]')).toBeNull();
+    });
+
+    it("has Toasty explain the first pick, then the verdict once the test is done (#4807)", async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
+      expect(hint()?.getAttribute('hintId')).toBe('test-vote');
+      expect(hint()?.textContent).toContain('picks from both sides of your detector');
+
+      // The first pick voted: the explanation has done its job.
+      fixture.componentInstance.lineTest.response.set(
+        wireLineTest(wireTest({ picks: [1, 2], labelled: 1 })),
+      );
+      await settleZoneless(fixture);
+      expect(hint()).toBeNull();
+
+      fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
+      await settleZoneless(fixture);
+      expect(hint()?.getAttribute('hintId')).toBe('test-done');
+      expect(hint()?.textContent).toContain('Read the verdict on the right');
+    });
+
+    it("has Toasty explain the Review tab until an item is checked (#4807)", async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(false);
+
+      fixture.componentInstance.onFindTabChange('review');
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(true);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('vt-left-panel vt-toasty-hint')?.getAttribute('hintId')).toBe('review');
+
+      fixture.componentInstance.voteState.setOptimisticVerified(1, true);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.reviewHint()).toBe(false);
     });
 
     // #4555: Test opens on Autopilot, which has no centre panel, so the one

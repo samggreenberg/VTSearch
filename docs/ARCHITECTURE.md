@@ -85,10 +85,10 @@ detector training and label export.
 
 | Media type | Default embedder | Model | Alternative embedders |
 |---|---|---|---|
-| `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `paraspeechclap`, `whisper_encoder` |
+| `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `embeddinggemma2_audio`, `paraspeechclap`, `whisper_encoder` |
 | `document` | — (convert first) | — | — |
 | `face` | `face` (FaceNet (face identity, 512d)) | — | — |
-| `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `clip_l`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `eupe_patch`, `eupe_single`, `sift_vlad`, `sift_vlad_doc`, `siglip2`, `siglip2_l`, `siglip_l` |
+| `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `clip_l`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `embeddinggemma2`, `eupe_patch`, `eupe_single`, `sift_vlad`, `sift_vlad_doc`, `siglip2`, `siglip2_l`, `siglip_l` |
 | `text` | `e5` (E5 (text)) | `intfloat/e5-base-v2` | `bge` |
 | `video` | `xclip` (X-CLIP (video)) | `microsoft/xclip-base-patch32` | `languagebind`, `videomae` |
 
@@ -166,10 +166,13 @@ VTSearch/
 │   │   │                           lazy_clip and the detector resolver's replay path
 │   │   ├── provenance.py           Human-readable Source / Derived Via / Imported Via lines
 │   │   ├── torch_setup.py          Process-wide torch thread + device configuration
+│   │   ├── _embeddinggemma2.py     EmbeddingGemma 2's shared loader + pooled forward (one
+│   │   │                           checkpoint behind an image and an audio embedder)
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
-│   │   │                           ParaSpeechCLAP, AST, Whisper), clippers, SpeechExtractor
+│   │   │                           ParaSpeechCLAP, AST, Whisper, EmbeddingGemma 2), clippers,
+│   │   │                           SpeechExtractor
 │   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, SigLIP2-L,
-│   │   │                           SigLIP-L, CLIP, SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
+│   │   │                           SigLIP-L, CLIP, EmbeddingGemma 2 (eval-only), SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
 │   │   │                           single + patch variants), clippers, ImageClassExtractor,
 │   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
@@ -305,7 +308,10 @@ VTSearch/
 │   ├── labels/                     Label importers, sync sources, sync utilities
 │   │   ├── importers/              server_json_file, server_csv_file
 │   │   ├── sources/                server_json_file (bidirectional label sync)
-│   │   └── sync.py                 sync_to/from_labelset_source utilities
+│   │   ├── binding.py              Which source a detector syncs with (its registry binding >
+│   │   │                           deployment default_labelset_source > none), fixed fields
+│   │   └── sync.py                 The labelset-source engine: paced push of each detector file's
+│   │                               labelset on every write, merging pulls (load / link / sync)
 │   │
 │   ├── eval/                       Evaluation framework — measures deviations from the shipped
 │   │   │                           algorithm, so its *default arm* must track the app (see
@@ -601,6 +607,11 @@ modules on the right.
   pure I/O.  The *engine* driving settings sources is not — it lives in
   `vtsearch/settings_store.py` and is documented in
   [EXTENDING-plugins.md § How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works).
+  The labelset-source engine is `vtscore/labels/sync.py`: every write of a
+  detector file (`vtscore/detectors/store.py`) schedules a paced push of that
+  file's whole labelset, so a deployment's `default_labelset_source` keeps a
+  copy of every detector current outside the server
+  ([vtscore guide](../vtscore/docs/extending/labelset-sources.md#when-your-_do_save-and-_do_load_full-run)).
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
@@ -621,7 +632,7 @@ modules on the right.
 | `vtscore/labels/importers/` (base + all) | No | No | **Yes**: pure data processing |
 | `vtsearch/settings_io/sources/` | No | No | **Yes**: pure file I/O |
 | `vtscore/labels/sources/` | No | No | **Yes**: pure file I/O |
-| `vtscore/labels/sync.py` | No | Yes (reads votes) | Partially: needs state for vote export |
+| `vtscore/labels/sync.py` | No | Yes (detector registry + files) | Partially: needs the detector store and registry |
 | `vtscore/datasets/downloader/` | No | No (callback) | **Yes**: requests only |
 | `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes**: needs media registry |
 | `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes**: each self-contained |
@@ -805,7 +816,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 27 |
+| `embedders` | library | Media embedders | 29 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 7 |
 | `settings_importers` | app | Settings importers | 2 |

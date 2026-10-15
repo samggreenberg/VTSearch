@@ -16,11 +16,7 @@
 
 </div>
 
-<!-- **a** — Nothing to tick: the photos and the detector were each selected
-     the moment they were added, so Train is the whole setup — *this*
-     detector learns from *these* photos. -->
+<!-- **a** — No setup, both are already ticked. Hit Train. -->
 
-<!-- **b** — One photo at a time, and one question: is it what you are looking
-     for? Good or Bad, or the arrow keys. Every answer retrains the detector
-     and it picks the next photo from what it just learned, so the hard ones
-     come to you. Twenty or thirty answers is usually plenty. -->
+<!-- **b** — One photo at a time: Good or Bad, or the arrow keys. Each answer
+     retrains it and picks the next photo. Twenty or thirty usually does it. -->

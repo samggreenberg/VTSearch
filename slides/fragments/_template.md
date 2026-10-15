@@ -4,9 +4,9 @@
   Layout options (pick one, delete the rest, and swap in your own figure).
   Paths are relative to slides/, not to this file:
 
-    ![bg right:56% fit](figs/cost-traces.png)   figure right, text left
-    ![bg left:56% fit](figs/cost-traces.png)    figure left, text right
-    ![bg fit](figs/cost-traces.png)             full bleed (with _class: full)
+    ![bg right:56% fit](figs/cost-traces.webp)   figure right, text left
+    ![bg left:56% fit](figs/cost-traces.webp)    figure left, text right
+    ![bg fit](figs/cost-traces.webp)             full bleed (with _class: full)
 
   Slide classes: lead (title), statement (one big claim), outline (the deck's
   opening "where this goes" list), full (edge-to-edge figure), caveat (quiet
@@ -21,8 +21,9 @@
 
   Any HTML comment that is not a Marp directive becomes a presenter note —
   hidden in the audience build, rendered beside a miniature of the slide by
-  the speaker build (./render.sh <deck> pdf --speaker). Write notes as real
-  speaking notes: wordier than the slide, covering what to say.
+  the speaker build (./render.sh <deck> pdf --speaker). Write notes as what
+  you will actually say: a sentence or three per page, in your own voice, no
+  provenance.
 -->
 
 ### Kicker

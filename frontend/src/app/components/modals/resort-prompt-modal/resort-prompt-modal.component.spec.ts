@@ -92,21 +92,22 @@ describe('ResortPromptModalComponent', () => {
     expect(el.querySelector('.sort-status__field--sort dd')?.getAttribute('title')).toBe('bark.wav');
   });
 
-  it("has Toasty explain the prompt below the dialog box (#4721)", async () => {
-    renderPrompt({ positivesNeeded: 3 });
+  it("has Toasty explain the prompt below the dialog box, counting the clicks and positives (#4721, #4807)", async () => {
+    renderPrompt({ positivesNeeded: 3, clicksSoFar: 10, positivesSoFar: 1 });
     await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     const hint = el.querySelector('vt-toasty-hint');
     expect(hint).not.toBeNull();
     expect(squash(hint!.querySelector('.toasty-hint__text')?.textContent)).toBe(
-      'We need 3 positives before Autopilot can move on. This is an opportunity to try a different ' +
-        'example sort, or just keep clicking with the original sort.',
+      'Your 10 clicks found only 1 positive, and Autopilot needs 3 before it can move on. Switch to a ' +
+        'different example sort, or keep clicking with this one.',
     );
 
-    fixture.componentRef.setInput('positivesNeeded', 1);
+    fixture.componentRef.setInput('positivesSoFar', 0);
+    fixture.componentRef.setInput('clicksSoFar', 1);
     await settleZoneless(fixture);
-    expect(squash(hint!.textContent)).toContain('We need 1 positive before Autopilot can move on.');
+    expect(squash(hint!.textContent)).toContain('Your 1 click found no positives, and Autopilot needs 3');
   });
 
   it('opens with focus on the dialog box, not on an answer (#4721)', () => {

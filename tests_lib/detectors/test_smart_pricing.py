@@ -166,8 +166,12 @@ def test_harness_window_is_priced_and_cut_like_the_app(monkeypatch):
             "category": category,
         }
 
-    # The Inclusion arm: a set balance (the default arm's, #4413) would draw the line instead.
-    vi.simulate_voting_iterations(medias, "alpha", seed=42, inclusion=3, calibrate_count=1, beta="off")
+    # The Inclusion arm: a set balance (the default arm's, #4413) would draw the line instead. The
+    # plain SVM's head: on these 40 points it gives the fold-anchored fit a cut to move, which is the
+    # mechanism under test; the head itself is not (#4785 changed the single-vector default).
+    vi.simulate_voting_iterations(
+        medias, "alpha", seed=42, inclusion=3, calibrate_count=1, beta="off", head="linear_svm"
+    )
 
     assert windows
     assert len(windows) == len(cuts)

@@ -1,33 +1,25 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-em-anchored.png)
+![bg fit](figs/calib-em-anchored.webp)
 
 ## Vote of<br>Confidence
 
-<!-- build: figs/calib-em-anchored.build1.png -->
+<!-- build: figs/calib-em-anchored.build1.webp -->
 
-<!-- build: figs/calib-em-anchored.build2.png -->
+<!-- build: figs/calib-em-anchored.build2.webp -->
 
-<!-- build: figs/calib-em-anchored.build3.png -->
+<!-- build: figs/calib-em-anchored.build3.webp -->
 
-<!-- Appendix, with Above Average: how its fused fit reads the votes. The
-     same four pictures as Great Expectations with one difference, and that
-     difference is the whole fusion: the only new ink is the row of checks
-     and crosses on each baseline. -->
+<!-- **a** — How Above Average's fit uses the votes: the same EM as Great
+     Expectations, plus the checks and crosses along the bottom. Same terrible
+     starting guess. -->
 
-<!-- **a** — Same terrible guess. What is new is that a handful of the scores
-     under it are not anonymous any more: somebody voted on them. -->
+<!-- **b** — The E step: unvoted scores get split between the curves as before,
+     but a voted one belongs entirely to its own side. -->
 
-<!-- **b** — And the E step is where that lands. Every unlabeled score is
-     claimed in shares as before; a **voted** score is claimed entirely by its
-     own side, and the curves get no say. A vote is not evidence about the
-     shape — it says which component that item belongs to. -->
+<!-- **c** — The M step counts every vote kappa times over, the only knob here.
+     At the shipped setting the votes held about two and a half percent of the
+     fit. -->
 
-<!-- **c** — The M step is unchanged except that each vote counts κ times over.
-     That is the only knob in the whole fusion, and it decides how loudly a few
-     dozen votes speak against fifty thousand unlabeled ones. At the shipped κ
-     they hold about two and a half percent of the fit. -->
-
-<!-- **d** — Repeat, and it converges the same way. Two percent is nothing for
-     the *shape*, and that is the point: the votes are there to say which mound
-     is which. -->
+<!-- **d** — Repeat until it settles. Two and a half percent doesn't move the
+     shape; the votes only say which bump is which. -->

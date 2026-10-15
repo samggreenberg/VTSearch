@@ -249,6 +249,13 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "coco_better": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
+    # `o365_better` (#4815) is `coco_better`'s construction on Objects365, on the
+    # same *C* and the same `class@band` keys -- so the same texts, for the same
+    # reason: it exists to be read against `coco_better`, and a query that
+    # differed between them would put a seeding axis inside the source axis.
+    "o365_better": {
+        f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
+    },
     "coco_val": _COCO_TEXTS,
     # `vg_scale` with the band collapsed away (#3115): the same verified images
     # under the bare class name, so the same twelve texts serve it.  Without this
@@ -269,6 +276,24 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_box_small": dict(_VG_SCALE_TEXTS),
     "vg_box_medium": dict(_VG_SCALE_TEXTS),
     "vg_box_large": dict(_VG_SCALE_TEXTS),
+    # `apptitude` (#4356): the text each screen genre was reviewed under -- the
+    # queues asked "would you want this back searching for <text>?" -- so the
+    # opening types what the labels answer. A copy of the loader's `ROSTER`
+    # (`pilebuild/loaders/apptitude.py`), pinned equal by the registry test.
+    "apptitude": {
+        "settings": "a settings screen",
+        "login": "a login screen",
+        "signup": "a sign-up screen",
+        "onboarding": "an onboarding or tutorial screen",
+        "map": "a map screen",
+        "search": "a search screen",
+        "chat": "a chat or messaging screen",
+        "gallery": "a photo gallery screen",
+        "player": "a media player screen",
+        "cart": "a shopping cart or checkout screen",
+        "browser": "an in-app web browser screen",
+        "splash": "a splash or loading screen",
+    },
 }
 
 
@@ -393,6 +418,10 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # seeding difference inside the voting-mode axis (#3276, #3278). Both halves
     # are built for this dataset, so the pair is available rather than aspirational.
     "coco_better": os.environ.get("CALIB_COCO_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    # `o365_better` (#4815): the same two arms on the second source. Its own env
+    # var for the reason `coco_better` has one: the two are run against each other,
+    # and a shared knob would turn a source contrast into a column contrast.
+    "o365_better": os.environ.get("CALIB_O365_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
     # FHIBE (#4699): one identity per cell, the person's one-person photos as
     # its positives. The photo arms are whole images at two stored sizes; the
     # face arms are `image2face` crops of those copies, embedded by FaceNet. The
@@ -411,6 +440,9 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
         for tag in ("roll", "sim", "side")
         for size in (1024, 640)
     },
+    # Apptitude (#4356): whole app screens, one genre each, opening on the
+    # genre's text. No boxes, so no region arm.
+    "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -469,6 +501,8 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # `test_pile_boxed_datasets_are_registered` is now the guard rather than this
     # comment.
     "coco_better": True,
+    # Objects365's own boxes, banded by the same rule (#4815).
+    "o365_better": True,
     # FHIBE's photos carry the subject's annotated face box (#4699). Only a
     # whole-image embedder is built for them, so they binary-vote; the entry
     # keeps a future patch arm from silently doing the same. The face crops
@@ -478,6 +512,8 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "fhibe_faces_1024": False,
     "fhibe_faces_640": False,
     **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim", "side") for size in (1024, 640)},
+    # A screen's genre is the whole screen (#4356).
+    "apptitude": False,
 }
 
 
@@ -1057,10 +1093,11 @@ WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true
 #: count line); ``walk`` the full walk whose end moves the line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
-#: When the simulated user checks (#4496): unset is the harness's default, the app's (``weak``: the end-of-run check
-#: plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate weakly, d' below
-#: ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's constants);
-#: ``end`` (the end-of-run check only, the pre-#4496 harness) or ``off``.
+#: When the simulated user checks (#4496): unset is the harness's default, the app's for the cell's medias (``weak``:
+#: the end-of-run check plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate
+#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's
+#: constants - but ``end`` on face crops, where the app never prompts, #4799); ``end`` (the end-of-run check only,
+#: the pre-#4496 harness and the face path's), ``weak`` or ``off``.
 SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None
 WEAK_D = _opt_float("CALIB_WEAK_D")
 _weak_min_t = _opt_float("CALIB_WEAK_MIN_T")
@@ -1071,6 +1108,16 @@ WEAK_REPEAT = None if _weak_repeat is None else int(_weak_repeat)
 #: - only once Autopilot has left its text-sort opening, where the app has no detector to read separation from;
 #: ``any`` is the arm #4496 priced first, a prompt anywhere in the flow.
 WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
+#: Whether Autopilot checks the line before Done (``CALIB_DONE_CHECK``): unset is the harness's default, the app's
+#: (on: the first time every light is green, the simulated user runs the check as clicks, then the flow reports Done);
+#: ``0`` is the arm before Autopilot ran it, where all green reads Done at once.
+_done_check = os.environ.get("CALIB_DONE_CHECK", "").strip().lower()
+DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no", "off")
+#: Issue #4664's early check (``CALIB_EARLY_CHECK=N``): every session is checked at N votes, on top of the app's own
+#: checks (a prompted check running then counts; otherwise Autopilot prompts one, past the opening, no cooldown).  Unset (the default) is the app.  A value that is not a
+#: positive integer is kept as given, for preflight to refuse.
+_EARLY_CHECK = os.environ.get("CALIB_EARLY_CHECK", "").strip()
+EARLY_CHECK: "int | str | None" = int(_EARLY_CHECK) if _EARLY_CHECK.isdigit() else (_EARLY_CHECK or None)
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
@@ -1102,6 +1149,16 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
+#: What tells the user they can stop (#4878): unset = the app (``lights|level``,
+#: every light green or the labels line's expected F-beta at ``CALIB_STOP_LEVEL``,
+#: the app's 0.5); ``CALIB_STOP_RULE=lights`` is the app before #4878, ``level``
+#: and ``lights+level`` the A/B's other arms.
+STOP_RULE = os.environ.get("CALIB_STOP_RULE", "").strip().lower() or "lights|level"
+STOP_LEVEL = float(os.environ.get("CALIB_STOP_LEVEL", "").strip() or 0.5)
+#: The click cap (#4903): Done at this many votes whatever the stop rule (the app's
+#: 200).  ``CALIB_STOP_CAP=none`` is no cap, every session before #4903.
+_STOP_CAP = os.environ.get("CALIB_STOP_CAP", "").strip().lower()
+STOP_CAP: int | None = None if _STOP_CAP == "none" else int(_STOP_CAP or 200)
 #: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
 #: the first Good until 3 Goods and 4 Bads, or a Good and 16 Bads); ``CALIB_LABEL_QUOTA=off`` is the
 #: pre-#4643 arm, a trained head from the first Good and Bad, which the study
@@ -1177,6 +1234,57 @@ QUOTA_DRY_BADS: "int | str | None" = int(_QUOTA_DRY_BADS) if _QUOTA_DRY_BADS.isd
 CENTROID_LINE: str | None = os.environ.get("CALIB_CENTROID_LINE", "").strip() or None
 CENTROID_LINE_VARIANTS: str | None = os.environ.get("CALIB_CENTROID_LINE_VARIANTS", "").strip() or None
 
+#: Issue #4776's hand-over shadow: at every click Test gives the trained head,
+#: also the Goods' centroid's Test (rows tagged ``handover:centroid``) and the
+#: evidence a hand-over rule may read (``task_NNNN__handover.csv``).  Neither
+#: picks, so the session is the app's; ``CALIB_HANDOVER_SHADOW=1`` turns it on.
+HANDOVER_SHADOW: bool = os.environ.get("CALIB_HANDOVER_SHADOW", "").strip() not in ("", "0")
+
+#: Issue #4786's line counts: at every click Test gives the trained head, what
+#: each candidate line would keep on the withheld half and where its positives
+#: sit in the head's ranking (``task_NNNN__linecounts.csv``), so a count rule for
+#: the line is priced on the same sessions.  Recorded only, so the session is the
+#: app's; ``CALIB_LINE_COUNTS=1`` turns it on.
+LINE_COUNTS: bool = os.environ.get("CALIB_LINE_COUNTS", "").strip() not in ("", "0")
+#: Issue #4816's set overlap: on a typed-query run, at every click a trained head
+#: scored the pool, how its set and the typed query's split the unvoted media
+#: (``task_NNNN__overlap.csv``), and where each pick sat in them at the previous
+#: click (the pick log's ``picked_in_head`` ...), so a hand-over judge that reads
+#: the votes where the two sets disagree is priced on the same sessions.
+#: Recorded only, so the session is the app's; ``CALIB_SET_OVERLAP=1`` turns it on.
+SET_OVERLAP: bool = os.environ.get("CALIB_SET_OVERLAP", "").strip() not in ("", "0")
+#: Issue #4384's typed-query prior shadow: on a single-vector typed-query run, at
+#: every click a trained head is drawn, where the withheld positives sit under
+#: candidate heads started from the typed query (``task_NNNN__queryprior.csv``).
+#: Recorded only, so the session is the app's; ``CALIB_QUERY_PRIOR_SHADOW=1``.
+QUERY_PRIOR_SHADOW: bool = os.environ.get("CALIB_QUERY_PRIOR_SHADOW", "").strip() not in ("", "0")
+#: Issue #4384's arm, the app's since #4859: on a typed-query single-vector run every
+#: head fit also takes the typed query's direction as a cheap feature beside the
+#: Goods' centroid, at ``vtscore.training.svm_prior.QUERY_PRIOR_SCALE`` (10).  Unset
+#: is the app; ``0`` is the head before #4859 (the centroid alone); another number
+#: is a scale arm (``vtscore.eval.arms_query_prior.query_prior_scale``).  A value
+#: that is not a number is kept as given, for the harness to refuse.
+_QUERY_PRIOR = os.environ.get("CALIB_QUERY_PRIOR", "").strip()
+QUERY_PRIOR: "float | str | None" = None
+if _QUERY_PRIOR:
+    try:
+        QUERY_PRIOR = float(_QUERY_PRIOR)
+    except ValueError:
+        QUERY_PRIOR = _QUERY_PRIOR
+#: Issue #4758: a run that opens on a typed query is a typed-query detector, whose
+#: Test gives the typed query's own set until the label quota (rows tagged
+#: ``detector_tier = "query"``, from the first vote), as the app's does.  On (the
+#: default) is the app; ``CALIB_QUERY_TIER=0`` is the arm before (the Goods'
+#: centroid from the first Good, no row before it).
+QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", "off", "false")
+#: Issue #4736: past the quota, such a run's Test keeps giving the typed query's set
+#: on a single-vector space until this many votes (rows tagged ``detector_tier =
+#: "query"``; the head's own rows tagged ``hold:head``), as the app's does.  Unset is
+#: the app (:data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS`); ``0`` / ``off``
+#: is the arm before (the head from the quota), any other count an arm.
+_QUERY_HOLD = os.environ.get("CALIB_QUERY_HOLD", "").strip().lower()
+QUERY_HOLD: "int | None" = None if not _QUERY_HOLD else 0 if _QUERY_HOLD in ("off", "false") else int(_QUERY_HOLD)
+
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
 #: draws.  Unset (the default) is the app.  A value that is not a positive
@@ -1188,6 +1296,23 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
+
+#: Issue #4864's split rounding: ``dither`` sizes the calibration split the way
+#: the app did before #4864, stochastically, with a coin seeded from the labelset
+#: (``vtscore.eval.arms_split_rounding.split_rounding``).  Unset (the default,
+#: ``nearest``: each class's holdout rounded to the nearest whole vote) is the app.
+#: Like :data:`CALIBRATION_FRACTION` it moves the trajectory, so it is a run-level A/B.
+SPLIT_ROUNDING = os.environ.get("CALIB_SPLIT_ROUNDING", "").strip() or "nearest"
+
+#: The Bads half of issue #4786's gate: while the labels line's class model holds few
+#: Goods and fewer than this many Bads, the line keeps the head's count (``vtscore.eval.
+#: live_threshold_rules.head_count_bads``).  Unset is the app's (no Bads half since
+#: #4798); ``0`` is the line before #4786, ``32`` #4786's gate.  A value that is not a
+#: non-negative integer is kept as given, for the harness to refuse.
+_HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
+HEAD_COUNT_BADS: "int | str | None" = (
+    int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)
+)
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the

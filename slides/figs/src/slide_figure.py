@@ -20,7 +20,7 @@ So every generator here works to two rules:
   fails the build instead of quietly producing another unreadable figure.
 
 Both rules are about the *rendered* size, which is why neither can be checked
-by looking at the PNG on its own.
+by looking at the image file on its own.
 
 A third rule applies to schematics rather than plots, and is about *spacing*
 rather than size: `LABEL_GAP_PT` and `OBJECT_GAP_PT` below. See
@@ -38,6 +38,7 @@ its own slide's headline; see the constant.
 
 from __future__ import annotations
 
+import io
 import math
 from pathlib import Path
 
@@ -240,19 +241,20 @@ def notch_box(
 
 
 def enforce_title_notch(
-    path: Path,
+    image: Image.Image,
+    name: str,
     column: float = FULL_BLEED,
     notch: tuple[float, float, float, float] | None = None,
 ) -> None:
-    """Raise if the written figure puts ink where the slide's title goes.
+    """Raise if the figure `save` is writing puts ink where the slide's title goes.
 
-    Checked against the *file* rather than the live figure because `save`
-    crops, so the drawing that reaches the slide is not the one the canvas
-    holds. Background is read from the image's own top-left pixel, which the
-    tight crop's padding guarantees is blank.
+    Checked against the *rendered image* rather than the live figure because
+    `save` crops, so the drawing that reaches the slide is not the one the
+    canvas holds — and before the encode, so a photo frame's lossy WebP cannot
+    ring a stray pixel into the corner. Background is read from the image's own
+    top-left pixel, which the tight crop's padding guarantees is blank.
     """
-    with Image.open(path) as image:
-        pixels = np.asarray(image.convert("RGBA"))
+    pixels = np.asarray(image.convert("RGBA"))
     height, width = pixels.shape[:2]
     box = notch_box(width, height, column, notch)
     if box is None:
@@ -267,7 +269,7 @@ def enforce_title_notch(
     if ink.any():
         covered = 100.0 * ink.mean()
         raise SystemExit(
-            f"title notch: {path.name} draws in the top-left corner the slide reserves for its "
+            f"title notch: {name} draws in the top-left corner the slide reserves for its "
             f"headline ({covered:.1f}% of the notch has ink). Move that ink out of the notch — "
             f"`slide_figure.notch_box()` gives the rectangle in figure fractions — or drop the "
             f"slide's title, which is the other honest answer. Do not move the title."
@@ -314,7 +316,8 @@ def slot_px_per_pt(path: Path, column: float = FULL_BLEED) -> float:
     """
     with Image.open(path) as image:
         width, height = image.size
-        dpi = image.info.get("dpi", (matplotlib.rcParams["savefig.dpi"],) * 2)[0]
+    # WebP records no resolution, so this is the dpi `save` rendered at.
+    dpi = matplotlib.rcParams["savefig.dpi"]
     return (float(dpi) / 72.0) * min(SLIDE_PX * column / width, SLIDE_PX * 9 / 16 / height)
 
 
@@ -360,8 +363,9 @@ def save(
     tight: bool = True,
     box: matplotlib.transforms.Bbox | None = None,
     notch: bool | tuple[float, float, float, float] = True,
+    photo: bool = False,
 ) -> None:
-    """Write `fig`, refusing it if any label would miss the type floor.
+    """Write `fig` as WebP, refusing it if any label would miss the type floor.
 
     `tight=False` keeps the figure's declared bounds instead of cropping to the
     ink. That matters for a full-bleed slide, where the slide's own headline is
@@ -380,15 +384,40 @@ def save(
     shorter than the deck's longest (see `TITLE_NOTCH_PX`). The check is a
     no-op at any other `column`, where the title sits beside the figure rather
     than over it.
+
+    `name` must end in `.webp`: see `write_webp` for why, and `photo=True` for
+    a frame that carries photographs.
     """
+    if not name.endswith(".webp"):
+        raise SystemExit(f"{name}: slide figures are written as WebP (see `write_webp`); name it `.webp`")
     enforce_type_floor(fig, column)
+    buffer = io.BytesIO()
     if box is not None:
-        fig.savefig(out / name, bbox_inches=box)
+        fig.savefig(buffer, format="png", bbox_inches=box)
     elif tight:
-        fig.savefig(out / name, bbox_inches="tight", pad_inches=0.14)
+        fig.savefig(buffer, format="png", bbox_inches="tight", pad_inches=0.14)
     else:
-        fig.savefig(out / name)
+        fig.savefig(buffer, format="png")
     plt.close(fig)
-    if notch and column == FULL_BLEED:
-        enforce_title_notch(out / name, column, None if notch is True else notch)
+    with Image.open(buffer) as image:
+        if notch and column == FULL_BLEED:
+            enforce_title_notch(image, name, column, None if notch is True else notch)
+        write_webp(image, out / name, photo=photo)
     print(f"wrote figs/{name}")
+
+
+def write_webp(image: Image.Image, path: Path, *, photo: bool = False) -> None:
+    """Encode a rendered slide figure to `path`.
+
+    Lossless WebP for a plot: every pixel the PNG it replaced had, at about a
+    third of the bytes. Every regeneration of a figure is a blob git keeps
+    forever, so the format is most of what the deck costs the repository.
+    `photo=True` is for a frame that carries photographs, which lossless
+    encodes badly: lossy at quality 88, flattened to RGB, as the data cards
+    always were. The encoder is deterministic, so regenerating a figure whose
+    pixels did not move rewrites nothing.
+    """
+    if photo:
+        image.convert("RGB").save(path, "WEBP", quality=88, method=6)
+    else:
+        image.save(path, "WEBP", lossless=True, method=6)

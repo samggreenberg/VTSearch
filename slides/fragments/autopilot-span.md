@@ -1,32 +1,28 @@
 <!-- _class: full -->
 
-![bg fit](figs/autopilot-span.png)
+![bg fit](figs/autopilot-span.webp)
 
 ## Lay of<br>the Land
 
-<!-- build: figs/autopilot-span.build1.png -->
+<!-- build: figs/autopilot-span.build1.webp -->
 
-<!-- build: figs/autopilot-span.build2.png -->
+<!-- build: figs/autopilot-span.build2.webp -->
 
-<!-- build: figs/autopilot-span.build3.png -->
+<!-- build: figs/autopilot-span.build3.webp -->
 
-<!-- Span is section IV's atlas, read as a gauge: have the votes been
-     everywhere? -->
+<!-- build: figs/autopilot-span.build4.webp -->
 
-<!-- **a** — The atlas's first four levels: one cell, three, nine,
-     twenty-seven. Forty cells, which is exactly Span's green bar. Thousands of
-     smaller cells hang below and Span never needs them. The walk takes them
-     level by level, biggest first: left to right here. -->
+<!-- **a** — Span is the atlas as a gauge: have our votes been everywhere?
+     The top four levels are forty cells. -->
 
-<!-- **b** — After Boundary. Every vote marks its cell and every cell above
-     it, so a few votes deep in the first two branches fill paths up to the
-     top. Span counts the run from the top, in the walk's order, and stops at
-     the first empty cell: three. Red. The ringed cell is where Diversity
-     starts. -->
+<!-- **b** — After asking at the line, darken every cell a vote landed in, and
+     every cell above it. -->
 
-<!-- **c** — Four Diversity picks later, ten: yellow. Each pick fills the first
-     empty cell, so the run grows by at least one a pick, and it jumps when it
-     reaches cells the Boundary votes had already filled. -->
+<!-- **c** — Count from the top to the first empty cell: three. That gap is
+     where the atlas walk asks next. -->
 
-<!-- **d** — All forty: green. Below ten is red, ten to forty yellow. An atlas
-     with fewer than forty cells, on a small collection, needs every one. -->
+<!-- **d** — Four picks later. A pick lands on one photo, so it darkens a path
+     down to it: 02, then 021, then 0212. The count's ten. -->
+
+<!-- **e** — And it asks at the first gap again. The cell after it is already
+     dark, so the count jumps. Span is full at all forty. -->

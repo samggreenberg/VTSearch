@@ -14,6 +14,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { IconComponent } from '../../icon/icon.component';
 import {
@@ -51,7 +52,7 @@ export interface ColumnDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })

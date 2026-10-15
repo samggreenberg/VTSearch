@@ -338,6 +338,28 @@ result the detector produces carries a `balance` object beside its
 `threshold` (`status` `unchecked`, with `count`), which the JSON exporters
 write out with the hits. See [the line state](api/labeling.md#the-line-state).
 
+**A detector with too few labels runs as its typed query, or as the Goods'
+centroid, and the run says so.** Under the label quota (3 Goods and 4 Bads,
+or a Good and 16 Bads) there is no trained head, here as in the app's Test and
+AutoFind (see [find-label](api/find.md#find-label-score--label-the-active-dataset)).
+A detector made from a typed query (its `text_query`, else its first `text`
+example) scores as that query's own set: each item's cosine to the query in
+the dataset's text embedder, cut where the text sort draws its line at the
+detector's balance (#4758), past the label quota too on a single-vector space
+until it has 30 labels (#4736). It needs no label, so such a detector runs before
+its first one; until #4758 the run stopped with `Detector '<name>' has no
+labels.` A detector with no typed query scores as the Goods' centroid from its
+first Good, and with no Good it still stops the run. Either way the run prints
+a line naming what the detector scored as and what it still owes -
+`Detector 'Dogs' has 1 Good and 0 Bad labels, under the quota, so it scores as
+its typed query's own set ('a dog'), not a trained detector (2 more Goods and
+4 more Bads, or 16 more Bads for one).` - which is a `detector_query` or a
+`detector_centroid` event under `--progress-format json`, carrying `detector`,
+`tier` and the quota's counts (see the [event
+reference](../vtscore/docs/packages/cli.md#event-reference)). A query's head
+scores in the text embedder, so a `portable_detector` bundle of one names that
+embedder.
+
 **How to get the files:**
 
 - **Dataset file** (only for `--dataset`; `--importer` reads the source media directly): a demo dataset loaded once in the web UI leaves a cached `.pkl` under `data/embeddings/`. The currently active dataset can also be downloaded as a pickle through the API, `GET /api/dataset/export` (see [`docs/api/datasets.md`](api/datasets.md#export-dataset)); the dashboard has no menu item for it.

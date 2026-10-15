@@ -297,6 +297,15 @@ def score_detector(
             return None
         balance = _line_state(name, trained[0] if trained else None)
 
+        from vtscore.detectors.query_head import query_head_embedder  # noqa: PLC0415
+
+        query_space = query_head_embedder(mlp)
+        if query_space:
+            # A typed query's head scores in the text space, not the run's shared
+            # score-space rows (#4758).
+            from vtscore.detectors.training import scoring_rows_for_snap  # noqa: PLC0415
+
+            rows = scoring_rows_for_snap(snap, query_space)
         scores, _best_row = score_rows_with_model(mlp, rows)
 
         positive_hits = []
@@ -322,7 +331,8 @@ def score_detector(
             # #4272, #4413).
             "balance": balance,
             # Which detector the labels gave: under the quota, the Goods'
-            # centroid rather than a trained head (#4643).
+            # centroid rather than a trained head (#4643), or a typed-query
+            # detector's own query (#4758).
             "label_quota": served_quota(mlp, LabelSet.from_dict(det_data.get("labelset") or {})),
             "total_hits": len(positive_hits),
             "hits": positive_hits,

@@ -143,6 +143,20 @@ class StatusIndicatorSchema(PluginExtrasSchema):
     reason = fields.String()
 
 
+class StopLevelSchema(Schema):
+    """The labels line's own reading that Autopilot's Done also stops on (#4878).
+
+    ``expected_fbeta`` is the line's estimate of the F-beta of the set it keeps
+    at the detector's balance (``LabelsLine.expected_fbeta``); ``null`` with no
+    class model behind the line yet.  ``met`` is whether it reaches ``level``:
+    then Done comes even with a light short of green.
+    """
+
+    expected_fbeta = fields.Float(required=True, allow_none=True)
+    level = fields.Float(required=True)
+    met = fields.Boolean(required=True)
+
+
 class LabelingStatusResponseSchema(Schema):
     """Response for ``GET /api/labeling-status``."""
 
@@ -158,12 +172,16 @@ class LabelingStatusResponseSchema(Schema):
     # on the first poll after the refresh lands. Optional so existing clients /
     # mocks that omit it stay valid. See issue #2397.
     stale = fields.Boolean()
-    # What ends labeling (#4488): ``lights`` (Smart, Stable and Span) or, on a
-    # document (tiled structural) dataset, ``dry_run``, where ``dry_run`` carries
-    # the readout (``run`` votes in a row without a Good, green at ``target``)
-    # and the three lights are ``off``. Optional for the same reason as ``stale``.
+    # What ends labeling (#4488): ``lights`` (Smart, Stable and Span all green, or
+    # since #4878 the labels line's ``level``) or, on a document (tiled structural)
+    # dataset, ``dry_run``, where ``dry_run`` carries the readout (``run`` votes in
+    # a row without a Good, green at ``target``) and the three lights are ``off``.
+    # Optional for the same reason as ``stale``.
     stop_rule = fields.String(validate=validate.OneOf(["lights", "dry_run"]))
     dry_run = fields.Nested(StatusIndicatorSchema)
+    # The labels line's reading Done also stops on under ``lights`` (#4878);
+    # absent under ``dry_run``.
+    level = fields.Nested(StopLevelSchema)
 
 
 # ---------------------------------------------------------------------------

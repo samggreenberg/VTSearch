@@ -49,8 +49,6 @@ figures; the choice is recorded here so it can be re-checked.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import math
 import sys
 from dataclasses import dataclass
@@ -503,14 +501,8 @@ def text(ax: Axes, x: float, y: float, s: str, *, size: float = LABEL_PT, **kw) 
 
 
 def _save(fig: Figure, name: str) -> None:
-    """Scans on a slide are photographs, so they go out as WebP, through `save`'s checks."""
-    png = f"{name}.png"
-    with contextlib.redirect_stdout(io.StringIO()):
-        save(fig, OUT, png, column=FULL_BLEED, tight=False)
-    with Image.open(OUT / png) as image:
-        image.convert("RGB").save(OUT / f"{name}.webp", quality=88, method=6)
-    (OUT / png).unlink()
-    print(f"wrote figs/{name}.webp")
+    """Scans on a slide are photographs, so they go out as lossy WebP, through `save`'s checks."""
+    save(fig, OUT, f"{name}.webp", column=FULL_BLEED, tight=False, photo=True)
 
 
 def build(name: str, draw, stages: int) -> None:

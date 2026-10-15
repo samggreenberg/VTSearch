@@ -27,7 +27,13 @@ if TYPE_CHECKING:
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.labels import region_box_for_category
-from vtscore.training.mlp import LINEAR_HEAD, LINEAR_LOGREG_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim
+from vtscore.training.mlp import (
+    LINEAR_HEAD,
+    LINEAR_LOGREG_HEAD,
+    LINEAR_SVM_HEAD,
+    LINEAR_SVM_PRIOR_HEAD,
+    _auto_hidden_dim,
+)
 
 
 @dataclass
@@ -57,6 +63,11 @@ class StepModel:
     backend: str
     device: str
     predict_std: Optional[Callable[[Any], "np.ndarray"]] = None
+    #: A fixed score per media id, for a step that is not a model over the run's
+    #: vectors: a typed query's set (#4758), whose cosines live in the text space,
+    #: which on a paired arm is not the space the run learns in.  Every scorer
+    #: reads it first (``voting_iterations._score_media_ids``).
+    id_scores: Optional[dict[int, float]] = None
 
 
 #: Head choices for the app-pipeline trainer (:data:`APP_TRAINER`), all three
@@ -74,8 +85,10 @@ class StepModel:
 #: ``_train_and_score_xy``.  ``"linear_logreg"`` is the logistic loss fitted to
 #: convergence by scikit-learn (:data:`~vtscore.training.mlp.LINEAR_LOGREG_HEAD`,
 #: issue #4114), the in-loop test of #3197's finding that ``"linear"`` loses on
-#: its fit, not its loss.
-HEADS: tuple[str, ...] = ("mlp", "linear", "linear_svm", "linear_logreg")
+#: its fit, not its loss.  ``"linear_svm_prior"`` is the SVM started from the
+#: Goods' centroid (:data:`~vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD`, issue
+#: #4776), the in-loop test of a head that does not dip at the label quota.
+HEADS: tuple[str, ...] = ("mlp", "linear", "linear_svm", "linear_logreg", "linear_svm_prior")
 
 
 #: The voting simulation's ``trainer`` value naming the **app's own pipeline**:
@@ -106,17 +119,18 @@ def resolve_trainer_name(trainer: str) -> str:
     return APP_TRAINER if trainer == LEGACY_APP_TRAINER else trainer
 
 
-#: The head the **app** trains, and therefore the harness's default arm:
-#: ``vtscore.detectors.training.train_and_threshold`` pins ``hidden_dim =
-#: LINEAR_SVM_HEAD`` on every production fit.  ``head=None`` resolves to this,
-#: the way ``style=None`` and ``blend_schedule=None`` resolve to the app's
-#: geometry and blend schedule — an eval default that isn't the app default
-#: measures a detector nobody ships (see the "Eval Default Arm IS the App"
-#: rule).  If the shipped head ever changes, move this with it:
-#: ``test_harness_linear_head`` pins the two against each other by training the
-#: real app pipeline, so the suite fails rather than letting the default arm
-#: drift silently.
-PRODUCTION_HEAD: str = "linear_svm"
+#: The head the **app** trains, and therefore the harness's default arm: since
+#: #4785 ``vtscore.detectors.training`` pins ``hidden_dim = LINEAR_SVM_PRIOR_HEAD``
+#: (the linear SVM started from the Goods' centroid) on every production fit,
+#: in every space.  ``head=None`` resolves to this, the way ``style=None`` and
+#: ``blend_schedule=None`` resolve to the app's geometry and blend schedule — an
+#: eval default that isn't the app default measures a detector nobody ships (see
+#: the "Eval Default Arm IS the App" rule).  If the shipped head ever changes,
+#: move this with it: ``test_harness_linear_head`` pins the two against each
+#: other by training the real app pipeline, so the suite fails rather than
+#: letting the default arm drift silently.  ``"linear_svm"``, the plain SVM, is
+#: the arm before #4785.
+PRODUCTION_HEAD: str = "linear_svm_prior"
 
 
 def resolve_hidden_dim(head: str, n_votes: int) -> int:
@@ -131,6 +145,8 @@ def resolve_hidden_dim(head: str, n_votes: int) -> int:
         return LINEAR_HEAD
     if head == "linear_logreg":
         return LINEAR_LOGREG_HEAD
+    if head == "linear_svm_prior":
+        return LINEAR_SVM_PRIOR_HEAD
     if head == "mlp":
         return _auto_hidden_dim(n_votes)
     raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")

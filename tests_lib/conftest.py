@@ -48,6 +48,13 @@ os.environ.setdefault("VTSEARCH_TORCH_THREADS", _torch_threads)
 os.environ.setdefault("OMP_NUM_THREADS", _torch_threads)
 os.environ.setdefault("MKL_NUM_THREADS", _torch_threads)
 
+# Give the session its own VTSEARCH_DATA_DIR before ``vtscore.config`` below
+# resolves DATA_DIR from it. The inherited value may be the live app's data
+# (#4706); see tests_shared/data_dir.py.
+from tests_shared.data_dir import isolate_data_dir  # noqa: E402
+
+isolate_data_dir()
+
 from unittest.mock import patch  # noqa: E402
 
 import pytest  # noqa: E402

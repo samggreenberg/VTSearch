@@ -34,7 +34,9 @@ umap-learn
 
 # ── PyTorch (CPU) ────────────────────────────────────────────────────
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch>=2.0.0
+# Floor: transformers >= 5.18 cannot import a model class on torch 2.6 when no
+# GPU is visible (#4838); kept equal to pyproject.toml's.
+torch>=2.7
 # SigLIP's image processor is requested by backend name rather than
 # inheriting a default (#3173), and the name we ask for is `torchvision`
 # — so torchvision is a hard requirement of the preprocessing path, not

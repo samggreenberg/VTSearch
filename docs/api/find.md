@@ -88,8 +88,12 @@ POST /api/find
 }
 ```
 
-Each verdict is one of `Good`, `Bad`, `Error`, `N/A`. Errors: **400** (empty
-id lists, or a detector has no labels), **404** (unknown dataset/detector id),
+Each verdict is one of `Good`, `Bad`, `Error`, `N/A`. A detector under the
+label quota is what [find-label](#find-label-score--label-the-active-dataset)
+gives: its typed query's own set (#4758), drawn on each dataset, or the Goods'
+centroid. On a single-vector space a typed-query detector keeps its query's set
+past the quota until 30 labels (#4736). Errors: **400** (empty id lists, or a detector has neither labels nor
+a typed query), **404** (unknown dataset/detector id),
 **409** (cancelled via `POST /api/find/cancel`), **500** (pickle load failed).
 
 ### Cancel find
@@ -144,11 +148,25 @@ Scores every loaded media with the given detector and applies Good/Bad labels
 to **all** elements by threshold, freezing scores and initial labels for the
 Find verification workflow. If no current head is cached in the detector
 context, it builds one on the fly from the detector's labelset (resolving label
-origins as needed). Which one follows the **label quota** (#4643, #4731): under
-3 Goods or 4 Bads, unless a Good has 16 Bads beside it, the detector is the Goods' centroid (every item ranked by its
-cosine to the average of the Goods, cut at the midpoint of a two-Gaussian fit
-to those cosines on this dataset), and from there the trained head. One Good is
-enough; a labelset with no Good is a **400** that says so. `label_quota` says
+origins as needed). Which one follows the **label quota** (#4643, #4731): from
+3 Goods and 4 Bads, or a Good and 16 Bads, it is the trained head. Under the
+quota:
+
+- **A detector made from a typed query** (its `text_query`, else its first
+  `text` example) is that query's own set (#4758): every item ranked by its
+  cosine to the query in the dataset's text embedder, cut where the text sort
+  draws its display line at the detector's balance, over every item, voted ones
+  included. It is the set Autopilot's opening shows, and it needs no label at
+  all. On the State of the App's Binary opening (COCO Better, 720 sessions), on
+  the votes under the quota, it scored 0.56 / 0.44 / 0.54 F-beta at beta 1/4, 1
+  and 4, against the Goods' centroid's 0.43 / 0.28 / 0.35.
+- **A detector with no typed query** is the Goods' centroid: every item ranked
+  by its cosine to the average of the Goods, its line a count of the unvoted
+  items that stand out at the detector's balance (#4732, #4759, #4779, #4783).
+  One Good is enough; a labelset with no Good is a **400** that says so.
+
+A dataset with no text embedder cannot embed the query, so there a
+typed-query detector gives what one with no query gives. `label_quota` says
 which detector the pass got and what it still owes.
 
 Items the human has **verified** (see `verified` on [`GET
@@ -170,7 +188,7 @@ everywhere except those held votes.
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks",
-  "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4}
+  "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4, "dry_bad_quota": 16, "hold_labels": 30, "hold_owed": 0}
 }
 ```
 
@@ -179,12 +197,16 @@ for the views over a stored ranking, which today is
 [`GET /api/sort/collapsed`](medias.md#sort-collapsed-to-photos) (Collapse to
 photos, #4751).
 
-`label_quota.tier` is `centroid` for the Goods' centroid, `trained` for the
-trained head; `n_good` / `n_bad` are the detector's labels and `goods_owed` /
-`bads_owed` what a trained head still needs. The centroid's line is its own
-midpoint (its `threshold` is always 0.5 on its own scale) and does not take
-the balance: `balance` then counts what that line keeps, and a balance change
-leaves it where it is.
+`label_quota.tier` is `query` for a typed query's own set, `centroid` for the
+Goods' centroid, `trained` for the trained head; `n_good` / `n_bad` are the
+detector's labels, `goods_owed` / `bads_owed` what the first quota still needs,
+and `dry_bad_quota` the Bads that give a single Good the trained head. Past the
+quota, a typed-query detector on a single-vector space keeps its query's set
+until it has `hold_labels` (30) labels; `hold_owed` is then the labels, Good or
+Bad, still owed (and `0` whenever the hold is not why the tier is `query`). Under
+the quota the line is the head's own (its `threshold` is always 0.5 on its own
+scale), drawn at the detector's balance: `balance` counts what it keeps, and a
+balance change redraws it.
 
 `balance` is the [line state](labeling.md#the-line-state) of `threshold`:
 the set the Good/Bad split keeps, and what a spot check found on it. The
@@ -195,8 +217,9 @@ would draw. Nothing is counted on the scored corpus, so a dataset with
 nothing like the target can come back with no Good split at all. A fresh pass
 is `unchecked` until a check runs. On
 patch-region-aware datasets each result additionally carries `best_region`.
-Errors: **400** (no medias loaded, the detector has no labels, or none of
-them is a Good), **404** (detector not found), **409** (active dataset can't
+Errors: **400** (no medias loaded, or a detector with no typed query the
+dataset can embed has no labels, or none of them is a Good), **404** (detector
+not found), **409** (active dataset can't
 supply the detector's embedder type, or the run was cancelled).
 
 ### Auto-Detect
@@ -221,7 +244,7 @@ demand, and returns one result column per detector.
       "detector_name": "Dog Barks",
       "threshold": 0.5,
       "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
-      "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4},
+      "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4, "dry_bad_quota": 16, "hold_labels": 30, "hold_owed": 0},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -232,9 +255,11 @@ demand, and returns one result column per detector.
 ```
 
 Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
-under the label quota runs as the Goods' centroid, and its hits are the
-centroid's. A detector with no Good is left out of `results`, as one that
-cannot be scored always was.
+under the label quota runs as its typed query's own set (`query`, #4758), or
+with no typed query as the Goods' centroid (`centroid`), and its hits are that
+set. On a single-vector space a typed-query detector runs as its query past the
+quota too, until 30 labels (`query`, #4736). A detector with no Good and no typed query is left out of `results`, as
+one that cannot be scored always was.
 
 Each detector's `balance` is the [line state](labeling.md#the-line-state) of
 its `threshold` (`null` only when there was no trained context to ask).

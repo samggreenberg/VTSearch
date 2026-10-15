@@ -236,6 +236,7 @@ class TestFindStats:
             "checkable": False,
             "separation": None,
             "check_due": False,
+            "done_check_due": False,
         }
         assert "floor" not in data
         # The sweep went with the Inclusion stepper.

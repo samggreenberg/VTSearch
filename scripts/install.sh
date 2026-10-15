@@ -38,25 +38,27 @@ set -euo pipefail
 #   bash scripts/install.sh cpu        # force the CPU install
 #   bash scripts/install.sh gpu        # force the GPU install (auto-detect CUDA tag)
 #   bash scripts/install.sh cu118      # force the GPU install with an explicit CUDA tag
-#   bash scripts/install.sh cu121      # ...
-#   bash scripts/install.sh cu124      # for CUDA 12.4 (V100/Volta, A100, H100)
+#   bash scripts/install.sh cu126      # for CUDA 12.6 (V100/Volta, A100, H100)
 #   bash scripts/install.sh cu128      # for CUDA 12.8 (Blackwell; drops Volta)
 #   bash scripts/install.sh cu129      # for CUDA 12.9 (Turing..Blackwell; the tag cuML needs)
 #
 # About the CUDA tag (only relevant to GPU installs): it selects which prebuilt
 # torch wheel you get, and each wheel only ships kernel images for a fixed set
 # of GPU architectures. There is a floor AND a ceiling. Newer GPUs need newer
-# tags: Ampere/Ada work on cu118+, Hopper (H100) on cu121+, Blackwell (B100/B200,
+# tags: Ampere/Ada work on cu118+, Hopper (H100) on cu118+, Blackwell (B100/B200,
 # RTX 50xx) on cu128+. But the newest wheels also DROP the oldest architectures,
 # so "just use the latest tag" is wrong for old hardware: cu128 dropped Volta
-# (sm_70), so a Tesla V100 needs cu124 (or cu121/cu118), NOT cu128 or cu129.
+# (sm_70), so a Tesla V100 needs cu126 (or cu118), NOT cu128 or cu129.
+# cu121 and cu124 are refused: their indexes stop at torch 2.5.1 and 2.6.0,
+# below the torch>=2.7 floor in pyproject.toml. On torch 2.6, transformers >=
+# 5.18 cannot import a model class when no GPU is visible (#4838).
 # Rule of thumb: use the newest tag your driver supports that still covers
 # your GPU. cu129 is the default the auto-detect picks for Turing through
 # Blackwell: its torch pins the CUDA 12.9 libraries that RAPIDS >= 26.8 is
 # built on, so it is the only tag on which the optional cuML step below runs
 # (RAPIDS >= 26.8 is the first whose cudf takes the pandas 3 that
 # pyproject.toml pins, #4390). A Volta card, or a driver older than CUDA 12.9,
-# steps down to cu124 (or older) and the app runs UMAP / k-means on the CPU.
+# steps down to cu126 (or older) and the app runs UMAP / k-means on the CPU.
 #
 # (VTSearch also smoke-tests CUDA at runtime and falls back to CPU if the
 # installed wheel can't run on the GPU, so a mismatch degrades instead of
@@ -815,7 +817,7 @@ EOF
 # --- CUDA tag resolution -----------------------------------------------------
 # Echo a cuXYZ tag for the GPU. An explicit arg wins; otherwise auto-detect via
 # detect_cuda_tag.py (which prints its reasoning to stderr -> the terminal), and
-# fall back to cu124 if it can't tell: the widest wheel (Volta..Hopper), so a GPU
+# fall back to cu126 if it can't tell: the widest wheel (Volta..Hopper), so a GPU
 # we could not identify still gets a torch that runs on it, at the cost of the
 # cuML step (which needs cu129; see vts_install_cuml).
 vts_resolve_cuda_tag() {
@@ -829,8 +831,8 @@ vts_resolve_cuda_tag() {
     if [ -n "$pybin" ] && detected="$("$pybin" "$SCRIPT_DIR/detect_cuda_tag.py")"; then
         echo "$detected"
     else
-        echo "  (auto-detect failed; falling back to default tag cu124)" >&2
-        echo "cu124"
+        echo "  (auto-detect failed; falling back to default tag cu126)" >&2
+        echo "cu126"
     fi
 }
 
@@ -966,7 +968,7 @@ vts_install_cpu() {
 #     cuML depends on, is the first to take pandas 3 at 26.8: an older RAPIDS
 #     would downgrade pandas to 2.x in this very step (#4390). RAPIDS 26.x in
 #     turn requires nvidia-nvjitlink-cu12>=12.9, which only the cu129 torch wheel
-#     pins -- cu124 pins ==12.4.x and cu128 ==12.8.x, so pip reports a conflict
+#     pins -- cu126 pins ==12.6.x and cu128 ==12.8.x, so pip reports a conflict
 #     there, and a stack assembled anyway has cupy JIT-compiling cuVS/raft
 #     kernels against mismatched headers ("cuda_fp8.hpp: this declaration has no
 #     storage class" at fit time). So cuML is installed on cu129 (and cu13x)
@@ -990,7 +992,7 @@ vts_install_cuml() {
     # cu129 (and cu13x) get one. VTS_CUML_CU12_SPEC replaces it outright -- and
     # un-skips the step -- for anyone assembling a different RAPIDS on their own
     # terms, e.g. RAPIDS 25 on a Volta card at the cost of pandas dropping to 2:
-    #   VTS_CUML_CU12_SPEC='cuml-cu12<26' bash scripts/install.sh cu124
+    #   VTS_CUML_CU12_SPEC='cuml-cu12<26' bash scripts/install.sh cu126
     local cuml_pkg
     if [ -n "${VTS_CUML_CU12_SPEC:-}" ]; then
         cuml_pkg="$VTS_CUML_CU12_SPEC"
@@ -1127,6 +1129,19 @@ vts_install_gpu() {
     local cuda_tag="$1"
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
 
+    # A tag whose index stops below the torch>=2.7 floor (pyproject.toml) would
+    # install its old torch here, and the requirements pass below would then
+    # replace it with PyPI's newest build -- usually one without this GPU's
+    # kernels. cu118 (torch 2.7.1) is the oldest tag that clears the floor.
+    local tag_num="${cuda_tag#cu}"
+    if [[ "$tag_num" =~ ^[0-9]+$ ]] && [ "$tag_num" -lt 126 ] && [ "$tag_num" -ne 118 ]; then
+        echo "CUDA tag '${cuda_tag}' is no longer supported: its PyTorch index stops below" >&2
+        echo "torch 2.7, the floor in pyproject.toml (transformers >= 5.18 cannot import a" >&2
+        echo "model class on torch 2.6 when no GPU is visible, #4838). Use cu126 (Volta" >&2
+        echo "through Hopper, driver CUDA >= 12.6) or cu118 (older drivers)." >&2
+        exit 2
+    fi
+
     vts_progress_init 10 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
@@ -1156,7 +1171,7 @@ vts_install_gpu() {
     # Pin torch/torchvision/torchaudio to the chosen CUDA index with --index-url
     # (NOT --extra-index-url). With --extra-index-url, PyPI stays in the candidate
     # set, and when PyPI ships a *newer* torch than this CUDA index tops out at
-    # (e.g. cu124 caps at 2.6.0 while PyPI has 2.7.x, a cu126 build), pip prefers
+    # (e.g. cu128 caps at 2.11.0 while PyPI has 2.14.x), pip prefers
     # the higher version and silently installs the wrong-arch wheel -- which then
     # fails with cudaErrorNoKernelImageForDevice on older GPUs. Installing from the
     # CUDA index alone forces the matching +${cuda_tag} build; the PyTorch index
@@ -1252,7 +1267,7 @@ Usage:
   bash scripts/install.sh            # auto-detect CPU vs GPU
   bash scripts/install.sh cpu        # force CPU install
   bash scripts/install.sh gpu        # force GPU install (auto-detect CUDA tag)
-  bash scripts/install.sh cu124      # force GPU install with an explicit CUDA tag
+  bash scripts/install.sh cu126      # force GPU install with an explicit CUDA tag
 EOF
         exit 2
         ;;

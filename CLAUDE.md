@@ -37,6 +37,19 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 
 **This applies on every surface.** Claude Code on the web, the desktop app, the laptop CLI — the convention is repo policy, not a per-session preference, so it holds wherever this file is loaded.
 
+### Post a link to it, right after the assignment
+
+The number the user typed is not clickable, so hand them one that is. Right after step 1's assignment for an issue — or, for a pull request, which has no assignment step, as soon as the number resolves — write one line of text to the user linking the item:
+
+```markdown
+Working on [#3421](https://github.com/samggreenberg/VTSearch/issues/3421): <title>
+```
+
+- **Now, not in the summary.** It goes out ahead of the evaluation, while you are still reading, so the user has the link from the first minute of the session. Saved for the end-of-turn message, it is one link among many and arrives after the work it was meant to accompany.
+- **Same form as every other reference** (see "Every `#N` you write to the user is a link" below): the `issues/N` URL serves a PR too, and the title is the GitHub title verbatim, from the lookup that resolved the number. Write it as prose, never inside a code span, where a link renders as literal brackets.
+- **Every surface**, unlike the retitle below: a terminal renders the link as well as the web app does.
+- **Not a gate.** It is a line of text, not a tool call, and nothing waits on it.
+
 ### In a cloud session, retitle it after the issue or PR
 
 A session whose whole opening prompt is `#3421` gets an auto-title that says nothing, and the session list is where the user goes to find this work again. So **when the `set_session_title` tool is available** (the claude-code-remote MCP server, present in cloud sessions on claude.ai/code), rename the session to the item's GitHub title as soon as the number resolves — for an issue, right after step 1's assignment. The lookup that resolved the number already returned the title, so there is nothing extra to fetch; take the session id from `get_session` called with no arguments.
@@ -47,7 +60,7 @@ A session whose whole opening prompt is `#3421` gets an auto-title that says not
 
 ### If `#N` is an issue
 
-1. **Assign `samggreenberg` immediately.** The moment the number resolves to an issue — before you read it, before you evaluate it, before any analysis — write `assignees: ["samggreenberg"]`. Evaluation is itself work on the issue, and it is exactly the window in which a second session picks up the same number. Do this even if you go on to disagree with the issue; if you end up walking away, clear the assignee then.
+1. **Assign `samggreenberg` immediately.** The moment the number resolves to an issue — before you read it, before you evaluate it, before any analysis — write `assignees: ["samggreenberg"]`. Evaluation is itself work on the issue, and it is exactly the window in which a second session picks up the same number. Do this even if you go on to disagree with the issue; if you end up walking away, clear the assignee then. Then post the link to it (see "Post a link to it, right after the assignment" above).
 2. **Read it, then evaluate it.** Decide whether the premise is correct and whether you agree with the solution it proposes. This is a real gate, not a formality: an issue can be stale, already fixed, based on a misreading, or right about the symptom and wrong about the fix.
 3. **If you disagree — or the right scope is unclear — stop and ask** via `AskUserQuestion` before writing any code. Say what the issue claims, what you found instead, and what you'd do differently.
 4. **If you agree, do the work off a fresh `dev`:** `git fetch origin --prune && git checkout -B <branch> origin/dev`. Never build on whatever the branch happened to be pointing at.
@@ -56,7 +69,7 @@ A session whose whole opening prompt is `#3421` gets an auto-title that says not
 
 ### If `#N` is a pull request
 
-It is conflicted, and the ask is to **resolve the conflicts so the PR can merge into `dev`** — nothing more. Fetch, merge `origin/dev` into the PR's head branch, resolve, run the tests, and push. Do not rewrite the branch's history (no rebase, amend, or force-push) and do not fold in unrelated changes while you are there; a reviewer should see conflict resolution and nothing else.
+It is conflicted, and the ask is to **resolve the conflicts so the PR can merge into `dev`** — nothing more. Post the link to it first (see "Post a link to it, right after the assignment" above), then fetch, merge `origin/dev` into the PR's head branch, resolve, run the tests, and push. Do not rewrite the branch's history (no rebase, amend, or force-push) and do not fold in unrelated changes while you are there; a reviewer should see conflict resolution and nothing else.
 
 ## Every `#N` you write to the user is a link (CRITICAL)
 
@@ -561,7 +574,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Check documentation**: `python scripts/check-docs.py` (also a `./run-tests.sh` gate; validates relative links, `#anchors`, backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations anywhere in the tree, and code fences. Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
 - **Check extension docs**: `python scripts/check-extension-docs.py` (also a `./run-tests.sh` gate; proves the app-tier and library-tier extension guides still describe members that exist on the plugin ABCs, and that neither names a public wrapper as the override point. Pure invariants — nothing to re-pin. Fix the doc, or register a new contract section in `SECTIONS`)
 - **Regenerate doc inventories**: `python scripts/gen-docs-inventories.py` (fills the `<!-- BEGIN GENERATED: ... -->` regions in the docs from the live registries — embedders, plugin families, demo datasets; `--check` is a `./run-tests.sh` gate, so registry changes require rerunning this and committing the result)
-- **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
+- **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu126`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
 - **Frontend audit**: `python scripts/npm-audit-gate.py` (the `./run-tests.sh` gate: `npm audit` over `frontend/`, minus the advisories in its `WAIVERS` table, which have no patched release anywhere; bare `cd frontend && npm audit` still lists those)
@@ -588,7 +601,7 @@ The gate chain, the test-group table, markers, fixture isolation and the flaky-t
 
 Testing can crash the session. To avoid losing work, follow this workflow:
 
-1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
+1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet. **Re-rendered images are the exception:** leave screenshots and slide figures out of a WIP checkpoint and commit them once, when final. PRs merge without squashing, so every commit carrying an image keeps it in history for good, and losing an uncommitted render to a crash costs only a re-render.
 2. **Start the run in the foreground with the maximum timeout, and never *launch* it with `run_in_background`.** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for several minutes; this is normal, and is not a sign that output capture is broken.
 
    **Pass `600000` ms (10 minutes) — the Bash tool's maximum.** A measured warm full `./run-tests.sh` is ~3.5 minutes on a 4-vCPU box (the heavy gates — pyright, pip-audit, the Vitest suite — run concurrently with pytest, so the wall clock is close to pytest's own); a cold container adds ~3 minutes of dep install up front. A cold run can still brush the cap — that is fine: when the tool's cap is hit the harness moves the run to the background rather than killing it; wait for the completion notification and read the output file it names. What matters is that you *started* it in the foreground so the harness tracks it.

@@ -129,6 +129,30 @@ class TestCocoBetterIsRunnable:
         assert cfg.EXPERIMENT_QUERIES["coco_better"] == cfg.EXPERIMENT_QUERIES["vg_scale"]
 
 
+class TestO365BetterIsRunnable:
+    """#4815: the second source runs the same arms and opens on the same texts.
+
+    It exists to be read against `coco_better`, so every way the two could differ
+    other than the source is a way the comparison could be wrong.
+    """
+
+    def test_it_runs_the_same_arms(self, cfg):
+        assert cfg.DATASET_EMBEDDERS["o365_better"] == cfg.DATASET_EMBEDDERS["coco_better"]
+
+    def test_region_voting_is_really_on_for_the_patch_arm(self, cfg):
+        patch = [e for e in cfg.DATASET_EMBEDDERS["o365_better"] if cfg.is_patch_embedder(e)]
+        assert patch, "no region arm at all"
+        for e in patch:
+            assert cfg.text_embedder(e), f"{e} cannot open on a text sort"
+            assert cfg.region_voting_for("o365_better", e)
+
+    def test_it_shares_coco_betters_queries_exactly(self, cfg, pc):
+        queries = cfg.EXPERIMENT_QUERIES["o365_better"]
+        assert queries == cfg.EXPERIMENT_QUERIES["coco_better"]
+        expected = {pc.scale_cell(cls, band) for cls in pc.SCALE_CLASSES for band in pc.BOX_BANDS}
+        assert expected <= set(queries), f"no query for {sorted(expected - set(queries))}"
+
+
 class TestFhibeIsRunnable:
     """#4699: every FHIBE cell is a roster the harness can enumerate.
 
@@ -160,6 +184,24 @@ class TestFhibeIsRunnable:
         """FHIBE's categories are subject ids, so its cells open on example photos."""
         for ds in self.FHIBE:
             assert ds not in cfg.EXPERIMENT_QUERIES
+
+
+class TestRicoSuaveIsRunnable:
+    """#4356: the genre track opens on the text its labels were reviewed under."""
+
+    def test_it_has_a_roster_the_pile_builds(self, cfg, pc):
+        assert cfg.DATASET_EMBEDDERS["apptitude"]
+        for emb in cfg.DATASET_EMBEDDERS["apptitude"]:
+            assert pc.embeds(cfg.learn_embedder(emb), "apptitude"), f"apptitude x {emb} is never built"
+
+    def test_every_class_types_the_loaders_text(self, cfg):
+        from pilebuild.loaders import apptitude
+
+        assert cfg.EXPERIMENT_QUERIES["apptitude"] == apptitude.ROSTER
+
+    def test_it_is_boxless(self, cfg, pc):
+        assert cfg.BOXED_BY_DATASET["apptitude"] is False
+        assert pc.DATASETS["apptitude"]["boxed"] is False
 
 
 class TestTrainMixCells:

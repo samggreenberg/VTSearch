@@ -20,6 +20,7 @@ The decomposition figure re-plots published numbers from
 import functools
 import math
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # Ensure the repo root (where app.py lives) is importable no matter the cwd:
@@ -62,7 +63,13 @@ from vtscore.training.thresholds import (
     inclusion_cost_weights,
     target_precision_threshold,
 )
-from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine, corpus_sigma_floor, fit_labels_line
+from vtscore.training.thresholds.labels_line import (
+    ClassScoreModel,
+    LabelsLine,
+    corpus_sigma_floor,
+    fit_labels_line,
+    head_count_serves,
+)
 from vtscore.training.structural_similarity import (
     PRECISION_CEILING_MARGIN,
     PRECISION_GOOD_FRACTION,
@@ -291,11 +298,11 @@ def xcal_flow_fig() -> None:
         save(
             _xcal_flow_stage(stage),
             OUT,
-            f"calib-xcal-flow.build{stage}.png",
+            f"calib-xcal-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-xcal-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-xcal-flow.webp", column=FULL_BLEED, box=box)
 
 
 #: The share of the votes each fold model trains on, as slide 13 draws it —
@@ -722,11 +729,11 @@ def gmm_flow_fig() -> None:
         save(
             _gmm_flow_stage(stage, fit, scores),
             OUT,
-            f"calib-gmm-flow.build{stage}.png",
+            f"calib-gmm-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-gmm-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-gmm-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _haystack_scores() -> tuple[GmmFit1D, np.ndarray]:
@@ -1268,11 +1275,11 @@ def blend_flow_fig() -> None:
         save(
             _blend_flow_stage(stage, fit, scores),
             OUT,
-            f"calib-blend-flow.build{stage}.png",
+            f"calib-blend-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-blend-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-blend-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figure:
@@ -1581,12 +1588,12 @@ def xsemi_flow_fig() -> None:
         save(
             _xsemi_flow_stage(stage, folds),
             OUT,
-            f"calib-fold-anchored-flow.build{stage}.png",
+            f"calib-fold-anchored-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-fold-anchored-flow.png", column=FULL_BLEED, box=box)
-    enforce_rendered_px(OUT / "calib-fold-anchored-flow.png", XSEMI_MARK_PT, VOTE_MARK_PX, "vote glyph")
+    save(final, OUT, "calib-fold-anchored-flow.webp", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-fold-anchored-flow.webp", XSEMI_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
@@ -2123,12 +2130,12 @@ def xquant_flow_fig() -> None:
         save(
             _xquant_flow_stage(stage, folds, final),
             OUT,
-            f"calib-quantile-flow.build{stage}.png",
+            f"calib-quantile-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final_stage, OUT, "calib-quantile-flow.png", column=FULL_BLEED, box=box)
-    enforce_rendered_px(OUT / "calib-quantile-flow.png", XQUANT_MARK_PT, VOTE_MARK_PX, "vote glyph")
+    save(final_stage, OUT, "calib-quantile-flow.webp", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-quantile-flow.webp", XQUANT_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xquant_populations() -> tuple[list[tuple[GmmFit1D, np.ndarray, dict]], np.ndarray]:
@@ -2909,11 +2916,11 @@ def knob_flow_fig() -> None:
         save(
             _knob_flow_stage(stage, scores, labels),
             OUT,
-            f"calib-knob-flow.build{stage}.png",
+            f"calib-knob-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-knob-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-knob-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -3078,11 +3085,11 @@ def walk_flow_fig() -> None:
         save(
             _walk_flow_stage(stage, corpus, scores, labels),
             OUT,
-            f"calib-walk-flow.build{stage}.png",
+            f"calib-walk-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(final, OUT, "calib-walk-flow.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-walk-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -3305,11 +3312,11 @@ def tilt_flow_fig() -> None:
         save(
             _tilt_flow_stage(stage, folds, final),
             OUT,
-            f"calib-tilt-flow.build{stage}.png",
+            f"calib-tilt-flow.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
         )
-    save(last, OUT, "calib-tilt-flow.png", column=FULL_BLEED, box=box)
+    save(last, OUT, "calib-tilt-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
@@ -3554,7 +3561,7 @@ def blend_schedule_fig() -> None:
         va="top",
     )
     fig.text(0.06, 0.425, f"{binary} — the same at every vote count", fontsize=15, color=SOFT, va="top")
-    save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
+    save(fig, OUT, "calib-blend-schedule.webp", column=FULL_BLEED, tight=False)
 
 
 def split_idea_fig() -> None:
@@ -3578,11 +3585,11 @@ def split_idea_fig() -> None:
     save(
         _xquant_flow_stage(XQUANT_FLOW_STAGES, folds, final, numbers=False, split=True),
         OUT,
-        "calib-split-idea.build1.png",
+        "calib-split-idea.build1.webp",
         column=FULL_BLEED,
         box=box,
     )
-    save(final_stage, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
+    save(final_stage, OUT, "calib-split-idea.webp", column=FULL_BLEED, box=box)
 
 
 #: The six measured series, in legend order: the four single-vector models
@@ -3701,7 +3708,7 @@ def split_fraction_fig() -> None:
         labelspacing=0.55,
         fontsize=SPLIT_LEGEND_PT,
     )
-    save(fig, OUT, "calib-split-fraction.png", column=FULL_BLEED, tight=False)
+    save(fig, OUT, "calib-split-fraction.webp", column=FULL_BLEED, tight=False)
 
 
 def anchored_fig() -> None:
@@ -3780,7 +3787,7 @@ def anchored_fig() -> None:
     ax.spines["left"].set_visible(False)
     ax.set_title("Votes re-identify the components", loc="left", pad=14)
     fig.tight_layout()
-    save(fig, OUT, "calib-anchored-em.png")
+    save(fig, OUT, "calib-anchored-em.webp")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3920,12 +3927,12 @@ def fbeta_fig() -> None:
         save(
             _fbeta_stage(stage),
             OUT,
-            f"calib-fbeta.build{stage}.png",
+            f"calib-fbeta.build{stage}.webp",
             column=FULL_BLEED,
             box=box,
             notch=BETA_MAX_NOTCH_PX,
         )
-    save(final, OUT, "calib-fbeta.png", column=FULL_BLEED, box=box, notch=BETA_MAX_NOTCH_PX)
+    save(final, OUT, "calib-fbeta.webp", column=FULL_BLEED, box=box, notch=BETA_MAX_NOTCH_PX)
 
 
 #: The F-beta figure's own canvas: the slide's 16:9 at nearly the teaching
@@ -3998,15 +4005,23 @@ def _fbeta_ranking(ax: plt.Axes, top_reserve: float = FBETA_TOP_RESERVE) -> tupl
     return x0, w, rank_y
 
 
-#: How many stages F-ing Metrics reveals in: the cut; Precision and Recall;
-#: F1; Fβ.
-FMETRICS_STAGES = 4
+#: How many stages F-ing Metrics reveals in: the cut, with F1's definition
+#: already up top; the two rates' names; their definitions; their arithmetic;
+#: F1's value; Fβ right of F1 (owner, 2026-10-13, #4833).
+FMETRICS_STAGES = 6
 #: The cut F-ing Metrics reads, as items kept: one left of the Cutting Room's
 #: middle one, so it is plainly not the best cut, and its two rates differ —
 #: 4/6 and 4/5 — where the middle cut's were both 4/5, which left a room unable
 #: to tell from the numbers which fraction was which (owner, #4618). One step
 #: right buys precision and costs no recall, which the presenter can say.
 FMETRICS_KEPT = 6
+#: F-ing Metrics' title notch: "F-ing Metrics" is one line, like "Beta Max",
+#: so it is the box `BETA_MAX_NOTCH_PX` measured. The ranking keeps the
+#: two-line reserve (`FBETA_TOP_RESERVE`) all the same, so it lands where the
+#: Cutting Room's did; what the shorter notch buys is the band above it, right
+#: of the headline, where the top row of formulas goes. Split the two constants
+#: if either headline grows a line.
+FMETRICS_NOTCH_PX = BETA_MAX_NOTCH_PX
 
 
 def fmetrics_fig() -> None:
@@ -4015,8 +4030,11 @@ def fmetrics_fig() -> None:
     Beta Max used to print the F-beta formula under its rows and leave the room
     to take it in while the rows were the point. This comes first, with Beta
     Release (the same score as a map, at each beta) between the two: one cut
-    through the same ranking, the two rates it has, F1 as their harmonic mean,
-    and Fβ as the same mean with recall weighted β times.
+    through the same ranking, and F1 up top from the first page — the title
+    plays on the F, so the F is the first thing on screen — then the two rates
+    it is made of, built up a click at a time (named, defined, worked out),
+    F1's value, and Fβ beside it as the same mean with recall weighted β times
+    (owner, 2026-10-13).
 
     The rates are defined in words the room already has — Goods, and what comes
     back — rather than through three named counts (kept, hits, matches), which
@@ -4025,8 +4043,15 @@ def fmetrics_fig() -> None:
     final = _fmetrics_stage(FMETRICS_STAGES)
     box = tight_box(final)
     for stage in range(1, FMETRICS_STAGES):
-        save(_fmetrics_stage(stage), OUT, f"calib-fmetrics.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box)
+        save(
+            _fmetrics_stage(stage),
+            OUT,
+            f"calib-fmetrics.build{stage}.webp",
+            column=FULL_BLEED,
+            box=box,
+            notch=FMETRICS_NOTCH_PX,
+        )
+    save(final, OUT, "calib-fmetrics.webp", column=FULL_BLEED, box=box, notch=FMETRICS_NOTCH_PX)
 
 
 def _math(expr: str) -> str:
@@ -4059,52 +4084,90 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
     for x in (cut_x, x0 + w):
         ax.plot([x] * 2, [bracket_y, bracket_y + 0.18], color=INK, linewidth=1.6, zorder=4)
 
-    # ── stages 2-4: the formulas, in two columns ──────────────────────────────
-    # The rates on the left, the scores made of them on the right, each pair
-    # read top to bottom (owner, #4618). A fraction is set as one, over a bar:
-    # "A / B" in a row of other slashes read as ASCII, not as maths. What each
-    # one *says* is the presenter's to read out, so it is in the notes.
+    # ── stages 1-6: the formulas, in the pieces the reveals add ───────────────
+    # A formula is revealed a piece at a time, so each piece is its own text,
+    # set flush against the one before it on a shared baseline. That comes out
+    # as the formula set in one string would: mathtext puts 0.2em either side
+    # of an `=`, and both travel with the piece whose `=` they flank, and a
+    # fraction's bar is shifted onto the `=`'s own centre, so the baseline is
+    # the one height every piece agrees on. A fraction is set as one, over a
+    # bar: "A / B" in a row of other slashes read as ASCII, not as maths. What
+    # each one *says* is the presenter's to read out, so it is in the notes.
+    #
+    # Laid out from every piece whether or not this stage shows it, so a
+    # reveal adds ink and moves nothing.
+    renderer = fig.canvas.get_renderer()
+
+    def width(text: str) -> float:
+        probe = ax.text(0, 0, text, fontsize=FMETRICS_PT, alpha=0)
+        measured = probe.get_window_extent(renderer).transformed(ax.transData.inverted()).width
+        probe.remove()
+        return measured
+
+    pieces: list[tuple[int, float, float, str, str]] = []  # (first stage, x, y, ha, text)
+
+    # The top row: F1, the score the title plays on, up from the first page in
+    # the gap right of the headline and above the ranking; its value is the
+    # fifth reveal, and Fβ, level with it, the last. F1 is centred on the
+    # slide, as the rate rows under it are, and Fβ arrives in the gap right of
+    # it, ending where the ranking does (owner, #4833).
+    f1_def = _math(r"F1 = \dfrac{2PR}{P + R}")
+    f1_val = _math(rf"= {f1:.2f}")
+    fbeta = _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")
+    f1_x = FBETA_CANVAS[0] / 2 - (width(f1_def) + width(f1_val)) / 2
+    fbeta_x = x0 + w - width(fbeta)
+    assert fbeta_x - (f1_x + width(f1_def) + width(f1_val)) >= FMETRICS_COLUMN_GAP, "Fβ crowds F1's value"
+    pieces += [
+        (1, f1_x, FMETRICS_TOP_Y, "left", f1_def),
+        (5, f1_x + width(f1_def), FMETRICS_TOP_Y, "left", f1_val),
+        (6, fbeta_x, FMETRICS_TOP_Y, "left", fbeta),
+    ]
+
+    # The two rates under the ranking, a row each, aligned on their `=` rather
+    # than on the words' left edge (owner, 2026-10-13): first the names, then
+    # the definitions, then the arithmetic. The block is centred on the slide,
+    # not on the ranking: it is wider than the ranking's indent leaves room for.
     returned = r"\dfrac{\#\ Goods\ returned}"
-    p_rate = rf"P = {returned}{{\#\ returned}} = \dfrac{{{hits}}}{{{kept}}} = {precision:.2f}"
-    r_rate = rf"R = {returned}{{\#\ possible\ Goods}} = \dfrac{{{hits}}}{{{goods}}} = {recall:.2f}"
-    columns = (
-        ((2, "Precision  " + _math(p_rate)), (2, "Recall  " + _math(r_rate))),
+    rows = (
         (
-            (3, _math(rf"F1 = \dfrac{{2PR}}{{P + R}} = {f1:.2f}")),
-            (4, _math(r"Fβ = \dfrac{(1 + β^2)\,PR}{β^2 P + R}")),
+            "Precision  " + _math("P ="),
+            _math(rf"{returned}{{\#\ returned}}"),
+            _math(rf"= \dfrac{{{hits}}}{{{kept}}} = {precision:.2f}"),
+        ),
+        (
+            "Recall  " + _math("R ="),
+            _math(rf"{returned}{{\#\ possible\ Goods}}"),
+            _math(rf"= \dfrac{{{hits}}}{{{goods}}} = {recall:.2f}"),
         ),
     )
-    # Laid out from every formula whether or not this stage shows it, so a
-    # reveal adds ink and moves nothing. The block is centred on the slide, not
-    # on the ranking: it is wider than the ranking's indent leaves room for.
-    renderer = fig.canvas.get_renderer()
-    widths = []
-    for column in columns:
-        width = 0.0
-        for _first, formula in column:
-            probe = ax.text(0, 0, formula, fontsize=FMETRICS_PT, alpha=0)
-            width = max(width, probe.get_window_extent(renderer).transformed(ax.transData.inverted()).width)
-            probe.remove()
-        widths.append(width)
-    left = FBETA_CANVAS[0] / 2 - (sum(widths) + FMETRICS_COLUMN_GAP) / 2
-    for column, x in zip(columns, (left, left + widths[0] + FMETRICS_COLUMN_GAP), strict=True):
-        for (first, formula), y in zip(column, FMETRICS_ROWS_Y, strict=True):
-            if stage >= first:
-                ax.text(x, y, formula, ha="left", va="center", fontsize=FMETRICS_PT, color=INK)
+    before = max(width(name) for name, _defn, _calc in rows)
+    after = max(width(defn) + width(calc) for _name, defn, calc in rows)
+    eq_x = FBETA_CANVAS[0] / 2 - (before + after) / 2 + before
+    for (name, defn, calc), y in zip(rows, FMETRICS_ROWS_Y, strict=True):
+        pieces += [(2, eq_x, y, "right", name), (3, eq_x, y, "left", defn), (4, eq_x + width(defn), y, "left", calc)]
+
+    for first, x, y, ha, text in pieces:
+        if stage >= first:
+            ax.text(x, y, text, ha=ha, va="baseline", fontsize=FMETRICS_PT, color=INK)
     return fig
 
 
-#: The formulas' type, the gap between their two columns, and the two rows'
-#: centres, in canvas units: under the cut's bracket, with the space the three
-#: named counts used to take given to fractions, which stand two lines tall.
+#: The formulas' type; the least gap between F1 and Fβ on the top row; and the rows'
+#: baselines, in canvas units — baselines rather than centres because a row is
+#: drawn in pieces and the baseline is the height they share (`_fmetrics_stage`).
+#: The top row sits level with the one-line headline in the notch beside it
+#: (`FMETRICS_NOTCH_PX`), clear of the axis label under it; the two rate rows
+#: sit under the cut's bracket, with the space the three named counts used to
+#: take given to fractions, which stand two lines tall.
 FMETRICS_PT = 20
 FMETRICS_COLUMN_GAP = 1.6
-FMETRICS_ROWS_Y = (4.45, 2.35)
+FMETRICS_TOP_Y = 10.25
+FMETRICS_ROWS_Y = (4.25, 2.15)
 
 
-# ── Beta Release: F-beta as a map, once per beta (#4519) ──────────────────────
+# ── Beta Testers: F-beta as a map, once per beta (#4519) ──────────────────────
 
-#: How many stages Beta Release reveals in: F1's map, the one F-ing Metrics
+#: How many stages Beta Testers reveals in: F1's map, the one F-ing Metrics
 #: just defined; then β = ¼'s; then β = 4's (`FBETA_REVEAL`'s order).
 FBETA_MAPS_STAGES = 3
 #: The three maps' squares, in canvas units: the side, the gap between maps,
@@ -4149,12 +4212,12 @@ def fbeta_maps_fig() -> None:
     final = _fbeta_maps_stage(FBETA_MAPS_STAGES)
     box = tight_box(final)
     for stage in range(1, FBETA_MAPS_STAGES):
-        save(_fbeta_maps_stage(stage), OUT, f"calib-fbeta-maps.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-fbeta-maps.png", column=FULL_BLEED, box=box)
+        save(_fbeta_maps_stage(stage), OUT, f"calib-fbeta-maps.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-fbeta-maps.webp", column=FULL_BLEED, box=box)
 
 
 def _fbeta_maps_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of Beta Release."""
+    """Draw the first *stage* steps (1-based, cumulative) of Beta Testers."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, FBETA_CANVAS[0])
@@ -4598,8 +4661,8 @@ def patch_fig() -> None:
     final = _patch_stage(PATCH_STAGES)
     box = tight_box(final)
     for stage in range(1, PATCH_STAGES):
-        save(_patch_stage(stage), OUT, f"calib-patches.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-patches.png", column=FULL_BLEED, box=box)
+        save(_patch_stage(stage), OUT, f"calib-patches.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-patches.webp", column=FULL_BLEED, box=box)
 
 
 def _patch_cell(row: int, col: int) -> tuple[float, float, float]:
@@ -4774,8 +4837,8 @@ def region_max_fig() -> None:
     final = _region_max_stage(REGION_MAX_STAGES)
     box = tight_box(final)
     for stage in range(1, REGION_MAX_STAGES):
-        save(_region_max_stage(stage), OUT, f"calib-region-max.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-region-max.png", column=FULL_BLEED, box=box)
+        save(_region_max_stage(stage), OUT, f"calib-region-max.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-region-max.webp", column=FULL_BLEED, box=box)
 
 
 def _maxima(rng_seed: int = 5) -> np.ndarray:
@@ -5137,10 +5200,10 @@ def em_steps_fig() -> None:
         final = _em_stage(EM_STAGES, sample, votes)
         box = tight_box(final)
         for stage in range(1, EM_STAGES):
-            save(_em_stage(stage, sample, votes), OUT, f"{name}.build{stage}.png", column=FULL_BLEED, box=box)
-        save(final, OUT, f"{name}.png", column=FULL_BLEED, box=box)
+            save(_em_stage(stage, sample, votes), OUT, f"{name}.build{stage}.webp", column=FULL_BLEED, box=box)
+        save(final, OUT, f"{name}.webp", column=FULL_BLEED, box=box)
         if votes:
-            enforce_rendered_px(OUT / f"{name}.png", EM_MARK_PT, VOTE_MARK_PX, "vote glyph")
+            enforce_rendered_px(OUT / f"{name}.webp", EM_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figure:
@@ -5239,10 +5302,18 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 
 # ── the line the labels draw (#4452) ─────────────────────────────────────────
 
-#: How many build stages the labels-line figure reveals in: the held-out votes;
-#: the class model fitted to them; the corpus and its fit; expected F-beta at
-#: the balanced radio, and the line at its peak; the other two radios' peaks.
-LL_STAGES = 5
+#: How many build stages the labels-line figure has: the held-out votes; the
+#: class model fitted to them; the corpus and its fit; expected F-beta at the
+#: balanced radio, and the line at its peak; β ¼'s peak beside it; then β 4's
+#: (owner, #4872: one other radio at a time, before all three).
+LL_STAGES = 6
+#: The stage each radio's expected F-beta arrives on, in `FBETA_ARMS` order.
+LL_REVEAL = (5, 4, 6)
+#: The first stage Just How You Like It shows. The three before it are Curvey and
+#: InDiscrete's (`calib-labels-fit`), the slide right before it (owner,
+#: 2026-10-13: the fit without a balance, then the line with one), so the slide
+#: opens on that fit recapped and builds only what the balance adds.
+LL_FIRST_SHOWN = 3
 
 #: The canvas: `FBETA_CANVAS`, so the two slides that explain the balance
 #: draw at one scale and their type lands at one size.
@@ -5253,17 +5324,27 @@ LL_CANVAS = FBETA_CANVAS
 #: which score.
 LL_LOGIT = (-3.6, 3.0)
 #: The held-out votes, in logit units: every vote, scored by the fold model
-#: that never saw it. Spaced so no two glyphs touch, and imperfect on purpose:
-#: the top Bad outscores the bottom Good. The Bads sit near the middle rather
-#: than down in the bulk, because Autopilot asked about the items near its
-#: line — the bias the corpus fit exists to correct.
-LL_GOODS = (0.35, 0.95, 1.25, 1.55, 1.85)
-LL_BADS = (-1.3, -0.95, -0.6, -0.25, 0.05, 0.65)
+#: that never saw it. Not a fair sample of the corpus, and drawn so it looks
+#: like one it is not (owner, #4835: "we shouldn't show them evenly spaced"):
+#: the opening's three Goods off the top, and then a pile where Autopilot asks,
+#: round the line (it lands at 0.55 here), Goods and Bads mixed. That bias is
+#: what the corpus fit exists to correct. Imperfect on purpose: the top Bads
+#: outscore the bottom Good. Seven Goods, because the app draws the labels line
+#: only from `HEAD_COUNT_GOODS` held-out Goods (#4798): with five, these votes
+#: get the head's count line and every slide drawn from them would describe a
+#: line the app does not draw. `_ll_data` asserts it.
+#:
+#: Picked so the slides downstream keep their story on the shipped fit: tighter
+#: piles narrow the Good curve until Transfer Student's Find corpus keeps
+#: nearly twice its matches, and a pile with no Goods off the top leaves the
+#: fit nothing to call a match at all.
+LL_GOODS = (0.43, 0.66, 0.8, 0.95, 1.6, 1.95, 2.3)
+LL_BADS = (-0.9, -0.45, -0.21, 0.0, 0.15, 0.3, 0.55)
 #: The corpus the line is drawn on: (items, share that are matches, the
 #: matches' (mean, spread), the rest's (mean, spread), seed), in logit units.
 #: One in eight are matches, far more than a real search sees (COCO Better's
 #: pools are 0.44%), so the matches' hump is visible at all; the seed is the
-#: one whose fit *under*-counts the matches a little (219 of 240), as a
+#: one whose fit *under*-counts the matches a little (207 of 240), as a
 #: session's easiest Goods make it do in practice.
 LL_CORPUS = (2000, 0.12, (1.1, 0.65), (-1.3, 0.85), 3)
 LL_BINS = 46
@@ -5275,6 +5356,37 @@ LL_F_Y, LL_F_H = 0.8, 2.25
 #: The β the room has picked, and the two it has not: drawn heavier in the
 #: `BALANCE_WEIGHTS` ramp, the same three weights as on `calib-fbeta`.
 LL_PICKED = 1.0
+#: The votes' glyphs as a dot plot: a vote hangs in the first tier, top down,
+#: where the glyph left of it is at least this far away (a 20pt mark's width,
+#: in canvas units), so the pile round the line stacks instead of overprinting.
+#: The votes are spaced so the pile takes exactly two tiers (`_ll_pile_floor`
+#: asserts it); a mark's ink is about `LL_GLYPH_H` tall.
+LL_GLYPH_W = 0.48
+LL_TIER_STEP = 0.5
+LL_GLYPH_H = 0.45
+
+
+def _vote_tiers(xs: Sequence[float], gap: float) -> list[int]:
+    """Each vote's tier in a dot plot, left to right: the first tier whose last glyph is *gap* or more to its left."""
+    ends: list[float] = []
+    tiers = [0] * len(xs)
+    for i in np.argsort(np.asarray(xs, dtype=float), kind="stable"):
+        x = float(xs[i])
+        for tier, end in enumerate(ends):
+            if x - end >= gap:
+                ends[tier], tiers[i] = x, tier
+                break
+        else:
+            ends.append(x)
+            tiers[i] = len(ends) - 1
+    return tiers
+
+
+def _ll_pile_floor() -> float:
+    """The lowest ink of the votes' pile: lines rising from the corpus stop an object gap under it."""
+    tiers = _vote_tiers([float(_ll_at(x)) for x in LL_GOODS + LL_BADS], LL_GLYPH_W)
+    assert max(tiers) == 1, f"the votes pile {max(tiers) + 1} deep: respace LL_GOODS / LL_BADS"
+    return LL_VOTES_Y - 0.12 - max(tiers) * LL_TIER_STEP - LL_GLYPH_H
 
 
 def _ll_sigmoid(x: np.ndarray) -> np.ndarray:
@@ -5298,6 +5410,7 @@ def _ll_data() -> tuple[np.ndarray, "LabelsLine"]:
     labels = [1.0] * len(LL_GOODS) + [0.0] * len(LL_BADS)
     line = fit_labels_line([(votes, labels)], _ll_sigmoid(corpus))
     assert line is not None and line.unvoted_scores is not None and line.unvoted_posteriors is not None
+    assert not head_count_serves(line.model), "the votes are under the thin-model gate: add Goods (LL_GOODS)"
     return corpus, line
 
 
@@ -5326,14 +5439,17 @@ def labels_line_fig() -> None:
 
     Three rows on one score axis: the votes, held out, and the class model
     they imply; the corpus, and how many matches the fit says it holds; the
-    expected F-beta of every cut, and the line at its peak. The last page adds
-    the other two radios' peaks — the same three balances as `calib-fbeta`.
+    expected F-beta of every cut, and the line at its peak. The last two pages
+    add the other radios' peaks, β ¼'s and then β 4's — the same three balances
+    as `calib-fbeta`.
+    The first two rows are built up on Curvey & InDiscrete (`labels_fit_fig`), so
+    the pages start at :data:`LL_FIRST_SHOWN` and are numbered from 1.
     """
     final = _ll_stage(LL_STAGES)
     box = tight_box(final)
-    for stage in range(1, LL_STAGES):
-        save(_ll_stage(stage), OUT, f"calib-labels-line.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-labels-line.png", column=FULL_BLEED, box=box)
+    for page, stage in enumerate(range(LL_FIRST_SHOWN, LL_STAGES), start=1):
+        save(_ll_stage(stage), OUT, f"calib-labels-line.build{page}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-labels-line.webp", column=FULL_BLEED, box=box)
 
 
 #: The rows' left edge and width: the same indent and right margin as
@@ -5375,10 +5491,12 @@ def _ll_stage(stage: int) -> plt.Figure:
 def _ll_votes_row(ax: plt.Axes, model: "ClassScoreModel", stage: int) -> None:
     """Stages 1-2: the votes, each scored by a model that never saw it; then two normals, one spread."""
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_VOTES_Y, z=3)
-    for x, good in [(g, True) for g in LL_GOODS] + [(b, False) for b in LL_BADS]:
+    votes = [(g, True) for g in LL_GOODS] + [(b, False) for b in LL_BADS]
+    tiers = _vote_tiers([float(_ll_at(x)) for x, _ in votes], LL_GLYPH_W)
+    for (x, good), tier in zip(votes, tiers, strict=True):
         ax.text(
             float(_ll_at(x)),
-            LL_VOTES_Y - 0.12,
+            LL_VOTES_Y - 0.12 - tier * LL_TIER_STEP,
             "✓" if good else "✗",
             ha="center",
             va="top",
@@ -5398,8 +5516,21 @@ def _ll_votes_row(ax: plt.Axes, model: "ClassScoreModel", stage: int) -> None:
         ax.plot(_ll_at(grid[seen]), LL_VOTES_Y + curve[seen] * LL_MODEL_H, color=color, linewidth=HUMP_LW, zorder=4)
 
 
-def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: "ClassScoreModel") -> None:
-    """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds."""
+def _ll_corpus_row(
+    ax: plt.Axes,
+    corpus: np.ndarray,
+    line: "LabelsLine",
+    model: "ClassScoreModel",
+    *,
+    fit: bool = True,
+    show_count: bool = True,
+) -> None:
+    """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds.
+
+    With ``fit=False`` the bars alone: the corpus as Oops! All Haystack left it,
+    before Curvey & InDiscrete fits it. With ``show_count=False`` the fit without the
+    count of matches, on a slide whose point is elsewhere (A Cut Above).
+    """
     lo, hi = LL_LOGIT
     counts, edges = np.histogram(corpus, bins=LL_BINS, range=LL_LOGIT)
     bin_w = (hi - lo) / LL_BINS
@@ -5414,6 +5545,8 @@ def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: 
             ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [LL_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_CORPUS_Y, z=5)
     _ll_row_name(ax, LL_CORPUS_Y + 0.9, "The corpus")
+    if not fit:
+        return
     # The 2-part fit: the labels' Good normal, its shape held, and a normal
     # for everything else, each scaled to the count the fit gives it.
     grid = np.linspace(lo, hi, 700)
@@ -5426,6 +5559,8 @@ def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: 
         dens = count * bin_w * np.exp(-0.5 * ((grid - mu) / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
         seen = dens * sy > TAIL_FLOOR
         ax.plot(_ll_at(grid[seen]), LL_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=color, linewidth=HUMP_LW, zorder=4)
+    if not show_count:
+        return
     # Over the matches' hump, clear of the tallest bar under it, and starting
     # at its peak so it stays right of the line and inside the canvas (a label
     # past the edge widens the crop and rescales the slide).
@@ -5442,13 +5577,13 @@ def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: 
 
 
 def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) -> None:
-    """Stages 4-5: expected F-beta down the ranking, the line at the picked radio's peak, then the other two."""
+    """Stages 4-6: expected F-beta down the ranking, the line at the picked radio's peak, then β ¼'s, then β 4's."""
     lo, hi = LL_LOGIT
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_F_Y, z=3)
     _ll_row_name(ax, LL_F_Y + 0.75, "Expected Fβ")
-    for (beta, _name), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True):
+    for (beta, _name), weight, reveal in zip(FBETA_ARMS, BALANCE_WEIGHTS, LL_REVEAL, strict=True):
         picked = beta == LL_PICKED
-        if stage < (4 if picked else 5):
+        if stage < reveal:
             continue
         xs, f = _ll_expected_f(line, beta)
         inside = (xs >= lo) & (xs <= hi)
@@ -5466,7 +5601,7 @@ def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) 
 
 def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float, dot_y: float) -> None:
     """The line: blue, the palette's "the shipped thing", from the peak that placed it up through the corpus."""
-    top = LL_CORPUS_Y + LL_CORPUS_H + 0.15
+    top = min(LL_CORPUS_Y + LL_CORPUS_H + 0.15, _ll_pile_floor() - OBJECT_GAP)
     ax.plot([cut_x] * 2, [dot_y, top], color=BLUE, linewidth=2.6, zorder=5)
     kept = int(np.sum(corpus >= float(_ll_logit(line.threshold(LL_PICKED)))))
     bracket_y = LL_CORPUS_Y + LL_CORPUS_H - 0.35
@@ -5478,15 +5613,89 @@ def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float,
     )
 
 
-# ── Second Cut: where Autopilot asks (#3546, #4632) ──────────────────────────
+# ── Curvey & InDiscrete: the folds and the corpus, fitted together (#4452) ────────
 
-#: How many build stages Second Cut's figure reveals in: What to Expect's votes,
+#: How many build stages Curvey & InDiscrete's figure reveals in (owner,
+#: #4835): the held-out votes and the corpus, bare, so the room sees at once
+#: that the votes are no sample of it; the class model fitted to the votes; the
+#: 2-part fit of the corpus with the Good normal held, and its count; each
+#: item's chance of being a match.
+LF_STAGES = 4
+
+
+def labels_fit_fig() -> None:
+    """Curvey & InDiscrete: where section II's three ideas meet, before any line is drawn (#4452).
+
+    Just How You Like It's canvas and rows, built up from nothing (owner, #4835):
+    Grade My Own Homework's held-out votes beside Oops! All Haystack's corpus,
+    bare, so the room sees the votes are no sample of it; the two normals the
+    votes imply; the fit Great Expectations' EM makes of the corpus when the
+    Good normal's shape is held from the votes and only its share and the rest
+    are fitted, and the count of matches that fit gives; then the other thing
+    the same fit says, every item's chance of being a match, in the row where
+    Just How You Like It will draw expected F-beta. Dots in, curves out, hence the
+    title. No line: choosing one takes the user's balance. It ends section II,
+    after Cross Examination and Above Average, the naive ways of putting the
+    folds and the corpus together (owner, 2026-10-13).
+    """
+    final = _lf_stage(LF_STAGES)
+    box = tight_box(final)
+    for stage in range(1, LF_STAGES):
+        save(_lf_stage(stage), OUT, f"calib-labels-fit.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-labels-fit.webp", column=FULL_BLEED, box=box)
+
+
+def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
+    """Each unvoted item's chance of being a match, from the 3-part fit, with even odds marked.
+
+    Drawn where Just How You Like It draws expected F-beta, so Curvey & InDiscrete and
+    A Cut Above read as the same fit asked one question.
+    """
+    lo, hi = LL_LOGIT
+    right = LL_X0 + LL_W
+    half = LL_F_Y + LL_F_H / 2
+    _range_line(ax, LL_X0, right, LL_F_Y, z=3)
+    _ll_row_name(ax, half, "Chance of\na match")
+    # Even odds as a hairline across the row, named at its end: where the curve
+    # crosses it is a coin toss.
+    ax.plot([LL_X0, right], [half] * 2, color=SOFT, linewidth=1.2, linestyle=(0, (2, 3)), zorder=2)
+    ax.text(right + LABEL_GAP, half, "½", ha="left", va="center", fontsize=16, color=INK)
+    xs = _ll_logit(line.unvoted_scores)
+    chance = np.asarray(line.unvoted_posteriors, dtype=float)
+    inside = (xs >= lo) & (xs <= hi)
+    ax.plot(_ll_at(xs[inside]), LL_F_Y + chance[inside] * LL_F_H, color=INK, linewidth=2.4, zorder=4)
+
+
+def _lf_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Curvey & InDiscrete's figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+
+    corpus, line = _ll_data()
+    model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
+    _ll_votes_row(ax, model, stage)
+    _ll_corpus_row(ax, corpus, line, model, fit=stage >= 3)
+    if stage >= 4:
+        _ll_chance_row(ax, line)
+    return fig
+
+
+# ── A Cut Above: where Autopilot asks (#3546, #4632) ──────────────────────────
+
+#: How many build stages A Cut Above's figure has: Just How You Like It's votes,
 #: corpus and line, with each unvoted item's chance of being a match where that
 #: slide drew expected F-beta; the even-odds cut and the item it asks about; the
 #: other two radios' lines, which move while that cut does not; the answer
 #: going back into the votes.
 ACQ_FLOW_STAGES = 4
-#: The chance row stands where What to Expect drew expected F-beta, at that
+#: The first stage the slide shows. The chance of a match is Curvey &
+#: InDiscrete's last page already, so the slide goes straight to where it asks
+#: (owner, #4872).
+ACQ_FIRST_SHOWN = 2
+#: The chance row stands where Just How You Like It drew expected F-beta, at that
 #: row's height, so the two figures read as one fit asked two questions.
 ACQ_CHANCE_Y, ACQ_CHANCE_H = LL_F_Y, LL_F_H
 #: How far under the chance row's baseline the radios' names hang.
@@ -5497,9 +5706,9 @@ ACQ_PICK_GAP = 0.12
 
 
 def acq_flow_fig() -> None:
-    """Second Cut: where Autopilot asks, read off the line's own fit (#3546, #4632).
+    """A Cut Above: where Autopilot asks, read off the line's own fit (#3546, #4632).
 
-    What to Expect's votes, corpus and line, with that slide's expected-F-beta
+    Just How You Like It's votes, corpus and line, with that slide's expected-F-beta
     row swapped for the other thing the same 3-part fit says about every
     unvoted item: its chance of being a match (``LabelsLine.unvoted_posteriors``).
     Autopilot's Hard and New picks sample where that chance first falls below
@@ -5509,16 +5718,16 @@ def acq_flow_fig() -> None:
     score is what the figure drops to the corpus. The other two radios' lines
     arrive after it, because the slide's point is that they move and the asking
     cut does not: it is a fact about the fit, not about the user's preference.
-    Schematic inputs, real code, as on What to Expect.
+    Schematic inputs, real code, as on Just How You Like It.
 
     It replaced a figure of the line − 4 Inclusion re-cut of the fused mixture,
     which #3546 found had saturated into a rank pin under the balance.
     """
     final = _acq_flow_stage(ACQ_FLOW_STAGES)
     box = tight_box(final)
-    for stage in range(1, ACQ_FLOW_STAGES):
-        save(_acq_flow_stage(stage), OUT, f"calib-acq-flow.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-acq-flow.png", column=FULL_BLEED, box=box)
+    for page, stage in enumerate(range(ACQ_FIRST_SHOWN, ACQ_FLOW_STAGES), start=1):
+        save(_acq_flow_stage(stage), OUT, f"calib-acq-flow.build{page}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-acq-flow.webp", column=FULL_BLEED, box=box)
 
 
 def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
@@ -5541,7 +5750,8 @@ def _acq_cut(ax: plt.Axes, line: "LabelsLine", beta: float, name: str, **style) 
     """One radio's line: from the chance row's floor up through the corpus, its chance dotted, its name under it."""
     logit = float(_ll_logit(line.threshold(beta)))
     x = float(_ll_at(logit))
-    ax.plot([x] * 2, [ACQ_CHANCE_Y, LL_CORPUS_Y + LL_CORPUS_H + 0.15], zorder=5, **style)
+    top = min(LL_CORPUS_Y + LL_CORPUS_H + 0.15, _ll_pile_floor() - OBJECT_GAP)
+    ax.plot([x] * 2, [ACQ_CHANCE_Y, top], zorder=5, **style)
     ax.plot([x], [ACQ_CHANCE_Y + _acq_chance(line, logit) * ACQ_CHANCE_H], marker="o", markersize=8,
             color=style.get("color", INK), zorder=6)  # fmt: skip
     ax.text(x, ACQ_CHANCE_Y - ACQ_NAME_DROP, name, ha="center", va="top", fontsize=16, color=INK)
@@ -5561,7 +5771,7 @@ def _acq_pick(ax: plt.Axes, corpus: np.ndarray, ask: float) -> tuple[float, floa
 
 
 def _acq_flow_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of Second Cut's figure."""
+    """Draw the first *stage* steps (1-based, cumulative) of A Cut Above's figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, LL_CANVAS[0])
@@ -5570,24 +5780,16 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
 
     corpus, line = _ll_data()
     model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
-    lo, hi = LL_LOGIT
-    right = LL_X0 + LL_W
     half = ACQ_CHANCE_Y + ACQ_CHANCE_H / 2
 
-    # ── stage 1: What to Expect's fit, asked the other thing it knows ─────────
+    # ── stage 1: Curvey & InDiscrete's fit, with the line at the middle radio ───────
     _ll_votes_row(ax, model, 2)
-    _ll_corpus_row(ax, corpus, line, model)
-    _range_line(ax, LL_X0, right, ACQ_CHANCE_Y, z=3)
-    _ll_row_name(ax, ACQ_CHANCE_Y + ACQ_CHANCE_H / 2, "Chance of\na match")
-    # Even odds as a hairline across the row, named at its end: where the curve
-    # crosses it is a coin toss.
-    ax.plot([LL_X0, right], [half] * 2, color=SOFT, linewidth=1.2, linestyle=(0, (2, 3)), zorder=2)
-    ax.text(right + LABEL_GAP, half, "½", ha="left", va="center", fontsize=16, color=INK)
-    xs = _ll_logit(line.unvoted_scores)
-    chance = np.asarray(line.unvoted_posteriors, dtype=float)
-    inside = (xs >= lo) & (xs <= hi)
-    ax.plot(_ll_at(xs[inside]), ACQ_CHANCE_Y + chance[inside] * ACQ_CHANCE_H, color=INK, linewidth=2.4, zorder=4)
-    _acq_cut(ax, line, LL_PICKED, "β 1", color=BLUE, linewidth=2.6)
+    _ll_corpus_row(ax, corpus, line, model, show_count=False)
+    _ll_chance_row(ax, line)
+    # The radios' lines by weight, as everywhere the three are drawn (owner,
+    # #4872); the picked one in the line's own blue.
+    weights = {beta: weight for (beta, _), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True)}
+    _acq_cut(ax, line, LL_PICKED, "β 1", color=BLUE, linewidth=weights[LL_PICKED])
 
     # ── stage 2: Autopilot asks where the chance falls to even odds ───────────
     # Drawn as a reading of the curve rather than as a second line: from the
@@ -5605,19 +5807,20 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
     if stage >= 3:
         for beta, name in FBETA_ARMS:
             if beta != LL_PICKED:
-                _acq_cut(ax, line, beta, f"β {name}", color=INK, linewidth=1.4, linestyle=(0, (4, 3)))
+                _acq_cut(ax, line, beta, f"β {name}", color=INK, linewidth=weights[beta])
 
     # ── stage 4: the answer goes back into the votes ─────────────────────────
     if stage >= 4:
+        # Into the votes' pile from below, an object gap short of its lowest mark.
         ax.annotate(
             "",
-            xy=(ask_x, LL_VOTES_Y + 0.05),
+            xy=(ask_x, _ll_pile_floor() - OBJECT_GAP),
             xytext=(pick[0] + ACQ_PICK_R * 0.7, pick[1] + ACQ_PICK_R * 0.7),
             arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.6, "connectionstyle": "arc3,rad=0.4"},
             zorder=6,
         )
         # Right of the arc's bulge and clear of β ¼'s line, which runs between
-        # the two, and above the matches' count so the two labels stack.
+        # the two.
         quarter_x = float(_ll_at(float(_ll_logit(line.threshold(FBETA_ARMS[0][0])))))
         ax.text(
             quarter_x + OBJECT_GAP,
@@ -5638,7 +5841,7 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
 #: Expect left it; the labels, carried across; the corpus Find is pointed at;
 #: the line the same labels draw there.
 TX_STAGES = 4
-#: The two columns, each a copy of What to Expect's votes and corpus rows on
+#: The two columns, each a copy of Just How You Like It's votes and corpus rows on
 #: its own copy of the score axis: (left edge, width). The gap between them is
 #: what the one arrow crosses.
 TX_TRAIN = (4.0, 6.3)
@@ -5656,7 +5859,7 @@ TX_BINS = 30
 
 @functools.lru_cache(maxsize=None)
 def _tx_find() -> tuple[np.ndarray, "LabelsLine"]:
-    """The Find corpus and the line `fit_labels_line` draws on it from What to Expect's votes."""
+    """The Find corpus and the line `fit_labels_line` draws on it from Just How You Like It's votes."""
     n, share, (pos_mu, pos_sd), (neg_mu, neg_sd), seed = TX_FIND_CORPUS
     rng = np.random.default_rng(seed)
     n_pos = int(round(n * share))
@@ -5673,15 +5876,15 @@ def transfer_fig() -> None:
 
     Find runs on a corpus nobody voted on. The model's scores there are new,
     the Train corpus and its line stay behind, and the one thing carried
-    across is the labels. What to Expect's own votes and `fit_labels_line`,
+    across is the labels. Just How You Like It's own votes and `fit_labels_line`,
     run on a second corpus: the same labels draw a different line there, and
     keep a different count, because the corpus is half the input.
     """
     final = _tx_stage(TX_STAGES)
     box = tight_box(final)
     for stage in range(1, TX_STAGES):
-        save(_tx_stage(stage), OUT, f"calib-transfer.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-transfer.png", column=FULL_BLEED, box=box)
+        save(_tx_stage(stage), OUT, f"calib-transfer.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-transfer.webp", column=FULL_BLEED, box=box)
 
 
 def _tx_at(column: tuple[float, float], logit: float | np.ndarray) -> np.ndarray:
@@ -5691,30 +5894,31 @@ def _tx_at(column: tuple[float, float], logit: float | np.ndarray) -> np.ndarray
 
 
 def _tx_votes(ax: plt.Axes, column: tuple[float, float]) -> None:
-    """The votes on half What to Expect's width: Goods in one row, Bads in the row under it.
+    """The votes on half Just How You Like It's width, piled as that slide piles them.
 
-    At half the width the eleven glyphs no longer fit one row without touching,
-    and two rows are also the clearer picture: which kind a vote is reads off
-    its row, not only off its colour.
+    At half the width the pile round the line stacks deeper, but it is the same
+    dot plot, so the room reads the same votes on both slides.
     """
     x0, w = column
     _range_line(ax, x0, x0 + w, TX_VOTES_Y, z=3)
-    for row, (scores, glyph, color) in enumerate(((LL_GOODS, "✓", GREEN), (LL_BADS, "✗", RED))):
-        for x in scores:
-            ax.text(
-                float(_tx_at(column, x)),
-                TX_VOTES_Y - 0.12 - row * TX_VOTE_ROW,
-                glyph,
-                ha="center",
-                va="top",
-                fontsize=18,
-                color=color,
-                fontweight="bold",
-            )
+    votes = [(g, True) for g in LL_GOODS] + [(b, False) for b in LL_BADS]
+    tiers = _vote_tiers([float(_tx_at(column, x)) for x, _ in votes], TX_GLYPH_W)
+    for (x, good), tier in zip(votes, tiers, strict=True):
+        ax.text(
+            float(_tx_at(column, x)),
+            TX_VOTES_Y - 0.12 - tier * TX_TIER_STEP,
+            "✓" if good else "✗",
+            ha="center",
+            va="top",
+            fontsize=18,
+            color=GREEN if good else RED,
+            fontweight="bold",
+        )
 
 
-#: The step from the Goods' row to the Bads' row, in canvas units.
-TX_VOTE_ROW = 0.62
+#: The votes' dot plot at 18pt: a glyph's width and a tier's step, in canvas units.
+TX_GLYPH_W = 0.43
+TX_TIER_STEP = 0.45
 
 
 def _tx_corpus(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, sy: float) -> None:
@@ -5764,7 +5968,7 @@ def _tx_stage(stage: int) -> plt.Figure:
     peak = max(np.histogram(c, bins=TX_BINS, range=LL_LOGIT)[0].max() for c in (train, find))
     sy = (TX_CORPUS_H - 0.9) / float(peak)
 
-    # ── stage 1: Train, as What to Expect left it ─────────────────────────────
+    # ── stage 1: Train, as Just How You Like It left it ─────────────────────────────
     for name, y in (("The votes", TX_VOTES_Y + 0.15), ("The corpus", TX_CORPUS_Y + 1.6)):
         ax.text(TX_TRAIN[0] - 0.35, y, name, ha="right", va="center", fontsize=16, color=INK)
     ax.text(
@@ -5804,6 +6008,826 @@ def _tx_stage(stage: int) -> plt.Figure:
     # ── stage 4: the line the same labels draw there ──────────────────────────
     if stage >= TX_STAGES:
         _tx_line(ax, TX_FIND, find, find_line)
+    return fig
+
+
+# ── Out Standing: the line before the labels can draw one (#4603, #4759) ────
+
+#: How many build stages Out Standing's figure reveals in: the corpus; the
+#: bulk's normal, the bar 4σ up, and what stands out past it; the top of the
+#: ranking, zoomed in, and its widest gap; the middle radio's line; the other
+#: two radios' lines, and which items really match.
+SO_STAGES = 5
+#: The planted corpus, in the score's own units: a bulk of non-matches and,
+#: far out, a handful of matches. The matches are where the two counts
+#: disagree on purpose: five clear the bar, but the widest gap in the top 11
+#: falls after three, and two matches sit inside the bulk's tail, where only
+#: the recall radio reaches. The seed is one whose tail leaves room between
+#: the 13th and 14th items for β 4's line (owner, #4872: the zoom keeps the
+#: score axis horizontal, so neighbours that close would print over it).
+SO_BULK = (4000, 240)
+SO_MATCHES = (7.2, 6.9, 6.6, 5.0, 4.6, 3.6, 3.3)
+#: The corpus row's score axis, and its bins.
+SO_AXIS = (-4.2, 7.6)
+SO_BINS = 47
+#: How many of the top of the ranking the zoom shows.
+SO_TOP = 15
+#: The rows, in canvas units: the corpus (baseline, height) and the zoom into
+#: the top of the ranking (baseline). Far enough apart for the zoom between them.
+SO_CORPUS_Y, SO_CORPUS_H = 6.95, 3.1
+SO_RANK_Y = 1.15
+#: The zoom from the corpus row's axis to the ranking row (owner, #4835: the
+#: second row is the top 15 spread out, not the first row's axis again): its
+#: fill, and the gap it leaves under the corpus's axis and over the ranking
+#: row's tallest ink. The zoom keeps the score axis horizontal, as the corpus
+#: row draws it (owner, #4872: a 4σ that is a width up top must not turn into
+#: a height below).
+SO_ZOOM_FILL = "#eef1f5"
+SO_ZOOM_GAP = 0.12
+#: A planted item's disc, in canvas units; the zoom stacks discs that would
+#: touch, one item a disc, so up still means "how many" as it does in the
+#: histogram above it.
+SO_DOT_R = 0.16
+SO_TIER_STEP = 2 * SO_DOT_R + 0.04
+#: The ranking row's heights over its baseline: the widest gap's band, the
+#: 4σ bar, and the radios' lines, each with its label over it.
+SO_BAND_H = 0.85
+SO_BAR_H = 1.45
+SO_LINE_H = 2.05
+#: The band that marks the widest gap: a wash, the deck's `NEUTRAL_FILL`.
+SO_BAND_FILL = NEUTRAL_FILL
+#: The bar's dash: the one dashed line on the slide, so the radios' solid
+#: lines (weighted, as everywhere the three radios are drawn) never read as it.
+SO_BAR_DASH = (0, (4, 3))
+
+
+@functools.lru_cache(maxsize=None)
+def _so_data() -> dict:
+    """The planted corpus and what the **shipped** rule makes of it.
+
+    `centroid_cut` is the line the Goods' centroid draws, and `head_count_cut`
+    draws the trained head's with it while the labels are thin (#4786), so the
+    counts and cuts below are the app's. Its two counts are read through the
+    same private helpers it calls, so the figure can draw each one.
+    """
+    from vtscore.detectors.centroid_head import _top_gap_count, centroid_cut  # noqa: PLC0415
+    from vtscore.training.thresholds import _count_estimate  # noqa: PLC0415
+
+    n, seed = SO_BULK
+    rng = np.random.default_rng(seed)
+    scores = np.concatenate([rng.normal(0.0, 1.0, n), np.array(SO_MATCHES)])
+    med = float(np.median(scores))
+    spread = 1.4826 * float(np.median(np.abs(scores - med)))
+    bar = med + 4.0 * spread
+    keeps = {beta: int(np.sum(scores >= centroid_cut(scores, beta=beta))) for beta, _ in FBETA_ARMS}
+    top = np.sort(scores)[::-1][:SO_TOP]
+    # The zoom's window: the top 15 and a disc's width either side, in scores.
+    pad = SO_DOT_R * 1.6 * float(top[0] - top[-1]) / LL_W
+    out = {
+        "scores": scores,
+        "top": top,
+        "window": (float(top[-1]) - pad, float(top[0]) + pad),
+        "med": med,
+        "spread": spread,
+        "bar": bar,
+        "above": int(np.sum(scores > bar)),
+        "counted": float(_count_estimate(scores)),
+        "drop": int(_top_gap_count(scores)),
+        "keeps": keeps,
+    }
+    # The notes and the labels say these; a re-plant that moves them must move both.
+    assert (out["above"], out["drop"], keeps[0.25], keeps[1.0], keeps[4.0]) == (5, 3, 3, 5, 13), out
+    return out
+
+
+def out_standing_fig() -> None:
+    """Out Standing: the line drawn by counting what stands out, before the labels can draw one.
+
+    Two rows, both on a horizontal score axis, best on the right as every axis
+    in the deck runs. The corpus: the bulk as a rootogram (each bar the square
+    root of its count, so a bar of one item still shows beside four hundred),
+    the normal its median and median absolute deviation imply, the bar 4σ up
+    from the median, and the items past it. Then the zoom into the top of the
+    same ranking, one disc an item, where the widest gap between neighbours in
+    the top 11 can be seen, and the three radios' lines: ``beta ** 0.708``
+    times the larger count, never fewer than the gap's. Schematic inputs, real
+    code (`centroid_cut`).
+    """
+    final = _so_stage(SO_STAGES)
+    box = tight_box(final)
+    for stage in range(1, SO_STAGES):
+        save(_so_stage(stage), OUT, f"calib-out-standing.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-out-standing.webp", column=FULL_BLEED, box=box)
+
+
+def _so_x(score: float | np.ndarray) -> np.ndarray:
+    """Canvas x for a score on the corpus row's axis."""
+    lo, hi = SO_AXIS
+    return LL_X0 + (np.asarray(score, dtype=float) - lo) / (hi - lo) * LL_W
+
+
+def _so_zx(d: dict, score: float | np.ndarray) -> np.ndarray:
+    """Canvas x for a score on the ranking row's axis: the zoom's window, spread over the row."""
+    lo, hi = d["window"]
+    return LL_X0 + (np.asarray(score, dtype=float) - lo) / (hi - lo) * LL_W
+
+
+def _so_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Out Standing's figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+    d = _so_data()
+    _so_corpus_row(ax, d, stage)
+    if stage >= 3:
+        _so_zoom(ax, d)
+        _so_rank_row(ax, d, stage)
+    return fig
+
+
+def _so_zoom(ax: plt.Axes, d: dict) -> None:
+    """The window the ranking row spreads out: the top 15's stretch of the corpus's axis.
+
+    A trapezoid from that narrow stretch of the corpus's axis down to the
+    ranking row's full width, so the second row reads as a zoom into the top of
+    the first and not as the same axis drawn again.
+    """
+    x_lo, x_hi = (float(_so_x(s)) for s in d["window"])
+    y_top = SO_CORPUS_Y - SO_ZOOM_GAP
+    # Over the ranking row's labels: each radio's "keeps" sits a type height
+    # over its line.
+    y_bottom = SO_RANK_Y + SO_LINE_H + LABEL_GAP + 0.45 + SO_ZOOM_GAP
+    corners = [(x_lo, y_top), (x_hi, y_top), (LL_X0 + LL_W, y_bottom), (LL_X0, y_bottom)]
+    ax.add_patch(Polygon(corners, closed=True, facecolor=SO_ZOOM_FILL, edgecolor="none", zorder=1))
+    for (x0, y0), (x1, y1) in ((corners[0], corners[3]), (corners[1], corners[2])):
+        ax.plot([x0, x1], [y0, y1], color=SOFT, linewidth=1.2, zorder=1)
+    # The window itself, on the axis: the stretch the second row spreads out.
+    ax.plot([x_lo, x_hi], [y_top] * 2, color=SOFT, linewidth=3.0, solid_capstyle="butt", zorder=1)
+
+
+def _so_corpus_row(ax: plt.Axes, d: dict, stage: int) -> None:
+    """Stages 1-2: the corpus, then its bulk's normal, the bar 4σ up, and what stands out past it.
+
+    A rootogram: every bar is the square root of its count, and so is the
+    normal over it. On a straight count the bulk's four hundred would leave a
+    bar of one item a hairline, and the items past the bar would have to be
+    drawn as something other than bars to be seen at all (owner, #4872).
+    """
+    lo, hi = SO_AXIS
+    scores = d["scores"]
+    counts, edges = np.histogram(scores, bins=SO_BINS, range=SO_AXIS)
+    roots = np.sqrt(counts.astype(float))
+    sy = SO_CORPUS_H / float(roots.max())
+    u_edges = (edges - lo) / (hi - lo)
+    bars = _staircase(LL_X0, SO_CORPUS_Y, LL_W, sy, u_edges, roots, 0, len(counts) - 1)
+    bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    ax.add_patch(bars)
+    for i in range(1, len(counts)):
+        top = SO_CORPUS_Y + float(min(roots[i - 1], roots[i])) * sy
+        if top > SO_CORPUS_Y:
+            ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [SO_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    _range_line(ax, LL_X0, LL_X0 + LL_W, SO_CORPUS_Y, z=5)
+    _ll_row_name(ax, SO_CORPUS_Y + 0.9, "The corpus")
+    if stage < 2:
+        return
+    # The bulk's normal: the median and 1.4826 x the median absolute deviation,
+    # which the few far-out items barely move, scaled to the corpus's count.
+    grid = np.linspace(lo, hi, 700)
+    bin_w = (hi - lo) / SO_BINS
+    dens = (
+        scores.size
+        * bin_w
+        * np.exp(-0.5 * ((grid - d["med"]) / d["spread"]) ** 2)
+        / (d["spread"] * math.sqrt(2 * math.pi))
+    )
+    root = np.sqrt(dens) * sy
+    seen = root > TAIL_FLOOR + 0.06
+    ax.plot(_so_x(grid[seen]), SO_CORPUS_Y + root[seen] - HUMP_DROP, color=SOFT, linewidth=HUMP_LW, zorder=4)
+    # 4σ is a width, so it is drawn as one: a dimension from the median, over
+    # the bulk's peak, to the bar.
+    med_x, bar_x = float(_so_x(d["med"])), float(_so_x(d["bar"]))
+    dim_y = SO_CORPUS_Y + float(root.max()) + OBJECT_GAP
+    ax.plot([med_x] * 2, [SO_CORPUS_Y + float(root.max()) + LABEL_GAP, dim_y + 0.15], color=SOFT, linewidth=1.2,
+            zorder=3)  # fmt: skip
+    ax.plot([bar_x] * 2, [SO_CORPUS_Y, dim_y + 0.15], color=INK, linewidth=1.6, linestyle=SO_BAR_DASH, zorder=3)
+    ax.annotate("", xy=(bar_x, dim_y), xytext=(med_x, dim_y),
+                arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.6, "shrinkA": 0, "shrinkB": 0},
+                zorder=6)  # fmt: skip
+    ax.text((med_x + bar_x) / 2, dim_y + LABEL_GAP, "4σ", ha="center", va="bottom", fontsize=18, color=INK)
+    far = scores[scores > d["bar"]]
+    one = SO_CORPUS_Y + sy  # a bar of one item
+    ax.text(
+        float(_so_x(float(far.mean()))),
+        one + OBJECT_GAP,
+        f"{d['above']} stand out",
+        ha="center",
+        va="bottom",
+        fontsize=16,
+        color=INK,
+    )
+
+
+def _so_rank_row(ax: plt.Axes, d: dict, stage: int) -> None:
+    """Stages 3-5: the top of the ranking zoomed in, its widest gap, then the radios' lines."""
+    top = d["top"]
+    right = LL_X0 + LL_W
+    _range_line(ax, LL_X0, right, SO_RANK_Y, z=5)
+    _ll_row_name(ax, SO_RANK_Y + 0.9, f"The top {SO_TOP}")
+    xs = [float(_so_zx(d, float(s))) for s in top]
+    tiers = _vote_tiers(xs, 2 * SO_DOT_R + 0.04)
+    matches = set(SO_MATCHES)
+    for x, tier, s in zip(xs, tiers, top, strict=True):
+        good = stage >= 5 and float(s) in matches
+        ax.add_patch(
+            Circle((x, SO_RANK_Y + 0.04 + SO_DOT_R + tier * SO_TIER_STEP), SO_DOT_R,
+                   facecolor=GREEN if good else UNLABELED_FILL, edgecolor=INK, linewidth=1.4, zorder=6)
+        )  # fmt: skip
+    # The widest gap between neighbours in the top 11, as the stretch of the
+    # axis it spans: a width, read along the same axis as everything else.
+    k = d["drop"]
+    gap_lo, gap_hi = xs[k] + SO_DOT_R + 0.06, xs[k - 1] - SO_DOT_R - 0.06
+    ax.add_patch(Rectangle((gap_lo, SO_RANK_Y), gap_hi - gap_lo, SO_BAND_H, facecolor=SO_BAND_FILL,
+                           edgecolor="none", zorder=2))  # fmt: skip
+    ax.text((gap_lo + gap_hi) / 2, SO_RANK_Y + SO_BAND_H + LABEL_GAP, "widest gap\nin the top 11", ha="center",
+            va="bottom", fontsize=16, color=INK, linespacing=1.15)  # fmt: skip
+    # The bar again, at the same score: the five right of it are the five that stand out.
+    bar_x = float(_so_zx(d, d["bar"]))
+    ax.plot([bar_x] * 2, [SO_RANK_Y, SO_RANK_Y + SO_BAR_H], color=INK, linewidth=1.6, linestyle=SO_BAR_DASH, zorder=3)
+    ax.text(bar_x, SO_RANK_Y + SO_BAR_H + LABEL_GAP, "4σ", ha="center", va="bottom", fontsize=18, color=INK)
+    if stage < 4:
+        return
+    # The radios' lines: solid and black, told apart by weight as everywhere
+    # the three radios are drawn (`BALANCE_WEIGHTS`). Each stands an object
+    # gap left of the last item it keeps, so everything right of it is kept.
+    for (beta, name), weight, reveal in zip(FBETA_ARMS, BALANCE_WEIGHTS, (5, 4, 5), strict=True):
+        if stage < reveal:
+            continue
+        kept = d["keeps"][beta]
+        # Never past the gap's middle, where neighbours crowd (β 4's).
+        x = max((xs[kept - 1] + xs[kept]) / 2, xs[kept - 1] - SO_DOT_R - LABEL_GAP - 0.12)
+        line_top = SO_RANK_Y + SO_LINE_H
+        ax.plot([x] * 2, [SO_RANK_Y, line_top], color=INK, linewidth=weight, solid_capstyle="butt", zorder=5)
+        ax.text(x, SO_RANK_Y - 0.2, f"β {name}", ha="center", va="top", fontsize=16, color=INK)
+        ax.text(x, line_top + LABEL_GAP, f"keeps {kept}", ha="center", va="bottom", fontsize=16, color=INK)
+
+
+# ── Head Count: which line, for every count of Goods and Bads ──────────
+
+#: How many build stages the map reveals in: no Goods, and the Goods' average
+#: below the quota; the quota, and the trained head with the outlier cut; the
+#: labels line, with the Goods where the split decides; a text query's hold.
+#: That last page lightens the cells the hold covers instead of adding ink
+#: over them: a deliberate exception to STYLE.md's no-restyle build rule.
+#: Until page 4 each of those cells is the colour of the line the head draws
+#: there, which stays true; page 4 says the room sees the query's set instead (owner,
+#: 2026-10-13: lighter, not hatched, since the colour's model is computed and
+#: the query's set is what is returned).
+LAND_STAGES = 4
+#: The counts the map spans: Bads 0..LAND_B, Goods 0..LAND_G, one cell each.
+#: Tall enough (owner, 2026-10-13) for the text query's hold to close: its
+#: staircase meets the quota's edge, with the trained head's lines standing
+#: unlightened above it. No taller (owner, #4872: 28, not 32), so a row is
+#: tall enough to name the no-Goods one inside it.
+LAND_B, LAND_G = 50, 28
+#: Where the trained head's regions are named, in Bads: right of the text
+#: query's staircase at every Goods row the names sit on.
+LAND_NAME_B = 40.5
+#: The plot's box, in canvas units: left, bottom, right, top. Its left edge
+#: stands right of the title notch, so the Goods axis can run to the top.
+LAND_BOX = (10.0, 1.55, 19.9, 10.9)
+#: Each strategy's fill, white for "no Goods" and hues clear of the deck's
+#: three for the rest: red and green are Bad and Good, blue is the line itself.
+#: The two rules that cut at the outliers are warm and kin, yellow for the
+#: Goods' average and orange for the trained head; the labels line is purple.
+#: Picked as fills in OKLCH (yellow L 0.90, orange L 0.74, purple L 0.70) so
+#: lightness separates them as well as hue, and validated as fills, not as the
+#: hues they were lifted from (tinting a passing set pulled its pairs under the
+#: floors): `validate_palette.js --mode light --pairs all` gives worst CVD
+#: ΔE 15.6 and normal-vision 19.4, black text 6.9:1 or better on each. Its
+#: lightness band fails the yellow (L 0.90), a check for thin marks on the
+#: surface; here every region is named and ruled, the yellow's edge with the
+#: white row included.
+LAND_FILL = {
+    "none": "#ffffff",
+    "centroid": "#f9dd73",
+    "count": "#f58b4b",
+    "labels": "#ad80dd",
+}
+#: How far toward white, in OKLab, a cell under the text query's hold is
+#: lightened on the last page: half way, the colour's model under the query's
+#: set (owner, 2026-10-13).
+LAND_HOLD_WHITE = 0.5
+#: The no-Goods row's name: it sits inside a row one count tall, so it is the
+#: smallest type the 20px floor allows rather than the map's 16pt.
+LAND_ROW_FONT = 13
+
+
+def _oklab(hex_color: str) -> np.ndarray:
+    """*hex_color* in OKLab, where a straight line between two colours stays a clean blend."""
+    rgb = np.array(matplotlib.colors.to_rgb(hex_color))
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    lms = np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566],
+                    [0.0883024619, 0.2817188376, 0.6299787005]]) @ lin  # fmt: skip
+    lms = np.cbrt(lms)
+    return np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099],
+                     [0.0259040371, 0.7827717662, -0.8086757660]]) @ lms  # fmt: skip
+
+
+def _from_oklab(lab: np.ndarray) -> str:
+    """An OKLab colour as hex, clipped to the sRGB gamut."""
+    lms = np.array([[1.0, 0.3963377774, 0.2158037573], [1.0, -0.1055613458, -0.0638541728],
+                    [1.0, -0.0894841775, -1.2914855480]]) @ lab  # fmt: skip
+    lms = lms**3
+    lin = np.array([[4.0767416621, -3.3077115913, 0.2309699292], [-1.2684380046, 2.6097574011, -0.3413193965],
+                    [-0.0041960863, -0.7034186147, 1.7076147010]]) @ lms  # fmt: skip
+    rgb = np.where(lin <= 0.0031308, 12.92 * lin, 1.055 * np.clip(lin, 0, None) ** (1 / 2.4) - 0.055)
+    return matplotlib.colors.to_hex(np.clip(rgb, 0.0, 1.0))
+
+
+def _toward_white(lab: np.ndarray, t: float) -> np.ndarray:
+    return lab + (_oklab("#ffffff") - lab) * t
+
+
+def _lightened(hex_color: str) -> str:
+    """*hex_color* under the text query's hold: `LAND_HOLD_WHITE` of the way to white, in OKLab, so the hue holds."""
+    return _from_oklab(_toward_white(_oklab(hex_color), LAND_HOLD_WHITE))
+
+
+def _land_p_labels(n_good: int, n_bad: int, split: float) -> float:
+    """1 where a trained head's line is the labels line at these counts, else 0.
+
+    The calibration folds' arithmetic (`_split_train_counts`): each of the
+    `DEFAULT_CALIBRATE_COUNT` folds holds out the Goods' nearest whole share,
+    and the labels line stands once they hold out `HEAD_COUNT_GOODS` between
+    them (`head_count_serves`). With too few votes to split, the class model
+    reads the head's own scores of every Good.
+    """
+    from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
+    from vtscore.training.thresholds.conformal import _split_train_counts  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
+
+    n = n_good + n_bad
+    if n < 4 or n_good < 2 or n_bad < 2:
+        return 1.0 if n_good >= HEAD_COUNT_GOODS else 0.0
+    sizes = _split_train_counts(n, n_good, n_bad, split, None)
+    if sizes is None:
+        return 0.0
+    held = n_good - sizes[0]
+    return 1.0 if DEFAULT_CALIBRATE_COUNT * held >= HEAD_COUNT_GOODS else 0.0
+
+
+def _land_edge() -> int:
+    """The Goods from which a trained head draws the labels line.
+
+    The folds' split is a fixed function of the Goods (`nearest_holdout`,
+    #4864), so the edge is one count for every count of Bads: below it no
+    trained cell draws the labels line, from it every one does. Before #4864 a
+    coin decided a band of rows, and the map striped them.
+    """
+    grid = _land_grid()
+    trained = grid["kind"] == "trained"
+    every = [g for g in range(LAND_G + 1) if trained[g].any() and (grid["p"][g, trained[g]] >= 1.0).all()]
+    edge = min(every)
+    assert all((grid["p"][g, trained[g]] == 0.0).all() for g in range(edge)), "a row below the edge draws both lines"
+    return edge
+
+
+@functools.lru_cache(maxsize=None)
+def _land_grid() -> dict:
+    """Every cell's strategy on a single-vector space (the Binary path), from the shipped tiers and constants."""
+    from vtscore.detectors.label_quota import TIER_TRAINED, label_quota, query_holds  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import PRODUCTION_SPLIT_BY_SPACE  # noqa: PLC0415
+
+    kind = np.empty((LAND_G + 1, LAND_B + 1), dtype=object)
+    p_labels = np.zeros((LAND_G + 1, LAND_B + 1))
+    held = np.zeros((LAND_G + 1, LAND_B + 1), dtype=bool)
+    for g in range(LAND_G + 1):
+        for b in range(LAND_B + 1):
+            tier = label_quota(g, b).tier
+            # Under the quota a text query holds at every count (`_query_tier`):
+            # the hold's staircase bounds it only inside the trained head's region.
+            held[g, b] = g == 0 or tier != TIER_TRAINED or query_holds(g, b, patch_space=False)
+            if g == 0:
+                kind[g, b] = "none"
+            elif tier != TIER_TRAINED:
+                kind[g, b] = "centroid"
+            else:
+                p_labels[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["single_vector"])
+                kind[g, b] = "trained"
+    return {"kind": kind, "p": p_labels, "held": held}
+
+
+def lay_of_the_land_fig() -> None:
+    """Head Count: which line the app draws, for every count of Goods (up) and Bads (across).
+
+    One cell per pair of counts, on a single-vector space (the Binary path,
+    and faces). Below the quota the Goods' average; past it the trained head,
+    cutting at the outliers until its folds hold out six Goods, then the
+    labels line, from one count of Goods on (`_land_edge`). The last page
+    lightens the cells where a text query keeps its own set (`_lightened`).
+    Binary only: the room meets region voting, whose folds split another way,
+    sections later, so the slide never names it. Every boundary is computed
+    from the shipped functions and constants (`label_quota`, `query_holds`,
+    `_split_train_counts`, `PRODUCTION_SPLIT_BY_SPACE`, `HEAD_COUNT_GOODS`).
+    """
+    final = _land_stage(LAND_STAGES)
+    box = tight_box(final)
+    for stage in range(1, LAND_STAGES):
+        save(_land_stage(stage), OUT, f"calib-lay-of-the-land.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-lay-of-the-land.webp", column=FULL_BLEED, box=box)
+
+
+def _land_cell(b: float, g: float) -> tuple[float, float, float, float]:
+    """``(x, y, w, h)`` of the cell for *b* Bads and *g* Goods."""
+    x0, y0, x1, y1 = LAND_BOX
+    w, h = (x1 - x0) / (LAND_B + 1), (y1 - y0) / (LAND_G + 1)
+    return x0 + b * w, y0 + g * h, w, h
+
+
+def _land_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the map."""
+    from vtscore.detectors.label_quota import BAD_QUOTA  # noqa: PLC0415
+
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+    _land_cells(ax, stage)
+    _map_table(ax, LAND_TABLE, stage)
+    _land_axes(ax)
+    # The no-Goods row's edge, ruled: the yellow beside it is pale enough that
+    # the edge should not rest on colour alone.
+    x0, y0, x1, _ = LAND_BOX
+    ch = _land_cell(0, 0)[3]
+    ax.plot([x0, x1], [y0 + ch] * 2, color=INK, linewidth=1.2, zorder=4)
+    # Every region's name sits where no later page draws over it: the trained
+    # head's three to the right of the text query's staircase. Each names the
+    # region in the axes' own counts, never what it returns: that is the key's.
+    # The Goods' average is a column the quota's Bads wide and the map's full
+    # height, so its name reads up it. The no-Goods row is named inside it,
+    # at the smallest type the floor allows (owner, #4872: unnamed, it read as
+    # part of the axis).
+    _land_name(ax, BAD_QUOTA / 2, (LAND_G + 2) / 2, "under the quota", rotation=90)
+    _land_name(ax, LAND_NAME_B, 0.5, "0 Goods", fontsize=LAND_ROW_FONT)
+    if stage >= 2:
+        _land_quota(ax)
+    if stage >= 3:
+        _land_labels(ax)
+    if stage >= 4:
+        _land_query(ax)
+    return fig
+
+
+def _land_cells(ax: plt.Axes, stage: int) -> None:
+    """One cell per pair of counts, filled by its strategy.
+
+    The trained head's outlier cut below the edge, from page 2; the labels
+    line from the edge up, from page 3. A page only adds cells until the last,
+    which lightens the cells under the text query's hold (`LAND_STAGES`): the
+    same cells in the same hues, half way to white.
+    """
+    grid = _land_grid()
+    edge = _land_edge()
+    held = grid["held"] if stage >= LAND_STAGES else np.zeros_like(grid["held"])
+    for g in range(LAND_G + 1):
+        for b in range(LAND_B + 1):
+            k = grid["kind"][g, b]
+            if k == "trained":
+                if stage < (2 if g < edge else 3):
+                    continue
+                fill = LAND_FILL["count" if g < edge else "labels"]
+            else:
+                fill = LAND_FILL[k]
+            if held[g, b]:
+                fill = _lightened(fill)
+            # Edgeless, each cell edged in its own fill so no seam shows: only
+            # the black edges between decisions are drawn.
+            ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
+                                   linewidth=0.3, zorder=1))  # fmt: skip
+
+
+#: The maps' key: a table of what each colour does, its Sort and its Cut
+#: (owner, 2026-10-13: what we do is as important as where), in the column left
+#: of the plot and under the title notch. The map's own names say where each
+#: applies. Rows keep their slots across a build and appear on the page their
+#: colour does: (stage it appears on, fill key, sort, cut).
+MAP_TABLE_X = {"swatch": 0.3, "sort": 1.65, "cut": 5.35, "end": 8.75}
+MAP_TABLE_HEAD, MAP_TABLE_STEP, MAP_TABLE_SWATCH = 7.6, 0.85, 0.5
+LAND_TABLE = (
+    (1, "none", "Text query", "Outlier cut"),
+    (1, "centroid", "Goods' average", "Outlier cut"),
+    (2, "count", "Trained head", "Outlier cut"),
+    # No row for the band the folds' split decides: a mix of orange and
+    # purple returns one or the other, which their own rows already say
+    # (owner, 2026-10-13). None for the text query's hold either: the map's
+    # own name says where the lightened cells are, and the white row says
+    # what they return.
+    (3, "labels", "Trained head", "Fβ peak"),
+)
+
+
+def _map_table(ax: plt.Axes, rows: tuple, stage: int) -> None:
+    """The key as a table: a swatch, then what the colour sorts by and where it cuts.
+
+    White swatches are outlined so they show. A two-line row takes half a
+    row more, and every row keeps its place on every page.
+    """
+    xs = MAP_TABLE_X
+    head = MAP_TABLE_HEAD
+    for col, text in (("sort", "Sort"), ("cut", "Cut")):
+        ax.text(xs[col], head, text, ha="left", va="center", fontsize=16, fontweight="bold", color=INK)
+    ax.plot([xs["swatch"], xs["end"]], [head - 0.38] * 2, color=INK, linewidth=1.0, zorder=3)
+    half = MAP_TABLE_SWATCH / 2
+    heights = [1.5 if "\n" in sort + cut else 1.0 for _, _, sort, cut in rows]
+    for slot, (first, key, sort, cut) in enumerate(rows):
+        if stage < first:
+            continue
+        y = head - MAP_TABLE_STEP * (0.5 + sum(heights[:slot]) + heights[slot] / 2)
+        ax.add_patch(Rectangle((xs["swatch"], y - half), MAP_TABLE_SWATCH, MAP_TABLE_SWATCH,
+                               facecolor=LAND_FILL[key], edgecolor=INK, linewidth=1.0, zorder=3))  # fmt: skip
+        ax.text(xs["sort"], y, sort, ha="left", va="center", fontsize=16, color=INK)
+        ax.text(xs["cut"], y, cut, ha="left", va="center", fontsize=16, color=INK)
+
+
+def _map_axes(ax: plt.Axes, cell, bads: range, goods: range, title: str) -> None:
+    """A map's frame: evenly ticked counts at the cells' centres, plain axis names, and the chart's label.
+
+    The label over the map says what the colours are (the Sort/Cut each count
+    returns) and whose counts the regions are, and the axes themselves just
+    say Goods and Bads (owner, 2026-10-13). The decisions' values are where the
+    black edges are, so no tick is spent on them. *cell* is the map's
+    ``(b, g) -> (x, y, w, h)``.
+    """
+    x0, y0, x1, y1 = LAND_BOX
+    _, _, cw, ch = cell(bads[0], goods[0])
+    ax.plot([x0, x1], [y0, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
+    ax.plot([x0, x0], [y0, y1], color=INK, linewidth=BASELINE_LW, zorder=3)
+    for b in bads:
+        x = cell(b, goods[0])[0] + cw / 2
+        ax.plot([x, x], [y0 - 0.1, y0], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(x, y0 - 0.18, str(b), ha="center", va="top", fontsize=16, color=INK)
+    ax.text((x0 + x1) / 2, y0 - 0.75, "Bads", ha="center", va="top", fontsize=16, color=INK)
+    for g in goods:
+        y = cell(bads[0], g)[1] + ch / 2
+        ax.plot([x0 - 0.1, x0], [y, y], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(x0 - 0.18, y, str(g), ha="right", va="center", fontsize=16, color=INK)
+    # Named at the top of its axis, over the tick numbers, so the column left
+    # of the plot belongs to the key.
+    ax.text(x0 - 0.18, y1 + LABEL_GAP, "Goods", ha="right", va="bottom", fontsize=16, color=INK)
+    ax.text((x0 + x1) / 2, y1 + LABEL_GAP, title, ha="center", va="bottom", fontsize=18, fontweight="bold",
+            color=INK)  # fmt: skip
+
+
+def _land_axes(ax: plt.Axes) -> None:
+    """Head Count's frame: every ten Bads, every four Goods, as what each count returns."""
+    _map_axes(ax, _land_cell, range(0, LAND_B + 1, 10), range(0, LAND_G + 1, 4), "Sort/Cut per Label Counts")
+
+
+def _land_name(
+    ax: plt.Axes,
+    b: float,
+    g: float,
+    text: str,
+    plate: str | None = None,
+    rotation: float = 0.0,
+    fontsize: float = 16,
+) -> None:
+    """A region's name, centred at *b* Bads and *g* Goods, on a *plate* of its region's fill when the name may cross a row of another."""
+    x0, y0, _, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    box = None if plate is None else {"facecolor": plate, "edgecolor": "none", "pad": 2}
+    ax.text(x0 + b * cw, y0 + g * ch, text, ha="center", va="center", fontsize=fontsize, color=INK, zorder=6,
+            bbox=box, rotation=rotation)  # fmt: skip
+
+
+def _land_quota(ax: plt.Axes) -> None:
+    """Page 2: the quota's edge, 3 Goods and 4 Bads or a Good and 16 Bads, and the trained head past it."""
+    from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA, GOOD_QUOTA  # noqa: PLC0415
+
+    x0, y0, _, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    edge = [(BAD_QUOTA, LAND_G + 1), (BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, GOOD_QUOTA), (DRY_BAD_QUOTA, 1)]
+    # Over the names' plates (zorder 6), which would otherwise hide the edge
+    # where a name sits against it; the staircase likewise.
+    ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=7)
+    edge = _land_edge()
+    _land_name(ax, LAND_NAME_B, (1 + edge) / 2, f"< {edge} Goods")
+
+
+def _land_labels(ax: plt.Axes) -> None:
+    """Page 3: the labels line from the edge up, and the edge itself, ruled as a decision.
+
+    The rule runs across the trained head's cells only, from where its row
+    leaves the quota to the map's right edge.
+    """
+    edge = _land_edge()
+    grid = _land_grid()
+    first_b = min(b for b in range(LAND_B + 1) if grid["kind"][edge, b] == "trained")
+    x0, y0, x1, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    ax.plot([x0 + first_b * cw, x1], [y0 + edge * ch] * 2, color=INK, linewidth=2.0, zorder=7)
+    _land_name(ax, LAND_NAME_B, (edge + LAND_G + 1) / 2, f"≥ {edge} Goods")
+
+
+def _land_query(ax: plt.Axes) -> None:
+    """Page 4: the staircase that bounds the text query's hold inside the trained head's region, and its name.
+
+    Past the quota, on a single-vector space, a text query keeps its own set
+    until its labels number `QUERY_HOLD_LABELS`: the head's line is not what
+    such a detector shows there, so `_land_cells` lightens those cells on
+    this page. The staircase runs from the no-Goods row's edge up to the
+    quota's edge, where the quota's own line takes over: under the quota the
+    query holds at every count, so the Goods' average is lightened to the
+    top of the map.
+    """
+    from vtscore.detectors.label_quota import BAD_QUOTA, QUERY_HOLD_LABELS  # noqa: PLC0415
+
+    assert LAND_G >= QUERY_HOLD_LABELS - BAD_QUOTA, "the map must be tall enough for the hold to close"
+    x0, y0, _, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    xs: list[float] = []
+    ys: list[float] = []
+    for g in range(1, QUERY_HOLD_LABELS - BAD_QUOTA):
+        b = QUERY_HOLD_LABELS - g
+        xs += [x0 + b * cw, x0 + b * cw]
+        ys += [y0 + g * ch, y0 + (g + 1) * ch]
+    xs.append(x0 + BAD_QUOTA * cw)
+    ys.append(y0 + (QUERY_HOLD_LABELS - BAD_QUOTA) * ch)
+    ax.plot(xs, ys, color=INK, linewidth=2.0, zorder=7)
+    _land_name(ax, 13.5, 5.0, f"< {QUERY_HOLD_LABELS} labels,\nwith a query", plate=_lightened(LAND_FILL["count"]))
+
+
+# ── Weak Spot: Autopilot checks by itself when the labels separate weakly (#4496) ──
+
+#: How many build stages Weak Spot reveals in: two sessions' class models and
+#: their separation; that separation on one axis, with the bar it is held to;
+#: one weak session's votes, and where Autopilot spends some of them checking.
+WS_STAGES = 3
+#: Two sessions' held-out votes, in logit units: (Goods, Bads). The first's
+#: overlap, as a session's do when the target is hard or the first Goods were
+#: its easiest; the second separates well. Weak first, so the panels stand in
+#: the order their dots do on the separation axis under them.
+WS_SESSIONS = (
+    ((-0.2, 0.4, 0.9, 1.3, 1.8, 2.4), (-1.4, -0.8, -0.3, 0.2, 0.7, 1.2)),
+    ((1.0, 1.4, 1.8, 2.2, 2.6, 3.0), (-2.0, -1.6, -1.2, -0.8, -0.3, 0.4)),
+)
+#: Each panel's (left, right) in canvas units, and the logit range it spans.
+WS_PANELS = ((4.0, 10.9), (12.2, 19.1))
+WS_LOGIT = (-2.6, 3.6)
+#: Rows, in canvas units: the panels (baseline, curve height), the separation
+#: axis, the session's votes.
+WS_PANEL_Y, WS_PANEL_H = 6.55, 1.55
+WS_AXIS_Y = 3.55
+WS_TIME_Y = 0.95
+#: The separation axis's range.
+WS_D_MAX = 4.0
+#: One weak session, in votes: where the opening ends (the median session's
+#: first learned step, #4496), and each check's (start, length). A check runs
+#: about twenty picks; the second starts the shipped cooldown after the first
+#: ends, because the labels still separate weakly then.
+WS_SESSION_VOTES = 150
+WS_OPENING_END = 45
+WS_CHECK_LEN = 20
+
+
+def weak_spot_fig() -> None:
+    """Weak Spot: the labels' separation, the bar it is held to, and the checks Autopilot runs below it.
+
+    The separation is d' = (Good mean − Bad mean) / spread of the class model
+    the held-out votes imply, computed by the shipped `class_score_model`; the
+    bar, the first vote a check may come at and the cooldown between checks
+    are `WEAK_SEPARATION_D`, `WEAK_CHECK_MIN_VOTES` and `WEAK_CHECK_COOLDOWN`.
+    The session row is a schematic of one weak session drawn on those
+    constants, not a measured one.
+    """
+    final = _ws_stage(WS_STAGES)
+    box = tight_box(final)
+    for stage in range(1, WS_STAGES):
+        save(_ws_stage(stage), OUT, f"calib-weak-spot.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-weak-spot.webp", column=FULL_BLEED, box=box)
+
+
+@functools.lru_cache(maxsize=None)
+def _ws_models() -> tuple["ClassScoreModel", ...]:
+    """Each session's class model, from the shipped estimator; the first must separate weakly and the second must not."""
+    from vtscore.training.thresholds.labels_line import WEAK_SEPARATION_D, class_score_model  # noqa: PLC0415
+
+    models = []
+    for goods, bads in WS_SESSIONS:
+        model = class_score_model([(_ll_sigmoid(np.array(goods + bads)), [1.0] * len(goods) + [0.0] * len(bads))])
+        assert model is not None
+        models.append(model)
+    d = [(m.mu_pos - m.mu_neg) / m.sigma for m in models]
+    assert d[0] < WEAK_SEPARATION_D < d[1], d
+    return tuple(models)
+
+
+def _ws_panel(ax: plt.Axes, i: int) -> None:
+    """One session: its held-out votes, the two normals they imply, and how many spreads apart those sit."""
+    (x0, x1), (goods, bads), model = WS_PANELS[i], WS_SESSIONS[i], _ws_models()[i]
+    lo, hi = WS_LOGIT
+
+    def at(v: float | np.ndarray) -> np.ndarray:
+        return x0 + (np.asarray(v, dtype=float) - lo) / (hi - lo) * (x1 - x0)
+
+    _range_line(ax, x0, x1, WS_PANEL_Y, z=3)
+    for row, (votes, glyph, color) in enumerate(((goods, "✓", GREEN), (bads, "✗", RED))):
+        for v in votes:
+            ax.text(float(at(v)), WS_PANEL_Y - 0.12 - row * 0.5, glyph, ha="center", va="top", fontsize=18,
+                    color=color, fontweight="bold")  # fmt: skip
+    grid = np.linspace(lo, hi, 500)
+    for mu, color in ((model.mu_neg, RED), (model.mu_pos, GREEN)):
+        curve = np.exp(-0.5 * ((grid - mu) / model.sigma) ** 2)
+        seen = curve > 0.012
+        ax.plot(at(grid[seen]), WS_PANEL_Y + curve[seen] * WS_PANEL_H, color=color, linewidth=HUMP_LW, zorder=4)
+    # The two means, joined at the curves' crowns: the distance the ratio reads.
+    crown = WS_PANEL_Y + WS_PANEL_H + 0.22
+    xa, xb = float(at(model.mu_neg)), float(at(model.mu_pos))
+    ax.annotate("", xy=(xb, crown), xytext=(xa, crown),
+                arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.6}, zorder=6)  # fmt: skip
+    d = (model.mu_pos - model.mu_neg) / model.sigma
+    ax.text((xa + xb) / 2, crown + LABEL_GAP, f"d′ = {d:.1f} spreads", ha="center", va="bottom", fontsize=16,
+            color=INK)  # fmt: skip
+
+
+def _ws_axis_row(ax: plt.Axes) -> None:
+    """Stage 2: separation on one axis, the bar at 1.5, and the two sessions on it."""
+    from vtscore.training.thresholds.labels_line import WEAK_SEPARATION_D  # noqa: PLC0415
+
+    x0, x1 = WS_PANELS[0][0], WS_PANELS[1][1]
+
+    def at(d: float) -> float:
+        return x0 + d / WS_D_MAX * (x1 - x0)
+
+    bar = at(WEAK_SEPARATION_D)
+    ax.add_patch(Rectangle((x0, WS_AXIS_Y), bar - x0, 0.9, facecolor=NEUTRAL_FILL, edgecolor="none", zorder=1))
+    ax.text((x0 + bar) / 2, WS_AXIS_Y + 0.45, "weak", ha="center", va="center", fontsize=16, color=INK, zorder=2)
+    _range_line(ax, x0, x1, WS_AXIS_Y, z=3)
+    for d in range(int(WS_D_MAX) + 1):
+        ax.plot([at(d)] * 2, [WS_AXIS_Y - 0.1, WS_AXIS_Y], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(at(d), WS_AXIS_Y - 0.2, str(d), ha="center", va="top", fontsize=16, color=INK)
+    ax.plot([bar] * 2, [WS_AXIS_Y, WS_AXIS_Y + 1.15], color=INK, linewidth=1.6, linestyle=(0, (4, 3)), zorder=3)
+    ax.text(bar, WS_AXIS_Y + 1.15 + LABEL_GAP, f"{WEAK_SEPARATION_D:g}", ha="center", va="bottom", fontsize=16,
+            color=INK)  # fmt: skip
+    _ll_row_name(ax, WS_AXIS_Y + 0.45, "Separation, d′")
+    for model in _ws_models():
+        d = (model.mu_pos - model.mu_neg) / model.sigma
+        ax.plot([at(d)], [WS_AXIS_Y + 0.45], marker="o", markersize=11, color=INK, zorder=5)
+
+
+def _ws_session_row(ax: plt.Axes) -> None:
+    """Stage 3: one weak session's votes, with the checks Autopilot runs and the cooldown between them."""
+    from vtscore.training.thresholds.labels_line import WEAK_CHECK_COOLDOWN, WEAK_CHECK_MIN_VOTES  # noqa: PLC0415
+
+    x0, x1 = WS_PANELS[0][0], WS_PANELS[1][1]
+
+    def at(v: float) -> float:
+        return x0 + v / WS_SESSION_VOTES * (x1 - x0)
+
+    h = 0.75
+    _range_line(ax, x0, x1, WS_TIME_Y, z=3)
+    _ll_row_name(ax, WS_TIME_Y + h / 2, "A weak session")
+    for v in (0, 50, 100, 150):
+        ax.plot([at(v)] * 2, [WS_TIME_Y - 0.1, WS_TIME_Y], color=INK, linewidth=BASELINE_LW, zorder=3)
+        ax.text(at(v), WS_TIME_Y - 0.2, f"vote {v}" if v else "0", ha="center", va="top", fontsize=16, color=INK)
+    # The opening: no detector yet, so no separation to read.
+    ax.add_patch(Rectangle((at(0), WS_TIME_Y), at(WS_OPENING_END) - at(0), h, facecolor=NEUTRAL_FILL,
+                           edgecolor=INK, linewidth=1.2, zorder=2))  # fmt: skip
+    ax.text((at(0) + at(WS_OPENING_END)) / 2, WS_TIME_Y + h / 2, "opening", ha="center", va="center", fontsize=16,
+            color=INK, zorder=3)  # fmt: skip
+    first = max(WS_OPENING_END, WEAK_CHECK_MIN_VOTES)
+    second = first + WS_CHECK_LEN + WEAK_CHECK_COOLDOWN
+    for start in (first, second):
+        ax.add_patch(Rectangle((at(start), WS_TIME_Y), at(start + WS_CHECK_LEN) - at(start), h, facecolor="white",
+                               edgecolor=BLUE, linewidth=2.2, zorder=2))  # fmt: skip
+        ax.text((at(start) + at(start + WS_CHECK_LEN)) / 2, WS_TIME_Y + h / 2, "check", ha="center", va="center",
+                fontsize=16, color=INK, zorder=3)  # fmt: skip
+    # The cooldown, as a span from one check's end to the next one's start.
+    a, b = at(first + WS_CHECK_LEN), at(second)
+    y = WS_TIME_Y + h + 0.3
+    ax.annotate("", xy=(b, y), xytext=(a, y), arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.4},
+                zorder=4)  # fmt: skip
+    ax.text((a + b) / 2, y + LABEL_GAP, f"{WEAK_CHECK_COOLDOWN} votes", ha="center", va="bottom", fontsize=16,
+            color=INK)  # fmt: skip
+
+
+def _ws_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Weak Spot."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+    for i in range(len(WS_SESSIONS)):
+        _ws_panel(ax, i)
+    _ll_row_name(ax, WS_PANEL_Y + 0.4, "Held-out\nvotes")
+    if stage >= 2:
+        _ws_axis_row(ax)
+    if stage >= 3:
+        _ws_session_row(ax)
     return fig
 
 
@@ -5883,8 +6907,8 @@ def doc_balance_fig() -> None:
     final = _doc_stage(DOC_STAGES)
     box = tight_box(final)
     for stage in range(1, DOC_STAGES):
-        save(_doc_stage(stage), OUT, f"logo-balance.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "logo-balance.png", column=FULL_BLEED, box=box)
+        save(_doc_stage(stage), OUT, f"logo-balance.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "logo-balance.webp", column=FULL_BLEED, box=box)
 
 
 def _hatched_dot(ax: plt.Axes, xy: tuple[float, float], r: float, good: bool, z: float = 4) -> None:
@@ -6092,6 +7116,9 @@ FLOOR_BAND_LIFT = 0.70
 FLOOR_WALK_DROP = 0.55
 FLOOR_ASK_STAGES = 4
 FLOOR_CHECK_STAGES = 5
+#: The gap between the two lines of the check's reading (17pt), a little more
+#: than the 15pt lines' 0.55 under it.
+FLOOR_READING_LEADING = 0.62
 
 
 def floor_ask_fig() -> None:
@@ -6111,8 +7138,8 @@ def floor_ask_fig() -> None:
     final = _floor_stage(FLOOR_ASK_STAGES, "ask")
     box = tight_box(final)
     for stage in range(1, FLOOR_ASK_STAGES):
-        save(_floor_stage(stage, "ask"), OUT, f"calib-floor-ask.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-floor-ask.png", column=FULL_BLEED, box=box)
+        save(_floor_stage(stage, "ask"), OUT, f"calib-floor-ask.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-floor-ask.webp", column=FULL_BLEED, box=box)
 
 
 def floor_check_fig() -> None:
@@ -6131,8 +7158,8 @@ def floor_check_fig() -> None:
     final = _floor_stage(FLOOR_CHECK_STAGES, "check")
     box = tight_box(final)
     for stage in range(1, FLOOR_CHECK_STAGES):
-        save(_floor_stage(stage, "check"), OUT, f"calib-floor-check.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-floor-check.png", column=FULL_BLEED, box=box)
+        save(_floor_stage(stage, "check"), OUT, f"calib-floor-check.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-floor-check.webp", column=FULL_BLEED, box=box)
 
 
 # ── Clopper–Pearson, on its own (#4517) ──────────────────────────────────────
@@ -6170,8 +7197,8 @@ def clopper_fig() -> None:
     final = _cp_stage(CP_STAGES)
     box = tight_box(final)
     for stage in range(1, CP_STAGES):
-        save(_cp_stage(stage), OUT, f"calib-clopper.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-clopper.png", column=FULL_BLEED, box=box)
+        save(_cp_stage(stage), OUT, f"calib-clopper.build{stage}.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-clopper.webp", column=FULL_BLEED, box=box)
 
 
 def _cp_x(share: float) -> float:
@@ -6325,7 +7352,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict
         ax.text(
             FLOOR_STATEMENT_X,
             top - FLOOR_STATEMENT_DROP,
-            f"“Top {FLOOR_K} kept, unchecked”",
+            f"“{FLOOR_K} more kept, unchecked”",
             ha="left",
             va="bottom",
             fontsize=18,
@@ -6406,7 +7433,7 @@ def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict, top: float) -> None:
         ax.text(
             FLOOR_STATEMENT_X,
             top - FLOOR_STATEMENT_DROP - FLOOR_ASK_HEADROOM,
-            f"The Threshold control says: “Top {FLOOR_K} kept, unchecked”",
+            f"The Threshold control says: “{FLOOR_K} more kept, unchecked”",
             ha="left",
             va="bottom",
             fontsize=18,
@@ -6495,7 +7522,9 @@ def _floor_check_reading() -> str:
     band's Clopper–Pearson interval at the walk's split tail, `likely_range` at
     `range_tail`, weighted by the band's size — over the kept set for precision
     and over the walk's count of positives for recall. Worded as the control's
-    state line (`balanceSummary`), and rounded the way it rounds.
+    state line (`balanceSummary`), and rounded the way it rounds: it names the
+    set the check measured, the items nobody had voted on, and counts the kept
+    ones beside the votes (#4914).
     """
     k = FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][1]
     assert k == FLOOR_K, k
@@ -6512,7 +7541,10 @@ def _floor_check_reading() -> str:
     n_pos = FLOOR_CHECK_POSITIVES
     found = _floor_found_words((min(1.0, lo / n_pos) + min(1.0, hi / n_pos)) / 2)
     percent = "–".join(f"{math.floor(100 * x / k + 0.5):d}" for x in (lo, hi))
-    return f"Checked · likely {percent}% right, {found} (checked {labelled}) · {FLOOR_K} kept"
+    return (
+        f"Checked the top {k} you hadn't voted on · likely {percent}% right, "
+        f"{found} (checked {labelled}) · {FLOOR_K} more kept"
+    )
 
 
 def _floor_band_bracket(ax: plt.Axes, rows: dict, band: int) -> None:
@@ -6594,39 +7626,52 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
         _floor_walk_arrow(ax, line_x + 0.2, shallower_x, walk_y, "a band shallower: worse")
     # ── stage 5: what the control says, and what the check did to the line ───
     if stage >= 5:
-        reading_y = walk_y - 1.45
+        _floor_check_said(ax, walk_y - 1.45)
+
+
+def _floor_check_said(ax: plt.Axes, reading_y: float) -> None:
+    """Stage 5 of `calib-floor-check`: the control's reading at *reading_y*, and what the check did to the line under it."""
+    # The reading is too long for one line at this size, as it is in the
+    # app's panel: it breaks after the share right, as a reader pauses.
+    head, tail = _floor_check_reading().split(" right, ", 1)
+    for row, words in enumerate((f"“{head} right,", f"{tail}”")):
         ax.text(
             INCL_CANVAS_W / 2,
-            reading_y,
-            f"“{_floor_check_reading()}”",
+            reading_y - row * FLOOR_READING_LEADING,
+            words,
             ha="center",
             va="center",
             fontsize=17,
             color=INK,
         )
-        for row, words in enumerate(
-            (
-                "At every radio a check informs the line and does not move it:",
-                "its picks are votes, and the line stays where the labels put it.",
-            )
-        ):
-            ax.text(
-                INCL_CANVAS_W / 2,
-                reading_y - 0.75 - row * 0.55,
-                words,
-                ha="center",
-                va="center",
-                fontsize=15,
-                color=INK,
-            )
+    reading_y -= FLOOR_READING_LEADING
+    for row, words in enumerate(
+        (
+            "At every radio a check informs the line and does not move it:",
+            "its picks are votes, and the line stays where the labels put it.",
+        )
+    ):
+        ax.text(
+            INCL_CANVAS_W / 2,
+            reading_y - 0.75 - row * 0.55,
+            words,
+            ha="center",
+            va="center",
+            fontsize=15,
+            color=INK,
+        )
 
 
 if __name__ == "__main__":
     fmetrics_fig()
     fbeta_maps_fig()
     fbeta_fig()
+    labels_fit_fig()
     labels_line_fig()
     transfer_fig()
+    out_standing_fig()
+    lay_of_the_land_fig()
+    weak_spot_fig()
     doc_balance_fig()
     patch_fig()
     region_max_fig()
@@ -6644,6 +7689,7 @@ if __name__ == "__main__":
     clopper_fig()
     floor_check_fig()
     blend_schedule_fig()
+    split_idea_fig()
     split_fraction_fig()
     anchored_fig()
     print("wrote figures to", OUT)

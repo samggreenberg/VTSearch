@@ -31,11 +31,6 @@ from vtscore.training.thresholds.knobs import NO_GOOD_THRESHOLD
 # shared global RNG state, making results order-dependent under concurrency.
 CALIBRATION_SPLIT_SEED = 42
 
-# Rows sampled from the training matrix when seeding the split-size dither (see
-# :func:`_split_dither_rng`).  Small on purpose: this only has to separate two
-# labelsets of equal size, not summarise them.
-_DITHER_SAMPLE_ROWS = 32
-
 # False-negative budget of the conformal inclusion rule at inclusion 0; each
 # +1 step of inclusion halves it (see :func:`conformal_threshold`).  0.25 means
 # the default cutoff may sacrifice at most ~25% of true matches to the
@@ -97,6 +92,10 @@ def _calibration_cache_key(
     # Bag membership changes the fold split and per-group max-pool, so a change
     # in grouping must invalidate the cached orderings even when X/y are equal.
     groups_key = tuple(str(g) for g in groups) if groups is not None else None
+    # The fold models of a typed-query detector start from its query (#4859): a pass
+    # under another query, or none, must not be served this one's folds.
+    from vtscore.training.svm_prior import active_query_prior_key  # noqa: PLC0415
+
     return (
         X_hash,
         y_hash,
@@ -105,6 +104,7 @@ def _calibration_cache_key(
         int(hidden_dim),
         groups_key,
         _score_rows_digest(score_rows_by_group),
+        active_query_prior_key(),
     )
 
 
@@ -465,71 +465,57 @@ def _group_node_blocks(
     return [np.asarray([by_row[i] for i in rows_by_group[g]], dtype=np.float64) for g in cal_groups]
 
 
-def _split_dither_rng(X_np: np.ndarray, y_np: np.ndarray) -> "np.random.RandomState":
-    """A tie-break RNG for the Train/Calibrate split sizes, seeded from the labelset.
+def nearest_holdout(class_total: int, calibration_fraction: float) -> int:
+    """How many of a class of *class_total* votes each calibration fold holds out.
 
-    Deliberately **not** :data:`CALIBRATION_SPLIT_SEED`.  That seed is a
-    constant, so a draw from it is the same number on every call and would
-    replace one deterministic function of the vote count with another - which
-    is exactly the failure this dither exists to fix (issue #3286).  Seeding
-    from a digest of the training vectors and their labels instead gives a
-    draw that is *stable for a given labelset* - so the threshold stays a pure
-    function of the votes, and :func:`_calibration_cache_key` (which hashes the
-    same two arrays) stays valid - while differing between two labelsets that
-    merely happen to be the same size.
+    ``calibration_fraction`` of them rounded to the nearest whole vote, halves
+    up, and kept between 1 and ``class_total - 1`` so both sides of the split
+    keep a vote of the class.  A class of fewer than two votes has no split and
+    holds out none; the fold code refuses it before it trains.
 
-    The digest is taken over the labels in full plus a **strided sample** of the
-    training rows, rather than the whole matrix.  Two reasons, and both are
-    requirements rather than optimisations:
-
-    * *Bounded cost.*  A flooded patch labelset reaches tens of thousands of
-      rows, so hashing all of it would add a ~100 MB pass to every step.  The
-      sample is capped at :data:`_DITHER_SAMPLE_ROWS` rows.
-    * *Sensitivity to the whole labelset.*  A fixed prefix would be useless: the
-      rows are laid out Good-then-Bad and the earliest votes never move, so a
-      prefix digest would barely change as a session accumulates votes and the
-      dither would freeze into a constant - a coherent pattern again, just a
-      different one.  Striding by ``len // k`` re-samples different rows at
-      every size, and the labels change length and composition on every vote.
-
-    Only slicing and ``tobytes`` are involved - no arithmetic over the
-    embeddings - so the digest is byte-exact across machines.  A reduction like
-    a column sum would not be: SIMD width changes the summation order, which is
-    how #3166 turned a sub-part-per-million difference into a moved threshold.
+    No coin (issue #4864).  The held-out count is a function of the class's own
+    count alone, and never falls as the class grows.  The labels line stands
+    once the folds hold out ``HEAD_COUNT_GOODS`` Goods between them
+    (:func:`~vtscore.training.thresholds.labels_line.head_count_serves`), so it
+    takes over at one count of Goods and stays: 9 Goods on a single-vector space
+    (0.3 held out), 5 on a patch space (0.5), at the app's two folds.  The rule
+    before it rounded stochastically, which made that hand-over a labelset's
+    coin flip over a band of Goods counts, drawn again at every vote.
     """
-    stride = max(1, len(X_np) // _DITHER_SAMPLE_ROWS)
-    h = hashlib.blake2b(np.ascontiguousarray(X_np[::stride], dtype=np.float32).tobytes(), digest_size=8)
-    h.update(np.ascontiguousarray(y_np, dtype=np.float32).tobytes())
-    return np.random.RandomState(int.from_bytes(h.digest()[:4], "little"))
+    if class_total < 2:
+        return 0
+    held = math.floor(class_total * calibration_fraction + 0.5)
+    return max(1, min(class_total - 1, held))
 
 
-def _dithered_count(exact: float, rng: "np.random.RandomState") -> int:
-    """Round *exact* to an integer, breaking a fractional part at random.
+def _split_train_counts(
+    n: int, n_pos: int, n_neg: int, calibration_fraction: float, labelset: tuple[Any, Any] | None
+) -> tuple[int, int] | None:
+    """How many Goods and Bads train each fold; ``None`` when the split leaves too few to train.
 
-    Stochastic rounding: ``P(round up) = frac(exact)``, so the count is
-    **unbiased** (its expectation is *exact*) instead of being pinned to
-    whichever side ``round`` picks.  A whole number is returned unchanged and
-    draws nothing, so at the shipped ``calibration_fraction = 0.5`` this fires
-    on odd vote counts only - the exact ties, where "nearest" has no answer.
+    *n* counts the votes (rows, or bags on the grouped path) and *n_pos* /
+    *n_neg* the two classes.  Each class holds out :func:`nearest_holdout` of
+    its own votes, and every fold holds out the same counts.  A labelset whose
+    calibration share, rounded the same way, would leave fewer than two votes
+    to train is too small to split at all (a degenerate fraction), and gets the
+    caller's sentinel.
 
-    Why this is not just cosmetic (issue #3286).  ``round`` is round-half-to-
-    **even**, so at a 50/50 split the tie-break alternates with the vote count:
-    the odd vote joins Train at ``n % 4 == 1`` and Calibrate at ``n % 4 == 3``,
-    and ``n_train`` climbs 4, 5, 5, 5, 6, 7, 7, 7, 8 - stalling for two votes,
-    then jumping twice.  The fold models see a labelset share that seesaws with
-    period 4, and every threshold read off them inherits it.  One user never
-    notices; but the eval simulates one vote per step, so ``n`` tracks the step
-    index in *every* run and the seesaw is phase-locked across all of them.
-    Averaging hundreds of trajectories then cancels the noise and leaves the
-    artifact: a visible 4-vote ripple on the learning curves, big enough to
-    read as a real effect (see the #3286 investigation).  Randomising the tie
-    decoheres the runs, so the ripple averages away like the noise it is.
+    The cost, measured (#4864): sizes that step on a fixed cadence in a class's
+    count step together across the eval's runs where one class's count tracks
+    the vote count, which is #3286's setup.  On a single-vector space the Bads'
+    holdout does share a cadence across runs, at an eighth of ``round()``'s
+    over the whole labelset, and it does not reach the eval's curves.
+
+    *labelset* (the training vectors and their labels) is not read by this
+    rule.  It is passed so a harness arm can seed a rule from it: the one
+    place the split's sizes are decided, for the row-wise and grouped folds
+    alike, so ``vtscore.eval.arms_split_rounding`` can swap in the dithered
+    rule this replaced for a run.
     """
-    low = math.floor(exact)
-    frac = exact - low
-    if frac <= 0.0:
-        return int(low)
-    return int(low) + (1 if rng.random_sample() < frac else 0)
+    del labelset
+    if n - max(1, math.floor(n * calibration_fraction + 0.5)) < 2:
+        return None
+    return n_pos - nearest_holdout(n_pos, calibration_fraction), n_neg - nearest_holdout(n_neg, calibration_fraction)
 
 
 def _grouped_folds(
@@ -584,20 +570,11 @@ def _grouped_folds(
     if len(pos_groups) < 2 or len(neg_groups) < 2:
         return [], 0.5, X_np, rows_by_group, label_by_group
 
-    # Split sizes are dithered, not rounded, so a half-case does not resolve the
-    # same way for every labelset of the same size (issue #3286).
-    dither = _split_dither_rng(X_np, y_np)
-    n_cal = max(1, _dithered_count(n * calibration_fraction, dither))
-    n_train = n - n_cal
-    if n_train < 2 or n_cal < 1:
+    # Each class holds out its nearest whole share of the calibration fraction (#4864).
+    sizes = _split_train_counts(n, len(pos_groups), len(neg_groups), calibration_fraction, (X_np, y_np))
+    if sizes is None:
         return [], NO_GOOD_THRESHOLD, X_np, rows_by_group, label_by_group
-
-    def _per_class_n_train(class_total: int) -> int:
-        target = _dithered_count(class_total * n_train / n, dither)
-        return max(1, min(class_total - 1, target))
-
-    n_train_pos = _per_class_n_train(len(pos_groups))
-    n_train_neg = _per_class_n_train(len(neg_groups))
+    n_train_pos, n_train_neg = sizes
 
     # Index the plain group lists by position - group ids are tuples, and
     # ``np.array(list_of_tuples)`` would build a 2-D array and mangle them.
@@ -869,8 +846,8 @@ def compute_fold_orderings(
     *fold_fit* (row-wise path only; eval harness only, issue #3959) replaces the
     torch head with any estimator: ``fold_fit(X_train, y_train)`` returns a
     ``predict(X) -> P(positive)`` callable, which scores the fold's held-out
-    split and is what *model_sink* receives.  Everything else - the dithered
-    split sizes, the stratified draws, the *rng* stream - is this function's,
+    split and is what *model_sink* receives.  Everything else - the split
+    sizes, the stratified draws, the *rng* stream - is this function's,
     so a non-torch head calibrates on exactly the splits the app's head would
     have drawn from the same labels.  Production callers never pass it.
     """
@@ -899,27 +876,19 @@ def compute_fold_orderings(
     X_np = np.array(X_list)
     y_np = np.array(y_list)
 
-    # Split sizes are dithered, not rounded, so a half-case does not resolve the
-    # same way for every labelset of the same size (issue #3286).
-    dither = _split_dither_rng(X_np, y_np)
-    n_cal = max(1, _dithered_count(n * calibration_fraction, dither))
-    n_train = n - n_cal
-    if n_train < 2 or n_cal < 1:
-        return [], NO_GOOD_THRESHOLD
-
     pos_idx = np.where(y_np == 1.0)[0]
     neg_idx = np.where(y_np == 0.0)[0]
+    # Each class holds out its nearest whole share of the calibration fraction
+    # (#4864).  Sized before the class check, so a split too small to train
+    # still returns its sentinel.
+    sizes = _split_train_counts(n, len(pos_idx), len(neg_idx), calibration_fraction, (X_np, y_np))
+    if sizes is None:
+        return [], NO_GOOD_THRESHOLD
     if len(pos_idx) < 2 or len(neg_idx) < 2:
         return [], 0.5
 
     calibrate_count = max(1, calibrate_count)
-
-    def _per_class_n_train(class_total: int) -> int:
-        target = _dithered_count(class_total * n_train / n, dither)
-        return max(1, min(class_total - 1, target))
-
-    n_train_pos = _per_class_n_train(len(pos_idx))
-    n_train_neg = _per_class_n_train(len(neg_idx))
+    n_train_pos, n_train_neg = sizes
 
     orderings: list[tuple[list[float], list[float]]] = []
     for _ in range(calibrate_count):

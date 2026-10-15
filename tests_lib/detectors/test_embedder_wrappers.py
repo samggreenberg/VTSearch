@@ -902,6 +902,75 @@ class TestParaSpeechClapWrapper:
         assert vec.shape == (768,)
         np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-5)
 
+    def test_load_warmup_feeds_the_model_on_its_device(self, monkeypatch):
+        """The load-time warmup moves its inputs to the model's device (#4845).
+
+        It used to hand CPU tensors to a CUDA model, so the embedder never
+        finished loading on a GPU host.  Every external piece of the load is
+        faked; the model sits on ``meta``, standing in for the GPU.
+        """
+        import vtscore.media.audio._paraspeechclap_model as psm
+        import vtscore.media.audio.embedder_paraspeechclap as mod
+        from vtscore.config import PARASPEECHCLAP_SPEECH_MODEL_ID, PARASPEECHCLAP_TEXT_MODEL_ID
+
+        model = _OffCpuParaModel()
+        processors = {
+            PARASPEECHCLAP_SPEECH_MODEL_ID: _FakeProcessor(keys=("input_values",)),
+            PARASPEECHCLAP_TEXT_MODEL_ID: _FakeProcessor(keys=("input_ids", "attention_mask"), shape=(1, 3)),
+        }
+
+        def _load(fn, *args, **kwargs):
+            # Processors are loaded by model id; the one other call is the checkpoint download.
+            return processors[args[0]] if args else "/fake/slap-combined.pth.tar"
+
+        monkeypatch.setattr(psm, "CLAP", lambda **kwargs: model)
+        monkeypatch.setattr(mod, "embedder_load_setup", lambda *args, **kwargs: "/fake/cache")
+        monkeypatch.setattr(mod, "load_pretrained_local_first", _load)
+        monkeypatch.setattr(mod, "to_compute_device", lambda m: m)
+        monkeypatch.setattr(torch, "load", lambda *args, **kwargs: {})
+
+        emb = mod.AudioParaSpeechClapEmbedder()
+        emb._load_models_impl()
+        assert emb._model is model
+        assert model.forwards == ["audio", "text"]
+
+    def test_embed_paths_feed_the_model_on_its_device(self, monkeypatch):
+        _fake_decode_audio(monkeypatch, samples=1600)
+        emb = self._make()
+        emb._model = model = _OffCpuParaModel()
+        assert emb.embed_media({"media_path": "/fake.wav"}) is not None
+        assert emb.embed_text("an enthusiastic, fast-paced delivery") is not None
+        assert model.forwards == ["audio", "text"]
+
+
+class _OffCpuParaModel(_FakeParaModel):
+    """A ParaSpeechCLAP stand-in whose weights live off the CPU.
+
+    torch's ``meta`` device plays the GPU: each forward asserts its inputs were
+    moved there, where a CUDA model would raise if they were not.
+    """
+
+    def __init__(self, dim=768):
+        super().__init__(dim)
+        self._p = torch.zeros(1, device="meta")
+        self.forwards: list[str] = []
+
+    def load_state_dict(self, state_dict, strict=True):
+        return SimpleNamespace(missing_keys=[], unexpected_keys=[])
+
+    def eval(self):
+        return self
+
+    def get_audio_embedding(self, input_values, normalize=True):
+        assert input_values.device == self._p.device
+        self.forwards.append("audio")
+        return super().get_audio_embedding(input_values, normalize)
+
+    def get_text_embedding(self, inputs, normalize=True):
+        assert all(v.device == self._p.device for v in inputs.values())
+        self.forwards.append("text")
+        return super().get_text_embedding(inputs, normalize)
+
 
 # ===========================================================================
 # Vendored ParaSpeechCLAP architecture (_paraspeechclap_model.py)
@@ -997,6 +1066,24 @@ class TestParaSpeechClapModel:
         model = CLAP("microsoft/wavlm-large", "ibm-granite/granite", embedding_dim=5).eval()
         emb = model.get_audio_embedding(torch.randn(1, 80), normalize=False)
         assert emb.shape == (1, 5)
+
+    def test_clap_loads_both_towers_in_fp32(self, _patched_transformers):
+        """Granite's config.json says bfloat16; both towers still load in fp32 (#4845).
+
+        transformers' ``dtype="auto"`` default otherwise loads Granite in bf16,
+        and its output then fails to multiply into the fp32 text projection head.
+        """
+        from vtscore.media.audio._paraspeechclap_model import CLAP
+
+        model_dtypes = []
+
+        def _loader(fn, *args, **kwargs):
+            if fn == _patched_transformers.AutoModel.from_pretrained:
+                model_dtypes.append(kwargs.get("dtype"))
+            return fn(*args, **kwargs)
+
+        CLAP("microsoft/wavlm-large", "ibm-granite/granite", embedding_dim=5, loader=_loader)
+        assert model_dtypes == [torch.float32, torch.float32]
 
     def test_clap_text_embedding(self, _patched_transformers):
         from vtscore.media.audio._paraspeechclap_model import CLAP

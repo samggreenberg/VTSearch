@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from vtscore.eval.autopilot_flow import pick_provenance
-from vtscore.eval.voting_iterations import simulate_voting_iterations
+from vtscore.eval.voting_iterations import production_spot_check, simulate_voting_iterations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
     BALANCE_STATES,
@@ -275,13 +275,68 @@ class TestTheBalanceArm:
             self._run(beta=9.0)
 
 
+class TestTheCheckBeforeDone:
+    """Autopilot's Spot Check step before Done: the app checks the line once, the first time every light is green."""
+
+    def _run(self, max_steps: int = 60, **kwargs):
+        picks: list[dict] = []
+        rows = simulate_voting_iterations(
+            _separable(40), "alpha", seed=0, max_steps=max_steps, calibrate_count=2, pick_sink=picks,
+            beta=1.0, weak_separation=-math.inf, **kwargs,
+        )  # fmt: skip
+        return rows, picks
+
+    @staticmethod
+    def _phases(rows: list[dict]) -> list[tuple[int, str]]:
+        seq: list[tuple[int, str]] = []
+        for r in rows:
+            if not seq or seq[-1] != (r["t"], r["phase"]):
+                seq.append((r["t"], r["phase"]))
+        return seq
+
+    def test_all_green_runs_the_check_as_clicks_then_reports_done(self):
+        rows, picks = self._run()
+        seq = self._phases(rows)
+        t_spot = next(t for t, ph in seq if ph == "spot")
+        t_done = next(t for t, ph in seq if ph == "done")
+        prompts = [p for p in picks if p["phase"] == "prompt"]
+        assert prompts, "the check before Done ran"
+        assert all(t_spot < p["t"] < t_done for p in prompts), "between reaching all green and Done"
+        assert all(r["n_good"] + r["n_bad"] == r["t"] for r in rows if r["phase"] == "prompt"), "its picks are clicks"
+        assert sum(ph == "spot" for _t, ph in seq) == 1, "once a run"
+
+    def test_the_arm_without_it_reads_all_green_as_done(self):
+        rows, picks = self._run(done_check=False)
+        seq = self._phases(rows)
+        assert "spot" not in {ph for _t, ph in seq}
+        assert not [p for p in picks if p["phase"] == "prompt"]
+        with_check, _ = self._run()
+        assert next(t for t, ph in seq if ph == "done") == next(t for t, ph in self._phases(with_check) if ph == "spot")
+
+    def test_a_check_that_cannot_fit_the_budget_is_skipped(self):
+        """Its opening bands must fit the votes left, as a prompted check's do: here they cannot, so Done at once."""
+        rows, picks = self._run(max_steps=20)
+        assert "spot" not in {r["phase"] for r in rows}
+        assert "done" in {r["phase"] for r in rows}
+        assert not [p for p in picks if p["phase"] == "prompt"]
+
+    def test_a_run_that_never_checks_never_runs_it(self):
+        rows, picks = self._run(spot_check="off")
+        assert "spot" not in {r["phase"] for r in rows}
+        assert not [p for p in picks if p["phase"] in ("prompt", "check")]
+
+
 class TestTheWeakSeparationPrompt:
     """#4496: ``spot_check="weak"`` - the app prompts a check when the labels separate weakly."""
 
-    def _run(self, n_per_cat: int = 20, max_steps: int = 15, **kwargs):
+    def _run(self, n_per_cat: int = 20, max_steps: int = 15, media_type: str | None = None, **kwargs):
         picks: list[dict] = []
+        medias = _separable(n_per_cat)
+        if media_type is not None:
+            for m in medias.values():
+                m["media_type"] = media_type
         rows = simulate_voting_iterations(
-            _separable(n_per_cat), "alpha", seed=0, max_steps=max_steps, calibrate_count=2, pick_sink=picks,
+            medias, "alpha", seed=0, max_steps=max_steps, calibrate_count=2, pick_sink=picks,
             beta=1.0, **kwargs,
         )  # fmt: skip
         return rows, picks
@@ -326,12 +381,26 @@ class TestTheWeakSeparationPrompt:
         ]
 
     def test_a_learned_only_prompt_waits_for_the_flow_to_leave_its_opening(self):
-        """#4496: the app trains no detector on the text-sort opening, so ``weak_phase="learned"`` waits."""
+        """#4496: the app trains no detector on the text-sort opening, so ``weak_phase="learned"`` waits.
+
+        Under the lights alone: on this pool the line's level (#4878) can say Done the step the opening ends,
+        and the check before Done that follows a Bad pick would read here as a prompt after the opening.
+        """
         _rows, any_picks = self._run(
-            n_per_cat=40, max_steps=40, spot_check="weak", weak_separation=math.inf, weak_phase="any"
+            n_per_cat=40,
+            max_steps=40,
+            spot_check="weak",
+            weak_separation=math.inf,
+            weak_phase="any",
+            stop_rule="lights",
         )
         _rows, picks = self._run(
-            n_per_cat=40, max_steps=40, spot_check="weak", weak_separation=math.inf, weak_phase="learned"
+            n_per_cat=40,
+            max_steps=40,
+            spot_check="weak",
+            weak_separation=math.inf,
+            weak_phase="learned",
+            stop_rule="lights",
         )
         before = [
             picks[i - 1]["phase"]
@@ -360,15 +429,32 @@ class TestTheWeakSeparationPrompt:
         assert not [p for p in late if p["phase"] == "prompt"], "no room left at click 20 for a check's opening bands"
 
     def test_the_default_arm_checks_where_the_apps_rule_says(self):
-        """Since the owner's ruling (2026-10-05) the default is the app's: ``weak`` at the app's constants."""
+        """Since the owner's ruling (2026-10-05) the default is the app's: ``weak`` at the app's constants,
+        resolved per media type (#4799) - ``end`` on face crops, which the app never prompts on."""
         import inspect
 
         params = inspect.signature(simulate_voting_iterations).parameters
-        assert params["spot_check"].default == "weak"
+        assert params["spot_check"].default is None
+        assert production_spot_check({1: {"media_type": "image"}}) == "weak"
+        assert production_spot_check({1: {"media_type": "face"}}) == "end"
+        assert production_spot_check({1: {}}) == "weak", "a media without a type is prompted on"
+        assert production_spot_check({}) == "weak"
         assert params["weak_separation"].default == WEAK_SEPARATION_D
         assert params["weak_min_t"].default == WEAK_CHECK_MIN_VOTES
         assert params["weak_repeat"].default == WEAK_CHECK_COOLDOWN
         assert params["weak_phase"].default == "learned", "the app trains no detector on Autopilot's opening"
+
+    def test_by_default_face_crops_never_prompt_and_other_media_do(self):
+        """#4799: unset, the harness runs the app's arm for the medias - the end-of-run check only on faces."""
+        weak_everywhere = {"weak_separation": math.inf, "weak_min_t": 6, "weak_phase": "any"}
+        face, face_picks = self._run(n_per_cat=40, max_steps=25, media_type="face", **weak_everywhere)
+        end, end_picks = self._run(n_per_cat=40, max_steps=25, media_type="face", spot_check="end", **weak_everywhere)
+        assert not self._prompts(face_picks), "no prompted check on face crops"
+        assert [p["picked_id"] for p in face_picks] == [p["picked_id"] for p in end_picks]
+        assert [(r["t"], r["phase"]) for r in face] == [(r["t"], r["phase"]) for r in end]
+        assert any(r["phase"] == "check" for r in face), "the end-of-run check still runs"
+        _rows, image_picks = self._run(n_per_cat=40, max_steps=25, media_type="image", **weak_everywhere)
+        assert len(self._prompts(image_picks)) == 1, "an image detector is still prompted"
 
     def test_the_prompt_returns_after_its_cooldown_while_separation_stays_weak(self):
         once, once_picks = self._run(

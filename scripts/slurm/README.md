@@ -32,7 +32,7 @@ vtsearch          # allocates a GPU node and starts the app; leave it running
 > e.g. `VTS_MODULE="python/3.12.3" vtsearch`. See
 > [`docs/SETUP.md`](../../docs/SETUP.md#running-on-a-slurm-gpu-cluster) for the
 > full module-based setup. Pick the CUDA wheel to match your GPU — older cards
-> like the V100 need `cu124`, *not* `cu128`/`cu129` (which drop Volta); `cu129`
+> like the V100 need `cu126`, *not* `cu128`/`cu129` (which drop Volta); `cu129`
 > is the one tag that also installs cuML, and needs a driver at CUDA 12.9+.
 
 On your local machine (after adding a `cluster` host to `~/.ssh/config`):
@@ -76,5 +76,9 @@ job is not affected by the checkout it performs, or by a later `git pull` of
 the `dev` checkout. Give the suite a worktree of its own (`git worktree add
 --detach`): it moves that worktree's HEAD for the length of the job. Read the
 log's `=== HEAD` and `=== ref` lines to see which commit actually ran.
+The job runs on a fresh `VTSEARCH_DATA_DIR` under `$TMPDIR` and removes it at
+the end, so the data dir your shell exports is never touched. On the HLTCOE
+GRID, `~/.bashrc` names the live app's data there (#4706). The `=== data` line
+names both dirs.
 `tests_lib/meta/test_suite_sbatch.py` runs the real script against a throwaway
 origin to pin the guard's behaviour.

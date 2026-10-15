@@ -1,36 +1,28 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-gmm-flow.png)
+![bg fit](figs/calib-gmm-flow.webp)
 
 ## Oops! All<br>Haystack
 
-<!-- build: figs/calib-gmm-flow.build1.png -->
+<!-- build: figs/calib-gmm-flow.build1.webp -->
 
-<!-- build: figs/calib-gmm-flow.build2.png -->
+<!-- build: figs/calib-gmm-flow.build2.webp -->
 
-<!-- build: figs/calib-gmm-flow.build3.png -->
+<!-- build: figs/calib-gmm-flow.build3.webp -->
 
-<!-- build: figs/calib-gmm-flow.build4.png -->
+<!-- build: figs/calib-gmm-flow.build4.webp -->
 
-<!-- **a** — The same votes and the same model as the last slide, rearranged.
-     The new object is the grey bar above: the unlabeled corpus the votes were
-     drawn out of. Far wider, and no Good/Bad hatching, because unlabeled means
-     the classes are unknown, not absent. The labelled sliver is what the last
-     slide starved on, and the grey bar was there the whole time. -->
+<!-- **a** — What that left out: the haystack. Every unlabeled photo; I'll call
+     it the corpus. There ARE books in there, we just don't know which. -->
 
-<!-- **b** — So run the loop the other way round. Train M₀ on the votes as
-     before. **c** — And score the *whole corpus*: fifty thousand scores instead
-     of tens, and their shape is bimodal on its own. -->
+<!-- **b** — Our votes are a sample of it, and M₀ trains on them, same as
+     before. -->
 
-<!-- **d** — Fit a two-component Gaussian mixture to it. **e** — And cut at the
-     midpoint between the two means. That is the whole estimator, and nothing
-     in the bottom half of the figure ever looks at a vote. -->
+<!-- **c** — M₀ scores the whole corpus, and the scores fall into two humps on
+     their own. -->
 
-<!-- Say which half lasted. Reading the corpus did: section III's line
-     counts its matches on exactly this grey bar. The midpoint did not.
-     Scored in F-beta over the session, cutting here instead of
-     cross-calibrating lost 0.36, 0.36 and 0.28 at β ¼, 1 and 4 (#4582): where under half a percent
-     of the corpus matches, a cut between the two means keeps far more than
-     there are matches. And the colours are an assumption the fit cannot
-     justify: measured, the high component weighed 0.35 against a true
-     prevalence of 0.09. -->
+<!-- **d** — Bell curve on each. See the question marks? Calling the high one
+     Good is a guess. -->
+
+<!-- **e** — Cut halfway between, no votes needed. The corpus idea stuck; the
+     halfway cut didn't. With matches rare, it keeps WAY too much. -->

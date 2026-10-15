@@ -5,7 +5,7 @@
 users don't have to know their GPU's compute capability (or that the *newest*
 CUDA tag is the wrong choice for an old GPU). It shells out to ``nvidia-smi``,
 reads each GPU's compute capability and the driver's max CUDA version, and
-prints a ``cuXYZ`` tag (e.g. ``cu124``) to **stdout**. A human-readable
+prints a ``cuXYZ`` tag (e.g. ``cu126``) to **stdout**. A human-readable
 explanation goes to **stderr** so the caller can capture just the tag.
 
 Exit status is ``0`` with a tag on stdout when detection succeeds, ``1`` with
@@ -32,14 +32,19 @@ import sys
 # capability range. There is a FLOOR and a CEILING: newer wheels add new
 # architectures but DROP the oldest ones, which is exactly why "just use the
 # newest tag" breaks old GPUs. cu128 dropped Volta (sm_70), so a V100 (cc 7.0)
-# must use cu124 or older. The ``cuda_ver`` is the toolkit version the wheel
+# must use cu126 or older. The ``cuda_ver`` is the toolkit version the wheel
 # needs the driver to support; we use it to step down on hosts with old drivers.
+#
+# Only tags whose index carries a torch at or above the ``torch>=2.7`` floor in
+# pyproject.toml are candidates. cu121 and cu124 stop at torch 2.5.1 and 2.6.0,
+# and transformers >= 5.18 cannot import a model class on torch 2.6 when no GPU
+# is visible (#4838), so they are gone; cu118 stops at 2.7.1 and stays as the
+# old-driver fallback.
 #
 #               tag       cuda_ver  min_cc   max_cc
 _CANDIDATES = [
     ("cu118", (11, 8), (3, 7), (9, 0)),
-    ("cu121", (12, 1), (5, 0), (9, 0)),
-    ("cu124", (12, 4), (5, 0), (9, 0)),
+    ("cu126", (12, 6), (5, 0), (9, 0)),
     ("cu128", (12, 8), (7, 5), (12, 0)),
     ("cu129", (12, 9), (7, 5), (12, 0)),
 ]
@@ -48,7 +53,7 @@ _CANDIDATES = [
 # pins the CUDA 12.9 libraries that RAPIDS >= 26.8 (the first RAPIDS to take
 # the pandas 3 pinned in pyproject.toml, #4390) is built on, so it is the only
 # tag on which ``install.sh`` installs cuML (GPU UMAP / k-means). We deviate
-# only when the GPU is too old for it (Volta -> cu124, which spans Volta through
+# only when the GPU is too old for it (Volta -> cu126, which spans Volta through
 # Hopper) or the driver is too old for it (-> the newest tag it can run); both
 # fall back to CPU UMAP / k-means.
 DEFAULT_TAG = "cu129"
@@ -88,7 +93,7 @@ def select_cuda_tag(
         covering = gated
 
     # Prefer the anchor when it qualifies; otherwise the newest wheel that does
-    # (cu124 for a Volta card, or the best the driver allows).
+    # (cu126 for a Volta card, or the best the driver allows).
     for tag, *_ in covering:
         if tag == DEFAULT_TAG:
             return DEFAULT_TAG

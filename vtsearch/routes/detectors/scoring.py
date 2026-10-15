@@ -285,7 +285,10 @@ def find_label(body: dict):
         # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
         # cold path and the learned-sort cache-space marker.
         _abort_if_find_cancelled()
-        score_emb = keying_embedder_for_type(_detector_type(det_data), snap)
+        from vtscore.detectors.query_head import head_score_embedder
+
+        # A typed query's head scores in the text space, as the sort does (#4758).
+        score_emb = head_score_embedder(mlp, keying_embedder_for_type(_detector_type(det_data), snap) or None)
         results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
         update_find_progress(
             "running",
@@ -370,10 +373,6 @@ def find_label(body: dict):
         # vote dicts are the count.
         good_count = len(det_ctx.good_votes)
         bad_count = len(det_ctx.bad_votes)
-
-        from vtscore.labels.sync import sync_to_labelset_source
-
-        sync_to_labelset_source()
 
         update_find_progress(
             "idle",

@@ -82,6 +82,15 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 RUN pip install --no-cache-dir apricot-select && \
     pip install --no-cache-dir --no-deps "toponymy==0.5.2"
 
+# ---------- FaceNet (image2face, the face localizer, the face embedder) ----------
+# Docker builds never run scripts/install.sh, so this step mirrors its
+# `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
+# numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically
+# unnecessary, so it goes in `--no-deps` on the torch, torchvision, numpy,
+# Pillow, requests and tqdm already installed. MTCNN's weights ship inside the
+# wheel; FaceNet's checkpoint downloads into the models cache on first use.
+RUN pip install --no-cache-dir --no-deps facenet-pytorch
+
 # ---------- pre-download SigLIP weights into the image ----------
 # Bake weights into a non-volume path so they survive volume mounts on
 # /app/data. The app reads MODELS_CACHE_DIR from VTSEARCH_MODELS_DIR.

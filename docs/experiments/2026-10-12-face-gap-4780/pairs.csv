@@ -1,0 +1,33 @@
+cell,read,pairs,she_pairs,gap,se,gap_sd
+facenet_plain,all pairs,15784,8510.0,-0.0652,0.0089,-0.4016
+facenet_plain,same hairstyle,10731,4441.0,-0.0582,0.0095,-0.3583
+facenet_plain,different hairstyle,5053,4069.0,-0.0018,0.0149,-0.0108
+facenet_plain,"matched: same hairstyle and month, both clean",2335,699.0,-0.0293,0.0147,-0.1804
+facenet_plain,adjusted for the pair's covariates,15784,8510.0,-0.0177,0.0099,-0.1088
+facenet_plain,"same minus different hairstyle, She/her/hers",8510,,0.0427,0.0036,0.2632
+facenet_plain,"same minus different hairstyle, He/him/his",7274,,0.0992,0.0054,0.6107
+facenet_plain,"share of pairs with the same hairstyle, she / he",15784,,0.5219,0.8647,
+facenet_roll,all pairs,15784,8510.0,-0.0558,0.0084,-0.3747
+facenet_roll,same hairstyle,10731,4441.0,-0.0471,0.0088,-0.3164
+facenet_roll,different hairstyle,5053,4069.0,0.0062,0.014,0.0414
+facenet_roll,"matched: same hairstyle and month, both clean",2335,699.0,-0.0177,0.0123,-0.119
+facenet_roll,adjusted for the pair's covariates,15784,8510.0,-0.0081,0.0088,-0.0541
+facenet_roll,"same minus different hairstyle, She/her/hers",8510,,0.0464,0.0033,0.3112
+facenet_roll,"same minus different hairstyle, He/him/his",7274,,0.0997,0.0051,0.6689
+facenet_roll,"share of pairs with the same hairstyle, she / he",15784,,0.5219,0.8647,
+facenet_tight,all pairs,15784,8510.0,-0.0545,0.0092,-0.3306
+facenet_tight,same hairstyle,10731,4441.0,-0.0451,0.0095,-0.2731
+facenet_tight,different hairstyle,5053,4069.0,0.0107,0.0161,0.0648
+facenet_tight,"matched: same hairstyle and month, both clean",2335,699.0,-0.0167,0.0144,-0.1015
+facenet_tight,adjusted for the pair's covariates,15784,8510.0,-0.0071,0.0098,-0.0433
+facenet_tight,"same minus different hairstyle, She/her/hers",8510,,0.0497,0.0036,0.301
+facenet_tight,"same minus different hairstyle, He/him/his",7274,,0.1054,0.006,0.6388
+facenet_tight,"share of pairs with the same hairstyle, she / he",15784,,0.5219,0.8647,
+arcface_roll,all pairs,15784,8510.0,-0.0961,0.0101,-0.5309
+arcface_roll,same hairstyle,10731,4441.0,-0.0812,0.0104,-0.4482
+arcface_roll,different hairstyle,5053,4069.0,-0.0351,0.0172,-0.1941
+arcface_roll,"matched: same hairstyle and month, both clean",2335,699.0,-0.047,0.0169,-0.2593
+arcface_roll,adjusted for the pair's covariates,15784,8510.0,-0.0492,0.011,-0.2717
+arcface_roll,"same minus different hairstyle, She/her/hers",8510,,0.0618,0.0039,0.3412
+arcface_roll,"same minus different hairstyle, He/him/his",7274,,0.1078,0.006,0.5954
+arcface_roll,"share of pairs with the same hairstyle, she / he",15784,,0.5219,0.8647,

@@ -35,7 +35,13 @@ export type BalanceStatus = 'unchecked' | 'checked' | 'gate';
  */
 export type BalanceShape = 'advisory' | 'trim';
 
-/** A likely share, from the check's picks alone: of the kept set right (precision), or of all the matches kept (recall). */
+/**
+ * A likely share, from the check's picks alone: of the audited set right
+ * (precision), or of all the matches in it (recall). Both cover only the items
+ * the user had not voted on when the check ran (#4914): the walk samples the
+ * unvoted ranking, and recall's denominator is the mixture's count of the
+ * positives left in it, so the user's own Goods are in neither.
+ */
 export interface LikelyRange {
   lo: number;
   hi: number;
@@ -64,11 +70,11 @@ export interface LineBalance {
   status: BalanceStatus;
   /** How many unvoted items the line keeps. */
   count: number;
-  /** The check's likely share of the kept set that is right; null while unchecked. */
+  /** The check's likely share of the audited set that is right; null while unchecked. */
   precision: LikelyRange | null;
-  /** The check's likely share of all the matches that are in the kept set; null while unchecked. */
+  /** The check's likely share of all the unvoted matches that are in the audited set; null while unchecked. */
   recall: LikelyRange | null;
-  /** The check's F-beta estimate for the kept set; null while unchecked. */
+  /** The check's F-beta estimate for the audited set; null while unchecked. */
   fbeta: number | null;
   /** What a check at this balance would cost; null when the response carried none. */
   schedule: CheckSchedule | null;
@@ -86,11 +92,16 @@ export interface LineBalance {
   /** How far apart the labels' Good and Bad scores sit, in spreads (d'); null before a retrain has drawn the labels' line. */
   separation: number | null;
   /**
-   * The labels separate weakly enough that a spot check is due (#4496): Autopilot runs one, and the
-   * Train tab's Check button calls for one. The server decides (`weak_check_due`): d' below 1.5, from
-   * 10 votes on, and 25 votes after the last check ended.
+   * The labels separate weakly enough that a spot check is due (#4496): Autopilot runs one. The
+   * server decides (`weak_check_due`): d' below 1.5, from 10 votes on, and 25 votes after the last
+   * check ended.
    */
   checkDue: boolean;
+  /**
+   * Autopilot's check before Done should run (`done_check_due`): no check has ended in the last 25
+   * votes. Read once every quality light is green; false skips the step.
+   */
+  doneCheckDue: boolean;
 }
 
 const STATUSES: readonly BalanceStatus[] = ['unchecked', 'checked', 'gate'];
@@ -125,6 +136,7 @@ export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBala
     checkable: wire.checkable !== false,
     separation: wire.separation ?? null,
     checkDue: wire.check_due ?? false,
+    doneCheckDue: wire.done_check_due ?? false,
   };
 }
 
@@ -209,7 +221,7 @@ export function staleNote(range: LikelyRange | null): string {
 
 /**
  * The recall range in words, from its midpoint: how many of all the matches
- * the kept set likely holds. Words rather than a second percentage, so the
+ * the checked set likely holds. Words rather than a second percentage, so the
  * state line reads as a sentence; the number is in the tooltip
  * ({@link balanceExplanation}).
  */
@@ -222,12 +234,6 @@ export function foundWords(recall: LikelyRange): string {
   return 'nearly all of them found';
 }
 
-/** The picks a check deals, in words: "5 random picks a band, walking the list from the top 32". */
-function checkCost(schedule: CheckSchedule | null): string {
-  if (!schedule) return 'a few random picks';
-  return `${schedule.picks} random picks a band, walking the list from the top ${schedule.candidate.toLocaleString()}`;
-}
-
 /**
  * The balance's state in one short line, for the control under the spectrum
  * (#4413; the line is #4246's and #4273's): what the line keeps, and what the
@@ -236,17 +242,27 @@ function checkCost(schedule: CheckSchedule | null): string {
  * never from the model. Null when there is no state to report (no line yet,
  * or a sort with no detector behind it). A stale range reads exactly as a
  * current one: only {@link balanceExplanation} says so.
+ *
+ * Nothing in it counts the user's own votes, and it says so (#4914): the line
+ * keeps "N more" beside them, and a check names the set its ranges cover, the
+ * top `audited` the user had not voted on, which under `advisory` is not the
+ * set kept. Late in a session, once the matches near the top are voted, that
+ * set holds few of them, so the ranges can read low after a session that went
+ * well.
  */
 export function balanceSummary(balance: LineBalance | null): string | null {
   if (!balance) return null;
   const kept = balance.count.toLocaleString();
-  if (balance.status === 'unchecked') return `Top ${kept} kept, unchecked`;
+  if (balance.status === 'unchecked') return `${kept} more kept, unchecked`;
   if (balance.status === 'gate') return `${kept} pass the verification gate`;
   const p = balance.precision;
   const r = balance.recall;
-  return p && r
-    ? `Checked · likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}) · ${kept} kept`
-    : `Checked · ${kept} kept`;
+  if (!p || !r) return `Checked · ${kept} more kept`;
+  const audited = (balance.audited ?? balance.count).toLocaleString();
+  return (
+    `Checked the top ${audited} you hadn't voted on · likely ${rangePercent(p)} right, ` +
+    `${foundWords(r)} (checked ${p.labelled}) · ${kept} more kept`
+  );
 }
 
 /**
@@ -259,7 +275,7 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   if (!balance) return null;
   const kept = balance.count.toLocaleString();
   if (balance.status === 'unchecked') {
-    return `Unchecked: the line keeps the top ${kept}, and nothing has measured how much of it is right.`;
+    return `Unchecked: the line keeps the top ${kept} you haven't voted on, and nothing has measured how many of them are right.`;
   }
   if (balance.status === 'gate') {
     return (
@@ -271,58 +287,31 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   const r = balance.recall;
   const audited = (balance.audited ?? balance.count).toLocaleString();
   if (balance.shape === 'advisory') {
-    if (!p || !r) return `A check ended on the top ${audited}; the line keeps its ${kept}.`;
+    if (!p || !r) return `A check ended on the top ${audited} you hadn't voted on; the line keeps the top ${kept}.`;
     return (
-      `A check of ${p.labelled} random picks from the top ${audited} found ${p.right} right, ` +
-      `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches among them. ` +
-      `The line keeps its ${kept}, where your labels put it: a check informs the line and does not move it.` +
+      `A check of ${p.labelled} random picks from the top ${audited} you hadn't voted on found ${p.right} right, ` +
+      `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches you hadn't voted on among them. ` +
+      `The line keeps the top ${kept} you haven't voted on, where your labels put it: a check informs the line and does not move it.` +
       staleNote(p)
     );
   }
-  if (!p || !r) return `A check ended on the ${kept} items the line keeps.`;
+  if (!p || !r) return `A check ended on the top ${kept} you hadn't voted on, which the line keeps.`;
   return (
-    `A check of ${p.labelled} random picks from the ${kept} items the line keeps found ${p.right} right, ` +
-    `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches among them: ` +
+    `A check of ${p.labelled} random picks from the top ${kept} you hadn't voted on, which the line keeps, found ${p.right} right, ` +
+    `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches you hadn't voted on among them: ` +
     `the set where the check's balance peaked.` +
     staleNote(p)
   );
 }
 
 /**
- * The balance control's check affordance (#4273): "Check 5 picks", with the
- * picks a band draws at this balance. It starts a check in every state; after
- * a finished one it runs a fresh check. Null with no line to check, or a line
- * a check cannot walk (#4489): a structural detector's, which is the
- * verification gate's boundary and keeps no ranking.
- */
-export function checkLabel(balance: LineBalance | null): string | null {
-  if (!balance?.checkable) return null;
-  return balance.schedule ? `Check ${balance.schedule.picks} picks` : 'Check the line';
-}
-
-/**
  * Why a check is due, when the server says one is (#4496): the labels separate weakly, and a check's
  * picks, drawn evenly down the list, are the votes that teach the detector where its line falls.
- * Null when none is due.
+ * Only Autopilot runs a check, so the note points there. Null when none is due.
  */
 export function checkDueNote(balance: LineBalance | null): string | null {
   if (!balance?.checkDue) return null;
-  return 'Your Good and Bad labels still overlap. A check now teaches the detector where its line falls.';
-}
-
-/** The check affordance's tooltip: what a check does at this balance (#4427), and what it costs. */
-export function checkTitle(balance: LineBalance | null): string {
-  const cost = checkCost(balance?.schedule ?? null);
-  if (balance?.shape === 'trim') {
-    return (
-      `Vote on ${cost}: the check steps to a shorter list while the balance does not fall, ` +
-      `and the line keeps the set where it ends. Your votes count as ordinary votes.`
-    );
-  }
-  return (
-    `Vote on ${cost}: the check goes deeper while the balance keeps improving and shorter while it does not, ` +
-    `and reports what it found; it informs the line and does not move it. Your votes count as ordinary votes.`
-  );
+  return 'Your Good and Bad labels still overlap. Autopilot runs a spot check now: its picks teach the detector where its line falls.';
 }
 
 /** A range's own tooltip, for a chart that draws it (#4273): how it was measured, and whether it is stale. */

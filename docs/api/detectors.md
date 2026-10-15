@@ -75,14 +75,13 @@ PUT /api/detectors/{name}/rename
 
 **Body:** `{"new_name": "Cat Meows"}`
 
-→ `{"success": true, "old_name": "...", "new_name": "Cat Meows", "pending_labelset_move": null}`
+→ `{"success": true, "old_name": "...", "new_name": "Cat Meows"}`
 
-409 if new name already exists. `pending_labelset_move` is
-`{"old_path", "new_path"}` when the detector has a
-[labelset source](settings.md#labelset-sources-sync) whose file path is
-templated on `{detector_name}` / `{detector_id}` and the rename left the old
-file behind; offer the user a
-[move](#move-an-orphaned-labelset-file), otherwise it is `null`.
+409 if new name already exists. When the detector syncs to a
+[labelset source](settings.md#labelset-sources-sync) whose server file path
+is templated on `{detector_name}`, the rename moves that file to the new
+name's path before the detector's next push can write there (never over an
+existing file).
 
 ### Set examples
 
@@ -97,7 +96,16 @@ PUT /api/detectors/{name}/examples
 Replaces the `examples` list (on the detector JSON and the registry entry) and
 **adds** a `good` label for each media example not already in the labelset.
 The labelset edit is additive only: no existing label is dropped, and an
-exemplar the user has since voted Bad keeps that label.
+exemplar the user has since voted Bad keeps that label. An unlabeled seed
+(`"labeled": false`) adds none.
+
+`text_query` and `media_example` follow the new list, on both records: each is
+the value of its first text / media example, or `""` when there is none. So
+replacing a typed query with a media example drops the query. Under the label
+quota a typed-query detector gives its query's own set, so this is the query
+Test, AutoFind and Find use. The Train view's re-sort prompt saves its new
+example here, as a text example or as an unlabeled media seed. The Manual sort
+bar saves nothing: it is a browse.
 
 ### Save labels
 
@@ -279,6 +287,11 @@ Entries also carry `examples`, `media_example`, `embedder`, `embedder_type`,
 (`autofind: true`) also carries `test_verdict`: the newest test verdict it
 keeps, in the shape of the [stats](#detector-statistics)' `test_verdicts`
 entries, or `null` when it was never tested. Drafts leave it out.
+`labelset_source_status` says where the detector's labels are auto-exported:
+`{"source_name", "display_name", "inherited", "missing_fields"}`, or `null`
+when they sync nowhere (see [Labelset Sources](settings.md#labelset-sources-sync));
+a non-empty `missing_fields` means the detector is not synced until those
+values are filled in. The binding's field values are never listed.
 
 `name` is what the on-disk labelset file is looked up by; the file itself is
 `data/detectors/<slug-of-name>.json`. The head is trained on demand from the
@@ -486,9 +499,9 @@ PUT /api/detectors/registry/{detector_id}/rename
 
 **Body:** `{"name": "New Name"}`
 
-→ `{"ok": true, "name": "New Name", "pending_labelset_move": null}`
+→ `{"ok": true, "name": "New Name"}`
 
-`pending_labelset_move` has the same meaning as on
+A templated labelset-source file follows the rename, as on
 [`PUT /api/detectors/{name}/rename`](#rename-detector). 403 if the caller isn't
 the creator. 409 if the new name is already taken. Names are compared by the labelset
 *slug* (lowercased, punctuation collapsed), so "My Cat" and "my cat" collide;
@@ -561,24 +574,6 @@ section reads it.
 ```
 
 403 if the caller cannot access the detector; 404 if it does not exist.
-
-### Move an orphaned labelset file
-
-```
-POST /api/detectors/registry/{detector_id}/labelset-source/move-file
-```
-
-**Body:** `{"old_path": "...", "new_path": "..."}` — normally the
-`pending_labelset_move` pair a rename returned.
-
-Moves the detector's labelset-source file after a rename left it at the old
-template-resolved path (the *Move existing labelset file?* prompt).
-
-→ `{"ok": true, "moved": true, "old_path": "...", "new_path": "..."}`
-(`moved: false` when there was nothing at `old_path`).
-
-400 (path outside the allowed base), 404 (detector not found), 409
-(`new_path` already exists).
 
 ### Browse a detector's positives
 

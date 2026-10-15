@@ -25,9 +25,7 @@ from __future__ import annotations
 
 import argparse
 import collections
-import contextlib
 import functools
-import io
 import sys
 from pathlib import Path
 from typing import Any
@@ -46,19 +44,11 @@ OUT = REPO / "slides" / "figs"
 
 
 def _save(fig: Any, name: str) -> None:
-    """Photograph-carrying frames go out as WebP (slides/README.md), through `save`'s checks."""
-    from PIL import Image
-
-    png = f"{name}.png"
+    """Photograph-carrying frames go out as lossy WebP, through `save`'s checks."""
     # A "Data, Set" card's headline is one line, and its subtitle — the
     # dataset's name — sits in the half of the reserve that line leaves.
     notch = dc.DATA_SET_NOTCH_PX if name.startswith("data-set-") else True
-    with contextlib.redirect_stdout(io.StringIO()):
-        save(fig, OUT, png, column=FULL_BLEED, tight=False, notch=notch)
-    with Image.open(OUT / png) as image:
-        image.convert("RGB").save(OUT / f"{name}.webp", quality=88, method=6)
-    (OUT / png).unlink()
-    print(f"wrote figs/{name}.webp")
+    save(fig, OUT, f"{name}.webp", column=FULL_BLEED, tight=False, notch=notch, photo=True)
 
 
 # --------------------------------------------------------------------------
@@ -253,11 +243,14 @@ def frame_coco_zoom() -> Any:
 #: The four problems, in the order the slide takes them. The left column lists
 #: all four on every frame and sets the one being drawn at full weight — the
 #: deck's outline trick, so the room always knows which of the four it is on.
+#: The order is the order the fixes are made in (owner, #4835): correct the
+#: labels, split the boxes that hold a pile, choose the box that sets a photo's
+#: size, and only then cut the datasets by how common and how large.
 COCO_PROBLEMS = (
     "Two names, one thing",
-    "One set, many cuts",
-    "Which one sets the size?",
     "A pile is not large",
+    "Which one sets the size?",
+    "One set, many cuts",
 )
 
 #: `(annotation id, COCO's label)` pairs: the same kind of object, filed under
@@ -390,7 +383,7 @@ def frame_problem_merge() -> Any:
     whole media area: two picture columns, then the arrow and the merged name.
     """
     fig = dc.blank()
-    _problems_column(fig, 0, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("Two names, one thing"), COCO_PROBLEMS)
     x0, gap, cell_w = PROBLEMS_MEDIA_X0, 0.018, 0.2385
     label_h, row_gap = 0.05, 0.035
     cell_h = (0.955 - 0.045 - 3 * label_h - 2 * row_gap) / 3
@@ -428,7 +421,7 @@ def frame_problem_cuts() -> Any:
     from matplotlib.patches import Rectangle
 
     fig = dc.blank()
-    _problems_column(fig, 1, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("One set, many cuts"), COCO_PROBLEMS)
     fig.text(0.40, 0.935, "the same photographs, cut four ways", fontsize=dc.FLOOR_PT + 3, color=dc.SOFT, va="top")
 
     def dots(rect: list[float], cols: int, rows: int, hits: int, size: float, title: str) -> None:
@@ -484,7 +477,7 @@ def frame_problem_largest() -> Any:
     from PIL import Image
 
     fig = dc.blank()
-    _problems_column(fig, 2, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("Which one sets the size?"), COCO_PROBLEMS)
     images, coco, by_image, names = _coco()
     meta = next(i for i in coco["images"] if i["id"] == COCO_SHELF)
     cars = [a["bbox"] for a in by_image[COCO_SHELF] if names[a["category_id"]] == "book"]
@@ -523,7 +516,7 @@ def frame_problem_pile() -> Any:
 
     images, coco, _, _ = _coco()
     fig = dc.blank()
-    _problems_column(fig, 3, COCO_PROBLEMS)
+    _problems_column(fig, COCO_PROBLEMS.index("A pile is not large"), COCO_PROBLEMS)
     shown = []
     # Green for the box that is right to call large, red for the one that is not.
     for (image_id, ann_id), colour, dashed in ((COCO_PILE_ONE, dc.POS, False), (COCO_PILE_ROW, dc.NEG, True)):
@@ -672,6 +665,64 @@ def frame_coco_better_zoom() -> Any:
         (dc.display_class(name), []) for name in COCO_BETTER_ZOOM_ABSENT
     ]
     dc.zoom(fig, tile, categories)
+    return fig
+
+
+#: The knobs a COCO Better set is cut to (owner, #4884: much of its power is in
+#: changing them). A set reads as one sentence, `[prevalence] [object]@[size]
+#: among [images]`, each slot a knob; under it, every knob with what it can be
+#: set to, the sentence's four in its order and then the two it does not show.
+#: All of them are query-time filters over the embedded corpus,
+#: `coco_better_export.py`'s flags, so nothing re-embeds.
+KNOB_SENTENCE = (("1%", True), ("Dog", True), ("@", False), ("Medium", True), ("among", False), ("10,000", True))
+KNOBS = (
+    ("Prevalence", "0.1% to 50%"),
+    ("Object", "any of 49: Dog, Bus, Book …"),
+    ("Size", "Small, Medium, Large, or a mix"),
+    ("Images", "up to 100,000"),
+    ("Negatives", "anything without a dog, or nothing from any class"),
+    ("Tested at", "the same size, or all three"),
+)
+#: The sentence's type and the rows', in points; the sentence's baseline, the
+#: first row's, the rows' pitch and the indent of a row's range, in figure
+#: fractions.
+KNOB_SLOT_PT, KNOB_ROW_PT = 28, dc.FLOOR_PT + 2
+KNOB_SENTENCE_Y, KNOB_ROWS_Y, KNOB_PITCH, KNOB_INDENT = 0.74, 0.585, 0.074, 0.15
+
+
+def frame_coco_better_knobs() -> Any:
+    """The set as a sentence of knobs, then every knob and what it can be set to."""
+    fig = dc.blank()
+    _coco_better_left(fig)
+    renderer = fig.canvas.get_renderer()
+
+    def width(words: str, size: float, bold: bool) -> float:
+        probe = fig.text(0, 0, words, fontsize=size, fontweight="bold" if bold else "normal")
+        w = probe.get_window_extent(renderer).width / fig.bbox.width
+        probe.remove()
+        return w
+
+    space, pad = width("a a", KNOB_SLOT_PT, True) - width("aa", KNOB_SLOT_PT, True), 0.014
+    x = dc.AREA_X0 + 0.01
+    for k, (words, slot) in enumerate(KNOB_SENTENCE):
+        # "@" binds the object to its size, as the grid's captions write it: a hair either side, not a space.
+        if k:
+            x += 0.4 * space if "@" in (words, KNOB_SENTENCE[k - 1][0]) else space
+        w = width(words, KNOB_SLOT_PT, slot) + (2 * pad if slot else 0)
+        style = dict(boxstyle="round,pad=0.3", facecolor="#eef1f5", edgecolor=dc.INK, linewidth=1.6) if slot else None
+        fig.text(x + 0.5 * w, KNOB_SENTENCE_Y, words, ha="center", va="baseline", fontsize=KNOB_SLOT_PT,
+                 fontweight="bold" if slot else "normal", color=dc.INK, bbox=style)  # fmt: skip
+        x += w
+    if x > dc.AREA_X1:
+        raise SystemExit(f"COCO Better knobs: the sentence runs to {x:.3f}, past the media area")
+    for k, (knob, words) in enumerate(KNOBS):
+        y = KNOB_ROWS_Y - k * KNOB_PITCH
+        fig.text(dc.AREA_X0 + 0.01, y, knob, ha="left", va="baseline", fontsize=KNOB_ROW_PT, fontweight="bold",
+                 color=dc.INK)  # fmt: skip
+        fig.text(dc.AREA_X0 + 0.01 + KNOB_INDENT, y, words, ha="left", va="baseline", fontsize=KNOB_ROW_PT,
+                 color=dc.INK)  # fmt: skip
+    if KNOB_ROWS_Y - (len(KNOBS) - 1) * KNOB_PITCH < dc.AREA_Y0:
+        raise SystemExit("COCO Better knobs: the rows run under the media area")
     return fig
 
 
@@ -1181,7 +1232,9 @@ FRAMES = {
     "coco-better": [
         ("data-set-coco-better-grid", frame_coco_better_grid),
         ("data-set-coco-better-zoom", frame_coco_better_zoom),
+        ("data-set-coco-better-knobs", frame_coco_better_knobs),
     ],
+    "coco-better-knobs": [("data-set-coco-better-knobs", frame_coco_better_knobs)],
     "fullmarks-sources": [
         ("data-set-spods", frame_spods),
         ("data-set-tobacco800", frame_tobacco800),
@@ -1198,9 +1251,9 @@ FRAMES = {
     "coco-problems": [
         ("coco-problems-blank", frame_problem_blank),
         ("coco-problems-merge", frame_problem_merge),
-        ("coco-problems-cuts", frame_problem_cuts),
-        ("coco-problems-largest", frame_problem_largest),
         ("coco-problems-pile", frame_problem_pile),
+        ("coco-problems-largest", frame_problem_largest),
+        ("coco-problems-cuts", frame_problem_cuts),
     ],
 }
 

@@ -161,9 +161,9 @@ How many datasets the server downloads / embeds in parallel. Both knobs **autode
 | `VTSEARCH_TORCH_THREADS` | server: the process's CPU allocation; library/batch use: `1` | Thread count for `torch` and the native math libraries. When the server starts (`python app.py` **or** gunicorn importing `app.py`), `vtsearch/torch_threads.py` resolves it — the variable if set, otherwise the CPUs this process may run on (`os.sched_getaffinity`, i.e. the SLURM/cgroup/container allocation) — and exports the result as `OMP_NUM_THREADS` / `MKL_NUM_THREADS` before torch is imported, **overwriting** any value already in the environment (including the `OMP_NUM_THREADS=1` the Dockerfiles set). Code that imports `vtscore` without `app.py` (scripts, tests) defaults to `1`. Each thread allocates its own scratch buffers, so lower it on a memory-constrained box. |
 | `VTSEARCH_EMBED_BATCH_SIZE` | `32` | Items per GPU embedding batch. Lower it if a large model OOMs on a small card; non-positive or unparseable values fall back to the default. Some embedders (e.g. video models, whose per-clip frame stacks are much larger) ship a smaller default of their own. |
 | `VTSEARCH_DECODE_WORKERS` | allocated CPUs − 1, capped at 8 | Threads used to decode images *ahead* of the GPU forward during bulk image embedding. Decoding a batch inline, forwarding it, then decoding the next leaves the GPU idle for the whole decode — measured at 82% idle for base SigLIP on a V100 — so the decode runs on a pool, one batch ahead. The default is sized from the CPUs this process may actually run on (`os.sched_getaffinity`, which reflects a SLURM/cgroup allocation rather than the node's core count), leaving one for the calling thread. Set `0` to decode inline on the calling thread. Results are unaffected either way; the only cost of the pool is holding two batches of decoded images instead of one. |
-| `VTSEARCH_EMBED_PRECISION` | `fp32` | Compute precision for the **image** embedding forward pass. `fp32` is full precision and the shipped default. `fp16` / `bf16` cast the weights (fastest; `bf16` needs sm_80+, so not a V100); `autocast_fp16` / `autocast_bf16` keep fp32 weights and wrap the forward in `torch.autocast`, which holds softmax and layer norm in fp32 — numerically safer, slower; `auto` picks `bf16` where supported, else `fp16`. Every half mode degrades to `fp32` off CUDA, where half is emulated and *slower* than the fp32 it replaces. Stored vectors are always fp32 — only the compute is half. **Half precision changes the vectors** (cosine similarities shift ~1e-3, against a ~1e-7 fp32 kernel-selection noise floor), so a dataset embedded in one mode is not interchangeable with one embedded in another; re-embed a collection wholesale rather than in halves. **The speedup is only on the heavy encoders.** End to end it is 2.0x (L40S) to 2.5x (V100) on `siglip2_l`, but **0.99x on the default `siglip`** on both cards — base SigLIP's forward stopped being the bottleneck once decode was overlapped with it, so the knob buys the shipped default nothing. (The 4.2x in #3143 was the `siglip2_l` forward measured in isolation, before that overlap landed.) This is also the escape hatch back to `fp32`. |
+| `VTSEARCH_EMBED_PRECISION` | `fp32` | Compute precision for the **image** embedding forward pass. `fp32` is full precision and the shipped default. `fp16` / `bf16` cast the weights (fastest; `bf16` needs sm_80+, so not a V100); `autocast_fp16` / `autocast_bf16` keep fp32 weights and wrap the forward in `torch.autocast`, which holds softmax and layer norm in fp32 — numerically safer, slower; `auto` picks `bf16` where supported, else `fp16`. Every half mode degrades to `fp32` off CUDA, where half is emulated and *slower* than the fp32 it replaces. Stored vectors are always fp32 — only the compute is half. **Half precision changes the vectors** (cosine similarities shift ~1e-3, against a ~1e-7 fp32 kernel-selection noise floor), so a dataset embedded in one mode is not interchangeable with one embedded in another; re-embed a collection wholesale rather than in halves. **The speedup is only on the heavy encoders.** End to end it is 2.0x (L40S) to 2.5x (V100) on `siglip2_l`, but **0.99x on the default `siglip`** on both cards — base SigLIP's forward stopped being the bottleneck once decode was overlapped with it, so the knob buys the shipped default nothing. (The 4.2x in #3143 was the `siglip2_l` forward measured in isolation, before that overlap landed.) **EmbeddingGemma 2** (`embeddinggemma2`, `embeddinggemma2_audio`) honours only the `bf16` modes: its activations overflow fp16 (NaN or silently degraded vectors, per its model card), so the `fp16` modes run it in `fp32`. This is also the escape hatch back to `fp32`. |
 | `VTSEARCH_TEXT_SORT_CUT` | `gmm_midpoint` | Where a **typed-query** sort draws its green/red line, and where Autopilot's opening Bad phase votes. `gmm_midpoint` is the midpoint of a two-Gaussian fit, the shipped default. `guarded_tail` keeps that mixture (fitted to convergence) only when its components are separated, and otherwise cuts at the median plus 3 robust sigmas. On 1,120 labelled text sorts (#3826) the midpoint painted a median 43% of the collection green. The guarded line paints about as many as truly match (F1 0.17 → 0.39) and moves 4× less when the collection is resampled. It is worse on the Inclusion-0 rate cost, and it fails on queries whose matches are the majority of the collection (e.g. "a person" in COCO). Example and label-file sorts are unaffected. **It is off by default because it makes Autopilot's opening worse.** The Bad phase votes near this line, so under `guarded_tail` it samples the top of the ranking instead of its middle, and the first detectors see only near-miss negatives: Δcost +0.016 ± 0.005 over 100 clicks and +0.071 ± 0.013 at 6-20 votes in the trajectory A/B (`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`). Shipping it as a display-only line is #4136. An unrecognised value falls back to the default. |
-| `VTSEARCH_IMAGE_PROCESSOR_BACKEND` | `torchvision` | Which implementation resizes and normalises an image before the **image** encoder sees it. `torchvision` is the fast tensor path and the shipped default; `pil` is the legacy PIL/numpy one; `auto` passes nothing and inherits whatever the installed `transformers` defaults to. The default is `torchvision` rather than `auto` because `auto` is not a property of this repository: `transformers` 5 removed the `Fast` suffix, so the bare `SiglipImageProcessor` means PIL below 5 and torchvision at 5+, and `requirements/image-embedders.txt` pins a range (`>=4.49`) that spans the flip. **The two backends produce different vectors** — they disagree on 53–59% of pixel elements and by a median `1 − cos` of ~1.5e-04 on `siglip2_l`, 50× the fp16 perturbation — so two hosts resolving different wheels used to embed differently from identical code and weights. Naming the backend removes that axis. The pre-embedded pile is torchvision-built, so on a `transformers` 5 host this is a no-op; **on a 4.x host it changes behaviour**, bringing that host into agreement with the pile instead of quietly disagreeing with it. Not every architecture ships both (DINOv3 has no PIL implementation), and `transformers` *warns and falls back* rather than raising when asked for one that does not exist — so a request is not a guarantee, and the app reads the loaded class back and logs a warning naming the embedder when it differs. Set `auto` for the pre-#3173 behaviour. |
+| `VTSEARCH_IMAGE_PROCESSOR_BACKEND` | `torchvision` | Which implementation resizes and normalises an image before the **image** encoder sees it. `torchvision` is the fast tensor path and the shipped default; `pil` is the legacy PIL/numpy one; `auto` passes nothing and inherits whatever the installed `transformers` defaults to. The default is `torchvision` rather than `auto` because `auto` is not a property of this repository: `transformers` 5 removed the `Fast` suffix, so the bare `SiglipImageProcessor` means PIL below 5 and torchvision at 5+, and `requirements/image-embedders.txt` pinned a range (`>=4.49`) that spanned the flip (it is `>=5.18` since #4838, but an existing environment can still hold 4.x). **The two backends produce different vectors** — they disagree on 53–59% of pixel elements and by a median `1 − cos` of ~1.5e-04 on `siglip2_l`, 50× the fp16 perturbation — so two hosts resolving different wheels used to embed differently from identical code and weights. Naming the backend removes that axis. The pre-embedded pile is torchvision-built, so on a `transformers` 5 host this is a no-op; **on a 4.x host it changes behaviour**, bringing that host into agreement with the pile instead of quietly disagreeing with it. Not every architecture ships both (DINOv3 has no PIL implementation), and `transformers` *warns and falls back* rather than raising when asked for one that does not exist — so a request is not a guarantee, and the app reads the loaded class back and logs a warning naming the embedder when it differs. Set `auto` for the pre-#3173 behaviour. |
 | `VTSEARCH_IMAGE_PROCESSOR_DEVICE` | `auto` | Where the resize/normalise above runs. `auto` passes nothing (CPU tensors, today's behaviour); `cpu` is explicit; `cuda` hands the work to the GPU, which the `torchvision` backend supports through a `device=` call kwarg. `cuda` degrades to `auto` off CUDA rather than raising — an escape hatch that crashes on a laptop is not an escape hatch. It stays at `auto` because it is **not** free numerically: GPU resampling differs from CPU torchvision by *more* than CPU torchvision differs from PIL. The speedup is also smaller than it looks — 1.68× on `siglip`'s embed path in isolation but ~1.09× per pile cell, and ~1.02× for `siglip2_l`. |
 | `VTSEARCH_MAX_DECODE_PIXELS` | `64000000` (64 MP) | Pixel budget for a single image decode. Sources above it are downsampled (aspect preserved) before reaching a thumbnail, embedder, extractor, or converter — all of which resize to a few hundred pixels anyway — so gigapixel panoramas and whole-slide scans import instead of exhausting memory. Ordinary photographs are never touched; crop/clip paths deliberately bypass this and decode at native size. Set to `0` to disable bounding entirely. |
 | `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` | `2000000` (2 MP) | Resolution budget for local-feature detection in the structural (instance-matching) embedders. SIFT detection cost scales with pixel count while the keypoint set is capped regardless, so an uncapped high-resolution source pays many times over for the same descriptors — and spends them on fine texture that does not survive a rescale, so it matches worse as well as slower. Keypoints are stored in normalised coordinates and SIFT is scale-invariant, so features detected under different budgets still match each other. Set to `0` to detect at native size. |
@@ -230,10 +230,8 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
 
 `python app.py` runs Flask's built-in dev server and is intended for
-development only. The Docker images already use gunicorn via the CMD in
-`docker/Dockerfile`, `docker/Dockerfile.gpu`, and
-`docker/Dockerfile.labbench`, so this only applies if you are running
-outside Docker.
+development only. Every Docker image under `docker/` already uses gunicorn
+via its CMD, so this only applies if you are running outside Docker.
 
 ### Why `VTSEARCH_SERVER_INIT=1`?
 
@@ -628,7 +626,9 @@ working.
   "projection_n_neighbors": 15,
   "projection_min_dist": 0.1,
   "browse_signpost_vocab": {},
-  "default_settings_source": null
+  "default_settings_source": null,
+  "default_labelset_source": null,
+  "labelset_source_push_interval_seconds": 60
 }
 ```
 
@@ -719,6 +719,28 @@ working.
   out. Template the `field_values` (e.g.
   `{"filepath": "data/user-settings/{username}.json"}`) to personalise it per
   user.
+- `default_labelset_source`: auto-export every detector's labels (#4913). Same
+  `{"source_name": ..., "field_values": ...}` shape as a detector's own
+  labelset-source binding; every detector without one keeps its whole
+  labelset synced to this source as it is labelled, and pulls it back (merging)
+  when it loads. That makes the source the copy that survives losing this
+  server: re-create a detector under the same name and loading it restores its
+  labels. Each **non-empty** value in `field_values` is fixed - users never see
+  or change it - and the New Detector form asks for the source's other fields,
+  storing them on the detector (the Dashboard's **Auto-export…** action edits
+  them later, and flags a detector still missing one). For example, to keep
+  one JSON file per detector on a mounted backup volume, with nothing for
+  users to fill in:
+  `{"source_name": "server_json_file", "field_values": {"filepath": "/mnt/backup/vtsearch/{detector_name}.labels.json"}}`.
+  In a multi-user deployment a `server_path` value is confined to the
+  detector creator's data directory, like every server path a user supplies.
+  `null` (the default) auto-exports nothing.
+- `labelset_source_push_interval_seconds`: the shortest gap between two pushes
+  of one detector's labels to its labelset source (default 60). Pushes for one
+  detector never overlap, and changes made meanwhile ride the next push, so a
+  slow target or a burst of votes costs one write per window; pending pushes
+  are flushed on a normal shutdown. `0` pushes as soon as the previous push
+  lands. Clamped to `[0, 86400]`.
 
 #### Per-user tier — `user_settings.json`
 
@@ -852,6 +874,7 @@ startup sequence runs at WSGI import time. See
 | `docker/Dockerfile` | `docker-compose.yml` | `python:3.12-slim` | Full CPU build (all media types). Installs `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`. |
 | `docker/Dockerfile.gpu` | `docker-compose.yml` + `docker-compose.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | Full GPU build; needs the NVIDIA Container Toolkit on the host. |
 | `docker/Dockerfile.labbench` | `docker-compose.labbench.yml` | `python:3.12-slim` | SigLIP-only image search from `requirements/labbench.txt`; SigLIP weights baked in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. |
+| `docker/Dockerfile.solo` | `docker-compose.audio.yml`, `docker-compose.video.yml` | `python:3.12-slim` | The full CPU build locked to the media type given as the required `MEDIA_TYPE` build arg (`VTSEARCH_SOLO_MEDIA_TYPE`), with that type's default embedder weights baked in under `/opt/vtsearch/models` (CLAP General for `audio`, X-CLIP for `video`; for the half types, SigLIP for `document`'s page images and FaceNet for `face` crops). |
 | `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.12-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
 | `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
 
@@ -864,7 +887,7 @@ accepts: one new enough for CUDA 12.9 (driver 575 or later), or one from the
 R535, R550, R560, R565 or R570 branches. Anything else is refused at
 `docker run` with an `unsatisfied condition: cuda>=12.9` error. Check with
 `nvidia-smi`. The images ship torch's `cu129` build, which carries no Volta
-(`sm_70`) kernels: on a V100 host use `scripts/install.sh cu124` instead (see
+(`sm_70`) kernels: on a V100 host use `scripts/install.sh cu126` instead (see
 [SETUP.md § Picking the CUDA tag](SETUP.md#picking-the-cuda-tag)).
 
 ### Resource considerations
@@ -1369,8 +1392,8 @@ it "comes back every time."
 ```bash
 nvidia-smi                                                   # driver visible now?
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-#   2.x+cu124  True   -> both fine
-#   2.x+cu124  False  -> CUDA torch OK, the kernel MODULE broke (kernel update)
+#   2.x+cu126  True   -> both fine
+#   2.x+cu126  False  -> CUDA torch OK, the kernel MODULE broke (kernel update)
 #   2.x+cpu           -> the env got a CPU torch (env-recreation, a separate issue)
 dkms status | grep -i nvidia || echo "NOT dkms-managed -> kernel updates WILL break it"
 uname -r; ls /lib/modules/                                   # >1 kernel = an update happened
@@ -1434,7 +1457,7 @@ box where `dkms` can't be reached and only the precompiled kABI-stream or a plai
 
 ### GPU install's cuML step (skipped on every tag but `cu129`)
 
-**What you see**: on a `cu118`, `cu121`, `cu124` or `cu128` install the step
+**What you see**: on a `cu118`, `cu126` or `cu128` install the step
 prints `(skipped: cuML needs RAPIDS >= 26.8 …)` and the smoke test at the end
 reports `cuML not importable -> GPU UMAP/k-means will use the CPU fallback`.
 
@@ -1442,7 +1465,7 @@ reports `cuML not importable -> GPU UMAP/k-means will use the CPU fallback`.
 which cuML depends on, is the first to take pandas 3 at RAPIDS **26.8**; an
 older RAPIDS would downgrade pandas to 2.x mid-install. RAPIDS 26.x in turn
 requires `nvidia-nvjitlink-cu12 >= 12.9`, which only the `cu129` torch wheel
-pins (`cu124` pins `==12.4.x`, `cu128` `==12.8.x`), so on those tags the two
+pins (`cu126` pins `==12.6.x`, `cu128` `==12.8.x`), so on those tags the two
 cannot share a venv and the installer does not try.
 
 **What to do**: if the GPU is Turing or newer (`sm_75+`; every card since the
@@ -1452,7 +1475,11 @@ already picks that tag on such hosts, so an explicit older tag is usually why
 you got here. A Volta card (V100) has no `cu129` torch, and a driver below CUDA
 12.9 can't run one: those hosts run UMAP / k-means on the CPU. RAPIDS 25 can
 still be assembled on them by hand (`VTS_CUML_CU12_SPEC='cuml-cu12<26'`), at
-the cost of pandas dropping to 2.x in that venv.
+the cost of pandas dropping to 2.x in that venv. On `cu126` that works cleanly:
+RAPIDS 25.12 accepts any CUDA 12 libraries (`cuda-toolkit==12.*`), so it runs on
+the 12.6 set torch pins and pip reports no conflict. The GRID's V100 venvs are
+built this way: torch 2.14.1+cu126 with cuML 25.12, which runs GPU UMAP and
+k-means on a V100S (#4838).
 
 **On `cu129`** the step runs, and torch and RAPIDS share one set of
 `nvidia-*-cu12` wheels (torch pins them at 12.9.x, RAPIDS 26.8 is built on
@@ -1478,7 +1505,7 @@ storage class or type specifier  __NV_SILENCE_DEPRECATION_BEGIN
 pinned**. cuML compiles its cuVS/raft kernels with nvrtc lazily, on the first
 UMAP/k-means `fit`. RAPIDS **26.x** requires `nvidia-nvjitlink-cu12 >= 12.9`
 and is built on CUDA 12.9; a torch from an older tag pins the other CUDA
-libraries lower (`cu124` = 12.4.x, `cu128` = 12.8.x), so pip reports the
+libraries lower (`cu126` = 12.6.x, `cu128` = 12.8.x), so pip reports the
 conflict:
 
 ```
@@ -1493,9 +1520,9 @@ the resident nvrtc doesn't define), producing the `cuda_fp8.hpp` crash above.
 `scripts/install.sh` and `docker/Dockerfile.gpu` install RAPIDS **only
 alongside the `cu129` torch**, whose pins are the 12.9.x libraries RAPIDS is
 built on, so fresh installs are unaffected. A venv built before that move
-(torch `cu124` plus `cuml-cu12<26` and pandas 2) is consistent with itself and
-keeps working; the crash comes from mixing the two eras in one venv, e.g. by
-upgrading cuML there by hand.
+(torch `cu124`, or `cu126` since #4838, plus `cuml-cu12<26` and pandas 2) is
+consistent with itself and keeps working; the crash comes from mixing the two
+eras in one venv, e.g. by upgrading cuML there by hand.
 
 VTSearch also **degrades to the CPU UMAP/k-means path** whenever a cuML fit
 fails for any reason (logging a one-time warning) instead of crashing, so the

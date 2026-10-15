@@ -640,6 +640,63 @@ against the full VG source the same band holds **643** categories. So the fix is
 to use `vg_box_small` — built for exactly this — rather than to re-cut the band
 on a dataset that was never sampled for scale.
 
+## A second source: `o365_better` (#4815)
+
+`coco_better`'s construction on Objects365 v2's validation split: the same *C*,
+bands, pool rule and media dict, through the same `scale_core` objects, so a cell
+of the same name means the same thing on both. It exists to **confirm** method
+comparisons made on `coco_better`, and it can only do that if nothing is tuned
+on it.
+
+What changes is the vocabulary. `pile_config.O365_NAMES` maps each class onto
+Objects365 categories through its class rule, and `O365_AMBIGUOUS` holds the
+names that may or may not be the class. A box under an ambiguous name, or one the
+release flags `iscrowd` / `isfake` / `isreflected`, holds the class (so the image
+is no negative for it) but is never a positive. The supply census reads the
+annotation file alone, through the loader's own reader:
+
+```bash
+python o365_supply.py --annotations <zhiyuan_objv2_val.json> --out supply.json
+```
+
+Val fills 110 of 147 cells (the rest are `O365_DROPPED_CELLS`) and a 7,356-image
+pool, so a cell is scored against fewer negatives than on `coco_better` and
+absolute AP does not compare across the two. Full numbers, the rulings the
+ambiguous names are waiting on, and how to stage the images:
+[`docs/experiments/2026-10-13-o365-supply-4815/`](../../../docs/experiments/2026-10-13-o365-supply-4815/REPORT.md).
+The dataset is `on_request`, so it builds only when named.
+
+## Born-digital: `apptitude` (#4356)
+
+Android app screens by what the screen is for (settings, login, map, chat...),
+the genre track of the born-digital benchmark. Whole-image classes, no boxes.
+No public source labels screen function, so a label is two signals nobody fitted
+to images agreeing: the developer's Activity name proposes a class and at least
+two of the screen's Screen2Words crowd summaries must say it too. Nothing else is
+in the pool, so a negative is always another class's agreed screen, never "no
+keyword matched". The sources (Rico's original release, `ui_details.csv`, the
+summaries) are staged under `pile_config.RICO_ROOT`, whose README names each one.
+
+Three things the loader does that no other kind does:
+
+* **Every media carries `split_group`**, its app: the union of the package Rico
+  was exploring and the package in the foreground (the system browser opened from
+  another app), and `_split_media_ids` keeps a group on one side of the split.
+* **A screen whose captions also say a second class is not evaluable for it**
+  (`evaluable_categories`), since a login screen with a sign-up button may be
+  exactly what a sign-up search wants back.
+* **v0 is the agreed set only.** The disagreements are in owner review queues, and
+  a class's reviewed screens join when its whole queue is answered, never part of
+  it: votes arrive in the app's ranked order, so a part-answered queue is the
+  easy end.
+
+Apptitude was named Rico Suave (`rico_suave`) until 2026-10-15; v0's report and its GRID runs
+(`/expscratch/$USER/rico-suave/runs/`) predate the rename and keep the old name.
+
+Runs: [`scripts/experiments/apptitude/launch.sh`](../apptitude/launch.sh). First read:
+[`docs/experiments/2026-10-14-rico-suave-v0-4356/`](../../../docs/experiments/2026-10-14-rico-suave-v0-4356/REPORT.md).
+The dataset is `on_request`, so it builds only when named.
+
 ## Rebuilding
 
 Scratch is treated as purgeable, so every cell must rebuild from sources that

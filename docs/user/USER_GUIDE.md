@@ -138,29 +138,39 @@ from your labels, it travels with them: export the detector, run it on
 another collection, and VTSearch draws the line the same way there.
 Until you **check** the items above the line, nothing has measured how much
 of them is right or how much of what is there they found, and the note under
-the Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
+the Threshold says so: **32 more kept, unchecked** (or however many it kept
+besides the items you voted on).
 
-**The spot check.** In Train, click **Check 5 picks** beside the note.
-VTSearch cuts the list you haven't voted on into bands from the top (the top
-8, the next 8, then 16, 32, 64, and so on), draws 5 items at random from a
-band, and shows them one at a time. Vote each one Good or Bad with the usual
-keys: → for Good, ← for Bad, and ↓ to go back and change one. The last vote
-of a round sends it, and the check moves to the next band. Test offers no
-spot check: it is where you test the Threshold you set here, not where you set it.
+**The spot check.** Autopilot runs it for you, as its **Spot Check.** step
+(see [The phases](#the-phases)): once every quality light is green, or the
+detector already expects a good result (see below), just before it says
+**Done!**. There is no button for it; only Autopilot starts a
+check. VTSearch cuts the list you haven't voted on into bands from the top
+(the top 8, the next 8, then 16, 32, 64, and so on), draws 5 items at random
+from a band, and shows them one at a time in the centre, where the item
+usually is. Vote each one Good or Bad with the usual keys: → for Good, ← for
+Bad, and ↓ to go back and change one. The last vote of a round sends it, and
+the check moves to the next band. **Stop check** ends it early, and Autopilot
+carries on; **Continue** ends a finished one. If a check ended in your last 25
+answers, Autopilot skips this one: that check has just measured the line. It
+also runs none when you come back to a detector whose lights were already all
+green when Autopilot started: the session that finished it had its check. Test
+runs no spot check: it is where you test the Threshold you set here, not
+where you set it.
 
 **When your labels still overlap**, a check is worth doing now rather than
-later. If the detector scores your Good and Bad answers close together, the
-check button turns into the highlighted **Check 5 picks** and a note under the
-Threshold says your labels still overlap. A check's picks, spread evenly down
-the list, are exactly the answers that show the detector where its line falls.
-Autopilot runs the check itself at that point, once it has started learning
-from your answers, and asks again 25 answers later if your labels still
-overlap. Measured on COCO, sessions whose labels overlap returned far fewer
-wrong pictures and found more right ones for the same number of clicks.
+later. If the detector scores your Good and Bad answers close together, a note
+under the Threshold says your labels still overlap. A check's picks, spread
+evenly down the list, are exactly the answers that show the detector where its
+line falls, so Autopilot runs the Spot Check step at that point too, once it
+has started learning from your answers, and again 25 answers later if your
+labels still overlap. Measured on COCO, sessions whose labels overlap returned
+far fewer wrong pictures and found more right ones for the same number of
+clicks.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
-  <img src="assets/floor-check.light.webp" alt="The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
+  <img src="assets/floor-check.light.webp" alt="Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
 </picture>
 
 The picks come in the order they were drawn, which is random, with no rank
@@ -182,22 +192,31 @@ good matches that can be hundreds, on a short or sparse one as few as 8.
 **The check does not move the line**: it measures, and your picks become
 votes that the next retrain learns from like any other, but the line stays
 where your labels put it. The check's last screen says what it found -
-**Checked the top 48: likely 55–80% right, about half of them found (checked
-15).** and **The line keeps its 30, where your labels put it: the check
-informs the line and does not move it. The ranges are what the picks say
-about the top 48.** - and the note under the Threshold then shows the same
-result:
+**Checked the top 48 you hadn't voted on: likely 55–80% right, about half of
+them found (checked 15).** and **The line keeps the top 30 you haven't voted
+on, where your labels put it: the check informs the line and does not move
+it. The ranges are what the picks say about the top 48 you hadn't voted on;
+the Goods you had already voted on count in neither.** - and the note under
+the Threshold then shows the same result:
 
-- **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  30 kept** - the check measured the top 48, and the line keeps 30. The
-  range is how much of the checked set is likely right; the phrase after it
-  is how much of what the list holds that set likely found (**few of them**,
-  **about a quarter**, **about half**, **about three quarters** or **nearly
-  all of them**). Hovering the note says which set the check measured. The note names no cause for a poor result: a dataset with very few
+- **Checked the top 48 you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 15) · 30 more kept** - the check measured the top
+  48 of the items you hadn't voted on, and the line keeps 30 more besides
+  your votes. The range is how much of the checked set is likely right; the
+  phrase after it is how much of the matches you hadn't voted on that set
+  likely found (**few of them**, **about a quarter**, **about half**,
+  **about three quarters** or **nearly all of them**). Hovering the note
+  gives both as numbers. The note names no cause for a poor result: a dataset with very few
   matches and a detector that can't yet tell them apart look the same from
   here.
 
-**The likely range** says how much of the set the line keeps is probably
+**Neither range counts your own votes.** The check samples only the items
+you haven't voted on, so the Goods you have already found are in neither the
+share right nor the share found. Late in a session, once you have voted on
+most of the matches near the top, the items left there hold few of them, so
+the check before **Done!** can read low after a session that went well.
+
+**The likely range** says how much of the set the check measured is probably
 right. It comes from your picks alone, never from the detector's own guess:
 each band's picks bound that band, and the bands are weighed by their size.
 With 5 picks a band it is wide; that width is the honest answer to "how
@@ -328,6 +347,13 @@ whether it counts as a yellow smiley is your call: the detector learns where
 *you* draw the line. Twenty or thirty
 answers is usually enough, and the phase list on the left shows how far
 along you are (see [Autopilot](#autopilot-the-guided-workflow)).
+
+**Misclicked?** Open the **Labels** panel on the right and click the
+picture: it comes back in the middle with its answer's button filled in.
+Click the other button to change it, and Autopilot carries on. To leave it as
+it is, click Autopilot's current step in the strip on the left (or press
+`↑`), which brings back the picture Autopilot picked. `↓` steps back through the pictures you just answered, too
+(see [Tips and shortcuts](#tips-and-shortcuts)).
 
 ### Step 3: Load a test dataset
 
@@ -533,6 +559,23 @@ control there is the embedder picker, which is actually a three-role picker:
 - **Instance embedder (optional)** - a pattern-matching model for
   finding a specific object or logo.
 
+**Which embedder for photos?** The default, SigLIP, is fast on any machine.
+If a GPU analyzes your collection, **SigLIP2-L (SO400M/384)** is the better
+choice, especially when what you are looking for is small in a busy scene:
+a fork on a dining table, a distant chair.
+
+- **What it gains.** Its typed-query search and its detectors are better at
+  every object size. It also cut by about two thirds how often a search for a
+  small object turned up fewer than three examples in its first 150 votes
+  ([the measurements](../experiments/2026-10-14-siglip2l-4874/REPORT.md)).
+- **What it costs on a GPU.** Analysis takes about 10× as long as SigLIP's, or
+  about 3× with half precision (`VTSEARCH_EMBED_PRECISION=fp16`, see
+  [Deployment](../DEPLOYMENT.md)).
+- **Not on a CPU-only machine.** There it is about 19× slower, so keep SigLIP.
+
+The choice is made once, at import: a dataset's detectors are trained in its
+embedder's space, so switching later means analyzing the dataset again.
+
 The rest of the Advanced section, and one toggle on the importer's own
 form:
 
@@ -643,7 +686,10 @@ The run shows on the new dataset's Dashboard row while it works, and its
 it found; its **View results** button opens the **Find Results**
 dialog, which lists every item each detector called Good (switch to
 **Bad** or **Both** to see the rest), copies the list to the clipboard,
-and **Export**s the listed rows to any exporter. If you picked a results
+and **Export**s the listed rows to any exporter. A detector with too few
+labels for a trained one runs as its typed description, or as the Goods'
+centroid, as in [Test](#testing-a-detector), and the dialog names it, with the
+labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
 results there too. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
@@ -665,8 +711,8 @@ moving them to the AutoFind tab - tick them and the datasets to run them
 on, and click the big **Find** button in the Dashboard's action bar,
 beside **Train** and **Test**. It is enabled once at least one dataset
 and one detector are ticked, all of one media type, and every ticked
-detector is trained. Unlike Test, which takes exactly one dataset and one
-detector, it uses every ticked row:
+detector has labels or was made from a typed description. Unlike Test,
+which takes exactly one dataset and one detector, it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the Find Results dialog; any that finish while the
@@ -805,7 +851,7 @@ that reaches **Done!** opens its result panel on its own.
 Most users should never need Manual mode.
 
 Click the **Autopilot** tab in the left panel. Autopilot breaks
-labeling into four phases and tells you what to do at each step.
+labeling into phases and tells you what to do at each step.
 You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
@@ -814,7 +860,7 @@ just picks *which* items to show you and *when* each phase ends.
   <img src="assets/autopilot-vote.light.webp" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
 </picture>
 
-### The four phases
+### The phases
 
 The phase panel labels them, in order:
 
@@ -824,7 +870,12 @@ The phase panel labels them, in order:
    ranking the Text sort uses. If you don't see anything good,
    Autopilot eventually offers to change what it sorts by; you can also
    find a few matches yourself on the **Manual** tab (see
-   [Get Autopilot unstuck](howto/unstick-autopilot.md)).
+   [Get Autopilot unstuck](howto/unstick-autopilot.md)). If 200 votes go
+   by without the Goods it needs, Autopilot stops: the panel says
+   **Autopilot has stopped** and how many it found, and it offers the
+   change of sort once more. Your search may not reach what you are after
+   in this collection; voting on keeps looking, and if the Goods turn up
+   Autopilot checks the line and calls the detector done straight away.
 2. **Find Initial Bads.** - Vote some **bad** items (default: 4). Now
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
@@ -833,11 +884,32 @@ The phase panel labels them, in order:
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
-   and "stable" indicators in the status bar both turn green).
+   and "stable" indicators in the status bar both turn green). If you
+   started from a typed description on photos, the ranking behind the
+   item stays the description's until your 30th vote: the detector asks
+   the questions, but its matches only beat the description's from about
+   there.
 4. **Explore Diversity.** - Autopilot serves items from parts of the
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
+5. **Spot Check.** - With every quality light green, or once the
+   detector expects an F-beta of at least 0.5 at your balance (its own
+   estimate of how much of what it returns is right, and how much of what
+   is there it finds), or once you have cast 200 votes, Autopilot checks
+   the line before it calls the detector done. The second way ends a
+   session that is already good without waiting on the last light, and the
+   panel then quotes the F-beta it expects instead of saying every light is
+   green. The third ends every session that has not got there by 200
+   votes: past that, sessions that are still going gain little, from
+   little, and the panel says so ("as many as Autopilot asks for"). The check is
+   a few items drawn at
+   random from bands of the list, shown in the centre one at a time for
+   your Good or Bad (see [How close the line got](#how-close-the-line-got)).
+   It measures how much of what the detector returns is right, and its
+   answers train the detector like any others. It runs once a session;
+   while your Good and Bad labels still overlap, Autopilot runs it earlier
+   too, and the panel goes back to the phase it interrupted afterwards.
 
 The current phase carries one light that shows how close it is to done.
 It starts as a **red** circle, turns **yellow** once the phase is past
@@ -846,10 +918,10 @@ which point Autopilot moves on to the next one; every finished phase
 keeps its check. For the two Find phases, halfway is half the
 vote target (2 of 3 goods, 2 of 4 bads); for Refine Boundary the light
 shows whichever of the smart and stable indicators is further behind;
-for Explore Diversity it is half the coverage goal. Hover the light for
-the details.
+for Explore Diversity it is half the coverage goal; Spot Check stays
+yellow until the check ends. Hover the light for the details.
 
-When all four phases are done, Autopilot shows **Done!** and Toasty
+When the phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
 trained: keep voting and it keeps improving (your next vote sends Toasty
 away), or click **Dashboard** to export it or run it over another dataset.
@@ -858,7 +930,9 @@ trained the detector - coming back later to refine it further will not
 raise it again. If you label every item before then, Toasty says so instead
 and points you back to the Dashboard. When you open the Train view on a
 detector with no labels yet, Toasty also stands over the **Good** / **Bad**
-buttons until your first vote. See [Toasty's hints](#toastys-hints).
+buttons: asking for your first vote, then, through the run that trains the
+detector, saying what the current phase is after and how many Goods or Bads
+it still needs. See [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays checked, and a seventh step, **Keep
 Improving.**, takes over for as long as you keep labeling. It is
@@ -896,14 +970,14 @@ dry run there means the detector has found what it can.
 Autopilot starts collapsed to a thin strip that just shows the
 phase indicators, with the current phase's light above its name
 (the left panel's fold; see [The three-panel layout](#the-three-panel-layout)).
-Click any active phase to re-pick the
-current recommendation (useful if you voted the wrong way and
-want a fresh suggestion). The ▶ at the top of the strip opens the
+Click the active phase to go back to
+Autopilot's pick: after clicking an item in **Labels** to check or
+change its answer, say, or for a fresh suggestion. The ▶ at the top of the strip opens the
 full phase list, and its ◀ collapses it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
-  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity, Spot Check) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
@@ -973,7 +1047,7 @@ Picks *which unlabeled item* the app highlights next.
 - **New** - Pick an item from a part of the dataset you haven't
   covered yet. Ensures a broad mix.
 
-Autopilot cycles through these automatically in its four phases,
+Autopilot cycles through these automatically in its phases,
 but in Manual mode you choose directly.
 
 ### 3. Threshold
@@ -1001,21 +1075,22 @@ Once the list is ranked by the detector (a **Learned** sort, or Test), the
 note under the spectrum says what the Threshold is doing to the line, in one
 of two states:
 
-- **Top 32 kept, unchecked** - nothing has measured the set yet (the count
-  is 32 at most; fewer when the detector's estimate says the balance peaks
-  sooner).
-- **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  48 kept** - a check walked the list and ended where the balance peaked;
-  the line keeps that set, and the note says how much of it is likely right
-  and how much of what the list holds it likely found.
+- **32 more kept, unchecked** - the line keeps 32 items you haven't voted
+  on, besides your votes, and nothing has measured them yet.
+- **Checked the top 48 you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 15) · 30 more kept** - a check walked the items you
+  hadn't voted on and ended where the balance peaked, on the top 48; the
+  note says how much of that set is likely right and how much of the matches
+  you hadn't voted on it likely found. The line keeps its own 30 more, where
+  your labels put it.
 
-The range a check measured is a number. In Train, beside the note, **Check 5
-picks** runs a spot check of the list: 5 random picks from each band of it,
-which you vote on, walking deeper while a longer list scores better on the
-balance and stopping where it peaks. See
+The range a check measured is a number. Autopilot's **Spot Check.** step
+runs a spot check of the list: 5 random picks from each band of it, which you
+vote on, walking deeper while a longer list scores better on the balance and
+stopping where it peaks. See
 [How close the line got](#how-close-the-line-got) for the check and its
-likely range. Test shows the same note with no check beside it: there you
-test the Threshold, and it is too late to label more to set it. The **?**
+likely range. Test shows the same note and runs no check: there you test the
+Threshold, and it is too late to label more to set it. The **?**
 beside **Threshold:** explains it in two short sentences.
 
 A Threshold toward False Positives keeps a longer list, and the lists nest:
@@ -1194,6 +1269,11 @@ It has two tabs:
   in Manual mode. The detector keeps it, and Autopilot draws its line there.
   It starts on your last pick, so most detectors never need it opened; you
   can change it later in Manual or Test.
+- **Auto-export** (both tabs, only on a server set up for it) - where the
+  detector's labels are copied as you label, so a copy outside VTSearch stays
+  current (see [Auto-export](#auto-export)). The form asks only for what
+  the server left for you to fill in, such as a file name; often there is
+  nothing to fill in and it just says where the labels go.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server
@@ -1239,15 +1319,28 @@ already trust and collect what they match, with no view to work through, use
 the Dashboard's **Find** button instead (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
-**A detector with too few labels is tested as the Goods' centroid.** Until it
-has 3 Goods and 4 Bads, or one Good and 16 Bads, VTSearch does not train a
-detector from its labels:
-Test, Find and AutoFind rank everything by how close it is to the average of
-its Goods instead, and keep the images that stand out from the rest: fewer
-toward the false-negative end of the Threshold, more toward the false-positive
-end. One Good is enough to test it. The Test view says so under its tabs, with
-how many more Goods and Bads a trained detector needs. A detector with no Good
-at all can't be tested.
+**A detector with too few labels is tested as its typed description, or as the
+Goods' centroid.** Until it has 3 Goods and 4 Bads, or one Good and 16 Bads,
+VTSearch does not train a detector from its labels.
+
+- **A detector made from a typed description** (the **Text** tab of New
+  Detector) is that description instead. Test, Find and AutoFind keep the
+  images its text sort keeps in Train, at the detector's Threshold, so you can
+  test it before your first vote. Those are the matches Autopilot shows you
+  while it gathers the first labels, and on those first votes they are better
+  than the Goods' centroid's. On photos, where a picture is one point rather
+  than a set of regions, the description stays past those counts too, until
+  the detector has 30 labels: a detector trained on a few examples already
+  asks good questions, but until then its matches are worse than the
+  description's.
+- **A detector with no typed description** (made from media examples, or from
+  a labels file) ranks everything by how close it is to the average of its
+  Goods, and keeps the images that stand out from the rest. One Good is enough
+  to test it; with no Good at all it can't be tested.
+
+Either way the Threshold moves the line (fewer toward the false-negative end,
+more toward the false-positive end), and the Test view says so under its tabs,
+with how many more Goods and Bads a trained detector needs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
@@ -1537,8 +1630,11 @@ with bulk-action and per-card controls.
     Like datasets, the name carries a **Rename** pencil and **Delete**
     is inline; the **⋯** overflow menu holds the rest, including
     **Import Labels** (import labels into this detector), **Export
-    labels** (see [Exporting your work](#exporting-your-work)), and
-    **Move to AutoFind**.
+    labels** (see [Exporting your work](#exporting-your-work)),
+    **Auto-export…** (on a server set up for it; see
+    [Auto-export](#auto-export)), and **Move to AutoFind**. A row whose
+    auto-export still needs a value says **⚠ Auto-export not set up**
+    under its name; click it to fill the value in.
   - **AutoFind** holds finalized detectors. They run automatically
     against every dataset you import (see
     [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset))
@@ -1600,26 +1696,55 @@ work on whichever rows you currently have selected.
 ### Toasty's hints
 
 King Toasty (the toast with the magnifying glass in the logo) stands beside
-the next thing to click, with a speech bubble that says what to do and why.
-On the Dashboard he shows one step at a time:
+the next thing to click, with a speech bubble that says where you are and what
+to do about it. There is one hint at a time, all the way from an empty
+Dashboard to a detector's matches. On the Dashboard he shows one step at a
+time:
 
-- the **Datasets** card's **+** while you have no datasets, or a nudge to
-  select one when you have some but none is selected;
+- the **Datasets** card's **+** while you have no datasets, a nudge to select
+  one when you have some but none is selected, and a note to wait while your
+  only dataset is still importing;
 - a warning (he looks surprised) when the selected datasets hold different
   kinds of media;
-- the **Detectors** card's **+** once a dataset is in, or a nudge to select a
-  detector when you have some but none is selected;
+- the **Detectors** card's **+** once a dataset is in, a nudge to select a
+  detector when you have some but none is selected, and a pointer to the
+  other tab (**Drafts** or **AutoFind**) when the open one is empty;
 - a warning when the selected dataset and detector are for different kinds of
-  media;
+  media, when a new detector is ticked under several datasets (it trains on
+  one at a time), or when a detector with no labels is ticked among others
+  (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, and **Test** or **Find** once the selected detector is trained.
 
+While one of his hints is up, the reason under a disabled **Train**, **Test**
+or **Find** button is hidden, and so is an empty table's "Click **+** to add
+one", since the hint says the same thing; both come back if you hide the
+hint.
+
 In the Train view he asks for your first vote over **Good** / **Bad** while
-Autopilot runs on a detector with no labels, explains the **Update Sort
+Autopilot runs on a detector with no labels. Once you have voted, he moves
+beside the **Labels** panel until your next vote, saying that your votes go
+there and that you can change one by clicking it. Then he is back over **Good** / **Bad** through the run
+that trains the detector, saying what each phase is after and how far along it
+is (how many Goods and Bads it still needs, then that the detector retrains on
+every vote until the lights go green). On any run, when you click an item you
+have already labeled, he says what it is labeled, which button changes it, and
+that clicking Autopilot's current step on the left (or `↑`) goes back to
+Autopilot's pick. He explains the **Update Sort
 Example?** prompt from just below it (see [Get Autopilot
-unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he
-stands under the top bar's **Dashboard** button (see [Autopilot: the guided
-workflow](#autopilot-the-guided-workflow)).
+unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he stands
+under the top bar's **Dashboard** button (see [Autopilot: the guided
+workflow](#autopilot-the-guided-workflow)). In the Test view he explains the
+first pick, the verdict once the test is done, and the **Review** tab the
+first time you open it.
+
+The dialogs on that path have hints too: **Add Dataset**, **New Detector**,
+**Use This Example?**, **Find Results** and **Export Results**. Toasty stands
+below the dialog box, or beside its top corner when the box fills the window.
+Dialogs off the path (Settings, Help, a dataset's Stats, and the like) have
+none; they can always be cancelled. Only one hint shows at a time: opening any
+dialog hides the hint on the view behind it, and a dialog opened over another
+hides the first one's.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
@@ -1844,10 +1969,28 @@ it loads - so exporting the labels and making a detector from them there
 Opened this way the modal's **Categories** filter starts on **All**,
 which is what you want: the negatives are half of what the ranker learns
 from, and a good-only or bad-only file can't rebuild the detector at the
-other end (a good-only one gives only the Goods' centroid, below, and a
+other end (a labels file carries no typed description, so a good-only one
+gives only the Goods' centroid, as in [Test](#testing-a-detector), and a
 bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
+
+#### Auto-export
+
+On a server whose administrator has set it up, you don't have to remember
+to export at all: every detector's labels are copied to one place outside
+VTSearch (a backup folder, say) as you label, at most about once a minute,
+and once more when the server shuts down. The **New Detector** form and the
+**Auto-export…** item in a detector's **⋯** menu show where, and ask for
+anything the server left you to fill in. A detector the server does not
+have every value for is not copied until you fill them in; its row says
+**⚠ Auto-export not set up**.
+
+The copy also comes back. When a detector loads, VTSearch adds any labels
+its copy holds that the detector lacks (the detector's own label wins where
+the two disagree). So if the server loses its data, make a new detector with
+the **same name**: when it loads, its labels are restored from the copy.
+Renaming a detector moves its copy to the new name.
 
 #### Portable ONNX bundles (advanced)
 
@@ -1878,7 +2021,10 @@ bundle contains **no media and no fingerprints**, just the small trained
 ranker, but a trained ranker can still reveal something about the data it
 was trained on, so share it only with people you'd trust with the labels
 themselves. A compatible dataset must be loaded, since the ranker is
-trained against that dataset's embedder. Pattern-matching (structural)
+trained against that dataset's embedder. A detector made from a typed
+description that has too few labels for a trained ranker exports its
+description instead, which scores with the dataset's text embedder; the
+manifest names that embedder. Pattern-matching (structural)
 detectors can't be exported this way - their second verification stage
 has no ONNX equivalent - and region (patch) detectors export in a
 whole-item-only scoring mode.

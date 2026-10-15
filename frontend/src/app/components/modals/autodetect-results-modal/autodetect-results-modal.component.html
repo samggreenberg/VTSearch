@@ -1,4 +1,8 @@
 <vt-modal title="Find Results" [open]="true" (closed)="close()">
+  <vt-toasty-hint hintId="find-results">
+    These are the detector's matches in {{ data().dataset_name || 'this dataset' }}. <strong>Export</strong>
+    sends them on. <strong>Browse</strong> lays them out as a map.
+  </vt-toasty-hint>
   <!-- Summary -->
   <div class="results-summary">
     @if (data().dataset_name) {
@@ -15,7 +19,21 @@
     }
   </div>
 
-  <!-- Detectors under the label quota ran as the Goods' centroid (#4643). -->
+  <!-- Detectors under the label quota ran as their typed query (#4758), or with
+       no typed query as the Goods' centroid (#4643). Past the quota, a typed-query
+       detector is held on its query until the hold's labels (#4736, #4889). -->
+  @if (queryDetectors.length) {
+    <p class="info-text query-note" role="note">
+      Too few labels for a trained detector, so these ran as their typed query:
+      {{ queryDetectors.join('; ') }}.
+    </p>
+  }
+  @if (heldDetectors.length) {
+    <p class="info-text held-note" role="note">
+      A detector made from a typed query keeps its query's set until it has {{ holdLabels }} labels, so these
+      ran as their typed query: {{ heldDetectors.join('; ') }}.
+    </p>
+  }
   @if (centroidDetectors.length) {
     <p class="info-text centroid-note" role="note">
       Too few labels for a trained detector, so these ran as the Goods' centroid:

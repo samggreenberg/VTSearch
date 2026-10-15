@@ -12,7 +12,8 @@
  *                                                            numbered (#4202)
  *   make-detector  `figs/ui-make-detector[.buildN].webp`  — an empty app, a pile,
  *                                                            then name the concept
- *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly
+ *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly,
+ *                                                            then a staged stop
  *   find           `figs/ui-find*.webp`                    — score unseen media
  *   region-voting  `figs/ui-region-voting.webp`           — vote on a region
  *
@@ -31,12 +32,14 @@
  * clicks is decided by the filename of whatever autopilot chose to serve — the
  * picks of a spot check autopilot opens included — so the piles that
  * accumulate in the right-hand panel are a real session's, and the ranking
- * `find` then shows is a real trained head's.
+ * `find` then shows is a real trained head's (`assertTrainedHead` fails the run
+ * when it is not).
  *
  * One output of the `find` group is not a screenshot at all.
- * `figs/ui-find-grid.webp` is a contact sheet of the top of that ranking with
- * no app around it, built by `results_grid.py` from the frames the panel
- * actually listed — because not viewing your results in the tool is a feature,
+ * `figs/ui-find-grid.webp` is a contact sheet of book photographs with no app
+ * around it, built by `results_grid.py` from a seeded sample of the production
+ * pile's `book/` folder (`shootFindGrid` says why not the ranking itself) —
+ * because not viewing your results in the tool is a feature,
  * and the slide's payoff is the pictures rather than a screen with the
  * pictures stacked down one side of it (#3779). It is composed into the same
  * box a screenshot occupies, so the slide's build reveals into the same frame.
@@ -75,6 +78,7 @@
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
 import { clearCallouts, drawCallouts } from '../../../scripts/screenshots/callouts.mjs';
+import { clearStopHint, drawStopHint } from './stop-hint.mjs';
 import {
   appClient,
   BOOK_DETECTOR,
@@ -180,6 +184,12 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 //
 // A spot check's answers count towards all three (`answerSpotCheck`): they are
 // votes, and they land in the same piles.
+//
+// None of the three is the label count `find` needs. The Book detector is made
+// from a typed query, so on SigLIP it keeps its query's own set until it has 30
+// labels (#4736); the session ended at 36 on 2026-10-14 only because the spot
+// checks' picks count too. `assertTrainedHead` fails the run if it ever ends
+// short (#4890).
 const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
 // The numbered markers on the Instruction frames, scaled for the slot. The
@@ -197,23 +207,25 @@ const CALLOUT_SCALE = 1.3;
 const GRID_COLS = 4;
 const GRID_ROWS = 3;
 
-// The Find view's layout for the line shot, as the settings a user would have
-// after dragging the two dividers and picking a thumbnail size. That frame's
-// whole subject is the ranking in the left column — the line through it, and
-// what sits either side of it — and at the app's defaults that column was the
-// narrowest of the three, its thumbnails 80px, and the right column (two
-// counts) wider than it (#4176). So the left column is widened to three
-// columns of Large thumbnails, with the few pixels the panel's scrollbar and
-// padding need to keep the third (at 465 it drops to two, and the column is
-// narrower than the centre again), and the right one narrowed as far as its
-// counts allow without clipping; the centre keeps what is left. Set before the view opens and put back after the shot, because
-// these are persisted per media type and the Label view reads the same keys: a
-// run that left them behind would shoot the next run's train loop in this
-// layout.
+// The Test view's layout for the Instruction section's Review frame, as the
+// settings a user would have after dragging the two dividers and picking a
+// thumbnail size. That frame's subject is the ranking in the left column, and
+// at the app's defaults that column was the narrowest of the three, its
+// thumbnails 80px, and the right column (two counts) wider than it (#4176). So
+// the left column is widened to three columns of Large thumbnails, with the
+// few pixels the panel's scrollbar and padding need to keep the third (at 465
+// it drops to two, and the column is narrower than the centre again), and the
+// right one narrowed as far as its counts allow without clipping; the centre
+// keeps what is left. Set before the view opens and put back after the shot,
+// because these are persisted per media type and the Label view reads the
+// same keys: a run that left them behind would shoot the next run's train
+// loop in this layout. (It was drawn for `ui-find-line`, the same screen
+// scrolled to the line, a slide the deck cut as too technical that early;
+// owner, 2026-10-13.)
 // Both side panels open: Train and Test fold them to a strip by default
 // (#4673), and every slide is of what is in them.
 const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
-const FIND_LINE_LAYOUT = {
+const FIND_LAYOUT = {
   ...PANELS_OPEN,
   grid_icon_size_left: { image: 'L' },
   panel_pct_left: { image: 500 },
@@ -336,8 +348,12 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * it has nothing to do with the application a slide is showing.
  *
  * Toasty's hints (#4680) are hidden too: the slide around a frame already says
- * what to click, and a speech bubble saying it again is a hat on a hat. They
- * float over the page, so hiding one moves nothing else.
+ * what to click, and a speech bubble saying it again is a hat on a hat. An app
+ * this script started has `hide_all_hints` set (`ensureApp`), so a frame is
+ * what a user who ticked Hide all hints sees (#4807); this rule is the backstop
+ * for an app the caller pointed it at. Toasty floats over the page, so hiding
+ * him moves nothing else. The one Toasty on a slide is the train loop's last
+ * page, where he is the subject, and `stop-hint.mjs` draws him there itself.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
@@ -640,9 +656,10 @@ async function voteServed(page) {
   if (!served(before)) throw new Error(`the viewer never settled on a served item (alt ${before})`);
   const good = isBook(before);
   if ((await viewer.getAttribute('alt')) !== before) return voteServed(page);
-  // The check opens when a retrain lands, which is at no moment this script
-  // chooses (#4556): it can be up already, or come up while the click waits.
-  // Either way its backdrop takes the click, so nothing is cast.
+  // The check starts when a retrain lands or every light goes green, which is
+  // at no moment this script chooses (#4556): it can be up already, or come up
+  // while the click waits. Either way it hides the centre panel, so the click
+  // finds no button and nothing is cast.
   if (await spotCheckOpen(page)) return null;
   const cast = await page
     .locator(`vt-center-panel ${good ? '.btn-good' : '.btn-bad'}`)
@@ -701,7 +718,7 @@ async function assertVoted(filename, good) {
 
 /** The item in the Label view's centre, as against a spot-check pick. */
 const CENTRE_ITEM = 'vt-center-panel img.image-element';
-const SPOT_CHECK = 'vt-spot-check-modal';
+const SPOT_CHECK = 'vt-spot-check-stage';
 
 const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) > 0;
 
@@ -709,10 +726,12 @@ const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) >
  * Answer Autopilot's spot check, if it has one open, as truthfully as the loop
  * votes; the answers, Good as true, in the order they were given.
  *
- * Autopilot runs the check itself when the labels separate weakly (#4496):
- * from the tenth vote, once a retrain lands, which is a moment this script
- * does not choose (#4556). Its picks are the loop's question asked in a dialog
- * and its answers are ordinary votes, so it is answered the same way — by the
+ * Autopilot runs the check itself, as its Spot Check step: when the labels
+ * separate weakly (#4496), from the tenth vote once a retrain lands, and once
+ * before Done, when every light goes green; moments this script does not
+ * choose (#4556). Its picks are the loop's question asked in the centre pane
+ * in place of the served item, and its answers are ordinary votes, so it is
+ * answered the same way — by the
  * pick's file name, one at a time, round after round until the walk ends —
  * and its votes join the piles the last page shows. That is the session a
  * user has. Cancelling would not be: the check stays due, and comes back.
@@ -726,18 +745,18 @@ const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) >
  * answers.
  */
 async function answerSpotCheck(page) {
-  const modal = page.locator(SPOT_CHECK);
-  if (!(await modal.count())) return [];
+  const stage = page.locator(SPOT_CHECK);
+  if (!(await stage.count())) return [];
   log('autopilot opened a spot check; answering it');
-  const pick = modal.locator('.pick-stage img.image-element');
+  const pick = stage.locator('.pick-stage img.image-element');
   const answers = [];
-  for (let guard = 0; guard < 400 && (await modal.count()); guard++) {
+  for (let guard = 0; guard < 400 && (await stage.count()); guard++) {
     // A refused start or a lost round is not something to photograph around.
-    const error = modal.locator('.error-text');
+    const error = stage.locator('.error-text');
     if (await error.count()) throw new Error(`the spot check failed: ${(await error.first().textContent()).trim()}`);
-    if (await modal.locator('.check-result').count()) {
-      log(`spot check: ${(await modal.locator('.check-result-headline').textContent()).trim()}`);
-      await modal.getByRole('button', { name: 'Done', exact: true }).click();
+    if (await stage.locator('.check-result').count()) {
+      log(`spot check: ${(await stage.locator('.check-result-headline').textContent()).trim()}`);
+      await stage.getByRole('button', { name: 'Continue', exact: true }).click();
       break;
     }
     // Nothing to read while it draws a round; and a pick's file name, never
@@ -748,7 +767,7 @@ async function answerSpotCheck(page) {
       continue;
     }
     const good = isBook(name);
-    await modal.locator(good ? '.btn-good' : '.btn-bad').click();
+    await stage.locator(good ? '.btn-good' : '.btn-bad').click();
     answers.push({ name, good });
     // On to the next pick; or, on a round's last, the round goes to the server
     // with the pick still on screen, and the next round or the result replaces it.
@@ -762,7 +781,7 @@ async function answerSpotCheck(page) {
       { timeout: 120000 }
     );
   }
-  await modal.waitFor({ state: 'detached', timeout: 30000 });
+  await stage.waitFor({ state: 'detached', timeout: 30000 });
   for (const { name, good } of answers) await assertVoted(name, good);
   return answers.map((a) => a.good);
 }
@@ -889,7 +908,14 @@ async function shootTrainLoop(page) {
   log(`train loop: ${cast} votes (${checked} in spot checks) — ${tally.good} good / ${tally.bad} bad`);
   if (!tally.bad) throw new Error('no Bad votes: the detector has nothing to separate');
   await assertVoteColumns(page);
+  await shoot(page, 'ui-train-loop.build6');
+  // The last page is staged: Toasty saying the detector is trained, over the
+  // frame just shot, because the real hand-off waits for far more votes than
+  // this session casts (`stop-hint.mjs`, #4833).
+  await drawStopHint(page);
+  await page.waitForTimeout(200);
   await shoot(page, 'ui-train-loop');
+  await clearStopHint(page);
 }
 
 /** Fail the run unless the vote piles are `TRAIN_VOTE_COLUMNS` wide. */
@@ -905,41 +931,24 @@ async function assertVoteColumns(page) {
 }
 
 /**
- * Scroll the left panel's virtual viewport, and let it re-render.
- *
- * It is a `cdk-virtual-scroll-viewport`, so what is in the DOM is a window onto
- * the ranking rather than the ranking — and the panel scrolls itself to the
- * selected item on arrival, which is how the first version of the Find shot
- * came out photographing position 4200px with the top of the list nowhere in
- * frame. Drive it explicitly instead of hoping.
- */
-async function scrollResults(page, to) {
-  const viewport = page.locator('.panel-left .cdk-virtual-scroll-viewport').first();
-  await viewport.evaluate((el, top) => el.scrollTo({ top, behavior: 'instant' }), to);
-  await page.waitForTimeout(1800);
-}
-
-/**
  * Step 3 — run it over the media nobody voted on.
  *
- * Two slides out of one session. `ui-find[.build1]` is the click-by-click one:
- * the dashboard with the *production* pile selected beside the detector, then
- * the top of the ranking it produces. `photos-prod` does not share a single
- * frame with `photos-train` (`coco_fixture.DISJOINT_FROM`), which is the only reason
- * that slide is allowed to say what it says.
+ * One slide out of one session, plus the Instruction section's frames.
+ * `ui-find[.build1]` is the click-by-click one: the dashboard with the
+ * *production* pile selected beside the detector, then the top of the ranking
+ * it produces. `photos-prod` does not share a single frame with `photos-train`
+ * (`coco_fixture.DISJOINT_FROM`), which is the only reason that slide is
+ * allowed to say what it says.
  *
- * `ui-find-line` is the same screen scrolled down to the line the tool drew
- * through the ranking, and it is a separate slide rather than a third build
- * page for a reason the house rules are explicit about: a build page adds ink
- * and moves nothing, and this one moves the whole left panel. It is also not a
- * reveal but a second observation — the deck's hand-off into `vote-boundary`,
- * which spends the next ten minutes on where that line should go.
+ * (`ui-find-line`, the same screen scrolled down to the line the tool drew,
+ * was a slide of its own until the deck cut it — owner, 2026-10-13: too
+ * technical that early — so the session no longer scrolls to the line.)
  */
 async function shootFind(page) {
   // The layout goes in first and the page is reloaded to read it, because the
   // app reads its settings at load and a hash navigation is not a load. The
   // dashboard frame below is unaffected: it has no media panels.
-  await app.api('/api/settings', { method: 'PUT', body: FIND_LINE_LAYOUT });
+  await app.api('/api/settings', { method: 'PUT', body: FIND_LAYOUT });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
   for (const [tag, name] of [['tr[vt-dataset-card]', TEST_DATASET], ['tr[vt-detector-card]', BOOK_DETECTOR]]) {
@@ -961,7 +970,15 @@ async function shootFind(page) {
   ]);
 
   // Test, not Find: since #4525 the Find button runs AutoFind and opens no view.
-  await page.getByRole('button', { name: 'Test', exact: true }).click();
+  // Its scoring pass says which detector the labels gave (`label_quota`).
+  const [scored] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/find-label',
+      { timeout: 300000 },
+    ),
+    page.getByRole('button', { name: 'Test', exact: true }).click(),
+  ]);
+  assertTrainedHead((await scored.json()).label_quota);
   await page.waitForSelector('.panel-right', { timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
   // photographing a progress bar.
@@ -983,40 +1000,29 @@ async function shootFind(page) {
   // What came back, with no tool around it. See `results_grid.py`.
   await shootFindGrid();
 
-  // Then the line. Its offset is read off the rendered list rather than
-  // computed from a rank, because how many items make a row is the panel's
-  // business (thumbnail size, panel width) and not something this script knows.
-  const line = await page.evaluate(() => {
-    const viewport = document.querySelector('.panel-left .cdk-virtual-scroll-viewport');
-    const marker = viewport?.querySelector('.media-threshold-line');
-    if (!viewport) return null;
-    if (!marker) return 'offscreen';
-    return viewport.scrollTop + marker.getBoundingClientRect().top
-      - viewport.getBoundingClientRect().top;
-  });
-  if (line === null || line === 'offscreen') {
-    // Virtualised: the marker is only in the DOM once it is near the window, so
-    // walk down until it appears rather than guessing a pixel offset.
-    for (let top = 0; top < 40000; top += 500) {
-      await scrollResults(page, top);
-      if (await page.locator('.media-threshold-line').count()) break;
-    }
-  } else {
-    await scrollResults(page, Math.max(0, line - 260));
-  }
-  const marker = page.locator('.media-threshold-line').first();
-  if (!(await marker.count())) throw new Error('no threshold line in the Find ranking');
-  // Centre it: whatever the walk above landed on, the line should sit in the
-  // middle of the panel with matches above it and rejects below.
-  const centred = await page.evaluate(() => {
-    const viewport = document.querySelector('.panel-left .cdk-virtual-scroll-viewport');
-    const rect = viewport.querySelector('.media-threshold-line').getBoundingClientRect();
-    const box = viewport.getBoundingClientRect();
-    return viewport.scrollTop + rect.top - box.top - box.height / 2;
-  });
-  await scrollResults(page, Math.max(0, centred));
-  await shoot(page, 'ui-find-line');
   await app.api('/api/settings', { method: 'PUT', body: DEFAULT_LAYOUT });
+}
+
+/**
+ * Fail the run unless Test scored with the session's trained head (#4890).
+ *
+ * The deck says the ranking `find` shows is a real trained head's, and
+ * `ui-steps-find` frames it. Under the label quota, or under the typed query's
+ * hold (#4736), the detector is its typed query's own set instead, with a note
+ * under the Test view's tabs saying so; `TRAIN_FINAL` stops the session on
+ * vote counts, not on that. *quota* is the scoring pass's `label_quota`.
+ */
+function assertTrainedHead(quota) {
+  if (quota?.tier === 'trained') return;
+  const counts = quota ? `${quota.n_good} Good / ${quota.n_bad} Bad` : 'no label_quota';
+  const why = quota?.hold_owed > 0
+    ? `; a typed-query detector keeps its query's set until ${quota.hold_labels} labels, ${quota.hold_owed} more`
+    : '';
+  const as = { query: "its typed query's own set", centroid: "the Goods' centroid", none: 'nothing' }[quota?.tier];
+  throw new Error(
+    `find: Test scored the detector as ${as ?? (quota?.tier ? `tier ${quota.tier}` : 'an unknown detector')}, not a trained head (${counts}${why}): ` +
+      'raise TRAIN_FINAL so the train loop ends with one',
+  );
 }
 
 /**
@@ -1167,6 +1173,11 @@ async function ensureApp() {
       return false;
     }
   }, 300000);
+  // Toasty's hints off, the way a user turns them off (#4807): the frames then
+  // show what the app shows such a user, the reasons under the Dashboard's
+  // disabled buttons included. Only on an app this run started; one the
+  // caller is serving keeps its own settings.
+  await app.api('/api/settings', { method: 'PUT', body: { hide_all_hints: true } });
 }
 
 // The intro shots are one session and are taken together: the datasets `steps`

@@ -32,13 +32,34 @@ The threshold is the cut at which the expected F-beta of the kept set peaks
 fit (the labels' Good and Bad components and the corpus's bulk), the total
 positives from the 2-part estimate, the returned size counted on the corpus
 itself.  No count is
-drawn on any corpus: a corpus with no positives returns at most its own few
-high-scoring negatives.
+drawn on any corpus once the class model stands (while it is thin, the head's
+count line serves; see below): a corpus with no positives returns at most its own
+few high-scoring negatives.
 
 **Known weakness.**  The votes are not a random sample: active learning picks
 near the line and from the top, so the Bads' held-out scores sit higher than
 the true negatives' and the negative tail is extrapolated by the normal.  The
 pricing in ``docs/experiments`` measures what that costs on the objective.
+
+**While the labels are few** (#4786), the class model has almost nothing to fit -
+at the hand-over to the trained head a session holds four Bads - and its cut goes
+wrong both ways: at beta 4 the line kept a median of 5 of a FHIBE person's faces at
+the first trained click, one face in a fifth of sessions and thousands in the
+weakly separated ones.  Until the class model holds :data:`HEAD_COUNT_GOODS`
+held-out Goods, however many Bads (#4798), the line at every
+balance keeps instead what stands out in the head's own scores, counted by the rule
+that draws the Goods' centroid's line (:func:`head_count_cut`): the line Test gave
+until the hand-over, now drawn on the head.  With two to five Goods the Good
+component cannot place the corpus's positives: past 32 Bads the 3-part chances
+collapse while the 2-part total stays several times the positives, and a beta-4 cut
+ran to the corpus's end on faces (2.5% of clicks, up to 704 kept for 4 withheld)
+in a way no fix to the total could tell from a hard target's sound deep cut.  That count is ``beta ** 0.708`` times
+what stands out, so the line keeps more as the balance leans to recall.  Like the
+centroid's it is a count on the corpus being decided, not a cut the labels imply;
+the class model takes over once it has the labels to stand on.  The Goods half
+matters for a broad target: with many Goods its labels line is sound, while a count
+of what stands out keeps several times the positives (COCO Better's Binary opening
+lost F-beta there).
 
 **When the Bads are a random sample** (#4490: a labelset imported from an
 exhaustively labelled dataset; every label of the review's ceiling), one normal
@@ -88,6 +109,15 @@ WEAK_CHECK_MIN_VOTES = 10
 #: Priced against prompting once: +0.013 to +0.027 at click 150 against +0.007
 #: to +0.010, for 28-35% of a prompted session's clicks spent checking.
 WEAK_CHECK_COOLDOWN = 25
+#: Media types whose sessions never get a prompted weak check (#4778, #4799).  A
+#: face search's opening finds the person's few photos before the check could
+#: start (a median of 4 Goods at vote 11), so a check's votes find nothing and
+#: only pick which Bads get labelled, worse than acquisition does: without it
+#: the face review's sessions gained +0.007 to +0.018 over votes 1-50, with the
+#: objective after the end-of-run check and final AP unchanged.  On COCO the
+#: check pays most where it starts with fewest Goods, so a Good count cannot
+#: stand in for the media type.  Autopilot's check before Done stays (:func:`done_check_due`).
+WEAK_CHECK_OFF_MEDIA_TYPES: frozenset[str] = frozenset({"face"})
 #: The fewest Bads whose own scores model the negatives (#4490): a kernel density of a
 #: random 30 cannot see the upper tail (it lost 0.09 F at beta 1/4 on the review's
 #: ceiling), of 100 it gains.  A model keeps its Bads' scores only from this many.
@@ -111,6 +141,23 @@ _SEARCH_SPREADS = 8.0
 _SEARCH_POINTS = 4001
 #: The prevalence range an estimate is held to: never a certainty either way.
 PREVALENCE_MIN, PREVALENCE_MAX = 1e-6, 0.5
+#: The Bads half of the thin-model gate: while the class model holds fewer than this many Bads
+#: (its held-out ones, about 0.6 of the Bads in hand) and fewer than :data:`HEAD_COUNT_GOODS`
+#: Goods, the line at every balance keeps the head's count (:func:`head_count_cut`) rather than
+#: the class model's cut.  Unbounded since #4798, so the Goods alone close the gate; #4786
+#: shipped 32.  ``0`` is the line before #4786.
+HEAD_COUNT_BADS: float = math.inf
+#: The thin-model gate (#4786, #4798): with this many held-out Goods the class
+#: model's Good component stands on its own, and a broad target's labels line keeps what its
+#: many positives need where the head's count, a count of what stands out, keeps several
+#: times too many.
+HEAD_COUNT_GOODS = 6
+#: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
+#: the labels line expects at least this F-beta at the session's balance over the corpus it was
+#: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
+#: no change to the session, and the stop comes where the clicks pay
+#: (``docs/experiments/2026-10-14-stop-signal-4878``).
+STOP_LEVEL = 0.5
 
 
 def _logit(scores: Any) -> np.ndarray:
@@ -189,6 +236,16 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
     with no held-out Good or no held-out Bad, or when the Goods do not score
     above the Bads on average (a head that ranks the wrong way has no line).
     """
+    model = _pooled_class_model(orderings)
+    return model if model is not None and model.mu_pos > model.mu_neg else None
+
+
+def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScoreModel | None:
+    """:func:`class_score_model` whichever way the folds rank: ``None`` only with no held-out Good or Bad.
+
+    A model whose Goods do not score above its Bads draws no line, but its gap is
+    still what the folds say about the labels' separation (#4899).
+    """
     if not orderings:
         return None
     pos_parts: list[np.ndarray] = []
@@ -210,8 +267,6 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
         return None
     xp, xn = _logit(pos), _logit(neg)
     mu_pos, mu_neg = float(xp.mean()), float(xn.mean())
-    if not mu_pos > mu_neg:
-        return None
     dof = max(1, xp.size + xn.size - 2)
     var = (float(((xp - mu_pos) ** 2).sum()) + float(((xn - mu_neg) ** 2).sum())) / dof
     raw = math.sqrt(var)
@@ -249,6 +304,16 @@ def labels_line_threshold(
     :func:`fit_corpus` makes), else the labels' Bad component.  Searched on a
     fine logit grid; a tie keeps the higher cut.
     """
+    x, f = _parametric_fbeta(model, prevalence, beta, negatives)
+    best = float(f.max())
+    i = int(np.flatnonzero(f >= best - 1e-12).max())
+    return _sigmoid(float(x[i]))
+
+
+def _parametric_fbeta(
+    model: ClassScoreModel, prevalence: float, beta: float, negatives: CorpusNegatives | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(logit grid, expected F-beta of the cut at each point)`` for :func:`labels_line_threshold`."""
     p = min(max(float(prevalence), PREVALENCE_MIN), PREVALENCE_MAX)
     b2 = float(beta) * float(beta)
     mu0, s0 = (negatives.mu, negatives.sigma) if negatives is not None else (model.mu_neg, model.sigma)
@@ -261,10 +326,44 @@ def labels_line_threshold(
     s0_ = norm.sf((x - mu0) / s0)
     with np.errstate(invalid="ignore", divide="ignore"):
         f = (1.0 + b2) * p * s1 / (p * s1 + b2 * p + (1.0 - p) * s0_)
-    f = np.nan_to_num(f, nan=0.0)
-    best = float(f.max())
-    i = int(np.flatnonzero(f >= best - 1e-12).max())
-    return _sigmoid(float(x[i]))
+    return x, np.nan_to_num(f, nan=0.0)
+
+
+def parametric_expected_fbeta(
+    model: ClassScoreModel, prevalence: float, beta: float, negatives: CorpusNegatives | None = None
+) -> float:
+    """The expected F-*beta* at :func:`labels_line_threshold`'s cut: what the line would score on a fresh corpus.
+
+    A corpus at *prevalence* whose positives score as the labels' Good component
+    and whose negatives as *negatives* (else the Bad component).  Unlike
+    :func:`corpus_expected_fbeta` it counts no item, so it does not fall as a
+    session labels its corpus's positives away: it reads the class model alone.
+    """
+    return float(_parametric_fbeta(model, prevalence, beta, negatives)[1].max())
+
+
+def _corpus_fbeta(posteriors_desc: np.ndarray, total_positives: float, beta: float) -> np.ndarray:
+    """The expected F-*beta* of each cut of a corpus's items, best first, as :func:`corpus_cut` reads it."""
+    b2 = float(beta) * float(beta)
+    tp = np.cumsum(np.asarray(posteriors_desc, dtype=np.float64))
+    if tp.size == 0:
+        return tp
+    pos = max(float(total_positives), float(tp[-1]))
+    r = np.arange(1, tp.size + 1, dtype=np.float64)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.nan_to_num((1.0 + b2) * tp / (b2 * pos + r), nan=0.0)
+
+
+def corpus_expected_fbeta(posteriors_desc: np.ndarray, total_positives: float, beta: float) -> float:
+    """The expected F-*beta* at :func:`corpus_cut`'s cut: what the line expects to return from this corpus.
+
+    0 for a corpus with nothing worth keeping.  It counts the corpus's own
+    unvoted items, so it describes the rest of the session's corpus and falls
+    as the session labels that corpus's positives away, even with the model
+    unchanged; :func:`parametric_expected_fbeta` is the fresh-corpus reading.
+    """
+    f = _corpus_fbeta(posteriors_desc, total_positives, beta)
+    return float(f.max()) if f.size and f.max() > 0 else 0.0
 
 
 def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_positives: float, beta: float) -> float:
@@ -286,12 +385,7 @@ def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_posit
     n = s.size
     if n == 0:
         return 1.0 + 1e-9
-    b2 = float(beta) * float(beta)
-    tp = np.cumsum(np.asarray(posteriors_desc, dtype=np.float64))
-    pos = max(float(total_positives), float(tp[-1]))
-    r = np.arange(1, n + 1, dtype=np.float64)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        f = np.nan_to_num((1.0 + b2) * tp / (b2 * pos + r), nan=0.0)
+    f = _corpus_fbeta(posteriors_desc, total_positives, beta)
     k = int(np.argmax(f))
     if not f[k] > 0:
         return 1.0 + 1e-9
@@ -446,6 +540,11 @@ class LabelsLine:
     #: Whether the negatives were modelled by the Bads' own scores, the labels' Bads
     #: being a random sample of this corpus (#4490), rather than by the corpus fit.
     bads_shape: bool = False
+    #: The calibration folds' own model, floored on this corpus, when they ranked the
+    #: held-out Goods no higher than the Bads (#4899).  *model* is then the in-sample
+    #: stand-in, which draws the line as it always has; :attr:`separation` reads this.
+    #: ``None`` when *model* is the folds' own, or the folds held nothing out.
+    held_out: ClassScoreModel | None = None
 
     @property
     def separation(self) -> float:
@@ -454,22 +553,118 @@ class LabelsLine:
         The spread is the one the line was cut with, the class model's own
         floored on this corpus, so the value is free of the logit scale.  Below
         :data:`WEAK_SEPARATION_D` the labels separate weakly (#4496).
+
+        When the folds ranked the held-out Goods no higher than the Bads, it is
+        their gap, at most 0, in their own spread floored on this corpus
+        (:attr:`held_out`, #4899).  The in-sample stand-in that draws the line
+        then was fitted on the head's scores of the labels it trained on, which
+        it always separates: read from it, labels that do not separate at all
+        read as separating strongly, and the weak check never came due.
         """
+        if self.held_out is not None:
+            return (self.held_out.mu_pos - self.held_out.mu_neg) / self.held_out.sigma
         spread = self.model.sigma if self.spread is None else self.spread
         return (self.model.mu_pos - self.model.mu_neg) / spread if spread > 0 else float("inf")
 
     def threshold(self, beta: float) -> float:
         if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
+            if head_count_serves(self.model):
+                return head_count_cut(self.unvoted_scores, beta)
             total = self.unvoted_share * self.unvoted_scores.size
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
+
+    def expected_fbeta(self, beta: float) -> float:
+        """The expected F-*beta* of the best cut the class model sees on this corpus's unvoted items (#4878).
+
+        What :func:`corpus_cut` maximises, read at its maximum: the class model's
+        own estimate of how well the line's set does on the rest of the corpus.
+        Read whichever line serves, so it is the class model's estimate even
+        while the head's count line is the one drawn (:func:`head_count_serves`).
+        A line built by hand, with no corpus counted, reads the parametric one.
+        """
+        if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
+            total = self.unvoted_share * self.unvoted_scores.size
+            return corpus_expected_fbeta(self.unvoted_posteriors, total, beta)
+        return self.expected_fbeta_fresh(beta)
+
+    def expected_fbeta_fresh(self, beta: float) -> float:
+        """The expected F-*beta* the class model gives its line on a fresh corpus like this one (#4878).
+
+        The class model at the spread this corpus floored it to, at this
+        corpus's prevalence and with its negatives' bulk
+        (:func:`parametric_expected_fbeta`): a "Train on X, Find on Y" reading
+        that counts no item, so it does not move as the session's votes take
+        positives out of the corpus.
+        """
+        model = self.model if self.spread is None else replace(self.model, sigma=self.spread)
+        return parametric_expected_fbeta(model, self.prevalence, beta, self.negatives)
 
     def on_corpus(
         self, scores: Any, ids: Iterable[int] | None = None, labels: Mapping[int, bool] | None = None
     ) -> "LabelsLine":
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
-        line = _line_on(self.model, scores, ids, labels)
+        line = _line_on(self.model, scores, ids, labels, held_out=self.held_out)
         return self if line is None else line
+
+
+def stop_level_reading(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> dict[str, Any]:
+    """What Autopilot's stop reads off the labels line (#4878): ``expected_fbeta``, ``level`` and ``met``.
+
+    ``expected_fbeta`` is :meth:`LabelsLine.expected_fbeta` at *beta*, the
+    line's own estimate of the F-beta of the set it keeps; ``None`` with no
+    line, no balance, or while the head's count line serves
+    (:func:`head_count_serves`), whose class model is too thin to read.  ``met``
+    is whether it reaches *level*.
+    """
+    if line is None or beta is None or head_count_serves(line.model):
+        return {"expected_fbeta": None, "level": float(level), "met": False}
+    expected = float(line.expected_fbeta(float(beta)))
+    return {"expected_fbeta": expected, "level": float(level), "met": expected >= level}
+
+
+def stop_level_met(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> bool:
+    """Whether the labels line expects at least *level* F-beta at *beta* (:func:`stop_level_reading`)."""
+    return bool(stop_level_reading(line, beta, level)["met"])
+
+
+def head_count_serves(model: ClassScoreModel) -> bool:
+    """Whether the line is the head's count line (#4786): a class model with too few Goods to cut on (#4798)."""
+    return model.n_neg < HEAD_COUNT_BADS and model.n_pos < HEAD_COUNT_GOODS
+
+
+def head_count_cut(scores_desc: Any, beta: float) -> float:
+    """The cut that keeps what stands out in the head's own scores at *beta* (#4786).
+
+    *scores_desc* are a corpus's unvoted scores, best first.  On their logits the
+    rule that draws the Goods' centroid's line
+    (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`: ``beta ** 0.708``
+    times the larger of the Gaussian bulk's excess and the top's widest drop, never
+    fewer than that drop) counts what stands out; the cut keeps exactly those items,
+    placed between the last kept and the first dropped as :func:`corpus_cut` places
+    its own.  An empty corpus keeps nothing.
+    """
+    from vtscore.detectors.centroid_head import centroid_cut  # noqa: PLC0415
+
+    s = np.asarray(scores_desc, dtype=np.float64)
+    if s.size == 0:
+        return 1.0 + 1e-9
+    x = _logit(s)
+    k = int(np.count_nonzero(x >= centroid_cut(x, beta=float(beta))))
+    if k <= 0:
+        return 1.0 + 1e-9
+    return float(s[k - 1]) if k >= s.size else float((s[k - 1] + s[k]) / 2.0)
+
+
+def weak_check_prompts(media_type: str | None) -> bool:
+    """Whether weak separation may prompt a spot check on *media_type*'s detectors (#4799).
+
+    False on :data:`WEAK_CHECK_OFF_MEDIA_TYPES` (face crops); true elsewhere,
+    including an unknown type.  The app's :func:`vtscore.state.core.detector_check_prompt`
+    and the eval harness's default ``spot_check`` both read it, so the default
+    arm stays the app.
+    """
+    return media_type not in WEAK_CHECK_OFF_MEDIA_TYPES
 
 
 def weak_check_due(
@@ -489,9 +684,9 @@ def weak_check_due(
     ended (*votes_at_last_check*, the vote count when it ended; ``None``
     before any).  ``cooldown=None`` makes a check due once at most.
 
-    The app's Autopilot runs the check when it is due and the Train tab's
-    Check button calls for it; the eval harness's default arm
-    (``spot_check="weak"``) runs it where this says, so both read this rule.
+    The app's Autopilot runs the check when it is due; the eval harness's
+    default arm (``spot_check="weak"``) runs it where this says, so both read
+    this rule.
     A weakly separated session's uniform picks within the line's bands are
     better training votes than the acquisition picks they replace: priced at
     equal clicks, +0.008 to +0.033 at click 20 and +0.023 to +0.049 at 50
@@ -503,6 +698,23 @@ def weak_check_due(
     if votes_at_last_check is None:
         return True
     return cooldown is not None and n_votes - votes_at_last_check >= cooldown
+
+
+def done_check_due(n_votes: int, votes_at_last_check: int | None, *, cooldown: int = WEAK_CHECK_COOLDOWN) -> bool:
+    """Whether Autopilot's spot check before Done is due: no check has ended in the last *cooldown* votes.
+
+    Autopilot checks the line once a run, the first time every quality light is
+    green, and only then reports Done.  The check is skipped when one ended
+    fewer than *cooldown* votes ago (*votes_at_last_check*, the vote count when
+    it ended; ``None`` before any): a weak-separation check just run, or a
+    session re-entered right after its own check, has already measured this
+    line.  Unlike :func:`weak_check_due` it reads no separation and runs on
+    every media type, face crops included.
+
+    The app's Autopilot reads it (``done_check_due`` beside ``check_due``), and
+    so does the eval harness's default arm.
+    """
+    return votes_at_last_check is None or n_votes - votes_at_last_check >= cooldown
 
 
 #: The smallest share of the labels' Good component a cut must hold for the
@@ -608,7 +820,12 @@ def _bads_shape_posteriors(model: ClassScoreModel, unvoted_logits: np.ndarray, *
 
 
 def _line_on(
-    model: ClassScoreModel, scores: Any, ids: Iterable[int] | None, labels: Mapping[int, bool] | None
+    model: ClassScoreModel,
+    scores: Any,
+    ids: Iterable[int] | None,
+    labels: Mapping[int, bool] | None,
+    *,
+    held_out: ClassScoreModel | None = None,
 ) -> "LabelsLine | None":
     a = np.asarray(scores, dtype=np.float64)
     keep = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
@@ -646,6 +863,7 @@ def _line_on(
         post[order].copy(),
         fitted.sigma,
         bads_shape,
+        held_out=None if held_out is None else held_out.floored(floor),
     )
 
 
@@ -712,8 +930,18 @@ def fit_labels_line(
     in - in-sample, so the Goods sit high and the line leans precise, which is
     the safe side.  Still the labels alone, never a count on the corpus: the
     fallback before this kept thousands of a corpus at its prevalence (#4452).
+
+    **Folds that rank the wrong way.**  When the folds held Goods and Bads out
+    but scored the Goods no higher than the Bads, the same stand-in draws the
+    line (the owner's ruling, 2026-10-15), and the folds' own model rides on it
+    as :attr:`LabelsLine.held_out`, so its :attr:`~LabelsLine.separation` says
+    what they found: none (#4899).  The stand-in's own separation was read from
+    the labels the head trained on, and labels that did not separate at all
+    read as separating strongly.
     """
-    model = class_score_model(orderings)
+    folds = _pooled_class_model(orderings)
+    model = folds if folds is not None and folds.mu_pos > folds.mu_neg else None
+    wrong_way = folds if model is None else None
     if model is None and labels:
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
         if model is not None:
@@ -722,10 +950,12 @@ def fit_labels_line(
             model = replace(model, neg_logits=None)
     if model is None:
         return None
-    return _line_on(model, corpus_scores, corpus_ids, labels)
+    return _line_on(model, corpus_scores, corpus_ids, labels, held_out=wrong_way)
 
 
 __all__ = [
+    "HEAD_COUNT_BADS",
+    "HEAD_COUNT_GOODS",
     "MIN_LOGIT_SIGMA",
     "RELATIVE_SIGMA_FLOOR",
     "RANDOM_BADS_MAX_ENRICHMENT",
@@ -734,7 +964,10 @@ __all__ = [
     "WEAK_CHECK_COOLDOWN",
     "WEAK_CHECK_MIN_VOTES",
     "WEAK_SEPARATION_D",
+    "WEAK_CHECK_OFF_MEDIA_TYPES",
+    "done_check_due",
     "weak_check_due",
+    "weak_check_prompts",
     "PREVALENCE_MAX",
     "PREVALENCE_MIN",
     "ClassScoreModel",
@@ -748,5 +981,7 @@ __all__ = [
     "corpus_sigma_floor",
     "estimate_positives",
     "fit_labels_line",
+    "head_count_cut",
+    "head_count_serves",
     "labels_line_threshold",
 ]

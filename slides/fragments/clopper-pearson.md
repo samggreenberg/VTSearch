@@ -1,38 +1,27 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-clopper.png)
+![bg fit](figs/calib-clopper.webp)
 
 ## Home on<br>the Range
 
-<!-- build: figs/calib-clopper.build1.png -->
+<!-- build: figs/calib-clopper.build1.webp -->
 
-<!-- build: figs/calib-clopper.build2.png -->
+<!-- build: figs/calib-clopper.build2.webp -->
 
-<!-- build: figs/calib-clopper.build3.png -->
+<!-- build: figs/calib-clopper.build3.webp -->
 
-<!-- build: figs/calib-clopper.build4.png -->
+<!-- build: figs/calib-clopper.build4.webp -->
 
-<!-- Clopper–Pearson, on its own, before the app uses it: how a count from
-     random picks becomes a range on the whole set. -->
+<!-- **a** — Quick stats detour. Pick five at random, four are right. Obvious
+     guess is 80%, but it's five picks. How sure are we? -->
 
-<!-- **a** — Five picks drawn at random from a set, four of them right. The
-     obvious estimate is 80%. But five is very few: how sure is 80%? -->
+<!-- **b** — How low could the truth be and still give four of five one time in
+     forty? 28%. Any lower is a fluke. -->
 
-<!-- **b** — The bottom of the range. How low could the true share be and
-     still give four or more right out of five? At 28%, that happens one time
-     in forty; any lower and it is rarer still. Below 28%, the picks we got
-     would be a fluke. -->
+<!-- **c** — Same from the top: 99.5%. -->
 
-<!-- **c** — The top, the same way round. At 99.5% right, four or fewer of
-     five happens one time in forty; any higher and missing even one would be
-     a fluke. -->
+<!-- **d** — Everything between is the range. That's Clopper-Pearson: exact, and
+     honest about tiny samples. Five picks buy almost nothing. -->
 
-<!-- **d** — Everything between is the range: 28% to 99.5%. That is
-     Clopper–Pearson. It is exact rather than an approximation, and honest
-     about small samples: five picks buy a range nearly as wide as the axis.
-     With one time in forty in each tail, it misses the truth at most one time
-     in twenty. -->
-
-<!-- **e** — The same 80% from fifty picks: 66% to 90%. The share did not
-     change; how sure we are of it did. The next slide is the app doing this
-     on the kept set, band by band. -->
+<!-- **e** — Same 80% from fifty picks: 66 to 90%. The share didn't change; our
+     confidence did. -->

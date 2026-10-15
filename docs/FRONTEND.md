@@ -202,6 +202,21 @@ rule: it reads the kind of the sort started last
 (`SortRunnerService.newestSortKind`), not `sortMode`, and gives way only to a
 learned one, so a text seed still in the air cannot hold it off (#4326).
 
+**The typed query's hold** (#4736). A learned ranking is not always the one on
+screen. While an Autopilot run that opened on a typed query has fewer labels
+than the hold, the server marks its learned-sort payload `query_hold`, and
+`SortRunnerService` keeps that ranking behind the text sort (`heldRanking`)
+instead of installing it. Every pick reads `askWindow()`, the held ranking while
+there is one: the Hard pick, New's atlas steer and the weak check's balance
+(`askBalance`). So Autopilot asks what it would with the learned ranking on
+screen, while the user sees the text sort's order, line and count. The first
+payload without the mark takes the screen for good (`queryHandedOver`), and
+stopping Autopilot ends the hold under the Sort `onAutopilotStop` leaves
+selected (`endQueryHold`). Whether a run holds is the view's call
+(`holdsTypedQuery`, label-view's `autopilotHoldsTypedQuery`): a run that opened
+on the typed query's text sort, not an example opening, retrain mode or a
+document dataset's walk.
+
 The three panels are shared with the Test view:
 
 - **Left** — media list (virtual scroller), sort bar, Threshold, stripe
@@ -266,49 +281,86 @@ log space, a tie to the preset farther from 1, so the old 2 and 0.5 show as 4
 and 1/4) and snapped to it through the control's
 own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Test
 drops a balance change while a pass is running. Under the spectrum the state
-line reads "Checked · likely 55–100% right, about half of them found (checked
-5) · 32 kept" or "Top 32 kept, unchecked" (`balanceSummary`; the recall range
-is in words, `foundWords`, and as a number only in the tooltip,
-`balanceExplanation`), with a green dot when checked and a yellow one when
-not; there is no red.
+line reads "Checked the top 64 you hadn't voted on · likely 55–100% right,
+about half of them found (checked 5) · 32 more kept" or "32 more kept,
+unchecked" (`balanceSummary`; the recall range is in words, `foundWords`, and
+as a number only in the tooltip, `balanceExplanation`), with a green dot when
+checked and a yellow one when not; there is no red. Nothing in it counts the
+user's own votes, and it says so (#4914): the count is of the unvoted items
+the line keeps, and the ranges cover the top `audited` items the user had not
+voted on when the check ran (the walk samples the unvoted ranking, and
+recall's denominator is the mixture's count of the positives left in it).
+Under `advisory` that set is not the one kept, so the line names it rather
+than setting its ranges beside the count as if they described the kept set.
+The check's own result screen (`resultHeadline`, `resultDetail`) words it the
+same way.
 
-**The spot check** (`vt-spot-check-modal`, #4273, walking to the balance's
-peak since #4413) measures that line, in Train only. The control's "Check N
-picks" emits `check`; the left panel forwards it as `check`, and the label
-view hosts the modal behind a `showSpotCheck` signal. Test sets the control's
-`offerCheck` false and hosts no modal: it tests the balance Train set, and
-labelling more to set one is too late there (#4317); its own test of the line
-is the Test autopilot (below), and the control's state line there is the
-host's (`lineState`: this corpus's result, or untested) with the radios
-`locked` while a phase runs.
-**When a check is due** (#4496): the balance's `checkDue` (the server's
-`check_due`, `weak_check_due` on the labels line's `separation`) turns the
-control's button `btn--primary` and adds a `.balance-due` note. The label view
-runs the check itself under Autopilot: an effect on the balance and
-`sortBusy` calls `runDueCheck()`, which opens the modal with an `intro` line
-once a learned sort has landed with `checkDue`, never in Autopilot's opening
-(`good`/`bad`/`more`, where no detector is trained) nor over another step;
-closing it advances Autopilot past any item the check voted.
-The modal owns the check's lifecycle against `/api/precision-check` and holds a
-round's votes locally until every pick has one, then sends the round whole. It
-takes the vote keys through `KeyboardService.captureVoteKeys`, a claim that
-routes ←/→ and ↓/↑ to its holder even with a modal open and sends nothing to
-`action$`, so the ranked list behind it never votes. The walk goes deeper
-while its F-beta estimate does not fall ("Better so far: checking the next
-32.") and turns back once it does ("Past the peak: checking a shorter list."),
-and the check is finished when `check.status` is `checked`; the result reads
-"Checked: likely 55–100% right, about half of them found (checked 15)." over
-"The line keeps these 32: the set where the check's balance peaked." Each
-round's `voted` event refreshes the piles; a finished check has moved the line
-server-side, so the view re-reads it with `GET /api/balance` and installs it
-over the ranking on screen through `SortRunnerService.refreshLine`. No re-sort
-follows: a retrain moves the list under the result, which is what reports it
-`stale`, and the owner's model is that *later* votes do that. The line draws
-the same in every state; the state and its likely range live in the balance
-control and on the Stats chart (which draws no horizontal line any more: a
-balance is a preference, not a precision to keep), and a stale range differs
-only in its tooltip. The Test view draws neither the range nor the Stats
-chart that used to carry it: its result pane draws the test's own ranges.
+**The spot check** (`vt-spot-check-stage`, #4273, walking to the balance's
+peak since #4413) measures that line, in Train only, and only Autopilot runs
+it: it is Autopilot's **Spot Check** step, phase `spot` in
+`AutopilotStateService`. The state's `spotCheck` says why one is running:
+`weak` when the labels separate weakly, `done` for the check before Done. The
+phase machine reaches `spot` the first time every quality light is green
+(`doneChecked` latches it for the run once that check closes, so Done
+follows), and a running check of either kind holds the phase at `spot`. A
+run whose first labeling-status reading is already all green (the Train view
+re-entered on a finished detector) latches `doneChecked` at that reading, so
+re-entry runs no check, even after a server restart has forgotten the last
+one. The
+Threshold control starts none (it has no check button), and Test runs none:
+it tests the balance Train set, and labelling more to set one is too late
+there (#4317); its own test of the line is the Test autopilot (below), and
+the control's state line there is the host's (`lineState`: this corpus's
+result, or untested) with the radios `locked` while a phase runs.
+**When a check runs.** The label view starts both kinds. For weak separation
+(#4496), an effect on the balance's `checkDue` (the server's `check_due`,
+`weak_check_due` on the labels line's `separation`; never on a face detector,
+#4799) and `sortBusy` calls `runDueCheck()`, which calls
+`beginSpotCheck('weak')` once a learned sort has landed with `checkDue`
+(under the typed query's hold, the held ranking's,
+`SortRunnerService.askBalance`, #4736), never in Autopilot's opening
+(`good`/`bad`/`more`, where no detector is trained) nor over another step.
+For the check before Done, a second effect waits for the phase to reach
+`spot` with no check running and the sort settled, then reads the balance's
+`doneCheckDue` (the server's `done_check_due`: no check ended in the last 25
+votes) and calls `beginSpotCheck('done')`, or `skipDoneCheck()` when a check
+has just measured the line. Since the balance on hand right after a check
+predates it, that effect also waits for the line re-read the check's close
+starts (`awaitingLine`). The Threshold keeps a `.balance-due` note while a
+weak check is due. Leaving `spot` sets the Select the step underneath uses and
+does not re-sort; the completion hand-off follows the state stream
+(`AutopilotPanelComponent`), since the check before Done ends outside any
+vote. The step list shows Spot Check between Explore Diversity and Done; a
+weak check makes it the active step and the list goes back to the step
+underneath when it ends, as it does from Diversity to Boundary.
+**The stage.** While `spotCheck` is set the label view renders the stage in
+place of the centre panel, which stays mounted but hidden, so its keyboard
+and viewer state survive. The stage owns the check's lifecycle against
+`/api/precision-check` and holds a round's votes locally until every pick has
+one, then sends the round whole. It takes the vote keys through
+`KeyboardService.captureVoteKeys`, a claim that routes ←/→ and ↓/↑ to its
+holder and sends nothing to `action$`, so the hidden centre panel never
+votes. Train's Autopilot tab shows no ranked list, so no pick's rank is on
+screen. **Stop check** cancels a running check (as does the stage going away
+under one: Autopilot stopped, the view left); **Continue** ends a finished
+one. Either way `closed` calls `endSpotCheck()` and the view catches up on the
+votes and the line, then advances Autopilot past any item the check voted.
+The walk goes deeper while its F-beta estimate does not fall ("Better so far:
+checking the next 32.") and turns back once it does ("Past the peak: checking
+a shorter list."), and the check is finished when `check.status` is
+`checked`; the result reads "Checked: likely 55–100% right, about half of
+them found (checked 15)." over "The line keeps these 32: the set where the
+check's balance peaked." Each round's `voted` event refreshes the piles; a
+finished check has moved the line server-side, so the view re-reads it with
+`GET /api/balance` and installs it over the ranking on screen through
+`SortRunnerService.refreshLine`. No re-sort follows: a retrain moves the list
+under the result, which is what reports it `stale`, and the owner's model is
+that *later* votes do that. The line draws the same in every state; the state
+and its likely range live in the balance control and on the Stats chart
+(which draws no horizontal line any more: a balance is a preference, not a
+precision to keep), and a stale range differs only in its tooltip. The Test
+view draws neither the range nor the Stats chart that used to carry it: its
+result pane draws the test's own ranges.
 
 ### Test view (`components/find-view/`)
 
@@ -967,7 +1019,14 @@ shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
 speech bubble beside the control to click next, with "Hide this hint" / "Hide
 all hints" boxes that `HintsService` keeps in the user's settings. Drop it
 under any positioned container; it measures itself against its anchor and
-flips the bubble to the other side when it would run off the edge. Its `face`
+flips the bubble to the other side when it would run off the edge. Inside a
+`vt-modal` (however deep) the anchor may be left out: the hint is then about
+the dialog box, below it or beside its top corner when the box fills the
+window. At most one hint is on screen (#4807): the component shows a hint in
+a dialog only while that dialog is the topmost open one (`topOpenModal` in
+`modal/modal.component.ts`), and a hint on a view only while no dialog is
+open; within a view the host picks one (the Dashboard's `dashboardHint`
+ladder, the voting overlay's `hint` input). Its `face`
 (happy / sad / surprised, `utils/toasty-faces.ts`) is the same set the toasts
 use. [`hints.md`](hints.md) charts every hint: its face, its text and when it fires;
 a new hint adds a row there. `directives/no-focus-steal.directive.ts` stops toolbar buttons
@@ -1054,7 +1113,12 @@ even though runtime behaviour is unaffected:
 `src/test-setup.ts` installs the inert jsdom stubs (`EventSource`,
 `ResizeObserver`, `scrollIntoView`, `CSS.escape`, media element methods,
 canvas `getContext`) and resets the `TestBed` before each test so a throwing
-teardown cannot cascade — that per-test reset *is* the cascade guard.
+teardown cannot cascade — that per-test reset *is* the cascade guard. It also
+installs the real-XHR guard (`src/app/testing/real-xhr-guard.ts`). `HttpClient`
+is provided in root, so a spec without `provideHttpTesting()` gets no missing
+provider error, and its requests would go to jsdom's `localhost:3000`. The
+guard stops every real `XMLHttpRequest` before it reaches the network and fails
+the test that sent it, naming the request.
 `vitest.config.ts` deliberately leaves `isolate: false` (the builder's
 default): per-file isolation cost 3–4× the runtime and the guard in
 `test-setup.ts` covers the same failure mode. No spec uses

@@ -1,10 +1,10 @@
 {
   "acquisition.balance_cut": {
-    "app": "37eb7cae941c5244e9f8cb9fddaa98ecf10a9430536416b188e03740231d8570",
+    "app": "e7b58a78a2c045fb0d36e1e1d5ec60e7a83c58682fa4e8e2cc69485f4716cd27",
     "harness": "29c2fff0e1a8167f2b74a4de7f31313c2bc70579ae6008a97d75b2565721a897"
   },
   "acquisition.target_precision": {
-    "app": "37eb7cae941c5244e9f8cb9fddaa98ecf10a9430536416b188e03740231d8570",
+    "app": "e7b58a78a2c045fb0d36e1e1d5ec60e7a83c58682fa4e8e2cc69485f4716cd27",
     "harness": "549d2a02a7b1f62f52e164f31e27aa0a91668a27395b09b325dc2bc886551ef4"
   },
   "autopilot.auto_select_next": {
@@ -12,19 +12,19 @@
     "harness": "e9bc83e67824b3998c984178f84e2a4d0ee679dbf99483b9a0d20cf6ef44254b"
   },
   "autopilot.phase_machine": {
-    "app": "a57053ff414e2a62497edc76b767334b2d8b0d7bc2bfefd6e4283f34d8988a2c",
-    "harness": "c32bcc435df6a3da3487414e15ced387461447d424d2c4d33f08ef528a0c8548"
+    "app": "9ba2372f38a86d358caa8efe3919d4212d53b4b7bfabdba0e151723ad953dec7",
+    "harness": "6b1fefd94fc7abb7f11a0ada6bef059184fb4cfd287f693b98750707d68d3d25"
   },
   "autopilot.phase_sort_select": {
-    "app": "f8ce126d5b82dfbcf902a5b0a48cc9d8dbc21ca214de458d1899d1d20c98224d",
+    "app": "9c8a75ce110b028ed97121db2bd5be80e86b7231f2e38eef2125bb19aff4694a",
     "harness": "e3c2789034920caec663fef9cd8df06986832bc55ac425a8578b3808a676e095"
   },
   "autopilot.startup_default": {
-    "app": "4b396de53a2f545b6b880563c8afd14841bf1ca6f2e3e65ba35a44b4a58a547f",
+    "app": "dae13c0e5de9286175365c200d9a213f31bdf1d5a68da72192a7d84b380d7b23",
     "harness": "5791e133a51f3ed40314f5a083621a283239a8cbcbe4387b63936515d9374239"
   },
   "autopilot.vote_targets": {
-    "app": "4b396de53a2f545b6b880563c8afd14841bf1ca6f2e3e65ba35a44b4a58a547f",
+    "app": "dae13c0e5de9286175365c200d9a213f31bdf1d5a68da72192a7d84b380d7b23",
     "harness": "0e6d44fbdaccc1fce4ca1e9b87cab2f991fe79d457e668bf9e553474e306ea1e"
   },
   "check.bands": {
@@ -44,11 +44,15 @@
     "harness": "841d7ec31d00d8827250dae11129fd7ff71bd42c83883414a595a7f73c2dc5b1"
   },
   "detectors.label_quota_centroid": {
-    "app": "efd8d383ac3cacc240596fb08e68c615db780078f7b5f75f69e968afa0586ee4",
+    "app": "00995b40502d3ed2ec0ea89bcde0a8a75a8b32dd557315ad2d0db76c94e8a087",
     "harness": "5923b7ff1c978b52472b28e042e60fb42211b4baa933ff4fc9537997fc312740"
   },
   "detectors.label_quota_default": {
-    "app": "d46f164284a7f65fe75eef644b8189430ceebd28d7ceb628375ca41d1bba1c0d"
+    "app": "2019888512eb23e2e5dbbae03ebc93ffe11f2d51914298003a8d64fd046df61b"
+  },
+  "detectors.label_quota_query": {
+    "app": "f3d5f0219139ea33b580900c427f0405d0040b371ebac9e5fac35b28f1c138df",
+    "harness": "f2fe62e06191eea6aeab70b1c52281ef276778c4012544803164aed217be9f1b"
   },
   "line_test.budgets_default": {
     "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",
@@ -104,7 +108,11 @@
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "fc974540b6a36d6c100bedfe2b3adb967249b63e6ab982686cdaeb65ed67c7f3",
+    "app": "33d2a307330e428d5fdd90e22dce24d4bb998a1533dd341a08ca578118c0375f",
     "harness": "9673e37fce15a5fccc1ecbec181807bc4a8367309130b9e952a8799db1d9d651"
+  },
+  "training.typed_query_prior": {
+    "app": "f62e7281342ae81c0f58f8b4ca8bbdc50bcba10fa4b829e9949a581869940f84",
+    "harness": "cd62c2795d841d879e17105c1281a0ad9280924db3d1f21fa7115fb09c3d1d01"
   }
 }

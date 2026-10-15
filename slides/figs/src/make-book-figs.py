@@ -3,8 +3,8 @@
 
     python slides/figs/src/make-book-figs.py
 
-Writes `figs/book-boundary.png` (the sidebar figure on *A Concept in Your
-Head*) and `figs/book-rank.png` with its build stages (the full-bleed figure
+Writes `figs/book-boundary.webp` (the sidebar figure on *A Concept in Your
+Head*) and `figs/book-rank.webp` with its build stages (the full-bleed figure
 that opens Part 3).
 
 Both exist because a talk about searching images that shows no images is asking
@@ -221,7 +221,7 @@ def boundary_fig() -> None:
         save(
             _boundary_stage(stage),
             OUT,
-            f"book-boundary.build{stage}.png",
+            f"book-boundary.build{stage}.webp",
             column=FULL_BLEED,
             tight=False,
         )
@@ -231,7 +231,7 @@ def boundary_fig() -> None:
     # corner to spare. It is also what makes every stage share this one's
     # framing for free — the canvas is fixed, so nothing reflows as the bottom
     # row fills in.
-    save(_boundary_stage(BOUNDARY_STAGES), OUT, "book-boundary.png", column=FULL_BLEED, tight=False)
+    save(_boundary_stage(BOUNDARY_STAGES), OUT, "book-boundary.webp", column=FULL_BLEED, tight=False)
 
 
 def _boundary_stage(stage: int) -> plt.Figure:
@@ -344,16 +344,19 @@ def _errors(admitted: int) -> str:
 
 
 def rank_fig() -> None:
-    """The ranking, what it got wrong, and three cuts that all look reasonable."""
-    final = _rank_stage(3)
+    """The ranking and what it got wrong, then three cuts that all look reasonable.
+
+    It opens on the photos already labeled (#4833): a bare ranking before the
+    marks was a page spent on something the room has just seen.
+    """
+    final = _rank_stage(2)
     box = tight_box(final)
-    for stage in (1, 2):
-        save(_rank_stage(stage), OUT, f"book-rank.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "book-rank.png", column=FULL_BLEED, box=box)
+    save(_rank_stage(1), OUT, "book-rank.build1.webp", column=FULL_BLEED, box=box)
+    save(final, OUT, "book-rank.webp", column=FULL_BLEED, box=box)
 
 
 def _rank_stage(stage: int) -> plt.Figure:
-    """Stage 1 the ranking, 2 adds the truth, 3 adds the cuts anyone could pick."""
+    """Stage 1 the ranking with the truth, 2 adds the cuts anyone could pick."""
     width, height = RANK_CANVAS
     fig, ax = _canvas(width, height, RANK_UNIT)
 
@@ -385,18 +388,17 @@ def _rank_stage(stage: int) -> plt.Figure:
     for index, (name, positive) in enumerate(RANKING):
         x = _rank_x(index)
         _photo(ax, name, x, RANK_TILE_Y, RANK_TILE)
-        if stage >= 2:
-            ax.text(
-                x + RANK_TILE / 2,
-                RANK_MARK_Y,
-                "✓" if positive else "✗",
-                ha="center",
-                va="top",
-                fontsize=RANK_MARK_PT,
-                color=GREEN if positive else RED,
-            )
+        ax.text(
+            x + RANK_TILE / 2,
+            RANK_MARK_Y,
+            "✓" if positive else "✗",
+            ha="center",
+            va="top",
+            fontsize=RANK_MARK_PT,
+            color=GREEN if positive else RED,
+        )
 
-    if stage >= 3:
+    if stage >= 2:
         for admitted in CUTS:
             x = _cut_x(admitted)
             ax.plot(

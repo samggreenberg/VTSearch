@@ -19,19 +19,28 @@ from vtscore.training.thresholds import (
     ClassScoreModel,
     LabelsLine,
     class_score_model,
+    corpus_expected_fbeta,
     corpus_prevalence,
     corpus_sigma_floor,
     estimate_positives,
     fit_labels_line,
+    STOP_LEVEL,
+    head_count_serves,
     labels_line_threshold,
+    parametric_expected_fbeta,
+    stop_level_met,
+    stop_level_reading,
 )
 from vtscore.training.thresholds.labels_line import (
     MIN_LOGIT_SIGMA,
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
+    WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
+    done_check_due,
     weak_check_due,
+    weak_check_prompts,
 )
 
 
@@ -114,6 +123,66 @@ class TestTheThreshold:
         assert labels_line_threshold(m, 0.01, 1.0) == labels_line_threshold(m, 0.01, 1.0)
         line = LabelsLine(m, 0.01)
         assert line.threshold(1.0) == labels_line_threshold(m, 0.01, 1.0)
+
+
+class TestTheLinesOwnReading:
+    """#4878: what the line expects of itself, read where it cuts - the quantity a stop rule in F-beta would watch."""
+
+    def test_the_counted_reading_is_the_expected_f_beta_of_the_set_the_cut_keeps(self):
+        line = fit_labels_line(_orderings(), _corpus(), None, {})
+        assert line is not None and line.unvoted_scores is not None and line.unvoted_posteriors is not None
+        assert line.unvoted_share is not None
+        for beta in (0.25, 1.0, 4.0):
+            kept = line.unvoted_scores >= line.threshold(beta)
+            tp = float(line.unvoted_posteriors[kept].sum())
+            pos = max(line.unvoted_share * line.unvoted_scores.size, float(line.unvoted_posteriors.sum()))
+            want = (1 + beta**2) * tp / (beta**2 * pos + int(kept.sum()))
+            assert line.expected_fbeta(beta) == pytest.approx(want, rel=1e-9)
+            assert corpus_expected_fbeta(line.unvoted_posteriors, pos, beta) == pytest.approx(want, rel=1e-9)
+
+    def test_the_fresh_reading_is_the_parametric_line_s_peak(self):
+        m = class_score_model(_orderings())
+        assert m is not None
+        for beta in (0.25, 1.0, 4.0):
+            cut = labels_line_threshold(m, 0.01, beta)
+            s1, s0 = m.survival(cut)
+            want = (1 + beta**2) * 0.01 * s1 / (0.01 * s1 + beta**2 * 0.01 + 0.99 * s0)
+            assert parametric_expected_fbeta(m, 0.01, beta) == pytest.approx(want, rel=1e-6)
+        line = LabelsLine(m, 0.01)
+        assert line.expected_fbeta(1.0) == line.expected_fbeta_fresh(1.0) == parametric_expected_fbeta(m, 0.01, 1.0)
+
+    def test_both_readings_rise_as_the_labels_separate(self):
+        weak = fit_labels_line(_orderings(), _corpus(), None, {})
+        rng = np.random.default_rng(0)
+        sharp_orderings = [
+            (list(_sig(rng.normal(3, 0.6, 10))) + list(_sig(rng.normal(-1, 0.6, 30))), [1.0] * 10 + [0.0] * 30)
+            for _ in range(2)
+        ]
+        sharp = fit_labels_line(sharp_orderings, _corpus(), None, {})
+        assert weak is not None and sharp is not None
+        assert sharp.separation > weak.separation
+        assert sharp.expected_fbeta_fresh(1.0) > weak.expected_fbeta_fresh(1.0)
+        assert 0.0 < weak.expected_fbeta(1.0) <= 1.0 and 0.0 < sharp.expected_fbeta(1.0) <= 1.0
+
+    def test_the_stop_level_reads_the_line_where_its_class_model_cuts(self):
+        """#4878: Autopilot's Done also reads the line's own expected F-beta against STOP_LEVEL."""
+        line = fit_labels_line(_orderings(n_pos=10), _corpus(), None, {})
+        assert line is not None and not head_count_serves(line.model)
+        reading = stop_level_reading(line, 1.0)
+        assert reading["expected_fbeta"] == pytest.approx(line.expected_fbeta(1.0))
+        assert reading["level"] == STOP_LEVEL == 0.5
+        assert reading["met"] == (reading["expected_fbeta"] >= STOP_LEVEL) == stop_level_met(line, 1.0)
+        assert stop_level_met(line, 1.0, level=0.0) and not stop_level_met(line, 1.0, level=1.01)
+
+    def test_no_line_no_balance_or_a_thin_class_model_reads_nothing(self):
+        thin = fit_labels_line(_orderings(n_pos=2), _corpus(), None, {})
+        assert thin is not None and head_count_serves(thin.model)
+        for line, beta in ((None, 1.0), (thin, 1.0), (fit_labels_line(_orderings(), _corpus(), None, {}), None)):
+            assert stop_level_reading(line, beta, level=0.0) == {"expected_fbeta": None, "level": 0.0, "met": False}
+
+    def test_a_corpus_with_nothing_to_keep_reads_zero(self):
+        assert corpus_expected_fbeta(np.zeros(5), 0.0, 1.0) == 0.0
+        assert corpus_expected_fbeta(np.zeros(0), 0.0, 1.0) == 0.0
 
 
 class TestThePrevalence:
@@ -261,9 +330,18 @@ def test_a_model_floors_afresh_on_each_corpus():
 
 
 def test_the_absolute_floor_is_the_line_before_4492():
-    """#4668's harness switch: ``sigma_floor("absolute")`` draws the line as it was before #4492, inside the block only."""
-    from vtscore.eval.live_threshold_rules import sigma_floor
+    """#4668's harness switch: ``sigma_floor("absolute")`` draws the line as it was before #4492, inside the block only.
 
+    The session's class model holds four Goods and four Bads, so the app draws the head's count there (#4786);
+    the floors are the class model's, so its cut is read with that count held off.
+    """
+    from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
+
+    with head_count_bads(0):
+        _absolute_floor_checks(sigma_floor)
+
+
+def _absolute_floor_checks(sigma_floor):
     model, scores, _ = _compressed_session(1.0)
     assert model is not None and model.sigma_raw is not None and model.sigma_raw < MIN_LOGIT_SIGMA
     relative = _line_on(model, scores, None, {})
@@ -323,6 +401,64 @@ def test_a_line_built_by_hand_reads_separation_in_the_models_spread():
     assert 1.0 < WEAK_SEPARATION_D < 3.0
 
 
+class TestFoldsThatRankTheWrongWay:
+    """#4899: folds that score the held-out Goods below the Bads read as no separation, under today's line.
+
+    The folds are the ones the process that imported `drawings` drew for five
+    yellow smileys Good against five Bad (#4892): each held out one of each, and
+    the Good scored below the Bad both times.  In-sample, the head trained on
+    those very labels puts its Goods on top, and the separation read 2.69.
+    """
+
+    FOLDS = [([0.5090, 0.5239], [1.0, 0.0]), ([0.4974, 0.5235], [1.0, 0.0])]
+
+    def _session(self):
+        rng = np.random.default_rng(4892)
+        scores = np.clip(rng.normal(0.49, 0.02, 240), 0.0, 1.0)
+        order = np.argsort(-scores)
+        # The Goods top the in-sample ranking and the Bads sit a little below them.
+        labels = {int(i): True for i in order[:5]} | {int(i): False for i in order[30:35]}
+        return scores, list(range(scores.size)), labels
+
+    def test_the_separation_is_the_folds_gap_at_most_zero(self):
+        scores, ids, labels = self._session()
+        assert class_score_model(self.FOLDS) is None, "they support no line of their own"
+        line = fit_labels_line(self.FOLDS, scores, ids, labels)
+        assert line is not None and line.held_out is not None
+        assert line.held_out.mu_pos < line.held_out.mu_neg and line.separation < 0
+        floor = corpus_sigma_floor(line.unvoted_scores)
+        assert line.held_out.sigma == max(line.held_out.sigma_raw or 0.0, floor)
+        assert line.separation == pytest.approx((line.held_out.mu_pos - line.held_out.mu_neg) / line.held_out.sigma)
+        assert weak_check_due(line.separation, 10, None), "the labels it exists for are the ones it now checks"
+
+    def test_the_in_sample_stand_in_still_draws_the_line(self):
+        """The owner's ruling (2026-10-15): only the separation moves; the cut is the one before #4899."""
+        scores, ids, labels = self._session()
+        line = fit_labels_line(self.FOLDS, scores, ids, labels)
+        stand_in = fit_labels_line(None, scores, ids, labels)
+        assert line is not None and stand_in is not None
+        assert stand_in.held_out is None and stand_in.separation > WEAK_SEPARATION_D, "what #4892 read: 2.69"
+        assert line.model == stand_in.model
+        for beta in (0.25, 1.0, 4.0):
+            assert line.threshold(beta) == stand_in.threshold(beta)
+
+    def test_a_find_on_another_corpus_keeps_the_folds_verdict(self):
+        scores, ids, labels = self._session()
+        line = fit_labels_line(self.FOLDS, scores, ids, labels)
+        assert line is not None and line.held_out is not None
+        other = np.clip(np.random.default_rng(5).normal(0.48, 0.05, 300), 0.0, 1.0)
+        found = line.on_corpus(other)
+        assert found.held_out is not None and found.separation < 0
+        assert found.held_out.sigma == max(line.held_out.sigma_raw or 0.0, corpus_sigma_floor(other))
+
+    def test_folds_that_rank_the_right_way_carry_no_held_out_model(self):
+        line = fit_labels_line(_orderings(), _corpus())
+        assert line is not None and line.held_out is None
+
+    def test_wrong_way_folds_with_no_labels_still_draw_no_line(self):
+        assert fit_labels_line(self.FOLDS, [0.5, 0.6]) is None
+
+
 class TestWeakCheckDue:
     """#4496: the rule the app's Autopilot and the harness's default arm both check by."""
 
@@ -342,6 +478,31 @@ class TestWeakCheckDue:
     def test_no_cooldown_makes_it_due_once(self):
         assert weak_check_due(1.0, 20, None, cooldown=None)
         assert not weak_check_due(1.0, 500, 20, cooldown=None)
+
+
+class TestDoneCheckDue:
+    """Autopilot's check before Done runs unless a check ended in the last cooldown votes."""
+
+    def test_due_with_no_check_ended_yet(self):
+        assert done_check_due(0, None)
+        assert done_check_due(500, None)
+
+    def test_skipped_within_a_cooldown_of_the_last_check(self):
+        ended = 30
+        assert not done_check_due(ended, ended), "a check just measured this line"
+        assert not done_check_due(ended + WEAK_CHECK_COOLDOWN - 1, ended)
+        assert done_check_due(ended + WEAK_CHECK_COOLDOWN, ended)
+        assert not done_check_due(ended + 5, ended, cooldown=10)
+
+
+class TestWeakCheckPrompts:
+    """#4799: the media types the check never prompts on - face crops, where it cost every session (#4778)."""
+
+    def test_faces_are_never_prompted_and_everything_else_is(self):
+        assert WEAK_CHECK_OFF_MEDIA_TYPES == frozenset({"face"})
+        assert not weak_check_prompts("face")
+        for media_type in ("image", "audio", "video", "text", "document", "", None):
+            assert weak_check_prompts(media_type), media_type
 
 
 # ---------------------------------------------------------------------------

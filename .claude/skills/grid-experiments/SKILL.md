@@ -372,6 +372,8 @@ crossover, or how unlike the mean a single run is. At minimum:
   study, no exceptions;
 - **the interactive viewer** (see below) — likewise mandatory, and linked from the
   report;
+- **the stopping block** (see below) — mandatory for every simulated-user study
+  whose runs walk Autopilot's phase machine (the default arm);
 - whatever axis the study's mechanism runs on (scale band, prevalence, κ …);
 - the binding constraint, if the study found one.
 
@@ -533,7 +535,9 @@ first Good vote, and at every click of a run that never got one, the harness
 writes no row, and a user there has nothing: with no Good there is nothing to
 sort toward, and Test on it is refused. (In results run before #4643 the rows
 start at the first Good *and* Bad, when Test refused one class too; the same
-rule - every click before a run's first row - reads both.) Both the viewer and
+rule - every click before a run's first row - reads both. A run that opens on a
+typed query has a row from its first vote since #4758: its Test gives the
+query's own set.) Both the viewer and
 `curves.py` now score those clicks as the empty returned set
 (`curves.score_empty_sets`, `curves.EMPTY_SET`: recall, F1 and the objective
 0, precision 0, FPR 0, FNR 1, AP the test split's prevalence, AUROC 0.5, cost
@@ -553,7 +557,12 @@ sort until the Hard phase (`app_trained`, #4605), but the user can export the
 labels and run Test at any click, and either builds a detector from the
 labelset. So the page shows what that gives, and neither module reads
 `app_trained`. Since #4643 that is the label quota's: the Goods' centroid until
-the labels hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731), the trained head from there. The harness
+the labels hold 3 Goods and 4 Bads (or a Good and 16 Bads, #4731), the trained head from there; since
+#4758 a run that opens on a typed query gives that query's own set until the
+quota instead, from its first vote (`detector_tier` `query`; `CALIB_QUERY_TIER=0`
+is the arm before), and since #4736 on a single-vector space past the quota
+until 30 votes (`app_trained` 0 there, the head's rows tagged `hold:head`;
+`CALIB_QUERY_HOLD=0` is the arm before). The harness
 writes each row as that detector and names it in `detector_tier`, which
 neither module reads either. A report that scores the *session* filters on
 `app_trained` itself, as the State of the App analyzer does. A study that wants
@@ -611,6 +620,34 @@ the first, and the point is that both renderings say the same thing.
 Reports cite only analysis code that is **in the tree**: `scripts/check-docs.py`
 now enforces that for `docs/experiments/`. A report whose script never got
 committed cannot be reproduced or extended, however good its numbers were.
+
+### The stopping block (mandatory where the runs walk Autopilot)
+
+A simulated session clicks to its budget, but the app tells a user *All quality
+indicators are green* at Done, and a user may stop there. So a study whose runs
+carry `phase` (every Autopilot-fidelity run since 2026-07-31) reports, per arm,
+where the app said stop and what the user had there (#3560). The one
+implementation is `scripts/experiments/calibration/stopping.py`:
+
+- **`stopping_table`**: the fire rate first, because every later column is
+  conditional on it and the runs it drops are the slow ones; the Kaplan-Meier
+  median stop, with the runs that never fired censored; the objective at the
+  stop and at the budget, paired within run; the stop against the run's own best.
+- **`stage_table` and `binding_note`**: where the clicks before the stop went
+  (opening, Hard, New, the mid-session check, the check before Done), and which
+  light each stretch waited on. Read a light only in its own stretch. Span is
+  never green in Hard, because New is the walk that fills it, so a not-green
+  share over every held click names Span binding in every session. The
+  2026-10-08 review reported exactly that.
+- **`margin_table`**, on runs that carry the margins (#3883 on): how close each
+  gate came, over its own stretch.
+
+Quote them in the objective (F-beta), never cost. The State of the App analyzer
+writes all three into its `summary.md`. An A/B quotes the first two per arm,
+beside its quality-over-clicks pair: an arm that changes where the app says
+stop changes what most users leave with. The stop is never a reason to
+truncate a run: the clicks past it are what say whether stopping there was
+right, and arms are compared at a fixed click.
 
 ### Close what the study answered
 

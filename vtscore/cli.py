@@ -293,6 +293,7 @@ def _load_and_train_detectors(
     )
     from vtscore.detectors.store import _detector_path, _read_detector
     from vtscore.detectors.labelset_training import Haystack, train_from_labelset
+    from vtscore.detectors.query_head import detector_text_query, head_score_embedder
     from vtscore.state import seed_detector_beta
     from vtscore.state.core import DetectorContext
 
@@ -354,7 +355,8 @@ def _load_and_train_detectors(
                 )
 
         labelset = LabelSet.from_dict(det.get("labelset") or {})
-        if not labelset.elements:
+        if not labelset.elements and not detector_text_query(det):
+            # A typed-query detector scores as its query's set before any label (#4758).
             raise ValueError(f"Detector '{det_name}' has no labels.")
 
         det_ctx = DetectorContext(det_name, media_type=det_media_type or media_type)
@@ -390,6 +392,8 @@ def _load_and_train_detectors(
             media_type=target_type,
             snap=snap,
             haystack_for=_haystack_for,
+            # Until its labels give a trained head, a typed-query detector is its query's set (#4758).
+            text_query=detector_text_query(det),
         )
         if not trained:
             cached = len(det_ctx.label_embeddings)
@@ -414,7 +418,8 @@ def _load_and_train_detectors(
             "mlp": det_ctx.model,
             "threshold": det_ctx.threshold,
             "balance": balance,
-            "embedder": det_ctx.embedder or "",
+            # The space the head scores in: a typed query's head's is the text slot (#4758).
+            "embedder": head_score_embedder(det_ctx.model, det_ctx.embedder or "") or "",
             "media_type": det_media_type or media_type,
             "embedder_type": detector_embedder_type_from_data(det),
             "good_count": sum(1 for el in labelset.elements if el.label == "good"),
@@ -432,12 +437,18 @@ def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
 
     The run still scores and exports: the centroid is the detector those labels
     give, here as in Test and AutoFind.  The ``detector_centroid`` event is the
-    record that it was not a trained head, and what the labelset still owes.
+    record that it was not a trained head, and what the labelset still owes.  A
+    detector made from a typed query scores as that query's own set there
+    instead (#4758), and says so in a ``detector_query`` event; past the quota
+    it does until the hold's labels (#4736), and the event then says that is
+    why (#4889).
     """
     from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
     from vtscore.detectors.label_quota import labelset_quota, served_quota  # noqa: PLC0415
+    from vtscore.detectors.query_head import is_query_head, query_head_text  # noqa: PLC0415
 
-    if not is_centroid_head(det_ctx.model):
+    query = is_query_head(det_ctx.model)
+    if not (query or is_centroid_head(det_ctx.model)):
         return
     quota = labelset_quota(labelset)
     owed = [
@@ -449,15 +460,27 @@ def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
     dry_owed = max(0, quota.dry_bad_quota - quota.n_bad) if owed and quota.n_good and quota.dry_bad_quota else 0
     if dry_owed:
         owed = [" and ".join(owed) + f", or {dry_owed} more Bad{'' if dry_owed == 1 else 's'}"]
-    cli_progress.emit(
-        "detector_centroid",
-        text=(
+    serves = f"its typed query's own set ('{query_head_text(det_ctx.model)}')" if query else "the Goods' centroid"
+    served = served_quota(det_ctx.model, labelset)
+    if served["hold_owed"]:
+        # Past the quota, held on the typed query (#4736): the quota is not why (#4889).
+        hold_owed = served["hold_owed"]
+        text = (
+            f"Detector '{det_name}' has {quota.n_good} Good and {quota.n_bad} Bad labels; a detector made from a "
+            f"typed query scores as {serves} until it has {served['hold_labels']} labels "
+            f"({hold_owed} more label{'' if hold_owed == 1 else 's'}, Good or Bad, for a trained detector)."
+        )
+    else:
+        text = (
             f"Detector '{det_name}' has {quota.n_good} Good and {quota.n_bad} Bad labels, under the quota, so it "
-            f"scores as the Goods' centroid, not a trained detector"
-            + (f" ({' and '.join(owed)} for one)." if owed else ".")
-        ),
+            f"scores as {serves}, not a trained detector" + (f" ({' and '.join(owed)} for one)." if owed else ".")
+        )
+    cli_progress.emit(
+        "detector_query" if query else "detector_centroid",
+        text=text,
         detector=det_name,
-        **served_quota(det_ctx.model, labelset),
+        **({"query": query_head_text(det_ctx.model)} if query else {}),
+        **served,
     )
 
 

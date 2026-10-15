@@ -170,18 +170,27 @@ same edit.
     the check *should* certify is #4358; report whatever that ruling becomes.
   - **Ceiling:** the full-label model's AP, and its line, F1 and oracle recall at P.
   - **Click 0:** the text sort's AP and its top K at P.
-  - **Where the app said stop (#3560):** `summary.md`'s stopping block, with
-    `stops.csv` / `margins.csv`: the share of sessions the stopping rules ever
-    fired in, the click they fired at, the objective there against the budget
-    and the run's own best, which light held the rest, and how close each gate
-    came. Not yet a report section: the first review to read it decides
-    whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
+  - **Where the app said stop (#3560), a standing section:** `summary.md`'s
+    stopping block, with `stops.csv` / `margins.csv`. Report the share of
+    sessions the stopping rules ever fired in, the click they fired at, the
+    objective there against the budget and against the run's own best, where
+    the clicks before the stop went (`stage_table`), which light each stretch
+    waited on, and how close each gate came. Read Smart and Stable over Hard
+    only, and Span over New only: New is the walk that fills Span, so Span is
+    never "the binding light" (the 2026-10-08 review said it was, from a count
+    over every held click). `stops_by_preset.py` gives the per-preset table a
+    report commits. `stop_rules_3560.py` has the deeper read: the objective
+    around the stop, and whether Smart's lapses carry news.
 - **The opening is the text sort (#4605).** The app stays on the text sort
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
-  the Hard phase on, a median ~40 clicks in. The harness scores the detector
-  Test would give during the opening anyway (from the first Good: the Goods'
-  centroid under the label quota, then the trained head; #4643,
-  `detector_tier`) and flags the steps the app would show as
+  the Hard phase on (vote 8 since #4742), and on a single-vector space (the
+  Binary path) not before 30 votes: until then a typed-query session keeps the
+  text sort on screen while Autopilot asks from the head (#4736, `app_trained`
+  0 on those clicks). The harness scores the detector
+  Test would give during the opening anyway (from the first vote, the typed
+  query's own set under the label quota since #4758 - the Goods' centroid from
+  the first Good before it - then the trained head; #4643, `detector_tier`)
+  and flags the steps the app would show as
   `app_trained == 1`. Every number the report reads off the session before a
   run's first such step (AP, the line at P, the balance, the objective,
   `curves.csv`, `by_click.py`) is the text sort's, at its own line. Never read
@@ -227,19 +236,25 @@ same edit.
   written to the detector as it is cast, Export labels and Test have no phase
   gate, and Test or an import builds a detector from the labelset. So
   `viewer.py` and `curves.py` read neither `app_trained` nor `detector_tier`.
-  Before a run's first Good they draw the empty set (Test is refused, #4629),
+  Before a run's first row they draw the empty set (Test is refused, #4629),
   and from there on the harness's detector, which is what Test gives: since
   #4643 the app no longer hands out a head fitted to too few labels, so under
   the label quota (3 Goods and 4 Bads, Autopilot's own quorum, or a Good and 16 Bads since #4731) that is the
-  Goods' centroid, cut at its midpoint on the withheld half, and from the
-  quota the trained head, whose line is Find's there. The report is the
+  typed query's own set, from the first vote, on a run that opens on one
+  (#4758; the Goods' centroid from the first Good before it, and still on any
+  other opening), cut by its line on the withheld half, and from the
+  quota the trained head, whose line is Find's there - on a single-vector
+  space from 30 votes, since the query holds until then (#4736; the head's
+  rows there are tagged `hold:head`). The report is the
   session, the viewer is the export, so the two still differ through the
   opening; the click-4 dip the head on 3 Goods and 1 Bad drew (#4640) went
   with the app, not with a viewer rule. A review run before #4643 starts its
   rows at the first Good and Bad and draws that head; the committed pages
   change only at the next review's run. The page says so in its reading
-  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (A typed-query
-  tier was dropped: a labelset does not carry the query.)
+  note, and `selftest_viewer.py` / `selftest_curves.py` pin it. (The typed
+  query lives on the detector, not the labelset, since #4758: an exported
+  labelset, which carries no query, still imports as the centroid. The page
+  draws Test's.)
 - **The viewer's dotted line is the best cut (owner, 2026-10-08, #4654).** On
   an F metric it is the best that F any cut of the same ranking reaches, the
   report's "best cut", so it never sits below the line; precision, recall and
@@ -252,14 +267,17 @@ same edit.
   2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
   reskin cannot add the best cut: the next review's run draws it.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
-  The default arm (`spot_check="weak"`, the app's since 2026-10-05) checks the
+  The default arm (`spot_check="weak"`, the app's since 2026-10-05; `"end"` on faces) checks the
   line once the voting steps are spent, so every run ends with
   `phase == "check"` rows past `max_steps`. "Final" is the last ordinary step;
   the end check's rows and picks feed only the check's own columns, never a
   curve, a checkpoint or an image's credit. Mid-session, Autopilot also runs
   the check when the labels separate weakly (`weak_check_due`, past its
-  text-sort opening): those rows carry `phase == "prompt"`, count in `t` and
+  text-sort opening), and once before Done, the first time every light is
+  green (`done_check`): those rows carry `phase == "prompt"`, count in `t` and
   the 150-vote budget, and read as ordinary clicks in every curve and credit.
+  The weak prompt never runs on face crops (#4799); the check before Done
+  does, as the app's does. The first `done` follows the check before Done.
 - **Rank frames:** the line at every P is read off where the positives sit in
   each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
   checkpoints (`CALIB_RANK_FRAME_STEPS`). For an F1 curve, record them densely:
@@ -274,11 +292,22 @@ same edit.
   image, per image × detector, and early (≤30 clicks) vs late (>90). One
   click's credit includes refit noise, so an image claim needs repeat
   observations (`n_obs`).
+- **Only trained-head credit is an image's (owner, 2026-10-13, #4658).** The
+  per-image tables read only clicks whose credited step and the step before
+  both score the trained head (`head_credit`). A Bad cannot move the Goods'
+  centroid or the typed query's set (exactly 0 credit), and a step where the
+  tier changes charges the jump between two sorts to whichever click triggered
+  it. `influence.csv` still lists every click, with `tier` and `prev_tier`.
 - **An image's own effect:** judge images on `resid_z`, never the raw mean. The
-  raw mean mostly says *when* (early positives hurt) and *where* (hard classes)
-  an image was clicked. `resid` nets out the cell, label and phase. Report the
-  |z| > 3 count **next to the shuffled-image null** that `summary.md` prints.
-  At 3 seeds nothing cleared it; at 7 seeds (2026-09-24) the harmful side did.
+  raw mean mostly says *when* and *where* (hard classes) an image was clicked.
+  `resid` nets out the cell, label and phase. An image is flagged only when
+  |z| > 3 AND its raw credit is past |z| > 3 the same way (`raw_z`): the
+  credit is right-skewed, so a typical click sits below its bucket's mean, and
+  a Bad the head ignores is credited about 0 every time, a steady bucket-mean
+  below its peers. Neither hurt anything. Report the flagged counts **next to
+  the shuffled-image null** that `summary.md` prints. On the 2026-10-08 Binary
+  runs (24 seeds) that is about 370 helpful and 280 harmful, against a null of
+  about 4 each.
 
 ## Document Logo (the structural path): standing decisions (owner, 2026-10-01, #4392)
 
@@ -540,9 +569,10 @@ things keep a report on its link:
   never got one; before its first Good and Bad in a review run before #4643)
   is scored as the empty returned set, the nothing Test gives that labelset,
   so the runs that never trained are in its mean as losses
-  (`curves.score_empty_sets`); from the first Good on, Autopilot's opening
-  included, it draws the harness's detector, the Goods' centroid under the
-  label quota (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
+  (`curves.score_empty_sets`); from a run's first row on, Autopilot's opening
+  included, it draws the harness's detector: under the label quota, the typed
+  query's own set from the first vote since #4758, else the Goods' centroid
+  from the first Good (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
   undefined; a page built before that is rebuilt with `analyze.sh`, since a
   reskin has no prevalence to put AP at.
   The report's own tables score a run with no detector at the typed query its

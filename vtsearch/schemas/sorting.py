@@ -138,9 +138,12 @@ class BalanceStateSchema(Schema):
     # ``null`` before a retrain has drawn the labels' line.
     separation = fields.Float(allow_none=True)
     # The labels separate weakly (d' below 1.5, from 10 votes, and 25 votes
-    # after the last check ended): Autopilot runs the check, the Train tab's
-    # Check button calls for one (``weak_check_due``, #4496).
+    # after the last check ended): Autopilot runs the check
+    # (``weak_check_due``, #4496).
     check_due = fields.Boolean()
+    # Autopilot's check before Done should run: no check has ended in the last
+    # 25 votes (``done_check_due``).  Read once every quality light is green.
+    done_check_due = fields.Boolean()
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +363,10 @@ class LearnedSortResponseSchema(Schema):
     acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
     # What the balance says about ``threshold`` (#4247, #4413), on ``done``.
     balance = fields.Nested(BalanceStateSchema, required=False, allow_none=True)
+    # On ``done``: whether a session opened on a typed query still shows that query's set
+    # rather than this ranking (#4736, ``label_quota.query_holds``).  Autopilot then asks
+    # from this ranking but keeps the text sort on screen.
+    query_hold = fields.Boolean(required=False)
 
 
 class LearnedSortCancelResponseSchema(Schema):

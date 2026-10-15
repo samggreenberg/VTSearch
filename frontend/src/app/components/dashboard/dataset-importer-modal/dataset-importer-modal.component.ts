@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, effect, inject, input, outp
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { SourcePickerComponent } from './source-picker/source-picker.component';
 import { ImportConfigComponent } from './import-config/import-config.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
@@ -14,10 +15,12 @@ import { ImportDefaultsService } from './pickers/shared/import-defaults.service'
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { HintsService } from '../../../services/hints.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { EmbedderInfo, ImporterInfo, ImporterPickerTab, MediaTypeInfo } from '../../../models/api.models';
 import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 import { toTypeId } from './pickers/shared/media-type.util';
+import { datasetMediaWords } from '../../../utils/media-words';
 
 /** Add Dataset modal.  Owns the importer registry, category/importer
  *  tab selection, and the shared media-type registry + Advanced-block
@@ -43,7 +46,7 @@ import { toTypeId } from './pickers/shared/media-type.util';
   standalone: true,
   imports: [
     FormsModule,
-    ModalComponent,
+    ModalComponent, ToastyHintComponent,
     SourcePickerComponent,
     ImportConfigComponent,
     FieldHintIconComponent,
@@ -59,6 +62,8 @@ export class DatasetImporterModalComponent implements OnInit {
   private datasetsCrudApi = inject(DatasetsCrudApiService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private settingsState = inject(SettingsStateService);
+  /** Toasty's import-dataset hint, which stands in for the picker's "Select…" line. */
+  readonly hints = inject(HintsService);
   private datasetState = inject(DatasetStateService);
   private importDefaults = inject(ImportDefaultsService);
 
@@ -119,6 +124,12 @@ export class DatasetImporterModalComponent implements OnInit {
 
   get effectiveSoloMediaType(): string | null {
     return this.importDefaults.effectiveSoloMediaType;
+  }
+
+  /** What Toasty says a dataset holds: the one media type when the server is
+   *  locked to one, else a mix (as the Dashboard's "add a dataset" hint). */
+  get datasetMediaWords(): string {
+    return datasetMediaWords(this.effectiveSoloMediaType);
   }
 
   constructor() {

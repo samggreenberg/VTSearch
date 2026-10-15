@@ -1,5 +1,8 @@
 <vt-modal [open]="true" [title]="modalTitle" [showCloseButton]="false" (closed)="close()">
   @if (view() === 'main') {
+  <vt-toasty-hint hintId="new-detector">
+    Describe what you're looking for in a few words, or give an example, then click <strong>Create</strong>.
+  </vt-toasty-hint>
     <div class="tab-bar" role="tablist">
       <button type="button" class="tab" role="tab"
         [class.active]="tab === 'blank'"
@@ -298,6 +301,24 @@
           (keydown.enter)="onNameEnter($event)"
         />
       </div>
+
+      <!-- The deployment keeps every detector's labels current at a sync
+           target outside VTSearch (#4913); ask for whatever the admin left open. -->
+      @if (autoExportSource(); as autoExport) {
+        <div class="form-group">
+          <span class="form-label">Auto-export:</span>
+          <p class="info-text">
+            This detector's labels are copied to <strong>{{ autoExport.display_name }}</strong> as you label,
+            so a copy outside VTSearch stays current.
+          </p>
+        </div>
+        <vt-labelset-source-fields
+          idPrefix="nd-autoexport"
+          [fields]="autoExportFields()"
+          [values]="autoExportValues()"
+          (valuesChange)="autoExportValues.set($event)"
+        />
+      }
 
       <!-- Opened from the footer's "Advanced" toggle (#4305), so the options
            land at the foot of the form, just above the toggle. -->

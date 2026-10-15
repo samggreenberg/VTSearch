@@ -458,11 +458,13 @@ def learned_sort(body: dict):
     completes and receive the result inline.  The frontend leaves it false.
     """
     from vtscore.concurrency.async_jobs import learned_sort_jobs
+    from vtscore.detectors.label_quota import labelset_quota, query_holds
     from vtscore.detectors.learned_sort import (
         build_learned_sort_signature,
         resolve_active_labelset,
         run_learned_sort,
     )
+    from vtscore.detectors.training import _patch_space_for
     from vtscore.state.core import (
         detector_acquisition_threshold,
         detector_balance_state,
@@ -545,6 +547,12 @@ def learned_sort(body: dict):
         # What the balance says about the line rides with it (#4247, #4413).
         balance = detector_balance_state(det_ctx, beta_value)
         job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), balance=balance)
+        # Whether a typed-query session still shows its query's set over this ranking (#4736): the
+        # client then asks from it but keeps the text sort on screen.  Counted as a Find counts.
+        quota = labelset_quota(labelset)
+        job.result["query_hold"] = query_holds(
+            quota.n_good, quota.n_bad, patch_space=_patch_space_for(det_ctx.embedder)
+        )
 
     job = learned_sort_jobs.start(
         signature,

@@ -3,7 +3,7 @@
 
     python slides/figs/src/make-sota-figs.py
 
-Writes `figs/sota-photos.png` and `figs/sota-documents.png`, each with one build
+Writes `figs/sota-photos.webp` and `figs/sota-documents.webp`, each with one build
 stage. Both slides have the same two panels, so the room reads the second the
 way it read the first:
 
@@ -19,7 +19,7 @@ way it read the first:
   documents (#4517) its three points joined straight.
 
 Both panels mark the same clicks with the same small hollow circle (`_mark`;
-owner, 2026-10-07): the typed query, 25, 50, 100 and 150 clicks and after the
+owner, 2026-10-07): the text query, 25, 50, 100 and 150 clicks and after the
 check (∞) on photos, and `DOC_PR_CLICKS` on documents.
 
 The photo slide is the binary-photo review (SigLIP, binary votes, COCO Better,
@@ -75,7 +75,8 @@ END_LABEL = "∞"
 #: its own blind GMM cut, before any vote. The F panel starts every radio there, at click 0 (owner,
 #: 2026-10-06: "a text-sort (and GMM-thresh) notch at the far left for 0"); the precision-recall panel
 #: leaves it out, at precision ~0.01 and recall ~0.9, far off its scale.
-TYPED_QUERY = "typed query"
+#: The value is the CSV row key as `perp.py` spells it, never printed: the tick label says "text query".
+TEXT_QUERY = "typed query"
 #: The Region Photo review (#4534): the same harness and the same table, on the
 #: region path (DINOv3 patches, `max_patch`, opened on SigLIP's text sort).
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
@@ -197,7 +198,7 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
     """Per radio: F-beta at `PHOTO_CLICKS` and after the check, the set after the check, and the path.
 
     All of it is a review's committed `precision_recall_path.csv` (#4519): means over
-    every run, one that never trained at its typed query's set (#4631), the returned
+    every run, one that never trained at its text query's set (#4631), the returned
     size a median. The binary review's by default; the region review's (#4534) has
     the same shape.
     """
@@ -215,8 +216,8 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
     with source.open() as f:
         for row in csv.DictReader(f):
             by.setdefault(float(row["beta"]), {})[row["point"]] = row
-    # The path starts at the typed query, "0" (owner, 2026-10-07), and ends after the check, "∞".
-    points = [TYPED_QUERY] + [str(c) for c in PHOTO_CLICKS] + ["after the check"]
+    # The path starts at the text query, "0" (owner, 2026-10-07), and ends after the check, "∞".
+    points = [TEXT_QUERY] + [str(c) for c in PHOTO_CLICKS] + ["after the check"]
     if set(by) != {0.25, 1.0, 4.0} or any(set(points) - set(by[b]) for b in by):
         raise SystemExit(f"make-sota-figs: {source} does not carry every radio at every point")
     out = {}
@@ -226,15 +227,15 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
                 "precision": float(rows[p]["precision"]),
                 "recall": float(rows[p]["recall"]),
                 "kept": int(round(float(rows[p]["returned, median"]))),
-                "label": {"after the check": END_LABEL, TYPED_QUERY: "0"}.get(p, p),
+                "label": {"after the check": END_LABEL, TEXT_QUERY: "0"}.get(p, p),
             }
             for p in points
         ]
         curve = by_click[beta]
         out[beta] = {
-            # The typed query at click 0: the text sort at the line the app draws for it (#4599).
-            "text": float(rows[TYPED_QUERY]["fbeta"]),
-            # Every click, filled: the typed query until the app shows a run's detector, the end of
+            # The text query at click 0: the text sort at the line the app draws for it (#4599).
+            "text": float(rows[TEXT_QUERY]["fbeta"]),
+            # Every click, filled: the text query until the app shows a run's detector, the end of
             # Autopilot's opening (#4605, `by_click.py`).
             "curve_t": [t for t, _ in curve],
             "curve_f": [f for _, f in curve],
@@ -242,7 +243,7 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
             "curve_pr": pr_click.get(beta, []),
             "clicks": list(PHOTO_CLICKS),
             "f": [float(rows[str(c)]["fbeta"]) for c in PHOTO_CLICKS],
-            # 50 clicks, which the notes quote: the first circle past the typed query (#4605).
+            # 50 clicks, which the notes quote: the first circle past the text query (#4605).
             "at50": float(rows["50"]["fbeta"]),
             "after": float(rows["after the check"]["fbeta"]),
             "path": path,
@@ -392,7 +393,7 @@ PR_PATH_LIM = (0.5, 1.0)
 def _recall_span(data: dict[float, dict]) -> tuple[float, float]:
     """The photo paths' recall axis: the 0.1 steps around every recall the panel draws, per-click paths included.
 
-    Read off the data, as the y span is (`_floor`, `_top`): since #4603 the typed query at beta 1/4 keeps about 19
+    Read off the data, as the y span is (`_floor`, `_top`): since #4603 the text query at beta 1/4 keeps about 19
     images at recall ~0.26, well left of where the sessions go, and a fixed span drew it off the panel.
     """
     recalls = [point["recall"] for d in data.values() for point in d["path"]]
@@ -422,7 +423,7 @@ def _pr_paths_panel(
     :func:`_mark`, at the same clicks the left panel marks. Each path is labelled
     where it ends; how many each returns is in the notes.
 
-    A point two radios share - the typed query, the query crop alone - is drawn
+    A point two radios share - the text query, the query crop alone - is drawn
     once, by the first radio to reach it.
     """
     ax = _pr_axes(fig, lim or PR_PATH_LIM, ticks or [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], step, ylim)
@@ -551,12 +552,12 @@ def photo_figure(
     """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
     fig = plt.figure(figsize=FIG_SIZE)
     # Every click, not five checkpoints joined (owner, 2026-10-07: "why is the left curve so coarse?"):
-    # flat on the typed query through Autopilot's opening (#4605), then the climb as sessions hand over;
+    # flat on the text query through Autopilot's opening (#4605), then the climb as sessions hand over;
     # then the step to after the check.
     lines = {b: (data[b]["curve_t"] + [PHOTO_CHECK_X], data[b]["curve_f"] + [data[b]["after"]]) for b in data}
 
     def marks(ax: plt.Axes, _ends: dict) -> None:
-        # The clicks the precision-recall path marks, at the same places: the typed query, each of
+        # The clicks the precision-recall path marks, at the same places: the text query, each of
         # `PHOTO_CLICKS`, and after the check.
         for beta, _label, _w in RADIOS:
             d = data[beta]
@@ -574,7 +575,7 @@ def photo_figure(
         PHOTO_GRID_STEP,
         top=top,
     )
-    ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", END_LABEL])
+    ax.set_xticklabels(["text\nquery", "25", "50", "100", "150", END_LABEL])
     if stage >= 2:
         lim = recall_lim or _recall_span(data)
         _pr_paths_panel(fig, data, lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, (floor, top))
@@ -614,8 +615,8 @@ def main() -> int:
     ):
         # Saved at the canvas's declared bounds, so both stages frame the
         # panels identically and the top margin keeps the title notch empty.
-        save(build(data, 2), OUT, f"{stem}.png", column=FULL_BLEED, tight=False)
-        save(build(data, 1), OUT, f"{stem}.build1.png", column=FULL_BLEED, tight=False)
+        save(build(data, 2), OUT, f"{stem}.webp", column=FULL_BLEED, tight=False)
+        save(build(data, 1), OUT, f"{stem}.build1.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

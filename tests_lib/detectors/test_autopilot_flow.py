@@ -13,6 +13,7 @@ issue #2788's cold-start degenerate thresholds look like a user-facing bug when
 they were an artifact of a flow no user takes.
 """
 
+from typing import Any
 import math
 
 import numpy as np
@@ -31,7 +32,9 @@ from vtscore.eval.autopilot_flow import (
     SPAN_YELLOW,
     STABLE_MAX_THRESHOLD,
     STABLE_RATE_THRESHOLD,
+    STOP_CAP,
     AutopilotFlow,
+    capped_in_opening,
     Status,
     app_has_detector,
     next_phase,
@@ -122,6 +125,10 @@ class TestPortedConstants:
         assert (GOOD_TARGET, BAD_TARGET) == (3, 4)
         assert (MORE_TARGET, MORE_DRY_RUN) == (0, 16)
 
+    def test_stop_cap_matches_the_app(self):
+        # frontend STOP_CAP_VOTES (#4903): Done at 200 votes whatever the lights and the level.
+        assert STOP_CAP == 200
+
     def test_indicator_gates_match_labeling_progress(self):
         # _compute_smart_status / _compute_stable_status: "Need at least 5 good
         # and 5 bad"; flat threshold -0.015 and a slope worth 2 standard errors
@@ -184,6 +191,19 @@ class TestPhaseMachine:
     def test_done_when_all_three_are_green(self):
         assert _phase(9, 9, smart="green", stable="green", span="green", more_done=True) == "done"
 
+    def test_all_green_reaches_the_check_before_done_until_it_has_closed(self):
+        """The app's ``doneChecked``: all green reads ``spot`` until the run's check before Done has closed."""
+        green = {"smart": "green", "stable": "green", "span": "green", "more_done": True, "remaining_unlabeled": 1000}
+        assert next_phase(9, 9, done_checked=False, **green) == "spot"
+        assert next_phase(9, 9, done_checked=True, **green) == "done"
+        # Nothing left unlabeled leaves nothing to check.
+        assert next_phase(9, 9, done_checked=False, **{**green, "remaining_unlabeled": 0}) == "done"
+
+    def test_a_running_check_holds_the_phase_at_spot(self):
+        assert (
+            next_phase(9, 9, remaining_unlabeled=1000, smart="red", stable="red", span="red", checking=True) == "spot"
+        )
+
     def test_exhausted_when_nothing_left_and_not_all_green(self):
         assert _phase(9, 9, remaining=0) == "exhausted"
         # All-green still wins over exhausted, as in the app's branch order.
@@ -217,6 +237,7 @@ class TestDetectorVisibility:
     def test_detector_from_the_hard_phase_on(self):
         assert app_has_detector("hard")
         assert app_has_detector("new")
+        assert app_has_detector("spot")
         assert app_has_detector("done")
 
 
@@ -412,13 +433,172 @@ class TestAutopilotFlow:
         assert flow.recent_error_costs == []
         assert smart_status(flow.recent_error_costs, 9, 9) == "yellow"
 
-    def test_span_drives_the_new_to_done_transition(self):
+    def test_span_drives_the_new_to_spot_transition(self):
+        """All green reaches the check before Done first: the app checks the line, then reports Done."""
         flow = AutopilotFlow()
         flow.more_done = True
         flow.recent_error_costs = [0.3] * 4
         flow.stability = [_entry(0)] * 6
         assert flow.update(9, 9, 500, {"level": 0, "depth": 100}) == "new"
-        assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "done"
+        assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "spot"
+
+    def _all_green(self, **kw) -> AutopilotFlow:
+        flow = AutopilotFlow(**kw)
+        flow.more_done = True
+        flow.recent_error_costs = [0.3] * 4
+        flow.stability = [_entry(0)] * 6
+        flow.update(9, 9, 500, {"level": 40, "depth": 100})
+        return flow
+
+    def test_the_check_before_done_runs_once_then_done(self):
+        flow = self._all_green()
+        assert flow.phase == "spot" and flow.spot_check is None
+        assert flow.begin_spot_check("done") == "spot"
+        # Its rounds are votes; the phase holds at spot while it runs.
+        assert flow.update(12, 11, 495, {"level": 40, "depth": 100}) == "spot"
+        assert flow.end_spot_check() == "done"
+        assert flow.done_checked
+        # A later return of every light to green does not check again.
+        flow.recent_error_costs = [0.9, 0.5, 0.3, 0.2]
+        assert flow.update(12, 12, 494, {"level": 40, "depth": 100}) != "spot"
+        flow.recent_error_costs = [0.3] * 4
+        assert flow.update(12, 13, 493, {"level": 40, "depth": 100}) == "done"
+
+    def test_a_skipped_check_goes_straight_on_to_done(self):
+        flow = self._all_green()
+        assert flow.skip_done_check() == "done"
+        assert flow.done_checked and flow.spot_check is None
+
+    def test_a_weak_check_holds_spot_while_it_runs_and_latches_nothing(self):
+        flow = AutopilotFlow()
+        flow.update(GOOD_TARGET, BAD_TARGET, 500, None)
+        assert flow.begin_spot_check("weak") == "spot"
+        assert flow.update(GOOD_TARGET + 2, BAD_TARGET + 3, 495, None) == "spot"
+        assert flow.end_spot_check() == "hard"
+        assert not flow.done_checked
+
+    def test_the_arm_without_the_check_reads_all_green_as_done(self):
+        assert self._all_green(done_check=False).phase == "done"
+
+    def test_a_check_kind_is_named(self):
+        with pytest.raises(ValueError, match="kind"):
+            AutopilotFlow().begin_spot_check("whenever")
+
+
+class TestStopRules:
+    """#4878's arms: what tells the user they can stop.  ``"lights"`` is the app and must stay byte-identical."""
+
+    GREEN = {"level": 40, "depth": 100}
+    SHORT = {"level": 0, "depth": 100}
+
+    def _flow(self, rule: str, *, smart_flat: bool = True) -> AutopilotFlow:
+        flow = AutopilotFlow(stop_rule=rule, done_check=False)
+        flow.more_done = True
+        flow.recent_error_costs = [0.3] * 4 if smart_flat else [0.9, 0.6, 0.4, 0.2]
+        flow.stability = [_entry(0)] * 6
+        return flow
+
+    @pytest.mark.parametrize(
+        ("rule", "level_met", "span", "want"),
+        [
+            # The app: the level is not read.
+            ("lights", True, SHORT, "new"),
+            ("lights", False, GREEN, "done"),
+            # The level alone: it stops whatever the lights, and all green without it is Hard, not Done.
+            ("level", True, SHORT, "done"),
+            ("level", False, GREEN, "hard"),
+            ("level", False, SHORT, "new"),
+            # Both: all green waits for the level.
+            ("lights+level", False, GREEN, "hard"),
+            ("lights+level", True, GREEN, "done"),
+            ("lights+level", True, SHORT, "new"),
+            # Either: the level can stop a session the lights have not.
+            ("lights|level", True, SHORT, "done"),
+            ("lights|level", False, GREEN, "done"),
+            ("lights|level", False, SHORT, "new"),
+        ],
+    )
+    def test_each_rule_reads_the_lights_and_the_level_as_named(self, rule, level_met, span, want):
+        assert self._flow(rule).update(9, 9, 500, span, level_met=level_met) == want
+
+    def test_the_lights_are_recorded_as_computed_whatever_the_rule(self):
+        flow = self._flow("level")
+        flow.update(9, 9, 500, self.GREEN, level_met=False)
+        assert (flow.smart, flow.stable, flow.span) == ("green", "green", "green") and flow.phase == "hard"
+
+    def test_the_level_stops_hard_too_and_runs_the_check_before_done(self):
+        flow = AutopilotFlow(stop_rule="level")
+        flow.more_done = True
+        flow.recent_error_costs = [0.9, 0.6, 0.4, 0.2]
+        flow.stability = [_entry(0)] * 6
+        assert flow.update(9, 9, 500, self.SHORT, level_met=False) == "hard"
+        assert flow.update(9, 10, 499, self.SHORT, level_met=True) == "spot"
+
+    def test_the_opening_never_reads_the_level(self):
+        flow = AutopilotFlow(stop_rule="level")
+        assert flow.update(GOOD_TARGET, 0, 500, None, level_met=True) == "bad"
+
+    def test_a_rule_is_named(self):
+        with pytest.raises(ValueError, match="stop_rule"):
+            AutopilotFlow(stop_rule="vibes")
+
+    def test_the_app_s_rule_is_lights_or_level(self):
+        """Since #4878 the app stops on every light green, or on the line's level."""
+        assert AutopilotFlow().stop_rule == "lights|level"
+        flow = self._flow("lights|level")
+        assert flow.update(9, 9, 500, self.SHORT) == "new", "without the level read it is the lights alone"
+        assert flow.update(9, 9, 500, self.SHORT, level_met=True) == "done"
+
+
+class TestStopCap:
+    """#4903: whatever the rule, a session that holds ``STOP_CAP`` votes goes to the check before Done and to Done."""
+
+    SHORT = {"level": 0, "depth": 100}
+
+    def _flow(self, rule: str = "lights|level", **kw) -> AutopilotFlow:
+        flow = AutopilotFlow(stop_rule=rule, **kw)
+        flow.more_done = True
+        flow.recent_error_costs = [0.9, 0.6, 0.4, 0.2]
+        flow.stability = [_entry(0)] * 6
+        return flow
+
+    @pytest.mark.parametrize("rule", ["lights|level", "lights", "level", "lights+level"])
+    def test_every_rule_stops_at_the_cap(self, rule):
+        good = STOP_CAP // 2
+        assert self._flow(rule, done_check=False).update(good, STOP_CAP - good - 1, 500, self.SHORT) == "hard"
+        assert self._flow(rule, done_check=False).update(good, STOP_CAP - good, 500, self.SHORT) == "done"
+
+    def test_the_cap_runs_the_check_before_done(self):
+        flow = self._flow()
+        assert flow.update(100, STOP_CAP - 100, 500, self.SHORT) == "spot"
+        assert flow.begin_spot_check("done") == "spot"
+        assert flow.end_spot_check() == "done"
+
+    def test_no_cap_is_an_arm(self):
+        assert self._flow(stop_cap=None, done_check=False).update(300, 300, 500, self.SHORT) == "hard"
+        assert self._flow(stop_cap=40, done_check=False).update(20, 20, 500, self.SHORT) == "done"
+
+    def test_smart_gate_never_reads_no_cap(self):
+        """#4359's bound holds the session in Hard to the end of the run, cap or no cap."""
+        assert self._flow(smart_gate="never", done_check=False).update(300, 300, 500, self.SHORT) == "hard"
+
+    def test_the_cap_is_an_integer(self):
+        bads: tuple[Any, ...] = (0, -1, 2.5, True)
+        for bad in bads:
+            with pytest.raises(ValueError, match="stop_cap"):
+                AutopilotFlow(stop_cap=bad)
+
+    def test_the_app_s_cap(self):
+        assert AutopilotFlow().stop_cap == STOP_CAP
+
+    def test_a_session_still_in_its_opening_is_capped_on_screen_only(self):
+        """The app's cappedInOpening: the phase, and so the picks, stay the opening's."""
+        flow = AutopilotFlow()
+        assert flow.update(0, STOP_CAP, 500, None) == "good"
+        assert capped_in_opening(flow.phase, 0, STOP_CAP)
+        assert not capped_in_opening(flow.phase, 0, STOP_CAP - 1)
+        assert not capped_in_opening("hard", 0, STOP_CAP), "past the opening the cap is Done's"
+        assert not capped_in_opening("good", 0, STOP_CAP, stop_cap=None)
 
 
 def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:

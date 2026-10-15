@@ -53,20 +53,14 @@ import { ExportModalComponent } from '../modals/export-modal/export-modal.compon
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
+import { AutoExportModalComponent } from '../modals/auto-export-modal/auto-export-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
-import { HintId } from '../../services/hints.service';
+import { topOpenModal } from '../modal/modal.component';
+import { HintId, HintsService } from '../../services/hints.service';
+import { datasetMediaWords } from '../../utils/media-words';
+import { typedQuery } from '../../utils/label-quota';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
-
-/** What a dataset of each media type holds, for Toasty's "add a dataset" hint. */
-const MEDIA_PLURALS: Readonly<Record<string, string>> = {
-  image: 'images',
-  audio: 'audio clips',
-  text: 'text paragraphs',
-  video: 'videos',
-  document: 'documents',
-  face: 'faces',
-};
 
 /** Toasty's Dashboard hints, in the order {@link DashboardComponent.dashboardHint} tries them. */
 type DashboardHintId = Extract<
@@ -75,9 +69,13 @@ type DashboardHintId = Extract<
   | 'select-dataset'
   | 'mixed-datasets'
   | 'add-detector'
+  | 'empty-detector-tab'
   | 'select-detector'
   | 'mismatch'
+  | 'wait-for-import'
   | 'train'
+  | 'train-one-dataset'
+  | 'untrained-detector'
   | 'test-or-find'
   | 'find'
 >;
@@ -96,6 +94,7 @@ type DashboardHintId = Extract<
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
+    AutoExportModalComponent,
     IconComponent,
     ToastyHintComponent,
     UsageBarComponent,
@@ -130,6 +129,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
   private autofind = inject(AutoFindService);
+  private hints = inject(HintsService);
 
   /** The highlighted rows, owned by `DashboardSelectionService` (a root
    *  singleton, so the top bar reads them without this component and they
@@ -848,15 +848,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Model actions ---
 
   renameDetector(model: DetectorRegistryEntry, newName: string): void {
+    // A ``{detector_name}`` auto-export file follows the rename server-side.
     this.detectorsRegistryApi.renameInRegistry(model.id, newName).subscribe({
-      next: response => {
-        this.datasetState.refresh();
-        this.detectorsRegistryApi.promptMoveOrphanedLabelsetFile(
-          this.dialog,
-          model.id,
-          response.pending_labelset_move,
-        );
-      },
+      next: () => this.datasetState.refresh(),
     });
   }
 
@@ -1050,6 +1044,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onAddLabelsImported(): void {
+    this.datasetState.refresh();
+  }
+
+  /** The Auto-export dialog saved a detector's values: close it and re-list,
+   *  so the row's "not set up" warning (and any labels the save restored)
+   *  catches up. */
+  onAutoExportSaved(): void {
+    this.modals.closeAutoExport();
     this.datasetState.refresh();
   }
 
@@ -1310,11 +1312,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Which of Toasty's hints the Dashboard shows (#4680), or `null`. At most one
-   * at a time: the first step, in the order a new user takes them, that the
-   * current state is waiting on. Each goes away the moment that step is taken
-   * (and while Add Dataset or New Detector is open, since opening one is
-   * taking it).
+   * Which of Toasty's hints the Dashboard shows (#4680, #4807), or `null`. At
+   * most one at a time: the first step, in the order a new user takes them,
+   * that the current state is waiting on, so every state on the way from an
+   * empty Dashboard to Train, Test or Find has one. Each goes away the moment
+   * that step is taken (and while Add Dataset or New Detector is open, since
+   * opening one is taking it).
    */
   get dashboardHint(): DashboardHintId | null {
     if (!this.registryLoaded || this.isNavBusy) return null;
@@ -1326,23 +1329,62 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.datasets.length > 0 && pickedDatasets.length === 0) return 'select-dataset';
     if (new Set(pickedDatasets.map((d) => d.media_type)).size > 1) return 'mixed-datasets';
     if (this.detectors.length === 0) return 'add-detector';
-    if (pickedDetectors.length === 0) return this.visibleDetectors.length > 0 ? 'select-detector' : null;
+    // The open tab may list none of them: the detectors are all on the other tab.
+    if (pickedDetectors.length === 0) return this.visibleDetectors.length > 0 ? 'select-detector' : 'empty-detector-tab';
     // Only an import under way, no dataset row to pair with yet.
-    if (pickedDatasets.length === 0) return null;
+    if (pickedDatasets.length === 0) return 'wait-for-import';
     if (!this.findMediaTypesMatch()) return 'mismatch';
     if (this.showTrainHint) return 'train';
     // Test takes one dataset and one detector; Find takes any number.
     if (this.findEnabled) return 'test-or-find';
     if (this.autofindEnabled) return 'find';
-    return null;
+    // Nothing runs: a ticked detector has nothing to score with (#4758). One
+    // detector under several datasets needs the datasets narrowed to train it;
+    // otherwise the untrained one is in the way of the others.
+    if (pickedDetectors.length === 1 && pickedDatasets.length > 1) return 'train-one-dataset';
+    return this.hasUntrainedModel() ? 'untrained-detector' : null;
+  }
+
+  /**
+   * Whether one of Toasty's hints is on screen (#4807): the one the state calls
+   * for, not hidden by the user, with no dialog over it. The reasons under the
+   * Train / Test / Find buttons step aside while it is: Toasty is saying the
+   * same thing, at more length.
+   */
+  get hintOnShow(): boolean {
+    const id = this.dashboardHint;
+    return id !== null && this.hints.isShown(id) && topOpenModal() === null;
+  }
+
+  /** Whether hint `id` is the one on show (#4807): the empty tables' own
+   *  "Click + to add one" steps aside for it. */
+  isHintOnShow(id: DashboardHintId): boolean {
+    return this.dashboardHint === id && this.hintOnShow;
   }
 
   /** What Toasty's "add a dataset" hint says a dataset holds: the server's one
    *  media type when it is locked to one (`solo_media_type`), else a mix. */
   get addDatasetMedia(): string {
-    const solo = this.settingsState.settingsSignal()?.solo_media_type;
-    if (!solo) return 'images, sounds or other media';
-    return MEDIA_PLURALS[solo] ?? `${solo} files`;
+    return datasetMediaWords(this.settingsState.settingsSignal()?.solo_media_type);
+  }
+
+  /** The detector tabs as Toasty names them: the open one, and the other. */
+  get detectorTabLabel(): string {
+    return this.detectorTab() === 'autofind' ? 'AutoFind' : 'Drafts';
+  }
+
+  get otherDetectorTabLabel(): string {
+    return this.detectorTab() === 'autofind' ? 'Drafts' : 'AutoFind';
+  }
+
+  get selectedDatasetCount(): number {
+    return this.resolvedSelectedDatasets.length;
+  }
+
+  /** The first ticked detector with nothing to score with (#4758), for Toasty. */
+  get untrainedDetectorName(): string {
+    const model = this.resolvedSelectedModels.find((m) => (m.num_training ?? 0) === 0 && !typedQuery(m));
+    return model?.name ?? 'This detector';
   }
 
   /** Whether Toasty points at Train (#4227, #4680): exactly one detector is
@@ -1388,8 +1430,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return types.size === 1;
   }
 
+  /** Whether a ticked detector has nothing to score with: no labels, and no
+   *  typed query, which a detector made from one is until it has a trained
+   *  head (#4758). */
   private hasUntrainedModel(): boolean {
-    return this.resolvedSelectedModels.some((m) => (m.num_training ?? 0) === 0);
+    return this.resolvedSelectedModels.some((m) => (m.num_training ?? 0) === 0 && !typedQuery(m));
   }
 
   private get resolvedSelectedDatasets(): DatasetRegistryEntry[] {
@@ -1402,10 +1447,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Why the selection cannot be scored, or `''` when it can: at least one
    *  dataset and one detector, one media type across every ticked row, and
-   *  every ticked detector trained. Test and Find share this rule, except that
-   *  Test (*onePair*) opens one view on one pair and so takes exactly one of
-   *  each, as Train does; Find runs AutoFind on every ticked dataset with every
-   *  ticked detector.
+   *  every ticked detector with labels or a typed query (#4758). Test and Find
+   *  share this rule, except that Test (*onePair*) opens one view on one pair
+   *  and so takes exactly one of each, as Train does; Find runs AutoFind on
+   *  every ticked dataset with every ticked detector.
    *
    *  Each reason is shown under its button as well as in the tooltip, so it
    *  must fit the fixed-width `.action-btn-group` (about 36 characters at the

@@ -35,7 +35,12 @@
 # `off` for the app before #4731. Set either and preflight declares it.
 # CALIB_CENTROID_LINE draws the Goods' centroid's line by another rule (#4732);
 # CALIB_CENTROID_LINE_VARIANTS="<rule>@<beta>,..." adds tagged rows pricing other
-# lines on the same sessions.
+# lines on the same sessions. CALIB_HANDOVER_SHADOW=1 adds, past the label quota, the
+# centroid's Test as tagged rows and a hand-over rule's evidence (__handover.csv, #4776).
+# CALIB_LINE_COUNTS=1 adds, at every click Test gives the trained head, what each candidate
+# line keeps on the withheld half (__linecounts.csv, #4786).
+# CALIB_SPOT_CHECK=end (the end-of-run check only) or off runs the session without the
+# app's weak-separation check (#4778); preflight declares it.
 # FHIBE_STRATA=2-4,5-6,7- makes `identities` draw FHIBE_N_IDENTITIES from each
 # band of photo counts and write <identities>.strata.tsv beside the file.
 #
@@ -126,6 +131,15 @@ ENVX="$ENVX CALIB_RANK_FRAME_STEPS=$CALIB_RANK_FRAME_STEPS CALIB_BETA=${CALIB_BE
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX CALIB_GOOD_DRY_RUN=${CALIB_GOOD_DRY_RUN:-} CALIB_QUOTA_DRY_BADS=${CALIB_QUOTA_DRY_BADS:-}"
 ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VARIANTS=${CALIB_CENTROID_LINE_VARIANTS:-}"
+ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
+# The line counts (#4786): a side frame of what each candidate line keeps; the session is unchanged.
+ENVX="$ENVX CALIB_LINE_COUNTS=${CALIB_LINE_COUNTS:-}"
+# The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
+ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
+# An eval head (CALIB_HEAD, e.g. linear_svm, the plain SVM before #4785): unset is the shipped head; preflight
+# declares it. CALIB_SPOT_CHECK likewise.
+ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
+ENVX="$ENVX CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
@@ -203,6 +217,11 @@ json.dump(
         "quota_dry_bads": "${CALIB_QUOTA_DRY_BADS:-}",
         "centroid_line": "${CALIB_CENTROID_LINE:-}",
         "centroid_line_variants": "${CALIB_CENTROID_LINE_VARIANTS:-}",
+        "handover_shadow": "${CALIB_HANDOVER_SHADOW:-}",
+        "line_counts": "${CALIB_LINE_COUNTS:-}",
+        "head_count_bads": "${CALIB_HEAD_COUNT_BADS:-}",
+        "head": "${CALIB_HEAD:-}",
+        "spot_check": "${CALIB_SPOT_CHECK:-}",
         "job_name": "$JOB_NAME",
     },
     open(sys.argv[1], "w"),
@@ -212,6 +231,8 @@ PYSHAPE
   DIVERGES="seed_examples,stratify_target${CALIB_BETA:+,beta}"
   DIVERGES="$DIVERGES${CALIB_GOOD_DRY_RUN:+,good_dry_run}${CALIB_QUOTA_DRY_BADS:+,quota_dry_bads}"
   DIVERGES="$DIVERGES${CALIB_CENTROID_LINE:+,centroid_line}"
+  DIVERGES="$DIVERGES${CALIB_HEAD:+,head}"
+  DIVERGES="$DIVERGES${CALIB_SPOT_CHECK:+,spot_check}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" --diverges "$DIVERGES" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }

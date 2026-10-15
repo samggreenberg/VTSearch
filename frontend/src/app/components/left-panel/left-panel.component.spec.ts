@@ -42,6 +42,18 @@ describe('LeftPanelComponent', () => {
     expect(comp.autopilotStart.emit).toHaveBeenCalled();
   });
 
+  it("has Toasty explain the Review tab when the host asks (#4807)", () => {
+    fixture.componentRef.setInput('panelMode', 'find');
+    fixture.componentRef.setInput('findTab', 'review');
+    fixture.componentRef.setInput('reviewHint', true);
+    TestBed.tick();
+    const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
+    expect(hint?.textContent).toContain('Every item is here, best match first');
+    fixture.componentRef.setInput('reviewHint', false);
+    TestBed.tick();
+    expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
+  });
+
   it('should switch to manual tab', () => {
     component.setTab('manual');
     expect(component.activeTab()).toBe('manual');
@@ -420,20 +432,10 @@ describe('LeftPanelComponent', () => {
       }
     });
 
-    it.each(BALANCE_STATES)('offers the check in Train and never in Find (#4317) when %s', (status) => {
-      const emitted = vi.spyOn(component.check, 'emit');
-      // Find tests the threshold Train set: labelling more to set one is too late there.
-      expect(show('find', lineBalance(status)).querySelector('.balance-check-btn')).toBeNull();
-      const btn = show('label', lineBalance(status)).querySelector('.balance-check-btn') as HTMLButtonElement;
-      expect(btn.textContent!.trim()).toBe('Check 5 picks');
-      btn.click();
-      expect(emitted).toHaveBeenCalledOnce();
-    });
-
-    it('holds the check while a sort is running', () => {
-      fixture.componentRef.setInput('sortBusy', true);
-      const btn = show('label', lineBalance('unchecked')).querySelector('.balance-check-btn') as HTMLButtonElement;
-      expect(btn.disabled).toBe(true);
+    it.each(BALANCE_STATES)('offers no check of its own in Train or Find when %s: only Autopilot runs one', (status) => {
+      for (const mode of ['find', 'label'] as const) {
+        expect(show(mode, lineBalance(status)).querySelector('.balance-check-btn, .balance-state button')).toBeNull();
+      }
     });
   });
 
@@ -516,7 +518,7 @@ describe('LeftPanelComponent', () => {
       const checked = el.querySelector('.find-balance-row input[type="radio"]:checked') as HTMLInputElement;
       expect(checked.value).toBe('0.25');
       expect(el.querySelector('.find-balance-row .balance-state')!.textContent).toContain(
-        'Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept',
+        "Checked the top 32 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept",
       );
     });
 

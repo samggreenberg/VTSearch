@@ -26,6 +26,7 @@ frontend build) Node.js 20.19+.
   - [CPU (default)](#cpu-default)
   - [GPU](#gpu)
   - [LabBench (SigLIP-only image search)](#labbench-siglip-only-image-search)
+  - [Single media type (audio-only, video-only)](#single-media-type-audio-only-video-only)
   - [All image embedders](#all-image-embedders)
   - [Data persistence](#data-persistence)
   - [Rebuilding](#rebuilding)
@@ -204,6 +205,7 @@ To override the auto-detection, pass an argument:
 bash scripts/install.sh cpu          # force the CPU-only install
 bash scripts/install.sh gpu          # force the GPU install (auto-detect the CUDA tag)
 bash scripts/install.sh cu118        # force the GPU install with an explicit tag (CUDA 11.8, older drivers)
+bash scripts/install.sh cu126        # ... CUDA 12.6 (Volta through Hopper)
 bash scripts/install.sh cu128        # ... CUDA 12.8 (Blackwell; drops Volta)
 ```
 
@@ -240,22 +242,25 @@ and install problems on GPU boxes are covered in
 When a GPU is visible, `scripts/detect_cuda_tag.py` picks the torch wheel's
 CUDA tag from the GPU's compute capability and the driver's CUDA version; pass
 an explicit `cuXYZ` tag only to override it. If the tag can't be determined it
-falls back to `cu124`, the widest wheel. You can preview the choice without
+falls back to `cu126`, the widest wheel. You can preview the choice without
 installing anything: `python scripts/detect_cuda_tag.py`.
 
 Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
 for certain GPU architectures, so it has to match your hardware. There's a
-**floor** — newer GPUs need newer tags: Ampere/Ada on `cu118`+, Hopper (H100)
-on `cu121`+, Blackwell on `cu128`+ — and a **ceiling**: the newest wheels
+**floor** — newer GPUs need newer tags: Ampere/Ada and Hopper (H100) on
+`cu118`+, Blackwell on `cu128`+ — and a **ceiling**: the newest wheels
 *drop* the oldest architectures, so "just use the latest tag" is wrong for old
 hardware. For example, `cu128` dropped Volta (`sm_70`), so a **Tesla V100 needs
-`cu124`** (or `cu121`/`cu118`), not `cu128` or `cu129`. Rule of thumb: pick the
+`cu126`** (or `cu118`), not `cu128` or `cu129`. `cu121` and `cu124` are
+refused: their indexes stop at torch 2.5.1 and 2.6.0, below the `torch>=2.7`
+floor in `pyproject.toml`. On torch 2.6, transformers 5.18 and later cannot
+import a model class when no GPU is visible (#4838). Rule of thumb: pick the
 newest tag your driver supports that still covers your GPU. `cu129` is what
 the auto-detect picks for Turing through Blackwell on a driver at CUDA 12.9 or
 later, and it is the **only tag that gets cuML** (GPU UMAP / k-means): its
 torch pins the CUDA 12.9 libraries that RAPIDS ≥ 26.8 is built on, and RAPIDS
 ≥ 26.8 is the first whose cudf takes the pandas 3 that `pyproject.toml` pins
-(#4390). A Volta card, or an older driver, steps down to `cu124` (or older),
+(#4390). A Volta card, or an older driver, steps down to `cu126` (or older),
 where the installer skips cuML and the app runs UMAP / k-means on the CPU.
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
@@ -411,7 +416,7 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 ```
 
 > **Note:** Every VTSearch Dockerfile (`Dockerfile`, `Dockerfile.gpu`,
-> `Dockerfile.labbench`, `Dockerfile.image-embedders`,
+> `Dockerfile.labbench`, `Dockerfile.solo`, `Dockerfile.image-embedders`,
 > `Dockerfile.image-embedders.gpu`) includes a Node.js `frontend` build
 > stage that runs `npm ci` and `npm run build:prod` inside the image, so
 > you do **not** need to build the Angular app on the host first; any
@@ -456,6 +461,48 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 The model cache lives in `/opt/vtsearch/models` (set via `VTSEARCH_MODELS_DIR`)
 so the baked weights are not masked when `/app/data` is mounted as a volume.
 
+### Single media type (audio-only, video-only)
+
+`docker/Dockerfile.solo` is the full CPU image locked to one media type, the
+way LabBench is locked to images. Pick the type with the `MEDIA_TYPE` build arg;
+the build bakes that type's default embedder weights into the image (CLAP
+General for `audio`, X-CLIP for `video`), so a fresh container serves on first
+run without a Hugging Face download. The importer and new-detector flows hide
+their mediaType pickers, and the type's other embedders stay installed and
+selectable (their weights download on first use).
+
+```bash
+docker compose -f docker/compose/docker-compose.audio.yml up    # audio-only
+docker compose -f docker/compose/docker-compose.video.yml up    # video-only
+```
+
+Or with plain Docker, for any media type:
+
+```bash
+docker build -f docker/Dockerfile.solo --build-arg MEDIA_TYPE=audio -t vtsearch:audio .
+docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:audio
+```
+
+`MEDIA_TYPE` is required, and the build fails with the list of valid ids for a
+missing or unknown one. Unlike LabBench, this image keeps every dependency of
+`docker/Dockerfile`, so it is no smaller; `--build-arg REQUIREMENTS=base-no-agpl.txt`
+works here too. The lock is the `VTSEARCH_SOLO_MEDIA_TYPE` environment variable,
+which also holds when the image is redeployed onto an existing volume. The
+general image accepts it as well (`docker run -e VTSEARCH_SOLO_MEDIA_TYPE=audio … vtsearch`),
+but that image has no weights baked, so it downloads them on first boot.
+
+`document` and `face` are *half* media types, so a container for either names a
+pipeline rather than an embedding space:
+
+- **`document`**: document input, converted to page images by `document2image`.
+  The build bakes the image default (SigLIP), which is what the pages embed with.
+  The converter needs PyMuPDF, so do not combine it with `REQUIREMENTS=base-no-agpl.txt`.
+- **`face`**: image input, with the faces cropped out by `image2face` and
+  embedded in FaceNet identity space. The build bakes FaceNet.
+
+The lock does not yet force that pipeline in every import flow, or give the
+new-detector flow the embedded type (#4891).
+
 ### All image embedders
 
 `docker/Dockerfile.image-embedders` (CPU) and
@@ -494,6 +541,8 @@ docker compose \
   -f docker/compose/docker-compose.yml \
   -f docker/compose/docker-compose.gpu.yml build                    # GPU
 docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (SigLIP-only)
+docker compose -f docker/compose/docker-compose.audio.yml build     # Audio-only
+docker compose -f docker/compose/docker-compose.video.yml build     # Video-only
 docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml build  # All image embedders (GPU)
 ```
 
@@ -544,14 +593,14 @@ with a shared filesystem.
 
 2. **Create the virtualenv and install the GPU dependencies.** Match the CUDA
    wheel to your cluster's drivers and cards (a node whose driver reports CUDA
-   12.4 takes `cu124`; a Turing-or-newer card on a driver at CUDA 12.9 or
-   later takes `cu129`, the one tag that also gets cuML; a V100 takes `cu124`
-   whatever the driver):
+   12.6 takes `cu126`; a Turing-or-newer card on a driver at CUDA 12.9 or
+   later takes `cu129`, the one tag that also gets cuML; a V100 takes `cu126`
+   on any driver from CUDA 12.6 up):
 
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   bash scripts/install.sh cu129         # or cu118 / cu121 / cu124 / cu128 to match your node's GPU and driver
+   bash scripts/install.sh cu129         # or cu118 / cu126 / cu128 to match your node's GPU and driver
    ```
 
    The scripts default to a venv named `.venv` in the project dir; override with
@@ -570,7 +619,7 @@ with a shared filesystem.
    > python3.12 -m venv .venv
    > source .venv/bin/activate
    > python --version                     # confirm 3.12.x before installing
-   > bash scripts/install.sh cu124
+   > bash scripts/install.sh cu126
    > ```
    >
    > A venv built this way is **not** self-contained — its `python` needs the

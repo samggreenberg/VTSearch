@@ -1,30 +1,19 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-fbeta-maps.png)
+![bg fit](figs/calib-fbeta-maps.webp)
 
-## Beta Release
+## Beta Testers
 
-<!-- build: figs/calib-fbeta-maps.build1.png -->
+<!-- build: figs/calib-fbeta-maps.build1.webp -->
 
-<!-- build: figs/calib-fbeta-maps.build2.png -->
+<!-- build: figs/calib-fbeta-maps.build2.webp -->
 
-<!-- The score as a map, once per beta, and the three betas the rest of the
-     talk uses. Left to right, β rises; the same three, top to bottom, are the
-     next slide's rows. -->
+<!-- **a** — F1 as a map: recall across, precision up, one score per curve. It's
+     balanced, so it doesn't care which you give up. Our include-six cut lands
+     at 0.73. -->
 
-<!-- **a** — F1 as a map: recall across, precision up, and its level curves
-     drawn like a topographic map's contours. Every point on a curve scores
-     the number at its end. They bow evenly about the diagonal: give up some
-     precision for the same recall and F1 does not care which. The cut
-     F-ing Metrics read, recall 0.8 and precision 0.67, sits between the 0.6
-     and 0.8 curves, at its 0.73. -->
+<!-- **b** — Beta of a quarter: the curves lie down. Only precision moves the
+     score. -->
 
-<!-- **b** — β = ¼: the same map, and the curves lie down. Height is
-     precision: past a little recall, moving right barely changes the score,
-     and moving up is all that does. -->
-
-<!-- **c** — β = 4: the curves stand up, and it is the other way round, with
-     recall setting the score. These are our betas from here on: ¼, 1 and 4,
-     as far below 1 as above it (#4448). One thing all three share: every
-     curve crosses the diagonal at its own number. Where precision equals
-     recall, every F-beta is that number, which the next slide lands on. -->
+<!-- **c** — Beta of 4: they stand up, and recall rules. A quarter, 1 and 4 are
+     our betas from here on. -->

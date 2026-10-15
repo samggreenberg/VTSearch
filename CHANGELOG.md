@@ -17,6 +17,135 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
+  you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
+  voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
+  "Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept" read as half of all the
+  matches, and put the range of the set the check ended on beside a count it did not describe. It now reads
+  "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32
+  more kept", or "32 more kept, unchecked" before a check, and its tooltip and the check's result screen say
+  the same. Late in a session, once the matches near the top are voted, the check before Done can read low
+  after a session that went well; the note now says why. What the check measures is unchanged.
+
+- **Autopilot stops every session by 200 votes** (issue #4903). Done came only when the quality lights went
+  green or the detector expected an F-beta of 0.5, and 1–2% of sessions reach neither by 400 votes; the app has
+  no horizon, so they went on as long as the user did. Done now also comes at 200 votes, after the same check
+  before Done, and the panel and Toasty say "You have cast 200 votes, as many as Autopilot asks for" when that
+  is what said Done. A session still looking for its first Goods at 200 votes is told **Autopilot has stopped**,
+  with the Goods it found, and offered the **Update Sort Example?** prompt once more; voting on keeps looking.
+  Priced on 2,160 simulated sessions run to 400 votes: the cap ends 6–7% of sessions early, all but a few on
+  small objects, at a median F-beta of 0.00–0.04, which 200 more votes would have taken to 0.07–0.14.
+
+- **A detector's labelset-source link is persisted, and pushes the whole labelset** (issue #4913). The link
+  set with `PUT /api/detectors/<id>/labelset-source` lived only on the loaded detector and was lost on
+  unload or restart; it is now stored on the registry entry, works for an unloaded detector, takes the id
+  or the name, and is creator-only. A push now sends the detector file's labels from every dataset (it
+  sent only the active dataset's votes, which overwrote the rest), and a sync merges into the detector
+  instead of only voting what the active dataset holds. Renaming a detector moves a
+  `{detector_name}`-templated labelset file itself: the *Move existing labelset file?* prompt,
+  `pending_labelset_move`, and `POST /api/detectors/registry/<id>/labelset-source/move-file` are gone.
+
+- **Autopilot also says Done once the detector expects a good result** (issue #4878). Done came only
+  when the Smart, Stable and Span lights were all green. It now also comes once the detector's labels
+  line expects an F-beta of at least 0.5 at your balance, its own estimate of how good the set it keeps
+  is, after the same check before Done. A session that is already good no longer waits on the last
+  light: priced on 2,160 simulated sessions and A/B'd on 6,480 more, it ends a session 5 to 16 clicks
+  sooner for the same F-beta. When that is what said Done, the panel and Toasty quote the F-beta it
+  expects instead of saying every light is green. `GET /api/labeling-status` carries it as `level`
+  (`expected_fbeta`, `level`, `met`).
+
+- **A detector held on its typed query no longer reads "Too few labels"** (issue #4889). A detector made
+  from a typed query keeps its query's set past the label quota until it has 30 labels (#4736). The Test
+  view's note used to blame the quota for that, naming counts the labels already met ("it takes 3 Goods
+  and 4 Bads") and owing nothing. It now says the detector keeps its query's set until 30 labels, how many
+  it has, and how many more labels, Good or Bad, give a trained one. AutoFind's results list held detectors
+  on their own line, and the CLI's message says the same. The `label_quota` payload gains `hold_labels` and
+  `hold_owed`.
+
+- **Faces work in every Docker image** (issue #4886). No image installed `facenet-pytorch`, so in a container
+  the Images → Faces converter found no faces (with only a log warning), and the face localizer and the
+  FaceNet embedder failed to load. Every `docker/Dockerfile*` now installs it, `--no-deps` as
+  `scripts/install.sh` does. FaceNet's weights also now always download into the model cache
+  (`VTSEARCH_MODELS_DIR`, else `data/models`) rather than under `$HOME`; a host that already holds
+  them in `~/.cache/torch` fetches them once more (~107 MB).
+- **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
+  and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
+  2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with
+  `CUDA_VISIBLE_DEVICES=` set, every Hugging Face embedder failed to load. The `cu124` tag a V100
+  used to get stops at torch 2.6.0, so `scripts/install.sh` now picks `cu126` for Volta (a torch past
+  2.7 that still ships `sm_70` kernels) and falls back to it when it cannot detect the GPU.
+  `pyproject.toml` requires `torch>=2.7`. `install.sh` refuses `cu121` and `cu124` with a message:
+  their indexes stop below that floor, so the requirements pass would have swapped in PyPI's newest
+  torch, which has no kernels for older GPUs. `cu118` (torch 2.7.1) remains for drivers older than
+  CUDA 12.6. With that pair ruled out, `transformers` is floored at 5.18, which the EmbeddingGemma 2
+  embedders need (#4837).
+- **Spot Check is an Autopilot step, not a dialog.** Autopilot now checks the line itself, the first
+  time every quality light goes green, before it says Done: a few picks drawn at random from bands of
+  the list, voted Good or Bad in the centre pane, where the item usually is. It is the **Spot Check**
+  step in Autopilot's list, between Explore Diversity and Done, and the check Autopilot already ran
+  while your Good and Bad labels still overlap is the same step. **Stop check** ends it early and
+  Autopilot carries on. The Threshold's **Check 5 picks** button is gone: only Autopilot starts a
+  check. Autopilot skips the check before Done when one ended in the last 25 votes, and when a session
+  opens with every light already green, so coming back to a detector you finished does not check it
+  again. The balance payload's new `done_check_due` says whether it would run.
+- **On photos, Autopilot keeps showing a typed description's matches until 30 votes** (issue #4736).
+  From the 8th vote Autopilot asks about the items a trained detector is unsure of, but a detector
+  trained on so few examples finds worse matches than the description does. So in a session started
+  from a typed description, the ranking behind the item stays the description's text ranking until
+  the 30th vote, while Autopilot keeps asking the detector's questions; from the 30th vote the
+  detector's ranking takes over. Test, Find, AutoFind and an export of such a detector give the
+  description's matches until then too. On COCO Better's photos that raised the F-beta of what is on
+  screen by 0.025 / 0.037 / 0.050 over the first 25 votes and 0.004 / 0.006 / 0.009 over 150, at the three balances. Region
+  search (DINOv3) is unchanged: its detector beats the description by about the 10th vote. The
+  learned-sort payload's new `query_hold` says when the description still holds.
+- **Toasty's hints say where you are, and cover the whole path from an empty Dashboard to results**
+  (issue #4807). Each hint now opens with the state that raised it and ends with the one step to
+  take, in a sentence or two ("You have detectors, but none is selected. Click one to select it, or
+  click **+** to make a new one."), rather than an instruction out of the blue. The Dashboard gained
+  hints for the detours on the way to Train, Test or Find: the only dataset still importing, the open
+  detector tab empty while the other has detectors, a new detector ticked under several datasets, and
+  a detector with no labels ticked among others. While a hint is up, what it says steps aside: the
+  reason under a disabled **Train** / **Test** / **Find** button, an empty table's "Click **+** to add
+  one", and **Add Dataset**'s "Select what type of dataset to add." line. The Test view's **Test
+  done** note is now just its heading, with Toasty saying what to do next. In the Train view Toasty stays
+  over **Good** / **Bad** through the run that trains a detector, saying what each Autopilot phase
+  needs, and the **Update Sort Example?** hint counts the clicks and positives so far. The Test view
+  has hints for its first pick, its verdict, and the **Review** tab. The dialogs on the path have
+  hints too (**Add Dataset**, **New Detector**, **Use This Example?**, **Find Results**, **Export
+  Results**), standing below the box or beside its top corner when the box fills the window; dialogs
+  off the path have none. Only one hint shows at a time: a dialog's only while it is the topmost
+  dialog, and a view's only while no dialog is open. New ids in `hidden_hints`: `empty-detector-tab`,
+  `wait-for-import`, `train-one-dataset`, `untrained-detector`, `find-goods`, `find-bads`,
+  `find-more`, `keep-voting`, `test-vote`, `test-done`, `review`, `import-dataset`, `new-detector`,
+  `use-example`, `find-results` and `export-results` (the chart is `docs/hints.md`).
+- **A detector made from a typed description is tested as that description until it has enough labels**
+  (issue #4758). Below 3 Goods and 4 Bads (or a Good and 16 Bads), Test, Find and AutoFind ranked by
+  the average of the detector's Goods, and before its first Good gave nothing: Test refused it and
+  AutoFind left it out. Autopilot meanwhile showed the typed description's own matches, which were
+  better. Now a detector made from a typed description gives those same matches, its text sort at its
+  Threshold, from before its first vote until a trained detector takes over. On COCO photos (720
+  sessions), on those first votes, what it returns scores 0.56 / 0.44 / 0.54 F-beta at beta 1/4, 1 and
+  4, against the average's 0.43 / 0.28 / 0.35; over votes 1-10 that is +0.08 / +0.09 / +0.14. A
+  detector made from media examples or a labels file still gives the average of its Goods. The Test
+  view and the Find Results dialog say which one ran, and the Dashboard's Test and Find buttons now
+  take a detector with no labels when it was made from a typed description. `label_quota.tier` has a
+  new value, `query`, and the command line a new `detector_query` event, beside the
+  `detector_centroid` event it already emitted.
+- **A new sort example in Autopilot's "Update Sort Example?" prompt now changes the detector, not
+  just the screen** (issue #4801). When you supplied a different sort there, only the Train view
+  sorted by it: the detector kept its old description, so Test, Find, AutoFind and the next Train
+  session still used that one. A new description is now saved to the detector. A media example
+  picked there is saved too, as an example that steers the sort without counting as a Good, and the
+  detector stops using its old description. Typing in the Manual tab's sort bar still only sorts
+  the view.
+- **A detector no longer gets worse the moment it starts learning** (issue #4785). Until you have 3 Goods and 4 Bads, Test ranks by the average of your Goods; after
+  that a trained detector takes over. On faces that first detector used to rank the person you are
+  looking for noticeably worse than the average it replaced, and Find dipped for the next few votes.
+  The trained detector now starts from that average and moves away from it only as your votes give
+  it reason to. On FHIBE's faces what Find returns over the first 50 votes improves at every
+  Threshold preset (mean F-beta +0.04 to +0.07), and on COCO photos slightly (+0.004 to +0.007).
+  Region detectors (DINOv3 patches) rank slightly better and return about the same.
+
 - **Moving the Threshold redraws a text or example sort's line on the spot** (issue #4760).
   A typed query's line has followed the balance since #4603, and an example sort's since #4732,
   but both were drawn only when the sort ran: moving the Threshold afterwards left the old line,
@@ -26,6 +155,20 @@ not list every commit. Use `git log` for the full history.
   `GET /api/sort/line`; the three `example-sort-{by-id,server,origin}` routes now return a
   `sort_token` (still with the whole ranking).
 
+- **An example sort and a detector with too few labels no longer count your own examples as what stands out**
+  (issue #4779). Their line keeps about as many images as stand out from the rest, and it counted the
+  whole collection: your starting photos and every image you had voted on, which sit at the top of
+  their own ranking. With one example of a face toward the false-negative end of the Threshold, the
+  example sort kept your photo and nothing new in 63% of sessions; it now leaves your examples and
+  votes out of its count and keeps something new in all but 14%. Autopilot's picks are unchanged.
+- **A detector with too few labels no longer stops at one standout image** (issue #4783). Below 3 Goods
+  and 4 Bads, the line keeps everything above the clearest break at the top of the ranking (#4759). When
+  one image stands far above the rest of the match, the clearest break is right after it, and the line
+  kept only that image. From the middle of the Threshold toward the false-positive end, the line now
+  looks past a standout to the next clear break. On the collection you labelled that standout is
+  usually your own example, so this is where it shows most: with one example of a face, sessions where
+  the line keeps nothing new fall from 45% to 22%. Toward the false-negative end the
+  line still keeps the standout alone.
 - **A detector with too few labels keeps all of a clear match, not just its top image** (issue #4759).
   Below 3 Goods and 4 Bads, Test, Find and AutoFind keep about as many images as stand out from the
   rest (#4732). On faces that kept one of a person's three or four other photos, because their photos
@@ -146,6 +289,40 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
+  `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
+  its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to
+  export. Pushes for one detector never overlap and start at least `labelset_source_push_interval_seconds`
+  apart (default 60), so a burst of votes is one write; pending pushes are flushed on shutdown. Loading a
+  detector merges back what its source holds, so a detector whose server lost its data is restored by
+  re-creating it under the same name. Values the admin sets are fixed; the **New Detector** form asks for
+  the source's other fields, and a detector's Dashboard ⋯ menu gains **Auto-export…** to fill them in later
+  (its row warns when one is missing). `GET /api/labelset-sources/default` serves the form, and the
+  registry listing carries each detector's `labelset_source_status`.
+
+- **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
+  image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's
+  default embedder weights in at build time (CLAP General for `audio`, X-CLIP for `video`), so a fresh
+  container serves on first run without a Hugging Face download. `docker/compose/docker-compose.audio.yml`
+  and `docker-compose.video.yml` build and run the two; any other media type builds with
+  `--build-arg MEDIA_TYPE=<type>`. The half types bake what their media embed as: `document` means
+  document input converted to page images, so it bakes SigLIP; `face` means image input with the faces
+  cropped out, so it bakes FaceNet (and the image installs `facenet-pytorch`). A server locked to
+  `document` now also warms SigLIP at startup, where it used to warm nothing. See
+  [SETUP.md](docs/SETUP.md#single-media-type-audio-only-video-only).
+- **EmbeddingGemma 2 (audio) embedder** (issue #4837). A new choice for sound collections, built on Google's
+  `embeddinggemma-2`. It finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
+  but is weaker than CLAP on other sounds and music, so CLAP-general stays the default. It needs transformers
+  5.18 or newer, and selecting it in an older environment says so (#4838). The same model's image half beat SigLIP
+  on every photo set measured (+0.08 to +0.09 session F-beta on COCO Better), but embeds 11–22× slower on a GPU
+  and about 10 s a photo on a CPU, so it is not offered.
+
+- **Toasty says how to fix a misclicked vote** (issue #4824). After the first vote of the run that trains
+  a detector, Toasty stands beside the **Labels** panel until the next one: your votes go there, and
+  you can click one to vote it again. On any Autopilot run, clicking an item you already labeled
+  brings a hint over **Good** / **Bad** naming its label and the button that changes it, and saying
+  that Autopilot's current step on the left (or `↑`) goes back to Autopilot's pick.
 
 - **Collapse to photos** (issue #4751). In Train and Test, a Face dataset whose import also made an
   Image dataset has a **Show: Faces | Photos** switch under the list's header. **Photos** shows the
@@ -723,6 +900,19 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Labels that do not separate start Autopilot's weak-separation check** (issue #4899). When a retrain's
+  calibration folds scored the held-out Goods no higher than the held-out Bads, the line fell back to the
+  head's own scores of the labels it trained on, and the separation was read from those, so labels that
+  did not separate at all read as separating strongly (2.69 on five yellow smileys Good against five
+  Bad) and the check never came due. The separation now comes from the folds (0 or below), so the check
+  runs. The line itself is unchanged.
+
+- **A dataset reloaded after a restart trains the same line as the process that imported it** (issue
+  #4892). Reloading a dataset moved the last bit of about a third of its stored vectors, and that was
+  enough to change which votes the calibration folds held out. The same labels could then get another
+  line, and another separation for Autopilot's weak-separation check: 2.69 in the process that imported
+  `drawings` against 0.13 after a restart. A reload now holds the vectors the import made, bit for bit.
 
 - **A face in Train or Test fills the pane and can be zoomed** (issue #4771). A face crop was
   shown through the document viewer, which clipped it to a 300×150 box and offered no image

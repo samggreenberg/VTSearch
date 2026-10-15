@@ -49,7 +49,13 @@ The phase ordering the app implements, and the harness therefore reproduces:
    is both *smart* (error cost has levelled off) and *stable* (predictions have
    stopped flipping).
 4. ``new`` — explore the coverage atlas until *span* goes green too.
-5. ``done`` (all three green) or ``exhausted`` (nothing left to label).
+5. ``spot`` — the spot check before Done: the first time all three lights are
+   green the app checks the line once (a band walk, answered as clicks), then
+   reports Done.  A run latches it once the check closes, or is skipped
+   because one ended moments ago (:func:`~vtscore.training.thresholds.done_check_due`).
+   A check Autopilot runs mid-run for weak separation (#4496) holds the phase
+   at ``spot`` too, while it runs.
+6. ``done`` (all three green) or ``exhausted`` (nothing left to label).
 """
 
 from __future__ import annotations
@@ -78,7 +84,7 @@ from vtscore.detectors.stability import (
 )
 from vtscore.eval.startup_schedule import StartupState, is_startup_phase
 
-Phase = Literal["idle", "good", "bad", "more", "hard", "new", "done", "exhausted"]
+Phase = Literal["idle", "good", "bad", "more", "hard", "new", "spot", "done", "exhausted"]
 Status = Literal["red", "yellow", "green"]
 
 # Autopilot's initial-phase vote targets (``INITIAL_STATE.goodToStart`` /
@@ -228,6 +234,57 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
 #: The Smart gate's arms (#4359): ``"app"`` reads the light; ``"never"`` holds it yellow.
 SMART_GATES = ("app", "never")
 
+#: What tells the user they can stop (#4878).  ``"lights|level"`` is the app since
+#: #4878: Done once Smart, Stable and Span are all green, or once the labels line
+#: expects at least ``STOP_LEVEL`` F-beta at the session's beta
+#: (:func:`~vtscore.training.thresholds.labels_line.stop_level_met`, which the
+#: caller reads and passes as *level_met*).  The rest are arms: ``"lights"`` (the
+#: app before #4878), ``"level"`` (the level alone) and ``"lights+level"`` (both).
+#: :func:`stop_lights` hands :func:`next_phase` the lights that make it decide so;
+#: a session the rule does not stop with every light green reads Hard (its pick is
+#: Done's), not New, whose atlas walk is over.
+STOP_RULES = ("lights|level", "lights", "level", "lights+level")
+
+#: The click cap (#4903): whatever the stop rule, a session that holds this many
+#: votes goes to the check before Done and to Done, as one the rule stops does.
+#: Every rule leaves some sessions unstopped (a third of small-object sessions
+#: under the lights at 150 clicks), and the app has no horizon: a user it never
+#: tells to stop either quits when they like or labels on through the collection.
+#: ``None`` (an arm) is no cap.
+STOP_CAP = 200
+
+
+def stop_lights(
+    smart: Status, stable: Status, span: Status, rule: str, level_met: bool, at_cap: bool = False
+) -> tuple[Status, Status, Status]:
+    """The lights :func:`next_phase` reads under stop *rule*, given the real ones and whether the level is met.
+
+    ``"lights"`` passes them through.  A rule that says stop passes all three
+    green, so the phase goes to the check before Done and to Done as the app's
+    own all-green does; one that does not, with every real light green, holds
+    Smart yellow, so the phase reads Hard.  Otherwise the real lights stand.
+    *at_cap* (the session holds :data:`STOP_CAP` votes, #4903) says stop under
+    every rule.
+    """
+    if rule not in STOP_RULES:
+        raise ValueError(f"stop rule must be one of {STOP_RULES}, got {rule!r}")
+    if at_cap:
+        return "green", "green", "green"
+    if rule == "lights":
+        return smart, stable, span
+    lights = smart == "green" and stable == "green" and span == "green"
+    if rule == "level":
+        stop = level_met
+    elif rule == "lights+level":
+        stop = lights and level_met
+    else:
+        stop = lights or level_met
+    if stop:
+        return "green", "green", "green"
+    if lights:
+        return "yellow", stable, span
+    return smart, stable, span
+
 
 def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, kept diffable by eye
     good_count: int,
@@ -244,6 +301,8 @@ def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, ke
     dry_run_stop: bool = False,
     ran_dry: bool = False,
     good_ran_dry: bool = False,
+    checking: bool = False,
+    done_checked: bool = True,
 ) -> Phase:
     """Port of ``AutopilotStateService.checkPhaseTransition``.
 
@@ -266,6 +325,14 @@ def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, ke
     its picks in a row held no Good, with a Good in hand, so the Goods found so
     far meet its target.  History, like *more_done*: the caller holds it
     (:class:`AutopilotFlow`), and the walk down the same sort is then spent.
+
+    *checking* is a spot check running inside the run (the app's
+    ``spotCheck``): the phase is ``spot`` whatever the counts.  *done_checked*
+    is whether the run's check before Done has closed (the app's
+    ``doneChecked``): until it has, all three lights green read ``spot``, the
+    check the app runs before it reports Done.  The default, ``True``, reads
+    all green as ``done``, as before the check existed; :class:`AutopilotFlow`
+    holds both and passes them.
     """
     # Cap each target at the most votes of that class the collection could still
     # yield, so a tiny dataset can still advance past the initial phases instead
@@ -276,6 +343,8 @@ def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, ke
         eff_good_target = min(eff_good_target, good_count)
     eff_bad_target = min(bad_target, bad_count + remaining_unlabeled)
 
+    if checking:
+        return "spot"
     if good_count < eff_good_target:
         return "good"
     if bad_count < eff_bad_target:
@@ -289,7 +358,8 @@ def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, ke
     if not more_done and good_count < min(more_target, good_count + remaining_unlabeled):
         return "more"
     if smart == "green" and stable == "green" and span == "green":
-        return "done"
+        # Check the line once before reporting Done; nothing left unlabeled has nothing to check.
+        return "done" if done_checked or remaining_unlabeled == 0 else "spot"
     if remaining_unlabeled == 0:
         return "exhausted"
     if smart == "green" and stable == "green":
@@ -300,7 +370,7 @@ def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, ke
 #: Phases in which the app has run a learned sort, so a trained detector's
 #: scores and threshold are on screen and driving the next pick.  Before this
 #: the user is still on the text/example sort (see the module docstring).
-TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "done", "exhausted"})
+TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "spot", "done", "exhausted"})
 
 
 #: The phase in which the app has told the user it is done: all three quality
@@ -313,6 +383,22 @@ TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "done", "exhausted"})
 #: pool with the indicators still amber - the opposite result - and folding the
 #: two together would report a starved run as a converged one.
 STOPPING_PHASE: str = "done"
+
+#: Autopilot's opening: the phases before its first learned sort.
+OPENING_PHASES: frozenset[str] = frozenset({"good", "bad", "more"})
+
+
+def capped_in_opening(phase: str, good_count: int, bad_count: int, stop_cap: int | None = STOP_CAP) -> bool:
+    """The app's ``cappedInOpening`` (#4903): the run holds *stop_cap* votes still in its opening.
+
+    The click cap's stop for a session with no detector: the app says Autopilot
+    has stopped and offers a different sort.  It is display only there, so the
+    phase - and every pick - is :func:`next_phase`'s, and a session that finds
+    its Goods later goes to the check before Done and Done at once.  A reader
+    asking where such a session was told to stop reads it here, beside
+    :data:`STOPPING_PHASE`.
+    """
+    return stop_cap is not None and phase in OPENING_PHASES and good_count + bad_count >= stop_cap
 
 
 #: What the app records for a vote Autopilot surfaced, per labelling phase:
@@ -437,6 +523,9 @@ class AutopilotFlow:
         dry_run_stop: bool = False,
         smart_gate: str = "app",
         good_dry_run: int | None = MORE_DRY_RUN,
+        done_check: bool = True,
+        stop_rule: str = "lights|level",
+        stop_cap: int | None = STOP_CAP,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -461,17 +550,44 @@ class AutopilotFlow:
         #: dry run is ``done`` (see :func:`next_phase`).
         self.dry_run_stop = dry_run_stop
         #: #4359's bound: ``"never"`` holds Smart yellow for the phase decision
-        #: (the light is still computed and reported), so a session stays in
-        #: ``hard`` until the run ends.  ``"app"`` is the app.
+        #: (the light is still computed and reported) and reads no stop level
+        #: (#4878), so a session stays in ``hard`` until the run ends.  ``"app"``
+        #: is the app.
         if smart_gate not in SMART_GATES:
             raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
         self.smart_gate = smart_gate
+        #: What tells the user they can stop (:data:`STOP_RULES`).  The app's,
+        #: ``"lights|level"``, and the level arms read *level_met*, which the
+        #: caller passes to :meth:`update` from the step's labels line; without
+        #: it the app's rule is the lights alone.
+        if stop_rule not in STOP_RULES:
+            raise ValueError(f"stop_rule must be one of {STOP_RULES}, got {stop_rule!r}")
+        self.stop_rule = stop_rule
+        #: The click cap (:data:`STOP_CAP`, #4903): Done at this many votes
+        #: whatever the rule; ``None`` is no cap.
+        if stop_cap is not None and (isinstance(stop_cap, bool) or not isinstance(stop_cap, int) or stop_cap < 1):
+            raise ValueError(f"stop_cap must be an integer >= 1 or None, got {stop_cap!r}")
+        self.stop_cap = stop_cap
         #: The ``more`` walk's history, as the app keeps it: consecutive walk
         #: picks without a positive, and whether the walk has ended (met its
         #: target or ran dry).  A vote's outcome is read the way the app reads
         #: it, from which count rose since the last update.
         self.more_misses = 0
         self.more_done = False
+        #: The spot check running inside the run, as the app's ``spotCheck``:
+        #: ``"weak"`` for weak separation (#4496), ``"done"`` for the check
+        #: before Done, ``"early"`` for the harness's #4664 arm, or ``None``.  The caller drives it
+        #: (:meth:`begin_spot_check` / :meth:`end_spot_check`), since the
+        #: check's picks are the caller's.
+        self.spot_check: str | None = None
+        #: Whether the run's check before Done has closed (the app's
+        #: ``doneChecked``), latched for the run.  ``done_check=False`` starts
+        #: it closed: all green reads ``done`` at once, the app before the
+        #: check existed (and a run that never checks, ``spot_check="off"``).
+        self.done_checked = not done_check
+        #: The last :meth:`update`'s inputs to :func:`next_phase`, so a check
+        #: starting or ending re-derives the phase without a vote.
+        self._last_args: dict[str, Any] | None = None
         self._counts: tuple[int, int] = (0, 0)
         self.span_green = SPAN_GREEN_DEFAULT if span_green is None else span_green
         #: A parameterised opening (issue #3267).  ``None`` - the default - is
@@ -586,6 +702,7 @@ class AutopilotFlow:
         span: dict[str, Any] | None,
         *,
         last_vote_good: Optional[bool] = None,
+        level_met: bool = False,
     ) -> Phase:
         """Recompute and return the phase after a vote.
 
@@ -595,7 +712,9 @@ class AutopilotFlow:
         met, so the trajectory continues into ``hard`` / ``new`` / ``done``
         exactly as it would have.  *last_vote_good* is the vote just cast; only
         a schedule round with a dry stop (#4222) reads it, and such a round
-        refuses a vote without it.
+        refuses a vote without it.  *level_met* is whether the step's labels line
+        expects at least the run's stop level (#4878); every ``stop_rule`` but
+        ``"lights"`` reads it.
         """
         if self.startup is not None:
             self.startup.on_click(last_vote_good)
@@ -624,20 +743,38 @@ class AutopilotFlow:
         self.stable_max_confident_flip_rate = _num(stable_d.get("max_confident_flip_rate"))
         self.stable_flip_rate_early = _num(stable_d.get("flip_rate_early"))
         self.stable_flip_rate_late = _num(stable_d.get("flip_rate_late"))
+        # What the phase decision reads: the lights as computed, under #4359's
+        # Smart gate and #4878's stop rule (both the app's by default).
+        # #4359's bound holds the session in Hard to the end, so it reads no level, nor the cap (#4903), either.
+        never = self.smart_gate == "never"
+        at_cap = not never and self.stop_cap is not None and good_count + bad_count >= self.stop_cap
+        read_smart, read_stable, read_span = stop_lights(
+            "yellow" if never else smart, stable, sp, self.stop_rule, level_met and not never, at_cap
+        )
+        self._last_args = {
+            "good_count": good_count,
+            "bad_count": bad_count,
+            "remaining_unlabeled": remaining_unlabeled,
+            "smart": read_smart,
+            "stable": read_stable,
+            "span": read_span,
+            "good_target": 0 if self.startup is not None else self.good_target,
+            "bad_target": 0 if self.startup is not None else self.bad_target,
+            "more_target": 0 if self.startup is not None else self.more_target,
+            "dry_run_stop": self.dry_run_stop,
+            "ran_dry": self.more_misses >= self.more_dry_run,
+            "good_ran_dry": self.good_dry,
+        }
+        return self._derive()
+
+    def _derive(self) -> Phase:
+        """The phase from the last :meth:`update`'s inputs and the history held here."""
+        assert self._last_args is not None
         self.phase = next_phase(
-            good_count,
-            bad_count,
-            remaining_unlabeled=remaining_unlabeled,
-            smart="yellow" if self.smart_gate == "never" else smart,
-            stable=stable,
-            span=sp,
-            good_target=0 if self.startup is not None else self.good_target,
-            bad_target=0 if self.startup is not None else self.bad_target,
-            more_target=0 if self.startup is not None else self.more_target,
+            **self._last_args,
             more_done=self.more_done,
-            dry_run_stop=self.dry_run_stop,
-            ran_dry=self.more_misses >= self.more_dry_run,
-            good_ran_dry=self.good_dry,
+            checking=self.spot_check is not None,
+            done_checked=self.done_checked,
         )
         if self.phase not in ("good", "bad", "more"):
             # The walk ends once the machine has moved past it - its target met
@@ -645,6 +782,35 @@ class AutopilotFlow:
             # round never does.
             self.more_done = True
         return self.phase
+
+    def begin_spot_check(self, kind: str) -> Phase:
+        """A spot check starts inside the run (the app's ``beginSpotCheck``): the phase is ``spot`` until it ends.
+
+        *kind* is ``"weak"`` (weak separation, #4496), ``"done"`` (the check
+        before Done) or ``"early"`` (the eval harness's check at a fixed vote
+        count, #4664, which the app does not run).  Before any :meth:`update`
+        there is nothing to derive from, and the phase is left as it is.
+        """
+        if kind not in ("weak", "done", "early"):
+            raise ValueError(f"kind must be 'weak', 'done' or 'early', got {kind!r}")
+        if self.spot_check is not None:
+            return self.phase
+        self.spot_check = kind
+        return self._derive() if self._last_args is not None else self.phase
+
+    def end_spot_check(self) -> Phase:
+        """The running check closed, finished or cut short (the app's ``endSpotCheck``); the check before Done latches."""
+        if self.spot_check is None:
+            return self.phase
+        if self.spot_check == "done":
+            self.done_checked = True
+        self.spot_check = None
+        return self._derive() if self._last_args is not None else self.phase
+
+    def skip_done_check(self) -> Phase:
+        """The check before Done does not run (the app's ``skipDoneCheck``): latch it, and the phase goes on."""
+        self.done_checked = True
+        return self._derive() if self._last_args is not None else self.phase
 
     def _note_more_vote(self, good_count: int, bad_count: int) -> None:
         """Fold the vote just cast into the ``more`` walk's run of misses.

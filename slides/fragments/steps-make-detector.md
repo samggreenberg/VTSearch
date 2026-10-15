@@ -16,11 +16,7 @@
 
 </div>
 
-<!-- **a** — The photos are in. Now the other card: the **+** on Detectors. A
-     detector is the thing that will learn what you are looking for — right
-     now it knows nothing. -->
+<!-- **a** — Photos are in. Now the other card: hit the + on Detectors. -->
 
-<!-- **b** — One field matters: what you are after, in a word. Here, `book`.
-     It only gives the detector somewhere to start; the answers in the next
-     step do the teaching. The name fills itself in from the word — "Book
-     detector" — so there is nothing more to type: Create. -->
+<!-- **b** — Type a word for what you want, "book". That's only a hint to start
+     from. It names itself, so hit Create. -->

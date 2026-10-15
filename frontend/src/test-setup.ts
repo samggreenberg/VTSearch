@@ -10,7 +10,8 @@
  */
 
 import { getTestBed } from '@angular/core/testing';
-import { beforeEach as vitestBeforeEach } from 'vitest';
+import { afterEach as vitestAfterEach, beforeEach as vitestBeforeEach } from 'vitest';
+import { installRealXhrGuard, takeRealXhrRequests } from './app/testing/real-xhr-guard';
 
 // --- TestBed cascade guard --------------------------------------------------
 // The Angular TestBed is a module-level singleton reset by an afterEach hook.
@@ -30,6 +31,21 @@ vitestBeforeEach(() => {
   } catch {
     // A throwing teardown from the previous spec is itself a reported failure;
     // swallow it here so it cannot mask the upcoming test.
+  }
+});
+
+// --- Real XHR guard ---------------------------------------------------------
+// A spec without provideHttpTesting() falls through to Angular's root
+// HttpClient and its real XHR backend, which jsdom sends to localhost:3000
+// (#4808). The guard makes that open() throw instead of reaching the network,
+// and this hook fails the test that did it, naming the request.
+installRealXhrGuard();
+vitestAfterEach(() => {
+  const requests = takeRealXhrRequests();
+  if (requests.length) {
+    throw new Error(
+      `Real XMLHttpRequest(s) sent; add ...provideHttpTesting() to the spec's providers:\n  ${requests.join('\n  ')}`,
+    );
   }
 });
 

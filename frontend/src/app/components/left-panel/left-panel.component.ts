@@ -24,6 +24,7 @@ import { StripeOverviewComponent } from './stripe-overview/stripe-overview.compo
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { SidePanelToggleComponent } from '../side-panel-toggle/side-panel-toggle.component';
 import { Media, MediaTypeInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
@@ -55,6 +56,7 @@ export type { SortMode, SelectMode, SortedItem };
     AutopilotPanelComponent,
     ViewControlsComponent,
     IconComponent,
+    ToastyHintComponent,
     SidePanelToggleComponent,
   ],
   templateUrl: './left-panel.component.html',
@@ -142,14 +144,16 @@ export class LeftPanelComponent implements OnInit {
    * right panes switch with it.
    */
   readonly findTab = input<'autopilot' | 'review'>('autopilot');
+  /** Toasty's hint under the Review tab (#4807): the host says when. */
+  readonly reviewHint = input(false);
   /** Find: the balance is frozen while a test phase runs (#4524). */
   readonly balanceLocked = input(false);
   /** Find: the balance control's state line, this corpus's test result or untested (#4524). */
   readonly balanceLineState = input<TestLineState | null>(null);
   /**
    * Find: what to say about the detector the pass was given, on both tabs
-   * (#4643): under the label quota it is the Goods' centroid, not a trained
-   * detector. Empty for a trained one.
+   * (#4643): under the label quota it is its typed query (#4758) or the Goods'
+   * centroid, not a trained detector. Empty for a trained one.
    */
   readonly findDetectorNote = input('');
   /** Disable all interaction (used during Find scoring). */
@@ -161,8 +165,6 @@ export class LeftPanelComponent implements OnInit {
   readonly selectModeChange = output<SelectMode>();
   /** The user picked a balance (a beta). */
   readonly betaChange = output<number>();
-  /** The Threshold control's "Check N picks", in Train only: the host opens the spot check (#4273, #4317). */
-  readonly check = output<void>();
   readonly textSort = output<string>();
   readonly learnedSort = output<void>();
   readonly loadSort = output<void>();

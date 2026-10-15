@@ -164,17 +164,37 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
 
         # Warmup: run one dummy forward per tower so the first real embed call
         # runs at steady-state speed and the progress bar does not appear to stall.
+        # It goes through the same forward helpers as the embed paths, so its
+        # inputs follow the model onto the GPU (#4845).
         self._on_progress("loading", "Warming up ParaSpeechCLAP: speech tower…", 1, 2)
-        dummy_audio = np.zeros(PARASPEECHCLAP_SAMPLE_RATE, dtype=np.float32)
-        audio_inputs = self._feature_extractor(
-            dummy_audio, sampling_rate=PARASPEECHCLAP_SAMPLE_RATE, return_tensors="pt", padding="do_not_pad"
-        )
-        with torch.no_grad():
-            self._model.get_audio_embedding(audio_inputs.input_values, normalize=False)
+        self._audio_forward(np.zeros(PARASPEECHCLAP_SAMPLE_RATE, dtype=np.float32))
         self._on_progress("loading", "Warming up ParaSpeechCLAP: text tower…", 2, 2)
-        text_inputs = self._tokenizer(["warmup"], padding="longest", truncation=True, return_tensors="pt")
+        self._text_forward("warmup")
+
+    # ------------------------------------------------------------------
+    # Forward passes (shared by the load-time warmup and the embed paths)
+    # ------------------------------------------------------------------
+
+    def _audio_forward(self, audio: np.ndarray) -> Any:
+        """Unnormalised speech embedding of one mono clip at :data:`PARASPEECHCLAP_SAMPLE_RATE`."""
+        import torch  # noqa: PLC0415
+
+        inputs = self._feature_extractor(
+            audio, sampling_rate=PARASPEECHCLAP_SAMPLE_RATE, return_tensors="pt", padding="do_not_pad"
+        )
+        device = next(self._model.parameters()).device
         with torch.no_grad():
-            self._model.get_text_embedding(dict(text_inputs), normalize=False)
+            return self._model.get_audio_embedding(inputs.input_values.to(device), normalize=False)
+
+    def _text_forward(self, text: str) -> Any:
+        """Unnormalised text embedding of one style description."""
+        import torch  # noqa: PLC0415
+
+        inputs = self._tokenizer([text], padding="longest", truncation=True, return_tensors="pt")
+        device = next(self._model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            return self._model.get_text_embedding(inputs, normalize=False)
 
     # ------------------------------------------------------------------
     # Embedding
@@ -207,8 +227,6 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
             file_path = Path(path_str)
         source_repr = file_path if file_path is not None else "<bytes>"
         try:
-            import torch  # noqa: PLC0415
-
             from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
 
             if audio_bytes is not None:
@@ -219,14 +237,7 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
             audio_data, _sr = decode_audio(source, sr=PARASPEECHCLAP_SAMPLE_RATE, mono=True)
             if len(audio_data) > PARASPEECHCLAP_MAX_SAMPLES:
                 audio_data = audio_data[:PARASPEECHCLAP_MAX_SAMPLES]
-            inputs = self._feature_extractor(
-                audio_data, sampling_rate=PARASPEECHCLAP_SAMPLE_RATE, return_tensors="pt", padding="do_not_pad"
-            )
-            device = next(self._model.parameters()).device
-            input_values = inputs.input_values.to(device)
-            with torch.no_grad():
-                emb = self._model.get_audio_embedding(input_values, normalize=False).detach().cpu().numpy()
-            return emb[0]
+            return self._audio_forward(audio_data).detach().cpu().numpy()[0]
         except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
@@ -237,14 +248,7 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
         if self._model is None or self._tokenizer is None:
             return None
         try:
-            import torch  # noqa: PLC0415
-
-            inputs = self._tokenizer([text], padding="longest", truncation=True, return_tensors="pt")
-            device = next(self._model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            with torch.no_grad():
-                emb = self._model.get_text_embedding(inputs, normalize=False).detach().cpu().numpy()[0]
-            return emb
+            return self._text_forward(text).detach().cpu().numpy()[0]
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for ParaSpeechCLAP")
             return None

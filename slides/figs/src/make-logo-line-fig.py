@@ -3,7 +3,7 @@
 
     python slides/figs/src/make-logo-line-fig.py
 
-Writes `figs/logo-line.png` and two build stages. Each draws the app's
+Writes `figs/logo-line.webp` and two build stages. Each draws the app's
 *returned set* (every page at or above the line) as mean F1 over FullMarks'
 36 classes, by vote, on tier `m` (~50,000 pages, v5.0), scored on each class's
 held-out half. One line per rule, in the order they shipped:
@@ -217,9 +217,9 @@ def draw(lines: dict[str, tuple[np.ndarray, np.ndarray]], out: Path, stem: str =
     span = YLIM[1] - YLIM[0]
     label_y = dict(zip(keys, _spread([float(lines[key][1][-1]) for key in keys], gap=0.075 * span), strict=True))
     n = len(RULES)
-    save(_figure(lines, label_y, n), out, f"{stem}.png", column=FULL_BLEED, tight=False)
+    save(_figure(lines, label_y, n), out, f"{stem}.webp", column=FULL_BLEED, tight=False)
     for k in range(1, n):
-        save(_figure(lines, label_y, k), out, f"{stem}.build{k}.png", column=FULL_BLEED, tight=False)
+        save(_figure(lines, label_y, k), out, f"{stem}.build{k}.webp", column=FULL_BLEED, tight=False)
 
 
 def main() -> int:

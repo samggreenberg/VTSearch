@@ -158,6 +158,20 @@ ENVX="$ENVX CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} CALIB_WEAK_D=${CALIB_WEAK_D:-
 ENVX="$ENVX CALIB_WEAK_REPEAT=${CALIB_WEAK_REPEAT:-} CALIB_WEAK_PHASE=${CALIB_WEAK_PHASE:-}"
 # The Goods' centroid's line (#4732): empty is the app's rule; the variants add tagged rows only.
 ENVX="$ENVX CALIB_CENTROID_LINE=${CALIB_CENTROID_LINE:-} CALIB_CENTROID_LINE_VARIANTS=${CALIB_CENTROID_LINE_VARIANTS:-}"
+# The hand-over shadow (#4776): tagged centroid rows past the quota and a side frame; the session is unchanged.
+ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
+# The line counts (#4786): a side frame of what each candidate line keeps; the session is unchanged.
+ENVX="$ENVX CALIB_LINE_COUNTS=${CALIB_LINE_COUNTS:-}"
+# The set overlap (#4816): a side frame of how the head's set and the typed query's split the pool; the session is unchanged.
+ENVX="$ENVX CALIB_SET_OVERLAP=${CALIB_SET_OVERLAP:-}"
+# The typed-query prior (#4384, #4859): the shadow is a side frame (session unchanged); the scale is the arm (unset = the app's 10, 0 = before #4859).
+ENVX="$ENVX CALIB_QUERY_PRIOR_SHADOW=${CALIB_QUERY_PRIOR_SHADOW:-} CALIB_QUERY_PRIOR=${CALIB_QUERY_PRIOR:-}"
+# The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
+ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
+# The typed query's hold (#4736): unset is the app's; 0 is the hand-over at the quota, before #4736.
+ENVX="$ENVX CALIB_QUERY_HOLD=${CALIB_QUERY_HOLD:-}"
+# An eval head (CALIB_HEAD): unset is the shipped linear SVM; a set head is declared to preflight (PREFLIGHT_DIVERGES=head).
+ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
@@ -313,6 +327,8 @@ pack)
   # full and another partition has idle nodes (#4490 ran on V100 nodes: CALIB_PARTITION=gpu
   # CALIB_PACK_GRES=gpu:v100:1). CALIB_PACK_JOBS jobs, each running CALIB_PACK_PAR cells at a time. The GPU is
   # hidden and each cell held to $CPUS threads, so a cell computes what an array task on the cpu partition would.
+  # CALIB_PACK_MEM (e.g. 12G) sets the job's memory outright, where cells peak well under CALIB_MEM each (#4664:
+  # 200-click Binary cells at ~0.9 GB); unset, it is CALIB_PACK_PAR x CALIB_MEM.
   IDXS="${2:?usage: launch_bands.sh pack <comma-separated indices>}"
   PJOBS="${CALIB_PACK_JOBS:-1}"
   PAR="${CALIB_PACK_PAR:-16}"
@@ -328,7 +344,7 @@ pack)
     [[ ${#SHARD[@]} -eq 0 ]] && continue
     echo "pack $j: ${#SHARD[@]} cells, $PAR at a time"
     submit "pack$j" --job-name="$JOB_NAME-pack$j" \
-      --mem="$((PAR * MEM_GB))G" --cpus-per-task="$((PAR * CPUS))" --time="$TIME" \
+      --mem="${CALIB_PACK_MEM:-$((PAR * MEM_GB))G}" --cpus-per-task="$((PAR * CPUS))" --time="$TIME" \
       --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
       --output="$LOGS/pack$j-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $HERE && \

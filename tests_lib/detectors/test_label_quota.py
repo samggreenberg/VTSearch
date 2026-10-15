@@ -30,8 +30,10 @@ from vtscore.detectors.label_quota import (
     BAD_QUOTA,
     DRY_BAD_QUOTA,
     GOOD_QUOTA,
+    QUERY_HOLD_LABELS,
     TIER_CENTROID,
     TIER_NONE,
+    TIER_QUERY,
     TIER_TRAINED,
     label_quota,
     labelset_quota,
@@ -149,6 +151,24 @@ class TestTheTiers:
         assert served_quota(head, ls)["tier"] == TIER_CENTROID
         assert served_quota(object(), ls)["tier"] == TIER_TRAINED
         assert served_quota(None, ls)["tier"] == TIER_NONE
+
+    def test_a_typed_query_past_the_quota_owes_the_hold(self):
+        """12 Goods and 15 Bads meet the quota: the hold is why it is the query, and the payload says so (#4889)."""
+        from vtscore.detectors.query_head import query_head
+
+        head = query_head(np.ones(DIM, np.float32) / np.sqrt(DIM), 0.2, embedder="siglip", text="a dog")
+        held = LabelSet(
+            [LabeledElement(md5=f"g{i}", label="good") for i in range(12)]
+            + [LabeledElement(md5=f"b{i}", label="bad") for i in range(15)]
+        )
+        out = served_quota(head, held)
+        assert (out["tier"], out["goods_owed"], out["bads_owed"]) == (TIER_QUERY, 0, 0)
+        assert (out["hold_labels"], out["hold_owed"]) == (QUERY_HOLD_LABELS, QUERY_HOLD_LABELS - 27)
+        # Under the quota the quota is why, so nothing is owed the hold.
+        under = LabelSet([LabeledElement(md5="g", label="good")])
+        assert served_quota(head, under)["hold_owed"] == 0
+        # Nor by any head but the typed query's.
+        assert served_quota(object(), held)["hold_owed"] == 0
 
 
 # ---------------------------------------------------------------------------

@@ -1925,24 +1925,214 @@ class TestAnAuditVerdictSurvivesARebuild:
         assert classes["spods/a"]["audit"]["reviewed_by"] == "a reviewer"
         assert classes["spods/a"]["audit"]["reviewed_on"]
 
-    def test_a_separation_says_whether_it_pins_marks_or_classes(self, mods):
-        # Recorded on the row rather than left to be re-derived: before the
-        # membership pass a class is not one must-linked group, so a single
-        # representative pair holds those two marks apart and nothing else.
+    def test_a_separation_says_whether_it_pins_members_or_classes(self, mods):
+        # Recorded on the row rather than left to be re-derived. Before the
+        # membership pass a class is not one must-linked group, so the row
+        # carries the class's members; after it, the star does that job and
+        # one representative per side is the whole constraint (#3837).
         pages = [
             _page(mods, "spods/001", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")]),
             _page(mods, "spods/002", "spods", [("logo", (0, 0, 200, 120), "spods/b", "clustered")]),
+            _page(mods, "spods/003", "spods", [("logo", (0, 0, 200, 120), "spods/b", "clustered")]),
         ]
         classes = {
             "spods/a": {"n_instances": 1, "page_ids": ["spods/001"], "audit": {"membership_verified": True}},
-            "spods/b": {"n_instances": 1, "page_ids": ["spods/002"], "audit": {}},
+            "spods/b": {"n_instances": 2, "page_ids": ["spods/002", "spods/003"], "audit": {}},
         }
         rows = [{"left_class_id": "spods/a", "right_class_id": "spods/b", "verdict": "different"}]
         _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
-        assert separations[0]["pins"] == "marks"
+        assert separations[0]["pins"] == "members"
+        assert separations[0]["right_members"] == [["spods/002", 0], ["spods/003", 0]]
+        assert "left_members" not in separations[0]  # the verified side's star already pins it
         classes["spods/b"]["audit"]["membership_verified"] = True
         _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
         assert separations[0]["pins"] == "classes"
+        assert "left_members" not in separations[0] and "right_members" not in separations[0]
+
+
+class TestASeparationPinsTheClassNotTheMarks:
+    """#3837: a separation between two unverified classes must hold the classes apart.
+
+    The fixture is the failure in four marks.  Classes ``a`` = rows 0, 1 and
+    ``b`` = rows 2, 3, with the verdict's representatives at rows 0 and 2.  The
+    crossing edge 1-3 is the cheapest distance in the matrix, so single linkage
+    takes it before either within-class edge.  If the separation names only
+    rows 0 and 2, rows 1 and 3 fuse, row 0 then joins them through 0-1, and
+    row 2 is the only mark left outside.  The two classes are one apart from
+    one row, and ``cluster_report.json`` still counts the separation as applied.
+    """
+
+    # 0-1 and 2-3 are within a class; 1-3 is the cheap crossing edge.
+    DIST = np.array(
+        [
+            [0.0, 0.05, 0.9, 0.9],
+            [0.05, 0.0, 0.9, 0.01],
+            [0.9, 0.9, 0.0, 0.05],
+            [0.9, 0.01, 0.05, 0.0],
+        ]
+    )
+
+    def test_two_named_marks_alone_let_the_classes_fuse(self, mods):
+        # The control, and the bug: the pair holds, the classes do not.
+        labels = mods["cluster"].single_linkage(self.DIST, 0.1, cannot_link=[(0, 2)])
+        assert labels[0] != labels[2]
+        assert labels[0] == labels[1] == labels[3]
+
+    def test_recorded_members_keep_each_class_on_its_side(self, mods):
+        Separation = mods["cluster"].Separation
+        labels = mods["cluster"].single_linkage(self.DIST, 0.1, separations=[Separation((0,), (2,), (1,), (3,))])
+        assert labels == [0, 0, 1, 1]
+
+    def test_a_member_a_human_merged_across_the_line_goes_with_the_human(self, mods):
+        # Row 1 was presumed in class a when the verdict was given, and a later
+        # pass (a membership rejection, a completeness accept) ruled it the same
+        # mark as b's representative. The snapshot was a presumption; the
+        # must-link is a verdict. Refusing the build here would make every
+        # separation a wedge against the passes that come after it.
+        Separation = mods["cluster"].Separation
+        labels = mods["cluster"].single_linkage(
+            self.DIST, 0.1, must_link=[(1, 2)], separations=[Separation((0,), (2,), (1,), (3,))]
+        )
+        assert labels[1] == labels[2] == labels[3]
+        assert labels[0] != labels[1]
+
+    def test_a_must_link_across_two_presumptions_keeps_neither(self, mods):
+        # Rows 1 and 3 are each presumed on opposite sides and a human joins
+        # them: one presumption is wrong and nothing says which. The group
+        # stays free of both, and the named marks still never meet.
+        Separation = mods["cluster"].Separation
+        labels = mods["cluster"].single_linkage(
+            self.DIST, 0.1, must_link=[(1, 3)], separations=[Separation((0,), (2,), (1,), (3,))]
+        )
+        assert labels[1] == labels[3]
+        assert labels[0] != labels[2]
+
+    def test_the_named_marks_ruled_both_ways_still_refuse(self, mods):
+        Separation = mods["cluster"].Separation
+        with pytest.raises(ValueError, match="both same and different"):
+            mods["cluster"].single_linkage(
+                self.DIST, 0.1, must_link=[(0, 2)], separations=[Separation((0,), (2,), (1,), (3,))]
+            )
+
+    def test_members_resolve_to_rows_and_skip_what_is_not_here(self, mods):
+        MarkRef, Side = mods["cluster"].MarkRef, mods["cluster"].Side
+        refs = [MarkRef(i, 0, f"spods/00{i}", "logo", (0, 0, 10, 10)) for i in range(4)]
+        left = Side(("spods/000", 0), (("spods/000", 0), ("spods/001", 0), ("tobacco800/x", 1)))
+        (sep,) = mods["cluster"].resolve_separations(refs, [(left, ("spods/002", 0))])
+        # The anchor is named, not presumed; another source's mark has no row.
+        assert (sep.left, sep.left_members, sep.right, sep.right_members) == ((0,), (1,), (2,), ())
+
+    def test_a_side_with_members_cannot_be_read_as_a_bare_pair(self, mods):
+        # Reading only the anchor is exactly the bug, so it is refused loudly.
+        MarkRef, Side = mods["cluster"].MarkRef, mods["cluster"].Side
+        refs = [MarkRef(0, 0, "spods/000", "logo", (0, 0, 10, 10))]
+        with pytest.raises(TypeError):
+            mods["cluster"].resolve_pairs(refs, [(Side(("spods/000", 0), ()), ("spods/000", 0))])
+
+    def test_the_members_survive_the_store_with_their_side(self, mods, tmp_path):
+        # Saved sorted within the pair, so the members must swap with the ids.
+        path = tmp_path / "adjudications.json"
+        row = {
+            "left_page_id": "spods/900",
+            "left_mark_index": 0,
+            "left_members": [["spods/900", 0], ["spods/901", 0]],
+            "right_page_id": "spods/100",
+            "right_mark_index": 0,
+        }
+        mods["cluster"].save_adjudications([], [row], path)
+        [(left, right)] = mods["cluster"].load_adjudications(path)[1]
+        assert left == ("spods/100", 0)
+        assert right == mods["cluster"].Side(("spods/900", 0), (("spods/900", 0), ("spods/901", 0)))
+
+    def _apply_and_rebuild(self, mods, tmp_path, monkeypatch, *, strip_members=False):
+        """Rule ``a`` != ``b`` through the confusable pass, store it, rebuild."""
+        pages = [
+            _page(mods, f"spods/00{i}", "spods", [("logo", (0, 0, 200, 120), cid, "clustered")])
+            for i, cid in enumerate(("spods/a", "spods/a", "spods/b", "spods/b"))
+        ]
+        classes = {
+            cid: {"n_instances": 2, "page_ids": [p.page_id for p in pages if p.marks[0].class_id == cid], "audit": {}}
+            for cid in ("spods/a", "spods/b")
+        }
+        rows = [{"left_class_id": "spods/a", "right_class_id": "spods/b", "verdict": "different"}]
+        _c, problems, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert not problems
+        if strip_members:
+            separations = [{k: v for k, v in r.items() if not k.endswith("_members")} for r in separations]
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications([], separations, path)
+        same, different = mods["cluster"].load_adjudications(path)
+
+        Mark = mods["common"].Mark
+        for page in pages:
+            page.marks = [Mark(m.kind, m.box, None, m.provenance) for m in page.marks]
+        # The descriptor is not what is under test; the order of the merges is.
+        monkeypatch.setattr(mods["cluster"], "describe_marks", lambda pages, refs, backend: np.zeros((len(refs), 1)))
+        monkeypatch.setattr(mods["cluster"], "distance_matrix", lambda desc, refs, backend: self.DIST)
+        summary = mods["cluster"].cluster_source(
+            pages, "spods", backend="phash", threshold=0.1, same=same, different=different
+        )
+        return summary, [p.marks[0].class_id for p in pages]
+
+    def test_a_rebuild_without_the_members_loses_the_class_separation(self, mods, tmp_path, monkeypatch):
+        # What a pre-#3837 row did: applied, counted, and holding one mark.
+        summary, ids = self._apply_and_rebuild(mods, tmp_path, monkeypatch, strip_members=True)
+        assert summary["separations_applied"] == 1
+        assert ids[0] == ids[1] == ids[3] != ids[2]
+
+    def test_a_rebuild_with_the_members_reproduces_both_classes(self, mods, tmp_path, monkeypatch):
+        summary, ids = self._apply_and_rebuild(mods, tmp_path, monkeypatch)
+        assert summary["separations_on_members"] == 1
+        assert ids[0] == ids[1] != ids[2] == ids[3]
+
+
+class TestSeparationCheck:
+    """``separation_check.py``: the store each arm replays, and the edge it blames."""
+
+    SAME = [
+        {"left_page_id": "s/1", "left_mark_index": 0, "right_page_id": "s/2", "right_mark_index": 0,
+         "note": "membership: every instance of s/a confirmed by hand"},
+        {"left_page_id": "s/1", "left_mark_index": 0, "right_page_id": "s/3", "right_mark_index": 0,
+         "note": "split of s/x"},
+    ]  # fmt: skip
+    DIFFERENT = [
+        {"left_page_id": "s/1", "left_mark_index": 0, "right_page_id": "s/4", "right_mark_index": 0,
+         "left_class_id": "s/a", "right_class_id": "s/b", "pins": "marks"},
+        {"left_page_id": "s/5", "left_mark_index": 0, "right_page_id": "s/1", "right_mark_index": 0,
+         "note": "completeness: candidate rejected for s/a"},
+    ]  # fmt: skip
+    CLASS_OF = {("s/1", 0): "s/a", ("s/2", 0): "s/a", ("s/4", 0): "s/b"}
+    MEMBERS_OF = {"s/a": [["s/1", 0], ["s/2", 0]], "s/b": [["s/4", 0]]}
+
+    def _store(self, arm, skip=None):
+        check = importlib.import_module("separation_check")
+        return check.arm_store(arm, self.SAME, self.DIFFERENT, self.MEMBERS_OF, self.CLASS_OF, set(skip or ()))
+
+    def test_the_stored_arm_is_the_store(self, mods):
+        assert self._store("stored") == {"same": self.SAME, "different": self.DIFFERENT}
+
+    def test_before_membership_drops_the_later_passes_and_names_two_marks(self, mods):
+        store = self._store("before_named")
+        assert [r["note"] for r in store["same"]] == ["split of s/x"]
+        assert len(store["different"]) == 1
+        assert not any(k.endswith("_members") for k in store["different"][0])
+
+    def test_the_members_arm_records_both_classes(self, mods):
+        (row,) = self._store("before_members")["different"]
+        assert row["left_members"] == [["s/1", 0], ["s/2", 0]]
+        assert row["right_members"] == [["s/4", 0]]
+
+    def test_a_skipped_pair_is_gone_from_every_arm(self, mods):
+        skip = {frozenset({("s/1", 0), ("s/4", 0)})}
+        for arm in ("stored", "before_named", "before_members"):
+            assert all(r.get("left_class_id") is None for r in self._store(arm, skip)["different"])
+
+    def test_the_bridge_is_the_edge_that_first_joined_the_two_classes(self, mods):
+        check = importlib.import_module("separation_check")
+        edges = [(0.01, 1, 3), (0.05, 0, 1), (0.05, 2, 3)]
+        assert check.bridge(edges, {0, 1}, {2, 3}) == (1, 3, 0.01)
+        # Through an unclassed mark: the edge that closed the chain is blamed.
+        assert check.bridge([(0.01, 1, 4), (0.02, 4, 3)], {1}, {3}) == (4, 3, 0.02)
 
 
 class TestAReviewerMayChangeTheirMind:
@@ -2687,6 +2877,416 @@ class TestAdjudicationMigration:
         same, _diff, problems = mods["audit"].migrate_adjudications(pages, classes, [row], [])
         assert not problems
         assert same == [row]
+
+
+class TestABareEndpointIsComparedAsTheMarkItMayBe:
+    """#4866: the owner's merge went in bare, beside the separation it overturned.
+
+    The live store's shape, cut down. On 2026-09-14 the owner ruled the chief
+    engraving (``afm90c00-first_1#0``) and the "100 Years" panel
+    (``bad45f00#1``) one mark, overturning the 09-13 separation. That run met a
+    ``classes.json`` still listing ``logo_bad45f00_1`` over a manifest whose
+    mark already carried the survivor's id, so every index it looked up came
+    back None: the merge went in bare, and so did a second copy of a 09-13
+    separation it re-recorded. A bare endpoint keys as ``-1``, so neither the
+    supersede nor the clash check matched it to ``#1``, and every Tobacco800
+    rebuild then refused.
+    """
+
+    AFM, BAD, SPODS = "tobacco800/logo_afm90c00-first_1_0", "tobacco800/logo_bad45f00_1", "spods/logo_00003_0"
+    MERGE = {
+        "left_page_id": "tobacco800/afm90c00-first_1",
+        "left_mark_index": 0,
+        "right_page_id": "tobacco800/bad45f00",
+        "right_mark_index": None,
+        "kept_class_id": AFM,
+        "merged_class_id": BAD,
+        "note": "Sam 2026-09-14, countersigning. Overturns the different ruled by the 2026-09-13 confusable pass.",
+    }
+    OVERTURNED = {
+        "left_page_id": "tobacco800/afm90c00-first_1",
+        "left_mark_index": 0,
+        "right_page_id": "tobacco800/bad45f00",
+        "right_mark_index": 1,
+        "left_class_id": AFM,
+        "right_class_id": BAD,
+        "pins": "classes",
+        "note": "adjudicated 2026-09-13",
+    }
+    APART = {
+        "left_page_id": "spods/00003",
+        "left_mark_index": 0,
+        "right_page_id": "tobacco800/bad45f00",
+        "right_mark_index": 1,
+        "left_class_id": SPODS,
+        "right_class_id": BAD,
+        "pins": "classes",
+        "note": "adjudicated 2026-09-13",
+    }
+
+    def _pages(self, mods, bad_logo_class=AFM):
+        return [
+            _page(mods, "tobacco800/afm90c00-first_1", "tobacco800", [("logo", (0, 0, 90, 80), self.AFM, "clustered")]),
+            _page(
+                mods,
+                "tobacco800/bad45f00",
+                "tobacco800",
+                [
+                    ("signature", (500, 900, 200, 120), "tobacco800/signature_jarrett_j_e", "gt"),
+                    ("logo", (0, 0, 300, 200), bad_logo_class, "clustered"),
+                ],
+            ),
+            _page(mods, "spods/00003", "spods", [("logo", (0, 0, 90, 80), self.SPODS, "clustered")]),
+        ]
+
+    def _classes(self):
+        return {
+            self.AFM: {
+                "kind": "logo",
+                "n_instances": 2,
+                "page_ids": ["tobacco800/afm90c00-first_1", "tobacco800/bad45f00"],
+                "audit": {"membership_verified": True},
+            },
+            self.SPODS: {"kind": "logo", "n_instances": 1, "page_ids": ["spods/00003"], "audit": {}},
+        }
+
+    def _store(self):
+        """As the 09-14 run left it: one merge and one separation copy, both bare."""
+        return [dict(self.MERGE)], [dict(self.OVERTURNED), dict(self.APART), {**self.APART, "right_mark_index": None}]
+
+    def _replay(self, mods, pages, path):
+        """What a rebuild does with the store, distances aside: forget every identity, apply the constraints."""
+        cluster = mods["cluster"]
+        refs = [
+            cluster.MarkRef(pi, mi, page.page_id, mark.kind, mark.box)
+            for pi, page in enumerate(pages)
+            if page.source == "tobacco800"
+            for mi, mark in enumerate(page.marks)
+            if mark.kind in ("logo", "stamp")
+        ]
+        same, different = cluster.load_adjudications(path)
+        must = cluster.resolve_pairs(refs, same)
+        separations = cluster.resolve_separations(refs, different)
+        dist = np.full((len(refs), len(refs)), np.inf)
+        return cluster.single_linkage(dist, 0.0, must_link=must, separations=separations)
+
+    def _write_store(self, path, same, different):
+        # Verbatim, as the 09-14 run wrote it: the point is that today's
+        # `save_adjudications` would refuse to.
+        path.write_text(json.dumps({"same": same, "different": different}, indent=2, sort_keys=True) + "\n")
+
+    def test_the_store_as_it_stood_refuses_a_rebuild(self, mods, tmp_path):
+        path = tmp_path / "adjudications.json"
+        self._write_store(path, *self._store())
+        with pytest.raises(ValueError, match="both same and different"):
+            self._replay(mods, self._pages(mods), path)
+
+    def test_saving_it_is_refused(self, mods, tmp_path):
+        # Defect 3: the clash check compared `(bad45f00, -1)` with
+        # `(bad45f00, 1)` and saw two pairs.
+        same, different = self._store()
+        with pytest.raises(ValueError, match="may be adjudicated both same and different"):
+            mods["cluster"].save_adjudications(same, different, tmp_path / "adjudications.json")
+
+    def test_a_bare_row_that_cannot_be_the_other_mark_still_saves(self, mods, tmp_path):
+        # A legacy bare row is only refused beside a ruling it may contradict:
+        # other pages, or another mark on the indexed side, is no clash.
+        path = tmp_path / "adjudications.json"
+        other_mark = {**self.OVERTURNED, "left_mark_index": 3}
+        mods["cluster"].save_adjudications([dict(self.MERGE)], [other_mark, dict(self.APART)], path)
+        same, different = mods["cluster"].load_adjudication_rows(path)
+        assert len(same) == 1 and len(different) == 2
+
+    def test_supersede_matches_a_bare_endpoint_to_the_mark_it_may_be(self, mods):
+        # Defect 2, both ways round: the 09-14 merge, bare, overturning the
+        # stored separation; and a stored bare merge overturned by a new one.
+        audit = mods["audit"]
+        _same, diff, overturned = audit.supersede([], [dict(self.OVERTURNED)], [dict(self.MERGE)], [])
+        assert diff == [] and overturned == [self.OVERTURNED]
+        same, _diff, overturned = audit.supersede([dict(self.MERGE)], [], [], [dict(self.OVERTURNED)])
+        assert same == [] and overturned == [self.MERGE]
+        # A bare endpoint on another page is not a match.
+        elsewhere = {**self.OVERTURNED, "right_page_id": "tobacco800/zzz00z00"}
+        _same, diff, overturned = audit.supersede([], [elsewhere], [dict(self.MERGE)], [])
+        assert diff == [elsewhere] and overturned == []
+
+    def test_a_merge_is_refused_when_classes_json_and_the_manifest_disagree(self, mods):
+        # Defect 1, the 09-14 state: classes.json still lists the absorbed
+        # class on bad45f00, whose mark already carries the survivor's id.
+        pages = self._pages(mods)
+        classes = self._classes()
+        classes[self.BAD] = {"kind": "logo", "n_instances": 1, "page_ids": ["tobacco800/bad45f00"], "audit": {}}
+        classes[self.AFM]["page_ids"] = ["tobacco800/afm90c00-first_1"]
+        rows = [
+            {"left_class_id": self.AFM, "right_class_id": self.BAD, "verdict": "same"},
+            {"left_class_id": self.SPODS, "right_class_id": self.BAD, "verdict": "different"},
+        ]
+        _changes, problems, separations, merges = mods["audit"].apply_confusable(pages, classes, rows)
+        assert merges == [] and separations == []
+        assert len(problems) == 2 and all("classes.json and the manifest disagree" in p for p in problems)
+        # Refused before anything moved: the absorbed class is still there, and
+        # nothing is distinct from anything.
+        assert self.BAD in classes and not classes[self.SPODS].get("distinct_from")
+
+    def test_a_located_merge_still_records_both_marks(self, mods):
+        pages = self._pages(mods, bad_logo_class=self.BAD)
+        classes = self._classes()
+        classes[self.BAD] = {"kind": "logo", "n_instances": 1, "page_ids": ["tobacco800/bad45f00"], "audit": {}}
+        classes[self.AFM]["page_ids"] = ["tobacco800/afm90c00-first_1"]
+        rows = [{"left_class_id": self.AFM, "right_class_id": self.BAD, "verdict": "same"}]
+        _changes, problems, _separations, merges = mods["audit"].apply_confusable(pages, classes, rows)
+        assert not problems
+        assert (merges[0]["left_mark_index"], merges[0]["right_mark_index"]) == (0, 1)
+
+    def test_migration_finds_an_absorbed_class_under_its_survivor(self, mods):
+        # The separations name `logo_bad45f00_1`, which no mark carries any
+        # more; the store's merge row says it became `afm90c00`'s class.
+        same_rows, diff_rows = self._store()
+        same, diff, problems = mods["audit"].migrate_adjudications(
+            self._pages(mods), self._classes(), same_rows, diff_rows
+        )
+        assert not problems
+        assert same[0]["right_mark_index"] == 1
+        assert [r["right_mark_index"] for r in diff] == [1, 1, 1]
+
+    def test_settling_drops_the_copy_and_finds_the_overturned_separation(self, mods):
+        audit = mods["audit"]
+        old_same, old_diff = self._store()
+        same, diff, _problems = audit.migrate_adjudications(self._pages(mods), self._classes(), old_same, old_diff)
+        same, diff, duplicates, overturned = audit.settle_stamped(old_same, old_diff, same, diff)
+        assert overturned == [self.OVERTURNED]
+        assert len(duplicates) == 1 and duplicates[0]["left_page_id"] == "spods/00003"
+        assert diff == [self.APART]  # the original, note and all
+        assert [r["right_mark_index"] for r in same] == [1]
+
+    def _corpus(self, mods, tmp_path):
+        mods["common"].write_manifest(self._pages(mods), tmp_path / "corpus.jsonl")
+        (tmp_path / "classes.json").write_text(json.dumps(self._classes()))
+        path = tmp_path / "adjudications.json"
+        self._write_store(path, *self._store())
+        return path
+
+    def test_the_repair_takes_supersede_and_then_the_rebuild_replays_clean(self, mods, tmp_path, capsys):
+        path = self._corpus(mods, tmp_path)
+        before = path.read_bytes()
+        args = ["--corpus", str(tmp_path), "--migrate-adjudications", "--apply"]
+        assert mods["audit"].main(args) == 1
+        assert "contradicts a stored ruling" in capsys.readouterr().out
+        assert path.read_bytes() == before
+
+        assert mods["audit"].main([*args, "--supersede"]) == 0
+        same, different = mods["cluster"].load_adjudication_rows(path)
+        assert [(r["right_page_id"], r["right_mark_index"]) for r in same] == [("tobacco800/bad45f00", 1)]
+        assert different == [self.APART]
+        labels = self._replay(mods, self._pages(mods), path)
+        assert labels[0] == labels[1]  # the engraving and the panel, one mark
+
+    def test_no_writer_puts_an_unlocated_mark_on_disk(self, mods, tmp_path, monkeypatch, capsys):
+        # The backstop under every writer: a new row with no index on a side
+        # stops the whole write, store and manifest alike.
+        self._corpus(mods, tmp_path)
+        (tmp_path / "adjudications.json").unlink()
+        audit_dir = tmp_path / "audit" / "confusable"
+        audit_dir.mkdir(parents=True)
+        (audit_dir / "verdicts.jsonl").write_text(
+            json.dumps({"left_class_id": self.AFM, "right_class_id": self.SPODS, "verdict": "different"}) + "\n"
+        )
+        manifest = (tmp_path / "corpus.jsonl").read_bytes()
+        monkeypatch.setattr(
+            mods["audit"], "apply_confusable", lambda *_a: ([], [], [{**self.APART, "right_mark_index": None}], [])
+        )
+        assert mods["audit"].main(["--corpus", str(tmp_path), "--task", "confusable", "--apply"]) == 1
+        assert "could not locate; nothing written" in capsys.readouterr().out
+        assert not (tmp_path / "adjudications.json").exists()
+        assert (tmp_path / "corpus.jsonl").read_bytes() == manifest
+
+
+class TestATurnedTobacco800Page:
+    """A GEDI file drawn on the page turned upright, over a TIF stored upside down (#4871).
+
+    The numbers are ``tobacco800/dic45f00_1``'s, 1200 x 1575.  Read verbatim,
+    its logo box held no ink at all -- the only blank crop of the corpus's 2,880
+    marks, and a hub in every Tobacco800 re-cluster -- and the completeness pass
+    then boxed the eagle the box was meant for a second time, as mark 2.
+    """
+
+    PAGE = "tobacco800/dic45f00_1"
+    W, H = 1200, 1575
+    SIG, LOGO = (797, 1073, 249, 220), (208, 161, 92, 84)
+    SIG_TURNED, LOGO_TURNED = (154, 282, 249, 220), (900, 1330, 92, 84)
+    EAGLE = (917, 1329, 71, 78)
+    CLASS = "tobacco800/logo_afm90c00-first_1_0"
+    GEDI = f"""<?xml version="1.0" encoding="UTF-8"?>
+    <GEDI xmlns="http://lamp.cfar.umd.edu/GEDI" version="1.0">
+      <DL_DOCUMENT src="dic45f00_1.tif" NrOfPages="1" docTag="xml">
+        <DL_PAGE gedi_type="DL_PAGE" src="dic45f00_1.tif" pageID="1" width="{W}" height="{H}">
+          <DL_ZONE gedi_type="DLSignature" id="None" col="797" row="1073" width="249" height="220"
+                   Overlapped="Yes" AuthorID="Jarrett, J.E."> </DL_ZONE>
+          <DL_ZONE gedi_type="DLLogo" id="None" col="208" row="161" width="92" height="84"> </DL_ZONE>
+        </DL_PAGE>
+      </DL_DOCUMENT>
+    </GEDI>"""
+    SAME = {
+        "left_page_id": "tobacco800/afm90c00-first_1",
+        "left_mark_index": 0,
+        "right_page_id": PAGE,
+        "right_mark_index": 2,
+        "note": "completeness: missing member of tobacco800/logo_afm90c00-first_1_0 confirmed by hand",
+    }
+
+    def _built(self, mods):
+        """The page as the corpus built before #4871 holds it."""
+        page = _page(
+            mods,
+            self.PAGE,
+            "tobacco800",
+            [
+                ("signature", self.SIG, "tobacco800/signature_jarrett_j_e", "gt"),
+                ("logo", self.LOGO, "tobacco800/logo_alk3aa00_1", "clustered"),
+                ("logo", self.EAGLE, self.CLASS, "completeness"),
+            ],
+            w=self.W,
+            h=self.H,
+        )
+        added = [{"page_id": self.PAGE, "kind": "logo", "box": list(self.EAGLE), "class_id": self.CLASS}]
+        return [page], added
+
+    def _turn(self, mods, pages, added, same=None, different=()):
+        shipped = mods["tobacco800"].parse_gedi(self.GEDI)
+        return mods["audit"].turn_pages(pages, shipped, added, [dict(self.SAME)] if same is None else same, different)
+
+    def test_the_page_is_in_the_table(self, mods):
+        assert "dic45f00_1" in mods["tobacco800"].TURNED_180
+
+    def test_turning_is_its_own_inverse(self, mods):
+        turn = mods["tobacco800"].turn_180
+        assert turn(self.LOGO, self.W, self.H) == self.LOGO_TURNED
+        assert turn(self.LOGO_TURNED, self.W, self.H) == self.LOGO
+
+    def test_a_rebuild_reads_the_boxes_turned(self, mods, tmp_path):
+        from PIL import Image
+
+        (tmp_path / "dic45f00_1.xml").write_text(self.GEDI, encoding="utf-8")
+        Image.new("1", (self.W, self.H), 1).save(tmp_path / "dic45f00_1.tif")
+        (tmp_path / "abc12d00.xml").write_text(self.GEDI.replace("dic45f00_1", "abc12d00"), encoding="utf-8")
+        Image.new("1", (self.W, self.H), 1).save(tmp_path / "abc12d00.tif")
+        pages, _warnings = mods["tobacco800"].build_pages(tmp_path)
+        boxes = {p.page_id: [m.box for m in p.marks] for p in pages}
+        assert boxes[self.PAGE] == [self.SIG_TURNED, self.LOGO_TURNED]
+        # A page not in the table keeps the XML's boxes.
+        assert boxes["tobacco800/abc12d00"] == [self.SIG, self.LOGO]
+
+    def test_the_audit_flags_a_logo_whose_ink_is_where_its_box_turns_to(self, mods, tmp_path):
+        from PIL import Image, ImageDraw
+
+        def page(stem, ink_box):
+            (tmp_path / f"{stem}.xml").write_text(self.GEDI.replace("dic45f00_1", stem), encoding="utf-8")
+            img = Image.new("L", (self.W, self.H), 255)
+            x, y, w, h = ink_box
+            ImageDraw.Draw(img).rectangle([x, y, x + w - 1, y + h - 1], fill=0)
+            img.save(tmp_path / f"{stem}.tif")
+
+        page("dic45f00_1", self.LOGO_TURNED)  # the real case: ink where the box turns to
+        page("abc12d00", self.LOGO)  # an ordinary page: ink where the box is
+        rows = importlib.import_module("turned_gt_audit").audit(tmp_path)
+        flagged = {(r["stem"], r["kind"]) for r in rows if r["flagged"]}
+        # A signature box with nothing in it is not evidence: signatures are a
+        # few strokes, so only logo zones are flagged.
+        assert flagged == {("dic45f00_1", "logo")}
+
+    def test_the_built_page_is_turned_and_the_eagle_folded_into_the_source_box(self, mods):
+        pages, added = self._built(mods)
+        added_after, same, different, changes, problems = self._turn(mods, pages, added)
+        assert not problems
+        page = pages[0]
+        assert [(m.kind, m.box, m.class_id) for m in page.marks] == [
+            ("signature", self.SIG_TURNED, "tobacco800/signature_jarrett_j_e"),
+            ("logo", self.LOGO_TURNED, self.CLASS),
+        ]
+        assert added_after == []
+        assert different == []
+        # The verdict is the reviewer's; only the index it names moves.
+        (row,) = same
+        assert (row["right_page_id"], row["right_mark_index"]) == (self.PAGE, 1)
+        assert row["note"].startswith(self.SAME["note"])  # still read as a completeness row
+        assert "was mark 2" in row["note"]
+        assert any("folds into mark 1" in c for c in changes)
+
+    def test_a_rebuild_after_the_repair_lands_on_the_same_marks(self, mods, tmp_path):
+        from PIL import Image
+
+        completeness = importlib.import_module("completeness")
+        pages, added = self._built(mods)
+        added_after, same, _different, _changes, problems = self._turn(mods, pages, added)
+        assert not problems
+
+        (tmp_path / "dic45f00_1.xml").write_text(self.GEDI, encoding="utf-8")
+        Image.new("1", (self.W, self.H), 1).save(tmp_path / "dic45f00_1.tif")
+        rebuilt, _warnings = mods["tobacco800"].build_pages(tmp_path)
+        assert completeness.replay_added_marks(rebuilt, added_after) == 0
+        assert [m.box for m in rebuilt[0].marks] == [m.box for m in pages[0].marks]
+        # ...and the verdict names a mark the rebuilt page has, the eagle.
+        (row,) = same
+        assert rebuilt[0].marks[row["right_mark_index"]].box == self.LOGO_TURNED
+
+    def test_running_it_again_changes_nothing(self, mods):
+        pages, added = self._built(mods)
+        added_after, same, different, _changes, _problems = self._turn(mods, pages, added)
+        again = self._turn(mods, pages, added_after, same, different)
+        assert again[3] == [] and again[4] == []
+        assert again[1] == same
+
+    def test_a_box_moved_since_the_build_is_reported_not_turned(self, mods):
+        pages, added = self._built(mods)
+        pages[0].marks[1] = mods["common"].Mark("logo", (210, 160, 90, 85), "tobacco800/logo_alk3aa00_1", "gt")
+        _added, _same, _diff, _changes, problems = self._turn(mods, pages, added)
+        assert any("mark 1" in p and "a person should look" in p for p in problems)
+
+    def test_a_second_instance_elsewhere_on_the_page_is_not_folded(self, mods):
+        pages, _added = self._built(mods)
+        Mark = mods["common"].Mark
+        pages[0].marks[2] = Mark("logo", (40, 40, 80, 80), self.CLASS, "completeness")
+        added = [{"page_id": self.PAGE, "kind": "logo", "box": [40, 40, 80, 80], "class_id": self.CLASS}]
+        added_after, same, _diff, changes, problems = self._turn(mods, pages, added)
+        assert not problems
+        assert len(pages[0].marks) == 3
+        assert added_after == added
+        assert same[0]["right_mark_index"] == 2
+        assert not any("folds" in c for c in changes)
+
+    def test_a_fold_that_would_renumber_a_later_mark_is_refused(self, mods):
+        pages, added = self._built(mods)
+        Mark = mods["common"].Mark
+        pages[0].marks.append(Mark("logo", (40, 40, 80, 80), "tobacco800/logo_other", "completeness"))
+        added.append({"page_id": self.PAGE, "kind": "logo", "box": [40, 40, 80, 80], "class_id": "x"})
+        _added, _same, _diff, _changes, problems = self._turn(mods, pages, added)
+        assert any("would be renumbered" in p for p in problems)
+
+    def test_a_source_class_somebody_ruled_on_is_not_overwritten(self, mods):
+        pages, added = self._built(mods)
+        ruling = {
+            "left_page_id": self.PAGE,
+            "left_mark_index": 1,
+            "right_page_id": "tobacco800/alk3aa00",
+            "right_mark_index": 1,
+            "note": "membership: rejected",
+        }
+        _added, _same, _diff, _changes, problems = self._turn(mods, pages, added, different=[ruling])
+        assert any("was ruled on" in p for p in problems)
+
+    def test_recorded_members_are_re_pointed_too(self, mods):
+        pages, added = self._built(mods)
+        separation = {
+            "left_page_id": "tobacco800/afm90c00-first_1",
+            "left_mark_index": 0,
+            "left_members": [["tobacco800/afm90c00-first_1", 0], [self.PAGE, 2]],
+            "right_page_id": "tobacco800/zzz00000",
+            "right_mark_index": 0,
+            "note": "",
+        }
+        _added, _same, different, _changes, problems = self._turn(mods, pages, added, different=[separation])
+        assert not problems
+        assert different[0]["left_members"] == [["tobacco800/afm90c00-first_1", 0], [self.PAGE, 1]]
 
 
 class TestSiglipClusterBackend:

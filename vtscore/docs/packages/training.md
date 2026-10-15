@@ -20,6 +20,7 @@ this package is the underlying ML core.
 | `vtscore/training/thresholds/`                                        | Threshold helpers: `gmm`, `conformal`, `anchored`, `blend`, `costs`, `knobs` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the production head's fit) |
+| `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`), the production head (#4776, #4785) |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
 | `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank: the inlier gate, and the returned-set line on documents (#4367, #4440) |
 | `vtscore/training/structural_stage1.py`                               | The tiled Stage 1 for document pages (best tile per page), the shortlist size and the verification cache |
@@ -68,9 +69,19 @@ delegates to `train_svm(kernel="linear")` - the very call the eval harness
 scores as its `svm_linear` arm, so the shipped head and the measured arm cannot
 drift apart - and copies the resulting hyperplane into the `Linear(input_dim, 1)`
 module, whose forward pass is then the SVM's decision function. `dropout` is
-ignored. Every production fit passes `LINEAR_SVM_HEAD` - in
-`vtscore.detectors` for both the final model and the calibration fold models,
-so the threshold is always calibrated on the head the final model has.
+ignored. It was the production head until #4785 and is now an eval arm
+(`head="linear_svm"`).
+
+**Linear SVM started from the Goods' centroid - the production head (#4785).** The `LINEAR_SVM_PRIOR_HEAD` (`-3`) sentinel
+builds the same `Linear(input_dim, 1)` and routes to
+`fit_linear_svm_prior_head` in `vtscore/training/svm_prior.py`: the SVM's
+objective on the votes plus one feature, `CENTROID_PRIOR_SCALE` (10) times each
+vector's dot with the unit Goods' centroid of the rows being fitted, folded back
+into the weight vector. Moving the hyperplane along the centroid costs 1/100 of
+any other direction, so a head fitted to a few labels starts at the centroid.
+Every production fit passes it - in `vtscore.detectors` for both the final model
+and the calibration fold models, so the threshold is always calibrated on the
+head the final model has.
 
 **Linear (logistic) head - eval harness and tests only.** The `LINEAR_HEAD`
 (`0`) sentinel builds the *same* `Linear(input_dim, 1)` but fits it through
@@ -97,16 +108,15 @@ for why the SVM head ships.
 
 All three are built by
 `vtscore/training/mlp.py::build_model(input_dim, hidden_dim=64, dropout=0.0, generator=None)`
-(`LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD)` both build the bare
-`Linear`). Pass a seeded `torch.Generator` to
+(every sentinel in `LINEAR_HEADS` builds the bare `Linear`). Pass a seeded `torch.Generator` to
 deterministically re-initialise the `Linear` weights (Kaiming uniform
 on the weight matrix, uniform on the bias with the standard PyTorch
 fan-in bound).
 
 > Note the mismatch between the two defaults: `build_model`'s own
 > `hidden_dim=64` builds an MLP, and `train_model`'s `hidden_dim=None`
-> auto-sizes one. Neither default is the production head - callers that want
-> it must pass `LINEAR_SVM_HEAD` explicitly.
+> auto-sizes one. Neither default is a production head - callers that want
+> one must pass `LINEAR_SVM_PRIOR_HEAD` explicitly.
 
 ### Auto-sizing the MLP hidden layer
 

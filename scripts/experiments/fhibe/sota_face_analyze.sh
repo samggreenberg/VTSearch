@@ -12,8 +12,9 @@
 #   sota_face_analyze.sh OUT [K ...]     K defaults to "1 4"
 #
 # Run on a compute node (srun ... -c 8): analyze.py reads every cell of a session set.
-# Env: SOTA_FACE_DATE (default today), SOTA_FACE_SIZES (default "1024 640"), and SOTA_FACE_ARM
-# (an arm sota_face.sh ran under the same variable, #4777).
+# Env: SOTA_FACE_DATE (default today), SOTA_FACE_SIZES (default "1024 640"), SOTA_FACE_ARM
+# (an arm sota_face.sh ran under the same variable, #4777) and SOTA_FACE_TAG (the run dirs' tag,
+# as sota_face.sh took it; default `sota`) and SOTA_FACE_BETAS (the presets it ran; default "0.25 1 4").
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOTA="$HERE/../state_of_app"
@@ -21,14 +22,14 @@ FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
 RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/runs"
 D="${SOTA_FACE_DATE:-$(date +%Y-%m-%d)}"
 ARM="${SOTA_FACE_ARM:-}"
-SET="$D-sota${ARM:+-$ARM}"
+SET="$D-${SOTA_FACE_TAG:-sota}${ARM:+-$ARM}"
 FACES="fhibe_faces${ARM:+_$ARM}"
 OUT="${1:?usage: sota_face_analyze.sh OUT [K ...]}"
 shift
 KS=("${@:-1 4}")
 read -r -a KS <<<"${KS[*]}"
 read -r -a SIZES <<<"${SOTA_FACE_SIZES:-1024 640}"
-BETAS=(0.25 1 4)
+read -r -a BETAS <<<"${SOTA_FACE_BETAS:-0.25 1 4}"
 BASELINES="$RUNS/$SET-baseline"
 mkdir -p "$OUT" && chmod 700 "$OUT"
 

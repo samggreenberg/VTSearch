@@ -7,7 +7,7 @@ otherwise fail late (missing fragment, missing figure, a stray `---` inside a
 fragment that would silently split one slide into two, a build marker naming a
 missing stage figure).
 
-A fragment may carry `<!-- build -->` / `<!-- build: figs/x.png -->` markers:
+A fragment may carry `<!-- build -->` / `<!-- build: figs/x.webp -->` markers:
 progressive-reveal chop points. The audience build expands each marker into an
 earlier stage of the slide (the content above the marker, the figure swapped
 when the marker names one), all sharing one page number; the speaker build
@@ -57,7 +57,7 @@ IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
 # markdown image cannot sit inside a <figure> without a blank line either side.
 SRC_RE = re.compile(r'src="([^"]+)"')
 # A build marker, alone on its line: `<!-- build -->` repeats the slide in the
-# audience deck with only the content above the marker; `<!-- build: figs/x.png -->`
+# audience deck with only the content above the marker; `<!-- build: figs/x.webp -->`
 # additionally swaps the slide's (first) figure for that stage's figure. The
 # speaker build ignores markers and keeps one page per fragment.
 BUILD_RE = re.compile(r"^\s*<!--\s*build(?:\s*:\s*(\S+))?\s*-->\s*$")
@@ -238,7 +238,7 @@ def yaml_scalar(value: str) -> str:
 def rewrite_images(text: str) -> str:
     """Repoint image paths from repo-root-relative to _build/-relative.
 
-    Fragments are authored with paths like `figs/x.png` relative to the repo
+    Fragments are authored with paths like `figs/x.webp` relative to the repo
     root, but the assembled deck lives in _build/, so Marp would resolve them
     one directory too deep. Marp only *warns* about missing local files and
     still exits 0, so this must be right rather than merely checked.
@@ -398,15 +398,15 @@ VISUAL_W = VISUAL_FRACTION * SPEAKER_W
 VISUAL_GUTTER = 34
 FRAME_GAP = 10
 FRAME_BORDER = 2
-#: Gap between the hero miniature and the strip of frames under it.
+#: Gap between the strip of earlier frames and the hero miniature under it.
 STRIP_TOP = 18
 SLIDE_ASPECT = 9 / 16
 
-#: Presenter notes are 18px, not the deck's 20px floor. The floor is about a
-#: projector at the back of a room; this page is a PDF on the presenter's own
-#: laptop, half a metre away, and the 20px version could not fit a long slide's
-#: narration on one page however the pictures were arranged. See STYLE.md.
-NOTES_FONT_PX = 18
+#: Presenter notes are 20px, the deck's own floor. They were 18px while the
+#: longest slides' narration ran to a page of prose; notes are now a sentence or
+#: three a page (STYLE.md, *Presenter notes are what you say*), and the type came
+#: back up to match (owner, #4884).
+NOTES_FONT_PX = 20
 NOTES_LINE_HEIGHT = 1.38
 NOTES_LINE_PX = NOTES_FONT_PX * NOTES_LINE_HEIGHT
 #: Average glyph width of the notes face. Measured against the theme: 20px
@@ -420,40 +420,30 @@ NOTES_LINES = int(SPEAKER_H // NOTES_LINE_PX)
 NOTES_PARAGRAPH_GAP = 0.4
 
 
-#: How tall a build-up's strip of earlier frames may stand, in px. A budget
-#: rather than a column count, because the two things the strip trades against
-#: each other — how big a thumbnail is, and how many lines of notes run full
-#: width under it — are both measured in pixels. Set where a ten-frame build
-#: still leaves the notes two thirds of the page.
-STRIP_MAX_H = 150
-
-
 def frame_columns(count: int, style: str) -> int:
     """How many frames a row of the overview holds.
 
-    The two styles want opposite things from the grid. An **equal-weight**
+    The two styles want different things from the grid. An **equal-weight**
     overview *is* the slide — every frame carries its own content — so it goes
     as wide as it can without leaving a widow: two up to four (a square), three
     beyond, and it never shrinks itself to buy room for prose.
 
-    A **build-up** strip is an afterthought under the hero, and the presenter
-    only has to recognise those frames rather than read them, so it is sized to
-    a height budget instead: the fewest columns — hence the largest thumbnails
-    — whose strip still fits `STRIP_MAX_H`. That keeps a ten-frame build from
-    spending most of the page on thumbnails of one picture, and it is why a
-    long build's frames come out smaller than a short one's.
+    A **build-up** puts its earlier frames first, in letter order, in the
+    smallest square grid that holds them, and its last frame under them as the
+    hero, so the column reads a, b, c … and ends on the slide (owner, #4884:
+    the hero on top made the order e, a, b, c, d). One column for
+    one earlier frame, so a two-frame build shows both frames at one size; two
+    up to four; three up to nine; four up to sixteen (owner, #4884: "don't take
+    4x4 until you need it"). The presenter has to recognise those frames, not
+    only count them, and a strip sized to save the notes a few lines of full
+    width made a short build's frames a quarter of the column across. A square
+    grid holds the strip's height nearly constant however long the build — a
+    3x3 of 152px frames stands as tall as a 2x2 of 234px ones — so it is the
+    frames that shrink with the build, and only as far as the build forces.
     """
     if style == "equal":
         return count if count <= 3 else (2 if count == 4 else 3)
-    # Never fewer than three columns: at two, a two-frame build's lone earlier
-    # frame comes out half the size of the hero above it and stops reading as
-    # subordinate to it. Six is the ceiling because the theme defines --c2
-    # through --c6; past twelve frames the strip grows a third row rather than a
-    # seventh column, which is the right trade anyway — a seventh column is 66px.
-    for cols in range(3, 6):
-        if _grid_height(count, cols) <= STRIP_MAX_H:
-            return cols
-    return 6
+    return max(1, math.ceil(math.sqrt(count)))
 
 
 def _grid_height(count: int, cols: int, width: float = VISUAL_W) -> float:
@@ -528,9 +518,10 @@ def frame_overview(deck: str, pages: list[int], group: list[int], style: str) ->
 
     A **build-up** — the default, and what a `<!-- build -->` marker usually
     means — reveals one picture in stages, so only the last frame holds all of
-    it. That frame is the hero, drawn big, and the rest sit under it small: the
-    presenter needs to *read* the slide they are on and only needs to
-    *recognise* the steps that got there.
+    it. That frame is the hero, drawn big under the rest, which sit above it
+    in letter order: the presenter needs to *read* the slide they are on and
+    only needs to *recognise* the steps that got there, and the column reads in
+    the order the room sees it.
 
     An **equal-weight** group has no such last frame. Its reveals are different
     pictures of equal standing — three screens of a click-through, six votes in
@@ -546,18 +537,19 @@ def frame_overview(deck: str, pages: list[int], group: list[int], style: str) ->
         return f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png"></figure>\n'
     letters = {page: stage_letter(index) for index, page in enumerate(group)}
     if style == "equal":
-        shown, head = group, ""
+        shown, tail = group, ""
     else:
         # Every frame but the one drawn big — "earlier" for a real build, "the
-        # other showings" for a fragment the deck comes back to.
+        # other showings" for a fragment the deck comes back to — and the big
+        # one after them, so the column reads in letter order.
         shown = [page for page in group if page != hero]
-        head = (
+        tail = (
             f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png">'
             f"<figcaption>{letters[hero]}</figcaption></figure>\n"
         )
     cols = frame_columns(len(shown), style)
     cells = "\n".join(_frame_cell(deck, page, letters[page]) for page in shown)
-    return f'{head}<div class="speaker-frames speaker-frames--c{cols}">\n{cells}\n</div>\n'
+    return f'<div class="speaker-frames speaker-frames--c{cols}">\n{cells}\n</div>\n{tail}'
 
 
 def notes_for_showing(notes: list[str], letters: set[str], first: bool) -> list[str]:
@@ -659,7 +651,7 @@ def check_build_markers(name: str, text: str, problems: list[str]) -> None:
             if line.strip().startswith("<!-- build"):
                 problems.append(
                     f"fragments/{name}.md:{lineno}: malformed build marker — expected "
-                    f"`<!-- build -->` or `<!-- build: figs/x.png -->` alone on its line"
+                    f"`<!-- build -->` or `<!-- build: figs/x.webp -->` alone on its line"
                 )
             continue
         figure = marker.group(1)
@@ -694,11 +686,13 @@ def check_note_letters(name: str, text: str, pages: int, problems: list[str]) ->
 
     A single note may name several letters (`**a**, **b** — recapitulation`);
     what is checked is coverage, not one note per page.
+
+    The stray-letter half runs on a one-page slide too: notes naming **b**
+    onward on a slide with one page are the trace of build markers that went
+    missing, which would otherwise pass as a plain one-page slide.
     """
-    if pages < 2:
-        return
     named = {m.group(1) for comment in COMMENT_RE.finditer(text) for m in NOTE_LETTER_RE.finditer(comment.group(1))}
-    missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named]
+    missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named] if pages >= 2 else []
     if missing:
         problems.append(
             f"fragments/{name}.md: this slide is {pages} pages, but its presenter notes "
@@ -799,9 +793,9 @@ def check_speaker_fit(
         where = f" (showing {letters})" if pages != group[name] else ""
         problems.append(
             f"fragments/{name}.md{where}: presenter notes overflow the speaker page by about "
-            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters, or move "
-            f"detail into the report the note cites. A speaker page never continues onto a "
-            f"second one; see slides/README.md."
+            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters. A speaker "
+            f"page never continues onto a second one; see slides/README.md, and slides/STYLE.md "
+            f"on what a note is for."
         )
 
 
@@ -1252,6 +1246,19 @@ def speaker_bodies(
     return bodies
 
 
+def front_matter(front: dict[str, str], *, speaker: bool, editable: bool) -> str:
+    """The assembled deck's front matter: the defaults, the manifest's keys, and what the cut adds."""
+    merged = dict(DEFAULT_FRONTMATTER)
+    merged.update(front)
+    if speaker and merged.get("title"):
+        # The two cuts side by side in a PDF viewer should not read alike, and
+        # an OS truncates a long title from the end, so the difference leads.
+        merged["title"] = f"Presenter: {merged['title']}"
+    if editable:
+        merged["style"] = EDITABLE_STYLE
+    return "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
+
+
 def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True, editable: bool = False) -> list[str]:
     """Preflight one deck; write _build/<deck>[.speaker|.editable|.unnumbered].md unless write=False.
 
@@ -1293,11 +1300,7 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
     if problems or not write:
         return problems
 
-    merged = dict(DEFAULT_FRONTMATTER)
-    merged.update(front)
-    if editable:
-        merged["style"] = EDITABLE_STYLE
-    header = "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
+    header = front_matter(front, speaker=speaker, editable=editable)
 
     BUILD.mkdir(exist_ok=True)
     parts = [""] if speaker else [p for p, on in ((".editable", editable), (".unnumbered", not pageno)) if on]

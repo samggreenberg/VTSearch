@@ -159,8 +159,24 @@ def text_sort_active(query_vec, *, snap=None, beta: float | None = None) -> tupl
     )
 
 
+#: A media this close to the query (cosine) is the example itself, or a copy of it: the line
+#: leaves it out of its count, as it does the voted media (#4779).
+EXAMPLE_SELF_COSINE = 0.9999
+
+
+def _voted_media_ids() -> set[int]:
+    """The active detector's voted media (Goods and Bads), which an example sort's line leaves out (#4779)."""
+    try:
+        from vtscore.state.core import get_active_detector_context
+
+        ctx = get_active_detector_context()
+    except Exception:  # noqa: BLE001 - no active detector: nothing voted
+        return set()
+    return set(ctx.good_votes) | set(ctx.bad_votes)
+
+
 def cosine_sort_cuts(
-    query_vec, *, role: str = "score", snap=None, beta: float | None = None
+    query_vec, *, role: str = "score", snap=None, beta: float | None = None, exclude_ids=None
 ) -> tuple[list[dict], TextSortCuts]:
     """Sort every media in the active dataset by cosine similarity to *query_vec*, with both its lines.
 
@@ -177,6 +193,12 @@ def cosine_sort_cuts(
     reads the active one (:func:`vtscore.state.get_beta`).  *cuts* carries the
     display line's :class:`SortLine`, which draws it, to redraw it at another
     balance (#4760).
+
+    The display line counts the unvoted media only (#4779): *exclude_ids* (by
+    default the active detector's voted media) and any media at
+    :data:`EXAMPLE_SELF_COSINE` or above, the example itself, stay out of its count,
+    or a starting photo at the top of its own sort is counted as what stands out.
+    The acquisition cut still reads every media, so Autopilot's picks do not move.
     """
     if beta is None:
         from vtscore.state import get_beta
@@ -189,9 +211,19 @@ def cosine_sort_cuts(
     from vtscore.detectors.centroid_head import CENTROID_LINE_RULE
     from vtscore.training.thresholds import TextSortCuts, calculate_gmm_threshold
 
+    if snap is None:
+        from vtscore.state import snapshot_medias
+
+        snap = snapshot_medias()
     results, sims_list = _cosine_sort_scored(query_vec, role=role, snap=snap)
     acq = calculate_gmm_threshold(sims_list)
-    line = SortLine("centroid", np.asarray(sims_list, dtype=np.float64))
+    sims = np.asarray(sims_list, dtype=np.float64)
+    leave = _voted_media_ids() if exclude_ids is None else set(exclude_ids)
+    # The raw similarities are in the snapshot's order (cosine_sort_with_boxes).
+    counted = sims < EXAMPLE_SELF_COSINE
+    if leave and len(sims) == len(snap):
+        counted &= np.fromiter((cid not in leave for cid in snap), dtype=bool, count=len(sims))
+    line = SortLine("centroid", sims[counted])
     return results, TextSortCuts(line.threshold_at(beta), round(acq, 4), CENTROID_LINE_RULE, line)
 
 

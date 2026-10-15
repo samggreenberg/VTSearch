@@ -1,29 +1,51 @@
 <!-- _class: full -->
+<!-- frames: equal -->
 
-![bg fit](figs/autopilot-smart.png)
+![bg fit](figs/autopilot-smart.webp)
 
 ## Diminishing<br>Returns
 
-<!-- build: figs/autopilot-smart.build1.png -->
+<!-- build: figs/autopilot-smart.build1.webp -->
 
-<!-- Smart is the first of the three lights, and the plainest question: is
-     the detector still getting better? The figure runs the shipped rule on a
-     planted session. -->
+<!-- build: figs/autopilot-smart.build2.webp -->
 
-<!-- **a** — Each point is one retrain's detector, scored on the votes as
-     they stand today: its mistakes, false alarms plus misses as shares
-     (FPR + FNR), at its own cut. The whole window is re-scored on every
-     vote, so older detectors are judged by newer labels. Fit a line through
-     the last ten. Early on it falls 7% of its height a retrain: yellow, keep
-     going. -->
+<!-- build: figs/autopilot-smart.build3.webp -->
 
-<!-- **b** — Later the same fit is flat, 0.2% a retrain, inside the 1.5% line:
-     green. A fall also has to be bigger than the window's own scatter, two
-     standard errors, before it counts (#3832). Without that, a category the
-     embedding cannot separate jumps from retrain to retrain, and the light
-     flapped between Done and Boundary with it. -->
+<!-- build: figs/autopilot-smart.build4.webp -->
 
-<!-- Smart and Stable both stay red until the labels hold five Goods and five
-     Bads: below that there is no detector worth judging. Smart cuts every
-     detector the same way, whatever the Threshold is set to, so the points
-     in a window stay comparable (#4243). -->
+<!-- build: figs/autopilot-smart.build5.webp -->
+
+<!-- build: figs/autopilot-smart.build6.webp -->
+
+<!-- build: figs/autopilot-smart.build7.webp -->
+
+<!-- build: figs/autopilot-smart.build8.webp -->
+
+<!-- build: figs/autopilot-smart.build9.webp -->
+
+<!-- **a** — Smart asks: is it still getting better? The idea first, in
+     Spanish class. Before Spanish 101, I'm bad. -->
+
+<!-- **b** — After it, I'm great. -->
+
+<!-- **c** — Then 102 starts, and I find out how much Spanish there is. I'm
+     bad again, and everything I knew shrinks below that. -->
+
+<!-- **d** — By the end of 102, I'm good. -->
+
+<!-- **e** — 103 opens and it happens again. I didn't get worse at 101; I
+     learned there's harder Spanish. -->
+
+<!-- **f** — I finish 103 at ok. -->
+
+<!-- **g** — Now 104. I take its test before studying, and I'm already ok:
+     nothing in it I didn't know. -->
+
+<!-- **h** — After it, still ok. Flat. That's when I'd stop taking Spanish. -->
+
+<!-- **i** — The app does the same. Each point is one retrain's detector,
+     scored on today's votes, so the old ones look worse as the votes get
+     harder. A line through the last ten is still falling. -->
+
+<!-- **j** — Later it's flat, and flat is what Smart waits for. A fall also has
+     to beat the points' own scatter, or it just flickers. -->

@@ -1110,14 +1110,17 @@ class TestAllEmbeddersRegistration:
         # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
-        # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap).
+        # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap)
+        # + the two halves of EmbeddingGemma 2 (#4837): `embeddinggemma2` (image,
+        #   eval_only like clip_l) and `embeddinggemma2_audio`, one checkpoint
+        #   registered once per media type.
         #
         # `all_embedders` is the REGISTRY, so it counts `clip_l` even though that
         # arm is `eval_only` and never reaches a picker (#3292). The listings the
         # app builds from are `embedders_for_type` / `all_embedders_dict`; the
         # `embedders_for_type("image")` set below is unchanged by `clip_l`, which
         # is the check that the withholding actually works.
-        assert len(embedders) == 27
+        assert len(embedders) == 29
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -1137,6 +1140,7 @@ class TestAllEmbeddersRegistration:
             "clap_general",
             "paraspeechclap",
             "xclip",
+            "embeddinggemma2_audio",
         ):
             assert by_name[name]["supports_text"] is True, name
         # Vision-only / patch-based and speech-only embedders do not.
@@ -1168,12 +1172,14 @@ class TestAllEmbeddersRegistration:
             "beats",
             "whisper_encoder",
             "paraspeechclap",
+            "embeddinggemma2_audio",
             "siglip",
             "siglip2",
             "siglip2_l",
             "siglip_l",
             "clip",
             "clip_l",
+            "embeddinggemma2",
             "dinov2_single",
             "dinov2_patch",
             "dinov3_single",
@@ -1195,7 +1201,16 @@ class TestAllEmbeddersRegistration:
         from vtscore.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("audio")}
-        assert names == {"clap", "clap_music", "clap_general", "ast", "beats", "whisper_encoder", "paraspeechclap"}
+        assert names == {
+            "clap",
+            "clap_music",
+            "clap_general",
+            "ast",
+            "beats",
+            "whisper_encoder",
+            "paraspeechclap",
+            "embeddinggemma2_audio",
+        }
 
     def test_embedders_for_image(self):
         from vtscore.media import embedders_for_type
@@ -1289,8 +1304,9 @@ class TestAllEmbeddersRegistration:
         # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
-        # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap).
-        assert len(dicts) == 26
+        # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap)
+        # + EmbeddingGemma 2's audio half (#4837); its image half is eval_only, like clip_l.
+        assert len(dicts) == 27
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d

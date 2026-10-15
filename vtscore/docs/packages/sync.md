@@ -177,8 +177,8 @@ pick it up.
 
 - **It does not auto-sync.** The ABC defines the `load` / `save` pair;
   the caller decides when to call them. For labelsets, the
-  debounced auto-export, auto-import and re-export guard live in
-  `vtscore/labels/sync.py` (see [labels.md](labels.md#sync-glue)).
+  paced auto-export and the merging pulls live in
+  `vtscore/labels/sync.py` (see [labels.md](labels.md#sync-engine)).
 - **It does not persist anything.** Storage is whatever the subclass
   implements. Embeddings and trained model weights are never among it -
   see [architecture.md](../architecture.md#the-no-persisted-vectors-rule).
@@ -192,7 +192,7 @@ pick it up.
 - [`plugins.md`](plugins.md) - registries, sentinels, entry points,
   inventory.
 - [`labels.md`](labels.md) - the `LabelsetSource` subclass and the
-  auto-sync helpers in `vtscore/labels/sync.py`.
+  auto-sync engine in `vtscore/labels/sync.py`.
 - `vtsearch.settings_io.sources` (app tier) - the `SettingsSource`
   subclass with per-user template variables (`{username}`) and lazy,
   per-user auto-import. Its engine (freshness probing, the dirty-key

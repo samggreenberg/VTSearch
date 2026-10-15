@@ -64,7 +64,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 27 |
+| `embedders` | library | Media embedders | 29 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 7 |
 | `settings_importers` | app | Settings importers | 2 |
@@ -2384,8 +2384,12 @@ see [Failure semantics](#failure-semantics).
 
 Labelset sources provide **bidirectional sync** for detector labels;
 combining the roles of a label importer and exporter into a single
-plugin. Each detector can link to a source that auto-exports labels on
-change and imports them on sync.
+plugin. Each detector can link to a source that auto-exports its labels
+as they change and imports them back on load or on sync. A deployment
+can link every detector to one source at once (the
+`default_labelset_source` server setting; see
+[DEPLOYMENT.md](DEPLOYMENT.md)), so a copy of every detector's labels
+stays current outside the server.
 
 Use a **Label Importer** (above) for one-shot label import. Use a
 **Labelset Source** when you want ongoing automatic sync per-detector.
@@ -2455,7 +2459,8 @@ override `_do_load_full(field_values) -> LabelSet`; the default wraps
 ### Template variables
 
 A field can accept `{detector_id}` and `{detector_name}`, resolved at
-runtime from the active `DetectorContext`. As with settings sources the
+runtime from the detector being synced (not whichever detector the request
+has active - a push runs off the request). As with settings sources the
 substitution is **opt-in per field** — declare
 `template_vars=("detector_id", "detector_name")` on the `PluginField`
 or the placeholder arrives literal. See [Framework-side field
@@ -2463,25 +2468,43 @@ normalization](#framework-side-field-normalization).
 
 ### How it gets invoked
 
-1. `GET /api/labelset-sources` lists all discovered sources.
-2. `PUT /api/detectors/<name>/labelset-source` links a source to a detector.
-3. When votes change or labels are imported, `sync_to_labelset_source()` auto-calls `source.save()`.
-4. `POST /api/detectors/<name>/labelset-source/sync` manually calls `source.load()`.
+1. `GET /api/labelset-sources` lists all discovered sources, and
+   `GET /api/labelset-sources/default` the deployment-wide default (with
+   only the fields an admin left for users to fill in).
+2. A detector is linked by its registry entry's `labelset_source` key
+   (`PUT /api/detectors/<id>/labelset-source`, which the New Detector
+   form and the Dashboard's **Auto-export…** action call), or inherits
+   the deployment default. The precedence lives in
+   `vtscore.labels.binding.resolve_labelset_source`; see the library
+   guide's [How a detector is
+   linked](../vtscore/docs/extending/labelset-sources.md#how-a-detector-is-linked).
+3. Every write of a detector's JSON file schedules a paced push of the
+   file's whole labelset (`vtscore.detectors.store` calls
+   `vtscore.labels.sync.note_detector_written`), so no route has to
+   remember to.
+4. Loading a detector, and linking one, pulls the source and merges it
+   into the detector file (the file wins a disagreement);
+   `POST /api/detectors/<id>/labelset-source/sync` does the same with the
+   source winning.
 
-### Circular trigger prevention
+### Pacing, merging and loops
 
-When a source imports labels (via `sync_from_labelset_source()`), each
-applied label would normally trigger a re-export back. A **module-level**
-(deliberately not thread-local) `_syncing` flag in
-`vtscore/labels/sync.py`, coordinated by a re-entrant `_sync_lock`,
-suppresses this: the flag is set for the duration of the import's apply
-pass, and `sync_to_labelset_source()` checks it both when scheduling and
-when executing the debounced push.
+Pushes for one detector never overlap and start at least
+`labelset_source_push_interval_seconds` apart (a server setting, default
+60); a change made meanwhile rides the next push, and a payload the
+source already holds is not sent again. A detector's first push in a
+process pulls first, so it never overwrites labels only the source held,
+and a source that cannot be read is not pushed to. A pull writes the
+detector file only when it changed something, and that write's push sends
+the merged labels - the loop ends there, because the next payload matches
+what the source holds. The library guide's [When your `_do_save` and
+`_do_load_full`
+run](../vtscore/docs/extending/labelset-sources.md#when-your-_do_save-and-_do_load_full-run)
+has the details a source author needs.
 
-Your source participates for free — the guard wraps the apply pass, not
-your `_do_load()` / `_do_save()`. Just know that `_do_save()` will never
-be called as a side effect of `_do_load()` returning labels.
-
-The same pattern is used in `vtsearch/settings.py` for settings sources.
+The same "a sync target is a side channel" stance as
+[settings sources](#failure-semantics) holds: a source that raises is
+logged and retried on the next change, and the detector file stays the
+record.
 
 ---

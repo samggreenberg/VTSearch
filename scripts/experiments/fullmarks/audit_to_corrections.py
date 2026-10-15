@@ -12,6 +12,7 @@
     python audit_to_corrections.py --task box_tighten --reviewer <name> --apply
     python audit_to_corrections.py --task surprise --reviewer <name> --apply   # top-ranked presumed negatives (#4089)
     python audit_to_corrections.py --migrate-adjudications --apply
+    python audit_to_corrections.py --turn-pages --apply          # Tobacco800 GT in the other frame (#4871)
 
 Without ``--apply`` it prints what it would change and touches nothing.
 
@@ -39,6 +40,7 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -65,6 +67,18 @@ def mark_indices(pages: Sequence[Page], class_id: str) -> dict[str, int]:
             if mark.class_id == class_id:
                 out.setdefault(page.page_id, index)
     return out
+
+
+def class_marks(pages: Sequence[Page], class_id: str) -> list[list[Any]]:
+    """Every ``[page_id, mark_index]`` carrying *class_id*, sorted.
+
+    Unlike :func:`mark_indices` this keeps a page's second instance of the class
+    as well as its first: it is the class's whole membership, written onto a
+    separation that has to hold the class apart and not one mark of it (#3837).
+    """
+    return sorted(
+        [page.page_id, index] for page in pages for index, mark in enumerate(page.marks) if mark.class_id == class_id
+    )
 
 
 def star(endpoints: Sequence[tuple[str, int]], note: str) -> list[dict[str, Any]]:
@@ -106,18 +120,38 @@ def migrate_adjudications(
     not, a page with exactly one classed mark settles it, and anything still
     ambiguous is **reported, not guessed**.
 
+    A class a later merge absorbed is gone from the manifest: its marks carry
+    the survivor's id now.  The store's own merge rows say which survivor
+    (``merged_class_id`` -> ``kept_class_id``), so a row naming the absorbed
+    class is looked up under both.  Without that, the fourteen Tobacco800
+    separations naming ``logo_bad45f00_1`` could not be migrated at all (#4866).
+
     Returns ``(same, different, problems)``.  Rows naming a page that is not in
     this corpus are passed through untouched: they belong to a tier or a build
-    this one cannot speak for.
+    this one cannot speak for.  An index stamped here can reveal a row the
+    store already holds, or one ruled the other way; `settle_stamped` sorts
+    those out.
     """
     by_page = {page.page_id: page for page in pages}
     problems: list[str] = []
+    absorbed_into = {
+        row["merged_class_id"]: row["kept_class_id"]
+        for row in same_rows
+        if row.get("merged_class_id") and row.get("kept_class_id")
+    }
+
+    def survivor(cid: str) -> str:
+        seen = set()
+        while cid in absorbed_into and cid not in seen:
+            seen.add(cid)
+            cid = absorbed_into[cid]
+        return cid
 
     def index_for(page_id: str, hints: Sequence[Optional[str]]) -> Optional[int]:
         page = by_page.get(page_id)
         if page is None:
             return None
-        wanted = [h for h in hints if h]
+        wanted = list(dict.fromkeys(cid for h in hints if h for cid in (h, survivor(h))))
         hit = [i for i, mark in enumerate(page.marks) if mark.class_id and mark.class_id in wanted]
         if len(hit) == 1:
             return hit[0]
@@ -165,6 +199,63 @@ def migrate_adjudications(
     )
 
 
+def settle_stamped(
+    old_same: Sequence[dict[str, Any]],
+    old_diff: Sequence[dict[str, Any]],
+    same: Sequence[dict[str, Any]],
+    diff: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Measure the rows a migration gave an index to against the rows that had one.
+
+    *old_* are the rows as stored, *same* / *diff* as `migrate_adjudications`
+    returned them, in the same order.  An endpoint that has just got its index
+    can be compared for the first time, and two things the bare key hid turn
+    up (#4866):
+
+    * a **duplicate**, a row already on file with the same ruling on the same
+      two marks.  The stamped copy is dropped and the original kept, note and
+      all.  The 2026-09-14 countersigning run re-recorded fourteen Tobacco800
+      separations this way, each beside the 09-13 row it repeated.
+    * a **contradiction**, a row on file ruled the other way.  That is a
+      reviewer changing their mind, which `supersede` exists for, with the
+      stamped row as the new verdict: a bare row went in unseen by both checks,
+      so it is the ruling whose ``--supersede`` never took.  The owner's
+      09-14 merge of the chief engraving and the "100 Years" panel is the case.
+      The caller drops the overturned rows only on ``--supersede``.
+
+    Returns ``(same, different, duplicates, overturned)``, where *same* and
+    *different* are what to write once the overturned rows are gone.
+    """
+
+    def split(
+        before: Sequence[dict[str, Any]], after: Sequence[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        stamped = [a for b, a in zip(before, after) if pair_key(a) != pair_key(b)]
+        rest = [a for b, a in zip(before, after) if pair_key(a) == pair_key(b)]
+        return stamped, rest
+
+    stamped_same, rest_same = split(old_same, same)
+    stamped_diff, rest_diff = split(old_diff, diff)
+    on_file_same = {pair_key(r) for r in rest_same}
+    on_file_diff = {pair_key(r) for r in rest_diff}
+    duplicates = [r for r in stamped_same if pair_key(r) in on_file_same]
+    duplicates += [r for r in stamped_diff if pair_key(r) in on_file_diff]
+    stamped_same = [r for r in stamped_same if pair_key(r) not in on_file_same]
+    stamped_diff = [r for r in stamped_diff if pair_key(r) not in on_file_diff]
+    kept_same, kept_diff, overturned = supersede(rest_same, rest_diff, stamped_same, stamped_diff)
+    return kept_same + stamped_same, kept_diff + stamped_diff, duplicates, overturned
+
+
+def unlocated(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The rows with a side whose mark index is missing.
+
+    Every writer here knows the marks it rules on.  A missing index means it
+    looked a mark up and did not find it, which is not a legacy row to carry
+    but a ruling about nothing in particular (#4866).
+    """
+    return [r for r in rows if r.get("left_mark_index") is None or r.get("right_mark_index") is None]
+
+
 def pair_key(row: dict[str, Any]) -> tuple[tuple[str, int], tuple[str, int]]:
     """The two marks a row rules on, order-independent — the identity of a verdict."""
 
@@ -180,7 +271,12 @@ def describe_pair(row: dict[str, Any]) -> str:
     left, right = pair_key(row)
     names = [row.get("left_class_id"), row.get("right_class_id"), row.get("kept_class_id")]
     named = " / ".join(n for n in names if n)
-    where = f"{left[0]}#{left[1]} vs {right[0]}#{right[1]}"
+
+    def mark(key: tuple[str, int]) -> str:
+        # A bare page id may be any mark on its page; say so rather than print "#-1".
+        return f"{key[0]}#{key[1]}" if key[1] >= 0 else f"{key[0]} (no mark index)"
+
+    where = f"{mark(left)} vs {mark(right)}"
     return f"{named} ({where})" if named else where
 
 
@@ -207,14 +303,156 @@ def supersede(
     rule that a mark plus additional elements is still that mark.  Without a way
     to supersede, applying that ruling means hand-editing the store, which is
     the one thing every other path here exists to avoid.
+
+    That ruling then went in with a bare page id on one side, and comparing
+    its ``-1`` as a mark missed the separation it overturned (#4866).  Pairs
+    are matched with `cluster_marks.coinciding`, which reads a bare endpoint as
+    possibly any mark on its page, so an overlap the clusterer would refuse is
+    always reported here first.
     """
-    same_keys = {pair_key(r) for r in new_merges}
-    diff_keys = {pair_key(r) for r in new_separations}
-    overturned = [r for r in old_diff if pair_key(r) in same_keys]
-    overturned += [r for r in old_same if pair_key(r) in diff_keys]
-    kept_same = [r for r in old_same if pair_key(r) not in diff_keys]
-    kept_diff = [r for r in old_diff if pair_key(r) not in same_keys]
+    from cluster_marks import coinciding  # noqa: PLC0415
+
+    def hit(old: Sequence[dict[str, Any]], new: Sequence[dict[str, Any]]) -> set[Any]:
+        return {a for a, _b in coinciding([pair_key(r) for r in old], [pair_key(r) for r in new])}
+
+    by_merge, by_separation = hit(old_diff, new_merges), hit(old_same, new_separations)
+    overturned = [r for r in old_diff if pair_key(r) in by_merge]
+    overturned += [r for r in old_same if pair_key(r) in by_separation]
+    kept_same = [r for r in old_same if pair_key(r) not in by_separation]
+    kept_diff = [r for r in old_diff if pair_key(r) not in by_merge]
     return kept_same, kept_diff, overturned
+
+
+#: Appended to the note of an adjudication row `turn_pages` re-points, so the
+#: store says why the index it names is not the one the reviewer was shown.
+TURNED_NOTE = " [was mark {old}: the same {kind} as source mark {new} once {page} was turned upright, #4871]"
+
+
+def turn_pages(
+    pages: Sequence[Page],
+    shipped: dict[str, list[Mark]],
+    added_rows: Sequence[dict[str, Any]],
+    same_rows: Sequence[dict[str, Any]],
+    diff_rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    """Bring a built corpus into line with ``tobacco800.TURNED_180``.
+
+    A rebuild reads those pages' GEDI boxes turned 180 degrees; a corpus built
+    before has them where the XML put them, on the wrong spot of the page.  Each
+    such mark gets its turned box in place, so its index -- what every
+    adjudication names -- holds.
+
+    Turned, a source mark can land on a mark the completeness pass added
+    *because* the source's box was empty: one instance boxed twice (#4871: the
+    eagle on ``dic45f00_1``).  The added mark is folded into the source one.
+    Its class moves onto the source mark, every adjudication naming it is
+    re-pointed (noted with `TURNED_NOTE`), its ``added_marks.json`` row is
+    dropped, and it leaves the page.  Only the last mark can leave a page
+    without renumbering the rest, so a fold anywhere else is reported, not
+    done.  So is one that would overwrite a class somebody ruled on, or make
+    two adjudication rows name the same pair.
+
+    *shipped* is `tobacco800.read_gedi` output: the boxes as the XML has them.
+    Changes *pages* in place and returns ``(added, same, different, changes,
+    problems)``; with any problem the caller writes nothing.  Running it on a
+    corpus it has already turned changes nothing.
+    """
+    from completeness import OVERLAP  # noqa: PLC0415
+    from sources.tobacco800 import TURNED_180, turn_180  # noqa: PLC0415
+
+    added = [dict(r) for r in added_rows]
+    same = [dict(r) for r in same_rows]
+    different = [dict(r) for r in diff_rows]
+    changes: list[str] = []
+    problems: list[str] = []
+    ruled = {side for row in same + different for side in pair_key(row)}
+
+    for page in pages:
+        stem = page.page_id.partition("/")[2]
+        if page.source != "tobacco800" or stem not in TURNED_180:
+            continue
+        source_marks = shipped.get(stem)
+        if source_marks is None:
+            problems.append(f"{page.page_id}: no GEDI file read for it")
+            continue
+        for i, raw in enumerate(source_marks):
+            turned = turn_180(raw.box, page.width, page.height)
+            mark = page.marks[i] if i < len(page.marks) else None
+            if mark is None or mark.kind != raw.kind:
+                problems.append(f"{page.page_id} mark {i}: not the source's {raw.kind}; a person should look")
+            elif tuple(mark.box) == tuple(raw.box):
+                page.marks[i] = replace(mark, box=turned)
+                changes.append(f"{page.page_id} mark {i} ({raw.kind}): {list(raw.box)} -> {list(turned)}")
+            elif tuple(mark.box) != turned:
+                problems.append(
+                    f"{page.page_id} mark {i}: box {list(mark.box)} is neither the shipped {list(raw.box)} nor "
+                    f"the turned {list(turned)}; a person should look"
+                )
+
+        n_source = len(source_marks)
+        mine = []
+        for row in (r for r in added if r["page_id"] == page.page_id):
+            box = tuple(int(v) for v in row["box"])
+            j = next((k for k in range(n_source, len(page.marks)) if tuple(page.marks[k].box) == box), None)
+            if j is None:
+                problems.append(f"{page.page_id}: added mark {list(box)} is not on the page")
+            else:
+                mine.append((j, row))
+        # Last first, so each fold leaves the next one's index where it was.
+        for j, row in sorted(mine, key=lambda pair: -pair[0]):
+            dup = page.marks[j]
+            bx, by, bw, bh = dup.box
+            i, best = None, 0.0
+            for k, mark in enumerate(page.marks[:n_source]):
+                if mark.kind != dup.kind:
+                    continue
+                mx, my, mw, mh = mark.box
+                ix = max(0, min(bx + bw, mx + mw) - max(bx, mx))
+                iy = max(0, min(by + bh, my + mh) - max(by, my))
+                if ix * iy / max(1, bw * bh) > best:
+                    i, best = k, ix * iy / max(1, bw * bh)
+            if i is None or best < OVERLAP:
+                continue  # a second instance, not this one boxed twice
+            where = f"{page.page_id} mark {j} folds into mark {i}"
+            src = page.marks[i]
+            if j != len(page.marks) - 1:
+                problems.append(f"{where}, but marks after {j} would be renumbered")
+                continue
+            if src.class_id and src.class_id != dup.class_id and (page.page_id, i) in ruled:
+                problems.append(f"{where}, but mark {i}'s class {src.class_id} was ruled on")
+                continue
+            changes.append(
+                f"{where}: {dup.kind} {list(dup.box)} ({dup.provenance}, {dup.class_id}) is source box "
+                f"{list(src.box)}, which was {src.class_id}"
+            )
+            note = TURNED_NOTE.format(old=j, kind=dup.kind, new=i, page=page.page_id)
+            old, new = [page.page_id, j], [page.page_id, i]
+            for rows in (same, different):
+                others = {pair_key(r) for r in rows}
+                for r in rows:
+                    sides = [s for s in ("left", "right") if r[f"{s}_page_id"] == page.page_id]
+                    hit = [s for s in sides if r.get(f"{s}_mark_index") == j]
+                    hit += [s for s in ("left", "right") if old in (r.get(f"{s}_members") or [])]
+                    if not hit:
+                        continue
+                    before = pair_key(r)
+                    for side in sides:
+                        if r.get(f"{side}_mark_index") == j:
+                            r[f"{side}_mark_index"] = i
+                    for side in ("left", "right"):
+                        if old in (r.get(f"{side}_members") or []):
+                            r[f"{side}_members"] = [new if m == old else m for m in r[f"{side}_members"]]
+                    r["note"] = str(r.get("note") or "") + note
+                    after = pair_key(r)
+                    if after[0] == after[1]:
+                        problems.append(f"{where}, but then a row names one mark twice: {describe_pair(r)}")
+                    elif after != before and after in others:
+                        problems.append(f"{where}, but then two rows name one pair: {describe_pair(r)}")
+                    changes.append(f"  re-pointed: {describe_pair(r)}")
+            page.marks[i] = replace(src, class_id=dup.class_id)
+            del page.marks[j]
+            added.remove(row)
+    return added, same, different, changes, problems
 
 
 #: What ``resplit_classes`` writes into a piece's ``audit.notes``.  Parsed, not
@@ -493,6 +731,24 @@ def apply_confusable(
             cid = moved[cid]
         return cid
 
+    def unanchored(*sides: tuple[str, dict[str, Any], dict[str, int]]) -> Optional[str]:
+        """Why this verdict cannot name its marks, or None if it can.
+
+        A row names each class by the mark on its first page, which is only
+        there to find while ``classes.json`` and the manifest agree.  When they
+        do not, the index came back None, and a bare endpoint went into the
+        store that neither `supersede` nor the clash check could compare
+        (#4866).  Refused before anything is mutated, so a refused merge is
+        not half applied.
+        """
+        missing = [f"{meta['page_ids'][0]} ({cid})" for cid, meta, at in sides if meta["page_ids"][0] not in at]
+        if not missing:
+            return None
+        return (
+            f"no mark on {', '.join(missing)} carries the class classes.json lists it under, so this ruling "
+            "cannot name its mark; classes.json and the manifest disagree. Nothing recorded for this pair"
+        )
+
     for row in verdicts:
         left, right = resolve(row["left_class_id"]), resolve(row["right_class_id"])
         verdict = str(row["verdict"]).strip().lower()
@@ -510,12 +766,16 @@ def apply_confusable(
             keep, gone = (left, right) if lmeta["n_instances"] >= rmeta["n_instances"] else (right, left)
             kmeta, gmeta = classes[keep], classes[gone]
             kept_at, gone_at = mark_indices(pages, keep), mark_indices(pages, gone)
+            why = unanchored((keep, kmeta, kept_at), (gone, gmeta, gone_at))
+            if why:
+                problems.append(f"{left} / {right}: {why}")
+                continue
             merges.append(
                 {
                     "left_page_id": kmeta["page_ids"][0],
-                    "left_mark_index": kept_at.get(kmeta["page_ids"][0]),
+                    "left_mark_index": kept_at[kmeta["page_ids"][0]],
                     "right_page_id": gmeta["page_ids"][0],
-                    "right_mark_index": gone_at.get(gmeta["page_ids"][0]),
+                    "right_mark_index": gone_at[gmeta["page_ids"][0]],
                     "kept_class_id": keep,
                     "merged_class_id": gone,
                     "note": row.get("notes", ""),
@@ -553,46 +813,55 @@ def apply_confusable(
                         "any roster or report written before the rebuild."
                     )
         elif verdict == "different":
+            lat, rat = mark_indices(pages, left), mark_indices(pages, right)
+            why = unanchored((left, lmeta, lat), (right, rmeta, rat))
+            if why:
+                problems.append(f"{left} / {right}: {why}")
+                continue
             lmeta.setdefault("distinct_from", [])
             rmeta.setdefault("distinct_from", [])
             if right not in lmeta["distinct_from"]:
                 lmeta["distinct_from"].append(right)
             if left not in rmeta["distinct_from"]:
                 rmeta["distinct_from"].append(left)
-            # One representative mark per side is enough to pin the constraint,
-            # and keeps the store small — but only because the membership pass
-            # ran first and must-linked each class into one group, which
-            # `single_linkage` forms before any separation is registered.  On a
-            # class that is still a clustering proposal it is NOT enough: the
-            # forbidden pair is between the two named marks, so a cheaper
-            # crossing edge elsewhere can fuse the classes and leave the two
-            # representatives as the only members kept apart.  Hence the
-            # warning rather than a quiet row.
-            lat, rat = mark_indices(pages, left), mark_indices(pages, right)
+            # One representative mark per side pins a class that has been
+            # through the membership pass: it is recorded as a must-link star,
+            # which `single_linkage` forms before any separation is registered,
+            # so the representative's group is the whole class.  A class that
+            # is still a clustering proposal is not one group, and a single
+            # mark would hold apart that mark and nothing else, because a
+            # cheaper crossing edge elsewhere can fuse the classes first.  The
+            # `merge` slate runs before membership by design, so that is
+            # where these get written (#3837).  So an unverified side also
+            # records the class's members as they stand now, and the
+            # clusterer keeps every one of them on its side.
             unverified = [
                 cid
                 for cid, meta in ((left, lmeta), (right, rmeta))
                 if not meta.get("audit", {}).get("membership_verified")
             ]
-            separations.append(
-                {
-                    "left_page_id": lmeta["page_ids"][0],
-                    "left_mark_index": lat.get(lmeta["page_ids"][0]),
-                    "right_page_id": rmeta["page_ids"][0],
-                    "right_mark_index": rat.get(rmeta["page_ids"][0]),
-                    "left_class_id": left,
-                    "right_class_id": right,
-                    # What the constraint will actually hold apart on a rebuild.
-                    # Not a detail: a reader of this file should not have to
-                    # re-derive which of their separations are load-bearing.
-                    "pins": "marks" if unverified else "classes",
-                    "note": row.get("notes", ""),
-                }
-            )
+            separation = {
+                "left_page_id": lmeta["page_ids"][0],
+                "left_mark_index": lat[lmeta["page_ids"][0]],
+                "right_page_id": rmeta["page_ids"][0],
+                "right_mark_index": rat[rmeta["page_ids"][0]],
+                "left_class_id": left,
+                "right_class_id": right,
+                # What the constraint will actually hold apart on a rebuild.
+                # Not a detail: a reader of this file should not have to
+                # re-derive which of their separations are load-bearing.
+                # `marks` is what an unverified side wrote before #3837.
+                "pins": "members" if unverified else "classes",
+                "note": row.get("notes", ""),
+            }
+            for side, cid in (("left", left), ("right", right)):
+                if cid in unverified:
+                    separation[f"{side}_members"] = class_marks(pages, cid)
+            separations.append(separation)
             changes.append(
                 f"{left} != {right}: separation recorded"
                 + (
-                    f" (pins the two marks only — {', '.join(unverified)} not membership-verified)"
+                    f" (pins the recorded members of {', '.join(unverified)} — not membership-verified)"
                     if unverified
                     else ""
                 )
@@ -1022,7 +1291,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--supersede",
         action="store_true",
         help="let these verdicts replace stored rulings on the same pairs (a reviewer changing "
-        "their mind); without it an overlap is reported and nothing is written",
+        "their mind); without it an overlap is reported and nothing is written. With "
+        "--migrate-adjudications: let a row that has just got its mark index replace a stored "
+        "ruling it turns out to contradict",
     )
     ap.add_argument(
         "--reviewer",
@@ -1051,6 +1322,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="rewrite corpus.jsonl with one record per page_id, keeping the longest mark list, then exit",
     )
+    ap.add_argument(
+        "--turn-pages",
+        action="store_true",
+        help="give the Tobacco800 pages in TURNED_180 their turned boxes, folding any hand-added mark that turns out "
+        "to be the same instance into its source mark (#4871), then exit",
+    )
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
@@ -1063,6 +1340,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.dedupe_manifest:
         return dedupe_manifest(args.corpus / "corpus.jsonl", apply=args.apply)
+
+    if args.turn_pages:
+        from cluster_marks import load_adjudication_rows, save_adjudications  # noqa: PLC0415
+        from completeness import ADDED_MARKS, load_added_marks, save_added_marks  # noqa: PLC0415
+        from sources import tobacco800  # noqa: PLC0415
+
+        pages = list(read_manifest(manifest_path))
+        added_path = args.corpus / ADDED_MARKS
+        old_same, old_diff = load_adjudication_rows(adjudications_path)
+        added, same, diff, changes, problems = turn_pages(
+            pages, tobacco800.read_gedi(cfg.RAW / "tobacco800"), load_added_marks(added_path), old_same, old_diff
+        )
+        for line in changes:
+            print(f"  {line}")
+        for problem in problems:
+            print(f"  PROBLEM: {problem}")
+        if problems:
+            return 1
+        if not changes:
+            print("every turned page is already turned")
+            return 0
+        if args.apply:
+            # The stores before the manifest: a fold on the page but not in the
+            # stores would come undone at the next rebuild.
+            save_added_marks(added, added_path)
+            save_adjudications(same, diff, adjudications_path)
+            write_manifest(pages, manifest_path)
+            print(f"wrote {added_path}, {adjudications_path} and {manifest_path}")
+        else:
+            print("dry run — pass --apply to write")
+        return 0
 
     if args.tidy_added_marks:
         # The repair for a store written before saving deduped (#4042): a
@@ -1090,7 +1398,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.migrate_adjudications:
-        from cluster_marks import load_adjudication_rows, save_adjudications
+        from cluster_marks import coinciding, load_adjudication_rows, save_adjudications
 
         pages = list(read_manifest(manifest_path))
         old_same, old_diff = load_adjudication_rows(adjudications_path)
@@ -1101,16 +1409,38 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             for side in ("left", "right")
             if before.get(f"{side}_mark_index") is None and after.get(f"{side}_mark_index") is not None
         )
+        same, diff, duplicates, overturned = settle_stamped(old_same, old_diff, same, diff)
         split_merges, split_separations = split_rows_from_notes(pages, classes)
         same, diff = same + split_merges, diff + split_separations
         for problem in problems:
             print(f"  PROBLEM: {problem}")
+        for row in duplicates:
+            print(f"  DUPLICATE: {describe_pair(row)} — already on file with its index; the stamped copy is dropped")
+        # Both notes, so whoever passes --supersede has read what it drops and what it keeps.
+        was_same, was_diff = {pair_key(r) for r in old_same}, {pair_key(r) for r in old_diff}
+        stamped_rows = [r for r in same if pair_key(r) not in was_same]
+        stamped_rows += [r for r in diff if pair_key(r) not in was_diff]
+        for row in overturned:
+            label = "SUPERSEDED" if args.supersede else "PROBLEM"
+            print(f"  {label}: {describe_pair(row)} is on file ruled the other way from a row given its index")
+            print(f"      on file: {str(row.get('note') or '')[:110]!r}")
+            for rival in stamped_rows:
+                if coinciding([pair_key(row)], [pair_key(rival)]):
+                    print(f"      stamped: {str(rival.get('note') or '')[:110]!r}")
         print(f"{stamped} endpoint(s) resolved to a mark, {len(problems)} left ambiguous")
+        print(f"{len(duplicates)} stamped row(s) repeat a row already on file, {len(overturned)} contradict one")
         print(
             f"{len(split_merges)} merge(s) and {len(split_separations)} separation(s) recovered "
             "from splits that were applied before they were recorded"
         )
         if problems:
+            return 1
+        if overturned and not args.supersede:
+            print(
+                "\nA row given its index above contradicts a stored ruling. Neither check could compare the two "
+                "while one side was a bare page id, so the later ruling's --supersede never took (#4866). Read "
+                "both notes; if the stamped row is the decision, re-run with --supersede to drop the stored one."
+            )
             return 1
         if args.apply:
             save_adjudications(same, diff, adjudications_path)
@@ -1213,6 +1543,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     for p in problems:
         print(f"  PROBLEM: {p}")
     print(f"\n{len(changes)} change(s), {len(problems)} problem(s) from {len(verdicts)} filled verdict(s)")
+
+    # Each writer refuses a mark it cannot locate; this is the backstop.  The
+    # writer may already have changed the pages for that ruling, so nothing at
+    # all is written, rather than a manifest the store does not account for.
+    bare = unlocated(new_merges + new_separations)
+    if bare:
+        for row in bare:
+            print(f"  PROBLEM: {describe_pair(row)} — a new ruling with no mark index on one side")
+        print(f"\n{len(bare)} new ruling(s) name a mark this corpus could not locate; nothing written (#4866)")
+        return 1
 
     if not args.apply:
         print("dry run — pass --apply to write")

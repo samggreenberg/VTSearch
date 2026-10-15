@@ -261,7 +261,7 @@ capability 7.0; this torch build ships kernels for sm_75, sm_80, ..."*). To
 actually use the GPU, reinstall a torch build whose CUDA tag covers its
 arch (see `scripts/install.sh`). The right tag is not simply the newest:
 the newest wheels drop the oldest architectures, so an old GPU needs an
-*older* tag (`cu128` dropped Volta/`sm_70`, so a V100 needs `cu124`).
+*older* tag (`cu128` dropped Volta/`sm_70`, so a V100 needs `cu126`).
 
 ### Embedding precision and image-processor backend
 
@@ -315,6 +315,7 @@ time. The actual download + load is lazy, driven by each embedder's
 | `CLIP_L_MODEL_ID`              | `"openai/clip-vit-large-patch14"`                                                      | OpenAI CLIP ViT-L/14.                                                                  |
 | `SIGLIP_L_MODEL_ID` / `SIGLIP_L_PRETRAINED` | `"ViT-SO400M-14-SigLIP-384"` / `"webli"`                                  | open_clip model name + pretrained tag (not a HF id).                                   |
 | `PARASPEECHCLAP_*`             | `SPEECH_MODEL_ID="microsoft/wavlm-large"`, `TEXT_MODEL_ID="ibm-granite/granite-embedding-278m-multilingual"`, `CHECKPOINT_REPO="ajd12342/paraspeechclap-combined"`, `CHECKPOINT_FILE="slap-combined.pth.tar"` | Plus `EMBED_DIM=768`, `SAMPLE_RATE=16000`, `MAX_SAMPLES=16000*30`. |
+| `EMBEDDINGGEMMA2_*`            | `MODEL_ID="google/embeddinggemma-2"`, `QUERY_PREFIX="task: search result \| query: "` | One 768-d text/image/audio space behind both `embeddinggemma2` and `embeddinggemma2_audio`; needs transformers >= 5.18. Plus `SAMPLE_RATE=16000`, `MAX_SAMPLES=16000*30`, `MIN_SAMPLES=16000`. |
 | `E5_MODEL_ID`                  | `"intfloat/e5-base-v2"`                                                                | Default text embedder.                                                                 |
 | `BGE_MODEL_ID`                 | `"BAAI/bge-base-en-v1.5"`                                                              | Alternative text embedder.                                                             |
 

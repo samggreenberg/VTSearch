@@ -55,7 +55,20 @@ def _style() -> None:
     )
 
 
-def curves_figure(curves: pd.DataFrame, panels: list[tuple[str, str, str]], out: Path, max_t: int) -> Path:
+#: Colours for ``--rule`` lines, in order: the first is drawn thick (the candidate a study ships).
+PALETTE = ("#eb6834", "#f2a541", "#2a78d6", "#1d4f91", "#6aa6e8", "#8a8984")
+
+
+def curves_figure(
+    curves: pd.DataFrame,
+    panels: list[tuple[str, str, str]],
+    out: Path,
+    max_t: int,
+    rules: dict[str, tuple[str, str, float]] | None = None,
+    reference: str = "count",
+    name: str = "fig_centroid_count.png",
+) -> Path:
+    rules = RULES if rules is None else rules
     fig, axes = plt.subplots(
         len(BETAS), len(panels), figsize=(4.4 * len(panels), 2.6 * len(BETAS)), squeeze=False, sharex=True
     )
@@ -64,7 +77,7 @@ def curves_figure(curves: pd.DataFrame, panels: list[tuple[str, str, str]], out:
         for i, (beta, bname) in enumerate(BETAS.items()):
             ax = axes[i][j]
             sub = d[(d["run"] == run) & (d["dataset"] == ds) & (d["beta"] == beta)]
-            for rule, (color, _name, width) in RULES.items():
+            for rule, (color, _name, width) in rules.items():
                 c = sub[sub["rule"] == rule].sort_values("t")
                 if not c.empty:
                     ax.plot(c["t"], c["value"], color=color, lw=width)
@@ -73,16 +86,16 @@ def curves_figure(curves: pd.DataFrame, panels: list[tuple[str, str, str]], out:
             if i == 0:
                 ax.set_title(title, fontsize=10, color=INK, loc="left")
             if j == 0:
-                ax.set_ylabel(f"{bname}: F-beta minus count's")
+                ax.set_ylabel(f"{bname}: minus {reference}", fontsize=8 if len(reference) > 8 else 10)
             if i == len(BETAS) - 1:
                 ax.set_xlabel("vote")
             ax.set_xlim(1, max_t)
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    handles = [plt.Line2D([], [], color=c, lw=w, label=n) for c, n, w in RULES.values()]
-    fig.legend(handles=handles, loc="upper center", ncol=len(RULES), frameon=False, fontsize=8)
+    handles = [plt.Line2D([], [], color=c, lw=w, label=n) for c, n, w in rules.values()]
+    fig.legend(handles=handles, loc="upper center", ncol=len(rules), frameon=False, fontsize=8)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     out.mkdir(parents=True, exist_ok=True)
-    path = out / "fig_centroid_count.png"
+    path = out / name
     fig.savefig(path, dpi=150, facecolor=SURFACE)
     return path
 
@@ -93,6 +106,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--panel", action="append", required=True, help="run/dataset=Title")
     ap.add_argument("--max-t", type=int, default=20, help="the last vote drawn (the tier ends by ~17)")
+    ap.add_argument(
+        "--rule", action="append", default=[], help="rule=Label, in order (the first thick); default #4759's set"
+    )
+    ap.add_argument("--reference", default="count", help="the rule the curves are differences to (the y label)")
+    ap.add_argument("--name", default="fig_centroid_count.png")
     args = ap.parse_args(argv)
     panels = []
     for spec in args.panel:
@@ -100,7 +118,13 @@ def main(argv: list[str] | None = None) -> int:
         run, _, ds = key.partition("/")
         panels.append((run, ds, title or key))
     _style()
-    print(curves_figure(pd.read_csv(args.curves), panels, args.out, args.max_t))
+    rules = None
+    if args.rule:
+        rules = {}
+        for i, spec in enumerate(args.rule):
+            rule, _, label = spec.partition("=")
+            rules[rule] = (PALETTE[i % len(PALETTE)], label or rule, 2.4 if i == 0 else 1.3)
+    print(curves_figure(pd.read_csv(args.curves), panels, args.out, args.max_t, rules, args.reference, args.name))
     return 0
 
 

@@ -4,6 +4,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { Subscription, pairwise } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import type { VoteHintCounts, VoteHintId } from '../center-panel/voting-overlay/voting-overlay.component';
 import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import {
@@ -20,6 +21,7 @@ import { SortingApiService } from '../../services/sorting-api.service';
 import { PairScopeService } from '../../services/pair-scope.service';
 import { SortRunnerService } from '../../services/sort-runner.service';
 import { adaptivePoll } from '../../services/adaptive-poll';
+import { DetectorsCrudApiService } from '../../services/detectors-crud-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
@@ -30,18 +32,19 @@ import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { PanelHideStateService, type PanelSide } from '../../services/panel-hide-state.service';
-import { AutopilotStateService, type AutopilotPhase } from '../../services/autopilot-state.service';
+import { AutopilotStateService, cappedInOpening, type AutopilotPhase } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SourcePhotoService } from '../../services/source-photo.service';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
-import { SpotCheckModalComponent, type SpotCheckVoted } from '../modals/spot-check-modal/spot-check-modal.component';
+import { SpotCheckStageComponent, type SpotCheckVoted } from './spot-check-stage/spot-check-stage.component';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
 import { SidePanelToggleComponent } from '../side-panel-toggle/side-panel-toggle.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import {
   MediaPrefetchService,
   PREFETCH_DEPTH,
@@ -56,10 +59,15 @@ type SeedTrigger = 'entry' | 'pair' | 'retrain';
 /** Autopilot's opening phases, on the text or example sort: no detector is trained there (#4496). */
 const AUTOPILOT_OPENING: ReadonlySet<AutopilotPhase> = new Set<AutopilotPhase>(['idle', 'good', 'bad', 'more']);
 
-/** What the spot check says when Autopilot opened it (#4496). */
-const AUTOPILOT_CHECK_INTRO =
+/** What the Spot Check step says when Autopilot runs it for weak separation (#4496). */
+const WEAK_CHECK_INTRO =
   'Your Good and Bad labels still overlap, so Autopilot is checking the line: a few picks drawn ' +
   'evenly down the list teach the detector where it falls.';
+
+/** What the Spot Check step says when Autopilot runs it before Done. */
+const DONE_CHECK_INTRO =
+  'Every quality light is green. Before Autopilot calls the detector done, a few picks drawn at random ' +
+  'down the list measure how much of what it returns is right.';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,11 +79,12 @@ const AUTOPILOT_CHECK_INTRO =
     RightPanelComponent,
     ProgressModalComponent,
     ResortPromptModalComponent,
-    SpotCheckModalComponent,
+    SpotCheckStageComponent,
     ContextMenuComponent,
     MediaCropModalComponent,
     PanelResizeDirective,
     SidePanelToggleComponent,
+    ToastyHintComponent,
   ],
   providers: [LabelViewPanelStateService, PairScopeService, SortRunnerService],
   templateUrl: './label-view.component.html',
@@ -83,6 +92,7 @@ const AUTOPILOT_CHECK_INTRO =
 })
 export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private sortingApi = inject(SortingApiService);
+  private detectorsCrudApi = inject(DetectorsCrudApiService);
   private detectorsFindApi = inject(DetectorsFindApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private labelSession = inject(LabelSessionService);
@@ -173,22 +183,77 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly autopilotRun = toSignal(this.autopilotStateService.state$, { requireSync: true });
 
   /**
-   * Toasty's "start voting" hint over the Good / Bad buttons (#4680): Autopilot
-   * is running on a detector that had no labels, nothing has been voted yet,
-   * and there is an item on screen to vote on. The first vote ends it.
+   * Toasty's one hint on the Train view's panes (#4680, #4807), or `null`.
+   * While Autopilot runs with an item on screen: `revote` on an item the user
+   * picked that is already labeled (#4824), on any run; otherwise
+   * `start-voting` on a detector that has no labels and nothing voted yet (the
+   * first vote ends it), then, on the run that trains the detector (as the
+   * hand-off, see `AutopilotStateService.startedUntrained`), `fix-votes` for
+   * the run's first vote and one hint per phase after it, until the run
+   * reaches Done, when the hand-off under the Dashboard button takes over.
+   * Nothing shows while that hand-off is up.
    */
-  readonly startVotingHint = computed(() => {
-    if (this.autopilotRun().phase === 'idle') return false;
+  private readonly trainHint = computed<VoteHintId | 'fix-votes' | null>(() => {
+    const run = this.autopilotRun();
+    if (run.phase === 'idle' || this.autopilotStateService.handoff()) return null;
     const votes = this.voteState;
-    return (
-      votes.votesLoaded &&
-      votes.labelsetGoodCount === 0 &&
-      votes.labelsetBadCount === 0 &&
-      votes.goodVotes.size === 0 &&
-      votes.badVotes.size === 0 &&
-      this.mediaState.selectedMedia !== null &&
-      !this.centreExhausted()
+    const selected = this.mediaState.selectedMedia;
+    if (!votes.votesLoaded || selected === null) return null;
+    // The label it was picked with, still on it: a vote on the item moves the
+    // label before its swipe ends, and the hint must not name the new one.
+    // Autopilot's current step is the way back, so not with nothing left to pick.
+    const picked = this.pickedLabel();
+    if (
+      this.viewingPick() &&
+      picked !== null &&
+      this.labelOf(selected.id) === picked &&
+      !(this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted())
+    ) {
+      return 'revote';
+    }
+    if (this.centreExhausted()) return null;
+    // The two vote tallies move at different times: the item's own state as
+    // the click lands, the labelset's counts after a round-trip.
+    const cast = Math.max(
+      votes.labelsetGoodCount + votes.labelsetBadCount,
+      votes.goodVotes.size + votes.badVotes.size,
     );
+    if (cast === 0) return 'start-voting';
+    if (!this.autopilotStateService.startedUntrained() || run.doneReached) return null;
+    if (cast === 1) return 'fix-votes';
+    switch (run.phase) {
+      case 'good':
+        return 'find-goods';
+      case 'bad':
+        return 'find-bads';
+      case 'more':
+        return 'find-more';
+      case 'hard':
+      case 'new':
+        return 'keep-voting';
+      default:
+        return null;
+    }
+  });
+
+  /** The hint over the Good / Bad buttons: {@link trainHint}, unless that stands beside Labels. */
+  readonly voteHint = computed<VoteHintId | null>(() => {
+    const hint = this.trainHint();
+    return hint === 'fix-votes' ? null : hint;
+  });
+
+  /** `fix-votes`, beside the Labels panel: where the run's first vote went, and how to change one. */
+  readonly labelsHint = computed(() => this.trainHint() === 'fix-votes');
+
+  /** The counts the phase hints say: Goods and Bads so far against Autopilot's targets. */
+  readonly voteHintCounts = computed<VoteHintCounts>(() => {
+    const run = this.autopilotRun();
+    return {
+      goods: this.voteState.labelsetGoodCount,
+      goodsNeeded: run.goodToStart,
+      bads: this.voteState.labelsetBadCount,
+      badsNeeded: run.badToStart,
+    };
   });
 
   /**
@@ -207,6 +272,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * the point again.
    */
   private readonly pickedWhileDone = signal<number | null>(null);
+
+  /** The label the item picked by hand had when it was picked, or `null` when
+   *  it had none: what `revote` names (#4824). */
+  private readonly pickedLabel = signal<'good' | 'bad' | null>(null);
+
+  /** The label the Good / Bad buttons show for item `id`. */
+  private labelOf(id: number): 'good' | 'bad' | null {
+    if (this.voteState.effectiveGood(id)) return 'good';
+    return this.voteState.effectiveBad(id) ? 'bad' : null;
+  }
 
   /** True while the selection is still the item {@link pickedWhileDone}
    *  recorded. Both being `null` is not a match: that is "nothing picked and
@@ -254,10 +329,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get focusModeLeft(): 'click' | 'hover' { return this.panelState.focusModeLeft; }
   get focusModeRight(): 'click' | 'hover' { return this.panelState.focusModeRight; }
 
-  /** The balance's spot check is open (#4273, #4413). */
-  readonly showSpotCheck = signal(false);
-  /** Why the open spot check opened, when Autopilot ran it (#4496); null when the user asked for it. */
-  readonly spotCheckIntro = signal<string | null>(null);
+  /** Autopilot's Spot Check step running, by why it runs; null while none does. The stage replaces the centre panel. */
+  readonly spotCheck = computed(() => this.autopilotRun().spotCheck);
+  /** What the Spot Check step says about why it runs. */
+  readonly spotCheckIntro = computed(() => (this.spotCheck() === 'weak' ? WEAK_CHECK_INTRO : DONE_CHECK_INTRO));
+  /**
+   * A check just closed and the line is being re-read. Until it lands the
+   * balance on hand is the one from before the check, whose `done_check_due`
+   * predates it: read now, it would start the check before Done straight
+   * after a check that has just measured the line.
+   */
+  private readonly awaitingLine = signal(false);
+  /** Toasty may name the step, on the run that trains the detector, as for the phase hints (#4807). */
+  readonly spotCheckHintable = computed(
+    () => this.autopilotStateService.startedUntrained() && !this.autopilotRun().doneReached,
+  );
 
   // Re-sort prompt state
   readonly showResortPrompt = signal(false);
@@ -274,6 +360,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private resortInterval = 10;
   private resortVoteCount = 0;
   private resortNextThreshold = 0;
+  /** The prompt has come up for the click cap this run (#4903): once, whatever the user answers. */
+  private resortCapShown = false;
 
   /** A folded side's strip, in px; the `.layout--*-collapsed` rules in the SCSS match it. */
   readonly COLLAPSED_WIDTH = 48;
@@ -343,6 +431,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private centreProvisional = false;
 
   constructor() {
+    // #4736: the runner asks the view whether this run holds its typed query.
+    this.sortRunner.holdsTypedQuery = () => this.autopilotHoldsTypedQuery;
+
     // Warm the next review image while the reviewer is looking at this one
     // (#3896). The fetch used to be issued only once the vote POST had come
     // back, so its ~300 ms client gap, its transfer and its decode were all
@@ -360,10 +451,25 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // image: the store hands bytes back only for the URL they were fetched from.
     // #4496: Autopilot checks when the server says one is due. The balance
     // lands with each learned sort, and the check waits for the sort to settle.
+    // Under the typed query's hold it is the held learned ranking's (#4736):
+    // the hold changes what is shown, not what Autopilot asks.
     effect(() => {
-      const due = this.sortState.balance?.checkDue ?? false;
+      const due = this.sortRunner.askBalance?.checkDue ?? false;
       if (!due || this.sortState.sortBusy) return;
       untracked(() => this.runDueCheck());
+    });
+    // The check before Done: the phase machine reaches `spot` once every light
+    // is green, and the step runs unless the server says a check ended moments
+    // ago, or the line has none to run (`done_check_due`). Read once the sort
+    // has settled, so the balance is this line's.
+    effect(() => {
+      const run = this.autopilotRun();
+      if (run.phase !== 'spot' || run.spotCheck !== null || this.sortState.sortBusy || this.awaitingLine()) return;
+      const due = this.sortRunner.askBalance?.doneCheckDue ?? false;
+      untracked(() => {
+        if (due) this.autopilotStateService.beginSpotCheck('done');
+        else this.autopilotStateService.skipDoneCheck();
+      });
     });
     effect(() => {
       const id = this.mediaState.selectedId();
@@ -587,6 +693,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
+        // Into the Spot Check step, nothing moves: the check deals its own
+        // picks over the ranking it fixed. Out of it, the step underneath takes
+        // its Select back with no re-sort: the next ordinary vote retrains and
+        // moves the list, as after any check (`onSpotCheckVoted`).
+        if (curr.phase === 'spot') return;
+        if (prev.phase === 'spot') {
+          if (curr.phase === 'hard') this.sortState.setSelectMode('hard');
+          else if (curr.phase === 'new' || curr.phase === 'done') this.sortState.setSelectMode('new');
+          return;
+        }
+        // Stopped: the hold ends, and the screen follows the Sort
+        // `onAutopilotStop` has just set (#4736).
+        if (curr.phase === 'idle') this.sortRunner.endQueryHold();
         // 'more' (#4282) resumes the Good phase's draw: the top of the seed sort
         // the Bad phase left on screen. On a document dataset it walks the
         // detector's own ranking instead, which is where its dry run was measured
@@ -607,7 +726,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         else if (curr.phase === 'hard') {
           this.sortState.setSelectMode('hard');
-          this.sortState.setSortMode('learned');
+          // Back from New under the typed query's hold, the text sort is still
+          // on screen; the learned sort's result decides the mode (#4736).
+          if (!this.sortRunner.queryHeld) this.sortState.setSortMode('learned');
           this.sortRunner.onLearnedSort(false);
         }
         else if (curr.phase === 'new') this.sortState.setSelectMode('new');
@@ -1032,25 +1153,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortRunner.onBetaChange(value);
   }
 
-  /** The balance control's "Check N picks": open the spot check (#4273). */
-  onSpotCheck(): void {
-    if (this.sortState.sortBusy) return;
-    this.spotCheckIntro.set(null);
-    this.showSpotCheck.set(true);
-  }
-
   /**
-   * Autopilot runs the spot check itself when the labels separate weakly (#4496): the server's
-   * `check_due`, read once a learned sort has landed. Only past Autopilot's opening: on the text or
-   * example sort no detector is trained, so there is neither a separation to read nor a list to
-   * check. Never over another step.
+   * Autopilot runs the Spot Check step itself when the labels separate weakly (#4496): the
+   * server's `check_due`, read once a learned sort has landed. Only past Autopilot's opening: on
+   * the text or example sort no detector is trained, so there is neither a separation to read nor
+   * a list to check. Never over another step.
    */
   private runDueCheck(): void {
     if (!this.autopilotStateService.running) return;
     if (AUTOPILOT_OPENING.has(this.autopilotStateService.state.phase)) return;
-    if (this.showSpotCheck() || this.showResortPrompt()) return;
-    this.spotCheckIntro.set(AUTOPILOT_CHECK_INTRO);
-    this.showSpotCheck.set(true);
+    if (this.spotCheck() !== null || this.showResortPrompt()) return;
+    this.autopilotStateService.beginSpotCheck('weak');
   }
 
   /**
@@ -1066,13 +1179,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (event.finished) this.sortRunner.refreshLine();
   }
 
-  /** The check closed, however it ended: catch up on anything it left behind, and let Autopilot carry on. */
+  /** The step ended, however it ended: catch up on anything it left behind, and let Autopilot carry on. */
   onSpotCheckClosed(): void {
-    this.showSpotCheck.set(false);
-    this.spotCheckIntro.set(null);
+    this.awaitingLine.set(true);
+    this.autopilotStateService.endSpotCheck();
     this.voteState.loadVotes();
     this.labelsetState.refresh();
-    this.sortRunner.refreshLine();
+    this.sortRunner.refreshLine(() => this.awaitingLine.set(false));
     // The check's picks are votes, and the item in the centre may be one of them.
     if (this.autopilotStateService.running) this.sortRunner.autoSelectNext();
   }
@@ -1082,6 +1195,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onMediaSelect(id: number): void {
     this.centreProvisional = false;
     this.pickedWhileDone.set(id);
+    this.pickedLabel.set(this.labelOf(id));
     this.mediaState.selectMedia(id);
   }
 
@@ -1294,7 +1408,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // No-op when no detector is being trained (refresh() bails on a null model).
     this.labelsetState.refresh();
     this.sortRunner.autoSelectNext(event.id);
-    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
+    // A learned ranking held behind the typed query's set re-sorts on every
+    // vote too, as Autopilot asks from it (#4736).
+    if ((this.sortState.sortMode === 'learned' || this.sortRunner.queryHeld) && this.voteState.learnedSortAvailable) {
       this.sortRunner.scheduleLearnedSort(false);
     }
     this.checkResortPrompt(event);
@@ -1370,6 +1486,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
+    this.resortCapShown = false;
     this.resetResortSortTally();
 
     const state = this.autopilotStateService.state;
@@ -1435,6 +1552,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return !retrainMode && (phase === 'good' || phase === 'bad' || (phase === 'more' && !dryRunStop));
   }
 
+  /**
+   * Whether this Autopilot run keeps its typed query's set on screen while
+   * the learned sort says the query still holds (#4736): a run that opened on
+   * the typed query's text sort. The server's mark is the labels' count and
+   * the space only, so the run has to be one whose screen is that query's: not
+   * an example opening (or one the re-sort prompt moved to an example), not
+   * retrain mode, which never shows a seed sort, and not a document dataset's
+   * walk, which shows the learned sort from its opening (#4488). Autopilot off,
+   * every learned sort is the user's and goes on screen.
+   */
+  private get autopilotHoldsTypedQuery(): boolean {
+    const { retrainMode, dryRunStop } = this.autopilotStateService.state;
+    return this.autopilotStateService.running && !retrainMode && !dryRunStop && !!this.labelSession.textQuery;
+  }
+
   private triggerAutopilotTextSort(autoSelect = true): void {
     const textQuery = this.labelSession.textQuery;
     if (!textQuery) return;
@@ -1474,7 +1606,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (event.vote === 'good' && this.voteState.goodVotes.has(event.id)) {
       this.resortSortPositives++;
     }
-    if (this.resortVoteCount >= this.resortNextThreshold) {
+    // The click cap in the opening (#4903): Autopilot has stopped without the
+    // Goods it needs, and a different sort is the way on, so the prompt comes up
+    // there too, once, whatever its own count says.
+    const atCap = !this.resortCapShown && cappedInOpening(this.autopilotStateService.state);
+    if (this.resortVoteCount >= this.resortNextThreshold || atCap) {
+      if (atCap) this.resortCapShown = true;
       // Determine current example info for the prompt
       if (this.labelSession.textQuery) {
         this.resortCurrentType = 'text';
@@ -1512,13 +1649,35 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.triggerAutopilotTextSort();
     } else {
       // The re-sort prompt swaps in a single fresh example, replacing any
-      // multi-example seed stack the detector started with.
+      // multi-example seed stack the detector started with. It steers the
+      // sort, as a seed importer's example does, without being a Good the
+      // user voted.
       this.labelSession.mediaExample = result.value;
       this.labelSession.textQuery = '';
-      this.labelSession.examples = [{ type: 'media', value: result.value }];
+      this.labelSession.examples = [{ type: 'media', value: result.value, labeled: false }];
       this.sortState.setSelectMode('top');
       this.triggerAutopilotMediaSort();
     }
+    this.saveResortExample();
+  }
+
+  /**
+   * Save the re-sort's example to the detector (#4801). Under the label quota
+   * a typed-query detector's Find gives its stored query's own set (#4758),
+   * and the next Train session opens on it, so a re-sort kept only here would
+   * leave Find, and the next opening, on the old query. The Manual sort bar
+   * saves nothing: it is a browse, not the detector's query.
+   */
+  private saveResortExample(): void {
+    const name = this.trainableModelName();
+    if (!name) return;
+    this.detectorsCrudApi.setExamples(name, this.labelSession.examples).subscribe({
+      error: () =>
+        this.toast.error({
+          message: "Couldn't save the new example to the detector",
+          detail: 'Find keeps the example it had until it is saved.',
+        }),
+    });
   }
 
   private resetResortSortTally(): void {
@@ -1569,7 +1728,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     } else if (phase === 'bad') {
       this.sortState.setSortMode(earlySortMode);
       this.sortState.setSelectMode('hard');
-    } else if (phase === 'hard') {
+    } else if (phase === 'hard' || phase === 'spot') {
+      // Stopped inside the Spot Check step: back to the boundary's picks.
       this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('hard');
     } else if (phase === 'new' || phase === 'done') {

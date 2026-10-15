@@ -181,17 +181,12 @@ def cancel_precision_check():
 def _persist_votes() -> None:
     """Persist the check's votes exactly as ``/api/medias/<id>/vote`` persists one."""
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector  # noqa: PLC0415
-    from vtscore.labels.sync import sync_to_labelset_source  # noqa: PLC0415
 
     try:
         sync_labels_to_loaded_detector()
     except Exception as exc:
         log.exception("precision check: detector label sync failed")
         abort(500, message=f"Failed to persist votes to detector store: {exc}")
-    try:
-        sync_to_labelset_source()
-    except Exception:
-        log.exception("precision check: labelset source scheduling failed")
 
 
 def _move_line(det_ctx) -> None:

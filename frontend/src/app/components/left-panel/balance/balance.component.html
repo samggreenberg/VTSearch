@@ -34,25 +34,11 @@
     </div>
   </div>
   @if (summary(); as text) {
-    <!-- The dot rides inside the note, so a narrow panel wraps the check
-         button below the note rather than squeezing the note beside it. -->
+    <!-- The dot rides inside the note. -->
     <p class="balance-state" [attr.data-status]="dot()">
       <span class="balance-state-text" role="status" [title]="explanation() ?? ''"
         ><span class="indicator-dot" aria-hidden="true"></span>{{ text }}</span
       >
-      @if (checkText(); as label) {
-        <button
-          type="button"
-          class="btn balance-check-btn"
-          [class.btn--toolbar]="!due()"
-          [class.btn--primary]="due()"
-          [disabled]="!checkable()"
-          [title]="checkHint()"
-          (click)="check.emit()"
-        >
-          {{ label }}
-        </button>
-      }
     </p>
     @if (dueNote(); as note) {
       <p class="balance-due" role="status">{{ note }}</p>

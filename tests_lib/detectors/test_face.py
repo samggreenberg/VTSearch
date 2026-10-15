@@ -222,6 +222,55 @@ class TestFaceEmbedder:
         # The bar's progress should have been forwarded to the callback instead.
         assert any(c[3] == 107 for c in calls)
 
+    @staticmethod
+    def _torch_home_at_weight_load(monkeypatch) -> str | None:
+        """Run ``_load_models_impl`` against a stub; return ``TORCH_HOME`` as the weights load."""
+        import os
+        import sys
+
+        from vtscore.media.face.embedder_facenet import FaceEmbedder
+
+        seen: dict = {}
+
+        class _FakeInceptionResnetV1:
+            def __init__(self, pretrained=None):
+                seen["torch_home"] = os.environ.get("TORCH_HOME")
+
+            def eval(self):
+                return self
+
+            def to(self, _device):
+                return self
+
+        fake_module = MagicMock()
+        fake_module.InceptionResnetV1 = _FakeInceptionResnetV1
+        monkeypatch.setitem(sys.modules, "facenet_pytorch", fake_module)
+        FaceEmbedder()._load_models_impl()
+        return seen["torch_home"]
+
+    def test_weights_cache_in_the_models_dir(self, monkeypatch):
+        """The VGGFace2 checkpoint lands in $TORCH_HOME/checkpoints (issue #4886).
+
+        Unset, that is under $HOME, unless the EUPE or speech-clipper loader
+        happened to run first and point it at the model cache. The embedder
+        sets it the same way itself, so where the weights go no longer depends
+        on load order, and a Docker image keeps them with every other model.
+        """
+        from pathlib import Path
+
+        from vtscore.config import MODELS_CACHE_DIR
+
+        # setenv first so the undo restores the original state even if the
+        # variable was unset: a bare delenv of a missing key records nothing,
+        # and the embedder's setdefault would leak into later tests.
+        monkeypatch.setenv("TORCH_HOME", "placeholder")
+        monkeypatch.delenv("TORCH_HOME")
+        assert self._torch_home_at_weight_load(monkeypatch) == str(Path(MODELS_CACHE_DIR).expanduser())
+
+    def test_an_explicit_torch_home_wins(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TORCH_HOME", str(tmp_path))
+        assert self._torch_home_at_weight_load(monkeypatch) == str(tmp_path)
+
 
 # ---------------------------------------------------------------------------
 # image2face converter

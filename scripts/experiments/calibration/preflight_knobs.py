@@ -38,8 +38,32 @@ def env(name: str) -> str | None:
     return v.strip() if v and v.strip() else None
 
 
+def _shipped_spot_check(C: Any, T: Any) -> str:
+    """The spot check the app runs on this run's datasets (#4496, #4799).
+
+    ``weak``, or ``end`` when every dataset's embedders embed a media type the
+    app never prompts on (face crops).  A grid mixing the two has no single
+    shipped value, so any pinned ``CALIB_SPOT_CHECK`` diverges from it.
+    """
+    from vtscore.media import get_embedder
+
+    def prompts(emb: str) -> bool:
+        try:
+            return T.weak_check_prompts(get_embedder(emb).media_type_id)
+        except KeyError:  # a composite region space ("a+b_patch") is not registered
+            return True
+
+    kinds = {prompts(emb) for ds in C.DATASETS for emb in C.embedders_for_dataset(ds)}
+    if kinds == {False}:
+        return "end"
+    if False in kinds:
+        return "weak, or end on face crops (#4799): the grid mixes the two"
+    return "weak"
+
+
 def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
+    from vtscore.eval.arms_split_rounding import SPLIT_ROUNDINGS
     from vtscore.eval.live_threshold_rules import SIGMA_FLOORS
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
@@ -259,6 +283,12 @@ def probe(C: Any) -> list[str]:
             rows.append(("band_share", str(C.BAND_SHARE), "<unset> = the app's own picks, no band picks"))
         else:
             refuse("band_share", "CALIB_BAND_SHARE", "must be a positive integer, one pick in N")
+    # #4664's early check: an arm the app does not take.
+    if C.EARLY_CHECK is not None:
+        if isinstance(C.EARLY_CHECK, int) and C.EARLY_CHECK >= 1:
+            rows.append(("early_check", str(C.EARLY_CHECK), "<unset> = the app's own checks, none at a fixed click"))
+        else:
+            refuse("early_check", "CALIB_EARLY_CHECK", "must be a positive integer, the vote count it checks from")
     # #4699's example opening and stratified split: the app's example sort, but
     # not the opening a dataset with a typed query takes, and an eval protocol
     # rather than an app setting. Declared, so a study cannot take either silently.
@@ -312,6 +342,23 @@ def probe(C: Any) -> list[str]:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))
     elif C.SIGMA_FLOOR != "relative":
         rows.append(("sigma_floor", C.SIGMA_FLOOR, "<unset> = relative, the app's floor (#4492)"))
+    # #4864's split rounding: unset is the app's split sizes, each class's nearest whole share.
+    if C.SPLIT_ROUNDING not in SPLIT_ROUNDINGS:
+        refuse("split_rounding", "CALIB_SPLIT_ROUNDING", "must be one of %s" % ", ".join(SPLIT_ROUNDINGS))
+    elif C.SPLIT_ROUNDING != "nearest":
+        rows.append(("split_rounding", C.SPLIT_ROUNDING, "<unset> = nearest, the app's split sizes (#4864)"))
+    # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
+    # before it (the Goods' centroid alone), another scale an arm.
+    from vtscore.training.svm_prior import QUERY_PRIOR_SCALE  # noqa: PLC0415
+
+    qp = getattr(C, "QUERY_PRIOR", None)
+    if qp is not None:
+        if not isinstance(qp, float) or qp < 0 or qp == float("inf"):
+            refuse("query_prior", "CALIB_QUERY_PRIOR", "must be a number >= 0")
+        elif qp != QUERY_PRIOR_SCALE:
+            rows.append(
+                ("query_prior", "%g" % qp, "<unset> = %g, the app's typed-query prior (#4859)" % QUERY_PRIOR_SCALE)
+            )
 
     # The balance the line is drawn at (#4413).  Unset is the app's default;
     # the precision floor went in #4421 (experiment_config refuses its knob).
@@ -350,14 +397,19 @@ def probe(C: Any) -> list[str]:
     resolved("walk_guard", "CALIB_WALK_GUARD", C.WALK_GUARD, walk_app["guard"].default, "<unset> = no guard")
 
     # When the simulated user checks (#4496).  The app's Autopilot runs the weak
-    # check, so `weak` is shipped, at the app's constants; `run_cells.py` leaves an
-    # unset knob out, so the run gets the harness default - compared too, so a
-    # stale default is caught on a launcher that pins nothing.
+    # check, so `weak` is shipped, at the app's constants - except on face crops,
+    # where it never prompts and `end` is shipped (#4799).  `run_cells.py` leaves an
+    # unset knob out, so the run gets the harness default: `None`, resolved per
+    # cell from its medias' type exactly as the app does.  Any other default is
+    # compared too, so a stale one is caught on a launcher that pins nothing.
+    shipped_spot = _shipped_spot_check(C, T)
     spot = C.SPOT_CHECK if C.SPOT_CHECK is not None else harness_default("spot_check")
-    if spot not in SPOT_CHECKS:
+    if spot is None and C.SPOT_CHECK is None:
+        pass
+    elif spot not in SPOT_CHECKS:
         refuse("spot_check", "CALIB_SPOT_CHECK", "must be one of %s" % ", ".join(SPOT_CHECKS))
     else:
-        resolved("spot_check", "CALIB_SPOT_CHECK", spot, "weak")
+        resolved("spot_check", "CALIB_SPOT_CHECK", spot, shipped_spot)
     for knob, var, value, param, shipped in (
         ("weak_d", "CALIB_WEAK_D", C.WEAK_D, "weak_separation", T.WEAK_SEPARATION_D),
         ("weak_min_t", "CALIB_WEAK_MIN_T", C.WEAK_MIN_T, "weak_min_t", T.WEAK_CHECK_MIN_VOTES),
@@ -380,6 +432,18 @@ def probe(C: Any) -> list[str]:
     # #3546's arms: neither has an app counterpart yet.
     if C.SMART_GATE != "app":
         rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
+    if C.STOP_RULE != "lights|level" or C.STOP_LEVEL != 0.5:
+        rows.append(
+            (
+                "stop_rule",
+                f"{C.STOP_RULE}@{C.STOP_LEVEL:g}",
+                "lights|level@0.5 (every light green, or the line's level)",
+            )
+        )
+    from vtscore.eval.autopilot_flow import STOP_CAP  # noqa: PLC0415
+
+    if C.STOP_CAP != STOP_CAP:
+        rows.append(("stop_cap", str(C.STOP_CAP), f"{STOP_CAP} (Done at {STOP_CAP} votes whatever the rule; #4903)"))
     if C.LABEL_QUOTA is not None:
         rows.append(
             (
