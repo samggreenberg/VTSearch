@@ -209,12 +209,12 @@ class TestPush:
         flush_pending_label_syncs()
         assert _md5s(_remote_labels(tmp_path / "Templated.labels.json")) == {GOOD_A["md5"], BAD_B["md5"]}
 
-    def test_unbound_detector_schedules_nothing(self, tmp_path):
+    def test_unbound_detector_schedules_nothing(self, counting_save):
         _make_detector("quiet", [GOOD_A])
         _rewrite_labels("quiet", [GOOD_A, BAD_B])
         assert "quiet" not in label_sync._slots
         flush_pending_label_syncs()
-        assert not list(tmp_path.glob("*.json"))
+        assert counting_save == []
 
     def test_detector_missing_a_field_value_is_not_pushed(self, counting_save):
         settings.set_default_labelset_source({"source_name": "server_json_file", "field_values": {}})
