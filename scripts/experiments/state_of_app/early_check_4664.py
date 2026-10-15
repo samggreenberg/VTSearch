@@ -218,7 +218,7 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
     # broken pairing (another commit, a node's BLAS), not an effect.
     prefix = {}
     for arm in EARLY:
-        st = col(arm)("early_start")
+        st = col[arm]("early_start")
         lim = np.where(np.isfinite(st), st, T).astype(int)
         bad = [
             i
@@ -232,7 +232,7 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
     COOLDOWN = 25
     cool_on = {}
     for arm in EARLY:
-        st = col(arm)("early_start")
+        st = col[arm]("early_start")
         on = np.zeros(len(keys), bool)
         for i, k in enumerate(keys):
             if np.isfinite(st[i]):
@@ -251,20 +251,20 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
         def C(name: str, arm: str = arm, base_arm: str = base_arm) -> np.ndarray:
             """A per-run tally of *arm*: the cooldown variant's is the e-arm's where it ran, the control's elsewhere."""
             if arm == base_arm:
-                return col(arm)(name)
-            return np.where(cool_on[base_arm], col(base_arm)(name), col("a0")(name))
+                return col[arm](name)
+            return np.where(cool_on[base_arm], col[base_arm](name), col["a0"](name))
 
         st = C("early_start")
         ran = np.isfinite(st) & (cool_on[base_arm] if arm.endswith("c") else True)
         r = {"beta": beta, "arm": arm, "runs": len(keys), "prefix_mismatch": prefix[base_arm], "ran": float(ran.mean())}
         # Not run because a prompted check was running at N (it counts as the session's check).
-        r["absorbed"] = float(np.mean(~np.isfinite(col(base_arm)("early_start"))))
+        r["absorbed"] = float(np.mean(~np.isfinite(col[base_arm]("early_start"))))
         r["start_median"] = float(np.nanmedian(st)) if ran.any() else np.nan
         r["start_p90"] = float(np.nanpercentile(st, 90)) if ran.any() else np.nan
         r["early_picks"] = float(np.nanmean(C("early_picks")[ran])) if ran.any() else 0.0
         r["early_good_share"] = C("early_goods")[ran].sum() / max(C("early_picks")[ran].sum(), 1)
         # Why it did not run: a check had ended within the cooldown (the control checked just before), or none fit.
-        a0_weak = col("a0")("weak_before")
+        a0_weak = col["a0"]("weak_before")
         r["skipped_after_a_check"] = float(np.mean(~ran & np.isfinite(a0_weak)))
         for lo, hi in WINDOWS:
             g = np.nanmean(F[arm][:, lo : hi + 1] - F["a0"][:, lo : hi + 1], axis=1)
@@ -289,19 +289,19 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
         r["gain_1_150_where_ran_se"] = se_over_classes(g150[ran], cls[ran]) if ran.sum() > 2 else np.nan
         # The clicks after it: the app's own checks, Done, Goods.
         for name in ("weak_picks", "done_check_picks", "check_clicks", "end_check_picks"):
-            r[name], r[f"a0_{name}"] = np.nanmean(C(name)), np.nanmean(col("a0")(name))
+            r[name], r[f"a0_{name}"] = np.nanmean(C(name)), np.nanmean(col["a0"](name))
         r["weak_picks_after_early"] = np.nanmean(C("weak_picks_after_early"))
         for name in ("done_click",):
             r[f"{name}_reached"], r[f"a0_{name}_reached"] = (
                 np.mean(np.isfinite(C(name))),
-                np.mean(np.isfinite(col("a0")(name))),
+                np.mean(np.isfinite(col["a0"](name))),
             )
-            r[f"{name}_median"], r[f"a0_{name}_median"] = np.nanmedian(C(name)), np.nanmedian(col("a0")(name))
+            r[f"{name}_median"], r[f"a0_{name}_median"] = np.nanmedian(C(name)), np.nanmedian(col["a0"](name))
         for c in (50, 100, 150, 200):
             r[f"goods_at_{c}"], r[f"a0_goods_at_{c}"] = np.nanmean(G[arm][:, c]), np.nanmean(G["a0"][:, c])
         r["hard_good_share"] = C("hard_goods").sum() / max(C("hard_picks").sum(), 1)
-        r["a0_hard_good_share"] = col("a0")("hard_goods").sum() / max(col("a0")("hard_picks").sum(), 1)
-        r["ap200_gain"] = np.nanmean(C("ap200") - col("a0")("ap200"))
+        r["a0_hard_good_share"] = col["a0"]("hard_goods").sum() / max(col["a0"]("hard_picks").sum(), 1)
+        r["ap200_gain"] = np.nanmean(C("ap200") - col["a0"]("ap200"))
         rows.append(r)
     summary = pd.DataFrame(rows)
 
@@ -310,7 +310,7 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
     brow = []
     for arm in EARLY:
         g = np.nanmean(F[arm][:, 1:151] - F["a0"][:, 1:151], axis=1)
-        fired = np.isfinite(col(arm)("early_start"))
+        fired = np.isfinite(col[arm]("early_start"))
         context = {"absorbed": ~fired, "fired, a check ended < 25 before": fired & ~cool_on[arm],
                    "fired, none in the 25 before": fired & cool_on[arm]}  # fmt: skip
         for split, mask_of in (("band", {bd: band == bd for bd in sorted(set(band))}), ("at N", context)):

@@ -4022,9 +4022,13 @@ def simulate_voting_iterations(  # noqa: C901
             and flow.phase not in _OPENING_PHASES
         ):
             # #4664: every session is checked at early_check votes, once.  A
-            # prompted check running now, or started this step, is that
-            # check; otherwise the user checks now, if a check can start.
-            if check is not None and check.running and check_phase == "prompt":
+            # prompted check running now or started this step, or one whose
+            # rounds reached that vote (a round casts its picks at once, so it
+            # can step over it), is that check; otherwise the user checks now,
+            # if a check can start.
+            if (check is not None and check.running and check_phase == "prompt") or (
+                last_check_end is not None and last_check_end >= early_check
+            ):
                 early_settled = True
             elif picks is None and flow.phase != "spot" and flow.spot_check is None:
                 early_settled = True

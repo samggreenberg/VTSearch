@@ -85,6 +85,12 @@ class TestEarlyCheck:
         assert not _kind_ts(picks, "early")
         assert [p["picked_id"] for p in plain] == [p["picked_id"] for p in picks]
 
+    def test_a_round_that_steps_over_the_vote_count_is_the_sessions_check(self):
+        """A check round casts its picks at once: one that reaches N votes counts, though no step starts at N."""
+        weak = _kind_ts(_run(**_ALWAYS_WEAK), "weak")
+        for n in range(weak[0] - 4, weak[-1] + 1):
+            assert not _kind_ts(_run(n, **_ALWAYS_WEAK), "early"), n
+
     def test_no_cooldown_after_a_check_that_ended(self):
         """A check that ended just before N votes does not stand in for it (the cooldown variant is read offline)."""
         weak = _kind_ts(_run(**_ALWAYS_WEAK), "weak")
