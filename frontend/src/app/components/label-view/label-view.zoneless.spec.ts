@@ -11,7 +11,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService } from '../../services/sort-state.service';
-import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { AutopilotStateService, STOP_CAP_VOTES } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import type { EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';

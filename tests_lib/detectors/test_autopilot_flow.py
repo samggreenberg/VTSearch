@@ -13,6 +13,7 @@ issue #2788's cold-start degenerate thresholds look like a user-facing bug when
 they were an artifact of a flow no user takes.
 """
 
+from typing import Any
 import math
 
 import numpy as np
@@ -582,7 +583,8 @@ class TestStopCap:
         assert self._flow(smart_gate="never", done_check=False).update(300, 300, 500, self.SHORT) == "hard"
 
     def test_the_cap_is_an_integer(self):
-        for bad in (0, -1, 2.5, True):
+        bads: tuple[Any, ...] = (0, -1, 2.5, True)
+        for bad in bads:
             with pytest.raises(ValueError, match="stop_cap"):
                 AutopilotFlow(stop_cap=bad)
 
