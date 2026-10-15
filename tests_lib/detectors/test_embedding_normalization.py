@@ -56,6 +56,32 @@ class TestL2Normalize:
         twice = l2_normalize(once)
         np.testing.assert_allclose(once, twice, atol=1e-6)
 
+    def test_idempotent_bit_for_bit(self):
+        """A second pass returns the very bytes of the first (#4892).
+
+        The pickle loader normalizes what ingest already normalized, and the
+        calibration folds' split is seeded from the training vectors' bytes.
+        Dividing a unit vector by its own float32 norm again moved the last bit
+        of about a third of them, so a reloaded dataset trained other folds.
+        """
+        rng = np.random.default_rng(4892)
+        for raw in rng.standard_normal((200, 768)).astype(np.float32):
+            once = l2_normalize(raw)
+            assert l2_normalize(once).tobytes() == once.tobytes()
+
+    def test_a_vector_unit_in_float32_arithmetic_passes_through(self):
+        """A vector normalized elsewhere in float32 (an older pickle's) keeps its bytes."""
+        rng = np.random.default_rng(7)
+        for raw in rng.standard_normal((50, 768)).astype(np.float32):
+            unit = raw / np.float32(np.linalg.norm(raw))
+            assert l2_normalize(unit).tobytes() == unit.tobytes()
+
+    def test_unit_input_comes_back_as_a_new_array(self):
+        """The pass-through still hands back a fresh array, as the division did."""
+        unit = l2_normalize([3.0, 4.0])
+        out = l2_normalize(unit)
+        assert out is not unit and not np.shares_memory(out, unit)
+
 
 # ---------------------------------------------------------------------------
 # MediaEmbedder wrappers normalize subclass output

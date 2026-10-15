@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`l2_normalize` is idempotent bit for bit** (issue #4892). A vector already unit-norm to within 1e-6
+  is returned with the bytes it came in with (as a new array), and a vector that is not is divided by its
+  norm in `float64` and rounded to `float32` once. A second pass used to divide by the `float32` norm
+  again, which moved the last bit of about a third of a dataset's vectors: the pickle loader normalises
+  what ingest stored, so a reloaded dataset held other bytes than the process that imported it, and the
+  calibration folds' split sizes, dithered by an RNG seeded from those bytes (`_split_dither_rng`), could
+  differ. The same labels then gave another labels line and another separation (2.69 against 0.13 on the
+  issue's labels). Fresh embeddings' last bits move once with the new arithmetic; a stored vector now
+  reloads unchanged.
+
 - **`FaceEmbedder` caches its weights in `MODELS_CACHE_DIR`** (issue #4886). Loading now sets
   `TORCH_HOME` to the model cache when it is unset, as the EUPE and speech-clipper loaders already
   did, so FaceNet's VGGFace2 checkpoint lands in `<MODELS_CACHE_DIR>/checkpoints` instead of under

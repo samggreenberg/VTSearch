@@ -853,6 +853,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A dataset reloaded after a restart trains the same line as the process that imported it** (issue
+  #4892). Reloading a dataset moved the last bit of about a third of its stored vectors, and that was
+  enough to change which votes the calibration folds held out. The same labels could then get another
+  line, and another separation for Autopilot's weak-separation check: 2.69 in the process that imported
+  `drawings` against 0.13 after a restart. A reload now holds the vectors the import made, bit for bit.
+
 - **A face in Train or Test fills the pane and can be zoomed** (issue #4771). A face crop was
   shown through the document viewer, which clipped it to a 300×150 box and offered no image
   toolbar. It now opens in the image viewer, with zoom and rotate, as does any media type that
