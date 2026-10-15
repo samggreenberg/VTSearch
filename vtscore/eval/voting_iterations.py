@@ -433,8 +433,10 @@ def _line_columns(details: dict[str, Any]) -> dict[str, Any]:
             "check_right": -1,
             "check_stale": -1,
             "check_audited": -1,
+            "check_kept": -1,
         }
-    # The kept set's precision range: what the range columns have always read.
+    # The check's precision range: since #4483 over the set the line kept when
+    # the check started (``check_kept``), before it over the audited set.
     rng = state.precision
     return {
         "beta": beta,
@@ -448,6 +450,9 @@ def _line_columns(details: dict[str, Any]) -> dict[str, Any]:
         # The set the walk audited (#4427): under the advisory shape not the
         # set the line keeps, which ``floor_count`` reports.
         "check_audited": state.audited if rng is not None else -1,
+        # The set the ranges describe (#4483): how many unvoted items the line
+        # kept when the check started; -1 where they describe the audited set.
+        "check_kept": state.kept_at_check if rng is not None and state.kept_at_check is not None else -1,
     }
 
 
@@ -3866,6 +3871,9 @@ def simulate_voting_iterations(  # noqa: C901
     # bands are cut from and a finished result is fingerprinted against.
     check: SpotCheck | None = None
     line_ranking: LineRanking | None = None
+    # How many unvoted items the line keeps on it: the set a check started next
+    # ranges over (#4483).
+    line_kept: int | None = None
     # The rank frame's identity, and the inputs of the last ordinary step's
     # frame (#4357), which is emitted once the loop ends.
     rank_ident = {
@@ -3925,6 +3933,9 @@ def simulate_voting_iterations(  # noqa: C901
             fine=walk_fine,
             guard=walk_guard,
             shallow_only=walk_shape_resolved == CHECK_TRIM,
+            # The ranges describe the set the line keeps as the check starts, as
+            # the app's (#4483); a ``trim`` walk's line is its own end.
+            kept=line_kept if walk_shape_resolved != CHECK_TRIM else None,
         )
 
     # The last finished check: what a prompted check the budget cut short leaves in place.
@@ -4150,7 +4161,7 @@ def simulate_voting_iterations(  # noqa: C901
                 # The set the line keeps from here on, as it stands with the
                 # check's own votes cast: what the retrains below are
                 # compared against for ``check_stale``.
-                check.fingerprint = line_ranking.fingerprint(check.k, set(good_votes) | set(bad_votes))
+                check.fingerprint = line_ranking.fingerprint(check.range_count, set(good_votes) | set(bad_votes))
         else:
             phase = flow.phase if flow is not None else None
             startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
@@ -4376,6 +4387,8 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             )
             line_ranking = details.get("line_ranking")
+            line_state = details.get("line_state")
+            line_kept = line_state.count if line_state is not None else None
             if (
                 spot_check == "weak"
                 and picks is None

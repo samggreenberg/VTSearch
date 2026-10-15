@@ -234,6 +234,7 @@ class TestFindStats:
             "audited": None,
             # No ranking behind this fixture's line, so nothing a check could walk (#4489, #4496).
             "checkable": False,
+            "kept_at_check": None,
             "separation": None,
             "check_due": False,
             "done_check_due": False,

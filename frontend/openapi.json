@@ -856,6 +856,10 @@
             "nullable": true,
             "type": "number"
           },
+          "kept_at_check": {
+            "nullable": true,
+            "type": "integer"
+          },
           "n_returned": {
             "nullable": true,
             "type": "integer"
@@ -901,6 +905,7 @@
           "checkable",
           "count",
           "fbeta",
+          "kept_at_check",
           "n_returned",
           "precision",
           "recall",
@@ -936,6 +941,10 @@
           "fbeta": {
             "nullable": true,
             "type": "number"
+          },
+          "kept_at_check": {
+            "nullable": true,
+            "type": "integer"
           },
           "precision": {
             "$ref": "#/components/schemas/LikelyRange",
@@ -974,6 +983,7 @@
           "checkable",
           "count",
           "fbeta",
+          "kept_at_check",
           "precision",
           "recall",
           "schedule",

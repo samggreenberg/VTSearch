@@ -306,7 +306,8 @@ class ResultsExporter(PluginBase):
                      **``balance``** says what the line at ``threshold``
                      keeps (:func:`vtscore.state.core.detector_balance_state`):
                      ``{"beta", "status", "count", "precision", "recall",
-                     "fbeta", "schedule", "shape", "audited"}``.  A headless
+                     "fbeta", "schedule", "shape", "audited", "checkable",
+                     "kept_at_check"}``.  A headless
                      run's ``status`` is ``"unchecked"``: nobody was there
                      to spot-check the set, so ``count`` is the balance's
                      unchecked line and the ranges are ``None``.

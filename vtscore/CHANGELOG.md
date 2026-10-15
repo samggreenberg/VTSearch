@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
+  #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
+  `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns
+  `alpha` whatever the bands (#4272's union split is dropped). `SpotCheck.start_balance(kept=)` records how
+  many unvoted items the line kept as the check starts (`SpotCheck.kept`); `range_over(top)` /
+  `recall_range_over(top)` bound any top set from the picks that fell in it (`parts_over`), `range_count` is
+  the set a finished check's ranges describe, and `is_stale` watches that set. `BalanceState` gains
+  `kept_at_check`, and its `precision` / `recall` describe that set; the eval harness passes the line's count
+  and logs it as `check_kept`. `range()` / `recall_range()` still describe the walk's own set. Priced at
+  `docs/experiments/2026-10-15-check-range-4483/REPORT.md`.
+
 - **`ratio_test_matches` ranks on `|b|^2 - 2ab`, in cache-sized blocks on a CPU** (issue #4515).
   SIFT descriptors are integers in `[0, 255]`, so every partial sum of the expanded squared distance
   is an integer below `2**24` and float32 holds it exactly. The two nearest neighbours are found on

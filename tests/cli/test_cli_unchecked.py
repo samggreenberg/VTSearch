@@ -87,6 +87,7 @@ class TestTrainingRecordsTheState:
             "shape": shape,
             "audited": None,
             "checkable": True,
+            "kept_at_check": None,
             "separation": None,
             "check_due": False,
             # Nothing has checked this line: Autopilot's check before Done would run.
