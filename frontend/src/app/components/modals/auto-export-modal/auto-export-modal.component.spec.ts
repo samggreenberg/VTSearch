@@ -86,7 +86,7 @@ describe('AutoExportModalComponent', () => {
       source_name: 'server_json_file',
       field_values: { filepath: '/backups/barks.json', note: '' },
     });
-    req.flush({ ok: true, message: 'Labelset source set to Server JSON File.' });
+    req.flush({ ok: true, message: 'Labels will be auto-exported to Server JSON File.' });
     await settleZoneless(fixture);
     expect(saved).toBe(true);
   });

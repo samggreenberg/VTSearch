@@ -32,6 +32,8 @@ export function fieldsComplete(fields: readonly ImporterField[], values: Record<
   standalone: true,
   imports: [FormsModule, PluginCheckboxComponent],
   templateUrl: './labelset-source-fields.component.html',
+  // Stack the fields with the gap the surrounding plugin forms use.
+  styles: [':host { display: flex; flex-direction: column; gap: var(--space-lg); }'],
 })
 export class LabelsetSourceFieldsComponent {
   /** The fields to render (the server already left out what the admin fixed). */

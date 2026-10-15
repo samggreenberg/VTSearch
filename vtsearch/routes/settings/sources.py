@@ -313,7 +313,7 @@ def set_detector_labelset_source(body: dict, detector_name: str):
     own = _validated_binding(entry, source, body.get("field_values") or {})
     update_detector(entry["id"], labelset_source={"source_name": source_name, "field_values": own})
     pulled = reconcile_labelset_source(entry["name"], detector_id=entry["id"])
-    message = f"Labelset source set to {source.display_name}."
+    message = f"Labels will be auto-exported to {source.display_name}."
     if pulled:
         message += f" Restored {pulled} label(s) it already held."
     return {"ok": True, "message": message}

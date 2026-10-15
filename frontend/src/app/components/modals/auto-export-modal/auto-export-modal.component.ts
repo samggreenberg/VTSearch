@@ -30,6 +30,8 @@ import type { DetectorLabelsetSource } from '../../../generated/api-client/model
   standalone: true,
   imports: [ModalComponent, LabelsetSourceFieldsComponent],
   templateUrl: './auto-export-modal.component.html',
+  // The same stacked spacing as the other plugin-field forms.
+  styles: ['.auto-export-body { display: flex; flex-direction: column; gap: var(--space-lg); }'],
 })
 export class AutoExportModalComponent implements OnInit {
   private labelsetSourcesApi = inject(LabelsetSourcesApiService);
