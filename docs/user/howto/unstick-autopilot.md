@@ -26,7 +26,9 @@ you can do about it.
 
 1. **Continue**, under **Keep clicking:**, carries on with the same sort for a
    while longer. Pick it if the matches are there but few, and you would rather
-   keep going.
+   keep going. It asks again after half as many answers again each time, and
+   once more when you reach 200 votes, where Autopilot stops: its panel says
+   **Autopilot has stopped** and how many matches it found.
 2. **Supply a different sort:** type a new description under **Text
    example** and click **Use**,
 3. or pick a picture that looks like what you want, with **Browse Media…**

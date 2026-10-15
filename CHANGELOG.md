@@ -17,6 +17,25 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
+  you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
+  voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
+  "Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept" read as half of all the
+  matches, and put the range of the set the check ended on beside a count it did not describe. It now reads
+  "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32
+  more kept", or "32 more kept, unchecked" before a check, and its tooltip and the check's result screen say
+  the same. Late in a session, once the matches near the top are voted, the check before Done can read low
+  after a session that went well; the note now says why. What the check measures is unchanged.
+
+- **Autopilot stops every session by 200 votes** (issue #4903). Done came only when the quality lights went
+  green or the detector expected an F-beta of 0.5, and 1–2% of sessions reach neither by 400 votes; the app has
+  no horizon, so they went on as long as the user did. Done now also comes at 200 votes, after the same check
+  before Done, and the panel and Toasty say "You have cast 200 votes, as many as Autopilot asks for" when that
+  is what said Done. A session still looking for its first Goods at 200 votes is told **Autopilot has stopped**,
+  with the Goods it found, and offered the **Update Sort Example?** prompt once more; voting on keeps looking.
+  Priced on 2,160 simulated sessions run to 400 votes: the cap ends 6–7% of sessions early, all but a few on
+  small objects, at a median F-beta of 0.00–0.04, which 200 more votes would have taken to 0.07–0.14.
+
 - **A detector's labelset-source link is persisted, and pushes the whole labelset** (issue #4913). The link
   set with `PUT /api/detectors/<id>/labelset-source` lived only on the loaded detector and was lost on
   unload or restart; it is now stored on the registry entry, works for an unloaded detector, takes the id

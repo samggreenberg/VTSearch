@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A click cap backs every stop rule** (issue #4903). `vtscore.eval.autopilot_flow.STOP_CAP` (200) mirrors the
+  app's `STOP_CAP_VOTES`: `stop_lights(..., at_cap=)` says stop under every rule, `AutopilotFlow(stop_cap=)` and
+  `simulate_voting_iterations(stop_cap=)` default to it (`None` is no cap), and `capped_in_opening(phase,
+  good_count, bad_count)` reads the app's display-only stop for a session still in its opening at the cap. It
+  never binds inside the eval's 150 clicks.
+
 - **Labelset sources push the detector file's whole labelset, paced, and pull by merging** (issue #4913).
   `vtscore.labels.sync` is rewritten. Every detector-file write (`vtscore.detectors.store._write_detector` /
   `queue_detector_write`, through the new `note_detector_written` hook) schedules a push, and the payload

@@ -199,15 +199,15 @@ describe('line-balance (#4413)', () => {
     });
 
     it.each<[BalanceStatus, string]>([
-      ['checked', 'Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept'],
-      ['unchecked', 'Top 32 kept, unchecked'],
+      ['checked', "Checked the top 32 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept"],
+      ['unchecked', '32 more kept, unchecked'],
     ])('summarises %s', (status, expected) => {
       expect(balanceSummary(lineBalance(status))).toBe(expected);
     });
 
     it('summarises a checked line with no ranges by its count alone', () => {
-      expect(balanceSummary(lineBalance('checked', { precision: null, recall: null }))).toBe('Checked · 32 kept');
-      expect(balanceSummary(lineBalance('checked', { recall: null }))).toBe('Checked · 32 kept');
+      expect(balanceSummary(lineBalance('checked', { precision: null, recall: null }))).toBe('Checked · 32 more kept');
+      expect(balanceSummary(lineBalance('checked', { recall: null }))).toBe('Checked · 32 more kept');
     });
 
     it.each<BalanceStatus>(['checked', 'unchecked'])('neither names nor numbers the balance (%s, #4298, #4317)', (status) => {
@@ -222,9 +222,30 @@ describe('line-balance (#4413)', () => {
     });
 
     it('reads the count from the result, never from the preset', () => {
-      expect(balanceSummary(lineBalance('checked', { beta: 2, count: 64 }))).toContain('64 kept');
-      expect(balanceSummary(lineBalance('checked', { beta: 2, count: 128 }))).toContain('128 kept');
-      expect(balanceSummary(lineBalance('unchecked', { beta: 2, count: 128 }))).toBe('Top 128 kept, unchecked');
+      expect(balanceSummary(lineBalance('checked', { beta: 2, count: 64 }))).toContain('64 more kept');
+      expect(balanceSummary(lineBalance('checked', { beta: 2, count: 128 }))).toContain('128 more kept');
+      expect(balanceSummary(lineBalance('unchecked', { beta: 2, count: 128 }))).toBe('128 more kept, unchecked');
+    });
+
+    it('says the ranges and the count leave out what the user voted on (#4914)', () => {
+      // The check walks the unvoted ranking and reads recall against the
+      // positives left in it; the count is of unvoted items. The line says so.
+      for (const status of ['checked', 'unchecked'] as const) {
+        expect(balanceSummary(lineBalance(status))).toMatch(/\b32 more kept\b/);
+        expect(balanceExplanation(lineBalance(status))).toMatch(/you haven't voted on/);
+      }
+      const checked = balanceExplanation(lineBalance('checked'))!;
+      expect(checked).toContain("of all the matches you hadn't voted on among them");
+      expect(checked).not.toMatch(/of all the matches among them/);
+    });
+
+    it('names the audited set beside the count kept, not as if the ranges described it (#4914)', () => {
+      // Advisory (every preset since #4452): the walk ended on the top 64, the line keeps 16.
+      expect(balanceSummary(lineBalance('checked', { count: 16, audited: 64 }))).toBe(
+        "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 16 more kept",
+      );
+      // A server that sends no audited count audited the set it keeps.
+      expect(balanceSummary(lineBalance('checked', { count: 1234, audited: null }))).toContain('Checked the top 1,234 you hadn');
     });
 
     it('carries the precision range wide as the check left it, and the recall in words', () => {
@@ -243,25 +264,27 @@ describe('line-balance (#4413)', () => {
     it('explains a trimmed line (beta above 1) by its check, both ranges as numbers, as the set where the balance peaked', () => {
       const why = balanceExplanation(lineBalance('checked', { beta: 2 }))!;
       expect(why).toBe(
-        'A check of 5 random picks from the 32 items the line keeps found 5 right, so likely 55–100% of them are, ' +
-          'with likely 30–70% of all the matches among them: the set where the check\'s balance peaked.',
+        "A check of 5 random picks from the top 32 you hadn't voted on, which the line keeps, found 5 right, so likely 55–100% of them are, " +
+          "with likely 30–70% of all the matches you hadn't voted on among them: the set where the check's balance peaked.",
       );
       expect(why).not.toMatch(/estimate|enough|short/i);
     });
 
     it('explains an advisory check (beta 1 and below) by the set it audited, and says the line keeps its own count', () => {
       const why = balanceExplanation(lineBalance('checked', { count: 16, audited: 64 }))!;
-      expect(why).toContain('A check of 5 random picks from the top 64 found 5 right');
-      expect(why).toContain('The line keeps its 16, where your labels put it: a check informs the line and does not move it.');
+      expect(why).toContain("A check of 5 random picks from the top 64 you hadn't voted on found 5 right");
+      expect(why).toContain(
+        "The line keeps the top 16 you haven't voted on, where your labels put it: a check informs the line and does not move it.",
+      );
       expect(why).not.toContain('peaked');
       expect(balanceExplanation(lineBalance('checked', { count: 16, audited: 64, precision: null, recall: null }))).toBe(
-        'A check ended on the top 64; the line keeps its 16.',
+        "A check ended on the top 64 you hadn't voted on; the line keeps the top 16.",
       );
     });
 
     it('explains a checked line with no ranges as where the check ended', () => {
       expect(balanceExplanation(lineBalance('checked', { beta: 2, precision: null, recall: null }))).toBe(
-        'A check ended on the 32 items the line keeps.',
+        "A check ended on the top 32 you hadn't voted on, which the line keeps.",
       );
     });
 
@@ -276,7 +299,7 @@ describe('line-balance (#4413)', () => {
 
     it('explains an unchecked line as unmeasured, pointing at no check (Find offers none, #4317)', () => {
       const why = balanceExplanation(lineBalance('unchecked', { count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }))!;
-      expect(why).toBe('Unchecked: the line keeps the top 128, and nothing has measured how much of it is right.');
+      expect(why).toBe("Unchecked: the line keeps the top 128 you haven't voted on, and nothing has measured how many of them are right.");
       expect(why).not.toMatch(/likely|a check of/i);
     });
 

@@ -1155,6 +1155,10 @@ SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
 #: and ``lights+level`` the A/B's other arms.
 STOP_RULE = os.environ.get("CALIB_STOP_RULE", "").strip().lower() or "lights|level"
 STOP_LEVEL = float(os.environ.get("CALIB_STOP_LEVEL", "").strip() or 0.5)
+#: The click cap (#4903): Done at this many votes whatever the stop rule (the app's
+#: 200).  ``CALIB_STOP_CAP=none`` is no cap, every session before #4903.
+_STOP_CAP = os.environ.get("CALIB_STOP_CAP", "").strip().lower()
+STOP_CAP: int | None = None if _STOP_CAP == "none" else int(_STOP_CAP or 200)
 #: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
 #: the first Good until 3 Goods and 4 Bads, or a Good and 16 Bads); ``CALIB_LABEL_QUOTA=off`` is the
 #: pre-#4643 arm, a trained head from the first Good and Bad, which the study

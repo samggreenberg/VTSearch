@@ -170,29 +170,37 @@ export class SpotCheckStageComponent implements OnInit {
     return `${picks[0].toUpperCase()}${picks.slice(1)}${from}, ${set}.`;
   });
 
-  /** The result's headline: what the picks found on the set the walk ended on (under `advisory`, named, since the line keeps another). */
+  /**
+   * The result's headline: what the picks found on the set the walk ended on, named, since under
+   * `advisory` the line keeps another, and since it holds only what the user had not voted on (#4914).
+   */
   readonly resultHeadline = computed(() => {
     const b = this.balance();
     if (!b) return '';
     const p = b.precision;
     const r = b.recall;
-    const what = b.shape === 'advisory' ? `Checked the top ${(b.audited ?? b.count).toLocaleString()}` : 'Checked';
+    const what = `Checked the top ${(b.audited ?? b.count).toLocaleString()} you hadn't voted on`;
     return p && r ? `${what}: likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}).` : `${what}.`;
   });
 
-  /** What the line keeps now, and what the ranges describe (#4427: under `advisory` the two differ). */
+  /**
+   * What the line keeps now, and what the ranges describe (#4427: under `advisory` the two differ).
+   * Neither range counts the Goods voted before the check (#4914), which is why a session that
+   * harvested the top well can end on low ranges, so the note says so.
+   */
   readonly resultDetail = computed(() => {
     const b = this.balance();
     if (!b) return '';
     const kept = b.count.toLocaleString();
+    const before = 'the Goods you had already voted on count in neither.';
     if (b.shape === 'advisory') {
       const audited = (b.audited ?? b.count).toLocaleString();
       return (
-        `The line keeps its ${kept}, where your labels put it: the check informs the line and does not move it. ` +
-        `The ranges are what the picks say about the top ${audited}.`
+        `The line keeps the top ${kept} you haven't voted on, where your labels put it: the check informs the line and does not move it. ` +
+        `The ranges are what the picks say about the top ${audited} you hadn't voted on; ${before}`
       );
     }
-    return `The line keeps these ${kept}: the set where the check's balance peaked. The ranges are what the picks say about them.`;
+    return `The line keeps these ${kept}: the set where the check's balance peaked. The ranges are what the picks say about them; ${before}`;
   });
 
   constructor() {

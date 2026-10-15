@@ -53,6 +53,12 @@
           <p class="ap-exhausted-detail">Autopilot has labeled every item in this dataset. Review your votes or export your results.</p>
         </div>
       } @else {
+      @if (cappedInOpening) {
+        <div class="autopilot-exhausted autopilot-capped" role="status">
+          <p class="ap-exhausted-title">Autopilot has stopped</p>
+          <p class="ap-exhausted-detail">{{ openingCapNote }}</p>
+        </div>
+      }
       <div class="autopilot-steps">
         @for (step of steps; track step.phase) {
           <div

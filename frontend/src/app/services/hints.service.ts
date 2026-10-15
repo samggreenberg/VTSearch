@@ -36,6 +36,7 @@ export const HINT_IDS = [
   'resort-prompt',
   'autopilot-done',
   'autopilot-done-level',
+  'autopilot-done-cap',
   'autopilot-ran-dry',
   'all-labeled',
   // Test view.
