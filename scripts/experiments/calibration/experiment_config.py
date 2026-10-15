@@ -1095,7 +1095,7 @@ WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
 #: When the simulated user checks (#4496): unset is the harness's default, the app's for the cell's medias (``weak``:
 #: the end-of-run check plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate
-#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's
+#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once (the app's since #4909); unset, the app's
 #: constants - but ``end`` on face crops, where the app never prompts, #4799); ``end`` (the end-of-run check only,
 #: the pre-#4496 harness and the face path's), ``weak`` or ``off``.
 SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None

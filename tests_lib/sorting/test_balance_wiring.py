@@ -284,13 +284,16 @@ class TestTheWeakCheckPrompt:
             state = detector_balance_state(ctx, 1.0)
             assert state["checkable"] is False and state["check_due"] is False
 
-    def test_it_waits_a_cooldown_after_the_last_check_ended(self):
-        ctx = self._weak(_ctx("det-weak-cooldown"))
+    def test_it_prompts_once_never_after_a_check_has_ended(self):
+        """#4909: once a session, however long ago the check ended."""
+        ctx = self._weak(_ctx("det-weak-once"))
         n = len(human_voted_ids(ctx))
+        assert ctx.check_ended_votes is None
+        assert detector_balance_state(ctx, 1.0)["check_due"] is True
         ctx.check_ended_votes = n
         assert detector_balance_state(ctx, 1.0)["check_due"] is False
-        ctx.check_ended_votes = n - WEAK_CHECK_COOLDOWN
-        assert detector_balance_state(ctx, 1.0)["check_due"] is True
+        ctx.check_ended_votes = n - 10 * WEAK_CHECK_COOLDOWN
+        assert detector_balance_state(ctx, 1.0)["check_due"] is False
 
     def test_never_due_on_face_crops_but_separation_still_reported(self):
         """#4799: a face detector never prompts (#4778 priced it a loss); its d' is still shown."""

@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The weak-separation check prompts once** (issue #4909). New
+  `vtscore.training.thresholds.WEAK_CHECK_REPEAT` (`None`) is `weak_check_due`'s default `cooldown`, so a
+  check is due only while none has ended (it was `WEAK_CHECK_COOLDOWN`, 25: again 25 votes after the last
+  check). `WEAK_CHECK_COOLDOWN` stays 25 and now governs only `done_check_due`. The harness follows:
+  `simulate_voting_iterations(weak_repeat=)` defaults to 0 (once), and 25 is the arm before. Priced at
+  `docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md`.
+
 - **A click cap backs every stop rule** (issue #4903). `vtscore.eval.autopilot_flow.STOP_CAP` (200) mirrors the
   app's `STOP_CAP_VOTES`: `stop_lights(..., at_cap=)` says stop under every rule, `AutopilotFlow(stop_cap=)` and
   `simulate_voting_iterations(stop_cap=)` default to it (`None` is no cap), and `capped_in_opening(phase,

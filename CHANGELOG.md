@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot checks for overlapping labels once a session** (issue #4909). When your Good and Bad answers
+  score close together, Autopilot still opens the spot check once it has started learning, but it no longer
+  asks again 25 votes later while they still overlap, and it does not ask after any other check has run. The
+  repeat had cost a quarter of a session's clicks: 50 to 57 of 200 went to checks, against 25 to 33 now.
+  Priced on today's app, asking once did as well or better over 200 clicks (mean F-beta +0.0006 at beta 1,
+  +0.0013 at beta 4), was level after the closing check, and reached Done at the same click with the same
+  result (`docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md`). The check before Done is unchanged.
+
 - **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
   you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
   voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
