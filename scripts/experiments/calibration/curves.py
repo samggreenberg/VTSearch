@@ -516,7 +516,12 @@ def _fully_measured_from(covs: Sequence[np.ndarray], t_index: np.ndarray) -> int
     return max(firsts) if firsts else None
 
 
-def attempted_cells(main: pd.DataFrame, baseline: pd.DataFrame | None, keys: Sequence[str] = KEYS) -> pd.DataFrame:
+def attempted_cells(
+    main: pd.DataFrame,
+    baseline: pd.DataFrame | None,
+    keys: Sequence[str] = KEYS,
+    within: Sequence[str] = (),
+) -> pd.DataFrame:
     """One row per ``(arm, *keys)`` cell the run attempted: a ``denominator`` for a caller with no cell list.
 
     *main* holds rows only for the cells that trained, so a seed that never
@@ -535,25 +540,32 @@ def attempted_cells(main: pd.DataFrame, baseline: pd.DataFrame | None, keys: Seq
     Joined on the group keys the two frames share, as :func:`baseline_map`
     reads the anchor.  Without a *baseline*, or one with no ``seed`` column,
     this is the cells of *main* alone.
+
+    *within* names keys that, like ``seed``, tell the runs of one group apart,
+    and are read off the *baseline* with it: on a page that pools categories
+    into strata, each recorded category is a run of its stratum (#4944), so a
+    person who never trained counts wherever someone in their stratum did.
+    A *baseline* without them is not used.
     """
     kk = [k for k in keys if k in main.columns]
     if "arm" not in main.columns or "seed" not in kk:
         return pd.DataFrame(columns=["arm", *kk])
     trained = main.loc[:, ["arm", *kk]].drop_duplicates()
-    shared = [k for k in kk if k != "seed" and baseline is not None and k in baseline.columns]
-    if baseline is None or baseline.empty or "seed" not in baseline.columns or not shared:
+    run = ["seed", *(k for k in within if k in kk)]
+    shared = [k for k in kk if k not in run and baseline is not None and k in baseline.columns]
+    if baseline is None or baseline.empty or not set(run) <= set(baseline.columns) or not shared:
         return trained.reset_index(drop=True)
     ran = set(pd.to_numeric(trained["seed"], errors="coerce").dropna().astype(int))
-    b = baseline.loc[:, [*shared, "seed"]].copy()
+    b = baseline.loc[:, [*shared, *run]].copy()
     b["seed"] = pd.to_numeric(b["seed"], errors="coerce")
     b = b.dropna(subset=["seed"])
     b = b[b["seed"].astype(int).isin(ran)].drop_duplicates()
     # Matched as text, then written back in *main*'s own dtypes, so the cells
     # line up with the columns `_wide` pivots *main* into.
     tmp = [f"__k{i}" for i in range(len(shared))]
-    groups = trained.drop(columns="seed").drop_duplicates()
+    groups = trained.drop(columns=run).drop_duplicates()
     left = groups.assign(**{t: groups[c].astype(str) for t, c in zip(tmp, shared, strict=True)})
-    right = b.assign(**{t: b[c].astype(str) for t, c in zip(tmp, shared, strict=True)}).loc[:, [*tmp, "seed"]]
+    right = b.assign(**{t: b[c].astype(str) for t, c in zip(tmp, shared, strict=True)}).loc[:, [*tmp, *run]]
     right["seed"] = right["seed"].astype(int).astype(trained["seed"].dtype)
     extra = left.merge(right, on=tmp).loc[:, ["arm", *kk]]
     return pd.concat([trained, extra], ignore_index=True).drop_duplicates().reset_index(drop=True)

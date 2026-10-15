@@ -39,7 +39,11 @@ screen, so both are checked against values that are known by construction:
 * each run's **stopped point** (#4939) must be the click the app *first* said
   stop, at the value the curve has there, with a run never told to stop at its
   last click and a run that never trained kept as the empty set, agreeing with
-  ``stopping.stopping_points`` and kept when the per-seed lines are dropped.
+  ``stopping.stopping_points`` and kept when the per-seed lines are dropped;
+* on a page that pools categories into **strata** (``--category-map``, #4762),
+  each recorded category must stay a run of its own (#4944): its stop, its
+  carried gaps, its clicks before a first detector, and a cell in the count,
+  rather than a dozen people at one seed read as one run.
 
 Run: ``python selftest_viewer.py``
 """
@@ -498,6 +502,97 @@ def _stop_checks(tmp: Path) -> bool:  # noqa: C901
     ok &= _check(
         "the template offers the stop view and reads the block the builder writes",
         'value="stop"' in shell and "P.stops.cols" in shell and "P.stops_note" in shell,
+    )
+    return ok
+
+
+#: A page of strata (#4762, #4944): four people at seed 0, pooled into one
+#: stratum by ``--category-map``.  ``p0`` stops at 8 (STOP_RUNS[0]), ``p1``
+#: has its first row at click 5 and is never told to stop, ``p2`` sits out a
+#: spot check at clicks 11..14 and stops at 16, and ``p3`` never trains.  Each
+#: person's f1 is t/100 plus 0.1 a person, so a value names whose row it is.
+POOL_T = 20
+POOL_GAP = range(11, 15)
+
+
+def _pooled_checks(tmp: Path) -> bool:
+    """A stratum pools people, and each person stays a run: the stops, the carry, the empty sets, the cells."""
+    phases = {
+        "p0": STOP_RUNS[0][0],
+        "p1": dict.fromkeys(range(5, POOL_T + 1), "hard"),
+        "p2": {
+            **{t: "hard" for t in range(1, POOL_T + 1) if t not in POOL_GAP and t < 16},
+            **dict.fromkeys(range(16, POOL_T + 1), "done"),
+        },
+    }
+    rows, base = [], []
+    for k, person in enumerate(("p0", "p1", "p2", "p3")):
+        key = {"dataset": "dsA", "embedder": "embA", "category": person, "seed": 0}
+        base.append(
+            {**key, "supports_text": 1, "text_precision": 0.4, "text_recall": 0.3, "text_f1": 0.34, "text_AP": 0.5}
+        )
+        for t, phase in phases.get(person, {}).items():
+            rows.append(
+                {
+                    **key,
+                    "arm": "ctl",
+                    "t": t,
+                    "phase": phase,
+                    "precision": 0.7,
+                    "recall": 0.6,
+                    "f1": t / 100.0 + 0.1 * k,
+                    "average_precision": 0.8,
+                }
+            )
+    strata = dict.fromkeys(("p0", "p1", "p2", "p3"), "s")
+    # As the CLI does it: the map goes onto the rows and the baseline, and the
+    # cell list comes off the baseline.
+    page = V.build_viewer(
+        V.apply_category_map(pd.DataFrame(rows), strata),
+        tmp / "strata.html",
+        arms=["ctl"],
+        baseline=V.apply_category_map(pd.DataFrame(base), strata),
+        runs_budget_mb=0.25,
+    )
+    P = _payload(page)
+    ok = _check("the page shows the stratum, not the people", P["categories"] == ["s"], str(P["categories"]))
+    gi = [g[2] for g in P["groups"]].index("s")
+    cells = _decode(P["agg"]["cells"])
+    ok &= _check(
+        "a stratum's cells are its people, each a run at seed 0",
+        int(cells[gi, 0, 0]) == 4,
+        f"{cells[gi, 0, 0]:g}",
+    )
+    fi = [m["key"] for m in P["metrics"]].index("f1")
+    n = _decode(P["agg"]["n"])[gi, 0, fi]
+    mean = _decode(P["agg"]["mean"])[gi, 0, fi]
+    tz = P["t"].index(12)
+    ok &= _check(
+        "every person is in the mean at every click: a late start, a spot check and a run that never trained",
+        all(int(n[P["t"].index(t)]) == 4 for t in range(1, POOL_T + 1)),
+        str([int(n[P["t"].index(t)]) for t in range(1, POOL_T + 1)]),
+    )
+    want = (0.12 + (0.12 + 0.1) + (0.10 + 0.2) + 0.0) / 4  # p2 carried from click 10; p3 the empty set
+    ok &= _check(
+        "...at the person's own value: the carry is p2's last row, not a neighbour's",
+        abs(mean[tz] - want) <= 2.0 / P["agg"]["mean"]["scale"],
+        f"{mean[tz]:.4f} vs {want:.4f}",
+    )
+    stops = P.get("stops")
+    if not stops:
+        return _check("the page carries the people's stops", False, str(P.get("stops_note")))
+    ints = _decode(stops["ints"]).astype(int)
+    col = {c: i for i, c in enumerate(stops["cols"])}
+    got = sorted((int(ints[col["t"], i]), int(ints[col["fired"], i])) for i in range(ints.shape[1]))
+    ok &= _check(
+        "a stratum has a stop per person, not the earliest of them",
+        got == sorted([(8, 1), (POOL_T, 0), (16, 1), (POOL_T, 0)]),
+        str(got),
+    )
+    ok &= _check(
+        "the note counts people",
+        P.get("stops_note") == "The app said stop in 2 of 4 runs.",
+        str(P.get("stops_note")),
     )
     return ok
 
@@ -1301,6 +1396,7 @@ def main() -> int:  # noqa: C901
 
         ok &= _beta_checks(tmp)
         ok &= _stop_checks(tmp)
+        ok &= _pooled_checks(tmp)
 
         print("\n" + ("SELFTEST PASSED" if ok else "SELFTEST FAILED"))
         return 0 if ok else 1

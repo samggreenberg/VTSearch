@@ -600,6 +600,15 @@ class _Shape:
 #: name away from splitting in the wrong place.
 GSEP = "\u001f"
 
+#: The category a run was recorded under, kept beside its stratum by
+#: :func:`apply_category_map` (#4944).  A stratum pools many runs at one seed,
+#: so this is what still tells them apart in the steps that work run by run.
+RUN_CATEGORY = "__run_category"
+
+#: What identifies one run in the frame :func:`build_viewer` works on; a key
+#: the frame lacks is ignored, so off a category map this is group, arm, seed.
+RUN_KEYS: tuple[str, ...] = ("__group", "arm", "seed", RUN_CATEGORY)
+
 
 def _gkey(dataset: str, embedder: str, category: str) -> str:
     return GSEP.join((str(dataset), str(embedder or ""), str(category)))
@@ -793,13 +802,15 @@ def stop_points(main: pd.DataFrame, shape: _Shape) -> tuple[np.ndarray, np.ndarr
     click.  ``ints`` is ``(len(STOP_COLUMNS), runs)``: the run's indices into
     *shape*, the click, and ``fired``.  ``values`` is ``(runs, metrics)``,
     in *shape*'s metric order.  Runs are sorted by group, arm and seed, which
-    keeps the delta-coded index small.
+    keeps the delta-coded index small.  On a page that pools categories into
+    strata, a run is one recorded category (:data:`RUN_KEYS`), so a stratum
+    holds a dot per person rather than its earliest stop (#4944).
     """
     from vtscore.eval.autopilot_flow import STOPPING_PHASE  # noqa: PLC0415
 
     if "phase" not in main.columns or not main["phase"].notna().any():
         return None
-    keys = ["__group", "arm", "seed"]
+    keys = [k for k in RUN_KEYS if k in main.columns]
     df = main.assign(__t=pd.to_numeric(main["t"], errors="coerce")).dropna(subset=["__t"])
     df = df[df["__t"] >= 1].sort_values([*keys, "__t"], kind="stable")
     done = df["phase"].fillna("").astype(str).str.strip() == STOPPING_PHASE
@@ -1018,10 +1029,16 @@ def apply_category_map(df: pd.DataFrame | None, mapping: Mapping[str, str] | Non
 
     For a bench whose categories name people (FHIBE, #4762): the page then offers strata, and its
     per-category moments pool exactly over the people in each, as "all categories" pools them.
+
+    The category itself is kept in :data:`RUN_CATEGORY`, because a run is a person, not a stratum:
+    a stratum holds a dozen people at seed 0, and the steps that work run by run (carrying a run's
+    gaps, scoring the clicks before its first detector, counting its cells, finding where the app
+    said stop) would otherwise read the dozen as one run (#4944).
     """
     if df is None or mapping is None or df.empty or "category" not in df.columns:
         return df
-    return df.assign(category=df["category"].astype(str).map(mapping).fillna("other"))
+    cat = df["category"].astype(str)
+    return df.assign(**{RUN_CATEGORY: cat}, category=cat.map(mapping).fillna("other"))
 
 
 def _skyline_arrays(skyline: pd.DataFrame | None, shape: _Shape) -> tuple[np.ndarray, np.ndarray, str]:
@@ -1246,12 +1263,14 @@ def build_viewer(  # noqa: C901
     main["__group"] = _group_key(main)
     kind = oracle_kind(main)
     oracle_keys = add_oracle_columns(main)
+    # Run by run, and on a page of strata a run is one recorded category (RUN_KEYS, #4944).
+    cell_keys = (*curves.KEYS, RUN_CATEGORY)
     if fill_gaps:
-        main = curves.fill_gaps(main, ("__group", "arm", "seed"))
+        main = curves.fill_gaps(main, RUN_KEYS)
     if (denominator is None or denominator.empty) and baseline is not None and not baseline.empty:
-        denominator = curves.attempted_cells(main, baseline)
+        denominator = curves.attempted_cells(main, baseline, keys=cell_keys, within=(RUN_CATEGORY,))
     if score_empty_sets:
-        main = curves.score_empty_sets(main, denominator, baseline)
+        main = curves.score_empty_sets(main, denominator, baseline, keys=cell_keys)
         main["__group"] = _group_key(main)
         added = main[curves.NO_DETECTOR] == 1
         for k in oracle_keys:
@@ -1276,8 +1295,10 @@ def build_viewer(  # noqa: C901
     if "embedder" not in den.columns:
         den["embedder"] = ""
     den["__group"] = _group_key(den)
+    # A cell is a run: a seed, or on a page of strata a seed of one recorded category (#4944).
+    cell_cols = [c for c in ("seed", RUN_CATEGORY) if c in den.columns]
     cells = {
-        (str(arm), str(gk)): int(d.loc[:, ["seed"]].drop_duplicates().shape[0])
+        (str(arm), str(gk)): int(d.loc[:, cell_cols].drop_duplicates().shape[0])
         for (arm, gk), d in den.groupby(["arm", "__group"])
     }
 
