@@ -159,7 +159,10 @@ MIRRORS: list[Mirror] = [
             "labeling-status reading already says Done, every light green or the level met (the Train view "
             "re-entered on a finished detector), and when its first labelset reading already holds the cap "
             "(noteInitialLabelset); a harness run starts with no votes, where none can hold, so "
-            "it has nothing to port."
+            "it has nothing to port. A run that reaches the cap still in its opening (cappedInOpening, #4903) "
+            "is told Autopilot has stopped and offered the re-sort prompt, but its phase stays the opening's: "
+            "display only, like doneReached, so next_phase has nothing to port; the harness's "
+            "capped_in_opening reads the same condition for a reader asking where such a session stopped."
         ),
     ),
     Mirror(

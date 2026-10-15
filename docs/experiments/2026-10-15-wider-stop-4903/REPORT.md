@@ -21,13 +21,15 @@ NEVER stop the user; are we really going to make them label 10k images? ... Wors
   saving is a floor.
 - **Nothing in the numbers moves N off 200.** The cost falls smoothly with N, with no knee: 0.005–0.009 F-beta
   at 150, 0.002–0.005 at 200, 0.001–0.002 at 250, 0.001 at 300.
-- **The sessions the cap ends were still learning, but slowly and from little.** At click 200 they hold an
-  F-beta of 0.06–0.13 (trained) or ~0.01 (still in the opening). Run to 400 they reach 0.13–0.27 and 0.10–0.18.
-  They gain 0.035–0.071 F-beta per 100 more clicks, against 0.023–0.029 for the sessions Done stopped by 150,
-  which are already at 0.52–0.64.
-- **What the cap counts is the real choice.** As built, it is read where the lights and the level are, past the
-  opening. A session still walking for its first Good is never capped (0.3% at 400, and in the app,
-  forever), and one that leaves the opening after 200 is stopped the moment it does.
+- **The cap stops sessions polishing a turd.** At vote 200 the sessions it ends hold a median F-beta of
+  0.00–0.04; left to their own Done (or click 400) they would reach a median 0.07–0.14, and 0–5% of them 0.5.
+  The sessions Done stopped by 150 leave with a median 0.52–0.72. The text default is no floor under them: for
+  these classes the typed query's own set scores 0.01–0.06, so the detector is below it in only 7–29% of them at
+  the cap ([the capped sessions](#are-the-capped-sessions-worth-finishing)).
+- **What the cap counts was the real choice, and the owner chose every vote, at 200.** Read only past the
+  opening, it would never end a session still walking for its first Good (0.3% at 400, and in the app,
+  forever). Counting every vote, such a session is told at 200 that Autopilot has stopped and offered a
+  different sort ([what ships](#what-ships)).
 
 ## Data
 
@@ -154,22 +156,51 @@ The same at N = 200 by how the cap counts:
 - **"Votes since the opening" is the gentlest, and it cannot be fully priced at a 400-click horizon:** the late
   starters it protects would run past 400.
 
+### Are the capped sessions worth finishing?
+
+The owner's question: a session the cap ends is left with what it has; if that is no worse than the text default
+it started from, and more clicks would not have lifted it clear, the cap costs nothing however the F-beta moves.
+Done or 200 votes (every vote), the sessions it ends (`capped.csv`):
+
+| | β 1/4 | β 1 | β 4 |
+|---|---|---|---|
+| sessions capped | 44 (6.1%) | 43 (6.0%) | 48 (6.7%) |
+| their text default (typed query's own set), mean F-beta | 0.018 | 0.014 | 0.056 |
+| median F-beta at the cap | 0.00 | 0.02 | 0.04 |
+| median F-beta at their own Done, or click 400 | 0.08 | 0.07 | 0.14 |
+| would ever reach 0.3 / 0.5 | 25% / 5% | 0% / 0% | 17% / 2% |
+| detector below the text default at the cap | 7% | 14% | 29% |
+| ... still below it at their own Done, or 400 | 9% | 12% | 19% |
+| F-beta given up, counting the better of detector and text | 0.077 | 0.039 | 0.065 |
+| for scale: sessions Done by 150, median F-beta there | 0.72 | 0.52 | 0.64 |
+
+- **They are turds either way.** A median of 0.00–0.04 at the cap becomes 0.07–0.14 with up to 200 more votes.
+  Of the 135 capped sessions, 3 would ever have reached an F-beta of 0.5.
+- **The text default does not rescue them, because it is worse.** Their classes are the ones the typed query
+  cannot find (0.01–0.06), so the detector beats it at the cap in 71–93% of them, and crediting each session
+  with the better of the two leaves the cost where it was: 0.0047, 0.0023 and 0.0043 F-beta a session over all
+  sessions, against 0.0047, 0.0023 and 0.0047 raw.
+- **So the 0.002–0.005 the cap costs is the turd getting a little shinier.** It is real in the units the eval
+  counts, and buys nothing a user would keep.
+
 ## What ships
 
-Built on this branch, in the app and the harness, at the owner's default of 200, counting every vote past the
-opening:
+The owner chose (2026-10-15): **the cap counts every vote, at N = 200.**
 
-- **App:** `STOP_CAP_VOTES = 200` (`AutopilotStateService`). `checkPhaseTransition` opens Done's branch at that
-  many votes as it does on every light green or the level met: the check before Done, then Done. A detector
-  re-entered with that many votes already runs no check. The panel and Toasty (`autopilot-done-cap`) say "You
-  have cast 200 votes, as many as Autopilot asks for" when the cap is what said Done.
+- **App:** `STOP_CAP_VOTES = 200` (`AutopilotStateService`).
+  - Past the opening, `checkPhaseTransition` opens Done's branch at that many votes as it does on every light
+    green or the level met: the check before Done, then Done. A detector re-entered with that many votes runs
+    no check. The panel and Toasty (`autopilot-done-cap`) say "You have cast 200 votes, as many as Autopilot
+    asks for" when the cap is what said Done.
+  - In the opening (`cappedInOpening`), the panel says **Autopilot has stopped**, with the Goods it found of the
+    ones it needs, and the **Update Sort Example?** prompt comes up once more. The phase is unchanged, so a user
+    who votes on keeps walking the same sort, and one whose Goods turn up goes to the check before Done and Done
+    at once.
 - **Harness:** `STOP_CAP = 200` (`vtscore/eval/autopilot_flow.py`): `stop_lights(at_cap=)` says stop under every
   rule, `AutopilotFlow(stop_cap=)`, `simulate_voting_iterations(stop_cap=)`, `CALIB_STOP_CAP` (`none` is no
-  cap), and a preflight row for a non-default cap. The eval-app sync mirror watches `STOP_CAP` with the phase
-  machine. It never binds inside the eval's 150 clicks.
-
-How the cap should count (and so what the app says to a session still looking for its first Good at 200) is
-the owner's call; see the issue.
+  cap), and a preflight row for a non-default cap. The opening's stop is display only in the app, so the phase
+  machine has nothing to port; `capped_in_opening` reads it for a reader. The eval-app sync mirror watches
+  `STOP_CAP` with the phase machine. The cap never binds inside the eval's 150 clicks.
 
 ## Reproduce
 

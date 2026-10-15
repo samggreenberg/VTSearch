@@ -152,6 +152,18 @@ export const STOP_CAP_VOTES = 200;
 /** The phases before the first learned sort: no trained detector yet. */
 const OPENING_PHASES: readonly AutopilotPhase[] = ['good', 'bad', 'more'];
 
+/**
+ * The run reached the click cap still in its opening (#4903): {@link STOP_CAP_VOTES}
+ * votes without the Goods a detector needs, so there is no line to check and
+ * no Done to give. Autopilot tells the user it has stopped and offers a
+ * different sort. Display only: the phase, and so what Autopilot picks if the
+ * user votes on, is unchanged, and finding the Goods later moves the run to
+ * the check before Done and Done at once.
+ */
+export function cappedInOpening(st: AutopilotState): boolean {
+  return st.atCap && OPENING_PHASES.includes(st.phase);
+}
+
 const INITIAL_STATE: AutopilotState = {
   phase: 'idle',
   goodToStart: 3,

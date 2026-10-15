@@ -792,6 +792,27 @@ describe('AutopilotPanelComponent', () => {
     });
   });
 
+  describe('the click cap in the opening (#4903)', () => {
+    it('says Autopilot has stopped, with the Goods it found, and keeps the steps', async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', new Set());
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 1));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('good');
+      expect(fixture.nativeElement.querySelector('.autopilot-capped')).toBeNull();
+
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('good');
+      const note = fixture.nativeElement.querySelector('.autopilot-capped');
+      expect(note).toBeTruthy();
+      expect(note.textContent).toContain('Autopilot has stopped');
+      expect(note.textContent).toContain(`In ${STOP_CAP_VOTES} votes it found 0 of the 3 Goods`);
+      expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBeGreaterThan(0);
+      expect(autopilotState.handoff()).toBeNull();
+    });
+  });
+
   describe('completion hand-off', () => {
     it("raises Toasty's hand-off and moves nobody (#4680)", async () => {
       const router = TestBed.inject(Router);

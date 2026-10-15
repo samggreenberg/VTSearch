@@ -86,7 +86,12 @@ def session_record(g: pd.DataFrame) -> dict:
     level = np.flatnonzero((hc == 0) & (ef >= STOP_LEVEL))
     trained = np.flatnonzero(~np.isin(phase, list(OPENING)))
     n_good = pd.to_numeric(g["n_good"], errors="coerce").to_numpy(dtype=float)
+    # The typed query's own set, which Find gives while the detector is on its query tier (#4758): the text
+    # default a session starts from, constant over a session.
+    tier = g["detector_tier"].fillna("").astype(str).to_numpy() if "detector_tier" in g else np.array([])
+    fq = pd.to_numeric(g[objective.OBJECTIVE], errors="coerce").to_numpy(dtype=float)[tier == "query"]
     rec: dict = {
+        "text_fbeta": float(np.nanmean(fq)) if fq.size and np.isfinite(fq).any() else np.nan,
         "last_click": int(t[-1]),
         "trained_from": int(t[trained[0]]) if trained.size else np.nan,
         "stop[done]": int(t[done[0]]) if done.size else np.nan,
@@ -295,6 +300,54 @@ def caps(sessions: pd.DataFrame) -> pd.DataFrame:
                             "never_stopped": float((leave >= HORIZON).mean()),
                         }
                     )
+    return pd.DataFrame(rows)
+
+
+def capped_sessions(sessions: pd.DataFrame) -> pd.DataFrame:
+    """Per preset and N, the sessions the app's Done-or-N (every vote) ends early, against the text default.
+
+    The text default is the typed query's own set (``text_fbeta``), what a session starts from.  ``worse_*`` is
+    the share of capped sessions whose detector is below it at the cap, at the rule's own stop (or
+    :data:`HORIZON`), and at :data:`HORIZON`.  ``gives_up_above_text`` counts each session at the better of its
+    detector and the text default, so a detector that never beats text costs nothing.  ``reach_*`` is the share
+    that would ever have reached that F-beta by the rule's own stop (or :data:`HORIZON`).
+    """
+    rows = []
+    for (preset, beta), g in sessions.groupby(["preset", "beta"], sort=False):
+        g = g.reset_index(drop=True)
+        fb = _fb(g)
+        idx = np.arange(len(g))
+        check = check_clicks(g)
+        text = pd.to_numeric(g["text_fbeta"], errors="coerce").to_numpy(dtype=float)
+        for cap in (150, 200, 250, 300):
+            leave, natural = cap_leave(g, "done", cap, "votes", check)
+            cut = leave < natural
+            if not cut.any():
+                continue
+            at_cap = fb[idx, leave.astype(int) - 1][cut]
+            at_nat = fb[idx, natural.astype(int) - 1][cut]
+            at_end = fb[cut, HORIZON - 1]
+            t = text[cut]
+            rows.append(
+                {
+                    "preset": preset,
+                    "beta": beta,
+                    "cap": cap,
+                    "capped": int(cut.sum()),
+                    "share": float(cut.mean()),
+                    "text_fbeta": float(np.nanmean(t)),
+                    "fbeta_at_cap_median": float(np.median(at_cap)),
+                    "fbeta_at_own_stop_median": float(np.median(at_nat)),
+                    "fbeta_at_400_median": float(np.median(at_end)),
+                    "worse_than_text_at_cap": float(np.mean(at_cap < t)),
+                    "worse_than_text_at_own_stop": float(np.mean(at_nat < t)),
+                    "worse_than_text_at_400": float(np.mean(at_end < t)),
+                    "reach_0.3": float(np.mean(at_nat >= 0.3)),
+                    "reach_0.5": float(np.mean(at_nat >= 0.5)),
+                    "gives_up": float(np.mean(at_nat - at_cap)),
+                    "gives_up_above_text": float(np.mean(np.maximum(at_nat, t) - np.maximum(at_cap, t))),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -566,6 +619,7 @@ def report(work: Path, out: Path, ab_work: Path | None) -> None:
     priced = caps(sessions)
     priced.to_csv(out / "caps.csv", index=False, float_format="%.4f")
     never(sessions).to_csv(out / "never.csv", index=False, float_format="%.4f")
+    capped_sessions(sessions).to_csv(out / "capped.csv", index=False, float_format="%.4f")
     curves = over_clicks(sessions)
     curves.to_csv(out / "over_clicks.csv", index=False, float_format="%.4f")
     if ab_work is not None:

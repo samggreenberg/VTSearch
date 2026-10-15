@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { BehaviorSubject } from 'rxjs';
-import { AutopilotStateService, STOP_CAP_VOTES, type AutopilotState } from './autopilot-state.service';
+import { AutopilotStateService, cappedInOpening, STOP_CAP_VOTES, type AutopilotState } from './autopilot-state.service';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 import type { StatusIndicator } from '../generated/api-client/models/status-indicator';
 
@@ -523,6 +523,21 @@ describe('AutopilotStateService', () => {
       service.beginSpotCheck('done');
       service.endSpotCheck();
       expect(service.state.phase).toBe('done');
+    });
+
+    it('in the opening, says the run is capped and leaves the phase alone (#4903)', () => {
+      service.activate();
+      service.checkPhaseTransition(0, STOP_CAP_VOTES - 1);
+      expect(service.state.phase).toBe('good');
+      expect(cappedInOpening(service.state)).toBe(false);
+      service.checkPhaseTransition(0, STOP_CAP_VOTES);
+      expect(service.state.phase).toBe('good');
+      expect(cappedInOpening(service.state)).toBe(true);
+      // Finding the Goods later goes straight to the check before Done.
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(3, STOP_CAP_VOTES);
+      expect(service.state.phase).toBe('spot');
+      expect(cappedInOpening(service.state)).toBe(false);
     });
 
     it('runs no check on a re-entered detector that already holds the cap', () => {

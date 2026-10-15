@@ -19,6 +19,7 @@ import {
   AutopilotStateService,
   AutopilotPhase,
   AutopilotState,
+  cappedInOpening,
   STOP_CAP_VOTES,
 } from '../../../services/autopilot-state.service';
 import { IconComponent } from '../../icon/icon.component';
@@ -264,6 +265,20 @@ export class AutopilotPanelComponent implements OnInit {
    *  (typical of a tiny dataset that can't reach the good+bad quorum). */
   get exhausted(): boolean {
     return this.state.phase === 'exhausted';
+  }
+
+  /** The run reached the click cap still in its opening (#4903): Autopilot has stopped without a detector. */
+  get cappedInOpening(): boolean {
+    return cappedInOpening(this.state);
+  }
+
+  /** What the panel says when the run reached the cap in its opening. */
+  get openingCapNote(): string {
+    const found = this.goodVotes().size;
+    const needed = this.effGoodTarget;
+    return `In ${STOP_CAP_VOTES} votes it found ${found} of the ${needed} Goods it needs to train a detector, `
+      + 'so this search may not find what you are after in this collection. Try a different description '
+      + 'or example, or keep voting to keep looking.';
   }
 
   /** Items still carrying no vote, or ``Infinity`` while the dataset size is

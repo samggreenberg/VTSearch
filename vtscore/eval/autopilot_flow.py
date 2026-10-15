@@ -384,6 +384,22 @@ TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "spot", "done", "exha
 #: two together would report a starved run as a converged one.
 STOPPING_PHASE: str = "done"
 
+#: Autopilot's opening: the phases before its first learned sort.
+OPENING_PHASES: frozenset[str] = frozenset({"good", "bad", "more"})
+
+
+def capped_in_opening(phase: str, good_count: int, bad_count: int, stop_cap: int | None = STOP_CAP) -> bool:
+    """The app's ``cappedInOpening`` (#4903): the run holds *stop_cap* votes still in its opening.
+
+    The click cap's stop for a session with no detector: the app says Autopilot
+    has stopped and offers a different sort.  It is display only there, so the
+    phase - and every pick - is :func:`next_phase`'s, and a session that finds
+    its Goods later goes to the check before Done and Done at once.  A reader
+    asking where such a session was told to stop reads it here, beside
+    :data:`STOPPING_PHASE`.
+    """
+    return stop_cap is not None and phase in OPENING_PHASES and good_count + bad_count >= stop_cap
+
 
 #: What the app records for a vote Autopilot surfaced, per labelling phase:
 #: the ranking on screen and how the item was drawn off it.  Ported from the

@@ -33,6 +33,7 @@ from vtscore.eval.autopilot_flow import (
     STABLE_RATE_THRESHOLD,
     STOP_CAP,
     AutopilotFlow,
+    capped_in_opening,
     Status,
     app_has_detector,
     next_phase,
@@ -587,6 +588,15 @@ class TestStopCap:
 
     def test_the_app_s_cap(self):
         assert AutopilotFlow().stop_cap == STOP_CAP
+
+    def test_a_session_still_in_its_opening_is_capped_on_screen_only(self):
+        """The app's cappedInOpening: the phase, and so the picks, stay the opening's."""
+        flow = AutopilotFlow()
+        assert flow.update(0, STOP_CAP, 500, None) == "good"
+        assert capped_in_opening(flow.phase, 0, STOP_CAP)
+        assert not capped_in_opening(flow.phase, 0, STOP_CAP - 1)
+        assert not capped_in_opening("hard", 0, STOP_CAP), "past the opening the cap is Done's"
+        assert not capped_in_opening("good", 0, STOP_CAP, stop_cap=None)
 
 
 def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:
