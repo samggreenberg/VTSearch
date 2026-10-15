@@ -77,17 +77,20 @@ class TestEarlyCheck:
         i = _first(early, "early")
         assert [p["picked_id"] for p in plain[:i]] == [p["picked_id"] for p in early[:i]]
 
-    def test_skipped_when_a_check_just_ended(self):
-        """A weak check that ended within the cooldown stands in for it, as it does for the check before Done."""
+    def test_a_running_check_is_the_sessions_check(self):
+        """At N votes mid-check, the running check counts: no second check follows it."""
         weak = _kind_ts(_run(**_ALWAYS_WEAK), "weak")
         assert weak, "the always-weak run never prompted"
-        assert not _kind_ts(_run(weak[-1] + 1, **_ALWAYS_WEAK), "early")
+        plain, picks = _run(**_ALWAYS_WEAK), _run(weak[0], **_ALWAYS_WEAK)
+        assert not _kind_ts(picks, "early")
+        assert [p["picked_id"] for p in plain] == [p["picked_id"] for p in picks]
 
-    def test_runs_once_the_cooldown_has_passed(self):
+    def test_no_cooldown_after_a_check_that_ended(self):
+        """A check that ended just before N votes does not stand in for it (the cooldown variant is read offline)."""
         weak = _kind_ts(_run(**_ALWAYS_WEAK), "weak")
-        picks = _run(weak[-1] + 30, max_steps=90, **_ALWAYS_WEAK)
+        picks = _run(weak[-1] + 1, **_ALWAYS_WEAK)
         assert _kind_ts(picks, "early")
-        assert picks[_first(picks, "early") - 1]["t"] == weak[-1] + 30
+        assert picks[_first(picks, "early") - 1]["t"] == weak[-1] + 1
 
     def test_not_started_past_the_budget(self):
         """A check whose opening bands do not fit the clicks left is skipped, as a prompted one is."""

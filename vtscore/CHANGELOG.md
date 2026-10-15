@@ -118,9 +118,9 @@ instead, since every commit on `dev` is effectively a new app release.)
 ### Added
 
 - **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
-  takes `early_check` (`None`, the default and the app; or N: Autopilot prompts the spot check once, at the first
-  step from N votes past the opening, on top of the app's own checks, skipped where the check before Done would
-  be). Its picks are clicks with phase `"prompt"`. The pick log gains `check_kind` (`weak`, `done`, `early` or
+  takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of
+  the app's own checks: at the first step from N votes past the opening, a prompted check already running counts,
+  and otherwise Autopilot prompts one, with no cooldown). Its picks are clicks with phase `"prompt"`. The pick log gains `check_kind` (`weak`, `done`, `early` or
   `end` on a check's picks, blank on every other), and `AutopilotFlow.begin_spot_check` takes `"early"`. An
   experiment arm; the app is unchanged.
 

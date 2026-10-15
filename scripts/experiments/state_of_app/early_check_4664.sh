@@ -4,8 +4,9 @@
 # session goes on after it, to 200 clicks, and closes with the end-of-run check as every arm does.
 #
 #   a0          today's app (its own checks: weak separation, and before Done), 200 clicks
-#   e30/e50/e75 the same plus a check Autopilot prompts once in every session at the first step from 30 / 50 /
-#               75 votes past the opening (CALIB_EARLY_CHECK), skipped where a check ended in the last 25 votes
+#   e30/e50/e75 the same, with every session checked at 30 / 50 / 75 votes (CALIB_EARLY_CHECK): a prompted check
+#               running then counts, otherwise Autopilot prompts one at the first step from N votes past the
+#               opening, however recently another ended (the cooldown variant is read offline)
 #
 # The Binary Photo path, beta 1 and 4, 5 seeds x 144 cells, on the grid #4743 priced (2026-10-08-b1), paired by
 # cell and seed. Trajectory pass (no ceiling); cells gzipped.

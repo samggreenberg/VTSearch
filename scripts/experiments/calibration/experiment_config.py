@@ -1113,8 +1113,8 @@ WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
 #: ``0`` is the arm before Autopilot ran it, where all green reads Done at once.
 _done_check = os.environ.get("CALIB_DONE_CHECK", "").strip().lower()
 DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no", "off")
-#: Issue #4664's early check (``CALIB_EARLY_CHECK=N``): Autopilot checks in every session at the first step from N
-#: votes past the opening, on top of the app's own checks.  Unset (the default) is the app.  A value that is not a
+#: Issue #4664's early check (``CALIB_EARLY_CHECK=N``): every session is checked at N votes, on top of the app's own
+#: checks (a prompted check running then counts; otherwise Autopilot prompts one, past the opening, no cooldown).  Unset (the default) is the app.  A value that is not a
 #: positive integer is kept as given, for preflight to refuse.
 _EARLY_CHECK = os.environ.get("CALIB_EARLY_CHECK", "").strip()
 EARLY_CHECK: "int | str | None" = int(_EARLY_CHECK) if _EARLY_CHECK.isdigit() else (_EARLY_CHECK or None)

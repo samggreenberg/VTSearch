@@ -3203,19 +3203,21 @@ def simulate_voting_iterations(  # noqa: C901
             ``False`` is the arm before the app ran it, where all green reads
             ``done`` at once; ``spot_check="off"`` and the Inclusion arm never
             check.  Needs the Autopilot flow; ignored without one.
-        early_check: An experiment knob (issue #4664): Autopilot prompts a
-            check in **every** session at the first ordinary step from
-            *early_check* votes on, past the opening, on top of the app's own
-            checks (the weak prompt and the check before Done).  Its picks are
-            clicks, ``phase == "prompt"`` rows and ``check_kind == "early"``
-            picks, and the session goes on after it.  Once a run, and skipped,
-            once, where the check before Done would be: a check ended in the
-            last ``WEAK_CHECK_COOLDOWN`` votes
-            (:func:`~vtscore.training.thresholds.done_check_due`), or none can
-            start (nothing unvoted, or its opening bands do not fit the budget
-            left).  A step where the check before Done is due runs that one
-            instead.  ``None`` - the default - is the app, which has no such
-            check.  Needs the balance (*beta*) and the phase machine.
+        early_check: An experiment knob (issue #4664): **every** session is
+            checked at *early_check* votes, on top of the app's own checks (the
+            weak prompt and the check before Done).  Once a run, at the first
+            step from *early_check* votes past the opening: a prompted check
+            already running then, or starting that step, is that session's
+            check; otherwise Autopilot prompts one, however recently another
+            ended (no cooldown), if it can start (something unvoted, and its
+            opening bands fit the budget left).  Its picks are clicks,
+            ``phase == "prompt"`` rows and ``check_kind == "early"`` picks, and
+            the session goes on after it.  A cooldown variant - skip where a
+            check ended in the last ``WEAK_CHECK_COOLDOWN`` votes - is this
+            arm's run where it fires and the arm-free run where it would skip,
+            so it is read off the two without a run of its own.  ``None`` - the
+            default - is the app, which has no such check.  Needs the balance
+            (*beta*) and the phase machine.
         label_quota: Whether the withheld half is scored as Test scores it
             under the app's label quota (#4643,
             :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
@@ -3998,32 +4000,6 @@ def simulate_voting_iterations(  # noqa: C901
                     flow.begin_spot_check("done")
                 else:
                     flow.skip_done_check()
-            if (
-                picks is None
-                and not early_settled
-                and early_check is not None
-                and flow is not None
-                and t >= early_check
-                and flow.phase not in _OPENING_PHASES
-                and flow.phase != "spot"
-                and flow.spot_check is None
-            ):
-                # #4664: the check every session gets from early_check votes on,
-                # once, unless one just ran or none fits, as the check before
-                # Done is skipped.
-                early_settled = True
-                if (
-                    done_check_due(t, last_check_end)
-                    and t + _check_start_cost() <= n_steps
-                    and pool
-                    and line_ranking is not None
-                ):
-                    started = _start_check()
-                    if started is not None and started.pending:
-                        last_check_end = t
-                        check, check_phase = started, "prompt"
-                        picks = list(check.pending)
-                        flow.begin_spot_check("early")
             if picks is None and (t >= n_steps or not pool):
                 # The voting steps are spent.  Check the line once, if the run
                 # checks at all and there is a ranking with something unvoted in it.
@@ -4038,6 +4014,27 @@ def simulate_voting_iterations(  # noqa: C901
                 if not picks:
                     break
 
+        if (
+            not early_settled
+            and early_check is not None
+            and flow is not None
+            and t >= early_check
+            and flow.phase not in _OPENING_PHASES
+        ):
+            # #4664: every session is checked at early_check votes, once.  A
+            # prompted check running now, or started this step, is that
+            # check; otherwise the user checks now, if a check can start.
+            if check is not None and check.running and check_phase == "prompt":
+                early_settled = True
+            elif picks is None and flow.phase != "spot" and flow.spot_check is None:
+                early_settled = True
+                if t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                    started = _start_check()
+                    if started is not None and started.pending:
+                        last_check_end = t
+                        check, check_phase = started, "prompt"
+                        picks = list(check.pending)
+                        flow.begin_spot_check("early")
         if picks is not None:
             # A check round: every pick is answered at once.  The candidate was
             # fixed at the start, so the retrain each round triggers cannot
