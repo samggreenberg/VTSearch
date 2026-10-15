@@ -91,6 +91,8 @@ _SHARED_CONFTEST_NAMES = (
     "add_group_markers",
     "print_summary_and_exit",
     "isolate_data_dir",
+    "make_crash_safe_scheduler",
+    "set_worker_timeout_timer",
 )
 
 
