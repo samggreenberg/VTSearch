@@ -261,11 +261,25 @@ same edit.
   the rates read the cut the session's own F-beta would have drawn; click 0
   carries the text sort's. The harness records it from #4654 on
   (`oracle_fbeta*`, `fbeta_oracle_*`; `text_baseline.py`'s
-  `text_oracle_{precision,recall,fpr}_b*`). A page built from earlier runs
-  can only draw the cost cut those runs carried, which on a rare class cuts
-  deep (recall about 0.85, precision about 0.1) and sat under F1 on the
-  2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
-  reskin cannot add the best cut: the next review's run draws it.
+  `text_oracle_{precision,recall,fpr}_b*`). Runs from before that carried only
+  the cost cut, and the cost cut is old news (owner, 2026-10-15, #4939): a
+  page that hides cost, as every SotA page does, neither draws it nor names
+  it. A page built from those runs therefore has no dotted line at all, and
+  a reskin cannot add the best cut: the next review's run draws it.
+- **The viewer shows where the app said stop (owner, 2026-10-15, #4939).**
+  Beside the whole curve, the page offers each run as one dot, at the click
+  Autopilot first reached Done and its value there. A pile of per-seed
+  curves becomes a scatter plot.
+  - A run never told to stop is a hollow dot at its last click. The series'
+    marker is the Kaplan-Meier median stop at the mean value there, ±1 SD,
+    and there is none where fewer than half the runs stopped.
+  - It reads the rows' `phase`, as `stopping.stopping_points` reads `t_stop`,
+    so it agrees with the report's stopping section.
+  - The points are one click a run, so a page built with
+    `SOTA_RUNS_BUDGET_MB=0` keeps them.
+  - A page built before #4939 cannot get them from a reskin (the payload
+    holds no phase). It shows the control disabled until the page is rebuilt
+    from its results with `viewer_betas.sh`.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05; `"end"` on faces) checks the
   line once the voting steps are spent, so every run ends with
@@ -555,7 +569,7 @@ things keep a report on its link:
   preset. A review with one session set commits
   `analyze.sh`'s `analysis-<path>/viewer.html`, which holds that path's panels
   only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
-  offer cost (#4576); a page built before that gets both from
+  offer cost (#4576), nor the cost cut as its dotted line (#4939); a page built before that gets all three from
   `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's
   rounds (#4624): a run inside a prompted check is scored once per round of
