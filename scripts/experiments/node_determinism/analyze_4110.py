@@ -217,7 +217,9 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
 
-    arms = sorted({x for p in PAIRS for x in p[:2]})
+    # Only the pairs both of whose arms ran under --base (#4930 re-ran four of them on numpy 2.5).
+    pairs = [p for p in PAIRS if all((args.base / arm / "results").is_dir() for arm in p[:2])]
+    arms = sorted({x for p in pairs for x in p[:2]})
     hw = {}
     for arm in arms:
         n = nodes(args.base / arm)
@@ -231,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     timing = {arm: cell_seconds(args.base / arm) for arm in arms}
 
     summary, rows = [], []
-    for left, right, what in PAIRS:
+    for left, right, what in pairs:
         lc, rc = _cells(args.base / left), _cells(args.base / right)
         common = sorted(lc.keys() & rc.keys())
         per = [compare_cell(lc[c], rc[c]) | {"left": left, "right": right} for c in common]
@@ -316,7 +318,11 @@ def main(argv: list[str] | None = None) -> int:
         ("a_full", "a_base"),
         ("a_rep", "a_base"),
         ("i_base", "a_base"),
+        ("i_ship", "i_full"),
+        ("a_ship", "a_full"),
     ):
+        if a not in timing or b not in timing:
+            continue
         j = timing[a].index.intersection(timing[b].index)
         if len(j):
             r = timing[a][j] / timing[b][j]

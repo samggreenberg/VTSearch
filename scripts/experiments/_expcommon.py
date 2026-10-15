@@ -82,11 +82,13 @@ def numpy_kernel_pin(version: str | None = None) -> str:
     Up to 2.3 they are single extensions, and turning off ``AVX512F`` and
     ``AVX512_SKX`` takes every kernel off AVX-512.  From 2.4 they are
     microarchitecture levels plus two extensions, ``X86_V4`` holding what
-    ``AVX512_SKX`` did.  Given a name its build lacks, numpy ignores the whole
-    variable with an ``ImportWarning``, which Python hides, so an AVX-512 node
-    keeps its AVX-512 kernels and nothing says so.  Probed on numpy 2.2.6 to 2.5.4
-    across the GRID's five CPU models, each value takes its numpy's ufuncs to AVX2
-    and agrees on every node; on the other numpy it does nothing.
+    ``AVX512_SKX`` did.  numpy skips a name its build does not dispatch, with an
+    ``ImportWarning`` that Python hides, so on 2.4 the old value disables nothing:
+    an AVX-512 node keeps its AVX-512 kernels and nothing says so.  Probed on numpy
+    2.2.6 to 2.5.4 across the GRID's five CPU models, each value takes its numpy's
+    ufuncs to AVX2 and agrees on every node; on the other numpy it does nothing.
+    One value naming both sets would work on both, but warn at every import, and
+    that warning is the only sign of the next rename.
 
     Read from the package metadata, not by importing numpy: numpy reads the
     variable when it loads, so the value has to be known before then.

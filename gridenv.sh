@@ -51,9 +51,9 @@ export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
 # (scripts/experiments/_expcommon.py `cpu_kernel_pins`); they cost a CPU GEMM 2-3x,
 # so they are not set here for every job.
 # The value names numpy's dispatch targets, which numpy 2.4 renamed (#4930), and
-# numpy ignores the whole variable over one name its build lacks, with a warning
-# Python hides. So it comes from the numpy this python has, chosen by the cell
-# runner's own function. An exported value wins, an empty one included.
+# numpy skips a name its build lacks with a warning Python hides, so the old value
+# disables nothing on numpy 2.4. It comes from the numpy this python has, chosen by
+# the cell runner's own function. An exported value wins, an empty one included.
 if [ "$(uname -m)" = x86_64 ] && [ -z "${NPY_DISABLE_CPU_FEATURES+set}" ]; then
   if _vts_npy_pin="$(python -c 'import sys; sys.path.insert(0, sys.argv[1]); import _expcommon; print(_expcommon.numpy_kernel_pin())' \
     "${_VTS_WT}/scripts/experiments" 2>/dev/null)"; then

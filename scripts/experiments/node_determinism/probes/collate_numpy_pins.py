@@ -4,12 +4,13 @@ For each: whether numpy warned about the pin, which dispatch targets above AVX2
 stayed on (per CPU model), which ufunc targets ran, and which ops still differ
 between nodes.  An op "differs" when its hash is not the same on every node probed.
 
-    python collate_numpy_pins.py --probes /expscratch/$USER/det-4930/probes [--out table.md]
+    python collate_numpy_pins.py --probes /expscratch/$USER/det-4930/probes [--out table.md] [--csv pins.csv]
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -30,6 +31,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--probes", type=Path, required=True)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--csv", type=Path, help="the same table, one row per (numpy, pin)")
     args = ap.parse_args()
 
     runs = [json.loads(p.read_text()) for p in sorted(args.probes.glob("*__*__*.json"))]
@@ -45,6 +47,7 @@ def main() -> None:
         "| numpy | pin | warns | above-AVX2 targets still on (CPU: targets) | ufunc targets run | ops differing across nodes |",
         "|---|---|---|---|---|---|",
     ]
+    records = []
     for np_ver in sorted({k[0] for k in by_key}, key=lambda v: tuple(int(x) for x in v.split("."))):
         for pin in PIN_ORDER:
             rs = by_key.get((np_ver, pin))
@@ -63,6 +66,18 @@ def main() -> None:
             lines.append(
                 f"| {np_ver} | `{pin}` | {warns} | {on_txt} | {', '.join(ran)} | {', '.join(differ) or '**none**'} |"
             )
+            records.append(
+                {
+                    "numpy": np_ver,
+                    "pin": pin,
+                    "value": rs[0]["pin"] if rs[0]["pin"] is not None else "",
+                    "nodes": len(rs),
+                    "warns": warns,
+                    "above_avx2_on": on_txt,
+                    "ufunc_targets_run": " ".join(ran),
+                    "ops_differing": " ".join(differ),
+                }
+            )
     lines += ["", "Pins:"]
     seen = {}
     for r in runs:
@@ -76,6 +91,11 @@ def main() -> None:
     print(text)
     if args.out:
         args.out.write_text(text + "\n")
+    if args.csv:
+        with args.csv.open("w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(records[0]))
+            w.writeheader()
+            w.writerows(records)
 
 
 if __name__ == "__main__":

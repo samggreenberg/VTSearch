@@ -216,12 +216,12 @@ class TestThisNumpyAcceptsThePin:
     def test_imports_without_a_warning_and_turns_the_targets_off(self, expcommon):
         """The installed numpy takes its pin, and no optimized ufunc runs above AVX2 under it.
 
-        A name the build does not dispatch makes numpy ignore the whole variable with
-        an ``ImportWarning``, hidden by default, which is how numpy 2.4's renamed
-        targets left the pre-2.4 pin doing nothing (#4930); ``-W error`` makes that
-        fail here.  ``__cpu_features__`` reports the CPU's flags as well as the
-        targets turned off, so a target the pin does not name (``AVX512_ICL`` before
-        numpy 2.4) can read as on while no kernel uses it.  The ufunc check reads
+        numpy skips a name its build does not dispatch, with an ``ImportWarning``
+        hidden by default, which is how numpy 2.4's renamed targets left the pre-2.4
+        pin disabling nothing (#4930); ``-W error`` makes that fail here.
+        ``__cpu_features__`` reports the CPU's flags as well as the targets turned
+        off, so a target the pin does not name (``AVX512_ICL`` before numpy 2.4) can
+        read as on while no kernel uses it.  The ufunc check reads
         what runs instead.  It can only fail on an AVX-512 CPU; an AVX2 one runs
         nothing above AVX2 either way.
         """
