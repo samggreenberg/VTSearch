@@ -735,18 +735,19 @@ describe('AutopilotPanelComponent', () => {
       const step = component.steps.find((st) => st.state === 'active')!;
       expect(step.phase).toBe('improve');
       expect(step.detail).toBe('Expected F-beta 0.62');
+      // A step past the active one keeps its help and intent, not its detail.
       const done = component.steps.find((st) => st.phase === 'done')!;
-      expect(done.detail).toBe('Expected F-beta 0.62');
       expect(done.helpText).toContain('expects an F-beta of 0.62 at your balance');
       expect(done.helpText).not.toContain('All quality indicators are green');
+      expect(done.intent).toContain('expects an F-beta of 0.62 at your balance');
     });
 
     it('keeps "all green" when every light is green, met level or not', async () => {
       reachDone();
       fixture.componentRef.setInput('labelingStatus', { ...ALL_GREEN, level: { expected_fbeta: 0.9, level: 0.5, met: true } });
       await settleZoneless(fixture);
-      const done = component.steps.find((st) => st.phase === 'done')!;
-      expect(done.detail).toBe('All indicators green');
+      expect(component.steps.find((st) => st.state === 'active')!.detail).toBe('All indicators green');
+      expect(component.steps.find((st) => st.phase === 'done')!.helpText).toContain('All quality indicators are green');
       expect(autopilotState.handoff()?.expectedFbeta).toBeUndefined();
     });
   });
