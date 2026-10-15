@@ -1,7 +1,8 @@
 # The spot check's precision range, re-priced (issue #4483)
 
-**Status (2026-10-15): priced on existing runs (Binary Photo, every preset, 5 seeds); no new runs. Which range the
-check shows is the owner's call (below).**
+**Status (2026-10-15): priced on existing runs (Binary Photo, every preset, 5 seeds); no new runs. The owner chose
+the exact band bound without the split, on the line's kept set, shipped with this report (below). "Shipped" in the
+tables is the app before it.**
 
 **The range is wide mostly because of how each band's bound is computed, not because of the union split.** After a
 check, the state line reads "likely X–Y% right" for the set the check audited. Each band of that set gets 5 random
@@ -130,11 +131,17 @@ python scripts/experiments/state_of_app/check_range_4483.py figures <out> --docs
   --featured hg_union,bayes90j
 ```
 
-## Decision (owner)
+## Decision (owner, 2026-10-15) and what shipped
 
-1. **How each band is bounded.** Recommended: the exact bound for a band of known size, without the union split.
-   It is the narrowest construction that held the truth in at least 98.9% of checks in every regime. Keeping the
-   split costs 0.01–0.08 of width for its formal guarantee. Shipping either one changes `likely_range` and
-   `range_tail` in `spot_check.py`, and the recall range follows. The frontend draws `lo` / `hi` as it does now.
-2. **Which set the range describes.** Today it is the set the walk audited. The line's kept set is also viable at
-   about the same width, and it would let the state line put the range beside "N more kept".
+1. **How each band is bounded: the exact bound for its size, without the union split** (recommended; the
+   alternative kept the split for 0.01–0.08 more width). `likely_range` uses the hypergeometric bound
+   (`hypergeometric_lower` / `hypergeometric_upper`), and `range_tail` returns alpha whatever the bands.
+2. **Which set: the line's kept set** (the alternative was the audited set, as before). A check records how
+   many unvoted items the line kept as it starts (`SpotCheck.kept`, passed by the app's start route and by the
+   harness), and a finished check's ranges bound that set from the picks that fell in it
+   (`SpotCheck.range_over`). The balance state carries the count as `kept_at_check`, and the state line names
+   it: "Checked the 36 kept you hadn't voted on · likely 55–80% right, about half of them found (checked 12) ·
+   30 more kept". The two counts differ once the check's own picks are voted and the line re-drawn.
+
+The harness logs the count as `check_kept`, and `analyze.py` reads a check's truth on it (on `check_audited` for
+runs before it). The walk, its picks and its estimate are unchanged, so no session's clicks or F-beta move.

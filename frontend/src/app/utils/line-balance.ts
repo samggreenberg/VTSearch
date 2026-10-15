@@ -303,7 +303,8 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   const audited = (balance.audited ?? balance.count).toLocaleString();
   if (balance.shape === 'advisory' && balance.keptAtCheck !== null) {
     const ranged = balance.keptAtCheck.toLocaleString();
-    if (!p || !r) return `When a check started, the line kept none you hadn't voted on; it keeps the top ${kept} now.`;
+    if (balance.keptAtCheck === 0) return `When a check started, the line kept none you hadn't voted on; it keeps the top ${kept} now.`;
+    if (!p || !r) return `When a check started, the line kept the top ${ranged} you hadn't voted on; it keeps the top ${kept} now.`;
     return (
       `When the check started, the line kept the top ${ranged} you hadn't voted on. ${p.labelled} of the check's random picks ` +
       `fell among them and ${p.right} were right, so likely ${rangePercent(p)} of them are, ` +

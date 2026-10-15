@@ -298,15 +298,19 @@ describe('line-balance (#4413)', () => {
       expect(why).not.toMatch(/estimate|enough|short/i);
     });
 
-    it('explains an advisory check (beta 1 and below) by the set it audited, and says the line keeps its own count', () => {
-      const why = balanceExplanation(lineBalance('checked', { count: 16, audited: 64 }))!;
+    it('explains an advisory check from a server before #4483 by the set it audited, and says the line keeps its own count', () => {
+      const why = balanceExplanation(lineBalance('checked', { count: 16, audited: 64, keptAtCheck: null }))!;
       expect(why).toContain("A check of 5 random picks from the top 64 you hadn't voted on found 5 right");
       expect(why).toContain(
         "The line keeps the top 16 you haven't voted on, where your labels put it: a check informs the line and does not move it.",
       );
       expect(why).not.toContain('peaked');
-      expect(balanceExplanation(lineBalance('checked', { count: 16, audited: 64, precision: null, recall: null }))).toBe(
-        "A check ended on the top 64 you hadn't voted on; the line keeps the top 16.",
+      expect(
+        balanceExplanation(lineBalance('checked', { count: 16, audited: 64, keptAtCheck: null, precision: null, recall: null })),
+      ).toBe("A check ended on the top 64 you hadn't voted on; the line keeps the top 16.");
+      // Since #4483 the set named is the one the line kept when the check started.
+      expect(balanceExplanation(lineBalance('checked', { count: 16, audited: 64, keptAtCheck: 20, precision: null, recall: null }))).toBe(
+        "When a check started, the line kept the top 20 you hadn't voted on; it keeps the top 16 now.",
       );
     });
 

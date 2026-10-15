@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
+  #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
+  `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns
+  `alpha` whatever the bands (#4272's union split is dropped). `SpotCheck.start_balance(kept=)` records how
+  many unvoted items the line kept as the check starts (`SpotCheck.kept`); `range_over(top)` /
+  `recall_range_over(top)` bound any top set from the picks that fell in it (`parts_over`), `range_count` is
+  the set a finished check's ranges describe, and `is_stale` watches that set. `BalanceState` gains
+  `kept_at_check`, and its `precision` / `recall` describe that set; the eval harness passes the line's count
+  and logs it as `check_kept`. `range()` / `recall_range()` still describe the walk's own set. Priced at
+  `docs/experiments/2026-10-15-check-range-4483/REPORT.md`.
+
 - **The weak-separation check prompts once** (issue #4909). New
   `vtscore.training.thresholds.WEAK_CHECK_REPEAT` (`None`) is `weak_check_due`'s default `cooldown`, so a
   check is due only while none has ended (it was `WEAK_CHECK_COOLDOWN`, 25: again 25 votes after the last
