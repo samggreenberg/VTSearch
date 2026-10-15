@@ -17,10 +17,13 @@
 #   fold_transfer_4910.sh launch ARM PATH BETA [IDX]  one arm, path and preset as a cpu array (default: every seed's)
 #   fold_transfer_4910.sh cpack ARM PATH BETA [IDX]   the same as cpu-partition packs: one job runs CALIB_PACK_PAR
 #                                                     cells at CALIB_CPUS (default 1) thread each
+#   fold_transfer_4910.sh gpack ARM PATH BETA [IDX]   the same as one pack on a V100 node, the GPU hidden: the gpu
+#                                                     partition is outside the cpu cap (4 GPUs per user)
 #   fold_transfer_4910.sh idx PATH [SEEDS]            the grid indices of a path's cells, seed-major
 #
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it). Pin the
-# CPU vendor (SBATCH_CONSTRAINT=amd) so paired arms do not drift apart on BLAS (#4481).
+# CPU vendor so paired arms do not drift apart on BLAS (#4481): every V100 node is Intel, so this study runs on
+# Intel throughout (SBATCH_CONSTRAINT=intel on the cpu partition too).
 # Env: XFER4910_DATE (default 2026-10-15), XFER4910_SEEDS (5), XFER4910_TAG (e.g. smoke), SOTA_ROOT, and anything
 # launch.sh reads (CALIB_MEM, CALIB_CONC, CALIB_TIME, CALIB_PACK_JOBS, CALIB_PACK_PAR, CALIB_PACK_TIME).
 set -euo pipefail
@@ -73,7 +76,7 @@ JSON
 idx)
   path_idx "${2:?path (${PATHS[*]})}" "${3:-$SEEDS}"
   ;;
-launch|cpack)
+launch|cpack|gpack)
   arm="${2:?arm (${ARMS[*]})}" p="${3:?path (${PATHS[*]})}" b="${4:?beta (0.25, 1 or 4)}"
   [[ -v "KNOBS[$arm]" ]] || { echo "arm must be one of ${ARMS[*]}" >&2; exit 2; }
   idx="${5:-$(path_idx "$p")}"
@@ -88,6 +91,11 @@ launch|cpack)
   if [[ -n "${DIVERGES[$arm]}" ]]; then
     export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}${DIVERGES[$arm]}"
   fi
+  if [[ "$1" == gpack ]]; then
+    export CALIB_PARTITION=gpu CALIB_PACK_GRES="${CALIB_PACK_GRES:-gpu:v100:1}" CALIB_CPUS=1 CALIB_MEM="${mem_in:-2G}"
+    export CALIB_PACK_JOBS=1 CALIB_PACK_PAR="${CALIB_PACK_PAR:-32}" CALIB_TIME="${CALIB_PACK_TIME:-12:00:00}"
+    exec bash "$HERE/launch.sh" pack "$idx"
+  fi
   if [[ "$1" == cpack ]]; then
     export CALIB_PARTITION=cpu CALIB_CPUS="${CALIB_CPUS:-1}" CALIB_MEM="${mem_in:-2G}"
     export CALIB_PACK_JOBS="${CALIB_PACK_JOBS:-1}" CALIB_PACK_PAR="${CALIB_PACK_PAR:-16}"
@@ -98,6 +106,6 @@ launch|cpack)
   exec bash "$HERE/launch.sh" redo "$idx"
   ;;
 *)
-  echo "usage: fold_transfer_4910.sh {dirs [ARM] | idx PATH [SEEDS] | launch ARM PATH BETA [IDX] | cpack ARM PATH BETA [IDX]}" >&2
+  echo "usage: fold_transfer_4910.sh {dirs [ARM] | idx PATH [SEEDS] | {launch|cpack|gpack} ARM PATH BETA [IDX]}" >&2
   exit 1 ;;
 esac
