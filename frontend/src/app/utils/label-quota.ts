@@ -48,11 +48,25 @@ export function centroidNote(quota: LabelQuota | null | undefined): string {
 
 /**
  * The note a view shows when the detector it was given is its typed query
- * (#4758), or `''` for any other (and before any response).
+ * (#4758), or `''` for any other (and before any response). Past the quota it
+ * is the typed query's hold (#4736) that kept the trained one away, and the
+ * note says so rather than naming counts the labels already meet (#4889).
  */
 export function queryNote(quota: LabelQuota | null | undefined): string {
   if (!quota || quota.tier !== 'query') return '';
-  return underQuotaNote(quota, "the detector's typed query, keeping the images its text sort keeps in Train");
+  const servedAs = "the detector's typed query, keeping the images its text sort keeps in Train";
+  return quota.hold_owed > 0 ? heldNote(quota, servedAs) : underQuotaNote(quota, servedAs);
+}
+
+/** The note on a typed-query detector past the quota, held on its query until the hold's labels (#4736). */
+function heldNote(quota: LabelQuota, servedAs: string): string {
+  const n = quota.n_good + quota.n_bad;
+  const more = `${quota.hold_owed} more label${quota.hold_owed === 1 ? '' : 's'}`;
+  return (
+    `A detector made from a typed query keeps its query's set until it has ${quota.hold_labels} labels ` +
+    `(this one has ${n}), so this is ${servedAs}; the Threshold moves it. ` +
+    `${more}, Good or Bad, in Train give a trained one.`
+  );
 }
 
 /** The note for whichever detector the quota gave (the typed query or the Goods' centroid), or `''` for a trained one. */

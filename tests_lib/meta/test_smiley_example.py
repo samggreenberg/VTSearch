@@ -112,6 +112,20 @@ def test_the_vote_baselines_fit_their_corpora() -> None:
         assert not short, f"{votes} asks for more than {_const(corpus)} holds (wanted, held): {short}"
 
 
+def test_the_detector_has_a_trained_head() -> None:
+    # `Yellow Smileys` is made from a typed query on SigLIP, so under the hold it
+    # gives its query's own set, which keeps one picture of `drawings-new`: Test
+    # then has nothing to test, and every Test shot times out (#4862).
+    from vtscore.detectors.label_quota import TIER_TRAINED, label_quota, query_holds
+
+    good, bad = _votes("VOTES")
+    n_bad = sum(bad.values())
+    assert label_quota(good, n_bad).tier == TIER_TRAINED
+    assert not query_holds(good, n_bad, patch_space=False), (
+        f"VOTES has {good + n_bad} labels, under the typed query's hold: Test would show the query's set"
+    )
+
+
 def test_the_detector_learns_yellow_and_smiling_not_yellow() -> None:
     # The Bads are what make the trained ranking a picture of a detector that
     # learned the concept: if they drift to easy pictures only, the shots stop

@@ -4876,6 +4876,14 @@
           "goods_owed": {
             "type": "integer"
           },
+          "hold_labels": {
+            "description": "Labels a typed-query detector on a single-vector space keeps its query's set until (#4736).",
+            "type": "integer"
+          },
+          "hold_owed": {
+            "description": "On a ``query`` tier whose labels meet the quota, the labels (Good or Bad) still owed before the hold gives the trained head; 0 when the hold is not why (#4889).",
+            "type": "integer"
+          },
           "n_bad": {
             "type": "integer"
           },
@@ -4899,6 +4907,8 @@
           "dry_bad_quota",
           "good_quota",
           "goods_owed",
+          "hold_labels",
+          "hold_owed",
           "n_bad",
           "n_good",
           "tier"

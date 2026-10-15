@@ -112,23 +112,31 @@ export function framesOf(pictures, cat, n) {
 /**
  * The votes that train `Yellow Smileys`: a first session's worth.
  *
- * Twenty-seven labels, like the Book example it replaced. Fewer is not a
- * detector anyone would ship, and the count is load-bearing for
- * `autopilot-progress`: Autopilot moves through its phases on vote counts, and
- * this baseline puts it in Refine Boundary, so change it and that shot's
- * active phase moves with it.
+ * Thirty labels. Fewer is not a detector anyone would ship, and the count is
+ * load-bearing twice over:
+ *
+ * - **The Test shots need a trained head.** `Yellow Smileys` is made from a
+ *   typed query on SigLIP, and such a detector gives its query's own set until
+ *   it has `QUERY_HOLD_LABELS` (30) labels (#4736,
+ *   `vtscore/detectors/label_quota.py`). On `drawings-new` that set keeps one
+ *   picture, so Test has nothing to test and every recipe that waits for its
+ *   result times out (#4862). `tests_lib/meta/test_smiley_example.py` holds the
+ *   baseline to the hold.
+ * - **`autopilot-progress`**: Autopilot moves through its phases on vote
+ *   counts, and this baseline puts it in Refine Boundary, so change it and that
+ *   shot's active phase moves with it.
  *
  * The Bads are the near-misses rather than the easy ones: yellow faces that
  * are not smiling, smiling faces that are not yellow, yellow shapes with no
  * face at all. That is what makes the ranking in the results shots look like
  * a detector that learned *yellow and smiling* rather than *yellow*. Measured
- * on `drawings-new` with SigLIP (#4240): the text query alone ranks the 34
+ * on `drawings-new` with SigLIP (#4862): the text query alone ranks the 34
  * yellow smileys at an average precision of 0.83, and these votes lift it to
  * 0.99.
  */
 export const VOTES = {
   good: 12,
-  bad: { 'yellow-face': 4, 'orange-smiley': 3, smiley: 3, 'yellow-shapes': 2, face: 2, scene: 1 },
+  bad: { 'yellow-face': 5, 'orange-smiley': 4, smiley: 4, 'yellow-shapes': 2, face: 2, scene: 1 },
 };
 
 // The region shot wants a picture where the yellow smiley is a *part* of the

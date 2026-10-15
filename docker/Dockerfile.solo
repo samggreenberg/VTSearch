@@ -1,0 +1,154 @@
+# -----------------------------------------------------------------
+# VTSearch: single-media-type CPU image (audio-only, video-only, ...)
+#
+# The full CPU image (same dependencies as docker/Dockerfile) locked to one
+# media type, with that type's default embedder weights baked in so a fresh
+# container serves on first run without a Hugging Face download.
+#
+# MEDIA_TYPE is required: a registered media-type id. The build fails, listing
+# the valid ids, for a missing or unknown one. What gets baked today:
+#
+#   audio     CLAP General
+#   video     X-CLIP
+#   image     SigLIP (docker/Dockerfile.labbench is the slimmer image-only build)
+#   text      E5
+#   document  SigLIP: a half type, meaning document input converted to page
+#             images (document2image), so it bakes what the pages embed with
+#   face      FaceNet: a half type, meaning image input with the faces cropped
+#             out (image2face), embedded in FaceNet identity space
+#
+# The lock does not yet force a half type's pipeline in every flow (#4891).
+#
+# That table is informational. The baked embedder is whatever the server warms
+# for the type at startup, because the build runs that very preload
+# (scripts/preload_default_embedder.py); this file names no model, so a change
+# of default cannot leave the image baking the wrong one.
+#
+# The lock is VTSEARCH_SOLO_MEDIA_TYPE (set below), the admin override the
+# gunicorn images read in place of --solo-media-type. It hides the mediaType
+# pickers in the dataset-importer and new-detector flows, filters converters
+# to ones that output this type, and preloads the type's default embedder at
+# startup. Being an env var rather than a seeded settings file, it also holds
+# when the image is redeployed onto an existing /app/data volume. Other
+# embedders for the type stay installed and selectable; their weights
+# download on first use.
+#
+# Build (from repo root):
+#   docker build -f docker/Dockerfile.solo --build-arg MEDIA_TYPE=audio -t vtsearch:audio .
+# Run:
+#   docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:audio
+# Or use docker/compose/docker-compose.audio.yml / docker-compose.video.yml.
+# -----------------------------------------------------------------
+
+# ---------- frontend build stage ----------
+# Builds the Angular SPA inside the image so callers never have to run
+# `npm run build:prod` on the host. Output lands at /static because
+# frontend/angular.json sets outputPath to "../static" relative to the
+# frontend/ workdir. The final stage COPYs /static into /app/static.
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build:prod
+
+FROM python:3.12-slim AS base
+
+# System packages needed by opencv, librosa, and other native deps
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libsndfile1 \
+        ffmpeg \
+        libgl1 \
+        libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ---------- dependency layer ----------
+# Identical to docker/Dockerfile's, so every embedder and converter for the
+# chosen type is installed. vtscore/ is copied here as well (docker/Dockerfile
+# only needs it at runtime) because the preload step below imports it.
+COPY requirements/ requirements/
+COPY pyproject.toml ./
+COPY vtsearch/ vtsearch/
+COPY vtscore/ vtscore/
+
+# AGPL opt-out, as in docker/Dockerfile:
+#   docker build --build-arg REQUIREMENTS=base-no-agpl.txt ...
+ARG REQUIREMENTS=base.txt
+
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir \
+        --prefer-binary \
+        -r "requirements/$REQUIREMENTS"
+
+# ---------- VTSBrowse signpost naming (toponymy) ----------
+# Mirrors scripts/install.sh's `vts_install_toponymy`; see docker/Dockerfile
+# for why it is a dedicated `--no-deps` step (issue #3852).
+RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
+
+# ---------- FaceNet (the face half type) ----------
+# facenet-pytorch is both halves of a face container: the image2face
+# converter's MTCNN detector and the face embedder. Mirrors scripts/install.sh's
+# `vts_install_face_deps`: its torch<2.3 / numpy<2 / Pillow<10.3 pins would
+# downgrade the stack, and are empirically unnecessary, so it goes in
+# `--no-deps` on the torch / torchvision / numpy / Pillow already installed.
+RUN pip install --no-cache-dir --no-deps facenet-pytorch
+
+# ---------- bake the media type's default embedder ----------
+# Weights go to a non-volume path so a volume mounted on /app/data cannot mask
+# them; the app reads the cache location from VTSEARCH_MODELS_DIR. TORCH_HOME
+# points at the same place so a torch.hub-loaded checkpoint is baked there too
+# rather than under root's $HOME, which the runtime user cannot see.
+# HF_HUB_DOWNLOAD_TIMEOUT makes a stalled connection error out (and
+# huggingface_hub auto-retry) instead of blocking the build forever.
+#
+# MEDIA_TYPE is declared here, after the dependency layers, so an audio and a
+# video build share every layer above this one.
+ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
+    TORCH_HOME=/opt/vtsearch/models \
+    HF_HUB_DOWNLOAD_TIMEOUT=120 \
+    PYTHONUNBUFFERED=1
+ARG MEDIA_TYPE=
+COPY scripts/preload_default_embedder.py scripts/preload_default_embedder.py
+RUN mkdir -p "$VTSEARCH_MODELS_DIR" && \
+    python -u scripts/preload_default_embedder.py "$MEDIA_TYPE"
+
+# ---------- application layer ----------
+COPY . .
+
+# Overlay the freshly-built Angular bundle from the frontend stage so
+# the image is never served with a stale checked-in static/ snapshot.
+RUN rm -rf /app/static
+COPY --from=frontend /static/ /app/static/
+
+# Bake the version into the image. See docker/Dockerfile for the pattern.
+ARG VTSEARCH_VERSION=
+RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
+
+# Runtime data directory (settings, embeddings, datasets, media files).
+# Mount a volume here to persist user data across container restarts.
+# Note: the baked weights live under /opt/vtsearch/models, NOT this volume.
+RUN mkdir -p /app/data
+VOLUME /app/data
+
+# Run as a non-root user. See docker/Dockerfile for the rationale and the
+# GID-0 / g=u perm pattern that lets arbitrary OpenShift UIDs write.
+# /opt/vtsearch/models is opened up too, so the baked weights stay readable
+# when the runtime UID is unknown at build time.
+RUN useradd --uid 1000 --gid 0 --create-home --home-dir /home/vtsearch vtsearch && \
+    chgrp -R 0 /app /home/vtsearch /opt/vtsearch && \
+    chmod -R g=u /app /home/vtsearch /opt/vtsearch
+
+ENV HOME=/home/vtsearch
+USER 1000
+
+EXPOSE 5000
+
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    VTSEARCH_SERVER_INIT=1 \
+    VTSEARCH_SOLO_MEDIA_TYPE=${MEDIA_TYPE}
+
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]

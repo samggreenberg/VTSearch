@@ -147,6 +147,12 @@ stamp that decomposes to four means the merge gap is wrong.
 **Tobacco800** — 1,290 real scanned business documents, 412 with a logo, GEDI
 XML ground truth from UMD's LAMP. Its published protocol keeps the 21 logo
 categories with ≥2 occurrences, which cannot support a train-and-search eval.
+One page's XML was drawn on the page turned upright while its TIF is stored
+upside down, so read verbatim its logo box held no ink at all (#4871).
+`sources/tobacco800.py` turns the boxes of the pages in `TURNED_180`, and
+`turned_gt_audit.py` is how that table is found: it compares the ink in every
+logo zone with the ink at its 180-degree image. `audit_to_corrections.py
+--turn-pages` brings a corpus built before a page joined the table into line.
 
 **UCSF IDL** — an open Solr index; measured live 2026-08-25:
 

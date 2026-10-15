@@ -18,7 +18,6 @@ The decomposition figure re-plots published numbers from
 """
 
 import functools
-import itertools
 import math
 import sys
 from collections.abc import Sequence
@@ -5311,7 +5310,7 @@ LL_STAGES = 6
 #: The stage each radio's expected F-beta arrives on, in `FBETA_ARMS` order.
 LL_REVEAL = (5, 4, 6)
 #: The first stage Just How You Like It shows. The three before it are Curvey and
-#: InDiscreet's (`calib-labels-fit`), the slide right before it (owner,
+#: InDiscrete's (`calib-labels-fit`), the slide right before it (owner,
 #: 2026-10-13: the fit without a balance, then the line with one), so the slide
 #: opens on that fit recapped and builds only what the balance adds.
 LL_FIRST_SHOWN = 3
@@ -5443,7 +5442,7 @@ def labels_line_fig() -> None:
     expected F-beta of every cut, and the line at its peak. The last two pages
     add the other radios' peaks, β ¼'s and then β 4's — the same three balances
     as `calib-fbeta`.
-    The first two rows are built up on Curvey & InDiscreet (`labels_fit_fig`), so
+    The first two rows are built up on Curvey & InDiscrete (`labels_fit_fig`), so
     the pages start at :data:`LL_FIRST_SHOWN` and are numbered from 1.
     """
     final = _ll_stage(LL_STAGES)
@@ -5529,7 +5528,7 @@ def _ll_corpus_row(
     """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds.
 
     With ``fit=False`` the bars alone: the corpus as Oops! All Haystack left it,
-    before Curvey & InDiscreet fits it. With ``show_count=False`` the fit without the
+    before Curvey & InDiscrete fits it. With ``show_count=False`` the fit without the
     count of matches, on a slide whose point is elsewhere (A Cut Above).
     """
     lo, hi = LL_LOGIT
@@ -5614,9 +5613,9 @@ def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float,
     )
 
 
-# ── Curvey & InDiscreet: the folds and the corpus, fitted together (#4452) ────────
+# ── Curvey & InDiscrete: the folds and the corpus, fitted together (#4452) ────────
 
-#: How many build stages Curvey & InDiscreet's figure reveals in (owner,
+#: How many build stages Curvey & InDiscrete's figure reveals in (owner,
 #: #4835): the held-out votes and the corpus, bare, so the room sees at once
 #: that the votes are no sample of it; the class model fitted to the votes; the
 #: 2-part fit of the corpus with the Good normal held, and its count; each
@@ -5625,7 +5624,7 @@ LF_STAGES = 4
 
 
 def labels_fit_fig() -> None:
-    """Curvey & InDiscreet: where section II's three ideas meet, before any line is drawn (#4452).
+    """Curvey & InDiscrete: where section II's three ideas meet, before any line is drawn (#4452).
 
     Just How You Like It's canvas and rows, built up from nothing (owner, #4835):
     Grade My Own Homework's held-out votes beside Oops! All Haystack's corpus,
@@ -5649,7 +5648,7 @@ def labels_fit_fig() -> None:
 def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
     """Each unvoted item's chance of being a match, from the 3-part fit, with even odds marked.
 
-    Drawn where Just How You Like It draws expected F-beta, so Curvey & InDiscreet and
+    Drawn where Just How You Like It draws expected F-beta, so Curvey & InDiscrete and
     A Cut Above read as the same fit asked one question.
     """
     lo, hi = LL_LOGIT
@@ -5668,7 +5667,7 @@ def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
 
 
 def _lf_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of Curvey & InDiscreet's figure."""
+    """Draw the first *stage* steps (1-based, cumulative) of Curvey & InDiscrete's figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, LL_CANVAS[0])
@@ -5693,7 +5692,7 @@ def _lf_stage(stage: int) -> plt.Figure:
 #: going back into the votes.
 ACQ_FLOW_STAGES = 4
 #: The first stage the slide shows. The chance of a match is Curvey &
-#: InDiscreet's last page already, so the slide goes straight to where it asks
+#: InDiscrete's last page already, so the slide goes straight to where it asks
 #: (owner, #4872).
 ACQ_FIRST_SHOWN = 2
 #: The chance row stands where Just How You Like It drew expected F-beta, at that
@@ -5783,7 +5782,7 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
     model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
     half = ACQ_CHANCE_Y + ACQ_CHANCE_H / 2
 
-    # ── stage 1: Curvey & InDiscreet's fit, with the line at the middle radio ───────
+    # ── stage 1: Curvey & InDiscrete's fit, with the line at the middle radio ───────
     _ll_votes_row(ax, model, 2)
     _ll_corpus_row(ax, corpus, line, model, show_count=False)
     _ll_chance_row(ax, line)
@@ -6323,14 +6322,6 @@ LAND_HOLD_WHITE = 0.5
 #: The no-Goods row's name: it sits inside a row one count tall, so it is the
 #: smallest type the 20px floor allows rather than the map's 16pt.
 LAND_ROW_FONT = 13
-#: The band the folds' split decides is a mix of the two solid fills rather
-#: than a blend (owner, 2026-10-13): diagonal stripes of the labels line's
-#: purple on the outlier cut's orange, the purple's share of each period the
-#: row's chance of the labels line. This is the period along the Bads axis,
-#: in canvas units; the stripes run at 45°, on one phase for the whole band,
-#: each starting on the same line in every row, so a stripe's left edge is
-#: continuous up the band and its right edge steps out as the share grows.
-LAND_STRIPE_PERIOD = 0.5
 
 
 def _oklab(hex_color: str) -> np.ndarray:
@@ -6364,58 +6355,43 @@ def _lightened(hex_color: str) -> str:
     return _from_oklab(_toward_white(_oklab(hex_color), LAND_HOLD_WHITE))
 
 
-class _Coin:
-    """An RNG stub whose one draw is fixed: walks a dithered rounding's two branches through the shipped code."""
-
-    def __init__(self, u: float) -> None:
-        self.u = u
-
-    def random_sample(self) -> float:
-        return self.u
-
-
-def _land_branches(exact: float) -> list[tuple[float, int]]:
-    """``(probability, count)`` for each way `_dithered_count` can round *exact*, from the shipped function."""
-    from vtscore.training.thresholds.conformal import _dithered_count  # noqa: PLC0415
-
-    frac = exact - math.floor(exact)
-    if frac <= 0.0:
-        return [(1.0, _dithered_count(exact, _Coin(0.5)))]
-    return [(frac, _dithered_count(exact, _Coin(0.0))), (1.0 - frac, _dithered_count(exact, _Coin(1.0 - 1e-12)))]
-
-
 def _land_p_labels(n_good: int, n_bad: int, split: float) -> float:
-    """The chance a trained head's line is the labels line at these counts, over how the split rounds.
+    """1 where a trained head's line is the labels line at these counts, else 0.
 
-    The calibration folds' arithmetic (`_grouped_folds`): each of the
-    `DEFAULT_CALIBRATE_COUNT` folds holds out the same number of Goods, sized by
-    two dithered roundings, and the labels line stands once they hold out
-    `HEAD_COUNT_GOODS` between them (`head_count_serves`). With too few votes to
-    split, the class model reads the head's own scores of every Good.
+    The calibration folds' arithmetic (`_split_train_counts`): each of the
+    `DEFAULT_CALIBRATE_COUNT` folds holds out the Goods' nearest whole share,
+    and the labels line stands once they hold out `HEAD_COUNT_GOODS` between
+    them (`head_count_serves`). With too few votes to split, the class model
+    reads the head's own scores of every Good.
     """
     from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
+    from vtscore.training.thresholds.conformal import _split_train_counts  # noqa: PLC0415
     from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
 
     n = n_good + n_bad
     if n < 4 or n_good < 2 or n_bad < 2:
         return 1.0 if n_good >= HEAD_COUNT_GOODS else 0.0
-    p = 0.0
-    for p_cal, n_cal in _land_branches(n * split):
-        n_train = n - max(1, n_cal)
-        for p_pos, target in _land_branches(n_good * n_train / n):
-            held = n_good - max(1, min(n_good - 1, target))
-            if DEFAULT_CALIBRATE_COUNT * held >= HEAD_COUNT_GOODS:
-                p += p_cal * p_pos
-    return p
+    sizes = _split_train_counts(n, n_good, n_bad, split, None)
+    if sizes is None:
+        return 0.0
+    held = n_good - sizes[0]
+    return 1.0 if DEFAULT_CALIBRATE_COUNT * held >= HEAD_COUNT_GOODS else 0.0
 
 
-def _land_band() -> tuple[int, int]:
-    """``(lo, hi)``: the split can give a trained head the labels line from *lo* Goods, and always does from *hi*."""
+def _land_edge() -> int:
+    """The Goods from which a trained head draws the labels line.
+
+    The folds' split is a fixed function of the Goods (`nearest_holdout`,
+    #4864), so the edge is one count for every count of Bads: below it no
+    trained cell draws the labels line, from it every one does. Before #4864 a
+    coin decided a band of rows, and the map striped them.
+    """
     grid = _land_grid()
     trained = grid["kind"] == "trained"
-    some = [g for g in range(LAND_G + 1) if (grid["p"][g, trained[g]] > 0).any()]
     every = [g for g in range(LAND_G + 1) if trained[g].any() and (grid["p"][g, trained[g]] >= 1.0).all()]
-    return min(some), min(every)
+    edge = min(every)
+    assert all((grid["p"][g, trained[g]] == 0.0).all() for g in range(edge)), "a row below the edge draws both lines"
+    return edge
 
 
 @functools.lru_cache(maxsize=None)
@@ -6440,14 +6416,7 @@ def _land_grid() -> dict:
             else:
                 p_labels[g, b] = _land_p_labels(g, b, PRODUCTION_SPLIT_BY_SPACE["single_vector"])
                 kind[g, b] = "trained"
-    # One mix per Goods row (owner, 2026-10-13): the exact chance wobbles a
-    # few points along a row, with whether 0.3 of G + B is a whole number (at
-    # 10 Goods it is 1.000 with 20 Bads and 0.93 either side), and that speckle
-    # reads as noise. Each row's stripes show the mean of its trained cells'
-    # exact chance.
-    trained = kind == "trained"
-    p_row = np.array([p_labels[g, trained[g]].mean() if trained[g].any() else 0.0 for g in range(LAND_G + 1)])
-    return {"kind": kind, "p": p_labels, "p_row": p_row, "held": held}
+    return {"kind": kind, "p": p_labels, "held": held}
 
 
 def lay_of_the_land_fig() -> None:
@@ -6456,14 +6425,12 @@ def lay_of_the_land_fig() -> None:
     One cell per pair of counts, on a single-vector space (the Binary path,
     and faces). Below the quota the Goods' average; past it the trained head,
     cutting at the outliers until its folds hold out six Goods, then the
-    labels line. Where the folds' split rounds either way, the row is striped
-    with the two fills, the labels line's share of each stripe its mean
-    chance (`_land_band_row`), and the last page lightens the cells where a
-    text query keeps its own set (`_lightened`). Binary only: the room meets
-    region voting, whose folds split another way, sections later, so the
-    slide never names it. Every boundary is computed from the shipped
-    functions and constants (`label_quota`, `query_holds`, `_dithered_count`,
-    `PRODUCTION_SPLIT_BY_SPACE`, `HEAD_COUNT_GOODS`).
+    labels line, from one count of Goods on (`_land_edge`). The last page
+    lightens the cells where a text query keeps its own set (`_lightened`).
+    Binary only: the room meets region voting, whose folds split another way,
+    sections later, so the slide never names it. Every boundary is computed
+    from the shipped functions and constants (`label_quota`, `query_holds`,
+    `_split_train_counts`, `PRODUCTION_SPLIT_BY_SPACE`, `HEAD_COUNT_GOODS`).
     """
     final = _land_stage(LAND_STAGES)
     box = tight_box(final)
@@ -6515,23 +6482,23 @@ def _land_stage(stage: int) -> plt.Figure:
 
 
 def _land_cells(ax: plt.Axes, stage: int) -> None:
-    """One cell per pair of counts, filled by its strategy; the band the split decides, as striped rows.
+    """One cell per pair of counts, filled by its strategy.
 
-    The trained head's rows the split cannot change, from page 2; the band
-    and the labels line above it, from page 3. A page only adds cells until
-    the last, which lightens the cells under the text query's hold
-    (`LAND_STAGES`): the same cells in the same hues, half way to white.
+    The trained head's outlier cut below the edge, from page 2; the labels
+    line from the edge up, from page 3. A page only adds cells until the last,
+    which lightens the cells under the text query's hold (`LAND_STAGES`): the
+    same cells in the same hues, half way to white.
     """
     grid = _land_grid()
-    lo, hi = _land_band()
+    edge = _land_edge()
     held = grid["held"] if stage >= LAND_STAGES else np.zeros_like(grid["held"])
     for g in range(LAND_G + 1):
         for b in range(LAND_B + 1):
             k = grid["kind"][g, b]
             if k == "trained":
-                if stage < (2 if g < lo else 3) or lo <= g < hi:
+                if stage < (2 if g < edge else 3):
                     continue
-                fill = LAND_FILL["count" if g < lo else "labels"]
+                fill = LAND_FILL["count" if g < edge else "labels"]
             else:
                 fill = LAND_FILL[k]
             if held[g, b]:
@@ -6540,79 +6507,6 @@ def _land_cells(ax: plt.Axes, stage: int) -> None:
             # the black edges between decisions are drawn.
             ax.add_patch(Rectangle(_land_cell(b, g)[:2], *_land_cell(b, g)[2:], facecolor=fill, edgecolor=fill,
                                    linewidth=0.3, zorder=1))  # fmt: skip
-    if stage >= 3:
-        for g in range(lo, hi):
-            _land_band_row(ax, g, grid["p_row"][g], held[g])
-
-
-def _land_band_row(ax: plt.Axes, g: int, p: float, held: np.ndarray) -> None:
-    """Row *g* of the band: the outlier cut's orange under the labels line's purple stripes, their share *p*.
-
-    *held* flags the row's cells under the text query's hold, which are drawn
-    in the lightened pair. The row's trained cells are one run (from the
-    quota's Bads on) and the held ones are its left end, so the row is at
-    most two runs, each striped in its own pair and clipped to its own cells.
-    """
-    grid = _land_grid()
-    _, y, _, h = _land_cell(0, g)
-    trained = [b for b in range(LAND_B + 1) if grid["kind"][g, b] == "trained"]
-    for lightened, run in itertools.groupby(trained, key=lambda b: bool(held[b])):
-        cells = list(run)
-        x0, x1 = _land_cell(cells[0], g)[0], _land_cell(cells[-1] + 1, g)[0]
-        base, stripe = (_lightened(LAND_FILL[k]) if lightened else LAND_FILL[k] for k in ("count", "labels"))
-        _land_stripes(ax, (x0, y, x1 - x0, h), p, base, stripe)
-
-
-def _land_stripes(ax: plt.Axes, box: tuple[float, float, float, float], p: float, base: str, stripe: str) -> None:
-    """Fill *box* with *base*, and over it 45° stripes of *stripe* that are *p* of every `LAND_STRIPE_PERIOD`.
-
-    The stripes' phase is the plot's origin, so every row of the band is cut
-    by the same stripes, each starting on the same line, and only their width
-    changes from row to row. Each stripe is a parallelogram the box's height,
-    cut to the box's width; it overlaps the rows above and below by a hair,
-    so no seam of the base shows between one row's stripes and the next's.
-    """
-    x, y, w, h = box
-    ax.add_patch(Rectangle((x, y), w, h, facecolor=base, edgecolor=base, linewidth=0.3, zorder=1))
-    width = p * LAND_STRIPE_PERIOD
-    if width <= 0.0:
-        return
-    eps = 0.01
-    bx0, by0 = LAND_BOX[:2]
-    # A stripe starts on the line x - y = bx0 - by0 + k * period, which
-    # crosses the row's bottom edge at `start + lo` and its top edge h
-    # further right, and it is `width` wide to the right of that line.
-    lo, hi = y - eps - by0, y + h + eps - by0
-    k_first = math.floor((x - bx0 - hi - width) / LAND_STRIPE_PERIOD)
-    k_last = math.ceil((x + w - bx0 - lo) / LAND_STRIPE_PERIOD)
-    for k in range(k_first, k_last + 1):
-        start = bx0 + k * LAND_STRIPE_PERIOD
-        corners = [
-            (start + lo, y - eps),
-            (start + lo + width, y - eps),
-            (start + hi + width, y + h + eps),
-            (start + hi, y + h + eps),
-        ]
-        cut = _clip_x(corners, x, x + w)
-        if len(cut) >= 3:
-            ax.add_patch(Polygon(cut, closed=True, facecolor=stripe, edgecolor="none", zorder=1.2))
-
-
-def _clip_x(points: list[tuple[float, float]], x_min: float, x_max: float) -> list[tuple[float, float]]:
-    """The part of a convex polygon between ``x = x_min`` and ``x = x_max`` (Sutherland–Hodgman, two edges)."""
-    for bound, keep in ((x_min, lambda px: px >= x_min), (x_max, lambda px: px <= x_max)):
-        kept: list[tuple[float, float]] = []
-        for (ax_, ay), (bx, by) in zip(points, points[1:] + points[:1], strict=True):
-            a_in, b_in = keep(ax_), keep(bx)
-            if a_in:
-                kept.append((ax_, ay))
-            if a_in != b_in:
-                t = (bound - ax_) / (bx - ax_)
-                kept.append((bound, ay + t * (by - ay)))
-        points = kept
-        if not points:
-            break
-    return points
 
 
 #: The maps' key: a table of what each colour does, its Sort and its Cut
@@ -6719,15 +6613,23 @@ def _land_quota(ax: plt.Axes) -> None:
     # Over the names' plates (zorder 6), which would otherwise hide the edge
     # where a name sits against it; the staircase likewise.
     ax.plot([x0 + b * cw for b, _ in edge], [y0 + g * ch for _, g in edge], color=INK, linewidth=2.0, zorder=7)
-    lo, _ = _land_band()
-    _land_name(ax, LAND_NAME_B, (1 + lo) / 2, f"< {lo} Goods")
+    edge = _land_edge()
+    _land_name(ax, LAND_NAME_B, (1 + edge) / 2, f"< {edge} Goods")
 
 
 def _land_labels(ax: plt.Axes) -> None:
-    """Page 3: the labels line, and the Goods where the split decides."""
-    lo, hi = _land_band()
-    _land_name(ax, LAND_NAME_B, (hi + LAND_G + 1) / 2, f"≥ {hi} Goods")
-    _land_name(ax, LAND_NAME_B, (lo + hi) / 2, f"{lo}–{hi - 1} Goods")
+    """Page 3: the labels line from the edge up, and the edge itself, ruled as a decision.
+
+    The rule runs across the trained head's cells only, from where its row
+    leaves the quota to the map's right edge.
+    """
+    edge = _land_edge()
+    grid = _land_grid()
+    first_b = min(b for b in range(LAND_B + 1) if grid["kind"][edge, b] == "trained")
+    x0, y0, x1, _ = LAND_BOX
+    _, _, cw, ch = _land_cell(0, 0)
+    ax.plot([x0 + first_b * cw, x1], [y0 + edge * ch] * 2, color=INK, linewidth=2.0, zorder=7)
+    _land_name(ax, LAND_NAME_B, (edge + LAND_G + 1) / 2, f"≥ {edge} Goods")
 
 
 def _land_query(ax: plt.Axes) -> None:

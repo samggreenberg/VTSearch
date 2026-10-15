@@ -171,18 +171,36 @@ export class AutoDetectResultsModalComponent implements OnInit {
   /**
    * The detectors that ran as their typed query (#4758): too few labels for a
    * trained detector, so their hits are the set their query's text sort keeps.
-   * One line each, with the labels still owed.
+   * One line each, with the labels still owed. Not the held ones
+   * ({@link heldDetectors}), whose labels meet the quota.
    */
   get queryDetectors(): string[] {
-    return this.detectorsServedAs('query');
+    return this.detectorsServedAs('query', false);
   }
 
-  private detectorsServedAs(tier: 'centroid' | 'query'): string[] {
+  /**
+   * The detectors that ran as their typed query past the quota (#4736, #4889):
+   * a detector made from a typed query keeps its query's set until it has
+   * {@link holdLabels} labels. One line each, with the labels still owed.
+   */
+  get heldDetectors(): string[] {
+    return this.detectorsServedAs('query', true);
+  }
+
+  /** The labels the typed query's hold lasts until, from the first held detector's quota. */
+  get holdLabels(): number {
+    const held = Object.values(this.data().results || {}).find((r) => (r.label_quota?.hold_owed ?? 0) > 0);
+    return held?.label_quota?.hold_labels ?? 0;
+  }
+
+  private detectorsServedAs(tier: 'centroid' | 'query', held = false): string[] {
     const lines: string[] = [];
     for (const [name, result] of Object.entries(this.data().results || {})) {
       const quota = result.label_quota;
-      if (quota?.tier !== tier) continue;
-      const owed = labelsOwed(quota);
+      if (quota?.tier !== tier || (quota.hold_owed > 0) !== held) continue;
+      const owed = held
+        ? `${quota.hold_owed} more label${quota.hold_owed === 1 ? '' : 's'}`
+        : labelsOwed(quota);
       lines.push(owed ? `${result.detector_name || name} (${owed})` : result.detector_name || name);
     }
     return lines;

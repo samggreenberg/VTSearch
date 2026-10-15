@@ -236,6 +236,16 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
     with no held-out Good or no held-out Bad, or when the Goods do not score
     above the Bads on average (a head that ranks the wrong way has no line).
     """
+    model = _pooled_class_model(orderings)
+    return model if model is not None and model.mu_pos > model.mu_neg else None
+
+
+def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScoreModel | None:
+    """:func:`class_score_model` whichever way the folds rank: ``None`` only with no held-out Good or Bad.
+
+    A model whose Goods do not score above its Bads draws no line, but its gap is
+    still what the folds say about the labels' separation (#4899).
+    """
     if not orderings:
         return None
     pos_parts: list[np.ndarray] = []
@@ -257,8 +267,6 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
         return None
     xp, xn = _logit(pos), _logit(neg)
     mu_pos, mu_neg = float(xp.mean()), float(xn.mean())
-    if not mu_pos > mu_neg:
-        return None
     dof = max(1, xp.size + xn.size - 2)
     var = (float(((xp - mu_pos) ** 2).sum()) + float(((xn - mu_neg) ** 2).sum())) / dof
     raw = math.sqrt(var)
@@ -532,6 +540,11 @@ class LabelsLine:
     #: Whether the negatives were modelled by the Bads' own scores, the labels' Bads
     #: being a random sample of this corpus (#4490), rather than by the corpus fit.
     bads_shape: bool = False
+    #: The calibration folds' own model, floored on this corpus, when they ranked the
+    #: held-out Goods no higher than the Bads (#4899).  *model* is then the in-sample
+    #: stand-in, which draws the line as it always has; :attr:`separation` reads this.
+    #: ``None`` when *model* is the folds' own, or the folds held nothing out.
+    held_out: ClassScoreModel | None = None
 
     @property
     def separation(self) -> float:
@@ -540,7 +553,16 @@ class LabelsLine:
         The spread is the one the line was cut with, the class model's own
         floored on this corpus, so the value is free of the logit scale.  Below
         :data:`WEAK_SEPARATION_D` the labels separate weakly (#4496).
+
+        When the folds ranked the held-out Goods no higher than the Bads, it is
+        their gap, at most 0, in their own spread floored on this corpus
+        (:attr:`held_out`, #4899).  The in-sample stand-in that draws the line
+        then was fitted on the head's scores of the labels it trained on, which
+        it always separates: read from it, labels that do not separate at all
+        read as separating strongly, and the weak check never came due.
         """
+        if self.held_out is not None:
+            return (self.held_out.mu_pos - self.held_out.mu_neg) / self.held_out.sigma
         spread = self.model.sigma if self.spread is None else self.spread
         return (self.model.mu_pos - self.model.mu_neg) / spread if spread > 0 else float("inf")
 
@@ -582,7 +604,7 @@ class LabelsLine:
         self, scores: Any, ids: Iterable[int] | None = None, labels: Mapping[int, bool] | None = None
     ) -> "LabelsLine":
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
-        line = _line_on(self.model, scores, ids, labels)
+        line = _line_on(self.model, scores, ids, labels, held_out=self.held_out)
         return self if line is None else line
 
 
@@ -798,7 +820,12 @@ def _bads_shape_posteriors(model: ClassScoreModel, unvoted_logits: np.ndarray, *
 
 
 def _line_on(
-    model: ClassScoreModel, scores: Any, ids: Iterable[int] | None, labels: Mapping[int, bool] | None
+    model: ClassScoreModel,
+    scores: Any,
+    ids: Iterable[int] | None,
+    labels: Mapping[int, bool] | None,
+    *,
+    held_out: ClassScoreModel | None = None,
 ) -> "LabelsLine | None":
     a = np.asarray(scores, dtype=np.float64)
     keep = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
@@ -836,6 +863,7 @@ def _line_on(
         post[order].copy(),
         fitted.sigma,
         bads_shape,
+        held_out=None if held_out is None else held_out.floored(floor),
     )
 
 
@@ -902,8 +930,18 @@ def fit_labels_line(
     in - in-sample, so the Goods sit high and the line leans precise, which is
     the safe side.  Still the labels alone, never a count on the corpus: the
     fallback before this kept thousands of a corpus at its prevalence (#4452).
+
+    **Folds that rank the wrong way.**  When the folds held Goods and Bads out
+    but scored the Goods no higher than the Bads, the same stand-in draws the
+    line (the owner's ruling, 2026-10-15), and the folds' own model rides on it
+    as :attr:`LabelsLine.held_out`, so its :attr:`~LabelsLine.separation` says
+    what they found: none (#4899).  The stand-in's own separation was read from
+    the labels the head trained on, and labels that did not separate at all
+    read as separating strongly.
     """
-    model = class_score_model(orderings)
+    folds = _pooled_class_model(orderings)
+    model = folds if folds is not None and folds.mu_pos > folds.mu_neg else None
+    wrong_way = folds if model is None else None
     if model is None and labels:
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
         if model is not None:
@@ -912,7 +950,7 @@ def fit_labels_line(
             model = replace(model, neg_logits=None)
     if model is None:
         return None
-    return _line_on(model, corpus_scores, corpus_ids, labels)
+    return _line_on(model, corpus_scores, corpus_ids, labels, held_out=wrong_way)
 
 
 __all__ = [

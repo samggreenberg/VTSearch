@@ -317,11 +317,11 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **check-dockerfiles.py misses python invocations on RUN continuation lines and `python3`** — `scripts/check-dockerfiles.py` (low impact)
+- **check-dockerfiles.py misses `python3` invocations** — `scripts/check-dockerfiles.py` (low impact)
 
-  The ordering gate skips every physical line that continues a previous instruction (lines 38-41: `if is_continuation: continue`), so `RUN set -e \\\n && python scripts/foo.py` is never inspected — only a `python` on the RUN's first physical line is caught. It also matches only `\bpython\b` (line 62), so `python3 ...` (the actual interpreter name in Dockerfile.gpu, where `/usr/bin/python` is only a symlink created in the same layer) slips through. A future Dockerfile edit that runs Python in a multi-line RUN before vtsearch/+vtscore/ are copied would pass the gate the gate exists to catch. Relatedly, .dockerignore excludes `tests/` but not `tests_lib/`, so the library-tier test tree (with fixtures) is baked into every image for no reason.
+  The ordering gate matches only `\bpython\b`, so `python3 ...` (the actual interpreter name in Dockerfile.gpu, where `/usr/bin/python` is only a symlink created in the same layer) slips through. A future Dockerfile edit that runs `python3` before vtsearch/+vtscore/ are copied would pass the gate the gate exists to catch. Relatedly, .dockerignore excludes `tests/` but not `tests_lib/`, so the library-tier test tree (with fixtures) is baked into every image for no reason.
 
-  *Direction:* Accumulate logical instructions (join continuation lines before matching), broaden the regex to `python[0-9.]*`, and add tests_lib/ to .dockerignore.
+  *Direction:* Broaden the regex to `python[0-9.]*`, with a carve-out for Dockerfile.gpu's `python3 -m venv`, which runs before the COPYs and needs no package; and add tests_lib/ to .dockerignore.
 
 <!-- item-sep -->
 

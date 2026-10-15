@@ -188,7 +188,7 @@ everywhere except those held votes.
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks",
-  "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4, "dry_bad_quota": 16}
+  "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4, "dry_bad_quota": 16, "hold_labels": 30, "hold_owed": 0}
 }
 ```
 
@@ -200,7 +200,10 @@ photos, #4751).
 `label_quota.tier` is `query` for a typed query's own set, `centroid` for the
 Goods' centroid, `trained` for the trained head; `n_good` / `n_bad` are the
 detector's labels, `goods_owed` / `bads_owed` what the first quota still needs,
-and `dry_bad_quota` the Bads that give a single Good the trained head. Under
+and `dry_bad_quota` the Bads that give a single Good the trained head. Past the
+quota, a typed-query detector on a single-vector space keeps its query's set
+until it has `hold_labels` (30) labels; `hold_owed` is then the labels, Good or
+Bad, still owed (and `0` whenever the hold is not why the tier is `query`). Under
 the quota the line is the head's own (its `threshold` is always 0.5 on its own
 scale), drawn at the detector's balance: `balance` counts what it keeps, and a
 balance change redraws it.
@@ -241,7 +244,7 @@ demand, and returns one result column per detector.
       "detector_name": "Dog Barks",
       "threshold": 0.5,
       "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
-      "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4, "dry_bad_quota": 16},
+      "label_quota": {"tier": "trained", "n_good": 12, "n_bad": 30, "goods_owed": 0, "bads_owed": 0, "good_quota": 3, "bad_quota": 4, "dry_bad_quota": 16, "hold_labels": 30, "hold_owed": 0},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]

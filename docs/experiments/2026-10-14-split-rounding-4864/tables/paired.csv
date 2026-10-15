@@ -1,0 +1,81 @@
+path,read,stratum,n,delta,se,sd,resolved
+binary,"objective, votes 1-30",all,720,-0.00016983,0.0001587,0.0035074,False
+binary,"objective, votes 1-30",band=small,230,0.0001641,0.0001194,0.0022055,False
+binary,"objective, votes 1-30",band=medium,245,-9.7364e-05,0.00027584,0.0032405,False
+binary,"objective, votes 1-30",band=large,245,-0.00055578,0.00035562,0.0045744,False
+binary,"AP, votes 1-30",all,333,-0.0047468,0.0016809,0.033849,True
+binary,"AP, votes 1-30",band=small,74,-0.0038637,0.0032423,0.033237,False
+binary,"AP, votes 1-30",band=medium,118,-0.0059385,0.0026485,0.027503,True
+binary,"AP, votes 1-30",band=large,141,-0.004213,0.002903,0.03882,False
+binary,"objective, votes 31-100",all,720,-0.0026351,0.0012911,0.033238,True
+binary,"objective, votes 31-100",band=small,230,-0.00073874,0.0010682,0.021422,False
+binary,"objective, votes 31-100",band=medium,245,-0.00025764,0.0021865,0.032778,False
+binary,"objective, votes 31-100",band=large,245,-0.0067928,0.0028741,0.041521,True
+binary,"AP, votes 31-100",all,705,6.7685e-06,0.00070171,0.019624,False
+binary,"AP, votes 31-100",band=small,215,-0.0025058,0.0012484,0.018538,True
+binary,"AP, votes 31-100",band=medium,245,0.00076482,0.0013855,0.020069,False
+binary,"AP, votes 31-100",band=large,245,0.0014536,0.00092374,0.019968,False
+binary,"objective, votes 101-150",all,720,-0.00010092,0.00076816,0.022765,False
+binary,"objective, votes 101-150",band=small,230,-9.84e-05,0.0015035,0.02232,False
+binary,"objective, votes 101-150",band=medium,245,-1.5105e-05,0.001342,0.023678,False
+binary,"objective, votes 101-150",band=large,245,-0.00018911,0.0011728,0.022337,False
+binary,"AP, votes 101-150",all,712,-0.00025977,0.00044827,0.013033,False
+binary,"AP, votes 101-150",band=small,222,-0.00061554,0.00099232,0.015952,False
+binary,"AP, votes 101-150",band=medium,245,0.00023026,0.00073483,0.01375,False
+binary,"AP, votes 101-150",band=large,245,-0.00042743,0.00058636,0.0086624,False
+binary,"objective, votes 1-150",all,720,-0.0012973,0.00067264,0.018819,False
+binary,"objective, votes 1-150",band=small,230,-0.00034473,0.00074594,0.014239,False
+binary,"objective, votes 1-150",band=medium,245,-0.00014474,0.00118,0.019109,False
+binary,"objective, votes 1-150",band=large,245,-0.0033442,0.0013952,0.021948,True
+binary,"AP, votes 1-150",all,712,-0.0002509,0.0005161,0.014532,False
+binary,"AP, votes 1-150",band=small,222,-0.0019888,0.00095929,0.014789,True
+binary,"AP, votes 1-150",band=medium,245,0.00028046,0.00098616,0.01477,False
+binary,"AP, votes 1-150",band=large,245,0.00079246,0.00067958,0.013964,False
+binary,"objective, vote 150",all,720,0.0020639,0.0012633,0.036205,False
+binary,"objective, vote 150",band=small,230,0.0027286,0.0025205,0.037299,False
+binary,"objective, vote 150",band=medium,245,0.0038072,0.0020204,0.040679,False
+binary,"objective, vote 150",band=large,245,-0.00030357,0.0020277,0.029883,False
+binary,"AP, vote 150",all,712,-0.00034134,0.00060625,0.014237,False
+binary,"AP, vote 150",band=small,222,-0.0018496,0.0014624,0.018113,False
+binary,"AP, vote 150",band=medium,245,0.0011354,0.00081693,0.013635,False
+binary,"AP, vote 150",band=large,245,-0.00045144,0.00071575,0.010162,False
+binary,"objective, votes 31-45 (post hoc)",all,720,-0.0094417,0.0032529,0.075112,True
+binary,"objective, votes 31-45 (post hoc)",band=small,230,-0.0036453,0.0020839,0.039578,False
+binary,"objective, votes 31-45 (post hoc)",band=medium,245,-0.0054974,0.0055524,0.068384,False
+binary,"objective, votes 31-45 (post hoc)",band=large,245,-0.018828,0.0074277,0.1017,True
+binary,"AP, votes 31-45 (post hoc)",all,663,-0.003089,0.0014739,0.036414,True
+binary,"AP, votes 31-45 (post hoc)",band=small,173,-0.0027058,0.0022119,0.0256,False
+binary,"AP, votes 31-45 (post hoc)",band=medium,245,-0.0050939,0.0027914,0.036514,False
+binary,"AP, votes 31-45 (post hoc)",band=large,245,-0.0013547,0.0024866,0.042369,False
+binary,"objective, after the check",all,720,0.00028296,0.0013507,0.036393,False
+binary,"objective, after the check",band=small,230,4.277e-05,0.0030339,0.041058,False
+binary,"objective, after the check",band=medium,245,0.0033334,0.0022348,0.039112,False
+binary,"objective, after the check",band=large,245,-0.002542,0.0015859,0.027813,False
+binary,"returned set size, after the check",all,717,0.49093,1.2672,35.121,False
+binary,"returned set size, after the check",band=small,227,0.15419,3.0918,46.579,False
+binary,"returned set size, after the check",band=medium,245,-0.085714,2.3032,35.402,False
+binary,"returned set size, after the check",band=large,245,1.3796,0.55937,18.856,True
+binary,"precision, after the check",all,717,-0.0030917,0.0026534,0.071796,False
+binary,"precision, after the check",band=small,227,-0.0022988,0.0063006,0.082489,False
+binary,"precision, after the check",band=medium,245,-0.00019544,0.003972,0.077585,False
+binary,"precision, after the check",band=large,245,-0.0067225,0.0032368,0.052743,True
+binary,"objective, 7-11 Goods",all,390,-0.00033835,0.0066539,0.079397,False
+binary,"objective, 7-11 Goods",band=small,171,-0.0057101,0.0044887,0.04595,False
+binary,"objective, 7-11 Goods",band=medium,120,-0.00049602,0.016631,0.087387,False
+binary,"objective, 7-11 Goods",band=large,99,0.0091313,0.010582,0.1093,False
+region,"objective, votes 1-30",all,144,-0.0030518,0.0060796,0.074949,False
+region,"AP, votes 1-30",all,116,-0.0017611,0.0023718,0.026809,False
+region,"objective, votes 31-100",all,144,-0.011026,0.0073117,0.089531,False
+region,"AP, votes 31-100",all,139,-0.00054037,0.0022562,0.024404,False
+region,"objective, votes 101-150",all,144,-0.0018439,0.0048212,0.057057,False
+region,"AP, votes 101-150",all,143,-0.0010578,0.0016651,0.020988,False
+region,"objective, votes 1-150",all,144,-0.0063706,0.0055533,0.066811,False
+region,"AP, votes 1-150",all,143,-0.0010606,0.0016611,0.019669,False
+region,"objective, vote 150",all,144,-0.0001208,0.0059406,0.068875,False
+region,"AP, vote 150",all,143,0.0036509,0.0016842,0.024478,True
+region,"objective, votes 31-45 (post hoc)",all,144,-0.013936,0.01241,0.14547,False
+region,"AP, votes 31-45 (post hoc)",all,124,-0.00018824,0.0035845,0.040294,False
+region,"objective, after the check",all,144,0.0048522,0.0043658,0.051117,False
+region,"returned set size, after the check",all,143,-1.6853,3.7215,39.8,False
+region,"precision, after the check",all,143,-0.003144,0.0068081,0.07221,False
+region,"objective, 4-6 Goods",all,124,0.014141,0.0097027,0.11163,False
