@@ -13,8 +13,9 @@ import type { BalanceState } from '../generated/api-client/models/balance-state'
  *   balance's starting candidate, and nothing has measured how much of it is
  *   right.
  * - `checked`: a check walked the ranking and ended on the set where its
- *   estimate of the balance (F-beta) peaked; the line keeps that set, and the
- *   two ranges say what the picks found there.
+ *   estimate of the balance (F-beta) peaked. The two ranges say what its
+ *   picks found in the set the line kept when it started (`keptAtCheck`,
+ *   #4483).
  * - `gate`: a structural detector's line (#4505), the verification gate's
  *   boundary. The set is the `count` unvoted items the gate passes; a check
  *   needs a ranking to sample, so none applies and there are no ranges.
@@ -36,11 +37,13 @@ export type BalanceStatus = 'unchecked' | 'checked' | 'gate';
 export type BalanceShape = 'advisory' | 'trim';
 
 /**
- * A likely share, from the check's picks alone: of the audited set right
- * (precision), or of all the matches in it (recall). Both cover only the items
- * the user had not voted on when the check ran (#4914): the walk samples the
- * unvoted ranking, and recall's denominator is the mixture's count of the
- * positives left in it, so the user's own Goods are in neither.
+ * A likely share, from the check's picks alone: of the set the line kept when
+ * the check started that is right (precision), or of all the matches that are
+ * in it (recall); #4483, before which they described the audited set. Both
+ * cover only the items the user had not voted on when the check ran (#4914):
+ * the walk samples the unvoted ranking, and recall's denominator is the
+ * mixture's count of the positives left in it, so the user's own Goods are in
+ * neither.
  */
 export interface LikelyRange {
   lo: number;
@@ -70,9 +73,9 @@ export interface LineBalance {
   status: BalanceStatus;
   /** How many unvoted items the line keeps. */
   count: number;
-  /** The check's likely share of the audited set that is right; null while unchecked. */
+  /** The check's likely share of the set the line kept when it started that is right; null while unchecked. */
   precision: LikelyRange | null;
-  /** The check's likely share of all the unvoted matches that are in the audited set; null while unchecked. */
+  /** The check's likely share of all the unvoted matches that are in that set; null while unchecked. */
   recall: LikelyRange | null;
   /** The check's F-beta estimate for the audited set; null while unchecked. */
   fbeta: number | null;
@@ -80,8 +83,13 @@ export interface LineBalance {
   schedule: CheckSchedule | null;
   /** How a check treats the line at this balance. */
   shape: BalanceShape;
-  /** The set the last check audited (the walk's end), which the ranges describe; under `advisory` not the set kept. Null while unchecked. */
+  /** The set the last check audited (the walk's end); under `advisory` not the set kept. Null while unchecked. */
   audited: number | null;
+  /**
+   * How many unvoted items the line kept when the last check started: the set the ranges describe (#4483).
+   * Null while unchecked, and from a server before #4483, whose ranges describe `audited`.
+   */
+  keptAtCheck: number | null;
   /**
    * Whether a spot check can start on this line (#4489). False when the
    * detector has no ranking to walk - a structural detector, whose line is the
@@ -132,6 +140,7 @@ export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBala
     schedule: schedule ? { candidate: schedule.candidate, rounds: schedule.rounds, picks: schedule.picks } : null,
     shape: wire.shape === 'advisory' ? 'advisory' : 'trim',
     audited: wire.audited ?? null,
+    keptAtCheck: wire.kept_at_check ?? null,
     // A server from before #4489 sends no flag, and offered a check everywhere.
     checkable: wire.checkable !== false,
     separation: wire.separation ?? null,
@@ -244,11 +253,12 @@ export function foundWords(recall: LikelyRange): string {
  * current one: only {@link balanceExplanation} says so.
  *
  * Nothing in it counts the user's own votes, and it says so (#4914): the line
- * keeps "N more" beside them, and a check names the set its ranges cover, the
- * top `audited` the user had not voted on, which under `advisory` is not the
- * set kept. Late in a session, once the matches near the top are voted, that
- * set holds few of them, so the ranges can read low after a session that went
- * well.
+ * keeps "N more" beside them, and a check names the set its ranges cover:
+ * since #4483 the ones the line kept when it started (`keptAtCheck`), which
+ * the line's count has moved from once the check's own votes are cast; from a
+ * server before it, the top `audited`. Late in a session, once the matches
+ * near the top are voted, that set holds few of them, so the ranges can read
+ * low after a session that went well.
  */
 export function balanceSummary(balance: LineBalance | null): string | null {
   if (!balance) return null;
@@ -258,11 +268,16 @@ export function balanceSummary(balance: LineBalance | null): string | null {
   const p = balance.precision;
   const r = balance.recall;
   if (!p || !r) return `Checked · ${kept} more kept`;
-  const audited = (balance.audited ?? balance.count).toLocaleString();
   return (
-    `Checked the top ${audited} you hadn't voted on · likely ${rangePercent(p)} right, ` +
+    `Checked ${rangedSetWords(balance)} · likely ${rangePercent(p)} right, ` +
     `${foundWords(r)} (checked ${p.labelled}) · ${kept} more kept`
   );
+}
+
+/** The set a check's ranges describe, named: the ones the line kept when it started (#4483), or the top it audited. */
+export function rangedSetWords(balance: LineBalance): string {
+  if (balance.keptAtCheck !== null) return `the ${balance.keptAtCheck.toLocaleString()} kept you hadn't voted on`;
+  return `the top ${(balance.audited ?? balance.count).toLocaleString()} you hadn't voted on`;
 }
 
 /**
@@ -286,6 +301,17 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   const p = balance.precision;
   const r = balance.recall;
   const audited = (balance.audited ?? balance.count).toLocaleString();
+  if (balance.shape === 'advisory' && balance.keptAtCheck !== null) {
+    const ranged = balance.keptAtCheck.toLocaleString();
+    if (!p || !r) return `When a check started, the line kept none you hadn't voted on; it keeps the top ${kept} now.`;
+    return (
+      `When the check started, the line kept the top ${ranged} you hadn't voted on. ${p.labelled} of the check's random picks ` +
+      `fell among them and ${p.right} were right, so likely ${rangePercent(p)} of them are, ` +
+      `with likely ${rangePercent(r)} of all the matches you hadn't voted on among them. ` +
+      `The line keeps the top ${kept} you haven't voted on now, where your labels put it: a check informs the line and does not move it.` +
+      staleNote(p)
+    );
+  }
   if (balance.shape === 'advisory') {
     if (!p || !r) return `A check ended on the top ${audited} you hadn't voted on; the line keeps the top ${kept}.`;
     return (

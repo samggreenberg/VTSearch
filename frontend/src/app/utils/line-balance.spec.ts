@@ -30,6 +30,7 @@ describe('line-balance (#4413)', () => {
         shape: 'advisory',
         audited: 128,
         checkable: true,
+        kept_at_check: 40,
       };
       expect(lineBalanceFrom(wire)).toEqual({
         beta: 0.5,
@@ -41,6 +42,7 @@ describe('line-balance (#4413)', () => {
         schedule: { candidate: 64, rounds: 2, picks: 5 },
         shape: 'advisory',
         audited: 128,
+        keptAtCheck: 40,
         checkable: true,
         separation: null,
         checkDue: false,
@@ -60,6 +62,7 @@ describe('line-balance (#4413)', () => {
         schedule: { candidate: 128, rounds: 3, picks: 5 },
         shape: 'trim',
         audited: null,
+        keptAtCheck: null,
         checkable: true,
         separation: null,
         checkDue: false,
@@ -102,6 +105,7 @@ describe('line-balance (#4413)', () => {
       expect(balance.schedule).toBeNull();
       expect(balance.shape).toBe('trim');
       expect(balance.audited).toBeNull();
+      expect(balance.keptAtCheck).toBeNull();
     });
 
     it('is null for a response with no detector behind it', () => {
@@ -199,7 +203,7 @@ describe('line-balance (#4413)', () => {
     });
 
     it.each<[BalanceStatus, string]>([
-      ['checked', "Checked the top 32 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept"],
+      ['checked', "Checked the 32 kept you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept"],
       ['unchecked', '32 more kept, unchecked'],
     ])('summarises %s', (status, expected) => {
       expect(balanceSummary(lineBalance(status))).toBe(expected);
@@ -239,13 +243,37 @@ describe('line-balance (#4413)', () => {
       expect(checked).not.toMatch(/of all the matches among them/);
     });
 
-    it('names the audited set beside the count kept, not as if the ranges described it (#4914)', () => {
+    it('names the set the ranges describe beside the count kept now (#4914, #4483)', () => {
+      // The line kept 20 when the check started; its votes and the retrain after them leave 16 kept now.
+      const balance = lineBalance('checked', { count: 16, audited: 64, keptAtCheck: 20 });
+      expect(balanceSummary(balance)).toBe(
+        "Checked the 20 kept you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 16 more kept",
+      );
+      const tooltip = balanceExplanation(balance)!;
+      expect(tooltip).toContain("When the check started, the line kept the top 20 you hadn't voted on.");
+      expect(tooltip).toContain("5 of the check's random picks fell among them and 5 were right, so likely 55–100% of them are");
+      expect(tooltip).toContain("The line keeps the top 16 you haven't voted on now");
+      expect(tooltip).not.toContain('64');
+    });
+
+    it('says when the line kept nothing as the check started, which leaves it no ranges (#4483)', () => {
+      const balance = lineBalance('checked', { count: 5, keptAtCheck: 0, precision: null, recall: null });
+      expect(balanceSummary(balance)).toBe('Checked · 5 more kept');
+      expect(balanceExplanation(balance)).toBe("When a check started, the line kept none you hadn't voted on; it keeps the top 5 now.");
+    });
+
+    it('names the audited set where a server before #4483 sends no kept count (#4914)', () => {
       // Advisory (every preset since #4452): the walk ended on the top 64, the line keeps 16.
-      expect(balanceSummary(lineBalance('checked', { count: 16, audited: 64 }))).toBe(
+      expect(balanceSummary(lineBalance('checked', { count: 16, audited: 64, keptAtCheck: null }))).toBe(
         "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 16 more kept",
       );
-      // A server that sends no audited count audited the set it keeps.
-      expect(balanceSummary(lineBalance('checked', { count: 1234, audited: null }))).toContain('Checked the top 1,234 you hadn');
+      expect(balanceExplanation(lineBalance('checked', { count: 16, audited: 64, keptAtCheck: null }))).toContain(
+        "A check of 5 random picks from the top 64 you hadn't voted on found 5 right",
+      );
+      // A server that sends no audited count either audited the set it keeps.
+      expect(balanceSummary(lineBalance('checked', { count: 1234, audited: null, keptAtCheck: null }))).toContain(
+        'Checked the top 1,234 you hadn',
+      );
     });
 
     it('carries the precision range wide as the check left it, and the recall in words', () => {

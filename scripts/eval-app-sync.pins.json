@@ -28,19 +28,19 @@
     "harness": "0e6d44fbdaccc1fce4ca1e9b87cab2f991fe79d457e668bf9e553474e306ea1e"
   },
   "check.bands": {
-    "app": "fd583ae911acc83d83c31dc74d821c189e778401b2baed42a2f2148d2425df96",
+    "app": "96971bd68102ea4a24e46d3ecacb05d0bfe4a2260baea63a4142d70af88de4e4",
     "harness": "2725f5eb38d9da06479591a698cd278be6e671bbac6a98befa96ee300221c754"
   },
   "check.likely_range": {
-    "app": "688403ef3258c8411d709a2295f8fc8b7c0af7bcff1002927c81c38cb87e362b",
-    "harness": "8df1a1803ff42c2f736d6c100f1086f5827655c2d00563738abaa2f3e675d157"
+    "app": "7cbac7cb48a570ac7e11ffe5bfa8fb03920287c9fb85d287d1feec73412b329d",
+    "harness": "3d8b6d4dec1ca1f5b2a09ba9c4c846e6980c011c4c32ba269b02d08d3aebb108"
   },
   "check.schedule": {
     "app": "362d65a8094ed0219cb1140fc94535cedbc3984c167988a06fd4e5f8a559527d",
     "harness": "b0eab212a2d6ac3ceb4c32dd60f4e9b82d8ba73486b9f4cdf2ff44a45b55cac1"
   },
   "check.walk": {
-    "app": "fd583ae911acc83d83c31dc74d821c189e778401b2baed42a2f2148d2425df96",
+    "app": "96971bd68102ea4a24e46d3ecacb05d0bfe4a2260baea63a4142d70af88de4e4",
     "harness": "841d7ec31d00d8827250dae11129fd7ff71bd42c83883414a595a7f73c2dc5b1"
   },
   "detectors.label_quota_centroid": {

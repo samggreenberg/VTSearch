@@ -189,10 +189,13 @@ describe('BalanceComponent (#4413, #4317)', () => {
       await show(0.25, lineBalance('checked', { beta: 0.25 }), 1234);
       expect(state()!.getAttribute('data-status')).toBe('green');
       expect(stateText()!.textContent).toContain(
-        "Checked the top 32 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept",
+        "Checked the 32 kept you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept",
       );
-      // An advisory check (#4427, every beta since #4452): the ranges describe the audited set, the line keeps its own count.
-      expect(stateText()!.getAttribute('title')).toContain("5 random picks from the top 32 you hadn't voted on");
+      // An advisory check (#4427, every beta since #4452): the ranges describe what the line kept when the check
+      // started (#4483), and the line keeps its own count.
+      expect(stateText()!.getAttribute('title')).toContain(
+        "When the check started, the line kept the top 32 you hadn't voted on. 5 of the check's random picks fell among them",
+      );
       expect(stateText()!.getAttribute('title')).toContain('a check informs the line and does not move it');
     });
 
