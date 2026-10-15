@@ -10,8 +10,10 @@ Reads ``fold_transfer_4910.sh``'s arms on one path (Binary or Region), at the pr
   where the shadow has none (the opening, the centroid's rows).  No session ran the transferred line here, so
   this is the line's own effect, not what it does to acquisition, the weak check or Done.
 * **The closed loop** (arms ``q`` / ``qt`` against ``c``): the same session means, each arm's own sessions,
-  paired by (category, seed).  Pairing check: at the first step either draws a labels line both runs hold the
-  same head, so ``q``'s Train cut must equal ``c``'s shadow's there.
+  paired by (category, seed).  Pairing check: the picks must match through the opening (Good, Bad, More on the
+  typed query's sort), where no labels line is read; an arm leaves the control at its first learned pick at the
+  earliest, since acquisition reads the line from the first trained step.  (The rows' first trained Test, at the
+  query hold's 30 labels, comes long after.)
 
 F at a click is the line's F-beta on the withheld half at the row's beta (an empty set scores 0), carried
 forward between retrains; before the head is first shown it is the typed query's own (``--baseline``), the
@@ -66,11 +68,29 @@ def _headline(m: pd.DataFrame) -> pd.DataFrame:
     return m[m["pool_variant"].fillna("").astype(str).str.strip().isin(("", "max"))]
 
 
+OPENING = ("good", "bad", "more")
+
+
 def read_cell(args: tuple[str, str]) -> pd.DataFrame:
     path, emb = args
     head = pd.read_csv(path, nrows=0).columns
     m = pd.read_csv(path, usecols=[c for c in COLS if c in head], low_memory=False)
-    return _headline(m[m["embedder"] == emb])
+    m = _headline(m[m["embedder"] == emb])
+    # The pick log's opening, for the pairing check: the picked ids in order up to the opening's last pick.
+    picks_path = (
+        path.replace(".csv.gz", "__picks.csv.gz") if path.endswith(".gz") else path.replace(".csv", "__picks.csv")
+    )
+    try:
+        pk = pd.read_csv(picks_path, usecols=["category", "seed", "embedder", "phase", "picked_id"], low_memory=False)
+    except (FileNotFoundError, pd.errors.EmptyDataError, ValueError):
+        return m
+    pk = pk[pk["embedder"] == emb]
+    opening = {}
+    for (c, sd), g in pk.groupby(["category", "seed"]):
+        ph = g["phase"].astype(str).to_numpy()
+        last = max((i for i, p in enumerate(ph) if p in OPENING), default=-1)
+        opening[(c, int(sd))] = ",".join(str(int(x)) for x in g["picked_id"].to_numpy()[: last + 1])
+    return m.assign(opening_picks=[opening.get((c, int(sd)), "") for c, sd in zip(m["category"], m["seed"])])
 
 
 def run_dir(root: Path, date: str, tag: str, arm: str, path: str, beta: float) -> Path:
@@ -107,14 +127,10 @@ def per_run(steps: pd.DataFrame, tq: dict, beta: float) -> dict[str, dict]:
             det[t] = v
             det = pd.Series(det).ffill().to_numpy()
             curves[name] = np.where((GRID_T >= shown) & np.isfinite(det), det, q)
-        drawn = rows[np.isfinite(rows["train_prevalence"].to_numpy(dtype=float))]
-        first = drawn.iloc[0] if len(drawn) else None
         out[key] = {
             **curves,
             "cls": c,
-            "first_t": float(first["t"]) if first is not None else np.nan,
-            "first_cut": float(first["train_threshold"]) if first is not None else np.nan,
-            "first_shadow_cut": float(first["shadow_train_threshold"]) if first is not None else np.nan,
+            "opening": str(g["opening_picks"].iloc[0]) if "opening_picks" in g.columns else "",
         }
     return out
 
@@ -168,6 +184,20 @@ def gate(steps: pd.DataFrame, runs: dict[str, dict], beta: float, path: str) -> 
         row[f"same_head_{lo}_{hi}"] = float(np.mean(d))
         row[f"same_head_se_{lo}_{hi}"] = se_over_classes(d, cls)
         row[f"f_{lo}_{hi}"] = float(np.mean(window_mean(F, lo, hi)))
+    sh = FS - F
+    same_curve = pd.DataFrame(
+        {"path": path, "beta": beta, "t": GRID_T, "d": np.nanmean(sh, axis=0),
+         "se": [se_over_classes(sh[:, t], cls) for t in GRID_T]}
+    )  # fmt: skip
+    bins = []
+    for lo in range(1, T + 1, 10):
+        b = s[(s["t"] >= lo) & (s["t"] < lo + 10)]
+        bins.append(
+            {"path": path, "beta": beta, "t_lo": lo, "t_mid": lo + 4.5, "rows": int(len(b)),
+             "clip_good": float(np.nanmean(b["xfer_clip_good"])) if len(b) else np.nan,
+             "dmu_pos": float(np.nanmedian(b["xfer_dmu_pos"])) if len(b) else np.nan,
+             "dmu_neg": float(np.nanmedian(b["xfer_dmu_neg"])) if len(b) else np.nan}
+        )  # fmt: skip
     by_t = []
     for lo, hi in ((1, 25), (26, 50), (51, 100), (101, 150)):
         b = s[(s["t"] >= lo) & (s["t"] <= hi)]
@@ -189,7 +219,7 @@ def gate(steps: pd.DataFrame, runs: dict[str, dict], beta: float, path: str) -> 
                 "dfbeta_mean": float(np.nanmean(bt["shadow_fbeta"] - bt["fbeta"])) if len(bt) else np.nan,
             }
         )
-    return {"row": row, "by_t": pd.DataFrame(by_t)}
+    return {"row": row, "by_t": pd.DataFrame(by_t), "same_curve": same_curve, "bins": pd.DataFrame(bins)}
 
 
 def closed_loop(control: dict[str, dict], arm: dict[str, dict], name: str, beta: float, path: str) -> dict:
@@ -197,10 +227,18 @@ def closed_loop(control: dict[str, dict], arm: dict[str, dict], name: str, beta:
     cls = np.array([control[k]["cls"].split("@")[0] for k in keys])
     C = np.stack([control[k]["f"] for k in keys])
     A = np.stack([arm[k]["f"] for k in keys])
-    same = [k for k in keys if control[k]["first_t"] == arm[k]["first_t"] and np.isfinite(control[k]["first_t"])]
-    mism = sum(1 for k in same if abs(arm[k]["first_cut"] - control[k]["first_shadow_cut"]) > 1e-6)
-    row = {"path": path, "beta": beta, "arm": name, "pairs": len(keys), "first_cut_checked": len(same),
-           "first_cut_mismatch": mism}  # fmt: skip
+    # The pairing check: an arm's opening picks are the control's (a prefix of the longer one: a run whose
+    # opening ran longer only means it left the opening later, which the line cannot cause).
+    checked = [k for k in keys if control[k]["opening"] and arm[k]["opening"]]
+
+    def _prefix(a: str, b: str) -> bool:
+        x, y = a.split(","), b.split(",")
+        n = min(len(x), len(y))
+        return x[:n] == y[:n]
+
+    mism = sum(1 for k in checked if not _prefix(control[k]["opening"], arm[k]["opening"]))
+    row = {"path": path, "beta": beta, "arm": name, "pairs": len(keys), "opening_checked": len(checked),
+           "opening_mismatch": mism}  # fmt: skip
     for lo, hi in WINDOWS:
         d = window_mean(A, lo, hi) - window_mean(C, lo, hi)
         row[f"control_{lo}_{hi}"] = float(np.mean(window_mean(C, lo, hi)))
@@ -211,11 +249,111 @@ def closed_loop(control: dict[str, dict], arm: dict[str, dict], name: str, beta:
         d = A[:, t] - C[:, t]
         row[f"d_at_{t}"] = float(np.nanmean(d))
         row[f"se_at_{t}"] = se_over_classes(d, cls)
+    D = A - C
     curve = pd.DataFrame(
         {"path": path, "beta": beta, "arm": name, "t": GRID_T, "control": np.nanmean(C, axis=0),
-         "arm_f": np.nanmean(A, axis=0), "d": np.nanmean(A - C, axis=0)}
+         "arm_f": np.nanmean(A, axis=0), "d": np.nanmean(D, axis=0),
+         "se": [se_over_classes(D[:, t], cls) for t in GRID_T]}
     )  # fmt: skip
     return {"row": row, "curve": curve}
+
+
+INK, MUTED, GRIDC = "#0b0b0b", "#52514e", "#e4e3df"
+#: The control in neutral gray; the two arms in the reference palette's first two categorical slots.
+COLOR = {"c": "#8a8985", "q": "#eb6834", "qt": "#2a78d6"}
+NAME = {"c": "today's line (raw)", "q": "quantile transfer", "qt": "quantile, tails kept"}
+
+
+def _style(ax) -> None:
+    ax.grid(color=GRIDC, lw=0.8)
+    ax.tick_params(colors=MUTED, labelsize=9)
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    for sp in ("left", "bottom"):
+        ax.spines[sp].set_color(GRIDC)
+
+
+def _preset(beta: float) -> str:
+    return "beta 1/4" if beta == 0.25 else f"beta {beta:g}"
+
+
+def figure_curves(curves: pd.DataFrame, path: Path, title: str) -> None:
+    """F-beta over clicks per arm (top) and each arm's paired gain over the control with +-1 SE (bottom), per preset."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    betas = sorted(curves["beta"].unique())
+    fig, axes = plt.subplots(2, len(betas), figsize=(4.2 * len(betas), 6.4), sharex=True, squeeze=False,
+                             gridspec_kw={"height_ratios": [1.3, 1]})  # fmt: skip
+    for j, beta in enumerate(betas):
+        cb = curves[curves["beta"] == beta]
+        top, bot = axes[0, j], axes[1, j]
+        first = cb[cb["arm"] == cb["arm"].iloc[0]]
+        top.plot(first["t"], first["control"], color=COLOR["c"], lw=2, label=NAME["c"])
+        for arm in ("q", "qt"):
+            a = cb[cb["arm"] == arm]
+            if not len(a):
+                continue
+            top.plot(a["t"], a["arm_f"], color=COLOR[arm], lw=2, label=NAME[arm])
+            top.annotate(arm, (a["t"].iloc[-1], a["arm_f"].iloc[-1]), xytext=(4, 0), textcoords="offset points",
+                         color=MUTED, fontsize=9, va="center")  # fmt: skip
+            bot.fill_between(a["t"], a["d"] - a["se"], a["d"] + a["se"], color=COLOR[arm], alpha=0.18, lw=0)
+            bot.plot(a["t"], a["d"], color=COLOR[arm], lw=2)
+            bot.annotate(arm, (a["t"].iloc[-1], a["d"].iloc[-1]), xytext=(4, 0), textcoords="offset points",
+                         color=MUTED, fontsize=9, va="center")  # fmt: skip
+        top.annotate("c", (first["t"].iloc[-1], first["control"].iloc[-1]), xytext=(4, 0),
+                     textcoords="offset points", color=MUTED, fontsize=9, va="center")  # fmt: skip
+        bot.axhline(0, color=MUTED, lw=1)
+        top.set_title(_preset(beta), color=INK, fontsize=11, loc="left")
+        bot.set_xlabel("clicks", color=MUTED, fontsize=9)
+        _style(top)
+        _style(bot)
+    axes[0, 0].set_ylabel("mean F-beta of the returned set", color=MUTED, fontsize=9)
+    axes[1, 0].set_ylabel("paired gain over today's line", color=MUTED, fontsize=9)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3, frameon=False, fontsize=9, bbox_to_anchor=(0.5, 1.0))
+    fig.suptitle(title, color=INK, fontsize=12, x=0.01, ha="left", y=1.05)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(path, dpi=130, bbox_inches="tight")
+    plt.close(fig)
+
+
+def figure_mechanism(bins: pd.DataFrame, same: pd.DataFrame, path: Path, title: str) -> None:
+    """The control's own heads: the share of held-out Goods above their fold's haystack, the Good mean's move, and
+    what the transferred line would score on the same head, over clicks, one line per preset."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    betas = sorted(bins["beta"].unique())
+    shades = {0.25: "#9fc4ee", 1.0: "#2a78d6", 4.0: "#164a8a"}  # one hue, light to dark: the presets are ordered
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.6))
+    for beta in betas:
+        b = bins[bins["beta"] == beta]
+        c = same[same["beta"] == beta]
+        col = shades.get(beta, "#2a78d6")
+        axes[0].plot(b["t_mid"], b["clip_good"], color=col, lw=2, marker="o", ms=4, label=_preset(beta))
+        axes[1].plot(b["t_mid"], b["dmu_pos"], color=col, lw=2, marker="o", ms=4, label=_preset(beta))
+        axes[2].plot(c["t"], c["d"], color=col, lw=2, label=_preset(beta))
+    axes[0].set_title("held-out Goods above their fold's haystack", color=INK, fontsize=10, loc="left")
+    axes[0].set_ylabel("share", color=MUTED, fontsize=9)
+    axes[1].set_title("Good mean, transferred minus raw", color=INK, fontsize=10, loc="left")
+    axes[1].set_ylabel("logit", color=MUTED, fontsize=9)
+    axes[2].set_title("same head: quantile line minus today's", color=INK, fontsize=10, loc="left")
+    axes[2].set_ylabel("F-beta", color=MUTED, fontsize=9)
+    for ax in axes:
+        ax.set_xlabel("clicks", color=MUTED, fontsize=9)
+        _style(ax)
+    axes[1].axhline(0, color=MUTED, lw=1)
+    axes[2].axhline(0, color=MUTED, lw=1)
+    axes[0].legend(frameon=False, fontsize=9)
+    fig.suptitle(title, color=INK, fontsize=12, x=0.01, ha="left")
+    fig.tight_layout()
+    fig.savefig(path, dpi=130, bbox_inches="tight")
+    plt.close(fig)
 
 
 def main() -> int:
@@ -235,7 +373,7 @@ def main() -> int:
     emb = EMBEDDER[a.path]
     base = pd.read_csv(a.baseline)
     base = base[(base["embedder"] == emb) & (base["seed"] < a.seeds)]
-    gates, by_t, loops, curves, counts = [], [], [], [], {}
+    gates, by_t, loops, curves, counts, same, bins = [], [], [], [], {}, [], []
     for beta in (float(b) for b in a.betas.split(",")):
         tag = BTAG[beta]
         if f"text_line_precision_b{tag}" in base.columns:
@@ -252,6 +390,8 @@ def main() -> int:
         g = gate(steps, control, beta, a.path)
         gates.append(g["row"])
         by_t.append(g["by_t"])
+        same.append(g["same_curve"])
+        bins.append(g["bins"])
         for arm in (x for x in a.arms.split(",") if x):
             st = load_arm(run_dir(a.root, a.date, a.tag, arm, a.path, beta), emb, a.seeds, a.procs)
             if not len(st):
@@ -268,10 +408,21 @@ def main() -> int:
         o.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(gates).to_csv(o / f"gate_{a.path}.csv", index=False)
         pd.concat(by_t).to_csv(o / f"gate_by_click_{a.path}.csv", index=False)
+        pd.concat(same).to_csv(o / f"same_head_curve_{a.path}.csv", index=False)
+        pd.concat(bins).to_csv(o / f"saturation_{a.path}.csv", index=False)
         if loops:
             pd.DataFrame(loops).to_csv(o / f"closed_loop_{a.path}.csv", index=False)
             pd.concat(curves).to_csv(o / f"curves_{a.path}.csv", index=False)
-        (o / f"counts_{a.path}.json").write_text(json.dumps(counts, indent=1))
+        (o / f"counts_{a.path}.json").write_text(json.dumps(counts, indent=1) + "\n")
+    figs = [a.out] + ([a.docs.parent / "figures"] if a.docs else [])
+    label = "Binary Photo" if a.path == "binary" else "Region Photo"
+    for o in figs:
+        o.mkdir(parents=True, exist_ok=True)
+        if curves:
+            figure_curves(pd.concat(curves), o / f"transfer_over_clicks_{a.path}.png",
+                          f"{label}: the labels line with the folds' scores transferred, against today's")  # fmt: skip
+        figure_mechanism(pd.concat(bins), pd.concat(same), o / f"saturation_{a.path}.png",
+                         f"{label}: the plain transfer fitted beside today's line, on today's sessions")  # fmt: skip
     with pd.option_context("display.width", 250, "display.max_columns", 80):
         print(pd.DataFrame(gates).round(4).T.to_string())
         print(pd.concat(by_t).round(4).to_string(index=False))
