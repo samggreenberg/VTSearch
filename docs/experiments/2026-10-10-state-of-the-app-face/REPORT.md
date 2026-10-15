@@ -252,6 +252,13 @@ photos (`fhibe_faces_1024, 1 photo`, and so on). It shows people as strata (age 
 skin tone), never by subject ID. It draws what Test gives, opening included, as every review's
 viewer does; this report reads the session, so the two differ through the opening.
 
+**Rebuilt 2026-10-15 (#4944).** The page now shows where the app said stop: 1,447 of 6,744
+sessions, as the analysis's `stops.csv` counts them. The rebuild also fixed its curves. The first page pooled each
+stratum's people before carrying a spot check's gaps, so between rounds it averaged only the
+sessions with a row. From one photo at votes 18–19 that was 124–146 of 562 people, and Find read
+0.34–0.40 where every session gives 0.72–0.76. The page now matches Figure 2's `find_by_vote.csv`
+to 0.0001 at every vote.
+
 ## Provenance
 
 | | |
