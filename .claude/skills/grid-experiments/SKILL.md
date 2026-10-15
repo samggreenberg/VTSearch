@@ -253,9 +253,9 @@ What goes with it:
 - **Pair only grids from the same commit.** Eleven days of `dev` alone give a
   per-cell σ of ~0.01. Reuse a same-commit baseline grid instead of an old one.
 - **…and the same kernel pins.** Since #4110, `run_cells.py` pins the CPU kernels
-  of OpenBLAS, numpy, torch's MKL and ATen (`_expcommon.CPU_KERNEL_PINS`), so a
-  cell is bit-identical on an Intel and an AMD cpu node, and there is no vendor to
-  pin. A grid run before the pins differs from a pinned one in its last bits on
+  of OpenBLAS, numpy, torch's MKL and ATen (`_expcommon.cpu_kernel_pins`; numpy's
+  pin is chosen by numpy's version, #4930), so a cell is bit-identical on an Intel
+  and an AMD cpu node, and there is no vendor to pin. A grid run before the pins differs from a pinned one in its last bits on
   every node, so re-run it rather than pair against it. The pins do not reach a
   GPU (cuBLAS still differs by device, #3160).
 - σ is this environment set's. On another, read it off the first seeds and
