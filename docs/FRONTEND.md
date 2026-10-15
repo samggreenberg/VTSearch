@@ -314,8 +314,9 @@ the control's state line there is the host's (`lineState`: this corpus's
 result, or untested) with the radios `locked` while a phase runs.
 **When a check runs.** The label view starts both kinds. For weak separation
 (#4496), an effect on the balance's `checkDue` (the server's `check_due`,
-`weak_check_due` on the labels line's `separation`; never on a face detector,
-#4799) and `sortBusy` calls `runDueCheck()`, which calls
+`weak_check_due` on the labels line's `separation`, only while no check has
+ended, so once a session, #4909; never on a face detector, #4799) and
+`sortBusy` calls `runDueCheck()`, which calls
 `beginSpotCheck('weak')` once a learned sort has landed with `checkDue`
 (under the typed query's hold, the held ranking's,
 `SortRunnerService.askBalance`, #4736), never in Autopilot's opening

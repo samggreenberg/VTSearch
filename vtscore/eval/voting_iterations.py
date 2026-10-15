@@ -106,8 +106,8 @@ from vtscore.eval.voting_columns import (
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
-    WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
+    WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     LabelsLine,
     LineRanking,
@@ -2663,7 +2663,7 @@ def simulate_voting_iterations(  # noqa: C901
     spot_check: Optional[str] = None,
     weak_separation: float = WEAK_SEPARATION_D,
     weak_min_t: int = WEAK_CHECK_MIN_VOTES,
-    weak_repeat: int = WEAK_CHECK_COOLDOWN,
+    weak_repeat: int = WEAK_CHECK_REPEAT or 0,
     weak_phase: str = "learned",
     done_check: bool = True,
     early_check: Optional[int] = None,
@@ -3239,15 +3239,17 @@ def simulate_voting_iterations(  # noqa: C901
             record on them, at each requested click a round reaches).  It starts
             only when its opening bands fit the voting budget left, and a deeper
             band that would overrun the budget ends it there, as a user closing
-            the step does, so a run's clicks still end at *max_steps*.  With
-            *weak_repeat* > 0 the prompt returns once that many votes have
-            been cast since the last prompted check ended, while the labels
-            still separate weakly; 0 prompts once.  Ignored on the Inclusion
+            the step does, so a run's clicks still end at *max_steps*.  It
+            prompts once, and only while no check has ended (*weak_repeat* 0,
+            the app since #4909); with *weak_repeat* > 0 the prompt returns
+            once that many votes have been cast since the last check ended,
+            while the labels still separate weakly.  Ignored on the Inclusion
             arm, and when nothing is left unvoted to check.
         weak_separation: The d' below which ``spot_check="weak"`` prompts (the app's ``WEAK_SEPARATION_D``).
         weak_min_t: The fewest votes before ``spot_check="weak"`` prompts (``WEAK_CHECK_MIN_VOTES``).
-        weak_repeat: Votes after a prompted check before it may prompt again
-            (``WEAK_CHECK_COOLDOWN``); 0 prompts once, the priced alternative.
+        weak_repeat: Votes after a check ends before the weak check may
+            prompt again; 0 (the default, the app's ``WEAK_CHECK_REPEAT``,
+            ``None``, #4909) prompts once.  25 is the app before #4909.
         weak_phase: Where in Autopilot's flow ``spot_check="weak"`` may prompt.
             ``"learned"`` (the default, the app's) or ``"any"`` (the arm #4496
             priced first): ``"learned"`` prompts only once the flow has left

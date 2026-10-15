@@ -26,8 +26,8 @@ from vtscore.training.thresholds import (
     BALANCE_UNCHECKED,
     DEFAULT_BETA,
     NO_BALANCE,
-    WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
+    WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     balance_schedule,
 )
@@ -441,7 +441,8 @@ class TestTheWeakSeparationPrompt:
         assert production_spot_check({}) == "weak"
         assert params["weak_separation"].default == WEAK_SEPARATION_D
         assert params["weak_min_t"].default == WEAK_CHECK_MIN_VOTES
-        assert params["weak_repeat"].default == WEAK_CHECK_COOLDOWN
+        assert WEAK_CHECK_REPEAT is None, "the app prompts once (#4909)"
+        assert params["weak_repeat"].default == 0, "the harness's once"
         assert params["weak_phase"].default == "learned", "the app trains no detector on Autopilot's opening"
 
     def test_by_default_face_crops_never_prompt_and_other_media_do(self):

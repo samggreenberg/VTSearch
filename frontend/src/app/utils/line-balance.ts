@@ -93,8 +93,8 @@ export interface LineBalance {
   separation: number | null;
   /**
    * The labels separate weakly enough that a spot check is due (#4496): Autopilot runs one. The
-   * server decides (`weak_check_due`): d' below 1.5, from 10 votes on, and 25 votes after the last
-   * check ended.
+   * server decides (`weak_check_due`): d' below 1.5, from 10 votes on, and only while no check has
+   * ended, so once a session (#4909).
    */
   checkDue: boolean;
   /**

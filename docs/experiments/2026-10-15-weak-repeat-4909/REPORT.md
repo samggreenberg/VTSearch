@@ -1,7 +1,8 @@
 # The weak check's repeat, re-priced at today's head (issue #4909)
 
-**Status (2026-10-15): Binary Photo at beta 1 and 4, 5 seeds, priced. The owner chose to ship "once": the weak
-check prompts at most once a session, and never after any check has run.**
+**Status (2026-10-15): Binary Photo at beta 1 and 4, 5 seeds, priced. The owner chose "once", shipped with this
+report (`WEAK_CHECK_REPEAT`): the weak check prompts at most once a session, and never after any check has ended.
+"As shipped" below is the app before it.**
 
 **The repeat no longer pays, and neither does the weak check itself, past click 75.** Every arm ran today's app to
 click 200, then the closing check, and differed only in the weak-separation check:

@@ -4,8 +4,9 @@
 # the same now, while checks take 25-29% of a session's clicks. Every arm is today's app to 200 clicks, closing with
 # the end-of-run check, and differs only in the weak-separation check (the check before Done is the app's in all):
 #
-#   r25   as shipped: the weak check again 25 votes after a check ends, while the labels separate weakly
-#   r0    the weak check once (CALIB_WEAK_REPEAT=0)
+#   r25   the app before #4909: the weak check again 25 votes after a check ends, while the labels separate weakly
+#         (CALIB_WEAK_REPEAT=25)
+#   r0    the weak check once (CALIB_WEAK_REPEAT=0), the app since #4909
 #   r50   again after 50 votes (CALIB_WEAK_REPEAT=50)
 #   nw    no weak check (CALIB_WEAK_MIN_T past the budget): the bracket, what the first prompt itself is worth
 #
@@ -29,9 +30,10 @@ S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 D="${REPEAT4909_DATE:-2026-10-15}"
 SEEDS="${REPEAT4909_SEEDS:-5}"
 ARMS=(r25 r0 r50 nw)
-# Each arm's knobs, as env assignments; r25 sets none (the app's constants).
-declare -A KNOBS=([r25]="" [r0]="CALIB_WEAK_REPEAT=0" [r50]="CALIB_WEAK_REPEAT=50" [nw]="CALIB_WEAK_MIN_T=100000")
-declare -A DIVERGES=([r25]="" [r0]="weak_repeat" [r50]="weak_repeat" [nw]="weak_min_t")
+# Each arm's knobs, as env assignments. The study ran at b5cdd719a, where r25 was the app and set none; #4909
+# shipped r0, so r25 is pinned and declared now, and r0 is the app's (its pin is the app's value).
+declare -A KNOBS=([r25]="CALIB_WEAK_REPEAT=25" [r0]="CALIB_WEAK_REPEAT=0" [r50]="CALIB_WEAK_REPEAT=50" [nw]="CALIB_WEAK_MIN_T=100000")
+declare -A DIVERGES=([r25]="weak_repeat" [r0]="" [r50]="weak_repeat" [nw]="weak_min_t")
 GRID_SRC="${REPEAT4909_GRID:-$S/2026-10-08-b1/results}"  # prepare_data.py unchanged since this grid was prepared
 
 btag() { case "$1" in 1) echo 1 ;; 4) echo 4 ;; *) echo "beta must be 1 or 4" >&2; exit 2 ;; esac; }
