@@ -40,6 +40,8 @@ import pandas as pd  # noqa: E402
 T = 200
 GRID_T = np.arange(T + 1)
 ARMS = {"a0": None, "e30": 30, "e50": 50, "e75": 75}
+#: #4482's c50 at today's head: the app stopping at click 50, so its closing check is the check where the user stops.
+STOP_ARM, STOP_AT = "c50", 50
 EARLY = ("e30", "e50", "e75")
 BETAS = (1, 4)
 NAME = {
@@ -202,16 +204,16 @@ def _axes_style(ax) -> None:
 
 
 def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
-    keys = sorted(set.intersection(*(set(r) for r in runs.values())))
+    keys = sorted(set.intersection(*(set(runs[a]) for a in ARMS)))
     keys = [k for k in keys if np.isfinite(runs["a0"][k]["tq"]) and "goods" in runs["a0"][k]]
     cls = np.array([k.split("|")[0].split("@")[0] for k in keys])
     band = np.array([k.split("|")[0].split("@")[1] for k in keys])
-    F = {arm: np.vstack([runs[arm][k]["f"] for k in keys]) for arm in runs}
-    G = {arm: np.vstack([runs[arm][k]["goods"] for k in keys]) for arm in runs}
-    after = {arm: np.array([runs[arm][k]["after"] for k in keys]) for arm in runs}
+    F = {arm: np.vstack([runs[arm][k]["f"] for k in keys]) for arm in ARMS}
+    G = {arm: np.vstack([runs[arm][k]["goods"] for k in keys]) for arm in ARMS}
+    after = {arm: np.array([runs[arm][k]["after"] for k in keys]) for arm in ARMS}
     col = {
         arm: (lambda name, arm=arm: np.array([runs[arm][k].get(name, np.nan) for k in keys], dtype=float))
-        for arm in runs
+        for arm in ARMS
     }
 
     # The control's runs are byte-identical to an arm's until the early check: a pair that differs before it is a
@@ -328,7 +330,61 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
         gains[arm] = np.nanmean(d, axis=0)
         by = pd.DataFrame(d).groupby(cls).mean()
         gains[f"{arm}_se"] = by.std(ddof=1).to_numpy() / np.sqrt(len(by))
-    return {"summary": summary, "splits": splits, "curves": curves, "gains": gains, "F": F, "after": after}
+    stop = stop_table(runs, keys, cls, F, col, cool_on, beta) if STOP_ARM in runs else pd.DataFrame()
+    return {
+        "summary": summary,
+        "splits": splits,
+        "curves": curves,
+        "gains": gains,
+        "F": F,
+        "after": after,
+        "stop": stop,
+    }
+
+
+def stop_table(runs, keys, cls, F, col, cool_on, beta) -> pd.DataFrame:
+    """The check at a stop (c50) beside the same check inside the session (e50), on the same sessions.
+
+    c50's closing check against its unchecked line at click 50 is #4482's "the check"; the control's F at click
+    50 + k (k = the check's picks) against its F at 50 is "the same number of further Autopilot clicks". e50's
+    gain where its check closes, against the control at that click, is what the check is worth when the session
+    goes on. Split by what the session was doing at vote 50: a prompted check running or ended in the 25 votes
+    before (the control had just checked), or not.
+    """
+    n = STOP_AT
+    c = runs[STOP_ARM]
+    ok = np.array([k in c for k in keys])
+    unchecked = np.array([c[k]["f"][n] if k in c else np.nan for k in keys])
+    after = np.array([c[k]["after"] if k in c else np.nan for k in keys])
+    picks = np.array([c[k].get("end_check_picks", np.nan) if k in c else np.nan for k in keys], dtype=float)
+    further = np.array(
+        [
+            F["a0"][i, int(min(n + picks[i], T))] - F["a0"][i, n] if np.isfinite(picks[i]) else np.nan
+            for i in range(len(keys))
+        ]
+    )
+    e_end = col["e50"]("early_end")
+    at_close = np.array(
+        [F["e50"][i, int(e)] - F["a0"][i, int(e)] if np.isfinite(e) else np.nan for i, e in enumerate(e_end)]
+    )
+    recent = ~cool_on["e50"]  # absorbed, or fired within 25 votes of the control's last check
+    rows = []
+    for name, m in (
+        ("all", ok),
+        ("checked in the 25 votes before 50", ok & recent),
+        ("not checked recently", ok & ~recent),
+    ):
+        g = after[m] - unchecked[m]
+        rows.append({
+            "beta": beta, "sessions": name, "runs": int(m.sum()), "share": float(m.mean()),
+            "a0_F_at_50": np.nanmean(F["a0"][m, n]), "c50_unchecked_at_50": np.nanmean(unchecked[m]),
+            "after_check": np.nanmean(after[m]), "check_gain": np.nanmean(g), "check_se": se_over_classes(g, cls[m]),
+            "check_picks": np.nanmean(picks[m]), "same_clicks_autopilot": np.nanmean(further[m]),
+            "same_clicks_se": se_over_classes(further[m], cls[m]),
+            "e50_fired": float(np.mean(np.isfinite(e_end[m]))), "e50_gain_at_close": np.nanmean(at_close[m]),
+            "e50_close_se": se_over_classes(at_close[m], cls[m]) if np.isfinite(at_close[m]).sum() > 2 else np.nan,
+        })  # fmt: skip
+    return pd.DataFrame(rows)
 
 
 def figure(res: dict[int, dict], path: Path) -> None:
@@ -384,12 +440,14 @@ def main() -> int:
         tq = {f"{c}|{int(s)}": float(fbeta([p], [r], beta)[0]) for c, s, p, r in
               zip(base["category"], base["seed"], base[f"text_line_precision_b{beta}"], base[f"text_line_recall_b{beta}"])}  # fmt: skip
         runs = {}
-        for arm in ARMS:
+        for arm in (*ARMS, STOP_ARM):
             steps, picks = load_arm(run_dir(a.root, a.date, a.tag, arm, beta), a.seeds, a.procs)
+            if arm == STOP_ARM and not len(steps):
+                continue
             runs[arm] = per_run(steps, picks, tq, float(beta))
             counts[f"{arm}-b{beta}"] = len(runs[arm])
             print(f"beta {beta} {arm}: {len(runs[arm])} runs", flush=True)
-        if min(len(r) for r in runs.values()) == 0:
+        if min(len(runs[arm]) for arm in ARMS) == 0:
             print(f"beta {beta}: an arm has no runs yet; skipped")
             continue
         res[beta] = analyse_beta(runs, beta)
@@ -400,6 +458,7 @@ def main() -> int:
         o.mkdir(parents=True, exist_ok=True)
         pd.concat([r["summary"] for r in res.values()]).to_csv(o / "early_summary.csv", index=False)
         pd.concat([r["splits"] for r in res.values()]).to_csv(o / "early_splits.csv", index=False)
+        pd.concat([r["stop"] for r in res.values()]).to_csv(o / "early_check_at_stop.csv", index=False)
         pd.concat([r["curves"] for r in res.values()]).to_csv(o / "early_curves.csv", index=False)
         pd.concat([r["gains"] for r in res.values()]).to_csv(o / "early_gains.csv", index=False)
         (o / "early_counts.json").write_text(json.dumps(counts, indent=1))
@@ -418,6 +477,7 @@ def main() -> int:
                  "a0_done_check_picks", "check_clicks", "a0_check_clicks", "done_click_reached", "a0_done_click_reached",
                  "done_click_median", "a0_done_click_median", "goods_at_200", "a0_goods_at_200"]].round(3).to_string(index=False))  # fmt: skip
         print(pd.concat([r["splits"] for r in res.values()]).round(4).to_string(index=False))
+        print(pd.concat([r["stop"] for r in res.values()]).round(4).to_string(index=False))
     return 0
 
 

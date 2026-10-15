@@ -7,11 +7,13 @@
 #   e30/e50/e75 the same, with every session checked at 30 / 50 / 75 votes (CALIB_EARLY_CHECK): a prompted check
 #               running then counts, otherwise Autopilot prompts one at the first step from N votes past the
 #               opening, however recently another ended (the cooldown variant is read offline)
+#   c50         today's app stopping at click 50, so its closing check is the check where the user stops: #4482's
+#               c50 arm at today's head, to read the check at a stop beside the check inside a session
 #
 # The Binary Photo path, beta 1 and 4, 5 seeds x 144 cells, on the grid #4743 priced (2026-10-08-b1), paired by
 # cell and seed. Trajectory pass (no ceiling); cells gzipped.
 #
-#   early_check_4664.sh dirs                       run dirs <root>/<date>-early4664-<arm>-b{1,4}
+#   early_check_4664.sh dirs [ARM]                 run dirs <root>/<date>-early4664-<arm>-b{1,4} (every arm, or ARM)
 #   early_check_4664.sh launch ARM BETA [IDX]      one arm at one preset as a cpu array (default: every seed's)
 #   early_check_4664.sh pack ARM BETA [IDX]        the same as V100 packs, the GPU hidden (the cpu cap full)
 #   early_check_4664.sh cpack ARM BETA [IDX]       the same as cpu-partition packs: one job runs CALIB_PACK_PAR
@@ -27,9 +29,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 D="${EARLY4664_DATE:-2026-10-14}"
 SEEDS="${EARLY4664_SEEDS:-5}"
-STEPS=200
-ARMS=(a0 e30 e50 e75)
-declare -A AT=([a0]="" [e30]=30 [e50]=50 [e75]=75)
+ARMS=(a0 e30 e50 e75 c50)
+declare -A AT=([a0]="" [e30]=30 [e50]=50 [e75]=75 [c50]="")
+declare -A STEPS_OF=([c50]=50)
 GRID_SRC="${EARLY4664_GRID:-$S/2026-10-08-b1/results}"  # prepare_data.py unchanged since this grid was prepared
 
 btag() { case "$1" in 1) echo 1 ;; 4) echo 4 ;; *) echo "beta must be 1 or 4" >&2; exit 2 ;; esac; }
@@ -45,6 +47,8 @@ PY
 case "${1:-}" in
 dirs)
   for arm in "${ARMS[@]}"; do
+    [[ -z "${2:-}" || "$2" == "$arm" ]] || continue
+    STEPS="${STEPS_OF[$arm]:-200}"
     for b in 1 4; do
       r="$S/$D-$(run_of "$arm" "$b")/results"
       mkdir -p "$r/cells"
@@ -64,6 +68,7 @@ launch|pack|cpack)
   [[ -v "AT[$arm]" ]] || { echo "arm must be one of ${ARMS[*]}" >&2; exit 2; }
   idx="${4:-$(all_idx)}"
   run="$(run_of "$arm" "$b")"
+  STEPS="${STEPS_OF[$arm]:-200}"
   mem_in="${CALIB_MEM:-}"
   export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}" CALIB_MEM="${CALIB_MEM:-3G}" CALIB_TIME="${CALIB_TIME:-2:00:00}"
   export SOTA_BETA="$b" SOTA_DATE="$D-$run" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS" SOTA_MAX_STEPS="$STEPS"
