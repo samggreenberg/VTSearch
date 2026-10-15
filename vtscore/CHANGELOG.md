@@ -221,6 +221,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The eval harness can record every calibration fold model's scores beside the final model's** (issue #4936).
+  `simulate_voting_iterations` takes `fold_scale_steps` (clicks; `None`, the default, is off): at the first
+  ordinary step at or past each, the `test_score_sink` entry also carries each live fold model's scores of the
+  withheld half (`fold_test_scores`, aligned with the snapshot's `ids`) and of the whole sim set
+  (`fold_sim_scores`, beside the final model's `sim_scores`, the items' `sim_labels` and `sim_vote`), whether the
+  step's haystacks dropped the voted items (`fold_sim_excluding`), and the vote behind each held-out score
+  (`fold_ids`). Every remainder-fitted map's haystacks replay from these, so the fold models' scale can be read
+  against the final model's on images no model has seen. Record only; the session is unchanged.
+
 - **The eval harness can carry the folds' held-out scores onto the final model's scale before the labels line**
   (issue #4910). `simulate_voting_iterations` takes `labels_scale` (`None`, the default and the app: each fold
   model's scores as it scored them; `"quantile"`: fold *k*'s scores carried onto the final model's scale by their

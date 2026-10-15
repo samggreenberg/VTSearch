@@ -542,6 +542,7 @@ def main(argv: list[str] | None = None) -> int:
                 precision_frame_steps=cfg.PFRAME_STEPS or None,
                 rank_frame_sink=rankframes_local,
                 test_score_sink=testscores_local,
+                fold_scale_steps=cfg.SAVE_TEST_SCORES_AT if cfg.SAVE_FOLD_SCALES else None,
                 line_test_sink=linetest_local,
                 sim_size=cfg.SIM_SIZE,
                 rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
