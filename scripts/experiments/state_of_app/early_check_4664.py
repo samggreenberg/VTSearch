@@ -323,6 +323,25 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
                              "share": float(m.mean()), "gain_1_150": g[m].mean(), "se": se_over_classes(g[m], cls[m]),
                              "better": float(np.mean(g[m] > 1e-9)), "worse": float(np.mean(g[m] < -1e-9))})  # fmt: skip
     splits = pd.DataFrame(brow)
+
+    # Literal examples: per early arm, the sessions it helped and hurt most over clicks 1-150, with what they did.
+    erow = []
+    for arm in EARLY:
+        g = np.nanmean(F[arm][:, 1:151] - F["a0"][:, 1:151], axis=1)
+        fired = np.isfinite(col[arm]("early_start"))
+        order = np.argsort(np.where(fired, g, np.nan))
+        order = order[np.isfinite(g[order]) & fired[order]]
+        for tag, idx in (("helped most", order[::-1][:3]), ("hurt most", order[:3])):
+            for i in idx:
+                cat, seed = keys[i].split("|")
+                erow.append({
+                    "beta": beta, "arm": arm, "which": tag, "category": cat, "seed": int(seed),
+                    "gain_1_150": g[i], "early_start": col[arm]("early_start")[i], "early_end": col[arm]("early_end")[i],
+                    "early_goods": col[arm]("early_goods")[i], "a0_weak_before": col["a0"]("weak_before")[i],
+                    "F_a0_at_100": F["a0"][i, 100], "F_arm_at_100": F[arm][i, 100],
+                    "goods_200_a0": G["a0"][i, T], "goods_200_arm": G[arm][i, T],
+                })  # fmt: skip
+    examples = pd.DataFrame(erow)
     curves = pd.DataFrame({"beta": beta, "t": GRID_T, **{arm: np.nanmean(F[arm], axis=0) for arm in F}})
     gains = pd.DataFrame({"beta": beta, "t": GRID_T})
     for arm in EARLY + tuple(f"{a}c" for a in EARLY):
@@ -339,6 +358,8 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
         "F": F,
         "after": after,
         "stop": stop,
+        "examples": examples,
+        "seed": np.array([int(k.split("|")[1]) for k in keys]),
     }
 
 
@@ -420,6 +441,42 @@ def figure(res: dict[int, dict], path: Path) -> None:
     plt.close(fig)
 
 
+def figure_runs(res: dict[int, dict], path: Path) -> None:
+    """Per run, not averaged: e50's paired gain per seed over clicks, and every session's gain over clicks 1-150."""
+    fig, axes = plt.subplots(2, len(res), figsize=(6.5 * len(res), 8.2), squeeze=False)
+    seed_colors = ("#2a78d6", "#1baf7a", "#eb6834", "#8a5cc7", "#c9a227")
+    for j, (beta, r) in enumerate(sorted(res.items())):
+        ax = axes[0, j]
+        d = r["F"]["e50"] - r["F"]["a0"]
+        for s_, c in zip(sorted(set(r["seed"])), seed_colors):
+            m = pd.Series(np.nanmean(d[r["seed"] == s_], axis=0)).rolling(5, center=True, min_periods=1).mean()
+            ax.plot(GRID_T, m, color=c, lw=1.4, label=f"seed {s_}")
+        ax.axhline(0, color=MUTED, lw=0.8)
+        ax.axvline(50, color=MUTED, lw=0.8, ls=":")
+        ax.set_title(
+            f"+ a check at click 50, gain per seed, beta {beta} (5-click mean)", color=INK, fontsize=11, loc="left"
+        )
+        ax.set_xlabel("clicks", color=MUTED, fontsize=9)
+        _axes_style(ax)
+        ax.legend(frameon=False, fontsize=8, loc="upper right", ncol=5)
+        ax = axes[1, j]
+        bins = np.linspace(-0.1, 0.1, 41)
+        for arm in EARLY:
+            g = np.nanmean(r["F"][arm][:, 1:151] - r["F"]["a0"][:, 1:151], axis=1)
+            moved = np.abs(g) > 1e-9
+            ax.hist(np.clip(g[moved], -0.1, 0.1), bins=bins, histtype="step", lw=1.6, color=COLOR[arm],
+                    label=f"{NAME[arm]} ({moved.mean():.0%} of sessions moved)")  # fmt: skip
+        ax.axvline(0, color=MUTED, lw=0.8)
+        ax.set_title(f"Each session's gain over clicks 1-150, beta {beta}", color=INK, fontsize=11, loc="left")
+        ax.set_xlabel("paired gain in mean F over clicks 1-150 (clipped to ±0.1)", color=MUTED, fontsize=9)
+        ax.set_ylabel("sessions", color=MUTED, fontsize=9)
+        _axes_style(ax)
+        ax.legend(frameon=False, fontsize=8, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True, type=Path)
@@ -459,6 +516,7 @@ def main() -> int:
         pd.concat([r["summary"] for r in res.values()]).to_csv(o / "early_summary.csv", index=False)
         pd.concat([r["splits"] for r in res.values()]).to_csv(o / "early_splits.csv", index=False)
         pd.concat([r["stop"] for r in res.values()]).to_csv(o / "early_check_at_stop.csv", index=False)
+        pd.concat([r["examples"] for r in res.values()]).to_csv(o / "early_examples.csv", index=False)
         pd.concat([r["curves"] for r in res.values()]).to_csv(o / "early_curves.csv", index=False)
         pd.concat([r["gains"] for r in res.values()]).to_csv(o / "early_gains.csv", index=False)
         (o / "early_counts.json").write_text(json.dumps(counts, indent=1))
@@ -466,6 +524,7 @@ def main() -> int:
     for o in figs:
         o.mkdir(parents=True, exist_ok=True)
         figure(res, o / "early_over_clicks.png")
+        figure_runs(res, o / "early_per_run.png")
     s = pd.concat([r["summary"] for r in res.values()])
     with pd.option_context("display.width", 250, "display.max_columns", 80):
         print(s[["beta", "arm", "runs", "prefix_mismatch", "ran", "absorbed", "start_median", "early_picks", "early_good_share"]
@@ -478,6 +537,7 @@ def main() -> int:
                  "done_click_median", "a0_done_click_median", "goods_at_200", "a0_goods_at_200"]].round(3).to_string(index=False))  # fmt: skip
         print(pd.concat([r["splits"] for r in res.values()]).round(4).to_string(index=False))
         print(pd.concat([r["stop"] for r in res.values()]).round(4).to_string(index=False))
+        print(pd.concat([r["examples"] for r in res.values()]).round(3).to_string(index=False))
     return 0
 
 
