@@ -296,12 +296,13 @@ describe('SpotCheckStageComponent (#4413, #4273)', () => {
       expect(voted.map((v) => v.finished)).toEqual([false, false, false, true]);
       expect(el().querySelector('.check-result')!.getAttribute('data-status')).toBe('checked');
       // Beta 1 is an advisory check (#4427): the audited set is named, and the line keeps its own count.
+      // Both leave out what the user had voted on before the check, and say so (#4914).
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Checked the top 32: likely 55–100% right, about half of them found (checked 15).',
+        "Checked the top 32 you hadn't voted on: likely 55–100% right, about half of them found (checked 15).",
       );
       expect(text()).toContain(
-        "The line keeps its 32, where your labels put it: the check informs the line and does not move it. " +
-          'The ranges are what the picks say about the top 32.',
+        "The line keeps the top 32 you haven't voted on, where your labels put it: the check informs the line and does not move it. " +
+          "The ranges are what the picks say about the top 32 you hadn't voted on; the Goods you had already voted on count in neither.",
       );
       expect(dots().length).toBe(0);
     });
@@ -335,9 +336,9 @@ describe('SpotCheckStageComponent (#4413, #4273)', () => {
       });
       expect(voted.map((v) => v.finished)).toEqual([false, false, false, true]);
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Checked the top 8: likely 0–45% right, few of them found (checked 5).',
+        "Checked the top 8 you hadn't voted on: likely 0–45% right, few of them found (checked 5).",
       );
-      expect(text()).toContain("The line keeps its 8, where your labels put it");
+      expect(text()).toContain("The line keeps the top 8 you haven't voted on, where your labels put it");
       expect(text()).not.toMatch(/\bshort\b|\bfell\b|\bmet\b|confirmed|threshold/i);
       // The copy names no cause: it is true of a sparse corpus and a weak model alike.
       expect(text()).not.toMatch(/sparse|weak|too few|model/i);
@@ -351,7 +352,7 @@ describe('SpotCheckStageComponent (#4413, #4273)', () => {
         balance: wireBalance('checked', { precision: null, recall: null, fbeta: null }),
         check: { ...running([], 1, 1, 32, {}, null), status: 'checked' },
       });
-      expect(el().querySelector('.check-result-headline')!.textContent!.trim()).toBe('Checked the top 32.');
+      expect(el().querySelector('.check-result-headline')!.textContent!.trim()).toBe("Checked the top 32 you hadn't voted on.");
       expect(voted.map((v) => v.finished)).toEqual([true]);
     });
   });

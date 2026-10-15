@@ -138,7 +138,8 @@ from your labels, it travels with them: export the detector, run it on
 another collection, and VTSearch draws the line the same way there.
 Until you **check** the items above the line, nothing has measured how much
 of them is right or how much of what is there they found, and the note under
-the Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
+the Threshold says so: **32 more kept, unchecked** (or however many it kept
+besides the items you voted on).
 
 **The spot check.** Autopilot runs it for you, as its **Spot Check.** step
 (see [The phases](#the-phases)): once every quality light is green, or the
@@ -191,22 +192,31 @@ good matches that can be hundreds, on a short or sparse one as few as 8.
 **The check does not move the line**: it measures, and your picks become
 votes that the next retrain learns from like any other, but the line stays
 where your labels put it. The check's last screen says what it found -
-**Checked the top 48: likely 55–80% right, about half of them found (checked
-15).** and **The line keeps its 30, where your labels put it: the check
-informs the line and does not move it. The ranges are what the picks say
-about the top 48.** - and the note under the Threshold then shows the same
-result:
+**Checked the top 48 you hadn't voted on: likely 55–80% right, about half of
+them found (checked 15).** and **The line keeps the top 30 you haven't voted
+on, where your labels put it: the check informs the line and does not move
+it. The ranges are what the picks say about the top 48 you hadn't voted on;
+the Goods you had already voted on count in neither.** - and the note under
+the Threshold then shows the same result:
 
-- **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  30 kept** - the check measured the top 48, and the line keeps 30. The
-  range is how much of the checked set is likely right; the phrase after it
-  is how much of what the list holds that set likely found (**few of them**,
-  **about a quarter**, **about half**, **about three quarters** or **nearly
-  all of them**). Hovering the note says which set the check measured. The note names no cause for a poor result: a dataset with very few
+- **Checked the top 48 you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 15) · 30 more kept** - the check measured the top
+  48 of the items you hadn't voted on, and the line keeps 30 more besides
+  your votes. The range is how much of the checked set is likely right; the
+  phrase after it is how much of the matches you hadn't voted on that set
+  likely found (**few of them**, **about a quarter**, **about half**,
+  **about three quarters** or **nearly all of them**). Hovering the note
+  gives both as numbers. The note names no cause for a poor result: a dataset with very few
   matches and a detector that can't yet tell them apart look the same from
   here.
 
-**The likely range** says how much of the set the line keeps is probably
+**Neither range counts your own votes.** The check samples only the items
+you haven't voted on, so the Goods you have already found are in neither the
+share right nor the share found. Late in a session, once you have voted on
+most of the matches near the top, the items left there hold few of them, so
+the check before **Done!** can read low after a session that went well.
+
+**The likely range** says how much of the set the check measured is probably
 right. It comes from your picks alone, never from the detector's own guess:
 each band's picks bound that band, and the bands are weighed by their size.
 With 5 picks a band it is wide; that width is the honest answer to "how
@@ -1065,13 +1075,14 @@ Once the list is ranked by the detector (a **Learned** sort, or Test), the
 note under the spectrum says what the Threshold is doing to the line, in one
 of two states:
 
-- **Top 32 kept, unchecked** - nothing has measured the set yet (the count
-  is 32 at most; fewer when the detector's estimate says the balance peaks
-  sooner).
-- **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  48 kept** - a check walked the list and ended where the balance peaked;
-  the line keeps that set, and the note says how much of it is likely right
-  and how much of what the list holds it likely found.
+- **32 more kept, unchecked** - the line keeps 32 items you haven't voted
+  on, besides your votes, and nothing has measured them yet.
+- **Checked the top 48 you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 15) · 30 more kept** - a check walked the items you
+  hadn't voted on and ended where the balance peaked, on the top 48; the
+  note says how much of that set is likely right and how much of the matches
+  you hadn't voted on it likely found. The line keeps its own 30 more, where
+  your labels put it.
 
 The range a check measured is a number. Autopilot's **Spot Check.** step
 runs a spot check of the list: 5 random picks from each band of it, which you
