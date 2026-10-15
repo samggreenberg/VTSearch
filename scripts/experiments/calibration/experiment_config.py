@@ -1134,6 +1134,13 @@ SAVE_TEST_SCORES = os.environ.get("CALIB_SAVE_TEST_SCORES", "").strip().lower() 
 SAVE_TEST_SCORES_AT = tuple(
     int(x) for x in os.environ.get("CALIB_SAVE_TEST_SCORES_AT", "").replace(" ", "").split(",") if x
 )
+#: #4936's instrument (``CALIB_SAVE_FOLD_SCALES=1``): the ``t<N>`` snapshots also carry every live calibration fold
+#: model's scores of the withheld half and of the sim set, the sim set's truth and votes, and the vote behind each
+#: held-out score, so the fold models' scale is read against the final model's on images no model has seen.
+#: Needs ``CALIB_SAVE_TEST_SCORES=1`` and ``CALIB_SAVE_TEST_SCORES_AT``; the session is unchanged.
+SAVE_FOLD_SCALES = os.environ.get("CALIB_SAVE_FOLD_SCALES", "").strip().lower() in ("1", "true", "yes")
+if SAVE_FOLD_SCALES and not (SAVE_TEST_SCORES and SAVE_TEST_SCORES_AT):
+    raise ValueError("CALIB_SAVE_FOLD_SCALES=1 needs CALIB_SAVE_TEST_SCORES=1 and CALIB_SAVE_TEST_SCORES_AT")
 #: The Test arm (#4523, ``CALIB_LINE_TEST=1``): after the last ordinary click, run Test mode's autopilot on the
 #: withheld half with every pick answered from the truth, at the app's default budgets, into
 #: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.
