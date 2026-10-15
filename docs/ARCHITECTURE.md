@@ -308,7 +308,10 @@ VTSearch/
 │   ├── labels/                     Label importers, sync sources, sync utilities
 │   │   ├── importers/              server_json_file, server_csv_file
 │   │   ├── sources/                server_json_file (bidirectional label sync)
-│   │   └── sync.py                 sync_to/from_labelset_source utilities
+│   │   ├── binding.py              Which source a detector syncs with (its registry binding >
+│   │   │                           deployment default_labelset_source > none), fixed fields
+│   │   └── sync.py                 The labelset-source engine: paced push of each detector file's
+│   │                               labelset on every write, merging pulls (load / link / sync)
 │   │
 │   ├── eval/                       Evaluation framework — measures deviations from the shipped
 │   │   │                           algorithm, so its *default arm* must track the app (see
@@ -604,6 +607,11 @@ modules on the right.
   pure I/O.  The *engine* driving settings sources is not — it lives in
   `vtsearch/settings_store.py` and is documented in
   [EXTENDING-plugins.md § How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works).
+  The labelset-source engine is `vtscore/labels/sync.py`: every write of a
+  detector file (`vtscore/detectors/store.py`) schedules a paced push of that
+  file's whole labelset, so a deployment's `default_labelset_source` keeps a
+  copy of every detector current outside the server
+  ([vtscore guide](../vtscore/docs/extending/labelset-sources.md#when-your-_do_save-and-_do_load_full-run)).
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
@@ -624,7 +632,7 @@ modules on the right.
 | `vtscore/labels/importers/` (base + all) | No | No | **Yes**: pure data processing |
 | `vtsearch/settings_io/sources/` | No | No | **Yes**: pure file I/O |
 | `vtscore/labels/sources/` | No | No | **Yes**: pure file I/O |
-| `vtscore/labels/sync.py` | No | Yes (reads votes) | Partially: needs state for vote export |
+| `vtscore/labels/sync.py` | No | Yes (detector registry + files) | Partially: needs the detector store and registry |
 | `vtscore/datasets/downloader/` | No | No (callback) | **Yes**: requests only |
 | `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes**: needs media registry |
 | `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes**: each self-contained |

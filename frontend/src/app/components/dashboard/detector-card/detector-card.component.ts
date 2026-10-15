@@ -92,6 +92,8 @@ export class DetectorCardComponent {
   readonly dismissTask = output<string>();
   readonly checkboxToggle = output<void>();
   readonly security = output<void>();
+  /** Opens the Auto-export dialog: where this detector's labels sync to. */
+  readonly autoExport = output<void>();
   /** Emits the new AutoFind membership: true for "Move to AutoFind", false for
    *  "Move to Drafts". */
   readonly setAutofind = output<boolean>();
@@ -122,6 +124,26 @@ export class DetectorCardComponent {
       return 'No test has measured what this detector ships. Tick it and a dataset it never trained on, then click Test.';
     }
     return verdictTitle(verdict);
+  }
+
+  /** The labelset-source field values this detector still lacks (#4913): its
+   *  labels are not auto-exported until they are filled in. Empty when it
+   *  syncs nowhere or has everything it needs. */
+  get autoExportMissing(): string[] {
+    return this.detector()?.labelset_source_status?.missing_fields ?? [];
+  }
+
+  get autoExportWarning(): string {
+    const status = this.detector()?.labelset_source_status;
+    const target = status?.display_name || 'its sync target';
+    return this.isOwner
+      ? `This detector's labels are not auto-exported to ${target} yet: click to fill in ${this.autoExportMissing.join(', ')}`
+      : `This detector's labels are not auto-exported to ${target} yet; its creator needs to fill in ${this.autoExportMissing.join(', ')}`;
+  }
+
+  onAutoExportWarning(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.isOwner) this.autoExport.emit();
   }
 
   /** True for a just-created detector that has never been trained (no labels
@@ -208,6 +230,9 @@ export class DetectorCardComponent {
         break;
       case 'stats':
         this.stats.emit();
+        break;
+      case 'auto-export':
+        this.autoExport.emit();
         break;
       case 'move-to-autofind':
         this.setAutofind.emit(true);

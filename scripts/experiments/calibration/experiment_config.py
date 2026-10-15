@@ -276,11 +276,11 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_box_small": dict(_VG_SCALE_TEXTS),
     "vg_box_medium": dict(_VG_SCALE_TEXTS),
     "vg_box_large": dict(_VG_SCALE_TEXTS),
-    # `rico_suave` (#4356): the text each screen genre was reviewed under -- the
+    # `apptitude` (#4356): the text each screen genre was reviewed under -- the
     # queues asked "would you want this back searching for <text>?" -- so the
     # opening types what the labels answer. A copy of the loader's `ROSTER`
-    # (`pilebuild/loaders/rico_suave.py`), pinned equal by the registry test.
-    "rico_suave": {
+    # (`pilebuild/loaders/apptitude.py`), pinned equal by the registry test.
+    "apptitude": {
         "settings": "a settings screen",
         "login": "a login screen",
         "signup": "a sign-up screen",
@@ -440,9 +440,9 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
         for tag in ("roll", "sim")
         for size in (1024, 640)
     },
-    # Rico Suave (#4356): whole app screens, one genre each, opening on the
+    # Apptitude (#4356): whole app screens, one genre each, opening on the
     # genre's text. No boxes, so no region arm.
-    "rico_suave": os.environ.get("CALIB_RICO_SUAVE_EMBEDDERS", "siglip").split(","),
+    "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -513,7 +513,7 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "fhibe_faces_640": False,
     **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim") for size in (1024, 640)},
     # A screen's genre is the whole screen (#4356).
-    "rico_suave": False,
+    "apptitude": False,
 }
 
 
@@ -1155,6 +1155,10 @@ SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
 #: and ``lights+level`` the A/B's other arms.
 STOP_RULE = os.environ.get("CALIB_STOP_RULE", "").strip().lower() or "lights|level"
 STOP_LEVEL = float(os.environ.get("CALIB_STOP_LEVEL", "").strip() or 0.5)
+#: The click cap (#4903): Done at this many votes whatever the stop rule (the app's
+#: 200).  ``CALIB_STOP_CAP=none`` is no cap, every session before #4903.
+_STOP_CAP = os.environ.get("CALIB_STOP_CAP", "").strip().lower()
+STOP_CAP: int | None = None if _STOP_CAP == "none" else int(_STOP_CAP or 200)
 #: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
 #: the first Good until 3 Goods and 4 Bads, or a Good and 16 Bads); ``CALIB_LABEL_QUOTA=off`` is the
 #: pre-#4643 arm, a trained head from the first Good and Bad, which the study

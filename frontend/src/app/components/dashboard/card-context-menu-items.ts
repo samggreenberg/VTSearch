@@ -8,7 +8,8 @@ import type { ContextMenuItem } from '../context-menu/context-menu.component';
  * those inline verbs (see ``overflowMenuItems``) so it reads as "more" — Browse,
  * Rename, Stats, dataset-only Run AutoFind, and detector-only Import Labels /
  * Export labels, plus Edit-access in multi-user mode — rather than repeating
- * icons already visible in the row.
+ * icons already visible in the row, plus Auto-export… on a detector whose
+ * labels sync to a labelset source.
  * Rename is additionally surfaced as a pencil next to the row name. Availability
  * rules: Load only shows when the item is unloaded; Edit-access only shows in
  * multi-user mode and is disabled for non-owners.
@@ -57,6 +58,11 @@ const ICON = {
       '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
       '<path d="M10 11v6"/><path d="M14 11v6"/>' +
       '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  ),
+  // A cloud with an up arrow: the labels kept current somewhere else (#4913).
+  autoExport: svg(
+    '<path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 8a4 4 0 0 1 0 8"/>' +
+      '<polyline points="9 15 12 12 15 15"/><line x1="12" y1="12" x2="12" y2="21"/>',
   ),
   // A bolt: AutoFind is the detectors that run by themselves.
   autofind: svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
@@ -152,7 +158,9 @@ export function buildDatasetCardMenuItems(
  * "Move to AutoFind" to finalize it.
  */
 export function buildDetectorCardMenuItems(
-  detector: { detector_loaded?: boolean; autofind?: boolean } | undefined,
+  detector:
+    | { detector_loaded?: boolean; autofind?: boolean; labelset_source_status?: { display_name?: string } | null }
+    | undefined,
   access: CardMenuAccess,
 ): ContextMenuItem[] {
   const frozen = !!detector?.autofind;
@@ -181,6 +189,20 @@ export function buildDetectorCardMenuItems(
     title: "Export this detector's labeled items; the full set is what re-imports as the detector",
     iconSvg: ICON.export,
   });
+  // Only for a detector whose labels sync somewhere (its own link, or the
+  // deployment default it follows): this edits the values that link needs.
+  const autoExport = detector?.labelset_source_status;
+  if (autoExport) {
+    items.push({
+      id: 'auto-export',
+      label: 'Auto-export…',
+      title: access.isOwner
+        ? `Where this detector's labels are copied as you label (${autoExport.display_name || 'a sync target'})`
+        : "Only the creator can change where this detector's labels are auto-exported",
+      iconSvg: ICON.autoExport,
+      disabled: !access.isOwner,
+    });
+  }
   items.push({ id: 'stats', label: 'Stats', title: 'Stats', iconSvg: ICON.stats });
   if (frozen) {
     items.push({

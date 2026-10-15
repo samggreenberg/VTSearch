@@ -11,7 +11,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService } from '../../services/sort-state.service';
-import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { AutopilotStateService, STOP_CAP_VOTES } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import type { EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
@@ -1615,6 +1615,43 @@ describe('LabelViewComponent', () => {
     component.onResortNewExample({ action: 'new-example', type: 'text', value: 'new query' });
     expect(component.resortSortClicks).toBe(0);
     expect(component.resortSortPositives).toBe(0);
+  });
+
+  it('opens the prompt once at the click cap, a run still in its opening (#4903)', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = 'test query';
+    const medias = Array.from({ length: STOP_CAP_VOTES + 20 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    flushInitialRequests(undefined, medias);
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    autopilot.activate();
+    component.onAutopilotStart();
+    const bad: number[] = [];
+    const cast = (id: number): void => {
+      bad.push(id);
+      component.voteState.loadVotes();
+      httpMock.match('/api/votes').forEach(req => req.flush({ good: [], bad: [...bad], click_times: {}, learned_scores: {} }));
+      component.onMediaVoted({ id, vote: 'bad' });
+      httpMock.match('/api/votes').forEach(req => req.flush({ good: [], bad: [...bad], click_times: {}, learned_scores: {} }));
+    };
+    // Keep the sort whenever the prompt's own count brings it up, and push that
+    // count out of reach, so only the cap can bring it up again.
+    const keep = (): void => {
+      component.onResortKeep();
+      (component as unknown as { resortNextThreshold: number }).resortNextThreshold = 10_000;
+    };
+    for (let id = 1; id < STOP_CAP_VOTES; id++) {
+      cast(id);
+      if (component.showResortPrompt()) keep();
+    }
+    expect(autopilot.state.phase).toBe('good');
+    expect(component.showResortPrompt()).toBe(false);
+    cast(STOP_CAP_VOTES);
+    expect(autopilot.state.atCap).toBe(true);
+    expect(component.showResortPrompt()).toBe(true);
+    keep();
+    for (let id = STOP_CAP_VOTES + 1; id <= STOP_CAP_VOTES + 10; id++) cast(id);
+    expect(component.showResortPrompt()).toBe(false);
   });
 
   describe('saving the re-sort to the detector (#4801)', () => {

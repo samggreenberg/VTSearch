@@ -694,8 +694,8 @@ class TestRegistryNameCollisions:
 
 
 class TestRenameLabelsetSourceCleanup:
-    """Renaming a detector with a {detector_name} labelset source should
-    surface the orphaned file path so the user can move it."""
+    """Renaming a detector with a {detector_name} labelset source moves the
+    source's file to the new name, so the next push does not orphan it."""
 
     def _create_registered_detector(self, client):
         res = client.post(
@@ -706,180 +706,93 @@ class TestRenameLabelsetSourceCleanup:
         return res.get_json()["detector"]["id"]
 
     def _attach_labelset_source(self, detector_id, template):
-        from vtscore.state.core import DetectorContext, register_detector_context
+        from vtscore.detectors.registry import update_detector
 
-        ctx = DetectorContext(detector_id, name="Old Name", media_type="audio")
-        ctx.labelset_source = {
-            "source_name": "server_json_file",
-            "field_values": {"filepath": template},
-        }
-        register_detector_context(ctx)
-        return ctx
+        update_detector(
+            detector_id,
+            labelset_source={"source_name": "server_json_file", "field_values": {"filepath": template}},
+        )
 
-    def test_rename_returns_pending_move_when_old_file_exists(self, client, tmp_path):
+    def test_rename_moves_the_old_file_to_the_new_name(self, client, tmp_path):
         detector_id = self._create_registered_detector(client)
-        template = str(tmp_path / "{detector_name}.labels.json")
-        self._attach_labelset_source(detector_id, template)
+        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
 
         # Pretend a previous sync wrote the old labelset file.
         old_file = tmp_path / "Old Name.labels.json"
-        old_file.write_text('{"labels": []}')
+        old_file.write_text('{"labels": [{"md5": "abc", "label": "good"}]}')
 
-        res = client.put(
-            f"/api/detectors/registry/{detector_id}/rename",
-            json={"name": "New Name"},
-        )
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "New Name"})
         assert res.status_code == 200
         body = res.get_json()
-        assert body["ok"] is True
-        assert body["name"] == "New Name"
-        pending = body["pending_labelset_move"]
-        assert pending is not None
-        assert pending["old_path"].endswith("Old Name.labels.json")
-        assert pending["new_path"].endswith("New Name.labels.json")
+        assert body == {"ok": True, "name": "New Name"}
+        assert not old_file.exists()
+        assert (tmp_path / "New Name.labels.json").exists()
+
+    def test_crud_rename_moves_the_old_file_too(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
+        old_file = tmp_path / "Old Name.labels.json"
+        old_file.write_text('{"labels": []}')
+
+        res = client.put("/api/detectors/Old Name/rename", json={"new_name": "New Name"})
+        assert res.status_code == 200
+        assert "pending_labelset_move" not in res.get_json()
+        assert not old_file.exists()
+        assert (tmp_path / "New Name.labels.json").exists()
 
     def test_rename_updates_ctx_name_for_future_syncs(self, client, tmp_path):
-        from vtscore.state.core import get_detector_context
+        from vtscore.state.core import DetectorContext, get_detector_context, register_detector_context
 
         detector_id = self._create_registered_detector(client)
-        template = str(tmp_path / "{detector_name}.labels.json")
-        self._attach_labelset_source(detector_id, template)
+        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
+        register_detector_context(DetectorContext(detector_id, name="Old Name", media_type="audio"))
 
-        client.put(
-            f"/api/detectors/registry/{detector_id}/rename",
-            json={"name": "New Name"},
-        )
+        client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "New Name"})
 
         ctx = get_detector_context(detector_id)
         assert ctx is not None
         assert ctx.name == "New Name"
 
-    def test_rename_no_pending_when_old_file_missing(self, client, tmp_path):
-        detector_id = self._create_registered_detector(client)
-        template = str(tmp_path / "{detector_name}.labels.json")
-        self._attach_labelset_source(detector_id, template)
-
-        # No old file on disk.
-        res = client.put(
-            f"/api/detectors/registry/{detector_id}/rename",
-            json={"name": "New Name"},
-        )
-        assert res.status_code == 200
-        assert res.get_json()["pending_labelset_move"] is None
-
-    def test_rename_no_pending_when_template_has_no_name_var(self, client, tmp_path):
+    def test_rename_leaves_a_file_whose_path_has_no_name(self, client, tmp_path):
         detector_id = self._create_registered_detector(client)
         # Template without {detector_name}; old and new resolve to same path.
-        template = str(tmp_path / "shared.labels.json")
-        self._attach_labelset_source(detector_id, template)
+        self._attach_labelset_source(detector_id, str(tmp_path / "shared.labels.json"))
+        shared = tmp_path / "shared.labels.json"
+        shared.write_text('{"labels": []}')
 
-        (tmp_path / "shared.labels.json").write_text('{"labels": []}')
-
-        res = client.put(
-            f"/api/detectors/registry/{detector_id}/rename",
-            json={"name": "New Name"},
-        )
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "New Name"})
         assert res.status_code == 200
-        assert res.get_json()["pending_labelset_move"] is None
+        assert shared.exists()
 
-    def test_rename_no_pending_when_destination_exists(self, client, tmp_path):
+    def test_rename_never_overwrites_an_existing_destination(self, client, tmp_path):
         detector_id = self._create_registered_detector(client)
-        template = str(tmp_path / "{detector_name}.labels.json")
-        self._attach_labelset_source(detector_id, template)
-
-        (tmp_path / "Old Name.labels.json").write_text('{"labels": []}')
-        (tmp_path / "New Name.labels.json").write_text('{"labels": []}')
-
-        res = client.put(
-            f"/api/detectors/registry/{detector_id}/rename",
-            json={"name": "New Name"},
-        )
-        assert res.status_code == 200
-        # We refuse to propose a move that would clobber an existing file.
-        assert res.get_json()["pending_labelset_move"] is None
-
-    def test_rename_no_pending_without_labelset_source(self, client):
-        detector_id = self._create_registered_detector(client)
-        # No source attached (no _attach_labelset_source call).
-        res = client.put(
-            f"/api/detectors/registry/{detector_id}/rename",
-            json={"name": "New Name"},
-        )
-        assert res.status_code == 200
-        assert res.get_json()["pending_labelset_move"] is None
-
-    def test_move_endpoint_moves_file(self, client, tmp_path):
-        detector_id = self._create_registered_detector(client)
-        template = str(tmp_path / "{detector_name}.labels.json")
-        self._attach_labelset_source(detector_id, template)
+        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
 
         old_file = tmp_path / "Old Name.labels.json"
-        old_file.write_text('{"labels": [{"md5": "abc", "label": "good"}]}')
+        old_file.write_text('{"labels": [{"md5": "old", "label": "good"}]}')
         new_file = tmp_path / "New Name.labels.json"
+        new_file.write_text('{"labels": [{"md5": "new", "label": "good"}]}')
 
-        res = client.put(
-            f"/api/detectors/registry/{detector_id}/rename",
-            json={"name": "New Name"},
-        )
-        pending = res.get_json()["pending_labelset_move"]
-
-        res = client.post(
-            f"/api/detectors/registry/{detector_id}/labelset-source/move-file",
-            json={"old_path": pending["old_path"], "new_path": pending["new_path"]},
-        )
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "New Name"})
         assert res.status_code == 200
-        body = res.get_json()
-        assert body["ok"] is True
-        assert body["moved"] is True
-
-        assert not old_file.exists()
-        assert new_file.exists()
-        # Content preserved.
-        assert "abc" in new_file.read_text()
-
-    def test_move_endpoint_idempotent_when_old_missing(self, client, tmp_path):
-        detector_id = self._create_registered_detector(client)
-        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
-
-        res = client.post(
-            f"/api/detectors/registry/{detector_id}/labelset-source/move-file",
-            json={
-                "old_path": str(tmp_path / "nope.json"),
-                "new_path": str(tmp_path / "dest.json"),
-            },
-        )
-        assert res.status_code == 200
-        body = res.get_json()
-        assert body["ok"] is True
-        assert body["moved"] is False
-
-    def test_move_endpoint_rejects_existing_destination(self, client, tmp_path):
-        detector_id = self._create_registered_detector(client)
-        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
-
-        old_file = tmp_path / "src.json"
-        old_file.write_text("{}")
-        new_file = tmp_path / "dst.json"
-        new_file.write_text("{}")
-
-        res = client.post(
-            f"/api/detectors/registry/{detector_id}/labelset-source/move-file",
-            json={"old_path": str(old_file), "new_path": str(new_file)},
-        )
-        assert res.status_code == 409
-        # Neither file touched.
         assert old_file.exists()
-        assert new_file.exists()
+        assert '"old"' in old_file.read_text()
 
-    def test_move_endpoint_404_for_unknown_detector(self, client, tmp_path):
+    def test_rename_without_labelset_source(self, client):
+        detector_id = self._create_registered_detector(client)
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "New Name"})
+        assert res.status_code == 200
+        assert res.get_json() == {"ok": True, "name": "New Name"}
+
+    def test_move_file_route_is_gone(self, client, tmp_path):
+        # The rename moves the file itself now; the confirm-then-move route a
+        # rename used to hand the SPA was retired with that prompt.
+        detector_id = self._create_registered_detector(client)
         res = client.post(
-            "/api/detectors/registry/nonexistent/labelset-source/move-file",
-            json={
-                "old_path": str(tmp_path / "x"),
-                "new_path": str(tmp_path / "y"),
-            },
+            f"/api/detectors/registry/{detector_id}/labelset-source/move-file",
+            json={"old_path": str(tmp_path / "x"), "new_path": str(tmp_path / "y")},
         )
-        assert res.status_code == 404
+        assert res.status_code in (404, 405)
 
 
 class TestSaveLabels:

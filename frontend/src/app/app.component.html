@@ -76,6 +76,12 @@
             at your balance. Keep voting to sharpen it, or click <strong>Dashboard</strong> to test it
             or put it to work.
           </vt-toasty-hint>
+        } @else if (handoff.capVotes != null) {
+          <vt-toasty-hint hintId="autopilot-done-cap" [anchor]="dashboardBtn" reach="right">
+            Your detector is trained! That's {{ handoff.capVotes }} votes, as many as Autopilot asks
+            for. Keep voting to sharpen it, or click <strong>Dashboard</strong> to test it or put it to
+            work.
+          </vt-toasty-hint>
         } @else if (handoff.dryRun) {
           <vt-toasty-hint hintId="autopilot-ran-dry" [anchor]="dashboardBtn" reach="right">
             Your detector is trained! {{ handoff.dryRun }} of its best matches in a row were not

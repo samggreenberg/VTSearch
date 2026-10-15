@@ -4,8 +4,8 @@ Label I/O - the two plugin families and the sync glue that move
 detector labels between VTSearch and external systems. A *label
 importer* is one-way (read labels from somewhere external, apply them
 to the active detector). A *labelset source* is bidirectional: it
-both loads labels from an external store and pushes them back whenever
-votes change. Both produce / consume the same
+both loads labels from an external store and pushes a detector's labels
+back whenever they change. Both produce / consume the same
 [`LabelSet`](datasets.md#labelset) object defined in
 `vtscore.datasets` - there is no separate label datatype.
 
@@ -21,7 +21,8 @@ votes change. Both produce / consume the same
 | `vtscore/labels/sources/__init__.py` | Labelset-source registry with auto-discovery |
 | `vtscore/labels/sources/server_json_file/` | Bidirectional sync with a JSON file on the server |
 | `vtscore/labels/json_format.py` | Shared shape checks for the label-JSON format (`require_label_object`, `extract_labels`) |
-| `vtscore/labels/sync.py` | The sync glue: debounced push, synchronous pull, re-export guard |
+| `vtscore/labels/binding.py` | Which source a detector syncs with: its registry binding, a context binding, or the deployment default |
+| `vtscore/labels/sync.py` | The sync engine: paced push on every detector write, merging pull |
 
 `vtscore/labels/__init__.py` re-exports nothing; import from the
 submodules (see [architecture.md](../architecture.md#import-paths-read-before-copy-pasting)).
@@ -194,80 +195,86 @@ LABELSET_SOURCE = RedisLabelsetSource()
 
 ---
 
-## Sync glue
+## Sync engine
 
-`vtscore/labels/sync.py` wires labelset sources to the live detector
-context (see [state.md](state.md)). Two entry points:
+`vtscore/labels/sync.py` keeps a detector's labels current at its
+linked source; `vtscore/labels/binding.py` decides which source that is.
+The library guide's [When your `_do_save` and `_do_load_full`
+run](../extending/labelset-sources.md#when-your-_do_save-and-_do_load_full-run)
+is the source author's view of the same contract.
 
-| Function                           | When called                                                  |
-|------------------------------------|--------------------------------------------------------------|
-| `sync_to_labelset_source()`        | Whenever votes change. Schedules a **debounced background push**. |
-| `sync_from_labelset_source(detector_id=None)` | On detector load or on manual import. Pulls + applies labels synchronously; returns the imported label list, or `None` when no source is configured, the source is unknown, the load raised, or the source is empty. |
+| Function | When called |
+|----------|-------------|
+| `note_detector_written(data)` | By `vtscore.detectors.store` on every detector-file write. Schedules a push; never raises. |
+| `schedule_labelset_push(detector_name, *, detector_id="")` | Schedule a paced push of that detector's labels. A no-op when it syncs nowhere or its source is missing a field value. |
+| `sync_to_labelset_source()` | Schedule a push for the active detector (every write already does; this is for library code that linked a source on a bare `DetectorContext`). |
+| `sync_from_labelset_source(detector_id=None, *, prefer="source")` | The manual "sync now": pull and merge, the source winning a disagreement. Returns the label dicts the source held, or `None` when the detector syncs nowhere, a field value is missing, the read failed, or the source is empty. |
+| `reconcile_labelset_source(detector_name, *, detector_id="")` | On detector load and when its link changes: pull and merge with the file winning, then schedule a push. Returns how many labels it added or changed; never raises. |
 
-Both silently no-op when the detector has no `labelset_source`; a
-`load`/`save` exception is logged, never raised.
+### Binding
 
-### Debounced push
-
-`sync_to_labelset_source` returns immediately. The actual push runs on
-a background `threading.Timer` ~200ms (`_DEBOUNCE_DELAY`) after the
-most recent call; further calls within the window cancel and restart
-the timer, so a rapid voting burst collapses into a single sync run
-that uses the **latest** captured contexts (latest wins). The pending
-slot is keyed by `detector_id`, so two detectors voted on concurrently
-never coalesce into each other's window. A push is skipped (not
-retried) when the vote snapshot can't be proven consistent with the
-active dataset; the next vote re-arms the timer.
-
-`flush_pending_label_syncs()` drains the queue synchronously - used by
-tests that need to assert the file was written, and by graceful
-shutdown paths. An `atexit` hook also calls it so the most recent
-vote's push survives normal interpreter exit (Ctrl-C, gunicorn
-SIGQUIT, `sys.exit`). Hard kills (SIGKILL, `os._exit`) bypass `atexit`
-and still drop the last ~200ms of work - accept this as the cost of
-debouncing.
-
-For test isolation, `reset_label_sync_for_tests()` *cancels* pending
-syncs without firing them, so a sync scheduled under one test's
-contexts can't fire after those contexts are gone.
-
-### The `_syncing` guard
-
-A module-level boolean (`_syncing`, guarded by the `_sync_lock` RLock)
-is set for the whole apply pass of `sync_from_labelset_source`. Any
-push that reaches the source during that window is skipped, so a
-half-applied import is never written back to the source. The flag is
-**module-level, not thread-local**: the timer thread re-checks it
-inside `_sync_lock` immediately before calling `save`, so a push that
-fires on another thread mid-import is suppressed too.
-
-### Detector meta round-trip
-
-`load_full` returns the full `LabelSet`, including any `detector_meta`
-block. When `sync_from_labelset_source` sees one, it folds the
-source's `input_spec` (and `media_type`, when the receiving detector
-is missing one) into the receiving detector's on-disk JSON. The
-source's `threshold` is intentionally **not** applied - the receiver
-retrains its head from the imported labels and recomputes its own
-threshold. Detector files only ever store origins and meta, never
-embeddings or model weights (see
-[architecture.md](../architecture.md#the-no-persisted-vectors-rule)).
-
-### Configuration
-
-A detector opts into source-based sync by setting
-`DetectorContext.labelset_source` to:
+`resolve_labelset_source(entry)` resolves, in order: the detector's
+registry entry `labelset_source` (`{"source_name": "none"}` opts out),
+a binding on its loaded `DetectorContext.labelset_source`, then the
+deployment default `CoreConfig.default_labelset_source`. Non-empty
+values in the default's `field_values` are fixed and overlay the
+detector's own whenever it syncs to the default's source. The result
+carries `missing_fields` (required fields with no value and no default);
+a detector with any is not synced. `labelset_source_status(entry)` is
+the same answer without field values, for listings.
 
 ```python
-{
-    "source_name": "server_json_file",
-    "field_values": {"filepath": "/data/labels/{detector_name}.labels.json"},
-}
+# Link a registered detector to a source (what the app's PUT route stores).
+from vtscore.detectors.registry import update_detector
+
+update_detector(
+    detector_id,
+    labelset_source={
+        "source_name": "server_json_file",
+        "field_values": {"filepath": "/data/labels/{detector_name}.labels.json"},
+    },
+)
 ```
 
-`source_name` keys into `get_labelset_source`; `field_values` is
-passed through to that source's `load_full` / `save`. A detector
-without a linked source costs nothing on every vote.
+### Push
+
+The payload is the detector file's **whole labelset** - every dataset's
+labels, not the active dataset's votes - plus `detector_meta`
+(`media_type`, `input_spec`, and the live threshold when a trained head
+is loaded), read when the push runs. Pacing is per detector name:
+
+- pushes never overlap; a change during one sets a dirty flag and rides
+  the next push;
+- two pushes start at least `CoreConfig.labelset_source_push_interval`
+  seconds apart (default 60), and never sooner than 200ms
+  (`_DEBOUNCE_DELAY`) after the change that scheduled them;
+- a payload whose digest matches what the source is known to hold (the
+  last push, or the last pull) is skipped;
+- a detector's first push in a process pulls first, so it never
+  overwrites labels only the source held, and a source that cannot be
+  read is not pushed to.
+
+The push runs on a background timer as the detector's creator, with a
+context carrying the detector's id and name so `{detector_*}` templates
+resolve to it. `flush_pending_label_syncs()` runs every pending push now
+(ignoring the pace) and waits for in-flight ones; an `atexit` hook does
+the same on a normal exit, so only a hard kill loses what was waiting.
+`reset_label_sync_for_tests()` *cancels* pending pushes instead.
+
+### Pull
+
+A pull reads `load_full()` and merges it into the detector file under
+`label_sync_write_lock`: labels the source has and the file lacks are
+appended, and on a disagreement the `prefer` side wins (`"local"` for
+`reconcile_labelset_source`, `"source"` for the manual sync). No label
+is removed. The source's `input_spec` (and `media_type`, when the file
+has none) is folded in; its `threshold` is intentionally **not** - the
+receiver retrains its head and derives its own (detector files store
+origins and meta, never embeddings or weights; see
+[architecture.md](../architecture.md#the-no-persisted-vectors-rule)).
+A pull that changed the file updates the registry's `num_training`,
+re-derives a loaded detector's votes (manual sync), and - through the
+write - schedules a push of the merged labels.
 
 ---
 
