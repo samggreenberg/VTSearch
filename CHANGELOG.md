@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A Good on a document collection is up to twice as fast without a GPU** (issue #4515). After a
+  Good, the server matches the new mark's SIFT points against every point on each shortlisted page,
+  1,000 pages without a GPU, and keeps the pairs whose nearest point is clearly nearer than the
+  next. It now ranks the two nearest points without working out every distance in full, and on a
+  CPU it works through a page at a time so the numbers stay in the processor's cache. On 8 cores of
+  an AMD EPYC 7713 a Good takes ~4.5 s at 5,000 pages (was 9.2 s) and ~5.7 s at 50,000 (was
+  9.7 s). On a V100 it takes ~1.25 s at 5,000 pages (was 1.6 s) and ~1.5 s at 50,000 (was
+  1.75 s). Rankings are unchanged.
+
 - **Autopilot checks for overlapping labels once a session** (issue #4909). When your Good and Bad answers
   score close together, Autopilot still opens the spot check once it has started learning, but it no longer
   asks again 25 votes later while they still overlap, and it does not ask after any other check has run. The

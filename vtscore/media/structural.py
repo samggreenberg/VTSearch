@@ -364,10 +364,13 @@ def load_vlad_codebook() -> np.ndarray:
 # Batched descriptor matching (the GPU-able half of Stage 2)
 # --------------------------------------------------------------------------
 
-# Element budget for one batched distance matrix (candidates x M x N).  32M
-# float32 elements is 128 MB, which keeps the transient off a small GPU and out
-# of cache-thrashing territory on CPU; a larger shortlist is chunked.
+# Element budget for one batched distance matrix (candidates x M x N).  On a GPU,
+# 32M float32 elements is 128 MB, which keeps the transient off a small card; a
+# larger shortlist is chunked.  On a CPU the matrix has to stay in cache while it
+# is reduced: with 1M-4M elements, about a page against a template, a 1,000-page
+# shortlist took 2.95 s on 8 EPYC 7713 cores, and 3.7 s with 8M (#4515).
 _MATCH_CHUNK_ELEMENTS = 32_000_000
+_MATCH_CHUNK_ELEMENTS_CPU = 2_000_000
 
 #: Candidate descriptors kept on the GPU between calls (#4469), in their stored dtype (uint8
 #: for compact features), keyed by the array and checked by a weak reference so a freed
@@ -386,12 +389,15 @@ def release_device_descriptors() -> None:
     _DEVICE_DESCRIPTOR_BYTES[0] = 0
 
 
-def _device_descriptors(desc: np.ndarray, dev: str, cache: bool) -> "torch.Tensor":
-    """*desc* as a float32 tensor on *dev*; with *cache*, the stored array stays on the device."""
+def _stored_descriptors(desc: np.ndarray, dev: str, cache: bool) -> "torch.Tensor":
+    """*desc* on *dev* in its stored dtype; with *cache*, it stays on the device between calls.
+
+    The caller widens it into its float32 batch on the device; uint8 values are exact.
+    """
     import torch  # noqa: PLC0415
 
     if not cache:
-        return torch.from_numpy(np.asarray(desc, dtype=np.float32)).to(dev)
+        return torch.from_numpy(np.ascontiguousarray(desc)).to(dev)
     key = id(desc)
     hit = _DEVICE_DESCRIPTORS.get(key)
     if hit is not None and hit[0]() is desc:
@@ -406,7 +412,7 @@ def _device_descriptors(desc: np.ndarray, dev: str, cache: bool) -> "torch.Tenso
         while _DEVICE_DESCRIPTOR_BYTES[0] > DEVICE_DESCRIPTOR_LIMIT_BYTES and len(_DEVICE_DESCRIPTORS) > 1:
             _old_key, (_ref, old) = _DEVICE_DESCRIPTORS.popitem(last=False)
             _DEVICE_DESCRIPTOR_BYTES[0] -= old.nbytes
-    return stored.float()  # widened on the device; uint8 values are exact
+    return stored
 
 
 def _match_device() -> str:
@@ -444,14 +450,21 @@ def ratio_test_matches(
     ratio test - the same set ``knnMatch`` produces, up to floating-point ties:
     the batched path computes distances by the expanded
     ``|a|^2 + |b|^2 - 2ab`` form, so a match sitting exactly on the ratio
-    boundary can fall either way.
+    boundary can fall either way.  SIFT descriptors have no such ties: they are
+    integers in ``[0, 255]``, so every term and partial sum of that form is an
+    integer below ``2**24`` and float32 holds the squared distance exactly.
+
+    Only the two nearest neighbours of each template descriptor need a distance,
+    so the batch is ranked on ``|b|^2 - 2ab``; the template's own ``|a|^2`` and
+    the square root are added for those two alone (#4515).  Both are monotone, so
+    the two found, and their distances, are those of the full distance matrix.
 
     A candidate with fewer than 2 descriptors yields an empty correspondence
     set, matching ``knnMatch``'s need for a second-nearest neighbour.
 
     Candidates may be stored descriptors in any numeric dtype (uint8 for compact
     features); they are widened to float32. With *cache*, each candidate array is
-    kept on the device between calls (:func:`_device_descriptors`), so pass only
+    kept on the device between calls (:func:`_stored_descriptors`), so pass only
     arrays that live as long as their features, never temporaries.
     """
     import torch  # noqa: PLC0415
@@ -471,22 +484,26 @@ def ratio_test_matches(
         dev = device or _match_device()
         m, d = tmpl.shape
         t = torch.from_numpy(tmpl).to(dev)
+        t_sq = (t * t).sum(1, keepdim=True)
+        budget = _MATCH_CHUNK_ELEMENTS_CPU if torch.device(dev).type == "cpu" else _MATCH_CHUNK_ELEMENTS
         widest = max(c.shape[0] for _, c in usable)
-        per_chunk = max(1, _MATCH_CHUNK_ELEMENTS // max(1, m * widest))
+        per_chunk = max(1, budget // max(1, m * widest))
         for start in range(0, len(usable), per_chunk):
             chunk = usable[start : start + per_chunk]
             pad = max(c.shape[0] for _, c in chunk)
             batch = torch.zeros((len(chunk), pad, d), dtype=torch.float32, device=dev)
+            # |b|^2 of each candidate descriptor. A padded row gets +inf, so it is
+            # never nearer than a real descriptor.
+            c_sq = torch.full((len(chunk), 1, pad), float("inf"), dtype=torch.float32, device=dev)
             for row, (_, c) in enumerate(chunk):
-                batch[row, : c.shape[0]] = _device_descriptors(c, dev, cache)
-            dist = torch.cdist(t.unsqueeze(0).expand(len(chunk), -1, -1), batch)
-            # A padded row is an all-zero descriptor at a real distance from the
-            # template, so mask it out before the nearest-neighbour search rather
-            # than letting it win one.
-            for row, (_, c) in enumerate(chunk):
-                if c.shape[0] < pad:
-                    dist[row, :, c.shape[0] :] = float("inf")
-            best, idx = torch.topk(dist, 2, dim=2, largest=False)
+                rows = batch[row, : c.shape[0]]
+                rows.copy_(_stored_descriptors(c, dev, cache))
+                c_sq[row, 0, : c.shape[0]] = (rows * rows).sum(1)
+            part = torch.baddbmm(c_sq, t.unsqueeze(0).expand(len(chunk), -1, -1), batch.transpose(1, 2), alpha=-2)
+            first, idx = part.min(dim=2, keepdim=True)
+            part.scatter_(2, idx, float("inf"))
+            second = part.amin(dim=2, keepdim=True)
+            best = (torch.cat((first, second), dim=2) + t_sq).clamp_min_(0).sqrt_()
             keep = (best[..., 0] < ratio * best[..., 1]).cpu().numpy()
             nn = idx[..., 0].cpu().numpy()
             for row, (orig, _) in enumerate(chunk):
