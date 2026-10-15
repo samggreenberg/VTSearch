@@ -322,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
             r = timing[a][j] / timing[b][j]
             ratios[f"{a}/{b}"] = {"cells": len(j), "median": float(r.median()), "mean": float(r.mean())}
     result = {"pairs": summary, "hardware": hw, "cell_seconds": secs, "time_ratios": ratios}
-    (args.out / "summary.json").write_text(json.dumps(result, indent=1))
+    (args.out / "summary.json").write_text(json.dumps(result, indent=1) + "\n")
     print(json.dumps(result, indent=1))
     return 0
 

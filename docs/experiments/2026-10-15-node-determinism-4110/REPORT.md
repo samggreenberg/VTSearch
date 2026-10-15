@@ -192,6 +192,11 @@ minutes) and 1% less on the EPYCs (3.1 against 3.2). The same arm run twice on t
 
 ## What ships
 
+- **Checked as it ships.** Two more arms ran the branch itself (`a9aced026`) with no pin exported, so
+  `run_cells.py` set the pins: 6 cells a node type (`i_ship`, `a_ship`, every 24th class). Each matched the
+  pinned arm of its node type bit for bit (6 of 6 on each), and Intel matched AMD (6 of 6). Every cell's log
+  read `OPENBLAS_CORETYPE=Haswell NPY_DISABLE_CPU_FEATURES=AVX512F AVX512_SKX MKL_CBWR=COMPATIBLE
+  ATEN_CPU_CAPABILITY=avx2`.
 - **`run_cells.py` pins all four kernels before numpy and torch load**
   (`scripts/experiments/_expcommon.py`, `CPU_KERNEL_PINS` and `pin_cpu_kernels()`). It does so only when run
   as a script, so a test that imports the module keeps its own kernels. Each pin is a default, so an exported
