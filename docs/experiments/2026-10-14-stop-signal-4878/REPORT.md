@@ -37,8 +37,8 @@
   at today's Done, and its stops go where they pay at every preset. But it tells only 43–49% of sessions to
   stop. `lights or level` is today's Done 5–6 clicks sooner. `lights + level` is dominated by `level`.
 
-Whether the app should tell users "your detector is as good as it gets" this way, and never tell over half
-of them, is a product decision. The numbers are below.
+The owner chose `lights or level` for the app ([what shipped](#what-shipped)). A cap so that no session goes
+unstopped is #4903.
 
 ## Data
 
@@ -259,6 +259,23 @@ less well.
 **`lights or level` is today's Done, a few clicks sooner.** At β 1/4 and β 1 it stops 5–6 clicks sooner for
 the same F-beta, and its stops go where they pay a little better (+0.022 and +0.008, against today's +0.008
 and +0.000). At β 4 it is today's Done.
+
+## What shipped
+
+The owner chose **`lights or level`** (2026-10-15). It keeps today's Done for every session the lights stop,
+and lets the line end a session sooner when it already expects the level. It ships in the same PR as this
+report:
+
+- **Library:** `stop_level_reading` / `stop_level_met` in `vtscore.training.thresholds.labels_line`, at
+  `STOP_LEVEL` 0.5.
+- **API:** `/api/labeling-status` carries the reading as `level`.
+- **Frontend:** `checkPhaseTransition` reads `level.met` beside the lights.
+- **Panel and Toasty:** they quote the expected F-beta when the level, not the lights, said Done.
+- **Harness:** its default stop rule follows the app (`lights|level`, reading the same function).
+
+A session the rule never stops still never stops: about 11% by click 150. The owner's ruling is that no
+session may go unstopped, with "some rule, or 200 clicks" as the worst case. That is #4903: stop rules at
+wider widths, and a click cap priced on them.
 
 ## What this leaves open
 
