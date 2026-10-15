@@ -350,7 +350,7 @@ def test_cuda_can_run_warning_reports_device_and_arch_mismatch(monkeypatch, capl
     assert "compute capability 7.0" in msg
     assert "sm_75" in msg
     # Must NOT tell a Volta owner to "just use the newest" tag (cu128 drops sm_70).
-    assert "cu124" in msg
+    assert "cu126" in msg
     assert "OLDER tag" in msg
 
 
