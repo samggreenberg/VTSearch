@@ -38,18 +38,32 @@ def _binding(path) -> dict:
     return {"source_name": "server_json_file", "field_values": {"filepath": str(path)}}
 
 
-def _make_detector(name: str, labels: list[dict], *, binding: dict | None = None, created_by: str = "default"):
+def _entry(detector_id: str) -> dict:
+    """The registry entry for *detector_id*, which the test made and must exist."""
+    entry = get_detector(detector_id)
+    assert entry is not None
+    return entry
+
+
+def _detector_file(name: str) -> dict:
+    """*name*'s detector JSON, which the test wrote and must exist."""
+    data = _read_detector(_detector_path(name))
+    assert data is not None
+    return data
+
+
+def _make_detector(name: str, labels: list[dict], *, binding: dict | None = None, created_by: str = "default") -> dict:
     """Write *name*'s detector file, register it, and link *binding* (if any)."""
     _write_detector(_detector_path(name), {"name": name, "media_type": "audio", "labelset": {"labels": labels}})
     entry = register_detector(name=name, media_type="audio", num_training=len(labels), created_by=created_by)
     if binding is not None:
         update_detector(entry["id"], labelset_source=binding)
-    return get_detector(entry["id"])
+    return _entry(entry["id"])
 
 
 def _rewrite_labels(name: str, labels: list[dict]) -> None:
     """Rewrite a detector's labels the way a vote does: one file write."""
-    data = _read_detector(_detector_path(name))
+    data = _detector_file(name)
     data["labelset"] = {"labels": labels}
     _write_detector(_detector_path(name), data)
 
@@ -59,7 +73,7 @@ def _remote_labels(path) -> list[dict]:
 
 
 def _local_labels(name: str) -> list[dict]:
-    return _read_detector(_detector_path(name))["labelset"]["labels"]
+    return _detector_file(name)["labelset"]["labels"]
 
 
 def _md5s(labels: list[dict]) -> set[str]:
@@ -424,7 +438,7 @@ class TestPull:
 
         assert reconcile_labelset_source("restored") == 1
         assert _md5s(_local_labels("restored")) == {GOOD_A["md5"], BAD_B["md5"]}
-        assert get_detector(entry["id"])["num_training"] == 2
+        assert _entry(entry["id"])["num_training"] == 2
 
     def test_reconcile_keeps_the_files_label_and_pushes_it_back(self, tmp_path):
         remote = tmp_path / "r.json"
@@ -467,7 +481,7 @@ class TestPull:
         )
         _make_detector("meta_in", [GOOD_A], binding=_binding(remote))
         reconcile_labelset_source("meta_in")
-        data = _read_detector(_detector_path("meta_in"))
+        data = _detector_file("meta_in")
         assert data["input_spec"] == {"clipper": "sound_tiling", "clipper_params": {"duration": "2.0"}}
         assert "threshold" not in data
 
@@ -558,7 +572,7 @@ class TestDetectorSourceRoutes:
         )
         assert resp.status_code == 200, resp.get_json()
         # No loaded context needed: the binding lives on the registry entry.
-        stored = get_detector(entry["id"])["labelset_source"]
+        stored = _entry(entry["id"])["labelset_source"]
         assert stored == _binding(tmp_path / "p.json")
         body = client.get(f"/api/detectors/{entry['id']}/labelset-source").get_json()
         assert body["field_values"] == {"filepath": str(tmp_path / "p.json")}
@@ -592,7 +606,7 @@ class TestDetectorSourceRoutes:
             json={"source_name": "server_json_file", "field_values": {}},
         )
         assert resp.status_code == 400
-        assert get_detector(entry["id"]).get("labelset_source") is None
+        assert _entry(entry["id"]).get("labelset_source") is None
 
     def test_put_never_stores_what_the_default_fixes(self, client, tmp_path):
         settings.set_default_labelset_source(_binding(tmp_path / "{detector_name}.json"))
@@ -602,7 +616,7 @@ class TestDetectorSourceRoutes:
             json={"source_name": "server_json_file", "field_values": {"filepath": "/etc/elsewhere.json"}},
         )
         assert resp.status_code == 200, resp.get_json()
-        assert get_detector(entry["id"])["labelset_source"] == {"source_name": "server_json_file", "field_values": {}}
+        assert _entry(entry["id"])["labelset_source"] == {"source_name": "server_json_file", "field_values": {}}
 
     def test_put_none_opts_out_and_empty_clears(self, client, tmp_path):
         settings.set_default_labelset_source(_binding(tmp_path / "{detector_name}.json"))

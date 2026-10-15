@@ -163,8 +163,7 @@ def _digest(labelset: LabelSet) -> str:
 
 def _push_interval() -> float:
     """The configured gap between pushes of one detector, in seconds."""
-    from vtscore.config import CoreConfig  # noqa: PLC0415
-    from vtscore.config.core_config import DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL  # noqa: PLC0415
+    from vtscore.config import DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL, CoreConfig  # noqa: PLC0415
 
     try:
         return max(0.0, float(CoreConfig.from_settings().labelset_source_push_interval))
