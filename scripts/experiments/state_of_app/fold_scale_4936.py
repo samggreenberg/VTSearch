@@ -42,7 +42,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-MAPS = ("none", "q", "qt", "z", "vs", "ho", "oracle")
+MAPS = ("none", "q", "qt", "z", "vs", "ho", "oracle", "oracle_pos", "oracle_neg")
+WHOLE_MAPS = MAPS[:7]  # the oracle's halves differ from it only in F-beta: on its own class each is the oracle
 TOP_SHARE = 0.01  # the negatives the line cuts among: the top 1% of the withheld half by the fold model's score
 ORACLE_NEG_SHARE = 0.02  # the oracle's negative map is fitted on the top 2% of the withheld half's negatives
 EMBEDDER_STYLE = "siglip/whole_image"  # Binary Photo's snapshot keys
@@ -190,6 +191,11 @@ def _oracle_map(s: Snapshot, f: Fold):
     return lambda x, cls: fit[cls][1] + fit[cls][0] * np.asarray(x)
 
 
+def _one_class(m, cls: int):
+    """*m* on class *cls* only; the other class keeps its fold logits."""
+    return lambda x, c: m(x, c) if c == cls else np.asarray(x)
+
+
 def build_maps(s: Snapshot) -> dict[str, list]:
     maps: dict[str, list] = {"none": [lambda x, _c: np.asarray(x)] * s.k}
     maps["q"] = [_quantile_map(s, f, tails=False) for f in s.folds]
@@ -200,6 +206,9 @@ def build_maps(s: Snapshot) -> dict[str, list]:
         maps["vs"] = [_vote_shift(s, f, held=False) for f in s.folds]
         maps["ho"] = [_vote_shift(s, f, held=True) for f in s.folds]
     maps["oracle"] = [_oracle_map(s, f) for f in s.folds]
+    # The oracle's two halves: the positives' map on the Goods alone, the negatives' on the Bads alone.
+    maps["oracle_pos"] = [_one_class(m, 1) for m in maps["oracle"]]
+    maps["oracle_neg"] = [_one_class(m, 0) for m in maps["oracle"]]
     return maps
 
 
@@ -599,6 +608,25 @@ def cmd_report(a) -> None:
             rec[f"mean {a_col} - {b_col}"] = round(float((ok[a_col] - ok[b_col]).mean()), 3) if len(ok) else math.nan
         track.append(rec)
     pd.DataFrame(track).to_csv(tabs / "vote_estimates.csv", index=False)
+    # Per session, not per class: how far single snapshots stray from the means above.
+    spread = []
+    for c, sub in folded.groupby("click"):
+        rec = {"click": c, "snapshots": len(sub)}
+        for col in ("dpos", "dnegtop", "gap_scale", "gap_selection", "none_gap"):
+            q10, q50, q90 = sub[col].quantile([0.1, 0.5, 0.9])
+            rec[col] = f"{q10:+.2f} / {q50:+.2f} / {q90:+.2f}"
+        rec["share |dpos| < 0.1"] = round(float((sub["dpos"].abs() < 0.1).mean()), 2)
+        spread.append(rec)
+    pd.DataFrame(spread).to_csv(tabs / "spread_10_50_90.csv", index=False)
+    # The replay against the run's own rows: every Find F-beta mismatch should be a step under the typed query's
+    # hold, where the row reports the query's set.
+    if "chk_row_fbeta" in df:
+        off = df[df["chk_row_fbeta"] > 1e-6]
+        print(
+            f"replay vs run: {len(off)} Find F-beta mismatches, {int(off['query_hold'].astype(bool).sum())} under "
+            f"the hold; max off the hold {df.loc[~df['query_hold'].astype(bool), 'chk_row_fbeta'].max():.1e}; "
+            f"quantile shadow max {df['chk_row_q'].max():.1e}"
+        )
     src = df.groupby("click")["line_src"].value_counts().unstack(fill_value=0)
     src.to_csv(tabs / "line_source.csv")
     print(src)
@@ -616,6 +644,8 @@ MAP_LABEL = {
     "vs": "training votes' shift",
     "ho": "held-out votes' shift",
     "oracle": "oracle (withheld truth)",
+    "oracle_pos": "oracle, Goods only",
+    "oracle_neg": "oracle, Bads only",
 }
 MAP_COLOR = {
     "none": "#333333",
@@ -625,6 +655,8 @@ MAP_COLOR = {
     "vs": "#2ca02c",
     "ho": "#d62728",
     "oracle": "#9467bd",
+    "oracle_pos": "#c5b0d5",
+    "oracle_neg": "#7b4173",
 }
 
 
@@ -684,7 +716,7 @@ def figures(df: pd.DataFrame, folded: pd.DataFrame, figdir: Path) -> None:
 
     # 2. Each map's error on the withheld positives (scale alone) and on the top negatives.
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
-    for m in MAPS:
+    for m in WHOLE_MAPS:
         band(axes[0], f"{m}_bias_pos", MAP_LABEL[m], MAP_COLOR[m])
         band(axes[1], f"{m}_bias_negtop", MAP_LABEL[m], MAP_COLOR[m])
     for ax, title in zip(axes, ("withheld positives", "withheld top 1% negatives")):
@@ -699,7 +731,7 @@ def figures(df: pd.DataFrame, folded: pd.DataFrame, figdir: Path) -> None:
 
     # 3. The Good component each map gives the line, against the withheld positives' own mean.
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
-    for m in MAPS:
+    for m in WHOLE_MAPS:
         band(axes[0], f"{m}_gap", MAP_LABEL[m], MAP_COLOR[m])
     axes[0].axhline(0, color="k", lw=0.6)
     axes[0].set_title("Good component's mean minus the withheld positives'")
