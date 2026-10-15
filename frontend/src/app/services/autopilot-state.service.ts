@@ -70,6 +70,15 @@ export interface AutopilotState {
    */
   spanTarget: number;
   /**
+   * The labels line's own expected F-beta at the detector's balance has reached
+   * Done's level (#4878: the labeling status's ``level.met``). Done comes once
+   * every light is green or this holds: priced on 2,160 sessions and A/B'd, it
+   * ends a session a few clicks sooner for the same F-beta.
+   */
+  levelMet: boolean;
+  /** That expected F-beta, for the panel to quote when the level is what said Done; null without a line. */
+  expectedFbeta: number | null;
+  /**
    * True when autopilot started against a detector that already has labels
    * (e.g. trained on DatasetA, now continuing on DatasetB).  In retrain mode
    * every phase uses learned sort; the initial "good"/"bad" phases use
@@ -107,14 +116,21 @@ export interface AutopilotState {
 /**
  * Toasty's hand-off when a run that trained the detector ends (#4680): `done`
  * when every quality light went green (or a document walk ran dry, with
- * `dryRun` set to the run of misses), `all-labeled` when nothing is left to
- * label. `votes` is the vote total it was raised at; any vote or undo after
- * that drops it.
+ * `dryRun` set to the run of misses; or the labels line reached Done's level
+ * with a light short of green, with `expectedFbeta` set, #4878), `all-labeled`
+ * when nothing is left to label. `votes` is the vote total it was raised at;
+ * any vote or undo after that drops it.
  */
 export interface AutopilotHandoff {
   kind: 'done' | 'all-labeled';
   votes: number;
   dryRun?: number;
+  expectedFbeta?: number;
+}
+
+/** Every quality light green: what said Done before the level could (#4878). */
+export function allLightsGreen(st: AutopilotState): boolean {
+  return st.smartStatus === 'green' && st.stableStatus === 'green' && st.spanStatus === 'green';
 }
 
 /** The phases before the first learned sort: no trained detector yet. */
@@ -137,6 +153,8 @@ const INITIAL_STATE: AutopilotState = {
   spanStatus: '',
   fracDiversity: 0,
   spanTarget: 0,
+  levelMet: false,
+  expectedFbeta: null,
   retrainMode: false,
   doneReached: false,
   spotCheck: null,
@@ -360,11 +378,16 @@ export class AutopilotStateService {
     const current = this.stateSubject.value;
     const allGreen =
       status.smart.status === 'green' && status.stable.status === 'green' && status.span.status === 'green';
+    const levelMet = status.level?.met === true;
     const firstRead = current.phase !== 'idle' && !this.statusRead;
     if (current.phase !== 'idle') this.statusRead = true;
     this.stateSubject.next({
       ...current,
-      doneChecked: current.doneChecked || (firstRead && allGreen),
+      // A detector that already reads Done on its first status (the Train view
+      // re-entered on a finished detector) has nothing to check before Done.
+      doneChecked: current.doneChecked || (firstRead && (allGreen || levelMet)),
+      levelMet,
+      expectedFbeta: status.level?.expected_fbeta ?? null,
       dryRunStop: status.stop_rule === 'dry_run',
       smartStatus: status.smart.status || '',
       stableStatus: status.stable.status || '',
@@ -466,9 +489,10 @@ export class AutopilotStateService {
       else nextPhase = 'more';
     } else if (!st.moreDone && goodCount < effMoreTarget) {
       nextPhase = 'more';
-    } else if (st.smartStatus === 'green' && st.stableStatus === 'green' && st.spanStatus === 'green') {
-      // Every light is green: check the line once before reporting Done. With
-      // nothing left unlabeled there is nothing to check.
+    } else if (allLightsGreen(st) || st.levelMet) {
+      // Every light is green, or the labels line expects Done's level of F-beta
+      // at the detector's balance (#4878): check the line once before reporting
+      // Done. With nothing left unlabeled there is nothing to check.
       nextPhase = st.doneChecked || remainingUnlabeled === 0 ? 'done' : 'spot';
     } else if (remainingUnlabeled === 0) {
       // Every item is labeled but the quality indicators never went green

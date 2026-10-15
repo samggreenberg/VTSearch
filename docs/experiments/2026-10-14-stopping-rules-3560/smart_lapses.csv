@@ -1,0 +1,4 @@
+arm,beta,n_fired,share_broken,gain_broken,gain_kept,n_classes,within_class_diff,se_within_class_diff
+β 1/4,0.2500,640,0.2984,0.0715,0.0787,41,0.0191,0.0137
+β 1,1.0000,640,0.2797,0.0760,0.0771,41,0.0201,0.0132
+β 4,4.0000,629,0.2703,0.0567,0.0602,39,0.0089,0.0120

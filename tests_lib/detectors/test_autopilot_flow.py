@@ -478,6 +478,71 @@ class TestAutopilotFlow:
             AutopilotFlow().begin_spot_check("whenever")
 
 
+class TestStopRules:
+    """#4878's arms: what tells the user they can stop.  ``"lights"`` is the app and must stay byte-identical."""
+
+    GREEN = {"level": 40, "depth": 100}
+    SHORT = {"level": 0, "depth": 100}
+
+    def _flow(self, rule: str, *, smart_flat: bool = True) -> AutopilotFlow:
+        flow = AutopilotFlow(stop_rule=rule, done_check=False)
+        flow.more_done = True
+        flow.recent_error_costs = [0.3] * 4 if smart_flat else [0.9, 0.6, 0.4, 0.2]
+        flow.stability = [_entry(0)] * 6
+        return flow
+
+    @pytest.mark.parametrize(
+        ("rule", "level_met", "span", "want"),
+        [
+            # The app: the level is not read.
+            ("lights", True, SHORT, "new"),
+            ("lights", False, GREEN, "done"),
+            # The level alone: it stops whatever the lights, and all green without it is Hard, not Done.
+            ("level", True, SHORT, "done"),
+            ("level", False, GREEN, "hard"),
+            ("level", False, SHORT, "new"),
+            # Both: all green waits for the level.
+            ("lights+level", False, GREEN, "hard"),
+            ("lights+level", True, GREEN, "done"),
+            ("lights+level", True, SHORT, "new"),
+            # Either: the level can stop a session the lights have not.
+            ("lights|level", True, SHORT, "done"),
+            ("lights|level", False, GREEN, "done"),
+            ("lights|level", False, SHORT, "new"),
+        ],
+    )
+    def test_each_rule_reads_the_lights_and_the_level_as_named(self, rule, level_met, span, want):
+        assert self._flow(rule).update(9, 9, 500, span, level_met=level_met) == want
+
+    def test_the_lights_are_recorded_as_computed_whatever_the_rule(self):
+        flow = self._flow("level")
+        flow.update(9, 9, 500, self.GREEN, level_met=False)
+        assert (flow.smart, flow.stable, flow.span) == ("green", "green", "green") and flow.phase == "hard"
+
+    def test_the_level_stops_hard_too_and_runs_the_check_before_done(self):
+        flow = AutopilotFlow(stop_rule="level")
+        flow.more_done = True
+        flow.recent_error_costs = [0.9, 0.6, 0.4, 0.2]
+        flow.stability = [_entry(0)] * 6
+        assert flow.update(9, 9, 500, self.SHORT, level_met=False) == "hard"
+        assert flow.update(9, 10, 499, self.SHORT, level_met=True) == "spot"
+
+    def test_the_opening_never_reads_the_level(self):
+        flow = AutopilotFlow(stop_rule="level")
+        assert flow.update(GOOD_TARGET, 0, 500, None, level_met=True) == "bad"
+
+    def test_a_rule_is_named(self):
+        with pytest.raises(ValueError, match="stop_rule"):
+            AutopilotFlow(stop_rule="vibes")
+
+    def test_the_app_s_rule_is_lights_or_level(self):
+        """Since #4878 the app stops on every light green, or on the line's level."""
+        assert AutopilotFlow().stop_rule == "lights|level"
+        flow = self._flow("lights|level")
+        assert flow.update(9, 9, 500, self.SHORT) == "new", "without the level read it is the lights alone"
+        assert flow.update(9, 9, 500, self.SHORT, level_met=True) == "done"
+
+
 def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:
     return next_phase(
         good,

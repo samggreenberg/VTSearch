@@ -109,6 +109,7 @@ from vtscore.training.thresholds import (
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
+    LabelsLine,
     LineRanking,
     SpotCheck,
     balance_line,
@@ -118,6 +119,9 @@ from vtscore.training.thresholds import (
     done_check_due,
     fbeta_count,
     fit_labels_line,
+    head_count_serves,
+    STOP_LEVEL,
+    stop_level_met,
     weak_check_due,
     weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
@@ -1260,6 +1264,39 @@ def _standalone_calibration_row(
     return row
 
 
+def _line_reading(
+    line: "LabelsLine | None",
+    beta: float | None,
+    corpus_scores: Any = None,
+    on_test: "LabelsLine | None" = None,
+) -> dict[str, Any]:
+    """The labels line's own reading of how well it does, at *beta* (#4878); nothing with no line.
+
+    What a stop rule in the objective's units would read, and the app has all of
+    it at every retrain: the expected F-beta at the line's cut over the Train
+    corpus's unvoted items, over the Train corpus read as unlabelled
+    (*corpus_scores*: a Find on a corpus like this one), and on a fresh corpus
+    in the class model's normals; the labels' d'; and whether the head's count
+    line served.  *on_test* is the line fitted on the withheld half, whose
+    expected F-beta is a diagnostic the app cannot read: it is read off that
+    half's scores (never its labels), beside the F-beta it is estimating.
+    """
+    if line is None or beta is None:
+        return {}
+    b = float(beta)
+    out = {
+        "line_efbeta": round6(line.expected_fbeta(b)),
+        "line_efbeta_fresh": round6(line.expected_fbeta_fresh(b)),
+        "line_separation": round6(float(line.separation)),
+        "line_head_count": int(head_count_serves(line.model)),
+    }
+    if corpus_scores is not None:
+        out["line_efbeta_corpus"] = round6(line.on_corpus(corpus_scores).expected_fbeta(b))
+    if on_test is not None:
+        out["find_efbeta"] = round6(on_test.expected_fbeta(b))
+    return out
+
+
 def _calibration_metric_rows(
     step: StepModel,
     threshold: float,
@@ -1340,6 +1377,15 @@ def _calibration_metric_rows(
     base["train_threshold"] = round6(float(train_threshold))
     base["train_prevalence"] = round6(float(details.get("train_prevalence", float("nan"))))
     base["find_prevalence"] = round6(find_prevalence)
+    line_ranking = details.get("line_ranking")
+    base.update(
+        _line_reading(
+            find_line,
+            details.get("beta"),
+            corpus_scores=None if line_ranking is None else line_ranking.scores,
+            on_test=details.get("find_on_test"),
+        )
+    )
     # How many held-out scores the conformal quantile was actually taken over,
     # on the SHIPPED row rather than only on the fold-count variant rows (issue
     # #3287).  It was declared in `CALIBRATION_COLUMNS` and filled only by the
@@ -2582,6 +2628,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
     smart_gate: str = "app",
+    stop_rule: str = "lights|level",
+    stop_level: float = STOP_LEVEL,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
@@ -2978,6 +3026,18 @@ def simulate_voting_iterations(  # noqa: C901
         smart_gate: #4359's bound on the Smart light: ``"app"`` (the default)
             reads it; ``"never"`` holds it yellow for the phase decision, so
             Autopilot stays in ``hard`` to the end of the run.
+        stop_rule: What tells the user they can stop (#4878;
+            :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights|level"``
+            (the default) is the app: Done once every quality light is green, or
+            once the step's labels line expects an F-beta of at least
+            *stop_level* at the run's balance, over its corpus's unvoted items
+            (:func:`~vtscore.training.thresholds.labels_line.stop_level_met`, the
+            app's own function), from the first step its class model cuts the line
+            (never while the head's count line serves).  With no balance or no
+            Autopilot flow there is no level to read, and it is the lights alone.
+            ``"lights"`` is the app before #4878; ``"level"`` and
+            ``"lights+level"`` are #4878's other arms and need a balance and the flow.
+        stop_level: The level the rule reads (the app's ``STOP_LEVEL``; #4878 priced 0.3 to 0.7).
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -3671,7 +3731,9 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
-        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate, good_dry_run=flow_good_dry_run)
+        flow = AutopilotFlow(
+            startup=startup_state, smart_gate=smart_gate, good_dry_run=flow_good_dry_run, stop_rule=stop_rule
+        )
     elif more_walk != "seed":
         raise ValueError(
             "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
@@ -3682,6 +3744,9 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
+    if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
+        # An arm that waits on the level, with no line to read or no phase to move, would never stop.
+        raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
     if early_check is not None and (
         isinstance(early_check, bool) or not isinstance(early_check, int) or early_check < 1
     ):
@@ -4596,6 +4661,7 @@ def simulate_voting_iterations(  # noqa: C901
                 remaining_unlabeled=len(pool),
                 span=atlas.span_info() if atlas is not None else None,
                 last_vote_good=is_positive,
+                level_met=stop_rule != "lights" and stop_level_met(details.get("find_line"), beta, stop_level),
             )
             _settle_done_check()
 

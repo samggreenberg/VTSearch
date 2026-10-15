@@ -234,6 +234,45 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
 #: The Smart gate's arms (#4359): ``"app"`` reads the light; ``"never"`` holds it yellow.
 SMART_GATES = ("app", "never")
 
+#: What tells the user they can stop (#4878).  ``"lights|level"`` is the app since
+#: #4878: Done once Smart, Stable and Span are all green, or once the labels line
+#: expects at least ``STOP_LEVEL`` F-beta at the session's beta
+#: (:func:`~vtscore.training.thresholds.labels_line.stop_level_met`, which the
+#: caller reads and passes as *level_met*).  The rest are arms: ``"lights"`` (the
+#: app before #4878), ``"level"`` (the level alone) and ``"lights+level"`` (both).
+#: :func:`stop_lights` hands :func:`next_phase` the lights that make it decide so;
+#: a session the rule does not stop with every light green reads Hard (its pick is
+#: Done's), not New, whose atlas walk is over.
+STOP_RULES = ("lights|level", "lights", "level", "lights+level")
+
+
+def stop_lights(
+    smart: Status, stable: Status, span: Status, rule: str, level_met: bool
+) -> tuple[Status, Status, Status]:
+    """The lights :func:`next_phase` reads under stop *rule*, given the real ones and whether the level is met.
+
+    ``"lights"`` passes them through.  A rule that says stop passes all three
+    green, so the phase goes to the check before Done and to Done as the app's
+    own all-green does; one that does not, with every real light green, holds
+    Smart yellow, so the phase reads Hard.  Otherwise the real lights stand.
+    """
+    if rule == "lights":
+        return smart, stable, span
+    lights = smart == "green" and stable == "green" and span == "green"
+    if rule == "level":
+        stop = level_met
+    elif rule == "lights+level":
+        stop = lights and level_met
+    elif rule == "lights|level":
+        stop = lights or level_met
+    else:
+        raise ValueError(f"stop rule must be one of {STOP_RULES}, got {rule!r}")
+    if stop:
+        return "green", "green", "green"
+    if lights:
+        return "yellow", stable, span
+    return smart, stable, span
+
 
 def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, kept diffable by eye
     good_count: int,
@@ -457,6 +496,7 @@ class AutopilotFlow:
         smart_gate: str = "app",
         good_dry_run: int | None = MORE_DRY_RUN,
         done_check: bool = True,
+        stop_rule: str = "lights|level",
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -481,11 +521,19 @@ class AutopilotFlow:
         #: dry run is ``done`` (see :func:`next_phase`).
         self.dry_run_stop = dry_run_stop
         #: #4359's bound: ``"never"`` holds Smart yellow for the phase decision
-        #: (the light is still computed and reported), so a session stays in
-        #: ``hard`` until the run ends.  ``"app"`` is the app.
+        #: (the light is still computed and reported) and reads no stop level
+        #: (#4878), so a session stays in ``hard`` until the run ends.  ``"app"``
+        #: is the app.
         if smart_gate not in SMART_GATES:
             raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
         self.smart_gate = smart_gate
+        #: What tells the user they can stop (:data:`STOP_RULES`).  The app's,
+        #: ``"lights|level"``, and the level arms read *level_met*, which the
+        #: caller passes to :meth:`update` from the step's labels line; without
+        #: it the app's rule is the lights alone.
+        if stop_rule not in STOP_RULES:
+            raise ValueError(f"stop_rule must be one of {STOP_RULES}, got {stop_rule!r}")
+        self.stop_rule = stop_rule
         #: The ``more`` walk's history, as the app keeps it: consecutive walk
         #: picks without a positive, and whether the walk has ended (met its
         #: target or ran dry).  A vote's outcome is read the way the app reads
@@ -620,6 +668,7 @@ class AutopilotFlow:
         span: dict[str, Any] | None,
         *,
         last_vote_good: Optional[bool] = None,
+        level_met: bool = False,
     ) -> Phase:
         """Recompute and return the phase after a vote.
 
@@ -629,7 +678,9 @@ class AutopilotFlow:
         met, so the trajectory continues into ``hard`` / ``new`` / ``done``
         exactly as it would have.  *last_vote_good* is the vote just cast; only
         a schedule round with a dry stop (#4222) reads it, and such a round
-        refuses a vote without it.
+        refuses a vote without it.  *level_met* is whether the step's labels line
+        expects at least the run's stop level (#4878); every ``stop_rule`` but
+        ``"lights"`` reads it.
         """
         if self.startup is not None:
             self.startup.on_click(last_vote_good)
@@ -658,13 +709,20 @@ class AutopilotFlow:
         self.stable_max_confident_flip_rate = _num(stable_d.get("max_confident_flip_rate"))
         self.stable_flip_rate_early = _num(stable_d.get("flip_rate_early"))
         self.stable_flip_rate_late = _num(stable_d.get("flip_rate_late"))
+        # What the phase decision reads: the lights as computed, under #4359's
+        # Smart gate and #4878's stop rule (both the app's by default).
+        # #4359's bound holds the session in Hard to the end, so it reads no level either.
+        never = self.smart_gate == "never"
+        read_smart, read_stable, read_span = stop_lights(
+            "yellow" if never else smart, stable, sp, self.stop_rule, level_met and not never
+        )
         self._last_args = {
             "good_count": good_count,
             "bad_count": bad_count,
             "remaining_unlabeled": remaining_unlabeled,
-            "smart": "yellow" if self.smart_gate == "never" else smart,
-            "stable": stable,
-            "span": sp,
+            "smart": read_smart,
+            "stable": read_stable,
+            "span": read_span,
             "good_target": 0 if self.startup is not None else self.good_target,
             "bad_target": 0 if self.startup is not None else self.bad_target,
             "more_target": 0 if self.startup is not None else self.more_target,

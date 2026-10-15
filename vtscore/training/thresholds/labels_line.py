@@ -152,6 +152,12 @@ HEAD_COUNT_BADS: float = math.inf
 #: many positives need where the head's count, a count of what stands out, keeps several
 #: times too many.
 HEAD_COUNT_GOODS = 6
+#: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
+#: the labels line expects at least this F-beta at the session's balance over the corpus it was
+#: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
+#: no change to the session, and the stop comes where the clicks pay
+#: (``docs/experiments/2026-10-14-stop-signal-4878``).
+STOP_LEVEL = 0.5
 
 
 def _logit(scores: Any) -> np.ndarray:
@@ -298,6 +304,16 @@ def labels_line_threshold(
     :func:`fit_corpus` makes), else the labels' Bad component.  Searched on a
     fine logit grid; a tie keeps the higher cut.
     """
+    x, f = _parametric_fbeta(model, prevalence, beta, negatives)
+    best = float(f.max())
+    i = int(np.flatnonzero(f >= best - 1e-12).max())
+    return _sigmoid(float(x[i]))
+
+
+def _parametric_fbeta(
+    model: ClassScoreModel, prevalence: float, beta: float, negatives: CorpusNegatives | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(logit grid, expected F-beta of the cut at each point)`` for :func:`labels_line_threshold`."""
     p = min(max(float(prevalence), PREVALENCE_MIN), PREVALENCE_MAX)
     b2 = float(beta) * float(beta)
     mu0, s0 = (negatives.mu, negatives.sigma) if negatives is not None else (model.mu_neg, model.sigma)
@@ -310,10 +326,44 @@ def labels_line_threshold(
     s0_ = norm.sf((x - mu0) / s0)
     with np.errstate(invalid="ignore", divide="ignore"):
         f = (1.0 + b2) * p * s1 / (p * s1 + b2 * p + (1.0 - p) * s0_)
-    f = np.nan_to_num(f, nan=0.0)
-    best = float(f.max())
-    i = int(np.flatnonzero(f >= best - 1e-12).max())
-    return _sigmoid(float(x[i]))
+    return x, np.nan_to_num(f, nan=0.0)
+
+
+def parametric_expected_fbeta(
+    model: ClassScoreModel, prevalence: float, beta: float, negatives: CorpusNegatives | None = None
+) -> float:
+    """The expected F-*beta* at :func:`labels_line_threshold`'s cut: what the line would score on a fresh corpus.
+
+    A corpus at *prevalence* whose positives score as the labels' Good component
+    and whose negatives as *negatives* (else the Bad component).  Unlike
+    :func:`corpus_expected_fbeta` it counts no item, so it does not fall as a
+    session labels its corpus's positives away: it reads the class model alone.
+    """
+    return float(_parametric_fbeta(model, prevalence, beta, negatives)[1].max())
+
+
+def _corpus_fbeta(posteriors_desc: np.ndarray, total_positives: float, beta: float) -> np.ndarray:
+    """The expected F-*beta* of each cut of a corpus's items, best first, as :func:`corpus_cut` reads it."""
+    b2 = float(beta) * float(beta)
+    tp = np.cumsum(np.asarray(posteriors_desc, dtype=np.float64))
+    if tp.size == 0:
+        return tp
+    pos = max(float(total_positives), float(tp[-1]))
+    r = np.arange(1, tp.size + 1, dtype=np.float64)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.nan_to_num((1.0 + b2) * tp / (b2 * pos + r), nan=0.0)
+
+
+def corpus_expected_fbeta(posteriors_desc: np.ndarray, total_positives: float, beta: float) -> float:
+    """The expected F-*beta* at :func:`corpus_cut`'s cut: what the line expects to return from this corpus.
+
+    0 for a corpus with nothing worth keeping.  It counts the corpus's own
+    unvoted items, so it describes the rest of the session's corpus and falls
+    as the session labels that corpus's positives away, even with the model
+    unchanged; :func:`parametric_expected_fbeta` is the fresh-corpus reading.
+    """
+    f = _corpus_fbeta(posteriors_desc, total_positives, beta)
+    return float(f.max()) if f.size and f.max() > 0 else 0.0
 
 
 def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_positives: float, beta: float) -> float:
@@ -335,12 +385,7 @@ def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_posit
     n = s.size
     if n == 0:
         return 1.0 + 1e-9
-    b2 = float(beta) * float(beta)
-    tp = np.cumsum(np.asarray(posteriors_desc, dtype=np.float64))
-    pos = max(float(total_positives), float(tp[-1]))
-    r = np.arange(1, n + 1, dtype=np.float64)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        f = np.nan_to_num((1.0 + b2) * tp / (b2 * pos + r), nan=0.0)
+    f = _corpus_fbeta(posteriors_desc, total_positives, beta)
     k = int(np.argmax(f))
     if not f[k] > 0:
         return 1.0 + 1e-9
@@ -529,12 +574,58 @@ class LabelsLine:
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
 
+    def expected_fbeta(self, beta: float) -> float:
+        """The expected F-*beta* of the best cut the class model sees on this corpus's unvoted items (#4878).
+
+        What :func:`corpus_cut` maximises, read at its maximum: the class model's
+        own estimate of how well the line's set does on the rest of the corpus.
+        Read whichever line serves, so it is the class model's estimate even
+        while the head's count line is the one drawn (:func:`head_count_serves`).
+        A line built by hand, with no corpus counted, reads the parametric one.
+        """
+        if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
+            total = self.unvoted_share * self.unvoted_scores.size
+            return corpus_expected_fbeta(self.unvoted_posteriors, total, beta)
+        return self.expected_fbeta_fresh(beta)
+
+    def expected_fbeta_fresh(self, beta: float) -> float:
+        """The expected F-*beta* the class model gives its line on a fresh corpus like this one (#4878).
+
+        The class model at the spread this corpus floored it to, at this
+        corpus's prevalence and with its negatives' bulk
+        (:func:`parametric_expected_fbeta`): a "Train on X, Find on Y" reading
+        that counts no item, so it does not move as the session's votes take
+        positives out of the corpus.
+        """
+        model = self.model if self.spread is None else replace(self.model, sigma=self.spread)
+        return parametric_expected_fbeta(model, self.prevalence, beta, self.negatives)
+
     def on_corpus(
         self, scores: Any, ids: Iterable[int] | None = None, labels: Mapping[int, bool] | None = None
     ) -> "LabelsLine":
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
         line = _line_on(self.model, scores, ids, labels, held_out=self.held_out)
         return self if line is None else line
+
+
+def stop_level_reading(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> dict[str, Any]:
+    """What Autopilot's stop reads off the labels line (#4878): ``expected_fbeta``, ``level`` and ``met``.
+
+    ``expected_fbeta`` is :meth:`LabelsLine.expected_fbeta` at *beta*, the
+    line's own estimate of the F-beta of the set it keeps; ``None`` with no
+    line, no balance, or while the head's count line serves
+    (:func:`head_count_serves`), whose class model is too thin to read.  ``met``
+    is whether it reaches *level*.
+    """
+    if line is None or beta is None or head_count_serves(line.model):
+        return {"expected_fbeta": None, "level": float(level), "met": False}
+    expected = float(line.expected_fbeta(float(beta)))
+    return {"expected_fbeta": expected, "level": float(level), "met": expected >= level}
+
+
+def stop_level_met(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> bool:
+    """Whether the labels line expects at least *level* F-beta at *beta* (:func:`stop_level_reading`)."""
+    return bool(stop_level_reading(line, beta, level)["met"])
 
 
 def head_count_serves(model: ClassScoreModel) -> bool:

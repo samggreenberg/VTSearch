@@ -10,6 +10,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The labels line reads its own F-beta, and Autopilot's Done stops on it** (issue #4878).
+  `LabelsLine.expected_fbeta(beta)` is the expected F-beta at the line's cut over the corpus's unvoted
+  items (what `corpus_cut` maximises), `LabelsLine.expected_fbeta_fresh(beta)` the class model's on a
+  fresh corpus like it; `corpus_expected_fbeta` and `parametric_expected_fbeta` are the two functions
+  behind them, factored out of `corpus_cut` and `labels_line_threshold`, whose cuts are unchanged.
+  `stop_level_reading(line, beta)` / `stop_level_met` read a line against `STOP_LEVEL` (0.5), and never
+  while the head's count line serves. The eval harness's default stop rule follows the app:
+  `simulate_voting_iterations(stop_rule="lights|level", stop_level=STOP_LEVEL)` and
+  `AutopilotFlow(stop_rule=)`, with `"lights"`, `"level"` and `"lights+level"` as arms; the calibration
+  frame's base row carries `line_efbeta`, `line_efbeta_corpus`, `line_efbeta_fresh`, `line_separation`,
+  `line_head_count` and the diagnostic `find_efbeta`.
+
 - **The calibration folds hold out each class's nearest whole share; the split no longer draws a coin**
   (issue #4864). `_split_train_counts` sizes each class's holdout as `nearest_holdout(count, fraction)`:
   the share rounded to the nearest whole vote, halves up, kept between 1 and count − 1, with no

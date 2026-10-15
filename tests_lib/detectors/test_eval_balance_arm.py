@@ -381,12 +381,26 @@ class TestTheWeakSeparationPrompt:
         ]
 
     def test_a_learned_only_prompt_waits_for_the_flow_to_leave_its_opening(self):
-        """#4496: the app trains no detector on the text-sort opening, so ``weak_phase="learned"`` waits."""
+        """#4496: the app trains no detector on the text-sort opening, so ``weak_phase="learned"`` waits.
+
+        Under the lights alone: on this pool the line's level (#4878) can say Done the step the opening ends,
+        and the check before Done that follows a Bad pick would read here as a prompt after the opening.
+        """
         _rows, any_picks = self._run(
-            n_per_cat=40, max_steps=40, spot_check="weak", weak_separation=math.inf, weak_phase="any"
+            n_per_cat=40,
+            max_steps=40,
+            spot_check="weak",
+            weak_separation=math.inf,
+            weak_phase="any",
+            stop_rule="lights",
         )
         _rows, picks = self._run(
-            n_per_cat=40, max_steps=40, spot_check="weak", weak_separation=math.inf, weak_phase="learned"
+            n_per_cat=40,
+            max_steps=40,
+            spot_check="weak",
+            weak_separation=math.inf,
+            weak_phase="learned",
+            stop_rule="lights",
         )
         before = [
             picks[i - 1]["phase"]

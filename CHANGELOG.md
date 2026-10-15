@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot also says Done once the detector expects a good result** (issue #4878). Done came only
+  when the Smart, Stable and Span lights were all green. It now also comes once the detector's labels
+  line expects an F-beta of at least 0.5 at your balance, its own estimate of how good the set it keeps
+  is, after the same check before Done. A session that is already good no longer waits on the last
+  light: priced on 2,160 simulated sessions and A/B'd on 6,480 more, it ends a session 5 to 16 clicks
+  sooner for the same F-beta. When that is what said Done, the panel and Toasty quote the F-beta it
+  expects instead of saying every light is green. `GET /api/labeling-status` carries it as `level`
+  (`expected_fbeta`, `level`, `met`).
+
 - **A detector held on its typed query no longer reads "Too few labels"** (issue #4889). A detector made
   from a typed query keeps its query's set past the label quota until it has 30 labels (#4736). The Test
   view's note used to blame the quota for that, naming counts the labels already met ("it takes 3 Goods

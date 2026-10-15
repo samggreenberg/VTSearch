@@ -342,6 +342,55 @@ class TestTheDefaultArmDrawsTheLabelsLine:
         assert all(np.isfinite(r["find_prevalence"]) and 0.0 < r["find_prevalence"] <= 0.5 for r in drawn)
         assert all(np.isfinite(r["train_threshold"]) for r in drawn)
 
+    def test_base_rows_carry_the_line_s_own_reading(self):
+        """#4878: the expected F-beta the line gives itself, on Train at the row's beta, beside the labels' d'."""
+        rows = _run_safe_uncached("max_patch", beta=None)
+        base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
+        drawn = [r for r in base if np.isfinite(r["train_prevalence"])]
+        assert drawn, "the default arm never drew the labels' line"
+        for r in drawn:
+            for col in ("line_efbeta", "line_efbeta_corpus", "line_efbeta_fresh", "find_efbeta"):
+                assert 0.0 <= r[col] <= 1.0, (col, r)
+            assert np.isfinite(r["line_separation"]) and r["line_head_count"] in (0, 1), r
+        undrawn = [r for r in base if not np.isfinite(r["train_prevalence"])]
+        assert all(np.isnan(r["line_efbeta"]) and r["line_head_count"] == -1 for r in undrawn)
+        variants = [r for r in rows if r["gmm_variant"] != "" or r["pool_variant"] != "max"]
+        assert all(np.isnan(r["line_efbeta"]) for r in variants), "only the base row reads the line"
+
+
+class TestTheStopArms:
+    """#4878: the stop rules that read the labels line's own expected F-beta move the phase as named."""
+
+    @staticmethod
+    def _phases(**kw):
+        rows = _run_safe_uncached("max_patch", beta=None, max_steps=30, **kw)
+        base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
+        return [(r["t"], r["phase"], r["line_head_count"]) for r in base], base
+
+    def test_the_app_s_rule_named_is_the_default(self):
+        default, rows_d = self._phases()
+        named, rows_n = self._phases(stop_rule="lights|level")
+        assert default == named
+        assert [r["threshold"] for r in rows_d] == [r["threshold"] for r in rows_n]
+
+    def test_the_app_s_rule_needs_no_balance_and_is_then_the_lights(self):
+        rows = _run_safe_uncached("max_patch", beta="off", max_steps=8)
+        assert rows, "the Inclusion arm runs under the app's stop rule, reading no level"
+
+    def test_a_level_always_met_stops_at_the_first_step_the_class_model_cuts(self):
+        phases, _ = self._phases(stop_rule="level", stop_level=0.0)
+        first_cut = next(i for i, (_, ph, hc) in enumerate(phases) if hc == 0 and ph not in ("good", "bad", "more"))
+        assert phases[first_cut][1] == "spot", phases
+        assert any(ph == "done" for _, ph, _ in phases)
+
+    def test_a_level_never_met_never_stops(self):
+        phases, _ = self._phases(stop_rule="level", stop_level=1.01)
+        assert not any(ph in ("spot", "done", "prompt") for _, ph, _ in phases), phases
+
+    def test_a_level_arm_needs_a_balance(self):
+        with pytest.raises(ValueError, match="stop_rule"):
+            _run_safe_uncached("max_patch", beta="off", max_steps=8, stop_rule="level")
+
 
 class TestTheWiderWorldKnobs:
     """#4452: the withheld half's scores are kept for post-hoc Find scenarios, and the Train pool can shrink."""

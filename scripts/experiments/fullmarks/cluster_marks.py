@@ -759,6 +759,41 @@ def load_adjudication_rows(path: Path) -> tuple[list[dict[str, Any]], list[dict[
     return list(payload.get("same", [])), list(payload.get("different", []))
 
 
+#: The two marks a stored row rules on, each ``(page_id, mark_index)``, sorted.
+#: A bare page id keys as mark ``-1``.
+PairKey = tuple[tuple[str, int], tuple[str, int]]
+
+
+def coinciding(left: Iterable[PairKey], right: Iterable[PairKey]) -> list[tuple[PairKey, PairKey]]:
+    """Every ``(a, b)``, *a* from *left* and *b* from *right*, that may name the same two marks.
+
+    Equal keys do.  So do keys that differ only where one of them is a bare
+    page id: a bare endpoint names whichever mark `resolve_pairs` finds on its
+    page, and that can be the very mark the other key names.  Comparing the
+    ``-1`` as if it were a mark of its own is how the store came to hold the
+    owner's 2026-09-14 merge next to the separation it overturned, after a
+    ``--supersede`` that should have dropped it (#4866).  Neither check could
+    see that ``(bad45f00, -1)`` and ``(bad45f00, 1)`` were one mark, and every
+    Tobacco800 rebuild refused.
+    """
+
+    def fits(x: tuple[str, int], y: tuple[str, int]) -> bool:
+        return x[0] == y[0] and (x[1] == y[1] or -1 in (x[1], y[1]))
+
+    def pages(key: PairKey) -> tuple[str, str]:
+        return key[0][0], key[1][0]
+
+    by_pages: dict[tuple[str, str], list[PairKey]] = {}
+    for key in right:
+        by_pages.setdefault(pages(key), []).append(key)
+    out: list[tuple[PairKey, PairKey]] = []
+    for a in left:
+        for b in by_pages.get(pages(a), ()):
+            if (fits(a[0], b[0]) and fits(a[1], b[1])) or (fits(a[0], b[1]) and fits(a[1], b[0])):
+                out.append((a, b))
+    return sorted(out)
+
+
 def save_adjudications(
     same: Sequence[dict[str, Any]],
     different: Sequence[dict[str, Any]],
@@ -772,8 +807,12 @@ def save_adjudications(
     The key is the pair of *marks*, not of pages: one page can carry a logo
     that is the same as another page's and a stamp that is not, so keying on
     pages would let the second verdict overwrite the first (#3343).  A row with
-    no mark index keys on ``-1``, which keeps a legacy file idempotent without
-    letting it collide with a row that names a real mark.
+    no mark index keys on ``-1``, which keeps a legacy file idempotent.  That
+    key is not a mark, though, so the clash check compares it with
+    `coinciding`: a bare endpoint ruled one way and a real mark on the same
+    page ruled the other may be one pair ruled both ways, and the clusterer
+    would refuse the store (#4866).  That is refused too, until
+    ``--migrate-adjudications`` gives the bare endpoint its index.
     """
 
     def key_of(row: dict[str, Any], side: str) -> tuple[str, int]:
@@ -809,6 +848,15 @@ def save_adjudications(
             f"{len(clash)} pair(s) adjudicated both same and different, e.g. {clash[0]} — "
             "resolve the verdicts before writing; storing both would let whichever "
             "is applied last silently win"
+        )
+    maybe = coinciding(same_map, diff_map)
+    if maybe:
+        a, b = maybe[0]
+        raise ValueError(
+            f"{len(maybe)} pair(s) may be adjudicated both same and different, e.g. same {a} and different {b}: "
+            "a bare page id (mark -1) names whichever mark the clusterer finds on that page, which can be the "
+            "mark the other ruling names. Give it its index first — `audit_to_corrections.py "
+            "--migrate-adjudications --corpus <dir>`"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {

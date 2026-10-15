@@ -70,6 +70,12 @@
             You've labeled every item in this dataset! Click <strong>Dashboard</strong> to test or run
             your detector on another dataset.
           </vt-toasty-hint>
+        } @else if (handoff.expectedFbeta != null) {
+          <vt-toasty-hint hintId="autopilot-done-level" [anchor]="dashboardBtn" reach="right">
+            Your detector is trained! It expects an F-beta of {{ handoff.expectedFbeta.toFixed(2) }}
+            at your balance. Keep voting to sharpen it, or click <strong>Dashboard</strong> to test it
+            or put it to work.
+          </vt-toasty-hint>
         } @else if (handoff.dryRun) {
           <vt-toasty-hint hintId="autopilot-ran-dry" [anchor]="dashboardBtn" reach="right">
             Your detector is trained! {{ handoff.dryRun }} of its best matches in a row were not
