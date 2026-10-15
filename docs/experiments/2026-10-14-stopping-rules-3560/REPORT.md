@@ -1,7 +1,7 @@
 # Are Autopilot's stopping rules any good? (#3560)
 
 **2026-10-14.** A reading of 2,160 simulated sessions on today's app, no new runs. It answers the three
-questions [`docs/plans/stopping-rules-in-eval.md`](../../plans/stopping-rules-in-eval.md) left open:
+questions the stopping-rules plan (since retired; see [`docs/EVAL.md`](../../EVAL.md#stopping-point-and-stopping-cost-issue-3560)) left open:
 
 1. Is the stop near the session's own best?
 2. Which light holds the session, and is it the right one?
