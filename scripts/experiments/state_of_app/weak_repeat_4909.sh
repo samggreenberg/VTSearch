@@ -48,6 +48,7 @@ case "${1:-}" in
 dirs)
   for arm in "${ARMS[@]}"; do
     [[ -z "${2:-}" || "$2" == "$arm" ]] || continue
+    knobs="${KNOBS[$arm]:-the app weak check}"
     for b in 1 4; do
       r="$S/$D-$(run_of "$arm" "$b")/results"
       mkdir -p "$r/cells"
@@ -56,7 +57,7 @@ dirs)
       cat >"$r/grid_shape.json" <<JSON
 {"n_cells": 288, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $SEEDS,
  "max_steps": 200, "cell_order": "seed", "test_bands": "all", "job_name": "$(run_of "$arm" "$b")",
- "note": "#4909 arm $arm (${KNOBS[$arm]:-the app's weak check}), beta $b, 200 clicks, binary path only, trajectory pass; grid symlinked from $GRID_SRC"}
+ "note": "#4909 arm $arm ($knobs), beta $b, 200 clicks, binary path only, trajectory pass; grid symlinked from $GRID_SRC"}
 JSON
       echo "$r"
     done
