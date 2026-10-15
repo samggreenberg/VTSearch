@@ -470,7 +470,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     pd.DataFrame(delta_curves).rename_axis("t").to_csv(args.out / "delta_curves.csv", float_format="%.5g")
     (args.out / "decomposition.json").write_text(json.dumps(decomp, indent=2) + "\n")
     (args.out / "provenance.json").write_text(
-        json.dumps({"arms": prov, "problems": problems, "verdict": verdict}, indent=2)
+        json.dumps({"arms": prov, "problems": problems, "verdict": verdict}, indent=2) + "\n"
     )
 
     pd.set_option("display.width", 250)
