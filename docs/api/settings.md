@@ -178,18 +178,23 @@ If no source is configured: `{"ok": false, "message": "No settings source config
 
 ## Labelset Sources (Sync)
 
-Labelset sources provide **bidirectional sync** for detector labels.
-Each detector can have its own linked source. When votes are cast or
-labels imported, the labelset is automatically exported to the source.
+Labelset sources provide **bidirectional sync** for detector labels: a
+detector linked to one has its whole labelset pushed there as it changes
+(paced: pushes for one detector never overlap and start at least
+`labelset_source_push_interval_seconds` apart), and pulled back and merged
+when it loads or on a manual sync. See
+[EXTENDING-plugins.md § Adding a Labelset Source](../EXTENDING-plugins.md#adding-a-labelset-source).
 
-Field values support `{detector_id}` and `{detector_name}` templates
-(resolved from the active detector context).
+A detector is linked by a binding stored on its **registry entry**, so the
+link survives restarts and works whether or not the detector is loaded. A
+detector with no binding of its own follows the deployment-wide
+`default_labelset_source` server setting, if any; every non-empty value in
+that setting's `field_values` is fixed by the admin and is never echoed or
+stored per detector. Field values support `{detector_id}` and
+`{detector_name}` templates, resolved for the detector being synced.
 
-The link lives on the **loaded detector's in-memory context** — it is not
-persisted, and it is gone once the detector is unloaded. The path segment
-below is spelled `{detector_name}` in the spec, but it is looked up as the
-loaded context's key: the registry **detector id** (the `X-Detector-Id`
-value).
+The path segment below is spelled `{detector_name}` in the spec; it takes
+the registry **detector id**, or the detector's name.
 
 ### List available labelset sources
 
@@ -212,14 +217,40 @@ GET /api/labelset-sources
 ]
 ```
 
+### Get the deployment-wide labelset source
+
+```
+GET /api/labelset-sources/default
+```
+
+→ the `default_labelset_source` server setting's source as a plugin entry
+whose `fields` are only those the admin left for users to fill in (the New
+Detector form renders these), plus `fixed_keys` (the fields the admin
+fixed; their values stay on the server) and `push_interval_seconds`. `null`
+when the deployment has no default.
+
+```json
+{
+  "name": "server_json_file",
+  "display_name": "Server JSON File",
+  "fields": [],
+  "fixed_keys": ["filepath"],
+  "push_interval_seconds": 60
+}
+```
+
 ### Get detector's labelset source
 
 ```
 GET /api/detectors/{detector_id}/labelset-source
 ```
 
-→ `{"source_name": "server_json_file", "field_values": {"filepath": "..."}}`, or
-`null` when no source is set **or the detector isn't loaded** (not a 404).
+→ `{"source_name", "display_name", "field_values", "inherited", "fixed_keys", "missing_fields"}`,
+or `null` when the detector syncs nowhere. `field_values` holds only the
+detector's own values, and only for its creator. `inherited` is `true` when
+it follows the deployment default. `missing_fields` names required fields
+with no value; the detector is not synced until they are filled in. 403 if
+the caller cannot access the detector, 404 if it does not exist.
 
 ### Set or clear detector's labelset source
 
@@ -227,13 +258,23 @@ GET /api/detectors/{detector_id}/labelset-source
 PUT /api/detectors/{detector_id}/labelset-source
 ```
 
-**Body:** `{"source_name": "server_json_file", "field_values": {"filepath": "labels/{detector_id}.json"}}`
+**Body:** `{"source_name": "server_json_file", "field_values": {"filepath": "labels/{detector_name}.json"}}`
 
-To clear: `{}` or an empty `source_name`.
+Values the deployment default fixes for that source are dropped (they always
+come from the server). The rest are validated the way a push uses them -
+required fields present, templates resolvable, paths and URLs allowed -
+then stored, after which the detector is levelled with the source: what the
+source already holds is merged in (the detector's labels win a
+disagreement) and the detector's labels are pushed back.
 
-→ `{"ok": true, "message": "..."}`
+To clear the detector's own binding (it then follows the default again):
+`{}` or an empty `source_name`. To opt it out even when a default exists:
+`{"source_name": "none"}`.
 
-404 if the detector isn't loaded or `source_name` is unknown.
+→ `{"ok": true, "message": "..."}` (the message counts any labels it restored)
+
+400 if a value is missing or not allowed, 403 unless the caller created the
+detector, 404 if the detector or `source_name` is unknown.
 
 ### Force sync from labelset source
 
@@ -241,12 +282,16 @@ To clear: `{}` or an empty `source_name`.
 POST /api/detectors/{detector_id}/labelset-source/sync
 ```
 
-Imports labels from the detector's linked source.
+Pulls the source's labels into the detector: labels it lacks are added and,
+where the two disagree, the **source's** label wins. Nothing is removed. A
+loaded detector's votes are re-derived from the result, and the merged
+labels are pushed back.
 
-→ `{"ok": true, "message": "Imported 42 label(s) from source."}`
+→ `{"ok": true, "message": "Imported 42 label(s) from source (3 new or changed).", "labels": 42, "changed": 3}`
 
 If no source is configured (or the source is empty): `{"ok": false, "message": "..."}`
-(still 200). 404 if the detector isn't loaded.
+(still 200). 403 if the caller cannot access the detector, 404 if it does not
+exist.
 
-A rename that moves the templated file path is handled by
-[`POST /api/detectors/registry/{detector_id}/labelset-source/move-file`](detectors.md#move-an-orphaned-labelset-file).
+A rename moves a `{detector_name}`-templated server file to the new name's
+path itself; see [Rename detector](detectors.md#rename-detector).

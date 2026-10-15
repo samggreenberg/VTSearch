@@ -124,6 +124,21 @@ def _write_detector(path: Path, data: dict) -> None:
     with _writer_lock:
         _drain_pending(path)
         _atomic_write_text(path, text)
+    _note_written(data)
+
+
+def _note_written(data: dict) -> None:
+    """Tell the labelset-source sync that a detector's labels may have changed.
+
+    Every detector write passes through here (both :func:`_write_detector` and
+    :func:`queue_detector_write`), which is what lets a linked labelset source
+    follow votes, imports and renames without each caller scheduling the push
+    itself (#4913).  The hook only schedules - the push runs on its own timer -
+    and never raises.
+    """
+    from vtscore.labels.sync import note_detector_written  # noqa: PLC0415
+
+    note_detector_written(data)
 
 
 # ---------------------------------------------------------------------------
@@ -222,12 +237,16 @@ def queue_detector_write(path: Path, data: dict, *, after: Callable[[], None] | 
             _atomic_write_text(path, text)
         if after is not None:
             after()
+        _note_written(data)
         return
     with _queue_cv:
         failed = _failed.pop(path, None)
         _pending[path] = _PendingWrite(text, after)
         _ensure_writer_thread_locked()
         _queue_cv.notify()
+    # The push reads the detector through ``_read_detector``, which returns
+    # the queued text, so it can be scheduled before the write lands.
+    _note_written(data)
     if failed is not None:
         raise DetectorWriteError(f"the previous write of {path.name} failed: {failed}") from failed
 

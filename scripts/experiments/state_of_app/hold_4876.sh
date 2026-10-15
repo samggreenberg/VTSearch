@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # #4876: re-price #4736's typed-query hold on one build. The price itself is offline (hold_4876.py reads the
-# shipped-hold sessions: #4874's SigLIP arm on photos, #4356's 1%-prevalence Rico Suave runs on screens). These
+# shipped-hold sessions: #4874's SigLIP arm on photos, #4356's 1%-prevalence Apptitude runs on screens). These
 # runs are its check: the same sessions on today's dev at other holds must pick the same images and show
 # exactly what the offline price says.
 #
 #   hold_4876.sh dirs                     photo run dirs <root>/2026-10-14-hold4876-h{0,15}-b{025,1,4},
 #                                         symlinked to #4874's grid so an index is the same cell
 #   hold_4876.sh photos HOLD BETA         the check subset of the photo grid at CALIB_QUERY_HOLD=HOLD
-#   hold_4876.sh screens HOLD BETA        every Rico Suave session at 1% prevalence, RICO_QUERY_HOLD=HOLD
+#   hold_4876.sh screens HOLD BETA        every Apptitude session at 1% prevalence, at hold HOLD; runs only
+#                                         from the report's tree (564ba13de), see below
 #
 # Launch from a FROZEN worktree: every task imports the worktree this script sits in.
 # Env: HOLD_SUBSET (photo indices; default seeds 1 and 3, every fourth SigLIP cell), SOTA_ROOT, CALIB_CONC.
@@ -15,7 +16,6 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 GRID="$S/2026-10-14-s2l-4874-grid"
-RICO="/expscratch/sgreenberg/rico-suave/runs"
 
 btag() { case "$1" in 0.25) echo 025 ;; 1) echo 1 ;; 4) echo 4 ;; *) echo "beta must be 0.25, 1 or 4" >&2; exit 2 ;; esac; }
 
@@ -53,13 +53,11 @@ photos)
   exec bash "$HERE/launch.sh" redo "${HOLD_SUBSET:-$(subset)}"
   ;;
 screens)
-  h="${2:?hold}" b="${3:?beta (0.25, 1 or 4)}"
-  r="$RICO/2026-10-14-p001-hold$h-b$(btag "$b")/results"
-  mkdir -p "$r/cells"
-  ln -sfn "$RICO/2026-10-14-p001-b$(btag "$b")/results/prepare_info.json" "$r/prepare_info.json"
-  ln -sfn "$RICO/2026-10-14-p001-b$(btag "$b")/results/crops" "$r/crops"
-  export RICO_RUN=2026-10-14 RICO_PREVALENCE=0.01 RICO_BETA="$b" RICO_QUERY_HOLD="$h" CALIB_CONC="${CALIB_CONC:-20}"
-  exec bash "$HERE/../rico_suave/launch.sh" cells
+  # The screens check re-runs the 2026-10-14 grids under /expscratch/sgreenberg/rico-suave/runs, which were
+  # prepared when Apptitude was still named Rico Suave: their prepare_info.json names the dataset `rico_suave`,
+  # which this tree no longer knows. Run it from the tree the report ran from, where the name still resolves.
+  echo "hold_4876.sh screens: the 2026-10-14 grids were prepared as rico_suave; run this from 564ba13de" >&2
+  exit 2
   ;;
 *)
   echo "usage: hold_4876.sh {dirs | photos HOLD BETA | screens HOLD BETA}" >&2

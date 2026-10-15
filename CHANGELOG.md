@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
+  you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
+  voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
+  "Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept" read as half of all the
+  matches, and put the range of the set the check ended on beside a count it did not describe. It now reads
+  "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32
+  more kept", or "32 more kept, unchecked" before a check, and its tooltip and the check's result screen say
+  the same. Late in a session, once the matches near the top are voted, the check before Done can read low
+  after a session that went well; the note now says why. What the check measures is unchanged.
+
 - **Autopilot stops every session by 200 votes** (issue #4903). Done came only when the quality lights went
   green or the detector expected an F-beta of 0.5, and 1–2% of sessions reach neither by 400 votes; the app has
   no horizon, so they went on as long as the user did. Done now also comes at 200 votes, after the same check
@@ -25,6 +35,15 @@ not list every commit. Use `git log` for the full history.
   with the Goods it found, and offered the **Update Sort Example?** prompt once more; voting on keeps looking.
   Priced on 2,160 simulated sessions run to 400 votes: the cap ends 6–7% of sessions early, all but a few on
   small objects, at a median F-beta of 0.00–0.04, which 200 more votes would have taken to 0.07–0.14.
+
+- **A detector's labelset-source link is persisted, and pushes the whole labelset** (issue #4913). The link
+  set with `PUT /api/detectors/<id>/labelset-source` lived only on the loaded detector and was lost on
+  unload or restart; it is now stored on the registry entry, works for an unloaded detector, takes the id
+  or the name, and is creator-only. A push now sends the detector file's labels from every dataset (it
+  sent only the active dataset's votes, which overwrote the rest), and a sync merges into the detector
+  instead of only voting what the active dataset holds. Renaming a detector moves a
+  `{detector_name}`-templated labelset file itself: the *Move existing labelset file?* prompt,
+  `pending_labelset_move`, and `POST /api/detectors/registry/<id>/labelset-source/move-file` are gone.
 
 - **Autopilot also says Done once the detector expects a good result** (issue #4878). Done came only
   when the Smart, Stable and Span lights were all green. It now also comes once the detector's labels
@@ -270,6 +289,17 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
+  `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
+  its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to
+  export. Pushes for one detector never overlap and start at least `labelset_source_push_interval_seconds`
+  apart (default 60), so a burst of votes is one write; pending pushes are flushed on shutdown. Loading a
+  detector merges back what its source holds, so a detector whose server lost its data is restored by
+  re-creating it under the same name. Values the admin sets are fixed; the **New Detector** form asks for
+  the source's other fields, and a detector's Dashboard ⋯ menu gains **Auto-export…** to fill them in later
+  (its row warns when one is missing). `GET /api/labelset-sources/default` serves the form, and the
+  registry listing carries each detector's `labelset_source_status`.
 
 - **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
   image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's

@@ -281,11 +281,19 @@ log space, a tie to the preset farther from 1, so the old 2 and 0.5 show as 4
 and 1/4) and snapped to it through the control's
 own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Test
 drops a balance change while a pass is running. Under the spectrum the state
-line reads "Checked · likely 55–100% right, about half of them found (checked
-5) · 32 kept" or "Top 32 kept, unchecked" (`balanceSummary`; the recall range
-is in words, `foundWords`, and as a number only in the tooltip,
-`balanceExplanation`), with a green dot when checked and a yellow one when
-not; there is no red.
+line reads "Checked the top 64 you hadn't voted on · likely 55–100% right,
+about half of them found (checked 5) · 32 more kept" or "32 more kept,
+unchecked" (`balanceSummary`; the recall range is in words, `foundWords`, and
+as a number only in the tooltip, `balanceExplanation`), with a green dot when
+checked and a yellow one when not; there is no red. Nothing in it counts the
+user's own votes, and it says so (#4914): the count is of the unvoted items
+the line keeps, and the ranges cover the top `audited` items the user had not
+voted on when the check ran (the walk samples the unvoted ranking, and
+recall's denominator is the mixture's count of the positives left in it).
+Under `advisory` that set is not the one kept, so the line names it rather
+than setting its ranges beside the count as if they described the kept set.
+The check's own result screen (`resultHeadline`, `resultDetail`) words it the
+same way.
 
 **The spot check** (`vt-spot-check-stage`, #4273, walking to the balance's
 peak since #4413) measures that line, in Train only, and only Autopilot runs

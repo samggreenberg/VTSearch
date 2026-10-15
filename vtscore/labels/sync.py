@@ -1,372 +1,600 @@
-"""Labelset source sync utilities.
+"""Labelset source sync: keep a detector's labels current at its linked source.
 
-Provides :func:`sync_to_labelset_source` which exports the current
-detector's labels to its linked labelset source (if any), and
-:func:`sync_from_labelset_source` which imports labels from the source.
+A detector linked to a :class:`~vtscore.labels.sources.base.LabelsetSource`
+(see :mod:`vtscore.labels.binding` for where the link comes from) has its
+labels kept at that source as well as in its own JSON file, so the copy
+outside the server is current rather than only as fresh as the last time
+someone remembered to export (#4913).
 
-``sync_to_labelset_source`` is **debounced and asynchronous**: each call
-schedules a background push that fires after ``_DEBOUNCE_DELAY`` seconds
-of quiet (currently 200ms).  Rapid voting bursts collapse into a single
-sync run that uses the latest state, so a slow target (webhook, slow
-disk) never stalls the voting request handler.  Use
-:func:`flush_pending_label_syncs` to drain the queue synchronously when
-deterministic behaviour is needed (tests, graceful shutdown).  An
-``atexit`` hook calls ``flush_pending_label_syncs`` so the most recent
-vote's push survives normal interpreter exit (Ctrl-C, gunicorn SIGQUIT,
-``sys.exit``).  Hard kills (SIGKILL, ``os._exit``) bypass atexit and
-still drop the last 200ms of work - accept that as the cost of debounce.
+**Push** (:func:`schedule_labelset_push`).  Every write of a detector JSON
+file schedules one - :mod:`vtscore.detectors.store` calls
+:func:`note_detector_written` - so votes, label imports, corrections and
+renames all reach the source without each route having to remember to.  The
+payload is the detector file's **whole labelset** (every dataset's labels,
+not just the active dataset's votes) plus its ``detector_meta``, read when the
+push runs, so it is always the newest state.  Pushes are paced per detector:
 
-A module-level (NOT thread-local) flag, coordinated by ``_sync_lock``,
-prevents re-exporting during an import pass - including from concurrent
-``_push_to_labelset_source`` calls running on other threads.
+* never two at once for one detector - a change landing while a push is in
+  flight rides the next one;
+* at least ``CoreConfig.labelset_source_push_interval`` seconds between the
+  starts of two pushes (the app's ``labelset_source_push_interval_seconds``),
+  so a slow target or a burst of votes costs one write per window;
+* never sooner than ``_DEBOUNCE_DELAY`` after the change that scheduled it,
+  so a burst inside that window is one push;
+* a push whose payload matches what the source is known to hold is skipped;
+* a detector's first push in a process pulls first (see below), so a push
+  never overwrites labels only the source held - the backup of a detector this
+  server lost - and a source that cannot be read is not pushed to at all.
+
+A failed push is logged and leaves the source as it was; the next change
+schedules another.  :func:`flush_pending_label_syncs` lands every pending push
+now, ignoring the pace - tests use it, and an ``atexit`` hook calls it so the
+newest labels reach the source on a normal shutdown (a SIGKILL still loses
+whatever was waiting).
+
+**Pull** (:func:`sync_from_labelset_source`, :func:`reconcile_labelset_source`).
+Reads the source and **merges** its labels into the detector file: labels the
+source has and the file lacks are added, and when both hold one item with
+different labels the caller's ``prefer`` decides.  A pull never removes a
+label.  The manual sync prefers the source (the user asked for its labels);
+the pull when a detector loads or is linked prefers the file, which is never
+older than what it last pushed.  A pull writes the file only when it changed
+something, and that write schedules a push of the merged labels, so a source
+that was behind catches up.
 """
 
 from __future__ import annotations
 
 import atexit
+import hashlib
+import json
 import logging
 import threading
+import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from vtscore.state.core import DatasetContext, DetectorContext
+    from vtscore.datasets.labelset import LabeledElement, LabelSet
+    from vtscore.state.core import DetectorContext
 
 logger = logging.getLogger(__name__)
 
-# Serializes label sync operations and protects ``_syncing``.  A
-# thread-local guard cannot stop a parallel ``sync_to`` on another
-# thread from racing with a ``sync_from`` import.
-_sync_lock = threading.RLock()
-_syncing: bool = False
+__all__ = [
+    "flush_pending_label_syncs",
+    "note_detector_written",
+    "reconcile_labelset_source",
+    "reset_label_sync_for_tests",
+    "schedule_labelset_push",
+    "sync_from_labelset_source",
+    "sync_to_labelset_source",
+]
 
-
-# Debounce window for ``sync_to_labelset_source``.  200ms coalesces a
-# rapid voting burst into a single background push while staying short
-# enough that the on-disk labels match the UI within a tick.
+# The shortest wait between a change and the push it schedules.  200ms
+# coalesces a rapid voting burst into one push while staying short enough that
+# the source matches the UI within a tick when the pace allows it.
 _DEBOUNCE_DELAY = 0.2
+
+# How long the atexit flush waits for an in-flight push before giving up, so
+# a hung target cannot hang interpreter shutdown.
+_EXIT_FLUSH_TIMEOUT = 30.0
 
 
 @dataclass
-class _PendingSync:
-    """One scheduled debounce + the contexts to run it under."""
+class _Slot:
+    """Pacing state for one detector's pushes, keyed by detector name."""
 
-    timer: threading.Timer
-    user: str | None
-    dataset_ctx: "DatasetContext"
-    detector_ctx: "DetectorContext"
+    timer: threading.Timer | None = None
+    #: Bumped whenever a timer is armed or cancelled; a timer whose token no
+    #: longer matches fires as a no-op (it lost a race with a flush).
+    token: int = 0
+    in_flight: bool = False
+    #: A change arrived while a push was in flight; push again after it.
+    dirty: bool = False
+    #: ``time.monotonic()`` at the start of the last push, or ``None``.
+    last_started: float | None = None
 
 
-# Per-detector debounce slot.  Keyed by ``detector_id`` so concurrent
-# voting on two detectors doesn't coalesce one detector's push into the
-# other's window.
-_pending_lock = threading.Lock()
-_pending_syncs: dict[str, _PendingSync] = {}
+# Guards ``_slots``, every slot's fields, and ``_last_synced``.  A leaf lock:
+# nothing is called out to while it is held except ``Timer.start``.
+_slots_cv = threading.Condition()
+_slots: dict[str, _Slot] = {}
+# Detector name → digest of the payload the source is known to hold (the last
+# push, or the last pull).  A push of the same payload is skipped.
+_last_synced: dict[str, str] = {}
 
-# Held by ``_run_pending_sync`` while a worker is in flight and acquired
-# by :func:`flush_pending_label_syncs` so flush() doesn't return while a
-# debounced timer is still mid-write.  Separate from ``_sync_lock`` so a
-# concurrent ``sync_from_labelset_source`` still serializes correctly.
-_workers_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Identity and context helpers
+# ---------------------------------------------------------------------------
+
+
+def _identify(name: str, detector_id: str = "") -> tuple[dict[str, Any] | None, str]:
+    """Return ``(registry entry, detector id)`` for the detector named *name*.
+
+    Falls back to a loaded context of that name when the registry has none
+    (library callers that bind a source on a bare :class:`DetectorContext`).
+    """
+    from vtscore.detectors.registry import find_by_name, get_detector  # noqa: PLC0415
+
+    entry = get_detector(detector_id) if detector_id else None
+    if entry is None or entry.get("name") != name:
+        entry = find_by_name(name)
+    if entry is not None:
+        return entry, entry.get("id", "") or detector_id
+    if not detector_id:
+        from vtscore.state.core import loaded_detector_contexts  # noqa: PLC0415
+
+        for ctx in loaded_detector_contexts():
+            if ctx.name == name:
+                return None, ctx.detector_id
+    return None, detector_id
+
+
+def _template_context(name: str, detector_id: str) -> DetectorContext:
+    """A context whose name / id resolve the source's ``{detector_*}`` templates.
+
+    The loaded context when there is one, else a throwaway that carries only
+    the identity - the push and pull run off the request, and the request's
+    own active detector (if any) is not necessarily this one.
+    """
+    from vtscore.state.core import DetectorContext, get_detector_context  # noqa: PLC0415
+
+    ctx = get_detector_context(detector_id) if detector_id else None
+    if ctx is not None and ctx.name == name:
+        return ctx
+    return DetectorContext(detector_id, name=name)
+
+
+def _owner(entry: dict[str, Any] | None) -> str | None:
+    """The user a detector's sync runs as: its creator.
+
+    Fixed per detector, so a server path confined to a user's data dir names
+    one file however many readers vote on a shared detector.
+    """
+    return (entry or {}).get("created_by") or None
+
+
+def _digest(labelset: LabelSet) -> str:
+    """A content digest of *labelset*'s serialised form."""
+    text = json.dumps(labelset.to_dict(), sort_keys=True, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _push_interval() -> float:
+    """The configured gap between pushes of one detector, in seconds."""
+    from vtscore.config import DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL, CoreConfig  # noqa: PLC0415
+
+    try:
+        return max(0.0, float(CoreConfig.from_settings().labelset_source_push_interval))
+    except Exception:  # noqa: BLE001 - no app builder (library-only) or unreadable settings
+        return DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL
+
+
+# ---------------------------------------------------------------------------
+# Push scheduling
+# ---------------------------------------------------------------------------
+
+
+def _delay_for(slot: _Slot, interval: float) -> float:
+    if slot.last_started is None:
+        return _DEBOUNCE_DELAY
+    return max(_DEBOUNCE_DELAY, slot.last_started + interval - time.monotonic())
+
+
+def _arm_locked(name: str, slot: _Slot, delay: float) -> None:
+    """Arm *slot*'s timer.  Caller holds ``_slots_cv``."""
+    slot.token += 1
+    timer = threading.Timer(delay, _fire, args=(name, slot.token))
+    timer.daemon = True
+    slot.timer = timer
+    timer.start()
+
+
+def schedule_labelset_push(detector_name: str, *, detector_id: str = "") -> None:
+    """Schedule a paced push of *detector_name*'s labels to its labelset source.
+
+    Returns immediately.  A no-op when the detector syncs nowhere, or when its
+    source is missing a required field value.  Otherwise the push runs on a
+    background timer as soon as the pace allows (see the module docstring);
+    calls made while one is already scheduled or in flight are folded into it.
+    """
+    if not detector_name:
+        return
+    from vtscore.labels.binding import resolve_labelset_source  # noqa: PLC0415
+
+    entry, detector_id = _identify(detector_name, detector_id)
+    resolved = resolve_labelset_source(entry, detector_id=detector_id)
+    if resolved is None or not resolved.ready:
+        return
+    interval = _push_interval()
+    with _slots_cv:
+        slot = _slots.setdefault(detector_name, _Slot())
+        if slot.in_flight:
+            slot.dirty = True
+            return
+        if slot.timer is not None:
+            # The armed push reads the detector file when it fires, so it
+            # already carries this change.
+            return
+        _arm_locked(detector_name, slot, _delay_for(slot, interval))
+
+
+def note_detector_written(data: dict[str, Any]) -> None:
+    """Hook for :mod:`vtscore.detectors.store`: a detector file was (re)written.
+
+    Never raises - losing a sync must not fail the write that triggered it.
+    """
+    try:
+        name = data.get("name") if isinstance(data, dict) else None
+        if isinstance(name, str) and name:
+            schedule_labelset_push(name)
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to schedule a labelset source push")
 
 
 def sync_to_labelset_source() -> None:
-    """Schedule a debounced background push to the active detector's labelset source.
+    """Schedule a push of the active detector's labels to its labelset source.
 
-    Returns immediately.  The actual push runs on a background timer
-    thread ~200ms after the most recent call for this detector; further
-    calls within the window restart the timer and overwrite the captured
-    contexts (latest wins), so a burst of votes turns into one sync run.
-
-    Silently skips if no labelset source is configured for the active
-    detector, if no detector is active, or if a ``sync_from`` import is
-    currently in progress (re-checked at execution time, not here).
+    Every detector-file write already schedules one (see
+    :func:`note_detector_written`); this is for a caller that changed what the
+    push carries without writing the file, and for library code that linked a
+    source on a bare :class:`~vtscore.state.core.DetectorContext`.
     """
-    from vtscore.state.current_user import get_current_user
-    from vtscore.state.core import get_active_context, get_active_detector_context
+    from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
 
-    detector_ctx = get_active_detector_context()
-    if detector_ctx is None or not detector_ctx.labelset_source:
+    ctx = get_active_detector_context()
+    if ctx is None or not ctx.detector_id:
         return
+    name = ctx.name
+    if not name:
+        from vtscore.detectors.registry import get_detector  # noqa: PLC0415
 
-    detector_id = detector_ctx.detector_id
-    if not detector_id:
-        return
-
-    user = get_current_user()
-    dataset_ctx = get_active_context()
-
-    with _pending_lock:
-        existing = _pending_syncs.get(detector_id)
-        if existing is not None:
-            existing.timer.cancel()
-        timer = threading.Timer(_DEBOUNCE_DELAY, _run_pending_sync, args=(detector_id,))
-        timer.daemon = True
-        _pending_syncs[detector_id] = _PendingSync(
-            timer=timer,
-            user=user,
-            dataset_ctx=dataset_ctx,
-            detector_ctx=detector_ctx,
-        )
-        timer.start()
+        name = (get_detector(ctx.detector_id) or {}).get("name", "")
+    schedule_labelset_push(name, detector_id=ctx.detector_id)
 
 
-def _run_pending_sync(detector_id: str) -> None:
-    """Timer callback: pop the pending entry and run the actual push.
-
-    Holds ``_workers_lock`` while running so :func:`flush_pending_label_syncs`
-    can wait for an in-flight write to finish before returning.
-    """
-    with _workers_lock:
-        with _pending_lock:
-            entry = _pending_syncs.pop(detector_id, None)
-        if entry is None:
+def _fire(name: str, token: int) -> None:
+    """Timer callback: run the armed push unless a flush already took it."""
+    with _slots_cv:
+        slot = _slots.get(name)
+        if slot is None or slot.timer is None or slot.token != token:
             return
-        _push_with_thread_context(entry)
+        slot.timer = None
+        slot.in_flight = True
+    _run_push(name)
 
 
-def _push_with_thread_context(entry: _PendingSync) -> None:
-    """Scope thread-local user / dataset / detector context, run the push, restore."""
-    from vtscore.state.current_user import thread_user
-    from vtscore.state.core import thread_dataset_context, thread_detector_context
+def _run_push(name: str) -> None:
+    """Push *name* (its slot is already marked in flight), then re-arm if dirty."""
+    started = time.monotonic()
+    try:
+        _push_detector(name)
+    finally:
+        interval = _push_interval()
+        with _slots_cv:
+            slot = _slots.setdefault(name, _Slot())
+            slot.in_flight = False
+            slot.last_started = started
+            if slot.dirty:
+                slot.dirty = False
+                if slot.timer is None:
+                    _arm_locked(name, slot, _delay_for(slot, interval))
+            _slots_cv.notify_all()
 
-    with (
-        thread_user(entry.user),
-        thread_dataset_context(entry.dataset_ctx),
-        thread_detector_context(entry.detector_ctx),
-    ):
-        _push_to_labelset_source()
+
+def _push_payload(data: dict[str, Any], detector_id: str) -> LabelSet:
+    """The labelset a push sends: the file's whole labelset plus ``detector_meta``."""
+    from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
+    from vtscore.detectors.input_spec import build_detector_meta  # noqa: PLC0415
+    from vtscore.detectors.query_head import is_quota_head  # noqa: PLC0415
+    from vtscore.state.core import get_detector_context  # noqa: PLC0415
+
+    labelset = LabelSet.from_dict(data.get("labelset") or {})
+    # The live threshold travels only from a trained head: a Goods' centroid's
+    # (#4643), or a typed query's head's (#4758), is its own head's 0.5, which
+    # says nothing about the labels to anyone without that head.
+    ctx = get_detector_context(detector_id) if detector_id else None
+    threshold = None
+    if ctx is not None and ctx.model is not None and not is_quota_head(ctx.model):
+        threshold = ctx.threshold
+    labelset.detector_meta = build_detector_meta(data, threshold=threshold) or None
+    return labelset
+
+
+def _push_detector(name: str) -> None:
+    """Push the detector file's labelset to its source, synchronously."""
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.labels.binding import resolve_labelset_source  # noqa: PLC0415
+    from vtscore.state.core import override_detector_context  # noqa: PLC0415
+    from vtscore.state.current_user import thread_user  # noqa: PLC0415
+
+    entry, detector_id = _identify(name)
+    resolved = resolve_labelset_source(entry, detector_id=detector_id)
+    if resolved is None:
+        return
+    if not resolved.ready:
+        logger.warning(
+            "Not syncing detector %r to %s: missing %s", name, resolved.source_name, ", ".join(resolved.missing_fields)
+        )
+        return
+    source = resolved.source
+    if source is None:
+        return
+    with _slots_cv:
+        seen = name in _last_synced
+    if not seen:
+        # This process has not read the source yet, so it may hold labels the
+        # file lacks - a backup of a detector this server lost and the user
+        # just re-created.  Pushing blind would overwrite them; merge first
+        # (the file wins a disagreement), and if the source cannot be read,
+        # do not risk overwriting what it holds.
+        remote, _changes = _pull(name, detector_id, prefer="local")
+        if remote is None:
+            logger.warning(
+                "Not syncing detector %r to %s: its current contents could not be read", name, resolved.source_name
+            )
+            return
+    data = _read_detector(_detector_path(name))
+    if data is None:
+        return
+    labelset = _push_payload(data, detector_id)
+    digest = _digest(labelset)
+    with _slots_cv:
+        if _last_synced.get(name) == digest:
+            return
+    try:
+        with thread_user(_owner(entry)), override_detector_context(_template_context(name, detector_id)):
+            source.save(labelset, resolved.field_values)
+    except Exception:  # noqa: BLE001 - a sync target is a side channel; the file is the record
+        logger.exception("Failed to sync detector %r's labels to %s", name, resolved.source_name)
+        return
+    with _slots_cv:
+        _last_synced[name] = digest
+
+
+def _flush(timeout: float | None) -> None:
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while True:
+        with _slots_cv:
+            while any(s.in_flight for s in _slots.values()):
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    logger.warning("Gave up waiting for an in-flight labelset source push")
+                    return
+                _slots_cv.wait(remaining)
+            due = []
+            for name, slot in _slots.items():
+                if slot.timer is not None:
+                    slot.timer.cancel()
+                    slot.timer = None
+                    slot.token += 1
+                    slot.in_flight = True
+                    due.append(name)
+        if not due:
+            return
+        for name in due:
+            _run_push(name)
 
 
 def flush_pending_label_syncs() -> None:
-    """Run every pending debounced sync now and wait for in-flight workers.
+    """Run every scheduled push now, ignoring the pace, and wait for in-flight ones.
 
-    Used by tests (so they can assert the file was written) and by any
-    graceful-shutdown path.  Cancels every pending timer, then runs the
-    sync inline on the calling thread.  Acquires ``_workers_lock`` so any
-    timer that has already fired and is mid-write is waited out before
-    this returns.
+    Used by tests (to assert on what the source holds) and at interpreter exit.
     """
-    with _workers_lock:
-        with _pending_lock:
-            entries = list(_pending_syncs.values())
-            for entry in entries:
-                entry.timer.cancel()
-            _pending_syncs.clear()
-        for entry in entries:
-            _push_with_thread_context(entry)
+    _flush(None)
 
 
 def reset_label_sync_for_tests() -> None:
-    """Cancel every pending sync and drop captured contexts (for conftest).
+    """Cancel every scheduled push and forget what the sources hold (for conftest).
 
-    Unlike :func:`flush_pending_label_syncs`, this does **not** run the
-    pending pushes - it discards them, which is what the autouse
-    ``reset_state`` fixture wants between tests so a sync scheduled by
-    one test's contexts can't fire after those contexts are gone.
+    Unlike :func:`flush_pending_label_syncs` this does **not** run the pending
+    pushes - it discards them, so a push scheduled by one test cannot fire
+    into the next.  An in-flight push is waited out first.
     """
-    global _syncing
-
-    with _workers_lock:
-        with _pending_lock:
-            for entry in _pending_syncs.values():
-                entry.timer.cancel()
-            _pending_syncs.clear()
-        with _sync_lock:
-            _syncing = False
-
-
-# Drain any pending debounced push at interpreter exit so the most recent
-# vote isn't dropped on Ctrl-C / SIGQUIT / sys.exit.  Fires once per
-# process; no-op when the queue is empty.  SIGKILL / os._exit bypass
-# atexit and still lose the last 200ms - unavoidable for any debounce.
-atexit.register(flush_pending_label_syncs)
+    with _slots_cv:
+        deadline = time.monotonic() + 10.0
+        while any(s.in_flight for s in _slots.values()) and time.monotonic() < deadline:
+            _slots_cv.wait(deadline - time.monotonic())
+        for slot in _slots.values():
+            if slot.timer is not None:
+                slot.timer.cancel()
+        _slots.clear()
+        _last_synced.clear()
 
 
-def _push_to_labelset_source() -> None:
-    """Synchronously push current detector labels to the linked source.
+# Land the newest labels at their sources on a normal exit (Ctrl-C, gunicorn
+# SIGQUIT, ``sys.exit``).  SIGKILL / ``os._exit`` bypass atexit and lose
+# whatever was waiting on the pace - the cost of not writing on every vote.
+atexit.register(_flush, _EXIT_FLUSH_TIMEOUT)
 
-    Reads the active detector and dataset contexts via the standard
-    resolution chain - callers running on a background thread must arrange
-    thread-local context propagation before invoking this.
+
+# ---------------------------------------------------------------------------
+# Pull
+# ---------------------------------------------------------------------------
+
+
+def _merge_labels(
+    local: list[LabeledElement],
+    remote: list[LabeledElement],
+    *,
+    prefer: str,
+) -> tuple[list[LabeledElement], int]:
+    """Merge *remote* labels into *local*, returning ``(merged, changes)``.
+
+    Items are matched by :func:`~vtscore.datasets.labelset.element_identity_keys`
+    (origin or content hash).  Local order is kept and remote-only labels are
+    appended; when both sides hold one item with different labels, the
+    ``prefer`` side (``"local"`` or ``"source"``) wins.  Nothing is removed.
     """
-    from vtscore.state.core import get_active_detector_context
+    from vtscore.datasets.labelset import element_identity_keys  # noqa: PLC0415
 
-    ctx = get_active_detector_context()
-    if ctx is None or not ctx.labelset_source:
+    remote_by_key: dict[Any, LabeledElement] = {}
+    for el in remote:
+        for key in element_identity_keys(el):
+            remote_by_key.setdefault(key, el)
+
+    merged: list[LabeledElement] = []
+    matched: set[int] = set()
+    changes = 0
+    for el in local:
+        match = next((remote_by_key[k] for k in element_identity_keys(el) if k in remote_by_key), None)
+        if match is not None:
+            matched.add(id(match))
+            if prefer == "source" and match.label in ("good", "bad") and match.label != el.label:
+                merged.append(match)
+                changes += 1
+                continue
+        merged.append(el)
+
+    seen = {k for el in merged for k in element_identity_keys(el)}
+    for el in remote:
+        if id(el) in matched or el.label not in ("good", "bad"):
+            continue
+        keys = element_identity_keys(el)
+        if not keys or any(k in seen for k in keys):
+            continue
+        seen.update(keys)
+        merged.append(el)
+        changes += 1
+    return merged, changes
+
+
+def _pull(name: str, detector_id: str, *, prefer: str) -> tuple[LabelSet | None, int]:
+    """Read *name*'s source and merge it into the detector file.
+
+    Returns ``(what the source held, labels added or changed)``; the first is
+    ``None`` when the detector syncs nowhere, its source is missing a field,
+    or the read failed.
+    """
+    from vtscore.detectors.input_spec import apply_detector_meta  # noqa: PLC0415
+    from vtscore.detectors.label_sync import label_sync_write_lock  # noqa: PLC0415
+    from vtscore.detectors.registry import update_detector  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector, _write_detector  # noqa: PLC0415
+    from vtscore.labels.binding import resolve_labelset_source  # noqa: PLC0415
+    from vtscore.state.core import override_detector_context  # noqa: PLC0415
+    from vtscore.state.current_user import thread_user  # noqa: PLC0415
+
+    entry, detector_id = _identify(name, detector_id)
+    resolved = resolve_labelset_source(entry, detector_id=detector_id)
+    if resolved is None or not resolved.ready or resolved.source is None:
+        return None, 0
+    try:
+        with thread_user(_owner(entry)), override_detector_context(_template_context(name, detector_id)):
+            remote = resolved.source.load_full(resolved.field_values)
+    except Exception:  # noqa: BLE001 - an unreachable source must not fail a load
+        logger.exception("Failed to read detector %r's labels from %s", name, resolved.source_name)
+        return None, 0
+
+    changes = 0
+    if remote.elements or remote.detector_meta:
+        path = _detector_path(name)
+        with label_sync_write_lock:
+            data = _read_detector(path)
+            if data is not None:
+                # The meta's input_spec (and media_type, when the file has
+                # none) comes across; its threshold never does - the receiver
+                # retrains and derives its own.
+                changed = apply_detector_meta(data, remote.detector_meta)
+                from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
+
+                local = LabelSet.from_dict(data.get("labelset") or {})
+                merged, changes = _merge_labels(local.elements, remote.elements, prefer=prefer)
+                if changes:
+                    labelset = dict(data.get("labelset") or {})
+                    labelset["labels"] = [el.to_dict() for el in merged]
+                    data["labelset"] = labelset
+                    changed = True
+                if changed:
+                    _write_detector(path, data)
+                if changes and entry is not None:
+                    update_detector(entry["id"], num_training=len(merged))
+    with _slots_cv:
+        _last_synced[name] = _digest(remote)
+    return remote, changes
+
+
+def _rehydrate_loaded(detector_id: str) -> None:
+    """Re-derive a loaded detector's votes from its file after a pull changed it."""
+    from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset  # noqa: PLC0415
+    from vtscore.state.core import get_detector_context, override_detector_context  # noqa: PLC0415
+
+    ctx = get_detector_context(detector_id) if detector_id else None
+    if ctx is None:
         return
-
-    cfg = ctx.labelset_source
-    source_name = cfg.get("source_name", "")
-    if not source_name:
-        return
-
-    from vtscore.labels.sources import get_labelset_source
-
-    source = get_labelset_source(source_name)
-    if source is None:
-        logger.warning("Unknown labelset source: %s", source_name)
-        return
-
-    field_values = cfg.get("field_values", {})
-
-    from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.dataset_sync import validated_vote_snapshot
-    from vtscore.detectors.input_spec import build_detector_meta
-    from vtscore.detectors.store import _detector_path, _read_detector
-
-    # Read the detector JSON so the exported labelset can carry its
-    # input_spec / media_type alongside the in-memory threshold.  Anything
-    # missing is simply omitted from detector_meta.
-    detector_data = _read_detector(_detector_path(ctx.name)) or {}
-    # A Goods' centroid's threshold (#4643), or a typed query's head's (#4758), is
-    # its own head's 0.5, which says nothing about the labels to anyone without
-    # that head: leave it out.
-    from vtscore.detectors.query_head import is_quota_head
-
-    threshold = ctx.threshold if ctx.model is not None and not is_quota_head(ctx.model) else None
-    detector_meta = build_detector_meta(detector_data, threshold=threshold)
-
-    # Serialize against any in-progress sync_from on another thread.
-    # Re-check the flag inside the lock so we never push partial state
-    # back to the source during an import.
-    with _sync_lock:
-        if _syncing:
-            return
-        try:
-            # Atomic snapshot so the votes we serialise are guaranteed to be
-            # keyed in the same dataset's cid space as the medias they're
-            # composed with - even under concurrent dataset-switch requests
-            # on the same detector.  ``safe=False`` means we couldn't prove
-            # consistency; pushing an empty labelset would clobber whatever
-            # the external source has, so we skip this push and let the next
-            # vote re-trigger the debounced timer.
-            vote_snap = validated_vote_snapshot()
-            if not vote_snap.safe:
-                return
-            labelset = LabelSet.from_clips_and_votes(
-                vote_snap.medias,
-                vote_snap.good_votes,
-                vote_snap.bad_votes,
-                vote_region_boxes=vote_snap.vote_region_boxes,
-                vote_provenance=vote_snap.vote_provenance,
-                detector_meta=detector_meta or None,
-            )
-            source.save(labelset, field_values)
-        except Exception as exc:
-            logger.exception("Failed to sync labels to source: %s", exc)
+    # Drop the cached labelset so the freshness check cannot mistake the file
+    # for one it has already seen (its mtime cache may lag the write by a tick).
+    ctx.cached_labelset = None
+    with override_detector_context(ctx):
+        ensure_votes_match_active_dataset()
 
 
-def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, str]] | None:  # noqa: C901
-    """Pull labels from the active detector's labelset source and apply them.
+def sync_from_labelset_source(
+    detector_id: str | None = None,
+    *,
+    prefer: str = "source",
+) -> list[dict[str, Any]] | None:
+    """Pull the labels at a detector's labelset source into its file.
+
+    Labels the source holds and the detector lacks are added; with
+    ``prefer="source"`` (the default - the manual "sync now") the source's
+    label also wins where the two disagree, and with ``prefer="local"`` the
+    detector's does.  No label is removed.  A loaded detector's votes are
+    re-derived from the merged file, and the merged labels are pushed back so
+    the source catches up on anything only the detector had.
 
     Args:
-        detector_id: If given, operate on this detector context. Otherwise
-            use the currently active detector context.
+        detector_id: The detector to sync; the active detector when omitted.
+        prefer: ``"source"`` or ``"local"`` - which label wins a disagreement.
 
     Returns:
-        The imported label list, or ``None`` if no source is configured
-        or the source file doesn't exist yet.
+        The label dicts the source held, or ``None`` when the detector syncs
+        nowhere, its source is missing a field value, the read failed, or the
+        source holds nothing.
     """
-    from vtscore.state.core import get_active_detector_context, get_detector_context
+    if prefer not in ("source", "local"):
+        raise ValueError(f"prefer must be 'source' or 'local', got {prefer!r}")
+    from vtscore.detectors.registry import get_detector  # noqa: PLC0415
+    from vtscore.state.core import get_active_detector_context, get_detector_context  # noqa: PLC0415
 
-    if detector_id is not None:
-        ctx = get_detector_context(detector_id)
-    else:
-        ctx = get_active_detector_context()
-
-    if ctx is None or not ctx.labelset_source:
+    ctx = get_detector_context(detector_id) if detector_id else get_active_detector_context()
+    did = detector_id or (ctx.detector_id if ctx is not None else "")
+    entry = get_detector(did) if did else None
+    name = (entry or {}).get("name") or (ctx.name if ctx is not None else "")
+    if not name:
         return None
 
-    cfg = ctx.labelset_source
-    source_name = cfg.get("source_name", "")
-    if not source_name:
+    remote, changes = _pull(name, did, prefer=prefer)
+    if remote is None:
         return None
+    if changes:
+        _rehydrate_loaded(did)
+        from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
 
-    from vtscore.labels.sources import get_labelset_source
-
-    source = get_labelset_source(source_name)
-    if source is None:
-        logger.warning("Unknown labelset source: %s", source_name)
+        record_achievement("detector_import", did)
+    schedule_labelset_push(name, detector_id=did)
+    if not remote.elements and not remote.detector_meta:
         return None
+    return [el.to_dict() for el in remote.elements]
 
-    field_values = cfg.get("field_values", {})
+
+def reconcile_labelset_source(detector_name: str, *, detector_id: str = "") -> int:
+    """Bring a detector and its labelset source level with each other.
+
+    Run when a detector loads and when its link changes: pulls what the source
+    holds into the file (the file's label wins a disagreement - it is never
+    older than what it pushed), then schedules a push so the source gains
+    anything only the file had.  This is how a detector whose server lost its
+    data comes back: re-create it under the same name and the pull restores
+    the labels its source kept.  Never raises.
+
+    Returns:
+        How many labels the pull added or changed.
+    """
     try:
-        labelset = source.load_full(field_values)
-    except Exception as exc:
-        logger.exception("Failed to load from labelset source: %s", exc)
-        return None
-
-    if not labelset.elements and not labelset.detector_meta:
-        return None
-
-    # If the source carried a detector_meta block, fold its input_spec
-    # (and media_type, when the receiver is missing one) into the
-    # receiving detector's on-disk JSON.  threshold is intentionally
-    # *not* persisted - the receiver will retrain its MLP from the
-    # imported labels and recompute its own threshold.
-    if labelset.detector_meta:
-        from vtscore.detectors.input_spec import apply_detector_meta
-        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
-
-        det_path = _detector_path(ctx.name)
-        det_data = _read_detector(det_path)
-        if det_data is not None and apply_detector_meta(det_data, labelset.detector_meta):
-            _write_detector(det_path, det_data)
-
-    labels = [el.to_dict() for el in labelset.elements]
-    if not labels:
-        return labels
-
-    # Hold _sync_lock for the entire apply pass so that any concurrent
-    # sync_to_labelset_source() on another thread blocks (or skips, on
-    # re-entry from this same thread) instead of pushing the pre-import
-    # state back to the source.
-    global _syncing
-    applied_any = False
-    with _sync_lock:
-        _syncing = True
-        try:
-            from vtscore.datasets.vote_provenance import read_provenance
-            from vtscore.state.core import get_active_context, override_detector_context
-            from vtscore.state.votes import apply_label
-
-            ds_medias = get_active_context().medias
-            # Apply the votes to *ctx* - the detector this sync was invoked
-            # for - not whatever detector the surrounding request happens to
-            # have active.  The manual sync route takes the detector as a
-            # path param, so the request's X-Detector-Id can legitimately
-            # name a different detector; without the override the imported
-            # votes landed on that one while detector_meta (above) went to
-            # ctx.
-            with override_detector_context(ctx):
-                for entry in labels:
-                    label = entry.get("label")
-                    md5 = entry.get("md5")
-                    if label not in ("good", "bad") or not md5:
-                        continue
-
-                    # Find media by md5
-                    for mid, media in ds_medias.items():
-                        if media.get("md5") == md5:
-                            # System-driven auto-import on detector load; the
-                            # ``record_detector_import`` call below covers the
-                            # achievement credit instead of crediting each
-                            # imported label as a user vote.
-                            apply_label(
-                                mid,
-                                label,
-                                record_achievement=False,
-                                provenance=read_provenance(entry.get("metadata")),
-                            )
-                            applied_any = True
-                            break
-        finally:
-            _syncing = False
-
-    if applied_any:
-        from vtscore.achievements_hooks import record_achievement
-
-        record_achievement("detector_import", ctx.detector_id)
-
-    return labels
+        _remote, changes = _pull(detector_name, detector_id, prefer="local")
+        schedule_labelset_push(detector_name, detector_id=detector_id)
+        return changes
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to reconcile detector %r with its labelset source", detector_name)
+        return 0

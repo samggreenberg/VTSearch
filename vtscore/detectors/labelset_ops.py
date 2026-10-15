@@ -53,6 +53,7 @@ from vtscore.detectors.labelset_elements import (
 )
 from vtscore.detectors.labelset_rename import (
     detect_pending_labelset_move,
+    follow_rename_with_labelset_file,
     move_labelset_file,
 )
 from vtscore.detectors.labelset_training import (
@@ -80,6 +81,7 @@ __all__ = [
     "stable_element_id",
     # labelset_rename
     "detect_pending_labelset_move",
+    "follow_rename_with_labelset_file",
     "move_labelset_file",
     # labelset_training
     "build_xy_from_labelset",

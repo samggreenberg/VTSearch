@@ -291,7 +291,7 @@ def _split_media_ids(
 ) -> tuple[list[int], list[int]]:
     """Randomly partition media IDs into simulation and test sets.
 
-    A dataset whose medias carry ``split_group`` (``rico_suave``'s app, #4356)
+    A dataset whose medias carry ``split_group`` (``apptitude``'s app, #4356)
     is split by group instead: the groups are drawn in a seeded order and each
     joins the simulation half while it is short of ``sim_fraction``, so no group
     has medias on both sides and the simulation half overshoots by less than one

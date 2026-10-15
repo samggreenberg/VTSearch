@@ -194,6 +194,12 @@ class TestAppSchemaCoversTheModels:
         # / ``_EXCLUDE_FROM_SOURCE_EXPORT``); echoing it to every client would
         # publish an operator's sync config.
         "default_settings_source",
+        # Deployment-wide labelset source and its push pace (#4913). The fixed
+        # field values may carry credentials, so the settings DTO never echoes
+        # them; ``GET /api/labelset-sources/default`` serves the public half
+        # (which source, which fields the user still fills, the pace).
+        "default_labelset_source",
+        "labelset_source_push_interval_seconds",
         # Server-tier UMAP knobs, consumed into ``CoreConfig`` by
         # ``vtsearch.shim``. Operator-tuned via the settings file; no frontend
         # code reads them.
