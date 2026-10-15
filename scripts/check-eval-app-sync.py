@@ -114,7 +114,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="autopilot.phase_machine",
         app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(goodCount",
-        harness="vtscore/eval/autopilot_flow.py::next_phase",
+        harness="vtscore/eval/autopilot_flow.py::next_phase,stop_lights",
         kind="ported",
         note=(
             "The phase ordering and every transition trigger of the simulated Autopilot user. "
@@ -133,7 +133,12 @@ MIRRORS: list[Mirror] = [
             "has closed, so all green reads 'done' rather than 'spot'), moved by beginSpotCheck / "
             "endSpotCheck / skipDoneCheck; the harness's AutopilotFlow spot_check / done_checked, moved by "
             "begin_spot_check / end_spot_check / skip_done_check, read by next_phase as checking / "
-            "done_checked. Whether the check before Done runs is done_check_due, which both call."
+            "done_checked. Whether the check before Done runs is done_check_due, which both call. "
+            "Done's branch also opens on the labels line's level (#4878): the app's checkPhaseTransition reads "
+            "levelMet (the labeling status's level.met, from the library's stop_level_reading) beside the three "
+            "lights, and every light green or the level met is that branch; the harness's AutopilotFlow, under its "
+            "default stop_rule 'lights|level', hands next_phase every light green when stop_lights says the rule "
+            "stops, reading stop_level_met on the step's labels line."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
@@ -147,9 +152,9 @@ MIRRORS: list[Mirror] = [
             "harness's end-of-budget check (spot_check 'end' and 'weak', rows with phase 'check' past "
             "max_steps) is its measurement of the final line, which no app user can start since the "
             "Check button went: it is never a click. The app also latches doneChecked when a run's first "
-            "labeling-status reading is already all green (the Train view re-entered on a finished "
-            "detector); a harness run starts with no votes, where the lights cannot be green, so it has "
-            "nothing to port."
+            "labeling-status reading already says Done, every light green or the level met (the Train view "
+            "re-entered on a finished detector); a harness run starts with no votes, where neither can hold, so "
+            "it has nothing to port."
         ),
     ),
     Mirror(

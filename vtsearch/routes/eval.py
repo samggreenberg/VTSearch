@@ -36,6 +36,7 @@ from vtsearch.state import (
     get_coverage_atlas,
     good_votes,
     label_history,
+    line_knobs,
     snapshot_medias,
 )
 from vtscore.concurrency.progress import (
@@ -46,7 +47,9 @@ from vtscore.state.core import (
     DatasetNotLoadedError,
     DetectorNotLoadedError,
     RequestMissingContextError,
+    get_active_detector_context,
 )
+from vtscore.training.thresholds import stop_level_reading
 
 eval_bp = Blueprint(
     "eval",
@@ -159,6 +162,11 @@ def _schedule_status_refresh(span_info) -> None:
     )
 
 
+def _stop_level() -> dict:
+    """The active detector's labels line read against Done's level, at its balance (#4878)."""
+    return stop_level_reading(get_active_detector_context().labels_line, line_knobs()["beta"])
+
+
 @eval_bp.route("/api/labeling-status", methods=["GET"])
 @eval_bp.response(200, LabelingStatusResponseSchema)
 @eval_bp.alt_response(500, description="Labeling-status computation failed.")
@@ -179,8 +187,11 @@ def labeling_status_indicator():
     advancement to a background worker (issue #2397).
 
     ``stop_rule`` names what ends labeling.  ``"lights"`` is Smart, Stable and
-    Span.  A document (tiled structural) dataset answers ``"dry_run"`` instead,
-    with the ``dry_run`` readout and the three lights ``off`` (#4488).
+    Span all green, or (#4878) the labels line's own expected F-beta at the
+    detector's balance reaching ``STOP_LEVEL``: the ``level`` readout, which the
+    frontend's phase machine reads beside the lights.  A document (tiled
+    structural) dataset answers ``"dry_run"`` instead, with the ``dry_run``
+    readout and the three lights ``off`` (#4488).
     """
     try:
         if _dataset_is_tiled():
@@ -195,6 +206,7 @@ def labeling_status_indicator():
             status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, span_info=span)
             status["stale"] = False
             status["stop_rule"] = "lights"
+            status["level"] = _stop_level()
             return status
 
         # Cache is behind: serve the last snapshot now, advance the cache in
@@ -210,6 +222,8 @@ def labeling_status_indicator():
         status = stale_labeling_status(good_votes, bad_votes, span)
         status["stale"] = True
         status["stop_rule"] = "lights"
+        # The line is the last retrain's, so it is never stale the way Smart and Stable are.
+        status["level"] = _stop_level()
         _schedule_status_refresh(span)
         return status
     except _CONTEXT_ERRORS:

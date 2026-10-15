@@ -453,6 +453,55 @@ describe('AutopilotStateService', () => {
     expect(service.state.doneChecked).toBe(true);
   });
 
+  describe("the labels line's level also says Done (#4878)", () => {
+    const yellow = makeStatus({ status: 'yellow' }, { status: 'green' }, { status: 'red' });
+    const level = (met: boolean, expected: number | null = 0.62): LabelingStatusResponse => ({
+      ...yellow,
+      stop_rule: 'lights',
+      level: { expected_fbeta: expected, level: 0.5, met },
+    });
+
+    it('reads the level beside the lights', () => {
+      service.activate();
+      service.updateFromLabelingStatus(level(true));
+      expect(service.state.levelMet).toBe(true);
+      expect(service.state.expectedFbeta).toBe(0.62);
+      service.updateFromLabelingStatus(yellow);
+      expect(service.state.levelMet).toBe(false);
+      expect(service.state.expectedFbeta).toBeNull();
+    });
+
+    it('goes to the check before Done, then Done, with a light short of green', () => {
+      service.activate();
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('hard');
+      service.updateFromLabelingStatus(level(true));
+      service.checkPhaseTransition(3, 5);
+      expect(service.state.phase).toBe('spot');
+      service.beginSpotCheck('done');
+      service.endSpotCheck();
+      expect(service.state.phase).toBe('done');
+    });
+
+    it('leaves the lights to decide while the level is not met', () => {
+      service.activate();
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(3, 4);
+      service.updateFromLabelingStatus(level(false, 0.3));
+      service.checkPhaseTransition(3, 5);
+      expect(service.state.phase).toBe('hard');
+    });
+
+    it('runs no check on a re-entered detector that already meets the level', () => {
+      service.activate();
+      service.updateFromLabelingStatus(level(true));
+      service.checkPhaseTransition(30, 40);
+      expect(service.state.phase).toBe('done');
+      expect(service.state.doneChecked).toBe(true);
+    });
+  });
+
   describe('the Spot Check step', () => {
     const green = makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' });
     const yellow = makeStatus({ status: 'green' }, { status: 'yellow' }, { status: 'green' });

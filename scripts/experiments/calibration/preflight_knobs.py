@@ -426,6 +426,14 @@ def probe(C: Any) -> list[str]:
     # #3546's arms: neither has an app counterpart yet.
     if C.SMART_GATE != "app":
         rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
+    if C.STOP_RULE != "lights|level" or C.STOP_LEVEL != 0.5:
+        rows.append(
+            (
+                "stop_rule",
+                f"{C.STOP_RULE}@{C.STOP_LEVEL:g}",
+                "lights|level@0.5 (every light green, or the line's level)",
+            )
+        )
     if C.LABEL_QUOTA is not None:
         rows.append(
             (
