@@ -1118,6 +1118,13 @@ DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no"
 #: positive integer is kept as given, for preflight to refuse.
 _EARLY_CHECK = os.environ.get("CALIB_EARLY_CHECK", "").strip()
 EARLY_CHECK: "int | str | None" = int(_EARLY_CHECK) if _EARLY_CHECK.isdigit() else (_EARLY_CHECK or None)
+#: Issue #4910's fold scale (``CALIB_LABELS_SCALE``): the scale the labels line's class model reads the calibration
+#: folds' held-out scores on.  Unset (the default) is the app, each fold model's scores as it scored them;
+#: ``quantile`` / ``quantile_tails`` carry each fold's onto the final model's scale through its haystack first.
+#: ``CALIB_LABELS_SCALE_SHADOW`` fits the line on another scale beside it, drawing nothing (the rows' ``shadow_*`` /
+#: ``xfer_*`` columns).  Kept as given, for preflight to refuse a value outside ``FOLD_SCALES``.
+LABELS_SCALE = os.environ.get("CALIB_LABELS_SCALE", "").strip().lower() or None
+LABELS_SCALE_SHADOW = os.environ.get("CALIB_LABELS_SCALE_SHADOW", "").strip().lower() or None
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
