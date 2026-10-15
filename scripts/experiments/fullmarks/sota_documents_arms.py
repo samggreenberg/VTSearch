@@ -27,6 +27,7 @@ from typing import Any, Optional, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import sota_documents as sd  # noqa: E402
+from vtscore.media.structural import release_device_descriptors  # noqa: E402
 
 _MEMO: dict[Any, Any] = {}
 
@@ -81,6 +82,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"== {arm} rep{rep} {cid} ({time.time() - t0:.0f}s)", flush=True)
                 swap = ["--swap-halves"] if rep == 2 else []
                 rc = sd.main([*passthrough, *flags, *swap, "--classes", cid, "--out", str(out)])
+                # The #4469 descriptor cache keeps every array it saw alive, up to 4 GB; on a CPU
+                # each run's cuts would pile up there across calls (the pilot's 20 GB tasks OOM'd).
+                release_device_descriptors()
                 if rc:
                     return rc
                 (out / "done").write_text(time.strftime("%Y-%m-%dT%H:%M:%S") + "\n", encoding="utf-8")

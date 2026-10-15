@@ -150,7 +150,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             w = csv.DictWriter(fh, fieldnames=list(rows[0]) if rows else ["arm"])
             w.writeheader()
             w.writerows(rows)
+        write_steps(args.root, runs, args.out / "steps.csv")
     return 0
+
+
+#: The per-step columns ``steps.csv`` keeps: what the tables and ``keypoint_cut_figures.py`` read.
+STEP_COLUMNS = ("v", "found", "ap", "gate_f1", "gate_fb025", "gate_fb4", "gate_k", "line", "retrain_s")
+
+
+def write_steps(root: Path, runs: dict[str, dict[tuple[str, int], list[dict[str, str]]]], out: Path) -> None:
+    """Every arm's steps in one long CSV, with the label of the click before each step (``after``)."""
+    with out.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(("arm", "rep", "class_id", *STEP_COLUMNS, "after"))
+        for arm in sorted(runs):
+            for (cid, rep), steps in sorted(runs[arm].items()):
+                clicks_f = root / arm / f"rep{rep}" / cid.replace("/", "__", 1) / "clicks.csv"
+                label = {}
+                if clicks_f.exists():
+                    label = {int(c["click"]): c["label"] for c in csv.DictReader(clicks_f.open(encoding="utf-8"))}
+                for r in steps:
+                    vals = [r[k] if k in ("v", "found", "gate_k") else f"{float(r[k]):.4g}" for k in STEP_COLUMNS]
+                    w.writerow((arm, rep, cid, *vals, label.get(int(r["v"]), "start")))
 
 
 if __name__ == "__main__":
